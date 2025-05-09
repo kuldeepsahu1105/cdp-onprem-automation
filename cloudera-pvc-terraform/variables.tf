@@ -16,7 +16,7 @@ variable "pvc_cluster_tags" {
   description = "Tags to apply to all EC2 instances"
   type        = map(string)
   default = {
-    owner       = "ksahu-ygulati"
+    owner       = "ksahu"
     environment = "development"
   }
 }
@@ -68,4 +68,125 @@ variable "existing_sg" {
   description = "The name of the existing security group (if using an existing one)"
   type        = string
   default     = ""
+}
+
+# Elastic IP Variables
+variable "create_eip" {
+  description = "Flag to decide whether to create an eip for cloudera manager"
+  type        = bool
+  default     = true
+}
+
+variable "cldr_eip_name" {
+  description = "Name of the elastic ip"
+  type        = string
+}
+
+# VPC Variables
+variable "create_vpc" {
+  description = "Whether to create a new VPC or use the default one"
+  type        = bool
+  default     = false
+}
+
+variable "vpc_name" {
+  description = "Name of new VPC or use the default one"
+  type        = string
+  default     = "cloudera-vpc"
+}
+
+variable "vpc_tags" {
+  description = "Map of tags to apply to the key pair (owner and environment)"
+  type        = map(string)
+  default = {
+    owner       = "ksahu"
+    environment = "development"
+  }
+}
+
+variable "vpc_cidr_block" {
+  type    = string
+  default = "10.0.0.0/16"
+}
+
+variable "azs" {
+  type    = list(string)
+  default = []
+}
+
+variable "private_subnets_cidr" {
+  type    = list(string)
+  default = []
+}
+
+variable "public_subnets_cidr" {
+  type    = list(string)
+  default = []
+}
+
+variable "enable_nat_gateway" {
+  type    = bool
+  default = false
+}
+
+variable "enable_vpn_gateway" {
+  type    = bool
+  default = false
+}
+
+# EC2 Variables
+variable "instance_groups" {
+  description = "EC2 instance groups with individual configurations"
+  type = map(object({
+    count         = number
+    ami           = string
+    instance_type = string
+    volume_size   = number
+    tags          = map(string)
+    user_data     = optional(string)
+  }))
+  default = {
+    cldr_mngr = {
+      count         = 1
+      ami           = "ami-06dc977f58c8d7857"
+      instance_type = "t3.medium"
+      volume_size   = 30
+      tags          = { Name = "cldr-mngr" }
+    },
+    ipa_server = {
+      count         = 1
+      ami           = "ami-06dc977f58c8d7857"
+      instance_type = "t3.medium"
+      volume_size   = 30
+      tags          = { Name = "ipa-server" }
+    },
+    pvcbase_master = {
+      count         = 1
+      ami           = "ami-06dc977f58c8d7857"
+      instance_type = "t3.large"
+      volume_size   = 50
+      tags          = { Name = "pvcbase-master" }
+    },
+    pvcbase_worker = {
+      count         = 1
+      ami           = "ami-06dc977f58c8d7857"
+      instance_type = "t3.large"
+      volume_size   = 50
+      tags          = { Name = "pvcbase-worker" }
+    },
+    pvcecs_master = {
+      count         = 1
+      ami           = "ami-06dc977f58c8d7857"
+      instance_type = "t3.xlarge"
+      volume_size   = 100
+      tags          = { Name = "pvcecs-master" }
+    },
+    pvcecs_worker = {
+      count         = 1
+      ami           = "ami-06dc977f58c8d7857"
+      instance_type = "t3.xlarge"
+      volume_size   = 100
+      tags          = { Name = "pvcecs-worker" }
+    }
+  }
 }
