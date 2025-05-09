@@ -1,5 +1,4 @@
 = Cloudera PVC Terraform Automation Guide
-
 Kuldeep Sahu <ksahu@example.com>
 
 :toc: macro
@@ -9,82 +8,105 @@ Kuldeep Sahu <ksahu@example.com>
 :sectnums:
 :sectnumlevels: 4
 
-A comprehensive guide to automate the provisioning of Cloudera Data Platform (CDP) cluster instances on AWS.
-
 toc::[]
+
+A comprehensive guide to automate the provisioning of Cloudera Data Platform (CDP) cluster instances on AWS.
 
 == Overview
 
-This automation facilitates the provisioning of a Cloudera Private Cloud (PVC) environment on AWS using Terraform. It supports both Mac and Linux systems and offers two primary methods for deployment:​:contentReference[oaicite:11]{index=11}
+This automation facilitates the provisioning of a Cloudera Private Cloud (PVC) environment on AWS using Terraform. It supports both Mac and Linux systems and offers two primary methods for deployment:
 
-1. **Wrapper Script Method**: :contentReference[oaicite:13]{index=13}
-2. **Manual Terraform Method**: :contentReference[oaicite:16]{index=16}:contentReference[oaicite:18]{index=18}
+1. *Wrapper Script Method*
+2. *Manual Terraform Method*
 
 == Prerequisites
 
-Before proceeding, ensure the following prerequisites are met:
+Ensure the following tools and accounts are available before proceeding:
 
-- **AWS Account**: :contentReference[oaicite:20]{index=20}
-- **AWS CLI**: :contentReference[oaicite:23]{index=23}
-  - :contentReference[oaicite:26]{index=26}
-  - :contentReference[oaicite:29]{index=29}
-- **Terraform**: :contentReference[oaicite:32]{index=32}
-- **Git**: :contentReference[oaicite:35]{index=35}
-- **Operating System**: :contentReference[oaicite:38]{index=38}:contentReference[oaicite:40]{index=40}
+- *AWS Account*
+- *AWS CLI*
+- *Terraform*
+- *Git*
+- *MacOS or Linux OS*
 
 == Deployment Methods
 
 === 1. Wrapper Script Method
 
-:contentReference[oaicite:42]{index=42}:contentReference[oaicite:44]{index=44}
+This is the quickest method for setting up your infrastructure.
 
-==== Steps:
+==== Steps
 
-1. **Download the Wrapper Script and Environment Template**:
+1. Download the wrapper script and environment file:
 
-   ```bash
+   [source, bash]
+   ----
    curl -O https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/dev/terraform/clone_and_run_terraform.sh
    curl -O https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/dev/terraform/.tfvars.env
+   ----
 
-Configure .tfvars.env:
-Edit the .tfvars.env file to match your desired configuration. Refer to the <<tfvars-configuration>> section for guidance.
-Execute the Wrapper Script:
-bash clone_and_run_terraform.sh
+2. Configure `.tfvars.env`:
 
-Ensure that .tfvars.env is present in the same directory as the script.
+   Edit the file to match your desired configuration. See the <<tfvars-configuration, .tfvars.env Configuration Guide>> for details.
+
+3. Execute the script:
+
+   [source, bash]
+   ----
+   bash clone_and_run_terraform.sh
+   ----
+
+   Ensure `.tfvars.env` is in the same directory as the script.
 
 === 2. Manual Terraform Method
 
 This method provides more granular control over the deployment process.
 
-==== Steps:
+==== Steps
 
-Clone the Repository:
+1. Clone the repository:
+
+[source, bash]
+----
 git clone https://github.com/kuldeepsahu1105/cdp-onprem-automation.git
 cd cdp-onprem-automation
-Configure terraform.tfvars:
-Edit the terraform.tfvars file to match your desired configuration. Refer to the <<tfvars-configuration>> section for guidance.
-Initialize and Apply Terraform Configuration:
+----
+
+2. Configure `terraform.tfvars`:
+
+   Modify the file to fit your desired setup. Refer to the <<tfvars-configuration, .tfvars.env Configuration Guide>>.
+
+3. Initialize and apply the Terraform configuration:
+
+[source, bash]
+----
 terraform init
 terraform apply
+----
 
 == .tfvars.env Configuration Guide
 
-The .tfvars.env file contains environment-specific variables that dictate the behavior of the Terraform deployment. Below is a breakdown of key sections and best practices.
+The `.tfvars.env` file defines environment-specific settings used by Terraform.
 
 === AWS Region and Environment Settings
 
+[source, bash]
+----
 AWS_REGION="${AWS_REGION:-ap-southeast-1}"
 OWNER="${OWNER:-ksahu}"
 ENVIRONMENT="${ENVIRONMENT:-development}"
 TERRAFORM_VERSION="${TERRAFORM_VERSION:-latest}"
-AWS_REGION: Specify the AWS region for resource deployment.
-OWNER: Identifier for resource ownership tagging.
-ENVIRONMENT: Deployment environment (e.g., development, staging, production).
-TERRAFORM_VERSION: Specify the Terraform version to use.
+----
+
+- `AWS_REGION`: AWS region for deployment
+- `OWNER`: Resource tag owner
+- `ENVIRONMENT`: Environment name (e.g., dev, stage, prod)
+- `TERRAFORM_VERSION`: Terraform version to use
 
 === VPC Configuration
 
+[source, bash]
+----
 -var="create_vpc=false"
 -var="vpc_name=cloudera-vpc"
 -var="vpc_cidr_block=172.16.0.0/16"
@@ -93,49 +115,35 @@ TERRAFORM_VERSION: Specify the Terraform version to use.
 -var='private_subnets_cidr=[]'
 -var="enable_nat_gateway=false"
 -var="enable_vpn_gateway=false"
-
-create_vpc: Set to true to create a new VPC; false to use an existing one.
-vpc_name: Name of the VPC.
-vpc_cidr_block: CIDR block for the VPC.
-azs: List of Availability Zones.
-public_subnets_cidr: CIDR blocks for public subnets.
-private_subnets_cidr: CIDR blocks for private subnets.
-enable_nat_gateway: Set to true to enable NAT Gateway.
-enable_vpn_gateway: Set to true to enable VPN Gateway.
+----
 
 === Security Group Configuration
 
+[source, bash]
+----
 -var="create_new_sg=false"
 -var='allowed_cidrs=["0.0.0.0/0"]'
 -var='allowed_ports=[0]'
 -var="sg_name=pvc_cluster_sg"
 -var="existing_sg=sg-0dbb6f79cba5ef701"
-
-create_new_sg: Set to true to create a new Security Group; false to use an existing one.
-allowed_cidrs: List of CIDR blocks allowed to access the instances.
-allowed_ports: List of ports to allow.
-sg_name: Name of the Security Group.
-existing_sg: ID of the existing Security Group to use.
+----
 
 === Elastic IP and Key Pair Configuration
 
+[source, bash]
+----
 -var="create_eip=true"
 -var="cldr_eip_name=cldr-mngr-eip"
 
 -var="create_keypair=true"
 -var="keypair_name=pvc-new-keypair"
 -var="existing_keypair_name=kuldeep-pvc-session"
-
-create_eip: Set to true to create a new Elastic IP.
-cldr_eip_name: Name for the Elastic IP.
-create_keypair: Set to true to create a new Key Pair.
-keypair_name: Name for the new Key Pair.
-existing_keypair_name: Name of the existing Key Pair to use.
+----
 
 === Instance Groups Configuration
 
-Define the specifications for each instance group.
-
+[source, bash]
+----
 -var='instance_groups={
   cldr_mngr = {
     count = 1
@@ -180,15 +188,11 @@ Define the specifications for each instance group.
     tags = { Name = "'"${ENVIRONMENT}"'-pvcecs-worker" }
   }
 }'
-count: Number of instances in the group.
-ami: Amazon Machine Image ID.
-instance_type: Type of EC2 instance.
-volume_size: Size of the root EBS volume in GB.
-tags: Key-value pairs for tagging the instances.
+----
 
 == Best Practices
 
-Version Control: Maintain your Terraform configurations in a version control system like Git.
-Remote State Management: Use remote backends (e.g., AWS S3 with DynamoDB locking) to manage Terraform state files securely.
-Modularization: Break down your Terraform code into reusable modules for better organization and maintenance.
-Variable Management: Use variable files (`.tfvars
+- *Version Control*: Store all infrastructure code in Git.
+- *Remote State*: Use remote backends like S3 with DynamoDB for secure state storage.
+- *Modularization*: Organize Terraform into reusable modules.
+- *Variable Management*: Use `.tfvars` files and environment overrides for clean configuration.
