@@ -1,11 +1,11 @@
-# This module creates a security group in AWS with the ability to either create a new one or use an existing one.
+# Use existing security group if not creating a new one
 data "aws_security_group" "existing_sg" {
-  count = var.create_new_sg == false ? 1 : 0
+  count = var.create_new_sg ? 0 : 1
   id    = var.existing_sg
 }
 
 resource "aws_security_group" "vpc_sg" {
-  count       = var.create_new_sg == true ? 1 : 0 # Only create a new security group if the flag is true
+  count       = var.create_new_sg ? 1 : 0
   name        = var.sg_name
   description = var.sg_description
   vpc_id      = var.vpc_id
@@ -14,11 +14,23 @@ resource "aws_security_group" "vpc_sg" {
     create_before_destroy = true
   }
 
-  # Loop only through ports
+  # Ingress rule for allowing all traffic (if allow_all is true)
   dynamic "ingress" {
-    for_each = var.allowed_ports
+    for_each = var.allow_all ? [1] : []
     content {
-      description = "Allow traffic on port ${ingress.value}"
+      description = "Allow all inbound traffic"
+      from_port   = 0
+      to_port     = 0
+      protocol    = "-1"
+      cidr_blocks = var.allowed_cidrs
+    }
+  }
+
+  # Ingress rule for specific TCP ports (if allow_all is false)
+  dynamic "ingress" {
+    for_each = var.allow_all ? [] : var.allowed_ports
+    content {
+      description = "Allow TCP traffic on port ${ingress.value}"
       from_port   = ingress.value
       to_port     = ingress.value
       protocol    = "tcp"
@@ -35,6 +47,7 @@ resource "aws_security_group" "vpc_sg" {
     self        = true
   }
 
+  # Egress rule
   egress {
     description = "Allow all outbound traffic"
     from_port   = 0

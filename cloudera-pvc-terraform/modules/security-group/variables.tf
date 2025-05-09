@@ -36,6 +36,12 @@ variable "vpc_id" {
   default     = "vpc-9d9385fa"
 }
 
+variable "allow_all" {
+  description = "whether to allow all ingress traffic"
+  type    = bool
+  default = true
+}
+
 variable "allowed_ports" {
   description = "List of allowed ports"
   type        = list(number)

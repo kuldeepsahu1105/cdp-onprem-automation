@@ -46,6 +46,12 @@ variable "sg_name" {
   default     = "pvc_cluster_sg"
 }
 
+variable "allow_all" {
+  description = "whether to allow all ingress traffic"
+  type    = bool
+  default = true
+}
+
 variable "allowed_ports" {
   description = "List of allowed ports"
   type        = list(number)

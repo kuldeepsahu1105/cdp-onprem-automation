@@ -18,7 +18,8 @@ enable_vpn_gateway   = false
 # Security Group
 create_new_sg = true # Will be set to true if create_vpc is true, if cre ate_vpc is false, it can be set to true/false
 allowed_cidrs = ["0.0.0.0/0"]
-allowed_ports = [0]
+allow_all     = false         # Set true to allow all inbound traffic
+allowed_ports = [22, 443, 80, 7180, 7183, 7182]
 sg_name       = "pvc_cluster_sg"
 existing_sg   = "sg-0dbb6f79cba5ef701" # Existing security group ID
 
@@ -28,7 +29,7 @@ cldr_eip_name = "cldr-mngr-eip"
 
 # Keypair
 create_keypair        = true
-keypair_name          = "pvc-new-keypair"
+keypair_name          = "pvc-new-keypair1"
 existing_keypair_name = "kuldeep-pvc-session"
 
 # EC2 vars
