@@ -52,9 +52,13 @@ output "private_ips" {
   description = "A map of instance group names to the list of private IP addresses assigned to EC2 instances"
 }
 
+# output "public_ips" {
+#   value       = module.ec2_instances.public_ips
+#   description = "A map of instance group names to the list of public IP addresses assigned to EC2 instances"
+# }
+
 output "public_ips" {
-  value       = module.ec2_instances.public_ips
-  description = "A map of instance group names to the list of public IP addresses assigned to EC2 instances"
+  value = local.final_public_ips
 }
 
 # Elastic IP Outputs

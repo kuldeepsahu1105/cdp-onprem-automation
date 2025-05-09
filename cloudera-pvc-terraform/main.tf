@@ -55,10 +55,25 @@ module "ec2_instances" {
   key_name                    = module.key-pair.keypair_name
   pvc_cluster_tags            = var.pvc_cluster_tags
   instance_groups             = var.instance_groups
+  cldr_mngr_eip_enabled       = var.create_eip
   cldr_mngr_eip_allocation_id = module.elastic-ip.eip_allocation_id
   depends_on = [
     module.key-pair,
     module.security_group,
     module.vpc
   ]
+}
+
+# Use `locals` to dynamically update the public IPs if necessary
+locals {
+  # Access the public IPs from EC2 instances
+  original_public_ips = module.ec2_instances.public_ips
+
+  # Conditionally replace Cloudera Manager's public IP with Elastic IP if create_eip is true
+  final_public_ips = merge(
+    local.original_public_ips,
+    var.create_eip ? {
+      "cldr_mngr-1" = module.elastic-ip.eip_public_ip[0] # Access first IP if it's a list
+    } : {}
+  )
 }

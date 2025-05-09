@@ -105,6 +105,12 @@ variable "instance_groups" {
   }
 }
 
+variable "cldr_mngr_eip_enabled" {
+  description = "True or false to create Elastic IP for Cloudera Manager"
+  type        = bool
+  default     = false
+}
+
 variable "cldr_mngr_eip_allocation_id" {
   description = "EIP Allocation ID for Cloudera Manager"
   type        = string

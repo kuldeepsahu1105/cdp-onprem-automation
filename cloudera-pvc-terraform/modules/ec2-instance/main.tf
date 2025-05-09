@@ -43,11 +43,10 @@ resource "aws_instance" "group_instances" {
 }
 
 resource "aws_eip_association" "cldr_mngr" {
-  for_each = {
+  for_each = var.cldr_mngr_eip_enabled ? {
     for k, inst in aws_instance.group_instances :
-    k => inst
-    if k == "cldr_mngr-1"
-  }
+    k => inst if k == "cldr_mngr-1"
+  } : {}
 
   instance_id   = each.value.id
   allocation_id = var.cldr_mngr_eip_allocation_id

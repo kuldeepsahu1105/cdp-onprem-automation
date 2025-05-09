@@ -3,16 +3,17 @@ aws_region = "ap-southeast-1"
 
 # Tags to apply to the key pair (e.g., owner and environment)
 pvc_cluster_tags = {
-  owner       = "ksahu" # Set your owner tag
-  environment = "development"   # Set your environment tag
+  owner       = "ksahu"       # Set your owner tag
+  environment = "development" # Set your environment tag
 }
 
 # EC2 Groups Definition: vars
-vpc_id            = "vpc-9d9385fa"
-subnet_id         = "subnet-6346ad2b"
-security_group_id = "sg-0dbb6f79cba5ef701"
-key_name          = "kuldeep-pvc-session"
-
+vpc_id                      = "vpc-9d9385fa"
+subnet_id                   = "subnet-6346ad2b"
+security_group_id           = "sg-0dbb6f79cba5ef701"
+key_name                    = "kuldeep-pvc-session"
+cldr_mngr_eip_enabled       = false
+cldr_mngr_eip_allocation_id = "eipalloc-0c3f1a2b4d5e6f7a8"
 instance_groups = {
   cldr_mngr = {
     count         = 1
