@@ -1,14 +1,27 @@
 = Cloudera PVC Terraform Automation Guide
-Kuldeep Sahu <ksahu@example.com>
+# cdp-onprem-automation
+Terraform and Ansible based automation to spin-up multi node Cloudera PvC (OnPrem) Cluster
 
-:toc: macro
-:toclevels: 3
+v0.1, May 2025: Draft
+
+// :toc: macro
+:toc-title: Table of Contents
+:description: Installation instructions for Cloudera OnPrem Cluster nodes on AWS
+:toc: left
+:toclevels: 2
 :icons: font
-:source-highlighter: highlightjs
 :sectnums:
-:sectnumlevels: 4
+:sectnumlevels: 3
+:source-highlighter: rouge
+:keywords: Cloudera, Terraform, AWS, Automation, PVC
+:imagesdir: ./images
+:hide-uri-scheme:
+:homepage: https://github.com/kuldeepsahu1105/cdp-onprem-automation
 
-toc::[]
+[WARNING]
+====
+📝 **DRAFT** — This document is WIP and Not Final.
+====
 
 A comprehensive guide to automate the provisioning of Cloudera Data Platform (CDP) cluster instances on AWS.
 
@@ -16,8 +29,8 @@ A comprehensive guide to automate the provisioning of Cloudera Data Platform (CD
 
 This automation facilitates the provisioning of a Cloudera Private Cloud (PVC) environment on AWS using Terraform. It supports both Mac and Linux systems and offers two primary methods for deployment:
 
-1. *Wrapper Script Method*
-2. *Manual Terraform Method*
+. *Wrapper Script Method*
+. *Manual Terraform Method*
 
 == Prerequisites
 
@@ -31,40 +44,40 @@ Ensure the following tools and accounts are available before proceeding:
 
 == Deployment Methods
 
-=== 1. Wrapper Script Method
+=== Wrapper Script Method
 
 This is the quickest method for setting up your infrastructure.
 
 ==== Steps
 
-1. Download the wrapper script and environment file:
+. Download the wrapper script and environment file:
 
-   [source, bash]
-   ----
-   curl -O https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/dev/terraform/clone_and_run_terraform.sh
-   curl -O https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/dev/terraform/.tfvars.env
-   ----
+[source, bash]
+----
+curl -O https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/dev/terraform/clone_and_run_terraform.sh
+curl -O https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/dev/terraform/.tfvars.env
+----
 
-2. Configure `.tfvars.env`:
+. Configure `.tfvars.env`:
 
-   Edit the file to match your desired configuration. See the <<tfvars-configuration, .tfvars.env Configuration Guide>> for details.
+Edit the file to match your desired configuration. See the <<tfvars-configuration, .tfvars.env Configuration Guide>> for details.
 
-3. Execute the script:
+. Execute the script:
 
-   [source, bash]
-   ----
-   bash clone_and_run_terraform.sh
-   ----
+[source, bash]
+----
+bash clone_and_run_terraform.sh
+----
 
-   Ensure `.tfvars.env` is in the same directory as the script.
+Ensure `.tfvars.env` is in the same directory as the script.
 
-=== 2. Manual Terraform Method
+=== Manual Terraform Method
 
 This method provides more granular control over the deployment process.
 
 ==== Steps
 
-1. Clone the repository:
+. Clone the repository:
 
 [source, bash]
 ----
@@ -72,11 +85,11 @@ git clone https://github.com/kuldeepsahu1105/cdp-onprem-automation.git
 cd cdp-onprem-automation
 ----
 
-2. Configure `terraform.tfvars`:
+. Configure `terraform.tfvars`:
 
-   Modify the file to fit your desired setup. Refer to the <<tfvars-configuration, .tfvars.env Configuration Guide>>.
+Modify the file to fit your desired setup. Refer to the <<tfvars-configuration, .tfvars.env Configuration Guide>>.
 
-3. Initialize and apply the Terraform configuration:
+. Initialize and apply the Terraform configuration:
 
 [source, bash]
 ----
@@ -101,7 +114,7 @@ TERRAFORM_VERSION="${TERRAFORM_VERSION:-latest}"
 - `AWS_REGION`: AWS region for deployment
 - `OWNER`: Resource tag owner
 - `ENVIRONMENT`: Environment name (e.g., dev, stage, prod)
-- `TERRAFORM_VERSION`: Terraform version to use
+- `TERRAFORM_VERSION`: Terraform version to install and use (if terraform is not installed)
 
 === VPC Configuration
 
@@ -123,7 +136,8 @@ TERRAFORM_VERSION="${TERRAFORM_VERSION:-latest}"
 ----
 -var="create_new_sg=false"
 -var='allowed_cidrs=["0.0.0.0/0"]'
--var='allowed_ports=[0]'
+-var='allow_all=true'
+-var='allowed_ports=[22, 443, 80, 7180, 7183, 7182]'
 -var="sg_name=pvc_cluster_sg"
 -var="existing_sg=sg-0dbb6f79cba5ef701"
 ----
