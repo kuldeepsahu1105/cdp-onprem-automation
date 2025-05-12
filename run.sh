@@ -17,28 +17,28 @@ elif [[ "$OS" == "Linux" ]]; then
     echo "🔧 Installing libyaml-devel & python3-venv via yum…"
     sudo yum install -y libyaml-devel python3-venv python3-pip
   else
-    echo "⚠️  Please install libyaml-dev and python3-venv manually."
+    echo "Please install libyaml-dev and python3-venv manually."
     exit 1
   fi
 else
-  echo "⚠️  Unsupported OS: $OS"
+  echo "Unsupported OS: $OS"
   exit 1
 fi
 
 # 1) Enter webapp & setup virtualenv
 cd webapp
 if [ ! -d newvenv ]; then
-  echo "🐍 Creating Python newvenv..."
+  echo "Creating Python newvenv..."
   python3 -m venv newvenv
 fi
 source newvenv/bin/activate
 
 # 2) Upgrade pip, setuptools & wheel
-echo "⬆️  Upgrading pip, setuptools, and wheel…"
+echo "Upgrading pip, setuptools, and wheel…"
 pip install --upgrade pip setuptools wheel
 
 # 3) Install requirements via pre-built wheels only
-echo "📦 Installing Python requirements (binary wheels only)…"
+echo "Installing Python requirements (binary wheels only)…"
 pip install --only-binary=:all: -r requirements.txt
 
 # 4) Ensure Terraform & Ansible are on PATH (adjust if needed)
@@ -50,5 +50,5 @@ export ANSIBLE_HOST_KEY_CHECKING=False
 # 6) Launch Flask
 export FLASK_APP=app.py
 export FLASK_DEBUG=1
-echo "🚀 Starting Flask on http://0.0.0.0:5000"
+echo "Starting Flask on http://0.0.0.0:5000"
 flask run --host=0.0.0.0 --port=5000
