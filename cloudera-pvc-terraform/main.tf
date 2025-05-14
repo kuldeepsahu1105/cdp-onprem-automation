@@ -69,11 +69,11 @@ locals {
   # Access the public IPs from EC2 instances
   original_public_ips = module.ec2_instances.public_ips
 
-  # Conditionally replace Cloudera Manager's public IP with Elastic IP if create_eip is true
+  # Conditionally replace Cloudera Manager's public IP with Elastic IP
   final_public_ips = merge(
     local.original_public_ips,
-    var.create_eip ? {
-      "cldr_mngr-1" = module.elastic-ip.eip_public_ip[0] # Access first IP if it's a list
+    var.create_eip && contains(keys(local.original_public_ips), "cldr_mngr-1") ? {
+      "cldr_mngr-1" = module.elastic-ip.eip_public_ip[0]
     } : {}
   )
 }

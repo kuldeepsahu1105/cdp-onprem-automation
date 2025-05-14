@@ -26,6 +26,7 @@ output "public_ips" {
 }
 
 output "eip_association_id" {
-  value       = aws_eip_association.cldr_mngr["cldr_mngr-1"].id
+  # value       = aws_eip_association.cldr_mngr["cldr_mngr-1"].id
+  value = lookup(aws_eip_association.cldr_mngr, "cldr_mngr-1", null) != null ? lookup(aws_eip_association.cldr_mngr, "cldr_mngr-1", null).id : null
   description = "The Association ID for the EIP and instance"
 }

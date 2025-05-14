@@ -60,9 +60,7 @@ curl -O https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/
 curl -O https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/dev/terraform/.tfvars.env
 ----
 
-. Configure `.tfvars.env`:
-
-  Edit the file to match your desired configuration. See the <<tfvars-configuration, .tfvars.env Configuration Guide>> for details.
+. *Configure `.tfvars.env`:* Edit the file to match your desired configuration. See the <<tfvars-configuration, .tfvars.env Configuration Guide>> for details.
 
 . Execute the script:
 +
@@ -87,9 +85,7 @@ git clone https://github.com/kuldeepsahu1105/cdp-onprem-automation.git
 cd cdp-onprem-automation
 ----
 
-. Configure `terraform.tfvars`:
-
-  Modify the file to fit your desired setup. Refer to the <<tfvars-configuration, .tfvars.env Configuration Guide>>.
+. *Configure `terraform.tfvars`:* Modify the file to fit your desired setup. Refer to the <<tfvars-configuration, .tfvars.env Configuration Guide>>.
 
 . Initialize and apply the Terraform configuration:
 +
@@ -99,7 +95,8 @@ terraform init
 terraform apply
 ----
 
-== `.tfvars.env` Configuration Guide
+[[tfvars-configuration]]
+== .tfvars.env Configuration Guide
 
   The `.tfvars.env` file defines environment-specific settings used by Terraform.
 

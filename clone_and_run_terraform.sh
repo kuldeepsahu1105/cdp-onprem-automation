@@ -2,9 +2,12 @@
 
 # How to run: OWNER=myname ENVIRONMENT=production ./run_terraform_wrapper.sh
 
-# make sure aws credentials are set or if using sso then logged in.
+# make sure aws credentials are set or if using sso then logged in to awscli.
 set -e
 set -o pipefail
+
+GIT_REPO_URL="https://github.com/kuldeepsahu1105/cdp-onprem-automation.git"
+echo "GIT_REPO_URL: $GIT_REPO_URL"
 
 print_message() {
     echo ""
@@ -124,11 +127,24 @@ fi
 set -a
 source .tfvars.env
 set +a
+# ------------------------------
+# 🔧 OVERRIDABLE CONFIG SECTION
+# ------------------------------
+# AWS_REGION: Specify the AWS region for deployment (e.g., ap-southeast-1).
+# OWNER: Tag to identify the resource owner.
+# ENVIRONMENT: Deployment environment (e.g., development, staging, production).
+# TERRAFORM_VERSION: Version of Terraform to use; 'latest' will use the most recent version.
+AWS_REGION="${AWS_REGION:-ap-southeast-1}"
+OWNER="${OWNER:-ksahu}"
+ENVIRONMENT="${ENVIRONMENT:-development}"
+TERRAFORM_VERSION="${TERRAFORM_VERSION:-latest}"
+
 print_message "Verify environment name : '$ENVIRONMENT' is set from .tfvars.env file"
 
 print_message "Cloning repository if needed..."
+
 if [ ! -d "pvc-automation" ]; then
-    git clone https://github.com/kuldeepsahu1105/cdp-onprem-automation.git
+    git clone "$GIT_REPO_URL"
 fi
 cd cdp-onprem-automation/cloudera-pvc-terraform || exit 1
 
