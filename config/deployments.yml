@@ -1,5 +1,5 @@
 deployments:
-  - name: "deploy this"
+  - name: "Demo deloyment mode"
     ami_id: "ami-06d753822bd94c64e"
     instance_count: 1
     vpc_id: "vpc-9d9385fa"                # empty → create or default
@@ -40,6 +40,7 @@ deployments:
       count: 1
       prefix: "ham-data-"
       type: "m5.large"
+      
 
   - name: "NonHaMode"
     ami_id: "ami-0c94855ba95c71c99"
@@ -63,3 +64,13 @@ deployments:
       type: "t3.medium"
 
 # To add a new deployment type: append another block with the same structure.
+  - name: "LightWeight"
+    ami_id: "ami-06d753822bd94c64e"
+    instance_count: 1
+    vpc_id: "vpc-9d9385fa"                # empty → create or default
+    required_elastic_ip: false
+
+    master:
+      count: 1
+      prefix: "master-"
+      type: "t2.medium"
