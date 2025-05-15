@@ -6,8 +6,10 @@
 set -e
 set -o pipefail
 
-GIT_REPO_URL="https://github.com/kuldeepsahu1105/cdp-onprem-automation.git"
+GIT_REPO_NAME="cdp-onprem-automation"
+GIT_REPO_URL="https://github.com/kuldeepsahu1105/$GIT_REPO_NAME.git"
 echo "GIT_REPO_URL: $GIT_REPO_URL"
+GIT_BRANCH="dev/terraform"
 
 print_message() {
     echo ""
@@ -143,17 +145,25 @@ print_message "Verify environment name : '$ENVIRONMENT' is set from .tfvars.env 
 
 print_message "Cloning repository if needed..."
 
-if [ ! -d "pvc-automation" ]; then
+if [ ! -d "$GIT_REPO_NAME" ]; then
     git clone "$GIT_REPO_URL"
+    cd $GIT_REPO_NAME || exit 1
+    git checkout "$GIT_BRANCH"
+    cd ..
+else
+    cd $GIT_REPO_NAME || exit 1
+    git fetch origin
+    git checkout "$GIT_BRANCH"
+    git pull origin "$GIT_BRANCH"
+    cd ..
 fi
-cd cdp-onprem-automation/cloudera-pvc-terraform || exit 1
 
+cd $GIT_REPO_NAME/cloudera-pvc-terraform || exit 1
 
 # ------------------------------
 # 🔧 OVERRIDABLE CONFIG SECTION
 # ------------------------------
 # Section moved to .tfvars.env file
-
 
 # ------------------------------
 # 🌱 SET TERRAFORM WORKSPACE
@@ -168,7 +178,7 @@ fi
 # ------------------------------
 # 🧠 DYNAMIC VARS ASSEMBLY
 # ------------------------------
-# This contains all the variables that are passed to Terraform in order 
+# This contains all the variables that are passed to Terraform in order
 # i.e. COMMON_VARS, VPC_VARS, SG_VARS, EIP_VARS, KEYPAIR_VARS, INSTANCE_GROUPS_VARS
 # Section moved to .tfvars.env file
 
