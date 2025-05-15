@@ -51,7 +51,7 @@ data "aws_subnets" "existing" {
 
 # 7) SSH security group
 resource "aws_security_group" "allow_ssh" {
-  name        = "allow_ssh"
+  name        = "allow_ssh1"
   description = "Allow SSH inbound"
   vpc_id      = local.selected_vpc
 
