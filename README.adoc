@@ -129,16 +129,15 @@ TERRAFORM_VERSION="${TERRAFORM_VERSION:-latest}"
 -var="enable_vpn_gateway=false"
 ----
 
-- `create_vpc`: Set to `true` to create a new VPC
+. `create_vpc`: Set to `true` to create a new VPC
+. If `create_vpc=true`, the following parameters are required:
+.. `vpc_name`: Name of the VPC
+.. `vpc_cidr_block`: CIDR block for the VPC
+.. `azs`: Availability zones for the VPC
+.. `public_subnets_cidr`: CIDR blocks for public subnets
+.. `private_subnets_cidr`: CIDR blocks for private subnets
 
-- If `create_vpc=true`, the following parameters are required:
-- `vpc_name`: Name of the VPC
-- `vpc_cidr_block`: CIDR block for the VPC
-- `azs`: Availability zones for the VPC
-- `public_subnets_cidr`: CIDR blocks for public subnets
-- `private_subnets_cidr`: CIDR blocks for private subnets
-
-- If `create_vpc=false`, the script will use the default VPC in that region.
+. If `create_vpc=false`, the script will use the default VPC in that region.
 
 === Security Group Configuration
 
@@ -152,15 +151,15 @@ TERRAFORM_VERSION="${TERRAFORM_VERSION:-latest}"
 -var="existing_sg=sg-0dbb6f79cba5ef701"
 ----
 
-- `create_new_sg`: Set to `true` to create a new security group
-- If `create_new_sg=true`, the following parameters are required:
-- `allowed_cidrs`: CIDR blocks to allow access
-- `allow_all`: Set to `true` to allow all traffic
-- If `allow_all=false`, `allowed_ports` value is required for Ports to allow access
-- `sg_name`: Name of the security group to be created
+. `create_new_sg`: Set to `true` to create a new security group
+. If `create_new_sg=true`, the following parameters are required:
+.. `allowed_cidrs`: CIDR blocks to allow access
+.. `allow_all`: Set to `true` to allow all traffic
+... If `allow_all=false`, `allowed_ports` value is required for Ports to allow access
+.. `sg_name`: Name of the security group to be created
 
-- If `create_new_sg=false`, the script will use the existing security group specified by `existing_sg`.
-- `existing_sg`: ID of the existing security group to use
+. If `create_new_sg=false`, the script will use the existing security group specified by `existing_sg`.
+.. `existing_sg`: ID of the existing security group to use
 
 === Elastic IP and Key Pair Configuration
 
@@ -174,26 +173,26 @@ TERRAFORM_VERSION="${TERRAFORM_VERSION:-latest}"
 -var="existing_keypair_name=kuldeep-pvc-session"
 ----
 
-- `create_eip`: Set to `true` to create a new Elastic IP
-- `cldr_eip_name`: Name of the Elastic IP to be created
-- `create_keypair`: Set to `true` to create a new key pair
-- `keypair_name`: Name of the key pair to be created
-- `existing_keypair_name`: Name of the existing key pair to use
-- If `create_keypair=false`, the script will use the existing key pair specified by `existing_keypair_name`.
-- If `create_eip=false`, the script will use the existing Elastic IP specified by `cldr_eip_name`.
-- If `create_eip=true`, the script will create a new Elastic IP and associate it with the cldr-mngr instance.
+. `create_eip`: Set to `true` to create a new Elastic IP (If `create_eip=true`, the script will create a new Elastic IP and associate it with the cldr-mngr instance)
+. If `create_eip=false`, the script will use the existing Elastic IP specified by `cldr_eip_name`.
+.. `cldr_eip_name`: Name of the Elastic IP to be created
+
+. `create_keypair`: Set to `true` to create a new key pair
+.. `keypair_name`: Name of the key pair to be created
+. If `create_keypair=false`, the script will use the existing key pair specified by `existing_keypair_name`.
+.. `existing_keypair_name`: Name of the existing key pair to use
 
 === Instance Groups Configuration
 
-- `instance_groups`: Defines the EC2 instance groups to be created
-- Each group can have the following parameters:
-- `count`: Number of instances in the group
-- `ami`: AMI ID for the instances
-- `instance_type`: Instance type (e.g., m5.8xlarge)
-- `volume_size`: Size of the EBS volume in GB
-- `tags`: Tags to be applied to the instances
-- `Name`: Name tag for the instances, typically in the format `${ENVIRONMENT}-<group_name>`
-- Make sure AMI ID is available in the specified region and is compatible with the instance type.
+. `instance_groups`: Defines the EC2 instance groups to be created
+. Each group can have the following parameters:
+.. `count`: Number of instances in the group
+.. `ami`: AMI ID for the instances
+.. `instance_type`: Instance type (e.g., m5.8xlarge)
+.. `volume_size`: Size of the EBS volume in GB
+.. `tags`: Tags to be applied to the instances
+.. `Name`: Name tag for the instances, typically in the format `${ENVIRONMENT}-<group_name>`
+. Make sure AMI ID is available in the specified region and is compatible with the instance type.
 
 [source, bash]
 ----
