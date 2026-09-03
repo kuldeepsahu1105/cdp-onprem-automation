@@ -143,5 +143,5 @@
     - name: Set OS-specific facts
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
-    - name: Configure Cloudera Manager yum repository
-      ansible.builtin.import_tasks: common_tasks/configure_cm_yum_repo.yml
+    - name: Configure Cloudera Manager repository
+      ansible.builtin.import_tasks: common_tasks/configure_cm_repo.yml

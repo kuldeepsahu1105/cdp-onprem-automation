@@ -59,7 +59,10 @@ Package names and paths are in the `os_vars` map:
 - `os_vars.RedHat` — RHEL/Rocky/Alma
 - `os_vars.Debian` — Ubuntu/Debian
 
-Access at runtime: `{{ os_vars[ansible_os_family].<key> }}`
+| `cm_repo_dir` | `/etc/yum.repos.d` (RHEL) or `/etc/apt/sources.list.d` (Ubuntu) | CM repo drop-in directory |
+| `cm_repo_file` | `cloudera-manager.repo` or `cloudera-manager.list` | CM repo file name per OS |
+
+Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` after `set_os_facts`.
 
 **PostgreSQL paths:** RHEL stores config in the data directory (`postgres_data_dir`). Ubuntu/Debian uses separate paths — config in `postgres_config_dir` (`/etc/postgresql/<version>/main`), data in `postgres_data_dir` (`/var/lib/postgresql/<version>/main`). Playbook `18_setup_postgres.yml` deploys templates to `postgres_config_dir`.
 

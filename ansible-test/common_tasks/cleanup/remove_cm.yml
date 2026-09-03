@@ -66,6 +66,6 @@
 
 - name: Remove Cloudera Manager repo file
   ansible.builtin.file:
-    path: "{{ os.yum_repo_dir }}/cloudera-manager.repo"
+    path: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
     state: absent
   when: cleanup_remove_cm_repo_file | default(false)

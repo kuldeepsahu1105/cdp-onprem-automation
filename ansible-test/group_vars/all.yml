@@ -445,6 +445,8 @@ os_vars:
     web_server_ssl_cert: /etc/pki/tls/certs/httpd.crt
     webserver_path: /var/www/html
     yum_repo_dir: /etc/yum.repos.d
+    cm_repo_dir: /etc/yum.repos.d
+    cm_repo_file: cloudera-manager.repo
     rc_local_path: /etc/rc.d/rc.local
     dns_config_method: resolv_conf
     postgres_data_dir: "/var/lib/pgsql/{{ postgresql_version }}/data"
@@ -520,6 +522,8 @@ os_vars:
     web_server_ssl_cert: /etc/ssl/certs/apache-selfsigned.crt
     webserver_path: /var/www/html
     yum_repo_dir: /etc/apt/sources.list.d
+    cm_repo_dir: /etc/apt/sources.list.d
+    cm_repo_file: cloudera-manager.list
     rc_local_path: /etc/rc.local
     netplan_dns_file: /etc/netplan/99-cloudera-dns.yaml
     dns_config_method: netplan

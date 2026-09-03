@@ -1,0 +1,33 @@
+---
+- name: Set CM repository OS version path (RHEL)
+  ansible.builtin.set_fact:
+    cm_repo_os_version: "{{ ansible_distribution | lower }}{{ ansible_distribution_major_version }}"
+  when: ansible_os_family == "RedHat"
+
+- name: Set CM repository OS version path (Ubuntu/Debian)
+  ansible.builtin.set_fact:
+    cm_repo_os_version: "ubuntu{{ ansible_distribution_version | replace('.', '') }}"
+  when: ansible_os_family == "Debian"
+
+- name: Configure Cloudera Manager yum repository (RHEL)
+  ansible.builtin.template:
+    src: templates/cloudera-manager.repo.j2
+    dest: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: ansible_os_family == "RedHat"
+
+- name: Configure Cloudera Manager apt repository (Ubuntu/Debian)
+  ansible.builtin.template:
+    src: templates/cloudera-manager.list.j2
+    dest: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: ansible_os_family == "Debian"
+
+- name: Update apt cache after adding Cloudera Manager repository (Ubuntu/Debian)
+  ansible.builtin.apt:
+    update_cache: true
+  when: ansible_os_family == "Debian"
