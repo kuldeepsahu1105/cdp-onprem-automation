@@ -1,0 +1,53 @@
+---
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: set_os_facts.yml
+
+- name: Restart PostgreSQL to apply configuration (RHEL)
+  ansible.builtin.systemd:
+    name: "{{ os.postgres_service }}"
+    state: restarted
+    enabled: true
+    daemon_reload: true
+  when: ansible_os_family == "RedHat"
+
+- name: Restart PostgreSQL cluster to apply configuration (Ubuntu/Debian)
+  ansible.builtin.command: "pg_ctlcluster {{ postgresql_version }} main restart"
+  when: ansible_os_family == "Debian"
+  register: pg_cluster_restart
+  changed_when: pg_cluster_restart.rc == 0
+  failed_when: pg_cluster_restart.rc != 0
+
+- name: Wait for PostgreSQL on localhost
+  ansible.builtin.wait_for:
+    port: "{{ postgres_port }}"
+    host: 127.0.0.1
+    delay: 2
+    timeout: 60
+
+- name: Wait for PostgreSQL on host IP (required for CM JDBC over TCP)
+  ansible.builtin.wait_for:
+    port: "{{ postgres_port }}"
+    host: "{{ ansible_default_ipv4.address }}"
+    delay: 2
+    timeout: 60
+
+- name: Show PostgreSQL listen sockets
+  ansible.builtin.command: ss -ltn sport = :{{ postgres_port }}
+  register: pg_listen_sockets
+  changed_when: false
+
+- name: Display PostgreSQL listen sockets
+  ansible.builtin.debug:
+    msg: "{{ pg_listen_sockets.stdout_lines }}"
+
+- name: Assert PostgreSQL accepts remote TCP connections
+  ansible.builtin.assert:
+    that:
+      - >
+        '0.0.0.0:{{ postgres_port }}' in pg_listen_sockets.stdout
+        or '[::]:{{ postgres_port }}' in pg_listen_sockets.stdout
+        or (ansible_default_ipv4.address ~ ':' ~ postgres_port|string) in pg_listen_sockets.stdout
+    fail_msg: >-
+      PostgreSQL is still bound to localhost only (127.0.0.1:{{ postgres_port }}).
+      Expected listen_addresses='*' in {{ postgres_config_dir }}/postgresql.conf
+      and a full cluster restart.

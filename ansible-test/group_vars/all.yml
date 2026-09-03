@@ -527,6 +527,7 @@ os_vars:
     postgres_config_dir: "/etc/postgresql/{{ postgresql_version }}/main"
     postgres_bin_dir: "/usr/lib/postgresql/{{ postgresql_version }}/bin"
     postgres_service: "postgresql@{{ postgresql_version }}-main"
+    postgres_group: postgres
     postgres_server_packages:
       - "postgresql-{{ postgresql_version }}"
       - "postgresql-client-{{ postgresql_version }}"

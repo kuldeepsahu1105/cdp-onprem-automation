@@ -128,12 +128,22 @@
         src: "templates/{{ item.src }}"
         dest: "{{ postgres_config_dir }}/{{ item.dest }}"
         owner: "{{ postgres_user }}"
-        group: "{{ postgres_user }}"
+        group: "{{ postgres_group | default(postgres_user) }}"
         mode: "0640"
         backup: yes
       loop:
         - { src: "pg_hba.conf.j2", dest: "pg_hba.conf" }
         - { src: "postgresql.conf.j2", dest: "postgresql.conf" }
+      register: postgres_config_deploy
+
+    - name: Show listen_addresses from deployed postgresql.conf
+      ansible.builtin.shell: grep -E '^listen_addresses' "{{ postgres_config_dir }}/postgresql.conf"
+      register: postgres_listen_config
+      changed_when: false
+
+    - name: Display PostgreSQL listen_addresses setting
+      ansible.builtin.debug:
+        msg: "{{ postgres_listen_config.stdout }}"
 
     - name: Ensure LC_ALL is set to C.UTF-8 (RHEL)
       ansible.builtin.lineinfile:
@@ -339,21 +349,13 @@
   hosts: cldr-mngr
   become: yes
   tasks:
-    ##### Restart PostgreSQL DB
-    - name: Ensure PostgreSQL service is started and enabled
-      ansible.builtin.systemd:
-        name: "{{ os.postgres_service }}"
-        state: started
-        enabled: yes
-
-    - name: "Wait for PostgreSQL to listen on port {{ postgres_port }}"
-      ansible.builtin.wait_for:
-        port: "{{ postgres_port }}"
-        host: 127.0.0.1
-        delay: 5
-        timeout: 30
+    - name: Restart PostgreSQL and wait for network listen
+      ansible.builtin.import_tasks: common_tasks/restart_postgresql.yml
 
     ##### Verify PostgreSQL DB status
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
     - name: Check PostgreSQL service status
       ansible.builtin.command: "systemctl status {{ os.postgres_service }} -l"
       register: postgres_status
@@ -406,6 +408,9 @@
   hosts: cldr-mngr
   become: true
   tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
     - name: Verify if SSL is enabled in PostgreSQL
       ansible.builtin.shell: |
         PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -c "SHOW ssl;"
