@@ -143,6 +143,14 @@
         path: "{{ os.rc_local_path }}"
         mode: "0755"
 
+    - name: Enable rc-local service (Ubuntu/Debian)
+      ansible.builtin.systemd:
+        name: rc-local
+        enabled: true
+        state: started
+      when: ansible_os_family == "Debian"
+      failed_when: false
+
     - name: Display rc.local content
       command: cat {{ os.rc_local_path }}
       register: rc_local_content

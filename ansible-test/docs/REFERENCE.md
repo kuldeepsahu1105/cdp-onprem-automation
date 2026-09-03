@@ -27,7 +27,7 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 
 | Variable | Default | Description |
 |---|---|---|
-| `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/ direct; `internal` = mirror on cldr-mngr |
+| `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/ direct; `internal` = mirror on cldr-mngr (RHEL only) |
 | `cm_repo_public_base_url` | `https://archive.cloudera.com/p` | Public archive base URL |
 | `cm_repo_mirror_host` | cldr-mngr IP | Internal mirror HTTP host |
 | `parcel_repo` | computed | Public or internal parcel URL based on `cm_repo_source` |
@@ -42,9 +42,11 @@ cm_repo_source: public
 cm_repo_username: "your-cloudera-account"
 cm_repo_password: "your-password"
 
-# Internal mirror — download RPMs/parcels to cldr-mngr web server
+# Internal mirror — download RPMs/parcels to cldr-mngr web server (RHEL/CentOS/Rocky only)
 cm_repo_source: internal
 ```
+
+Ubuntu/Debian hosts must use `cm_repo_source: public`. The internal mirror playbooks download RPM packages and run `createrepo`; Ubuntu CM installs from archive APT repositories configured by `17_download_repos.yml`.
 
 | Playbook | Mode | Description |
 |---|---|---|

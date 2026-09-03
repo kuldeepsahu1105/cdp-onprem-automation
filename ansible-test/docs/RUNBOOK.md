@@ -226,6 +226,9 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 |---|---|
 | Wrong identity detected | Run `00_detect_identity.yml`; set `identity_provider: freeipa` or `ad` to override |
 | DNS not persisting on Ubuntu | DNS is applied via netplan — see [REFERENCE.md](REFERENCE.md#dns-configuration) |
+| CM install fails on Ubuntu | Use `cm_repo_source: public` and set `cm_repo_username` / `cm_repo_password`; internal mirror is RHEL-only |
+| PostgreSQL listens on 127.0.0.1 only | Re-run `18_setup_postgres.yml` (uses `pg_ctlcluster restart` on Ubuntu) or `pg_ctlcluster 18 main restart` |
+| SSH restart fails on Ubuntu | Fixed in `00_setup_ssh_preqs.yml` — uses `ssh` service instead of `sshd` |
 | AWS vs bare metal DNS wrong | Set `deployment_environment: aws` or `baremetal` explicitly |
 | NetworkManager restart failed | Fixed in `03_create_etc_hosts.yml` — pull latest `main` |
 

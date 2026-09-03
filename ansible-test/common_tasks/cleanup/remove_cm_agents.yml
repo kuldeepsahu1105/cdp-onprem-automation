@@ -15,7 +15,6 @@
       - cloudera-manager-agent
       - cloudera-manager-daemons
     state: absent
-  when: os.supports_cloudera_rpm | default(false)
   failed_when: false
 
 - name: Remove Cloudera Manager agent directories

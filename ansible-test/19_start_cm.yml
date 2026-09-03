@@ -22,12 +22,6 @@
     - name: Set OS-specific facts
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
-    - name: Verify Cloudera Manager RPM packages are supported on this OS
-      ansible.builtin.assert:
-        that:
-          - os.supports_cloudera_rpm
-        fail_msg: "Cloudera Manager RPM installation is only supported on RHEL-based systems."
-
     - name: Install Cloudera Manager Server packages
       ansible.builtin.package:
         name: "{{ cldr_mngr_packages.server }}"
@@ -150,8 +144,6 @@
       ansible.builtin.package:
         name: "{{ cldr_mngr_packages.client }}"
         state: present
-      when: os.supports_cloudera_rpm
-
 
     # - name: Get cldr-mngr hostname from inventory
     #   set_fact:
@@ -167,19 +159,16 @@
         path: /etc/cloudera-scm-agent/config.ini
         regexp: "^server_host="
         line: "server_host={{ hostvars['cldr-mngr']['ansible_fqdn'] }}"
-      when: os.supports_cloudera_rpm
 
     - name: Print the updated config.ini file with updated server details
       ansible.builtin.command:
         cmd: grep server /etc/cloudera-scm-agent/config.ini
       register: config_ini_output
       changed_when: false
-      when: os.supports_cloudera_rpm
 
     - name: Display config.ini content with updated server details
       ansible.builtin.debug:
         msg: "{{ config_ini_output.stdout_lines }}"
-      when: os.supports_cloudera_rpm
 
     - name: Ensure Cloudera Manager Agent is enabled and started
       ansible.builtin.systemd:
@@ -189,7 +178,6 @@
       loop:
         - cloudera-scm-agent
       register: cm_services_status
-      when: os.supports_cloudera_rpm
 
 ##### Print CM UI HTTP Public URL
 - name: Fetch and Print Cloudera Manager Public HTTP URL

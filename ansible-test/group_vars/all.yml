@@ -151,6 +151,7 @@ cldr_repos_path: "{{ webserver_path }}/cloudera-repos"
 # CM/CDH repository source: public | internal
 # public   — use archive.cloudera.com/p/ directly (default, no local mirror)
 # internal — mirror RPMs/parcels to cldr-mngr web server (16 + 17 playbooks)
+#            RHEL/CentOS/Rocky only; Ubuntu/Debian must use public
 # ---------------------------------------------------------------------------
 cm_repo_source: public
 cm_repo_public_base_url: "https://archive.cloudera.com/p"
@@ -393,7 +394,7 @@ cleanup_cm_process_users:
   - yarn
   - zookeeper
 
-# CM packages to remove (RHEL; skipped on Ubuntu when supports_cloudera_rpm is false)
+# CM packages to remove (same package names on RHEL yum and Ubuntu apt)
 cleanup_cm_packages:
   - cloudera-manager-server
   - cloudera-manager-server-db-2
@@ -434,6 +435,7 @@ os_vars:
       - "java-{{ java_version }}-openjdk"
       - "java-{{ java_version }}-openjdk-devel"
     firewall_service: firewalld
+    ssh_service: sshd
     chrony_service: chronyd
     web_server_packages:
       - httpd
@@ -485,7 +487,7 @@ os_vars:
       - krb5-workstation
     supports_selinux: true
     supports_tuned: true
-    supports_cloudera_rpm: true
+    supports_internal_rpm_mirror: true
 
   Debian:
     pkg_mgr: apt
@@ -512,6 +514,7 @@ os_vars:
     java_packages:
       - "openjdk-{{ java_version }}-jdk"
     firewall_service: ufw
+    ssh_service: ssh
     chrony_service: chrony
     web_server_packages:
       - apache2
@@ -566,4 +569,4 @@ os_vars:
       - krb5-user
     supports_selinux: false
     supports_tuned: false
-    supports_cloudera_rpm: false
+    supports_internal_rpm_mirror: false

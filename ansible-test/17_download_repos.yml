@@ -25,8 +25,20 @@
           - cm_repo_password != '<password>'
         fail_msg: >-
           Set cm_repo_username and cm_repo_password for public repo mode
-          (archive.cloudera.com/p/), or use cm_repo_source=internal with 16_setup_internal_repo.yml.
+          (archive.cloudera.com/p/), or use cm_repo_source=internal with 16_setup_internal_repo.yml
+          on RHEL/CentOS/Rocky hosts only.
       when: cm_repo_source == 'public'
+
+    - name: Document Ubuntu/Debian internal mirror limitation
+      ansible.builtin.assert:
+        that:
+          - cm_repo_source != 'internal'
+        fail_msg: >-
+          cm_repo_source=internal mirrors RPM packages only and is not supported on Ubuntu/Debian.
+          Set cm_repo_source: public in group_vars/all.yml for Ubuntu deployments.
+      when:
+        - cm_repo_source == 'internal'
+        - hostvars[groups['cldr-mngr'][0]].ansible_os_family | default('') == 'Debian'
 
 - name: Mirror Cloudera Manager and CDH to internal web server
   hosts: cldr-mngr
@@ -39,11 +51,12 @@
     - name: Set OS-specific facts
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
-    - name: Verify Cloudera Manager RPM repo setup is supported on this OS
-      ansible.builtin.assert:
-        that:
-          - os.supports_cloudera_rpm
-        fail_msg: "Cloudera Manager RPM repository setup is only supported on RHEL-based systems."
+    - name: Require public CM repos on Ubuntu/Debian
+      ansible.builtin.fail:
+        msg: >-
+          cm_repo_source=internal builds an RPM yum mirror and is not supported on Ubuntu/Debian.
+          Set cm_repo_source: public in group_vars/all.yml for Ubuntu deployments.
+      when: ansible_os_family == "Debian"
 
     - name: Set CDH and Spark version variables
       ansible.builtin.set_fact:
