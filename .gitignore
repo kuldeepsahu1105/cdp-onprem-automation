@@ -6,6 +6,9 @@ terraform.tfstate
 terraform.tfstate.backup
 terraform_output.json
 tfplan.out
+nutanix_terraform/terraform.tfvars
+nutanix_terraform/.terraform/
+nutanix_terraform/.terraform.lock.hcl
 
 # Secrets and credentials — never commit
 *.pem

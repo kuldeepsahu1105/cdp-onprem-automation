@@ -45,6 +45,12 @@
   hosts: all
   become: true
   tasks:
+    - name: Ensure Java library directory exists for JDBC driver
+      ansible.builtin.file:
+        path: /usr/share/java
+        state: directory
+        mode: "0755"
+
     - name: Copy JDBC driver from IPA server to all hosts
       copy:
         src: "/tmp/postgresql-{{ postgres_jdbc_version }}.jar"
@@ -120,10 +126,10 @@
     - name: Deploy updated PostgreSQL configuration files
       ansible.builtin.template:
         src: "templates/{{ item.src }}"
-        dest: "{{ postgres_data_dir }}/{{ item.dest }}"
+        dest: "{{ postgres_config_dir }}/{{ item.dest }}"
         owner: "{{ postgres_user }}"
         group: "{{ postgres_user }}"
-        mode: "0600"
+        mode: "0640"
         backup: yes
       loop:
         - { src: "pg_hba.conf.j2", dest: "pg_hba.conf" }

@@ -61,6 +61,8 @@ Package names and paths are in the `os_vars` map:
 
 Access at runtime: `{{ os_vars[ansible_os_family].<key> }}`
 
+**PostgreSQL paths:** RHEL stores config in the data directory (`postgres_data_dir`). Ubuntu/Debian uses separate paths — config in `postgres_config_dir` (`/etc/postgresql/<version>/main`), data in `postgres_data_dir` (`/var/lib/postgresql/<version>/main`). Playbook `18_setup_postgres.yml` deploys templates to `postgres_config_dir`.
+
 ---
 
 ## Identity provider detection

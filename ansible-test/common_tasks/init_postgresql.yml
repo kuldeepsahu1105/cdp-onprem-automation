@@ -1,21 +1,29 @@
 ---
 - name: Check if PostgreSQL data directory exists
   ansible.builtin.stat:
-    path: "{{ os_vars[ansible_os_family].postgres_data_dir }}/PG_VERSION"
+    path: "{{ postgres_data_dir }}/PG_VERSION"
   register: pg_data_stat
 
 - name: Initialize PostgreSQL database (RHEL)
-  ansible.builtin.command: "{{ os_vars.RedHat.postgres_init_command }}"
+  ansible.builtin.command: "{{ os.postgres_init_command }}"
   when:
     - ansible_os_family == "RedHat"
     - not pg_data_stat.stat.exists
   args:
-    creates: "{{ os_vars.RedHat.postgres_data_dir }}/PG_VERSION"
+    creates: "{{ postgres_data_dir }}/PG_VERSION"
 
-- name: Initialize PostgreSQL cluster (Ubuntu)
+- name: Initialize PostgreSQL cluster (Ubuntu/Debian)
   ansible.builtin.command: "pg_createcluster {{ postgresql_version }} main"
   when:
     - ansible_os_family == "Debian"
     - not pg_data_stat.stat.exists
   args:
-    creates: "{{ os_vars.Debian.postgres_data_dir }}/PG_VERSION"
+    creates: "{{ postgres_data_dir }}/PG_VERSION"
+
+- name: Ensure PostgreSQL service is enabled after cluster init (Ubuntu/Debian)
+  ansible.builtin.systemd:
+    name: "{{ os.postgres_service }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: ansible_os_family == "Debian"

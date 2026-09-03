@@ -3,5 +3,6 @@
   ansible.builtin.set_fact:
     os: "{{ os_vars[ansible_os_family] }}"
     postgres_data_dir: "{{ os_vars[ansible_os_family].postgres_data_dir }}"
+    postgres_config_dir: "{{ os_vars[ansible_os_family].postgres_config_dir }}"
     httpd_conf_file: "{{ os_vars[ansible_os_family].web_server_conf_file }}"
     webserver_path: "{{ os_vars[ansible_os_family].webserver_path }}"
