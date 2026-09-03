@@ -1,0 +1,86 @@
+### ansible-playbook -i inventory.ini 16_setup_internal_repo.yml
+#
+# Internal web server for CM/CDH mirror — only when cm_repo_source=internal
+---
+- name: Skip internal web server when using public Cloudera repos
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: End playbook when public repo mode is selected
+      ansible.builtin.meta: end_play
+      when: cm_repo_source != 'internal'
+
+- name: Set up web server to host repository
+  hosts: cldr-mngr
+  become: true
+
+  tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Install required packages
+      ansible.builtin.package:
+        name: "{{ os.web_server_packages }}"
+        state: present
+
+    - name: Generate CA certificate using OpenSSL (RHEL)
+      ansible.builtin.command: >
+        openssl req -newkey rsa:2048 -nodes
+        -keyout {{ os.web_server_ssl_key }}
+        -x509 -days {{ cert_days_valid }}
+        -out {{ os.web_server_ssl_cert }}
+        -subj "{{ cert_subj }}"
+      args:
+        creates: "{{ os.web_server_ssl_key }}"
+      when: ansible_os_family == "RedHat"
+
+    - name: Generate CA certificate using OpenSSL (Ubuntu)
+      ansible.builtin.command: >
+        openssl req -newkey rsa:2048 -nodes
+        -keyout {{ os.web_server_ssl_key }}
+        -x509 -days {{ cert_days_valid }}
+        -out {{ os.web_server_ssl_cert }}
+        -subj "{{ cert_subj }}"
+      args:
+        creates: "{{ os.web_server_ssl_key }}"
+      when: ansible_os_family == "Debian"
+
+    - name: Create directory for HTTPS content
+      ansible.builtin.file:
+        path: "{{ httpd_repo_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Add secure content to the HTTPS directory
+      ansible.builtin.copy:
+        content: "secure content"
+        dest: "{{ httpd_repo_dir }}/index.html"
+        mode: "0644"
+
+    - name: Configure the server name in httpd.conf (RHEL)
+      ansible.builtin.lineinfile:
+        path: "{{ os.web_server_conf_file }}"
+        regexp: "^#ServerName"
+        line: "ServerName {{ server_name }}:80"
+        create: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Configure the server name in apache2.conf (Ubuntu)
+      ansible.builtin.lineinfile:
+        path: "{{ os.web_server_conf_file }}"
+        regexp: "^#?ServerName"
+        line: "ServerName {{ server_name }}"
+        create: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Start and enable web server
+      ansible.builtin.systemd:
+        name: "{{ os.web_server_service }}"
+        state: started
+        enabled: yes
+
+    - name: Verify web server is enabled
+      ansible.builtin.systemd:
+        name: "{{ os.web_server_service }}"
+        enabled: yes

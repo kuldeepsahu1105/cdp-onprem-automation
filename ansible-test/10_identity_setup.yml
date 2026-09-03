@@ -1,0 +1,27 @@
+### ansible-playbook -i inventory.ini 10_identity_setup.yml
+#
+# Phase 2 identity router (auto-detects FreeIPA vs AD via 00_detect_identity.yml)
+#
+# FreeIPA ([ipaserver] in inventory): 10 -> 11 -> 12 -> 13 -> 14 -> 15
+# Active Directory (ad_kdc_host only): 11 -> 14  (10/12/15 skipped automatically)
+---
+- name: Detect identity provider
+  ansible.builtin.import_playbook: 00_detect_identity.yml
+
+- name: FreeIPA server install
+  ansible.builtin.import_playbook: 10_setup_freeipa_server.yml
+
+- name: DNS and resolv.conf
+  ansible.builtin.import_playbook: 11_update_resolv_conf.yml
+
+- name: FreeIPA DNS records
+  ansible.builtin.import_playbook: 12_setup_dns_records.yml
+
+- name: Network sysconfig (domain/DNS)
+  ansible.builtin.import_playbook: 13_update_syscfg_network.yml
+
+- name: Identity client enrollment (FreeIPA or AD realm join)
+  ansible.builtin.import_playbook: 14_setup_identity_client.yml
+
+- name: FreeIPA wildcard DNS record
+  ansible.builtin.import_playbook: 15_setup_wildcard.yml

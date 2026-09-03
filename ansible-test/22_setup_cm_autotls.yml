@@ -1,0 +1,90 @@
+### ansible-playbook -i inventory.ini 22_setup_cm_autotls.yml
+---
+- name: Enable Auto-TLS in Cloudera Manager
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Set up Cloudera Manager API URL
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+
+    - name: Print Auto-TLS status
+      ansible.builtin.debug:
+        msg: "Auto-TLS is already enabled: {{ autotls_enabled }}"
+
+    - name: Perform Auto-TLS setup only if not already enabled
+      when: not autotls_enabled
+      block:
+        - name: Check if password authentication is used
+          ansible.builtin.set_fact:
+            use_password: "{{ cm_node_sudo_password is defined and cm_node_sudo_password | trim | length > 0 }}"
+
+        - name: Create Auto-TLS JSON file (Password-based)
+          ansible.builtin.template:
+            src: auto-tls.json.j2
+            dest: /tmp/auto-tls.json
+          when: use_password
+
+        - name: Enable Auto-TLS (Password-based)
+          ansible.builtin.uri:
+            url: "{{ cm_api_url }}/cm/commands/generateCmca"
+            method: POST
+            user: "{{ cm_admin_user }}"
+            password: "{{ cm_admin_pass }}"
+            force_basic_auth: yes
+            body: "{{ lookup('file', '/tmp/auto-tls.json') }}"
+            body_format: json
+            timeout: 360
+            status_code: [200, 301, 303]
+            validate_certs: no
+          when: use_password
+          register: auto_tls_response
+
+        - name: Create Auto-TLS JSON file (Key-based)
+          ansible.builtin.template:
+            src: auto-tls-key.json.j2
+            dest: /tmp/auto-tls-key.json
+          when: not use_password
+
+        - name: Set private key as a single line (for Key-based)
+          ansible.builtin.set_fact:
+            node_key_one_line: "{{ lookup('file', cm_private_key_path) | replace('\n', '\\n') | replace('\"', '\\\"') }}"
+          when: not use_password
+
+        - name: Enable Auto-TLS (Key-based)
+          ansible.builtin.uri:
+            url: "{{ cm_api_url }}/cm/commands/generateCmca"
+            method: POST
+            user: "{{ cm_admin_user }}"
+            password: "{{ cm_admin_pass }}"
+            force_basic_auth: yes
+            body: "{{ lookup('file', '/tmp/auto-tls-key.json') }}"
+            body_format: json
+            timeout: 360
+            status_code: [200, 301, 303]
+            validate_certs: no
+          when: not use_password
+          register: auto_tls_response
+
+        - name: Restart Cloudera Manager services after Auto-TLS setup
+          ansible.builtin.systemd:
+            name: "{{ item }}"
+            state: restarted
+          loop:
+            - cloudera-scm-server
+            - cloudera-scm-agent
+          when: auto_tls_response is succeeded
+          delegate_to: cldr-mngr
+
+    - name: Refresh CM API URL after Auto-TLS changes
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+
+    - name: Wait for Cloudera Manager API to become available
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
+
+    - name: Wait for Cloudera Manager Server to start
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
+      delegate_to: cldr-mngr
+
+    - name: Print Cloudera Manager Access URLs
+      ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml

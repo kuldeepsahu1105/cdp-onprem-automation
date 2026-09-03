@@ -1,0 +1,67 @@
+---
+- name: Stop and remove ECS docker registry container
+  ansible.builtin.shell: |
+    set -e
+    DOCKER_BIN="/opt/cloudera/parcels/ECS/docker/docker"
+    if [ -x "$DOCKER_BIN" ]; then
+      "$DOCKER_BIN" container stop registry || true
+      "$DOCKER_BIN" container rm -v registry || true
+      "$DOCKER_BIN" image rm registry:2 || true
+    fi
+  args:
+    warn: false
+  when: cleanup_ecs_remove_docker_registry | default(true)
+  changed_when: false
+  failed_when: false
+
+- name: Check if ECS rke2-killall script exists
+  ansible.builtin.stat:
+    path: /opt/cloudera/parcels/ECS/bin/rke2-killall.sh
+  register: rke2_killall_script
+
+- name: Run rke2-killall.sh twice when available
+  ansible.builtin.command: ./rke2-killall.sh
+  args:
+    chdir: /opt/cloudera/parcels/ECS/bin
+  loop: [1, 2]
+  when:
+    - cleanup_ecs_run_rke2_killall | default(true)
+    - rke2_killall_script.stat.exists
+  failed_when: false
+  changed_when: false
+
+- name: Run rke2-uninstall.sh when available
+  ansible.builtin.command: ./rke2-uninstall.sh
+  args:
+    chdir: /opt/cloudera/parcels/ECS/bin
+  when: rke2_killall_script.stat.exists
+  failed_when: false
+  changed_when: false
+
+- name: Remove ECS and container runtime directories
+  ansible.builtin.shell: |
+    rm -rf /ecs/*
+    rm -rf /var/lib/docker_server/*
+    rm -rf /etc/docker/certs.d /etc/docker/*
+    rm -rf /var/lib/docker/*
+    rm -rf /etc/rancher /var/lib/rancher /var/log/rancher
+    rm -rf /var/lib/rancher/k3s/server/node-token
+    rm -rf /run/k3s /opt/containerd /opt/cni
+    rm -rf /docker/* /lhdata/* /cdwdata/*
+    rm -rf /root/.kube /root/.cache
+  args:
+    warn: false
+  changed_when: true
+  failed_when: false
+
+- name: Reload systemd after ECS cleanup
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: Reset iptables to ACCEPT and flush chains
+  ansible.builtin.import_tasks: common_tasks/cleanup/reset_iptables.yml
+  when: hostvars['localhost']['cleanup_effective']['reset_iptables'] | default(false)
+
+- name: Remove CM agent from ECS node
+  ansible.builtin.import_tasks: common_tasks/cleanup/remove_cm_agents.yml
+  when: hostvars['localhost']['cleanup_effective']['remove_cm_agents'] | default(false)

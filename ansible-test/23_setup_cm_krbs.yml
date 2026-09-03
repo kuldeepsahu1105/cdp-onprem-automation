@@ -1,0 +1,144 @@
+### ansible-playbook -i inventory.ini 23_setup_cm_krbs.yml
+---
+- name: Install cloudera.cluster collection on control node
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Install cloudera.cluster collection
+      ansible.builtin.import_tasks: common_tasks/install_cloudera_collection.yml
+
+- name: Enable Kerberos (KDC) integration in Cloudera Manager
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Set up Cloudera Manager API URL
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+
+    - name: Print Kerberos integration targets
+      ansible.builtin.debug:
+        msg:
+          - "Identity provider: {{ identity_provider_effective }}"
+          - "CM host: {{ cm_host }}"
+          - "KDC host: {{ kdc_host }}"
+          - "Kerberos realm: {{ cluster_realm }}"
+          - "KDC type: {{ krb5_kdc_type }}"
+
+    - name: Check current Kerberos configuration
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/cm/kerberosConfig"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 404]
+      register: kerberos_config
+      failed_when: false
+
+    - name: Determine if Kerberos is already configured
+      ansible.builtin.set_fact:
+        kerberos_already_configured: >-
+          {{
+            kerberos_config.json is defined and
+            (kerberos_config.json.items | default([]) | selectattr('name', 'equalto', 'SECURITY_REALM') | map(attribute='value') | first | default('') | length > 0)
+          }}
+
+    - name: Import KDC admin credentials into Cloudera Manager
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/cm/commands/importAdminCredentials"
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          username: "{{ krb5_kdc_admin_user }}"
+          password: "{{ krb5_kdc_admin_password }}"
+        status_code: [200, 201, 204, 400]
+      register: kdc_import_result
+      failed_when: false
+      changed_when: kdc_import_result.status in [200, 201, 204]
+
+    - name: Print KDC credential import result
+      ansible.builtin.debug:
+        msg: "KDC credential import status: {{ kdc_import_result.status }}"
+
+    - name: Configure Kerberos via Cloudera Manager API
+      cloudera.cluster.cm_kerberos:
+        host: "{{ cm_host }}"
+        port: "{{ cm_api_port }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        security_realm: "{{ cluster_realm }}"
+        kdc_type: "{{ krb5_kdc_type }}"
+        krb_enc_types: "{{ krb5_enc_types }}"
+        kdc_admin_host: "{{ kdc_host }}"
+        kdc_host: "{{ kdc_host }}"
+        kdc_admin_user: "{{ krb5_kdc_admin_user if '@' in krb5_kdc_admin_user else krb5_kdc_admin_user + '@' + cluster_realm }}"
+        kdc_admin_password: "{{ krb5_kdc_admin_password }}"
+        verify_tls: false
+        force_tls: "{{ autotls_enabled | default(false) }}"
+        state: present
+      register: cm_kerberos_result
+      when: not kerberos_already_configured | default(false)
+
+    - name: Configure Active Directory-specific Kerberos settings
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/cm/kerberosConfig"
+        method: PUT
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          items:
+            - name: AD_DELETE_ON_REGENERATE
+              value: "{{ krb5_ad_delete_on_regenerate | default(true) | lower }}"
+            - name: AD_KDC_DOMAIN
+              value: "{{ krb5_ad_suffix }}"
+        status_code: [200, 204]
+      register: cm_kerberos_ad_config
+      when:
+        - identity_provider_effective == 'ad'
+        - cm_kerberos_result is changed
+      failed_when: false
+
+    - name: Print Kerberos configuration result
+      ansible.builtin.debug:
+        msg: |
+          {% for item in cm_kerberos_result.cm_config | default([]) %}
+          {{ item.name }}: {{ item.value }}
+          {% endfor %}
+      when: cm_kerberos_result is changed
+
+    - name: Restart Cloudera Manager services after Kerberos setup
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop:
+        - cloudera-scm-server
+        - cloudera-scm-agent
+      when: cm_kerberos_result is changed or (cm_kerberos_ad_config is defined and cm_kerberos_ad_config is changed)
+      delegate_to: cldr-mngr
+
+    - name: Refresh CM API URL after Kerberos changes
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+      when: cm_kerberos_result is changed or (cm_kerberos_ad_config is defined and cm_kerberos_ad_config is changed)
+
+    - name: Wait for Cloudera Manager API to become available
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
+      when: cm_kerberos_result is changed or (cm_kerberos_ad_config is defined and cm_kerberos_ad_config is changed)
+
+    - name: Wait for Cloudera Manager Server to start
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
+      delegate_to: cldr-mngr
+      when: cm_kerberos_result is changed or (cm_kerberos_ad_config is defined and cm_kerberos_ad_config is changed)
+
+    - name: Kerberos already configured
+      ansible.builtin.debug:
+        msg: "Kerberos is already enabled in Cloudera Manager. Skipping configuration."
+      when: kerberos_already_configured | default(false)

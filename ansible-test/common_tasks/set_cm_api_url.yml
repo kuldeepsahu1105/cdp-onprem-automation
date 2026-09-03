@@ -1,0 +1,91 @@
+---
+- name: Validate CM manager inventory group
+  ansible.builtin.import_tasks: validate_inventory_groups.yml
+  vars:
+    required_inventory_group: cldr-mngr
+
+- name: Set Cloudera Manager host
+  ansible.builtin.set_fact:
+    cm_host: "{{ hostvars[cm_manager_inventory_host].ansible_host | default(cm_manager_inventory_host) }}"
+
+- name: Probe Cloudera Manager HTTP API (Auto-TLS redirect detection)
+  ansible.builtin.uri:
+    url: "http://{{ cm_host }}:{{ cm_http_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    follow_redirects: none
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_tls_probe_http
+  until: cm_tls_probe_http is succeeded
+  retries: 5
+  delay: 5
+  ignore_errors: yes
+
+- name: Probe Cloudera Manager HTTPS API (fallback when HTTP is unavailable)
+  ansible.builtin.uri:
+    url: "https://{{ cm_host }}:{{ cm_https_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_tls_probe_https
+  until: cm_tls_probe_https is succeeded
+  retries: 5
+  delay: 5
+  ignore_errors: yes
+  when: cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
+
+- name: Set CM protocol and port based on probe results
+  ansible.builtin.set_fact:
+    autotls_enabled: >-
+      {{
+        (cm_tls_probe_http.status | default(0) in [301, 303])
+        or (cm_tls_probe_https is defined and cm_tls_probe_https is succeeded and cm_tls_probe_https.status | default(0) == 200)
+      }}
+    cm_protocol: >-
+      {{
+        'https' if (
+          (cm_tls_probe_http.status | default(0) in [301, 303])
+          or (cm_tls_probe_https is defined and cm_tls_probe_https is succeeded and cm_tls_probe_https.status | default(0) == 200)
+        ) else 'http'
+      }}
+    cm_api_port: >-
+      {{
+        cm_https_port if (
+          (cm_tls_probe_http.status | default(0) in [301, 303])
+          or (cm_tls_probe_https is defined and cm_tls_probe_https is succeeded and cm_tls_probe_https.status | default(0) == 200)
+        ) else cm_http_port
+      }}
+
+- name: Get Cloudera Manager API version
+  ansible.builtin.uri:
+    url: "{{ cm_protocol }}://{{ cm_host }}:{{ cm_api_port }}/api/version"
+    method: GET
+    status_code: [200, 301, 303]
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    return_content: yes
+    validate_certs: no
+  register: cm_api_version_result
+  until: cm_api_version_result is succeeded
+  retries: 10
+  delay: 6
+
+- name: Set base Cloudera Manager API URL
+  ansible.builtin.set_fact:
+    cm_api_url: "{{ cm_protocol }}://{{ cm_host }}:{{ cm_api_port }}/api/{{ cm_api_version_result.content | trim }}"
+    cm_api_version: "{{ cm_api_version_result.content | trim }}"
+
+- name: Print Cloudera Manager API URL
+  ansible.builtin.debug:
+    msg:
+      - "cm_api_url: {{ cm_api_url }}"
+      - "Auto-TLS enabled: {{ autotls_enabled | default(false) }}"

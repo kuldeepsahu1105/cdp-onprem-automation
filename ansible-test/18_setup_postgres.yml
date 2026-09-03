@@ -1,0 +1,485 @@
+### ansible-playbook -i inventory.ini 18_setup_postgres.yml
+# vars:
+#   postgresql_version: 15
+#   postgres_data_dir: "/var/lib/pgsql/{{ postgresql_version }}/data"
+#   pg_client_crt_dir: "/root/.postgresql"
+#   postgres_user: "postgres"
+#   postgres_password: "postgres"
+#   postgres_db: "postgres"
+
+---
+- name: Configure cloudera-manager.repo on all hosts
+  hosts: all
+  become: yes
+  tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Configure Cloudera Manager yum repository
+      ansible.builtin.import_tasks: common_tasks/configure_cm_yum_repo.yml
+    
+- name: Download PostgreSQL JDBC driver
+  hosts: all
+  become: true
+  tasks:
+    - name: Download PostgreSQL JDBC driver jar file
+      get_url:
+        url: "https://jdbc.postgresql.org/download/postgresql-{{ postgres_jdbc_version }}.jar"
+        dest: "/tmp/postgresql-{{ postgres_jdbc_version }}.jar"
+        mode: "0644"
+      register: jdbc_download
+      retries: 3
+      delay: 5
+      until: jdbc_download is succeeded
+
+    - name: Verify JDBC driver download
+      stat:
+        path: "/tmp/postgresql-{{ postgres_jdbc_version }}.jar"
+      register: jdbc_file_check
+
+    - name: Debug - Check if JDBC file is present
+      debug:
+        msg: "JDBC file exists: {{ jdbc_file_check.stat.exists }}"
+
+- name: Distribute JDBC driver to all hosts
+  hosts: all
+  become: true
+  tasks:
+    - name: Copy JDBC driver from IPA server to all hosts
+      copy:
+        src: "/tmp/postgresql-{{ postgres_jdbc_version }}.jar"
+        dest: "/usr/share/java/postgresql-connector-java.jar"
+        mode: "0644"
+        remote_src: yes
+
+    - name: Debug - Check if file exists after copying
+      command: "ls -l /usr/share/java/postgresql-connector-java.jar"
+      register: jdbc_file_check
+      ignore_errors: true
+
+    - name: Debug output for JDBC file existence
+      debug:
+        var: jdbc_file_check.stdout_lines
+
+    - name: Verify JDBC driver file
+      command: "ls -l /usr/share/java/postgresql-connector-java.jar"
+      register: jdbc_ls_output
+      changed_when: false
+
+    - name: Display JDBC driver file details
+      debug:
+        var: jdbc_ls_output.stdout_lines
+
+- name: Install and Configure PostgreSQL
+  hosts: cldr-mngr
+  become: yes
+  tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Install PostgreSQL repository
+      ansible.builtin.import_tasks: common_tasks/install_postgresql_repo.yml
+
+    - name: "Install PostgreSQL {{ postgresql_version }}"
+      ansible.builtin.package:
+        name: "{{ os.postgres_server_packages }}"
+        state: present
+
+    - name: Initialize PostgreSQL database
+      ansible.builtin.import_tasks: common_tasks/init_postgresql.yml
+
+    - name: Verify PostgreSQL version
+      ansible.builtin.command: "cat {{ postgres_data_dir }}/PG_VERSION"
+      register: pg_version
+      changed_when: false
+
+    - name: Display PostgreSQL version
+      ansible.builtin.debug:
+        msg: "PostgreSQL version is {{ pg_version.stdout }}"
+
+    - name: Verify psycopg2 is installed using pip3 list on all hosts except ipaserver
+      ansible.builtin.shell: "pip3 list | grep psycopg2"
+      register: psycopg2_check_pip
+      failed_when: psycopg2_check_pip.rc != 0
+      changed_when: false
+      when: inventory_hostname != 'ipaserver'
+
+    - name: Verify psycopg2 is installed using Python import on all hosts except ipaserver
+      ansible.builtin.shell: "python3 -c 'import psycopg2'"
+      register: psycopg2_check_import
+      failed_when: psycopg2_check_import.rc != 0
+      changed_when: false
+      when: inventory_hostname != 'ipaserver'
+
+    - name: Display psycopg2 version
+      ansible.builtin.debug:
+        msg: "Psycopg2 version: {{ psycopg2_check_pip.stdout }}"
+      when: psycopg2_check_pip is defined
+
+    ##### Postgres Configuration updates
+    - name: Deploy updated PostgreSQL configuration files
+      ansible.builtin.template:
+        src: "templates/{{ item.src }}"
+        dest: "{{ postgres_data_dir }}/{{ item.dest }}"
+        owner: "{{ postgres_user }}"
+        group: "{{ postgres_user }}"
+        mode: "0600"
+        backup: yes
+      loop:
+        - { src: "pg_hba.conf.j2", dest: "pg_hba.conf" }
+        - { src: "postgresql.conf.j2", dest: "postgresql.conf" }
+
+    - name: Ensure LC_ALL is set to C.UTF-8 (RHEL)
+      ansible.builtin.lineinfile:
+        path: /etc/locale.conf
+        line: '{{ item }}="C.UTF-8"'
+        create: yes
+        backup: yes
+      loop:
+        - LANG
+        - LC_CTYPE
+      when: ansible_os_family == "RedHat"
+
+    - name: Ensure LC_ALL is set to C.UTF-8 (Ubuntu)
+      ansible.builtin.lineinfile:
+        path: /etc/default/locale
+        line: '{{ item }}=C.UTF-8'
+        create: yes
+        backup: yes
+      loop:
+        - LANG
+        - LC_CTYPE
+      when: ansible_os_family == "Debian"
+
+##### TLS Setup for Postgres DB
+- name: Setup PostgreSQL with TLS/SSL for Cloudera Manager
+  hosts: cldr-mngr
+  become: yes
+  tasks:
+    - name: Ensure PostgreSQL data directory exists
+      ansible.builtin.file:
+        path: "{{ postgres_data_dir }}"
+        state: directory
+        owner: "{{ postgres_user }}"
+        group: "{{ postgres_user }}"
+        # mode: "0700"
+
+    - name: Generate private key and CSR
+      ansible.builtin.command:
+        cmd: >
+          openssl req -new -nodes -text
+          -out {{ postgres_data_dir }}/root.csr
+          -keyout {{ postgres_data_dir }}/root.key
+          -subj "{{ cert_subj }}"
+      args:
+        creates: "{{ postgres_data_dir }}/root.key"
+
+    - name: Set permissions on root key
+      ansible.builtin.file:
+        path: "{{ postgres_data_dir }}/root.key"
+        mode: "0400"
+
+    - name: Generate root CA certificate
+      ansible.builtin.command:
+        cmd: >
+          openssl x509 -req -in {{ postgres_data_dir }}/root.csr -text -days 3650
+          -extfile /etc/ssl/openssl.cnf -extensions v3_ca
+          -signkey {{ postgres_data_dir }}/root.key -out {{ postgres_data_dir }}/root.crt
+      args:
+        creates: "{{ postgres_data_dir }}/root.crt"
+
+    - name: Generate server key and CSR
+      ansible.builtin.command:
+        cmd: >
+          openssl req -new -nodes -text
+          -out {{ postgres_data_dir }}/server.csr
+          -keyout {{ postgres_data_dir }}/server.key
+          -subj "/CN={{ ansible_fqdn }}"
+      args:
+        creates: "{{ postgres_data_dir }}/server.key"
+
+    - name: Set permissions on server key
+      ansible.builtin.file:
+        path: "{{ postgres_data_dir }}/server.key"
+        mode: "0400"
+
+    - name: Generate server certificate signed by CA
+      ansible.builtin.command:
+        cmd: >
+          openssl x509 -req -in {{ postgres_data_dir }}/server.csr -text -days 3650
+          -CA {{ postgres_data_dir }}/root.crt -CAkey {{ postgres_data_dir }}/root.key -CAcreateserial
+          -out {{ postgres_data_dir }}/server.crt
+      args:
+        creates: "{{ postgres_data_dir }}/server.crt"
+
+    - name: Set correct ownership for certificates
+      ansible.builtin.file:
+        path: "{{ item }}"
+        owner: "{{ postgres_user }}"
+        group: "{{ postgres_user }}"
+      loop:
+        - "{{ postgres_data_dir }}/server.crt"
+        - "{{ postgres_data_dir }}/server.key"
+        - "{{ postgres_data_dir }}/root.crt"
+
+    - name: Set permissions on certificates
+      ansible.builtin.file:
+        path: "{{ item }}"
+        mode: "0644"
+      loop:
+        - "{{ postgres_data_dir }}/server.crt"
+        - "{{ postgres_data_dir }}/root.crt"
+
+    - name: "Ensure PostgreSQL client certificate directory {{ pg_client_crt_dir }} exists on all nodes"
+      ansible.builtin.file:
+        path: "{{ pg_client_crt_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['all'] }}"
+
+- name: Fetch root.crt from cldr-mngr
+  hosts: cldr-mngr
+  gather_facts: false
+  tasks:
+    - name: Fetch {{ postgres_data_dir }}/root.crt to control node
+      fetch:
+        src: "{{ postgres_data_dir }}/root.crt"
+        dest: /tmp/root.crt
+        flat: yes
+
+- name: Copy root.crt to all nodes
+  hosts: all
+  become: true
+  tasks:
+    - name: "Copy root.crt to {{ pg_client_crt_dir }}/root.crt"
+      copy:
+        src: /tmp/root.crt      # on control node
+        dest: "{{ pg_client_crt_dir }}/root.crt"
+        owner: root
+        group: root
+        mode: '0644'
+
+##### ==================== VERIFICATION TASKS ====================
+##### TLS Verify for Postgres DB
+- name: Verify the certificate files
+  hosts: cldr-mngr
+  become: yes
+  tasks:
+    ##### Verify CRT
+    - name: Verify CRT
+      ansible.builtin.command:
+        cmd: openssl x509 -req -in "{{ postgres_data_dir }}/server.csr" -text -days 3650 -CA "{{ postgres_data_dir }}/root.crt" -CAkey "{{ postgres_data_dir }}/root.key" -CAcreateserial -out "{{ postgres_data_dir }}/server.crt"
+      register: csr_check_result
+      changed_when: false
+
+    - name: Display CRT Verification Output
+      ansible.builtin.debug:
+        msg: "{{ csr_check_result.stderr.replace('\t', '    ').split('\n') }}"
+
+    ##### Verify CSR
+    - name: Verify CSR
+      ansible.builtin.shell: openssl req -in "{{ postgres_data_dir }}/server.csr" -noout -text | head -20
+      register: csr_check_result
+      changed_when: false
+
+    - name: Display CSR Verification Output
+      ansible.builtin.debug:
+        msg: "{{ csr_check_result.stdout.replace('\t', '    ').split('\n') }}"
+
+    - name: Verify Key
+      ansible.builtin.shell: openssl rsa -noout -text -in "{{ postgres_data_dir }}/server.key" | head -20
+      register: csr_check_result
+      changed_when: false
+
+    - name: Display Key Verification Output
+      ansible.builtin.debug:
+        msg: "{{ csr_check_result.stdout.replace('\t', '    ').split('\n') }}"
+
+    ##### Verify Private Key
+    - name: Verify Private Key
+      ansible.builtin.shell: openssl rsa -in "{{ postgres_data_dir }}/server.key" -check | head -20
+      register: key_check_result
+      changed_when: false
+
+    - name: Display Private Key Verification Output
+      ansible.builtin.debug:
+        msg: "{{ key_check_result.stdout.replace('\t', '    ').split('\n') }}"
+
+    ##### Verify Certificate
+    - name: Verify Certificate
+      ansible.builtin.shell: openssl x509 -in "{{ postgres_data_dir }}/server.crt" -noout -text | head -20
+      register: cert_check_result
+      changed_when: false
+
+    - name: Display Certificate Verification Output
+      ansible.builtin.debug:
+        msg: "{{ cert_check_result.stdout.replace('\t', '    ').split('\n') }}"
+
+    # - name: Configure PostgreSQL for SSL
+    #   ansible.builtin.blockinfile:
+    #     path: "{{ postgres_data_dir }}/postgresql.conf"
+    #     block: |
+    #       ssl = on
+    #       ssl_ca_file = 'root.crt'
+    #       ssl_cert_file = 'server.crt'
+    #       ssl_key_file = 'server.key'
+    #     marker: "# {mark} ANSIBLE MANAGED BLOCK SSL CONFIG"
+
+##### Restart and verify Postgres DB
+- name: Restart and verify Postgres DB is running fine
+  hosts: cldr-mngr
+  become: yes
+  tasks:
+    ##### Restart PostgreSQL DB
+    - name: Ensure PostgreSQL service is started and enabled
+      ansible.builtin.systemd:
+        name: "{{ os.postgres_service }}"
+        state: started
+        enabled: yes
+
+    - name: "Wait for PostgreSQL to listen on port {{ postgres_port }}"
+      ansible.builtin.wait_for:
+        port: "{{ postgres_port }}"
+        host: 127.0.0.1
+        delay: 5
+        timeout: 30
+
+    ##### Verify PostgreSQL DB status
+    - name: Check PostgreSQL service status
+      ansible.builtin.command: "systemctl status {{ os.postgres_service }} -l"
+      register: postgres_status
+      changed_when: false
+
+    - name: Display PostgreSQL service status
+      ansible.builtin.debug:
+        msg: "{{ postgres_status.stdout_lines }}"
+
+    - name: Verify PostgreSQL is listening on port 5432
+      ansible.builtin.shell: netstat -ltnup | grep LISTEN | grep -E '5432|postmaster'
+      register: netstat_output
+      changed_when: false
+
+    - name: Display netstat output
+      ansible.builtin.debug:
+        msg: "{{ netstat_output.stdout_lines }}"
+
+    - name: Set PostgreSQL password for user 'postgres'
+      community.postgresql.postgresql_user:
+        name: "{{ postgres_user }}"
+        password: "{{ postgres_password }}"
+        encrypted: yes
+        login_unix_socket: "{{ os.postgres_socket_dir }}"
+      become: yes
+      become_user: postgres
+
+##### Distribute root.crt to other nodes
+# - name: Distribute root.crt to all other nodes
+#   hosts: all
+#   become: yes
+#   tasks:
+#     - name: Distribute root.crt to all nodes
+#       ansible.builtin.copy:
+#         src: "{{ pg_client_crt_dir }}/root.crt"
+#         dest: "{{ pg_client_crt_dir }}/root.crt"
+#         owner: root
+#         group: root
+#         mode: "0644"
+
+# - name: Install and Configure PostgreSQL with TLS/SSL for Cloudera Manager
+#   hosts: cloudera_manager
+#   become: true
+#   roles:
+#     - postgresql
+#     - cloudera_manager
+
+##### Verify PostgreSQL SSL Configuration (Post Start)
+- name: Verify PostgreSQL SSL Configuration (Post Start)
+  hosts: cldr-mngr
+  become: true
+  tasks:
+    - name: Verify if SSL is enabled in PostgreSQL
+      ansible.builtin.shell: |
+        PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -c "SHOW ssl;"
+      register: ssl_status
+      changed_when: false
+
+    - name: Display SSL Status
+      ansible.builtin.debug:
+        msg: "{{ ssl_status.stdout.replace('\t', '    ').split('\n') }}"
+
+    - name: Check Active SSL Connections
+      ansible.builtin.shell: |
+        PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -c "SELECT * FROM pg_stat_ssl;"
+      register: pg_stat_ssl
+      changed_when: false
+
+    - name: Display SSL Connection Status
+      ansible.builtin.debug:
+        msg: "{{ pg_stat_ssl.stdout.replace('\t', '    ').split('\n') }}"
+
+    - name: Verify SSL settings in PostgreSQL
+      ansible.builtin.shell: |
+        PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -c "SELECT name, setting FROM pg_settings WHERE name LIKE '%ssl%';"
+      register: ssl_settings
+      changed_when: false
+
+    - name: Display PostgreSQL SSL Configuration
+      ansible.builtin.debug:
+        msg: "{{ ssl_settings.stdout.replace('\t', '    ').split('\n') }}"
+
+    - name: Test SSL Connection with verify-full
+      ansible.builtin.shell: |
+        PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} "dbname={{ postgres_db }} sslmode=verify-full" -c "SELECT version();"
+      register: ssl_verify_full
+      changed_when: false
+      failed_when: ssl_verify_full.rc != 0
+
+    - name: Display SSL Connection Test (verify-full)
+      ansible.builtin.debug:
+        msg:
+          - "SSL verify-full connection successful:"
+          - "{{ ssl_verify_full.stdout | replace('\t', '    ') | split('\n') }}"
+
+    - name: Test SSL Connection with verify-ca
+      ansible.builtin.shell: |
+        PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} "dbname={{ postgres_db }} sslmode=verify-ca" -c "SELECT version();"
+      register: ssl_verify_ca
+      changed_when: false
+      failed_when: ssl_verify_ca.rc != 0
+
+    - name: Display SSL Connection Test (verify-ca)
+      ansible.builtin.debug:
+        msg:
+          - "SSL verify-ca connection successful:"
+          - "{{ ssl_verify_ca.stdout | replace('\t', '    ') | split('\n') }}"
+
+##### Create databases, users for Cloudera-Manager
+- name: Initialize PostgreSQL Database
+  hosts: cldr-mngr
+  become: true
+  tasks:
+    - name: Generate SQL script from template
+      ansible.builtin.template:
+        src: templates/create_cm_dbs.sql.j2 # Jinja2 template
+        dest: /tmp/init.sql
+        owner: postgres
+        group: postgres
+        mode: "0644"
+
+    - name: Run SQL script on PostgreSQL
+      ansible.builtin.shell: |
+        PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -f /tmp/init.sql
+      register: sql_output
+      changed_when: false
+      failed_when: sql_output.rc != 0
+
+    - name: Display SQL Execution Output
+      ansible.builtin.debug:
+        msg: "{{ sql_output.stdout.replace('\t', '    ').split('\n') }}"
+
+    - name: Display SQL Execution STDERR Output
+      ansible.builtin.debug:
+        msg: "{{ sql_output.stderr.replace('\t', '    ').split('\n') }}"

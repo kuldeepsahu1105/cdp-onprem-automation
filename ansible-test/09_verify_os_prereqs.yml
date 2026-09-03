@@ -1,0 +1,113 @@
+### ansible-playbook -i inventory.ini 09_verify_os_prereqs.yml
+# vars:
+#
+---
+- name: Tasks for remaining prereq on all the hosts
+  hosts: all
+  become: yes
+  become_user: root
+  tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Print service facts
+      ansible.builtin.debug:
+        var: ansible_facts.selinux.status
+
+    - name: Verify swappiness value
+      shell: sysctl vm.swappiness
+      register: swappiness_status
+      changed_when: false
+    - debug: var=swappiness_status.stdout_lines
+
+    - name: Verify enabled hugepage value
+      shell: cat /sys/kernel/mm/transparent_hugepage/enabled
+      register: enabled_hugepage_value
+      changed_when: false
+    - debug: var=enabled_hugepage_value.stdout_lines
+
+    - name: Verify defrag hugepage value
+      shell: cat /sys/kernel/mm/transparent_hugepage/defrag
+      register: defrag_hugepage_value
+      changed_when: false
+    - debug: var=defrag_hugepage_value.stdout_lines
+
+    - name: Print chronyd state
+      ansible.builtin.systemd:
+        name: "{{ os.chrony_service }}"
+      register: chronyd_status
+    - debug:
+        var: chronyd_status.status.ActiveState
+
+    - name: Verify if chrony is enabled to run on reboot
+      shell: systemctl is-enabled {{ os.chrony_service }}
+      register: chronyd_enabled_status
+      changed_when: false
+    - debug: var=chronyd_enabled_status.stdout_lines
+
+    - name: Print firewall state
+      ansible.builtin.systemd:
+        name: "{{ os.firewall_service }}"
+      register: firewall_status
+      ignore_errors: true
+    - debug:
+        var: firewall_status.status.ActiveState
+      ignore_errors: true
+
+    - name: Check rc.local
+      shell: cat {{ os.rc_local_path }}
+      register: rc_local_status
+      changed_when: false
+    - debug: var=rc_local_status.stdout_lines
+
+    - name: Wait for 15 seconds
+      ansible.builtin.pause:
+        seconds: 15
+# #####
+# - name: Tasks for remaining prereq on all the hosts
+#   hosts: all:ipaserver
+#   become: yes
+#   become_user: root
+#   roles:
+#     - cdp_base_OS_prereq
+
+# - name: Tasks for packages installation on all the CDP Base hosts
+#   hosts: all
+#   become: yes
+#   become_user: root
+#   tasks:
+#     - name: install packages
+#       yum:
+#         name:
+#           - ipa-client
+#           - wget
+#           - ntp
+
+# - name: Tasks for packages installation on the freeipa server
+#   hosts: ipaserver
+#   become: yes
+#   become_user: root
+#   tasks:
+#     - name: install packages
+#       yum:
+#         name:
+#           - wget
+#           - ntp
+
+# - name: Reboot the freeipa server
+#   hosts: ipaserver
+#   become: yes
+#   become_user: root
+#   tasks:
+#     - name: Reboot the FreeIPA server for Disabling SELinux
+#       ansible.builtin.reboot:
+#       when: ansible_facts.selinux.status == 'enabled'
+
+# - name: Reboot all the worker nodes
+#   hosts: workers
+#   become: yes
+#   become_user: root
+#   tasks:
+#     - name: Reboot the machines
+#       ansible.builtin.reboot:
+#       when: ansible_facts.selinux.status == 'enabled'

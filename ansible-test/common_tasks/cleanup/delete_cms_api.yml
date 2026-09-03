@@ -1,0 +1,16 @@
+---
+- name: Delete Cloudera Management Service (CMS) via API
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/cm/service"
+    method: DELETE
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 202, 204, 400, 404]
+  register: delete_cms_result
+  failed_when: false
+
+- name: Print CMS delete API result
+  ansible.builtin.debug:
+    msg: "CMS delete API status: {{ delete_cms_result.status | default('unknown') }}"

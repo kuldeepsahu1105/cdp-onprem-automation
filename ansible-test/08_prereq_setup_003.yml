@@ -1,0 +1,27 @@
+### ansible-playbook -i inventory.ini 08_prereq_setup_003.yml
+
+---
+- name: Enable Repositories and Install Packages
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Install PostgreSQL repository
+      ansible.builtin.import_tasks: common_tasks/install_postgresql_repo.yml
+
+    - name: Install PostgreSQL client (psql)
+      ansible.builtin.package:
+        name: "{{ os.postgres_client_packages }}"
+        state: present
+
+    - name: Verify PostgreSQL(psql) installation
+      ansible.builtin.command: psql --version
+      register: psql_version
+      changed_when: false
+
+    - name: Print PostgreSQL(psql) version
+      ansible.builtin.debug:
+        msg: "{{ psql_version.stdout }}"

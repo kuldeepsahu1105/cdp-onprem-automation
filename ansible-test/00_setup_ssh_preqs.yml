@@ -1,0 +1,25 @@
+### ansible-playbook -i inventory.ini 00_setup_ssh_preqs.yml
+# for file in [0-9]*_*; do mv "$file" "$((10#${file%%_*} + 1))_${file#*_}"; done
+---
+- name: Ensure SSH allows password authentication and root login
+  hosts: all:!ipaserver
+  become: yes
+  tasks:
+    - name: Enable PasswordAuthentication in SSH config
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#*PasswordAuthentication"
+        line: "PasswordAuthentication yes"
+        state: present
+
+    - name: Enable PermitRootLogin in SSH config
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#*PermitRootLogin"
+        line: "PermitRootLogin yes"
+        state: present
+
+    - name: Restart SSH service
+      ansible.builtin.service:
+        name: sshd
+        state: restarted

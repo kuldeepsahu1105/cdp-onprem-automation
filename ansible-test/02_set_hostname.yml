@@ -1,0 +1,31 @@
+### ansible-playbook -i inventory.ini 02_set_hostname.yml
+# vars:
+#   ansible_user: ec2-user
+#   cldr_hostname: ipaserver
+#   ipaserver_domain: cldrsetup.local
+
+---
+- name: Set hostname to IP address
+  hosts: all
+  become: yes
+  remote_user: "{{ ansible_user }}" # Specify the SSH user
+  tasks:
+    - name: Verify connectivity to all hosts
+      ping:
+
+    - name: Print cldr_hostname and cluster domain
+      debug:
+        msg: "cldr_hostname is {{ cldr_hostname }} and cluster_domain is {{ cluster_domain }}"
+
+    - name: Set system hostname to IP address with domain
+      hostname:
+        name: "{{ cldr_hostname }}.{{ cluster_domain }}"
+
+    - name: Verify hostname has been set
+      command: hostname
+      register: current_hostname
+      changed_when: false
+
+    - name: Display the new hostname
+      debug:
+        msg: "The hostname is now: {{ current_hostname.stdout }}"

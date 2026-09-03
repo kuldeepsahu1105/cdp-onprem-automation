@@ -1,0 +1,213 @@
+### ansible-playbook -i inventory.ini 19_start_cm.yml
+# vars:
+#   scm_db_name: "scm"
+#   scm_db_user: "scm"
+#   scm_db_password: "scm"
+#   cm_db_ssl_crt_dir: "/var/lib/cloudera-scm-server/.postgresql"
+#   cm_db_root_crt: "{{ cm_db_ssl_crt_dir }}/root.crt"
+#   cldr_mngr_packages:
+#     server:
+#       - cloudera-manager-agent
+#       - cloudera-manager-daemons
+#       - cloudera-manager-server
+#     client:
+#       - cloudera-manager-agent
+#       - cloudera-manager-daemons
+
+---
+- name: Install and Configure Cloudera Manager Server
+  hosts: cldr-mngr
+  become: yes
+  tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Verify Cloudera Manager RPM packages are supported on this OS
+      ansible.builtin.assert:
+        that:
+          - os.supports_cloudera_rpm
+        fail_msg: "Cloudera Manager RPM installation is only supported on RHEL-based systems."
+
+    - name: Install Cloudera Manager Server packages
+      ansible.builtin.package:
+        name: "{{ cldr_mngr_packages.server }}"
+        state: present
+
+    - name: Create PostgreSQL SSL directory
+      ansible.builtin.file:
+        path: "{{ cm_db_ssl_crt_dir }}"
+        state: directory
+        owner: cloudera-scm
+        group: cloudera-scm
+        mode: "0755"
+
+    - name: Copy PostgreSQL root certificate
+      ansible.builtin.copy:
+        src: "{{ postgres_data_dir }}/root.crt"
+        dest: "{{ cm_db_root_crt }}"
+        remote_src: yes
+        owner: cloudera-scm
+        group: cloudera-scm
+        mode: "0644"
+
+    - name: Configure PostgreSQL JDBC connector for CM
+      ansible.builtin.copy:
+        src: /usr/share/java/postgresql-connector-java.jar
+        dest: /opt/cloudera/cm/lib/postgresql-connector.jar
+        remote_src: yes
+
+    - name: Remove existing PostgreSQL connector symlink
+      ansible.builtin.file:
+        path: "/opt/cloudera/cm/lib/postgresql-42.*.jar"
+        state: absent
+
+    ##### Generate db.properties file
+    - name: Check if CM database is already prepared
+      ansible.builtin.command: grep -q "jdbc:postgresql" /etc/cloudera-scm-server/db.properties
+      register: cm_db_prepared
+      failed_when: false
+      changed_when: false
+
+    - name: Run scm_prepare_database.sh script
+      ansible.builtin.command:
+        cmd: >
+          /opt/cloudera/cm/schema/scm_prepare_database.sh -h{{ ansible_fqdn }}
+          --jdbc-url "jdbc:postgresql://{{ ansible_fqdn }}:{{ postgres_port }}/{{ scm_db_name }}?ssl=true&sslmode=verify-ca&sslrootcert={{ cm_db_root_crt }}"
+          postgresql {{ scm_db_name }} {{ scm_db_user }} {{ scm_db_password }} --ssl
+      register: scm_db_output
+      changed_when: "'Successfully connected to database.' in scm_db_output.stdout"
+      when: cm_db_prepared.rc != 0
+
+    ##### Verify the Cloudera Manager Server updated configs
+    - name: Print the updated db.properties file
+      ansible.builtin.command:
+        cmd: cat /etc/cloudera-scm-server/db.properties
+      register: db_properties_output
+      changed_when: false
+
+    - name: Display db.properties contents
+      ansible.builtin.debug:
+        msg: "{{ db_properties_output.stdout_lines }}"
+
+
+    ##### CSD Installation
+    - name: Create CSD directory
+      file:
+        path: /opt/cloudera/csd
+        state: directory
+        owner: cloudera-scm
+        group: cloudera-scm
+        mode: 0755
+      # delegate_to: cldr-mngr
+
+    - name: Download CSDs
+      ansible.builtin.get_url:
+        url: "{{ item }}"
+        dest: /opt/cloudera/csd
+        mode: '0644'
+        url_username: "{{ cm_repo_username }}"
+        url_password: "{{ cm_repo_password }}"
+        force_basic_auth: yes
+      loop: "{{ scm_csds }}"
+      when: scm_csds is defined
+      # delegate_to: cldr-mngr
+
+    # ----------------------------------------
+    # Start and enable Cloudera Manager Server
+    # ----------------------------------------
+    - name: Ensure Cloudera Manager server is enabled and started
+      ansible.builtin.systemd:
+        name: cloudera-scm-server
+        enabled: true
+        state: started
+      register: cm_service_status
+
+    # ----------------------------------------
+    # Wait for CM server port to be available
+    # ----------------------------------------
+    - name: Wait for Cloudera Manager Server port (HTTP)
+      ansible.builtin.wait_for:
+        port: "{{ cm_http_port }}"
+        delay: 10
+        timeout: 300
+
+    # ----------------------------------------
+    # Additional validation (if needed)
+    # ----------------------------------------
+    - name: Wait for Cloudera Manager to become active
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
+
+
+##### Setup agent config on rest of the hosts
+- name: Install and Configure Cloudera Manager Agents
+  hosts: all:!ipaserver
+  become: yes
+  tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Install Cloudera Manager Agent packages
+      ansible.builtin.package:
+        name: "{{ cldr_mngr_packages.client }}"
+        state: present
+      when: os.supports_cloudera_rpm
+
+
+    # - name: Get cldr-mngr hostname from inventory
+    #   set_fact:
+    #     cldr_mngr_fqdn: "{{ hostvars['cldr-mngr']['cldr_hostname'] }}"
+
+    # - name: debug
+    #   debug:
+    #     msg: "cldr-mngr FQDN: {{ cldr_mngr_fqdn }}"
+
+
+    - name: Configure Cloudera Manager Agent
+      ansible.builtin.lineinfile:
+        path: /etc/cloudera-scm-agent/config.ini
+        regexp: "^server_host="
+        line: "server_host={{ hostvars['cldr-mngr']['ansible_fqdn'] }}"
+      when: os.supports_cloudera_rpm
+
+    - name: Print the updated config.ini file with updated server details
+      ansible.builtin.command:
+        cmd: grep server /etc/cloudera-scm-agent/config.ini
+      register: config_ini_output
+      changed_when: false
+      when: os.supports_cloudera_rpm
+
+    - name: Display config.ini content with updated server details
+      ansible.builtin.debug:
+        msg: "{{ config_ini_output.stdout_lines }}"
+      when: os.supports_cloudera_rpm
+
+    - name: Ensure Cloudera Manager Agent is enabled and started
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: yes
+        state: started
+      loop:
+        - cloudera-scm-agent
+      register: cm_services_status
+      when: os.supports_cloudera_rpm
+
+##### Print CM UI HTTP Public URL
+- name: Fetch and Print Cloudera Manager Public HTTP URL
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Get public IP of CM server from ipify
+      ansible.builtin.uri:
+        url: "https://api.ipify.org/"
+        return_content: yes
+      register: public_ip_result
+      delegate_to: cldr-mngr
+
+    - name: Print Cloudera Manager Public URL
+      ansible.builtin.debug:
+        msg: "Cloudera Manager Public HTTP URL: http://{{ public_ip_result.content }}:{{ cm_port }}/"
+
+    - name: Print Cloudera Manager Private URL
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+      become: no
+

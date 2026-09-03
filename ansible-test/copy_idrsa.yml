@@ -1,0 +1,23 @@
+- name: Distribute .ssh directory to ECS nodes
+  hosts: ecs-masters:ecs-workers
+  become: yes
+
+  vars:
+    ssh_src: "{{ lookup('env','HOME') }}/Nutanix/.ssh"
+
+  tasks:
+    - name: Ensure /root/.ssh exists
+      file:
+        path: /root/.ssh
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Copy .ssh contents
+      copy:
+        src: "{{ ssh_src }}/"
+        dest: /root/.ssh/
+        owner: root
+        group: root
+        mode: '0600'

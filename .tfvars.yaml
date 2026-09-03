@@ -1,0 +1,52 @@
+# =============================================================================
+# .tfvars.yaml — YAML deployment config (alternative to .tfvars.env)
+# =============================================================================
+#
+# Use either this file OR .tfvars.env in your working directory.
+# Override path: export TFVARS_FILE=/path/to/config.yaml
+#
+# Wrapper scripts auto-detect: .tfvars.yaml → .tfvars.yml → .tfvars.env
+# =============================================================================
+
+# --- General -----------------------------------------------------------------
+aws_region: ap-southeast-1
+owner: ksahu-ygulati
+environment: development
+terraform_version: latest
+
+# --- Cloudera versions -------------------------------------------------------
+cm_version: "7.13.2.10000"
+
+# --- AWS existing resources ----------------------------------------------------
+existing_sg_name: testing-pvc_cluster_sg
+existing_keypair_name: kuldeep-pvc-session
+
+# --- AMI (shared by all groups) ----------------------------------------------
+ami_id: ami-0a66a47c24c021954
+
+# --- Instance groups -----------------------------------------------------------
+instance_groups:
+  cldr_mngr:
+    count: 1
+    instance_type: m5.4xlarge
+    volume_size: 300
+  ipa_server:
+    count: 1
+    instance_type: m5.xlarge
+    volume_size: 250
+  pvcbase_master:
+    count: 1
+    instance_type: m5.4xlarge
+    volume_size: 400
+  pvcbase_worker:
+    count: 3
+    instance_type: m5.4xlarge
+    volume_size: 400
+  pvcecs_master:
+    count: 1
+    instance_type: m5.8xlarge
+    volume_size: 1300
+  pvcecs_worker:
+    count: 7
+    instance_type: r5a.4xlarge
+    volume_size: 1300

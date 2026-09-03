@@ -1,0 +1,23 @@
+.DS_Store
+.idea/
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+terraform_output.json
+tfplan.out
+
+# Secrets and credentials — never commit
+*.pem
+id_rsa
+idrsa
+license.txt
+*_info.txt
+**/kuldeep*sahu*
+
+# Ansible runtime
+**/logs/*
+!ansible-test/logs/.gitkeep
+
+# Local inventory overrides (keep inventory.ini as template if needed)
+ansible-test/inventory.ini.bak

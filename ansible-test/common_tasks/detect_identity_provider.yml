@@ -1,0 +1,31 @@
+---
+- name: Validate detected identity provider configuration
+  ansible.builtin.assert:
+    that:
+      - identity_provider_effective in ['freeipa', 'ad']
+      - >
+        identity_provider_effective != 'ad'
+        or (ad_kdc_host | default('') | length > 0 and ad_domain | default('') | length > 0)
+      - >
+        identity_provider_effective != 'freeipa'
+        or (ipa_server_in_inventory | default(false) | bool)
+    fail_msg: >-
+      Identity detection failed.
+      FreeIPA: add an active host under [ipaserver] in inventory.ini.
+      Active Directory: leave [ipaserver] empty/unused and set ad_domain + ad_kdc_host in group_vars/all.yml.
+      Or set identity_provider=freeipa|ad explicitly to override auto detection.
+
+- name: Print identity provider detection result
+  ansible.builtin.debug:
+    msg:
+      - "identity_provider setting: {{ identity_provider }}"
+      - "ipa_server in inventory: {{ ipa_server_in_inventory }}"
+      - "effective identity provider: {{ identity_provider_effective }}"
+      - "cluster domain: {{ cluster_domain }}"
+      - "identity client hosts: {{ identity_client_hosts }}"
+      - >-
+        {% if identity_provider_effective == 'freeipa' %}
+        Flow: FreeIPA full (10 server, 11 DNS, 12 records, 13 network, 14 clients, 15 wildcard)
+        {% else %}
+        Flow: AD dependent only (11 DNS, 14 realm join, 23 CM Kerberos, 25 CM LDAP)
+        {% endif %}

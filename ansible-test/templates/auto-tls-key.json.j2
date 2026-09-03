@@ -1,0 +1,9 @@
+{
+    "customCA" : false,
+    "configureAllServices" : "true",
+    "sshPort" : 22,
+    {% if use_freeipa_for_crt_mgmt %}"trustedCaCerts" : "/etc/ipa/ca.crt",{% endif %}
+    "userName" : "{{ cm_srvr_sudo_user|default("root") }}",
+    "privateKey": "{{ node_key_one_line|default('/root/.ssh/id_rsa') }}",
+    "passphrase": "{{ cm_priv_key_passphrase|default("") }}"
+}

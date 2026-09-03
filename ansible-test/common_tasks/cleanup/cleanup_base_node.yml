@@ -1,0 +1,41 @@
+---
+- name: Stop Cloudera services on base cluster node
+  ansible.builtin.systemd:
+    name: cloudera-scm-agent
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Kill CM/CDP process users on base node
+  ansible.builtin.shell: |
+    pids=$(ps -u "{{ item }}" -o pid= 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+      kill $pids || true
+    fi
+  loop: "{{ cleanup_cm_process_users }}"
+  changed_when: false
+  failed_when: false
+
+- name: Remove CM agent packages on base node
+  ansible.builtin.import_tasks: common_tasks/cleanup/remove_cm_agents.yml
+  when: hostvars['localhost']['cleanup_effective']['remove_cm_agents'] | default(false)
+
+- name: Remove base cluster data and config directories
+  ansible.builtin.shell: |
+    rm -rf /tmp/kafka-logs
+    rm -rf /tmp/.scm_prepare_node.lock
+    rm -rf /var/local/kafka/data/meta.properties
+    rm -rf /hdfs /dfs /hdfs/mapred /hdfs/yarn
+    rm -rf /var/lib/had*ozon* /yarn* /hadoop*
+    rm -rf /etc/atlas /etc/hadoop* /etc/ranger* /etc/hue /etc/impala /etc/knox
+    rm -rf /etc/hbase /etc/hive* /etc/hbase-solr /etc/hadoop-kms /etc/ozone*
+    rm -rf /etc/oozie /etc/kafka* /etc/zeppelin* /etc/spark* /etc/sqoop*
+    rm -rf /etc/schemaregistry /etc/solr* /etc/hive-hcatalog /etc/hive-webhcat
+    rm -rf /etc/kudu* /etc/tez* /etc/streams* /etc/nifi*
+    rm -rf /usr/share/cmf /var/lib/cloudera* /var/cache/yum/cloudera*
+    rm -rf /var/log/cloudera* /var/run/cloudera* /opt/cloudera
+  args:
+    warn: false
+  when: hostvars['localhost']['cleanup_effective']['deep_remove_data_dirs'] | default(false)
+  changed_when: true
+  failed_when: false

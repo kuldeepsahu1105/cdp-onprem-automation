@@ -1,0 +1,130 @@
+### ansible-playbook -i inventory.ini 10_setup_freeipa_server.yml
+# vars:
+#   ipaserver_domain: cldrsetup.local
+#   ipaserver_realm: "{{ ipaserver_domain | upper }}"
+#   ipaadmin_principal: "admin"
+#   ipaadmin_password: "vmware123"
+#   ipadm_password: "{{ ipaadmin_password }}"
+#   ipaserver_setup_dns: yes
+#   dns_forwarders: "no"
+#   reverse_zones: "no"
+#   chrony_enabled: "yes"
+---
+- name: Skip FreeIPA server setup when Active Directory is detected
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: End playbook for Active Directory deployments
+      ansible.builtin.meta: end_play
+      when: identity_provider_effective == 'ad'
+
+- name: Install and Configure FreeIPA Server
+  hosts: ipaserver
+  become: yes
+  vars_files:
+    - group_vars/all.yml
+
+  tasks:
+    - name: Print variables passed to the playbook
+      debug:
+        msg: >-
+          hostname: "{{ ansible_fqdn }}"
+          ipaadmin_password: "{{ ipaadmin_password }}"
+          ipaserver_domain: "{{ ipaserver_domain }}"
+          ipaserver_realm: "{{ ipaserver_realm }}"
+          ipaserver_setup_dns: "{{ ipaserver_setup_dns }}"
+
+    - name: Install required packages
+      ansible.builtin.package:
+        name: "{{ os_vars[ansible_os_family].freeipa_server_packages }}"
+        state: present
+
+    # - name: Set Java alternatives (if required)
+    #   command: update-alternatives --config java
+    #   register: java_result
+    #   changed_when: "'selection' in java_result.stdout"
+
+    - name: Extract NetBIOS name from realm
+      set_fact:
+        netbios_name: "{{ ipaserver_realm.split('.')[0] }}"
+
+    - name: Display derived NetBIOS name (for verification)
+      debug:
+        msg: "Derived NetBIOS Name: {{ netbios_name }}"
+
+    - name: Check if IPA server package is installed
+      command: ipa-server-install --version
+      register: ipa_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Display IPA installation status
+      debug:
+        msg: "IPA Server package is installed with version: {{ ipa_check.stdout }}"
+      when: ipa_check.rc == 0
+
+    - name: Check if IPA Server is configured
+      ansible.builtin.stat:
+        path: /etc/ipa/default.conf
+      register: ipa_default_conf
+
+    - name: Check if ipa is installed and running
+      ansible.builtin.command: ipactl status
+      register: ipa_server_status
+      failed_when: false
+      changed_when: false
+
+    - name: Show IPA status if installed
+      ansible.builtin.debug:
+        msg: "{{ ipa_server_status.stdout }}"
+      when: ipa_server_status.rc == 0
+
+    - name: Inform if IPA is not installed or not running
+      ansible.builtin.debug:
+        msg: "IPA is not installed or not running"
+      when: ipa_server_status.rc != 0
+
+    - name: Run IPA server installation
+      command: >
+        ipa-server-install --setup-dns --unattended
+        --hostname={{ ansible_fqdn }}
+        --ip-address={{ ansible_default_ipv4.address }}
+        --domain={{ ipaserver_domain }}
+        --realm={{ ipaserver_realm }}
+        --ds-password={{ ipadm_password }}
+        --admin-password={{ ipaadmin_password }}
+        --no-dnssec-validation
+        --netbios-name={{ netbios_name }}
+        {% if dns_forwarders == 'no' %} --no-forwarders {% endif %}
+        {% if reverse_zones == 'no' %} --no-reverse {% endif %}
+        {% if chrony_enabled == 'yes' %} --ntp-server=pool.ntp.org {% endif %}
+      register: ipa_install_result
+      changed_when: "'The ipa-server-install command was successful' in ipa_install_result.stderr"
+      when: ipa_server_status.rc != 0 or not ipa_default_conf.stat.exists
+
+    - name: Print IPA server installation output
+      ansible.builtin.debug:
+        msg: "{{ ipa_install_result.stderr_lines }}"
+      when: ipa_install_result is changed
+
+    - name: Validate IPA Services
+      command: ipactl status
+      register: ipa_status
+      changed_when: false
+      failed_when: "'The ipactl command was successful' not in ipa_status.stderr"
+
+    - name: Ensure Kerberos Ticket is Present
+      shell: echo "{{ ipaadmin_password }}" | kinit {{ ipaadmin_principal }}
+      register: kinit_result
+      changed_when: false
+      failed_when: kinit_result.rc != 0
+
+    - name: Print Current Kerberos Ticket
+      command: klist -e
+      register: kerberos_ticket
+      changed_when: false
+
+    - name: Debug Kerberos Ticket Details
+      debug:
+        msg: "{{ kerberos_ticket.stdout.replace('\t', '    ').split('\n') }}"

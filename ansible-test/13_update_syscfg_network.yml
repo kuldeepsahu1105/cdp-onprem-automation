@@ -1,0 +1,54 @@
+### ansible-playbook -i inventory.ini 13_update_syscfg_network.yml
+# vars:
+#   ipaserver_domain: cldrsetup.local
+
+---
+- name: Skip sysconfig network update on non-RHEL hosts
+  hosts: all
+  become: yes
+  tasks:
+    - name: End host when not RedHat
+      ansible.builtin.meta: end_host
+      when: ansible_os_family != "RedHat"
+
+- name: Configure /etc/sysconfig/network for identity provider DNS
+  hosts: all
+  become: yes
+  vars:
+    sysconfig_domain: "{{ cluster_domain }}"
+    sysconfig_dns1: >-
+      {{
+        hostvars[groups['ipaserver'][0]].ansible_default_ipv4.address
+        if identity_provider_effective == 'freeipa' and ipa_server_in_inventory | bool
+        else ad_kdc_host
+      }}
+
+  tasks:
+    - name: Print sysconfig network targets
+      ansible.builtin.debug:
+        msg:
+          - "Identity provider: {{ identity_provider_effective }}"
+          - "DOMAIN: {{ sysconfig_domain }}"
+          - "DNS1: {{ sysconfig_dns1 }}"
+
+    - name: Read current /etc/sysconfig/network
+      ansible.builtin.slurp:
+        src: /etc/sysconfig/network
+      register: sysconfig_network_content
+      failed_when: false
+
+    - name: Prepare /etc/sysconfig/network content
+      ansible.builtin.template:
+        src: templates/sysconfig_network.j2
+        dest: /etc/sysconfig/network
+        backup: yes
+
+    - name: Verify new /etc/sysconfig/network content
+      ansible.builtin.command:
+        cmd: cat /etc/sysconfig/network
+      register: sysconfig_network_output
+      changed_when: false
+
+    - name: Show the final content of /etc/sysconfig/network
+      ansible.builtin.debug:
+        msg: "{{ sysconfig_network_output.stdout.replace('\t', '    ').split('\n') }}"

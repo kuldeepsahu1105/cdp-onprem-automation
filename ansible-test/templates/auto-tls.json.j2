@@ -1,0 +1,8 @@
+{
+    "customCA" : false,
+    "configureAllServices" : "true",
+    "sshPort" : 22,
+    {% if use_freeipa_for_crt_mgmt %}"trustedCaCerts" : "/etc/ipa/ca.crt",{% endif %}
+    "userName" : "{{ cm_srvr_sudo_user }}",
+    "password": "{{ cm_node_sudo_password }}"
+}

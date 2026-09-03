@@ -1,0 +1,72 @@
+### ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
+---
+- name: Install cloudera.cluster collection on control node
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Install cloudera.cluster collection
+      ansible.builtin.import_tasks: common_tasks/install_cloudera_collection.yml
+
+- name: Configure LDAP authentication in Cloudera Manager (FreeIPA or Active Directory)
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Skip LDAP configuration when disabled
+      ansible.builtin.meta: end_play
+      when: not cm_ldap_enabled | default(false)
+
+    - name: Set up Cloudera Manager API URL
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+
+    - name: Print LDAP integration targets
+      ansible.builtin.debug:
+        msg:
+          - "Identity provider: {{ identity_provider_effective }}"
+          - "LDAP URL: {{ cm_ldap_url }}"
+          - "LDAP bind DN: {{ cm_ldap_bind_dn }}"
+          - "User search base: {{ cm_ldap_user_search_base }}"
+          - "User search filter: {{ cm_ldap_user_search_filter }}"
+
+    - name: Configure Cloudera Manager LDAP settings
+      cloudera.cluster.cm_config:
+        host: "{{ cm_host }}"
+        port: "{{ cm_api_port }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        verify_tls: false
+        force_tls: "{{ autotls_enabled | default(false) }}"
+        parameters:
+          auth_backend_order: "{{ cm_ldap_auth_backend_order }}"
+          ldap_type: "{{ cm_ldap_type }}"
+          ldap_url: "{{ cm_ldap_url }}"
+          ldap_bind_dn: "{{ cm_ldap_bind_dn }}"
+          ldap_bind_pw: "{{ cm_ldap_bind_password }}"
+          ldap_user_search_base: "{{ cm_ldap_user_search_base }}"
+          ldap_user_search_filter: "{{ cm_ldap_user_search_filter }}"
+          ldap_group_search_base: "{{ cm_ldap_group_search_base }}"
+          ldap_group_search_filter: "{{ cm_ldap_group_search_filter }}"
+          ldap_dn_pattern: "{{ cm_ldap_dn_pattern | default('') }}"
+      register: cm_ldap_result
+
+    - name: Print LDAP configuration result
+      ansible.builtin.debug:
+        msg: "LDAP authentication configured in Cloudera Manager"
+      when: cm_ldap_result is changed
+
+    - name: Restart Cloudera Manager Server after LDAP configuration
+      ansible.builtin.systemd:
+        name: cloudera-scm-server
+        state: restarted
+      when: cm_ldap_result is changed
+      delegate_to: cldr-mngr
+
+    - name: Wait for Cloudera Manager API to become available
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
+      when: cm_ldap_result is changed
+
+    - name: Wait for Cloudera Manager Server to start
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
+      delegate_to: cldr-mngr
+      when: cm_ldap_result is changed

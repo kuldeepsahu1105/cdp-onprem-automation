@@ -1,0 +1,13 @@
+### ansible-playbook -i inventory.ini 00_detect_identity.yml
+#
+# Detect FreeIPA vs Active Directory from inventory and group_vars.
+#   [ipaserver] has hosts  -> FreeIPA full flow
+#   [ipaserver] empty + ad_kdc_host set -> AD dependent flow only
+---
+- name: Detect identity provider (FreeIPA vs Active Directory)
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Detect and validate identity provider
+      ansible.builtin.import_tasks: common_tasks/detect_identity_provider.yml

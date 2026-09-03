@@ -1,0 +1,89 @@
+### ansible-playbook -i inventory.ini 06_prereq_setup.yml
+
+---
+- name: System Update and Package Installation
+  hosts: all
+  become: yes
+  tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Install required base packages
+      ansible.builtin.package:
+        name: "{{ os.prereq_packages }}"
+        state: present
+
+    - name: Enable Python {{ python_version }} module (RHEL 8)
+      ansible.builtin.command: "dnf module enable python{{ python_version | replace('.', '') }} -y"
+      when:
+        - ansible_os_family == "RedHat"
+        - ansible_distribution_major_version == "8"
+      changed_when: false
+      failed_when: false
+
+    - name: Install Python {{ python_version }} packages
+      ansible.builtin.package:
+        name: "{{ os.python_packages }}"
+        state: present
+
+    - name: Upgrade pip to the latest version
+      ansible.builtin.pip:
+        name: pip
+        state: latest
+        executable: "{{ os.pip_executable }}"
+      become: yes
+
+    - name: Verify if Python is installed
+      ansible.builtin.command: "{{ os.python_executable }} --version"
+      register: python_version_output
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Print Python version
+      ansible.builtin.debug:
+        msg: "Python version: {{ python_version_output.stdout }}"
+      when: python_version_output.rc == 0
+
+    - name: Verify if Pip is installed
+      ansible.builtin.command: "{{ os.pip_executable }} --version"
+      register: pip_version_output
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Print Pip version
+      ansible.builtin.debug:
+        msg: "Pip version: {{ pip_version_output.stdout }}"
+      when: pip_version_output.rc == 0
+
+    - name: Install psycopg2-binary
+      ansible.builtin.pip:
+        name: psycopg2-binary
+        state: present
+        executable: "{{ os.pip_executable }}"
+      become: yes
+
+    - name: Install Java
+      ansible.builtin.package:
+        name: "{{ os.java_packages }}"
+        state: present
+
+    - name: Verify Java installation
+      ansible.builtin.command: java -version
+      register: java_version_output
+      changed_when: false
+
+    - name: Display Java version
+      ansible.builtin.debug:
+        msg: "{{ java_version_output.stderr_lines | default(java_version_output.stdout_lines) }}"
+
+    - name: Verify psycopg2 installation
+      ansible.builtin.command: "{{ os.pip_executable }} list | grep psy"
+      register: psycopg2_output
+      changed_when: false
+
+    - name: Display psycopg2 installation output
+      ansible.builtin.debug:
+        msg: "{{ psycopg2_output.stdout_lines }}"
+
+    - name: Disable firewall
+      ansible.builtin.import_tasks: common_tasks/disable_firewall.yml

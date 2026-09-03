@@ -1,0 +1,85 @@
+### ansible-playbook -i inventory.ini 14_setup_freeipa_client.yml
+# vars:
+#   ipaserver_domain: cldrsetup.local
+#   ipaserver_realm: "{{ ipaserver_domain | upper }}"
+#   ipaadmin_principal: "admin"
+#   ipaadmin_password: "vmware123"
+
+---
+- name: Update /etc/resolv.conf on all hosts
+  hosts: all
+  become: yes
+  tasks:
+    - name: Configure DNS for identity provider
+      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
+
+    - name: Wait for 15 seconds
+      ansible.builtin.pause:
+        seconds: 15
+
+- name: Install FreeIPA client packages
+  hosts: all:!ipaserver
+  become: yes
+  tasks:
+    - name: Download FreeIPA client packages and required packages
+      ansible.builtin.package:
+        name: "{{ os_vars[ansible_os_family].freeipa_client_packages }}"
+        state: present
+
+- name: Enroll nodes as IPA clients
+  hosts: all:!ipaserver
+  become: true
+  vars_files:
+    - group_vars/all.yml
+
+  tasks:
+    - name: Set IPA Server fact
+      ansible.builtin.set_fact:
+        ipaserver: "ipaserver.{{ ipaserver_domain }}"
+
+    - name: Check if IPA client is configured
+      ansible.builtin.stat:
+        path: /etc/ipa/default.conf
+      register: ipa_client_config
+
+    - name: Install and configure FreeIPA client
+      ansible.builtin.command: >
+        ipa-client-install --unattended --force-join --force
+        --realm={{ ipaserver_realm }} --domain={{ ipaserver_domain }} --server="{{ ipaserver }}"
+        --principal={{ ipaadmin_principal }} --password={{ ipaadmin_password }}
+        --mkhomedir --enable-dns-updates --ntp-server=pool.ntp.org
+      register: ipa_client_output
+      changed_when: ipa_client_output.rc == 0 and not ipa_client_config.stat.exists
+      when: not ipa_client_config.stat.exists
+
+    - name: Print IPA client installation output
+      ansible.builtin.debug:
+        msg: "{{ ipa_client_output.stderr_lines }}"
+      when: ipa_client_output is defined and not ipa_client_config.stat.exists
+
+    - name: Ensure Kerberos ticket is available
+      ansible.builtin.command: klist
+      register: klist_output
+      changed_when: false
+      failed_when: false
+
+    - name: Obtain Kerberos ticket if missing
+      ansible.builtin.shell: echo "{{ ipaadmin_password }}" | kinit {{ ipaadmin_principal }}
+      register: kinit_result
+      changed_when: kinit_result.rc == 0
+      when: "'No credentials cache found' in klist_output.stderr or klist_output.rc != 0"
+
+    - name: Verify IPA domain enrollment
+      ansible.builtin.command: ipa ping
+      register: ipa_ping
+      changed_when: false
+      failed_when: "'did not receive Kerberos credentials' in ipa_ping.stderr"
+
+    - name: List Current Kerberos Ticket
+      ansible.builtin.command: klist -e
+      register: kerberos_ticket
+      changed_when: false
+
+    - name: Print Kerberos Ticket Details
+      debug:
+        msg: "{{ kerberos_ticket.stdout.replace('\t', '    ').split('\n') }}"

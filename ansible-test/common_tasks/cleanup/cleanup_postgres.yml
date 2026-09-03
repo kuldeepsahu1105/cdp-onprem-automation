@@ -1,0 +1,70 @@
+---
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+- name: Stop PostgreSQL service
+  ansible.builtin.systemd:
+    name: "{{ os.postgres_service }}"
+    state: stopped
+    enabled: false
+  failed_when: false
+  when: cleanup_effective.stop_postgres | default(false)
+
+- name: Check if PostgreSQL data directory exists
+  ansible.builtin.stat:
+    path: "{{ os.postgres_data_dir }}"
+  register: pg_data_dir_stat
+  when: cleanup_effective.remove_postgres_data | default(false)
+
+- name: Set PostgreSQL data backup suffix
+  ansible.builtin.set_fact:
+    pg_data_backup_path: "{{ os.postgres_data_dir | dirname }}/data_bkp_{{ lookup('pipe', 'date +%Y%m%d') }}"
+
+- name: Check if PostgreSQL backup already exists for today
+  ansible.builtin.stat:
+    path: "{{ pg_data_backup_path }}"
+  register: pg_data_backup_stat
+  when: cleanup_effective.remove_postgres_data | default(false)
+
+- name: Backup PostgreSQL data directory
+  ansible.builtin.command: "mv {{ os.postgres_data_dir }} {{ pg_data_backup_path }}"
+  when:
+    - cleanup_effective.remove_postgres_data | default(false)
+    - cleanup_backup_postgres_data | default(true)
+    - pg_data_dir_stat.stat.exists | default(false)
+    - not pg_data_backup_stat.stat.exists | default(false)
+
+- name: Remove PostgreSQL data directory
+  ansible.builtin.file:
+    path: "{{ os.postgres_data_dir }}"
+    state: absent
+  when:
+    - cleanup_effective.remove_postgres_data | default(false)
+    - not (cleanup_backup_postgres_data | default(true))
+    - pg_data_dir_stat.stat.exists | default(false)
+
+- name: Remove PostgreSQL server packages (RHEL)
+  ansible.builtin.package:
+    name: "{{ os.postgres_server_packages + ['postgresql-contrib', 'postgresql-server'] }}"
+    state: absent
+  when:
+    - cleanup_effective.remove_postgres_packages | default(false)
+    - ansible_os_family == "RedHat"
+  failed_when: false
+
+- name: Remove PostgreSQL server packages (Ubuntu)
+  ansible.builtin.package:
+    name: "{{ os.postgres_server_packages }}"
+    state: absent
+  when:
+    - cleanup_effective.remove_postgres_packages | default(false)
+    - ansible_os_family == "Debian"
+  failed_when: false
+
+- name: Remove postgres OS user
+  ansible.builtin.user:
+    name: postgres
+    state: absent
+    remove: true
+  when: cleanup_effective.remove_postgres_user | default(false)
+  failed_when: false

@@ -1,0 +1,37 @@
+---
+- name: Stop Cloudera Management Service (CMS) via API
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/cm/service/commands/stop"
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 202, 204, 400, 404]
+  register: stop_cms_result
+  failed_when: false
+
+- name: Wait for CMS to stop
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/cm/service"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 404]
+  register: cms_status
+  until: >
+    cms_status.status == 404
+    or (
+      cms_status.json is defined
+      and cms_status.json.serviceState | default('') in ['STOPPED', 'NONE']
+    )
+  retries: 20
+  delay: 10
+  failed_when: false
+  when: stop_cms_result.status in [200, 202]
+
+- name: Print CMS stop API result
+  ansible.builtin.debug:
+    msg: "CMS stop API status: {{ stop_cms_result.status | default('unknown') }}"

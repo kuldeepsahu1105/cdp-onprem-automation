@@ -1,0 +1,16 @@
+---
+- name: Validate required inventory group exists
+  ansible.builtin.assert:
+    that:
+      - inventory_group_name in groups
+      - groups[inventory_group_name] | length > 0
+    fail_msg: >-
+      Inventory group '{{ inventory_group_name }}' is missing or empty.
+      Check inventory.ini before running this playbook.
+  vars:
+    inventory_group_name: "{{ required_inventory_group | default('cldr-mngr') }}"
+
+- name: Set CM manager inventory hostname
+  ansible.builtin.set_fact:
+    cm_manager_inventory_host: "{{ groups[required_inventory_group | default('cldr-mngr')][0] }}"
+  when: cm_manager_inventory_host is not defined

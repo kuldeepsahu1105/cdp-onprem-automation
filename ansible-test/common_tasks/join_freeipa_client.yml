@@ -1,0 +1,56 @@
+---
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: set_os_facts.yml
+
+- name: Set IPA server FQDN
+  ansible.builtin.set_fact:
+    ipaserver: "ipaserver.{{ ipaserver_domain }}"
+
+- name: Check if IPA client is configured
+  ansible.builtin.stat:
+    path: /etc/ipa/default.conf
+  register: ipa_client_config
+
+- name: Install and configure FreeIPA client
+  ansible.builtin.command: >
+    ipa-client-install --unattended --force-join --force
+    --realm={{ ipaserver_realm }} --domain={{ ipaserver_domain }} --server="{{ ipaserver }}"
+    --principal={{ ipaadmin_principal }} --password={{ ipaadmin_password }}
+    --mkhomedir --enable-dns-updates --ntp-server=pool.ntp.org
+  register: ipa_client_output
+  changed_when: ipa_client_output.rc == 0 and not ipa_client_config.stat.exists
+  when: not ipa_client_config.stat.exists
+  no_log: true
+
+- name: Print IPA client installation output
+  ansible.builtin.debug:
+    msg: "{{ ipa_client_output.stderr_lines }}"
+  when: ipa_client_output is changed
+
+- name: Ensure Kerberos ticket is available
+  ansible.builtin.command: klist
+  register: klist_output
+  changed_when: false
+  failed_when: false
+
+- name: Obtain Kerberos ticket if missing
+  ansible.builtin.shell: echo "{{ ipaadmin_password }}" | kinit {{ ipaadmin_principal }}
+  register: kinit_result
+  changed_when: kinit_result.rc == 0
+  no_log: true
+  when: "'No credentials cache found' in klist_output.stderr or klist_output.rc != 0"
+
+- name: Verify IPA domain enrollment
+  ansible.builtin.command: ipa ping
+  register: ipa_ping
+  changed_when: false
+  failed_when: "'did not receive Kerberos credentials' in ipa_ping.stderr"
+
+- name: List current Kerberos ticket
+  ansible.builtin.command: klist -e
+  register: kerberos_ticket
+  changed_when: false
+
+- name: Print Kerberos ticket details
+  ansible.builtin.debug:
+    msg: "{{ kerberos_ticket.stdout.replace('\t', '    ').split('\n') }}"

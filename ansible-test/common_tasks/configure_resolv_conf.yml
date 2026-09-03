@@ -1,0 +1,60 @@
+---
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: set_os_facts.yml
+
+- name: Resolve DNS facts for deployment environment and identity provider
+  ansible.builtin.import_tasks: set_dns_facts.yml
+
+- name: Check if netplan is available
+  ansible.builtin.stat:
+    path: /etc/netplan
+  register: netplan_dir
+
+- name: Find existing netplan configuration files
+  ansible.builtin.find:
+    paths: /etc/netplan
+    patterns: "*.yaml,*.yml"
+    file_type: file
+  register: netplan_files
+  when: netplan_dir.stat.isdir | default(false)
+
+- name: Configure DNS via netplan on Ubuntu/Debian
+  when:
+    - ansible_os_family == "Debian"
+    - netplan_dir.stat.isdir | default(false)
+    - netplan_files.matched | default(0) > 0
+    - ansible_default_ipv4.interface is defined
+  block:
+    - name: Deploy netplan DNS configuration
+      ansible.builtin.template:
+        src: templates/netplan_dns.yaml.j2
+        dest: "{{ os.netplan_dns_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+      register: netplan_dns_config
+
+    - name: Validate netplan configuration
+      ansible.builtin.command: netplan generate
+      changed_when: false
+
+    - name: Apply netplan DNS configuration
+      ansible.builtin.command: netplan apply
+      when: netplan_dns_config is changed
+      register: netplan_apply
+      changed_when: netplan_apply.rc == 0
+
+- name: Configure DNS via /etc/resolv.conf on RHEL and non-netplan hosts
+  when: >
+    ansible_os_family == "RedHat"
+    or not (netplan_dir.stat.isdir | default(false))
+    or netplan_files.matched | default(0) == 0
+    or ansible_default_ipv4.interface is not defined
+  block:
+    - name: Update /etc/resolv.conf
+      ansible.builtin.template:
+        src: templates/etc_resolv_conf_generic.j2
+        dest: /etc/resolv.conf
+        owner: root
+        group: root
+        mode: "0644"

@@ -1,0 +1,71 @@
+---
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+- name: Stop Cloudera Manager and agent services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop:
+    - cloudera-scm-server
+    - cloudera-scm-agent
+    - cloudera-scm-server-db
+    - cloudera-manager-server-db
+    - supervisord
+  failed_when: false
+
+- name: Kill CM-related process users
+  ansible.builtin.shell: |
+    pids=$(ps -u "{{ item }}" -o pid= 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+      kill $pids || true
+    fi
+  loop: "{{ cleanup_cm_process_users }}"
+  changed_when: false
+  failed_when: false
+
+- name: Unmount cm_processes mount if present
+  ansible.builtin.command: umount cm_processes
+  failed_when: false
+  changed_when: false
+
+- name: Remove Cloudera Manager packages
+  ansible.builtin.package:
+    name: "{{ cleanup_cm_packages }}"
+    state: absent
+  when: os.supports_cloudera_rpm | default(false)
+
+- name: Clean package manager cache (RHEL)
+  ansible.builtin.command: dnf clean all
+  when: ansible_os_family == "RedHat"
+  changed_when: false
+  failed_when: false
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: Remove Cloudera Manager directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/share/cmf
+    - /var/lib/cloudera-scm-server
+    - /var/cache/yum/cloudera-manager
+    - /var/log/cloudera-scm-server
+    - /var/log/cloudera-scm-agent
+    - /var/run/cloudera-scm-server
+    - /var/run/cloudera-scm-agent
+    - /etc/cloudera-scm-server
+    - /etc/cloudera-scm-agent
+    - /opt/cloudera/cm-agent
+    - /opt/cloudera/csd
+  failed_when: false
+
+- name: Remove Cloudera Manager repo file
+  ansible.builtin.file:
+    path: "{{ os.yum_repo_dir }}/cloudera-manager.repo"
+    state: absent
+  when: cleanup_remove_cm_repo_file | default(false)

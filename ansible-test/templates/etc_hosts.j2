@@ -1,0 +1,29 @@
+##### Generated using ansible
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+
+# Free-IPA Server
+{% for host in groups['ipaserver'] %}
+{{ hostvars[host]['private_ip'] }} {{ hostvars[host]['cldr_hostname'] }}.{{ ipaserver_domain }} {{ hostvars[host]['cldr_hostname'] }}
+{% endfor %}
+
+# Cloudera Manager Server
+{% for host in groups['cldr-mngr'] %}
+{{ hostvars[host]['private_ip'] }} {{ hostvars[host]['cldr_hostname'] }}.{{ ipaserver_domain }} {{ hostvars[host]['cldr_hostname'] }}
+{% endfor %}
+
+# PvC Base Cluster Nodes
+{% for host in groups['base-masters'] %}
+{{ hostvars[host]['private_ip'] }} {{ hostvars[host]['cldr_hostname'] }}.{{ ipaserver_domain }} {{ hostvars[host]['cldr_hostname'] }}
+{% endfor %}
+{% for host in groups['base-workers'] %}
+{{ hostvars[host]['private_ip'] }} {{ hostvars[host]['cldr_hostname'] }}.{{ ipaserver_domain }} {{ hostvars[host]['cldr_hostname'] }}
+{% endfor %}
+
+# PvC Data Services ECS Cluster Nodes
+{% for host in groups['ecs-masters'] %}
+{{ hostvars[host]['private_ip'] }} {{ hostvars[host]['cldr_hostname'] }}.{{ ipaserver_domain }} {{ hostvars[host]['cldr_hostname'] }}
+{% endfor %}
+{% for host in groups['ecs-workers'] %}
+{{ hostvars[host]['private_ip'] }} {{ hostvars[host]['cldr_hostname'] }}.{{ ipaserver_domain }} {{ hostvars[host]['cldr_hostname'] }}
+{% endfor %}

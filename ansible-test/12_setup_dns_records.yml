@@ -1,0 +1,121 @@
+### ansible-playbook -i inventory.ini 12_setup_dns_records.yml
+# vars:
+#   ipaadmin_password: "vmware123"
+#   ipaadmin_principal: "admin"
+#   ipaserver_domain: cldrsetup.local
+
+---
+- name: Skip FreeIPA DNS records when Active Directory is detected
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: End playbook for Active Directory deployments
+      ansible.builtin.meta: end_play
+      when: identity_provider_effective == 'ad'
+
+- name: Manage FreeIPA DNS Zones and Records
+  hosts: ipaserver
+  gather_facts: yes
+  become: yes
+  tasks:
+    - name: Ensure Kerberos Ticket is Present
+      shell: echo "{{ ipaadmin_password }}" | kinit {{ ipaadmin_principal }}
+      register: kinit_result
+      changed_when: false
+      failed_when: kinit_result.rc != 0
+
+    - name: Validate IPA Services
+      command: ipactl status
+      register: ipa_status
+      changed_when: false
+      failed_when: "'The ipactl command was successful' not in ipa_status.stderr"
+
+    - name: Print Current Kerberos Ticket
+      command: klist -e
+      register: kerberos_ticket
+      changed_when: false
+
+    - name: Debug Kerberos Ticket Details
+      debug:
+        msg: "{{ kerberos_ticket.stdout.replace('\t', '    ').split('\n') }}"
+
+    - name: Extract Reverse DNS Zone from IP Address
+      set_fact:
+        reverse_dns_zone: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['network'].split('.')[1] }}.{{ hostvars[inventory_hostname]['ansible_default_ipv4']['network'].split('.')[0] }}.in-addr.arpa."
+
+    - name: Print reverse_dns_zone name
+      debug:
+        msg: "Reverse DNS Zone Name: {{ reverse_dns_zone }}"
+
+    - name: Ensure Reverse DNS Zone is Present
+      freeipa.ansible_freeipa.ipadnszone:
+        ipaadmin_password: "{{ ipaadmin_password }}"
+        name: "{{ reverse_dns_zone }}"
+        state: present
+
+    - name: Gather facts for all hosts
+      ansible.builtin.setup:
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      loop: "{{ groups['all'] }}"
+
+    - name: Debug ansible_default_ipv4 before using it
+      debug:
+        msg: "{{ item }} ansible_default_ipv4: {{ hostvars[item].ansible_default_ipv4 | default('MISSING') }}"
+      loop: "{{ groups['all'] }}"
+
+    - name: Add PTR Records Dynamically
+      freeipa.ansible_freeipa.ipadnsrecord:
+        ipaadmin_password: "{{ ipaadmin_password }}"
+        name: "{{ hostvars[item]['ansible_default_ipv4']['address'].split('.')[3] }}.{{ hostvars[item]['ansible_default_ipv4']['address'].split('.')[2] }}"
+        zone_name: "{{ reverse_dns_zone }}"
+        record_type: "PTR"
+        record_value: "{{ hostvars[item]['cldr_hostname'] }}.{{ ipaserver_domain }}."
+        state: present
+      loop: "{{ groups['all'] }}"
+
+    - name: Verify Created DNS Records in FreeIPA
+      command: ipa dnsrecord-find {{ reverse_dns_zone }}
+      register: ipa_dns_records
+      changed_when: false
+
+    - name: Debug FreeIPA DNS Records
+      debug:
+        msg: "{{ ipa_dns_records.stdout_lines }}"
+
+    - name: Verify A Record using dig
+      shell: dig $(hostname -f) A | grep -A2 ANSWER
+      register: dig_result
+      changed_when: false
+
+    - name: Debug dig Output
+      debug:
+        msg: "{{ dig_result.stdout.replace('\t', '    ').split('\n') }}"
+
+    - name: Verify reverse lookup using dig
+      shell: dig -x $(hostname -i) | grep -A2 ANSWER
+      register: dig_result
+      changed_when: false
+
+    - name: Debug dig Output
+      debug:
+        msg: "{{ dig_result.stdout.replace('\t', '    ').split('\n') }}"
+
+    - name: Validate DNS resolution using nslookup
+      shell: "nslookup $(hostname -f)"
+      register: nslookup_output
+      changed_when: false
+
+    - name: Display nslookup output for DNS
+      debug:
+        msg: "{{ nslookup_output.stdout.replace('\t', '    ').split('\n') }}"
+
+    - name: Validate IP resolution using nslookup
+      shell: "nslookup $(hostname -i)"
+      register: nslookup_output
+      changed_when: false
+
+    - name: Display nslookup output for IP
+      debug:
+        msg: "{{ nslookup_output.stdout.replace('\t', '    ').split('\n') }}"

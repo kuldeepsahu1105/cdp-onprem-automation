@@ -1,0 +1,83 @@
+### ansible-playbook -i inventory.ini 24_setup_cm_cms.yml
+#
+# Enable Cloudera Management Service (CMS) on the CM host.
+# CMS includes: Service Monitor, Host Monitor, Event Server, Alert Publisher,
+# Reports Manager — this is NOT the CDP base cluster (HDFS/YARN/ZK).
+# For base cluster install use 26_setup_base_cluster.yml
+---
+- name: Install cloudera.cluster collection on control node
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Install cloudera.cluster collection
+      ansible.builtin.import_tasks: common_tasks/install_cloudera_collection.yml
+
+- name: Enable Cloudera Management Service (CMS)
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Set up Cloudera Manager API URL
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+
+    - name: Print CMS target host
+      ansible.builtin.debug:
+        msg:
+          - "CMS hostname: {{ cm_cms_hostname }}"
+          - "Reports Manager DB host: {{ cm_cms_reports_manager_db_host }}"
+
+    - name: Check Cloudera Management Service status
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/cm/service"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 404]
+      register: cms_status
+      failed_when: false
+
+    - name: Print current CMS status
+      ansible.builtin.debug:
+        msg: >-
+          CMS status: {{ cms_status.json.serviceState | default(cms_status.json.message | default('not configured')) }}
+          [HTTP {{ cms_status.status }}]
+
+    - name: Configure and start Cloudera Management Service
+      cloudera.cluster.cm_service:
+        host: "{{ cm_host }}"
+        port: "{{ cm_api_port }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        verify_tls: false
+        force_tls: "{{ autotls_enabled | default(false) }}"
+        state: started
+        role_config_groups:
+          - type: SERVICEMONITOR
+            config:
+              firehose_non_java_memory_bytes: "{{ cm_cms_servicemonitor_memory_bytes }}"
+          - type: REPORTSMANAGER
+            config:
+              headlamp_database_type: postgresql
+              headlamp_database_host: "{{ cm_cms_reports_manager_db_host }}"
+              headlamp_database_name: "{{ cm_cms_reports_manager_db_name }}"
+              headlamp_database_user: "{{ cm_cms_reports_manager_db_user }}"
+              headlamp_database_password: "{{ cm_cms_reports_manager_db_password }}"
+        roles:
+          - type: SERVICEMONITOR
+            cluster_hostname: "{{ cm_cms_hostname }}"
+          - type: HOSTMONITOR
+            cluster_hostname: "{{ cm_cms_hostname }}"
+          - type: EVENTSERVER
+            cluster_hostname: "{{ cm_cms_hostname }}"
+          - type: ALERTPUBLISHER
+            cluster_hostname: "{{ cm_cms_hostname }}"
+          - type: REPORTSMANAGER
+            cluster_hostname: "{{ cm_cms_hostname }}"
+      register: cms_result
+
+    - name: Print CMS configuration result
+      ansible.builtin.debug:
+        msg: "Cloudera Management Service state: {{ cms_result.service_state | default('started') }}"

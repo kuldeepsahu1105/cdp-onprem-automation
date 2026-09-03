@@ -1,0 +1,31 @@
+## Directory Structure
+
+```
+cloudera-pvc-terraform/
+├── main.tf
+├── provider.tf
+├── variables.tf
+├── outputs.tf
+├── terraform.tfvars
+├── modules/
+│   ├── ec2-instance/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   ├── key-pair/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   ├── security-group/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   ├── elastic-ip/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   └── vpc/
+│       ├── main.tf
+│       ├── variables.tf
+│       ├── outputs.tf
+```

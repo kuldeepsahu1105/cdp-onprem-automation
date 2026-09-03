@@ -1,0 +1,141 @@
+### ansible-playbook -i inventory.ini 21_setup_cm_license.yml
+# vars:
+#   cm_port: 7180
+#   cm_admin_user: "admin"
+#   cm_admin_pass: "admin"
+#   license_file_name: "license.txt"
+
+---
+- name: Setup Cloudera Manager License
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Set up Cloudera Manager API URL
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+
+    - name: Print cm_api_url (in playbook)
+      ansible.builtin.debug:
+        msg: "cm_api_url is set to {{ cm_api_url }}"
+
+    - name: Check existing Cloudera Manager license
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/cm/license"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        return_content: yes
+        status_code: [200, 301, 303, 404] # 404 if no license installed
+        validate_certs: no
+      register: cm_license_info
+      changed_when: false
+
+    - name: Print existing cloudera manager license status
+      ansible.builtin.debug:
+        msg: |
+          =====License status:=====
+
+          License Owner: {{ cm_license_info.json.owner }}
+          License UUID: {{ cm_license_info.json.uuid }}
+          Expiration Date: {{ cm_license_info.json.expiration }}
+
+          Features Enabled:
+          {% for feature in cm_license_info.json.features if feature.enabled %}
+            - {{ feature.name }}: {{ feature.description }}
+          {% endfor %}
+
+      when: cm_license_info.status != 404
+
+    - name: Check if Cloudera Manager license file exists (on local)
+      ansible.builtin.stat:
+        path: "{{ license_file_name }}"
+      register: license_file_status
+      when: cm_license_info.status == 404 # Upload only if license is missing
+
+    - name: Print license file existence (on local)
+      debug:
+        msg: "License file '{{ license_file_name }}' exists = {{ license_file_status.stat.exists }}"
+        # verbosity: 1
+      when: cm_license_info.status == 404 # Upload only if license is missing
+
+    - name: Upload license file to Cloudera Manager (if license is not already uploaded)
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/cm/license"
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: form-multipart
+        body:
+          license: "{{ lookup('file', license_file_name) }}"
+        status_code: [200, 201, 204]
+      register: license_upload_response
+      when: cm_license_info.status == 404 and license_file_status.stat.exists
+      become: false
+
+    - name: Activate Cloudera Manager trial license (if license file not provided by user)
+      uri:
+        url: "{{ cm_api_url }}/cm/trial/begin"
+        method: POST
+        status_code: [200, 204, 301, 303, 400]
+        force_basic_auth: yes
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        validate_certs: no
+      # notify:
+      #   - Restart cloudera-scm-server
+      when:
+        (cm_license_info is defined and cm_license_info.status is defined and cm_license_info.status == 404)
+        and not license_file_status.stat.exists
+      register: trial_license_response
+
+    # Trigger handler
+    - meta: flush_handlers
+
+    # Validate that Cloudera Manager is running after license changes
+    - name: Wait for Cloudera Manager Server to Start
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
+      delegate_to: cldr-mngr
+      when: >
+        (license_upload_response is defined and license_upload_response is changed)
+        or (trial_license_response is defined and trial_license_response is changed)
+
+    - name: Print response from license upload
+      debug:
+        var: license_upload_response
+        # verbosity: 1
+      when: cm_license_info.status == 404 and license_file_status.stat.exists
+
+    - name: Print License Upload Status
+      ansible.builtin.debug:
+        msg: "License file uploaded successfully."
+      when: license_upload_response is defined and license_upload_response is changed
+
+    - name: Print Trial License Activation Status
+      ansible.builtin.debug:
+        msg: "Started Cloudera Manager with trial license (license file not found in current directory)."
+      when: trial_license_response is defined and trial_license_response is changed
+
+  # handlers:
+  #   - name: Restart cloudera-scm-server
+  #     command: /bin/systemctl restart cloudera-scm-server
+  #     delegate_to: cldr-mngr
+
+    # - name: Upload Cloudera Manager license
+    #   ansible.builtin.uri:
+    #     url: "{{ cm_api_url }}/cm/license"
+    #     method: POST
+    #     user: "{{ cm_admin_user }}"
+    #     password: "{{ cm_admin_pass }}"
+    #     status_code: [200, 204, 301, 303]
+    #     validate_certs: no
+    #     force_basic_auth: yes
+    #     #     body_format: form-multipart
+    #     body_format: json
+    #     headers:
+    #       Content-Type: "application/json"
+    #     body:
+    #       license: "{{ lookup('file', license_file_name) | b64encode }}"
+    #   when: cm_license_status.status == 404 and license_status.stat.exists
+    #   register: license_upload_response

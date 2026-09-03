@@ -1,0 +1,16 @@
+---
+- name: Stop and disable firewall service (RHEL)
+  ansible.builtin.service:
+    name: "{{ os_vars.RedHat.firewall_service }}"
+    state: stopped
+    enabled: false
+  when: ansible_os_family == "RedHat"
+  ignore_errors: true
+
+- name: Stop and disable firewall service (Ubuntu)
+  ansible.builtin.service:
+    name: "{{ os_vars.Debian.firewall_service }}"
+    state: stopped
+    enabled: false
+  when: ansible_os_family == "Debian"
+  ignore_errors: true

@@ -1,0 +1,42 @@
+### ansible-playbook -i inventory.ini 14_setup_identity_client.yml
+#
+# Identity client enrollment (auto-detected FreeIPA or Active Directory)
+---
+- name: Detect and validate identity provider
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Detect identity provider
+      ansible.builtin.import_tasks: common_tasks/detect_identity_provider.yml
+
+- name: Update DNS for identity provider
+  hosts: all
+  become: yes
+  tasks:
+    - name: Configure DNS (netplan or resolv.conf)
+      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
+
+    - name: Wait for DNS to settle
+      ansible.builtin.pause:
+        seconds: 10
+
+- name: Enroll cluster hosts with identity provider
+  hosts: "{{ identity_client_hosts }}"
+  become: yes
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: Install FreeIPA client packages
+      ansible.builtin.package:
+        name: "{{ os_vars[ansible_os_family].freeipa_client_packages }}"
+        state: present
+      when: identity_provider_effective == 'freeipa'
+
+    - name: Join FreeIPA domain
+      ansible.builtin.import_tasks: common_tasks/join_freeipa_client.yml
+      when: identity_provider_effective == 'freeipa'
+
+    - name: Join Active Directory realm
+      ansible.builtin.import_tasks: common_tasks/join_ad_realm.yml
+      when: identity_provider_effective == 'ad'

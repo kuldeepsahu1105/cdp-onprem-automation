@@ -1,0 +1,30 @@
+-- ##### Generated using ansible
+{% for db in databases %}
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ db.user }}') THEN
+        CREATE ROLE {{ db.user }} LOGIN PASSWORD '{{ db.password }}';
+        RAISE NOTICE 'Role % created successfully.', '{{ db.user }}';
+    ELSE
+        RAISE NOTICE 'Role % already exists. Skipping.', '{{ db.user }}';
+    END IF;
+END $$;
+
+{% endfor %}
+
+{% for db in databases %}
+-- Create database **outside** the function block
+CREATE DATABASE {{ db.name }} OWNER {{ db.user }} ENCODING 'UTF8'
+    TEMPLATE template0
+    LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8';
+{% endfor %}
+
+/* Special Configuration */
+ALTER DATABASE hive SET standard_conforming_strings=off;
+ALTER DATABASE oozie SET standard_conforming_strings=off;
+
+-- SSL Verification Queries
+SELECT 1;
+SELECT * FROM pg_stat_ssl;
+SHOW ssl;
+SELECT name, setting FROM pg_settings WHERE name LIKE '%ssl%';

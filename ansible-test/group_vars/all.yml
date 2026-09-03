@@ -1,0 +1,560 @@
+---
+# ansible_config_vars:
+ansible_user: root
+ansible_ssh_private_key_file: ./id_rsa
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+# ansible_galaxy: "/usr/bin/ansible-galaxy"
+
+# dependencies versions:
+java_version: "17"
+python_version: "3.11"
+postgresql_version: 18
+
+# ---------------------------------------------------------------------------
+# Identity provider: auto | freeipa | ad
+# auto: [ipaserver] in inventory -> FreeIPA full flow
+#       no ipaserver + ad_kdc_host set -> AD dependent flow only
+# ---------------------------------------------------------------------------
+identity_provider: auto
+
+# True when inventory.ini has at least one host in [ipaserver]
+ipa_server_in_inventory: "{{ (groups.get('ipaserver', []) | default([]) | length) > 0 }}"
+
+identity_provider_effective: >-
+  {%- if identity_provider in ['freeipa', 'ad'] -%}
+  {{- identity_provider -}}
+  {%- elif ipa_server_in_inventory | bool -%}
+  freeipa
+  {%- elif ad_kdc_host | default('') | length > 0 -%}
+  ad
+  {%- else -%}
+  freeipa
+  {%- endif -%}
+
+# Host pattern for client enrollment / realm join
+identity_client_hosts: "{{ 'all:!ipaserver' if ipa_server_in_inventory | bool else 'all' }}"
+
+# Unified domain/realm (used by hostname, cluster FQDNs, Kerberos)
+cluster_domain: "{{ ad_domain if identity_provider_effective == 'ad' else ipaserver_domain }}"
+cluster_realm: "{{ cluster_domain | upper }}"
+
+# ipa_server_vars:
+ipaserver_domain: ntnxlab.local
+ipaserver_realm: "{{ ipaserver_domain | upper }}"
+ipaadmin_principal: "admin"
+ipaadmin_password: "PseTeam@123"
+ipadm_password: "{{ ipaadmin_password }}"
+ipaserver_setup_dns: yes
+dns_forwarders: "no"
+reverse_zones: "no"
+chrony_enabled: "yes"
+
+# Active Directory (when identity_provider: ad)
+ad_domain: corp.example.com
+ad_realm: "{{ ad_domain | upper }}"
+ad_kdc_host: "dc01.{{ ad_domain }}"
+ad_dns_servers:
+  - "{{ ad_kdc_host }}"
+ad_join_user: "svc-cloudera-join"
+ad_join_password: "ChangeMe@123"
+# Optional OU for computer accounts (leave empty to use default Computers container)
+ad_computer_ou: ""
+ad_organizational_unit: "{{ ad_computer_ou }}"
+# CM service account for Kerberos admin operations in AD
+ad_kdc_admin_user: "{{ ad_join_user }}"
+ad_kdc_admin_password: "{{ ad_join_password }}"
+
+# ---------------------------------------------------------------------------
+# DNS / resolv.conf — AWS vs bare metal
+# deployment_environment: auto (detect) | aws | baremetal
+# ---------------------------------------------------------------------------
+deployment_environment: auto
+aws_region: "{{ lookup('env', 'AWS_REGION') | default('', true) }}"
+aws_vpc_dns_resolver: ""
+extra_dns_search_domains: []
+extra_dns_nameservers: []
+
+# ssh_vars:
+ssh_user: "root"
+ssh_dir: "/root/.ssh"
+private_key_path: "{{ ssh_dir }}/id_rsa"
+public_key_path: "{{ ssh_dir }}/id_rsa.pub"
+authorized_keys_path: "{{ ssh_dir }}/authorized_keys"
+force_generate: "{{ hostvars[inventory_hostname].force_generate | default(false) }}"
+
+# Variables for setting internal repo (OS-specific paths resolved at runtime):
+httpd_repo_dir: /var/www/https
+server_name: "{{ ansible_fqdn }}"
+cert_days_valid: 3650
+
+# Variables for customizable certificate subject fields:
+cert_country: "US"
+cert_state: "Santa Clara"
+cert_locality: "Raleigh"
+cert_organization: "Cloudera Inc"
+cert_organizational_unit: "CLDR"
+# cert_common_name: "cldr-mngr.cldrsetup.local"
+
+# The CN (Common Name) will be automatically set to the FQDN:
+cert_subj: "/C={{ cert_country }}/ST={{ cert_state }}/L={{ cert_locality }}/O={{ cert_organization }}/OU={{ cert_organizational_unit }}/CN={{ ansible_fqdn }}"
+
+# Variables for wildcard record and postgres jdbc driver setup:
+wildcard_dns_record: "*.apps"
+postgres_jdbc_version: "42.7.10"  # Configurable version
+jdbc_driver_url: "https://jdbc.postgresql.org/download/postgresql-{{ postgres_jdbc_version }}.jar"
+jdbc_driver_dest: "/usr/share/java/postgresql-connector-java.jar"
+
+# PostgreSQL database variables (OS-specific paths in os_vars below):
+pg_client_crt_dir: "/root/.postgresql"
+postgres_user: "postgres"
+postgres_password: "postgres"
+postgres_db: "postgres"
+
+# PostgreSQL configuration template variables:
+postgres_port: 5432
+listen_addresses: "*"
+max_connections: 1000
+shared_buffers: "1024MB"
+wal_buffers: "16MB"
+max_wal_size: "6GB"
+min_wal_size: "512MB"
+checkpoint_completion_target: 0.9
+standard_conforming_strings: "off"
+jit: "off"
+
+# PostgreSQL database TLS/SSL variables:
+enable_ssl: true
+ssl_ca_file: "root.crt"
+ssl_cert_file: "server.crt"
+ssl_key_file: "server.key"
+
+# cldr-mngr repo setup variables:
+cm_version: "7.13.2.10000"
+cm_numeric_version: "713210000"
+
+cdh_version: "7.3.2.10000"
+cdh_numeric_version: "82216952"
+# Spark is bundled in the CDH parcel for 7.3.1+ — separate SPARK3 parcel not required
+cdh_spark_bundled_min_version: "7.3.1"
+
+# spark_version: "3.3.1.7.3.1.700"
+# spark_minor_version: "3.3.1.7.3.1.700"
+# spark_numeric_version: "p0.74774806"
+
+public_ip: "{{ ansible_default_ipv4.address }}"
+cm_repo_username: "<username>"
+cm_repo_password: "<password>"
+webserver_path: "/var/www/html"
+cldr_repos_path: "{{ webserver_path }}/cloudera-repos"
+
+# ---------------------------------------------------------------------------
+# CM/CDH repository source: public | internal
+# public   — use archive.cloudera.com/p/ directly (default, no local mirror)
+# internal — mirror RPMs/parcels to cldr-mngr web server (16 + 17 playbooks)
+# ---------------------------------------------------------------------------
+cm_repo_source: public
+cm_repo_public_base_url: "https://archive.cloudera.com/p"
+cm_repo_mirror_host: "{{ hostvars[groups['cldr-mngr'][0]].ansible_host | default(groups['cldr-mngr'][0]) }}"
+cdh_repo_product: "cdh{{ cdh_version.split('.')[0] }}"
+parcel_repo_public: "{{ cm_repo_public_base_url }}/{{ cdh_repo_product }}/{{ cdh_version }}/parcels/"
+parcel_repo_internal: "http://{{ cm_repo_mirror_host }}/cloudera-repos/{{ cdh_repo_product }}/{{ cdh_version }}/"
+parcel_repo: "{{ parcel_repo_internal if cm_repo_source == 'internal' else parcel_repo_public }}"
+
+# cldr-mngr: scm config:
+scm_db_name: "scm"
+scm_db_user: "scm"
+scm_db_password: "scm"
+cm_db_ssl_crt_dir: "/var/lib/cloudera-scm-server/.postgresql"
+cm_db_root_crt: "{{ cm_db_ssl_crt_dir }}/root.crt"
+cldr_mngr_packages:
+  server:
+    - cloudera-manager-server
+    - cloudera-manager-daemons
+    # - cloudera-manager-agent  
+  client:
+    - cloudera-manager-agent
+    - cloudera-manager-daemons
+
+# cldr-mngr databases to be created on postgres external database:
+databases:
+  - { name: "{{ scm_db_name }}", user: "{{ scm_db_user }}", password: "{{ scm_db_password }}" }
+  - { name: "rman", user: "rman", password: "rman" }
+  - { name: "hue", user: "hue", password: "hue" }
+  - { name: "hive", user: "hive", password: "hive" }
+  - { name: "knox", user: "knox", password: "knox" }
+  - { name: "oozie", user: "oozie", password: "oozie" }
+  - { name: "ranger", user: "rangeradmin", password: "rangeradmin" }
+  - { name: "rangerkms", user: "rangerkms", password: "rangerkms" }
+  - { name: "schemaregistry", user: "schemaregistry", password: "schemaregistry" }
+  - { name: "nifiregistry", user: "nifiregistry", password: "nifiregistry" }
+  - { name: "dataviz", user: "dataviz", password: "dataviz" }
+  - { name: "yqm", user: "yqm", password: "yqm" }
+  - { name: "smm", user: "smm", password: "smm" }
+  - { name: "das", user: "das", password: "das" }
+
+scm_csds: 
+  - https://archive.cloudera.com/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar
+  - https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel/NIFIREGISTRY-1.28.1.2.1.7.3004-1.jar
+  - https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel/NIFI-1.28.1.2.1.7.3004-1.jar
+
+##### cm_server api configs:
+cm_port: 7180
+cm_admin_user: "admin"
+cm_admin_pass: "admin"
+cdh_basecluster_name: "CDH-Cluster"
+base_cluster_master_group: base-masters
+base_cluster_worker_group: base-workers
+cdh_parcel_version: "{{ cdh_version.split('.')[:3] | join('.') }}-1.cdh{{ cdh_version.split('.')[:3] | join('.') }}.p{{ cdh_version.split('.')[-1] }}.{{ cdh_numeric_version }}"
+kerberos_principal: "{{ ipaadmin_principal }}/{{ ipaadmin_principal }}@{{ cluster_realm }}"
+kerberos_password: "{{ ipaadmin_password }}"
+license_file_name: "license.txt"
+
+# Kerberos / KDC (FreeIPA or Active Directory)
+kdc_host: "{{ ad_kdc_host if identity_provider_effective == 'ad' else ipa_kdc_host }}"
+krb5_kdc_type: "{{ 'Active Directory' if identity_provider_effective == 'ad' else 'Red Hat IPA' }}"
+krb5_kdc_admin_user: "{{ ad_kdc_admin_user if identity_provider_effective == 'ad' else ipaadmin_principal }}"
+krb5_kdc_admin_password: "{{ ad_kdc_admin_password if identity_provider_effective == 'ad' else ipaadmin_password }}"
+krb5_ad_suffix: "{{ ad_domain }}"
+krb5_ad_delete_on_regenerate: true
+
+# Cloudera Management Service (CMS) - NOT the CDP base cluster
+# CMS roles: Service Monitor, Host Monitor, Event Server, Alert Publisher, Reports Manager
+cm_manager_inventory_host: "{{ groups['cldr-mngr'][0] if ('cldr-mngr' in groups and groups['cldr-mngr'] | length > 0) else '' }}"
+cm_cms_hostname: "{{ hostvars[cm_manager_inventory_host].cldr_hostname | default(cm_manager_inventory_host) }}.{{ cluster_domain }}"
+cm_cms_servicemonitor_memory_bytes: 6442450944
+cm_cms_reports_manager_db_host: "{{ cm_cms_hostname }}"
+cm_cms_reports_manager_db_name: rman
+cm_cms_reports_manager_db_user: rman
+cm_cms_reports_manager_db_password: rman
+
+# Cloudera Manager API ports
+cm_https_port: 7183
+cm_http_port: 7180
+
+##### cm_server autotls variables:
+# SSH Authentication (Choose one)
+# cm_node_sudo_password: "your-root-pass"  # Required for password-based authentication # Either commented out or defined but not set to empty string
+cm_private_key_path: "/root/.ssh/id_rsa" # Required for key-based authentication
+cm_priv_key_passphrase: "" # If private key is encrypted, provide cm_priv_key_passphrase
+
+# OS User for Key-Based/Password based Authentication for AutoTLS
+cm_srvr_sudo_user: "root" # Set the default SSH user for key-based/password-based authentication
+
+# Cloudera Manager Auto-TLS
+use_freeipa_for_crt_mgmt: false # Set to true if FreeIPA is used for certificate management
+
+##### KDC integration for cldr-mngr:
+krb5_enc_types: "{{ 'aes256-cts aes128-cts' if identity_provider_effective == 'ad' else 'aes256-cts aes128-cts rc4-hmac' }}"
+ipa_kdc_host: "ipaserver.{{ ipaserver_domain }}"
+
+# Cloudera Manager LDAP integration (FreeIPA or Active Directory)
+cm_ldap_enabled: true
+cm_ldap_auth_backend_order: "EXTERNAL_AND_DB"
+cm_ldap_type: "LDAP"
+cm_ldap_url: >-
+  {{ 'ldaps://' + ad_kdc_host + ':636' if identity_provider_effective == 'ad'
+     else 'ldaps://' + ipa_kdc_host + ':636' }}
+cm_ldap_bind_dn: >-
+  {{ ad_ldap_bind_dn if identity_provider_effective == 'ad'
+     else 'uid=' + ipaadmin_principal + ',cn=users,cn=accounts,' + ipa_ldap_dc_suffix }}
+cm_ldap_bind_password: "{{ ad_ldap_bind_password if identity_provider_effective == 'ad' else ipaadmin_password }}"
+cm_ldap_user_search_base: >-
+  {{ ad_ldap_user_search_base if identity_provider_effective == 'ad'
+     else 'cn=users,cn=accounts,' + ipa_ldap_dc_suffix }}
+cm_ldap_user_search_filter: "{{ '(sAMAccountName={0})' if identity_provider_effective == 'ad' else '(uid={0})' }}"
+cm_ldap_group_search_base: >-
+  {{ ad_ldap_group_search_base if identity_provider_effective == 'ad'
+     else 'cn=groups,cn=accounts,' + ipa_ldap_dc_suffix }}
+cm_ldap_group_search_filter: "{{ '(member={0})' if identity_provider_effective == 'ad' else '(&(member={0})(objectClass=posixgroup))' }}"
+cm_ldap_dn_pattern: ""
+
+# AD LDAP bind/search defaults (override in extra-vars or vault as needed)
+ad_ldap_bind_dn: "CN=svc-cm-ldap,OU=Service Accounts,DC=corp,DC=example,DC=com"
+ad_ldap_bind_password: "{{ ad_join_password }}"
+ad_ldap_user_search_base: "OU=Users,DC=corp,DC=example,DC=com"
+ad_ldap_group_search_base: "OU=Groups,DC=corp,DC=example,DC=com"
+
+# FreeIPA LDAP (used when identity_provider: freeipa)
+ipa_ldap_dc_suffix: "{% for part in ipaserver_domain.split('.') %}dc={{ part }}{% if not loop.last %},{% endif %}{% endfor %}"
+
+cloudera_manager_api_user: "{{ cm_admin_user }}"
+cloudera_manager_api_password: "{{ cm_admin_pass }}"
+
+# ---------------------------------------------------------------------------
+# Cleanup toggles (99_cleanup.yml)
+# Master switch MUST be true to run any cleanup:
+#   ansible-playbook -i inventory.ini 99_cleanup.yml -e cleanup_enabled=true ...
+# ---------------------------------------------------------------------------
+cleanup_enabled: false
+cleanup_confirm: false
+
+# Cluster/API cleanup scope
+cleanup_delete_base_cluster: false
+cleanup_delete_ecs_cluster: false
+cleanup_stop_cms: false
+cleanup_delete_cms: false
+cleanup_delete_cluster_via_api: true
+
+# Cloudera Manager removal
+cleanup_remove_cm: false
+cleanup_remove_cm_agents: false
+cleanup_remove_cm_repo_file: false
+
+# PostgreSQL / CM database cleanup (typically on cldr-mngr)
+cleanup_stop_postgres: false
+cleanup_remove_postgres_data: false
+cleanup_backup_postgres_data: true
+cleanup_remove_postgres_packages: false
+cleanup_remove_postgres_user: false
+
+# End-to-end / deep cleanup
+cleanup_e2e: false
+cleanup_remove_service_users: "{{ cleanup_e2e }}"
+cleanup_remove_service_groups: "{{ cleanup_e2e }}"
+cleanup_deep_remove_data_dirs: "{{ cleanup_e2e }}"
+
+# ECS-specific options
+cleanup_reset_iptables: false
+cleanup_ecs_remove_docker_registry: true
+cleanup_ecs_run_rke2_killall: true
+
+# Post-cleanup actions
+cleanup_reboot_hosts: false
+
+# Cluster names for API deletion
+ecs_cluster_name: "ECS-Cluster"
+
+# Service users/groups removed during E2E cleanup
+cleanup_service_users:
+  - hdfs
+  - httpfs
+  - sqoop
+  - kafka
+  - yarn
+  - hbase
+  - streamsrepmgr
+  - streamsmsgmgr
+  - livy
+  - kms
+  - atlas
+  - schemaregistry
+  - hue
+  - zookeeper
+  - accumulo
+  - phoenix
+  - mapred
+  - druid
+  - ranger
+  - zeppelin
+  - oozie
+  - kudu
+  - knox
+  - superset
+  - solr
+  - hive
+  - cruisecontrol
+  - impala
+  - rangerraz
+  - ozone
+  - tez
+  - dpprofiler
+  - flume
+  - nifi
+  - nifiregistry
+  - nifitoolkit
+  - spark
+  - flink
+  - rangerrms
+  - omid
+  - hadoop
+  - kraft
+  - cloudera-scm
+
+cleanup_service_groups: "{{ cleanup_service_users }}"
+
+# CM process users killed before package removal on cluster nodes
+cleanup_cm_process_users:
+  - cloudera-scm
+  - flume
+  - hadoop
+  - hdfs
+  - hbase
+  - hive
+  - httpfs
+  - hue
+  - impala
+  - llama
+  - mapred
+  - oozie
+  - solr
+  - spark
+  - sqoop
+  - sqoop2
+  - yarn
+  - zookeeper
+
+# CM packages to remove (RHEL; skipped on Ubuntu when supports_cloudera_rpm is false)
+cleanup_cm_packages:
+  - cloudera-manager-server
+  - cloudera-manager-server-db-2
+  - cloudera-manager-agent
+  - cloudera-manager-daemons
+  - cloudera-manager-server-db
+
+# ---------------------------------------------------------------------------
+# OS-specific configuration (RHEL/RedHat and Debian/Ubuntu)
+# Reference maps with: {{ os_vars[ansible_os_family].<key> }}
+# ---------------------------------------------------------------------------
+os_vars:
+  RedHat:
+    pkg_mgr: dnf
+    prereq_packages:
+      - wget
+      - telnet
+      - net-tools
+      - bind-utils
+      - iproute
+      - mlocate
+      - traceroute
+      - nmap-ncat
+      - tar
+      - gcc
+      - openssl
+      - python3
+      - python3-pip
+      - python3-devel
+      - postgresql-libs
+    python_packages:
+      - "python{{ python_version }}"
+      - "python{{ python_version }}-pip"
+      - "python{{ python_version }}-devel"
+    python_executable: "python{{ python_version }}"
+    pip_executable: "pip{{ python_version }}"
+    java_packages:
+      - "java-{{ java_version }}-openjdk"
+      - "java-{{ java_version }}-openjdk-devel"
+    firewall_service: firewalld
+    chrony_service: chronyd
+    web_server_packages:
+      - httpd
+      - mod_ssl
+      - createrepo_c
+    web_server_service: httpd
+    web_server_conf_file: /etc/httpd/conf/httpd.conf
+    web_server_ssl_key: /etc/pki/tls/private/httpd.key
+    web_server_ssl_cert: /etc/pki/tls/certs/httpd.crt
+    webserver_path: /var/www/html
+    yum_repo_dir: /etc/yum.repos.d
+    rc_local_path: /etc/rc.d/rc.local
+    dns_config_method: resolv_conf
+    postgres_data_dir: "/var/lib/pgsql/{{ postgresql_version }}/data"
+    postgres_bin_dir: "/usr/pgsql-{{ postgresql_version }}/bin"
+    postgres_service: "postgresql-{{ postgresql_version }}"
+    postgres_server_packages:
+      - "postgresql{{ postgresql_version }}"
+      - "postgresql{{ postgresql_version }}-server"
+      - "postgresql{{ postgresql_version }}-libs"
+    postgres_client_packages:
+      - "postgresql{{ postgresql_version }}"
+    postgres_repo_url: "https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}/pgdg-redhat-repo-latest.noarch.rpm"
+    postgres_init_command: "/usr/pgsql-{{ postgresql_version }}/bin/postgresql-{{ postgresql_version }}-setup initdb"
+    postgres_socket_dir: /var/run/postgresql
+    pkg_utils: "{{ 'dnf-utils' if ansible_facts.get('pkg_mgr', 'dnf') == 'dnf' else 'yum-utils' }}"
+    reboot_check_command: needs-restarting
+    reboot_check_flag: "-r"
+    freeipa_server_packages:
+      - ipa-server
+      - bind
+      - bind-dyndb-ldap
+      - ipa-server-dns
+      - firewalld
+    freeipa_client_packages:
+      - freeipa-client
+      - openldap-clients
+      - krb5-workstation
+      - krb5-libs
+    ad_join_packages:
+      - realmd
+      - sssd
+      - sssd-tools
+      - adcli
+      - oddjob-mkhomedir
+      - krb5-workstation
+    supports_selinux: true
+    supports_tuned: true
+    supports_cloudera_rpm: true
+
+  Debian:
+    pkg_mgr: apt
+    prereq_packages:
+      - wget
+      - telnet
+      - net-tools
+      - dnsutils
+      - iproute2
+      - mlocate
+      - traceroute
+      - netcat-openbsd
+      - tar
+      - gcc
+      - openssl
+      - libpq5
+    python_packages:
+      - "python{{ python_version }}"
+      - "python{{ python_version }}-venv"
+      - "python{{ python_version }}-dev"
+      - python3-pip
+    python_executable: "python{{ python_version }}"
+    pip_executable: "pip3"
+    java_packages:
+      - "openjdk-{{ java_version }}-jdk"
+    firewall_service: ufw
+    chrony_service: chrony
+    web_server_packages:
+      - apache2
+      - ssl-cert
+    web_server_service: apache2
+    web_server_conf_file: /etc/apache2/apache2.conf
+    web_server_ssl_key: /etc/ssl/private/apache-selfsigned.key
+    web_server_ssl_cert: /etc/ssl/certs/apache-selfsigned.crt
+    webserver_path: /var/www/html
+    yum_repo_dir: /etc/apt/sources.list.d
+    rc_local_path: /etc/rc.local
+    netplan_dns_file: /etc/netplan/99-cloudera-dns.yaml
+    dns_config_method: netplan
+    postgres_data_dir: "/var/lib/postgresql/{{ postgresql_version }}/main"
+    postgres_bin_dir: "/usr/lib/postgresql/{{ postgresql_version }}/bin"
+    postgres_service: "postgresql@{{ postgresql_version }}-main"
+    postgres_server_packages:
+      - "postgresql-{{ postgresql_version }}"
+      - "postgresql-client-{{ postgresql_version }}"
+    postgres_client_packages:
+      - "postgresql-client-{{ postgresql_version }}"
+    postgres_apt_key_url: "https://www.postgresql.org/media/keys/ACCC4CF8.asc"
+    postgres_apt_repo: "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    postgres_init_command: ""
+    postgres_socket_dir: /var/run/postgresql
+    pkg_utils: apt-transport-https
+    reboot_check_command: ""
+    reboot_check_flag: ""
+    freeipa_server_packages:
+      - freeipa-server
+      - freeipa-server-dns
+      - bind9
+      - bind9-dyndb-ldap
+    freeipa_client_packages:
+      - freeipa-client
+      - ldap-utils
+      - krb5-user
+      - libkrb5-3
+    ad_join_packages:
+      - realmd
+      - sssd
+      - sssd-tools
+      - adcli
+      - oddjob-mkhomedir
+      - packagekit
+      - krb5-user
+    supports_selinux: false
+    supports_tuned: false
+    supports_cloudera_rpm: false

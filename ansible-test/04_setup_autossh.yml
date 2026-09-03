@@ -1,0 +1,130 @@
+### ansible-playbook -i inventory.ini 04_setup_autossh.yml
+# vars:
+#   ssh_dir: "/root/.ssh"
+#   ssh_user: "root"
+#   private_key_path: "{{ ssh_dir }}/id_rsa"
+#   public_key_path: "{{ ssh_dir }}/id_rsa.pub"
+#   authorized_keys_path: "{{ ssh_dir }}/authorized_keys"
+
+---
+- name: Generate SSH key on ipaserver
+  hosts: ipaserver
+  become: true
+
+  vars:
+    ssh_dir: "/root/.ssh"
+    ssh_user: "root"
+    private_key_path: "{{ ssh_dir }}/id_rsa"
+    public_key_path: "{{ ssh_dir }}/id_rsa.pub"
+
+  tasks:
+    - name: Ensure .ssh directory exists
+      file:
+        path: "{{ ssh_dir }}"
+        state: directory
+        mode: "0700"
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+
+    - name: Check if SSH private key exists
+      stat:
+        path: "{{ private_key_path }}"
+      register: private_key_stat
+
+    - name: Generate SSH key pair if not exists
+      openssh_keypair:
+        path: "{{ private_key_path }}"
+        type: rsa
+        size: 2048
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: "0600"
+      when: not private_key_stat.stat.exists
+    
+    - name: Read public key from ipaserver
+      slurp:
+        src: "{{ public_key_path }}"
+      register: pubkey_raw
+
+    - name: Ensure public key exists in authorized_keys on ipaserver
+      authorized_key:
+        user: "{{ ssh_user }}"
+        key: "{{ pubkey_raw.content | b64decode }}"
+        state: present
+
+
+# ==========================================================
+# STEP 2: FETCH KEYS TO ANSIBLE CONTROLLER
+# ==========================================================
+
+- name: Fetch SSH keys from ipaserver to controller
+  hosts: ipaserver
+  become: true
+
+  vars:
+    private_key_path: "/root/.ssh/id_rsa"
+    public_key_path: "/root/.ssh/id_rsa.pub"
+
+  tasks:
+    - name: Fetch private key to controller
+      fetch:
+        src: "{{ private_key_path }}"
+        dest: "/tmp/ansible_ssh_keys/id_rsa"
+        flat: yes
+
+    - name: Fetch public key to controller
+      fetch:
+        src: "{{ public_key_path }}"
+        dest: "/tmp/ansible_ssh_keys/id_rsa.pub"
+        flat: yes
+
+
+# ==========================================================
+# STEP 3: DISTRIBUTE TO ALL OTHER NODES
+# ==========================================================
+
+- name: Distribute SSH keys to all nodes
+  hosts: all:!ipaserver
+  become: true
+
+  vars:
+    ssh_dir: "/root/.ssh"
+    private_key_path: "{{ ssh_dir }}/id_rsa"
+    public_key_path: "{{ ssh_dir }}/id_rsa.pub"
+    authorized_keys_path: "{{ ssh_dir }}/authorized_keys"
+
+  tasks:
+    - name: Ensure .ssh directory exists
+      file:
+        path: "{{ ssh_dir }}"
+        state: directory
+        mode: "0700"
+        owner: root
+        group: root
+
+    - name: Copy private key from controller
+      copy:
+        src: "/tmp/ansible_ssh_keys/id_rsa"
+        dest: "{{ private_key_path }}"
+        mode: "0600"
+        owner: root
+        group: root
+
+    - name: Copy public key from controller
+      copy:
+        src: "/tmp/ansible_ssh_keys/id_rsa.pub"
+        dest: "{{ public_key_path }}"
+        mode: "0644"
+        owner: root
+        group: root
+
+    - name: Read public key from ipaserver
+      slurp:
+        src: "{{ public_key_path }}"
+      register: pubkey_raw
+
+    - name: Add public key to authorized_keys
+      authorized_key:
+        user: root
+        key: "{{ pubkey_raw.content | b64decode }}"
+        state: present

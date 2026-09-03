@@ -1,0 +1,75 @@
+---
+- name: Require explicit cleanup confirmation
+  ansible.builtin.assert:
+    that:
+      - cleanup_enabled | bool
+      - cleanup_confirm | bool
+    fail_msg: >-
+      Cleanup is destructive. Re-run with:
+      -e cleanup_enabled=true -e cleanup_confirm=true
+      and set the desired scope toggles in group_vars/all.yml or extra-vars.
+
+- name: Compute effective cleanup scope (e2e expands deep cleanup toggles)
+  ansible.builtin.set_fact:
+    cleanup_effective:
+      delete_base_cluster: "{{ cleanup_delete_base_cluster or cleanup_e2e }}"
+      delete_ecs_cluster: "{{ cleanup_delete_ecs_cluster or cleanup_e2e }}"
+      stop_cms: "{{ cleanup_stop_cms or cleanup_remove_cm or cleanup_e2e }}"
+      delete_cms: "{{ cleanup_delete_cms or cleanup_remove_cm or cleanup_e2e }}"
+      remove_cm: "{{ cleanup_remove_cm or cleanup_e2e }}"
+      remove_cm_agents: "{{ cleanup_remove_cm_agents or cleanup_remove_cm or cleanup_e2e }}"
+      stop_postgres: "{{ cleanup_stop_postgres or cleanup_remove_postgres_data or cleanup_remove_postgres_packages or cleanup_e2e }}"
+      remove_postgres_data: "{{ cleanup_remove_postgres_data or cleanup_e2e }}"
+      remove_postgres_packages: "{{ cleanup_remove_postgres_packages or cleanup_e2e }}"
+      remove_postgres_user: "{{ cleanup_remove_postgres_user or cleanup_e2e }}"
+      remove_service_users: "{{ cleanup_remove_service_users or cleanup_e2e }}"
+      remove_service_groups: "{{ cleanup_remove_service_groups or cleanup_e2e }}"
+      deep_remove_data_dirs: "{{ cleanup_deep_remove_data_dirs or cleanup_e2e }}"
+      reset_iptables: "{{ cleanup_reset_iptables or (cleanup_delete_ecs_cluster or cleanup_e2e) }}"
+      needs_cm_api: >-
+        {{
+          cleanup_stop_cms
+          or cleanup_delete_cms
+          or (
+            (cleanup_delete_base_cluster or cleanup_delete_ecs_cluster or cleanup_e2e)
+            and cleanup_delete_cluster_via_api | default(true)
+          )
+        }}
+
+- name: Ensure at least one cleanup action is selected
+  ansible.builtin.assert:
+    that:
+      - >-
+        cleanup_effective.delete_base_cluster
+        or cleanup_effective.delete_ecs_cluster
+        or cleanup_effective.stop_cms
+        or cleanup_effective.delete_cms
+        or cleanup_effective.remove_cm
+        or cleanup_effective.remove_cm_agents
+        or cleanup_effective.stop_postgres
+        or cleanup_effective.remove_postgres_data
+        or cleanup_effective.remove_postgres_packages
+        or cleanup_effective.deep_remove_data_dirs
+        or cleanup_effective.remove_service_users
+        or hostvars['localhost']['cleanup_effective']['reset_iptables'] | default(false)
+    fail_msg: Enable at least one cleanup toggle (or cleanup_e2e=true).
+
+- name: Print cleanup plan
+  ansible.builtin.debug:
+    msg:
+      - "Cleanup plan:"
+      - "  delete_base_cluster: {{ cleanup_effective.delete_base_cluster }}"
+      - "  delete_ecs_cluster: {{ cleanup_effective.delete_ecs_cluster }}"
+      - "  stop_cms: {{ cleanup_effective.stop_cms }}"
+      - "  delete_cms: {{ cleanup_effective.delete_cms }}"
+      - "  remove_cm: {{ cleanup_effective.remove_cm }}"
+      - "  remove_cm_agents: {{ cleanup_effective.remove_cm_agents }}"
+      - "  stop_postgres: {{ cleanup_effective.stop_postgres }}"
+      - "  remove_postgres_data: {{ cleanup_effective.remove_postgres_data }} (backup={{ cleanup_backup_postgres_data }})"
+      - "  remove_postgres_packages: {{ cleanup_effective.remove_postgres_packages }}"
+      - "  remove_postgres_user: {{ cleanup_effective.remove_postgres_user }}"
+      - "  deep_remove_data_dirs: {{ cleanup_effective.deep_remove_data_dirs }}"
+      - "  remove_service_users: {{ cleanup_effective.remove_service_users }}"
+      - "  reset_iptables: {{ cleanup_effective.reset_iptables }}"
+      - "  needs_cm_api: {{ cleanup_effective.needs_cm_api }}"
+      - "  reboot_hosts: {{ cleanup_reboot_hosts }}"

@@ -1,0 +1,43 @@
+### ansible-playbook -i inventory.ini 05_disable_selinux.yml
+# vars:
+
+---
+- name: Set SELinux to permissive and ensure persistence across reboots
+  hosts: "all:!ipaserver"
+  become: yes
+  tasks:
+    - name: Skip SELinux configuration on non-RHEL hosts
+      ansible.builtin.meta: end_host
+      when: ansible_os_family != "RedHat"
+    - name: Verify current SELinux mode before change
+      command: getenforce
+      register: selinux_status_before
+      changed_when: false
+
+    - name: Print SELinux mode before change
+      debug:
+        msg: "Before change, SELinux mode: {{ selinux_status_before.stdout }}"
+
+    - name: Set SELinux to permissive mode immediately
+      command: setenforce 0
+      when: selinux_status_before.stdout not in ['Permissive', 'Disabled']
+
+    - name: Ensure SELinux is set to permissive on boot
+      lineinfile:
+        path: /etc/selinux/config
+        regexp: "^SELINUX="
+        line: "SELINUX=permissive"
+        backup: yes
+
+    - name: Verify SELinux mode after change
+      command: getenforce
+      register: selinux_status_after
+      changed_when: false
+
+    - name: Print SELinux mode after change
+      debug:
+        msg: "After change, SELinux mode: {{ selinux_status_after.stdout }}"
+
+    - name: Reboot if SELinux mode was changed
+      ansible.builtin.reboot:
+      when: selinux_status_before.stdout == "Enforcing" and selinux_status_after.stdout != "Permissive"

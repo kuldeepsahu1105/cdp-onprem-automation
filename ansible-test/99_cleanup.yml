@@ -1,0 +1,152 @@
+### ansible-playbook -i inventory.ini 99_cleanup.yml
+#
+# DESTRUCTIVE cleanup playbook with scope toggles in group_vars/all.yml
+#
+# Required extra-vars:
+#   -e cleanup_enabled=true -e cleanup_confirm=true
+#
+# Examples:
+#
+# 1) Base cluster only (CDH cluster delete + node cleanup):
+#    ansible-playbook -i inventory.ini 99_cleanup.yml \
+#      -e cleanup_enabled=true -e cleanup_confirm=true \
+#      -e cleanup_delete_base_cluster=true
+#
+# 1b) CMS only (stop Cloudera Management Service — Service Monitor, Host Monitor, etc.):
+#    ansible-playbook -i inventory.ini 99_cleanup.yml \
+#      -e cleanup_enabled=true -e cleanup_confirm=true \
+#      -e cleanup_stop_cms=true
+#
+# 1c) CMS stop + delete (remove management service from CM):
+#    ansible-playbook -i inventory.ini 99_cleanup.yml \
+#      -e cleanup_enabled=true -e cleanup_confirm=true \
+#      -e cleanup_stop_cms=true -e cleanup_delete_cms=true
+#
+# 2) ECS cluster only:
+#    ansible-playbook -i inventory.ini 99_cleanup.yml \
+#      -e cleanup_enabled=true -e cleanup_confirm=true \
+#      -e cleanup_delete_ecs_cluster=true -e cleanup_reset_iptables=true
+#
+# 3) Remove CM server but keep PostgreSQL data:
+#    ansible-playbook -i inventory.ini 99_cleanup.yml \
+#      -e cleanup_enabled=true -e cleanup_confirm=true \
+#      -e cleanup_remove_cm=true -e cleanup_remove_cm_agents=true \
+#      -e cleanup_stop_postgres=true
+#
+# 4) Remove CM + backup PostgreSQL data:
+#    ansible-playbook -i inventory.ini 99_cleanup.yml \
+#      -e cleanup_enabled=true -e cleanup_confirm=true \
+#      -e cleanup_remove_cm=true -e cleanup_remove_cm_agents=true \
+#      -e cleanup_remove_postgres_data=true -e cleanup_backup_postgres_data=true
+#
+# 5) Full end-to-end cleanup (base + ecs + cm + postgres + deep dirs + service users):
+#    ansible-playbook -i inventory.ini 99_cleanup.yml \
+#      -e cleanup_enabled=true -e cleanup_confirm=true -e cleanup_e2e=true
+#
+---
+- name: Validate cleanup request and print plan
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Validate cleanup toggles
+      ansible.builtin.import_tasks: common_tasks/cleanup/validate_cleanup.yml
+
+- name: Cloudera Manager API cleanup (CMS, base cluster, ECS)
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Skip CM API cleanup when not required
+      ansible.builtin.meta: end_play
+      when: not (hostvars['localhost']['cleanup_effective']['needs_cm_api'] | default(false))
+
+    - name: Set up Cloudera Manager API URL
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+
+    - name: Stop CMS via API
+      ansible.builtin.import_tasks: common_tasks/cleanup/stop_cms_api.yml
+      when: hostvars['localhost']['cleanup_effective']['stop_cms'] | default(false)
+
+    - name: Delete CMS via API
+      ansible.builtin.import_tasks: common_tasks/cleanup/delete_cms_api.yml
+      when: hostvars['localhost']['cleanup_effective']['delete_cms'] | default(false)
+
+    - name: Delete base cluster via API
+      ansible.builtin.import_tasks: common_tasks/cleanup/delete_base_cluster_api.yml
+      when: hostvars['localhost']['cleanup_effective']['delete_base_cluster'] | default(false)
+
+    - name: Delete ECS cluster via API
+      ansible.builtin.import_tasks: common_tasks/cleanup/delete_ecs_cluster_api.yml
+      when: hostvars['localhost']['cleanup_effective']['delete_ecs_cluster'] | default(false)
+
+- name: Cleanup CDP base cluster nodes
+  hosts: base-masters:base-workers
+  become: yes
+  gather_facts: yes
+  tasks:
+    - name: Cleanup base cluster node files and services
+      ansible.builtin.import_tasks: common_tasks/cleanup/cleanup_base_node.yml
+      when: hostvars['localhost']['cleanup_effective']['delete_base_cluster'] | default(false)
+
+    - name: Remove CDP service users and groups (E2E)
+      ansible.builtin.import_tasks: common_tasks/cleanup/remove_service_users.yml
+      when: hostvars['localhost']['cleanup_effective']['remove_service_users'] | default(false)
+
+- name: Cleanup ECS cluster nodes
+  hosts: ecs-masters:ecs-workers
+  become: yes
+  gather_facts: yes
+  tasks:
+    - name: Cleanup ECS node runtime and directories
+      ansible.builtin.import_tasks: common_tasks/cleanup/cleanup_ecs_node.yml
+      when: hostvars['localhost']['cleanup_effective']['delete_ecs_cluster'] | default(false)
+
+    - name: Remove CDP service users and groups (E2E)
+      ansible.builtin.import_tasks: common_tasks/cleanup/remove_service_users.yml
+      when: hostvars['localhost']['cleanup_effective']['remove_service_users'] | default(false)
+
+- name: Remove Cloudera Manager server and PostgreSQL on CM host
+  hosts: cldr-mngr
+  become: yes
+  gather_facts: yes
+  vars:
+    cleanup_effective: "{{ hostvars['localhost']['cleanup_effective'] }}"
+  tasks:
+    - name: Remove Cloudera Manager server packages and directories
+      ansible.builtin.import_tasks: common_tasks/cleanup/remove_cm.yml
+      when: cleanup_effective.remove_cm | default(false)
+
+    - name: Cleanup PostgreSQL database
+      ansible.builtin.import_tasks: common_tasks/cleanup/cleanup_postgres.yml
+      when: >
+        cleanup_effective.stop_postgres | default(false)
+        or cleanup_effective.remove_postgres_data | default(false)
+        or cleanup_effective.remove_postgres_packages | default(false)
+
+    - name: Remove CDP service users and groups (E2E)
+      ansible.builtin.import_tasks: common_tasks/cleanup/remove_service_users.yml
+      when: cleanup_effective.remove_service_users | default(false)
+
+- name: Remove Cloudera Manager agents from remaining hosts
+  hosts: "all:!ipaserver:!cldr-mngr"
+  become: yes
+  gather_facts: yes
+  tasks:
+    - name: Remove Cloudera Manager agent
+      ansible.builtin.import_tasks: common_tasks/cleanup/remove_cm_agents.yml
+      when: hostvars['localhost']['cleanup_effective']['remove_cm_agents'] | default(false)
+
+    - name: Remove CDP service users and groups (E2E)
+      ansible.builtin.import_tasks: common_tasks/cleanup/remove_service_users.yml
+      when: hostvars['localhost']['cleanup_effective']['remove_service_users'] | default(false)
+
+- name: Reboot hosts after cleanup (optional)
+  hosts: all:!ipaserver
+  become: yes
+  tasks:
+    - name: Reboot host
+      ansible.builtin.reboot:
+        msg: "Rebooting after Cloudera cleanup"
+        reboot_timeout: 600
+      when: cleanup_reboot_hosts | default(false)

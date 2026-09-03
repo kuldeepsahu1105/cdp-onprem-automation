@@ -1,0 +1,65 @@
+---
+- name: Stop base cluster services via API
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/clusters/{{ cdh_basecluster_name }}/commands/stop"
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 202, 204, 400, 404]
+  register: stop_base_cluster
+  failed_when: false
+
+- name: Wait for base cluster to stop before deletion
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/clusters/{{ cdh_basecluster_name }}"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 404]
+  register: base_cluster_status
+  until: >
+    base_cluster_status.status == 404
+    or (
+      base_cluster_status.json is defined
+      and base_cluster_status.json.clusterState | default('') in ['STOPPED', 'UNKNOWN']
+    )
+  retries: 30
+  delay: 10
+  failed_when: false
+  when: stop_base_cluster.status in [200, 202]
+
+- name: Delete base cluster via API
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/clusters/{{ cdh_basecluster_name }}"
+    method: DELETE
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 202, 204, 404]
+  register: delete_base_cluster
+  failed_when: false
+
+- name: Wait for base cluster deletion to complete
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/clusters/{{ cdh_basecluster_name }}"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 404]
+  register: base_cluster_deleted
+  until: base_cluster_deleted.status == 404
+  retries: 20
+  delay: 10
+  failed_when: false
+  when: delete_base_cluster.status in [200, 202, 204]
+
+- name: Print base cluster API delete result
+  ansible.builtin.debug:
+    msg: "Base cluster delete API status: {{ delete_base_cluster.status | default('unknown') }}"

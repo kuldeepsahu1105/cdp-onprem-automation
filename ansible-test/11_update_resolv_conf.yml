@@ -1,0 +1,24 @@
+### ansible-playbook -i inventory.ini 11_update_resolv_conf.yml
+# vars:
+#   ipaserver_domain: cldrsetup.local
+
+---
+- name: Generate and configure /etc/resolv.conf file based on existing values
+  hosts: all
+  become: yes
+  vars:
+    ipa_domain: "{{ ipaserver_domain | default('cdppvcds.com') }}"
+
+  tasks:
+    - name: Configure resolv.conf for identity provider
+      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
+
+    - name: Verify new /etc/resolv.conf content
+      ansible.builtin.command:
+        cmd: cat /etc/resolv.conf
+      register: resolv_conf_output
+      changed_when: false
+
+    - name: Show the final content of /etc/resolv.conf
+      debug:
+        msg: "{{ resolv_conf_output.stdout.replace('\t', '    ').split('\n') }}"

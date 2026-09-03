@@ -1,0 +1,13 @@
+---
+- name: Set CM repository OS version path
+  ansible.builtin.set_fact:
+    cm_repo_os_version: "{{ ansible_distribution | lower }}{{ ansible_distribution_major_version }}"
+
+- name: Distribute cloudera-manager.repo to host
+  ansible.builtin.template:
+    src: templates/cloudera-manager.repo.j2
+    dest: "{{ os.yum_repo_dir }}/cloudera-manager.repo"
+    owner: root
+    group: root
+    mode: "0644"
+  when: os.supports_cloudera_rpm | default(false)

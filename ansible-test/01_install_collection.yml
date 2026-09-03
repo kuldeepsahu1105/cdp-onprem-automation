@@ -1,0 +1,84 @@
+### ansible-playbook -i inventory.ini 01_install_collection.yml
+
+---
+- name: Install Ansible Collections using ansible_galaxy
+  hosts: ipaserver
+  become: yes
+  tasks:
+    - name: Ensure Ansible is installed
+      ansible.builtin.package:
+        name: ansible-core
+        state: present
+
+    - name: Locate ansible-galaxy binary
+      ansible.builtin.command: which ansible-galaxy
+      register: galaxy_path
+      changed_when: false
+      failed_when: galaxy_path.rc != 0
+
+    - name: Set ansible_galaxy variable
+      ansible.builtin.set_fact:
+        ansible_galaxy: "{{ galaxy_path.stdout }}"
+
+    - name: Debug ansible-galaxy path
+      ansible.builtin.debug:
+        msg: "Using ansible-galaxy at {{ ansible_galaxy }}"
+
+    - name: Install community.crypto collection using ansible-galaxy
+      ansible.builtin.shell:
+        cmd: "{{ ansible_galaxy }} collection install community.crypto"
+
+    - name: Install freeipa.ansible_freeipa collection using ansible-galaxy
+      ansible.builtin.shell:
+        cmd: "{{ ansible_galaxy }} collection install freeipa.ansible_freeipa"
+      register: result
+      retries: 3
+      delay: 5
+      until: result.rc == 0
+
+    - name: Install ansible.posix collection using ansible-galaxy
+      ansible.builtin.shell:
+        cmd: "{{ ansible_galaxy }} collection install ansible.posix"
+
+- name: Perform full system update on all hosts
+  hosts: all
+  become: yes
+  tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Ensure package manager utilities are installed (RHEL)
+      ansible.builtin.package:
+        name: "{{ os.pkg_utils }}"
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Update all packages (RHEL)
+      ansible.builtin.dnf:
+        name: '*'
+        state: latest
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Update all packages (Ubuntu)
+      ansible.builtin.apt:
+        upgrade: dist
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Check if reboot is required (RHEL)
+      ansible.builtin.command: "{{ os.reboot_check_command }} {{ os.reboot_check_flag }}"
+      register: reboot_check
+      ignore_errors: yes
+      changed_when: false
+      failed_when: false
+      when: ansible_os_family == "RedHat"
+
+    - name: Reboot if needed and not ipaserver (RHEL)
+      ansible.builtin.reboot:
+        msg: "Rebooting after update"
+        reboot_timeout: 600
+      when:
+        - ansible_os_family == "RedHat"
+        - reboot_check.rc != 0
+        - inventory_hostname != 'ipaserver'

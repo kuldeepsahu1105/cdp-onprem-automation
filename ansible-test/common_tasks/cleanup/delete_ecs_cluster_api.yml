@@ -1,0 +1,65 @@
+---
+- name: Stop ECS cluster services via API
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/clusters/{{ ecs_cluster_name }}/commands/stop"
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 202, 204, 400, 404]
+  register: stop_ecs_cluster
+  failed_when: false
+
+- name: Wait for ECS cluster to stop before deletion
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/clusters/{{ ecs_cluster_name }}"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 404]
+  register: ecs_cluster_status
+  until: >
+    ecs_cluster_status.status == 404
+    or (
+      ecs_cluster_status.json is defined
+      and ecs_cluster_status.json.clusterState | default('') in ['STOPPED', 'UNKNOWN']
+    )
+  retries: 30
+  delay: 10
+  failed_when: false
+  when: stop_ecs_cluster.status in [200, 202]
+
+- name: Delete ECS cluster via API
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/clusters/{{ ecs_cluster_name }}"
+    method: DELETE
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 202, 204, 404]
+  register: delete_ecs_cluster
+  failed_when: false
+
+- name: Wait for ECS cluster deletion to complete
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/clusters/{{ ecs_cluster_name }}"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 404]
+  register: ecs_cluster_deleted
+  until: ecs_cluster_deleted.status == 404
+  retries: 20
+  delay: 10
+  failed_when: false
+  when: delete_ecs_cluster.status in [200, 202, 204]
+
+- name: Print ECS cluster API delete result
+  ansible.builtin.debug:
+    msg: "ECS cluster delete API status: {{ delete_ecs_cluster.status | default('unknown') }}"

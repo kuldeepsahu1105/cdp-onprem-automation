@@ -1,0 +1,70 @@
+---
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: set_os_facts.yml
+
+- name: Install Active Directory join packages
+  ansible.builtin.package:
+    name: "{{ os.ad_join_packages }}"
+    state: present
+
+- name: Ensure oddjobd is running for mkhomedir
+  ansible.builtin.systemd:
+    name: oddjobd
+    state: started
+    enabled: true
+  failed_when: false
+
+- name: Check current realm membership
+  ansible.builtin.command: realm list
+  register: realm_list
+  changed_when: false
+  failed_when: false
+
+- name: Discover Active Directory realm
+  ansible.builtin.command: "realm discover {{ ad_domain }}"
+  register: realm_discover
+  changed_when: false
+  failed_when: false
+  when: ad_realm not in realm_list.stdout
+
+- name: Print realm discovery output
+  ansible.builtin.debug:
+    msg: "{{ realm_discover.stdout_lines | default(['Realm already joined or discovery skipped']) }}"
+  when: realm_discover is defined and realm_discover.stdout_lines is defined
+
+- name: Join Active Directory realm
+  ansible.builtin.shell: |
+    set -o pipefail
+    realm join {{ ad_realm }} \
+      --user={{ ad_join_user | quote }} \
+      --membership-software=sssd \
+      --client-software=sssd \
+      {% if ad_computer_ou | default('') | length > 0 %}--computer-ou={{ ad_computer_ou | quote }} {% endif %}
+  args:
+    stdin: "{{ ad_join_password }}"
+    executable: /bin/bash
+  register: realm_join_result
+  changed_when: realm_join_result.rc == 0
+  no_log: true
+  when: ad_realm not in realm_list.stdout
+
+- name: Print realm join result
+  ansible.builtin.debug:
+    msg: "Joined Active Directory realm {{ ad_realm }}"
+  when: realm_join_result is changed
+
+- name: Restart SSSD after realm join
+  ansible.builtin.systemd:
+    name: sssd
+    state: restarted
+    enabled: true
+  when: realm_join_result is changed
+
+- name: Verify realm membership
+  ansible.builtin.command: realm list
+  register: realm_list_final
+  changed_when: false
+
+- name: Print final realm membership
+  ansible.builtin.debug:
+    msg: "{{ realm_list_final.stdout_lines }}"

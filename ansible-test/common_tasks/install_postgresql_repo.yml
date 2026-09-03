@@ -1,0 +1,47 @@
+---
+- name: Enable RHEL Repositories (if RHEL-based)
+  ansible.builtin.command: >
+    subscription-manager repos
+    --enable=rhel-{{ ansible_distribution_major_version }}-for-{{ ansible_architecture }}-baseos-rpms
+    --enable=rhel-{{ ansible_distribution_major_version }}-for-{{ ansible_architecture }}-appstream-rpms
+  when: ansible_os_family == "RedHat" and ansible_distribution == "RedHat"
+  changed_when: false
+  failed_when: false
+
+- name: Enable CentOS Stream AppStream Repos (if CentOS)
+  ansible.builtin.command: dnf config-manager --set-enabled appstream
+  when: ansible_os_family == "RedHat" and ansible_distribution == "CentOS"
+  changed_when: false
+  failed_when: false
+
+- name: Install PostgreSQL PGDG repository (RHEL)
+  ansible.builtin.package:
+    name: "{{ os_vars.RedHat.postgres_repo_url }}"
+    state: present
+    disable_gpg_check: true
+  when: ansible_os_family == "RedHat"
+
+- name: Install PostgreSQL APT repository key (Ubuntu)
+  ansible.builtin.get_url:
+    url: "{{ os_vars.Debian.postgres_apt_key_url }}"
+    dest: /tmp/postgresql.asc
+    mode: "0644"
+  when: ansible_os_family == "Debian"
+
+- name: Dearmor PostgreSQL APT key
+  ansible.builtin.command: gpg --dearmor -o /usr/share/keyrings/postgresql.gpg /tmp/postgresql.asc
+  args:
+    creates: /usr/share/keyrings/postgresql.gpg
+  when: ansible_os_family == "Debian"
+
+- name: Add PostgreSQL APT repository (Ubuntu)
+  ansible.builtin.apt_repository:
+    repo: "{{ os_vars.Debian.postgres_apt_repo }}"
+    state: present
+    filename: pgdg
+  when: ansible_os_family == "Debian"
+
+- name: Update apt cache after adding PostgreSQL repo (Ubuntu)
+  ansible.builtin.apt:
+    update_cache: true
+  when: ansible_os_family == "Debian"

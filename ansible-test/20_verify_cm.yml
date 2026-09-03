@@ -1,0 +1,139 @@
+### ansible-playbook -i inventory.ini 20_verify_cm.yml
+# vars:
+#   cm_port: 7180
+#   cm_admin_user: "admin"
+#   cm_admin_pass: "admin"
+
+---
+- name: Verify and perform sanity checks on cloudera-manager server
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Set up Cloudera Manager API URL
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+      become: false
+
+    - name: Print cm_api_url (in playbook)
+      ansible.builtin.debug:
+        msg: "cm_api_url is set to {{ cm_api_url }}"
+
+    - name: Authenticate with Cloudera Manager API
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/cm/version"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        status_code: [200, 301, 303]
+        validate_certs: no
+      register: cm_version
+
+    # - name: Print Cloudera Manager API Version Response
+    #   ansible.builtin.debug:
+    #     msg: "Cloudera Manager API Version: {{ cm_version.json }}"
+
+    - name: Print Cloudera Manager API Version and Build Timestamp
+      ansible.builtin.debug:
+        msg: "Cloudera Manager Version: {{ cm_version.json.version }}, Build Timestamp: {{ cm_version.json.buildTimestamp }}"
+
+    - name: Check existing Cloudera Manager license
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/cm/license"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        return_content: yes
+        status_code: [200, 301, 303, 404] # 404 if no license installed
+        validate_certs: no
+      register: cm_license_status
+      changed_when: false
+
+    - name: Print Cloudera Manager License Status
+      ansible.builtin.debug:
+        msg: "Cloudera Manager License: {{ 'Installed' if cm_license_status.status == 200 else 'Not Installed' }}"
+
+    - name: Check Cloudera SCM Server service status
+      ansible.builtin.shell: "systemctl is-active cloudera-scm-server"
+      register: scm_server_status
+      delegate_to: cldr-mngr
+      changed_when: false
+      failed_when: false
+      ignore_errors: true
+
+    - name: Print Cloudera SCM Server Service Status
+      ansible.builtin.debug:
+        msg: "Cloudera SCM Server is {{ scm_server_status.stdout | default('not running') }}"
+
+    - name: Check Cloudera Manager Service status
+      ansible.builtin.shell: systemctl status cloudera-scm-server --no-pager
+      delegate_to: cldr-mngr
+      register: cm_status_output
+      changed_when: false
+
+    - name: Display Cloudera Manager Service status
+      ansible.builtin.debug:
+        msg: "{{ cm_status_output.stdout }}"
+
+    - name: Check Cloudera Management Services Status
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/cm/service"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        status_code: [200, 301, 303]
+        validate_certs: no
+      register: cm_service_status
+      failed_when: false
+
+    - name: Print Cloudera Management Services Status
+      ansible.builtin.debug:
+        msg: >
+          {% if cm_service_status.status == 200 %}
+            {{ cm_service_status.json.displayName }}:
+            State={{ cm_service_status.json.serviceState }},
+            Health={{ cm_service_status.json.healthSummary }},
+            Entity={{ cm_service_status.json.entityStatus }},
+            Status Code={{ cm_service_status.status }}
+          {% else %}
+            CM Service not available:
+            Message={{ cm_service_status.json.message | default('Unknown error') }},
+            Status Code={{ cm_service_status.status }}
+          {% endif %}
+
+    - name: List available clusters in Cloudera Manager
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/clusters"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        status_code: [200, 301, 303]
+        validate_certs: no
+      register: cm_clusters
+
+    - name: Print Available Clusters
+      ansible.builtin.debug:
+        msg: "Available Clusters: {{ cm_clusters.json['items'] }}"
+        # msg: "Available Clusters: {{ cm_clusters.json.items | map(attribute='name') | list }}"
+
+    # - name: Get the host identifiers and names from Cloudera Manager
+    #   uri:
+    #     url: "{{ cm_api_url }}/hosts"
+    #     method: GET
+    #     status_code: [200, 301, 303]
+    #     user: "{{ cm_admin_user }}"
+    #     password: "{{ cm_admin_pass }}"
+    #     force_basic_auth: yes
+    #     return_content: yes
+    #   register: scm_host_list
+
+    # - name: Extract the host identifiers and names into facts
+    #   set_fact:
+    #     scm_hosts: "{{ lookup('template', 'scm_host_list.j2') | from_yaml }}"
+
+    # - name: Print the extracted host identifiers and names
+    #   debug:
+    #     var: scm_hosts
+    #     # verbosity: 2

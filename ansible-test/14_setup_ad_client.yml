@@ -1,0 +1,40 @@
+### ansible-playbook -i inventory.ini 14_setup_ad_client.yml
+#
+# Active Directory realm join only (use 14_setup_identity_client.yml for auto-detect)
+---
+- name: Detect and validate Active Directory configuration
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Require Active Directory mode
+      ansible.builtin.assert:
+        that:
+          - identity_provider_effective == 'ad'
+          - ad_domain | length > 0
+          - ad_kdc_host | length > 0
+          - ad_join_user | length > 0
+          - ad_join_password | length > 0
+        fail_msg: >-
+          Active Directory not detected. Leave [ipaserver] empty in inventory
+          and set ad_domain, ad_kdc_host, ad_join_user, ad_join_password.
+
+- name: Update DNS for Active Directory
+  hosts: all
+  become: yes
+  tasks:
+    - name: Configure DNS
+      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
+
+    - name: Wait for DNS to settle
+      ansible.builtin.pause:
+        seconds: 10
+
+- name: Join cluster hosts to Active Directory realm
+  hosts: "{{ identity_client_hosts }}"
+  become: yes
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: Join Active Directory realm
+      ansible.builtin.import_tasks: common_tasks/join_ad_realm.yml

@@ -1,0 +1,17 @@
+---
+- name: Locate ansible-galaxy binary
+  ansible.builtin.command: which ansible-galaxy
+  register: galaxy_path
+  changed_when: false
+  failed_when: galaxy_path.rc != 0
+
+- name: Install cloudera.cluster collection
+  ansible.builtin.shell:
+    cmd: >
+      {{ galaxy_path.stdout }} collection install
+      git+https://github.com/cloudera-labs/cloudera.cluster.git,devel
+  register: cloudera_collection_result
+  retries: 3
+  delay: 5
+  until: cloudera_collection_result.rc == 0
+  changed_when: "'Nothing to do' not in cloudera_collection_result.stdout"

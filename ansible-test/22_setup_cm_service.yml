@@ -1,0 +1,63 @@
+### ansible-playbook -i inventory.ini 21_setup_cm_license.yml
+# vars:
+#   cm_port: 7180
+#   cm_admin_user: "admin"
+#   cm_admin_pass: "admin"
+#   license_file_name: "license.txt"
+
+---
+- name: Setup Cloudera Manager License
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Set up Cloudera Manager API URL
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+
+    - name: Print cm_api_url
+      ansible.builtin.debug:
+        msg: "cm_api_url is set to {{ cm_api_url }}"
+
+    - name: Check Cloudera Management Services Status
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/cm/service"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        status_code: 200
+      register: cm_service_status
+      failed_when: false
+
+    - name: Print Cloudera Management Services Status
+      ansible.builtin.debug:
+        msg: "Cloudera Management Service Status: {{ cm_service_status.json.message }} [status-code: {{ cm_service_status.status }}]"
+
+    - name: Enable Cloudera Management Services
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/cm/service"
+        method: PUT
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        body_format: json
+        body:
+          items:
+            - name: "Cloudera Management Service"
+              type: "MGMT"
+        status_code: 200
+      register: management_services
+
+    - name: List available clusters in Cloudera Manager
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/clusters"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        status_code: 200
+      register: cm_clusters
+
+    - name: Print Available Clusters
+      ansible.builtin.debug:
+        msg: "Available Clusters: {{ cm_clusters.json['items'] }}"
+        # msg: "Available Clusters: {{ cm_clusters.json.items | map(attribute='name') | list }}"

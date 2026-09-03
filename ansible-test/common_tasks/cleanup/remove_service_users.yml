@@ -1,0 +1,17 @@
+---
+- name: Remove CDP service users
+  ansible.builtin.user:
+    name: "{{ item }}"
+    state: absent
+    remove: true
+  loop: "{{ cleanup_service_users }}"
+  when: hostvars['localhost']['cleanup_effective']['remove_service_users'] | default(false)
+  failed_when: false
+
+- name: Remove CDP service groups
+  ansible.builtin.group:
+    name: "{{ item }}"
+    state: absent
+  loop: "{{ cleanup_service_groups }}"
+  when: hostvars['localhost']['cleanup_effective']['remove_service_groups'] | default(false)
+  failed_when: false

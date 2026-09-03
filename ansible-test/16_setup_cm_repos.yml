@@ -1,0 +1,11 @@
+### ansible-playbook -i inventory.ini 16_setup_cm_repos.yml
+#
+# CM/CDH repository setup router:
+#   cm_repo_source=public   — configure archive.cloudera.com/p/ on all hosts (17 only)
+#   cm_repo_source=internal — web server (16) + mirror download (17)
+---
+- name: Set up internal web server (internal repo mode only)
+  ansible.builtin.import_playbook: 16_setup_internal_repo.yml
+
+- name: Configure or mirror Cloudera Manager repositories
+  ansible.builtin.import_playbook: 17_download_repos.yml

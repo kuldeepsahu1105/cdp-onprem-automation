@@ -1,0 +1,147 @@
+### ansible-playbook -i inventory.ini 17_download_repos.yml
+#
+# Configure CM/CDH repositories:
+#   cm_repo_source=public   — point hosts at archive.cloudera.com/p/ (default)
+#   cm_repo_source=internal — download RPMs/parcels to cldr-mngr and serve locally
+---
+- name: Validate CM repository configuration
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Print CM repository mode
+      ansible.builtin.debug:
+        msg:
+          - "cm_repo_source: {{ cm_repo_source }}"
+          - "parcel_repo: {{ parcel_repo }}"
+          - "cm_repo_mirror_host: {{ cm_repo_mirror_host }}"
+
+    - name: Require Cloudera archive credentials for public repo mode
+      ansible.builtin.assert:
+        that:
+          - cm_repo_username | default('') | length > 0
+          - cm_repo_username != '<username>'
+          - cm_repo_password | default('') | length > 0
+          - cm_repo_password != '<password>'
+        fail_msg: >-
+          Set cm_repo_username and cm_repo_password for public repo mode
+          (archive.cloudera.com/p/), or use cm_repo_source=internal with 16_setup_internal_repo.yml.
+      when: cm_repo_source == 'public'
+
+- name: Mirror Cloudera Manager and CDH to internal web server
+  hosts: cldr-mngr
+  become: yes
+  tasks:
+    - name: Skip internal mirror tasks when using public repos
+      ansible.builtin.meta: end_host
+      when: cm_repo_source != 'internal'
+
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Verify Cloudera Manager RPM repo setup is supported on this OS
+      ansible.builtin.assert:
+        that:
+          - os.supports_cloudera_rpm
+        fail_msg: "Cloudera Manager RPM repository setup is only supported on RHEL-based systems."
+
+    - name: Set CDH and Spark version variables
+      ansible.builtin.set_fact:
+        os_version: "{{ ansible_distribution | lower }}{{ ansible_distribution_major_version }}"
+        cm_major_version: "{{ cm_version.split('.')[:3] | join('.') }}"
+        cdh7: "{{ cdh_repo_product }}"
+        cdh_major_version: "{{ cdh_version.split('.')[:3] | join('.') }}"
+        cdh_build_number: "{{ cdh_version.split('.')[-1] }}"
+        cdh_spark_bundled: "{{ cdh_version is version(cdh_spark_bundled_min_version, '>=') }}"
+        download_spark: >-
+          {{
+            (spark_version is defined and spark_version | length > 0)
+            and not (cdh_version is version(cdh_spark_bundled_min_version, '>='))
+          }}
+        spark3: "{{ 'spark' + (spark_version.split('.')[0] | string) if (spark_version is defined and spark_version | length > 0) else '' }}"
+
+    - name: Print Spark parcel download decision
+      ansible.builtin.debug:
+        msg: >-
+          {% if cdh_spark_bundled %}
+          Skipping separate Spark parcel download — Spark is bundled in CDH {{ cdh_version }} (>= {{ cdh_spark_bundled_min_version }}).
+          {% elif download_spark %}
+          Will download separate Spark parcel for CDH {{ cdh_version }}.
+          {% else %}
+          Spark parcel download skipped (spark_version not defined).
+          {% endif %}
+
+    - name: Create necessary directories
+      ansible.builtin.file:
+        path: "{{ cldr_repos_path }}/{{ item }}"
+        state: directory
+      loop: "{{ repo_directories }}"
+      vars:
+        repo_directories: >-
+          {{
+            [
+              'cloudera-manager',
+              'cloudera-manager/cm' + cm_major_version + '/' + os_version + '/yum/RPMS/' + ansible_architecture + '/',
+              cdh7 + '/' + cdh_version
+            ]
+            + (['spark3/' + spark_version] if download_spark else [])
+          }}
+
+    - name: Download Cloudera Manager repo files from archive
+      ansible.builtin.get_url:
+        url: >-
+          https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_version }}/
+          {%- if item in ['allkeys.asc', 'allkeyssha256.asc'] -%}
+          {{ item }}
+          {%- else -%}
+          {{ os_version }}/yum/{{ item }}
+          {%- endif -%}
+        dest: "{{ cldr_repos_path }}/cloudera-manager/{{ item }}"
+      loop:
+        - cloudera-manager.repo
+        - cloudera-manager-trial.repo
+        - RPM-GPG-KEY-cloudera
+        - allkeys.asc
+        - allkeyssha256.asc
+
+    - name: Download Cloudera Manager RPMs from archive
+      ansible.builtin.get_url:
+        url: "https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_version }}/{{ os_version }}/yum/RPMS/{{ ansible_architecture }}/{{ item }}"
+        dest: "{{ cldr_repos_path }}/cloudera-manager/cm{{ cm_major_version }}/{{ os_version }}/yum/RPMS/{{ ansible_architecture }}/"
+      loop:
+        - "cloudera-manager-agent-{{ cm_version }}-{{ cm_numeric_version }}.el{{ ansible_distribution_major_version }}.{{ ansible_architecture }}.rpm"
+        - "cloudera-manager-daemons-{{ cm_version }}-{{ cm_numeric_version }}.el{{ ansible_distribution_major_version }}.{{ ansible_architecture }}.rpm"
+        - "cloudera-manager-server-{{ cm_version }}-{{ cm_numeric_version }}.el{{ ansible_distribution_major_version }}.{{ ansible_architecture }}.rpm"
+        - "cloudera-manager-server-db-2-{{ cm_version }}-{{ cm_numeric_version }}.el{{ ansible_distribution_major_version }}.{{ ansible_architecture }}.rpm"
+
+    - name: Download CDH Parcels from archive
+      ansible.builtin.get_url:
+        url: "https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/{{ cdh7 }}/{{ cdh_version }}/parcels/CDH-{{ cdh_major_version }}-1.cdh{{ cdh_major_version }}.p{{ cdh_build_number }}.{{ cdh_numeric_version }}-el{{ ansible_distribution_major_version }}.parcel"
+        dest: "{{ cldr_repos_path }}/{{ cdh7 }}/{{ cdh_version }}/"
+
+    - name: Download Spark Parcels from archive
+      ansible.builtin.get_url:
+        url: "https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/{{ spark3 }}/{{ spark_version }}/parcels/SPARK3-{{ spark_minor_version }}-1-1.{{ spark_numeric_version }}-el{{ ansible_distribution_major_version }}.parcel"
+        dest: "{{ cldr_repos_path }}/{{ spark3 }}/{{ spark_version }}/"
+      when: download_spark
+
+    - name: Run createrepo for internal CM mirror
+      ansible.builtin.command: "createrepo --baseurl http://{{ ansible_default_ipv4.address }}/cloudera-repos/cloudera-manager/ {{ cldr_repos_path }}/cloudera-manager/"
+      args:
+        chdir: "{{ cldr_repos_path }}/cloudera-manager/"
+
+    - name: Ensure web server is started for internal mirror
+      ansible.builtin.service:
+        name: "{{ os.web_server_service }}"
+        state: started
+        enabled: yes
+
+- name: Configure cloudera-manager.repo on all cluster hosts
+  hosts: all
+  become: yes
+  tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Configure Cloudera Manager yum repository
+      ansible.builtin.import_tasks: common_tasks/configure_cm_yum_repo.yml

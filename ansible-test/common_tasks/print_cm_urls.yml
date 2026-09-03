@@ -1,0 +1,90 @@
+- name: Set up Cloudera Manager API URL
+  ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+
+# - name: Print Cloudera Manager API URL
+#   ansible.builtin.debug:
+#     msg: "cm_api_url is set to {{ cm_api_url }}"
+
+- name: Extract API version from cm_api_url
+  ansible.builtin.set_fact:
+    cm_api_version: "{{ cm_api_url | regex_search('/api/(v[0-9]+)', '\\1') | first | default('v54') }}"
+
+# - name: Print extracted API version
+#   ansible.builtin.debug:
+#     msg: "cm_api_version is set to {{ cm_api_version }}"
+
+- name: Get Private IP of CM server
+  ansible.builtin.set_fact:
+    cm_private_ip: "{{ hostvars[groups['cldr-mngr'][0]].ansible_host }}" # Fetch IP of CM from inventory
+
+# - name: Print Private IP
+#   ansible.builtin.debug:
+#     msg: "✏️  Cloudera Manager Private IP: {{ cm_private_ip }}"
+
+- name: Get Public IP of CM server (if available)
+  ansible.builtin.uri:
+    url: "https://api.ipify.org/"
+    return_content: yes
+  register: public_ip_result
+  delegate_to: "{{ groups['cldr-mngr'][0] }}"
+  ignore_errors: yes
+
+- name: Set Public IP (if available)
+  ansible.builtin.set_fact:
+    cm_public_ip: "{{ public_ip_result.content | default('N/A') }}"
+
+# - name: Print Public IP
+#   ansible.builtin.debug:
+#     msg: "✏️  Cloudera Manager Public IP: {{ cm_public_ip }}"
+
+- name: Check if Cloudera Manager redirects HTTP to HTTPS (Auto-TLS status)
+  ansible.builtin.uri:
+    url: "http://{{ cm_private_ip }}:{{ cm_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    follow_redirects: none
+    return_content: no
+    validate_certs: no
+    status_code: [200, 303]
+  register: cm_http_response
+  ignore_errors: yes
+
+- name: Determine if Auto-TLS is enabled
+  ansible.builtin.set_fact:
+    autotls_enabled: "{{ cm_http_response.status == 303 }}"
+
+- name: Print Auto-TLS status
+  ansible.builtin.debug:
+    msg: "❓ Auto-TLS is enabled: {{ autotls_enabled }}"
+
+- name: Set Cloudera Manager protocol and port
+  ansible.builtin.set_fact:
+    cm_protocol: "{{ 'https' if autotls_enabled else 'http' }}"
+    cm_port_ui: "{{ '7183' if autotls_enabled else '7180' }}"
+    cm_port_api: "{{ '7183' if autotls_enabled else '7180' }}" # same port for both in CM
+
+- name: Set Cloudera Manager URLs
+  ansible.builtin.set_fact:
+    cm_private_ui_url: "{{ cm_protocol }}://{{ cm_private_ip }}:{{ cm_port_ui }}"
+    cm_private_api_url: "{{ cm_protocol }}://{{ cm_private_ip }}:{{ cm_port_api }}/api/{{ cm_api_version }}"
+    cm_public_ui_url: "{{ cm_protocol }}://{{ cm_public_ip }}:{{ cm_port_ui }}"
+    cm_public_api_url: "{{ cm_protocol }}://{{ cm_public_ip }}:{{ cm_port_api }}/api/{{ cm_api_version }}"
+
+- name: Set Cloudera Manager Access Message (YAML formatted output)
+  ansible.builtin.debug:
+    msg: "{{ msg_content.split('\n') }}"
+  vars:
+    msg_content: |
+      ✅ **Cloudera Manager Access Details**
+
+      ♻️  **Private Access (Recommended for Internal Use)**  
+      ➡️  UI URL: [Cloudera Manager]({{ cm_private_ui_url }})  
+      ⚠️  API URL: [CM API]({{ cm_private_api_url }})  
+
+      {% if cm_public_ip != 'N/A' %}
+      ♻️  **Public Access (If Public IP is Configured)**  
+      ➡️  UI URL: [Cloudera Manager]({{ cm_public_ui_url }})  
+      ⚠️  API URL: [CM API]({{ cm_public_api_url }})  
+      {% endif %}

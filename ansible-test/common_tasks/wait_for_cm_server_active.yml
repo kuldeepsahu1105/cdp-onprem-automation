@@ -1,0 +1,40 @@
+---
+- name: Check if Cloudera Manager Server is already running
+  ansible.builtin.command: systemctl is-active cloudera-scm-server
+  register: cm_status
+  changed_when: false
+  failed_when: cm_status.rc > 1
+
+- name: Print Cloudera SCM Server startup status - ALREADY RUNNING
+  ansible.builtin.debug:
+    msg: "Cloudera SCM Server is already running."
+  when: cm_status.stdout == "active"
+
+- name: Wait for Cloudera Manager Server port
+  ansible.builtin.wait_for:
+    port: "{{ cm_api_port | default(cm_http_port) | default(7180) }}"
+    host: "{{ ansible_default_ipv4.address | default('127.0.0.1') }}"
+    delay: 10
+    timeout: 300
+  when: cm_status.stdout != "active"
+
+- name: Wait for Cloudera Manager Server systemd active state
+  ansible.builtin.command: systemctl is-active cloudera-scm-server
+  register: cm_active_check
+  until: cm_active_check.stdout == "active"
+  retries: 30
+  delay: 10
+  changed_when: false
+  when: cm_status.stdout != "active"
+
+- name: Print Cloudera SCM Server startup status - SUCCESS
+  ansible.builtin.debug:
+    msg: "Cloudera SCM Server successfully started."
+  when: cm_status.stdout == "active" or (cm_active_check is defined and cm_active_check.stdout == "active")
+
+- name: Print Cloudera SCM Server startup status - FAILURE
+  ansible.builtin.debug:
+    msg: "Cloudera SCM Server failed to start within timeout."
+  when: >
+    cm_status.stdout != "active"
+    and (cm_active_check is not defined or cm_active_check.stdout != "active")

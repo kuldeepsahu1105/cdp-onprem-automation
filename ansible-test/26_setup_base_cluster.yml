@@ -1,0 +1,178 @@
+### ansible-playbook -i inventory.ini 26_setup_base_cluster.yml
+#
+# Install CDP Base Cluster (HDFS, YARN, ZooKeeper) on base-masters/base-workers.
+# This is separate from Cloudera Management Service (CMS) — see 24_setup_cm_cms.yml
+---
+- name: Install cloudera.cluster collection on control node
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Install cloudera.cluster collection
+      ansible.builtin.import_tasks: common_tasks/install_cloudera_collection.yml
+
+- name: Install CDP Base Cluster via Cloudera Manager
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Set up Cloudera Manager API URL
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+
+    - name: Validate base cluster inventory groups
+      ansible.builtin.assert:
+        that:
+          - base_cluster_master_group in groups
+          - groups[base_cluster_master_group] | length > 0
+          - base_cluster_worker_group in groups
+          - groups[base_cluster_worker_group] | length > 0
+        fail_msg: >-
+          Base cluster inventory groups '{{ base_cluster_master_group }}' and
+          '{{ base_cluster_worker_group }}' must exist and contain hosts.
+
+    - name: Set base master FQDN
+      ansible.builtin.set_fact:
+        base_master_fqdn: "{{ hostvars[groups[base_cluster_master_group][0]].cldr_hostname }}.{{ cluster_domain }}"
+
+    - name: Build base worker FQDNs
+      ansible.builtin.set_fact:
+        base_worker_fqdns: "{{ base_worker_fqdns | default([]) + [hostvars[item].cldr_hostname + '.' + cluster_domain] }}"
+      loop: "{{ groups[base_cluster_worker_group] }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Build worker host assignment entries
+      ansible.builtin.set_fact:
+        base_worker_host_entries: "{{ base_worker_host_entries | default([]) + [{'name': item, 'host_template': 'Worker'}] }}"
+      loop: "{{ base_worker_fqdns }}"
+
+    - name: Build cluster host assignment list
+      ansible.builtin.set_fact:
+        base_cluster_hosts: "{{ [{'name': base_master_fqdn, 'host_template': 'Master'}] + base_worker_host_entries }}"
+
+    - name: Print base cluster targets
+      ansible.builtin.debug:
+        msg:
+          - "Cluster name: {{ cdh_basecluster_name }}"
+          - "CDH parcel version: {{ cdh_parcel_version }}"
+          - "Master host: {{ base_master_fqdn }}"
+          - "Worker hosts: {{ base_worker_fqdns }}"
+
+    - name: Set remote parcel repository URL in Cloudera Manager
+      cloudera.cluster.cm_config:
+        host: "{{ cm_host }}"
+        port: "{{ cm_api_port }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        verify_tls: false
+        force_tls: "{{ autotls_enabled | default(false) }}"
+        parameters:
+          REMOTE_PARCEL_REPO_URLS: "{{ parcel_repo }}"
+      when: parcel_repo is defined
+
+    - name: Check if base cluster already exists
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/clusters/{{ cdh_basecluster_name }}"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 404]
+      register: existing_cluster
+
+    - name: Create and start CDP Base Cluster
+      cloudera.cluster.cluster:
+        host: "{{ cm_host }}"
+        port: "{{ cm_api_port }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        verify_tls: false
+        force_tls: "{{ autotls_enabled | default(false) }}"
+        name: "{{ cdh_basecluster_name }}"
+        display_name: "{{ cdh_basecluster_name }}"
+        cluster_version: "{{ cdh_parcel_version }}"
+        type: BASE_CLUSTER
+        state: started
+        parcels:
+          CDH: "{{ cdh_parcel_version }}"
+        services:
+          - name: core-settings
+            type: CORE_SETTINGS
+            display_name: Core Settings
+          - name: zookeeper
+            type: ZOOKEEPER
+            display_name: ZooKeeper
+            config:
+              zookeeper_datadir_autocreate: true
+          - name: hdfs
+            type: HDFS
+            display_name: HDFS
+            config:
+              zookeeper_service: zookeeper
+              core_connector: core-settings
+            role_groups:
+              - type: DATANODE
+                config:
+                  dfs_data_dir_list: /dfs/dn
+              - type: NAMENODE
+                config:
+                  dfs_name_dir_list: /dfs/nn
+              - type: SECONDARYNAMENODE
+                config:
+                  fs_checkpoint_dir_list: /dfs/snn
+          - name: yarn
+            type: YARN
+            display_name: YARN
+            config:
+              hdfs_service: hdfs
+              zookeeper_service: zookeeper
+            role_groups:
+              - type: RESOURCEMANAGER
+                config:
+                  yarn_scheduler_maximum_allocation_mb: 4096
+                  yarn_scheduler_maximum_allocation_vcores: 4
+              - type: NODEMANAGER
+                config:
+                  yarn_nodemanager_resource_memory_mb: 4096
+                  yarn_nodemanager_resource_cpu_vcores: 4
+                  yarn_nodemanager_local_dirs: /tmp/nm
+                  yarn_nodemanager_log_dirs: /var/log/nm
+        host_templates:
+          - name: Master
+            role_groups:
+              - service: hdfs
+                type: NAMENODE
+              - service: hdfs
+                type: SECONDARYNAMENODE
+              - service: yarn
+                type: RESOURCEMANAGER
+              - service: yarn
+                type: JOBHISTORY
+          - name: Worker
+            role_groups:
+              - service: hdfs
+                type: DATANODE
+              - service: yarn
+                type: NODEMANAGER
+              - service: zookeeper
+                type: SERVER
+        hosts: "{{ base_cluster_hosts }}"
+      register: base_cluster_result
+      when: existing_cluster.status == 404
+
+    - name: Start existing base cluster services
+      cloudera.cluster.cluster:
+        host: "{{ cm_host }}"
+        port: "{{ cm_api_port }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        verify_tls: false
+        force_tls: "{{ autotls_enabled | default(false) }}"
+        name: "{{ cdh_basecluster_name }}"
+        state: started
+      when: existing_cluster.status == 200
+
+    - name: Print base cluster result
+      ansible.builtin.debug:
+        msg: "Base cluster '{{ cdh_basecluster_name }}' deployment complete or already exists"

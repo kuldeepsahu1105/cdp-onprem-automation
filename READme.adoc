@@ -1,0 +1,365 @@
+= CDP On-Prem Automation — Cloudera Data Platform on AWS
+Kuldeep Sahu
+v1.3
+:toc:
+:toc-title: Table of Contents
+:toclevels: 3
+:icons: font
+
+End-to-end automation for provisioning AWS infrastructure and deploying Cloudera Private Cloud (Base + ECS) using Terraform and Ansible.
+
+== 📚 Documentation
+
+[cols="2,4", options="header"]
+|===
+| Document | Purpose
+
+| link:README.md[README.md]
+| Project overview, quick start, repo layout, default versions
+
+| link:ansible-test/README.md[ansible-test/README.md]
+| Ansible quick start and phase summary
+
+| link:ansible-test/docs/RUNBOOK.md[ansible-test/docs/RUNBOOK.md]
+| *How to run* — step-by-step deployment, FreeIPA/AD scenarios, cleanup
+
+| link:ansible-test/docs/REFERENCE.md[ansible-test/docs/REFERENCE.md]
+| *Detailed reference* — playbooks, variables, inventory, DNS, repo modes, cleanup toggles
+|===
+
+TIP: Use the *runbook* for execution steps; use the *reference* for configuration details.
+
+== 🎯 Objective
+
+The goal is to keep execution *simple and lightweight*:
+
+* Users do *not* need to clone the repository manually
+* Only required files (wrappers + config) are downloaded
+* Wrapper scripts handle cloning and execution internally
+
+== 📋 Prerequisites
+
+Before running either script, ensure the following are in place:
+
+. *AWS CLI* is configured and logged in to the correct AWS account
+. *Bash* is available (Linux or macOS)
+. *Internet access* is available for cloning repos and downloading packages
+. Ensure you have access to the target AWS account where resources will be created
+
+NOTE: The scripts automatically install `git`, `terraform`, `python3`, `ansible-core`, and required network tools (`wget`, `telnet`, `net-tools`, `bind-utils`, etc.). No pre-installation is needed.
+
+== 🚀 Setup (How It Works)
+=== Step 0 — Setup (One-time)
+
+Download the required files into your working directory:
+
+[source,bash]
+----
+mkdir -p cdp_deployment_dir
+cd cdp_deployment_dir
+
+wget https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/refs/heads/main/clone_and_run_terraform.sh
+wget https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/refs/heads/main/clone_and_run_pvc_automation.sh
+wget https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/refs/heads/main/.tfvars.env
+# Or use YAML instead:
+# wget https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/refs/heads/main/.tfvars.yaml
+----
+
+Make scripts executable:
+
+[source,bash]
+----
+chmod +x clone_and_run_terraform.sh
+chmod +x clone_and_run_pvc_automation.sh
+----
+
+Place required files in the same directory:
+
+* `kuldeep_sahu_2026_2027_cloudera_license.txt`
+* `kuldeep_sahu_2026_2027_info.txt`
+
+== 📁 Directory Structure
+
+Your working directory should look like this:
+
+[source,text]
+----
+~/cdp_deployment_dir/
+├── clone_and_run_terraform.sh
+├── clone_and_run_pvc_automation.sh
+├── .tfvars.env
+├── .tfvars.yaml                  # optional YAML alternative to .tfvars.env
+├── kuldeep_sahu_2026_2027_cloudera_license.txt
+├── kuldeep_sahu_2026_2027_info.txt
+└── cdp-onprem-automation/   # auto-cloned by wrapper scripts
+----
+
+=== Required Files
+
+[cols="2,4", options="header"]
+|===
+| File | Purpose
+
+| `.tfvars.env`
+| Shell-format deployment configuration
+
+| `.tfvars.yaml`
+| YAML-format deployment configuration (alternative to `.tfvars.env`)
+|===
+
+TIP: Use *either* `.tfvars.env` *or* `.tfvars.yaml` in your working directory. Wrapper scripts prefer YAML when both exist. Set `TFVARS_FILE` to choose an explicit path.
+
+[cols="2,4", options="header"]
+|===
+| File | Purpose
+
+| `kuldeep_sahu_2026_2027_cloudera_license.txt`
+| Cloudera license
+
+| `kuldeep_sahu_2026_2027_info.txt`
+| Cloudera archive repository credentials
+|===
+
+WARNING: Do *NOT* commit license, credentials, or SSH key files to GitHub.
+
+== ⚙️ Configuration
+
+=== Key Terraform Variables
+
+[cols="2,4,2", options="header"]
+|===
+| Variable | Description | Default
+
+| `AWS_REGION`
+| AWS region for deployment
+| `ap-southeast-1`
+
+| `OWNER`
+| Resource owner tag
+| `ksahu-ygulati`
+
+| `ENVIRONMENT`
+| Environment tag
+| `development`
+
+| `CM_VERSION`
+| Cloudera Manager version
+| `7.13.2.10000`
+
+| `create_vpc`
+| Create a new VPC or use an existing one
+| `false`
+
+| `create_new_sg`
+| Create a new security group or use an existing one
+| `false`
+
+| `existing_sg`
+| Existing security group ID to use (if not creating new)
+| `sg-0dbb6f79cba5ef701`
+
+| `create_new_keypair`
+| Create a new EC2 key pair
+| `true`
+
+| `existing_keypair_name`
+| Name of existing key pair (if not creating new)
+| `kuldeep-pvc-session`
+
+| `create_eip`
+| Allocate and associate Elastic IPs
+| `true`
+|===
+
+=== Instance Groups
+
+All nodes use AMI `ami-0fbbafe729d214f98` (RHEL 9.7, ap-southeast-1).
+
+[cols="2,1,2,2", options="header"]
+|===
+| Instance Group | Count | Instance Type | Volume Size
+
+| `cldr_mngr`
+| 1
+| m5.4xlarge
+| 300 GB
+
+| `ipa_server`
+| 1
+| m5.xlarge
+| 250 GB
+
+| `pvcbase_master`
+| 1
+| m5.4xlarge
+| 400 GB
+
+| `pvcbase_worker`
+| 3
+| m5.4xlarge
+| 400 GB
+
+| `pvcecs_master`
+| 1
+| m5.8xlarge
+| 1300 GB
+
+| `pvcecs_worker`
+| 7
+| r5a.4xlarge
+| 1300 GB
+|===
+
+== ▶️ How to run it ????
+
+=== Step 1 — Update Configuration File
+
+Edit `.tfvars.env` or `.tfvars.yaml` (use one, not both):
+
+[source,bash]
+----
+vi .tfvars.env
+# or
+vi .tfvars.yaml
+----
+
+Update:
+
+* AWS region
+* Environment name
+* CDP version
+* Owner
+* Instance configuration (if needed)
+
+[source,bash]
+----
+#!/bin/bash
+
+AWS_REGION="ap-southeast-1"
+OWNER="ksahu-ygulati"
+ENVIRONMENT="development"
+TERRAFORM_VERSION="latest"
+CM_VERSION="7.13.2.10000"
+----
+
+NOTE: No need to modify Terraform or Ansible code.
+
+=== Step 2 — Provision Infrastructure
+
+[source,bash]
+----
+./clone_and_run_terraform.sh
+----
+
+This will:
+
+* Clone Terraform automation (or pull latest changes)
+* Create AWS infrastructure:
+** VPC, subnets, security groups
+** Key pairs and Elastic IPs
+** EC2 instances
+* Generate Ansible inventory
+
+=== Step 3 — Deploy Cloudera
+
+[source,bash]
+----
+./clone_and_run_pvc_automation.sh
+----
+
+This will:
+
+* Clone Ansible automation (or pull latest changes)
+* Validate required files (`sshkey.pem`, license)
+* Execute playbooks to:
+** Configure passwordless SSH
+** Install FreeIPA
+** Configure DNS
+** Install Cloudera Manager
+** Upload license
+
+[NOTE]
+====
+Wrappers can be executed independently:
+
+* Infrastructure provisioning only
+* Cloudera deployment only
+
+For standalone Ansible execution:
+
+* Ensure `inventory.ini` exists in the execution directory
+* See link:ansible-test/docs/RUNBOOK.md[RUNBOOK.md] for full playbook execution order
+* See link:ansible-test/docs/REFERENCE.md[REFERENCE.md] for cleanup toggles and variable reference
+====
+
+== 📘 Ansible Playbooks
+
+All Ansible automation lives under `ansible-test/`.
+
+* link:ansible-test/README.md[ansible-test/README.md] — quick start and defaults
+* link:ansible-test/docs/RUNBOOK.md[RUNBOOK.md] — step-by-step deployment guide
+* link:ansible-test/docs/REFERENCE.md[REFERENCE.md] — detailed playbook and variable reference
+
+Default versions (configured in `group_vars/all.yml`):
+
+* Cloudera Manager `7.13.2.10000`
+* CDH Runtime `7.3.2.10000`
+* Java 17, Python 3.11, PostgreSQL 18
+
+=== Key playbook phases
+
+[cols="1,3", options="header"]
+|===
+| Phase | Playbooks
+
+| Prerequisites
+| `00`–`09` — SSH, hostname, packages, OS tuning
+
+| FreeIPA & DNS
+| `10`–`15` — IPA server/client, DNS records
+
+| Cloudera Manager
+| `16`–`21` — repo, PostgreSQL, CM install, license
+
+| CM security
+| `22` Auto-TLS, `23` Kerberos/KDC, `25` LDAP
+
+| CMS & base cluster
+| `24_setup_cm_cms.yml` (Management Service), `26_setup_base_cluster.yml` (HDFS/YARN/ZK)
+
+| Cleanup
+| `99_cleanup.yml` — toggle-driven teardown (see README)
+|===
+
+WARNING: `24_setup_cm_cms.yml` deploys the *Cloudera Management Service* (Service Monitor, Host Monitor, etc.). The CDP *base cluster* is deployed separately via `26_setup_base_cluster.yml`.
+
+=== Cleanup
+
+The cleanup playbook requires explicit confirmation:
+
+[source,bash]
+----
+cd ansible-test
+ansible-playbook -i inventory.ini 99_cleanup.yml \
+  -e cleanup_enabled=true -e cleanup_confirm=true \
+  -e cleanup_delete_base_cluster=true
+----
+
+Available toggles: `cleanup_stop_cms`, `cleanup_delete_cms`, `cleanup_delete_base_cluster`, `cleanup_delete_ecs_cluster`, `cleanup_remove_cm`, `cleanup_remove_postgres_data`, `cleanup_e2e`, and more. See link:ansible-test/docs/REFERENCE.md[REFERENCE.md].
+
+== 🔄 Optional: Direct Repository Access
+
+If you prefer working directly with code:
+
+[source,bash]
+----
+git clone https://github.com/kuldeepsahu1105/cdp-onprem-automation.git
+# OR
+git clone git@github.com:kuldeepsahu1105/cdp-onprem-automation.git
+----
+
+== 👤 Author
+
+*Kuldeep Sahu*  < ksahu@cloudera.com | sahukuldeep4321@gmail.com >
+
+*Yash Gulati* < ygulati@cloudera.com >

@@ -1,0 +1,116 @@
+### ansible-playbook -i inventory.ini 03_create_etc_hosts.yml 
+# vars: 
+#
+
+---
+- name: Configure /etc/hosts file and Gather System Information
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Generate /etc/hosts from template
+      ansible.builtin.template:
+        src: templates/etc_hosts.j2
+        dest: /etc/hosts
+        owner: root
+        group: root
+        mode: "0644"
+
+    # /etc/hosts is read on each lookup; no network service restart required.
+
+    - name: Ensure OS version is RHEL 9.x
+      shell: cat /etc/*rel* | grep -E 'NAME|VERSION'
+      register: os_version
+      changed_when: false
+
+    - name: Print OS version information
+      debug:
+        msg: "{{ os_version.stdout.replace('\t', '    ').split('\n') }}"
+
+    - name: Verify hostname (FQDN)
+      command: hostname -f
+      register: hostname_fqdn
+      changed_when: false
+
+    - name: Print hostname (FQDN)
+      debug:
+        msg: "Hostname (FQDN): {{ hostname_fqdn.stdout }}"
+
+    - name: Verify host IP address
+      command: hostname -i
+      register: hostname_ip
+      changed_when: false
+
+    - name: Print host IP address
+      debug:
+        msg: "Hostname IP Address: {{ hostname_ip.stdout }}"
+
+    - name: Verify /etc/hostname file content
+      command: cat /etc/hostname
+      register: hostname_file
+      changed_when: false
+
+    - name: Print /etc/hostname content
+      debug:
+        msg: "Content of /etc/hostname: {{ hostname_file.stdout }}"
+
+    - name: Get IP addresses (cross-platform)
+      shell: |
+        if command -v ip >/dev/null 2>&1; then
+          ip -o -4 addr show | awk '{print $4}'
+        else
+          ifconfig | grep -E 'inet ' | awk '{print $2}'
+        fi
+      register: net_info
+      changed_when: false
+
+    - name: Print interfaces and IPs
+      debug:
+        msg: "{{ net_info.stdout_lines }}"
+
+    # Optional interface checks
+    # - name: Verify IP address on eth0
+    #   shell: ip addr show eth0 | grep -e inet
+    #   register: eth0_ip
+    #   changed_when: false
+    #
+    # - name: Print eth0 IP address
+    #   debug:
+    #     msg: "eth0 IP Address: {{ eth0_ip.stdout }}"
+    #
+    # - name: Verify IP address on eth1
+    #   shell: ip addr show eth1 | grep -e inet
+    #   register: eth1_ip
+    #   changed_when: false
+    #   failed_when: false
+    #
+    # - name: Print eth1 IP address (if available)
+    #   debug:
+    #     msg: "eth1 IP Address: {{ eth1_ip.stdout | default('eth1 not found, skipping...') }}"
+
+    # - name: Verify IP address matching hostname
+    #   shell: ip addr show | grep "$(hostname -i)"
+    #   register: ip_match_hostname
+    #   changed_when: false
+
+    # - name: Print IP matching hostname
+    #   debug:
+    #     msg: "IP matching Hostname: {{ ip_match_hostname.stdout }}"
+
+    # - name: Verify DNS resolution for hostname
+    #   shell: host -v -t A "$(hostname)"
+    #   register: dns_resolution
+    #   changed_when: false
+
+    # - name: Print DNS resolution for hostname
+    #   debug:
+    #     msg: "DNS Resolution for Hostname: {{ dns_resolution.stdout }}"
+
+    - name: Verify kernel version
+      command: uname -a
+      register: kernel_version
+      changed_when: false
+
+    - name: Print kernel version
+      debug:
+        msg: "Kernel Version: {{ kernel_version.stdout }}"

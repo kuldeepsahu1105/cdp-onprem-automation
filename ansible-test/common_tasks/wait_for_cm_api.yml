@@ -1,0 +1,14 @@
+---
+- name: Wait for Cloudera Manager API to respond
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_api_wait
+  until: cm_api_wait.status in [200, 301, 303]
+  retries: 30
+  delay: 10

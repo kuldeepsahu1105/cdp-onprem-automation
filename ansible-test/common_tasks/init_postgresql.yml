@@ -1,0 +1,21 @@
+---
+- name: Check if PostgreSQL data directory exists
+  ansible.builtin.stat:
+    path: "{{ os_vars[ansible_os_family].postgres_data_dir }}/PG_VERSION"
+  register: pg_data_stat
+
+- name: Initialize PostgreSQL database (RHEL)
+  ansible.builtin.command: "{{ os_vars.RedHat.postgres_init_command }}"
+  when:
+    - ansible_os_family == "RedHat"
+    - not pg_data_stat.stat.exists
+  args:
+    creates: "{{ os_vars.RedHat.postgres_data_dir }}/PG_VERSION"
+
+- name: Initialize PostgreSQL cluster (Ubuntu)
+  ansible.builtin.command: "pg_createcluster {{ postgresql_version }} main"
+  when:
+    - ansible_os_family == "Debian"
+    - not pg_data_stat.stat.exists
+  args:
+    creates: "{{ os_vars.Debian.postgres_data_dir }}/PG_VERSION"

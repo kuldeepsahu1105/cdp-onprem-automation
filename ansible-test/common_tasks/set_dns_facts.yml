@@ -1,0 +1,143 @@
+---
+- name: Detect AWS EC2 host from system facts
+  ansible.builtin.set_fact:
+    is_aws_host: >-
+      {{
+        ansible_system_vendor | default('') in ['Amazon EC2', 'Amazon EC2 NVMe Vendor', 'Amazon.com']
+        or ansible_bios_vendor | default('') in ['Amazon EC2', 'Amazon.com']
+        or (ansible_board_vendor | default('') in ['Amazon EC2', 'Amazon.com'])
+      }}
+
+- name: Read hypervisor UUID for AWS detection
+  ansible.builtin.slurp:
+    src: /sys/hypervisor/uuid
+  register: hypervisor_uuid
+  failed_when: false
+
+- name: Set effective deployment environment
+  ansible.builtin.set_fact:
+    effective_deployment_env: >-
+      {{
+        deployment_environment
+        if deployment_environment in ['aws', 'baremetal']
+        else (
+          'aws' if (
+            is_aws_host | default(false)
+            or (
+              hypervisor_uuid.content is defined
+              and (hypervisor_uuid.content | b64decode | trim | lower).startswith('ec2')
+            )
+          ) else 'baremetal'
+        )
+      }}
+
+- name: Set host private IP for DNS resolver calculation
+  ansible.builtin.set_fact:
+    host_private_ip: "{{ private_ip | default(ansible_default_ipv4.address | default('')) }}"
+
+- name: Detect AWS region from EC2 metadata
+  ansible.builtin.uri:
+    url: http://169.254.169.254/latest/meta-data/placement/region
+    timeout: 2
+  register: ec2_region_meta
+  failed_when: false
+  changed_when: false
+  when:
+    - effective_deployment_env == 'aws'
+    - aws_region | default('') | length == 0
+
+- name: Set effective AWS region
+  ansible.builtin.set_fact:
+    effective_aws_region: >-
+      {{
+        aws_region
+        if aws_region | default('') | length > 0
+        else (ec2_region_meta.content | default('') | trim)
+      }}
+  when: effective_deployment_env == 'aws'
+
+- name: Set AWS internal DNS search domain
+  ansible.builtin.set_fact:
+    aws_internal_search_domain: "{{ effective_aws_region }}.compute.internal"
+  when:
+    - effective_deployment_env == 'aws'
+    - effective_aws_region | default('') | length > 0
+
+- name: Compute AWS VPC DNS resolver
+  ansible.builtin.set_fact:
+    effective_vpc_dns_resolver: >-
+      {{
+        aws_vpc_dns_resolver
+        if aws_vpc_dns_resolver | default('') | length > 0
+        else (
+          host_private_ip.split('.')[0] + '.' + host_private_ip.split('.')[1] + '.0.2'
+          if host_private_ip | default('') | length > 0
+          else ''
+        )
+      }}
+  when: effective_deployment_env == 'aws'
+
+- name: Set IPA server DNS address
+  ansible.builtin.set_fact:
+    ipa_server_dns_ip: >-
+      {{
+        hostvars[groups['ipaserver'][0]].private_ip
+        | default(hostvars[groups['ipaserver'][0]].ansible_host)
+      }}
+  when:
+    - identity_provider | default('freeipa') == 'freeipa'
+    - groups.get('ipaserver') is defined
+    - groups['ipaserver'] | length > 0
+
+- name: Build DNS search domains for Active Directory
+  ansible.builtin.set_fact:
+    dns_search_domains: >-
+      {{
+        ([cluster_domain]
+        + ([aws_internal_search_domain] if effective_deployment_env == 'aws' and aws_internal_search_domain is defined else [])
+        + (extra_dns_search_domains | default([])))
+        | unique
+      }}
+  when: identity_provider_effective == 'ad'
+
+- name: Build DNS nameservers for Active Directory
+  ansible.builtin.set_fact:
+    dns_nameservers: >-
+      {{
+        (ad_dns_servers | default([])
+        + ([effective_vpc_dns_resolver] if effective_deployment_env == 'aws' and effective_vpc_dns_resolver | default('') | length > 0 else [])
+        + (extra_dns_nameservers | default([]))
+        + ['127.0.0.1'])
+        | unique
+      }}
+  when: identity_provider_effective == 'ad'
+
+- name: Build DNS search domains for FreeIPA
+  ansible.builtin.set_fact:
+    dns_search_domains: >-
+      {{
+        ([ipaserver_domain]
+        + ([aws_internal_search_domain] if effective_deployment_env == 'aws' and aws_internal_search_domain is defined else [])
+        + (extra_dns_search_domains | default([])))
+        | unique
+      }}
+  when: identity_provider_effective == 'freeipa'
+
+- name: Build DNS nameservers for FreeIPA
+  ansible.builtin.set_fact:
+    dns_nameservers: >-
+      {{
+        ([ipa_server_dns_ip]
+        + ([effective_vpc_dns_resolver] if effective_deployment_env == 'aws' and effective_vpc_dns_resolver | default('') | length > 0 else [])
+        + (extra_dns_nameservers | default([]))
+        + ['127.0.0.1'])
+        | unique
+      }}
+  when: identity_provider_effective == 'freeipa'
+
+- name: Print resolved DNS configuration
+  ansible.builtin.debug:
+    msg:
+      - "Deployment environment: {{ effective_deployment_env }}"
+      - "DNS search domains: {{ dns_search_domains | default([]) }}"
+      - "DNS nameservers: {{ dns_nameservers | default([]) }}"
