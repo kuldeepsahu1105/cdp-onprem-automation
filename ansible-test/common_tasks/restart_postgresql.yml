@@ -1,6 +1,6 @@
 ---
 - name: Set OS-specific facts
-  ansible.builtin.import_tasks: set_os_facts.yml
+  ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
 - name: Restart PostgreSQL to apply configuration (RHEL)
   ansible.builtin.systemd:
