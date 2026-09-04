@@ -59,7 +59,7 @@ PVCECS_WORKER_COUNT=7
 PVCECS_WORKER_VOLUME_SIZE=1300
 ```
 
-CDH and ECS **software versions** and cluster settings are configured in Ansible (`ansible-test/group_vars/all.yml`), not in `.tfvars.env` / `.tfvars.yaml`. Terraform only provisions the EC2 instance groups; Ansible deploys the clusters onto those hosts.
+CDH and ECS **software versions** and cluster settings are configured in Ansible (`ansible-playbooks/group_vars/all.yml`), not in `.tfvars.env` / `.tfvars.yaml`. Terraform only provisions the EC2 instance groups; Ansible deploys the clusters onto those hosts.
 
 ## CDH base cluster deployment
 
@@ -152,7 +152,7 @@ Compatible with CDH 7.3.2: CDS 1.5.5 SP2+ (see Cloudera release matrix).
 
 ```bash
 # ECS only (after base cluster is up)
-cd ansible-test
+cd ansible-playbooks
 DEPLOY_PHASE=5 ./pvc_setup.sh
 
 # Or run playbook directly
@@ -174,15 +174,15 @@ ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml \
 | Document | Audience | Contents |
 |---|---|---|
 | [READme.adoc](READme.adoc) | **AWS users** | Terraform wrappers, `.tfvars.env`, instance groups, one-click deployment |
-| [ansible-test/README.md](ansible-test/README.md) | **Ansible users** | Quick start, defaults, phase summary |
-| [ansible-test/docs/RUNBOOK.md](ansible-test/docs/RUNBOOK.md) | **Operators** | Step-by-step deployment, identity scenarios (FreeIPA/AD), cleanup, wrapper scripts |
-| [ansible-test/docs/REFERENCE.md](ansible-test/docs/REFERENCE.md) | **Detailed reference** | All playbooks, variables, inventory groups, DNS, repo modes, cleanup toggles |
+| [ansible-playbooks/README.md](ansible-playbooks/README.md) | **Ansible users** | Quick start, defaults, phase summary |
+| [ansible-playbooks/docs/RUNBOOK.md](ansible-playbooks/docs/RUNBOOK.md) | **Operators** | Step-by-step deployment, identity scenarios (FreeIPA/AD), cleanup, wrapper scripts |
+| [ansible-playbooks/docs/REFERENCE.md](ansible-playbooks/docs/REFERENCE.md) | **Detailed reference** | All playbooks, variables, inventory groups, DNS, repo modes, cleanup toggles |
 
 **Start here:** use the runbook for execution steps; use the reference for variable definitions and playbook details.
 
 ## Default versions
 
-Configured in `ansible-test/group_vars/all.yml`:
+Configured in `ansible-playbooks/group_vars/all.yml`:
 
 | Component | Version |
 |---|---|
@@ -225,7 +225,7 @@ cdp-onprem-automation/
 ├── .tfvars.env                   # Shell-format deployment config
 ├── .tfvars.yaml                  # YAML-format deployment config (alternative)
 ├── READme.adoc                   # AWS deployment guide
-├── ansible-test/                 # Ansible playbooks
+├── ansible-playbooks/                 # Ansible playbooks
 │   ├── README.md                 # Ansible quick start
 │   ├── docs/
 │   │   ├── RUNBOOK.md            # How to run (step-by-step)
@@ -248,7 +248,7 @@ cdp-onprem-automation/
 | Cleanup | `99` | Toggle-driven teardown (base cluster, ECS, CMS, CM) |
 
 ```bash
-cd ansible-test
+cd ansible-playbooks
 ansible-galaxy collection install -r requirements.yml
 ansible-playbook -i inventory.ini 00_detect_identity.yml
 ansible-playbook -i inventory.ini 10_identity_setup.yml

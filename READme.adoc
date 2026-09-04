@@ -17,13 +17,13 @@ End-to-end automation for provisioning AWS infrastructure and deploying Cloudera
 | link:README.md[README.md]
 | Project overview, quick start, repo layout, default versions
 
-| link:ansible-test/README.md[ansible-test/README.md]
+| link:ansible-playbooks/README.md[ansible-playbooks/README.md]
 | Ansible quick start and phase summary
 
-| link:ansible-test/docs/RUNBOOK.md[ansible-test/docs/RUNBOOK.md]
+| link:ansible-playbooks/docs/RUNBOOK.md[ansible-playbooks/docs/RUNBOOK.md]
 | *How to run* — step-by-step deployment, FreeIPA/AD scenarios, cleanup
 
-| link:ansible-test/docs/REFERENCE.md[ansible-test/docs/REFERENCE.md]
+| link:ansible-playbooks/docs/REFERENCE.md[ansible-playbooks/docs/REFERENCE.md]
 | *Detailed reference* — playbooks, variables, inventory, DNS, repo modes, cleanup toggles
 |===
 
@@ -288,17 +288,17 @@ Wrappers can be executed independently:
 For standalone Ansible execution:
 
 * Ensure `inventory.ini` exists in the execution directory
-* See link:ansible-test/docs/RUNBOOK.md[RUNBOOK.md] for full playbook execution order
-* See link:ansible-test/docs/REFERENCE.md[REFERENCE.md] for cleanup toggles and variable reference
+* See link:ansible-playbooks/docs/RUNBOOK.md[RUNBOOK.md] for full playbook execution order
+* See link:ansible-playbooks/docs/REFERENCE.md[REFERENCE.md] for cleanup toggles and variable reference
 ====
 
 == 📘 Ansible Playbooks
 
-All Ansible automation lives under `ansible-test/`.
+All Ansible automation lives under `ansible-playbooks/`.
 
-* link:ansible-test/README.md[ansible-test/README.md] — quick start and defaults
-* link:ansible-test/docs/RUNBOOK.md[RUNBOOK.md] — step-by-step deployment guide
-* link:ansible-test/docs/REFERENCE.md[REFERENCE.md] — detailed playbook and variable reference
+* link:ansible-playbooks/README.md[ansible-playbooks/README.md] — quick start and defaults
+* link:ansible-playbooks/docs/RUNBOOK.md[RUNBOOK.md] — step-by-step deployment guide
+* link:ansible-playbooks/docs/REFERENCE.md[REFERENCE.md] — detailed playbook and variable reference
 
 Default versions (configured in `group_vars/all.yml`):
 
@@ -318,7 +318,7 @@ Phased deployment via `pvc_setup.sh`:
 
 [source,bash]
 ----
-cd ansible-test
+cd ansible-playbooks
 DEPLOY_PHASE=1 ./pvc_setup.sh    # prerequisites
 DEPLOY_PHASE=2 ./pvc_setup.sh    # identity (FreeIPA or AD)
 DEPLOY_PHASE=3 ./pvc_setup.sh    # Cloudera Manager
@@ -327,7 +327,7 @@ DEPLOY_PHASE=5 ./pvc_setup.sh    # ECS cluster only
 DEPLOY_PHASE=all ./pvc_setup.sh  # full flow
 ----
 
-Set `CONTROL_MODE=local` when running on a host listed in `inventory.ini`. See link:ansible-test/docs/RUNBOOK.md[RUNBOOK.md] for control-node options and environment variables (`ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, `CM_INFO_FILE`).
+Set `CONTROL_MODE=local` when running on a host listed in `inventory.ini`. See link:ansible-playbooks/docs/RUNBOOK.md[RUNBOOK.md] for control-node options and environment variables (`ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, `CM_INFO_FILE`).
 
 === Key playbook phases
 
@@ -365,13 +365,13 @@ The cleanup playbook requires explicit confirmation:
 
 [source,bash]
 ----
-cd ansible-test
+cd ansible-playbooks
 ansible-playbook -i inventory.ini 99_cleanup.yml \
   -e cleanup_enabled=true -e cleanup_confirm=true \
   -e cleanup_delete_base_cluster=true
 ----
 
-Available toggles: `cleanup_stop_cms`, `cleanup_delete_cms`, `cleanup_delete_base_cluster`, `cleanup_delete_ecs_cluster`, `cleanup_remove_cm`, `cleanup_remove_postgres_data`, `cleanup_e2e`, and more. See link:ansible-test/docs/REFERENCE.md[REFERENCE.md].
+Available toggles: `cleanup_stop_cms`, `cleanup_delete_cms`, `cleanup_delete_base_cluster`, `cleanup_delete_ecs_cluster`, `cleanup_remove_cm`, `cleanup_remove_postgres_data`, `cleanup_e2e`, and more. See link:ansible-playbooks/docs/REFERENCE.md[REFERENCE.md].
 
 == 🔄 Optional: Direct Repository Access
 

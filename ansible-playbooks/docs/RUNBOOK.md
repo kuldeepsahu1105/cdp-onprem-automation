@@ -2,10 +2,10 @@
 
 Step-by-step guide for deploying and tearing down Cloudera Private Cloud with these Ansible playbooks.
 
-All commands assume you are in the `ansible-test/` directory:
+All commands assume you are in the `ansible-playbooks/` directory:
 
 ```bash
-cd ansible-test
+cd ansible-playbooks
 ```
 
 ## Prerequisites
@@ -18,7 +18,7 @@ ansible-galaxy collection install -r requirements.yml
 
 2. Prepare `inventory.ini` with your hosts (see [REFERENCE.md](REFERENCE.md#inventory-groups)).
 3. Configure `group_vars/all.yml` (domain, passwords, AD vars if needed).
-4. Place `license.txt` and SSH key (`id_rsa` or `.pem`) in `ansible-test/`.
+4. Place `license.txt` and SSH key (`id_rsa` or `.pem`) in `ansible-playbooks/`.
 
 ## Control node and OS support
 
@@ -26,11 +26,11 @@ The wrappers and playbooks support:
 
 | Control node | How to run |
 |---|---|
-| Mac laptop (remote) | `brew install ansible jq`; run from repo root or `ansible-test/` |
-| RHEL / Ubuntu laptop (remote) | Install `ansible`, `jq`; run `./clone_and_run_pvc_automation.sh` or `cd ansible-test && ./pvc_setup.sh` |
-| Cluster node (`cldr-mngr`, `ipaserver`) | `CONTROL_MODE=local DEPLOY_PHASE=all ./pvc_setup.sh` from `ansible-test/` (uses `~/.ssh/id_rsa` if no PEM in cwd) |
+| Mac laptop (remote) | `brew install ansible jq`; run from repo root or `ansible-playbooks/` |
+| RHEL / Ubuntu laptop (remote) | Install `ansible`, `jq`; run `./clone_and_run_pvc_automation.sh` or `cd ansible-playbooks && ./pvc_setup.sh` |
+| Cluster node (`cldr-mngr`, `ipaserver`) | `CONTROL_MODE=local DEPLOY_PHASE=all ./pvc_setup.sh` from `ansible-playbooks/` (uses `~/.ssh/id_rsa` if no PEM in cwd) |
 
-When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-test/`, the wrapper prompts you to choose. Override with `ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, or `CM_INFO_FILE`.
+When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-playbooks/`, the wrapper prompts you to choose. Override with `ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, or `CM_INFO_FILE`.
 
 | Target OS | CM repo mode | Notes |
 |---|---|---|
@@ -64,7 +64,7 @@ From the repo root:
 ./clone_and_run_terraform.sh
 ```
 
-This creates EC2 instances and generates `ansible_inventory.ini`. Copy or symlink it to `ansible-test/inventory.ini`.
+This creates EC2 instances and generates `ansible_inventory.ini`. Copy or symlink it to `ansible-playbooks/inventory.ini`.
 
 ### 2. Ensure inventory has ipaserver
 

@@ -5,7 +5,7 @@ Automation for deploying and cleaning up Cloudera Private Cloud on **RHEL** and 
 ## Quick start
 
 ```bash
-cd ansible-test
+cd ansible-playbooks
 ansible-galaxy collection install -r requirements.yml
 ansible-playbook -i inventory.ini 00_detect_identity.yml
 DEPLOY_PHASE=all ./pvc_setup.sh

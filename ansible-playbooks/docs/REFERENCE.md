@@ -280,7 +280,7 @@ Requires:
 |---|---|---|
 | `clone_and_run_terraform.sh` | repo root | Terraform + inventory generation |
 | `clone_and_run_pvc_automation.sh` | repo root | Clone repo, run `pvc_setup.sh` |
-| `pvc_setup.sh` | `ansible-test/` | Phased playbook runner (`DEPLOY_PHASE`) |
+| `pvc_setup.sh` | `ansible-playbooks/` | Phased playbook runner (`DEPLOY_PHASE`) |
 | `scripts/lib/ansible_env.sh` | repo root | Control mode, SSH key, license, CM creds resolution |
 | `scripts/lib/portable.sh` | repo root | macOS/Linux portable helpers |
 
@@ -309,7 +309,7 @@ License file is required for phases `3`, `4`, and `all` only.
 | `CM_REPO_USERNAME` / `CM_REPO_PASSWORD` | Archive credentials (alternative to `CM_INFO_FILE`) |
 | `ANSIBLE_LIMIT` | Passed through to `ansible-playbook --limit` |
 
-When multiple `*.pem`, `*license*`, or `*info.txt` files exist in `ansible-test/`, `ansible_env.sh` prompts interactively. Non-interactive runs must set the env vars above.
+When multiple `*.pem`, `*license*`, or `*info.txt` files exist in `ansible-playbooks/`, `ansible_env.sh` prompts interactively. Non-interactive runs must set the env vars above.
 
 ### macOS notes
 
