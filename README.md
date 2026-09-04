@@ -2,7 +2,7 @@
 
 End-to-end automation for provisioning infrastructure and deploying **Cloudera Private Cloud** (Base + ECS) with **Terraform** and **Ansible**.
 
-Supports **RHEL/Rocky/Alma** and **Ubuntu**, with **FreeIPA** or **Active Directory** for identity, and **public or internal** Cloudera archive repositories.
+Supports **RHEL/Rocky/Alma**, **Ubuntu 22.04/24.04**, and **Debian**, with **FreeIPA** or **Active Directory** for identity, and **public or internal** Cloudera archive repositories (RPM mirror on RHEL, apt mirror on Ubuntu).
 
 ## Quick start (AWS)
 
@@ -75,12 +75,18 @@ Configured in `ansible-test/group_vars/all.yml`:
 | Component | Version |
 |---|---|
 | Cloudera Manager | `7.13.2.10000` |
-| CDH (Runtime parcel) | `7.3.2.10000` |
+| CDH (Runtime parcel) | `7.3.2.10000` (`cdh_parcel_os_suffix`: `el8` default) |
 | Java | `17` |
 | Python | `3.11` |
 | PostgreSQL | `18` |
 
 Spark is bundled in the CDH parcel for 7.3.1+ — a separate SPARK3 download is not required.
+
+### Ubuntu notes
+
+- **CM server** on Ubuntu 22.04/24.04: supported with `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr).
+- **CDH workers**: use RHEL 8/9 nodes with `cdh_parcel_os_suffix: el8` or `el9` (default `el8`). CM on Ubuntu downloads and serves the matching parcel.
+- **Internal mirror**: Ubuntu cldr-mngr mirrors apt `.deb` packages and CDH parcels to its local web server (`16` + `17` playbooks).
 
 ## Nutanix Terraform
 

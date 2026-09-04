@@ -1,6 +1,6 @@
 # Ansible Playbooks — Cloudera Private Cloud
 
-Automation for deploying and cleaning up Cloudera Private Cloud on **RHEL** and **Ubuntu**.
+Automation for deploying and cleaning up Cloudera Private Cloud on **RHEL**, **Ubuntu**, and **Debian**.
 
 ## Quick start
 
@@ -8,7 +8,7 @@ Automation for deploying and cleaning up Cloudera Private Cloud on **RHEL** and 
 cd ansible-test
 ansible-galaxy collection install -r requirements.yml
 ansible-playbook -i inventory.ini 00_detect_identity.yml
-ansible-playbook -i inventory.ini 10_identity_setup.yml
+DEPLOY_PHASE=all ./pvc_setup.sh
 ```
 
 For the full deployment sequence, identity scenarios, and cleanup steps, see the runbook below.
@@ -20,7 +20,17 @@ For the full deployment sequence, identity scenarios, and cleanup steps, see the
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | **How to run** — step-by-step deployment, FreeIPA/AD scenarios, cleanup, wrapper scripts |
 | [docs/REFERENCE.md](docs/REFERENCE.md) | **Detailed reference** — every playbook, variable, inventory group, DNS behavior, repo modes, cleanup toggles |
 
-The runbook is the operator guide; the reference is the complete configuration and playbook catalog.
+## OS and repository support
+
+| Component | RHEL 8/9 | Ubuntu 22.04/24.04 | Debian |
+|---|---|---|---|
+| Prerequisites (`00`–`09`) | Yes | Yes | Yes* |
+| CM install (`19_start_cm`) | Yes | Yes | Yes* |
+| Public CM repo | Yes | Yes | Yes* |
+| Internal CM mirror | RPM + createrepo | apt `.deb` mirror | apt* |
+| CDH parcels / base cluster | `el8`/`el9` parcels | Yes — set `cdh_parcel_os_suffix` | Same |
+
+\*Debian uses Ubuntu apt archive paths when `cm_debian_use_ubuntu_repo: true`.
 
 ## Defaults (`group_vars/all.yml`)
 
@@ -28,6 +38,7 @@ The runbook is the operator guide; the reference is the complete configuration a
 |---|---|---|
 | `cm_version` | `7.13.2.10000` | Cloudera Manager |
 | `cdh_version` | `7.3.2.10000` | CDH Runtime parcel |
+| `cdh_parcel_os_suffix` | `el8` | Parcel suffix for workers (`el8` or `el9`) |
 | `java_version` | `17` | OpenJDK |
 | `python_version` | `3.11` | System Python |
 | `postgresql_version` | `18` | External DB for CM |
@@ -41,10 +52,10 @@ Spark is bundled in the CDH parcel for `>= 7.3.1` — separate SPARK3 download i
 
 | Phase | Playbooks | Entry point |
 |---|---|---|
-| 1 — Prerequisites | `00`–`09` | `pvc_setup.sh` or individual playbooks |
-| 2 — Identity & DNS | `00_detect`, `10_identity_setup` | `10_identity_setup.yml` |
-| 3 — Cloudera Manager | `16`–`25` | Per playbook (see RUNBOOK) |
-| 4 — CMS & base cluster | `24`, `26` | Separate steps |
+| 1 — Prerequisites | `00`–`09` | `DEPLOY_PHASE=1 ./pvc_setup.sh` |
+| 2 — Identity & DNS | `00_detect`, `10_identity_setup` | `DEPLOY_PHASE=2 ./pvc_setup.sh` |
+| 3 — Cloudera Manager | `16`–`21` | `DEPLOY_PHASE=3 ./pvc_setup.sh` |
+| 4 — CMS & base cluster | `22`–`26` | `DEPLOY_PHASE=4 ./pvc_setup.sh` |
 | Cleanup | `99` | `99_cleanup.yml` |
 
 See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full execution steps and [docs/REFERENCE.md](docs/REFERENCE.md) for playbook and variable details.

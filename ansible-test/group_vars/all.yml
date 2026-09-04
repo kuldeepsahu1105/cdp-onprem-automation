@@ -149,9 +149,9 @@ cldr_repos_path: "{{ webserver_path }}/cloudera-repos"
 
 # ---------------------------------------------------------------------------
 # CM/CDH repository source: public | internal
-# public   — use archive.cloudera.com/p/ directly (default, no local mirror)
-# internal — mirror RPMs/parcels to cldr-mngr web server (16 + 17 playbooks)
-#            RHEL/CentOS/Rocky only; Ubuntu/Debian must use public
+# public   — use archive.cloudera.com/p/ directly (default)
+# internal — mirror CM + CDH parcels to cldr-mngr web server (16 + 17 playbooks)
+#            RHEL: yum/RPM + createrepo | Ubuntu/Debian: apt mirror + Packages index
 # ---------------------------------------------------------------------------
 cm_repo_source: public
 cm_repo_public_base_url: "https://archive.cloudera.com/p"
@@ -160,6 +160,10 @@ cdh_repo_product: "cdh{{ cdh_version.split('.')[0] }}"
 parcel_repo_public: "{{ cm_repo_public_base_url }}/{{ cdh_repo_product }}/{{ cdh_version }}/parcels/"
 parcel_repo_internal: "http://{{ cm_repo_mirror_host }}/cloudera-repos/{{ cdh_repo_product }}/{{ cdh_version }}/"
 parcel_repo: "{{ parcel_repo_internal if cm_repo_source == 'internal' else parcel_repo_public }}"
+
+# CDH parcel file suffix — must match worker OS (el8, el9). CM on Ubuntu downloads parcels
+# using this suffix (default el8). Set el9 when workers are RHEL 9 / Rocky 9.
+cdh_parcel_os_suffix: "el8"
 
 # cldr-mngr: scm config:
 scm_db_name: "scm"
@@ -494,7 +498,8 @@ os_vars:
       - krb5-workstation
     supports_selinux: true
     supports_tuned: true
-    supports_internal_rpm_mirror: true
+    supports_internal_mirror: true
+    internal_mirror_format: rpm
 
   Debian:
     pkg_mgr: apt
@@ -577,4 +582,5 @@ os_vars:
       - krb5-user
     supports_selinux: false
     supports_tuned: false
-    supports_internal_rpm_mirror: false
+    supports_internal_mirror: true
+    internal_mirror_format: apt

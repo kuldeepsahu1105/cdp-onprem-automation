@@ -1,0 +1,43 @@
+---
+# Shared facts for CM/CDH repository mirroring and parcel URLs.
+- name: Set CM repository OS version path (RHEL)
+  ansible.builtin.set_fact:
+    cm_repo_os_version: "{{ ansible_distribution | lower }}{{ ansible_distribution_major_version }}"
+  when: ansible_os_family == "RedHat"
+
+- name: Set CM repository OS version path (Ubuntu)
+  ansible.builtin.set_fact:
+    cm_repo_os_version: "ubuntu{{ ansible_distribution_version | replace('.', '') }}"
+  when:
+    - ansible_os_family == "Debian"
+    - ansible_distribution == "Ubuntu"
+
+- name: Set CM repository OS version path (Debian with Ubuntu repo fallback)
+  ansible.builtin.set_fact:
+    cm_repo_os_version: "ubuntu{{ cm_debian_ubuntu_compat_version }}"
+  when:
+    - ansible_os_family == "Debian"
+    - ansible_distribution == "Debian"
+    - cm_debian_use_ubuntu_repo | default(false) | bool
+
+- name: Set CM apt suite name for internal mirror (Debian family)
+  ansible.builtin.set_fact:
+    cm_apt_suite: "{{ ansible_distribution_release }}-cm{{ cm_version.split('.')[:3] | join('.') }}"
+    cm_apt_mirror_root: "{{ cldr_repos_path }}/cloudera-manager/apt"
+    cm_apt_archive_url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt"
+  when: ansible_os_family == "Debian"
+
+- name: Set CDH parcel naming variables
+  ansible.builtin.set_fact:
+    cdh_major_version: "{{ cdh_version.split('.')[:3] | join('.') }}"
+    cdh_build_number: "{{ cdh_version.split('.')[-1] }}"
+    cdh_parcel_os_suffix_effective: "{{ cdh_parcel_os_suffix }}"
+    cdh_parcel_filename: >-
+      CDH-{{ cdh_version.split('.')[:3] | join('.') }}-1.cdh{{ cdh_version.split('.')[:3] | join('.') }}.p{{ cdh_version.split('.')[-1] }}.{{ cdh_numeric_version }}-{{ cdh_parcel_os_suffix_effective }}.parcel
+
+- name: Print CDH parcel target suffix
+  ansible.builtin.debug:
+    msg:
+      - "CDH parcel OS suffix: {{ cdh_parcel_os_suffix_effective }}"
+      - "CDH parcel file: {{ cdh_parcel_filename }}"
+      - "Override with cdh_parcel_os_suffix in group_vars (e.g. el8 for RHEL 8 workers)"

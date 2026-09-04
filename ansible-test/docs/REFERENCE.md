@@ -27,12 +27,13 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 
 | Variable | Default | Description |
 |---|---|---|
-| `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/ direct; `internal` = mirror on cldr-mngr (RHEL only) |
+| `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/ direct; `internal` = mirror on cldr-mngr |
 | `cm_repo_public_base_url` | `https://archive.cloudera.com/p` | Public archive base URL |
 | `cm_repo_mirror_host` | cldr-mngr IP | Internal mirror HTTP host |
 | `parcel_repo` | computed | Public or internal parcel URL based on `cm_repo_source` |
-| `cm_repo_username` | — | Required for public mode (archive credentials) |
-| `cm_repo_password` | — | Required for public mode |
+| `cdh_parcel_os_suffix` | `el8` | CDH parcel filename suffix (`el8`, `el9`) — must match **worker** OS, not cldr-mngr OS |
+| `cm_repo_username` | — | Required (archive credentials) |
+| `cm_repo_password` | — | Required (archive credentials) |
 
 **Spark parcel:** For CDH `>= 7.3.1`, Spark is bundled in the CDH parcel — a separate SPARK3 download is skipped automatically (`cdh_spark_bundled_min_version`). Set `spark_version` only for older CDH releases that need a standalone Spark parcel.
 
@@ -42,11 +43,19 @@ cm_repo_source: public
 cm_repo_username: "your-cloudera-account"
 cm_repo_password: "your-password"
 
-# Internal mirror — download RPMs/parcels to cldr-mngr web server (RHEL/CentOS/Rocky only)
+# Internal mirror — CM + CDH parcels served from cldr-mngr web server
 cm_repo_source: internal
 ```
 
-Ubuntu/Debian hosts must use `cm_repo_source: public`. The internal mirror playbooks download RPM packages and run `createrepo`; Ubuntu CM installs from archive APT repositories configured by `17_download_repos.yml`.
+**Internal mirror by OS:**
+
+| cldr-mngr OS | Mirror format | What is downloaded |
+|---|---|---|
+| RHEL 8/9 | yum/RPM + `createrepo` | CM RPMs, CDH parcel (`-el8`/`-el9`) |
+| Ubuntu 22.04/24.04 | apt | CM `.deb` packages + `Packages` index, CDH parcel |
+| Debian | apt (with `cm_debian_use_ubuntu_repo: true`) | Same as Ubuntu path |
+
+**CDH parcels on Ubuntu:** Cloudera publishes CDH parcels with `-el8`/`-el9` suffixes for RHEL workers. A CM server on Ubuntu can deploy these parcels to RHEL worker nodes. Set `cdh_parcel_os_suffix: el8` (default) or `el9` to match your workers. CM on Ubuntu mirroring/download uses this suffix regardless of cldr-mngr OS.
 
 | Playbook | Mode | Description |
 |---|---|---|
