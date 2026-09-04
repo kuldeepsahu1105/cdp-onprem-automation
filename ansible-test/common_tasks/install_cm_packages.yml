@@ -1,0 +1,24 @@
+---
+- name: Require Cloudera archive credentials for public CM repository
+  ansible.builtin.assert:
+    that:
+      - cm_repo_username | default('') | length > 0
+      - cm_repo_username != '<username>'
+      - cm_repo_password | default('') | length > 0
+      - cm_repo_password != '<password>'
+    fail_msg: >-
+      Set cm_repo_username and cm_repo_password (archive.cloudera.com credentials).
+      On Ubuntu use cm_repo_source: public in group_vars/all.yml.
+  when: cm_repo_source == 'public'
+
+- name: Configure Cloudera Manager repository
+  ansible.builtin.import_tasks: configure_cm_repo.yml
+
+- name: Apply Ubuntu-specific CM install prerequisites
+  ansible.builtin.import_tasks: prepare_ubuntu_cm_install.yml
+
+- name: Install Cloudera Manager packages
+  ansible.builtin.package:
+    name: "{{ cm_package_list }}"
+    state: present
+  environment: "{{ {'DEBIAN_FRONTEND': 'noninteractive'} if ansible_os_family == 'Debian' else {} }}"

@@ -9,23 +9,53 @@
     cm_repo_os_version: "ubuntu{{ ansible_distribution_version | replace('.', '') }}"
   when: ansible_os_family == "Debian"
 
-- name: Configure Cloudera Manager yum repository (RHEL)
+- name: Download official Cloudera Manager yum repo file (RHEL, public)
+  ansible.builtin.get_url:
+    url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/yum/cloudera-manager.repo"
+    dest: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+    url_username: "{{ cm_repo_username }}"
+    url_password: "{{ cm_repo_password }}"
+    force_basic_auth: true
+  when:
+    - ansible_os_family == "RedHat"
+    - cm_repo_source == 'public'
+
+- name: Inject archive credentials into cloudera-manager.repo placeholders (RHEL)
+  ansible.builtin.replace:
+    path: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
+    regexp: "{{ item }}"
+    replace: "{{ cm_repo_username }}:{{ cm_repo_password }}"
+  loop:
+    - 'username:password'
+    - 'USERNAME:PASSWORD'
+    - '\[username\]:\[password\]'
+  when:
+    - ansible_os_family == "RedHat"
+    - cm_repo_source == 'public'
+
+- name: Configure Cloudera Manager yum repository from template (internal mirror)
   ansible.builtin.template:
     src: templates/cloudera-manager.repo.j2
     dest: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
     owner: root
     group: root
     mode: "0644"
-  when: ansible_os_family == "RedHat"
+  when:
+    - ansible_os_family == "RedHat"
+    - cm_repo_source == 'internal'
 
 - name: Download official Cloudera Manager apt sources list (Ubuntu/Debian, public)
   ansible.builtin.get_url:
-    url: >-
-      https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt/cloudera-manager.list
+    url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt/cloudera-manager.list"
     dest: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
     owner: root
     group: root
     mode: "0644"
+    url_username: "{{ cm_repo_username }}"
+    url_password: "{{ cm_repo_password }}"
     force_basic_auth: true
   when:
     - ansible_os_family == "Debian"
@@ -46,16 +76,17 @@
 
 - name: Download Cloudera Manager apt archive signing key (Ubuntu/Debian, public)
   ansible.builtin.get_url:
-    url: >-
-      https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt/archive.key
+    url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt/archive.key"
     dest: /tmp/cloudera-cm-archive.key
     mode: "0644"
+    url_username: "{{ cm_repo_username }}"
+    url_password: "{{ cm_repo_password }}"
     force_basic_auth: true
   when:
     - ansible_os_family == "Debian"
     - cm_repo_source == 'public'
 
-- name: Import Cloudera Manager apt archive signing key
+- name: Install Cloudera Manager apt archive signing key
   ansible.builtin.apt_key:
     file: /tmp/cloudera-cm-archive.key
     state: present

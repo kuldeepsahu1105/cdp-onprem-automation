@@ -1,0 +1,23 @@
+---
+# Ubuntu-specific steps before installing Cloudera Manager packages via apt.
+# CM 7.13.2 on Ubuntu 24.04 requires Python 3.11 and stable service restarts during apt.
+- name: Ensure needrestart config directory exists (Ubuntu)
+  ansible.builtin.file:
+    path: /etc/needrestart
+    state: directory
+    mode: "0755"
+  when:
+    - ansible_os_family == "Debian"
+    - ansible_distribution == "Ubuntu"
+
+- name: Disable needrestart automatic service restarts (Ubuntu 24.04+)
+  ansible.builtin.lineinfile:
+    path: /etc/needrestart/needrestart.conf
+    regexp: "^#?\\$nrconf\\{restart\\}"
+    line: "$nrconf{restart} = 'l';"
+    create: false
+  when:
+    - ansible_os_family == "Debian"
+    - ansible_distribution == "Ubuntu"
+    - ansible_distribution_major_version | int >= 24
+  failed_when: false

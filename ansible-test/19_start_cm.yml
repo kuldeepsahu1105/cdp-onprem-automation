@@ -23,9 +23,9 @@
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
     - name: Install Cloudera Manager Server packages
-      ansible.builtin.package:
-        name: "{{ cldr_mngr_packages.server }}"
-        state: present
+      ansible.builtin.import_tasks: common_tasks/install_cm_packages.yml
+      vars:
+        cm_package_list: "{{ cldr_mngr_packages.server }}"
 
     - name: Create PostgreSQL SSL directory
       ansible.builtin.file:
@@ -50,10 +50,19 @@
         dest: /opt/cloudera/cm/lib/postgresql-connector.jar
         remote_src: yes
 
-    - name: Remove existing PostgreSQL connector symlink
+    - name: Remove existing PostgreSQL connector JAR files
+      ansible.builtin.find:
+        paths: /opt/cloudera/cm/lib
+        patterns: "postgresql-42*.jar"
+      register: old_pg_jars
+      failed_when: false
+
+    - name: Delete old PostgreSQL connector JAR files
       ansible.builtin.file:
-        path: "/opt/cloudera/cm/lib/postgresql-42.*.jar"
+        path: "{{ item.path }}"
         state: absent
+      loop: "{{ old_pg_jars.files | default([]) }}"
+      when: old_pg_jars.files is defined
 
     ##### Generate db.properties file
     - name: Check if CM database is already prepared
@@ -141,9 +150,9 @@
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
     - name: Install Cloudera Manager Agent packages
-      ansible.builtin.package:
-        name: "{{ cldr_mngr_packages.client }}"
-        state: present
+      ansible.builtin.import_tasks: common_tasks/install_cm_packages.yml
+      vars:
+        cm_package_list: "{{ cldr_mngr_packages.client }}"
 
     # - name: Get cldr-mngr hostname from inventory
     #   set_fact:
