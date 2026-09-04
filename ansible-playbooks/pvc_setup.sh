@@ -87,10 +87,6 @@ run_playbook() {
   ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" "$@"
 }
 
-print_message() {
-  ui_section "$1" "🔧"
-}
-
 cd "$SCRIPT_DIR"
 
 if [[ "${PVC_SETUP_FROM_WRAPPER:-0}" == "1" ]]; then
