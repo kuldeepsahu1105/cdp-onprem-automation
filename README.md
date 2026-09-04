@@ -2,7 +2,7 @@
 
 End-to-end automation for provisioning infrastructure and deploying **Cloudera Private Cloud** (Base + ECS) with **Terraform** and **Ansible**.
 
-Supports **RHEL/Rocky/Alma**, **Ubuntu 22.04/24.04**, and **Debian**, with **FreeIPA** or **Active Directory** for identity, and **public or internal** Cloudera archive repositories (RPM mirror on RHEL, apt mirror on Ubuntu).
+Supports **RHEL/Rocky/Alma** and **Ubuntu 22.04/24.04**, with **FreeIPA** or **Active Directory** for identity, and **public or internal** Cloudera archive repositories (RPM mirror on RHEL, apt mirror on Ubuntu).
 
 ## Quick start (AWS)
 
@@ -194,7 +194,7 @@ Configured in `ansible-test/group_vars/all.yml`:
 
 Spark is bundled in the CDH parcel for 7.3.1+ — a separate SPARK3 download is not required.
 
-### Ubuntu notes
+### OS notes
 
 - **CM server** on Ubuntu 22.04/24.04: supported with `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr).
 - **CDH workers on Ubuntu 22.04/24.04**: parcels `...-jammy.parcel` and `...-noble.parcel` exist in archive; `cdh_parcel_os_suffix: auto` selects them from worker facts. See [CDH base cluster deployment](#cdh-base-cluster-deployment).

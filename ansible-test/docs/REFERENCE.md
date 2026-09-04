@@ -38,9 +38,7 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 | `cdh_parcel_os_suffix` | `auto` | Parcel filename suffix: `auto`, `el8`, `el9`, `jammy`, `noble`, `sles15`, `el8.aarch64le` |
 | `cdh_parcel_target_group` | `base-workers` | Inventory group used to auto-detect worker OS for parcel suffix |
 | `cdh_parcel_os_suffix_fallback` | `el8` | Fallback when auto-detect cannot read worker facts |
-| `cm_debian_use_ubuntu_repo` | `false` | Debian: use Ubuntu apt archive paths when `true` |
-| `cm_debian_ubuntu_compat_version` | `2204` | Ubuntu archive version for Debian (`2204` or `2404`) |
-| `scm_csds` | `[]` | CSD JAR URLs (all OS); leave empty on Ubuntu/Debian |
+| `scm_csds` | `[]` | CSD JAR URLs (all OS); leave empty on Ubuntu |
 | `scm_csds_redhat` | list | CSD JAR URLs for RHEL-based CM (RPM archive paths) |
 | `cm_repo_username` | — | Required (archive credentials) |
 | `cm_repo_password` | — | Required (archive credentials) |
@@ -63,7 +61,6 @@ cm_repo_source: internal
 |---|---|---|
 | RHEL 8/9 | yum/RPM + `createrepo` | CM RPMs, CDH parcel (`-el8`/`-el9`) |
 | Ubuntu 22.04/24.04 | apt | CM `.deb` packages + `Packages` index, CDH parcel |
-| Debian | apt (with `cm_debian_use_ubuntu_repo: true`) | Same as Ubuntu path |
 
 **CDH parcel suffixes in archive** (CDH 7.3.2 example):
 
@@ -89,7 +86,7 @@ With `cdh_parcel_os_suffix: auto` (default), the suffix is derived from the firs
 Package names and paths are in the `os_vars` map:
 
 - `os_vars.RedHat` — RHEL/Rocky/Alma
-- `os_vars.Debian` — Ubuntu/Debian
+- `os_vars.Debian` — Ubuntu (Ansible `Debian` OS family)
 
 | `cm_repo_dir` | `/etc/yum.repos.d` (RHEL) or `/etc/apt/sources.list.d` (Ubuntu) | CM repo drop-in directory |
 | `cm_repo_file` | `cloudera-manager.repo` or `cloudera-manager.list` | CM repo file name per OS |
@@ -98,7 +95,7 @@ On Ubuntu, public mode downloads the official `cloudera-manager.list` from `arch
 
 Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` after `set_os_facts`.
 
-**PostgreSQL paths:** RHEL stores config in the data directory (`postgres_data_dir`). Ubuntu/Debian uses separate paths — config in `postgres_config_dir` (`/etc/postgresql/<version>/main`), data in `postgres_data_dir` (`/var/lib/postgresql/<version>/main`). Playbook `18_setup_postgres.yml` deploys templates to `postgres_config_dir`.
+**PostgreSQL paths:** RHEL stores config in the data directory (`postgres_data_dir`). Ubuntu uses separate paths — config in `postgres_config_dir` (`/etc/postgresql/<version>/main`), data in `postgres_data_dir` (`/var/lib/postgresql/<version>/main`). Playbook `18_setup_postgres.yml` deploys templates to `postgres_config_dir`.
 
 ---
 
@@ -159,7 +156,7 @@ Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` 
 
 | OS | Method |
 |---|---|
-| Ubuntu/Debian (netplan) | `/etc/netplan/99-cloudera-dns.yaml` + `netplan apply` |
+| Ubuntu (netplan) | `/etc/netplan/99-cloudera-dns.yaml` + `netplan apply` |
 | RHEL | `/etc/resolv.conf` via template |
 
 ### Per environment
@@ -327,7 +324,7 @@ When multiple `*.pem`, `*license*`, or `*info.txt` files exist in `ansible-test/
 | Collection | Purpose |
 |---|---|
 | `community.general` | General modules |
-| `community.postgresql` | PostgreSQL modules (Ubuntu/Debian) |
+| `community.postgresql` | PostgreSQL modules (Ubuntu) |
 | `ansible.posix` | POSIX helpers |
 | `community.crypto` | TLS/crypto |
 | `freeipa.ansible_freeipa` | FreeIPA server/client |
@@ -344,7 +341,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/set_dns_facts.yml` | AWS/bare metal DNS facts |
 | `common_tasks/configure_resolv_conf.yml` | netplan or resolv.conf |
 | `common_tasks/configure_cm_repo.yml` | Public or internal CM repo setup |
-| `common_tasks/prepare_debian_cm_install.yml` | Ubuntu/Debian apt prep (needrestart, etc.) |
+| `common_tasks/prepare_debian_cm_install.yml` | Ubuntu apt prep (needrestart, etc.) |
 | `common_tasks/install_cm_packages.yml` | OS-aware CM server/agent package install |
 | `common_tasks/configure_cm_agent.yml` | Set `server_host` in agent `config.ini` to cldr-mngr FQDN |
 | `common_tasks/set_cm_mirror_facts.yml` | Internal mirror URL facts |

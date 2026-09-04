@@ -308,7 +308,7 @@ Default versions (configured in `group_vars/all.yml`):
 
 === OS support (Ansible)
 
-Playbooks support **RHEL 8/9**, **Ubuntu 22.04/24.04**, and **Debian** (with `cm_debian_use_ubuntu_repo: true` for apt paths).
+Playbooks support **RHEL 8/9** and **Ubuntu 22.04/24.04**.
 
 * CM server on Ubuntu: `cm_repo_source: public` or `internal` (apt mirror on `cldr-mngr`)
 * CDH parcels: `-jammy` / `-noble` for Ubuntu workers; `-el8` / `-el9` for RHEL workers

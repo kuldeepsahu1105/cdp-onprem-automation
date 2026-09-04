@@ -36,7 +36,6 @@ When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-test/`, 
 |---|---|---|
 | RHEL 8/9 | `public` or `internal` | Internal mirror: RPM + `createrepo` + CDH parcel |
 | Ubuntu 22.04 / 24.04 | `public` or `internal` | Internal mirror: apt `.deb` mirror + CDH parcel; public uses official `cloudera-manager.list` |
-| Debian | `public` or `internal`* | *Set `cm_debian_use_ubuntu_repo: true` for apt paths |
 
 **CDH base cluster:** Parcel suffix defaults to `auto` — `jammy`/`noble` on Ubuntu workers, `el8`/`el9` on RHEL. Override with `cdh_parcel_os_suffix: noble` etc.
 

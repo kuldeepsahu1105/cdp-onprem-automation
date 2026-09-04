@@ -1,6 +1,6 @@
 # Ansible Playbooks — Cloudera Private Cloud
 
-Automation for deploying and cleaning up Cloudera Private Cloud on **RHEL**, **Ubuntu**, and **Debian**.
+Automation for deploying and cleaning up Cloudera Private Cloud on **RHEL** and **Ubuntu**.
 
 ## Quick start
 
@@ -22,15 +22,13 @@ For the full deployment sequence, identity scenarios, and cleanup steps, see the
 
 ## OS and repository support
 
-| Component | RHEL 8/9 | Ubuntu 22.04/24.04 | Debian |
-|---|---|---|---|
-| Prerequisites (`00`–`09`) | Yes | Yes | Yes* |
-| CM install (`19_start_cm`) | Yes | Yes | Yes* |
-| Public CM repo | Yes | Yes | Yes* |
-| Internal CM mirror | RPM + createrepo | apt `.deb` mirror | apt* |
-| CDH parcels / base cluster | `el8` / `el9` | `jammy` / `noble` | Same* |
-
-\*Debian uses Ubuntu apt archive paths when `cm_debian_use_ubuntu_repo: true`.
+| Component | RHEL 8/9 | Ubuntu 22.04/24.04 |
+|---|---|---|
+| Prerequisites (`00`–`09`) | Yes | Yes |
+| CM install (`19_start_cm`) | Yes | Yes |
+| Public CM repo | Yes | Yes |
+| Internal CM mirror | RPM + createrepo | apt `.deb` mirror |
+| CDH parcels / base cluster | `el8` / `el9` | `jammy` / `noble` |
 
 ## Defaults (`group_vars/all.yml`)
 
