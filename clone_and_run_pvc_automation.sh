@@ -84,9 +84,9 @@ fi
 
 cd "$ANSIBLE_DIR"
 
-ui_step "Executing pvc_setup.sh" "▶️"
+ui_step "Executing pvc_setup.sh" "▶"
 ui_kv "Deploy phase" "${DEPLOY_PHASE:-1}" "🔢"
-ui_kv "Control mode" "${CONTROL_MODE:-auto}" "🎛️"
+ui_kv "Control mode" "${CONTROL_MODE:-auto}" "🎚"
 chmod +x pvc_setup.sh
 export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 export CONTROL_MODE="${CONTROL_MODE:-auto}"

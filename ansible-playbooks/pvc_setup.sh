@@ -98,8 +98,8 @@ if [[ "${PVC_SETUP_FROM_WRAPPER:-0}" == "1" ]]; then
 else
   wrapper_print_identity "Cloudera Private Cloud Deployment (pvc_setup.sh)" "$REPO_ROOT" "$REPO_ROOT/scripts/lib"
   ui_kv "Phase" "${DEPLOY_PHASE}" "🔢"
-  ui_kv "Control mode" "${CONTROL_MODE}" "🎛️"
-  ui_kv "CPU" "${CPU_ARCHITECTURE:-x86_64}" "🖥️"
+  ui_kv "Control mode" "${CONTROL_MODE}" "🎚"
+  ui_kv "CPU" "${CPU_ARCHITECTURE:-x86_64}" "💻"
   print_banner
 fi
 

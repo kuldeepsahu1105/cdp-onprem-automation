@@ -17,7 +17,7 @@ wrapper_has_ui() {
 wrapper_dry_run_label() {
   case "${DRY_RUN:-false}" in
     1|true|yes|TRUE|YES|on|ON) printf 'enabled 🧪' ;;
-    *) printf 'disabled ▶️' ;;
+    *) printf 'disabled ▶' ;;
   esac
 }
 

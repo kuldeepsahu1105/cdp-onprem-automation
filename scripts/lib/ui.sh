@@ -3,7 +3,8 @@
 
 UI_STEP_NUM=0
 UI_WIDTH=66
-UI_TAB=$'\t'
+UI_INDENT='    '
+UI_VALUE_COL=38
 
 ui_is_tty() {
   [[ -t 1 ]]
@@ -39,24 +40,19 @@ ui_rule() {
   ui_nl
 }
 
-# Tabular row: [indent][emoji\t]label\tvalue
-ui_row() {
-  local indent="$1"
-  local emoji="$2"
-  local label="$3"
-  local value="${4-}"
-
-  printf '%s' "$indent"
-  if [[ -n "$emoji" ]]; then
-    printf '%s%s' "$emoji" "$UI_TAB"
+# Left block padded to UI_VALUE_COL, then value (aligned column)
+ui_kv() {
+  local key="$1"
+  local value="$2"
+  local emoji="${3:-}"
+  local left="${UI_INDENT}"
+  [[ -n "$emoji" ]] && left+="${emoji}  "
+  left+="${key}:"
+  if ui_is_tty; then
+    printf '\033[2m%-*s\033[0m %s\n' "$UI_VALUE_COL" "$left" "$value"
+  else
+    printf '%-*s %s\n' "$UI_VALUE_COL" "$left" "$value"
   fi
-  if [[ -n "$label" ]]; then
-    printf '%s' "$label"
-  fi
-  if [[ $# -ge 4 ]]; then
-    printf '%s%s' "$UI_TAB" "$value"
-  fi
-  ui_nl
 }
 
 ui_banner() {
@@ -65,11 +61,11 @@ ui_banner() {
 
   ui_nl
   ui_rule "═"
-  printf '  🏗️%s' "$UI_TAB"
+  printf '  🏗️  '
   ui_c "1;36" "$title"
   ui_nl
   if [[ -n "$subtitle" ]]; then
-    printf '  %s' "$UI_TAB"
+    printf '      '
     ui_c "2" "$subtitle"
     ui_nl
   fi
@@ -83,7 +79,7 @@ ui_section() {
   UI_STEP_NUM=0
   ui_nl
   ui_rule "═"
-  printf '  %s%s' "$emoji" "$UI_TAB"
+  printf '  %-3s  ' "$emoji"
   ui_c "1;34" "$title"
   ui_nl
   ui_rule "─"
@@ -93,7 +89,7 @@ ui_subsection() {
   local title="$1"
   local emoji="${2:-•}"
   ui_nl
-  printf '    %s%s' "$emoji" "$UI_TAB"
+  printf '%s%-3s  ' "$UI_INDENT" "$emoji"
   ui_c "1;35" "$title"
   ui_nl
 }
@@ -103,47 +99,36 @@ ui_step() {
   local emoji="${2:-▸}"
   UI_STEP_NUM=$((UI_STEP_NUM + 1))
   ui_nl
-  printf '    %s%s' "$emoji" "$UI_TAB"
-  ui_c "1" "Step ${UI_STEP_NUM}:"
-  printf '%s' "$UI_TAB"
-  ui_c "0;1" "$msg"
-  ui_nl
+  local left="${UI_INDENT}${emoji}  Step ${UI_STEP_NUM}:"
+  if ui_is_tty; then
+    printf '\033[1m%-*s\033[0m %s\n' "$UI_VALUE_COL" "$left" "$msg"
+  else
+    printf '%-*s %s\n' "$UI_VALUE_COL" "$left" "$msg"
+  fi
 }
 
 ui_ok() {
-  printf '    %s✅%s' "$UI_TAB" "$UI_TAB"
+  printf '%s     ✅  ' "$UI_INDENT"
   ui_c "32" "$*"
   ui_nl
 }
 
 ui_info() {
-  printf '    💡%s' "$UI_TAB"
+  printf '%s💡   ' "$UI_INDENT"
   ui_c "36" "$*"
   ui_nl
 }
 
 ui_warn() {
-  printf '    ⚠️%s' "$UI_TAB" >&2
+  printf '%s⚠️   ' "$UI_INDENT" >&2
   ui_c "33" "$*" >&2
   ui_nl >&2
 }
 
 ui_err() {
-  printf '    ❌%s' "$UI_TAB" >&2
+  printf '%s❌   ' "$UI_INDENT" >&2
   ui_c "31" "$*" >&2
   ui_nl >&2
-}
-
-ui_kv() {
-  local key="$1"
-  local value="$2"
-  local emoji="${3:-}"
-  printf '    '
-  if [[ -n "$emoji" ]]; then
-    printf '%s%s' "$emoji" "$UI_TAB"
-  fi
-  ui_c "2" "${key}:"
-  printf '%s%s\n' "$UI_TAB" "$value"
 }
 
 ui_config_summary() {
@@ -151,7 +136,7 @@ ui_config_summary() {
   ui_kv "Config file" "${TFVARS_LOADED_FROM:-not set}" "📄"
   ui_kv "Environment" "${ENVIRONMENT:-—}" "🌍"
   ui_kv "AWS region" "${AWS_REGION:-—}" "📍"
-  ui_kv "CPU architecture" "${CPU_ARCHITECTURE:-x86_64}" "🖥️"
+  ui_kv "CPU architecture" "${CPU_ARCHITECTURE:-x86_64}" "💻"
   if [[ "${CPU_ARCHITECTURE:-x86_64}" == "arm64" ]]; then
     ui_kv "Graviton remap" "${APPLY_GRAVITON_DEFAULTS:-true}" "⚡"
     ui_kv "ECS on ARM64" "${ECS_DEPLOY_ON_ARM64:-false}" "📦"
@@ -160,7 +145,7 @@ ui_config_summary() {
   ui_kv "CM version" "${CM_VERSION:-—}" "🔖"
   case "${DRY_RUN:-${ANSIBLE_DRY_RUN:-false}}" in
     1|true|yes|TRUE|YES|on|ON) ui_kv "Dry run" "enabled (no changes applied)" "🧪" ;;
-    *) ui_kv "Dry run" "disabled" "▶️" ;;
+    *) ui_kv "Dry run" "disabled" "▶" ;;
   esac
 }
 
@@ -168,7 +153,7 @@ ui_inventory_summary() {
   local inventory_file="$1"
   ui_subsection "Host groups" "📊"
   if [[ -f "$inventory_file" ]] && command -v awk >/dev/null 2>&1; then
-    awk -v tab="$UI_TAB" '
+    awk -v col="$UI_VALUE_COL" '
       /^\[/ {
         gsub(/[\[\]]/, "", $0)
         group=$0
@@ -178,7 +163,10 @@ ui_inventory_summary() {
         count[group]++
       }
       END {
-        for (g in count) printf "         🖥️%s%s%s%d host(s)\n", tab, g ":", tab, count[g]
+        for (g in count) {
+          left = sprintf("         💻  %s:", g)
+          printf "%-*s %d host(s)\n", col, left, count[g]
+        }
       }
     ' "$inventory_file" | sort
   fi
@@ -195,7 +183,7 @@ ui_done() {
   local msg="${1:-Completed successfully}"
   ui_nl
   ui_rule "═"
-  printf '  🎉%s' "$UI_TAB"
+  printf '  🎉  '
   ui_c "1;32" "$msg"
   ui_nl
   ui_rule "═"
