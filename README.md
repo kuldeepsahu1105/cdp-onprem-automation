@@ -85,7 +85,8 @@ Spark is bundled in the CDH parcel for 7.3.1+ — a separate SPARK3 download is 
 ### Ubuntu notes
 
 - **CM server** on Ubuntu 22.04/24.04: supported with `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr).
-- **CDH workers**: use RHEL 8/9 nodes with `cdh_parcel_os_suffix: el8` or `el9` (default `el8`). CM on Ubuntu downloads and serves the matching parcel.
+- **CDH workers on Ubuntu 22.04/24.04**: parcels `...-jammy.parcel` and `...-noble.parcel` exist in archive; `cdh_parcel_os_suffix: auto` selects them from worker facts.
+- **CDH workers on RHEL**: use `el8` / `el9` (or `auto`). ARM64 workers use `el8.aarch64le` / `el9.aarch64le`.
 - **Internal mirror**: Ubuntu cldr-mngr mirrors apt `.deb` packages and CDH parcels to its local web server (`16` + `17` playbooks).
 
 ## Nutanix Terraform

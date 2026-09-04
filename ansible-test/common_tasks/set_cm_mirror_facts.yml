@@ -27,17 +27,59 @@
     cm_apt_archive_url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt"
   when: ansible_os_family == "Debian"
 
-- name: Set CDH parcel naming variables
+- name: Pick inventory host used to resolve CDH parcel suffix
+  ansible.builtin.set_fact:
+    cdh_parcel_target_host: >-
+      {{
+        groups[cdh_parcel_target_group][0]
+        if (
+          cdh_parcel_target_group in groups
+          and groups[cdh_parcel_target_group] | length > 0
+          and hostvars[groups[cdh_parcel_target_group][0]].ansible_os_family is defined
+        )
+        else (
+          groups[base_cluster_master_group][0]
+          if (
+            base_cluster_master_group in groups
+            and groups[base_cluster_master_group] | length > 0
+            and hostvars[groups[base_cluster_master_group][0]].ansible_os_family is defined
+          )
+          else inventory_hostname
+        )
+      }}
+
+- name: Resolve CDH parcel suffix from target host OS (auto mode)
+  ansible.builtin.set_fact:
+    cdh_parcel_os_suffix_effective: >-
+      {%- set hv = hostvars[cdh_parcel_target_host] -%}
+      {%- if hv.ansible_os_family == 'RedHat' -%}
+      el{{ hv.ansible_distribution_major_version }}{{ '.aarch64le' if hv.ansible_architecture in ['aarch64', 'arm64'] else '' }}
+      {%- elif hv.ansible_distribution == 'Ubuntu' -%}
+      {{ hv.ansible_distribution_release }}
+      {%- elif hv.ansible_distribution == 'SLES' -%}
+      sles{{ hv.ansible_distribution_major_version }}
+      {%- else -%}
+      {{ cdh_parcel_os_suffix_fallback }}
+      {%- endif -%}
+  when: cdh_parcel_os_suffix | default('auto') == 'auto'
+
+- name: Use explicit CDH parcel suffix override
+  ansible.builtin.set_fact:
+    cdh_parcel_os_suffix_effective: "{{ cdh_parcel_os_suffix }}"
+  when: cdh_parcel_os_suffix | default('auto') != 'auto'
+
+- name: Set CDH parcel filename from resolved suffix
   ansible.builtin.set_fact:
     cdh_major_version: "{{ cdh_version.split('.')[:3] | join('.') }}"
     cdh_build_number: "{{ cdh_version.split('.')[-1] }}"
-    cdh_parcel_os_suffix_effective: "{{ cdh_parcel_os_suffix }}"
     cdh_parcel_filename: >-
       CDH-{{ cdh_version.split('.')[:3] | join('.') }}-1.cdh{{ cdh_version.split('.')[:3] | join('.') }}.p{{ cdh_version.split('.')[-1] }}.{{ cdh_numeric_version }}-{{ cdh_parcel_os_suffix_effective }}.parcel
 
-- name: Print CDH parcel target suffix
+- name: Print CDH parcel target and archive file
   ansible.builtin.debug:
     msg:
+      - "CDH parcel target host: {{ cdh_parcel_target_host }}"
       - "CDH parcel OS suffix: {{ cdh_parcel_os_suffix_effective }}"
       - "CDH parcel file: {{ cdh_parcel_filename }}"
-      - "Override with cdh_parcel_os_suffix in group_vars (e.g. el8 for RHEL 8 workers)"
+      - "Archive suffixes: el8, el9, jammy (Ubuntu 22.04), noble (Ubuntu 24.04), sles15, *.aarch64le"
+      - "Override: cdh_parcel_os_suffix=noble|jammy|el8|el9 or cdh_parcel_target_group=base-workers"

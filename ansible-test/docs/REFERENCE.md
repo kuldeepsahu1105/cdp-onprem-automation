@@ -31,7 +31,9 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 | `cm_repo_public_base_url` | `https://archive.cloudera.com/p` | Public archive base URL |
 | `cm_repo_mirror_host` | cldr-mngr IP | Internal mirror HTTP host |
 | `parcel_repo` | computed | Public or internal parcel URL based on `cm_repo_source` |
-| `cdh_parcel_os_suffix` | `el8` | CDH parcel filename suffix (`el8`, `el9`) — must match **worker** OS, not cldr-mngr OS |
+| `cdh_parcel_os_suffix` | `auto` | Parcel filename suffix: `auto`, `el8`, `el9`, `jammy`, `noble`, `sles15`, `el8.aarch64le` |
+| `cdh_parcel_target_group` | `base-workers` | Inventory group used to auto-detect worker OS for parcel suffix |
+| `cdh_parcel_os_suffix_fallback` | `el8` | Fallback when auto-detect cannot read worker facts |
 | `cm_repo_username` | — | Required (archive credentials) |
 | `cm_repo_password` | — | Required (archive credentials) |
 
@@ -55,7 +57,18 @@ cm_repo_source: internal
 | Ubuntu 22.04/24.04 | apt | CM `.deb` packages + `Packages` index, CDH parcel |
 | Debian | apt (with `cm_debian_use_ubuntu_repo: true`) | Same as Ubuntu path |
 
-**CDH parcels on Ubuntu:** Cloudera publishes CDH parcels with `-el8`/`-el9` suffixes for RHEL workers. A CM server on Ubuntu can deploy these parcels to RHEL worker nodes. Set `cdh_parcel_os_suffix: el8` (default) or `el9` to match your workers. CM on Ubuntu mirroring/download uses this suffix regardless of cldr-mngr OS.
+**CDH parcel suffixes in archive** (CDH 7.3.2 example):
+
+| Suffix | Target OS |
+|---|---|
+| `el8` | RHEL / Rocky / Alma 8 (x86_64) |
+| `el9` | RHEL / Rocky / Alma 9 (x86_64) |
+| `el8.aarch64le` / `el9.aarch64le` | RHEL on ARM64 |
+| `jammy` | Ubuntu 22.04 workers |
+| `noble` | Ubuntu 24.04 workers |
+| `sles15` | SLES 15 |
+
+With `cdh_parcel_os_suffix: auto` (default), the suffix is derived from the first host in `cdh_parcel_target_group` (`base-workers`). Override explicitly when workers are mixed or facts are not gathered yet.
 
 | Playbook | Mode | Description |
 |---|---|---|

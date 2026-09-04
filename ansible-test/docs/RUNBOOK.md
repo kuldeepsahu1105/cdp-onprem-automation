@@ -38,7 +38,7 @@ When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-test/`, 
 | Ubuntu 22.04 / 24.04 | `public` or `internal` | Internal mirror: apt `.deb` mirror + CDH parcel; public uses official `cloudera-manager.list` |
 | Debian | `public` or `internal`* | *Set `cm_debian_use_ubuntu_repo: true` for apt paths |
 
-**CDH base cluster:** Parcel suffix is controlled by `cdh_parcel_os_suffix` (default `el8`). Use `el9` for RHEL 9 workers even when cldr-mngr is Ubuntu.
+**CDH base cluster:** Parcel suffix defaults to `auto` — `jammy`/`noble` on Ubuntu workers, `el8`/`el9` on RHEL. Override with `cdh_parcel_os_suffix: noble` etc.
 
 ### Phased deployment (`pvc_setup.sh`)
 
@@ -259,7 +259,7 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 | Wrong identity detected | Run `00_detect_identity.yml`; set `identity_provider: freeipa` or `ad` to override |
 | DNS not persisting on Ubuntu | DNS is applied via netplan — see [REFERENCE.md](REFERENCE.md#dns-configuration) |
 | CM install fails on Ubuntu | Set `cm_repo_username` / `cm_repo_password`; use `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr) |
-| CDH parcel download fails from Ubuntu cldr-mngr | Set `cdh_parcel_os_suffix: el8` or `el9` to match worker OS (not Ubuntu version) |
+| CDH parcel download fails | Ensure worker facts exist (run phase 1 first). Set `cdh_parcel_os_suffix: noble` or `jammy` for Ubuntu workers, `el8`/`el9` for RHEL |
 | PostgreSQL listens on 127.0.0.1 only | Re-run `18_setup_postgres.yml` (uses `pg_ctlcluster restart` on Ubuntu) or `pg_ctlcluster 18 main restart` |
 | SSH restart fails on Ubuntu | Fixed in `00_setup_ssh_preqs.yml` — uses `ssh` service instead of `sshd` |
 | AWS vs bare metal DNS wrong | Set `deployment_environment: aws` or `baremetal` explicitly |

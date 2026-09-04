@@ -28,7 +28,7 @@ For the full deployment sequence, identity scenarios, and cleanup steps, see the
 | CM install (`19_start_cm`) | Yes | Yes | Yes* |
 | Public CM repo | Yes | Yes | Yes* |
 | Internal CM mirror | RPM + createrepo | apt `.deb` mirror | apt* |
-| CDH parcels / base cluster | `el8`/`el9` parcels | Yes — set `cdh_parcel_os_suffix` | Same |
+| CDH parcels / base cluster | `jammy` / `noble` / `el8` / `el9` (auto-detect) | Same |
 
 \*Debian uses Ubuntu apt archive paths when `cm_debian_use_ubuntu_repo: true`.
 
@@ -38,7 +38,7 @@ For the full deployment sequence, identity scenarios, and cleanup steps, see the
 |---|---|---|
 | `cm_version` | `7.13.2.10000` | Cloudera Manager |
 | `cdh_version` | `7.3.2.10000` | CDH Runtime parcel |
-| `cdh_parcel_os_suffix` | `el8` | Parcel suffix for workers (`el8` or `el9`) |
+| `cdh_parcel_os_suffix` | `auto` | `noble`, `jammy`, `el8`, `el9`, or `auto` from worker OS |
 | `java_version` | `17` | OpenJDK |
 | `python_version` | `3.11` | System Python |
 | `postgresql_version` | `18` | External DB for CM |

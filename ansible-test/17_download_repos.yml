@@ -15,7 +15,7 @@
           - "cm_repo_source: {{ cm_repo_source }}"
           - "parcel_repo: {{ parcel_repo }}"
           - "cm_repo_mirror_host: {{ cm_repo_mirror_host }}"
-          - "cdh_parcel_os_suffix: {{ cdh_parcel_os_suffix | default('el8') }}"
+          - "cdh_parcel_os_suffix: {{ cdh_parcel_os_suffix | default('auto') }} (auto → jammy/noble/el8/el9 from workers)"
 
     - name: Require Cloudera archive credentials
       ansible.builtin.assert:

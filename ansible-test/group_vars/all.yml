@@ -161,9 +161,12 @@ parcel_repo_public: "{{ cm_repo_public_base_url }}/{{ cdh_repo_product }}/{{ cdh
 parcel_repo_internal: "http://{{ cm_repo_mirror_host }}/cloudera-repos/{{ cdh_repo_product }}/{{ cdh_version }}/"
 parcel_repo: "{{ parcel_repo_internal if cm_repo_source == 'internal' else parcel_repo_public }}"
 
-# CDH parcel file suffix — must match worker OS (el8, el9). CM on Ubuntu downloads parcels
-# using this suffix (default el8). Set el9 when workers are RHEL 9 / Rocky 9.
-cdh_parcel_os_suffix: "el8"
+# CDH parcel file suffix — auto-detects from worker OS when set to "auto".
+# Archive publishes: el8, el9, jammy (Ubuntu 22.04), noble (Ubuntu 24.04), sles15, *.aarch64le
+# Examples: cdh_parcel_os_suffix: noble | jammy | el8 | el9 | el8.aarch64le
+cdh_parcel_os_suffix: auto
+cdh_parcel_target_group: base-workers
+cdh_parcel_os_suffix_fallback: el8
 
 # cldr-mngr: scm config:
 scm_db_name: "scm"
