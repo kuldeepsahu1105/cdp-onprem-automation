@@ -193,10 +193,16 @@ databases:
   - { name: "smm", user: "smm", password: "smm" }
   - { name: "das", user: "das", password: "das" }
 
-scm_csds: 
+scm_csds: []
+# Optional CSD JARs for RHEL-based CM (RPM archive paths). Leave scm_csds empty on Ubuntu/Debian.
+scm_csds_redhat:
   - https://archive.cloudera.com/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar
   - https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel/NIFIREGISTRY-1.28.1.2.1.7.3004-1.jar
   - https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel/NIFI-1.28.1.2.1.7.3004-1.jar
+
+# When true, pure Debian hosts use Ubuntu CM apt repo path (Cloudera supports Ubuntu only)
+cm_debian_use_ubuntu_repo: false
+cm_debian_ubuntu_compat_version: "2204"
 
 ##### cm_server api configs:
 cm_port: 7180
@@ -449,6 +455,7 @@ os_vars:
     yum_repo_dir: /etc/yum.repos.d
     cm_repo_dir: /etc/yum.repos.d
     cm_repo_file: cloudera-manager.repo
+    cm_package_cache_glob: /var/cache/yum/cloudera*
     rc_local_path: /etc/rc.d/rc.local
     dns_config_method: resolv_conf
     postgres_data_dir: "/var/lib/pgsql/{{ postgresql_version }}/data"
@@ -527,6 +534,7 @@ os_vars:
     yum_repo_dir: /etc/apt/sources.list.d
     cm_repo_dir: /etc/apt/sources.list.d
     cm_repo_file: cloudera-manager.list
+    cm_package_cache_glob: /var/cache/apt/archives
     rc_local_path: /etc/rc.local
     netplan_dns_file: /etc/netplan/99-cloudera-dns.yaml
     dns_config_method: netplan

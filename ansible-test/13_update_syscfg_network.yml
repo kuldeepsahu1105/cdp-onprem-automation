@@ -3,7 +3,7 @@
 #   ipaserver_domain: cldrsetup.local
 
 ---
-- name: Skip sysconfig network update on non-RHEL hosts
+- name: Skip sysconfig network update on Debian family (DNS via netplan/resolv)
   hosts: all
   become: yes
   tasks:

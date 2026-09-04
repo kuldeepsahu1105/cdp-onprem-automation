@@ -36,12 +36,12 @@
     state: absent
 
 - name: Clean package manager cache (RHEL)
-  ansible.builtin.command: dnf clean all
+  ansible.builtin.command: "{{ 'dnf clean all' if ansible_facts.get('pkg_mgr', 'dnf') == 'dnf' else 'yum clean all' }}"
   when: ansible_os_family == "RedHat"
   changed_when: false
   failed_when: false
 
-- name: Clean package manager cache (Ubuntu/Debian)
+- name: Clean package manager cache (Debian family)
   ansible.builtin.apt:
     autoclean: true
   when: ansible_os_family == "Debian"
@@ -60,6 +60,7 @@
     - /usr/share/cmf
     - /var/lib/cloudera-scm-server
     - /var/cache/yum/cloudera-manager
+    - "{{ os.cm_package_cache_glob }}"
     - /var/log/cloudera-scm-server
     - /var/log/cloudera-scm-agent
     - /var/run/cloudera-scm-server

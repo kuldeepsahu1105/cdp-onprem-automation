@@ -111,8 +111,8 @@
         url_username: "{{ cm_repo_username }}"
         url_password: "{{ cm_repo_password }}"
         force_basic_auth: yes
-      loop: "{{ scm_csds }}"
-      when: scm_csds is defined
+      loop: "{{ scm_csds_effective }}"
+      when: scm_csds_effective | length > 0
       # delegate_to: cldr-mngr
 
     # ----------------------------------------

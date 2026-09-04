@@ -51,12 +51,12 @@
     - name: Set OS-specific facts
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
-    - name: Require public CM repos on Ubuntu/Debian
+    - name: Require public CM repos when internal mirror is unsupported
       ansible.builtin.fail:
         msg: >-
-          cm_repo_source=internal builds an RPM yum mirror and is not supported on Ubuntu/Debian.
-          Set cm_repo_source: public in group_vars/all.yml for Ubuntu deployments.
-      when: ansible_os_family == "Debian"
+          cm_repo_source=internal builds an RPM yum mirror and is not supported on this OS.
+          Set cm_repo_source: public in group_vars/all.yml for Ubuntu/Debian deployments.
+      when: not os.supports_internal_rpm_mirror | default(false)
 
     - name: Set CDH and Spark version variables
       ansible.builtin.set_fact:

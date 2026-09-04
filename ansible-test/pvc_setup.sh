@@ -1,234 +1,144 @@
 #!/usr/bin/env bash
+# Cloudera CDP on-prem deployment driver.
+# Works from Mac or Linux, remote laptop or cluster node (cldr-mngr / ipaserver).
+#
+# Usage:
+#   DEPLOY_PHASE=1 ./pvc_setup.sh          # prerequisites only (default)
+#   DEPLOY_PHASE=2 ./pvc_setup.sh          # identity (FreeIPA or AD auto-detect)
+#   DEPLOY_PHASE=3 ./pvc_setup.sh          # CM install
+#   DEPLOY_PHASE=all ./pvc_setup.sh        # full flow
+#   CONTROL_MODE=local ./pvc_setup.sh      # running on a host in inventory.ini
+#   ANSIBLE_PRIVATE_KEY=~/.ssh/id_rsa ./pvc_setup.sh
 
-set -e          # Exit immediately if a command fails
-set -o pipefail # Catch errors in pipes
+set -euo pipefail
 
-# Identity provider: auto-detected from inventory (see 00_detect_identity.yml)
-#   [ipaserver] has hosts -> FreeIPA full flow via 10_identity_setup.yml
-#   no ipaserver + ad_kdc_host -> AD dependent flow only
-echo "Identity provider mode: auto (detected from inventory)"
-echo
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# CM_VERSION=$CM_VERSION
-echo "CM version to deploy is: $CM_VERSION"
-echo
-# CM_VERSION=7.13.2.0
+# shellcheck source=../scripts/lib/portable.sh
+source "$REPO_ROOT/scripts/lib/portable.sh"
+# shellcheck source=../scripts/lib/ansible_env.sh
+source "$REPO_ROOT/scripts/lib/ansible_env.sh"
 
-FILE=$(ls *info.txt 2>/dev/null | head -n 1)
+ensure_bash
 
-if [[ -z "$FILE" ]]; then
-  echo "❌ No file ending with info.txt found"
-  echo
-  exit 1
-fi
+DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
+CONTROL_MODE="$(detect_control_mode "$SCRIPT_DIR/inventory.ini")"
 
-echo "📄 Using file: $FILE"
-echo
-
-CM_REPO_USERID=$(awk -F': *' '/^login:/ {print $2}' "$FILE")
-CM_REPO_PASSWD=$(awk -F': *' '/^password:/ {print $2}' "$FILE")
-
-export CM_REPO_USERID
-export CM_REPO_PASSWD
-
-# Confirm that variables are set
-echo "Environment variables for cm_repo credentials set successfully."
-echo "CM_REPO_USERNAME: $CM_REPO_USERID"
-echo "CM_REPO_PASSWORD: $CM_REPO_PASSWD"
-echo
-
-# Function to print a fancy banner
 print_banner() {
-    echo "================================================================="
-    echo "            🚀 CLOUDERA ON-PREMISE INSTALLATION SETUP 🚀          "
-    echo "================================================================="
-    echo ""
+  echo "================================================================="
+  echo "     CLOUDERA ON-PREMISE INSTALLATION (phase: $DEPLOY_PHASE)"
+  echo "     Control mode: $CONTROL_MODE | OS: $(uname -s)"
+  echo "================================================================="
 }
 
-# Function to print completion message
-print_completion() {
-    echo ""
-    echo "================================================================="
-    echo " ✅ CLOUDERA INSTALLATION SETUP COMPLETED SUCCESSFULLY! 🎉       "
-    echo "================================================================="
-    echo
-}
-
-# Function to print a fancy banner
 print_message() {
-    echo ""
-    echo "================================================================="
-    echo "            🚀 $(echo $1) 🚀          "
-    echo "================================================================="
-    echo ""
+  echo ""
+  echo "-----------------------------------------------------------------"
+  echo ">> $1"
+  echo "-----------------------------------------------------------------"
 }
 
-# Print welcome banner
+run_playbook() {
+  local playbook="$1"
+  shift || true
+  print_message "Running $playbook"
+  ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "$@"
+}
+
+cd "$SCRIPT_DIR"
 print_banner
 
-echo "Updating system and installing dependencies..."
-echo
-# sudo yum update -y
-# sudo yum install -y git dnf wget telnet net-tools bind-utils dnsutils iproute traceroute nc python3 python3-pip ansible
+PRIVATE_KEY="$(resolve_private_key "$SCRIPT_DIR")"
+echo "Using SSH private key: $PRIVATE_KEY"
+
+patch_ansible_private_key_in_group_vars "$SCRIPT_DIR" "$PRIVATE_KEY"
+
+LICENSE_KEY="$(resolve_license_file "$SCRIPT_DIR")"
+echo "Using license file: $LICENSE_KEY"
+
+load_cm_repo_credentials "$SCRIPT_DIR" || true
+if [[ -n "${CM_REPO_USERID:-}" ]]; then
+  echo "CM archive user: $CM_REPO_USERID"
+fi
+
+mapfile -t ANSIBLE_PLAYBOOK_ARGS < <(ansible_extra_args "$PRIVATE_KEY")
+
 ansible-galaxy collection install -r requirements.yml
-echo
 
-echo "Verifying installations..."
-git --version
-python3 --version
-pip3 --version
-ansible --version
-echo
+# SSH pre-reqs: skip ipaserver for AD; include all for FreeIPA if ipaserver is a managed node
+SSH_LIMIT="${ANSIBLE_LIMIT_SSH:-all:!ipaserver}"
+print_message "SSH prerequisites ($SSH_LIMIT)"
+ansible-playbook 00_setup_ssh_preqs.yml --private-key="$PRIVATE_KEY" --limit "$SSH_LIMIT"
 
-# # Clone or update repository
-# if [ -d "cdp-onprem-automation" ]; then
-#     echo "Repository already exists. Pulling latest changes..."
-#     cd cdp-onprem-automation
-#     git reset --hard
-#     git clean -fd
-#     git pull origin main
-# else
-#     echo "Cloning the repository..."
-#     git clone https://github.com/kuldeepsahu1105/cdp-onprem-automation.git
-#     cd cdp-onprem-automation
-# fi
-
-# cd ansible-test/
-
-# Find private key file
-PRIVATE_KEY=$(find . -maxdepth 1 -type f \( -name "*.pem" -o -name "id_rsa" \) | head -n 1)
-
-if [[ -z "$PRIVATE_KEY" ]]; then
-    echo "ERROR!! No private key file found in the current directory to ssh into VMs. Please put the id_rsa or private key file before trying again. Exiting ..."
-    echo
-    exit 1
-    # if [[ -f "$HOME/.ssh/id_rsa" ]]; then
-    #     PRIVATE_KEY="$HOME/.ssh/id_rsa"
-    #     echo "Using existing key from ~/.ssh/id_rsa"
-    # else
-    #     echo "No key found in ~/.ssh. Generating a new SSH key..."
-    #     ssh-keygen -t rsa -b 4096 -f "$HOME/.ssh/id_rsa" -N ""
-    #     PRIVATE_KEY="$HOME/.ssh/id_rsa"
-    #     echo "Generated new SSH key: $PRIVATE_KEY"
-    # fi
-fi
-
-echo "Using private key: $PRIVATE_KEY"
-chmod 600 "$PRIVATE_KEY"
-ls -al "$PRIVATE_KEY"
-
-# Update ansible_ssh_private_key_file in group_vars/all.yml
-echo "Updating ansible_ssh_private_key_file in group_vars/all.yml..."
-if [[ "$OSTYPE" == "darwin"* ]]; then
-  sed -i '' "/^ansible_ssh_private_key_file:/c\\
-ansible_ssh_private_key_file: $PRIVATE_KEY
-" group_vars/all.yml
-else
-  sed -i "/^ansible_ssh_private_key_file:/c\\
-ansible_ssh_private_key_file: $PRIVATE_KEY
-" group_vars/all.yml
-fi
-echo
-
-# Find license.txt file (exclude CM credential *info.txt files)
-LICENSE_KEY=""
-while IFS= read -r -d '' candidate; do
-    LICENSE_KEY="$candidate"
-    break
-done < <(find . -maxdepth 1 -type f \( -iname "*license*" ! -iname "*info.txt" \) -print0 2>/dev/null)
-
-if [[ -z "$LICENSE_KEY" ]]; then
-    echo "ERROR!! No license key file found in the current directory to upload into CM. Please put the txt file before trying again. Exiting ..."
-    echo
-    exit 1
-fi
-
-echo "Using license key: $LICENSE_KEY"
-ls -al "$LICENSE_KEY"
-echo
-
-# Ensure SSH allows password authentication and root login
-# echo "Updating SSH configuration on IPAServer..."
-# sudo sed -i 's/^#*PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-# sudo sed -i 's/^#*PermitRootLogin no/PermitRootLogin yes/' /etc/ssh/sshd_config
-# sudo systemctl restart sshd
-
-echo "Updating SSH configuration prerequisites on all cluster hosts..."
-# ansible all -i inventory.ini -m lineinfile -a "path=/etc/ssh/sshd_config regexp='^#*PasswordAuthentication' line='PasswordAuthentication yes'" --become
-# ansible all -i inventory.ini -m lineinfile -a "path=/etc/ssh/sshd_config regexp='^#*PermitRootLogin' line='PermitRootLogin yes'" --become
-# ansible all -i inventory.ini -m service -a "name=sshd state=restarted" --become
-ansible-playbook 00_setup_ssh_preqs.yml --limit 'all:!ipaserver' --private-key="$PRIVATE_KEY"
-
-# Function to print playbook execution message
-run_playbook() {
-    local playbook_name="$1"
-    echo ""
-    echo "------------------------------------------------------"
-    echo "▶ Running playbook: $playbook_name"
-    echo "------------------------------------------------------"
-
-    ansible-playbook "$playbook_name" "$@"
-    echo
+run_phase_1() {
+  run_playbook 01_install_collection.yml
+  run_playbook 02_set_hostname.yml
+  run_playbook 03_create_etc_hosts.yml
+  run_playbook 05_disable_selinux.yml
+  run_playbook 06_prereq_setup.yml
+  run_playbook 07_prereq_setup_002.yml
+  run_playbook 08_prereq_setup_003.yml
+  run_playbook 09_verify_os_prereqs.yml
 }
 
-# # Run all numbered playbooks in order
-# for playbook in $(ls -1 *.yml | grep -E '^[0-9]+' | sort -V); do
-#     echo "------------------------------------------------------"
-#     echo "▶ Running playbook: $playbook"
-#     echo "------------------------------------------------------"
-#     ansible-playbook -i inventory.ini "$playbook"
-# done
+run_phase_2() {
+  run_playbook 00_detect_identity.yml
+  run_playbook 10_identity_setup.yml
+}
 
-print_message "Running Ansible playbooks..."
+run_phase_3() {
+  local cm_user="${CM_REPO_USERID:-${CM_REPO_USERNAME:-}}"
+  local cm_pass="${CM_REPO_PASSWD:-${CM_REPO_PASSWORD:-}}"
+  local cm_extra=()
+  local cm_repo_source="${CM_REPO_SOURCE:-public}"
+  if [[ -f group_vars/all.yml ]]; then
+    cm_repo_source="$(awk -F': *' '/^cm_repo_source:/ {gsub(/["'\'']/, "", $2); print $2; exit}' group_vars/all.yml)"
+    cm_repo_source="${cm_repo_source:-public}"
+  fi
+  if [[ -n "$cm_user" && -n "$cm_pass" ]]; then
+    cm_extra=(-e "cm_repo_username=$cm_user" -e "cm_repo_password=$cm_pass")
+  fi
+  if [[ "$cm_repo_source" == "internal" ]]; then
+    run_playbook 16_setup_cm_repos.yml "${cm_extra[@]}"
+  else
+    run_playbook 17_download_repos.yml "${cm_extra[@]}"
+  fi
+  run_playbook 18_setup_postgres.yml "${cm_extra[@]}"
+  run_playbook 19_start_cm.yml "${cm_extra[@]}"
+  run_playbook 20_verify_cm.yml -e ansible_become=false
+  run_playbook 21_setup_cm_license.yml -e ansible_become=false
+}
 
-print_message "Installing collection dependencies..."
-run_playbook "01_install_collection.yml"
+run_phase_4() {
+  run_playbook 22_setup_cm_autotls.yml
+  run_playbook 23_setup_cm_krbs.yml
+  run_playbook 24_setup_cm_cms.yml
+  run_playbook 25_setup_cm_ldap.yml
+  run_playbook 26_setup_base_cluster.yml
+}
 
-print_message "Setting hostname..."
-run_playbook "02_set_hostname.yml"
+case "$DEPLOY_PHASE" in
+  1|prereq|phase1) run_phase_1 ;;
+  2|identity|phase2) run_phase_2 ;;
+  3|cm|phase3) run_phase_3 ;;
+  4|cluster|phase4) run_phase_4 ;;
+  all|full)
+    run_phase_1
+    sleep 5
+    run_phase_2
+    sleep 5
+    run_phase_3
+    sleep 5
+    run_phase_4
+    ;;
+  *)
+    echo "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|4|all or prereq|identity|cm|cluster|all)"
+    exit 1
+    ;;
+esac
 
-print_message "Creating /etc/hosts entries..."
-run_playbook "03_create_etc_hosts.yml"
-
-# print_message "Setting up autossh..."
-# run_playbook "04_setup_autossh.yml"
-
-print_message "Disabling SELinux..."
-run_playbook "05_disable_selinux.yml"
-
-print_message "Running prerequisite setup..."
-run_playbook "06_prereq_setup.yml"
-
-print_message "Running additional prerequisite setup..."
-run_playbook "07_prereq_setup_002.yml"
-
-print_message "Running more prerequisite setup..."
-run_playbook "08_prereq_setup_003.yml"
-
-print_message "Verifying OS Prereqs..."
-run_playbook "09_verify_os_prereqs.yml"
-
-sleep 10
-
-# print_message "Identity + DNS setup (auto-detect FreeIPA vs AD)..."
-# run_playbook "10_identity_setup.yml"
-
-# print_message "Setting up CM/CDH repositories..."
-# Public (default): ansible-playbook 17_download_repos.yml -e cm_repo_username=... -e cm_repo_password=...
-# Internal mirror: set cm_repo_source=internal in group_vars, then:
-# run_playbook "16_setup_cm_repos.yml" -e cm_repo_username="$CM_REPO_USERID" -e cm_repo_password="$CM_REPO_PASSWD"
-
-# print_message "Setting up postgres db..."
-# run_playbook "18_setup_postgres.yml" -e cm_repo_username="$CM_REPO_USERID" -e cm_repo_password="$CM_REPO_PASSWD" -e cm_version="$CM_VERSION"
-
-# print_message "Setting up (installing) CM server..."
-# run_playbook "19_start_cm.yml" -e cm_repo_username="$CM_REPO_USERID" -e cm_repo_password="$CM_REPO_PASSWD"
-
-# print_message "Verifying CM server is UP and get details..."
-# run_playbook 20_verify_cm.yml -e "ansible_become=false"
-
-# print_message "Uploading (installing) CM license..."
-# run_playbook "21_setup_cm_license.yml" -e "ansible_become=false"
-
-# Print completion banner
-print_completion
+echo ""
+echo "================================================================="
+echo " Phase $DEPLOY_PHASE completed successfully"
+echo "================================================================="

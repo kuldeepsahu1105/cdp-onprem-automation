@@ -1,23 +1,14 @@
 ---
-- name: Stop and disable firewall service (RHEL)
+- name: Stop and disable firewall service
   ansible.builtin.service:
-    name: "{{ os_vars.RedHat.firewall_service }}"
+    name: "{{ os_vars[ansible_os_family].firewall_service }}"
     state: stopped
     enabled: false
-  when: ansible_os_family == "RedHat"
   ignore_errors: true
 
-- name: Disable UFW firewall (Ubuntu/Debian)
+- name: Disable UFW firewall (Debian family)
   ansible.builtin.command: ufw disable
   when: ansible_os_family == "Debian"
   register: ufw_disable
   changed_when: "'Firewall stopped and disabled' in ufw_disable.stdout"
   failed_when: false
-
-- name: Stop and disable UFW service (Ubuntu/Debian)
-  ansible.builtin.service:
-    name: "{{ os_vars.Debian.firewall_service }}"
-    state: stopped
-    enabled: false
-  when: ansible_os_family == "Debian"
-  ignore_errors: true

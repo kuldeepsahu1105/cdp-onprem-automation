@@ -20,6 +20,34 @@ ansible-galaxy collection install -r requirements.yml
 3. Configure `group_vars/all.yml` (domain, passwords, AD vars if needed).
 4. Place `license.txt` and SSH key (`id_rsa` or `.pem`) in `ansible-test/`.
 
+## Control node and OS support
+
+The wrappers and playbooks support:
+
+| Control node | How to run |
+|---|---|
+| Mac laptop (remote) | `brew install ansible jq`; run from repo root or `ansible-test/` |
+| RHEL / Ubuntu laptop (remote) | Install `ansible`, `jq`; run `./clone_and_run_pvc_automation.sh` or `cd ansible-test && ./pvc_setup.sh` |
+| Cluster node (`cldr-mngr`, `ipaserver`) | `CONTROL_MODE=local DEPLOY_PHASE=all ./pvc_setup.sh` from `ansible-test/` (uses `~/.ssh/id_rsa` if no PEM in cwd) |
+
+| Target OS | CM repo mode | Notes |
+|---|---|---|
+| RHEL 8/9 | `public` or `internal` | Internal mirror downloads RPMs + createrepo |
+| Ubuntu 22.04 / 24.04 | `public` only | Downloads official `cloudera-manager.list` + `archive.key` |
+| Debian | `public` only | Cloudera publishes Ubuntu apt repos; set `cm_debian_use_ubuntu_repo: true` to use `ubuntu2204` packages |
+
+### Phased deployment (`pvc_setup.sh`)
+
+```bash
+DEPLOY_PHASE=1 ./pvc_setup.sh    # prerequisites (00–09)
+DEPLOY_PHASE=2 ./pvc_setup.sh    # identity: FreeIPA or AD (auto-detect)
+DEPLOY_PHASE=3 ./pvc_setup.sh    # CM install (17/18/19/20/21)
+DEPLOY_PHASE=4 ./pvc_setup.sh    # autotls, kerberos, CMS, base cluster
+DEPLOY_PHASE=all ./pvc_setup.sh  # full flow
+```
+
+Identity is auto-detected: `[ipaserver]` in inventory → FreeIPA; empty ipaserver + `ad_kdc_host` → AD.
+
 ---
 
 ## Scenario A — AWS deployment with FreeIPA

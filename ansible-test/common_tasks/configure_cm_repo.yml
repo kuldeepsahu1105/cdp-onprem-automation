@@ -4,10 +4,31 @@
     cm_repo_os_version: "{{ ansible_distribution | lower }}{{ ansible_distribution_major_version }}"
   when: ansible_os_family == "RedHat"
 
-- name: Set CM repository OS version path (Ubuntu/Debian)
+- name: Set CM repository OS version path (Ubuntu)
   ansible.builtin.set_fact:
     cm_repo_os_version: "ubuntu{{ ansible_distribution_version | replace('.', '') }}"
-  when: ansible_os_family == "Debian"
+  when:
+    - ansible_os_family == "Debian"
+    - ansible_distribution == "Ubuntu"
+
+- name: Set CM repository OS version path (Debian with Ubuntu repo fallback)
+  ansible.builtin.set_fact:
+    cm_repo_os_version: "ubuntu{{ cm_debian_ubuntu_compat_version }}"
+  when:
+    - ansible_os_family == "Debian"
+    - ansible_distribution == "Debian"
+    - cm_debian_use_ubuntu_repo | default(false) | bool
+
+- name: Reject unsupported pure Debian CM apt repo path
+  ansible.builtin.fail:
+    msg: >-
+      Cloudera Manager apt repositories are published for Ubuntu (ubuntu2204/ubuntu2404).
+      Use Ubuntu for cldr-mngr, or set cm_debian_use_ubuntu_repo: true in group_vars/all.yml
+      to use ubuntu{{ cm_debian_ubuntu_compat_version }} packages on Debian (unsupported by Cloudera).
+  when:
+    - ansible_os_family == "Debian"
+    - ansible_distribution == "Debian"
+    - not (cm_debian_use_ubuntu_repo | default(false) | bool)
 
 - name: Download official Cloudera Manager yum repo file (RHEL, public)
   ansible.builtin.get_url:
@@ -47,7 +68,7 @@
     - ansible_os_family == "RedHat"
     - cm_repo_source == 'internal'
 
-- name: Download official Cloudera Manager apt sources list (Ubuntu/Debian, public)
+- name: Download official Cloudera Manager apt sources list (Debian family, public)
   ansible.builtin.get_url:
     url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt/cloudera-manager.list"
     dest: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
@@ -74,7 +95,7 @@
     - ansible_os_family == "Debian"
     - cm_repo_source == 'public'
 
-- name: Download Cloudera Manager apt archive signing key (Ubuntu/Debian, public)
+- name: Download Cloudera Manager apt archive signing key (Debian family, public)
   ansible.builtin.get_url:
     url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt/archive.key"
     dest: /tmp/cloudera-cm-archive.key
@@ -86,7 +107,7 @@
     - ansible_os_family == "Debian"
     - cm_repo_source == 'public'
 
-- name: Install Cloudera Manager apt archive signing key
+- name: Import Cloudera Manager apt archive signing key
   ansible.builtin.apt_key:
     file: /tmp/cloudera-cm-archive.key
     state: present
@@ -105,7 +126,7 @@
     - ansible_os_family == "Debian"
     - cm_repo_source == 'internal'
 
-- name: Update apt cache after adding Cloudera Manager repository (Ubuntu/Debian)
+- name: Update apt cache after adding Cloudera Manager repository (Debian family)
   ansible.builtin.apt:
     update_cache: true
   when: ansible_os_family == "Debian"

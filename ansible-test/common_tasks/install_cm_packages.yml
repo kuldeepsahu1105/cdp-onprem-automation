@@ -1,4 +1,7 @@
 ---
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: set_os_facts.yml
+
 - name: Require Cloudera archive credentials for public CM repository
   ansible.builtin.assert:
     that:
@@ -8,14 +11,14 @@
       - cm_repo_password != '<password>'
     fail_msg: >-
       Set cm_repo_username and cm_repo_password (archive.cloudera.com credentials).
-      On Ubuntu use cm_repo_source: public in group_vars/all.yml.
+      Debian/Ubuntu hosts require cm_repo_source: public in group_vars/all.yml.
   when: cm_repo_source == 'public'
 
 - name: Configure Cloudera Manager repository
   ansible.builtin.import_tasks: configure_cm_repo.yml
 
-- name: Apply Ubuntu-specific CM install prerequisites
-  ansible.builtin.import_tasks: prepare_ubuntu_cm_install.yml
+- name: Apply Debian-family CM install prerequisites
+  ansible.builtin.import_tasks: prepare_debian_cm_install.yml
 
 - name: Install Cloudera Manager packages
   ansible.builtin.package:
