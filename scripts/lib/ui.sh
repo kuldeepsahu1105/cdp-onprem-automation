@@ -85,6 +85,9 @@ ui_config_summary() {
   fi
   ui_kv "AMI" "${AMI_ID:-—}"
   ui_kv "CM version" "${CM_VERSION:-—}"
+  case "${DRY_RUN:-${ANSIBLE_DRY_RUN:-false}}" in
+    1|true|yes|TRUE|YES|on|ON) ui_kv "Dry run" "enabled (ansible --check --diff)" ;;
+  esac
 }
 
 ui_inventory_summary() {

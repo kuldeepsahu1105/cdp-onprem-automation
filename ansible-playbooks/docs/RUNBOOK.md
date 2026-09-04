@@ -50,6 +50,22 @@ DEPLOY_PHASE=5 ./pvc_setup.sh    # ECS cluster only (27)
 DEPLOY_PHASE=all ./pvc_setup.sh  # full flow
 ```
 
+**Dry run** (preview changes without applying):
+
+```bash
+# Ansible — check mode + diff
+DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
+./pvc_setup.sh --dry-run
+
+# Via wrapper
+DRY_RUN=true DEPLOY_PHASE=3 ./clone_and_run_pvc_automation.sh
+
+# Terraform — plan only (no apply, no inventory copy)
+DRY_RUN=true ./clone_and_run_terraform.sh
+```
+
+Set `ANSIBLE_DIFF=false` to omit `--diff` during Ansible dry runs. CM API playbooks (`26`, `27`) may still call Cloudera Manager APIs even in check mode.
+
 Identity is auto-detected: `[ipaserver]` in inventory → FreeIPA; empty ipaserver + `ad_kdc_host` → AD.
 
 ---

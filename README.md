@@ -272,8 +272,10 @@ cdp-onprem-automation/
 cd ansible-playbooks
 ansible-galaxy collection install -r requirements.yml
 ansible-playbook -i inventory.ini 00_detect_identity.yml
-ansible-playbook -i inventory.ini 10_identity_setup.yml
-# ... see RUNBOOK.md for full sequence
+DEPLOY_PHASE=all ./pvc_setup.sh
+
+# Dry run (preview changes, no apply)
+DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
 ```
 
 ## Key features
@@ -283,6 +285,7 @@ ansible-playbook -i inventory.ini 10_identity_setup.yml
 - **OS-independent playbooks** — RHEL and Ubuntu via `os_vars` map
 - **Persistent DNS** — netplan (Ubuntu) or resolv.conf; AWS vs bare-metal auto-detection
 - **Safe cleanup** — `99_cleanup.yml` with explicit confirmation and per-component toggles
+- **Dry run** — `DRY_RUN=true` for Ansible (`--check --diff`) or Terraform (plan only)
 
 ## Authors
 

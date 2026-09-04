@@ -221,6 +221,13 @@ load_cm_repo_credentials() {
   export CM_REPO_USERID CM_REPO_PASSWD
 }
 
+is_dry_run() {
+  case "${DRY_RUN:-${ANSIBLE_DRY_RUN:-false}}" in
+    1|true|yes|TRUE|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 ansible_extra_args() {
   local key="${1:-}"
   local args=()
@@ -229,6 +236,12 @@ ansible_extra_args() {
   fi
   if [[ -n "${ANSIBLE_LIMIT:-}" ]]; then
     args+=(--limit "$ANSIBLE_LIMIT")
+  fi
+  if is_dry_run; then
+    args+=(--check)
+    if [[ "${ANSIBLE_DIFF:-true}" != "false" ]]; then
+      args+=(--diff)
+    fi
   fi
   printf '%s\n' "${args[@]}"
 }

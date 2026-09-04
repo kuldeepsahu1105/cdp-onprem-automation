@@ -60,4 +60,6 @@ Spark is bundled in the CDH parcel for `>= 7.3.1` — separate SPARK3 download i
 | 5 — ECS (Data Services) | `27` | `DEPLOY_PHASE=5 ./pvc_setup.sh` |
 | Cleanup | `99` | `99_cleanup.yml` |
 
+**Dry run:** `DRY_RUN=true ./pvc_setup.sh` or `./pvc_setup.sh --dry-run` — runs Ansible with `--check --diff`. Terraform wrapper: `DRY_RUN=true ./clone_and_run_terraform.sh` (plan only).
+
 See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full execution steps and [docs/REFERENCE.md](docs/REFERENCE.md) for playbook and variable details.

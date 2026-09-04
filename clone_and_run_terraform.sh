@@ -246,6 +246,13 @@ fi
 print_message "Planning Terraform"
 terraform plan "${TF_VARS[@]}" -out=tfplan.out
 
+case "${DRY_RUN:-false}" in
+  1|true|yes|TRUE|YES|on|ON)
+    ui_done "Terraform dry run complete (plan only — no apply)"
+    exit 0
+    ;;
+esac
+
 print_message "Applying Terraform"
 terraform apply -auto-approve tfplan.out
 

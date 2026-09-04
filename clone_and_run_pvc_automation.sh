@@ -31,7 +31,7 @@ source "$SCRIPTS_LIB/ansible_env.sh"
 source "$SCRIPTS_LIB/ui.sh"
 ensure_bash
 
-ui_banner "Cloudera PVC Ansible Deployment" "Wrapper: clone_and_run_pvc_automation.sh"
+ui_banner "Cloudera PVC Ansible Deployment" "Wrapper: clone_and_run_pvc_automation.sh | DRY_RUN=${DRY_RUN:-false}"
 
 # shellcheck source=scripts/lib/load_tfvars.sh
 source "$SCRIPTS_LIB/load_tfvars.sh"
@@ -49,14 +49,17 @@ ui_kv "SSH private key" "$pem_file"
 
 if [[ "${DEPLOY_PHASE:-1}" =~ ^(3|cm|phase3|4|cluster|phase4|all|full)$ ]]; then
   license_file="$(resolve_license_file "$ANSIBLE_DIR")"
-  ensure_license_txt "$ANSIBLE_DIR" "$license_file"
+  if ! is_dry_run; then
+    ensure_license_txt "$ANSIBLE_DIR" "$license_file"
+  fi
   ui_kv "License file" "$license_file"
 fi
 
 cd "$ANSIBLE_DIR"
 
-ui_step "Executing pvc_setup.sh (DEPLOY_PHASE=${DEPLOY_PHASE:-1}, CONTROL_MODE=${CONTROL_MODE:-auto})"
+ui_step "Executing pvc_setup.sh (DEPLOY_PHASE=${DEPLOY_PHASE:-1}, CONTROL_MODE=${CONTROL_MODE:-auto}, DRY_RUN=${DRY_RUN:-false})"
 chmod +x pvc_setup.sh
 export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 export CONTROL_MODE="${CONTROL_MODE:-auto}"
-bash ./pvc_setup.sh
+export DRY_RUN="${DRY_RUN:-false}"
+bash ./pvc_setup.sh "$@"
