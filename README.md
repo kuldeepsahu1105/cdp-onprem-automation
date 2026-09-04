@@ -44,23 +44,28 @@ Both formats set the same variables and produce the same `TF_VARS` for Terraform
 
 | Section | Variables |
 |---|---|
-| General | `AWS_REGION`, `OWNER`, `ENVIRONMENT`, `TERRAFORM_VERSION` |
+| General | `AWS_REGION`, `OWNER`, `ENVIRONMENT` |
 | CPU architecture | `CPU_ARCHITECTURE` (`x86_64` \| `arm64`), `APPLY_GRAVITON_DEFAULTS`, `AUTO_RESOLVE_ARM64_AMI`, `ECS_DEPLOY_ON_ARM64` |
-| Cloudera | `CM_VERSION` |
-| AWS resources | `EXISTING_SG_NAME`, `EXISTING_KEYPAIR_NAME` |
+| Terraform resource mode | `CREATE_VPC`, `CREATE_NEW_SG`, `CREATE_KEYPAIR`, `CREATE_EIP` |
+| Existing AWS resources | `EXISTING_SG_NAME`, `EXISTING_KEYPAIR_NAME` (when create flags are `false`) |
+| New VPC / SG / keypair | `VPC_*`, `SG_NAME`, `ALLOWED_CIDRS`, `KEYPAIR_NAME`, `CLDR_EIP_NAME` (when create flags are `true`) |
+| Cloudera versions | `CM_VERSION`; optional commented `CDH_VERSION`, `ECS_PVC_DS_VERSION` (Ansible deploy uses `group_vars/all.yml`) |
 | AMI | `AMI_ID` (shared across instance groups) |
 | Instance groups | `CLDR_MNGR_*`, `IPA_SERVER_*`, `PVCBASE_*`, `PVCECS_*` |
+| Tooling | `TERRAFORM_VERSION` (default `latest`, at bottom of file) |
+
+When `EXISTING_SG_NAME` and `EXISTING_KEYPAIR_NAME` are set, use `CREATE_NEW_SG=false` and `CREATE_KEYPAIR=false` — no other duplicate true/false flags needed. `CREATE_VPC=false` uses the account default VPC.
 
 ```bash
-# .tfvars.env — edit by section, one variable per line with inline comments
-ENVIRONMENT="staging"
-PVCBASE_WORKER_COUNT=5
-PVCBASE_WORKER_INSTANCE_TYPE="m5.4xlarge"
-PVCECS_WORKER_COUNT=7
-PVCECS_WORKER_VOLUME_SIZE=1300
+# .tfvars.env — typical existing-resources layout
+CREATE_VPC="false"
+CREATE_NEW_SG="false"
+CREATE_KEYPAIR="false"
+EXISTING_SG_NAME="testing-pvc_cluster_sg"
+EXISTING_KEYPAIR_NAME="kuldeep-pvc-session"
 ```
 
-CDH and ECS **software versions** and cluster settings are configured in Ansible (`ansible-playbooks/group_vars/all.yml`), not in `.tfvars.env` / `.tfvars.yaml`. Terraform only provisions the EC2 instance groups; Ansible deploys the clusters onto those hosts.
+CDH and ECS **deploy versions** are applied by Ansible (`ansible-playbooks/group_vars/all.yml`). Optional `CDH_VERSION` / `ECS_PVC_DS_VERSION` comments in tfvars are for reference only — edit `all.yml` before cluster deploy.
 
 ## CDH base cluster deployment
 
