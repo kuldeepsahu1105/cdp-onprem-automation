@@ -4,8 +4,7 @@
 UI_STEP_NUM=0
 UI_WIDTH=66
 UI_INDENT='    '
-UI_STEP_LABEL_W=9   # "Step 10:"
-UI_VALUE_COL=38
+UI_KV_LABEL_W=22
 
 ui_is_tty() {
   [[ -t 1 ]]
@@ -41,19 +40,15 @@ ui_rule() {
   ui_nl
 }
 
-# Key/value: fixed step column, emoji, label, aligned values
 ui_kv() {
   local key="$1"
   local value="$2"
   local emoji="${3:-}"
-  local left="${UI_INDENT}$(printf '%-*s' "$UI_STEP_LABEL_W" '')"
-  [[ -n "$emoji" ]] && left+="${emoji}  "
-  left+="${key}:"
-  if ui_is_tty; then
-    printf '\033[2m%-*s\033[0m %s\n' "$UI_VALUE_COL" "$left" "$value"
-  else
-    printf '%-*s %s\n' "$UI_VALUE_COL" "$left" "$value"
-  fi
+  printf '%s' "$UI_INDENT"
+  [[ -n "$emoji" ]] && printf '%s  ' "$emoji"
+  ui_c "36" "$(printf '%-*s' "$UI_KV_LABEL_W" "${key}:")"
+  ui_c "1" "$value"
+  ui_nl
 }
 
 ui_banner() {
@@ -62,12 +57,13 @@ ui_banner() {
 
   ui_nl
   ui_rule "═"
-  printf '  🏗️  '
+  printf '  '
+  ui_c "1;35" '🏗️  '
   ui_c "1;36" "$title"
   ui_nl
   if [[ -n "$subtitle" ]]; then
     printf '      '
-    ui_c "2" "$subtitle"
+    ui_c "33" "$subtitle"
     ui_nl
   fi
   ui_rule "═"
@@ -80,7 +76,7 @@ ui_section() {
   UI_STEP_NUM=0
   ui_nl
   ui_rule "═"
-  printf '  %-3s  ' "$emoji"
+  printf '  %s  ' "$emoji"
   ui_c "1;34" "$title"
   ui_nl
   ui_rule "─"
@@ -90,7 +86,7 @@ ui_subsection() {
   local title="$1"
   local emoji="${2:-•}"
   ui_nl
-  printf '%s%-*s %s  ' "$UI_INDENT" "$UI_STEP_LABEL_W" '' "$emoji"
+  printf '%s%s  ' "$UI_INDENT" "$emoji"
   ui_c "1;35" "$title"
   ui_nl
 }
@@ -101,32 +97,41 @@ ui_step() {
   UI_STEP_NUM=$((UI_STEP_NUM + 1))
   ui_nl
   printf '%s' "$UI_INDENT"
-  if ui_is_tty; then
-    printf '\033[1m%-*s\033[0m' "$UI_STEP_LABEL_W" "Step ${UI_STEP_NUM}:"
-  else
-    printf '%-*s' "$UI_STEP_LABEL_W" "Step ${UI_STEP_NUM}:"
-  fi
-  printf ' %s  %s\n' "$emoji" "$msg"
+  ui_c "1;36" "Step ${UI_STEP_NUM}:"
+  printf ' %s  ' "$emoji"
+  ui_c "1" "$msg"
+  ui_nl
 }
 
 ui_ok() {
-  printf '%s%-*s    ' "$UI_INDENT" "$UI_STEP_LABEL_W" ''
-  ui_c "32" "✅"
-  printf '  %s\n' "$*"
+  printf '%s  ' "$UI_INDENT"
+  ui_c "32" '✅'
+  printf '  '
+  ui_c "32" "$*"
+  ui_nl
 }
 
 ui_info() {
-  printf '%s%-*s 💡  ' "$UI_INDENT" "$UI_STEP_LABEL_W" ''
+  printf '%s' "$UI_INDENT"
+  ui_c "33" '💡  '
   ui_c "36" "$*"
   ui_nl
 }
 
 ui_warn() {
-  printf '%s%-*s ⚠️  %s\n' "$UI_INDENT" "$UI_STEP_LABEL_W" '' "$*" >&2
+  {
+    printf '%s' "$UI_INDENT"
+    ui_c "33" "⚠️  $*"
+    ui_nl
+  } >&2
 }
 
 ui_err() {
-  printf '%s%-*s ❌  %s\n' "$UI_INDENT" "$UI_STEP_LABEL_W" '' "$*" >&2
+  {
+    printf '%s' "$UI_INDENT"
+    ui_c "31" "❌  $*"
+    ui_nl
+  } >&2
 }
 
 ui_config_summary() {
@@ -142,8 +147,12 @@ ui_config_summary() {
   ui_kv "AMI" "${AMI_ID:-—}" "💿"
   ui_kv "CM version" "${CM_VERSION:-—}" "🔖"
   case "${DRY_RUN:-${ANSIBLE_DRY_RUN:-false}}" in
-    1|true|yes|TRUE|YES|on|ON) ui_kv "Dry run" "enabled (no changes applied)" "🧪" ;;
-    *) ui_kv "Dry run" "disabled" "▶" ;;
+    1|true|yes|TRUE|YES|on|ON)
+      ui_kv "Dry run" "enabled (no changes applied)" "🧪"
+      ;;
+    *)
+      ui_kv "Dry run" "disabled" "▶"
+      ;;
   esac
 }
 
@@ -151,7 +160,7 @@ ui_inventory_summary() {
   local inventory_file="$1"
   ui_subsection "Host groups" "📊"
   if [[ -f "$inventory_file" ]] && command -v awk >/dev/null 2>&1; then
-    awk -v indent="$UI_INDENT" -v label_w="$UI_STEP_LABEL_W" -v col="$UI_VALUE_COL" '
+    awk -v indent="$UI_INDENT" -v label_w="$UI_KV_LABEL_W" '
       /^\[/ {
         gsub(/[\[\]]/, "", $0)
         group=$0
@@ -162,8 +171,7 @@ ui_inventory_summary() {
       }
       END {
         for (g in count) {
-          left = sprintf("%s%*s💻  %s:", indent, label_w, "", g)
-          printf "%-*s %d host(s)\n", col, left, count[g]
+          printf "%s💻  %-*s %d host(s)\n", indent, label_w, g ":", count[g]
         }
       }
     ' "$inventory_file" | sort
@@ -181,8 +189,8 @@ ui_done() {
   local msg="${1:-Completed successfully}"
   ui_nl
   ui_rule "═"
-  printf '  🎉  '
-  ui_c "1;32" "$msg"
+  printf '  '
+  ui_c "1;32" "🎉  ${msg}"
   ui_nl
   ui_rule "═"
   ui_nl
