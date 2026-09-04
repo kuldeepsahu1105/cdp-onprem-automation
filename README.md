@@ -291,3 +291,32 @@ DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
 
 - Kuldeep Sahu — ksahu@cloudera.com
 - Yash Gulati — ygulati@cloudera.com
+
+## Troubleshooting — UI / dry run not showing
+
+You need a **recent git checkout** (commit `979b503` or later). From your clone:
+
+```bash
+cd /Users/ksahu/cdp-onprem-automation   # or your clone path
+git pull origin main
+test -f scripts/lib/ui.sh && echo "UI OK" || echo "OLD CODE — pull again"
+git rev-parse --short HEAD              # should be 979b503 or newer
+```
+
+**Where to run:**
+
+| Entry point | Command |
+|---|---|
+| Repo root (recommended) | `./clone_and_run_pvc_automation.sh` or `DRY_RUN=true ./clone_and_run_terraform.sh` |
+| Ansible only | `cd ansible-playbooks && DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh` |
+| Deployment dir (wget wrappers) | Put `.tfvars` next to wrapper; wrapper re-execs into `cdp-onprem-automation/` after clone |
+
+**Dry run:**
+
+```bash
+DRY_RUN=true DEPLOY_PHASE=1 ./clone_and_run_pvc_automation.sh
+./clone_and_run_pvc_automation.sh --dry-run --help
+DRY_RUN=true ./clone_and_run_terraform.sh
+```
+
+Running `ansible-playbook` directly **bypasses** the wrapper UI. Use `./pvc_setup.sh` or the top-level wrappers.

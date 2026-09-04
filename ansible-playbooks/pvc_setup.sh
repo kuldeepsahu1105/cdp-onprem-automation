@@ -8,15 +8,17 @@
 #   DEPLOY_PHASE=3 ./pvc_setup.sh          # CM install
 #   DEPLOY_PHASE=all ./pvc_setup.sh        # full flow
 #   CONTROL_MODE=local ./pvc_setup.sh      # running on a host in inventory.ini
-#   CONTROL_MODE=local ./pvc_setup.sh      # running on a host in inventory.ini
 #   ANSIBLE_PRIVATE_KEY=~/.ssh/id_rsa ./pvc_setup.sh
 #   DRY_RUN=true ./pvc_setup.sh            # ansible --check --diff (no changes applied)
 #   ./pvc_setup.sh --dry-run               # same as DRY_RUN=true
+#   ./pvc_setup.sh --help                  # usage
 
 set -euo pipefail
 
+WRAPPER_SHOW_HELP=false
 for arg in "$@"; do
   case "$arg" in
+    --help|-h) WRAPPER_SHOW_HELP=true ;;
     --dry-run|-n) export DRY_RUN=true ;;
   esac
 done
@@ -30,6 +32,37 @@ source "$REPO_ROOT/scripts/lib/portable.sh"
 source "$REPO_ROOT/scripts/lib/ansible_env.sh"
 # shellcheck source=../scripts/lib/ui.sh
 source "$REPO_ROOT/scripts/lib/ui.sh"
+# shellcheck source=../scripts/lib/wrapper_info.sh
+source "$REPO_ROOT/scripts/lib/wrapper_info.sh"
+
+if [[ "${WRAPPER_SHOW_HELP:-false}" == "true" ]]; then
+  cat <<'EOF'
+pvc_setup.sh — Cloudera PVC Ansible deployment driver
+
+Usage:
+  DEPLOY_PHASE=1 ./pvc_setup.sh
+  DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
+  ./pvc_setup.sh --dry-run
+
+Options:
+  --dry-run, -n    Ansible --check --diff (no changes)
+  --help, -h       Show this help
+
+Environment:
+  DEPLOY_PHASE     1|2|3|4|5|all
+  DRY_RUN          true|false
+  CONTROL_MODE     auto|local|remote
+
+Run from: ansible-playbooks/ inside a git clone (needs ../scripts/lib/ui.sh)
+EOF
+  exit 0
+fi
+
+if [[ ! -f "$REPO_ROOT/scripts/lib/ui.sh" ]]; then
+  echo "Error: run from git clone root — missing $REPO_ROOT/scripts/lib/ui.sh" >&2
+  echo "  cd /path/to/cdp-onprem-automation && git pull origin main" >&2
+  exit 1
+fi
 
 ensure_bash
 
@@ -43,11 +76,6 @@ if [[ "${CPU_ARCHITECTURE:-x86_64}" == "arm64" ]]; then
 fi
 
 print_banner() {
-  local mode="Phase: ${DEPLOY_PHASE} | Control: ${CONTROL_MODE} | CPU: ${CPU_ARCHITECTURE:-x86_64}"
-  if is_dry_run; then
-    mode="${mode} | DRY RUN"
-  fi
-  ui_banner "Cloudera Private Cloud Deployment" "$mode"
   if is_dry_run; then
     ui_warn "Dry run enabled — Ansible will use --check --diff (no changes applied)."
     ui_warn "CM API playbooks (26/27) may still perform live API calls; use DEPLOY_PHASE=1-3 to limit scope."
@@ -70,6 +98,10 @@ print_message() {
 }
 
 cd "$SCRIPT_DIR"
+wrapper_print_identity "Cloudera Private Cloud Deployment (pvc_setup.sh)" "$REPO_ROOT" "$REPO_ROOT/scripts/lib"
+ui_kv "Phase" "${DEPLOY_PHASE}"
+ui_kv "Control mode" "${CONTROL_MODE}"
+ui_kv "CPU" "${CPU_ARCHITECTURE:-x86_64}"
 print_banner
 
 PRIVATE_KEY="$(resolve_private_key "$SCRIPT_DIR")"

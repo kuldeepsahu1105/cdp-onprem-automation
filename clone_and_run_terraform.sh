@@ -8,6 +8,21 @@ set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run|-n) export DRY_RUN=true ;;
+    --help|-h)
+      cat <<'EOF'
+Usage: ./clone_and_run_terraform.sh [--dry-run] [--help]
+  DRY_RUN=true     terraform plan only (no apply)
+  --dry-run, -n    same as DRY_RUN=true
+Run from git repo root or deployment dir. Requires scripts/lib/ui.sh (git pull if missing).
+EOF
+      exit 0
+      ;;
+  esac
+done
+
 HOST_MACHINE_ARCH="$(uname -m)"
 case "$HOST_MACHINE_ARCH" in
   aarch64|arm64) TF_DL_ARCH="arm64"; AWSCLI_DL_ARCH="aarch64" ;;
@@ -198,16 +213,28 @@ print_message "Loading deployment configuration"
 SCRIPTS_LIB="$(resolve_scripts_lib)"
 # shellcheck source=scripts/lib/ui.sh
 [[ -f "$SCRIPTS_LIB/ui.sh" ]] && source "$SCRIPTS_LIB/ui.sh"
+# shellcheck source=scripts/lib/wrapper_info.sh
+[[ -f "$SCRIPTS_LIB/wrapper_info.sh" ]] && source "$SCRIPTS_LIB/wrapper_info.sh"
 # shellcheck source=scripts/lib/load_tfvars.sh
 source "$SCRIPTS_LIB/load_tfvars.sh"
+
+if [[ ! -f "$SCRIPTS_LIB/ui.sh" ]]; then
+    echo "ERROR: Missing scripts/lib/ui.sh — old checkout?" >&2
+    echo "  cd $(dirname "$SCRIPTS_LIB")/.. && git pull origin main" >&2
+    exit 1
+fi
+
+wrapper_reexec_from_repo_if_needed "$SCRIPT_DIR" "${BASH_SOURCE[0]}" "$(basename "$0")" "$@" || true
+
 set -a
 load_tfvars
 set +a
-if declare -F ui_config_summary >/dev/null 2>&1; then
-    ui_banner "CDP On-Prem Terraform Provisioning" "Environment: ${ENVIRONMENT}"
+REPO_ROOT="$(cd "$SCRIPTS_LIB/../.." && pwd)"
+if declare -F wrapper_print_identity >/dev/null 2>&1; then
+    wrapper_print_identity "CDP On-Prem Terraform Provisioning" "$REPO_ROOT" "$SCRIPTS_LIB"
     ui_config_summary
 else
-    echo "Loaded configuration from: ${TFVARS_LOADED_FROM}"
+    echo "Loaded configuration from: ${TFVARS_LOADED_FROM:-.tfvars}"
 fi
 
 print_message "Verify environment: ${ENVIRONMENT}"
