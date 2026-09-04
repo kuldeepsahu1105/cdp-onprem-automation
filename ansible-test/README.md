@@ -28,7 +28,7 @@ For the full deployment sequence, identity scenarios, and cleanup steps, see the
 | CM install (`19_start_cm`) | Yes | Yes | Yes* |
 | Public CM repo | Yes | Yes | Yes* |
 | Internal CM mirror | RPM + createrepo | apt `.deb` mirror | apt* |
-| CDH parcels / base cluster | `jammy` / `noble` / `el8` / `el9` (auto-detect) | Same |
+| CDH parcels / base cluster | `el8` / `el9` | `jammy` / `noble` | Same* |
 
 \*Debian uses Ubuntu apt archive paths when `cm_debian_use_ubuntu_repo: true`.
 

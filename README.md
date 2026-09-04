@@ -75,7 +75,7 @@ Configured in `ansible-test/group_vars/all.yml`:
 | Component | Version |
 |---|---|
 | Cloudera Manager | `7.13.2.10000` |
-| CDH (Runtime parcel) | `7.3.2.10000` (`cdh_parcel_os_suffix`: `el8` default) |
+| CDH (Runtime parcel) | `7.3.2.10000` (`cdh_parcel_os_suffix`: `auto` default) |
 | Java | `17` |
 | Python | `3.11` |
 | PostgreSQL | `18` |

@@ -303,8 +303,30 @@ All Ansible automation lives under `ansible-test/`.
 Default versions (configured in `group_vars/all.yml`):
 
 * Cloudera Manager `7.13.2.10000`
-* CDH Runtime `7.3.2.10000`
+* CDH Runtime `7.3.2.10000` (`cdh_parcel_os_suffix`: `auto` — selects `jammy`/`noble` on Ubuntu workers, `el8`/`el9` on RHEL)
 * Java 17, Python 3.11, PostgreSQL 18
+
+=== OS support (Ansible)
+
+Playbooks support **RHEL 8/9**, **Ubuntu 22.04/24.04**, and **Debian** (with `cm_debian_use_ubuntu_repo: true` for apt paths).
+
+* CM server on Ubuntu: `cm_repo_source: public` or `internal` (apt mirror on `cldr-mngr`)
+* CDH parcels: `-jammy` / `-noble` for Ubuntu workers; `-el8` / `-el9` for RHEL workers
+* Run from Mac, RHEL, Ubuntu, or directly on a cluster node (`cldr-mngr` / `ipaserver`)
+
+Phased deployment via `pvc_setup.sh`:
+
+[source,bash]
+----
+cd ansible-test
+DEPLOY_PHASE=1 ./pvc_setup.sh    # prerequisites
+DEPLOY_PHASE=2 ./pvc_setup.sh    # identity (FreeIPA or AD)
+DEPLOY_PHASE=3 ./pvc_setup.sh    # Cloudera Manager
+DEPLOY_PHASE=4 ./pvc_setup.sh    # Auto-TLS, Kerberos, CMS, base cluster
+DEPLOY_PHASE=all ./pvc_setup.sh  # full flow
+----
+
+Set `CONTROL_MODE=local` when running on a host listed in `inventory.ini`. See link:ansible-test/docs/RUNBOOK.md[RUNBOOK.md] for control-node options and environment variables (`ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, `CM_INFO_FILE`).
 
 === Key playbook phases
 
