@@ -9,6 +9,7 @@
 #   DEPLOY_PHASE=all ./pvc_setup.sh        # full flow
 #   CONTROL_MODE=local ./pvc_setup.sh      # running on a host in inventory.ini
 #   ANSIBLE_PRIVATE_KEY=~/.ssh/id_rsa ./pvc_setup.sh
+# SSH key required for Ansible: *.pem or id_rsa in this dir, ~/.ssh/id_rsa, or ANSIBLE_PRIVATE_KEY
 #   DRY_RUN=true ./pvc_setup.sh            # ansible --check --diff (no changes applied)
 #   ./pvc_setup.sh --dry-run               # same as DRY_RUN=true
 #   ./pvc_setup.sh --help                  # usage
@@ -104,6 +105,9 @@ else
 fi
 
 PRIVATE_KEY="$(resolve_private_key "$SCRIPT_DIR")"
+if [[ "${PVC_SETUP_FROM_WRAPPER:-0}" != "1" ]]; then
+  ui_note_ssh_key_requirement
+fi
 ui_kv "SSH private key" "$PRIVATE_KEY" "🔑"
 
 if ! is_dry_run; then

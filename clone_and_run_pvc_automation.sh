@@ -71,6 +71,7 @@ ui_step "Resolving Ansible playbooks directory" "📁"
 ANSIBLE_DIR="$(resolve_ansible_playbooks_dir "$SCRIPT_DIR")"
 ui_kv "Ansible directory" "$ANSIBLE_DIR" "📂"
 
+ui_note_ssh_key_requirement
 pem_file="$(resolve_private_key "$ANSIBLE_DIR")"
 ui_kv "SSH private key" "$pem_file" "🔑"
 

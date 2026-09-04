@@ -131,7 +131,34 @@ prompt_select_file() {
   done
 }
 
+ansible_ssh_key_help() {
+  cat <<'EOF'
+SSH private key required for Ansible execution (SSH to cluster hosts).
+
+Accepted key locations / formats:
+  • ansible-playbooks/*.pem   (e.g. Terraform-generated key)
+  • ansible-playbooks/id_rsa
+  • ~/.ssh/id_rsa             (your default home SSH key)
+  • ANSIBLE_PRIVATE_KEY=/path/to/key
+
+Examples:
+  cp my-key.pem ansible-playbooks/sshkey.pem
+  ANSIBLE_PRIVATE_KEY=~/.ssh/id_rsa ./clone_and_run_pvc_automation.sh
+EOF
+}
+
+ui_note_ssh_key_requirement() {
+  if declare -F ui_info >/dev/null 2>&1; then
+    ui_info "SSH key required for Ansible: .pem or id_rsa in ansible-playbooks/, ~/.ssh/id_rsa, or ANSIBLE_PRIVATE_KEY=/path/to/key"
+  fi
+}
+
 resolve_private_key() {
+  # Ansible requires an SSH private key to reach inventory hosts.
+  # Search order:
+  #   1. ANSIBLE_PRIVATE_KEY (explicit path)
+  #   2. ansible-playbooks/*.pem, id_rsa, or idrsa
+  #   3. ~/.ssh/id_rsa (default home key)
   local ansible_dir="${1:-.}"
   local -a keys=()
   local key=""
@@ -158,7 +185,7 @@ resolve_private_key() {
   fi
 
   echo "Error: No SSH private key found in $ansible_dir or ~/.ssh/id_rsa." >&2
-  echo "Set ANSIBLE_PRIVATE_KEY=/path/to/key and re-run." >&2
+  ansible_ssh_key_help >&2
   return 1
 }
 

@@ -80,6 +80,13 @@ Environment:
   DRY_RUN          true|false — same as --dry-run
   CONTROL_MODE     auto|local|remote
   TFVARS_FILE      Path to .tfvars.env or .tfvars.yaml
+  ANSIBLE_PRIVATE_KEY  SSH private key for Ansible (see below)
+
+SSH private key (required for Ansible execution):
+  • ansible-playbooks/*.pem   (e.g. from Terraform)
+  • ansible-playbooks/id_rsa
+  • ~/.ssh/id_rsa
+  • ANSIBLE_PRIVATE_KEY=/path/to/key
 
 Run from:
   • Git repo root:  /path/to/cdp-onprem-automation/

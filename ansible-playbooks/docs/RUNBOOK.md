@@ -18,7 +18,11 @@ ansible-galaxy collection install -r requirements.yml
 
 2. Prepare `inventory.ini` with your hosts (see [REFERENCE.md](REFERENCE.md#inventory-groups)).
 3. Configure `group_vars/all.yml` (domain, passwords, AD vars if needed).
-4. Place `license.txt` and SSH key (`id_rsa` or `.pem`) in `ansible-playbooks/`.
+4. Place `license.txt` and an SSH private key in `ansible-playbooks/` (or use `~/.ssh/id_rsa`):
+   - `*.pem` (e.g. `sshkey.pem` copied from Terraform output)
+   - `id_rsa` in `ansible-playbooks/`
+   - `~/.ssh/id_rsa` on the control machine
+   - Or set `ANSIBLE_PRIVATE_KEY=/path/to/key` before running the wrapper
 
 ## Control node and OS support
 
