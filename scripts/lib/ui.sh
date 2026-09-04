@@ -26,83 +26,91 @@ ui_c() {
   fi
 }
 
+ui_nl() {
+  echo ""
+}
+
 ui_rule() {
   local char="${1:-─}"
   local width="${2:-$UI_WIDTH}"
   printf "  "
   ui_c "2" "$(ui_repeat_char "$char" "$width")"
-  echo ""
+  ui_nl
 }
 
 ui_banner() {
   local title="$1"
   local subtitle="${2:-}"
-  local bar
-  bar="$(ui_repeat_char '─' "$UI_WIDTH")"
 
-  echo ""
-  ui_c "1;36" "  ╭${bar}╮"
-  printf "  │  🏗️  %-58s│\n" "$title"
+  ui_nl
+  ui_rule "═"
+  printf "  🏗️  "
+  ui_c "1;36" "$title"
+  ui_nl
   if [[ -n "$subtitle" ]]; then
-    printf "  │     %-58s│\n" "$(ui_c "2" "$subtitle")"
+    printf "      "
+    ui_c "2" "$subtitle"
+    ui_nl
   fi
-  ui_c "1;36" "  ╰${bar}╯"
-  echo ""
+  ui_rule "═"
+  ui_nl
 }
 
 ui_section() {
   local title="$1"
   local emoji="${2:-📌}"
   UI_STEP_NUM=0
-  echo ""
+  ui_nl
   ui_rule "═"
   printf "  %s  " "$emoji"
   ui_c "1;34" "$title"
-  echo ""
+  ui_nl
   ui_rule "─"
 }
 
 ui_subsection() {
   local title="$1"
   local emoji="${2:-•}"
-  echo ""
+  ui_nl
   printf "    %s  " "$emoji"
   ui_c "1;35" "$title"
-  echo ""
+  ui_nl
 }
 
 ui_step() {
   local msg="$1"
   local emoji="${2:-▸}"
   UI_STEP_NUM=$((UI_STEP_NUM + 1))
-  echo ""
+  ui_nl
   printf "    %s  " "$emoji"
   ui_c "1" "Step ${UI_STEP_NUM}"
-  printf ": %s\n" "$(ui_c "0;1" "$msg")"
+  printf ": "
+  ui_c "0;1" "$msg"
+  ui_nl
 }
 
 ui_ok() {
   printf "         ✅  "
   ui_c "32" "$*"
-  echo ""
+  ui_nl
 }
 
 ui_info() {
   printf "    💡  "
   ui_c "36" "$*"
-  echo ""
+  ui_nl
 }
 
 ui_warn() {
   printf "    ⚠️   " >&2
   ui_c "33" "$*" >&2
-  echo "" >&2
+  ui_nl >&2
 }
 
 ui_err() {
   printf "    ❌  " >&2
   ui_c "31" "$*" >&2
-  echo "" >&2
+  ui_nl >&2
 }
 
 ui_kv() {
@@ -110,29 +118,6 @@ ui_kv() {
   local value="$2"
   local emoji="${3:-  }"
   printf "    %-2s %-24s %s\n" "$emoji" "$(ui_c "2" "${key}:")" "$value"
-}
-
-ui_panel() {
-  local title="${1:-}"
-  shift || true
-  local bar
-  bar="$(ui_repeat_char '─' "$((UI_WIDTH - 4))")"
-
-  echo ""
-  if [[ -n "$title" ]]; then
-    printf "  ┌─ %s " "$title"
-    ui_c "2" "%s" "$(ui_repeat_char '─' "$((UI_WIDTH - ${#title} - 6))")"
-    echo "┐"
-  else
-    ui_c "2" "  ┌${bar}┐"
-    echo ""
-  fi
-  while [[ $# -gt 0 ]]; do
-    printf "  │  %s\n" "$1"
-    shift
-  done
-  ui_c "2" "  └${bar}┘"
-  echo ""
 }
 
 ui_config_summary() {
@@ -182,13 +167,13 @@ ui_next_steps() {
 
 ui_done() {
   local msg="${1:-Completed successfully}"
-  echo ""
+  ui_nl
   ui_rule "═"
   printf "  🎉  "
   ui_c "1;32" "$msg"
-  echo ""
+  ui_nl
   ui_rule "═"
-  echo ""
+  ui_nl
 }
 
 ui_verbose() {
