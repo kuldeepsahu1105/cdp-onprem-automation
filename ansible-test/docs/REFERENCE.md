@@ -346,6 +346,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/configure_cm_repo.yml` | Public or internal CM repo setup |
 | `common_tasks/prepare_debian_cm_install.yml` | Ubuntu/Debian apt prep (needrestart, etc.) |
 | `common_tasks/install_cm_packages.yml` | OS-aware CM server/agent package install |
+| `common_tasks/configure_cm_agent.yml` | Set `server_host` in agent `config.ini` to cldr-mngr FQDN |
 | `common_tasks/set_cm_mirror_facts.yml` | Internal mirror URL facts |
 | `common_tasks/mirror_internal_cm_rhel.yml` | RPM mirror + createrepo |
 | `common_tasks/mirror_internal_cm_apt.yml` | apt `.deb` mirror + Packages index |

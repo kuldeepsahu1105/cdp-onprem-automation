@@ -1,0 +1,25 @@
+---
+- name: Validate cldr-mngr inventory group
+  ansible.builtin.import_tasks: validate_inventory_groups.yml
+  vars:
+    required_inventory_group: cldr-mngr
+
+- name: Set Cloudera Manager server FQDN for agent config
+  ansible.builtin.set_fact:
+    cm_server_fqdn: "{{ hostvars[cm_manager_inventory_host].cldr_hostname }}.{{ cluster_domain }}"
+
+- name: Point CM agent at Cloudera Manager server (not localhost)
+  ansible.builtin.lineinfile:
+    path: /etc/cloudera-scm-agent/config.ini
+    regexp: '^#?\s*server_host\s*=.*'
+    line: "server_host={{ cm_server_fqdn }}"
+
+- name: Verify CM agent server_host in config.ini
+  ansible.builtin.command:
+    cmd: grep -E '^server_host=' /etc/cloudera-scm-agent/config.ini
+  register: cm_agent_server_host_line
+  changed_when: false
+
+- name: Display CM agent server_host
+  ansible.builtin.debug:
+    msg: "{{ cm_agent_server_host_line.stdout }}"
