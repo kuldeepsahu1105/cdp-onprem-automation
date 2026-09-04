@@ -8,10 +8,6 @@ GIT_REPO_NAME="cdp-onprem-automation"
 GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/kuldeepsahu1105/$GIT_REPO_NAME.git}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
 
-WRAPPER_SHOW_HELP=false
-WRAPPER_REMAINING_ARGS=()
-wrapper_parse_common_args "$@"
-
 resolve_scripts_lib_early() {
   if [[ -f "$SCRIPT_DIR/scripts/lib/load_tfvars.sh" ]]; then
     printf '%s' "$SCRIPT_DIR/scripts/lib"
@@ -44,6 +40,10 @@ source "$SCRIPTS_LIB/ansible_env.sh"
 source "$SCRIPTS_LIB/ui.sh"
 # shellcheck source=scripts/lib/wrapper_info.sh
 source "$SCRIPTS_LIB/wrapper_info.sh"
+
+WRAPPER_SHOW_HELP=false
+WRAPPER_REMAINING_ARGS=()
+wrapper_parse_common_args "$@"
 
 if [[ "${WRAPPER_SHOW_HELP:-false}" == "true" ]]; then
   wrapper_show_help_ansible
