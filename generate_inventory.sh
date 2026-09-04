@@ -1,46 +1,35 @@
 #!/usr/bin/env bash
 
-set -e
-set -o pipefail
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib/portable.sh
 source "$SCRIPT_DIR/scripts/lib/portable.sh"
+# shellcheck source=scripts/lib/ui.sh
+source "$SCRIPT_DIR/scripts/lib/ui.sh"
 
 ensure_bash
 ensure_jq || exit 1
 
-print_message() {
-  echo ""
-  echo "================================================================="
-  echo "🧾 $(basename "$0"): $1"
-  echo "================================================================="
-  echo ""
-}
-
-print_message "Fetching Terraform output..."
-
-TF_OUTPUT=$(terraform output -json)
+ui_step "Fetch Terraform output" "📥"
+TF_OUTPUT="$(terraform output -json)"
 
 if [[ -z "$TF_OUTPUT" ]]; then
-  echo "❌ No Terraform output found."
+  ui_err "No Terraform output found"
   exit 1
 fi
+ui_ok "Terraform output fetched"
 
-echo "✅ Terraform output fetched successfully."
+if ui_verbose; then
+  ui_subsection "Terraform output keys" "🔍"
+  while IFS= read -r key; do
+    [[ -n "$key" ]] && ui_kv "public_ips" "$key" "🌐"
+  done < <(echo "$TF_OUTPUT" | jq -r '.public_ips.value | keys[]' 2>/dev/null || true)
+  while IFS= read -r key; do
+    [[ -n "$key" ]] && ui_kv "private_ips" "$key" "🔒"
+  done < <(echo "$TF_OUTPUT" | jq -r '.private_ips.value | keys[]' 2>/dev/null || true)
+fi
 
-# Debug keys
-echo
-echo "🔍 Available keys in public_ips:"
-echo "$TF_OUTPUT" | jq -r '.public_ips.value | keys[]' 2>/dev/null || true
-
-echo
-echo "🔍 Available keys in private_ips:"
-echo "$TF_OUTPUT" | jq -r '.private_ips.value | keys[]' 2>/dev/null || true
-
-# ------------------------------
-# Extract IPs (generic)
-# ------------------------------
 extract_ips() {
   local type=$1
   local pattern=$2
@@ -54,9 +43,6 @@ extract_ips() {
   ' 2>/dev/null || true
 }
 
-# ------------------------------
-# Generate inventory section (with public + private IP)
-# ------------------------------
 generate_inventory_section() {
   local group=$1
   local pub_ips=("${!2}")
@@ -92,15 +78,12 @@ generate_inventory_section() {
   echo
 }
 
-# ------------------------------
-# Generate single inventory
-# ------------------------------
 OUTPUT_FILE="ansible_inventory.ini"
 
-print_message "Generating unified inventory → $OUTPUT_FILE"
+ui_step "Generate inventory file" "📝"
+ui_kv "Output file" "$OUTPUT_FILE" "📄"
 
 {
-  # Collect PUBLIC IPs
   ipa_pub=( $(extract_ips "public_ips" "^ipa_server") )
   mngr_pub=( $(extract_ips "public_ips" "^cldr_mngr") )
   base_m_pub=( $(extract_ips "public_ips" "^pvcbase_master") )
@@ -108,7 +91,6 @@ print_message "Generating unified inventory → $OUTPUT_FILE"
   ecs_m_pub=( $(extract_ips "public_ips" "^pvcecs_master") )
   ecs_w_pub=( $(extract_ips "public_ips" "^pvcecs_worker") )
 
-  # Collect PRIVATE IPs
   ipa_pvt=( $(extract_ips "private_ips" "^ipa_server") )
   mngr_pvt=( $(extract_ips "private_ips" "^cldr_mngr") )
   base_m_pvt=( $(extract_ips "private_ips" "^pvcbase_master") )
@@ -125,6 +107,4 @@ print_message "Generating unified inventory → $OUTPUT_FILE"
 
 } | tee "$OUTPUT_FILE"
 
-echo "✅ Inventory generated: $OUTPUT_FILE"
-
-print_message "Inventory generation completed successfully!"
+ui_ok "Inventory generated: ${OUTPUT_FILE}"

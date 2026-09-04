@@ -32,6 +32,7 @@ resolve_scripts_lib_early() {
 
 ensure_repo_checkout() {
   if [[ -f "$SCRIPT_DIR/scripts/lib/load_tfvars.sh" ]]; then
+    ui_ok "Repository checkout ready (branch: ${GIT_BRANCH})"
     return 0
   fi
   ui_step "Syncing repository checkout" "📥"
@@ -174,6 +175,7 @@ if ! aws sts get-caller-identity &>/dev/null; then
 fi
 ui_ok "Credentials valid"
 
+ui_step "Repository checkout" "📥"
 ensure_repo_checkout
 
 # shellcheck source=scripts/lib/load_tfvars.sh
@@ -237,6 +239,7 @@ OUTPUT_FILE="ansible_inventory.ini"
 DEST_INVENTORY="$(cd "$REPO_ROOT/ansible-playbooks" && pwd)/inventory.ini"
 
 if [[ -f "$OUTPUT_FILE" ]]; then
+  ui_step "Copy inventory to ansible-playbooks" "📋"
   cp -f "$OUTPUT_FILE" "$DEST_INVENTORY"
   ui_inventory_summary "$OUTPUT_FILE"
   ui_ok "Copied inventory to ansible-playbooks/inventory.ini"
@@ -247,6 +250,7 @@ fi
 
 pem_file="$(find . -maxdepth 1 -type f -name '*.pem' | head -1)"
 if [[ -n "$pem_file" ]]; then
+  ui_step "Copy SSH key to ansible-playbooks" "🔑"
   cp -f "$pem_file" "$REPO_ROOT/ansible-playbooks/$(basename "$pem_file")"
   cp -f "$pem_file" "$REPO_ROOT/ansible-playbooks/sshkey.pem"
   ui_ok "Copied SSH key to ansible-playbooks/"

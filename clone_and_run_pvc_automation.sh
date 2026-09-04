@@ -91,4 +91,11 @@ chmod +x pvc_setup.sh
 export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 export CONTROL_MODE="${CONTROL_MODE:-auto}"
 export DRY_RUN="${DRY_RUN:-false}"
+export PVC_SETUP_FROM_WRAPPER=1
 bash ./pvc_setup.sh "${WRAPPER_REMAINING_ARGS[@]}"
+
+if is_dry_run; then
+  ui_done "Ansible deployment dry run completed (DEPLOY_PHASE=${DEPLOY_PHASE:-1})"
+else
+  ui_done "Ansible deployment completed (DEPLOY_PHASE=${DEPLOY_PHASE:-1})"
+fi

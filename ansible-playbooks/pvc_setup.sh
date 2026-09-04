@@ -58,12 +58,6 @@ EOF
   exit 0
 fi
 
-if [[ ! -f "$REPO_ROOT/scripts/lib/ui.sh" ]]; then
-  echo "Error: run from git clone root — missing $REPO_ROOT/scripts/lib/ui.sh" >&2
-  echo "  cd /path/to/cdp-onprem-automation && git pull origin main" >&2
-  exit 1
-fi
-
 ensure_bash
 
 DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
@@ -98,11 +92,20 @@ print_message() {
 }
 
 cd "$SCRIPT_DIR"
-wrapper_print_identity "Cloudera Private Cloud Deployment (pvc_setup.sh)" "$REPO_ROOT" "$REPO_ROOT/scripts/lib"
-ui_kv "Phase" "${DEPLOY_PHASE}" "🔢"
-ui_kv "Control mode" "${CONTROL_MODE}" "🎛️"
-ui_kv "CPU" "${CPU_ARCHITECTURE:-x86_64}" "🖥️"
-print_banner
+
+if [[ "${PVC_SETUP_FROM_WRAPPER:-0}" == "1" ]]; then
+  ui_subsection "Playbook execution (pvc_setup.sh)" "📜"
+  if is_dry_run; then
+    ui_warn "Dry run enabled — Ansible will use --check --diff (no changes applied)."
+    ui_warn "CM API playbooks (26/27) may still perform live API calls; use DEPLOY_PHASE=1-3 to limit scope."
+  fi
+else
+  wrapper_print_identity "Cloudera Private Cloud Deployment (pvc_setup.sh)" "$REPO_ROOT" "$REPO_ROOT/scripts/lib"
+  ui_kv "Phase" "${DEPLOY_PHASE}" "🔢"
+  ui_kv "Control mode" "${CONTROL_MODE}" "🎛️"
+  ui_kv "CPU" "${CPU_ARCHITECTURE:-x86_64}" "🖥️"
+  print_banner
+fi
 
 PRIVATE_KEY="$(resolve_private_key "$SCRIPT_DIR")"
 ui_kv "SSH private key" "$PRIVATE_KEY" "🔑"
@@ -133,11 +136,14 @@ fi
 
 mapfile -t ANSIBLE_PLAYBOOK_ARGS < <(ansible_extra_args "$PRIVATE_KEY")
 
+ui_step "Install Ansible collections" "📦"
 ansible-galaxy collection install -r requirements.yml
 
 # SSH pre-reqs: skip ipaserver for AD; include all for FreeIPA if ipaserver is a managed node
 SSH_LIMIT="${ANSIBLE_LIMIT_SSH:-all:!ipaserver}"
-print_message "SSH prerequisites ($SSH_LIMIT)"
+ui_section "SSH prerequisites" "🔐"
+ui_kv "Limit" "$SSH_LIMIT" "🎯"
+ui_step "Running 00_setup_ssh_preqs.yml" "📜"
 ansible-playbook 00_setup_ssh_preqs.yml "${ANSIBLE_PLAYBOOK_ARGS[@]}" --limit "$SSH_LIMIT"
 
 run_phase_1() {
@@ -208,13 +214,15 @@ case "$DEPLOY_PHASE" in
     run_phase_4
     ;;
   *)
-    echo "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|4|5|all or prereq|identity|cm|cluster|ecs|all)"
+    ui_err "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|4|5|all or prereq|identity|cm|cluster|ecs|all)"
     exit 1
     ;;
 esac
 
-if is_dry_run; then
-  ui_done "Phase ${DEPLOY_PHASE} dry run completed (no changes applied)"
-else
-  ui_done "Phase ${DEPLOY_PHASE} completed successfully"
+if [[ "${PVC_SETUP_FROM_WRAPPER:-}" != "1" ]]; then
+  if is_dry_run; then
+    ui_done "Phase ${DEPLOY_PHASE} dry run completed (no changes applied)"
+  else
+    ui_done "Phase ${DEPLOY_PHASE} completed successfully"
+  fi
 fi
