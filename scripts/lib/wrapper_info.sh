@@ -36,7 +36,7 @@ wrapper_print_identity() {
   if wrapper_has_ui; then
     ui_banner "$script_name" "git ${version} · DRY_RUN=$(wrapper_dry_run_label)"
     ui_kv "Repository" "${repo_root:-${scripts_lib:-not found}}" "📂"
-    ui_kv "Dry run" "DRY_RUN=true or --dry-run" "🧪"
+    ui_kv "Dry run" "$(wrapper_dry_run_label)" "🧪"
   else
     echo ""
     echo "=== ${script_name} (version ${version}) ==="
