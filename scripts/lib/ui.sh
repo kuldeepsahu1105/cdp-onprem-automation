@@ -3,6 +3,7 @@
 
 UI_STEP_NUM=0
 UI_WIDTH=66
+UI_TAB=$'\t'
 
 ui_is_tty() {
   [[ -t 1 ]]
@@ -38,17 +39,37 @@ ui_rule() {
   ui_nl
 }
 
+# Tabular row: [indent][emoji\t]label\tvalue
+ui_row() {
+  local indent="$1"
+  local emoji="$2"
+  local label="$3"
+  local value="${4-}"
+
+  printf '%s' "$indent"
+  if [[ -n "$emoji" ]]; then
+    printf '%s%s' "$emoji" "$UI_TAB"
+  fi
+  if [[ -n "$label" ]]; then
+    printf '%s' "$label"
+  fi
+  if [[ $# -ge 4 ]]; then
+    printf '%s%s' "$UI_TAB" "$value"
+  fi
+  ui_nl
+}
+
 ui_banner() {
   local title="$1"
   local subtitle="${2:-}"
 
   ui_nl
   ui_rule "═"
-  printf "  🏗️  "
+  printf '  🏗️%s' "$UI_TAB"
   ui_c "1;36" "$title"
   ui_nl
   if [[ -n "$subtitle" ]]; then
-    printf "      "
+    printf '  %s' "$UI_TAB"
     ui_c "2" "$subtitle"
     ui_nl
   fi
@@ -62,7 +83,7 @@ ui_section() {
   UI_STEP_NUM=0
   ui_nl
   ui_rule "═"
-  ui_prefix "  " "$emoji"
+  printf '  %s%s' "$emoji" "$UI_TAB"
   ui_c "1;34" "$title"
   ui_nl
   ui_rule "─"
@@ -72,7 +93,7 @@ ui_subsection() {
   local title="$1"
   local emoji="${2:-•}"
   ui_nl
-  ui_prefix "    " "$emoji"
+  printf '    %s%s' "$emoji" "$UI_TAB"
   ui_c "1;35" "$title"
   ui_nl
 }
@@ -82,53 +103,47 @@ ui_step() {
   local emoji="${2:-▸}"
   UI_STEP_NUM=$((UI_STEP_NUM + 1))
   ui_nl
-  ui_prefix "    " "$emoji"
-  ui_c "1" "Step ${UI_STEP_NUM}"
-  printf ": "
+  printf '    %s%s' "$emoji" "$UI_TAB"
+  ui_c "1" "Step ${UI_STEP_NUM}:"
+  printf '%s' "$UI_TAB"
   ui_c "0;1" "$msg"
   ui_nl
 }
 
 ui_ok() {
-  printf "         ✅  "
+  printf '    %s✅%s' "$UI_TAB" "$UI_TAB"
   ui_c "32" "$*"
   ui_nl
 }
 
 ui_info() {
-  printf "    💡  "
+  printf '    💡%s' "$UI_TAB"
   ui_c "36" "$*"
   ui_nl
 }
 
 ui_warn() {
-  printf "    ⚠️   " >&2
+  printf '    ⚠️%s' "$UI_TAB" >&2
   ui_c "33" "$*" >&2
   ui_nl >&2
 }
 
 ui_err() {
-  printf "    ❌  " >&2
+  printf '    ❌%s' "$UI_TAB" >&2
   ui_c "31" "$*" >&2
   ui_nl >&2
-}
-
-ui_prefix() {
-  local indent="${1:-    }"
-  local emoji="${2:-}"
-  if [[ -n "$emoji" ]]; then
-    printf '%s%s  ' "$indent" "$emoji"
-  else
-    printf '%s' "$indent"
-  fi
 }
 
 ui_kv() {
   local key="$1"
   local value="$2"
   local emoji="${3:-}"
-  ui_prefix "    " "$emoji"
-  printf "%s %s\n" "$(ui_c "2" "$(printf '%-24s' "${key}:")")" "$value"
+  printf '    '
+  if [[ -n "$emoji" ]]; then
+    printf '%s%s' "$emoji" "$UI_TAB"
+  fi
+  ui_c "2" "${key}:"
+  printf '%s%s\n' "$UI_TAB" "$value"
 }
 
 ui_config_summary() {
@@ -153,7 +168,7 @@ ui_inventory_summary() {
   local inventory_file="$1"
   ui_subsection "Host groups" "📊"
   if [[ -f "$inventory_file" ]] && command -v awk >/dev/null 2>&1; then
-    awk '
+    awk -v tab="$UI_TAB" '
       /^\[/ {
         gsub(/[\[\]]/, "", $0)
         group=$0
@@ -163,7 +178,7 @@ ui_inventory_summary() {
         count[group]++
       }
       END {
-        for (g in count) printf "         🖥️  %-22s %d host(s)\n", g ":", count[g]
+        for (g in count) printf "         🖥️%s%s%s%d host(s)\n", tab, g ":", tab, count[g]
       }
     ' "$inventory_file" | sort
   fi
@@ -180,7 +195,7 @@ ui_done() {
   local msg="${1:-Completed successfully}"
   ui_nl
   ui_rule "═"
-  printf "  🎉  "
+  printf '  🎉%s' "$UI_TAB"
   ui_c "1;32" "$msg"
   ui_nl
   ui_rule "═"
