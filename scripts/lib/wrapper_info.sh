@@ -81,12 +81,21 @@ Environment:
   CONTROL_MODE     auto|local|remote
   TFVARS_FILE      Path to .tfvars.env or .tfvars.yaml
   ANSIBLE_PRIVATE_KEY  SSH private key for Ansible (see below)
+  CM_INFO_FILE         Path to *info.txt with archive login:/password:
+  CM_REPO_USERNAME     Archive credentials (alternative to info file / all.yml)
+  CM_REPO_PASSWORD     Archive credentials (alternative to info file / all.yml)
 
 SSH private key (required for Ansible execution):
   • ansible-playbooks/*.pem   (e.g. from Terraform)
   • ansible-playbooks/id_rsa
   • ~/.ssh/id_rsa
   • ANSIBLE_PRIVATE_KEY=/path/to/key
+
+CM archive credentials (phase 3 — use ONE source only):
+  • ansible-playbooks/*info.txt   login: / password: lines
+  • CM_REPO_USERNAME + CM_REPO_PASSWORD
+  • cm_repo_username / cm_repo_password in group_vars/all.yml
+  (info file or env vars override all.yml; no need for all three)
 
 Run from:
   • Git repo root:  /path/to/cdp-onprem-automation/

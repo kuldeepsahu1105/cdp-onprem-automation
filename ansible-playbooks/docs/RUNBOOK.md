@@ -24,6 +24,14 @@ ansible-galaxy collection install -r requirements.yml
    - `~/.ssh/id_rsa` on the control machine
    - Or set `ANSIBLE_PRIVATE_KEY=/path/to/key` before running the wrapper
 
+5. **CM archive credentials** (phase 3 only) — use **one** of:
+   - `*info.txt` in `ansible-playbooks/` with `login:` and `password:` lines
+   - `CM_INFO_FILE=/path/to/info.txt`
+   - `CM_REPO_USERNAME` + `CM_REPO_PASSWORD` environment variables
+   - `cm_repo_username` / `cm_repo_password` in `group_vars/all.yml`
+
+   If an info file or env vars are set, the wrapper passes them as Ansible extra vars; you do **not** also need credentials in `all.yml` or manual `-e` flags.
+
 ## Control node and OS support
 
 The wrappers and playbooks support:

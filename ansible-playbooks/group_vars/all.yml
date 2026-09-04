@@ -144,6 +144,7 @@ cdh_spark_bundled_min_version: "7.3.1"
 public_ip: "{{ ansible_default_ipv4.address }}"
 cm_repo_username: "<username>"
 cm_repo_password: "<password>"
+# Archive credentials: set here OR use *info.txt / CM_REPO_USERNAME+PASSWORD (one source only).
 webserver_path: "/var/www/html"
 cldr_repos_path: "{{ webserver_path }}/cloudera-repos"
 

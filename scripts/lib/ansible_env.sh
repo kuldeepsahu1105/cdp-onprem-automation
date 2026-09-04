@@ -218,7 +218,38 @@ resolve_license_file() {
   return 1
 }
 
+ansible_cm_credentials_help() {
+  cat <<'EOF'
+Cloudera archive credentials (phase 3 CM install) — provide ONE of:
+
+  1. *info.txt in ansible-playbooks/  (or CM_INFO_FILE=/path/to/info.txt)
+     Format:
+       login: your-cloudera-account
+       password: your-password
+
+  2. CM_REPO_USERNAME + CM_REPO_PASSWORD environment variables
+
+  3. cm_repo_username / cm_repo_password in group_vars/all.yml
+
+If an info file or env vars are set, the wrapper passes them as -e extra vars
+and you do not need real credentials in all.yml or manual -e flags.
+
+Other settings (cm_repo_source, cm_version, etc.) still come from all.yml.
+EOF
+}
+
+ui_note_cm_credentials_requirement() {
+  if declare -F ui_info >/dev/null 2>&1; then
+    ui_info "CM archive creds (phase 3): use *info.txt, CM_REPO_USERNAME/PASSWORD, or all.yml — one source only"
+  fi
+}
+
 load_cm_repo_credentials() {
+  # Cloudera archive.cloudera.com credentials for phase 3 (CM install).
+  # Only ONE source is required (first match wins):
+  #   1. CM_REPO_USERNAME + CM_REPO_PASSWORD
+  #   2. CM_INFO_FILE or *info.txt in ansible-playbooks/ (login:/password: lines)
+  #   3. Else fall back to cm_repo_username / cm_repo_password in group_vars/all.yml
   local ansible_dir="${1:-.}"
   local -a info_files=()
   local info_file=""
@@ -239,7 +270,8 @@ load_cm_repo_credentials() {
   fi
 
   if [[ -z "$info_file" ]]; then
-    echo "Warning: No *info.txt with CM archive credentials; set CM_REPO_USERNAME/CM_REPO_PASSWORD." >&2
+    echo "Warning: No CM archive credentials from env or *info.txt; using group_vars/all.yml if set." >&2
+    echo "  (See: ansible_cm_credentials_help or DEPLOY_PHASE=3 --help)" >&2
     return 1
   fi
 
