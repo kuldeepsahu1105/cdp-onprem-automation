@@ -86,26 +86,26 @@ run_playbook() {
   local playbook="$1"
   shift || true
   if is_dry_run; then
-    ui_step "Dry-run ${playbook}"
+    ui_step "Dry-run ${playbook}" "🧪"
   else
-    ui_step "Running ${playbook}"
+    ui_step "Running ${playbook}" "📜"
   fi
   ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" "$@"
 }
 
 print_message() {
-  ui_section "$1"
+  ui_section "$1" "🔧"
 }
 
 cd "$SCRIPT_DIR"
 wrapper_print_identity "Cloudera Private Cloud Deployment (pvc_setup.sh)" "$REPO_ROOT" "$REPO_ROOT/scripts/lib"
-ui_kv "Phase" "${DEPLOY_PHASE}"
-ui_kv "Control mode" "${CONTROL_MODE}"
-ui_kv "CPU" "${CPU_ARCHITECTURE:-x86_64}"
+ui_kv "Phase" "${DEPLOY_PHASE}" "🔢"
+ui_kv "Control mode" "${CONTROL_MODE}" "🎛️"
+ui_kv "CPU" "${CPU_ARCHITECTURE:-x86_64}" "🖥️"
 print_banner
 
 PRIVATE_KEY="$(resolve_private_key "$SCRIPT_DIR")"
-ui_kv "SSH private key" "$PRIVATE_KEY"
+ui_kv "SSH private key" "$PRIVATE_KEY" "🔑"
 
 if ! is_dry_run; then
   patch_ansible_private_key_in_group_vars "$SCRIPT_DIR" "$PRIVATE_KEY"
@@ -123,12 +123,12 @@ if needs_license; then
   if ! is_dry_run; then
     ensure_license_txt "$SCRIPT_DIR" "$LICENSE_KEY"
   fi
-  ui_kv "License file" "$LICENSE_KEY"
+  ui_kv "License file" "$LICENSE_KEY" "📜"
 fi
 
 load_cm_repo_credentials "$SCRIPT_DIR" || true
 if [[ -n "${CM_REPO_USERID:-}" ]]; then
-  ui_kv "CM archive user" "$CM_REPO_USERID"
+  ui_kv "CM archive user" "$CM_REPO_USERID" "👤"
 fi
 
 mapfile -t ANSIBLE_PLAYBOOK_ARGS < <(ansible_extra_args "$PRIVATE_KEY")

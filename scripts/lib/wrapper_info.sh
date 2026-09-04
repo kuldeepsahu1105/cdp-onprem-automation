@@ -14,6 +14,13 @@ wrapper_has_ui() {
   declare -F ui_banner >/dev/null 2>&1
 }
 
+wrapper_dry_run_label() {
+  case "${DRY_RUN:-false}" in
+    1|true|yes|TRUE|YES|on|ON) printf 'enabled 🧪' ;;
+    *) printf 'disabled ▶️' ;;
+  esac
+}
+
 wrapper_print_identity() {
   local script_name="$1"
   local repo_root="${2:-}"
@@ -27,9 +34,10 @@ wrapper_print_identity() {
   fi
 
   if wrapper_has_ui; then
-    ui_banner "$script_name" "version ${version} | DRY_RUN=${DRY_RUN:-false}"
-    ui_kv "Repo / scripts" "${repo_root:-${scripts_lib:-not found}}"
-    ui_kv "Dry run" "DRY_RUN=true or --dry-run (Ansible: --check --diff; Terraform: plan only)"
+    ui_banner "$script_name" "git ${version} · DRY_RUN=$(wrapper_dry_run_label)"
+    ui_kv "Repository" "${repo_root:-${scripts_lib:-not found}}" "📂"
+    ui_kv "Dry run" "DRY_RUN=true or --dry-run" "🧪"
+    ui_rule "·"
   else
     echo ""
     echo "=== ${script_name} (version ${version}) ==="
@@ -115,6 +123,10 @@ wrapper_reexec_from_repo_if_needed() {
   local self_script="$2"
   local script_name="$3"
   shift 3
+
+  if [[ -f "$script_dir/scripts/lib/wrapper_info.sh" ]]; then
+    return 0
+  fi
 
   local nested="$script_dir/cdp-onprem-automation"
   local repo_script="$nested/$script_name"
