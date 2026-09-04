@@ -54,8 +54,18 @@ echo "Using SSH private key: $PRIVATE_KEY"
 
 patch_ansible_private_key_in_group_vars "$SCRIPT_DIR" "$PRIVATE_KEY"
 
-LICENSE_KEY="$(resolve_license_file "$SCRIPT_DIR")"
-echo "Using license file: $LICENSE_KEY"
+needs_license() {
+  case "$DEPLOY_PHASE" in
+    3|cm|phase3|4|cluster|phase4|all|full) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if needs_license; then
+  LICENSE_KEY="$(resolve_license_file "$SCRIPT_DIR")"
+  echo "Using license file: $LICENSE_KEY"
+  ensure_license_txt "$SCRIPT_DIR" "$LICENSE_KEY"
+fi
 
 load_cm_repo_credentials "$SCRIPT_DIR" || true
 if [[ -n "${CM_REPO_USERID:-}" ]]; then

@@ -30,6 +30,8 @@ The wrappers and playbooks support:
 | RHEL / Ubuntu laptop (remote) | Install `ansible`, `jq`; run `./clone_and_run_pvc_automation.sh` or `cd ansible-test && ./pvc_setup.sh` |
 | Cluster node (`cldr-mngr`, `ipaserver`) | `CONTROL_MODE=local DEPLOY_PHASE=all ./pvc_setup.sh` from `ansible-test/` (uses `~/.ssh/id_rsa` if no PEM in cwd) |
 
+When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-test/`, the wrapper prompts you to choose. Override with `ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, or `CM_INFO_FILE`.
+
 | Target OS | CM repo mode | Notes |
 |---|---|---|
 | RHEL 8/9 | `public` or `internal` | Internal mirror downloads RPMs + createrepo |
