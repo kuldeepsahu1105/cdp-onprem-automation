@@ -18,14 +18,61 @@
     mode: "0644"
   when: ansible_os_family == "RedHat"
 
-- name: Configure Cloudera Manager apt repository (Ubuntu/Debian)
+- name: Download official Cloudera Manager apt sources list (Ubuntu/Debian, public)
+  ansible.builtin.get_url:
+    url: >-
+      https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt/cloudera-manager.list
+    dest: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+    force_basic_auth: true
+  when:
+    - ansible_os_family == "Debian"
+    - cm_repo_source == 'public'
+
+- name: Inject archive credentials into cloudera-manager.list placeholders
+  ansible.builtin.replace:
+    path: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
+    regexp: "{{ item }}"
+    replace: "{{ cm_repo_username }}:{{ cm_repo_password }}"
+  loop:
+    - 'username:password'
+    - 'USERNAME:PASSWORD'
+    - '\[username\]:\[password\]'
+  when:
+    - ansible_os_family == "Debian"
+    - cm_repo_source == 'public'
+
+- name: Download Cloudera Manager apt archive signing key (Ubuntu/Debian, public)
+  ansible.builtin.get_url:
+    url: >-
+      https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt/archive.key
+    dest: /tmp/cloudera-cm-archive.key
+    mode: "0644"
+    force_basic_auth: true
+  when:
+    - ansible_os_family == "Debian"
+    - cm_repo_source == 'public'
+
+- name: Import Cloudera Manager apt archive signing key
+  ansible.builtin.apt_key:
+    file: /tmp/cloudera-cm-archive.key
+    state: present
+  when:
+    - ansible_os_family == "Debian"
+    - cm_repo_source == 'public'
+
+- name: Configure Cloudera Manager apt repository from template (internal mirror)
   ansible.builtin.template:
     src: templates/cloudera-manager.list.j2
     dest: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
     owner: root
     group: root
     mode: "0644"
-  when: ansible_os_family == "Debian"
+  when:
+    - ansible_os_family == "Debian"
+    - cm_repo_source == 'internal'
 
 - name: Update apt cache after adding Cloudera Manager repository (Ubuntu/Debian)
   ansible.builtin.apt:
