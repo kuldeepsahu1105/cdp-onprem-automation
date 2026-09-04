@@ -136,7 +136,7 @@ Set `PVCECS_*_COUNT=0` in tfvars to skip ECS infrastructure entirely, or leave g
 | `ecs_cluster_name` | `ECS-Cluster` | ECS cluster name in Cloudera Manager |
 | `ecs_cluster_master_group` | `ecs-masters` | Inventory group for ECS master |
 | `ecs_cluster_worker_group` | `ecs-workers` | Inventory group for ECS workers |
-| `ecs_pvc_ds_version` | `1.5.5-h2000` | CDS repo tag (CDS 1.5.5 SP2; use `1.5.5-h2100` for SP2 CHF1) |
+| `ecs_pvc_ds_version` | `1.5.5-h3300` | CDS repo tag (CDS 1.5.5 SP3 CHF3) |
 | `ecs_pvc_repository_url` | computed | `https://archive.cloudera.com/p/cdp-pvc-ds/<version>` |
 | `ecs_parcel_repo_url` | computed | ECS parcel repo under CDS path |
 | `ecs_parcel_version` | `""` | Optional override; auto-discovered from CM when empty |
@@ -149,7 +149,7 @@ Set `PVCECS_*_COUNT=0` in tfvars to skip ECS infrastructure entirely, or leave g
 | `ecs_control_plane_vault_mode` | `embedded` | Vault storage mode |
 | `ecs_k8s_webui_secret_admin_token` | `ChangeMe@ECS-WebUI` | K8s web UI admin token — change before deploy |
 
-Compatible with CDH 7.3.2: CDS 1.5.5 SP2+ (see Cloudera release matrix).
+Compatible with CDH 7.3.2: CDS 1.5.5 SP3 CHF3+ (see Cloudera release matrix).
 
 ```bash
 # ECS only (after base cluster is up)
@@ -158,7 +158,7 @@ DEPLOY_PHASE=5 ./pvc_setup.sh
 
 # Or run playbook directly
 ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml \
-  -e ecs_pvc_ds_version=1.5.5-h2000
+  -e ecs_pvc_ds_version=1.5.5-h3300
 ```
 
 ### ECS cleanup toggles (`99_cleanup.yml`)

@@ -349,12 +349,12 @@ ecs_cluster_name: "ECS-Cluster"
 # ---------------------------------------------------------------------------
 # ECS (Cloudera Data Services / Experience Cluster) deployment
 # Requires base cluster (26) and wildcard DNS (*.apps) when using FreeIPA.
-# Compatible with CDH 7.3.2: CDS 1.5.5 SP2+ (see Cloudera release matrix).
+# Compatible with CDH 7.3.2: CDS 1.5.5 SP3+ (see Cloudera release matrix).
 # ---------------------------------------------------------------------------
 ecs_deploy_enabled: auto  # auto | true | false — auto runs when ecs-masters/workers exist
 ecs_cluster_master_group: ecs-masters
 ecs_cluster_worker_group: ecs-workers
-ecs_pvc_ds_version: "1.5.5-h2000"  # CDS 1.5.5 SP2 repo tag (override for SP2 CHF1: 1.5.5-h2100)
+ecs_pvc_ds_version: "1.5.5-h3300"  # CDS 1.5.5 SP3 CHF3 repo tag
 ecs_pvc_repository_url: "{{ cm_repo_public_base_url }}/cdp-pvc-ds/{{ ecs_pvc_ds_version }}"
 ecs_parcel_repo_url: "{{ ecs_pvc_repository_url }}/parcels/"
 # Optional override; when empty the playbook discovers the latest ECS parcel from CM after refresh
