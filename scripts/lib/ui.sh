@@ -4,6 +4,7 @@
 UI_STEP_NUM=0
 UI_WIDTH=66
 UI_INDENT='    '
+UI_STEP_LABEL_W=9   # "Step 10:"
 UI_VALUE_COL=38
 
 ui_is_tty() {
@@ -40,12 +41,12 @@ ui_rule() {
   ui_nl
 }
 
-# Left block padded to UI_VALUE_COL, then value (aligned column)
+# Key/value: fixed step column, emoji, label, aligned values
 ui_kv() {
   local key="$1"
   local value="$2"
   local emoji="${3:-}"
-  local left="${UI_INDENT}"
+  local left="${UI_INDENT}$(printf '%-*s' "$UI_STEP_LABEL_W" '')"
   [[ -n "$emoji" ]] && left+="${emoji}  "
   left+="${key}:"
   if ui_is_tty; then
@@ -89,7 +90,7 @@ ui_subsection() {
   local title="$1"
   local emoji="${2:-•}"
   ui_nl
-  printf '%s%-3s  ' "$UI_INDENT" "$emoji"
+  printf '%s%-*s %s  ' "$UI_INDENT" "$UI_STEP_LABEL_W" '' "$emoji"
   ui_c "1;35" "$title"
   ui_nl
 }
@@ -99,36 +100,33 @@ ui_step() {
   local emoji="${2:-▸}"
   UI_STEP_NUM=$((UI_STEP_NUM + 1))
   ui_nl
-  local left="${UI_INDENT}${emoji}  Step ${UI_STEP_NUM}:"
+  printf '%s' "$UI_INDENT"
   if ui_is_tty; then
-    printf '\033[1m%-*s\033[0m %s\n' "$UI_VALUE_COL" "$left" "$msg"
+    printf '\033[1m%-*s\033[0m' "$UI_STEP_LABEL_W" "Step ${UI_STEP_NUM}:"
   else
-    printf '%-*s %s\n' "$UI_VALUE_COL" "$left" "$msg"
+    printf '%-*s' "$UI_STEP_LABEL_W" "Step ${UI_STEP_NUM}:"
   fi
+  printf ' %s  %s\n' "$emoji" "$msg"
 }
 
 ui_ok() {
-  printf '%s     ✅  ' "$UI_INDENT"
-  ui_c "32" "$*"
-  ui_nl
+  printf '%s%-*s    ' "$UI_INDENT" "$UI_STEP_LABEL_W" ''
+  ui_c "32" "✅"
+  printf '  %s\n' "$*"
 }
 
 ui_info() {
-  printf '%s💡   ' "$UI_INDENT"
+  printf '%s%-*s 💡  ' "$UI_INDENT" "$UI_STEP_LABEL_W" ''
   ui_c "36" "$*"
   ui_nl
 }
 
 ui_warn() {
-  printf '%s⚠️   ' "$UI_INDENT" >&2
-  ui_c "33" "$*" >&2
-  ui_nl >&2
+  printf '%s%-*s ⚠️  %s\n' "$UI_INDENT" "$UI_STEP_LABEL_W" '' "$*" >&2
 }
 
 ui_err() {
-  printf '%s❌   ' "$UI_INDENT" >&2
-  ui_c "31" "$*" >&2
-  ui_nl >&2
+  printf '%s%-*s ❌  %s\n' "$UI_INDENT" "$UI_STEP_LABEL_W" '' "$*" >&2
 }
 
 ui_config_summary() {
@@ -153,7 +151,7 @@ ui_inventory_summary() {
   local inventory_file="$1"
   ui_subsection "Host groups" "📊"
   if [[ -f "$inventory_file" ]] && command -v awk >/dev/null 2>&1; then
-    awk -v col="$UI_VALUE_COL" '
+    awk -v indent="$UI_INDENT" -v label_w="$UI_STEP_LABEL_W" -v col="$UI_VALUE_COL" '
       /^\[/ {
         gsub(/[\[\]]/, "", $0)
         group=$0
@@ -164,7 +162,7 @@ ui_inventory_summary() {
       }
       END {
         for (g in count) {
-          left = sprintf("         💻  %s:", g)
+          left = sprintf("%s%*s💻  %s:", indent, label_w, "", g)
           printf "%-*s %d host(s)\n", col, left, count[g]
         }
       }
