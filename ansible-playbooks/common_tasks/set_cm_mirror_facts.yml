@@ -55,7 +55,7 @@
       {%- if hv.ansible_os_family == 'RedHat' -%}
       el{{ hv.ansible_distribution_major_version }}{{ '.aarch64le' if hv.ansible_architecture in ['aarch64', 'arm64'] else '' }}
       {%- elif hv.ansible_distribution == 'Ubuntu' -%}
-      {{ hv.ansible_distribution_release }}
+      {{ hv.ansible_distribution_release }}{{ cdh_parcel_arm64_suffix if hv.ansible_architecture in ['aarch64', 'arm64'] else '' }}
       {%- elif hv.ansible_distribution == 'SLES' -%}
       sles{{ hv.ansible_distribution_major_version }}
       {%- else -%}
@@ -81,5 +81,5 @@
       - "CDH parcel target host: {{ cdh_parcel_target_host }}"
       - "CDH parcel OS suffix: {{ cdh_parcel_os_suffix_effective }}"
       - "CDH parcel file: {{ cdh_parcel_filename }}"
-      - "Archive suffixes: el8, el9, jammy (Ubuntu 22.04), noble (Ubuntu 24.04), sles15, *.aarch64le"
+      - "Archive suffixes: el8, el9, jammy, noble, jammy.aarch64le, noble.aarch64le, el8.aarch64le, el9.aarch64le"
       - "Override: cdh_parcel_os_suffix=noble|jammy|el8|el9 or cdh_parcel_target_group=base-workers"

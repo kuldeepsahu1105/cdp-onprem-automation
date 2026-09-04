@@ -34,6 +34,10 @@ KEY_MAP = {
     "existing_sg_name": "EXISTING_SG_NAME",
     "existing_keypair_name": "EXISTING_KEYPAIR_NAME",
     "ami_id": "AMI_ID",
+    "cpu_architecture": "CPU_ARCHITECTURE",
+    "apply_graviton_defaults": "APPLY_GRAVITON_DEFAULTS",
+    "auto_resolve_arm64_ami": "AUTO_RESOLVE_ARM64_AMI",
+    "ecs_deploy_on_arm64": "ECS_DEPLOY_ON_ARM64",
 }
 
 INSTANCE_GROUP_MAP = {

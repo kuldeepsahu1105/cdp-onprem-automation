@@ -295,7 +295,15 @@ cloudera_manager_api_user: "{{ cm_admin_user }}"
 cloudera_manager_api_password: "{{ cm_admin_pass }}"
 
 # ---------------------------------------------------------------------------
-# Cleanup toggles (99_cleanup.yml)
+# CPU architecture (optional ARM64 / AWS Graviton)
+# CPU_ARCHITECTURE: x86_64 (default) | arm64
+# APPLY_GRAVITON_DEFAULTS: remap m5/r5 → m7g/r7g when arm64 (default true)
+# AUTO_RESOLVE_ARM64_AMI: lookup RHEL 9 arm64 AMI in AWS_REGION when arm64 (default true)
+# ECS_DEPLOY_ON_ARM64: enable ECS on ARM64 — experimental (default false)
+# ---------------------------------------------------------------------------
+target_cpu_architecture: auto  # auto | x86_64 | arm64 — wrappers pass CPU_ARCHITECTURE from .tfvars
+ecs_deploy_on_arm64: false
+cdh_parcel_arm64_suffix: ".aarch64le"  # appended to el8/el9/jammy/noble parcel names on ARM64 workers
 # Master switch MUST be true to run any cleanup:
 #   ansible-playbook -i inventory.ini 99_cleanup.yml -e cleanup_enabled=true ...
 # ---------------------------------------------------------------------------

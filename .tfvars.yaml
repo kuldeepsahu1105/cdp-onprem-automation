@@ -14,6 +14,12 @@ owner: ksahu-ygulati
 environment: development
 terraform_version: latest
 
+# Optional ARM64 / Graviton (uncomment to enable)
+# cpu_architecture: arm64
+# apply_graviton_defaults: true
+# auto_resolve_arm64_ami: true
+# ecs_deploy_on_arm64: false
+
 # --- Cloudera versions -------------------------------------------------------
 cm_version: "7.13.2.10000"
 
