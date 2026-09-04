@@ -1,0 +1,300 @@
+### ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml
+#
+# Install Cloudera Data Services (ECS / Experience Cluster) on ecs-masters/ecs-workers.
+# Requires CDP base cluster (26_setup_base_cluster.yml) and CM agents on ECS nodes.
+---
+- name: Install cloudera.cluster collection on control node
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Install cloudera.cluster collection
+      ansible.builtin.import_tasks: common_tasks/install_cloudera_collection.yml
+
+- name: Install ECS (Cloudera Data Services) cluster via Cloudera Manager
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Detect ECS inventory presence
+      ansible.builtin.set_fact:
+        ecs_inventory_present: >-
+          {{
+            (ecs_cluster_master_group in groups)
+            and (groups[ecs_cluster_master_group] | default([]) | length > 0)
+            and (ecs_cluster_worker_group in groups)
+            and (groups[ecs_cluster_worker_group] | default([]) | length > 0)
+          }}
+
+    - name: Resolve ECS deployment toggle
+      ansible.builtin.set_fact:
+        ecs_deploy_effective: >-
+          {{
+            ecs_deploy_enabled | bool
+            if ecs_deploy_enabled not in ['auto', 'Auto', 'AUTO']
+            else ecs_inventory_present | bool
+          }}
+
+    - name: Skip ECS deployment when disabled or inventory is empty
+      ansible.builtin.debug:
+        msg: >-
+          Skipping ECS cluster deployment
+          (ecs_deploy_enabled={{ ecs_deploy_enabled }},
+          ecs-masters/workers present={{ ecs_inventory_present }}).
+      when: not ecs_deploy_effective | bool
+
+    - name: End playbook when ECS deployment is not requested
+      ansible.builtin.meta: end_play
+      when: not ecs_deploy_effective | bool
+
+    - name: Set up Cloudera Manager API URL
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+
+    - name: Validate ECS inventory groups
+      ansible.builtin.assert:
+        that:
+          - ecs_cluster_master_group in groups
+          - groups[ecs_cluster_master_group] | length > 0
+          - ecs_cluster_worker_group in groups
+          - groups[ecs_cluster_worker_group] | length > 0
+        fail_msg: >-
+          ECS inventory groups '{{ ecs_cluster_master_group }}' and
+          '{{ ecs_cluster_worker_group }}' must exist and contain hosts.
+
+    - name: Verify base cluster exists before ECS install
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/clusters/{{ cdh_basecluster_name }}"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+      register: base_cluster_check
+
+    - name: Set ECS master FQDN
+      ansible.builtin.set_fact:
+        ecs_master_fqdn: "{{ hostvars[groups[ecs_cluster_master_group][0]].cldr_hostname }}.{{ cluster_domain }}"
+
+    - name: Build ECS worker FQDNs
+      ansible.builtin.set_fact:
+        ecs_worker_fqdns: "{{ ecs_worker_fqdns | default([]) + [hostvars[item].cldr_hostname + '.' + cluster_domain] }}"
+      loop: "{{ groups[ecs_cluster_worker_group] }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Build ECS worker host assignment entries
+      ansible.builtin.set_fact:
+        ecs_worker_host_entries: "{{ ecs_worker_host_entries | default([]) + [{'name': item, 'host_template': 'ecs_workers'}] }}"
+      loop: "{{ ecs_worker_fqdns }}"
+
+    - name: Build ECS cluster host assignment list
+      ansible.builtin.set_fact:
+        ecs_cluster_hosts: "{{ [{'name': ecs_master_fqdn, 'host_template': 'ecs_master'}] + ecs_worker_host_entries }}"
+
+    - name: Print ECS cluster targets
+      ansible.builtin.debug:
+        msg:
+          - "Cluster name: {{ ecs_cluster_name }}"
+          - "PVC DS repo: {{ ecs_pvc_repository_url }}"
+          - "App domain: {{ ecs_app_domain }}"
+          - "Datalake cluster: {{ cdh_basecluster_name }}"
+          - "ECS master: {{ ecs_master_fqdn }}"
+          - "ECS workers: {{ ecs_worker_fqdns }}"
+
+    - name: Read current CM parcel repository URLs
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/cm/config"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+      register: cm_config_current
+
+    - name: Build merged parcel repository URL list
+      ansible.builtin.set_fact:
+        cm_parcel_repo_urls: >-
+          {{
+            (
+              (cm_config_current.json.items | selectattr('name', 'equalto', 'REMOTE_PARCEL_REPO_URLS') | map(attribute='value') | first | default(''))
+              .split(',')
+              | map('trim')
+              | reject('equalto', '')
+              | list
+            )
+            + [parcel_repo | default(''), ecs_parcel_repo_url]
+            | map('trim')
+            | reject('equalto', '')
+            | unique
+            | list
+          }}
+
+    - name: Add ECS parcel repository to Cloudera Manager
+      cloudera.cluster.cm_config:
+        host: "{{ cm_host }}"
+        port: "{{ cm_api_port }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        verify_tls: false
+        force_tls: "{{ autotls_enabled | default(false) }}"
+        parameters:
+          REMOTE_PARCEL_REPO_URLS: "{{ cm_parcel_repo_urls | join(',') }}"
+      when: ecs_parcel_repo_url | length > 0
+
+    - name: Refresh Cloudera Manager parcel repositories
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/cm/commands/refreshParcelRepos"
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 202]
+      register: refresh_parcels
+      failed_when: false
+
+    - name: Discover available ECS parcel versions
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/parcels/products/ECS/versions"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+      register: ecs_parcel_versions
+      retries: 5
+      delay: 10
+      until: ecs_parcel_versions is succeeded
+
+    - name: Resolve ECS parcel version
+      ansible.builtin.set_fact:
+        ecs_parcel_version_effective: >-
+          {{
+            ecs_parcel_version
+            if ecs_parcel_version | default('') | length > 0
+            else (
+              ecs_parcel_versions.json.items
+              | default([])
+              | selectattr('version', 'search', ecs_pvc_ds_version)
+              | map(attribute='version')
+              | list
+              | last
+              | default(
+                ecs_parcel_versions.json.items | default([]) | map(attribute='version') | list | last,
+                true
+              )
+            )
+          }}
+
+    - name: Require ECS parcel version
+      ansible.builtin.assert:
+        that:
+          - ecs_parcel_version_effective | default('') | length > 0
+        fail_msg: >-
+          Could not determine ECS parcel version. Set ecs_parcel_version in group_vars/all.yml
+          or verify archive credentials and ecs_pvc_ds_version ({{ ecs_pvc_ds_version }}).
+
+    - name: Print selected ECS parcel version
+      ansible.builtin.debug:
+        msg: "Using ECS parcel version: {{ ecs_parcel_version_effective }}"
+
+    - name: Check if ECS cluster already exists
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/clusters/{{ ecs_cluster_name }}"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 404]
+      register: existing_ecs_cluster
+
+    - name: Create and start ECS (Experience) cluster
+      cloudera.cluster.cluster:
+        host: "{{ cm_host }}"
+        port: "{{ cm_api_port }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        verify_tls: false
+        force_tls: "{{ autotls_enabled | default(false) }}"
+        name: "{{ ecs_cluster_name }}"
+        display_name: "{{ ecs_cluster_name }}"
+        cluster_version: "{{ ecs_parcel_version_effective }}"
+        type: EXPERIENCE_CLUSTER
+        state: started
+        parcels:
+          ECS: "{{ ecs_parcel_version_effective }}"
+        services:
+          - name: docker
+            type: DOCKER
+            config:
+              defaultDataPath: "{{ ecs_docker_data_path }}"
+          - name: ecs
+            type: ECS
+            config:
+              app_domain: "{{ ecs_app_domain }}"
+              docker: docker
+              k8s_webui_secret_admin_token: "{{ ecs_k8s_webui_secret_admin_token }}"
+              cp_prometheus_ingress_user: "{{ ecs_cp_prometheus_ingress_user }}"
+              cp_prometheus_ingress_password: "{{ ecs_cp_prometheus_ingress_password }}"
+              infra_prometheus_ingress_user: "{{ ecs_infra_prometheus_ingress_user }}"
+              infra_prometheus_ingress_password: "{{ ecs_infra_prometheus_ingress_password }}"
+              longhorn_replication: "{{ ecs_longhorn_replication }}"
+              lsoDataPath: "{{ ecs_lso_data_path }}"
+              defaultDataPath: "{{ ecs_longhorn_data_path }}"
+              nfs_over_provisioning: "{{ ecs_nfs_over_provisioning }}"
+        host_templates:
+          - name: ecs_master
+            role_groups:
+              - service_type: DOCKER
+                type: DOCKER_SERVER
+              - service_type: ECS
+                type: ECS_SERVER
+          - name: ecs_workers
+            role_groups:
+              - service_type: DOCKER
+                type: DOCKER_SERVER
+              - service_type: ECS
+                type: ECS_AGENT
+        hosts: "{{ ecs_cluster_hosts }}"
+        control_plane:
+          datalake_cluster_name: "{{ cdh_basecluster_name }}"
+          remote_repo_url: "{{ ecs_pvc_repository_url }}"
+          control_plane_config: "{{ ecs_control_plane_config }}"
+      vars:
+        ecs_control_plane_config:
+          ContainerInfo:
+            Mode: public
+            CopyDocker: false
+          Database:
+            Mode: "{{ ecs_control_plane_database_mode }}"
+            EmbeddedDbStorage: "{{ ecs_control_plane_embedded_db_storage_gb }}"
+          Vault:
+            Mode: "{{ ecs_control_plane_vault_mode }}"
+            EmbeddedStorage: "{{ ecs_control_plane_embedded_vault_storage_gb }}"
+          Platform:
+            Name: standard
+          ApplicationDomain: "{{ ecs_app_domain }}"
+          SecurityContext:
+            Enabled: true
+      register: ecs_cluster_result
+      when: existing_ecs_cluster.status == 404
+
+    - name: Start existing ECS cluster services
+      cloudera.cluster.cluster:
+        host: "{{ cm_host }}"
+        port: "{{ cm_api_port }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        verify_tls: false
+        force_tls: "{{ autotls_enabled | default(false) }}"
+        name: "{{ ecs_cluster_name }}"
+        state: started
+      when: existing_ecs_cluster.status == 200
+
+    - name: Print ECS cluster result
+      ansible.builtin.debug:
+        msg: "ECS cluster '{{ ecs_cluster_name }}' deployment complete or already exists"

@@ -22,6 +22,10 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 |---|---|
 | `cdh_basecluster_name` | `CDH-Cluster` |
 | `ecs_cluster_name` | `ECS-Cluster` |
+| `ecs_deploy_enabled` | `auto` | `auto`, `true`, or `false` — deploy ECS when ecs inventory groups exist |
+| `ecs_pvc_ds_version` | `1.5.5-h2000` | CDS repo tag (`1.5.5-h2100` for SP2 CHF1, etc.) |
+| `ecs_parcel_version` | `""` | Optional override; auto-discovered from CM after parcel repo refresh |
+| `ecs_app_domain` | `apps.<domain>` | Application domain for ECS services |
 
 ### CM/CDH repository source
 
@@ -239,6 +243,9 @@ CMS (Management Service) and CDP base cluster are **separate**:
 |---|---|---|
 | `24_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. |
 | `26_setup_base_cluster.yml` | Base cluster | ZooKeeper, HDFS, YARN |
+| `27_setup_ecs_cluster.yml` | ECS cluster | Cloudera Data Services (DOCKER + ECS), embedded control plane |
+
+Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-masters` / `ecs-workers` inventory groups. Skipped when `ecs_deploy_enabled: auto` and ECS groups are empty.
 
 ---
 
@@ -287,7 +294,8 @@ Requires:
 | `1` | `prereq` | `00`–`09` |
 | `2` | `identity` | `00_detect_identity`, `10_identity_setup` |
 | `3` | `cm` | `16`–`21` |
-| `4` | `cluster` | `22`–`26` |
+| `4` | `cluster` | `22`–`27` (ECS skipped if no ecs inventory) |
+| `5` | `ecs` | `27_setup_ecs_cluster.yml` |
 | `all` | — | Full flow |
 
 License file is required for phases `3`, `4`, and `all` only.

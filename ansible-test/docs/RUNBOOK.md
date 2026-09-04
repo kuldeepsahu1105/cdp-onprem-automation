@@ -46,7 +46,8 @@ When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-test/`, 
 DEPLOY_PHASE=1 ./pvc_setup.sh    # prerequisites (00–09)
 DEPLOY_PHASE=2 ./pvc_setup.sh    # identity: FreeIPA or AD (auto-detect)
 DEPLOY_PHASE=3 ./pvc_setup.sh    # CM install (17/18/19/20/21)
-DEPLOY_PHASE=4 ./pvc_setup.sh    # autotls, kerberos, CMS, base cluster
+DEPLOY_PHASE=4 ./pvc_setup.sh    # autotls, kerberos, CMS, base cluster, ECS (if inventory has ecs-* groups)
+DEPLOY_PHASE=5 ./pvc_setup.sh    # ECS cluster only (27)
 DEPLOY_PHASE=all ./pvc_setup.sh  # full flow
 ```
 
@@ -121,7 +122,10 @@ ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
 ```bash
 ansible-playbook -i inventory.ini 24_setup_cm_cms.yml
 ansible-playbook -i inventory.ini 26_setup_base_cluster.yml
+ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml
 ```
+
+`27_setup_ecs_cluster.yml` is skipped automatically when `[ecs-masters]` / `[ecs-workers]` are empty (`ecs_deploy_enabled: auto`).
 
 ---
 

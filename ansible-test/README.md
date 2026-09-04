@@ -56,6 +56,7 @@ Spark is bundled in the CDH parcel for `>= 7.3.1` — separate SPARK3 download i
 | 2 — Identity & DNS | `00_detect`, `10_identity_setup` | `DEPLOY_PHASE=2 ./pvc_setup.sh` |
 | 3 — Cloudera Manager | `16`–`21` | `DEPLOY_PHASE=3 ./pvc_setup.sh` |
 | 4 — CMS & base cluster | `22`–`26` | `DEPLOY_PHASE=4 ./pvc_setup.sh` |
+| 5 — ECS (Data Services) | `27` | `DEPLOY_PHASE=5 ./pvc_setup.sh` |
 | Cleanup | `99` | `99_cleanup.yml` |
 
 See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full execution steps and [docs/REFERENCE.md](docs/REFERENCE.md) for playbook and variable details.

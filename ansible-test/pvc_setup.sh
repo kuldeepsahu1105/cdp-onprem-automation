@@ -126,6 +126,11 @@ run_phase_4() {
   run_playbook 24_setup_cm_cms.yml
   run_playbook 25_setup_cm_ldap.yml
   run_playbook 26_setup_base_cluster.yml
+  run_playbook 27_setup_ecs_cluster.yml
+}
+
+run_phase_5() {
+  run_playbook 27_setup_ecs_cluster.yml
 }
 
 case "$DEPLOY_PHASE" in
@@ -133,6 +138,7 @@ case "$DEPLOY_PHASE" in
   2|identity|phase2) run_phase_2 ;;
   3|cm|phase3) run_phase_3 ;;
   4|cluster|phase4) run_phase_4 ;;
+  5|ecs|phase5) run_phase_5 ;;
   all|full)
     run_phase_1
     sleep 5
@@ -143,7 +149,7 @@ case "$DEPLOY_PHASE" in
     run_phase_4
     ;;
   *)
-    echo "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|4|all or prereq|identity|cm|cluster|all)"
+    echo "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|4|5|all or prereq|identity|cm|cluster|ecs|all)"
     exit 1
     ;;
 esac

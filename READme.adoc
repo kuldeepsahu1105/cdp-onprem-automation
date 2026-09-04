@@ -322,7 +322,8 @@ cd ansible-test
 DEPLOY_PHASE=1 ./pvc_setup.sh    # prerequisites
 DEPLOY_PHASE=2 ./pvc_setup.sh    # identity (FreeIPA or AD)
 DEPLOY_PHASE=3 ./pvc_setup.sh    # Cloudera Manager
-DEPLOY_PHASE=4 ./pvc_setup.sh    # Auto-TLS, Kerberos, CMS, base cluster
+DEPLOY_PHASE=4 ./pvc_setup.sh    # Auto-TLS, Kerberos, CMS, base cluster, ECS (when ecs-* groups exist)
+DEPLOY_PHASE=5 ./pvc_setup.sh    # ECS cluster only
 DEPLOY_PHASE=all ./pvc_setup.sh  # full flow
 ----
 
@@ -348,6 +349,9 @@ Set `CONTROL_MODE=local` when running on a host listed in `inventory.ini`. See l
 
 | CMS & base cluster
 | `24_setup_cm_cms.yml` (Management Service), `26_setup_base_cluster.yml` (HDFS/YARN/ZK)
+
+| ECS (Data Services)
+| `27_setup_ecs_cluster.yml` (DOCKER + ECS experience cluster; requires base cluster)
 
 | Cleanup
 | `99_cleanup.yml` — toggle-driven teardown (see README)
