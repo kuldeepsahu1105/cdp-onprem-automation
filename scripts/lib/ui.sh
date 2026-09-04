@@ -62,7 +62,7 @@ ui_section() {
   UI_STEP_NUM=0
   ui_nl
   ui_rule "═"
-  printf "  %s  " "$emoji"
+  ui_prefix "  " "$emoji"
   ui_c "1;34" "$title"
   ui_nl
   ui_rule "─"
@@ -72,7 +72,7 @@ ui_subsection() {
   local title="$1"
   local emoji="${2:-•}"
   ui_nl
-  printf "    %s  " "$emoji"
+  ui_prefix "    " "$emoji"
   ui_c "1;35" "$title"
   ui_nl
 }
@@ -82,7 +82,7 @@ ui_step() {
   local emoji="${2:-▸}"
   UI_STEP_NUM=$((UI_STEP_NUM + 1))
   ui_nl
-  printf "    %s  " "$emoji"
+  ui_prefix "    " "$emoji"
   ui_c "1" "Step ${UI_STEP_NUM}"
   printf ": "
   ui_c "0;1" "$msg"
@@ -113,11 +113,22 @@ ui_err() {
   ui_nl >&2
 }
 
+ui_prefix() {
+  local indent="${1:-    }"
+  local emoji="${2:-}"
+  if [[ -n "$emoji" ]]; then
+    printf '%s%s  ' "$indent" "$emoji"
+  else
+    printf '%s' "$indent"
+  fi
+}
+
 ui_kv() {
   local key="$1"
   local value="$2"
-  local emoji="${3:-  }"
-  printf "    %-2s %-24s %s\n" "$emoji" "$(ui_c "2" "${key}:")" "$value"
+  local emoji="${3:-}"
+  ui_prefix "    " "$emoji"
+  printf "%s %s\n" "$(ui_c "2" "$(printf '%-24s' "${key}:")")" "$value"
 }
 
 ui_config_summary() {
