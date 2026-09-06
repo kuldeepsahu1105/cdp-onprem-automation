@@ -212,7 +212,11 @@ pipeline {
           ./jenkins/scripts/build-summary.sh || true
         '''
         archivePipelineArtifacts()
-        sendPipelineEmail(true)
+        try {
+          sendPipelineEmail(true)
+        } catch (Exception e) {
+          echo "WARN: success email failed: ${e.message}"
+        }
       }
     }
 
@@ -245,7 +249,11 @@ pipeline {
           ./jenkins/scripts/build-summary.sh || true
         '''
         archivePipelineArtifacts()
-        sendPipelineEmail(false)
+        try {
+          sendPipelineEmail(false)
+        } catch (Exception e) {
+          echo "WARN: failure email failed: ${e.message}"
+        }
       }
     }
 
@@ -253,7 +261,11 @@ pipeline {
       script {
         env.BUILD_RESULT = 'UNSTABLE'
         archivePipelineArtifacts()
-        sendPipelineEmail(false)
+        try {
+          sendPipelineEmail(false)
+        } catch (Exception e) {
+          echo "WARN: unstable email failed: ${e.message}"
+        }
       }
     }
 
@@ -505,13 +517,15 @@ def sendPipelineEmail(boolean success) {
       attachmentList << "jenkins/artifacts/${name}"
     }
   }
-  (1..5).each { phase ->
+  ['1', '2', '3', '4', '5'].each { phase ->
     def logName = "ansible-${env.BUILD_NUMBER}-phase${phase}.log"
     if (fileExists("${env.WORKSPACE}/jenkins/artifacts/${logName}")) {
       attachmentList << "jenkins/artifacts/${logName}"
     }
   }
-  fileExists("${env.WORKSPACE}/ansible-playbooks/inventory.ini") && attachmentList << 'ansible-playbooks/inventory.ini'
+  if (fileExists("${env.WORKSPACE}/ansible-playbooks/inventory.ini")) {
+    attachmentList << 'ansible-playbooks/inventory.ini'
+  }
 
   emailext(
     to: env.MAIL_TO,
