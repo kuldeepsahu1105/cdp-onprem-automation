@@ -22,5 +22,9 @@ license.txt
 **/logs/*
 !ansible-playbooks/logs/.gitkeep
 
+# Jenkins pipeline runtime artifacts (keep directory placeholder)
+jenkins/artifacts/*
+!jenkins/artifacts/.gitkeep
+
 # Local inventory overrides (keep inventory.ini as template if needed)
 ansible-playbooks/inventory.ini.bak

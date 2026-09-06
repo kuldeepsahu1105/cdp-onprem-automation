@@ -67,6 +67,11 @@ load_tfvars() {
     esac
 
     export TFVARS_LOADED_FROM="$config_file"
+
+    # Jenkins pipeline UI overrides (non-empty values win over tfvars)
+    [[ -n "${JENKINS_OWNER:-}" ]] && export OWNER="$JENKINS_OWNER"
+    [[ -n "${JENKINS_ENVIRONMENT:-}" ]] && export ENVIRONMENT="$JENKINS_ENVIRONMENT"
+    [[ -n "${JENKINS_AWS_REGION:-}" ]] && export AWS_REGION="$JENKINS_AWS_REGION"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

@@ -297,6 +297,19 @@ DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
 - Kuldeep Sahu — ksahu@cloudera.com
 - Yash Gulati — ygulati@cloudera.com
 
+## Jenkins CI/CD
+
+A declarative **`Jenkinsfile`** at the repo root drives validation, optional Terraform provisioning, and Ansible deployment (prerequisites → CM → CDH → ECS) with UI parameters and email notifications on success/failure.
+
+| `PIPELINE_MODE` | Action |
+|---|---|
+| `validate` | Tools, AWS creds, tfvars, Ansible syntax |
+| `terraform` | Run `clone_and_run_terraform.sh` |
+| `ansible` | Run `clone_and_run_pvc_automation.sh` (`DEPLOY_PHASE`) |
+| `full` | Terraform then Ansible |
+
+Set `DRY_RUN=true` for Terraform plan-only or Ansible check mode. See [jenkins/README.md](jenkins/README.md) for job setup, required plugins, credentials, and artifacts.
+
 ## Troubleshooting — UI / dry run not showing
 
 You need a **recent git checkout** (commit `979b503` or later). From your clone:
