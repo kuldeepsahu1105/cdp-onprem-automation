@@ -11,7 +11,7 @@ pipeline {
       name: 'PIPELINE_STAGES',
       type: 'PT_CHECKBOX',
       value: 'VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL,CDH_BASE,ECS_INSTALL',
-      defaultValue: 'VALIDATE',
+      defaultValue: 'VALIDATE,TERRAFORM',
       multiSelectDelimiter: ',',
       description: 'Select stages to run (executed in order: Validate → Terraform → Ansible phases 1→5)'
     )
@@ -19,27 +19,27 @@ pipeline {
       name: 'VALIDATION_CHECKS',
       type: 'PT_CHECKBOX',
       value: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY,EMAIL_FORMAT',
-      defaultValue: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX',
+      defaultValue: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY',
       multiSelectDelimiter: ',',
       description: 'Validation checks when VALIDATE stage is selected (INVENTORY auto-enabled for Ansible-only runs)'
     )
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
-    string(name: 'ENVIRONMENT', defaultValue: '', description: 'Name prefix + Terraform workspace (overrides tfvars when set)')
-    string(name: 'OWNER', defaultValue: '', description: 'Owner tag — required for Terraform/Ansible if not set in tfvars')
-    string(name: 'AWS_REGION', defaultValue: '', description: 'AWS region override (e.g. ap-southeast-1)')
-    string(name: 'AMI_ID', defaultValue: '', description: 'AMI override for all instance groups (empty = use tfvars)')
-    string(name: 'CLDR_MNGR_COUNT', defaultValue: '', description: 'CM host count override (positive integer)')
-    string(name: 'CLDR_MNGR_INSTANCE_TYPE', defaultValue: '', description: 'CM instance type override (e.g. m5.4xlarge)')
-    string(name: 'CLDR_MNGR_VOLUME_SIZE', defaultValue: '', description: 'CM root volume GB override (positive integer)')
-    string(name: 'IPA_SERVER_COUNT', defaultValue: '', description: 'FreeIPA server count override')
-    string(name: 'IPA_SERVER_INSTANCE_TYPE', defaultValue: '', description: 'FreeIPA instance type override')
-    string(name: 'PVCBASE_MASTER_COUNT', defaultValue: '', description: 'CDH base master count override')
-    string(name: 'PVCBASE_WORKER_COUNT', defaultValue: '', description: 'CDH base worker count override')
-    string(name: 'PVCBASE_WORKER_INSTANCE_TYPE', defaultValue: '', description: 'CDH base worker instance type override')
-    string(name: 'PVCECS_MASTER_COUNT', defaultValue: '', description: 'ECS master count override')
-    string(name: 'PVCECS_WORKER_COUNT', defaultValue: '', description: 'ECS worker count override')
-    string(name: 'PVCECS_WORKER_INSTANCE_TYPE', defaultValue: '', description: 'ECS worker instance type override')
-    string(name: 'TFVARS_FILE', defaultValue: '', description: 'Config file path relative to repo root (empty = auto-detect)')
+    string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Name prefix + Terraform workspace (overrides tfvars when set)')
+    string(name: 'OWNER', defaultValue: 'ksahu-ygulati', description: 'Owner tag — required for Terraform/Ansible if not set in tfvars')
+    string(name: 'AWS_REGION', defaultValue: 'ap-southeast-1', description: 'AWS region override (e.g. ap-southeast-1)')
+    string(name: 'AMI_ID', defaultValue: 'ami-0a66a47c24c021954', description: 'AMI override for all instance groups (empty = use tfvars)')
+    string(name: 'CLDR_MNGR_COUNT', defaultValue: '1', description: 'CM host count override (positive integer)')
+    string(name: 'CLDR_MNGR_INSTANCE_TYPE', defaultValue: 'm5.4xlarge', description: 'CM instance type override (e.g. m5.4xlarge)')
+    string(name: 'CLDR_MNGR_VOLUME_SIZE', defaultValue: '300', description: 'CM root volume GB override (positive integer)')
+    string(name: 'IPA_SERVER_COUNT', defaultValue: '1', description: 'FreeIPA server count override')
+    string(name: 'IPA_SERVER_INSTANCE_TYPE', defaultValue: 'm5.xlarge', description: 'FreeIPA instance type override')
+    string(name: 'PVCBASE_MASTER_COUNT', defaultValue: '1', description: 'CDH base master count override')
+    string(name: 'PVCBASE_WORKER_COUNT', defaultValue: '3', description: 'CDH base worker count override')
+    string(name: 'PVCBASE_WORKER_INSTANCE_TYPE', defaultValue: 'm5.4xlarge', description: 'CDH base worker instance type override')
+    string(name: 'PVCECS_MASTER_COUNT', defaultValue: '1', description: 'ECS master count override')
+    string(name: 'PVCECS_WORKER_COUNT', defaultValue: '7', description: 'ECS worker count override')
+    string(name: 'PVCECS_WORKER_INSTANCE_TYPE', defaultValue: 'r5a.4xlarge', description: 'ECS worker instance type override')
+    string(name: 'TFVARS_FILE', defaultValue: '.tfvars.yaml', description: 'Config file path relative to repo root (empty = auto-detect)')
     string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to checkout (no spaces or ..)')
     string(name: 'NOTIFICATION_EMAIL', defaultValue: '', description: 'Email recipient (defaults to BUILD_USER_EMAIL; validated when set)')
   }
@@ -82,8 +82,8 @@ pipeline {
     stage('Build') {
       steps {
         script {
-          def stages = parseSelectedStages(params.PIPELINE_STAGES)
-          def label = "#${BUILD_NUMBER} — ${stages ? stages.join('+') : 'pending'}"
+          def stages = effectivePipelineStages(params.PIPELINE_STAGES)
+          def label = "#${BUILD_NUMBER} — ${stages.join('+')}"
           if (params.DRY_RUN == true || "${params.DRY_RUN}" == 'true') { label += ' (dry-run)' }
           currentBuild.displayName = label
         }
@@ -113,6 +113,7 @@ pipeline {
           env.REQUIRE_INVENTORY = cfg.requireInventory
           env.VALIDATE_INVENTORY = cfg.validateInventory
           env.PIPELINE_ACTION = cfg.summaryLabel
+          env.VALIDATION_CHECKS = cfg.validationChecks
           echo "Resolved stages: validate=${cfg.runValidate}, terraform=${cfg.runTerraform}, ansible=${cfg.runAnsible}, phases=${cfg.ansiblePhases}"
           echo "Validation checks: ${cfg.validationChecks}"
         }
@@ -268,6 +269,14 @@ pipeline {
   }
 }
 
+def defaultPipelineStages() {
+  return 'VALIDATE,TERRAFORM'
+}
+
+def defaultValidationChecks() {
+  return 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY'
+}
+
 def isRefreshRequested() {
   def refresh = params.REFRESH_JENKINSFILE
   if (refresh == null) {
@@ -294,8 +303,26 @@ def parseSelectedStages(def csv) {
   return text.split(',').collect { it.trim() }.findAll { it }
 }
 
+def effectivePipelineStages(def csv) {
+  def stages = parseSelectedStages(csv)
+  if (stages.isEmpty()) {
+    echo "PIPELINE_STAGES not set — using default: ${defaultPipelineStages()}"
+    return parseSelectedStages(defaultPipelineStages())
+  }
+  return stages
+}
+
+def effectiveValidationChecks(def csv) {
+  def checks = (csv?.toString()?.trim())
+  if (!checks) {
+    echo "VALIDATION_CHECKS not set — using default: ${defaultValidationChecks()}"
+    return defaultValidationChecks()
+  }
+  return checks
+}
+
 def resolvePipelineStages(def stagesCsv, def validationCsv) {
-  def stages = parseSelectedStages(stagesCsv)
+  def stages = effectivePipelineStages(stagesCsv)
   def ansibleMap = [
     'PREREQS'    : '1',
     'IDENTITY'   : '2',
@@ -308,7 +335,7 @@ def resolvePipelineStages(def stagesCsv, def validationCsv) {
   def runAnsible = ansiblePhases.isEmpty() ? 'false' : 'true'
   def runValidate = stages.contains('VALIDATE') ? 'true' : 'false'
   def requireInventory = (runAnsible == 'true' && runTerraform != 'true') ? 'true' : 'false'
-  def validationChecks = (validationCsv?.toString()?.trim()) ?: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX'
+  def validationChecks = effectiveValidationChecks(validationCsv)
   if (requireInventory == 'true' && !validationChecks.contains('INVENTORY')) {
     validationChecks = "${validationChecks},INVENTORY"
   }
@@ -337,9 +364,9 @@ def validatePipelineInputs() {
     return
   }
 
-  def stages = parseSelectedStages(params.PIPELINE_STAGES)
+  def stages = effectivePipelineStages(params.PIPELINE_STAGES)
   if (stages.isEmpty()) {
-    validationFail('PIPELINE_STAGES is empty. Select at least one stage checkbox, or set REFRESH_JENKINSFILE=YES to reload parameters.')
+    validationFail('PIPELINE_STAGES is empty. Select at least one stage checkbox, or set REFRESH_JENKINSFILE=YES to reload parameters after Jenkinsfile changes.')
   }
 
   def awsRegionRegex = /^(us|eu|ap|sa|ca|me|af|il|cn|us-gov)-[a-z]+-\d{1}$/
@@ -416,7 +443,7 @@ def validatePipelineInputs() {
   }
 
   def email = params.NOTIFICATION_EMAIL?.trim()
-  def checks = params.VALIDATION_CHECKS ?: ''
+  def checks = params.VALIDATION_CHECKS?.toString() ?: ''
   if (email && checks.contains('EMAIL_FORMAT') && !email.matches(emailRegex)) {
     validationFail("NOTIFICATION_EMAIL '${email}' is not a valid email address.")
   }

@@ -18,6 +18,24 @@ Declarative pipeline with **checkbox stage selection**, **configurable validatio
 3. Run the job — it aborts immediately after reloading the parameter UI
 4. Run again with your desired stage checkboxes
 
+## Default parameter values
+
+Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
+
+| Parameter | Default |
+|---|---|
+| `PIPELINE_STAGES` | `VALIDATE,TERRAFORM` |
+| `VALIDATION_CHECKS` | `TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY` |
+| `ENVIRONMENT` | `development` |
+| `OWNER` | `ksahu-ygulati` |
+| `AWS_REGION` | `ap-southeast-1` |
+| `AMI_ID` | `ami-0a66a47c24c021954` |
+| `TFVARS_FILE` | `.tfvars.yaml` |
+| `GIT_BRANCH` | `main` |
+| Instance counts/types | Same as `.tfvars.yaml` instance_groups |
+
+If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALIDATE,TERRAFORM`.
+
 ## Stage checkboxes (`PIPELINE_STAGES`)
 
 Select one or more stages (executed in order):
