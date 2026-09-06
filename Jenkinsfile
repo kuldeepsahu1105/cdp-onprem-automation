@@ -3,33 +3,34 @@ pipeline {
 
   parameters {
     choice(
-      name: 'PIPELINE_ACTION',
-      choices: [
-        'validate',
-        'terraform-only',
-        'prereqs-only',
-        'identity-only',
-        'cm-install',
-        'cdh-base',
-        'ecs-install',
-        'ansible-all',
-        'full'
-      ],
-      description: '''What to run:
-validate = checks only
-terraform-only = EC2/inventory only (override counts/sizes/prefix below)
-prereqs-only = Ansible phase 1 | identity-only = phase 2 | cm-install = phase 3
-cdh-base = phase 4 | ecs-install = phase 5 | ansible-all = all Ansible phases
-full = terraform-only then ansible-all'''
+      name: 'REFRESH_JENKINSFILE',
+      choices: ['NO', 'YES'],
+      description: 'YES = reload Jenkinsfile parameter UI and exit (no deployment). Run once after Jenkinsfile changes.'
+    )
+    extendedChoice(
+      name: 'PIPELINE_STAGES',
+      type: 'PT_CHECKBOX',
+      value: 'VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL,CDH_BASE,ECS_INSTALL',
+      defaultValue: 'VALIDATE',
+      multiSelectDelimiter: ',',
+      description: 'Select stages to run (executed in order: Validate → Terraform → Ansible phases 1→5)'
+    )
+    extendedChoice(
+      name: 'VALIDATION_CHECKS',
+      type: 'PT_CHECKBOX',
+      value: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY,EMAIL_FORMAT',
+      defaultValue: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX',
+      multiSelectDelimiter: ',',
+      description: 'Validation checks when VALIDATE stage is selected (INVENTORY auto-enabled for Ansible-only runs)'
     )
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
     string(name: 'ENVIRONMENT', defaultValue: '', description: 'Name prefix + Terraform workspace (overrides tfvars when set)')
-    string(name: 'OWNER', defaultValue: '', description: 'Owner tag (overrides tfvars when set)')
+    string(name: 'OWNER', defaultValue: '', description: 'Owner tag — required for Terraform/Ansible if not set in tfvars')
     string(name: 'AWS_REGION', defaultValue: '', description: 'AWS region override (e.g. ap-southeast-1)')
     string(name: 'AMI_ID', defaultValue: '', description: 'AMI override for all instance groups (empty = use tfvars)')
-    string(name: 'CLDR_MNGR_COUNT', defaultValue: '', description: 'CM host count override')
+    string(name: 'CLDR_MNGR_COUNT', defaultValue: '', description: 'CM host count override (positive integer)')
     string(name: 'CLDR_MNGR_INSTANCE_TYPE', defaultValue: '', description: 'CM instance type override (e.g. m5.4xlarge)')
-    string(name: 'CLDR_MNGR_VOLUME_SIZE', defaultValue: '', description: 'CM root volume GB override')
+    string(name: 'CLDR_MNGR_VOLUME_SIZE', defaultValue: '', description: 'CM root volume GB override (positive integer)')
     string(name: 'IPA_SERVER_COUNT', defaultValue: '', description: 'FreeIPA server count override')
     string(name: 'IPA_SERVER_INSTANCE_TYPE', defaultValue: '', description: 'FreeIPA instance type override')
     string(name: 'PVCBASE_MASTER_COUNT', defaultValue: '', description: 'CDH base master count override')
@@ -39,9 +40,8 @@ full = terraform-only then ansible-all'''
     string(name: 'PVCECS_WORKER_COUNT', defaultValue: '', description: 'ECS worker count override')
     string(name: 'PVCECS_WORKER_INSTANCE_TYPE', defaultValue: '', description: 'ECS worker instance type override')
     string(name: 'TFVARS_FILE', defaultValue: '', description: 'Config file path relative to repo root (empty = auto-detect)')
-    string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to checkout')
-    string(name: 'NOTIFICATION_EMAIL', defaultValue: '', description: 'Email recipient (defaults to BUILD_USER_EMAIL when empty)')
-    booleanParam(name: 'REFRESH_JENKINSFILE', defaultValue: false, description: 'Reload Jenkinsfile parameter definitions and exit')
+    string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to checkout (no spaces or ..)')
+    string(name: 'NOTIFICATION_EMAIL', defaultValue: '', description: 'Email recipient (defaults to BUILD_USER_EMAIL; validated when set)')
   }
 
   options {
@@ -72,7 +72,8 @@ full = terraform-only then ansible-all'''
     JENKINS_PVCECS_WORKER_INSTANCE_TYPE = "${params.PVCECS_WORKER_INSTANCE_TYPE?.trim() ?: ''}"
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
-    PIPELINE_ACTION = "${params.PIPELINE_ACTION}"
+    PIPELINE_STAGES = "${params.PIPELINE_STAGES?.trim() ?: ''}"
+    VALIDATION_CHECKS = "${params.VALIDATION_CHECKS?.trim() ?: ''}"
     BUILD_RESULT = 'IN_PROGRESS'
     MAIL_TO = "${params.NOTIFICATION_EMAIL?.trim() ?: env.BUILD_USER_EMAIL ?: ''}"
   }
@@ -81,7 +82,8 @@ full = terraform-only then ansible-all'''
     stage('Build') {
       steps {
         script {
-          def label = "#${BUILD_NUMBER} — ${params.PIPELINE_ACTION}"
+          def stages = parseSelectedStages(params.PIPELINE_STAGES)
+          def label = "#${BUILD_NUMBER} — ${stages.join('+') ?: 'none'}"
           if (params.DRY_RUN) { label += ' (dry-run)' }
           currentBuild.displayName = label
         }
@@ -89,26 +91,30 @@ full = terraform-only then ansible-all'''
     }
 
     stage('DRY RUN: Reload Jenkinsfile') {
-      when { expression { return params.REFRESH_JENKINSFILE } }
+      when { expression { return isRefreshRequested() } }
       steps {
+        sh 'echo "Reloading Jenkinsfile parameters for job ${JOB_NAME} [${BUILD_NUMBER}] (${BUILD_URL})"'
         script {
           currentBuild.result = 'ABORTED'
+          currentBuild.description = 'Jenkinsfile parameters reloaded. Re-run Build with Parameters.'
           error('DRY RUN COMPLETED — Jenkinsfile parameters reloaded.')
         }
       }
     }
 
-    stage('Resolve Action') {
+    stage('Resolve Stages') {
       steps {
         script {
-          def cfg = resolvePipelineAction(params.PIPELINE_ACTION)
+          def cfg = resolvePipelineStages(params.PIPELINE_STAGES, params.VALIDATION_CHECKS)
+          env.RUN_VALIDATE = cfg.runValidate
           env.RUN_TERRAFORM = cfg.runTerraform
           env.RUN_ANSIBLE = cfg.runAnsible
-          env.DEPLOY_PHASE = cfg.deployPhase
+          env.ANSIBLE_PHASES = cfg.ansiblePhases
           env.REQUIRE_INVENTORY = cfg.requireInventory
-          env.VALIDATE_ANSIBLE_SYNTAX = cfg.validateAnsibleSyntax
-          env.PIPELINE_MODE = cfg.legacyMode
-          echo "Resolved: terraform=${cfg.runTerraform}, ansible=${cfg.runAnsible}, phase=${cfg.deployPhase}, label=${cfg.label}"
+          env.VALIDATE_INVENTORY = cfg.validateInventory
+          env.PIPELINE_ACTION = cfg.summaryLabel
+          echo "Resolved stages: validate=${cfg.runValidate}, terraform=${cfg.runTerraform}, ansible=${cfg.runAnsible}, phases=${cfg.ansiblePhases}"
+          echo "Validation checks: ${cfg.validationChecks}"
         }
       }
     }
@@ -116,33 +122,7 @@ full = terraform-only then ansible-all'''
     stage('Check Parameters') {
       steps {
         script {
-          def RED_BOLD = "\u001B[1;31m"
-          def RESET = "\u001B[0m"
-          def fail = { msg -> error "${RED_BOLD}ERROR: ${msg}${RESET}" }
-
-          def awsRegionRegex = /^(us|eu|ap|sa|ca|me|af|il|cn|us-gov)-[a-z]+-\d{1}$/
-          if (params.AWS_REGION?.trim() && !params.AWS_REGION.trim().matches(awsRegionRegex)) {
-            fail("AWS_REGION '${params.AWS_REGION}' is not a valid AWS region format.")
-          }
-
-          def countParams = [
-            'CLDR_MNGR_COUNT', 'CLDR_MNGR_VOLUME_SIZE',
-            'IPA_SERVER_COUNT', 'PVCBASE_MASTER_COUNT', 'PVCBASE_WORKER_COUNT',
-            'PVCECS_MASTER_COUNT', 'PVCECS_WORKER_COUNT'
-          ]
-          countParams.each { name ->
-            def val = params."${name}"?.trim()
-            if (val && !val.isInteger()) {
-              fail("${name} must be a positive integer when set (got '${val}').")
-            }
-            if (val && val.toInteger() < 0) {
-              fail("${name} cannot be negative.")
-            }
-          }
-
-          if (env.REQUIRE_INVENTORY == 'true') {
-            echo "INFO: ${params.PIPELINE_ACTION} requires ansible-playbooks/inventory.ini (from a prior terraform-only or full run)."
-          }
+          validatePipelineInputs()
         }
       }
     }
@@ -161,12 +141,14 @@ full = terraform-only then ansible-all'''
     }
 
     stage('Validate Prerequisites') {
+      when { expression { return env.RUN_VALIDATE == 'true' } }
       steps {
         sh '''
           set -euo pipefail
           mkdir -p "${LOG_DIR}"
-          export VALIDATE_ANSIBLE_SYNTAX="${VALIDATE_ANSIBLE_SYNTAX:-true}"
+          export VALIDATION_CHECKS="${VALIDATION_CHECKS}"
           export REQUIRE_INVENTORY="${REQUIRE_INVENTORY:-false}"
+          export VALIDATE_INVENTORY="${VALIDATE_INVENTORY:-false}"
           ./jenkins/scripts/validate-prereqs.sh
         '''
       }
@@ -185,11 +167,18 @@ full = terraform-only then ansible-all'''
     stage('Ansible Deploy') {
       when { expression { return env.RUN_ANSIBLE == 'true' } }
       steps {
-        sh '''
-          set -euo pipefail
-          export REQUIRE_INVENTORY=true
-          ./jenkins/scripts/run-ansible.sh
-        '''
+        script {
+          def phases = env.ANSIBLE_PHASES.split(',').findAll { it?.trim() }
+          for (phase in phases) {
+            echo "Running Ansible deploy phase ${phase}"
+            sh """
+              set -euo pipefail
+              export DEPLOY_PHASE='${phase}'
+              export REQUIRE_INVENTORY=true
+              ./jenkins/scripts/run-ansible.sh
+            """
+          }
+        }
       }
     }
 
@@ -199,7 +188,8 @@ full = terraform-only then ansible-all'''
           sh """
             set -euo pipefail
             export BUILD_RESULT='${currentBuild.currentResult ?: 'SUCCESS'}'
-            export PIPELINE_ACTION='${params.PIPELINE_ACTION}'
+            export PIPELINE_ACTION='${env.PIPELINE_ACTION}'
+            export PIPELINE_STAGES='${params.PIPELINE_STAGES}'
             ./jenkins/scripts/collect-artifacts.sh
             ./jenkins/scripts/build-summary.sh
           """
@@ -216,6 +206,7 @@ full = terraform-only then ansible-all'''
           set -euo pipefail
           export BUILD_RESULT=SUCCESS
           export PIPELINE_ACTION="${PIPELINE_ACTION}"
+          export PIPELINE_STAGES="${PIPELINE_STAGES}"
           ./jenkins/scripts/collect-artifacts.sh || true
           ./jenkins/scripts/build-summary.sh || true
         '''
@@ -248,6 +239,7 @@ full = terraform-only then ansible-all'''
           export BUILD_RESULT=FAILURE
           export ERROR_MESSAGE="${ERROR_MESSAGE:-Pipeline failed}"
           export PIPELINE_ACTION="${PIPELINE_ACTION}"
+          export PIPELINE_STAGES="${PIPELINE_STAGES}"
           ./jenkins/scripts/collect-artifacts.sh || true
           ./jenkins/scripts/build-summary.sh || true
         '''
@@ -276,38 +268,156 @@ full = terraform-only then ansible-all'''
   }
 }
 
-def resolvePipelineAction(String action) {
-  def ansiblePhases = [
-    'prereqs-only'   : [phase: '1',   label: 'Prerequisites (phase 1)'],
-    'identity-only'  : [phase: '2',   label: 'Identity / DNS (phase 2)'],
-    'cm-install'     : [phase: '3',   label: 'Cloudera Manager install (phase 3)'],
-    'cdh-base'       : [phase: '4',   label: 'CDH base cluster (phase 4)'],
-    'ecs-install'    : [phase: '5',   label: 'ECS Data Services (phase 5)'],
-    'ansible-all'    : [phase: 'all', label: 'Full Ansible flow'],
-  ]
+def isRefreshRequested() {
+  def refresh = params.REFRESH_JENKINSFILE?.trim() ?: 'NO'
+  return refresh ==~ /(?i)(Y|YES|T|TRUE|ON|RUN)/
+}
 
-  switch (action) {
-    case 'validate':
-      return [runTerraform: 'false', runAnsible: 'false', deployPhase: 'n/a',
-              requireInventory: 'false', validateAnsibleSyntax: 'true',
-              legacyMode: 'validate', label: 'Validation only']
-    case 'terraform-only':
-      return [runTerraform: 'true', runAnsible: 'false', deployPhase: 'n/a',
-              requireInventory: 'false', validateAnsibleSyntax: 'false',
-              legacyMode: 'terraform', label: 'Terraform only (EC2 + inventory)']
-    case 'full':
-      return [runTerraform: 'true', runAnsible: 'true', deployPhase: 'all',
-              requireInventory: 'false', validateAnsibleSyntax: 'true',
-              legacyMode: 'full', label: 'Terraform + full Ansible']
-    default:
-      if (ansiblePhases.containsKey(action)) {
-        def p = ansiblePhases[action]
-        return [runTerraform: 'false', runAnsible: 'true', deployPhase: p.phase,
-                requireInventory: 'true', validateAnsibleSyntax: 'true',
-                legacyMode: 'ansible', label: p.label]
-      }
-      error("Unknown PIPELINE_ACTION: ${action}")
+def parseSelectedStages(String csv) {
+  if (!csv?.trim()) {
+    return []
   }
+  return csv.split(',').collect { it.trim() }.findAll { it }
+}
+
+def resolvePipelineStages(String stagesCsv, String validationCsv) {
+  def stages = parseSelectedStages(stagesCsv)
+  def ansibleMap = [
+    'PREREQS'    : '1',
+    'IDENTITY'   : '2',
+    'CM_INSTALL' : '3',
+    'CDH_BASE'   : '4',
+    'ECS_INSTALL': '5',
+  ]
+  def ansiblePhases = stages.findAll { ansibleMap.containsKey(it) }.collect { ansibleMap[it] }
+  def runTerraform = stages.contains('TERRAFORM') ? 'true' : 'false'
+  def runAnsible = ansiblePhases.isEmpty() ? 'false' : 'true'
+  def runValidate = stages.contains('VALIDATE') ? 'true' : 'false'
+  def requireInventory = (runAnsible == 'true' && runTerraform != 'true') ? 'true' : 'false'
+  def validationChecks = validationCsv?.trim() ?: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX'
+  if (requireInventory == 'true' && !validationChecks.contains('INVENTORY')) {
+    validationChecks = "${validationChecks},INVENTORY"
+  }
+  def summary = stages.isEmpty() ? 'none' : stages.join('+')
+  return [
+    runValidate      : runValidate,
+    runTerraform     : runTerraform,
+    runAnsible       : runAnsible,
+    ansiblePhases    : ansiblePhases.join(','),
+    requireInventory : requireInventory,
+    validateInventory: requireInventory,
+    validationChecks : validationChecks,
+    summaryLabel     : summary,
+  ]
+}
+
+def validationFail(String message) {
+  def RED_BOLD = "\u001B[1;31m"
+  def RESET = "\u001B[0m"
+  error "${RED_BOLD}❗ ERROR: ${message} ❗${RESET}"
+}
+
+def validatePipelineInputs() {
+  if (isRefreshRequested()) {
+    echo 'REFRESH_JENKINSFILE=YES — skipping input validation.'
+    return
+  }
+
+  def stages = parseSelectedStages(params.PIPELINE_STAGES)
+  if (stages.isEmpty()) {
+    validationFail('PIPELINE_STAGES is empty. Select at least one stage checkbox, or set REFRESH_JENKINSFILE=YES to reload parameters.')
+  }
+
+  def awsRegionRegex = /^(us|eu|ap|sa|ca|me|af|il|cn|us-gov)-[a-z]+-\d{1}$/
+  def envNameRegex = /^[a-zA-Z][a-zA-Z0-9-]{2,31}$/
+  def amiRegex = /^ami-[a-z0-9]+$/
+  def instanceTypeRegex = /^[a-z][0-9]+[a-z]?\.[a-z0-9]+$/
+  def emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
+
+  def region = params.AWS_REGION?.trim()
+  if (region && !region.matches(awsRegionRegex)) {
+    validationFail("AWS_REGION '${region}' is not a valid AWS region (e.g. ap-southeast-1).")
+  }
+
+  def environmentName = params.ENVIRONMENT?.trim()
+  if (environmentName && !environmentName.matches(envNameRegex)) {
+    validationFail("ENVIRONMENT '${environmentName}' must be 3-32 chars, start with a letter, and use only letters, digits, or hyphens.")
+  }
+
+  def owner = params.OWNER?.trim()
+  if (owner && owner.length() > 64) {
+    validationFail('OWNER must be 64 characters or fewer.')
+  }
+
+  if (stages.contains('TERRAFORM') || stages.any { it in ['PREREQS', 'IDENTITY', 'CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL'] }) {
+    if (!owner) {
+      echo 'WARN: OWNER not set in Jenkins UI — must be present in tfvars or validation will fail later.'
+    }
+  }
+
+  def ami = params.AMI_ID?.trim()
+  if (ami && !ami.matches(amiRegex)) {
+    validationFail("AMI_ID '${ami}' is invalid (expected format: ami-xxxxxxxx).")
+  }
+
+  def countParams = [
+    'CLDR_MNGR_COUNT', 'CLDR_MNGR_VOLUME_SIZE',
+    'IPA_SERVER_COUNT', 'PVCBASE_MASTER_COUNT', 'PVCBASE_WORKER_COUNT',
+    'PVCECS_MASTER_COUNT', 'PVCECS_WORKER_COUNT',
+  ]
+  countParams.each { name ->
+    def val = params."${name}"?.trim()
+    if (val) {
+      if (!val.isInteger()) {
+        validationFail("${name} must be a positive integer when set (got '${val}').")
+      }
+      if (val.toInteger() < 1) {
+        validationFail("${name} must be >= 1 when set.")
+      }
+    }
+  }
+
+  def typeParams = [
+    'CLDR_MNGR_INSTANCE_TYPE', 'IPA_SERVER_INSTANCE_TYPE',
+    'PVCBASE_WORKER_INSTANCE_TYPE', 'PVCECS_WORKER_INSTANCE_TYPE',
+  ]
+  typeParams.each { name ->
+    def val = params."${name}"?.trim()
+    if (val && !val.matches(instanceTypeRegex)) {
+      validationFail("${name} '${val}' does not look like a valid EC2 instance type (e.g. m5.4xlarge).")
+    }
+  }
+
+  def branch = params.GIT_BRANCH?.trim()
+  if (!branch) {
+    validationFail('GIT_BRANCH cannot be empty.')
+  }
+  if (branch.contains(' ') || branch.contains('..')) {
+    validationFail("GIT_BRANCH '${branch}' contains invalid characters.")
+  }
+
+  def tfvarsPath = params.TFVARS_FILE?.trim()
+  if (tfvarsPath && (tfvarsPath.contains('..') || tfvarsPath.startsWith('/'))) {
+    validationFail("TFVARS_FILE must be a relative path within the workspace (got '${tfvarsPath}').")
+  }
+
+  def email = params.NOTIFICATION_EMAIL?.trim()
+  def checks = params.VALIDATION_CHECKS ?: ''
+  if (email && checks.contains('EMAIL_FORMAT') && !email.matches(emailRegex)) {
+    validationFail("NOTIFICATION_EMAIL '${email}' is not a valid email address.")
+  }
+
+  if (stages.contains('ECS_INSTALL') && !stages.contains('CDH_BASE') && !stages.contains('TERRAFORM')) {
+    echo 'WARN: ECS_INSTALL without CDH_BASE — ensure base cluster already exists.'
+  }
+  if (stages.contains('CM_INSTALL') && !stages.contains('PREREQS') && !stages.contains('TERRAFORM')) {
+    echo 'WARN: CM_INSTALL without PREREQS — ensure prerequisites were applied previously.'
+  }
+  if (stages.contains('TERRAFORM') && stages.any { it in ['PREREQS', 'IDENTITY', 'CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL'] } && params.DRY_RUN) {
+    echo 'INFO: DRY_RUN applies to both Terraform plan and Ansible check mode in this build.'
+  }
+
+  echo "Input validation passed for stages: ${stages.join(', ')}"
 }
 
 def archivePipelineArtifacts() {
@@ -320,7 +430,7 @@ def archivePipelineArtifacts() {
     'jenkins/artifacts/error-summary.txt',
     'jenkins/artifacts/terraform-state-summary.json',
     'jenkins/artifacts/*.pem',
-    'ansible-playbooks/inventory.ini'
+    'ansible-playbooks/inventory.ini',
   ].join(',')
   archiveArtifacts artifacts: patterns, allowEmptyArchive: true, fingerprint: true
 }
@@ -345,20 +455,26 @@ def sendPipelineEmail(boolean success) {
 
   def summaryFile = "${env.WORKSPACE}/jenkins/artifacts/build-summary.txt"
   def summaryText = fileExists(summaryFile) ? readFile(summaryFile).take(8000).replace('\n', '<br/>') : 'n/a'
-  def phaseInfo = env.DEPLOY_PHASE ?: 'n/a'
+  def stageInfo = env.PIPELINE_ACTION ?: params.PIPELINE_STAGES ?: 'n/a'
+  def phaseInfo = env.ANSIBLE_PHASES ?: 'n/a'
 
   def attachmentList = []
-  ['build-summary.txt', "terraform-${env.BUILD_NUMBER}.log", "ansible-${env.BUILD_NUMBER}.log",
-   'inventory.ini', 'error-summary.txt'].each { name ->
+  ['build-summary.txt', "terraform-${env.BUILD_NUMBER}.log", 'inventory.ini', 'error-summary.txt'].each { name ->
     if (fileExists("${env.WORKSPACE}/jenkins/artifacts/${name}")) {
       attachmentList << "jenkins/artifacts/${name}"
+    }
+  }
+  (1..5).each { phase ->
+    def logName = "ansible-${env.BUILD_NUMBER}-phase${phase}.log"
+    if (fileExists("${env.WORKSPACE}/jenkins/artifacts/${logName}")) {
+      attachmentList << "jenkins/artifacts/${logName}"
     }
   }
   fileExists("${env.WORKSPACE}/ansible-playbooks/inventory.ini") && attachmentList << 'ansible-playbooks/inventory.ini'
 
   emailext(
     to: env.MAIL_TO,
-    subject: "${statusIcon} Jenkins ${statusText}: ${env.JOB_NAME} [${env.BUILD_NUMBER}] — ${params.PIPELINE_ACTION}",
+    subject: "${statusIcon} Jenkins ${statusText}: ${env.JOB_NAME} [${env.BUILD_NUMBER}] — ${stageInfo}",
     mimeType: 'text/html',
     attachmentsPattern: attachmentList.unique().join(','),
     body: """
@@ -371,7 +487,7 @@ def sendPipelineEmail(boolean success) {
     <table style="border-collapse:collapse;width:100%;">
       <tr><th style="text-align:left;padding:8px;border:1px solid #ddd;background:#f2f2f2;">Job</th><td style="padding:8px;border:1px solid #ddd;">${env.JOB_NAME}</td></tr>
       <tr><th style="text-align:left;padding:8px;border:1px solid #ddd;background:#f2f2f2;">Build</th><td style="padding:8px;border:1px solid #ddd;">#${env.BUILD_NUMBER}</td></tr>
-      <tr><th style="text-align:left;padding:8px;border:1px solid #ddd;background:#f2f2f2;">Action</th><td style="padding:8px;border:1px solid #ddd;">${params.PIPELINE_ACTION} (phase ${phaseInfo}, dry-run=${params.DRY_RUN})</td></tr>
+      <tr><th style="text-align:left;padding:8px;border:1px solid #ddd;background:#f2f2f2;">Stages</th><td style="padding:8px;border:1px solid #ddd;">${stageInfo} (ansible phases: ${phaseInfo}, dry-run=${params.DRY_RUN})</td></tr>
       <tr><th style="text-align:left;padding:8px;border:1px solid #ddd;background:#f2f2f2;">Build URL</th><td style="padding:8px;border:1px solid #ddd;"><a href="${env.BUILD_URL}">${env.BUILD_URL}</a></td></tr>
       <tr><th style="text-align:left;padding:8px;border:1px solid #ddd;background:#f2f2f2;">Triggered by</th><td style="padding:8px;border:1px solid #ddd;">${env.BUILD_USER ?: 'n/a'}</td></tr>
     </table>

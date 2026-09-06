@@ -12,7 +12,7 @@ export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 export DRY_RUN="${DRY_RUN:-false}"
 export CONTROL_MODE="${CONTROL_MODE:-auto}"
 
-LOG_FILE="$LOG_DIR/ansible-${BUILD_NUMBER:-local}.log"
+LOG_FILE="$LOG_DIR/ansible-${BUILD_NUMBER:-local}-phase${DEPLOY_PHASE}.log"
 log() { printf '[ansible] %s\n' "$*" | tee -a "$LOG_FILE"; }
 
 [[ -f ansible-playbooks/inventory.ini ]] || { log "ERROR: ansible-playbooks/inventory.ini missing"; exit 1; }

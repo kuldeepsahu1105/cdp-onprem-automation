@@ -24,7 +24,9 @@ append_matches() {
 }
 
 append_matches "Terraform" "$LOG_DIR/terraform-${BUILD_NUMBER:-local}.log"
-append_matches "Ansible" "$LOG_DIR/ansible-${BUILD_NUMBER:-local}.log"
+for f in "$LOG_DIR"/ansible-${BUILD_NUMBER:-local}-phase*.log; do
+  [[ -f "$f" ]] && append_matches "Ansible" "$f"
+done
 append_matches "Validation" "$LOG_DIR/validate-${BUILD_NUMBER:-local}.log"
 
 if [[ ! -s "$OUT_FILE" ]]; then

@@ -299,21 +299,13 @@ DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
 
 ## Jenkins CI/CD
 
-A declarative **`Jenkinsfile`** at the repo root drives validation, optional Terraform provisioning, and Ansible deployment with UI parameters and email notifications.
+Declarative **`Jenkinsfile`** with **checkbox stage selection**, input validation, and `REFRESH_JENKINSFILE=YES` to reload parameters after changes.
 
-| `PIPELINE_ACTION` | What runs |
-|---|---|
-| `validate` | Tools, AWS creds, tfvars, Ansible syntax |
-| `terraform-only` | EC2 + inventory only (override counts/sizes/prefix from UI) |
-| `prereqs-only` | Ansible phase 1 |
-| `identity-only` | Ansible phase 2 |
-| `cm-install` | Ansible phase 3 (Cloudera Manager) |
-| `cdh-base` | Ansible phase 4 |
-| `ecs-install` | Ansible phase 5 |
-| `ansible-all` | All Ansible phases |
-| `full` | `terraform-only` then `ansible-all` |
+**Stage checkboxes (`PIPELINE_STAGES`):** `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CDH_BASE`, `ECS_INSTALL` — pick any combination.
 
-Set `DRY_RUN=true` for Terraform plan-only or Ansible check mode. See [jenkins/README.md](jenkins/README.md) for job setup, tfvars UI overrides, and artifacts.
+**Validation checkboxes (`VALIDATION_CHECKS`):** `TOOLS`, `AWS_CREDS`, `TFVARS`, `ANSIBLE_SYNTAX`, `INVENTORY`, `EMAIL_FORMAT`.
+
+Requires the [Extended Choice Parameter](https://plugins.jenkins.io/extended-choice-parameter/) plugin. See [jenkins/README.md](jenkins/README.md) for setup, examples, and tfvars UI overrides.
 
 ## Troubleshooting — UI / dry run not showing
 
