@@ -299,16 +299,21 @@ DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
 
 ## Jenkins CI/CD
 
-A declarative **`Jenkinsfile`** at the repo root drives validation, optional Terraform provisioning, and Ansible deployment (prerequisites → CM → CDH → ECS) with UI parameters and email notifications on success/failure.
+A declarative **`Jenkinsfile`** at the repo root drives validation, optional Terraform provisioning, and Ansible deployment with UI parameters and email notifications.
 
-| `PIPELINE_MODE` | Action |
+| `PIPELINE_ACTION` | What runs |
 |---|---|
 | `validate` | Tools, AWS creds, tfvars, Ansible syntax |
-| `terraform` | Run `clone_and_run_terraform.sh` |
-| `ansible` | Run `clone_and_run_pvc_automation.sh` (`DEPLOY_PHASE`) |
-| `full` | Terraform then Ansible |
+| `terraform-only` | EC2 + inventory only (override counts/sizes/prefix from UI) |
+| `prereqs-only` | Ansible phase 1 |
+| `identity-only` | Ansible phase 2 |
+| `cm-install` | Ansible phase 3 (Cloudera Manager) |
+| `cdh-base` | Ansible phase 4 |
+| `ecs-install` | Ansible phase 5 |
+| `ansible-all` | All Ansible phases |
+| `full` | `terraform-only` then `ansible-all` |
 
-Set `DRY_RUN=true` for Terraform plan-only or Ansible check mode. See [jenkins/README.md](jenkins/README.md) for job setup, required plugins, credentials, and artifacts.
+Set `DRY_RUN=true` for Terraform plan-only or Ansible check mode. See [jenkins/README.md](jenkins/README.md) for job setup, tfvars UI overrides, and artifacts.
 
 ## Troubleshooting — UI / dry run not showing
 

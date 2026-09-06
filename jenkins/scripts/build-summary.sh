@@ -6,6 +6,15 @@ REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 OUT_DIR="${OUT_DIR:-$REPO_ROOT/jenkins/artifacts}"
 mkdir -p "$OUT_DIR"
 
+cd "$REPO_ROOT"
+if [[ -f "$REPO_ROOT/scripts/lib/load_tfvars.sh" ]]; then
+  # shellcheck source=scripts/lib/load_tfvars.sh
+  source "$REPO_ROOT/scripts/lib/load_tfvars.sh"
+  set -a
+  load_tfvars 2>/dev/null || true
+  set +a
+fi
+
 SUMMARY="$OUT_DIR/build-summary.txt"
 INVENTORY="$REPO_ROOT/ansible-playbooks/inventory.ini"
 
@@ -16,7 +25,7 @@ INVENTORY="$REPO_ROOT/ansible-playbooks/inventory.ini"
   echo "Build:        ${JOB_NAME:-local} #${BUILD_NUMBER:-0}"
   echo "URL:          ${BUILD_URL:-n/a}"
   echo "Result:       ${BUILD_RESULT:-UNKNOWN}"
-  echo "Pipeline:     ${PIPELINE_MODE:-n/a}"
+  echo "Action:       ${PIPELINE_ACTION:-${PIPELINE_MODE:-n/a}}"
   echo "Environment:  ${ENVIRONMENT:-n/a}"
   echo "AWS Region:   ${AWS_REGION:-n/a}"
   echo "Owner:        ${OWNER:-n/a}"
@@ -24,6 +33,15 @@ INVENTORY="$REPO_ROOT/ansible-playbooks/inventory.ini"
   echo "Dry Run:      ${DRY_RUN:-false}"
   echo "Terraform:    ${RUN_TERRAFORM:-false}"
   echo "Ansible:      ${RUN_ANSIBLE:-false}"
+  echo ""
+  echo "Instance groups (effective after Jenkins overrides):"
+  echo "  cldr-mngr:      count=${CLDR_MNGR_COUNT:-?} type=${CLDR_MNGR_INSTANCE_TYPE:-?} vol=${CLDR_MNGR_VOLUME_SIZE:-?}GB"
+  echo "  ipa-server:     count=${IPA_SERVER_COUNT:-?} type=${IPA_SERVER_INSTANCE_TYPE:-?}"
+  echo "  base-master:    count=${PVCBASE_MASTER_COUNT:-?}"
+  echo "  base-worker:    count=${PVCBASE_WORKER_COUNT:-?} type=${PVCBASE_WORKER_INSTANCE_TYPE:-?}"
+  echo "  ecs-master:     count=${PVCECS_MASTER_COUNT:-?}"
+  echo "  ecs-worker:     count=${PVCECS_WORKER_COUNT:-?} type=${PVCECS_WORKER_INSTANCE_TYPE:-?}"
+  echo "  ami_id:         ${AMI_ID:-?}"
   echo ""
   if [[ -n "${ERROR_MESSAGE:-}" ]]; then
     echo "Error:"

@@ -3,20 +3,42 @@ pipeline {
 
   parameters {
     choice(
-      name: 'PIPELINE_MODE',
-      choices: ['validate', 'terraform', 'ansible', 'full'],
-      description: 'validate = checks only; terraform = infra; ansible = CM/CDH/ECS deploy; full = terraform then ansible'
-    )
-    choice(
-      name: 'DEPLOY_PHASE',
-      choices: ['1', '2', '3', '4', '5', 'all'],
-      description: 'Ansible phase: 1=prereqs, 2=identity, 3=CM, 4=CDH base, 5=ECS, all=full flow'
+      name: 'PIPELINE_ACTION',
+      choices: [
+        'validate',
+        'terraform-only',
+        'prereqs-only',
+        'identity-only',
+        'cm-install',
+        'cdh-base',
+        'ecs-install',
+        'ansible-all',
+        'full'
+      ],
+      description: '''What to run:
+validate = checks only
+terraform-only = EC2/inventory only (override counts/sizes/prefix below)
+prereqs-only = Ansible phase 1 | identity-only = phase 2 | cm-install = phase 3
+cdh-base = phase 4 | ecs-install = phase 5 | ansible-all = all Ansible phases
+full = terraform-only then ansible-all'''
     )
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
-    string(name: 'ENVIRONMENT', defaultValue: '', description: 'Optional override for tfvars ENVIRONMENT (Terraform workspace / name prefix)')
-    string(name: 'OWNER', defaultValue: '', description: 'Optional override for tfvars OWNER tag (required if not set in tfvars)')
-    string(name: 'AWS_REGION', defaultValue: '', description: 'Optional override for tfvars AWS_REGION (e.g. ap-southeast-1)')
-    string(name: 'TFVARS_FILE', defaultValue: '', description: 'Config file path relative to repo root (empty = auto-detect .tfvars.yaml / .tfvars.env)')
+    string(name: 'ENVIRONMENT', defaultValue: '', description: 'Name prefix + Terraform workspace (overrides tfvars when set)')
+    string(name: 'OWNER', defaultValue: '', description: 'Owner tag (overrides tfvars when set)')
+    string(name: 'AWS_REGION', defaultValue: '', description: 'AWS region override (e.g. ap-southeast-1)')
+    string(name: 'AMI_ID', defaultValue: '', description: 'AMI override for all instance groups (empty = use tfvars)')
+    string(name: 'CLDR_MNGR_COUNT', defaultValue: '', description: 'CM host count override')
+    string(name: 'CLDR_MNGR_INSTANCE_TYPE', defaultValue: '', description: 'CM instance type override (e.g. m5.4xlarge)')
+    string(name: 'CLDR_MNGR_VOLUME_SIZE', defaultValue: '', description: 'CM root volume GB override')
+    string(name: 'IPA_SERVER_COUNT', defaultValue: '', description: 'FreeIPA server count override')
+    string(name: 'IPA_SERVER_INSTANCE_TYPE', defaultValue: '', description: 'FreeIPA instance type override')
+    string(name: 'PVCBASE_MASTER_COUNT', defaultValue: '', description: 'CDH base master count override')
+    string(name: 'PVCBASE_WORKER_COUNT', defaultValue: '', description: 'CDH base worker count override')
+    string(name: 'PVCBASE_WORKER_INSTANCE_TYPE', defaultValue: '', description: 'CDH base worker instance type override')
+    string(name: 'PVCECS_MASTER_COUNT', defaultValue: '', description: 'ECS master count override')
+    string(name: 'PVCECS_WORKER_COUNT', defaultValue: '', description: 'ECS worker count override')
+    string(name: 'PVCECS_WORKER_INSTANCE_TYPE', defaultValue: '', description: 'ECS worker instance type override')
+    string(name: 'TFVARS_FILE', defaultValue: '', description: 'Config file path relative to repo root (empty = auto-detect)')
     string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to checkout')
     string(name: 'NOTIFICATION_EMAIL', defaultValue: '', description: 'Email recipient (defaults to BUILD_USER_EMAIL when empty)')
     booleanParam(name: 'REFRESH_JENKINSFILE', defaultValue: false, description: 'Reload Jenkinsfile parameter definitions and exit')
@@ -36,14 +58,22 @@ pipeline {
     JENKINS_OWNER = "${params.OWNER?.trim() ?: ''}"
     JENKINS_ENVIRONMENT = "${params.ENVIRONMENT?.trim() ?: ''}"
     JENKINS_AWS_REGION = "${params.AWS_REGION?.trim() ?: ''}"
+    JENKINS_AMI_ID = "${params.AMI_ID?.trim() ?: ''}"
+    JENKINS_CLDR_MNGR_COUNT = "${params.CLDR_MNGR_COUNT?.trim() ?: ''}"
+    JENKINS_CLDR_MNGR_INSTANCE_TYPE = "${params.CLDR_MNGR_INSTANCE_TYPE?.trim() ?: ''}"
+    JENKINS_CLDR_MNGR_VOLUME_SIZE = "${params.CLDR_MNGR_VOLUME_SIZE?.trim() ?: ''}"
+    JENKINS_IPA_SERVER_COUNT = "${params.IPA_SERVER_COUNT?.trim() ?: ''}"
+    JENKINS_IPA_SERVER_INSTANCE_TYPE = "${params.IPA_SERVER_INSTANCE_TYPE?.trim() ?: ''}"
+    JENKINS_PVCBASE_MASTER_COUNT = "${params.PVCBASE_MASTER_COUNT?.trim() ?: ''}"
+    JENKINS_PVCBASE_WORKER_COUNT = "${params.PVCBASE_WORKER_COUNT?.trim() ?: ''}"
+    JENKINS_PVCBASE_WORKER_INSTANCE_TYPE = "${params.PVCBASE_WORKER_INSTANCE_TYPE?.trim() ?: ''}"
+    JENKINS_PVCECS_MASTER_COUNT = "${params.PVCECS_MASTER_COUNT?.trim() ?: ''}"
+    JENKINS_PVCECS_WORKER_COUNT = "${params.PVCECS_WORKER_COUNT?.trim() ?: ''}"
+    JENKINS_PVCECS_WORKER_INSTANCE_TYPE = "${params.PVCECS_WORKER_INSTANCE_TYPE?.trim() ?: ''}"
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
-    DEPLOY_PHASE = "${params.DEPLOY_PHASE}"
     DRY_RUN = "${params.DRY_RUN}"
-    PIPELINE_MODE = "${params.PIPELINE_MODE}"
+    PIPELINE_ACTION = "${params.PIPELINE_ACTION}"
     BUILD_RESULT = 'IN_PROGRESS'
-    RUN_TERRAFORM = "${params.PIPELINE_MODE in ['terraform', 'full'] ? 'true' : 'false'}"
-    RUN_ANSIBLE = "${params.PIPELINE_MODE in ['ansible', 'full'] ? 'true' : 'false'}"
-    REQUIRE_INVENTORY = "${params.PIPELINE_MODE == 'ansible' ? 'true' : 'false'}"
     MAIL_TO = "${params.NOTIFICATION_EMAIL?.trim() ?: env.BUILD_USER_EMAIL ?: ''}"
   }
 
@@ -51,7 +81,7 @@ pipeline {
     stage('Build') {
       steps {
         script {
-          def label = "#${BUILD_NUMBER} — ${params.PIPELINE_MODE}"
+          def label = "#${BUILD_NUMBER} — ${params.PIPELINE_ACTION}"
           if (params.DRY_RUN) { label += ' (dry-run)' }
           currentBuild.displayName = label
         }
@@ -68,6 +98,21 @@ pipeline {
       }
     }
 
+    stage('Resolve Action') {
+      steps {
+        script {
+          def cfg = resolvePipelineAction(params.PIPELINE_ACTION)
+          env.RUN_TERRAFORM = cfg.runTerraform
+          env.RUN_ANSIBLE = cfg.runAnsible
+          env.DEPLOY_PHASE = cfg.deployPhase
+          env.REQUIRE_INVENTORY = cfg.requireInventory
+          env.VALIDATE_ANSIBLE_SYNTAX = cfg.validateAnsibleSyntax
+          env.PIPELINE_MODE = cfg.legacyMode
+          echo "Resolved: terraform=${cfg.runTerraform}, ansible=${cfg.runAnsible}, phase=${cfg.deployPhase}, label=${cfg.label}"
+        }
+      }
+    }
+
     stage('Check Parameters') {
       steps {
         script {
@@ -80,13 +125,23 @@ pipeline {
             fail("AWS_REGION '${params.AWS_REGION}' is not a valid AWS region format.")
           }
 
-          def validPhases = ['1', '2', '3', '4', '5', 'all']
-          if (!validPhases.contains(params.DEPLOY_PHASE)) {
-            fail("DEPLOY_PHASE must be one of: ${validPhases.join(', ')}")
+          def countParams = [
+            'CLDR_MNGR_COUNT', 'CLDR_MNGR_VOLUME_SIZE',
+            'IPA_SERVER_COUNT', 'PVCBASE_MASTER_COUNT', 'PVCBASE_WORKER_COUNT',
+            'PVCECS_MASTER_COUNT', 'PVCECS_WORKER_COUNT'
+          ]
+          countParams.each { name ->
+            def val = params."${name}"?.trim()
+            if (val && !val.isInteger()) {
+              fail("${name} must be a positive integer when set (got '${val}').")
+            }
+            if (val && val.toInteger() < 0) {
+              fail("${name} cannot be negative.")
+            }
           }
 
-          if (params.PIPELINE_MODE in ['ansible', 'full'] && params.DEPLOY_PHASE == '1' && params.PIPELINE_MODE == 'ansible') {
-            echo 'INFO: ansible-only mode with DEPLOY_PHASE=1 (prerequisites). Inventory must exist.'
+          if (env.REQUIRE_INVENTORY == 'true') {
+            echo "INFO: ${params.PIPELINE_ACTION} requires ansible-playbooks/inventory.ini (from a prior terraform-only or full run)."
           }
         }
       }
@@ -110,14 +165,15 @@ pipeline {
         sh '''
           set -euo pipefail
           mkdir -p "${LOG_DIR}"
-          export VALIDATE_ANSIBLE_SYNTAX=true
+          export VALIDATE_ANSIBLE_SYNTAX="${VALIDATE_ANSIBLE_SYNTAX:-true}"
+          export REQUIRE_INVENTORY="${REQUIRE_INVENTORY:-false}"
           ./jenkins/scripts/validate-prereqs.sh
         '''
       }
     }
 
-    stage('Terraform') {
-      when { expression { return params.PIPELINE_MODE in ['terraform', 'full'] } }
+    stage('Terraform — Provision EC2') {
+      when { expression { return env.RUN_TERRAFORM == 'true' } }
       steps {
         sh '''
           set -euo pipefail
@@ -127,7 +183,7 @@ pipeline {
     }
 
     stage('Ansible Deploy') {
-      when { expression { return params.PIPELINE_MODE in ['ansible', 'full'] } }
+      when { expression { return env.RUN_ANSIBLE == 'true' } }
       steps {
         sh '''
           set -euo pipefail
@@ -143,6 +199,7 @@ pipeline {
           sh """
             set -euo pipefail
             export BUILD_RESULT='${currentBuild.currentResult ?: 'SUCCESS'}'
+            export PIPELINE_ACTION='${params.PIPELINE_ACTION}'
             ./jenkins/scripts/collect-artifacts.sh
             ./jenkins/scripts/build-summary.sh
           """
@@ -158,6 +215,7 @@ pipeline {
         sh '''
           set -euo pipefail
           export BUILD_RESULT=SUCCESS
+          export PIPELINE_ACTION="${PIPELINE_ACTION}"
           ./jenkins/scripts/collect-artifacts.sh || true
           ./jenkins/scripts/build-summary.sh || true
         '''
@@ -189,6 +247,7 @@ pipeline {
           set -euo pipefail
           export BUILD_RESULT=FAILURE
           export ERROR_MESSAGE="${ERROR_MESSAGE:-Pipeline failed}"
+          export PIPELINE_ACTION="${PIPELINE_ACTION}"
           ./jenkins/scripts/collect-artifacts.sh || true
           ./jenkins/scripts/build-summary.sh || true
         '''
@@ -214,6 +273,40 @@ pipeline {
     cleanup {
       sh 'echo "Pipeline cleanup complete for build ${BUILD_NUMBER}"'
     }
+  }
+}
+
+def resolvePipelineAction(String action) {
+  def ansiblePhases = [
+    'prereqs-only'   : [phase: '1',   label: 'Prerequisites (phase 1)'],
+    'identity-only'  : [phase: '2',   label: 'Identity / DNS (phase 2)'],
+    'cm-install'     : [phase: '3',   label: 'Cloudera Manager install (phase 3)'],
+    'cdh-base'       : [phase: '4',   label: 'CDH base cluster (phase 4)'],
+    'ecs-install'    : [phase: '5',   label: 'ECS Data Services (phase 5)'],
+    'ansible-all'    : [phase: 'all', label: 'Full Ansible flow'],
+  ]
+
+  switch (action) {
+    case 'validate':
+      return [runTerraform: 'false', runAnsible: 'false', deployPhase: 'n/a',
+              requireInventory: 'false', validateAnsibleSyntax: 'true',
+              legacyMode: 'validate', label: 'Validation only']
+    case 'terraform-only':
+      return [runTerraform: 'true', runAnsible: 'false', deployPhase: 'n/a',
+              requireInventory: 'false', validateAnsibleSyntax: 'false',
+              legacyMode: 'terraform', label: 'Terraform only (EC2 + inventory)']
+    case 'full':
+      return [runTerraform: 'true', runAnsible: 'true', deployPhase: 'all',
+              requireInventory: 'false', validateAnsibleSyntax: 'true',
+              legacyMode: 'full', label: 'Terraform + full Ansible']
+    default:
+      if (ansiblePhases.containsKey(action)) {
+        def p = ansiblePhases[action]
+        return [runTerraform: 'false', runAnsible: 'true', deployPhase: p.phase,
+                requireInventory: 'true', validateAnsibleSyntax: 'true',
+                legacyMode: 'ansible', label: p.label]
+      }
+      error("Unknown PIPELINE_ACTION: ${action}")
   }
 }
 
@@ -252,6 +345,7 @@ def sendPipelineEmail(boolean success) {
 
   def summaryFile = "${env.WORKSPACE}/jenkins/artifacts/build-summary.txt"
   def summaryText = fileExists(summaryFile) ? readFile(summaryFile).take(8000).replace('\n', '<br/>') : 'n/a'
+  def phaseInfo = env.DEPLOY_PHASE ?: 'n/a'
 
   def attachmentList = []
   ['build-summary.txt', "terraform-${env.BUILD_NUMBER}.log", "ansible-${env.BUILD_NUMBER}.log",
@@ -264,7 +358,7 @@ def sendPipelineEmail(boolean success) {
 
   emailext(
     to: env.MAIL_TO,
-    subject: "${statusIcon} Jenkins ${statusText}: ${env.JOB_NAME} [${env.BUILD_NUMBER}] — ${params.PIPELINE_MODE}",
+    subject: "${statusIcon} Jenkins ${statusText}: ${env.JOB_NAME} [${env.BUILD_NUMBER}] — ${params.PIPELINE_ACTION}",
     mimeType: 'text/html',
     attachmentsPattern: attachmentList.unique().join(','),
     body: """
@@ -277,7 +371,7 @@ def sendPipelineEmail(boolean success) {
     <table style="border-collapse:collapse;width:100%;">
       <tr><th style="text-align:left;padding:8px;border:1px solid #ddd;background:#f2f2f2;">Job</th><td style="padding:8px;border:1px solid #ddd;">${env.JOB_NAME}</td></tr>
       <tr><th style="text-align:left;padding:8px;border:1px solid #ddd;background:#f2f2f2;">Build</th><td style="padding:8px;border:1px solid #ddd;">#${env.BUILD_NUMBER}</td></tr>
-      <tr><th style="text-align:left;padding:8px;border:1px solid #ddd;background:#f2f2f2;">Mode</th><td style="padding:8px;border:1px solid #ddd;">${params.PIPELINE_MODE} (phase ${params.DEPLOY_PHASE}, dry-run=${params.DRY_RUN})</td></tr>
+      <tr><th style="text-align:left;padding:8px;border:1px solid #ddd;background:#f2f2f2;">Action</th><td style="padding:8px;border:1px solid #ddd;">${params.PIPELINE_ACTION} (phase ${phaseInfo}, dry-run=${params.DRY_RUN})</td></tr>
       <tr><th style="text-align:left;padding:8px;border:1px solid #ddd;background:#f2f2f2;">Build URL</th><td style="padding:8px;border:1px solid #ddd;"><a href="${env.BUILD_URL}">${env.BUILD_URL}</a></td></tr>
       <tr><th style="text-align:left;padding:8px;border:1px solid #ddd;background:#f2f2f2;">Triggered by</th><td style="padding:8px;border:1px solid #ddd;">${env.BUILD_USER ?: 'n/a'}</td></tr>
     </table>
