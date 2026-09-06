@@ -83,8 +83,8 @@ pipeline {
       steps {
         script {
           def stages = parseSelectedStages(params.PIPELINE_STAGES)
-          def label = "#${BUILD_NUMBER} — ${stages.join('+') ?: 'none'}"
-          if (params.DRY_RUN) { label += ' (dry-run)' }
+          def label = "#${BUILD_NUMBER} — ${stages ? stages.join('+') : 'pending'}"
+          if (params.DRY_RUN == true || "${params.DRY_RUN}" == 'true') { label += ' (dry-run)' }
           currentBuild.displayName = label
         }
       }
@@ -188,8 +188,8 @@ pipeline {
           sh """
             set -euo pipefail
             export BUILD_RESULT='${currentBuild.currentResult ?: 'SUCCESS'}'
-            export PIPELINE_ACTION='${env.PIPELINE_ACTION}'
-            export PIPELINE_STAGES='${params.PIPELINE_STAGES}'
+            export PIPELINE_ACTION='${env.PIPELINE_ACTION ?: 'n/a'}'
+            export PIPELINE_STAGES='${params.PIPELINE_STAGES ?: ''}'
             ./jenkins/scripts/collect-artifacts.sh
             ./jenkins/scripts/build-summary.sh
           """
@@ -203,10 +203,10 @@ pipeline {
       script {
         env.BUILD_RESULT = 'SUCCESS'
         sh '''
-          set -euo pipefail
+          set -eo pipefail
           export BUILD_RESULT=SUCCESS
-          export PIPELINE_ACTION="${PIPELINE_ACTION}"
-          export PIPELINE_STAGES="${PIPELINE_STAGES}"
+          export PIPELINE_ACTION="${PIPELINE_ACTION:-n/a}"
+          export PIPELINE_STAGES="${PIPELINE_STAGES:-}"
           ./jenkins/scripts/collect-artifacts.sh || true
           ./jenkins/scripts/build-summary.sh || true
         '''
@@ -235,11 +235,11 @@ pipeline {
           env.ERROR_MESSAGE = currentBuild.description
         }
         sh '''
-          set -euo pipefail
+          set -eo pipefail
           export BUILD_RESULT=FAILURE
           export ERROR_MESSAGE="${ERROR_MESSAGE:-Pipeline failed}"
-          export PIPELINE_ACTION="${PIPELINE_ACTION}"
-          export PIPELINE_STAGES="${PIPELINE_STAGES}"
+          export PIPELINE_ACTION="${PIPELINE_ACTION:-n/a}"
+          export PIPELINE_STAGES="${PIPELINE_STAGES:-}"
           ./jenkins/scripts/collect-artifacts.sh || true
           ./jenkins/scripts/build-summary.sh || true
         '''
@@ -269,18 +269,32 @@ pipeline {
 }
 
 def isRefreshRequested() {
-  def refresh = params.REFRESH_JENKINSFILE?.trim() ?: 'NO'
-  return refresh ==~ /(?i)(Y|YES|T|TRUE|ON|RUN)/
+  def refresh = params.REFRESH_JENKINSFILE
+  if (refresh == null) {
+    return false
+  }
+  if (refresh instanceof Boolean) {
+    return refresh
+  }
+  def value = refresh.toString().trim()
+  if (!value) {
+    return false
+  }
+  return value ==~ /(?i)(Y|YES|T|TRUE|ON|RUN)/
 }
 
-def parseSelectedStages(String csv) {
-  if (!csv?.trim()) {
+def parseSelectedStages(def csv) {
+  if (csv == null) {
     return []
   }
-  return csv.split(',').collect { it.trim() }.findAll { it }
+  def text = csv.toString().trim()
+  if (!text) {
+    return []
+  }
+  return text.split(',').collect { it.trim() }.findAll { it }
 }
 
-def resolvePipelineStages(String stagesCsv, String validationCsv) {
+def resolvePipelineStages(def stagesCsv, def validationCsv) {
   def stages = parseSelectedStages(stagesCsv)
   def ansibleMap = [
     'PREREQS'    : '1',
@@ -294,7 +308,7 @@ def resolvePipelineStages(String stagesCsv, String validationCsv) {
   def runAnsible = ansiblePhases.isEmpty() ? 'false' : 'true'
   def runValidate = stages.contains('VALIDATE') ? 'true' : 'false'
   def requireInventory = (runAnsible == 'true' && runTerraform != 'true') ? 'true' : 'false'
-  def validationChecks = validationCsv?.trim() ?: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX'
+  def validationChecks = (validationCsv?.toString()?.trim()) ?: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX'
   if (requireInventory == 'true' && !validationChecks.contains('INVENTORY')) {
     validationChecks = "${validationChecks},INVENTORY"
   }
