@@ -24,6 +24,7 @@ pipeline {
       description: 'Validation checks when VALIDATE stage is selected (INVENTORY auto-enabled for Ansible-only runs)'
     )
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
+    booleanParam(name: 'AWS_USE_INSTANCE_ROLE', defaultValue: true, description: 'Prefer EC2 instance IAM role via IMDS for this build (does not delete agent/Jenkins credentials)')
     string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Name prefix + Terraform workspace (overrides tfvars when set)')
     string(name: 'OWNER', defaultValue: 'ksahu-ygulati', description: 'Owner tag — required for Terraform/Ansible if not set in tfvars')
     string(name: 'AWS_REGION', defaultValue: 'ap-southeast-1', description: 'AWS region override (e.g. ap-southeast-1)')
@@ -72,6 +73,7 @@ pipeline {
     JENKINS_PVCECS_WORKER_INSTANCE_TYPE = "${params.PVCECS_WORKER_INSTANCE_TYPE?.trim() ?: ''}"
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
+    AWS_USE_INSTANCE_ROLE = "${params.AWS_USE_INSTANCE_ROLE}"
     PIPELINE_STAGES = "${params.PIPELINE_STAGES?.trim() ?: ''}"
     VALIDATION_CHECKS = "${params.VALIDATION_CHECKS?.trim() ?: ''}"
     BUILD_RESULT = 'IN_PROGRESS'
@@ -155,6 +157,7 @@ pipeline {
           export VALIDATE_INVENTORY="${VALIDATE_INVENTORY:-false}"
           export REQUIRE_ANSIBLE="${REQUIRE_ANSIBLE:-false}"
           export REQUIRE_TERRAFORM="${REQUIRE_TERRAFORM:-false}"
+          export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-true}"
           ./jenkins/scripts/validate-prereqs.sh
         '''
       }
@@ -165,6 +168,12 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
+          export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-true}"
+          # shellcheck source=jenkins/scripts/aws-credential-check.sh
+          source ./jenkins/scripts/aws-credential-check.sh
+          if [[ "${AWS_USE_INSTANCE_ROLE}" == "true" ]]; then
+            aws_use_instance_role_only
+          fi
           ./jenkins/scripts/run-terraform.sh
         '''
       }

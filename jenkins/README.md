@@ -133,17 +133,16 @@ The AWS CLI does **not** use the instance role when any of these are set with in
 - Global Jenkins env: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`
 - Jenkins user `~/.aws/credentials` with a bad `[default]` profile
 
-**Fix:** Keep pipeline parameter **AWS_USE_INSTANCE_ROLE** enabled (default). Re-run on latest `main` — validation clears static overrides and uses the instance profile.
+**Fix:** Keep pipeline parameter **AWS_USE_INSTANCE_ROLE** enabled (default). The pipeline loads a short-lived session from the EC2 instance IAM role (IMDS) for that build step only — it does **not** delete or modify `~/.aws/credentials`, Jenkins credential bindings, or any files on the agent.
 
 **Verify on the agent as the `jenkins` user:**
 
 ```bash
-unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE
-aws sts get-caller-identity
 curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/
+aws sts get-caller-identity
 ```
 
-Remove expired AWS credential bindings from the Jenkins job if you intend to use the instance role only.
+If you use Jenkins AWS credential bindings, disable **AWS_USE_INSTANCE_ROLE** or update the binding with valid keys.
 
 ## Local testing
 

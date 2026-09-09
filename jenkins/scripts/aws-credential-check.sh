@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# AWS credential validation with EC2 instance-role support.
-# Static env vars or ~/.aws/credentials override the instance IAM role and often
-# cause InvalidClientTokenId even when the EC2 instance has a valid role attached.
+# AWS credential helpers for Jenkins on EC2.
+# Uses instance-role session creds via IMDS when requested — does not delete or
+# modify any credentials files or Jenkins credential store on the agent.
 
 is_enabled() {
   case "${1:-false}" in
@@ -15,7 +15,7 @@ aws_cred_log() {
 }
 
 aws_cred_diagnose() {
-  aws_cred_log "Credential source diagnostics:"
+  aws_cred_log "Credential source diagnostics (read-only):"
   if [[ -n "${AWS_ACCESS_KEY_ID:-}" ]]; then
     aws_cred_log "  AWS_ACCESS_KEY_ID: set (${#AWS_ACCESS_KEY_ID} chars)"
   else
@@ -26,7 +26,7 @@ aws_cred_diagnose() {
   aws_cred_log "  AWS_PROFILE: ${AWS_PROFILE:-unset}"
   aws_cred_log "  AWS_SHARED_CREDENTIALS_FILE: ${AWS_SHARED_CREDENTIALS_FILE:-default ~/.aws/credentials}"
   if [[ -f "${HOME}/.aws/credentials" ]]; then
-    aws_cred_log "  ~/.aws/credentials: present (may override instance role if keys are invalid)"
+    aws_cred_log "  ~/.aws/credentials: present"
   else
     aws_cred_log "  ~/.aws/credentials: not found"
   fi
@@ -39,31 +39,55 @@ aws_cred_diagnose() {
   fi
 }
 
-# Bypass static keys and shared credentials file so the EC2 instance role is used.
-aws_use_instance_role_only() {
-  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-  unset AWS_PROFILE AWS_DEFAULT_PROFILE
-  local empty_creds
-  empty_creds="${TMPDIR:-/tmp}/jenkins-empty-aws-credentials"
-  : > "$empty_creds"
-  export AWS_SHARED_CREDENTIALS_FILE="$empty_creds"
-  export AWS_EC2_METADATA_DISABLED=false
-  aws_cred_log "Using EC2 instance role only (cleared static AWS env and shared credentials file)"
+# Fetch temporary credentials from the EC2 instance IAM role (IMDS).
+# Exports session env vars for this shell only — no files removed or changed.
+aws_export_instance_role_session() {
+  local role creds
+  role="$(curl -sf -m 2 http://169.254.169.254/latest/meta-data/iam/security-credentials/ | head -1)" || return 1
+  [[ -n "$role" ]] || return 1
+  creds="$(curl -sf -m 2 "http://169.254.169.254/latest/meta-data/iam/security-credentials/${role}")" || return 1
+  export AWS_ACCESS_KEY_ID
+  export AWS_SECRET_ACCESS_KEY
+  export AWS_SESSION_TOKEN
+  AWS_ACCESS_KEY_ID="$(echo "$creds" | jq -r .AccessKeyId)"
+  AWS_SECRET_ACCESS_KEY="$(echo "$creds" | jq -r .SecretAccessKey)"
+  AWS_SESSION_TOKEN="$(echo "$creds" | jq -r .Token)"
+  [[ -n "$AWS_ACCESS_KEY_ID" && "$AWS_ACCESS_KEY_ID" != "null" ]] || return 1
+  aws_cred_log "Loaded EC2 instance role session for this pipeline step (role: ${role}; agent credential files unchanged)"
+  return 0
+}
+
+# When enabled, prefer instance-role session for this step (overrides bad env in-process only).
+aws_apply_instance_role_if_enabled() {
+  if ! is_enabled "${AWS_USE_INSTANCE_ROLE:-true}"; then
+    aws_cred_log "AWS_USE_INSTANCE_ROLE=false — using agent/Jenkins credentials as configured"
+    return 0
+  fi
+  if aws_export_instance_role_session; then
+    return 0
+  fi
+  aws_cred_log "WARN: AWS_USE_INSTANCE_ROLE=true but IMDS session unavailable — using agent/Jenkins credentials"
+  return 0
 }
 
 aws_verify_caller_identity() {
-  local output err
+  local output err tried_imds=false
+
+  if is_enabled "${AWS_USE_INSTANCE_ROLE:-true}"; then
+    tried_imds=true
+    aws_apply_instance_role_if_enabled
+  fi
+
   if output="$(aws sts get-caller-identity 2>&1)"; then
     aws_cred_log "OK AWS identity: $(echo "$output" | jq -c '{Account, Arn, UserId}' 2>/dev/null || echo "$output" | head -1)"
     return 0
   fi
   err="$output"
 
-  if echo "$err" | grep -qiE 'InvalidClientTokenId|ExpiredToken|SignatureDoesNotMatch|UnrecognizedClientException'; then
-    if is_enabled "${AWS_USE_INSTANCE_ROLE:-true}"; then
-      aws_cred_log "WARN: AWS call failed with invalid/expired static credentials — retrying via instance role"
-      aws_use_instance_role_only
-      if output="$(aws sts get-caller-identity 2>&1)"; then
+  if ! $tried_imds && is_enabled "${AWS_USE_INSTANCE_ROLE:-true}"; then
+    if echo "$err" | grep -qiE 'InvalidClientTokenId|ExpiredToken|SignatureDoesNotMatch|UnrecognizedClientException'; then
+      aws_cred_log "WARN: configured credentials failed — trying EC2 instance role session (agent files unchanged)"
+      if aws_export_instance_role_session && output="$(aws sts get-caller-identity 2>&1)"; then
         aws_cred_log "OK AWS identity (instance role): $(echo "$output" | jq -c '{Account, Arn, UserId}' 2>/dev/null || echo "$output" | head -1)"
         return 0
       fi
@@ -72,8 +96,7 @@ aws_verify_caller_identity() {
   fi
 
   aws_cred_log "ERROR: $err"
-  aws_cred_log "Hint: remove expired Jenkins 'AWS Credentials' bindings / AWS_* global env vars."
-  aws_cred_log "Hint: set pipeline parameter AWS_USE_INSTANCE_ROLE=true (default) on EC2 agents with IAM role."
-  aws_cred_log "Hint: on agent run: unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; aws sts get-caller-identity"
+  aws_cred_log "Hint: enable AWS_USE_INSTANCE_ROLE on EC2 agents with an IAM role, or fix Jenkins/agent AWS credentials."
+  aws_cred_log "Hint: this pipeline never deletes or modifies credential files on the agent."
   return 1
 }
