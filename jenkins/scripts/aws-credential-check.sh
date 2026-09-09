@@ -70,6 +70,12 @@ aws_apply_instance_role_if_enabled() {
   return 0
 }
 
+# Backward compatibility for Jenkinsfiles that still call the old function name.
+aws_use_instance_role_only() {
+  aws_cred_log "NOTE: aws_use_instance_role_only is deprecated — use aws_apply_instance_role_if_enabled"
+  aws_apply_instance_role_if_enabled
+}
+
 aws_verify_caller_identity() {
   local output err tried_imds=false
 
