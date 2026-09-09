@@ -171,9 +171,7 @@ pipeline {
           export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-true}"
           # shellcheck source=jenkins/scripts/aws-credential-check.sh
           source ./jenkins/scripts/aws-credential-check.sh
-          if [[ "${AWS_USE_INSTANCE_ROLE}" == "true" ]]; then
-            aws_use_instance_role_only
-          fi
+          aws_apply_instance_role_if_enabled
           ./jenkins/scripts/run-terraform.sh
         '''
       }
