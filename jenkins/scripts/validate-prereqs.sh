@@ -50,7 +50,10 @@ else
 fi
 
 if should_validate "${VALIDATE_AWS:-true}" "AWS_CREDS"; then
-  aws sts get-caller-identity >/dev/null || fail "AWS credentials invalid — configure Jenkins AWS credentials or run aws sso login on agent"
+  # shellcheck source=jenkins/scripts/aws-credential-check.sh
+  source "$REPO_ROOT/jenkins/scripts/aws-credential-check.sh"
+  aws_cred_diagnose | tee -a "$LOG_FILE"
+  aws_verify_caller_identity | tee -a "$LOG_FILE" || fail "AWS credentials invalid — see [aws-creds] hints above (instance role may be overridden by stale Jenkins AWS_* env vars)"
   log "OK AWS credentials"
 else
   log "Skipping AWS credential check"
