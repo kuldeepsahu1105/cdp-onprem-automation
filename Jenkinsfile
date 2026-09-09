@@ -114,6 +114,8 @@ pipeline {
           env.VALIDATE_INVENTORY = cfg.validateInventory
           env.PIPELINE_ACTION = cfg.summaryLabel
           env.VALIDATION_CHECKS = cfg.validationChecks
+          env.REQUIRE_ANSIBLE = cfg.runAnsible
+          env.REQUIRE_TERRAFORM = cfg.runTerraform
           echo "Resolved stages: validate=${cfg.runValidate}, terraform=${cfg.runTerraform}, ansible=${cfg.runAnsible}, phases=${cfg.ansiblePhases}"
           echo "Validation checks: ${cfg.validationChecks}"
         }
@@ -147,9 +149,12 @@ pipeline {
         sh '''
           set -euo pipefail
           mkdir -p "${LOG_DIR}"
+          export PATH="${HOME}/.local/bin:${PATH}"
           export VALIDATION_CHECKS="${VALIDATION_CHECKS}"
           export REQUIRE_INVENTORY="${REQUIRE_INVENTORY:-false}"
           export VALIDATE_INVENTORY="${VALIDATE_INVENTORY:-false}"
+          export REQUIRE_ANSIBLE="${REQUIRE_ANSIBLE:-false}"
+          export REQUIRE_TERRAFORM="${REQUIRE_TERRAFORM:-false}"
           ./jenkins/scripts/validate-prereqs.sh
         '''
       }

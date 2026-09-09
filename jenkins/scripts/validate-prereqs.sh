@@ -31,7 +31,17 @@ else
 fi
 
 if should_validate "${VALIDATE_TOOLS:-true}" "TOOLS"; then
-  for tool in git jq aws terraform ansible-playbook python3; do
+  tools=(git jq aws python3)
+  if is_enabled "${REQUIRE_TERRAFORM:-false}"; then
+    tools+=(terraform)
+  fi
+  if is_enabled "${REQUIRE_ANSIBLE:-false}" || should_validate "${VALIDATE_ANSIBLE_SYNTAX:-true}" "ANSIBLE_SYNTAX"; then
+    # shellcheck disable=SC1091
+    source "$REPO_ROOT/jenkins/scripts/ensure-ansible.sh"
+    export PATH="${HOME}/.local/bin:${PATH}"
+    tools+=(ansible-playbook)
+  fi
+  for tool in "${tools[@]}"; do
     command -v "$tool" >/dev/null 2>&1 || fail "Required tool not found: $tool"
     log "OK tool: $tool ($(${tool} --version 2>&1 | head -1))"
   done
@@ -66,6 +76,9 @@ if is_enabled "${REQUIRE_INVENTORY:-false}" || should_validate "${VALIDATE_INVEN
 fi
 
 if should_validate "${VALIDATE_ANSIBLE_SYNTAX:-true}" "ANSIBLE_SYNTAX"; then
+  # shellcheck disable=SC1091
+  source "$REPO_ROOT/jenkins/scripts/ensure-ansible.sh"
+  export PATH="${HOME}/.local/bin:${PATH}"
   log "Ansible syntax check (ansible-playbooks/)"
   cd "$REPO_ROOT/ansible-playbooks"
   while IFS= read -r pb; do

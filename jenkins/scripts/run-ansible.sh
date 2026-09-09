@@ -7,6 +7,7 @@ LOG_DIR="${LOG_DIR:-$REPO_ROOT/jenkins/artifacts}"
 mkdir -p "$LOG_DIR"
 
 cd "$REPO_ROOT"
+export PATH="${HOME}/.local/bin:${PATH}"
 export TFVARS_FILE="${TFVARS_FILE:-.tfvars.yaml}"
 export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 export DRY_RUN="${DRY_RUN:-false}"
@@ -18,6 +19,10 @@ log() { printf '[ansible] %s\n' "$*" | tee -a "$LOG_FILE"; }
 [[ -f ansible-playbooks/inventory.ini ]] || { log "ERROR: ansible-playbooks/inventory.ini missing"; exit 1; }
 
 log "Starting clone_and_run_pvc_automation.sh (DEPLOY_PHASE=${DEPLOY_PHASE}, DRY_RUN=${DRY_RUN})"
+if ! command -v ansible-playbook >/dev/null 2>&1; then
+  # shellcheck disable=SC1091
+  source "$REPO_ROOT/jenkins/scripts/ensure-ansible.sh"
+fi
 set -o pipefail
 ./clone_and_run_pvc_automation.sh 2>&1 | tee -a "$LOG_FILE"
 log "Ansible stage completed"
