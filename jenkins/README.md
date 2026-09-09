@@ -123,6 +123,28 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `validate-*.log` | Validation output |
 | `inventory.ini`, `*.pem` | Deployment artifacts |
 
+## Troubleshooting
+
+### `InvalidClientTokenId` even with EC2 IAM role attached
+
+The AWS CLI does **not** use the instance role when any of these are set with invalid/expired keys:
+
+- Jenkins job **AWS Credentials** binding
+- Global Jenkins env: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`
+- Jenkins user `~/.aws/credentials` with a bad `[default]` profile
+
+**Fix:** Keep pipeline parameter **AWS_USE_INSTANCE_ROLE** enabled (default). Re-run on latest `main` — validation clears static overrides and uses the instance profile.
+
+**Verify on the agent as the `jenkins` user:**
+
+```bash
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE
+aws sts get-caller-identity
+curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/
+```
+
+Remove expired AWS credential bindings from the Jenkins job if you intend to use the instance role only.
+
 ## Local testing
 
 ```bash
