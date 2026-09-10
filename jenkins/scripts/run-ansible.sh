@@ -8,6 +8,10 @@ mkdir -p "$LOG_DIR"
 
 cd "$REPO_ROOT"
 export PATH="${HOME}/.local/bin:${PATH}"
+export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
+# shellcheck source=jenkins/scripts/apply-credentials-user.sh
+source "$REPO_ROOT/jenkins/scripts/apply-credentials-user.sh"
+apply_credentials_user 2>/dev/null || true
 export TFVARS_FILE="${TFVARS_FILE:-.tfvars.yaml}"
 export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 export DRY_RUN="${DRY_RUN:-false}"

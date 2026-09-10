@@ -24,7 +24,8 @@ pipeline {
       description: 'Validation checks when VALIDATE stage is selected (INVENTORY auto-enabled for Ansible-only runs)'
     )
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
-    booleanParam(name: 'AWS_USE_INSTANCE_ROLE', defaultValue: true, description: 'Prefer EC2 instance IAM role via IMDS for this build (does not delete agent/Jenkins credentials)')
+    booleanParam(name: 'AWS_USE_INSTANCE_ROLE', defaultValue: false, description: 'Use EC2 instance IAM role via IMDS (default off — uses CREDENTIALS_USER ~/.aws instead)')
+    string(name: 'CREDENTIALS_USER', defaultValue: 'holautosa', description: 'OS user whose ~/.aws and ~/.ssh credentials to use (read-only; files not modified)')
     string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Name prefix + Terraform workspace (overrides tfvars when set)')
     string(name: 'OWNER', defaultValue: 'ksahu-ygulati', description: 'Owner tag — required for Terraform/Ansible if not set in tfvars')
     string(name: 'AWS_REGION', defaultValue: 'ap-southeast-1', description: 'AWS region override (e.g. ap-southeast-1)')
@@ -74,6 +75,7 @@ pipeline {
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
     AWS_USE_INSTANCE_ROLE = "${params.AWS_USE_INSTANCE_ROLE}"
+    CREDENTIALS_USER = "${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}"
     PIPELINE_STAGES = "${params.PIPELINE_STAGES?.trim() ?: ''}"
     VALIDATION_CHECKS = "${params.VALIDATION_CHECKS?.trim() ?: ''}"
     BUILD_RESULT = 'IN_PROGRESS'
@@ -157,7 +159,11 @@ pipeline {
           export VALIDATE_INVENTORY="${VALIDATE_INVENTORY:-false}"
           export REQUIRE_ANSIBLE="${REQUIRE_ANSIBLE:-false}"
           export REQUIRE_TERRAFORM="${REQUIRE_TERRAFORM:-false}"
-          export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-true}"
+          export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-false}"
+          export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
+          # shellcheck source=jenkins/scripts/apply-credentials-user.sh
+          source ./jenkins/scripts/apply-credentials-user.sh
+          apply_credentials_user || true
           ./jenkins/scripts/validate-prereqs.sh
         '''
       }
@@ -168,7 +174,8 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
-          export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-true}"
+          export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-false}"
+          export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
           # shellcheck source=jenkins/scripts/aws-credential-check.sh
           source ./jenkins/scripts/aws-credential-check.sh
           aws_apply_instance_role_if_enabled

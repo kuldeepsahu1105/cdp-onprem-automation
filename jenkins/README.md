@@ -32,6 +32,8 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 | `AMI_ID` | `ami-0a66a47c24c021954` |
 | `TFVARS_FILE` | `.tfvars.yaml` |
 | `GIT_BRANCH` | `main` |
+| `CREDENTIALS_USER` | `holautosa` (uses `/home/holautosa/.aws` and `~/.ssh` read-only) |
+| `AWS_USE_INSTANCE_ROLE` | `false` (set `true` to prefer EC2 IAM role over holautosa creds) |
 | Instance counts/types | Same as `.tfvars.yaml` instance_groups |
 
 If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALIDATE,TERRAFORM`.
@@ -124,6 +126,19 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `inventory.ini`, `*.pem` | Deployment artifacts |
 
 ## Troubleshooting
+
+### Credentials user (`holautosa`)
+
+By default the pipeline uses **`CREDENTIALS_USER=holautosa`**:
+
+- AWS: `/home/holautosa/.aws/credentials` and `config`
+- SSH: `/home/holautosa/.ssh/id_rsa` or `id_ed25519` for Ansible
+
+Files are read only — nothing is deleted or modified on the agent.
+
+If the Jenkins `jenkins` user cannot read holautosa's files, grant read access or configure passwordless `sudo -u holautosa` for pipeline steps.
+
+Set **AWS_USE_INSTANCE_ROLE=true** only when you want EC2 IAM role (IMDS) instead of holautosa's `~/.aws`.
 
 ### `InvalidClientTokenId` even with EC2 IAM role attached
 
