@@ -24,6 +24,7 @@ pipeline {
       description: 'Validation checks when VALIDATE stage is selected (INVENTORY auto-enabled for Ansible-only runs)'
     )
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
+    booleanParam(name: 'SHOW_TF_PLAN_OUTPUT', defaultValue: false, description: 'Print full terraform plan to console (default off — summary only; apply output always shown)')
     booleanParam(name: 'USE_CREDENTIALS_USER_AWS', defaultValue: true, description: 'Use CREDENTIALS_USER ~/.aws credentials (default on — uncheck to use EC2 instance IAM role via IMDS)')
     string(name: 'CREDENTIALS_USER', defaultValue: 'holautosa', description: 'OS user whose ~/.aws and ~/.ssh credentials to use (read-only; files not modified)')
     choice(
@@ -117,6 +118,7 @@ pipeline {
     JENKINS_CLDR_EIP_NAME = "${params.CLDR_EIP_NAME?.trim() ?: ''}"
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
+    SHOW_TF_PLAN_OUTPUT = "${params.SHOW_TF_PLAN_OUTPUT}"
     CREDENTIALS_USER = "${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}"
     PIPELINE_STAGES = "${params.PIPELINE_STAGES?.trim() ?: ''}"
     VALIDATION_CHECKS = "${params.VALIDATION_CHECKS?.trim() ?: ''}"
@@ -580,6 +582,8 @@ def archivePipelineArtifacts() {
     'jenkins/artifacts/build-summary.txt',
     'jenkins/artifacts/inventory.ini',
     'jenkins/artifacts/terraform-*.log',
+    'jenkins/artifacts/terraform-plan-*-detail.log',
+    'jenkins/artifacts/terraform-plan-detail.log',
     'jenkins/artifacts/ansible-*.log',
     'jenkins/artifacts/validate-*.log',
     'jenkins/artifacts/error-summary.txt',
