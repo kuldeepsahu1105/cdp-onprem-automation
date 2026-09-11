@@ -50,12 +50,14 @@ aws_export_instance_role_session() {
 aws_apply_instance_role_if_enabled() {
   if is_enabled "${AWS_USE_INSTANCE_ROLE:-false}"; then
     if aws_export_instance_role_session; then
+      aws_cred_log "Using EC2 instance role (IMDS)"
       return 0
     fi
     aws_cred_log "WARN: IMDS unavailable — falling back to holautosa ~/.aws"
+    export AWS_USE_INSTANCE_ROLE=false
   fi
   apply_credentials_user_aws || return 1
-  aws_cred_log "Using holautosa home dir AWS credentials (${AWS_SHARED_CREDENTIALS_FILE})"
+  aws_cred_log "Using holautosa home dir AWS credentials (${AWS_SHARED_CREDENTIALS_FILE:-not set})"
   return 0
 }
 
