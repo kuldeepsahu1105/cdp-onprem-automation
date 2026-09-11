@@ -232,7 +232,9 @@ else
 fi
 
 ui_step "Terraform plan" "📝"
-terraform plan "${TF_VARS[@]}" -out=tfplan.out
+# shellcheck source=scripts/lib/terraform_plan_output.sh
+source "$SCRIPTS_LIB/terraform_plan_output.sh"
+terraform_run_plan "$TERRAFORM_DIR" tfplan.out
 
 case "${DRY_RUN:-false}" in
   1|true|yes|TRUE|YES|on|ON)

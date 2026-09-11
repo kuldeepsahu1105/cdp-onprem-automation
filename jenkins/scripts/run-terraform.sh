@@ -14,6 +14,7 @@ aws_apply_instance_role_if_enabled
 
 export TFVARS_FILE="${TFVARS_FILE:-.tfvars.yaml}"
 export DRY_RUN="${DRY_RUN:-false}"
+export SHOW_TF_PLAN_OUTPUT="${SHOW_TF_PLAN_OUTPUT:-false}"
 
 LOG_FILE="$LOG_DIR/terraform-${BUILD_NUMBER:-local}.log"
 log() { printf '[terraform] %s\n' "$*" | tee -a "$LOG_FILE"; }
