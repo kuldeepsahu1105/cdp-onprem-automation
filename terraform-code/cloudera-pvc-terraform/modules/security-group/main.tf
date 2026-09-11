@@ -15,6 +15,12 @@ data "aws_security_group" "existing_sg_by_name" {
   vpc_id = var.vpc_id
 }
 
+locals {
+  ingress_tcp_ports = distinct([
+    for port in var.allowed_ports : port if port > 0
+  ])
+}
+
 resource "aws_security_group" "vpc_sg" {
   count       = var.create_new_sg ? 1 : 0
   name        = var.sg_name
@@ -39,9 +45,9 @@ resource "aws_security_group" "vpc_sg" {
 
   # Ingress rule for specific TCP ports (if allow_all is false)
   dynamic "ingress" {
-    for_each = var.allow_all ? [] : var.allowed_ports
+    for_each = var.allow_all ? [] : local.ingress_tcp_ports
     content {
-      description = "Allow TCP traffic on port ${ingress.value}"
+      description = "Allow TCP ${ingress.value} from allowed CIDRs"
       from_port   = ingress.value
       to_port     = ingress.value
       protocol    = "tcp"

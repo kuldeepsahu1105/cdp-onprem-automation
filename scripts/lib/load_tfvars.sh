@@ -58,6 +58,9 @@ load_tfvars() {
             # shellcheck source=scripts/lib/jenkins_pipeline_defaults.sh
             source "$load_tfvars__lib_dir/jenkins_pipeline_defaults.sh"
             apply_jenkins_pipeline_defaults
+            # shellcheck source=scripts/lib/normalize_tfvars.sh
+            source "$load_tfvars__lib_dir/normalize_tfvars.sh"
+            normalize_tfvars_for_cli
             # shellcheck source=scripts/lib/build_tf_vars.sh
             source "$load_tfvars__lib_dir/build_tf_vars.sh"
             ;;
@@ -72,6 +75,9 @@ load_tfvars() {
             # shellcheck source=scripts/lib/jenkins_pipeline_defaults.sh
             source "$load_tfvars__lib_dir/jenkins_pipeline_defaults.sh"
             apply_jenkins_pipeline_defaults
+            # shellcheck source=scripts/lib/normalize_tfvars.sh
+            source "$load_tfvars__lib_dir/normalize_tfvars.sh"
+            normalize_tfvars_for_cli
             # shellcheck source=scripts/lib/build_tf_vars.sh
             source "$load_tfvars__lib_dir/build_tf_vars.sh"
             ;;

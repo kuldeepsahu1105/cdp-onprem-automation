@@ -229,6 +229,38 @@ Naming suffix in `.tfvars.yaml`: `sg_name_suffix: pvc_cluster_sg` → `{ENVIRONM
 
 If `USE_EXISTING` fails (SG not in VPC), switch to **SG_MODE=CREATE_NEW** or set **EXISTING_SG_NAME** to a valid `sg-xxxxxxxx` ID.
 
+### Security group ingress rules (port 0 / wrong ports)
+
+**Symptoms:** AWS console shows inbound rules with **port 0**, protocol **TCP**, from `0.0.0.0/0` (or your CIDRs) — instead of SSH (22), HTTPS (443), CM ports (7180, etc.).
+
+**Cause:** Older defaults used `allow_all=true` and `allowed_ports=[0]`. When `ALLOW_ALL=false`, a malformed `ALLOWED_PORTS` value (e.g. JSON with spaces like `[22, 443, 80]`) could break Terraform `-var` parsing and fall back to port `0`, creating useless TCP rules.
+
+**Jenkins settings (`SG_MODE=CREATE_NEW`):**
+
+| Parameter | Recommended | Notes |
+|---|---|---|
+| `ALLOW_ALL` | **unchecked** (`false`) | When checked, one rule allows all protocols (`-1`), not TCP port 0 |
+| `ALLOWED_PORTS` | `[22,443,80,7180,7183,7182]` | Compact JSON array — **no spaces** after commas |
+| `ALLOWED_CIDRS` | Your office/Jenkins IPs as `/32` | Include Jenkins agent egress IP for Ansible SSH |
+
+**Examples:**
+
+```
+ALLOWED_PORTS=[22,443,80,7180,7183,7182]     # correct
+ALLOWED_PORTS=[22, 443, 80, 7180, 7183, 7182] # avoid — spaces can break -var parsing
+```
+
+`.tfvars.yaml` uses the same compact format:
+
+```yaml
+allow_all: false
+allowed_ports: '[22,443,80,7180,7183,7182]'
+```
+
+**Fix existing SG:** Re-run the Jenkins **TERRAFORM** stage on latest `main` with `SG_MODE=CREATE_NEW` and the settings above. Terraform updates ingress rules in place when the SG is already in state (see [Re-run same environment](#re-run-same-environment-ptgty-etc)). Console should show `[tfvars] Security group: allow_all=false allowed_ports=[22,443,...]` in the log.
+
+**Verify in AWS:** Inbound rules should list individual TCP ports (22, 443, 80, 7180, …), not a single TCP rule on port 0.
+
 ### Terraform state on Jenkins (holautosa — PSEAutomation pattern)
 
 Jenkins uses **`CleanBeforeCheckout`** — the workspace is wiped each build. State is **not** stored in S3.

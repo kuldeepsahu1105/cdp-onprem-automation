@@ -48,14 +48,19 @@ variable "sg_name" {
 
 variable "allow_all" {
   description = "whether to allow all ingress traffic"
-  type    = bool
-  default = true
+  type        = bool
+  default     = false
 }
 
 variable "allowed_ports" {
-  description = "List of allowed ports"
+  description = "List of allowed TCP ports (used when allow_all is false)"
   type        = list(number)
-  default     = [0]
+  default     = [22, 443, 80, 7180, 7183, 7182]
+
+  validation {
+    condition     = var.allow_all || (length(var.allowed_ports) > 0 && !contains(var.allowed_ports, 0))
+    error_message = "allowed_ports must be a non-empty list of positive port numbers when allow_all is false."
+  }
 }
 
 variable "allowed_cidrs" {
