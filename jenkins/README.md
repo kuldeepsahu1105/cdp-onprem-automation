@@ -244,7 +244,21 @@ Following [PSEAutomation DeployHoL](https://github.com/cloudera/PSEAutomation/bl
 
 Each build restores state from holautosa before Terraform/Ansible and persists it back after apply. No S3 backend bucket is created or required.
 
+`state_manifest.json` under the environment dir records the last successful persist (build number, git commit, keypair name, PEM/inventory checksums, Terraform state serial). Ansible and Terraform stages log it at startup — use it to spot PEM/inventory drift between builds.
+
 `.terraform/` (provider/module cache) is **not** persisted — `terraform init` recreates it each build. Jenkins logs should show `State restore v2 (state files only; no .terraform cache)`.
+
+**Why mismatches still happen (and how we mitigate them):**
+
+| Layer | What it holds | Failure mode |
+|---|---|---|
+| Jenkins workspace | Fresh git checkout every build | Anything not restored from holautosa is lost |
+| holautosa | `terraform.tfstate`, `*.pem`, optional `inventory.ini` copy | PEM missing → SSH fails even when AWS keypair exists |
+| AWS | Live EC2, keypairs, SG rules | Source of truth for running infra |
+| Jenkins job params | Saved parameter values | Can disagree with tfvars until `REFRESH_JENKINSFILE=YES` |
+| Inventory | Regenerated from Terraform **public** IPs | Stale private IPs if restore overwrote inventory (fixed: Ansible restore skips `inventory.ini`) |
+
+Ansible-only runs now **restore Terraform state + init** before regenerating inventory, so holautosa remains the single source of truth across stage splits.
 
 **One-time agent cleanup** (if an older build left a bad module cache):
 
