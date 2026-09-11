@@ -247,7 +247,11 @@ pipeline {
         script {
           def phases = env.ANSIBLE_PHASES.split(',').findAll { it?.trim() }
           def cmCredId = params.CM_REPO_CREDENTIALS_ID?.trim()
-          def cmPasswordParam = params.CM_REPO_PASSWORD?.trim()
+          // password param is hudson.util.Secret — unwrap via GString, not .trim() on Secret
+          def cmPasswordParam = ''
+          if (params.CM_REPO_PASSWORD) {
+            cmPasswordParam = "${params.CM_REPO_PASSWORD}".trim()
+          }
           def shEscape = { String value -> (value ?: '').replace("'", "'\\''") }
           def ansibleEnvPrefix = { String phase ->
             """
