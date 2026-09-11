@@ -34,6 +34,7 @@ KEY_MAP = {
     "tf_state_bucket": "TF_STATE_BUCKET",
     "tf_state_key": "TF_STATE_KEY",
     "tf_state_region": "TF_STATE_REGION",
+    "tf_state_dynamodb_table": "TF_STATE_DYNAMODB_TABLE",
     "cm_version": "CM_VERSION",
     "cdh_version": "CDH_VERSION",
     "ecs_pvc_ds_version": "ECS_PVC_DS_VERSION",

@@ -92,6 +92,7 @@ instance_groups:
 # tf_state_backend: s3
 # tf_state_bucket: pvc-cluster-terraform-backend
 # tf_state_key: pvc-cluster/terraform.tfstate
+# tf_state_dynamodb_table: pvc-terraform-lock-table   # set none to disable locking
 
 # --- Tooling (rarely changed) ------------------------------------------------
 terraform_version: latest

@@ -86,6 +86,7 @@ TF_STATE_BACKEND="${TF_STATE_BACKEND:-s3}"
 TF_STATE_BUCKET="${TF_STATE_BUCKET:-pvc-cluster-terraform-backend}"
 TF_STATE_KEY="${TF_STATE_KEY:-pvc-cluster/terraform.tfstate}"
 TF_STATE_REGION="${TF_STATE_REGION:-${AWS_REGION}}"
+TF_STATE_DYNAMODB_TABLE="${TF_STATE_DYNAMODB_TABLE:-pvc-terraform-lock-table}"
 
 # --- Tooling (rarely changed) ---
 TERRAFORM_VERSION="${TERRAFORM_VERSION:-latest}"

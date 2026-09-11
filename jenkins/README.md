@@ -196,9 +196,9 @@ Jenkins uses **`CleanBeforeCheckout`** — the workspace (including local `terra
 
 Remote state is **required** for Jenkins. The pipeline uses an **S3 backend** (default bucket `pvc-cluster-terraform-backend`, key `pvc-cluster/terraform.tfstate`). Each `ENVIRONMENT` workspace is stored separately as `env:/<environment>/...` in that bucket.
 
-Ensure the bucket exists (see `terraform-code/cloudera-pvc-terraform/modules/s3-backend/`) and the Jenkins role can `s3:GetObject` / `s3:PutObject` on it.
+Ensure the bucket and DynamoDB lock table exist (see `terraform-code/cloudera-pvc-terraform/modules/s3-backend/`) and the Jenkins role can `s3:GetObject` / `s3:PutObject` / `dynamodb:GetItem` / `dynamodb:PutItem` on them.
 
-Set `TF_STATE_BACKEND=local` only for ad-hoc laptop runs without S3.
+Set `TF_STATE_DYNAMODB_TABLE=none` to skip DynamoDB locking. Set `TF_STATE_BACKEND=local` only for ad-hoc laptop runs without S3.
 
 ### Re-run same environment (`ptgty`, etc.)
 
