@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build ansible-playbooks/group_vars/all/jenkins_override.yml from Jenkins/CLI inputs."""
+"""Build ansible-playbooks/jenkins_override.yml from Jenkins/CLI inputs (applied via -e @file)."""
 
 from __future__ import annotations
 
@@ -140,7 +140,7 @@ def main() -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     header = (
         "# Generated at runtime — do not commit.\n"
-        "# Merged over ansible-playbooks/group_vars/all.yml (group: all).\n"
+        "# Applied via ansible -e @file (merged over group_vars/all.yml).\n"
     )
     out_path.write_text(
         header + yaml.safe_dump(overrides, default_flow_style=False, sort_keys=False),
