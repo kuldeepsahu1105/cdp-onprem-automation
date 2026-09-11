@@ -41,7 +41,7 @@ cluster_domain: "{{ ad_domain if identity_provider_effective == 'ad' else ipaser
 cluster_realm: "{{ cluster_domain | upper }}"
 
 # ipa_server_vars:
-ipaserver_domain: ntnxlab.local
+ipaserver_domain: cldrsetup.local
 ipaserver_realm: "{{ ipaserver_domain | upper }}"
 ipaadmin_principal: "admin"
 ipaadmin_password: "PseTeam@123"
