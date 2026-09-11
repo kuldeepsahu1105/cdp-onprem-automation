@@ -88,5 +88,10 @@ instance_groups:
     instance_type: r5a.4xlarge
     volume_size: 1300
 
+# --- Terraform remote state (S3 — persists across Jenkins workspace wipes) -----
+# tf_state_backend: s3
+# tf_state_bucket: pvc-cluster-terraform-backend
+# tf_state_key: pvc-cluster/terraform.tfstate
+
 # --- Tooling (rarely changed) ------------------------------------------------
 terraform_version: latest

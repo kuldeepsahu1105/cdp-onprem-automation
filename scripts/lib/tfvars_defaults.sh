@@ -81,6 +81,12 @@ PVCECS_WORKER_COUNT="${PVCECS_WORKER_COUNT:-7}"
 PVCECS_WORKER_INSTANCE_TYPE="${PVCECS_WORKER_INSTANCE_TYPE:-r5a.4xlarge}"
 PVCECS_WORKER_VOLUME_SIZE="${PVCECS_WORKER_VOLUME_SIZE:-1300}"
 
+# --- Terraform remote state (S3 — required for Jenkins; workspace wiped each build) ---
+TF_STATE_BACKEND="${TF_STATE_BACKEND:-s3}"
+TF_STATE_BUCKET="${TF_STATE_BUCKET:-pvc-cluster-terraform-backend}"
+TF_STATE_KEY="${TF_STATE_KEY:-pvc-cluster/terraform.tfstate}"
+TF_STATE_REGION="${TF_STATE_REGION:-${AWS_REGION}}"
+
 # --- Tooling (rarely changed) ---
 TERRAFORM_VERSION="${TERRAFORM_VERSION:-latest}"
 

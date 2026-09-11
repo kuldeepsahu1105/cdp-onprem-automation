@@ -202,7 +202,9 @@ ui_kv "Workspace" "${ENVIRONMENT}" "🌍"
 
 ui_step "Terraform init" "⚙️"
 cd "$TERRAFORM_DIR"
-terraform init -input=false
+# shellcheck source=scripts/lib/terraform_backend.sh
+source "$SCRIPTS_LIB/terraform_backend.sh"
+terraform_init_backend "$TERRAFORM_DIR"
 
 ui_step "Select workspace: ${ENVIRONMENT}" "🗂️"
 if terraform workspace list | grep -qw "${ENVIRONMENT}"; then

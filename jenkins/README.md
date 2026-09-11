@@ -190,9 +190,19 @@ Naming suffix in `.tfvars.yaml`: `sg_name_suffix: pvc_cluster_sg` → `{ENVIRONM
 
 If `USE_EXISTING` fails (SG not in VPC), switch to **SG_MODE=CREATE_NEW** or set **EXISTING_SG_NAME** to a valid `sg-xxxxxxxx` ID.
 
+### Why Terraform state was missing on Jenkins
+
+Jenkins uses **`CleanBeforeCheckout`** — the workspace (including local `terraform.tfstate`) is **deleted every build**.
+
+Remote state is **required** for Jenkins. The pipeline uses an **S3 backend** (default bucket `pvc-cluster-terraform-backend`, key `pvc-cluster/terraform.tfstate`). Each `ENVIRONMENT` workspace is stored separately as `env:/<environment>/...` in that bucket.
+
+Ensure the bucket exists (see `terraform-code/cloudera-pvc-terraform/modules/s3-backend/`) and the Jenkins role can `s3:GetObject` / `s3:PutObject` on it.
+
+Set `TF_STATE_BACKEND=local` only for ad-hoc laptop runs without S3.
+
 ### Re-run same environment (`ptgty`, etc.)
 
-Terraform workspace state is per `ENVIRONMENT`. On re-runs:
+Terraform workspace state is per `ENVIRONMENT` in S3. On re-runs:
 
 | Resource | First run | Re-run behavior |
 |---|---|---|

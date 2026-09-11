@@ -6,11 +6,7 @@ terraform {
     }
   }
 
-  # backend "s3" {
-  #   bucket = "pvc-cluster-terraform-backend"     # Replace with your S3 bucket name
-  #   # dynamodb_table = "pvc-terraform-lock-table"
-  #   use_lockfile = true                          # S3 Native Locking
-  #   key          = "pvc_setup/terraform.tfstate" # Path where the state file will be stored inside the bucket
-  #   region       = "ap-southeast-1"              # AWS region of the S3 bucket
-  # }
+  # Remote state — configured at init via scripts/lib/terraform_backend.sh (-backend-config).
+  # Per-environment workspaces map to env:/<workspace>/... in the bucket.
+  backend "s3" {}
 }
