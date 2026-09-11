@@ -59,7 +59,11 @@ fi
 wrapper_reexec_from_repo_if_needed "$SCRIPT_DIR" "${BASH_SOURCE[0]}" "$(basename "$0")" "${WRAPPER_REMAINING_ARGS[@]}"
 
 REPO_ROOT="$(cd "$SCRIPTS_LIB/../.." && pwd)"
-wrapper_print_identity "Cloudera PVC Ansible Deployment" "$REPO_ROOT" "$SCRIPTS_LIB"
+if output_is_quiet; then
+  log_milestone "Ansible deployment (phase ${DEPLOY_PHASE:-1})"
+else
+  wrapper_print_identity "Cloudera PVC Ansible Deployment" "$REPO_ROOT" "$SCRIPTS_LIB"
+fi
 
 # shellcheck source=scripts/lib/load_tfvars.sh
 source "$SCRIPTS_LIB/load_tfvars.sh"
@@ -69,9 +73,7 @@ set +a
 ui_config_summary
 
 ANSIBLE_DIR="$(resolve_ansible_playbooks_dir "$SCRIPT_DIR")"
-if output_is_quiet; then
-  printf '[ansible] dir=%s phase=%s\n' "$ANSIBLE_DIR" "${DEPLOY_PHASE:-1}"
-else
+if ! output_is_quiet; then
   ui_section "Ansible deployment" "🎯"
   ui_step "Resolving Ansible playbooks directory" "📁"
   ui_kv "Ansible directory" "$ANSIBLE_DIR" "📂"

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Reconcile Terraform with existing AWS key pairs / security groups (Jenkins re-runs).
 
+if [[ -f "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh" ]]; then
+  # shellcheck source=scripts/lib/output_mode.sh
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh"
+fi
+
 reconcile_is_enabled() {
   case "${1:-false}" in
     1|true|yes|TRUE|YES|on|ON) return 0 ;;
@@ -9,6 +14,12 @@ reconcile_is_enabled() {
 }
 
 reconcile_log() {
+  if [[ "$(output_mode 2>/dev/null || echo quiet)" == "quiet" ]]; then
+    case "$1" in
+      WARN:*|ERROR:*) printf '[reconcile] %s\n' "$*" >&2 ;;
+    esac
+    return 0
+  fi
   printf '[reconcile] %s\n' "$*"
 }
 

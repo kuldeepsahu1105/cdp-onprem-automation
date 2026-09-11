@@ -10,6 +10,9 @@ SSH_RETRIES="${ANSIBLE_SSH_RETRIES:-3}"
 SSH_RETRY_DELAY="${ANSIBLE_SSH_RETRY_DELAY:-10}"
 MAX_HOSTS="${ANSIBLE_PREFLIGHT_MAX_HOSTS:-5}"
 
+# shellcheck source=scripts/lib/output_mode.sh
+source "$REPO_ROOT/scripts/lib/output_mode.sh"
+
 # RHEL AMIs often accept ec2-user before root SSH is ready; try explicit user first.
 _ssh_users_for_preflight() {
   if [[ -n "${ANSIBLE_SSH_USER:-}" ]]; then
@@ -19,36 +22,49 @@ _ssh_users_for_preflight() {
   printf '%s\n' ec2-user root
 }
 
-log() { printf '[ansible-preflight] %s\n' "$*"; }
+log() {
+  if output_is_quiet; then
+    case "$1" in
+      ERROR:*|FAIL*) printf '[ansible-preflight] %s\n' "$*" >&2 ;;
+    esac
+    return 0
+  fi
+  printf '[ansible-preflight] %s\n' "$*"
+}
+
+log_verbose_detail() {
+  output_is_verbose || return 0
+  printf '[ansible-preflight] %s\n' "$*"
+}
 
 if [[ ! -f "$INVENTORY" ]]; then
-  log "ERROR: inventory missing: $INVENTORY"
+  printf '[ansible-preflight] ERROR: inventory missing: %s\n' "$INVENTORY" >&2
   exit 1
 fi
 
 if [[ ! -f "$SSH_KEY" ]]; then
-  log "ERROR: SSH key missing: $SSH_KEY"
+  printf '[ansible-preflight] ERROR: SSH key missing: %s\n' "$SSH_KEY" >&2
   exit 1
 fi
 chmod 600 "$SSH_KEY" 2>/dev/null || true
 
 agent_ip="$(curl -fsS --max-time 5 https://checkip.amazonaws.com 2>/dev/null | tr -d '[:space:]' || true)"
-if [[ -n "$agent_ip" ]]; then
-  log "Jenkins/agent egress IP: ${agent_ip} (must be in SG ALLOWED_CIDRS for port 22)"
-fi
+log_verbose_detail "Jenkins/agent egress IP: ${agent_ip} (must be in SG ALLOWED_CIDRS for port 22)"
 
-log "Inventory hosts (first ${MAX_HOSTS}):"
-awk '
-  /^\[/ { gsub(/[\[\]]/, "", $0); group=$0; next }
-  /^[^#[:space:]]/ {
-    split($0, a, /[ =]+/)
-    host=a[1]
-    for (i=2; i<=NF; i++) {
-      if ($i ~ /^ansible_host=/) { split($i, b, "="); ip=b[2] }
+if ! output_is_quiet; then
+  log "Inventory hosts (first ${MAX_HOSTS}):"
+  awk '
+    /^\[/ { gsub(/[\[\]]/, "", $0); group=$0; next }
+    /^[^#[:space:]]/ {
+      split($0, a, /[ =]+/)
+      host=a[1]
+      for (i=2; i<=NF; i++) {
+        if ($i ~ /^ansible_host=/) { split($i, b, "="); ip=b[2] }
+      }
+      if (ip != "") print "  " group ": " host " -> " ip
     }
-    if (ip != "") print "  " group ": " host " -> " ip
-  }
-' "$INVENTORY" | head -n "$MAX_HOSTS"
+  ' "$INVENTORY" | head -n "$MAX_HOSTS"
+fi
 
 _ssh_probe() {
   local user="$1" ip="$2" attempt
@@ -83,7 +99,7 @@ while IFS= read -r line; do
     fi
   done < <(_ssh_users_for_preflight)
   if [[ "$host_ok" == true ]]; then
-    log "OK  ${host} (${ip}) user=${used_user}"
+    log_verbose_detail "OK  ${host} (${ip}) user=${used_user}"
   else
     log "FAIL ${host} (${ip}) — SSH unreachable after ${SSH_RETRIES} attempt(s) per user (check SG port 22, PEM/keypair match, users tried: $(tr '\n' ' ' < <(_ssh_users_for_preflight)))"
     failed=$((failed + 1))
@@ -99,10 +115,14 @@ done < <(awk '
 ' "$INVENTORY")
 
 if [[ "$failed" -gt 0 ]]; then
-  log "ERROR: ${failed}/${checked} host(s) failed SSH preflight"
-  log "Hint: inventory must use public IPs for off-VPC Jenkins; regenerate via regenerate-inventory-from-terraform.sh"
-  log "Hint: add agent IP ${agent_ip:-<unknown>} to Jenkins ALLOWED_CIDRS when SG_MODE=CREATE_NEW"
+  printf '[ansible-preflight] ERROR: %s/%s host(s) failed SSH preflight\n' "$failed" "$checked" >&2
+  printf '[ansible-preflight] Hint: inventory must use public IPs for off-VPC Jenkins; regenerate via regenerate-inventory-from-terraform.sh\n' >&2
+  printf '[ansible-preflight] Hint: add agent IP %s to Jenkins ALLOWED_CIDRS when SG_MODE=CREATE_NEW\n' "${agent_ip:-<unknown>}" >&2
   exit 1
 fi
 
-log "SSH preflight passed (${checked} host(s) checked)"
+if output_is_quiet; then
+  log_milestone "SSH preflight passed (${checked} host(s))"
+else
+  log "SSH preflight passed (${checked} host(s) checked)"
+fi

@@ -2,6 +2,11 @@
 # AWS credential validation — default: holautosa ~/.aws/credentials
 
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_repo_root="$(cd "${_script_dir}/../.." && pwd)"
+if [[ -f "${_repo_root}/scripts/lib/output_mode.sh" ]]; then
+  # shellcheck source=scripts/lib/output_mode.sh
+  source "${_repo_root}/scripts/lib/output_mode.sh"
+fi
 # shellcheck source=jenkins/scripts/apply-credentials-user.sh
 source "${_script_dir}/apply-credentials-user.sh"
 
@@ -13,10 +18,19 @@ is_enabled() {
 }
 
 aws_cred_log() {
-  printf '[aws-creds] %s\n' "$*"
+  case "$1" in
+    ERROR:*|WARN:*) printf '[aws-creds] %s\n' "$*" >&2 ;;
+    *)
+      if output_is_quiet 2>/dev/null; then
+        return 0
+      fi
+      printf '[aws-creds] %s\n' "$*"
+      ;;
+  esac
 }
 
 aws_cred_diagnose() {
+  output_is_verbose 2>/dev/null || return 0
   apply_credentials_user 2>/dev/null || true
   aws_cred_log "Credential source diagnostics (read-only):"
   aws_cred_log "  CREDENTIALS_USER: ${CREDENTIALS_USER:-holautosa}"

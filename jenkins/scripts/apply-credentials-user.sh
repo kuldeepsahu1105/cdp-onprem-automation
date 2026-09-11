@@ -3,6 +3,29 @@
 # Does not modify holautosa files — may stage copies into jenkins/artifacts/ when
 # jenkins cannot read /home/holautosa/.aws directly (via sudo -u holautosa cat).
 
+_credentials_output_init() {
+  if [[ -z "${_CREDENTIALS_OUTPUT_INIT:-}" ]]; then
+    local lib
+    lib="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" && pwd)/output_mode.sh"
+    if [[ -f "$lib" ]]; then
+      # shellcheck source=scripts/lib/output_mode.sh
+      source "$lib"
+      _CREDENTIALS_OUTPUT_INIT=1
+    fi
+  fi
+}
+
+_credentials_log() {
+  _credentials_output_init
+  if declare -F log_verbose >/dev/null 2>&1 && output_is_quiet; then
+    log_verbose "[credentials-user] $*"
+  elif declare -F log_detail >/dev/null 2>&1; then
+    log_detail "[credentials-user] $*"
+  else
+    printf '[credentials-user] %s\n' "$*"
+  fi
+}
+
 _credentials_is_enabled() {
   case "${1:-false}" in
     1|true|yes|TRUE|YES|on|ON) return 0 ;;
@@ -55,24 +78,24 @@ apply_credentials_user_aws() {
 
   if _credentials_is_enabled "${AWS_USE_INSTANCE_ROLE:-false}"; then
     unset AWS_SHARED_CREDENTIALS_FILE AWS_CONFIG_FILE
-    printf '[credentials-user] AWS_USE_INSTANCE_ROLE=true — skipping %s/.aws\n' "$home"
+    _credentials_log "AWS_USE_INSTANCE_ROLE=true — skipping $home/.aws"
     return 0
   fi
 
   if [[ -r "${home}/.aws/credentials" ]]; then
     export AWS_SHARED_CREDENTIALS_FILE="${home}/.aws/credentials"
-    printf '[credentials-user] AWS_SHARED_CREDENTIALS_FILE=%s (direct read)\n' "$AWS_SHARED_CREDENTIALS_FILE"
+    _credentials_log "AWS_SHARED_CREDENTIALS_FILE=$AWS_SHARED_CREDENTIALS_FILE (direct read)"
     if [[ -r "${home}/.aws/config" ]]; then
       export AWS_CONFIG_FILE="${home}/.aws/config"
-      printf '[credentials-user] AWS_CONFIG_FILE=%s (direct read)\n' "$AWS_CONFIG_FILE"
+      _credentials_log "AWS_CONFIG_FILE=$AWS_CONFIG_FILE (direct read)"
     fi
   elif _stage_file_via_sudo "$user" "${home}/.aws/credentials" "$creds_dest"; then
     export AWS_SHARED_CREDENTIALS_FILE="$creds_dest"
     export CREDENTIALS_STAGED=true
-    printf '[credentials-user] AWS_SHARED_CREDENTIALS_FILE=%s (staged via sudo from %s)\n' "$creds_dest" "$user"
+    _credentials_log "AWS_SHARED_CREDENTIALS_FILE=$creds_dest (staged via sudo from $user)"
     if [[ -f "${home}/.aws/config" ]] && _stage_file_via_sudo "$user" "${home}/.aws/config" "$config_dest"; then
       export AWS_CONFIG_FILE="$config_dest"
-      printf '[credentials-user] AWS_CONFIG_FILE=%s (staged via sudo)\n' "$config_dest"
+      _credentials_log "AWS_CONFIG_FILE=$config_dest (staged via sudo)"
     fi
   else
     printf '[credentials-user] ERROR: cannot read %s/.aws/credentials as %s and sudo to %s failed\n' "$home" "$(id -un)" "$user" >&2
@@ -98,14 +121,14 @@ apply_credentials_user_ssh() {
   for key_src in "${home}/.ssh/id_rsa" "${home}/.ssh/id_ed25519"; do
     if [[ -r "$key_src" ]]; then
       export ANSIBLE_PRIVATE_KEY="$key_src"
-      printf '[credentials-user] ANSIBLE_PRIVATE_KEY=%s (direct read)\n' "$ANSIBLE_PRIVATE_KEY"
+      _credentials_log "ANSIBLE_PRIVATE_KEY=$ANSIBLE_PRIVATE_KEY (direct read)"
       return 0
     fi
     if [[ -f "$key_src" ]]; then
       key_dest="${stage_dir}/.holautosa-ssh-key"
       if _stage_file_via_sudo "$user" "$key_src" "$key_dest"; then
         export ANSIBLE_PRIVATE_KEY="$key_dest"
-        printf '[credentials-user] ANSIBLE_PRIVATE_KEY=%s (staged via sudo)\n' "$ANSIBLE_PRIVATE_KEY"
+        _credentials_log "ANSIBLE_PRIVATE_KEY=$ANSIBLE_PRIVATE_KEY (staged via sudo)"
         return 0
       fi
     fi

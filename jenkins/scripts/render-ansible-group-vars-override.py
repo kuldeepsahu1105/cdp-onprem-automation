@@ -97,10 +97,13 @@ def main() -> int:
     overrides.update(_load_yaml_fragment())
     overrides = _coerce_bool_strings(overrides)
 
+    quiet = os.environ.get("OUTPUT_MODE", "").lower() == "quiet"
+
     if not overrides:
         if out_path.is_file():
             out_path.unlink()
-        print("[ansible-vars] No overrides — using group_vars/all.yml only")
+        if not quiet:
+            print("[ansible-vars] No overrides — using group_vars/all.yml only")
         return 0
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -113,12 +116,13 @@ def main() -> int:
         encoding="utf-8",
     )
 
-    print(f"[ansible-vars] Wrote {len(overrides)} override(s) to {out_path}")
-    for key in sorted(overrides):
-        if "password" in key.lower() or key.endswith("_pass"):
-            print(f"[ansible-vars]   {key}=***")
-        else:
-            print(f"[ansible-vars]   {key}={overrides[key]}")
+    if not quiet:
+        print(f"[ansible-vars] Wrote {len(overrides)} override(s) to {out_path}")
+        for key in sorted(overrides):
+            if "password" in key.lower() or key.endswith("_pass"):
+                print(f"[ansible-vars]   {key}=***")
+            else:
+                print(f"[ansible-vars]   {key}={overrides[key]}")
     return 0
 
 

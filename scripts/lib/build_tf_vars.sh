@@ -2,9 +2,13 @@
 # Build the TF_VARS array from environment variables.
 # Requires tfvars_defaults.sh and normalize_tfvars_for_cli to have been sourced first.
 
+if [[ -f "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh" ]]; then
+  # shellcheck source=scripts/lib/output_mode.sh
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh"
+fi
+
 if [[ "${CREATE_NEW_SG:-false}" == "true" ]]; then
-  printf '[tfvars] Security group: allow_all=%s allowed_cidrs=%s\n' \
-    "${ALLOW_ALL:-false}" "${ALLOWED_CIDRS:-}"
+  log_detail "[tfvars] Security group: allow_all=${ALLOW_ALL:-false} allowed_cidrs=${ALLOWED_CIDRS:-}"
 fi
 
 TF_VARS=(

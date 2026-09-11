@@ -2,6 +2,14 @@
 # Persistent holautosa work dir (PSEAutomation HOL_AUTO_EXEC_DIR pattern).
 # Terraform/Ansible state survives Jenkins CleanBeforeCheckout.
 
+_holautosa_output_init() {
+  if [[ -z "${_HOLAUTOSA_OUTPUT_INIT:-}" && -f "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh" ]]; then
+    # shellcheck source=scripts/lib/output_mode.sh
+    source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh"
+    _HOLAUTOSA_OUTPUT_INIT=1
+  fi
+}
+
 holautosa_exec_user() {
   printf '%s' "${CREDENTIALS_USER:-holautosa}"
 }
@@ -72,7 +80,8 @@ prepare_holautosa_workdir() {
   # Legacy builds persisted .terraform/ here; remove so restore never copies it.
   _holautosa_clean_legacy_terraform_cache "$HOL_TERRAFORM_STATE_DIR"
 
-  printf '[holautosa-dir] Persistent state: %s (writable=%s)\n' "$env_dir" "$([[ -w "$env_dir" ]] && echo yes || echo sudo)"
+  _holautosa_output_init
+  log_detail "[holautosa-dir] Persistent state: $env_dir (writable=$([[ -w "$env_dir" ]] && echo yes || echo sudo))"
 }
 
 _holautosa_mkdir_p() {
@@ -106,7 +115,8 @@ _holautosa_clean_legacy_terraform_cache() {
   [[ -n "$dir" ]] || return 0
   if [[ -d "$dir/.terraform" ]]; then
     _holautosa_rm_rf "$dir/.terraform"
-    printf '[holautosa-dir] Removed legacy .terraform cache under %s\n' "$dir"
+    _holautosa_output_init
+    log_verbose "[holautosa-dir] Removed legacy .terraform cache under $dir"
   fi
 }
 
@@ -124,7 +134,8 @@ restore_terraform_state_to_workspace() {
   local item pem
 
   [[ -n "$src" && -d "$src" ]] || return 0
-  printf '[holautosa-dir] State restore v2 (state files only; no .terraform cache)\n'
+  _holautosa_output_init
+  log_verbose "[holautosa-dir] State restore v2 (state files only; no .terraform cache)"
   _holautosa_mkdir_p "$tf_dir"
 
   # Drop any stale init cache; terraform init recreates .terraform/ each build.
@@ -141,7 +152,7 @@ restore_terraform_state_to_workspace() {
     [[ -n "$pem" ]] && cp -f "$pem" "$tf_dir/"
   done < <(find "$src" -maxdepth 1 -type f -name '*.pem' 2>/dev/null || true)
 
-  printf '[holautosa-dir] Restored Terraform state from %s\n' "$src"
+  log_verbose "[holautosa-dir] Restored Terraform state from $src"
 }
 
 persist_terraform_state_from_workspace() {
@@ -165,7 +176,7 @@ persist_terraform_state_from_workspace() {
   done < <(find "$tf_dir" -maxdepth 1 -type f -name '*.pem' 2>/dev/null || true)
 
   holautosa_write_state_manifest "${REPO_ROOT:-.}"
-  printf '[holautosa-dir] Persisted Terraform state to %s\n' "$dest"
+  log_verbose "[holautosa-dir] Persisted Terraform state to $dest"
 }
 
 restore_ansible_artifacts_to_workspace() {
@@ -182,7 +193,7 @@ restore_ansible_artifacts_to_workspace() {
     [[ -n "$pem" ]] && cp -f "$pem" "$ansible_dir/"
   done < <(find "$src" -maxdepth 1 -type f -name '*.pem' 2>/dev/null || true)
 
-  printf '[holautosa-dir] Restored Ansible SSH keys from %s (inventory from Terraform)\n' "$src"
+  log_verbose "[holautosa-dir] Restored Ansible SSH keys from $src (inventory from Terraform)"
 }
 
 persist_ansible_artifacts_from_workspace() {
@@ -199,7 +210,7 @@ persist_ansible_artifacts_from_workspace() {
   done < <(find "$ansible_dir" -maxdepth 1 -type f -name '*.pem' 2>/dev/null || true)
 
   holautosa_write_state_manifest "$repo_root"
-  printf '[holautosa-dir] Persisted Ansible artifacts to %s\n' "$dest"
+  log_verbose "[holautosa-dir] Persisted Ansible artifacts to $dest"
 }
 
 # Single manifest tying holautosa artifacts together (debugging re-run mismatches).
@@ -246,21 +257,22 @@ holautosa_write_state_manifest() {
   "hol_ansible_dir": "${HOL_ANSIBLE_STATE_DIR:-}"
 }
 EOF
-  printf '[holautosa-dir] Wrote state manifest %s\n' "$manifest"
+  log_verbose "[holautosa-dir] Wrote state manifest $manifest"
 }
 
 holautosa_log_state_manifest() {
-  local manifest
+  local manifest summary
   manifest="$(holautosa_env_dir)/state_manifest.json"
   [[ -f "$manifest" ]] || return 0
-  if [[ -f "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh" ]]; then
-    # shellcheck source=scripts/lib/output_mode.sh
-    source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh"
-    if output_is_quiet && command -v jq >/dev/null 2>&1; then
-      jq -r '"[holautosa-dir] state manifest: build=\(.build_number) env=\(.environment) pem=\(.sshkey_sha256[0:12])…"' \
-        "$manifest" 2>/dev/null && return 0
-    fi
+  _holautosa_output_init
+  if output_is_quiet; then
+    return 0
   fi
-  printf '[holautosa-dir] Last persisted state manifest:\n'
-  sed 's/^/[holautosa-dir]   /' "$manifest"
+  if command -v jq >/dev/null 2>&1; then
+    summary="$(jq -r '"build=\(.build_number) env=\(.environment) pem=\(.sshkey_sha256[0:12])…"' \
+      "$manifest" 2>/dev/null || true)"
+    [[ -n "$summary" ]] && log_detail "[holautosa-dir] state manifest: $summary" && return 0
+  fi
+  log_detail "[holautosa-dir] Last persisted state manifest:"
+  sed 's/^/[holautosa-dir]   /' "$manifest" | while IFS= read -r line; do log_detail "$line"; done
 }

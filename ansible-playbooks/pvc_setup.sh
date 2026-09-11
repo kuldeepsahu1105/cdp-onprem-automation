@@ -99,9 +99,6 @@ run_playbook() {
   else
     ui_step "Running ${playbook}" "📜"
   fi
-  if output_is_quiet; then
-    printf '[playbook] %s\n' "$playbook"
-  fi
   ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" "$@"
 }
 
@@ -114,9 +111,6 @@ if [[ "${PVC_SETUP_FROM_WRAPPER:-0}" == "1" ]]; then
       ui_warn "Dry run enabled — Ansible will use --check --diff (no changes applied)."
       ui_warn "CM API playbooks (26/27) may still perform live API calls; use DEPLOY_PHASE=1-3 to limit scope."
     fi
-  else
-    printf '[ansible] phase=%s control=%s dry_run=%s\n' \
-      "${DEPLOY_PHASE}" "${CONTROL_MODE}" "${DRY_RUN:-false}"
   fi
 else
   wrapper_print_identity "Cloudera Private Cloud Deployment (pvc_setup.sh)" "$REPO_ROOT" "$REPO_ROOT/scripts/lib"

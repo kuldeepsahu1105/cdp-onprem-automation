@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Prefer Terraform-generated PEM for Ansible; fall back to CREDENTIALS_USER ~/.ssh.
 
+_REPO_ROOT_FOR_SSH="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+if [[ -f "${_REPO_ROOT_FOR_SSH}/scripts/lib/output_mode.sh" ]]; then
+  # shellcheck source=scripts/lib/output_mode.sh
+  source "${_REPO_ROOT_FOR_SSH}/scripts/lib/output_mode.sh"
+fi
+
 resolve_ansible_ssh_key() {
   local repo_root="${REPO_ROOT:-${WORKSPACE:-.}}"
   local ansible_dir="${repo_root}/ansible-playbooks"
@@ -10,7 +16,7 @@ resolve_ansible_ssh_key() {
   if [[ -f "${ansible_dir}/sshkey.pem" ]]; then
     chmod 600 "${ansible_dir}/sshkey.pem" 2>/dev/null || true
     export ANSIBLE_PRIVATE_KEY="${ansible_dir}/sshkey.pem"
-    printf '[ansible-ssh] ANSIBLE_PRIVATE_KEY=%s (terraform sshkey.pem)\n' "$ANSIBLE_PRIVATE_KEY"
+    log_verbose "[ansible-ssh] ANSIBLE_PRIVATE_KEY=$ANSIBLE_PRIVATE_KEY (terraform sshkey.pem)"
     return 0
   fi
 
@@ -18,7 +24,7 @@ resolve_ansible_ssh_key() {
   if [[ -n "$pem" && -f "$pem" ]]; then
     chmod 600 "$pem" 2>/dev/null || true
     export ANSIBLE_PRIVATE_KEY="$pem"
-    printf '[ansible-ssh] ANSIBLE_PRIVATE_KEY=%s (terraform-generated)\n' "$ANSIBLE_PRIVATE_KEY"
+    log_verbose "[ansible-ssh] ANSIBLE_PRIVATE_KEY=$ANSIBLE_PRIVATE_KEY (terraform-generated)"
     return 0
   fi
 

@@ -8,7 +8,11 @@ GEN_SCRIPT="${GEN_SCRIPT:-$REPO_ROOT/generate_inventory.sh}"
 DEST_INVENTORY="${DEST_INVENTORY:-$REPO_ROOT/ansible-playbooks/inventory.ini}"
 ENVIRONMENT="${ENVIRONMENT:-development}"
 
-log() { printf '[inventory] %s\n' "$*"; }
+# shellcheck source=scripts/lib/output_mode.sh
+source "$REPO_ROOT/scripts/lib/output_mode.sh"
+
+log() { log_detail "[inventory] $*"; }
+log_error() { printf '[inventory] %s\n' "$*" >&2; }
 
 if [[ ! -d "$TF_DIR" ]]; then
   log "SKIP: Terraform directory not found: $TF_DIR"
@@ -16,17 +20,17 @@ if [[ ! -d "$TF_DIR" ]]; then
 fi
 
 if [[ ! -f "$GEN_SCRIPT" ]]; then
-  log "ERROR: generate_inventory.sh not found at $GEN_SCRIPT"
+  log_error "ERROR: generate_inventory.sh not found at $GEN_SCRIPT"
   exit 1
 fi
 
 if ! command -v terraform >/dev/null 2>&1; then
-  log "ERROR: terraform not in PATH"
+  log_error "ERROR: terraform not in PATH"
   exit 1
 fi
 
 if ! command -v jq >/dev/null 2>&1; then
-  log "ERROR: jq not in PATH"
+  log_error "ERROR: jq not in PATH"
   exit 1
 fi
 
@@ -43,10 +47,10 @@ fi
 
 bash "$GEN_SCRIPT"
 if [[ ! -f "$TF_DIR/ansible_inventory.ini" ]]; then
-  log "ERROR: $TF_DIR/ansible_inventory.ini was not generated"
+  log_error "ERROR: $TF_DIR/ansible_inventory.ini was not generated"
   exit 1
 fi
 
 mkdir -p "$(dirname "$DEST_INVENTORY")"
 cp -f "$TF_DIR/ansible_inventory.ini" "$DEST_INVENTORY"
-log "Wrote $DEST_INVENTORY (ansible_host = public IPs from Terraform)"
+log_verbose "[inventory] Wrote $DEST_INVENTORY (ansible_host = public IPs from Terraform)"

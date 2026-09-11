@@ -75,5 +75,45 @@ ansible_configure_output_mode() {
     export ANSIBLE_DISPLAY_SKIPPED_HOSTS="${ANSIBLE_DISPLAY_SKIPPED_HOSTS:-false}"
     export ANSIBLE_DISPLAY_FAILED_STDERR="${ANSIBLE_DISPLAY_FAILED_STDERR:-true}"
     export ANSIBLE_DEPRECATION_WARNINGS="${ANSIBLE_DEPRECATION_WARNINGS:-false}"
+    export ANSIBLE_STDOUT_CALLBACK="${ANSIBLE_STDOUT_CALLBACK:-ansible.builtin.dense}"
+  fi
+}
+
+# Stage boundary — always printed (one line).
+log_milestone() {
+  printf '▶ %s\n' "$*"
+}
+
+# Routine detail — suppressed in quiet; shown in normal/verbose.
+log_detail() {
+  output_is_quiet && return 0
+  printf '%s\n' "$*"
+}
+
+# Detail only when verbose.
+log_verbose() {
+  output_is_verbose || return 0
+  printf '%s\n' "$*"
+}
+
+# Jenkins helpers: routine messages go to LOG_FILE only in quiet mode.
+log_tagged() {
+  local tag="$1"
+  shift
+  if [[ -n "${LOG_FILE:-}" ]]; then
+    printf '[%s] %s\n' "$tag" "$*" >>"$LOG_FILE"
+  fi
+  if ! output_is_quiet; then
+    printf '[%s] %s\n' "$tag" "$*"
+  fi
+}
+
+log_tagged_always() {
+  local tag="$1"
+  shift
+  if [[ -n "${LOG_FILE:-}" ]]; then
+    printf '[%s] %s\n' "$tag" "$*" | tee -a "$LOG_FILE"
+  else
+    printf '[%s] %s\n' "$tag" "$*"
   fi
 }

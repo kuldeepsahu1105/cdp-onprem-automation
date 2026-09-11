@@ -22,7 +22,9 @@ terraform_print_plan_summary() {
   fi
 
   if line="$(grep -E '^No changes\.' "$plan_log" | tail -1)" && [[ -n "$line" ]]; then
-    if declare -F ui_ok >/dev/null 2>&1; then
+    if output_is_quiet; then
+      log_milestone "$line"
+    elif declare -F ui_ok >/dev/null 2>&1; then
       ui_ok "$line"
     else
       printf '[terraform-plan] %s\n' "$line"
@@ -32,11 +34,17 @@ terraform_print_plan_summary() {
 
   line="$(grep -E '^Plan: ' "$plan_log" | tail -1)"
   if [[ -n "$line" ]]; then
-    if declare -F ui_ok >/dev/null 2>&1; then
+    if output_is_quiet; then
+      log_milestone "$line"
+    elif declare -F ui_ok >/dev/null 2>&1; then
       ui_ok "$line"
     else
       printf '[terraform-plan] %s\n' "$line"
     fi
+  fi
+
+  if output_is_quiet; then
+    return 0
   fi
 
   created="$(grep -cE ' will be created$' "$plan_log" 2>/dev/null || true)"
@@ -72,10 +80,12 @@ terraform_run_plan() {
     return $?
   fi
 
-  if declare -F ui_info >/dev/null 2>&1; then
-    ui_info "Plan running (summary only). Set SHOW_TF_PLAN_OUTPUT=true for full plan in console."
-  else
-    printf '[terraform-plan] Plan running (summary only). Set SHOW_TF_PLAN_OUTPUT=true for full plan.\n'
+  if ! output_is_quiet; then
+    if declare -F ui_info >/dev/null 2>&1; then
+      ui_info "Plan running (summary only). Set SHOW_TF_PLAN_OUTPUT=true for full plan in console."
+    else
+      printf '[terraform-plan] Plan running (summary only). Set SHOW_TF_PLAN_OUTPUT=true for full plan.\n'
+    fi
   fi
 
   local errexit_on=0
@@ -96,10 +106,12 @@ terraform_run_plan() {
   fi
 
   terraform_print_plan_summary "$plan_log"
-  if declare -F ui_info >/dev/null 2>&1; then
-    ui_info "Full plan log: ${plan_log}"
-  else
-    printf '[terraform-plan] Full plan log: %s\n' "$plan_log"
+  if ! output_is_quiet; then
+    if declare -F ui_info >/dev/null 2>&1; then
+      ui_info "Full plan log: ${plan_log}"
+    else
+      printf '[terraform-plan] Full plan log: %s\n' "$plan_log"
+    fi
   fi
   return 0
 }

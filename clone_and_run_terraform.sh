@@ -161,7 +161,11 @@ fi
 wrapper_reexec_from_repo_if_needed "$SCRIPT_DIR" "${BASH_SOURCE[0]}" "$(basename "$0")" "${WRAPPER_REMAINING_ARGS[@]}"
 
 REPO_ROOT="$(cd "$SCRIPTS_LIB/../.." && pwd)"
-wrapper_print_identity "CDP On-Prem Terraform Provisioning" "$REPO_ROOT" "$SCRIPTS_LIB"
+if output_is_quiet; then
+  log_milestone "Terraform provisioning"
+else
+  wrapper_print_identity "CDP On-Prem Terraform Provisioning" "$REPO_ROOT" "$SCRIPTS_LIB"
+fi
 
 ui_section "Prerequisites" "🔧"
 install_terraform
@@ -212,7 +216,15 @@ source "$SCRIPTS_LIB/terraform_backend.sh"
 terraform_init_backend "$TERRAFORM_DIR"
 
 ui_step "Select workspace: ${ENVIRONMENT}" "🗂️"
-if terraform workspace list | grep -qw "${ENVIRONMENT}"; then
+if output_is_quiet; then
+  if terraform workspace list 2>/dev/null | grep -qw "${ENVIRONMENT}"; then
+    terraform workspace select "${ENVIRONMENT}" >/dev/null
+    log_milestone "Workspace ${ENVIRONMENT} selected"
+  else
+    terraform workspace new "${ENVIRONMENT}" >/dev/null
+    log_milestone "Workspace ${ENVIRONMENT} created"
+  fi
+elif terraform workspace list | grep -qw "${ENVIRONMENT}"; then
   terraform workspace select "${ENVIRONMENT}"
   ui_ok "Workspace '${ENVIRONMENT}' selected"
 else
@@ -245,6 +257,7 @@ case "${DRY_RUN:-false}" in
 esac
 
 ui_step "Terraform apply" "🚀"
+output_is_quiet && log_milestone "Terraform apply"
 terraform_run_apply "$TERRAFORM_DIR" tfplan.out
 persist_terraform_state_from_workspace "$TERRAFORM_DIR"
 

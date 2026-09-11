@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Jenkins-only overrides applied after tfvars load (BUILD_NUMBER is set in CI).
 
+if [[ -f "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh" ]]; then
+  # shellcheck source=scripts/lib/output_mode.sh
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh"
+fi
+
 apply_jenkins_pipeline_defaults() {
   [[ -n "${BUILD_NUMBER:-}" ]] || return 0
 
@@ -41,8 +46,6 @@ apply_jenkins_pipeline_defaults() {
 
   export CLDR_EIP_NAME="${CLDR_EIP_NAME:-${ENVIRONMENT}-cldr-mngr-eip}"
 
-  printf '[jenkins-tfvars] VPC_MODE=%s CREATE_VPC=%s SG_MODE=%s CREATE_NEW_SG=%s CREATE_KEYPAIR=%s\n' \
-    "$vpc_mode" "$CREATE_VPC" "$sg_mode" "$CREATE_NEW_SG" "$CREATE_KEYPAIR"
-  printf '[jenkins-tfvars] KEYPAIR_NAME=%s SG(existing=%s new=%s) VPC=%s\n' \
-    "$KEYPAIR_NAME" "${EXISTING_SG_NAME:-n/a}" "${SG_NAME:-n/a}" "${VPC_NAME:-default}"
+  log_detail "[jenkins-tfvars] VPC_MODE=$vpc_mode CREATE_VPC=$CREATE_VPC SG_MODE=$sg_mode CREATE_NEW_SG=$CREATE_NEW_SG CREATE_KEYPAIR=$CREATE_KEYPAIR"
+  log_detail "[jenkins-tfvars] KEYPAIR_NAME=$KEYPAIR_NAME SG(existing=${EXISTING_SG_NAME:-n/a} new=${SG_NAME:-n/a}) VPC=${VPC_NAME:-default}"
 }

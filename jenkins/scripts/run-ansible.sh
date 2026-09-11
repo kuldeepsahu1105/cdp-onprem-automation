@@ -45,10 +45,12 @@ export DRY_RUN="${DRY_RUN:-false}"
 export CONTROL_MODE="${CONTROL_MODE:-auto}"
 
 LOG_FILE="$LOG_DIR/ansible-${BUILD_NUMBER:-local}-phase${DEPLOY_PHASE}.log"
-log() { printf '[ansible] %s\n' "$*" | tee -a "$LOG_FILE"; }
+log() { log_tagged "ansible" "$@"; }
+log_always() { log_tagged_always "ansible" "$@"; }
 
-[[ -f ansible-playbooks/inventory.ini ]] || { log "ERROR: ansible-playbooks/inventory.ini missing"; exit 1; }
+[[ -f ansible-playbooks/inventory.ini ]] || { log_always "ERROR: ansible-playbooks/inventory.ini missing"; exit 1; }
 
+log_milestone "Ansible stage phase ${DEPLOY_PHASE} (DRY_RUN=${DRY_RUN})"
 log "Starting clone_and_run_pvc_automation.sh (DEPLOY_PHASE=${DEPLOY_PHASE}, DRY_RUN=${DRY_RUN})"
 if ! command -v ansible-playbook >/dev/null 2>&1; then
   # shellcheck disable=SC1091
@@ -57,4 +59,5 @@ fi
 set -o pipefail
 ./clone_and_run_pvc_automation.sh 2>&1 | tee -a "$LOG_FILE"
 persist_ansible_artifacts_from_workspace || true
+log_milestone "Ansible stage completed"
 log "Ansible stage completed"

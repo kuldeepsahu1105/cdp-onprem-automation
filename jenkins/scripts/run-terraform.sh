@@ -20,7 +20,8 @@ export SHOW_TF_PLAN_OUTPUT="${SHOW_TF_PLAN_OUTPUT:-false}"
 export LOG_DIR="${LOG_DIR}"
 
 LOG_FILE="$LOG_DIR/terraform-${BUILD_NUMBER:-local}.log"
-log() { printf '[terraform] %s\n' "$*" | tee -a "$LOG_FILE"; }
+log() { log_tagged "terraform" "$@"; }
+log_always() { log_tagged_always "terraform" "$@"; }
 
 # shellcheck source=scripts/lib/holautosa_exec_dir.sh
 source "$REPO_ROOT/scripts/lib/holautosa_exec_dir.sh"
@@ -28,7 +29,9 @@ prepare_holautosa_workdir || true
 holautosa_purge_terraform_module_cache "$REPO_ROOT/terraform-code/cloudera-pvc-terraform"
 
 log "Git commit: $(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+log_milestone "Terraform stage (DRY_RUN=${DRY_RUN})"
 log "Starting clone_and_run_terraform.sh (OUTPUT_MODE=${OUTPUT_MODE}, DRY_RUN=${DRY_RUN}, SHOW_TF_PLAN_OUTPUT=${SHOW_TF_PLAN_OUTPUT}, user=$(id -un))"
 set -o pipefail
 ./clone_and_run_terraform.sh 2>&1 | tee -a "$LOG_FILE"
+log_milestone "Terraform stage completed"
 log "Terraform stage completed"

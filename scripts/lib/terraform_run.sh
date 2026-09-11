@@ -18,7 +18,9 @@ terraform_init_quiet() {
   init_log="$(output_terraform_init_log)"
   mkdir -p "$(dirname "$init_log")"
   if terraform -chdir="$tf_dir" init -input=false -no-color >"$init_log" 2>&1; then
-    if declare -F ui_ok >/dev/null 2>&1; then
+    if output_is_quiet; then
+      log_milestone "Terraform init OK"
+    elif declare -F ui_ok >/dev/null 2>&1; then
       ui_ok "Terraform init OK"
     else
       printf '[terraform] init OK\n'
@@ -53,11 +55,19 @@ terraform_run_apply() {
     return "${PIPESTATUS[0]}"
   fi
 
-  set +o pipefail
-  terraform -chdir="$tf_dir" apply -auto-approve "$plan_file" -no-color 2>&1 \
-    | tee "$apply_log" | output_filter_terraform_apply_stream
-  rc="${PIPESTATUS[0]}"
-  set -o pipefail
+  if output_is_quiet; then
+    if terraform -chdir="$tf_dir" apply -auto-approve "$plan_file" -no-color >"$apply_log" 2>&1; then
+      rc=0
+    else
+      rc=$?
+    fi
+  else
+    set +o pipefail
+    terraform -chdir="$tf_dir" apply -auto-approve "$plan_file" -no-color 2>&1 \
+      | tee "$apply_log" | output_filter_terraform_apply_stream
+    rc="${PIPESTATUS[0]}"
+    set -o pipefail
+  fi
 
   if [[ "$rc" -ne 0 ]]; then
     if declare -F ui_err >/dev/null 2>&1; then
@@ -70,14 +80,16 @@ terraform_run_apply() {
 
   if grep -q '^Apply complete!' "$apply_log"; then
     line="$(grep '^Apply complete!' "$apply_log" | tail -1)"
-    if declare -F ui_ok >/dev/null 2>&1; then
+    if output_is_quiet; then
+      log_milestone "$line"
+    elif declare -F ui_ok >/dev/null 2>&1; then
       ui_ok "$line"
     else
       printf '[terraform] %s\n' "$line"
     fi
   fi
 
-  if output_is_quiet; then
+  if ! output_is_quiet; then
     if declare -F ui_info >/dev/null 2>&1; then
       ui_info "Full apply log (incl. outputs): ${apply_log}"
     else
