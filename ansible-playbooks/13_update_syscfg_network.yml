@@ -18,7 +18,8 @@
     sysconfig_domain: "{{ cluster_domain }}"
     sysconfig_dns1: >-
       {{
-        hostvars[groups['ipaserver'][0]].ansible_default_ipv4.address
+        hostvars[groups['ipaserver'][0]].private_ip
+        | default(hostvars[groups['ipaserver'][0]].ansible_host)
         if identity_provider_effective == 'freeipa' and ipa_server_in_inventory | bool
         else ad_kdc_host
       }}
