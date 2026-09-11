@@ -204,6 +204,15 @@ Following [PSEAutomation DeployHoL](https://github.com/cloudera/PSEAutomation/bl
 
 Each build restores state from holautosa before Terraform/Ansible and persists it back after apply. No S3 backend bucket is created or required.
 
+`.terraform/` (provider/module cache) is **not** persisted — `terraform init` recreates it each build. Jenkins logs should show `State restore v2 (state files only; no .terraform cache)`.
+
+**One-time agent cleanup** (if an older build left a bad module cache):
+
+```bash
+sudo rm -rf /home/holautosa/HOL_AUTO_EXEC_DIR/cdp-onprem-automation/ptgty/terraform/.terraform
+sudo rm -rf /var/lib/jenkins/workspace/cdp-onprem-automation-deploy/terraform-code/cloudera-pvc-terraform/.terraform
+```
+
 **Required sudoers** (same as AWS creds):
 
 ```
