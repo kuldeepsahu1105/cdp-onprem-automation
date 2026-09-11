@@ -11,7 +11,8 @@ export PATH="${HOME}/.local/bin:${PATH}"
 export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
 # shellcheck source=jenkins/scripts/apply-credentials-user.sh
 source "$REPO_ROOT/jenkins/scripts/apply-credentials-user.sh"
-apply_credentials_user 2>/dev/null || true
+apply_credentials_user
+
 export TFVARS_FILE="${TFVARS_FILE:-.tfvars.yaml}"
 export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 export DRY_RUN="${DRY_RUN:-false}"
@@ -28,5 +29,5 @@ if ! command -v ansible-playbook >/dev/null 2>&1; then
   source "$REPO_ROOT/jenkins/scripts/ensure-ansible.sh"
 fi
 set -o pipefail
-./clone_and_run_pvc_automation.sh 2>&1 | tee -a "$LOG_FILE"
+run_as_credentials_user bash ./clone_and_run_pvc_automation.sh 2>&1 | tee -a "$LOG_FILE"
 log "Ansible stage completed"

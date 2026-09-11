@@ -127,6 +127,17 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 
 ## Troubleshooting
 
+### AWS credentials (`holautosa`)
+
+By default the pipeline reads AWS credentials from **`/home/holautosa/.aws/`**:
+
+- `/home/holautosa/.aws/credentials`
+- `/home/holautosa/.aws/config`
+
+Jenkins-injected `AWS_ACCESS_KEY_ID` env vars are ignored in the pipeline shell (cleared in-process only; no files deleted). Commands run as `holautosa` via `sudo` when available.
+
+Set **AWS_USE_INSTANCE_ROLE=true** only to use the EC2 IAM role instead of holautosa's `~/.aws`.
+
 ### Credentials user (`holautosa`)
 
 By default the pipeline uses **`CREDENTIALS_USER=holautosa`**:
@@ -140,24 +151,17 @@ If the Jenkins `jenkins` user cannot read holautosa's files, grant read access o
 
 Set **AWS_USE_INSTANCE_ROLE=true** only when you want EC2 IAM role (IMDS) instead of holautosa's `~/.aws`.
 
-### `InvalidClientTokenId` even with EC2 IAM role attached
+### `InvalidClientTokenId`
 
-The AWS CLI does **not** use the instance role when any of these are set with invalid/expired keys:
+**Fix:** Ensure `/home/holautosa/.aws/credentials` is valid. Keep **AWS_USE_INSTANCE_ROLE** unchecked (default). Re-run on latest `main`.
 
-- Jenkins job **AWS Credentials** binding
-- Global Jenkins env: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`
-- Jenkins user `~/.aws/credentials` with a bad `[default]` profile
-
-**Fix:** Keep pipeline parameter **AWS_USE_INSTANCE_ROLE** enabled (default). The pipeline loads a short-lived session from the EC2 instance IAM role (IMDS) for that build step only — it does **not** delete or modify `~/.aws/credentials`, Jenkins credential bindings, or any files on the agent.
-
-**Verify on the agent as the `jenkins` user:**
+**Verify as holautosa:**
 
 ```bash
-curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/
-aws sts get-caller-identity
+sudo -u holautosa aws sts get-caller-identity
 ```
 
-If you use Jenkins AWS credential bindings, disable **AWS_USE_INSTANCE_ROLE** or update the binding with valid keys.
+If Jenkins cannot read holautosa's files, allow passwordless sudo: `jenkins ALL=(holautosa) NOPASSWD: ALL`
 
 ## Local testing
 

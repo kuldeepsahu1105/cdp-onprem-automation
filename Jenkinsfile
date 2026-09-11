@@ -163,7 +163,7 @@ pipeline {
           export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
           # shellcheck source=jenkins/scripts/apply-credentials-user.sh
           source ./jenkins/scripts/apply-credentials-user.sh
-          apply_credentials_user || true
+          apply_credentials_user
           ./jenkins/scripts/validate-prereqs.sh
         '''
       }
