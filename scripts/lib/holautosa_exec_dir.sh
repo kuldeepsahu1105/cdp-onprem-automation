@@ -17,11 +17,32 @@ holautosa_env_dir() {
   printf '%s/cdp-onprem-automation/%s' "$(holautosa_exec_base)" "${ENVIRONMENT:-development}"
 }
 
+_holautosa_sudo_as_user() {
+  local user="$1"
+  shift
+  sudo -n -u "$user" -- "$@"
+}
+
+_holautosa_grant_jenkins_write() {
+  local tree="$1"
+  local run_user
+  run_user="$(id -un)"
+  # PSEAutomation: chown holautosa work files to jenkins for pipeline read/write.
+  if sudo -n chown -R "${run_user}:$(id -gn)" "$tree" 2>/dev/null; then
+    return 0
+  fi
+  if sudo -n chown -R jenkins:jenkins "$tree" 2>/dev/null; then
+    return 0
+  fi
+  sudo -n chmod -R u+rwX,g+rwX "$tree" 2>/dev/null || true
+}
+
 prepare_holautosa_workdir() {
-  local user base env_dir
+  local user base env_dir tree
   user="$(holautosa_exec_user)"
   base="$(holautosa_exec_base)"
   env_dir="$(holautosa_env_dir)"
+  tree="${base}/cdp-onprem-automation"
 
   if [[ ! -d "/home/${user}" ]]; then
     printf '[holautosa-dir] ERROR: home not found: /home/%s\n' "$user" >&2
@@ -30,14 +51,17 @@ prepare_holautosa_workdir() {
 
   if [[ "$(id -un)" == "$user" ]]; then
     mkdir -p "${env_dir}/terraform" "${env_dir}/ansible"
-  elif sudo -n -u "$user" -- true 2>/dev/null; then
-    sudo -n -u "$user" -- mkdir -p "${env_dir}/terraform" "${env_dir}/ansible"
-    sudo -n -u "$user" -- chmod -R u+rwX,g+rwX "${base}/cdp-onprem-automation" 2>/dev/null || true
+  elif [[ -d "$tree" && -w "$tree" ]]; then
+    mkdir -p "${env_dir}/terraform" "${env_dir}/ansible"
+  elif _holautosa_sudo_as_user "$user" mkdir -p "${env_dir}/terraform" "${env_dir}/ansible"; then
+    _holautosa_grant_jenkins_write "$tree"
+  elif sudo -n mkdir -p "${env_dir}/terraform" "${env_dir}/ansible"; then
+    _holautosa_grant_jenkins_write "$tree"
   else
-    mkdir -p "${env_dir}/terraform" "${env_dir}/ansible" 2>/dev/null || {
-      printf '[holautosa-dir] ERROR: cannot create %s (need sudo to %s)\n' "$env_dir" "$user" >&2
-      return 1
-    }
+    printf '[holautosa-dir] ERROR: cannot create %s\n' "$env_dir" >&2
+    printf '[holautosa-dir] Hint: jenkins ALL=(holautosa) NOPASSWD: ALL in sudoers\n' >&2
+    printf '[holautosa-dir] Or: sudo mkdir -p %s && sudo chown -R jenkins:jenkins %s\n' "$tree" "$tree" >&2
+    return 1
   fi
 
   export HOL_ENV_DIR="$env_dir"
@@ -45,7 +69,20 @@ prepare_holautosa_workdir() {
   export HOL_ANSIBLE_STATE_DIR="${env_dir}/ansible"
   export TF_STATE_BACKEND=local
 
-  printf '[holautosa-dir] Persistent state: %s\n' "$env_dir"
+  printf '[holautosa-dir] Persistent state: %s (writable=%s)\n' "$env_dir" "$([[ -w "$env_dir" ]] && echo yes || echo sudo)"
+}
+
+_holautosa_mkdir_p() {
+  local dir="$1"
+  if [[ -d "$dir" ]]; then
+    return 0
+  fi
+  if mkdir -p "$dir" 2>/dev/null; then
+    return 0
+  fi
+  local user
+  user="$(holautosa_exec_user)"
+  _holautosa_sudo_as_user "$user" mkdir -p "$dir" || sudo -n mkdir -p "$dir"
 }
 
 restore_terraform_state_to_workspace() {
@@ -53,16 +90,17 @@ restore_terraform_state_to_workspace() {
   local item pem
 
   [[ -n "$src" && -d "$src" ]] || return 0
+  _holautosa_mkdir_p "$tf_dir"
 
   for item in terraform.tfstate terraform.tfstate.backup; do
     [[ -f "$src/$item" ]] && cp -f "$src/$item" "$tf_dir/$item"
   done
   if [[ -d "$src/terraform.tfstate.d" ]]; then
-    mkdir -p "$tf_dir/terraform.tfstate.d"
+    _holautosa_mkdir_p "$tf_dir/terraform.tfstate.d"
     cp -a "$src/terraform.tfstate.d/." "$tf_dir/terraform.tfstate.d/"
   fi
   if [[ -d "$src/.terraform" ]]; then
-    mkdir -p "$tf_dir/.terraform"
+    _holautosa_mkdir_p "$tf_dir/.terraform"
     cp -a "$src/.terraform/." "$tf_dir/.terraform/"
   fi
   while IFS= read -r pem; do
@@ -77,17 +115,17 @@ persist_terraform_state_from_workspace() {
   local item pem
 
   [[ -n "$dest" ]] || return 0
-  mkdir -p "$dest"
+  _holautosa_mkdir_p "$dest"
 
   for item in terraform.tfstate terraform.tfstate.backup; do
     [[ -f "$tf_dir/$item" ]] && cp -f "$tf_dir/$item" "$dest/$item"
   done
   if [[ -d "$tf_dir/terraform.tfstate.d" ]]; then
-    mkdir -p "$dest/terraform.tfstate.d"
+    _holautosa_mkdir_p "$dest/terraform.tfstate.d"
     cp -a "$tf_dir/terraform.tfstate.d/." "$dest/terraform.tfstate.d/"
   fi
   if [[ -d "$tf_dir/.terraform" ]]; then
-    mkdir -p "$dest/.terraform"
+    _holautosa_mkdir_p "$dest/.terraform"
     cp -a "$tf_dir/.terraform/." "$dest/.terraform/"
   fi
   while IFS= read -r pem; do
@@ -118,7 +156,7 @@ persist_ansible_artifacts_from_workspace() {
   local ansible_dir="${repo_root}/ansible-playbooks"
 
   [[ -n "$dest" ]] || return 0
-  mkdir -p "$dest"
+  _holautosa_mkdir_p "$dest"
 
   [[ -f "$ansible_dir/inventory.ini" ]] && cp -f "$ansible_dir/inventory.ini" "$dest/inventory.ini"
   [[ -f "$ansible_dir/sshkey.pem" ]] && cp -f "$ansible_dir/sshkey.pem" "$dest/sshkey.pem"
