@@ -7,7 +7,7 @@
   hosts: all
   become: yes
   vars:
-    ipa_domain: "{{ ipaserver_domain | default('cdppvcds.com') }}"
+    ipa_domain: "{{ ipaserver_domain | default('cldrsetup.local') }}"
 
   tasks:
     - name: Configure resolv.conf for identity provider
