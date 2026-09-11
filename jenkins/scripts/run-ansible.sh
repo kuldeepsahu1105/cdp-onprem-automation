@@ -24,10 +24,6 @@ bash "$REPO_ROOT/jenkins/scripts/ansible-connectivity-preflight.sh"
 
 export TFVARS_FILE="${TFVARS_FILE:-.tfvars.yaml}"
 export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
-
-# shellcheck source=jenkins/scripts/stage-ansible-secrets.sh
-source "$REPO_ROOT/jenkins/scripts/stage-ansible-secrets.sh"
-stage_ansible_secrets
 export DRY_RUN="${DRY_RUN:-false}"
 export CONTROL_MODE="${CONTROL_MODE:-auto}"
 

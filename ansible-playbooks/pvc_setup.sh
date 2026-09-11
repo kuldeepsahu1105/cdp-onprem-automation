@@ -126,19 +126,19 @@ needs_license() {
 }
 
 if needs_license; then
-  LICENSE_KEY="$(resolve_license_file "$SCRIPT_DIR")"
-  if ! is_dry_run; then
-    ensure_license_txt "$SCRIPT_DIR" "$LICENSE_KEY"
+  if LICENSE_KEY="$(resolve_license_file "$SCRIPT_DIR" 2>/dev/null)"; then
+    if ! is_dry_run; then
+      ensure_license_txt "$SCRIPT_DIR" "$LICENSE_KEY"
+    fi
+    ui_kv "License file" "$LICENSE_KEY" "📜"
+  else
+    ui_info "No license file in ansible-playbooks/ — CM may use trial license or group_vars/all.yml"
   fi
-  ui_kv "License file" "$LICENSE_KEY" "📜"
 fi
 
 load_cm_repo_credentials "$SCRIPT_DIR" || true
 if [[ -n "${CM_REPO_USERID:-}" ]]; then
   ui_kv "CM archive user" "$CM_REPO_USERID" "👤"
-  ui_info "CM credentials from info file or env (overrides all.yml for phase 3)"
-elif [[ "${DEPLOY_PHASE:-1}" =~ ^(3|cm|phase3|4|cluster|phase4|all|full)$ ]]; then
-  ui_note_cm_credentials_requirement
 fi
 
 mapfile -t ANSIBLE_PLAYBOOK_ARGS < <(ansible_extra_args "$PRIVATE_KEY")

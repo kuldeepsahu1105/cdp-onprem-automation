@@ -76,11 +76,14 @@ pem_file="$(resolve_private_key "$ANSIBLE_DIR")"
 ui_kv "SSH private key" "$pem_file" "🔑"
 
 if [[ "${DEPLOY_PHASE:-1}" =~ ^(3|cm|phase3|4|cluster|phase4|all|full)$ ]]; then
-  license_file="$(resolve_license_file "$ANSIBLE_DIR")"
-  if ! is_dry_run; then
-    ensure_license_txt "$ANSIBLE_DIR" "$license_file"
+  if license_file="$(resolve_license_file "$ANSIBLE_DIR" 2>/dev/null)"; then
+    if ! is_dry_run; then
+      ensure_license_txt "$ANSIBLE_DIR" "$license_file"
+    fi
+    ui_kv "License file" "$license_file" "📜"
+  else
+    ui_info "No license file in ansible-playbooks/ — CM may use trial license or group_vars/all.yml"
   fi
-  ui_kv "License file" "$license_file" "📜"
 fi
 
 cd "$ANSIBLE_DIR"

@@ -68,11 +68,6 @@ pipeline {
     string(name: 'TFVARS_FILE', defaultValue: '.tfvars.yaml', description: 'Config file path relative to repo root (empty = auto-detect)')
     string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to checkout (no spaces or ..)')
     string(name: 'NOTIFICATION_EMAIL', defaultValue: '', description: 'Email recipient (defaults to BUILD_USER_EMAIL; validated when set)')
-    string(name: 'LICENSE_FILE', defaultValue: '', description: 'Cloudera license file path (optional for PREREQS/IDENTITY; required for CM_INSTALL+ unless *license* already in ansible-playbooks/)')
-    string(name: 'CM_INFO_FILE', defaultValue: '', description: 'CM archive *info.txt path (login:/password: lines). Alternative to CM_REPO_USERNAME + credential below')
-    string(name: 'CM_REPO_USERNAME', defaultValue: '', description: 'Cloudera archive.cloudera.com username (phase 3; use with CM_REPO_CREDENTIALS_ID or CM_REPO_PASSWORD)')
-    string(name: 'CM_REPO_CREDENTIALS_ID', defaultValue: '', description: 'Jenkins Username/Password credential ID for archive password (preferred over CM_REPO_PASSWORD param)')
-    password(name: 'CM_REPO_PASSWORD', defaultValue: '', description: 'Archive password fallback when CM_REPO_CREDENTIALS_ID is empty (prefer Jenkins credential ID in production)')
   }
 
   options {
@@ -127,9 +122,6 @@ pipeline {
     VALIDATION_CHECKS = "${params.VALIDATION_CHECKS?.trim() ?: ''}"
     BUILD_RESULT = 'IN_PROGRESS'
     MAIL_TO = "${params.NOTIFICATION_EMAIL?.trim() ?: env.BUILD_USER_EMAIL ?: ''}"
-    JENKINS_LICENSE_FILE = "${params.LICENSE_FILE?.trim() ?: ''}"
-    JENKINS_CM_INFO_FILE = "${params.CM_INFO_FILE?.trim() ?: ''}"
-    JENKINS_CM_REPO_USERNAME = "${params.CM_REPO_USERNAME?.trim() ?: ''}"
   }
 
   stages {
@@ -246,58 +238,14 @@ pipeline {
       steps {
         script {
           def phases = env.ANSIBLE_PHASES.split(',').findAll { it?.trim() }
-          def cmCredId = params.CM_REPO_CREDENTIALS_ID?.trim()
-          // password param is hudson.util.Secret — unwrap via GString, not .trim() on Secret
-          def cmPasswordParam = ''
-          if (params.CM_REPO_PASSWORD) {
-            cmPasswordParam = "${params.CM_REPO_PASSWORD}".trim()
-          }
-          def shEscape = { String value -> (value ?: '').replace("'", "'\\''") }
-          def ansibleEnvPrefix = { String phase ->
-            """
+          for (phase in phases) {
+            echo "Running Ansible deploy phase ${phase}"
+            sh """
               set -euo pipefail
               export DEPLOY_PHASE='${phase}'
               export REQUIRE_INVENTORY=true
-              export LICENSE_FILE='${shEscape(params.LICENSE_FILE?.trim())}'
-              export CM_INFO_FILE='${shEscape(params.CM_INFO_FILE?.trim())}'
-              export JENKINS_LICENSE_FILE='${shEscape(params.LICENSE_FILE?.trim())}'
-              export JENKINS_CM_INFO_FILE='${shEscape(params.CM_INFO_FILE?.trim())}'
-              export CM_REPO_USERNAME='${shEscape(params.CM_REPO_USERNAME?.trim())}'
-              export JENKINS_CM_REPO_USERNAME='${shEscape(params.CM_REPO_USERNAME?.trim())}'
+              ./jenkins/scripts/run-ansible.sh
             """
-          }
-          def runAnsiblePhase = { String phase ->
-            def prefix = ansibleEnvPrefix(phase)
-            if (cmCredId) {
-              withCredentials([usernamePassword(
-                credentialsId: cmCredId,
-                usernameVariable: 'CM_REPO_USERNAME_FROM_CREDS',
-                passwordVariable: 'CM_REPO_PASSWORD_FROM_CREDS',
-              )]) {
-                sh prefix + '''
-                  export CM_REPO_PASSWORD="${CM_REPO_PASSWORD_FROM_CREDS}"
-                  export JENKINS_CM_REPO_PASSWORD="${CM_REPO_PASSWORD_FROM_CREDS}"
-                  if [ -z "${CM_REPO_USERNAME}" ]; then
-                    export CM_REPO_USERNAME="${CM_REPO_USERNAME_FROM_CREDS}"
-                    export JENKINS_CM_REPO_USERNAME="${CM_REPO_USERNAME_FROM_CREDS}"
-                  fi
-                  ./jenkins/scripts/run-ansible.sh
-                '''
-              }
-            } else if (cmPasswordParam) {
-              withEnv([
-                "CM_REPO_PASSWORD=${cmPasswordParam}",
-                "JENKINS_CM_REPO_PASSWORD=${cmPasswordParam}",
-              ]) {
-                sh prefix + './jenkins/scripts/run-ansible.sh'
-              }
-            } else {
-              sh prefix + './jenkins/scripts/run-ansible.sh'
-            }
-          }
-          for (phase in phases) {
-            echo "Running Ansible deploy phase ${phase}"
-            runAnsiblePhase(phase)
           }
         }
       }
@@ -619,24 +567,6 @@ def validatePipelineInputs() {
   }
   if (stages.contains('CM_INSTALL') && !stages.contains('PREREQS') && !stages.contains('TERRAFORM')) {
     echo 'WARN: CM_INSTALL without PREREQS — ensure prerequisites were applied previously.'
-  }
-  if (stages.any { it in ['CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL'] }) {
-    def licensePath = params.LICENSE_FILE?.trim()
-    if (licensePath && (licensePath.contains('..') || (licensePath.startsWith('/') && licensePath.contains('..')))) {
-      validationFail("LICENSE_FILE must not contain '..' (got '${licensePath}').")
-    }
-    def infoPath = params.CM_INFO_FILE?.trim()
-    if (infoPath && infoPath.contains('..')) {
-      validationFail("CM_INFO_FILE must not contain '..' (got '${infoPath}').")
-    }
-    if (!licensePath) {
-      echo 'WARN: LICENSE_FILE not set — required for CM_INSTALL/CDH_BASE/ECS_INSTALL (not for PREREQS/IDENTITY alone).'
-    }
-    // Do not read params.CM_REPO_PASSWORD here — Jenkins blocks password params outside withCredentials.
-    def hasCmCreds = infoPath || params.CM_REPO_USERNAME?.trim() || params.CM_REPO_CREDENTIALS_ID?.trim()
-    if (!hasCmCreds) {
-      echo 'WARN: No CM archive credentials — set CM_INFO_FILE, CM_REPO_USERNAME + CM_REPO_CREDENTIALS_ID, or *info.txt in ansible-playbooks/ for CM_INSTALL+.'
-    }
   }
   if (stages.contains('TERRAFORM') && stages.any { it in ['PREREQS', 'IDENTITY', 'CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL'] } && params.DRY_RUN) {
     echo 'INFO: DRY_RUN applies to both Terraform plan and Ansible check mode in this build.'
