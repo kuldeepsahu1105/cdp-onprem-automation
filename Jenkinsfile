@@ -79,7 +79,7 @@ pipeline {
       description: 'Ansible-only YAML (allowed keys only): domain, stack versions, java/postgres/jdbc/psycopg, passwords. Not full all.yml — see jenkins/ansible-group-vars-allowed-keys.yaml'
     )
     string(name: 'CM_REPO_USERNAME', defaultValue: '', description: 'Optional archive.cloudera.com username (empty = all.yml, *info.txt, or skip)')
-    password(name: 'CM_REPO_PASSWORD', description: 'Optional archive.cloudera.com password (empty = all.yml, *info.txt, or skip)')
+    password(name: 'CM_REPO_PASSWORD', defaultValue: '', description: 'Optional archive.cloudera.com password (empty = all.yml, *info.txt, or skip)')
     text(
       name: 'CM_LICENSE_CONTENT',
       defaultValue: '',
@@ -277,19 +277,35 @@ pipeline {
               validationFail('ANSIBLE_GROUP_VARS_YAML is invalid or contains disallowed keys — see jenkins/ansible-group-vars-allowed-keys.yaml')
             }
           }
-          for (phase in phases) {
-            echo "Running Ansible deploy phase ${phase}"
-            sh """
+          // Jenkins password params are hudson.util.Secret — unwrap via GString, not .trim() on Secret.
+          def cmPasswordParam = ''
+          if (params.CM_REPO_PASSWORD) {
+            cmPasswordParam = "${params.CM_REPO_PASSWORD}".trim()
+          }
+          def ansiblePhasePrefix = { String phase, String licensePath ->
+            """
               set -euo pipefail
               export DEPLOY_PHASE='${phase}'
               export REQUIRE_INVENTORY=true
               export ANSIBLE_GROUP_VARS_FILE='${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml'
               export CM_REPO_USERNAME='${shellEscape(params.CM_REPO_USERNAME?.trim())}'
-              export CM_REPO_PASSWORD='${shellEscape(params.CM_REPO_PASSWORD)}'
-              export LICENSE_FILE='${licenseFile ? shellEscape(licenseFile) : ''}'
-              export CM_LICENSE_CONTENT_FILE='${licenseFile ? shellEscape(licenseFile) : ''}'
-              ./jenkins/scripts/run-ansible.sh
+              export LICENSE_FILE='${licensePath ? shellEscape(licensePath) : ''}'
+              export CM_LICENSE_CONTENT_FILE='${licensePath ? shellEscape(licensePath) : ''}'
             """
+          }
+          def runAnsiblePhase = { String phase ->
+            echo "Running Ansible deploy phase ${phase}"
+            def prefix = ansiblePhasePrefix(phase, licenseFile ?: '')
+            if (cmPasswordParam) {
+              withEnv(["CM_REPO_PASSWORD=${cmPasswordParam}"]) {
+                sh prefix + './jenkins/scripts/run-ansible.sh'
+              }
+            } else {
+              sh prefix + './jenkins/scripts/run-ansible.sh'
+            }
+          }
+          for (phase in phases) {
+            runAnsiblePhase(phase)
           }
         }
       }
@@ -658,6 +674,16 @@ def validatePipelineInputs() {
   }
   if (stages.contains('CM_INSTALL') && !stages.contains('PREREQS') && !stages.contains('TERRAFORM')) {
     echo 'WARN: CM_INSTALL without PREREQS — ensure prerequisites were applied previously.'
+  }
+  def cmStages = ['CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL']
+  if (stages.any { it in cmStages }) {
+    if (!cmLicenseContentProvided(params.CM_LICENSE_CONTENT?.toString() ?: '')) {
+      echo 'INFO: CM_LICENSE_CONTENT empty — CM phase uses agent *license* file or trial license.'
+    }
+    // Do not read params.CM_REPO_PASSWORD here — Jenkins blocks password params outside withCredentials/withEnv in stages.
+    if (!params.CM_REPO_USERNAME?.trim()) {
+      echo 'INFO: CM_REPO_USERNAME empty — archive creds may come from *info.txt or group_vars/all.yml.'
+    }
   }
   if (stages.contains('TERRAFORM') && stages.any { it in ['PREREQS', 'IDENTITY', 'CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL'] } && params.DRY_RUN) {
     echo 'INFO: DRY_RUN applies to both Terraform plan and Ansible check mode in this build.'
