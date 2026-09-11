@@ -1,6 +1,8 @@
 ---
 # ansible_config_vars:
-ansible_user: root
+# Fresh RHEL EC2 AMIs reject root SSH until bootstrap; use ec2-user + become (ansible.cfg).
+# Override for in-VPC local control: ansible_user=root or CONTROL_MODE=local in pvc_setup.sh
+ansible_user: ec2-user
 ansible_ssh_private_key_file: ./id_rsa
 ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
 # ansible_galaxy: "/usr/bin/ansible-galaxy"
