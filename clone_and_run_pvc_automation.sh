@@ -95,6 +95,10 @@ fi
 
 cd "$ANSIBLE_DIR"
 
+# shellcheck source=scripts/lib/ansible_group_vars_overrides.sh
+source "$SCRIPTS_LIB/ansible_group_vars_overrides.sh"
+apply_ansible_group_vars_overrides "$REPO_ROOT" "$ANSIBLE_DIR"
+
 if ! output_is_quiet; then
   ui_step "Executing pvc_setup.sh" "▶"
   ui_kv "Deploy phase" "${DEPLOY_PHASE:-1}" "🔢"

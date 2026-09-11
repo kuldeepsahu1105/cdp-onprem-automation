@@ -115,6 +115,41 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `GIT_BRANCH` | Branch to checkout |
 | `NOTIFICATION_EMAIL` | Email recipient |
 
+## Ansible `group_vars` overrides (Jenkins)
+
+Per-deployment Ansible settings can be changed without editing `group_vars/all.yml` in git.
+
+### Individual parameters (recommended)
+
+| Parameter | `group_vars` key | Notes |
+|---|---|---|
+| `IPASERVER_DOMAIN` | `ipaserver_domain` | Default in repo: `cldrsetup.local` |
+| `IDENTITY_PROVIDER` | `identity_provider` | `auto`, `freeipa`, or `ad` |
+| `IPAADMIN_PASSWORD` | `ipaadmin_password` | FreeIPA admin |
+| `CM_VERSION` / `CDH_VERSION` | `cm_version` / `cdh_version` | Cloudera versions |
+| `CM_REPO_SOURCE` | `cm_repo_source` | `public` or `internal` |
+| `CM_REPO_USERNAME` / `CM_REPO_PASSWORD` | archive creds | Alternative to `*info.txt` |
+| `CM_ADMIN_PASSWORD` | `cm_admin_pass` | CM UI admin |
+| `CDH_BASECLUSTER_NAME` | `cdh_basecluster_name` | Base cluster name |
+| `AD_DOMAIN`, `AD_KDC_HOST`, `AD_JOIN_*` | AD identity flow | When `IDENTITY_PROVIDER=ad` |
+
+Empty parameter = use value from `group_vars/all.yml`.
+
+### Extra YAML (`ANSIBLE_GROUP_VARS_YAML`)
+
+Multi-line YAML merged **last** (wins over individual params). See `jenkins/ansible-group-vars.example.yaml`.
+
+At runtime the pipeline writes `ansible-playbooks/group_vars/jenkins_override.yml` (gitignored).
+
+### Standalone (no Jenkins)
+
+```bash
+export IPASERVER_DOMAIN=myenv.example.com
+export ANSIBLE_GROUP_VARS_FILE=./my-overrides.yaml
+./clone_and_run_pvc_automation.sh
+# or: cd ansible-playbooks && DEPLOY_PHASE=1 ./pvc_setup.sh
+```
+
 ## License and CM archive credentials (agent / Ansible — not Jenkins params)
 
 Jenkins does **not** collect license or Cloudera archive passwords. For **CM_INSTALL** and later, Ansible resolves them automatically from:

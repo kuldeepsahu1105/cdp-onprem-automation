@@ -68,6 +68,9 @@ ensure_bash
 # shellcheck source=../scripts/lib/output_mode.sh
 source "$REPO_ROOT/scripts/lib/output_mode.sh"
 ansible_configure_output_mode
+# shellcheck source=../scripts/lib/ansible_group_vars_overrides.sh
+source "$REPO_ROOT/scripts/lib/ansible_group_vars_overrides.sh"
+apply_ansible_group_vars_overrides "$REPO_ROOT" "$SCRIPT_DIR"
 
 DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 CONTROL_MODE="$(detect_control_mode "$SCRIPT_DIR/inventory.ini")"
