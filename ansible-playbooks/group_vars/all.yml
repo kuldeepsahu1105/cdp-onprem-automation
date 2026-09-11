@@ -514,6 +514,7 @@ os_vars:
       - "postgresql{{ postgresql_version }}"
       - "postgresql{{ postgresql_version }}-server"
       - "postgresql{{ postgresql_version }}-libs"
+      - python3-pip
     postgres_client_packages:
       - "postgresql{{ postgresql_version }}"
     postgres_repo_url: "https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}/pgdg-redhat-repo-latest.noarch.rpm"

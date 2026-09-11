@@ -55,11 +55,11 @@
         msg: "Pip version: {{ pip_version_output.stdout }}"
       when: pip_version_output.rc == 0
 
-    - name: Install psycopg2-binary
+    - name: Install psycopg2-binary for Ansible modules (system python3 /usr/bin/python3)
       ansible.builtin.pip:
         name: "{{ 'psycopg2-binary==' + psycopg2_binary_version if psycopg2_binary_version | default('') | length > 0 else 'psycopg2-binary' }}"
         state: present
-        executable: "{{ os.pip_executable }}"
+        executable: pip3
       become: yes
 
     - name: Install Java
@@ -76,14 +76,14 @@
       ansible.builtin.debug:
         msg: "{{ java_version_output.stderr_lines | default(java_version_output.stdout_lines) }}"
 
-    - name: Verify psycopg2 installation
-      ansible.builtin.command: "{{ os.pip_executable }} list | grep psy"
+    - name: Verify psycopg2 installation (system python3)
+      ansible.builtin.command: /usr/bin/python3 -c 'import psycopg2'
       register: psycopg2_output
       changed_when: false
 
     - name: Display psycopg2 installation output
       ansible.builtin.debug:
-        msg: "{{ psycopg2_output.stdout_lines }}"
+        msg: "psycopg2 import OK for /usr/bin/python3 (Ansible interpreter)"
 
     - name: Disable firewall
       ansible.builtin.import_tasks: common_tasks/disable_firewall.yml
