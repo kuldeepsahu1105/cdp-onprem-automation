@@ -245,7 +245,11 @@ case "${DRY_RUN:-false}" in
 esac
 
 ui_step "Terraform apply" "🚀"
-terraform apply -auto-approve tfplan.out
+tf_apply_args=(-auto-approve)
+if declare -F ui_color_enabled >/dev/null 2>&1 && ui_color_enabled; then
+  tf_apply_args+=(-color=true)
+fi
+terraform apply "${tf_apply_args[@]}" tfplan.out
 persist_terraform_state_from_workspace "$TERRAFORM_DIR"
 
 ui_section "Ansible inventory" "📦"

@@ -285,6 +285,23 @@ is_dry_run() {
   esac
 }
 
+# Enable Ansible ANSI colors in Jenkins (ansiColor) and local terminals.
+ansible_configure_output() {
+  case "${ANSIBLE_NOCOLOR:-${NO_COLOR:-}}" in
+    1|true|yes|TRUE|YES|on|ON) export ANSIBLE_FORCE_COLOR=false; return 0 ;;
+  esac
+  case "${ANSIBLE_FORCE_COLOR:-auto}" in
+    0|false|no|off) export ANSIBLE_FORCE_COLOR=false; return 0 ;;
+    1|true|yes|on|force) export ANSIBLE_FORCE_COLOR=true ;;
+    auto)
+      if [[ -t 1 ]] || [[ -n "${JENKINS_URL:-}" || -n "${BUILD_NUMBER:-}" || "${CI:-}" == "true" ]]; then
+        [[ "${TERM:-}" == "dumb" ]] || export ANSIBLE_FORCE_COLOR=true
+      fi
+      ;;
+  esac
+  export PY_COLORS="${PY_COLORS:-1}"
+}
+
 ansible_extra_args() {
   local key="${1:-}"
   local args=()

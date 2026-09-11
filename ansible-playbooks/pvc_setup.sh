@@ -64,6 +64,7 @@ EOF
 fi
 
 ensure_bash
+ansible_configure_output
 
 DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 CONTROL_MODE="$(detect_control_mode "$SCRIPT_DIR/inventory.ini")"
