@@ -59,7 +59,7 @@ cm_version: "7.13.2.10000"
 # ecs_pvc_ds_version: "1.5.5-h3300"
 
 # --- AMI (shared by all groups) ----------------------------------------------
-ami_id: ami-0a66a47c24c021954
+ami_id: ami-030a276b398df7eb7
 
 # --- Instance groups -----------------------------------------------------------
 instance_groups:

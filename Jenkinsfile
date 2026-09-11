@@ -53,7 +53,7 @@ pipeline {
     string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Name prefix + Terraform workspace (overrides tfvars when set)')
     string(name: 'OWNER', defaultValue: 'ksahu-ygulati', description: 'Owner tag — required for Terraform/Ansible if not set in tfvars')
     string(name: 'AWS_REGION', defaultValue: 'ap-southeast-1', description: 'AWS region override (e.g. ap-southeast-1)')
-    string(name: 'AMI_ID', defaultValue: 'ami-0a66a47c24c021954', description: 'AMI override for all instance groups (empty = use tfvars)')
+    string(name: 'AMI_ID', defaultValue: 'ami-030a276b398df7eb7', description: 'AMI override for all instance groups in ap-southeast-1 (empty = use tfvars)')
     string(name: 'CLDR_MNGR_COUNT', defaultValue: '1', description: 'CM host count override (positive integer)')
     string(name: 'CLDR_MNGR_INSTANCE_TYPE', defaultValue: 'm5.4xlarge', description: 'CM instance type override (e.g. m5.4xlarge)')
     string(name: 'CLDR_MNGR_VOLUME_SIZE', defaultValue: '300', description: 'CM root volume GB override (positive integer)')

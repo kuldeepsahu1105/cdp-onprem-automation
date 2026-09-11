@@ -29,7 +29,7 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 | `ENVIRONMENT` | `development` |
 | `OWNER` | `ksahu-ygulati` |
 | `AWS_REGION` | `ap-southeast-1` |
-| `AMI_ID` | `ami-0a66a47c24c021954` |
+| `AMI_ID` | `ami-030a276b398df7eb7` (ap-southeast-1) |
 | `TFVARS_FILE` | `.tfvars.yaml` |
 | `GIT_BRANCH` | `main` |
 | `CREDENTIALS_USER` | `holautosa` (uses `/home/holautosa/.aws` and `~/.ssh` read-only) |
