@@ -4,6 +4,9 @@
 apply_jenkins_pipeline_defaults() {
   [[ -n "${BUILD_NUMBER:-}" ]] || return 0
 
+  export TF_STATE_BACKEND=local
+  export HOL_AUTO_EXEC_DIR="${HOL_AUTO_EXEC_DIR:-/home/${CREDENTIALS_USER:-holautosa}/HOL_AUTO_EXEC_DIR}"
+
   local kp_suffix="${KEYPAIR_NAME_SUFFIX:-pvc-new-keypair}"
   local sg_suffix="${SG_NAME_SUFFIX:-pvc_cluster_sg}"
   local vpc_mode="${VPC_MODE:-USE_DEFAULT}"

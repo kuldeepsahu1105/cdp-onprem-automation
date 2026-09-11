@@ -81,6 +81,7 @@ pipeline {
     LANG = 'C.UTF-8'
     REPO_ROOT = "${WORKSPACE}"
     LOG_DIR = "${WORKSPACE}/jenkins/artifacts"
+    HOL_AUTO_EXEC_DIR = "/home/holautosa/HOL_AUTO_EXEC_DIR"
     JENKINS_OWNER = "${params.OWNER?.trim() ?: ''}"
     JENKINS_ENVIRONMENT = "${params.ENVIRONMENT?.trim() ?: ''}"
     JENKINS_AWS_REGION = "${params.AWS_REGION?.trim() ?: ''}"
@@ -188,6 +189,13 @@ pipeline {
           userRemoteConfigs: scm.userRemoteConfigs
         ])
         sh 'chmod +x jenkins/scripts/*.sh clone_and_run_terraform.sh clone_and_run_pvc_automation.sh generate_inventory.sh 2>/dev/null || true'
+        sh """
+          set -euo pipefail
+          export CREDENTIALS_USER='${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}'
+          export ENVIRONMENT='${params.ENVIRONMENT?.trim() ?: 'development'}'
+          export HOL_AUTO_EXEC_DIR='${env.HOL_AUTO_EXEC_DIR}'
+          ./jenkins/scripts/setup-holautosa-workdir.sh
+        """
       }
     }
 

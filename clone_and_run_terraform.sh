@@ -200,6 +200,11 @@ ui_section "Terraform provisioning" "☁️"
 ui_kv "Working directory" "$TERRAFORM_DIR" "📁"
 ui_kv "Workspace" "${ENVIRONMENT}" "🌍"
 
+# shellcheck source=scripts/lib/holautosa_exec_dir.sh
+source "$SCRIPTS_LIB/holautosa_exec_dir.sh"
+prepare_holautosa_workdir || true
+restore_terraform_state_to_workspace "$TERRAFORM_DIR"
+
 ui_step "Terraform init" "⚙️"
 cd "$TERRAFORM_DIR"
 # shellcheck source=scripts/lib/terraform_backend.sh
@@ -231,6 +236,7 @@ terraform plan "${TF_VARS[@]}" -out=tfplan.out
 
 case "${DRY_RUN:-false}" in
   1|true|yes|TRUE|YES|on|ON)
+    persist_terraform_state_from_workspace "$TERRAFORM_DIR"
     ui_done "Dry run complete — plan only (no apply, no inventory copy)"
     exit 0
     ;;
@@ -238,6 +244,8 @@ esac
 
 ui_step "Terraform apply" "🚀"
 terraform apply -auto-approve tfplan.out
+persist_terraform_state_from_workspace "$TERRAFORM_DIR"
+persist_ansible_artifacts_from_workspace
 ui_done "Terraform provisioning complete"
 
 ui_section "Ansible inventory" "📦"

@@ -9,6 +9,10 @@ mkdir -p "$LOG_DIR"
 cd "$REPO_ROOT"
 export PATH="${HOME}/.local/bin:${PATH}"
 export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
+# shellcheck source=scripts/lib/holautosa_exec_dir.sh
+source "$REPO_ROOT/scripts/lib/holautosa_exec_dir.sh"
+prepare_holautosa_workdir || true
+restore_ansible_artifacts_to_workspace
 # shellcheck source=jenkins/scripts/aws-credential-check.sh
 source "$REPO_ROOT/jenkins/scripts/aws-credential-check.sh"
 aws_apply_instance_role_if_enabled
@@ -33,4 +37,5 @@ if ! command -v ansible-playbook >/dev/null 2>&1; then
 fi
 set -o pipefail
 ./clone_and_run_pvc_automation.sh 2>&1 | tee -a "$LOG_FILE"
+persist_ansible_artifacts_from_workspace || true
 log "Ansible stage completed"

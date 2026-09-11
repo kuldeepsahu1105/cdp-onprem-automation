@@ -5,8 +5,5 @@ terraform {
       version = "~> 5.0"
     }
   }
-
-  # Remote state — configured at init via scripts/lib/terraform_backend.sh (-backend-config).
-  # Per-environment workspaces map to env:/<workspace>/... in the bucket.
-  backend "s3" {}
+  # Local state — persisted on Jenkins agent under holautosa HOL_AUTO_EXEC_DIR (see holautosa_exec_dir.sh).
 }
