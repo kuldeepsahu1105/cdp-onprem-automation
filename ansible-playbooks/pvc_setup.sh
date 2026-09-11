@@ -31,6 +31,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$REPO_ROOT/scripts/lib/portable.sh"
 # shellcheck source=../scripts/lib/ansible_env.sh
 source "$REPO_ROOT/scripts/lib/ansible_env.sh"
+# shellcheck source=../scripts/lib/ansible_group_vars_overrides.sh
+source "$REPO_ROOT/scripts/lib/ansible_group_vars_overrides.sh"
 # shellcheck source=../scripts/lib/ui.sh
 source "$REPO_ROOT/scripts/lib/ui.sh"
 # shellcheck source=../scripts/lib/wrapper_info.sh
@@ -57,6 +59,8 @@ Environment:
   CM_INFO_FILE         *info.txt with archive login:/password: (phase 3)
   CM_REPO_USERNAME     Archive creds — alternative to info file or all.yml
   CM_REPO_PASSWORD     Archive creds — alternative to info file or all.yml
+  CM_LICENSE_CONTENT   License file body when no *license* file on disk (Jenkins textarea)
+  LICENSE_FILE         Path to license file (set by Jenkins or manually)
 
 Run from: ansible-playbooks/ inside a git clone (needs ../scripts/lib/ui.sh)
 EOF
@@ -97,6 +101,7 @@ run_playbook() {
 }
 
 cd "$SCRIPT_DIR"
+apply_ansible_group_vars_overrides "$REPO_ROOT" "$SCRIPT_DIR"
 
 if [[ "${PVC_SETUP_FROM_WRAPPER:-0}" == "1" ]]; then
   ui_subsection "Playbook execution (pvc_setup.sh)" "📜"
@@ -130,6 +135,7 @@ needs_license() {
 }
 
 if needs_license; then
+  materialize_cm_license_content "$SCRIPT_DIR"
   if LICENSE_KEY="$(resolve_license_file "$SCRIPT_DIR" 2>/dev/null)"; then
     if ! is_dry_run; then
       ensure_license_txt "$SCRIPT_DIR" "$LICENSE_KEY"

@@ -84,6 +84,8 @@ Environment:
   CM_INFO_FILE         Path to *info.txt with archive login:/password:
   CM_REPO_USERNAME     Archive credentials (alternative to info file / all.yml)
   CM_REPO_PASSWORD     Archive credentials (alternative to info file / all.yml)
+  CM_LICENSE_CONTENT   Cloudera license file content when no *license* file on disk
+  LICENSE_FILE         Path to Cloudera license file
 
 SSH private key (required for Ansible execution):
   • ansible-playbooks/*.pem   (e.g. from Terraform)

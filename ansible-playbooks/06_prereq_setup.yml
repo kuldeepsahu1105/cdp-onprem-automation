@@ -57,7 +57,7 @@
 
     - name: Install psycopg2-binary
       ansible.builtin.pip:
-        name: psycopg2-binary
+        name: "{{ 'psycopg2-binary==' + psycopg2_binary_version if psycopg2_binary_version | default('') | length > 0 else 'psycopg2-binary' }}"
         state: present
         executable: "{{ os.pip_executable }}"
       become: yes

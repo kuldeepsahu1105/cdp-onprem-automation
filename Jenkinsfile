@@ -68,6 +68,23 @@ pipeline {
     string(name: 'TFVARS_FILE', defaultValue: '.tfvars.yaml', description: 'Config file path relative to repo root (empty = auto-detect)')
     string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to checkout (no spaces or ..)')
     string(name: 'NOTIFICATION_EMAIL', defaultValue: '', description: 'Email recipient (defaults to BUILD_USER_EMAIL; validated when set)')
+    text(
+      name: 'ANSIBLE_GROUP_VARS_YAML',
+      defaultValue: '''# Ansible-only overrides (domain, versions, passwords) — see jenkins/ansible-group-vars-allowed-keys.yaml
+# Example:
+# ipaserver_domain: cldrsetup.local
+# cdh_version: "7.3.2.10000"
+# ecs_pvc_ds_version: "1.5.5-h3300"
+''',
+      description: 'Ansible-only YAML (allowed keys only): domain, stack versions, java/postgres/jdbc/psycopg, passwords. Not full all.yml — see jenkins/ansible-group-vars-allowed-keys.yaml'
+    )
+    string(name: 'CM_REPO_USERNAME', defaultValue: '', description: 'Optional archive.cloudera.com username (empty = all.yml, *info.txt, or skip)')
+    password(name: 'CM_REPO_PASSWORD', defaultValue: '', description: 'Optional archive.cloudera.com password (empty = all.yml, *info.txt, or skip)')
+    text(
+      name: 'CM_LICENSE_CONTENT',
+      defaultValue: '',
+      description: 'Optional Cloudera license file content (multiline). Used when no *license* file on agent. Empty = trial or existing file on agent.'
+    )
   }
 
   options {
@@ -242,14 +259,53 @@ pipeline {
       steps {
         script {
           def phases = env.ANSIBLE_PHASES.split(',').findAll { it?.trim() }
-          for (phase in phases) {
-            echo "Running Ansible deploy phase ${phase}"
-            sh """
+          writeAnsibleGroupVarsFragmentFile()
+          def licenseFile = writeCmLicenseContentFile()
+          if (ansibleGroupVarsYamlHasKeys(params.ANSIBLE_GROUP_VARS_YAML?.toString())) {
+            def yamlCheck = sh(
+              script: '''
+                set -euo pipefail
+                export ANSIBLE_GROUP_VARS_FILE="${ANSIBLE_GROUP_VARS_FILE:?}"
+                python3 jenkins/scripts/render-ansible-group-vars-override.py --validate-only /dev/null
+              ''',
+              returnStatus: true,
+              env: [
+                ANSIBLE_GROUP_VARS_FILE: "${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml",
+              ],
+            )
+            if (yamlCheck != 0) {
+              validationFail('ANSIBLE_GROUP_VARS_YAML is invalid or contains disallowed keys — see jenkins/ansible-group-vars-allowed-keys.yaml')
+            }
+          }
+          // Jenkins password params are hudson.util.Secret — unwrap via GString, not .trim() on Secret.
+          def cmPasswordParam = ''
+          if (params.CM_REPO_PASSWORD) {
+            cmPasswordParam = "${params.CM_REPO_PASSWORD}".trim()
+          }
+          def ansiblePhasePrefix = { String phase, String licensePath ->
+            """
               set -euo pipefail
               export DEPLOY_PHASE='${phase}'
               export REQUIRE_INVENTORY=true
-              ./jenkins/scripts/run-ansible.sh
+              export ANSIBLE_GROUP_VARS_FILE='${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml'
+              export CM_REPO_USERNAME='${shellEscape(params.CM_REPO_USERNAME?.trim())}'
+              export LICENSE_FILE='${licensePath ? shellEscape(licensePath) : ''}'
+              export CM_LICENSE_CONTENT_FILE='${licensePath ? shellEscape(licensePath) : ''}'
             """
+          }
+          def runAnsiblePhase = { String phase ->
+            echo "Running Ansible deploy phase ${phase}"
+            def prefix = ansiblePhasePrefix(phase, licenseFile ?: '')
+            if (cmPasswordParam) {
+              withEnv(["CM_REPO_PASSWORD=${cmPasswordParam}"]) {
+                sh prefix + './jenkins/scripts/run-ansible.sh'
+              }
+            } else {
+              sh prefix + './jenkins/scripts/run-ansible.sh'
+            }
+          }
+          for (phase in phases) {
+            runAnsiblePhase(phase)
           }
         }
       }
@@ -464,6 +520,53 @@ def validationFail(String message) {
   error "${RED_BOLD}❗ ERROR: ${message} ❗${RESET}"
 }
 
+def shellEscape(String value) {
+  if (value == null) {
+    return ''
+  }
+  return value.toString().replace('\\', '\\\\').replace("'", "'\\''")
+}
+
+def writeAnsibleGroupVarsFragmentFile() {
+  def fragment = params.ANSIBLE_GROUP_VARS_YAML?.toString() ?: ''
+  writeFile file: "${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml", text: fragment
+}
+
+def cmLicenseContentProvided(String licenseText) {
+  if (!licenseText?.trim()) {
+    return false
+  }
+  return licenseText.split('\n').any { line ->
+    def t = line.trim()
+    t && !t.startsWith('#')
+  }
+}
+
+def writeCmLicenseContentFile() {
+  def content = params.CM_LICENSE_CONTENT?.toString() ?: ''
+  if (!cmLicenseContentProvided(content)) {
+    return null
+  }
+  def path = "${env.WORKSPACE}/jenkins/artifacts/cm-license.txt"
+  writeFile file: path, text: content
+  echo 'CM license content provided via Jenkins parameter (written to jenkins/artifacts/cm-license.txt).'
+  return path
+}
+
+def ansibleGroupVarsYamlHasKeys(String yamlText) {
+  if (!yamlText?.trim()) {
+    return false
+  }
+  def stripped = yamlText.replaceAll('(?m)^\\s*#.*$', '').trim()
+  if (!stripped) {
+    return false
+  }
+  return stripped.split('\n').any { line ->
+    def t = line.trim()
+    t && !t.startsWith('#') && t.contains(':')
+  }
+}
+
 def validatePipelineInputs() {
   if (isRefreshRequested()) {
     echo 'REFRESH_JENKINSFILE=YES — skipping input validation.'
@@ -571,6 +674,16 @@ def validatePipelineInputs() {
   }
   if (stages.contains('CM_INSTALL') && !stages.contains('PREREQS') && !stages.contains('TERRAFORM')) {
     echo 'WARN: CM_INSTALL without PREREQS — ensure prerequisites were applied previously.'
+  }
+  def cmStages = ['CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL']
+  if (stages.any { it in cmStages }) {
+    if (!cmLicenseContentProvided(params.CM_LICENSE_CONTENT?.toString() ?: '')) {
+      echo 'INFO: CM_LICENSE_CONTENT empty — CM phase uses agent *license* file or trial license.'
+    }
+    // Do not read params.CM_REPO_PASSWORD here — Jenkins blocks password params outside withCredentials/withEnv in stages.
+    if (!params.CM_REPO_USERNAME?.trim()) {
+      echo 'INFO: CM_REPO_USERNAME empty — archive creds may come from *info.txt or group_vars/all.yml.'
+    }
   }
   if (stages.contains('TERRAFORM') && stages.any { it in ['PREREQS', 'IDENTITY', 'CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL'] } && params.DRY_RUN) {
     echo 'INFO: DRY_RUN applies to both Terraform plan and Ansible check mode in this build.'
