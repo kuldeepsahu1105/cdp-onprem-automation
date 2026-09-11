@@ -122,11 +122,8 @@ Options:
   --help, -h       Show this help
 
 Environment:
-  DRY_RUN              true|false — same as --dry-run
-  OUTPUT_MODE          quiet|normal|verbose (auto: TTY=normal, CI/Jenkins=quiet)
-  SHOW_TF_PLAN_OUTPUT  true|false — print full plan (default false; ignored when OUTPUT_MODE=verbose)
-  VERBOSE              true|false — same as OUTPUT_MODE=verbose
-  TFVARS_FILE          Path to .tfvars.env or .tfvars.yaml
+  DRY_RUN          true|false — same as --dry-run
+  TFVARS_FILE      Path to .tfvars.env or .tfvars.yaml
 
 Run from git repo root or deployment dir (with .tfvars next to wrapper).
 

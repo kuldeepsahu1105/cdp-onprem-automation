@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Jenkins: run Ansible PVC deployment wrapper for selected DEPLOY_PHASE.
 set -euo pipefail
-# shellcheck source=jenkins/scripts/jenkins-shell-init.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/jenkins-shell-init.sh"
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 LOG_DIR="${LOG_DIR:-$REPO_ROOT/jenkins/artifacts}"
@@ -36,7 +34,6 @@ aws_apply_instance_role_if_enabled
 # shellcheck source=jenkins/scripts/resolve-ansible-ssh-key.sh
 source "$REPO_ROOT/jenkins/scripts/resolve-ansible-ssh-key.sh"
 resolve_ansible_ssh_key
-bash "$REPO_ROOT/jenkins/scripts/apply-ansible-group-vars.sh"
 bash "$REPO_ROOT/jenkins/scripts/ansible-connectivity-preflight.sh"
 
 export TFVARS_FILE="${TFVARS_FILE:-.tfvars.yaml}"

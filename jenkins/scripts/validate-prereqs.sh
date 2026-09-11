@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Jenkins validation: tools, AWS credentials, config file, optional inventory.
 set -euo pipefail
-# shellcheck source=jenkins/scripts/jenkins-shell-init.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/jenkins-shell-init.sh"
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 LOG_DIR="${LOG_DIR:-$REPO_ROOT/jenkins/artifacts}"

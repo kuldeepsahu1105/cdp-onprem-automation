@@ -148,11 +148,6 @@ EOF
 }
 
 ui_note_ssh_key_requirement() {
-  # shellcheck source=scripts/lib/output_mode.sh
-  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh"
-  if output_is_quiet; then
-    return 0
-  fi
   if declare -F ui_info >/dev/null 2>&1; then
     ui_info "SSH key required for Ansible: .pem or id_rsa in ansible-playbooks/, ~/.ssh/id_rsa, or ANSIBLE_PRIVATE_KEY=/path/to/key"
   fi
@@ -291,10 +286,6 @@ is_dry_run() {
 }
 
 ansible_extra_args() {
-  # shellcheck source=scripts/lib/output_mode.sh
-  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh"
-  ansible_configure_output_mode
-
   local key="${1:-}"
   local args=()
   if [[ -n "$key" ]]; then

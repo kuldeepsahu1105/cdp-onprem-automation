@@ -253,14 +253,6 @@ holautosa_log_state_manifest() {
   local manifest
   manifest="$(holautosa_env_dir)/state_manifest.json"
   [[ -f "$manifest" ]] || return 0
-  if [[ -f "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh" ]]; then
-    # shellcheck source=scripts/lib/output_mode.sh
-    source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh"
-    if output_is_quiet && command -v jq >/dev/null 2>&1; then
-      jq -r '"[holautosa-dir] state manifest: build=\(.build_number) env=\(.environment) pem=\(.sshkey_sha256[0:12])…"' \
-        "$manifest" 2>/dev/null && return 0
-    fi
-  fi
   printf '[holautosa-dir] Last persisted state manifest:\n'
   sed 's/^/[holautosa-dir]   /' "$manifest"
 }

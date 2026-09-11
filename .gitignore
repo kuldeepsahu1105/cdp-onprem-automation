@@ -28,4 +28,3 @@ jenkins/artifacts/*
 
 # Local inventory overrides (keep inventory.ini as template if needed)
 ansible-playbooks/inventory.ini.bak
-ansible-playbooks/group_vars/jenkins_override.yml

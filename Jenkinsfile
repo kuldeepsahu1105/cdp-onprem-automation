@@ -24,12 +24,6 @@ pipeline {
       description: 'Validation checks when VALIDATE stage is selected (INVENTORY auto-enabled for Ansible-only runs)'
     )
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
-    booleanParam(name: 'SHOW_TF_PLAN_OUTPUT', defaultValue: false, description: 'Print full terraform plan to console (default off — summary only; apply output always shown)')
-    choice(
-      name: 'OUTPUT_MODE',
-      choices: ['quiet', 'normal', 'verbose'],
-      description: 'Console output: quiet=CI summary (default), normal=TTY-style UI, verbose=full terraform/ansible logs'
-    )
     booleanParam(name: 'USE_CREDENTIALS_USER_AWS', defaultValue: true, description: 'Use CREDENTIALS_USER ~/.aws credentials (default on — uncheck to use EC2 instance IAM role via IMDS)')
     string(name: 'CREDENTIALS_USER', defaultValue: 'holautosa', description: 'OS user whose ~/.aws and ~/.ssh credentials to use (read-only; files not modified)')
     choice(
@@ -74,36 +68,6 @@ pipeline {
     string(name: 'TFVARS_FILE', defaultValue: '.tfvars.yaml', description: 'Config file path relative to repo root (empty = auto-detect)')
     string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to checkout (no spaces or ..)')
     string(name: 'NOTIFICATION_EMAIL', defaultValue: '', description: 'Email recipient (defaults to BUILD_USER_EMAIL; validated when set)')
-    text(
-      name: 'ANSIBLE_GROUP_VARS_YAML',
-      defaultValue: '''# Optional YAML merged over group_vars/all.yml (see jenkins/ansible-group-vars.example.yaml)
-# Example:
-# ecs_deploy_on_arm64: false
-''',
-      description: 'Extra Ansible group_vars YAML (merged last). Use for keys not listed below.'
-    )
-    choice(
-      name: 'IDENTITY_PROVIDER',
-      choices: ['', 'auto', 'freeipa', 'ad'],
-      description: 'Identity: empty = all.yml default (auto). AD: also set AD_* fields and omit ipaserver from inventory.'
-    )
-    string(name: 'IPASERVER_DOMAIN', defaultValue: '', description: 'FreeIPA/cluster DNS domain (empty = all.yml: cldrsetup.local)')
-    password(name: 'IPAADMIN_PASSWORD', description: 'FreeIPA admin password override (empty = all.yml)')
-    string(name: 'CM_VERSION', defaultValue: '', description: 'Cloudera Manager version override (empty = all.yml)')
-    string(name: 'CDH_VERSION', defaultValue: '', description: 'CDH parcel version override (empty = all.yml)')
-    choice(
-      name: 'CM_REPO_SOURCE',
-      choices: ['', 'public', 'internal'],
-      description: 'CM/CDH repo source: empty = all.yml (public). internal = mirror on cldr-mngr.'
-    )
-    string(name: 'CM_REPO_USERNAME', defaultValue: '', description: 'archive.cloudera.com username (empty = all.yml or *info.txt)')
-    password(name: 'CM_REPO_PASSWORD', description: 'archive.cloudera.com password (empty = all.yml or *info.txt)')
-    password(name: 'CM_ADMIN_PASSWORD', description: 'Cloudera Manager admin password override (empty = all.yml)')
-    string(name: 'CDH_BASECLUSTER_NAME', defaultValue: '', description: 'CDH base cluster display name (empty = all.yml)')
-    string(name: 'AD_DOMAIN', defaultValue: '', description: 'Active Directory DNS domain (when IDENTITY_PROVIDER=ad)')
-    string(name: 'AD_KDC_HOST', defaultValue: '', description: 'AD KDC host FQDN or hostname (when IDENTITY_PROVIDER=ad)')
-    string(name: 'AD_JOIN_USER', defaultValue: '', description: 'AD domain join service account (when IDENTITY_PROVIDER=ad)')
-    password(name: 'AD_JOIN_PASSWORD', description: 'AD domain join password (when IDENTITY_PROVIDER=ad)')
   }
 
   options {
@@ -153,8 +117,6 @@ pipeline {
     JENKINS_CLDR_EIP_NAME = "${params.CLDR_EIP_NAME?.trim() ?: ''}"
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
-    SHOW_TF_PLAN_OUTPUT = "${params.SHOW_TF_PLAN_OUTPUT}"
-    OUTPUT_MODE = "${params.OUTPUT_MODE}"
     CREDENTIALS_USER = "${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}"
     PIPELINE_STAGES = "${params.PIPELINE_STAGES?.trim() ?: ''}"
     VALIDATION_CHECKS = "${params.VALIDATION_CHECKS?.trim() ?: ''}"
@@ -226,7 +188,7 @@ pipeline {
           extensions: [[$class: 'CleanBeforeCheckout']],
           userRemoteConfigs: scm.userRemoteConfigs
         ])
-        sh 'chmod +x jenkins/scripts/*.sh jenkins/scripts/render-ansible-group-vars-override.py clone_and_run_terraform.sh clone_and_run_pvc_automation.sh generate_inventory.sh 2>/dev/null || true'
+        sh 'chmod +x jenkins/scripts/*.sh clone_and_run_terraform.sh clone_and_run_pvc_automation.sh generate_inventory.sh 2>/dev/null || true'
         sh """
           set -euo pipefail
           export CREDENTIALS_USER='${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}'
@@ -261,8 +223,6 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
-          set +x
-          export OUTPUT_MODE="${OUTPUT_MODE:-quiet}"
           export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-false}"
           export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
           # shellcheck source=jenkins/scripts/aws-credential-check.sh
@@ -278,30 +238,12 @@ pipeline {
       steps {
         script {
           def phases = env.ANSIBLE_PHASES.split(',').findAll { it?.trim() }
-          writeAnsibleGroupVarsFragmentFile()
           for (phase in phases) {
             echo "Running Ansible deploy phase ${phase}"
             sh """
               set -euo pipefail
-              set +x
-              export OUTPUT_MODE="${env.OUTPUT_MODE ?: 'quiet'}"
               export DEPLOY_PHASE='${phase}'
               export REQUIRE_INVENTORY=true
-              export ANSIBLE_GROUP_VARS_FILE='${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml'
-              export JENKINS_ANSIBLE_IDENTITY_PROVIDER='${shellEscape(params.IDENTITY_PROVIDER?.trim())}'
-              export JENKINS_ANSIBLE_IPASERVER_DOMAIN='${shellEscape(params.IPASERVER_DOMAIN?.trim())}'
-              export JENKINS_ANSIBLE_IPAADMIN_PASSWORD='${shellEscape(params.IPAADMIN_PASSWORD)}'
-              export JENKINS_ANSIBLE_CM_VERSION='${shellEscape(params.CM_VERSION?.trim())}'
-              export JENKINS_ANSIBLE_CDH_VERSION='${shellEscape(params.CDH_VERSION?.trim())}'
-              export JENKINS_ANSIBLE_CM_REPO_SOURCE='${shellEscape(params.CM_REPO_SOURCE?.trim())}'
-              export JENKINS_ANSIBLE_CM_REPO_USERNAME='${shellEscape(params.CM_REPO_USERNAME?.trim())}'
-              export JENKINS_ANSIBLE_CM_REPO_PASSWORD='${shellEscape(params.CM_REPO_PASSWORD)}'
-              export JENKINS_ANSIBLE_CM_ADMIN_PASSWORD='${shellEscape(params.CM_ADMIN_PASSWORD)}'
-              export JENKINS_ANSIBLE_CDH_BASECLUSTER_NAME='${shellEscape(params.CDH_BASECLUSTER_NAME?.trim())}'
-              export JENKINS_ANSIBLE_AD_DOMAIN='${shellEscape(params.AD_DOMAIN?.trim())}'
-              export JENKINS_ANSIBLE_AD_KDC_HOST='${shellEscape(params.AD_KDC_HOST?.trim())}'
-              export JENKINS_ANSIBLE_AD_JOIN_USER='${shellEscape(params.AD_JOIN_USER?.trim())}'
-              export JENKINS_ANSIBLE_AD_JOIN_PASSWORD='${shellEscape(params.AD_JOIN_PASSWORD)}'
               ./jenkins/scripts/run-ansible.sh
             """
           }
@@ -518,18 +460,6 @@ def validationFail(String message) {
   error "${RED_BOLD}❗ ERROR: ${message} ❗${RESET}"
 }
 
-def shellEscape(String value) {
-  if (value == null) {
-    return ''
-  }
-  return value.toString().replace('\\', '\\\\').replace("'", "'\\''")
-}
-
-def writeAnsibleGroupVarsFragmentFile() {
-  def fragment = params.ANSIBLE_GROUP_VARS_YAML?.toString() ?: ''
-  writeFile file: "${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml", text: fragment
-}
-
 def validatePipelineInputs() {
   if (isRefreshRequested()) {
     echo 'REFRESH_JENKINSFILE=YES — skipping input validation.'
@@ -627,18 +557,6 @@ def validatePipelineInputs() {
   }
 
   def email = params.NOTIFICATION_EMAIL?.trim()
-  def idp = params.IDENTITY_PROVIDER?.trim()
-  if (idp && !(idp in ['auto', 'freeipa', 'ad'])) {
-    validationFail("IDENTITY_PROVIDER '${idp}' must be auto, freeipa, or ad (or empty).")
-  }
-  def cmRepo = params.CM_REPO_SOURCE?.trim()
-  if (cmRepo && !(cmRepo in ['public', 'internal'])) {
-    validationFail("CM_REPO_SOURCE '${cmRepo}' must be public or internal (or empty).")
-  }
-  def domain = params.IPASERVER_DOMAIN?.trim()
-  if (domain && !domain.matches(/^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/)) {
-    validationFail("IPASERVER_DOMAIN '${domain}' is not a valid DNS domain.")
-  }
   def checks = params.VALIDATION_CHECKS?.toString() ?: ''
   if (email && checks.contains('EMAIL_FORMAT') && !email.matches(emailRegex)) {
     validationFail("NOTIFICATION_EMAIL '${email}' is not a valid email address.")
@@ -662,8 +580,6 @@ def archivePipelineArtifacts() {
     'jenkins/artifacts/build-summary.txt',
     'jenkins/artifacts/inventory.ini',
     'jenkins/artifacts/terraform-*.log',
-    'jenkins/artifacts/terraform-plan-*-detail.log',
-    'jenkins/artifacts/terraform-plan-detail.log',
     'jenkins/artifacts/ansible-*.log',
     'jenkins/artifacts/validate-*.log',
     'jenkins/artifacts/error-summary.txt',
