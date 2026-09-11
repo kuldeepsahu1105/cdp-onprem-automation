@@ -190,19 +190,25 @@ Naming suffix in `.tfvars.yaml`: `sg_name_suffix: pvc_cluster_sg` → `{ENVIRONM
 
 If `USE_EXISTING` fails (SG not in VPC), switch to **SG_MODE=CREATE_NEW** or set **EXISTING_SG_NAME** to a valid `sg-xxxxxxxx` ID.
 
-### Why Terraform state was missing on Jenkins
+### Terraform state on Jenkins (holautosa — PSEAutomation pattern)
 
-Jenkins uses **`CleanBeforeCheckout`** — the workspace (including local `terraform.tfstate`) is **deleted every build**.
+Jenkins uses **`CleanBeforeCheckout`** — the workspace is wiped each build. State is **not** stored in S3.
 
-Remote state is **required** for Jenkins. The pipeline uses an **S3 backend** (default bucket `pvc-cluster-terraform-backend`, key `pvc-cluster/terraform.tfstate`). Each `ENVIRONMENT` workspace is stored separately as `env:/<environment>/...` in that bucket.
+Following [PSEAutomation DeployHoL](https://github.com/cloudera/PSEAutomation/blob/main/OnCloud/AWS/build/Jenkinsfile.DeployHoL), persistent files live under holautosa:
 
-Ensure the bucket and DynamoDB lock table exist (see `terraform-code/cloudera-pvc-terraform/modules/s3-backend/`) and the Jenkins role can `s3:GetObject` / `s3:PutObject` / `dynamodb:GetItem` / `dynamodb:PutItem` on them.
+```
+/home/holautosa/HOL_AUTO_EXEC_DIR/cdp-onprem-automation/<ENVIRONMENT>/
+  terraform/   # terraform.tfstate, .terraform/, *.pem
+  ansible/     # inventory.ini, sshkey.pem
+```
 
-Set `TF_STATE_DYNAMODB_TABLE=none` to skip DynamoDB locking. Set `TF_STATE_BACKEND=local` only for ad-hoc laptop runs without S3.
+Each build restores state from holautosa before Terraform/Ansible and persists it back after apply. No S3 backend bucket is created or required.
+
+Requires passwordless `sudo` for `jenkins` → `holautosa` if the `jenkins` user cannot write `/home/holautosa/HOL_AUTO_EXEC_DIR` directly.
 
 ### Re-run same environment (`ptgty`, etc.)
 
-Terraform workspace state is per `ENVIRONMENT` in S3. On re-runs:
+Terraform workspace state is per `ENVIRONMENT` under holautosa. On re-runs:
 
 | Resource | First run | Re-run behavior |
 |---|---|---|
