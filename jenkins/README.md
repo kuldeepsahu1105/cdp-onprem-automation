@@ -204,7 +204,13 @@ Following [PSEAutomation DeployHoL](https://github.com/cloudera/PSEAutomation/bl
 
 Each build restores state from holautosa before Terraform/Ansible and persists it back after apply. No S3 backend bucket is created or required.
 
-Requires passwordless `sudo` for `jenkins` → `holautosa` if the `jenkins` user cannot write `/home/holautosa/HOL_AUTO_EXEC_DIR` directly.
+**Required sudoers** (same as AWS creds):
+
+```
+jenkins ALL=(holautosa) NOPASSWD: ALL
+```
+
+The pipeline creates dirs as `holautosa`, then `chown`s `cdp-onprem-automation/` to `jenkins` (PSEAutomation pattern) so later builds can read/write state without sudo.
 
 ### Re-run same environment (`ptgty`, etc.)
 
