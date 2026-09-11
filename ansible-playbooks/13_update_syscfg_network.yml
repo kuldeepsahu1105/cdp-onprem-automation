@@ -25,7 +25,11 @@
       ansible.builtin.set_fact:
         sysconfig_dns1: >-
           {{
-            effective_vpc_dns_resolver
+            '127.0.0.1'
+            if identity_provider_effective == 'freeipa'
+              and ipa_server_in_inventory | bool
+              and inventory_hostname in groups.get('ipaserver', [])
+            else effective_vpc_dns_resolver
             if effective_deployment_env == 'aws'
               and effective_vpc_dns_resolver | default('') | length > 0
               and identity_provider_effective == 'freeipa'
@@ -39,12 +43,19 @@
           }}
         sysconfig_dns2: >-
           {{
-            hostvars[groups['ipaserver'][0]].private_ip
+            effective_vpc_dns_resolver
+            if identity_provider_effective == 'freeipa'
+              and ipa_server_in_inventory | bool
+              and inventory_hostname in groups.get('ipaserver', [])
+              and effective_deployment_env == 'aws'
+              and effective_vpc_dns_resolver | default('') | length > 0
+            else hostvars[groups['ipaserver'][0]].private_ip
             | default(hostvars[groups['ipaserver'][0]].ansible_host)
             if effective_deployment_env == 'aws'
               and effective_vpc_dns_resolver | default('') | length > 0
               and identity_provider_effective == 'freeipa'
               and ipa_server_in_inventory | bool
+              and inventory_hostname not in groups.get('ipaserver', [])
             else ''
           }}
 
