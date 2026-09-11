@@ -69,7 +69,9 @@ if should_validate "${VALIDATE_TFVARS:-true}" "TFVARS" && [[ -n "${TFVARS_FILE:-
   [[ -n "${ENVIRONMENT:-}" ]] || fail "ENVIRONMENT not set after loading tfvars"
   [[ -n "${AWS_REGION:-}" ]] || fail "AWS_REGION not set after loading tfvars"
   [[ -n "${OWNER:-}" ]] || fail "OWNER not set after loading tfvars (set in tfvars or Jenkins OWNER parameter)"
-  log "OK tfvars loaded (environment=${ENVIRONMENT}, region=${AWS_REGION}, owner=${OWNER}, keypair=${KEYPAIR_NAME:-n/a}, create_keypair=${CREATE_KEYPAIR:-false})"
+  log "OK tfvars loaded (environment=${ENVIRONMENT}, region=${AWS_REGION}, owner=${OWNER})"
+  log "  infra: vpc_mode=${VPC_MODE:-USE_DEFAULT} create_vpc=${CREATE_VPC:-false} sg_mode=${SG_MODE:-USE_EXISTING} create_new_sg=${CREATE_NEW_SG:-false}"
+  log "  names: keypair=${KEYPAIR_NAME:-n/a} sg=${EXISTING_SG_NAME:-${SG_NAME:-n/a}}"
 
   if is_enabled "${REQUIRE_TERRAFORM:-false}"; then
     # shellcheck source=jenkins/scripts/aws-credential-check.sh

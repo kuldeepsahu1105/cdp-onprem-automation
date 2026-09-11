@@ -78,7 +78,7 @@ validate_aws_resources() {
     --query 'SecurityGroups[0].GroupId' \
     --output text 2>/dev/null | grep -q '^sg-'; then
     printf '[validate-aws] ERROR: security group name not found in %s VPC %s: %s\n' "$region" "$vpc_id" "${EXISTING_SG_NAME}" >&2
-    printf '[validate-aws] Hint: use sg-xxxxxxxx ID or set create_new_sg=true\n' >&2
+    printf '[validate-aws] Hint: set Jenkins SG_MODE=CREATE_NEW, or EXISTING_SG_NAME to a valid sg-id/name\n' >&2
     return 1
   fi
   printf '[validate-aws] OK security group name: %s (vpc=%s, region=%s)\n' "${EXISTING_SG_NAME}" "$vpc_id" "$region"

@@ -176,6 +176,20 @@ sudo -u holautosa aws sts get-caller-identity
 sudo -u jenkins sudo -n -u holautosa cat /home/holautosa/.aws/credentials | head -1
 ```
 
+### VPC and security group (Jenkins UI)
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `VPC_MODE` | `USE_DEFAULT` | Use account default VPC (`create_vpc=false`) |
+| `VPC_MODE` | `CREATE_NEW` | Create VPC — set `VPC_NAME`, `VPC_CIDR_BLOCK`, `VPC_AZS`, subnets, NAT/VPN |
+| `SG_MODE` | `USE_EXISTING` | Lookup SG by name or `sg-id` (default `{ENVIRONMENT}-pvc_cluster_sg`) |
+| `SG_MODE` | `CREATE_NEW` | Terraform creates SG — set `SG_NAME`, `ALLOWED_CIDRS`, `ALLOW_ALL`, `ALLOWED_PORTS` |
+| `CREATE_EIP` | `true` | Elastic IP for Cloudera Manager |
+
+Naming suffix in `.tfvars.yaml`: `sg_name_suffix: pvc_cluster_sg` → `{ENVIRONMENT}-pvc_cluster_sg`.
+
+If `USE_EXISTING` fails (SG not in VPC), switch to **SG_MODE=CREATE_NEW** or set **EXISTING_SG_NAME** to a valid `sg-xxxxxxxx` ID.
+
 ### SSH key pair (Jenkins)
 
 Jenkins **always creates a new EC2 key pair** per run using the tfvars naming convention:

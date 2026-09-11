@@ -6,6 +6,7 @@
 # Override path: export TFVARS_FILE=/path/to/config.yaml
 #
 # Wrapper scripts auto-detect: .tfvars.yaml → .tfvars.yml → .tfvars.env
+# Jenkins UI overrides VPC_MODE, SG_MODE, and related fields when set.
 # =============================================================================
 
 # --- General -----------------------------------------------------------------
@@ -20,22 +21,22 @@ environment: development
 # ecs_deploy_on_arm64: false
 
 # --- Terraform: create new vs use existing -----------------------------------
-# create_vpc: false          # false = default VPC; true = create vpc_name/cidr below
-# create_new_sg: false        # false = existing_sg_name; true = create sg_name
-# create_keypair: true        # Jenkins always creates; name = {environment}-{keypair_name_suffix}
-# create_eip: true
+# Defaults: default VPC, use existing SG, create new keypair (Jenkins forces naming)
+# vpc_mode: USE_DEFAULT       # Jenkins: USE_DEFAULT | CREATE_NEW
+# sg_mode: USE_EXISTING       # Jenkins: USE_EXISTING | CREATE_NEW
 create_vpc: false
 create_new_sg: false
 create_keypair: true
 create_eip: true
 
-# AWS key pair name prefix: {environment}-{keypair_name_suffix} (e.g. ptgty-pvc-new-keypair)
+# Naming suffixes — full names: {environment}-{suffix}
 keypair_name_suffix: pvc-new-keypair
+sg_name_suffix: pvc_cluster_sg
 
-# SG: name in default VPC or sg-xxxxxxxx ID (see terraform-code/.../terraform.tfvars)
-existing_sg_name: testing-pvc_cluster_sg
+# USE_EXISTING SG: name in VPC or sg-xxxxxxxx (Jenkins default: {environment}-pvc_cluster_sg)
+# existing_sg_name: sg-0dbb6f79cba5ef701
 
-# New VPC (only when create_vpc: true)
+# New VPC (only when create_vpc: true / Jenkins VPC_MODE=CREATE_NEW)
 # vpc_name: development-cldr-vpc
 # vpc_cidr_block: 172.16.0.0/16
 # vpc_azs: '["ap-southeast-1a","ap-southeast-1b"]'
@@ -44,13 +45,11 @@ existing_sg_name: testing-pvc_cluster_sg
 # enable_nat_gateway: false
 # enable_vpn_gateway: false
 
-# New SG (only when create_new_sg: true)
+# New SG (only when create_new_sg: true / Jenkins SG_MODE=CREATE_NEW)
 # sg_name: development-pvc_cluster_sg
+# allow_all: true
 # allowed_cidrs: '["0.0.0.0/0"]'
 # allowed_ports: '[0]'
-
-# Optional full override (default: {environment}-{keypair_name_suffix})
-# keypair_name: ptgty-pvc-new-keypair
 
 # cldr_eip_name: development-cldr-mngr-eip
 

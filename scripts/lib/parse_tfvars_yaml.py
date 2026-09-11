@@ -47,6 +47,8 @@ KEY_MAP = {
     "enable_nat_gateway": "ENABLE_NAT_GATEWAY",
     "enable_vpn_gateway": "ENABLE_VPN_GATEWAY",
     "sg_name": "SG_NAME",
+    "sg_name_suffix": "SG_NAME_SUFFIX",
+    "allow_all": "ALLOW_ALL",
     "allowed_cidrs": "ALLOWED_CIDRS",
     "allowed_ports": "ALLOWED_PORTS",
     "keypair_name": "KEYPAIR_NAME",

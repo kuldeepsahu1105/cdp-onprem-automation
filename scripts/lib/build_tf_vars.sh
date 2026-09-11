@@ -16,6 +16,7 @@ TF_VARS=(
     -var="enable_vpn_gateway=${ENABLE_VPN_GATEWAY}"
 
     -var="create_new_sg=${CREATE_NEW_SG}"
+    -var="allow_all=${ALLOW_ALL}"
     -var="allowed_cidrs=${ALLOWED_CIDRS}"
     -var="allowed_ports=${ALLOWED_PORTS}"
     -var="sg_name=${SG_NAME}"

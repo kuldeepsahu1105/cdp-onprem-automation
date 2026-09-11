@@ -26,6 +26,30 @@ pipeline {
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
     booleanParam(name: 'AWS_USE_INSTANCE_ROLE', defaultValue: false, description: 'Use EC2 instance IAM role via IMDS (default off — uses CREDENTIALS_USER ~/.aws instead)')
     string(name: 'CREDENTIALS_USER', defaultValue: 'holautosa', description: 'OS user whose ~/.aws and ~/.ssh credentials to use (read-only; files not modified)')
+    choice(
+      name: 'VPC_MODE',
+      choices: ['USE_DEFAULT', 'CREATE_NEW'],
+      description: 'VPC: USE_DEFAULT = account default VPC (create_vpc=false). CREATE_NEW = new VPC — set VPC fields below.'
+    )
+    choice(
+      name: 'SG_MODE',
+      choices: ['USE_EXISTING', 'CREATE_NEW'],
+      description: 'Security group: USE_EXISTING = lookup by name/sg-id (default {ENVIRONMENT}-pvc_cluster_sg). CREATE_NEW = Terraform creates SG — set SG fields below.'
+    )
+    booleanParam(name: 'CREATE_EIP', defaultValue: true, description: 'Allocate Elastic IP for Cloudera Manager (cldr-mngr)')
+    string(name: 'VPC_NAME', defaultValue: '', description: 'CREATE_NEW VPC: name (empty = {ENVIRONMENT}-cldr-vpc)')
+    string(name: 'VPC_CIDR_BLOCK', defaultValue: '172.16.0.0/16', description: 'CREATE_NEW VPC: CIDR block')
+    string(name: 'VPC_AZS', defaultValue: '["ap-southeast-1a","ap-southeast-1b"]', description: 'CREATE_NEW VPC: JSON AZ list')
+    string(name: 'VPC_PUBLIC_SUBNETS_CIDR', defaultValue: '["172.16.0.0/24"]', description: 'CREATE_NEW VPC: JSON public subnet CIDRs')
+    string(name: 'VPC_PRIVATE_SUBNETS_CIDR', defaultValue: '[]', description: 'CREATE_NEW VPC: JSON private subnet CIDRs')
+    booleanParam(name: 'ENABLE_NAT_GATEWAY', defaultValue: false, description: 'CREATE_NEW VPC: enable NAT gateway')
+    booleanParam(name: 'ENABLE_VPN_GATEWAY', defaultValue: false, description: 'CREATE_NEW VPC: enable VPN gateway')
+    string(name: 'EXISTING_SG_NAME', defaultValue: '', description: 'USE_EXISTING SG: sg-id or name (empty = {ENVIRONMENT}-pvc_cluster_sg)')
+    string(name: 'SG_NAME', defaultValue: '', description: 'CREATE_NEW SG: name (empty = {ENVIRONMENT}-pvc_cluster_sg)')
+    booleanParam(name: 'ALLOW_ALL', defaultValue: true, description: 'CREATE_NEW SG: allow all inbound (false = use ALLOWED_PORTS)')
+    string(name: 'ALLOWED_CIDRS', defaultValue: '["137.83.231.109/32", "137.83.231.11/32", "208.127.31.110/32", "208.127.31.11/32", "139.180.248.227/32"]', description: 'CREATE_NEW SG: JSON allowed source CIDRs')
+    string(name: 'ALLOWED_PORTS', defaultValue: '[0]', description: 'CREATE_NEW SG when ALLOW_ALL=false: JSON TCP ports')
+    string(name: 'CLDR_EIP_NAME', defaultValue: '', description: 'Elastic IP name (empty = {ENVIRONMENT}-cldr-mngr-eip)')
     string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Name prefix + Terraform workspace (overrides tfvars when set)')
     string(name: 'OWNER', defaultValue: 'ksahu-ygulati', description: 'Owner tag — required for Terraform/Ansible if not set in tfvars')
     string(name: 'AWS_REGION', defaultValue: 'ap-southeast-1', description: 'AWS region override (e.g. ap-southeast-1)')
@@ -72,6 +96,24 @@ pipeline {
     JENKINS_PVCECS_MASTER_COUNT = "${params.PVCECS_MASTER_COUNT?.trim() ?: ''}"
     JENKINS_PVCECS_WORKER_COUNT = "${params.PVCECS_WORKER_COUNT?.trim() ?: ''}"
     JENKINS_PVCECS_WORKER_INSTANCE_TYPE = "${params.PVCECS_WORKER_INSTANCE_TYPE?.trim() ?: ''}"
+    VPC_MODE = "${params.VPC_MODE}"
+    SG_MODE = "${params.SG_MODE}"
+    JENKINS_VPC_MODE = "${params.VPC_MODE}"
+    JENKINS_SG_MODE = "${params.SG_MODE}"
+    JENKINS_CREATE_EIP = "${params.CREATE_EIP}"
+    JENKINS_VPC_NAME = "${params.VPC_NAME?.trim() ?: ''}"
+    JENKINS_VPC_CIDR_BLOCK = "${params.VPC_CIDR_BLOCK?.trim() ?: ''}"
+    JENKINS_VPC_AZS = "${params.VPC_AZS?.trim() ?: ''}"
+    JENKINS_VPC_PUBLIC_SUBNETS_CIDR = "${params.VPC_PUBLIC_SUBNETS_CIDR?.trim() ?: ''}"
+    JENKINS_VPC_PRIVATE_SUBNETS_CIDR = "${params.VPC_PRIVATE_SUBNETS_CIDR?.trim() ?: ''}"
+    JENKINS_ENABLE_NAT_GATEWAY = "${params.ENABLE_NAT_GATEWAY}"
+    JENKINS_ENABLE_VPN_GATEWAY = "${params.ENABLE_VPN_GATEWAY}"
+    JENKINS_EXISTING_SG_NAME = "${params.EXISTING_SG_NAME?.trim() ?: ''}"
+    JENKINS_SG_NAME = "${params.SG_NAME?.trim() ?: ''}"
+    JENKINS_ALLOW_ALL = "${params.ALLOW_ALL}"
+    JENKINS_ALLOWED_CIDRS = "${params.ALLOWED_CIDRS?.trim() ?: ''}"
+    JENKINS_ALLOWED_PORTS = "${params.ALLOWED_PORTS?.trim() ?: ''}"
+    JENKINS_CLDR_EIP_NAME = "${params.CLDR_EIP_NAME?.trim() ?: ''}"
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
     AWS_USE_INSTANCE_ROLE = "${params.AWS_USE_INSTANCE_ROLE}"
@@ -421,6 +463,24 @@ def validatePipelineInputs() {
   if (stages.contains('TERRAFORM') || stages.any { it in ['PREREQS', 'IDENTITY', 'CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL'] }) {
     if (!owner) {
       echo 'WARN: OWNER not set in Jenkins UI — must be present in tfvars or validation will fail later.'
+    }
+  }
+
+  if (stages.contains('TERRAFORM')) {
+    def vpcMode = params.VPC_MODE?.trim() ?: 'USE_DEFAULT'
+    def sgMode = params.SG_MODE?.trim() ?: 'USE_EXISTING'
+    echo "Terraform infra: VPC_MODE=${vpcMode}, SG_MODE=${sgMode}, CREATE_EIP=${params.CREATE_EIP}"
+    if (vpcMode == 'CREATE_NEW') {
+      def cidr = params.VPC_CIDR_BLOCK?.trim()
+      if (!cidr || !cidr.matches(/^\\d+\\.\\d+\\.\\d+\\.\\d+\\/\\d+$/)) {
+        validationFail("VPC_CIDR_BLOCK '${cidr}' is invalid for VPC_MODE=CREATE_NEW (expected e.g. 172.16.0.0/16).")
+      }
+    }
+    if (sgMode == 'CREATE_NEW' && !params.ALLOW_ALL) {
+      def ports = params.ALLOWED_PORTS?.trim()
+      if (!ports || !ports.startsWith('[')) {
+        validationFail("ALLOWED_PORTS must be a JSON array when ALLOW_ALL=false (got '${ports}').")
+      }
     }
   }
 
