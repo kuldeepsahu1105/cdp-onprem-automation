@@ -103,6 +103,7 @@ cert_subj: "/C={{ cert_country }}/ST={{ cert_state }}/L={{ cert_locality }}/O={{
 # Variables for wildcard record and postgres jdbc driver setup:
 wildcard_dns_record: "*.apps"
 postgres_jdbc_version: "42.7.10"  # Configurable version
+psycopg2_binary_version: ""  # empty = latest from pip; pin e.g. "2.9.9"
 jdbc_driver_url: "https://jdbc.postgresql.org/download/postgresql-{{ postgres_jdbc_version }}.jar"
 jdbc_driver_dest: "/usr/share/java/postgresql-connector-java.jar"
 

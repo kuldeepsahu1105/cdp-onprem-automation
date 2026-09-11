@@ -114,17 +114,19 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `TFVARS_FILE` | Relative config path (auto-detect if empty) |
 | `GIT_BRANCH` | Branch to checkout |
 | `NOTIFICATION_EMAIL` | Email recipient |
-| `ANSIBLE_GROUP_VARS_YAML` | Multiline YAML merged over `group_vars/all.yml` when Ansible stages run (see `jenkins/ansible-group-vars.example.yaml`) |
+| `ANSIBLE_GROUP_VARS_YAML` | Ansible-only YAML overrides (allowed keys in `jenkins/ansible-group-vars-allowed-keys.yaml`) — not full `all.yml` |
 | `CM_REPO_USERNAME` | Optional archive.cloudera.com username (empty = skip; no early validation failure) |
 | `CM_REPO_PASSWORD` | Optional archive.cloudera.com password (empty = skip) |
 
 ## Ansible group_vars override (`ANSIBLE_GROUP_VARS_YAML`)
 
-Jenkins `text` parameters render as a **multiline text area** (like an HTML textarea). Paste any keys from `ansible-playbooks/group_vars/all.yml` to override them per build without editing the repo.
+Jenkins `text` parameters render as a **multiline text area**. Only **Ansible-only** keys are accepted (domain, passwords, CM/CDH/ECS versions, java/postgres/jdbc/psycopg, etc.) — not the full `all.yml` and not Terraform/Jenkins UI fields.
 
+- Allowed keys: `jenkins/ansible-group-vars-allowed-keys.yaml`
+- Examples: `jenkins/ansible-group-vars.example.yaml`
 - Merged at runtime into `ansible-playbooks/group_vars/all/jenkins_override.yml` (not committed).
-- Comments-only or empty content is ignored.
-- YAML syntax is checked only when Ansible stages are selected and the textarea contains real `key: value` lines.
+- Disallowed or unknown keys fail validation when Ansible stages are selected.
+- CM archive login: use `CM_REPO_USERNAME` / `CM_REPO_PASSWORD` (not the textarea).
 
 ## License and CM archive credentials
 

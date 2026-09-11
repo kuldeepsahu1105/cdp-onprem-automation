@@ -14,11 +14,29 @@ except ImportError:
     print("ERROR: python3 PyYAML required (pip install pyyaml)", file=sys.stderr)
     sys.exit(1)
 
-# Optional env vars merged into group_vars (non-empty only).
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ALLOWED_KEYS_FILE = REPO_ROOT / "jenkins" / "ansible-group-vars-allowed-keys.yaml"
+
+# Jenkins env vars only (not accepted from ANSIBLE_GROUP_VARS_YAML textarea).
 ENV_TO_VAR = [
     ("CM_REPO_USERNAME", "cm_repo_username"),
     ("CM_REPO_PASSWORD", "cm_repo_password"),
 ]
+
+# Use Jenkins CM params instead of pasting these into the textarea.
+TEXTAREA_BLOCKED_KEYS = frozenset({"cm_repo_username", "cm_repo_password"})
+
+
+def _load_allowed_keys() -> frozenset[str]:
+    if not ALLOWED_KEYS_FILE.is_file():
+        print(f"ERROR: allowed-keys file missing: {ALLOWED_KEYS_FILE}", file=sys.stderr)
+        sys.exit(1)
+    data = yaml.safe_load(ALLOWED_KEYS_FILE.read_text(encoding="utf-8"))
+    keys = data.get("allowed_keys") if isinstance(data, dict) else None
+    if not isinstance(keys, list) or not keys:
+        print(f"ERROR: {ALLOWED_KEYS_FILE} must define allowed_keys: [ ... ]", file=sys.stderr)
+        sys.exit(1)
+    return frozenset(str(k) for k in keys)
 
 
 def _load_yaml_fragment() -> dict:
@@ -40,6 +58,33 @@ def _load_yaml_fragment() -> dict:
     return data
 
 
+def _filter_textarea_overrides(data: dict, allowed: frozenset[str]) -> dict:
+    rejected: list[str] = []
+    filtered: dict = {}
+    for key, val in data.items():
+        if key in TEXTAREA_BLOCKED_KEYS:
+            rejected.append(
+                f"{key} (use Jenkins CM_REPO_USERNAME / CM_REPO_PASSWORD instead)"
+            )
+            continue
+        if key not in allowed:
+            rejected.append(key)
+            continue
+        filtered[key] = val
+    if rejected:
+        print(
+            "ERROR: ANSIBLE_GROUP_VARS_YAML contains keys that are not allowed:\n  "
+            + "\n  ".join(sorted(rejected)),
+            file=sys.stderr,
+        )
+        print(
+            f"Allowed keys are listed in {ALLOWED_KEYS_FILE.relative_to(REPO_ROOT)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return filtered
+
+
 def _coerce_bool_strings(data: dict) -> dict:
     out = {}
     for key, val in data.items():
@@ -56,11 +101,21 @@ def _coerce_bool_strings(data: dict) -> dict:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <output-jenkins_override.yml>", file=sys.stderr)
+    validate_only = False
+    args = sys.argv[1:]
+    if args and args[0] == "--validate-only":
+        validate_only = True
+        args = args[1:]
+
+    if len(args) != 1:
+        print(
+            f"Usage: {sys.argv[0]} [--validate-only] <output-jenkins_override.yml>",
+            file=sys.stderr,
+        )
         return 2
 
-    out_path = Path(sys.argv[1])
+    out_path = Path(args[0])
+    allowed = _load_allowed_keys()
     overrides: dict = {}
 
     for env_key, var_name in ENV_TO_VAR:
@@ -68,8 +123,13 @@ def main() -> int:
         if val:
             overrides[var_name] = val
 
-    overrides.update(_load_yaml_fragment())
+    textarea = _filter_textarea_overrides(_load_yaml_fragment(), allowed)
+    overrides.update(textarea)
     overrides = _coerce_bool_strings(overrides)
+
+    if validate_only:
+        print(f"[ansible-vars] YAML override keys OK ({len(textarea)} from textarea)")
+        return 0
 
     if not overrides:
         if out_path.is_file():

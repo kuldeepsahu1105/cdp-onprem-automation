@@ -1,11 +1,14 @@
-# Optional extra overrides (paste into Jenkins ANSIBLE_GROUP_VARS_YAML text area).
-# Merged on top of ansible-playbooks/group_vars/all.yml at Ansible runtime.
+# Paste into Jenkins ANSIBLE_GROUP_VARS_YAML (allowed keys only).
+# See jenkins/ansible-group-vars-allowed-keys.yaml for the full list.
+# CM archive login: use CM_REPO_USERNAME / CM_REPO_PASSWORD Jenkins params.
 #
-# Common per-deployment tweaks:
 # ipaserver_domain: cldrsetup.local
-# cm_version: "7.13.1.0"
+# ipaadmin_password: "ChangeMe@123"
+# cm_version: "7.13.2.10000"
 # cdh_version: "7.3.2.10000"
-# cm_repo_source: public
-# cm_debian_use_ubuntu_repo: true
-# ecs_deploy_on_arm64: false
-# target_cpu_architecture: arm64
+# ecs_pvc_ds_version: "1.5.5-h3300"
+# java_version: "17"
+# python_version: "3.11"
+# postgresql_version: 18
+# postgres_jdbc_version: "42.7.10"
+# psycopg2_binary_version: "2.9.9"
