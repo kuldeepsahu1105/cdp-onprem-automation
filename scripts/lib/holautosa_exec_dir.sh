@@ -174,13 +174,14 @@ restore_ansible_artifacts_to_workspace() {
   [[ -n "$src" && -d "$src" ]] || return 0
   mkdir -p "$ansible_dir"
 
-  [[ -f "$src/inventory.ini" ]] && cp -f "$src/inventory.ini" "$ansible_dir/inventory.ini"
+  # inventory.ini is regenerated from Terraform (public IPs). Restoring a stale
+  # holautosa copy often points ansible_host at private VPC addresses Jenkins cannot reach.
   [[ -f "$src/sshkey.pem" ]] && cp -f "$src/sshkey.pem" "$ansible_dir/sshkey.pem"
   while IFS= read -r pem; do
     [[ -n "$pem" ]] && cp -f "$pem" "$ansible_dir/"
   done < <(find "$src" -maxdepth 1 -type f -name '*.pem' 2>/dev/null || true)
 
-  printf '[holautosa-dir] Restored Ansible artifacts from %s\n' "$src"
+  printf '[holautosa-dir] Restored Ansible SSH keys from %s (inventory from Terraform)\n' "$src"
 }
 
 persist_ansible_artifacts_from_workspace() {

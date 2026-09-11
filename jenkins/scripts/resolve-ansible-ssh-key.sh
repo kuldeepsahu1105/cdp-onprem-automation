@@ -8,6 +8,7 @@ resolve_ansible_ssh_key() {
   local pem=""
 
   if [[ -f "${ansible_dir}/sshkey.pem" ]]; then
+    chmod 600 "${ansible_dir}/sshkey.pem" 2>/dev/null || true
     export ANSIBLE_PRIVATE_KEY="${ansible_dir}/sshkey.pem"
     printf '[ansible-ssh] ANSIBLE_PRIVATE_KEY=%s (terraform sshkey.pem)\n' "$ANSIBLE_PRIVATE_KEY"
     return 0
@@ -15,6 +16,7 @@ resolve_ansible_ssh_key() {
 
   pem="$(find "$ansible_dir" "$tf_dir" -maxdepth 1 -type f -name '*.pem' 2>/dev/null | head -1 || true)"
   if [[ -n "$pem" && -f "$pem" ]]; then
+    chmod 600 "$pem" 2>/dev/null || true
     export ANSIBLE_PRIVATE_KEY="$pem"
     printf '[ansible-ssh] ANSIBLE_PRIVATE_KEY=%s (terraform-generated)\n' "$ANSIBLE_PRIVATE_KEY"
     return 0

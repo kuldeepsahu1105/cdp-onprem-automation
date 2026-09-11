@@ -13,12 +13,14 @@ export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
 source "$REPO_ROOT/scripts/lib/holautosa_exec_dir.sh"
 prepare_holautosa_workdir || true
 restore_ansible_artifacts_to_workspace
+bash "$REPO_ROOT/jenkins/scripts/regenerate-inventory-from-terraform.sh"
 # shellcheck source=jenkins/scripts/aws-credential-check.sh
 source "$REPO_ROOT/jenkins/scripts/aws-credential-check.sh"
 aws_apply_instance_role_if_enabled
 # shellcheck source=jenkins/scripts/resolve-ansible-ssh-key.sh
 source "$REPO_ROOT/jenkins/scripts/resolve-ansible-ssh-key.sh"
 resolve_ansible_ssh_key
+bash "$REPO_ROOT/jenkins/scripts/ansible-connectivity-preflight.sh"
 
 export TFVARS_FILE="${TFVARS_FILE:-.tfvars.yaml}"
 export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"

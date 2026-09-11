@@ -270,8 +270,10 @@ load_cm_repo_credentials() {
   fi
 
   if [[ -z "$info_file" ]]; then
-    echo "Warning: No CM archive credentials from env or *info.txt; using group_vars/all.yml if set." >&2
-    echo "  (See: ansible_cm_credentials_help or DEPLOY_PHASE=3 --help)" >&2
+    if [[ "${DEPLOY_PHASE:-1}" =~ ^(3|cm|phase3|4|cluster|phase4|5|ecs|phase5|all|full)$ ]]; then
+      echo "Warning: No CM archive credentials from env or *info.txt; using group_vars/all.yml if set." >&2
+      echo "  (See: ansible_cm_credentials_help or DEPLOY_PHASE=3 --help)" >&2
+    fi
     return 1
   fi
 

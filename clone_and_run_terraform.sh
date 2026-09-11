@@ -245,8 +245,6 @@ esac
 ui_step "Terraform apply" "🚀"
 terraform apply -auto-approve tfplan.out
 persist_terraform_state_from_workspace "$TERRAFORM_DIR"
-persist_ansible_artifacts_from_workspace
-ui_done "Terraform provisioning complete"
 
 ui_section "Ansible inventory" "📦"
 if [[ -f "$GEN_SCRIPT" ]]; then
@@ -276,5 +274,8 @@ if [[ -n "$pem_file" ]]; then
   cp -f "$pem_file" "$REPO_ROOT/ansible-playbooks/sshkey.pem"
   ui_ok "Copied SSH key to ansible-playbooks/"
 fi
+
+persist_ansible_artifacts_from_workspace
+ui_done "Terraform provisioning complete"
 
 ui_next_steps

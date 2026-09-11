@@ -269,6 +269,23 @@ keypair_name_suffix: pvc-new-keypair
 
 **Fix:** Ensure `/home/holautosa/.aws/credentials` is valid. Keep **USE_CREDENTIALS_USER_AWS** checked (default) when using holautosa creds.
 
+### Ansible SSH connectivity (unreachable hosts)
+
+**Symptoms:** Ansible stage fails with SSH timeouts, `UNREACHABLE`, or `[ansible-preflight] FAIL` in the console.
+
+**Common causes:**
+
+| Cause | Fix |
+|---|---|
+| Stale `inventory.ini` with **private** IPs (`10.x.x.x`) | Inventory is regenerated from Terraform outputs before each Ansible stage (`regenerate-inventory-from-terraform.sh`). Holautosa restore no longer overwrites `inventory.ini` — only SSH keys. |
+| Jenkins agent IP not in security group | Preflight logs `Jenkins/agent egress IP: …` — add that `/32` to **ALLOWED_CIDRS** when `SG_MODE=CREATE_NEW`, or update the existing SG for `USE_EXISTING`. Port **22** must be open. |
+| Wrong SSH key or permissions | Terraform PEM is copied to `ansible-playbooks/sshkey.pem` (mode `600`). Ansible user is `root` (`group_vars/all.yml`). |
+| Ansible-only run without Terraform | Run `VALIDATE` + `TERRAFORM` once, or ensure holautosa has current state and regenerate inventory manually: `./jenkins/scripts/regenerate-inventory-from-terraform.sh` |
+
+**Preflight:** `jenkins/scripts/ansible-connectivity-preflight.sh` SSH-tests up to five hosts before playbooks run.
+
+**CM credentials warning (phase 1–2):** `No CM archive credentials from env or *info.txt` is expected for `PREREQS` / `IDENTITY` — CM archive login is only required from phase 3 (`CM_INSTALL`) onward.
+
 ## Local testing
 
 ```bash
