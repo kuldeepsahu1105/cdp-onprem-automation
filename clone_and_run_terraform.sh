@@ -213,6 +213,17 @@ else
   ui_ok "Workspace '${ENVIRONMENT}' created"
 fi
 
+# shellcheck source=scripts/lib/reconcile_terraform_resources.sh
+source "$SCRIPTS_LIB/reconcile_terraform_resources.sh"
+ui_step "Reconcile existing AWS key pair / security group" "🔄"
+if reconcile_terraform_resources; then
+  ui_ok "No Terraform variable changes from reconcile"
+else
+  ui_ok "Reconciled flags — reloading Terraform variables"
+  # shellcheck source=scripts/lib/build_tf_vars.sh
+  source "$SCRIPTS_LIB/build_tf_vars.sh"
+fi
+
 ui_step "Terraform plan" "📝"
 terraform plan "${TF_VARS[@]}" -out=tfplan.out
 
