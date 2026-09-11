@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Terminal UI helpers for wrapper scripts (colors + emojis when stdout is a TTY).
 
+# shellcheck source=scripts/lib/output_mode.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh"
+
 UI_STEP_NUM=0
 UI_WIDTH=66
 UI_INDENT='    '
@@ -33,6 +36,7 @@ ui_nl() {
 }
 
 ui_rule() {
+  output_is_quiet && return 0
   local char="${1:-─}"
   local width="${2:-$UI_WIDTH}"
   printf "  "
@@ -44,6 +48,10 @@ ui_kv() {
   local key="$1"
   local value="$2"
   local emoji="${3:-}"
+  if output_is_quiet; then
+    printf '[config] %s=%s\n' "$key" "$value"
+    return 0
+  fi
   printf '%s' "$UI_INDENT"
   [[ -n "$emoji" ]] && printf '%s  ' "$emoji"
   ui_c "36" "$(printf '%-*s' "$UI_KV_LABEL_W" "${key}:")"
@@ -54,6 +62,11 @@ ui_kv() {
 ui_banner() {
   local title="$1"
   local subtitle="${2:-}"
+
+  if output_is_quiet; then
+    printf '[%s] %s\n' "$title" "$subtitle"
+    return 0
+  fi
 
   ui_nl
   ui_rule "═"
@@ -74,6 +87,10 @@ ui_section() {
   local title="$1"
   local emoji="${2:-📌}"
   UI_STEP_NUM=0
+  if output_is_quiet; then
+    printf '[%s]\n' "$title"
+    return 0
+  fi
   ui_nl
   ui_rule "═"
   printf '  %s  ' "$emoji"
@@ -85,6 +102,10 @@ ui_section() {
 ui_subsection() {
   local title="$1"
   local emoji="${2:-•}"
+  if output_is_quiet; then
+    printf '[%s]\n' "$title"
+    return 0
+  fi
   ui_nl
   printf '%s%s  ' "$UI_INDENT" "$emoji"
   ui_c "1;35" "$title"
@@ -95,6 +116,10 @@ ui_step() {
   local msg="$1"
   local emoji="${2:-▸}"
   UI_STEP_NUM=$((UI_STEP_NUM + 1))
+  if output_is_quiet; then
+    printf '  -> %s\n' "$msg"
+    return 0
+  fi
   ui_nl
   printf '%s' "$UI_INDENT"
   ui_c "1;36" "Step ${UI_STEP_NUM}:"
@@ -104,6 +129,10 @@ ui_step() {
 }
 
 ui_ok() {
+  if output_is_quiet; then
+    printf '  OK: %s\n' "$*"
+    return 0
+  fi
   printf '%s  ' "$UI_INDENT"
   ui_c "32" '✅'
   printf '  '
@@ -112,6 +141,10 @@ ui_ok() {
 }
 
 ui_info() {
+  if output_is_quiet; then
+    printf '  info: %s\n' "$*"
+    return 0
+  fi
   printf '%s' "$UI_INDENT"
   ui_c "33" '💡  '
   ui_c "36" "$*"
@@ -135,6 +168,11 @@ ui_err() {
 }
 
 ui_config_summary() {
+  if output_is_quiet; then
+    printf '[config] file=%s env=%s region=%s arch=%s\n' \
+      "${TFVARS_LOADED_FROM:-not set}" "${ENVIRONMENT:-—}" "${AWS_REGION:-—}" "${CPU_ARCHITECTURE:-x86_64}"
+    return 0
+  fi
   ui_section "Deployment configuration" "📋"
   ui_kv "Config file" "${TFVARS_LOADED_FROM:-not set}" "📄"
   ui_kv "Environment" "${ENVIRONMENT:-—}" "🌍"
@@ -179,6 +217,7 @@ ui_inventory_summary() {
 }
 
 ui_next_steps() {
+  output_is_quiet && return 0
   ui_section "Next steps" "🚀"
   ui_info "Review ansible-playbooks/inventory.ini"
   ui_info "Run: ./clone_and_run_pvc_automation.sh"
@@ -187,6 +226,10 @@ ui_next_steps() {
 
 ui_done() {
   local msg="${1:-Completed successfully}"
+  if output_is_quiet; then
+    printf 'DONE: %s\n' "$msg"
+    return 0
+  fi
   ui_nl
   ui_rule "═"
   printf '  '
@@ -197,7 +240,7 @@ ui_done() {
 }
 
 ui_verbose() {
-  [[ "${VERBOSE:-0}" == "1" || "${VERBOSE:-}" == "true" ]]
+  output_is_verbose
 }
 
 ui_git_quiet() {

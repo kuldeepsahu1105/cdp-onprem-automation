@@ -232,8 +232,8 @@ else
 fi
 
 ui_step "Terraform plan" "📝"
-# shellcheck source=scripts/lib/terraform_plan_output.sh
-source "$SCRIPTS_LIB/terraform_plan_output.sh"
+# shellcheck source=scripts/lib/terraform_run.sh
+source "$SCRIPTS_LIB/terraform_run.sh"
 terraform_run_plan "$TERRAFORM_DIR" tfplan.out
 
 case "${DRY_RUN:-false}" in
@@ -245,7 +245,7 @@ case "${DRY_RUN:-false}" in
 esac
 
 ui_step "Terraform apply" "🚀"
-terraform apply -auto-approve tfplan.out -no-color
+terraform_run_apply "$TERRAFORM_DIR" tfplan.out
 persist_terraform_state_from_workspace "$TERRAFORM_DIR"
 
 ui_section "Ansible inventory" "📦"

@@ -38,6 +38,8 @@ fi
 
 # shellcheck source=scripts/lib/portable.sh
 source "$SCRIPTS_LIB/portable.sh"
+# shellcheck source=scripts/lib/output_mode.sh
+source "$SCRIPTS_LIB/output_mode.sh"
 # shellcheck source=scripts/lib/ansible_env.sh
 source "$SCRIPTS_LIB/ansible_env.sh"
 # shellcheck source=scripts/lib/ui.sh
@@ -66,14 +68,19 @@ load_tfvars
 set +a
 ui_config_summary
 
-ui_section "Ansible deployment" "🎯"
-ui_step "Resolving Ansible playbooks directory" "📁"
 ANSIBLE_DIR="$(resolve_ansible_playbooks_dir "$SCRIPT_DIR")"
-ui_kv "Ansible directory" "$ANSIBLE_DIR" "📂"
-
-ui_note_ssh_key_requirement
+if output_is_quiet; then
+  printf '[ansible] dir=%s phase=%s\n' "$ANSIBLE_DIR" "${DEPLOY_PHASE:-1}"
+else
+  ui_section "Ansible deployment" "🎯"
+  ui_step "Resolving Ansible playbooks directory" "📁"
+  ui_kv "Ansible directory" "$ANSIBLE_DIR" "📂"
+  ui_note_ssh_key_requirement
+fi
 pem_file="$(resolve_private_key "$ANSIBLE_DIR")"
-ui_kv "SSH private key" "$pem_file" "🔑"
+if ! output_is_quiet; then
+  ui_kv "SSH private key" "$pem_file" "🔑"
+fi
 
 if [[ "${DEPLOY_PHASE:-1}" =~ ^(3|cm|phase3|4|cluster|phase4|all|full)$ ]]; then
   if license_file="$(resolve_license_file "$ANSIBLE_DIR" 2>/dev/null)"; then
@@ -88,9 +95,11 @@ fi
 
 cd "$ANSIBLE_DIR"
 
-ui_step "Executing pvc_setup.sh" "▶"
-ui_kv "Deploy phase" "${DEPLOY_PHASE:-1}" "🔢"
-ui_kv "Control mode" "${CONTROL_MODE:-auto}" "🎚"
+if ! output_is_quiet; then
+  ui_step "Executing pvc_setup.sh" "▶"
+  ui_kv "Deploy phase" "${DEPLOY_PHASE:-1}" "🔢"
+  ui_kv "Control mode" "${CONTROL_MODE:-auto}" "🎚"
+fi
 chmod +x pvc_setup.sh
 export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 export CONTROL_MODE="${CONTROL_MODE:-auto}"

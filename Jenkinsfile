@@ -25,6 +25,11 @@ pipeline {
     )
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
     booleanParam(name: 'SHOW_TF_PLAN_OUTPUT', defaultValue: false, description: 'Print full terraform plan to console (default off — summary only; apply output always shown)')
+    choice(
+      name: 'OUTPUT_MODE',
+      choices: ['quiet', 'normal', 'verbose'],
+      description: 'Console output: quiet=CI summary (default), normal=TTY-style UI, verbose=full terraform/ansible logs'
+    )
     booleanParam(name: 'USE_CREDENTIALS_USER_AWS', defaultValue: true, description: 'Use CREDENTIALS_USER ~/.aws credentials (default on — uncheck to use EC2 instance IAM role via IMDS)')
     string(name: 'CREDENTIALS_USER', defaultValue: 'holautosa', description: 'OS user whose ~/.aws and ~/.ssh credentials to use (read-only; files not modified)')
     choice(
@@ -119,6 +124,7 @@ pipeline {
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
     SHOW_TF_PLAN_OUTPUT = "${params.SHOW_TF_PLAN_OUTPUT}"
+    OUTPUT_MODE = "${params.OUTPUT_MODE}"
     CREDENTIALS_USER = "${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}"
     PIPELINE_STAGES = "${params.PIPELINE_STAGES?.trim() ?: ''}"
     VALIDATION_CHECKS = "${params.VALIDATION_CHECKS?.trim() ?: ''}"
@@ -225,6 +231,8 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
+          set +x
+          export OUTPUT_MODE="${OUTPUT_MODE:-quiet}"
           export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-false}"
           export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
           # shellcheck source=jenkins/scripts/aws-credential-check.sh
@@ -244,6 +252,8 @@ pipeline {
             echo "Running Ansible deploy phase ${phase}"
             sh """
               set -euo pipefail
+              set +x
+              export OUTPUT_MODE="${env.OUTPUT_MODE ?: 'quiet'}"
               export DEPLOY_PHASE='${phase}'
               export REQUIRE_INVENTORY=true
               ./jenkins/scripts/run-ansible.sh
