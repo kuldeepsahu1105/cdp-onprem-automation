@@ -49,10 +49,15 @@
       ansible.builtin.systemd:
         name: "{{ os.firewall_service }}"
       register: firewall_status
-      ignore_errors: true
-    - debug:
+      failed_when: false
+    - name: Show firewall active state
+      ansible.builtin.debug:
         var: firewall_status.status.ActiveState
-      ignore_errors: true
+      when: firewall_status is succeeded
+    - name: Note missing firewall service
+      ansible.builtin.debug:
+        msg: "Firewall service {{ os.firewall_service }} not installed on {{ inventory_hostname }}"
+      when: firewall_status is failed
 
     - name: Check rc.local
       shell: cat {{ os.rc_local_path }}

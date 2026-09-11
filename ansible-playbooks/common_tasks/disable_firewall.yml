@@ -4,7 +4,16 @@
     name: "{{ os_vars[ansible_os_family].firewall_service }}"
     state: stopped
     enabled: false
-  ignore_errors: true
+  register: firewall_disable
+  failed_when: false
+  changed_when: firewall_disable is changed
+
+- name: Note when firewall service is not installed
+  ansible.builtin.debug:
+    msg: >-
+      Firewall service {{ os_vars[ansible_os_family].firewall_service }} not present on
+      {{ inventory_hostname }} — skipped (expected on minimal AMIs without firewalld)
+  when: firewall_disable.failed | default(false)
 
 - name: Disable UFW firewall (Debian family)
   ansible.builtin.command: ufw disable
