@@ -176,11 +176,29 @@ sudo -u holautosa aws sts get-caller-identity
 sudo -u jenkins sudo -n -u holautosa cat /home/holautosa/.aws/credentials | head -1
 ```
 
+### SSH key pair (Jenkins)
+
+Jenkins **always creates a new EC2 key pair** per run using the tfvars naming convention:
+
+```
+{ENVIRONMENT}-{keypair_name_suffix}
+```
+
+Default suffix: `pvc-new-keypair` (e.g. `ptgty-pvc-new-keypair` when `ENVIRONMENT=ptgty`).
+
+Terraform writes `{KEYPAIR_NAME}.pem` to the terraform directory; the wrapper copies it to `ansible-playbooks/sshkey.pem`. Ansible uses that PEM before holautosa `~/.ssh`.
+
+Override suffix in `.tfvars.yaml`:
+
+```yaml
+keypair_name_suffix: pvc-new-keypair
+```
+
 ### `no matching EC2 Key Pair found`
 
-**Cause:** `existing_keypair_name` in tfvars does not exist in the target AWS account/region.
+**Cause:** Older builds used `create_keypair: false` with a missing `existing_keypair_name`.
 
-**Fix:** List key pairs (`aws ec2 describe-key-pairs --region ap-southeast-1`) and update `.tfvars.yaml`, or set `create_keypair: true` to generate a new pair.
+**Fix:** Rebuild on latest `main` — Jenkins forces `create_keypair: true` automatically.
 
 ### `InvalidGroupId.Malformed` / security group name
 

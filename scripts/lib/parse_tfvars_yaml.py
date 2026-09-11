@@ -50,6 +50,7 @@ KEY_MAP = {
     "allowed_cidrs": "ALLOWED_CIDRS",
     "allowed_ports": "ALLOWED_PORTS",
     "keypair_name": "KEYPAIR_NAME",
+    "keypair_name_suffix": "KEYPAIR_NAME_SUFFIX",
     "cldr_eip_name": "CLDR_EIP_NAME",
     "ami_id": "AMI_ID",
     "cpu_architecture": "CPU_ARCHITECTURE",

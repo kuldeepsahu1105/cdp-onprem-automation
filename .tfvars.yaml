@@ -22,17 +22,18 @@ environment: development
 # --- Terraform: create new vs use existing -----------------------------------
 # create_vpc: false          # false = default VPC; true = create vpc_name/cidr below
 # create_new_sg: false        # false = existing_sg_name; true = create sg_name
-# create_keypair: false       # false = existing_keypair_name; true = new KEYPAIR_NAME + .pem
+# create_keypair: true        # Jenkins always creates; name = {environment}-{keypair_name_suffix}
 # create_eip: true
 create_vpc: false
 create_new_sg: false
-create_keypair: false
+create_keypair: true
 create_eip: true
+
+# AWS key pair name prefix: {environment}-{keypair_name_suffix} (e.g. ptgty-pvc-new-keypair)
+keypair_name_suffix: pvc-new-keypair
 
 # SG: name in default VPC or sg-xxxxxxxx ID (see terraform-code/.../terraform.tfvars)
 existing_sg_name: testing-pvc_cluster_sg
-# Key pair must exist in AWS_REGION when create_keypair: false
-existing_keypair_name: kuldeep-pvc-session
 
 # New VPC (only when create_vpc: true)
 # vpc_name: development-cldr-vpc
@@ -48,8 +49,8 @@ existing_keypair_name: kuldeep-pvc-session
 # allowed_cidrs: '["0.0.0.0/0"]'
 # allowed_ports: '[0]'
 
-# New keypair (only when create_keypair: true)
-# keypair_name: development-pvc-new-keypair
+# Optional full override (default: {environment}-{keypair_name_suffix})
+# keypair_name: ptgty-pvc-new-keypair
 
 # cldr_eip_name: development-cldr-mngr-eip
 

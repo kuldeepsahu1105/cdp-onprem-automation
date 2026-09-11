@@ -12,7 +12,9 @@ export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
 # shellcheck source=jenkins/scripts/aws-credential-check.sh
 source "$REPO_ROOT/jenkins/scripts/aws-credential-check.sh"
 aws_apply_instance_role_if_enabled
-apply_credentials_user_ssh
+# shellcheck source=jenkins/scripts/resolve-ansible-ssh-key.sh
+source "$REPO_ROOT/jenkins/scripts/resolve-ansible-ssh-key.sh"
+resolve_ansible_ssh_key
 
 export TFVARS_FILE="${TFVARS_FILE:-.tfvars.yaml}"
 export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"

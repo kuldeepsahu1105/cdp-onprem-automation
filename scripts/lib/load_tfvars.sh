@@ -55,6 +55,9 @@ load_tfvars() {
             apply_jenkins_overrides
             # shellcheck source=scripts/lib/tfvars_defaults.sh
             source "$load_tfvars__lib_dir/tfvars_defaults.sh"
+            # shellcheck source=scripts/lib/jenkins_pipeline_defaults.sh
+            source "$load_tfvars__lib_dir/jenkins_pipeline_defaults.sh"
+            apply_jenkins_pipeline_defaults
             # shellcheck source=scripts/lib/build_tf_vars.sh
             source "$load_tfvars__lib_dir/build_tf_vars.sh"
             ;;
@@ -64,6 +67,11 @@ load_tfvars() {
             source "$config_file"
             set +a
             apply_jenkins_overrides
+            # shellcheck source=scripts/lib/tfvars_defaults.sh
+            source "$load_tfvars__lib_dir/tfvars_defaults.sh"
+            # shellcheck source=scripts/lib/jenkins_pipeline_defaults.sh
+            source "$load_tfvars__lib_dir/jenkins_pipeline_defaults.sh"
+            apply_jenkins_pipeline_defaults
             # shellcheck source=scripts/lib/build_tf_vars.sh
             source "$load_tfvars__lib_dir/build_tf_vars.sh"
             ;;
