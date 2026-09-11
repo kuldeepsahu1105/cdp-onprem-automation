@@ -5,9 +5,19 @@ set -euo pipefail
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 INVENTORY="${INVENTORY:-$REPO_ROOT/ansible-playbooks/inventory.ini}"
 SSH_KEY="${ANSIBLE_PRIVATE_KEY:-$REPO_ROOT/ansible-playbooks/sshkey.pem}"
-SSH_USER="${ANSIBLE_SSH_USER:-root}"
 SSH_TIMEOUT="${ANSIBLE_SSH_TIMEOUT:-15}"
+SSH_RETRIES="${ANSIBLE_SSH_RETRIES:-3}"
+SSH_RETRY_DELAY="${ANSIBLE_SSH_RETRY_DELAY:-10}"
 MAX_HOSTS="${ANSIBLE_PREFLIGHT_MAX_HOSTS:-5}"
+
+# RHEL AMIs often accept ec2-user before root SSH is ready; try explicit user first.
+_ssh_users_for_preflight() {
+  if [[ -n "${ANSIBLE_SSH_USER:-}" ]]; then
+    printf '%s\n' "$ANSIBLE_SSH_USER"
+    return 0
+  fi
+  printf '%s\n' ec2-user root
+}
 
 log() { printf '[ansible-preflight] %s\n' "$*"; }
 
@@ -40,6 +50,21 @@ awk '
   }
 ' "$INVENTORY" | head -n "$MAX_HOSTS"
 
+_ssh_probe() {
+  local user="$1" ip="$2" attempt
+  for attempt in $(seq 1 "$SSH_RETRIES"); do
+    if ssh -i "$SSH_KEY" \
+      -o BatchMode=yes \
+      -o ConnectTimeout="$SSH_TIMEOUT" \
+      -o StrictHostKeyChecking=no \
+      "${user}@${ip}" "echo ok" >/dev/null 2>&1; then
+      return 0
+    fi
+    [[ "$attempt" -lt "$SSH_RETRIES" ]] && sleep "$SSH_RETRY_DELAY"
+  done
+  return 1
+}
+
 failed=0
 checked=0
 while IFS= read -r line; do
@@ -47,14 +72,20 @@ while IFS= read -r line; do
   host="${line%% *}"
   ip="${line##* }"
   checked=$((checked + 1))
-  if ssh -i "$SSH_KEY" \
-    -o BatchMode=yes \
-    -o ConnectTimeout="$SSH_TIMEOUT" \
-    -o StrictHostKeyChecking=no \
-    "${SSH_USER}@${ip}" "echo ok" >/dev/null 2>&1; then
-    log "OK  ${host} (${ip})"
+  host_ok=false
+  used_user=""
+  while IFS= read -r ssh_user; do
+    [[ -z "$ssh_user" ]] && continue
+    if _ssh_probe "$ssh_user" "$ip"; then
+      host_ok=true
+      used_user="$ssh_user"
+      break
+    fi
+  done < <(_ssh_users_for_preflight)
+  if [[ "$host_ok" == true ]]; then
+    log "OK  ${host} (${ip}) user=${used_user}"
   else
-    log "FAIL ${host} (${ip}) — SSH unreachable (check SG port 22, ansible_user=${SSH_USER}, key)"
+    log "FAIL ${host} (${ip}) — SSH unreachable after ${SSH_RETRIES} attempt(s) per user (check SG port 22, PEM/keypair match, users tried: $(tr '\n' ' ' < <(_ssh_users_for_preflight)))"
     failed=$((failed + 1))
   fi
   [[ "$checked" -ge "$MAX_HOSTS" ]] && break

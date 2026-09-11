@@ -12,6 +12,20 @@ export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
 # shellcheck source=scripts/lib/holautosa_exec_dir.sh
 source "$REPO_ROOT/scripts/lib/holautosa_exec_dir.sh"
 prepare_holautosa_workdir || true
+holautosa_log_state_manifest || true
+TF_DIR="${REPO_ROOT}/terraform-code/cloudera-pvc-terraform"
+restore_terraform_state_to_workspace "$TF_DIR"
+# shellcheck source=scripts/lib/terraform_backend.sh
+source "$REPO_ROOT/scripts/lib/terraform_backend.sh"
+terraform_init_backend "$TF_DIR" 2>/dev/null || true
+if command -v terraform >/dev/null 2>&1 && [[ -f "${TF_DIR}/terraform.tfstate" || -d "${TF_DIR}/terraform.tfstate.d" ]]; then
+  (
+    cd "$TF_DIR"
+    if terraform workspace list 2>/dev/null | grep -qw "${ENVIRONMENT:-development}"; then
+      terraform workspace select "${ENVIRONMENT:-development}" >/dev/null 2>&1 || true
+    fi
+  )
+fi
 restore_ansible_artifacts_to_workspace
 bash "$REPO_ROOT/jenkins/scripts/regenerate-inventory-from-terraform.sh"
 # shellcheck source=jenkins/scripts/aws-credential-check.sh

@@ -164,6 +164,7 @@ persist_terraform_state_from_workspace() {
     [[ -n "$pem" ]] && cp -f "$pem" "$dest/"
   done < <(find "$tf_dir" -maxdepth 1 -type f -name '*.pem' 2>/dev/null || true)
 
+  holautosa_write_state_manifest "${REPO_ROOT:-.}"
   printf '[holautosa-dir] Persisted Terraform state to %s\n' "$dest"
 }
 
@@ -197,5 +198,61 @@ persist_ansible_artifacts_from_workspace() {
     [[ -n "$pem" ]] && cp -f "$pem" "$dest/"
   done < <(find "$ansible_dir" -maxdepth 1 -type f -name '*.pem' 2>/dev/null || true)
 
+  holautosa_write_state_manifest "$repo_root"
   printf '[holautosa-dir] Persisted Ansible artifacts to %s\n' "$dest"
+}
+
+# Single manifest tying holautosa artifacts together (debugging re-run mismatches).
+holautosa_write_state_manifest() {
+  local repo_root="${1:-${REPO_ROOT:-.}}"
+  local env_dir manifest tf_dir ansible_dir pem_sha inv_sha tf_serial git_commit
+  env_dir="$(holautosa_env_dir)"
+  manifest="${env_dir}/state_manifest.json"
+  tf_dir="${repo_root}/terraform-code/cloudera-pvc-terraform"
+  ansible_dir="${repo_root}/ansible-playbooks"
+
+  [[ -d "$env_dir" ]] || return 0
+  _holautosa_mkdir_p "$env_dir"
+
+  pem_sha=""
+  if [[ -f "${ansible_dir}/sshkey.pem" ]]; then
+    pem_sha="$(sha256sum "${ansible_dir}/sshkey.pem" 2>/dev/null | awk '{print $1}' || true)"
+  elif [[ -f "${HOL_ANSIBLE_STATE_DIR:-}/sshkey.pem" ]]; then
+    pem_sha="$(sha256sum "${HOL_ANSIBLE_STATE_DIR}/sshkey.pem" 2>/dev/null | awk '{print $1}' || true)"
+  fi
+
+  inv_sha=""
+  [[ -f "${ansible_dir}/inventory.ini" ]] && \
+    inv_sha="$(sha256sum "${ansible_dir}/inventory.ini" 2>/dev/null | awk '{print $1}' || true)"
+
+  tf_serial=""
+  if [[ -f "${tf_dir}/terraform.tfstate" ]]; then
+    tf_serial="$(jq -r '.serial // empty' "${tf_dir}/terraform.tfstate" 2>/dev/null || true)"
+  fi
+
+  git_commit="$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || true)"
+
+  cat >"$manifest" <<EOF
+{
+  "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "environment": "${ENVIRONMENT:-development}",
+  "build_number": "${BUILD_NUMBER:-local}",
+  "git_commit": "${git_commit}",
+  "keypair_name": "${KEYPAIR_NAME:-}",
+  "terraform_state_serial": ${tf_serial:-null},
+  "sshkey_sha256": "${pem_sha}",
+  "inventory_sha256": "${inv_sha}",
+  "hol_terraform_dir": "${HOL_TERRAFORM_STATE_DIR:-}",
+  "hol_ansible_dir": "${HOL_ANSIBLE_STATE_DIR:-}"
+}
+EOF
+  printf '[holautosa-dir] Wrote state manifest %s\n' "$manifest"
+}
+
+holautosa_log_state_manifest() {
+  local manifest
+  manifest="$(holautosa_env_dir)/state_manifest.json"
+  [[ -f "$manifest" ]] || return 0
+  printf '[holautosa-dir] Last persisted state manifest:\n'
+  sed 's/^/[holautosa-dir]   /' "$manifest"
 }

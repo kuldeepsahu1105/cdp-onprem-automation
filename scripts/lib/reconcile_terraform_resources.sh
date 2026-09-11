@@ -45,18 +45,21 @@ reconcile_tf_state_has() {
 
 reconcile_find_pem_for_key() {
   local name="$1" repo_root="${REPO_ROOT:-.}"
-  local candidate
+  local candidate hol_tf="${HOL_TERRAFORM_STATE_DIR:-}" hol_ans="${HOL_ANSIBLE_STATE_DIR:-}"
 
   for candidate in \
     "${repo_root}/terraform-code/cloudera-pvc-terraform/${name}.pem" \
     "${repo_root}/ansible-playbooks/${name}.pem" \
     "${repo_root}/ansible-playbooks/sshkey.pem" \
     "${repo_root}/jenkins/artifacts/${name}.pem" \
-    "${repo_root}/jenkins/artifacts/sshkey.pem"; do
-    if [[ -f "$candidate" ]]; then
-      printf '%s' "$candidate"
-      return 0
-    fi
+    "${repo_root}/jenkins/artifacts/sshkey.pem" \
+    "${hol_tf:+${hol_tf}/${name}.pem}" \
+    "${hol_tf:+${hol_tf}/sshkey.pem}" \
+    "${hol_ans:+${hol_ans}/${name}.pem}" \
+    "${hol_ans:+${hol_ans}/sshkey.pem}"; do
+    [[ -n "$candidate" && -f "$candidate" ]] || continue
+    printf '%s' "$candidate"
+    return 0
   done
   return 1
 }
