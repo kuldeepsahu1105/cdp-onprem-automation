@@ -85,7 +85,7 @@
         | default(hostvars[groups['ipaserver'][0]].ansible_host)
       }}
   when:
-    - identity_provider | default('freeipa') == 'freeipa'
+    - identity_provider_effective == 'freeipa'
     - groups.get('ipaserver') is defined
     - groups['ipaserver'] | length > 0
 
@@ -127,13 +127,20 @@
   ansible.builtin.set_fact:
     dns_nameservers: >-
       {{
-        ([ipa_server_dns_ip]
+        ([ipa_server_dns_ip | default(
+            hostvars[groups['ipaserver'][0]].private_ip
+            | default(hostvars[groups['ipaserver'][0]].ansible_host, true),
+            true
+          )]
         + ([effective_vpc_dns_resolver] if effective_deployment_env == 'aws' and effective_vpc_dns_resolver | default('') | length > 0 else [])
         + (extra_dns_nameservers | default([]))
         + ['127.0.0.1'])
         | unique
       }}
-  when: identity_provider_effective == 'freeipa'
+  when:
+    - identity_provider_effective == 'freeipa'
+    - groups.get('ipaserver') is defined
+    - groups['ipaserver'] | length > 0
 
 - name: Print resolved DNS configuration
   ansible.builtin.debug:
