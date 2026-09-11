@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 # Terraform plan console output control (Jenkins-friendly).
 
+# shellcheck source=scripts/lib/output_mode.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output_mode.sh"
+
 terraform_plan_output_enabled() {
-  case "${SHOW_TF_PLAN_OUTPUT:-false}" in
-    1|true|yes|TRUE|YES|on|ON) return 0 ;;
-  esac
-  if declare -F ui_verbose >/dev/null 2>&1 && ui_verbose; then
-    return 0
-  fi
-  [[ "${VERBOSE:-}" == "1" || "${VERBOSE:-}" == "true" ]]
+  output_show_tf_plan
 }
 
 terraform_plan_detail_log_path() {

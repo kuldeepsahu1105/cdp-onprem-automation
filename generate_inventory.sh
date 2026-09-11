@@ -5,6 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib/portable.sh
 source "$SCRIPT_DIR/scripts/lib/portable.sh"
+# shellcheck source=scripts/lib/output_mode.sh
+source "$SCRIPT_DIR/scripts/lib/output_mode.sh"
 # shellcheck source=scripts/lib/ui.sh
 source "$SCRIPT_DIR/scripts/lib/ui.sh"
 
@@ -105,6 +107,12 @@ ui_kv "Output file" "$OUTPUT_FILE" "📄"
   generate_inventory_section "ecs-masters" ecs_m_pub[@] ecs_m_pvt[@]
   generate_inventory_section "ecs-workers" ecs_w_pub[@] ecs_w_pvt[@]
 
-} | tee "$OUTPUT_FILE"
+} >"$OUTPUT_FILE"
 
-ui_ok "Inventory generated: ${OUTPUT_FILE}"
+if output_is_quiet; then
+  host_count="$(grep -cE '^[^#[:space:]]' "$OUTPUT_FILE" 2>/dev/null || echo 0)"
+  ui_ok "Inventory generated: ${OUTPUT_FILE} (${host_count} hosts)"
+else
+  cat "$OUTPUT_FILE"
+  ui_ok "Inventory generated: ${OUTPUT_FILE}"
+fi

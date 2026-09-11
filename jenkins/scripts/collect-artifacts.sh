@@ -27,6 +27,8 @@ copy_if_exists "$REPO_ROOT/ansible-playbooks/sshkey.pem"
 
 # Terraform plan detail (written when SHOW_TF_PLAN_OUTPUT=false)
 copy_if_exists "$OUT_DIR/terraform-plan-${BUILD_NUMBER:-local}-detail.log" "terraform-plan-detail.log"
+copy_if_exists "$OUT_DIR/terraform-init-${BUILD_NUMBER:-local}.log" "terraform-init.log"
+copy_if_exists "$OUT_DIR/terraform-apply-${BUILD_NUMBER:-local}.log" "terraform-apply.log"
 
 # Terraform outputs / state snippets (non-secret)
 TF_DIR="$REPO_ROOT/terraform-code/cloudera-pvc-terraform"

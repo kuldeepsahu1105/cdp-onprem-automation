@@ -65,6 +65,10 @@ fi
 
 ensure_bash
 
+# shellcheck source=../scripts/lib/output_mode.sh
+source "$REPO_ROOT/scripts/lib/output_mode.sh"
+ansible_configure_output_mode
+
 DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 CONTROL_MODE="$(detect_control_mode "$SCRIPT_DIR/inventory.ini")"
 
@@ -92,16 +96,24 @@ run_playbook() {
   else
     ui_step "Running ${playbook}" "📜"
   fi
+  if output_is_quiet; then
+    printf '[playbook] %s\n' "$playbook"
+  fi
   ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" "$@"
 }
 
 cd "$SCRIPT_DIR"
 
 if [[ "${PVC_SETUP_FROM_WRAPPER:-0}" == "1" ]]; then
-  ui_subsection "Playbook execution (pvc_setup.sh)" "📜"
-  if is_dry_run; then
-    ui_warn "Dry run enabled — Ansible will use --check --diff (no changes applied)."
-    ui_warn "CM API playbooks (26/27) may still perform live API calls; use DEPLOY_PHASE=1-3 to limit scope."
+  if ! output_is_quiet; then
+    ui_subsection "Playbook execution (pvc_setup.sh)" "📜"
+    if is_dry_run; then
+      ui_warn "Dry run enabled — Ansible will use --check --diff (no changes applied)."
+      ui_warn "CM API playbooks (26/27) may still perform live API calls; use DEPLOY_PHASE=1-3 to limit scope."
+    fi
+  else
+    printf '[ansible] phase=%s control=%s dry_run=%s\n' \
+      "${DEPLOY_PHASE}" "${CONTROL_MODE}" "${DRY_RUN:-false}"
   fi
 else
   wrapper_print_identity "Cloudera Private Cloud Deployment (pvc_setup.sh)" "$REPO_ROOT" "$REPO_ROOT/scripts/lib"
@@ -114,8 +126,10 @@ fi
 PRIVATE_KEY="$(resolve_private_key "$SCRIPT_DIR")"
 if [[ "${PVC_SETUP_FROM_WRAPPER:-0}" != "1" ]]; then
   ui_note_ssh_key_requirement
+  ui_kv "SSH private key" "$PRIVATE_KEY" "🔑"
+elif ! output_is_quiet; then
+  ui_kv "SSH private key" "$PRIVATE_KEY" "🔑"
 fi
-ui_kv "SSH private key" "$PRIVATE_KEY" "🔑"
 
 if ! is_dry_run; then
   patch_ansible_private_key_in_group_vars "$SCRIPT_DIR" "$PRIVATE_KEY"
@@ -147,7 +161,11 @@ fi
 mapfile -t ANSIBLE_PLAYBOOK_ARGS < <(ansible_extra_args "$PRIVATE_KEY")
 
 ui_step "Install Ansible collections" "📦"
-ansible-galaxy collection install -r requirements.yml
+if output_is_quiet; then
+  ansible-galaxy collection install -r requirements.yml -q
+else
+  ansible-galaxy collection install -r requirements.yml
+fi
 
 # SSH pre-reqs: include ipaserver when that group has hosts (FreeIPA); skip for AD-only inventory
 if grep -A30 '^\[ipaserver\]' "$SCRIPT_DIR/inventory.ini" | grep -qE '^[^#[:space:]]'; then

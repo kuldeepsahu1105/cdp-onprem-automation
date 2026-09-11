@@ -131,6 +131,7 @@ Place files on the Jenkins agent once (e.g. under `ansible-playbooks/` in the re
 | `build-summary.txt` | Stages, instance counts, inventory |
 | `terraform-*.log` | Terraform apply + summary (full plan omitted from console by default) |
 | `terraform-plan-detail.log` | Full plan when `SHOW_TF_PLAN_OUTPUT=false` (default) |
+| `terraform-init.log` / `terraform-apply.log` | Full init/apply when `OUTPUT_MODE=quiet` |
 | `ansible-*-phaseN.log` | Per-phase Ansible output |
 | `validate-*.log` | Validation output |
 | `inventory.ini`, `*.pem` | Deployment artifacts |
