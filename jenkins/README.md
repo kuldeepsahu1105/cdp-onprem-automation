@@ -146,11 +146,22 @@ License file (optional — CM can use trial):
 
 **PREREQS** and **IDENTITY** never need license or archive creds.
 
+## Email notifications
+
+Success/failure emails (Email Extension plugin) include:
+
+- **SSH private key** (`*.pem`) attached from `jenkins/artifacts/`
+- **`cm-access.txt`** — CM HTTP/HTTPS URL, admin username/password, SSH example
+- Build summary, inventory, and stage logs
+
+Set `NOTIFICATION_EMAIL` or rely on `BUILD_USER_EMAIL`. CM credentials come from `group_vars/all.yml` (and Jenkins `ANSIBLE_GROUP_VARS_YAML` overrides when set).
+
 ## Artifacts
 
 | File | Content |
 |---|---|
 | `build-summary.txt` | Stages, instance counts, inventory |
+| `cm-access.txt` | SSH PEM path, CM URL, CM login (after CM_INSTALL) |
 | `terraform-*.log` | Terraform output |
 | `ansible-*-phaseN.log` | Per-phase Ansible output |
 | `validate-*.log` | Validation output |
