@@ -47,9 +47,9 @@ sg_name_suffix: pvc_cluster_sg
 
 # New SG (only when create_new_sg: true / Jenkins SG_MODE=CREATE_NEW)
 # sg_name: development-pvc_cluster_sg
-# allow_all: true
-# allowed_cidrs: '["0.0.0.0/0"]'
-# allowed_ports: '[0]'
+allow_all: false
+allowed_cidrs: '["137.83.231.109/32", "137.83.231.11/32", "208.127.31.110/32", "208.127.31.11/32", "139.180.248.227/32", "54.254.32.236/32"]'
+allowed_ports: '[22, 443, 80, 7180, 7183, 7182]'
 
 # cldr_eip_name: development-cldr-mngr-eip
 
