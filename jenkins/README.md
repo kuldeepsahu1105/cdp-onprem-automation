@@ -114,15 +114,33 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `TFVARS_FILE` | Relative config path (auto-detect if empty) |
 | `GIT_BRANCH` | Branch to checkout |
 | `NOTIFICATION_EMAIL` | Email recipient |
+| `ANSIBLE_GROUP_VARS_YAML` | Multiline YAML merged over `group_vars/all.yml` when Ansible stages run (see `jenkins/ansible-group-vars.example.yaml`) |
+| `CM_REPO_USERNAME` | Optional archive.cloudera.com username (empty = skip; no early validation failure) |
+| `CM_REPO_PASSWORD` | Optional archive.cloudera.com password (empty = skip) |
 
-## License and CM archive credentials (agent / Ansible — not Jenkins params)
+## Ansible group_vars override (`ANSIBLE_GROUP_VARS_YAML`)
 
-Jenkins does **not** collect license or Cloudera archive passwords. For **CM_INSTALL** and later, Ansible resolves them automatically from:
+Jenkins `text` parameters render as a **multiline text area** (like an HTML textarea). Paste any keys from `ansible-playbooks/group_vars/all.yml` to override them per build without editing the repo.
 
-1. `ansible-playbooks/*license*` or `license.txt` on the agent (optional — CM can use trial license if missing)
-2. `ansible-playbooks/*info.txt` with `login:` / `password:` lines, **or** `cm_repo_username` / `cm_repo_password` in `group_vars/all.yml`
+- Merged at runtime into `ansible-playbooks/group_vars/all/jenkins_override.yml` (not committed).
+- Comments-only or empty content is ignored.
+- YAML syntax is checked only when Ansible stages are selected and the textarea contains real `key: value` lines.
 
-Place files on the Jenkins agent once (e.g. under `ansible-playbooks/` in the repo checkout path holautosa persists, or copy before CM phase). **PREREQS** and **IDENTITY** never need license or archive creds.
+## License and CM archive credentials
+
+For **CM_INSTALL** and later, Ansible resolves archive credentials from (first match wins):
+
+1. Jenkins `CM_REPO_USERNAME` + `CM_REPO_PASSWORD` (both must be set; either empty is ignored)
+2. `ansible-playbooks/*info.txt` with `login:` / `password:` lines on the agent
+3. `cm_repo_username` / `cm_repo_password` in `group_vars/all.yml` or `ANSIBLE_GROUP_VARS_YAML`
+
+Optional Jenkins CM creds do **not** fail validation or prereq stages when left empty.
+
+License file (optional — CM can use trial):
+
+1. `ansible-playbooks/*license*` or `license.txt` on the agent
+
+**PREREQS** and **IDENTITY** never need license or archive creds.
 
 ## Artifacts
 

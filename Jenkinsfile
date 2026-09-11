@@ -68,6 +68,15 @@ pipeline {
     string(name: 'TFVARS_FILE', defaultValue: '.tfvars.yaml', description: 'Config file path relative to repo root (empty = auto-detect)')
     string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to checkout (no spaces or ..)')
     string(name: 'NOTIFICATION_EMAIL', defaultValue: '', description: 'Email recipient (defaults to BUILD_USER_EMAIL; validated when set)')
+    text(
+      name: 'ANSIBLE_GROUP_VARS_YAML',
+      defaultValue: '''# Optional YAML merged over ansible-playbooks/group_vars/all.yml
+# See jenkins/ansible-group-vars.example.yaml for examples.
+''',
+      description: 'Ansible group_vars overrides (multiline). Merged last over all.yml when Ansible stages run. Leave comments-only or empty to skip.'
+    )
+    string(name: 'CM_REPO_USERNAME', defaultValue: '', description: 'Optional archive.cloudera.com username (empty = all.yml, *info.txt, or skip)')
+    password(name: 'CM_REPO_PASSWORD', description: 'Optional archive.cloudera.com password (empty = all.yml, *info.txt, or skip)')
   }
 
   options {
@@ -242,12 +251,16 @@ pipeline {
       steps {
         script {
           def phases = env.ANSIBLE_PHASES.split(',').findAll { it?.trim() }
+          writeAnsibleGroupVarsFragmentFile()
           for (phase in phases) {
             echo "Running Ansible deploy phase ${phase}"
             sh """
               set -euo pipefail
               export DEPLOY_PHASE='${phase}'
               export REQUIRE_INVENTORY=true
+              export ANSIBLE_GROUP_VARS_FILE='${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml'
+              export CM_REPO_USERNAME='${shellEscape(params.CM_REPO_USERNAME?.trim())}'
+              export CM_REPO_PASSWORD='${shellEscape(params.CM_REPO_PASSWORD)}'
               ./jenkins/scripts/run-ansible.sh
             """
           }
@@ -464,6 +477,32 @@ def validationFail(String message) {
   error "${RED_BOLD}❗ ERROR: ${message} ❗${RESET}"
 }
 
+def shellEscape(String value) {
+  if (value == null) {
+    return ''
+  }
+  return value.toString().replace('\\', '\\\\').replace("'", "'\\''")
+}
+
+def writeAnsibleGroupVarsFragmentFile() {
+  def fragment = params.ANSIBLE_GROUP_VARS_YAML?.toString() ?: ''
+  writeFile file: "${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml", text: fragment
+}
+
+def ansibleGroupVarsYamlHasKeys(String yamlText) {
+  if (!yamlText?.trim()) {
+    return false
+  }
+  def stripped = yamlText.replaceAll('(?m)^\\s*#.*$', '').trim()
+  if (!stripped) {
+    return false
+  }
+  return stripped.split('\n').any { line ->
+    def t = line.trim()
+    t && !t.startsWith('#') && t.contains(':')
+  }
+}
+
 def validatePipelineInputs() {
   if (isRefreshRequested()) {
     echo 'REFRESH_JENKINSFILE=YES — skipping input validation.'
@@ -564,6 +603,38 @@ def validatePipelineInputs() {
   def checks = params.VALIDATION_CHECKS?.toString() ?: ''
   if (email && checks.contains('EMAIL_FORMAT') && !email.matches(emailRegex)) {
     validationFail("NOTIFICATION_EMAIL '${email}' is not a valid email address.")
+  }
+
+  def ansibleStages = ['PREREQS', 'IDENTITY', 'CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL']
+  if (stages.any { it in ansibleStages } && ansibleGroupVarsYamlHasKeys(params.ANSIBLE_GROUP_VARS_YAML?.toString())) {
+    writeFile file: "${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-precheck.yaml", text: params.ANSIBLE_GROUP_VARS_YAML?.toString() ?: ''
+    def yamlCheck = sh(
+      script: '''
+        set -euo pipefail
+        python3 - <<'PY'
+import os, sys
+try:
+    import yaml
+except ImportError:
+    sys.exit(0)
+path = os.environ.get("ANSIBLE_GROUP_VARS_FILE", "")
+if not path or not os.path.isfile(path):
+    sys.exit(0)
+with open(path, encoding="utf-8") as fh:
+    data = yaml.safe_load(fh)
+if data is not None and not isinstance(data, dict):
+    print("ANSIBLE_GROUP_VARS_YAML must be a YAML mapping (key: value), not a list or scalar.", file=sys.stderr)
+    sys.exit(1)
+PY
+      ''',
+      returnStatus: true,
+      env: [
+        ANSIBLE_GROUP_VARS_FILE: "${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-precheck.yaml",
+      ],
+    )
+    if (yamlCheck != 0) {
+      validationFail('ANSIBLE_GROUP_VARS_YAML is not valid YAML mapping — fix syntax or leave empty.')
+    }
   }
 
   if (stages.contains('ECS_INSTALL') && !stages.contains('CDH_BASE') && !stages.contains('TERRAFORM')) {

@@ -31,6 +31,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$REPO_ROOT/scripts/lib/portable.sh"
 # shellcheck source=../scripts/lib/ansible_env.sh
 source "$REPO_ROOT/scripts/lib/ansible_env.sh"
+# shellcheck source=../scripts/lib/ansible_group_vars_overrides.sh
+source "$REPO_ROOT/scripts/lib/ansible_group_vars_overrides.sh"
 # shellcheck source=../scripts/lib/ui.sh
 source "$REPO_ROOT/scripts/lib/ui.sh"
 # shellcheck source=../scripts/lib/wrapper_info.sh
@@ -97,6 +99,7 @@ run_playbook() {
 }
 
 cd "$SCRIPT_DIR"
+apply_ansible_group_vars_overrides "$REPO_ROOT" "$SCRIPT_DIR"
 
 if [[ "${PVC_SETUP_FROM_WRAPPER:-0}" == "1" ]]; then
   ui_subsection "Playbook execution (pvc_setup.sh)" "📜"
