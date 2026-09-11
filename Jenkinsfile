@@ -626,9 +626,10 @@ def validatePipelineInputs() {
       validationFail("CM_INFO_FILE must not contain '..' (got '${infoPath}').")
     }
     if (!licensePath) {
-      echo 'WARN: LICENSE_FILE not set — CM/CDH/ECS stages require a license (*license* in ansible-playbooks/ or LICENSE_FILE param).'
+      echo 'WARN: LICENSE_FILE not set — required for CM_INSTALL/CDH_BASE/ECS_INSTALL (not for PREREQS/IDENTITY alone).'
     }
-    def hasCmCreds = infoPath || params.CM_REPO_USERNAME?.trim() || params.CM_REPO_CREDENTIALS_ID?.trim() || params.CM_REPO_PASSWORD?.trim()
+    // Do not read params.CM_REPO_PASSWORD here — Jenkins blocks password params outside withCredentials.
+    def hasCmCreds = infoPath || params.CM_REPO_USERNAME?.trim() || params.CM_REPO_CREDENTIALS_ID?.trim()
     if (!hasCmCreds) {
       echo 'WARN: No CM archive credentials — set CM_INFO_FILE, CM_REPO_USERNAME + CM_REPO_CREDENTIALS_ID, or *info.txt in ansible-playbooks/ for CM_INSTALL+.'
     }
