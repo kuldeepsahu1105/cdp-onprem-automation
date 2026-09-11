@@ -40,5 +40,9 @@ for info in "$REPO_ROOT"/*info.txt "$REPO_ROOT/ansible-playbooks"/*info.txt; do
   [[ -f "$info" ]] && copy_if_exists "$info"
 done
 
+if [[ -x "$REPO_ROOT/jenkins/scripts/build-cm-access-info.sh" ]]; then
+  bash "$REPO_ROOT/jenkins/scripts/build-cm-access-info.sh" || log "WARN: cm-access.txt not generated"
+fi
+
 log "Artifacts collected in $OUT_DIR"
 ls -la "$OUT_DIR"

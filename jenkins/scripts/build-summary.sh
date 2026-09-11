@@ -67,6 +67,12 @@ INVENTORY="$REPO_ROOT/ansible-playbooks/inventory.ini"
     echo "Inventory: not generated"
   fi
   echo ""
+  if [[ -f "$OUT_DIR/cm-access.txt" ]]; then
+    echo "SSH / Cloudera Manager access:"
+    echo "------------------------------"
+    cat "$OUT_DIR/cm-access.txt"
+    echo ""
+  fi
   echo "Artifacts directory: $OUT_DIR"
   ls -la "$OUT_DIR" 2>/dev/null || true
 } > "$SUMMARY"
