@@ -29,5 +29,5 @@ if ! command -v ansible-playbook >/dev/null 2>&1; then
   source "$REPO_ROOT/jenkins/scripts/ensure-ansible.sh"
 fi
 set -o pipefail
-run_as_credentials_user bash ./clone_and_run_pvc_automation.sh 2>&1 | tee -a "$LOG_FILE"
+./clone_and_run_pvc_automation.sh 2>&1 | tee -a "$LOG_FILE"
 log "Ansible stage completed"

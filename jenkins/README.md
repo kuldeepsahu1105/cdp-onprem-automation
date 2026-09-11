@@ -134,7 +134,7 @@ By default the pipeline reads AWS credentials from **`/home/holautosa/.aws/`**:
 - `/home/holautosa/.aws/credentials`
 - `/home/holautosa/.aws/config`
 
-Jenkins-injected `AWS_ACCESS_KEY_ID` env vars are ignored in the pipeline shell (cleared in-process only; no files deleted). Commands run as `holautosa` via `sudo` when available.
+Jenkins-injected `AWS_ACCESS_KEY_ID` env vars are ignored in the pipeline shell (cleared in-process only; no files deleted). **Terraform and Ansible run as the `jenkins` user** (workspace owner) with holautosa's AWS credentials loaded via env — not as holautosa (avoids permission errors on `.terraform`).
 
 Set **AWS_USE_INSTANCE_ROLE=true** only to use the EC2 IAM role instead of holautosa's `~/.aws`.
 

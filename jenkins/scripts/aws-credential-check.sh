@@ -76,8 +76,16 @@ aws_verify_caller_identity() {
 
   apply_credentials_user || return 1
 
-  if output="$(run_as_credentials_user aws sts get-caller-identity 2>&1)"; then
+  if output="$(aws sts get-caller-identity 2>&1)"; then
     aws_cred_log "OK AWS identity (holautosa ~/.aws): $(echo "$output" | jq -c '{Account, Arn, UserId}' 2>/dev/null || echo "$output" | head -1)"
+    return 0
+  fi
+  err="$output"
+
+  # Fallback: verify via sudo when jenkins cannot read holautosa creds directly
+  if output="$(run_as_credentials_user aws sts get-caller-identity 2>&1)"; then
+    aws_cred_log "OK AWS identity (holautosa via sudo): $(echo "$output" | jq -c '{Account, Arn, UserId}' 2>/dev/null || echo "$output" | head -1)"
+    aws_cred_log "WARN: grant jenkins read on /home/holautosa/.aws/credentials to avoid sudo for AWS"
     return 0
   fi
   err="$output"

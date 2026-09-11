@@ -18,7 +18,7 @@ export DRY_RUN="${DRY_RUN:-false}"
 LOG_FILE="$LOG_DIR/terraform-${BUILD_NUMBER:-local}.log"
 log() { printf '[terraform] %s\n' "$*" | tee -a "$LOG_FILE"; }
 
-log "Starting clone_and_run_terraform.sh (DRY_RUN=${DRY_RUN}, AWS creds=${AWS_SHARED_CREDENTIALS_FILE})"
+log "Starting clone_and_run_terraform.sh (DRY_RUN=${DRY_RUN}, AWS creds=${AWS_SHARED_CREDENTIALS_FILE}, user=$(id -un))"
 set -o pipefail
-run_as_credentials_user bash ./clone_and_run_terraform.sh 2>&1 | tee -a "$LOG_FILE"
+./clone_and_run_terraform.sh 2>&1 | tee -a "$LOG_FILE"
 log "Terraform stage completed"

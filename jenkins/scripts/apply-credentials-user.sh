@@ -14,8 +14,8 @@ apply_credentials_user() {
   export CREDENTIALS_USER="$user"
   export CREDENTIALS_HOME="$home"
 
-  if [[ ! -f "${home}/.aws/credentials" ]]; then
-    printf '[credentials-user] ERROR: missing %s/.aws/credentials\n' "$home" >&2
+  if [[ ! -r "${home}/.aws/credentials" ]]; then
+    printf '[credentials-user] ERROR: cannot read %s/.aws/credentials as user %s (grant read or sudo to holautosa for aws only)\n' "$home" "$(id -un)" >&2
     return 1
   fi
 
