@@ -117,6 +117,7 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `ANSIBLE_GROUP_VARS_YAML` | Ansible-only YAML overrides (allowed keys in `jenkins/ansible-group-vars-allowed-keys.yaml`) — not full `all.yml` |
 | `CM_REPO_USERNAME` | Optional archive.cloudera.com username (empty = skip; no early validation failure) |
 | `CM_REPO_PASSWORD` | Optional archive.cloudera.com password (empty = skip) |
+| `CM_LICENSE_CONTENT` | Optional multiline Cloudera license file content when no `*license*` file on the agent (empty = trial or agent file) |
 
 ## Ansible group_vars override (`ANSIBLE_GROUP_VARS_YAML`)
 
@@ -140,7 +141,8 @@ Optional Jenkins CM creds do **not** fail validation or prereq stages when left 
 
 License file (optional — CM can use trial):
 
-1. `ansible-playbooks/*license*` or `license.txt` on the agent
+1. Jenkins `CM_LICENSE_CONTENT` textarea (written to `jenkins/artifacts/cm-license.txt` at runtime)
+2. `ansible-playbooks/*license*` or `license.txt` on the agent
 
 **PREREQS** and **IDENTITY** never need license or archive creds.
 

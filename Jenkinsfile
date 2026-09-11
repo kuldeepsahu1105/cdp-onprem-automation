@@ -80,6 +80,11 @@ pipeline {
     )
     string(name: 'CM_REPO_USERNAME', defaultValue: '', description: 'Optional archive.cloudera.com username (empty = all.yml, *info.txt, or skip)')
     password(name: 'CM_REPO_PASSWORD', description: 'Optional archive.cloudera.com password (empty = all.yml, *info.txt, or skip)')
+    text(
+      name: 'CM_LICENSE_CONTENT',
+      defaultValue: '',
+      description: 'Optional Cloudera license file content (multiline). Used when no *license* file on agent. Empty = trial or existing file on agent.'
+    )
   }
 
   options {
@@ -255,6 +260,7 @@ pipeline {
         script {
           def phases = env.ANSIBLE_PHASES.split(',').findAll { it?.trim() }
           writeAnsibleGroupVarsFragmentFile()
+          def licenseFile = writeCmLicenseContentFile()
           if (ansibleGroupVarsYamlHasKeys(params.ANSIBLE_GROUP_VARS_YAML?.toString())) {
             def yamlCheck = sh(
               script: '''
@@ -280,6 +286,8 @@ pipeline {
               export ANSIBLE_GROUP_VARS_FILE='${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml'
               export CM_REPO_USERNAME='${shellEscape(params.CM_REPO_USERNAME?.trim())}'
               export CM_REPO_PASSWORD='${shellEscape(params.CM_REPO_PASSWORD)}'
+              export LICENSE_FILE='${licenseFile ? shellEscape(licenseFile) : ''}'
+              export CM_LICENSE_CONTENT_FILE='${licenseFile ? shellEscape(licenseFile) : ''}'
               ./jenkins/scripts/run-ansible.sh
             """
           }
@@ -506,6 +514,27 @@ def shellEscape(String value) {
 def writeAnsibleGroupVarsFragmentFile() {
   def fragment = params.ANSIBLE_GROUP_VARS_YAML?.toString() ?: ''
   writeFile file: "${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml", text: fragment
+}
+
+def cmLicenseContentProvided(String licenseText) {
+  if (!licenseText?.trim()) {
+    return false
+  }
+  return licenseText.split('\n').any { line ->
+    def t = line.trim()
+    t && !t.startsWith('#')
+  }
+}
+
+def writeCmLicenseContentFile() {
+  def content = params.CM_LICENSE_CONTENT?.toString() ?: ''
+  if (!cmLicenseContentProvided(content)) {
+    return null
+  }
+  def path = "${env.WORKSPACE}/jenkins/artifacts/cm-license.txt"
+  writeFile file: path, text: content
+  echo 'CM license content provided via Jenkins parameter (written to jenkins/artifacts/cm-license.txt).'
+  return path
 }
 
 def ansibleGroupVarsYamlHasKeys(String yamlText) {

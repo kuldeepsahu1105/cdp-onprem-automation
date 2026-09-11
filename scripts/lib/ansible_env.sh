@@ -189,10 +189,40 @@ resolve_private_key() {
   return 1
 }
 
+# Write CM license from Jenkins/CLI when no *license* file exists on the agent.
+# Sources (first match): LICENSE_FILE, CM_LICENSE_CONTENT_FILE, CM_LICENSE_CONTENT env.
+materialize_cm_license_content() {
+  local ansible_dir="${1:-.}"
+
+  if [[ -n "${LICENSE_FILE:-}" && -f "${LICENSE_FILE}" ]]; then
+    return 0
+  fi
+
+  local src_file="${CM_LICENSE_CONTENT_FILE:-}"
+  if [[ -n "$src_file" && -f "$src_file" ]]; then
+    export LICENSE_FILE="$src_file"
+    printf '[license] Using license file from CM_LICENSE_CONTENT_FILE=%s\n' "$LICENSE_FILE"
+    return 0
+  fi
+
+  local content="${CM_LICENSE_CONTENT:-}"
+  if [[ -z "${content//[[:space:]]/}" ]]; then
+    return 0
+  fi
+
+  local dest="${ansible_dir}/license.txt"
+  printf '%s' "$content" > "$dest"
+  chmod 600 "$dest" 2>/dev/null || true
+  export LICENSE_FILE="$dest"
+  printf '[license] Wrote license from CM_LICENSE_CONTENT to %s\n' "$dest"
+}
+
 resolve_license_file() {
   local ansible_dir="${1:-.}"
   local -a licenses=()
   local license=""
+
+  materialize_cm_license_content "$ansible_dir"
 
   if [[ -n "${LICENSE_FILE:-}" && -f "${LICENSE_FILE}" ]]; then
     printf '%s' "${LICENSE_FILE}"
