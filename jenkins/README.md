@@ -129,14 +129,17 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 
 ### AWS credentials (`holautosa`)
 
-By default the pipeline reads AWS credentials from **`/home/holautosa/.aws/`**:
+Reads from **`/home/holautosa/.aws/`**. If the `jenkins` user cannot read those files directly, the pipeline stages copies into `jenkins/artifacts/` using `sudo -u holautosa cat` (holautosa files are never modified).
 
-- `/home/holautosa/.aws/credentials`
-- `/home/holautosa/.aws/config`
+**Required sudoers** (on the Jenkins agent):
 
-Jenkins-injected `AWS_ACCESS_KEY_ID` env vars are ignored in the pipeline shell (cleared in-process only; no files deleted). **Terraform and Ansible run as the `jenkins` user** (workspace owner) with holautosa's AWS credentials loaded via env — not as holautosa (avoids permission errors on `.terraform`).
+```
+jenkins ALL=(holautosa) NOPASSWD: ALL
+```
 
-Set **AWS_USE_INSTANCE_ROLE=true** only to use the EC2 IAM role instead of holautosa's `~/.aws`.
+Terraform/Ansible run as **`jenkins`** (workspace owner) with staged or direct holautosa AWS credentials.
+
+Set **AWS_USE_INSTANCE_ROLE=true** only to use the EC2 IAM role instead of holautosa `~/.aws`.
 
 ### Credentials user (`holautosa`)
 
