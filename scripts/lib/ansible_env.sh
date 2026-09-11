@@ -300,13 +300,6 @@ ansible_configure_output() {
       ;;
   esac
   export PY_COLORS="${PY_COLORS:-1}"
-  export ANSIBLE_COLORS_OK="${ANSIBLE_COLORS_OK:-bright green}"
-  export ANSIBLE_COLORS_CHANGED="${ANSIBLE_COLORS_CHANGED:-bright yellow}"
-  export ANSIBLE_COLORS_ERROR="${ANSIBLE_COLORS_ERROR:-bright red}"
-  export ANSIBLE_COLORS_SKIP="${ANSIBLE_COLORS_SKIP:-bright cyan}"
-  export ANSIBLE_COLORS_UNREACHABLE="${ANSIBLE_COLORS_UNREACHABLE:-bright red}"
-  export ANSIBLE_COLORS_VERBOSE="${ANSIBLE_COLORS_VERBOSE:-bright blue}"
-  export ANSIBLE_COLORS_WARN="${ANSIBLE_COLORS_WARN:-bright purple}"
 }
 
 ansible_extra_args() {
