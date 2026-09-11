@@ -1,7 +1,18 @@
-# Use existing security group if not creating a new one
-data "aws_security_group" "existing_sg" {
-  count = var.create_new_sg ? 0 : 1
+# Use existing security group if not creating a new one (by sg- ID or name in VPC).
+locals {
+  use_existing_sg_by_id = !var.create_new_sg && can(regex("^sg-", var.existing_sg))
+  use_existing_sg_by_name = !var.create_new_sg && !can(regex("^sg-", var.existing_sg)) && var.existing_sg != ""
+}
+
+data "aws_security_group" "existing_sg_by_id" {
+  count = local.use_existing_sg_by_id ? 1 : 0
   id    = var.existing_sg
+}
+
+data "aws_security_group" "existing_sg_by_name" {
+  count  = local.use_existing_sg_by_name ? 1 : 0
+  name   = var.existing_sg
+  vpc_id = var.vpc_id
 }
 
 resource "aws_security_group" "vpc_sg" {

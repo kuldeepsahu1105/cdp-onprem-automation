@@ -176,6 +176,18 @@ sudo -u holautosa aws sts get-caller-identity
 sudo -u jenkins sudo -n -u holautosa cat /home/holautosa/.aws/credentials | head -1
 ```
 
+### `no matching EC2 Key Pair found`
+
+**Cause:** `existing_keypair_name` in tfvars does not exist in the target AWS account/region.
+
+**Fix:** List key pairs (`aws ec2 describe-key-pairs --region ap-southeast-1`) and update `.tfvars.yaml`, or set `create_keypair: true` to generate a new pair.
+
+### `InvalidGroupId.Malformed` / security group name
+
+**Cause:** Older Terraform module only accepted `sg-...` IDs; tfvars often use a **group name** (e.g. `testing-pvc_cluster_sg`).
+
+**Fix:** Latest `main` resolves SG by name or ID. Rebuild on latest `main`, or set `existing_sg_name` to a valid `sg-xxxxxxxx` ID.
+
 ### `InvalidClientTokenId`
 
 **Fix:** Ensure `/home/holautosa/.aws/credentials` is valid. Keep **AWS_USE_INSTANCE_ROLE** unchecked (default) when using holautosa creds.

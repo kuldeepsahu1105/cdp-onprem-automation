@@ -29,7 +29,9 @@ create_new_sg: false
 create_keypair: false
 create_eip: true
 
+# SG: name in default VPC or sg-xxxxxxxx ID (see terraform-code/.../terraform.tfvars)
 existing_sg_name: testing-pvc_cluster_sg
+# Key pair must exist in AWS_REGION when create_keypair: false
 existing_keypair_name: kuldeep-pvc-session
 
 # New VPC (only when create_vpc: true)

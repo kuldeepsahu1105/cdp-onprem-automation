@@ -70,6 +70,15 @@ if should_validate "${VALIDATE_TFVARS:-true}" "TFVARS" && [[ -n "${TFVARS_FILE:-
   [[ -n "${AWS_REGION:-}" ]] || fail "AWS_REGION not set after loading tfvars"
   [[ -n "${OWNER:-}" ]] || fail "OWNER not set after loading tfvars (set in tfvars or Jenkins OWNER parameter)"
   log "OK tfvars loaded (environment=${ENVIRONMENT}, region=${AWS_REGION}, owner=${OWNER})"
+
+  if is_enabled "${REQUIRE_TERRAFORM:-false}"; then
+    # shellcheck source=jenkins/scripts/aws-credential-check.sh
+    source "$REPO_ROOT/jenkins/scripts/aws-credential-check.sh"
+    aws_apply_instance_role_if_enabled
+    # shellcheck source=jenkins/scripts/validate-aws-resources.sh
+    source "$REPO_ROOT/jenkins/scripts/validate-aws-resources.sh"
+    validate_aws_resources | tee -a "$LOG_FILE" || fail "AWS resource pre-check failed — fix key pair or security group in tfvars"
+  fi
 fi
 
 INVENTORY="${REPO_ROOT}/ansible-playbooks/inventory.ini"

@@ -12,7 +12,7 @@ variable "create_new_sg" {
 }
 
 variable "existing_sg" {
-  description = "The name of the existing security group (if using an existing one)"
+  description = "Existing security group: sg-xxxxxxxx ID or name in the target VPC"
   type        = string
   default     = ""
 }
