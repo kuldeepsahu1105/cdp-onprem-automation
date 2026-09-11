@@ -33,7 +33,7 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 | `TFVARS_FILE` | `.tfvars.yaml` |
 | `GIT_BRANCH` | `main` |
 | `CREDENTIALS_USER` | `holautosa` (uses `/home/holautosa/.aws` and `~/.ssh` read-only) |
-| `AWS_USE_INSTANCE_ROLE` | `false` (set `true` to prefer EC2 IAM role over holautosa creds) |
+| `USE_CREDENTIALS_USER_AWS` | `true` (checked — holautosa `~/.aws`; uncheck for EC2 IAM role via IMDS) |
 | Instance counts/types | Same as `.tfvars.yaml` instance_groups |
 
 If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALIDATE,TERRAFORM`.
@@ -139,7 +139,7 @@ jenkins ALL=(holautosa) NOPASSWD: ALL
 
 Terraform/Ansible run as **`jenkins`** (workspace owner) with staged or direct holautosa AWS credentials.
 
-Set **AWS_USE_INSTANCE_ROLE=true** only to use the EC2 IAM role instead of holautosa `~/.aws`.
+Uncheck **USE_CREDENTIALS_USER_AWS** only to use the EC2 IAM role instead of holautosa `~/.aws`.
 
 ### Credentials user (`holautosa`)
 
@@ -167,7 +167,7 @@ Set **AWS_USE_INSTANCE_ROLE=true** only when you want EC2 IAM role (IMDS) instea
    jenkins ALL=(holautosa) NOPASSWD: ALL
    ```
 
-3. Or enable **AWS_USE_INSTANCE_ROLE=true** to use the EC2 IAM role instead of holautosa `~/.aws`.
+3. Or uncheck **USE_CREDENTIALS_USER_AWS** to use the EC2 IAM role instead of holautosa `~/.aws`.
 
 **Verify:**
 
@@ -222,7 +222,7 @@ keypair_name_suffix: pvc-new-keypair
 
 ### `InvalidClientTokenId`
 
-**Fix:** Ensure `/home/holautosa/.aws/credentials` is valid. Keep **AWS_USE_INSTANCE_ROLE** unchecked (default) when using holautosa creds.
+**Fix:** Ensure `/home/holautosa/.aws/credentials` is valid. Keep **USE_CREDENTIALS_USER_AWS** checked (default) when using holautosa creds.
 
 ## Local testing
 

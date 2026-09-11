@@ -24,7 +24,7 @@ pipeline {
       description: 'Validation checks when VALIDATE stage is selected (INVENTORY auto-enabled for Ansible-only runs)'
     )
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
-    booleanParam(name: 'AWS_USE_INSTANCE_ROLE', defaultValue: false, description: 'Use EC2 instance IAM role via IMDS (default off — uses CREDENTIALS_USER ~/.aws instead)')
+    booleanParam(name: 'USE_CREDENTIALS_USER_AWS', defaultValue: true, description: 'Use CREDENTIALS_USER ~/.aws credentials (default on — uncheck to use EC2 instance IAM role via IMDS)')
     string(name: 'CREDENTIALS_USER', defaultValue: 'holautosa', description: 'OS user whose ~/.aws and ~/.ssh credentials to use (read-only; files not modified)')
     choice(
       name: 'VPC_MODE',
@@ -116,7 +116,6 @@ pipeline {
     JENKINS_CLDR_EIP_NAME = "${params.CLDR_EIP_NAME?.trim() ?: ''}"
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
-    AWS_USE_INSTANCE_ROLE = "${params.AWS_USE_INSTANCE_ROLE}"
     CREDENTIALS_USER = "${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}"
     PIPELINE_STAGES = "${params.PIPELINE_STAGES?.trim() ?: ''}"
     VALIDATION_CHECKS = "${params.VALIDATION_CHECKS?.trim() ?: ''}"
@@ -151,6 +150,8 @@ pipeline {
     stage('Resolve Stages') {
       steps {
         script {
+          env.USE_CREDENTIALS_USER_AWS = credentialsUserAwsEnabled() ? 'true' : 'false'
+          env.AWS_USE_INSTANCE_ROLE = credentialsUserAwsEnabled() ? 'false' : 'true'
           def cfg = resolvePipelineStages(params.PIPELINE_STAGES, params.VALIDATION_CHECKS)
           env.RUN_VALIDATE = cfg.runValidate
           env.RUN_TERRAFORM = cfg.runTerraform
@@ -164,6 +165,7 @@ pipeline {
           env.REQUIRE_TERRAFORM = cfg.runTerraform
           echo "Resolved stages: validate=${cfg.runValidate}, terraform=${cfg.runTerraform}, ansible=${cfg.runAnsible}, phases=${cfg.ansiblePhases}"
           echo "Validation checks: ${cfg.validationChecks}"
+          echo "AWS creds: USE_CREDENTIALS_USER_AWS=${env.USE_CREDENTIALS_USER_AWS}, AWS_USE_INSTANCE_ROLE=${env.AWS_USE_INSTANCE_ROLE}"
         }
       }
     }
@@ -345,6 +347,28 @@ def defaultPipelineStages() {
 
 def defaultValidationChecks() {
   return 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY'
+}
+
+def isParamEnabled(def value) {
+  if (value == null) {
+    return false
+  }
+  if (value instanceof Boolean) {
+    return value
+  }
+  def text = value.toString().trim()
+  if (!text) {
+    return false
+  }
+  return text ==~ /(?i)(Y|YES|T|TRUE|ON|1)/
+}
+
+def credentialsUserAwsEnabled() {
+  if (params.containsKey('USE_CREDENTIALS_USER_AWS')) {
+    return isParamEnabled(params.USE_CREDENTIALS_USER_AWS)
+  }
+  // Legacy jobs before parameter rename: AWS_USE_INSTANCE_ROLE inverted
+  return !isParamEnabled(params.AWS_USE_INSTANCE_ROLE)
 }
 
 def isRefreshRequested() {
