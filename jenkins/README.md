@@ -114,6 +114,45 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `TFVARS_FILE` | Relative config path (auto-detect if empty) |
 | `GIT_BRANCH` | Branch to checkout |
 | `NOTIFICATION_EMAIL` | Email recipient |
+| `LICENSE_FILE` | Cloudera license file path (workspace-relative or absolute on agent). Staged to `ansible-playbooks/license.txt` before Ansible |
+| `CM_INFO_FILE` | CM archive `*info.txt` path (`login:` / `password:` lines). Staged into `ansible-playbooks/` |
+| `CM_REPO_USERNAME` | Archive.cloudera.com username (alternative to `CM_INFO_FILE`) |
+| `CM_REPO_CREDENTIALS_ID` | Jenkins **Username with password** credential ID for archive password (preferred) |
+| `CM_REPO_PASSWORD` | Archive password fallback when credential ID is empty (masked in UI; prefer credential ID) |
+
+## License and CM archive credentials (Jenkins → Ansible)
+
+Ansible phases **3+** (`CM_INSTALL`, `CDH_BASE`, `ECS_INSTALL`) require:
+
+1. **Cloudera license file** — set `LICENSE_FILE` or place `*license*` in `ansible-playbooks/`
+2. **CM archive credentials** — use **one** of:
+   - `CM_INFO_FILE` pointing to an `*info.txt` file in the workspace
+   - `CM_REPO_USERNAME` + `CM_REPO_CREDENTIALS_ID` (Jenkins credential)
+   - `CM_REPO_USERNAME` + `CM_REPO_PASSWORD` (param fallback)
+   - Pre-placed `*info.txt` in `ansible-playbooks/` or values in `group_vars/all.yml`
+
+Before each Ansible phase, `jenkins/scripts/stage-ansible-secrets.sh` copies `LICENSE_FILE` / `CM_INFO_FILE` into `ansible-playbooks/` (mode `600`) and exports env vars consumed by `scripts/lib/ansible_env.sh` (`resolve_license_file`, `load_cm_repo_credentials`).
+
+### Jenkins UI example (CM install)
+
+1. Upload or copy files onto the agent (or use a prior build artifact), e.g.:
+   - `/home/holautosa/secrets/cloudera-license.txt`
+   - `/home/holautosa/secrets/cm-archive-info.txt`
+2. **Build with Parameters:**
+   - `PIPELINE_STAGES`: `VALIDATE`, `TERRAFORM`, `CM_INSTALL` (include `PREREQS` on first run)
+   - `LICENSE_FILE`: `/home/holautosa/secrets/cloudera-license.txt` (or workspace-relative path)
+   - **Option A — info file:** `CM_INFO_FILE`: `/home/holautosa/secrets/cm-archive-info.txt`
+   - **Option B — Jenkins credential:** create a **Username with password** credential (e.g. `cloudera-archive`), set `CM_REPO_CREDENTIALS_ID=cloudera-archive` and `CM_REPO_USERNAME` if not stored in the credential
+3. Run the job — phase 3 receives staged license + archive login via Ansible extra vars.
+
+`info.txt` format:
+
+```
+login: your-cloudera-account
+password: your-archive-password
+```
+
+Phases 1–2 (`PREREQS`, `IDENTITY`) do not need license or CM archive creds; a warning in logs is expected and harmless.
 
 ## Artifacts
 
@@ -285,6 +324,14 @@ keypair_name_suffix: pvc-new-keypair
 **Preflight:** `jenkins/scripts/ansible-connectivity-preflight.sh` SSH-tests up to five hosts before playbooks run.
 
 **CM credentials warning (phase 1–2):** `No CM archive credentials from env or *info.txt` is expected for `PREREQS` / `IDENTITY` — CM archive login is only required from phase 3 (`CM_INSTALL`) onward.
+
+### Missing license or CM credentials (phase 3+)
+
+| Symptom | Fix |
+|---|---|
+| `No license file found` | Set **LICENSE_FILE** to a valid path, or place `*license*` in `ansible-playbooks/` before the build |
+| CM repo download fails / `Require Cloudera archive credentials` | Set **CM_INFO_FILE**, or **CM_REPO_USERNAME** + **CM_REPO_CREDENTIALS_ID**, or edit `group_vars/all.yml` |
+| `LICENSE_FILE not found` in `[stage-secrets]` | Path must exist on the agent; use absolute path or workspace-relative path without `..` |
 
 ## Local testing
 
