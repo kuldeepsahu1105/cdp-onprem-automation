@@ -68,7 +68,7 @@ pipeline {
     string(name: 'TFVARS_FILE', defaultValue: '.tfvars.yaml', description: 'Config file path relative to repo root (empty = auto-detect)')
     string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to checkout (no spaces or ..)')
     string(name: 'NOTIFICATION_EMAIL', defaultValue: '', description: 'Email recipient (defaults to BUILD_USER_EMAIL; validated when set)')
-    string(name: 'LICENSE_FILE', defaultValue: '', description: 'Cloudera license file path (workspace-relative or absolute on agent). Required for CM_INSTALL+ unless *license* already in ansible-playbooks/')
+    string(name: 'LICENSE_FILE', defaultValue: '', description: 'Cloudera license file path (optional for PREREQS/IDENTITY; required for CM_INSTALL+ unless *license* already in ansible-playbooks/)')
     string(name: 'CM_INFO_FILE', defaultValue: '', description: 'CM archive *info.txt path (login:/password: lines). Alternative to CM_REPO_USERNAME + credential below')
     string(name: 'CM_REPO_USERNAME', defaultValue: '', description: 'Cloudera archive.cloudera.com username (phase 3; use with CM_REPO_CREDENTIALS_ID or CM_REPO_PASSWORD)')
     string(name: 'CM_REPO_CREDENTIALS_ID', defaultValue: '', description: 'Jenkins Username/Password credential ID for archive password (preferred over CM_REPO_PASSWORD param)')

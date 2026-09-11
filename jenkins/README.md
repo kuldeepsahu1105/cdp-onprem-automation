@@ -122,6 +122,8 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 
 ## License and CM archive credentials (Jenkins → Ansible)
 
+**PREREQS** (phase 1) and **IDENTITY** (phase 2) do **not** require a license or CM archive credentials — leave `LICENSE_FILE` / `CM_INFO_FILE` empty for those stages.
+
 Ansible phases **3+** (`CM_INSTALL`, `CDH_BASE`, `ECS_INSTALL`) require:
 
 1. **Cloudera license file** — set `LICENSE_FILE` or place `*license*` in `ansible-playbooks/`
