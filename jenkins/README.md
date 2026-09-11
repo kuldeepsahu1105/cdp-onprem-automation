@@ -154,17 +154,31 @@ If the Jenkins `jenkins` user cannot read holautosa's files, grant read access o
 
 Set **AWS_USE_INSTANCE_ROLE=true** only when you want EC2 IAM role (IMDS) instead of holautosa's `~/.aws`.
 
-### `InvalidClientTokenId`
+### `cannot read /home/holautosa/.aws/credentials`
 
-**Fix:** Ensure `/home/holautosa/.aws/credentials` is valid. Keep **AWS_USE_INSTANCE_ROLE** unchecked (default). Re-run on latest `main`.
+**Cause:** Jenkins checked out an older commit, or the agent lacks read/sudo access to holautosa's `~/.aws`.
 
-**Verify as holautosa:**
+**Fix:**
+
+1. Rebuild on latest `main` (includes sudo staging into `jenkins/artifacts/`).
+2. On the Jenkins agent, add sudoers (files on holautosa are never modified):
+
+   ```
+   jenkins ALL=(holautosa) NOPASSWD: ALL
+   ```
+
+3. Or enable **AWS_USE_INSTANCE_ROLE=true** to use the EC2 IAM role instead of holautosa `~/.aws`.
+
+**Verify:**
 
 ```bash
 sudo -u holautosa aws sts get-caller-identity
+sudo -u jenkins sudo -n -u holautosa cat /home/holautosa/.aws/credentials | head -1
 ```
 
-If Jenkins cannot read holautosa's files, allow passwordless sudo: `jenkins ALL=(holautosa) NOPASSWD: ALL`
+### `InvalidClientTokenId`
+
+**Fix:** Ensure `/home/holautosa/.aws/credentials` is valid. Keep **AWS_USE_INSTANCE_ROLE** unchecked (default) when using holautosa creds.
 
 ## Local testing
 

@@ -49,10 +49,12 @@ aws_export_instance_role_session() {
 
 aws_apply_instance_role_if_enabled() {
   if is_enabled "${AWS_USE_INSTANCE_ROLE:-false}"; then
-    aws_export_instance_role_session || aws_cred_log "WARN: IMDS unavailable — falling back to holautosa ~/.aws"
-    return 0
+    if aws_export_instance_role_session; then
+      return 0
+    fi
+    aws_cred_log "WARN: IMDS unavailable — falling back to holautosa ~/.aws"
   fi
-  apply_credentials_user || return 1
+  apply_credentials_user_aws || return 1
   aws_cred_log "Using holautosa home dir AWS credentials (${AWS_SHARED_CREDENTIALS_FILE})"
   return 0
 }
@@ -74,7 +76,7 @@ aws_verify_caller_identity() {
     return 1
   fi
 
-  apply_credentials_user || return 1
+  apply_credentials_user_aws || return 1
 
   if output="$(aws sts get-caller-identity 2>&1)"; then
     aws_cred_log "OK AWS identity (holautosa ~/.aws): $(echo "$output" | jq -c '{Account, Arn, UserId}' 2>/dev/null || echo "$output" | head -1)"

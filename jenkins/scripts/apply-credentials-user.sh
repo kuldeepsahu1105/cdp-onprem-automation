@@ -3,6 +3,13 @@
 # Does not modify holautosa files — may stage copies into jenkins/artifacts/ when
 # jenkins cannot read /home/holautosa/.aws directly (via sudo -u holautosa cat).
 
+_credentials_is_enabled() {
+  case "${1:-false}" in
+    1|true|yes|TRUE|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 _credentials_stage_dir() {
   local root="${REPO_ROOT:-${WORKSPACE:-.}}"
   printf '%s/jenkins/artifacts' "$root"
@@ -22,10 +29,9 @@ _stage_file_via_sudo() {
   return 0
 }
 
-apply_credentials_user() {
+_resolve_credentials_home() {
   local user="${CREDENTIALS_USER:-holautosa}"
   local home="/home/${user}"
-  local stage_dir creds_dest config_dest key_src
 
   if [[ ! -d "$home" ]]; then
     printf '[credentials-user] ERROR: home not found: %s\n' "$home" >&2
@@ -34,9 +40,24 @@ apply_credentials_user() {
 
   export CREDENTIALS_USER="$user"
   export CREDENTIALS_HOME="$home"
+  return 0
+}
+
+apply_credentials_user_aws() {
+  local user home stage_dir creds_dest config_dest
+
+  _resolve_credentials_home || return 1
+  user="$CREDENTIALS_USER"
+  home="$CREDENTIALS_HOME"
   stage_dir="$(_credentials_stage_dir)"
   creds_dest="${stage_dir}/.holautosa-aws-credentials"
   config_dest="${stage_dir}/.holautosa-aws-config"
+
+  if _credentials_is_enabled "${AWS_USE_INSTANCE_ROLE:-false}"; then
+    unset AWS_SHARED_CREDENTIALS_FILE AWS_CONFIG_FILE
+    printf '[credentials-user] AWS_USE_INSTANCE_ROLE=true — skipping %s/.aws\n' "$home"
+    return 0
+  fi
 
   if [[ -r "${home}/.aws/credentials" ]]; then
     export AWS_SHARED_CREDENTIALS_FILE="${home}/.aws/credentials"
@@ -55,31 +76,48 @@ apply_credentials_user() {
     fi
   else
     printf '[credentials-user] ERROR: cannot read %s/.aws/credentials as %s and sudo to %s failed\n' "$home" "$(id -un)" "$user" >&2
-    printf '[credentials-user] Hint: jenkins ALL=(holautosa) NOPASSWD: ALL in sudoers\n' >&2
+    printf '[credentials-user] Hint: add to sudoers — jenkins ALL=(holautosa) NOPASSWD: ALL\n' >&2
+    printf '[credentials-user] Or set AWS_USE_INSTANCE_ROLE=true to use the EC2 IAM role\n' >&2
     return 1
   fi
 
   # Jenkins AWS_* env overrides credentials file — clear in this shell only.
   unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
   unset AWS_PROFILE AWS_DEFAULT_PROFILE
+  return 0
+}
+
+apply_credentials_user_ssh() {
+  local user home stage_dir key_src key_dest
+
+  _resolve_credentials_home || return 1
+  user="$CREDENTIALS_USER"
+  home="$CREDENTIALS_HOME"
+  stage_dir="$(_credentials_stage_dir)"
 
   for key_src in "${home}/.ssh/id_rsa" "${home}/.ssh/id_ed25519"; do
     if [[ -r "$key_src" ]]; then
       export ANSIBLE_PRIVATE_KEY="$key_src"
       printf '[credentials-user] ANSIBLE_PRIVATE_KEY=%s (direct read)\n' "$ANSIBLE_PRIVATE_KEY"
-      break
+      return 0
     fi
     if [[ -f "$key_src" ]]; then
-      local key_dest="${stage_dir}/.holautosa-ssh-key"
+      key_dest="${stage_dir}/.holautosa-ssh-key"
       if _stage_file_via_sudo "$user" "$key_src" "$key_dest"; then
         export ANSIBLE_PRIVATE_KEY="$key_dest"
         printf '[credentials-user] ANSIBLE_PRIVATE_KEY=%s (staged via sudo)\n' "$ANSIBLE_PRIVATE_KEY"
-        break
+        return 0
       fi
     fi
   done
 
+  printf '[credentials-user] WARN: no SSH key found under %s/.ssh (Ansible may fail)\n' "$home" >&2
   return 0
+}
+
+apply_credentials_user() {
+  apply_credentials_user_aws || return 1
+  apply_credentials_user_ssh
 }
 
 # Run a command as CREDENTIALS_USER when passwordless sudo is available.

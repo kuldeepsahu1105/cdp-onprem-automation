@@ -161,9 +161,6 @@ pipeline {
           export REQUIRE_TERRAFORM="${REQUIRE_TERRAFORM:-false}"
           export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-false}"
           export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
-          # shellcheck source=jenkins/scripts/apply-credentials-user.sh
-          source ./jenkins/scripts/apply-credentials-user.sh
-          apply_credentials_user
           ./jenkins/scripts/validate-prereqs.sh
         '''
       }

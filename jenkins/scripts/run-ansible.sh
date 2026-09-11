@@ -9,9 +9,10 @@ mkdir -p "$LOG_DIR"
 cd "$REPO_ROOT"
 export PATH="${HOME}/.local/bin:${PATH}"
 export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
-# shellcheck source=jenkins/scripts/apply-credentials-user.sh
-source "$REPO_ROOT/jenkins/scripts/apply-credentials-user.sh"
-apply_credentials_user
+# shellcheck source=jenkins/scripts/aws-credential-check.sh
+source "$REPO_ROOT/jenkins/scripts/aws-credential-check.sh"
+aws_apply_instance_role_if_enabled
+apply_credentials_user_ssh
 
 export TFVARS_FILE="${TFVARS_FILE:-.tfvars.yaml}"
 export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
