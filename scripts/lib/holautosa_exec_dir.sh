@@ -69,6 +69,9 @@ prepare_holautosa_workdir() {
   export HOL_ANSIBLE_STATE_DIR="${env_dir}/ansible"
   export TF_STATE_BACKEND=local
 
+  # Legacy builds persisted .terraform/ here; remove so restore never copies it.
+  _holautosa_clean_legacy_terraform_cache "$HOL_TERRAFORM_STATE_DIR"
+
   printf '[holautosa-dir] Persistent state: %s (writable=%s)\n' "$env_dir" "$([[ -w "$env_dir" ]] && echo yes || echo sudo)"
 }
 
@@ -85,6 +88,28 @@ _holautosa_mkdir_p() {
   _holautosa_sudo_as_user "$user" mkdir -p "$dir" || sudo -n mkdir -p "$dir"
 }
 
+_holautosa_rm_rf() {
+  local target="$1"
+  [[ -e "$target" ]] || return 0
+  if rm -rf "$target" 2>/dev/null; then
+    return 0
+  fi
+  local user
+  user="$(holautosa_exec_user)"
+  _holautosa_sudo_as_user "$user" rm -rf "$target" 2>/dev/null \
+    || sudo -n rm -rf "$target" 2>/dev/null \
+    || true
+}
+
+_holautosa_clean_legacy_terraform_cache() {
+  local dir="$1"
+  [[ -n "$dir" ]] || return 0
+  if [[ -d "$dir/.terraform" ]]; then
+    _holautosa_rm_rf "$dir/.terraform"
+    printf '[holautosa-dir] Removed legacy .terraform cache under %s\n' "$dir"
+  fi
+}
+
 restore_terraform_state_to_workspace() {
   local tf_dir="${1:-.}" src="${HOL_TERRAFORM_STATE_DIR:-}"
   local item pem
@@ -93,7 +118,7 @@ restore_terraform_state_to_workspace() {
   _holautosa_mkdir_p "$tf_dir"
 
   # Drop any stale init cache; terraform init recreates .terraform/ each build.
-  rm -rf "$tf_dir/.terraform"
+  _holautosa_clean_legacy_terraform_cache "$tf_dir"
 
   for item in terraform.tfstate terraform.tfstate.backup; do
     [[ -f "$src/$item" ]] && cp -f "$src/$item" "$tf_dir/$item"
@@ -124,7 +149,7 @@ persist_terraform_state_from_workspace() {
     cp -a "$tf_dir/terraform.tfstate.d/." "$dest/terraform.tfstate.d/"
   fi
   # Remove legacy .terraform cache from holautosa (no longer persisted).
-  rm -rf "$dest/.terraform"
+  _holautosa_clean_legacy_terraform_cache "$dest"
   while IFS= read -r pem; do
     [[ -n "$pem" ]] && cp -f "$pem" "$dest/"
   done < <(find "$tf_dir" -maxdepth 1 -type f -name '*.pem' 2>/dev/null || true)
