@@ -73,6 +73,9 @@ if [[ "${CPU_ARCHITECTURE:-x86_64}" == "arm64" ]]; then
   ARCH_ANSIBLE_ARGS+=(-e "target_cpu_architecture=arm64")
   ARCH_ANSIBLE_ARGS+=(-e "ecs_deploy_on_arm64=${ECS_DEPLOY_ON_ARM64:-false}")
 fi
+if [[ "$CONTROL_MODE" == "local" ]]; then
+  ARCH_ANSIBLE_ARGS+=(-e "ansible_user=root")
+fi
 
 print_banner() {
   if is_dry_run; then
@@ -146,8 +149,12 @@ mapfile -t ANSIBLE_PLAYBOOK_ARGS < <(ansible_extra_args "$PRIVATE_KEY")
 ui_step "Install Ansible collections" "📦"
 ansible-galaxy collection install -r requirements.yml
 
-# SSH pre-reqs: skip ipaserver for AD; include all for FreeIPA if ipaserver is a managed node
-SSH_LIMIT="${ANSIBLE_LIMIT_SSH:-all:!ipaserver}"
+# SSH pre-reqs: include ipaserver when that group has hosts (FreeIPA); skip for AD-only inventory
+if grep -A30 '^\[ipaserver\]' "$SCRIPT_DIR/inventory.ini" | grep -qE '^[^#[:space:]]'; then
+  SSH_LIMIT="${ANSIBLE_LIMIT_SSH:-all}"
+else
+  SSH_LIMIT="${ANSIBLE_LIMIT_SSH:-all:!ipaserver}"
+fi
 ui_section "SSH prerequisites" "🔐"
 ui_kv "Limit" "$SSH_LIMIT" "🎯"
 ui_step "Running 00_setup_ssh_preqs.yml" "📜"
