@@ -103,19 +103,31 @@
       ansible.builtin.debug:
         msg: "PostgreSQL version is {{ pg_version.stdout }}"
 
-    - name: Verify psycopg2 is installed using pip3 list on all hosts except ipaserver
-      ansible.builtin.shell: "pip3 list | grep psycopg2"
+    - name: Ensure pip is available for psycopg2 install
+      ansible.builtin.pip:
+        name: pip
+        state: latest
+        executable: "{{ os.pip_executable }}"
+      become: yes
+
+    - name: Ensure psycopg2-binary is installed (CM-only runs may skip phase 1 prereqs)
+      ansible.builtin.pip:
+        name: "{{ 'psycopg2-binary==' + psycopg2_binary_version if psycopg2_binary_version | default('') | length > 0 else 'psycopg2-binary' }}"
+        state: present
+        executable: "{{ os.pip_executable }}"
+      become: yes
+
+    - name: Verify psycopg2 is installed (pip list)
+      ansible.builtin.shell: "{{ os.pip_executable }} list | grep -i psycopg2"
       register: psycopg2_check_pip
       failed_when: psycopg2_check_pip.rc != 0
       changed_when: false
-      when: inventory_hostname != 'ipaserver'
 
-    - name: Verify psycopg2 is installed using Python import on all hosts except ipaserver
-      ansible.builtin.shell: "python3 -c 'import psycopg2'"
+    - name: Verify psycopg2 is installed (python import)
+      ansible.builtin.shell: "{{ os.python_executable }} -c 'import psycopg2'"
       register: psycopg2_check_import
       failed_when: psycopg2_check_import.rc != 0
       changed_when: false
-      when: inventory_hostname != 'ipaserver'
 
     - name: Display psycopg2 version
       ansible.builtin.debug:
