@@ -52,21 +52,17 @@ variable "allow_all" {
   default     = false
 }
 
-variable "allowed_ports" {
-  description = "Legacy/unused — ingress rules no longer restrict to TCP ports. Kept for backward-compatible tfvars."
-  type        = list(number)
-  default     = [22, 443, 80, 7180, 7183, 7182]
-
-  validation {
-    condition     = length(var.allowed_ports) == 0 || !contains(var.allowed_ports, 0)
-    error_message = "allowed_ports must not contain port 0."
-  }
-}
-
 variable "allowed_cidrs" {
   description = "List of CIDR blocks allowed inbound when allow_all is false"
   type        = list(string)
   default     = ["0.0.0.0/0"]
+}
+
+# Deprecated — ignored by security group module (kept so older tfvars do not fail plan).
+variable "allowed_ports" {
+  description = "Deprecated — ignored. Ingress uses allow_all + allowed_cidrs only."
+  type        = list(number)
+  default     = []
 }
 
 variable "create_new_sg" {
