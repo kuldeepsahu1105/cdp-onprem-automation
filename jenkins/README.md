@@ -198,7 +198,7 @@ Following [PSEAutomation DeployHoL](https://github.com/cloudera/PSEAutomation/bl
 
 ```
 /home/holautosa/HOL_AUTO_EXEC_DIR/cdp-onprem-automation/<ENVIRONMENT>/
-  terraform/   # terraform.tfstate, .terraform/, *.pem
+  terraform/   # terraform.tfstate, terraform.tfstate.d/, *.pem
   ansible/     # inventory.ini, sshkey.pem
 ```
 

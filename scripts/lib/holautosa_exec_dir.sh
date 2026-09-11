@@ -92,16 +92,15 @@ restore_terraform_state_to_workspace() {
   [[ -n "$src" && -d "$src" ]] || return 0
   _holautosa_mkdir_p "$tf_dir"
 
+  # Drop any stale init cache; terraform init recreates .terraform/ each build.
+  rm -rf "$tf_dir/.terraform"
+
   for item in terraform.tfstate terraform.tfstate.backup; do
     [[ -f "$src/$item" ]] && cp -f "$src/$item" "$tf_dir/$item"
   done
   if [[ -d "$src/terraform.tfstate.d" ]]; then
     _holautosa_mkdir_p "$tf_dir/terraform.tfstate.d"
     cp -a "$src/terraform.tfstate.d/." "$tf_dir/terraform.tfstate.d/"
-  fi
-  if [[ -d "$src/.terraform" ]]; then
-    _holautosa_mkdir_p "$tf_dir/.terraform"
-    cp -a "$src/.terraform/." "$tf_dir/.terraform/"
   fi
   while IFS= read -r pem; do
     [[ -n "$pem" ]] && cp -f "$pem" "$tf_dir/"
@@ -124,10 +123,8 @@ persist_terraform_state_from_workspace() {
     _holautosa_mkdir_p "$dest/terraform.tfstate.d"
     cp -a "$tf_dir/terraform.tfstate.d/." "$dest/terraform.tfstate.d/"
   fi
-  if [[ -d "$tf_dir/.terraform" ]]; then
-    _holautosa_mkdir_p "$dest/.terraform"
-    cp -a "$tf_dir/.terraform/." "$dest/.terraform/"
-  fi
+  # Remove legacy .terraform cache from holautosa (no longer persisted).
+  rm -rf "$dest/.terraform"
   while IFS= read -r pem; do
     [[ -n "$pem" ]] && cp -f "$pem" "$dest/"
   done < <(find "$tf_dir" -maxdepth 1 -type f -name '*.pem' 2>/dev/null || true)
