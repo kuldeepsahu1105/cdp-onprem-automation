@@ -341,6 +341,9 @@ ansible_extra_args() {
   if [[ -n "${ANSIBLE_LIMIT:-}" ]]; then
     args+=(--limit "$ANSIBLE_LIMIT")
   fi
+  if [[ -n "${ANSIBLE_GROUP_VARS_OVERRIDE_FILE:-}" && -f "${ANSIBLE_GROUP_VARS_OVERRIDE_FILE}" ]]; then
+    args+=(-e "@${ANSIBLE_GROUP_VARS_OVERRIDE_FILE}")
+  fi
   if is_dry_run; then
     args+=(--check)
     if [[ "${ANSIBLE_DIFF:-true}" != "false" ]]; then

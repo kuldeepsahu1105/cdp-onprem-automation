@@ -125,7 +125,7 @@ Jenkins `text` parameters render as a **multiline text area**. Only **Ansible-on
 
 - Allowed keys: `jenkins/ansible-group-vars-allowed-keys.yaml`
 - Examples: `jenkins/ansible-group-vars.example.yaml`
-- Merged at runtime into `ansible-playbooks/group_vars/all/jenkins_override.yml` (not committed).
+- Merged at runtime via `ansible-playbooks/jenkins_override.yml` + `-e @file` (not committed; never under `group_vars/all/`).
 - Disallowed or unknown keys fail validation when Ansible stages are selected.
 - CM archive login: use `CM_REPO_USERNAME` / `CM_REPO_PASSWORD` (not the textarea).
 

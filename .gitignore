@@ -21,7 +21,7 @@ license.txt
 # Ansible runtime
 **/logs/*
 !ansible-playbooks/logs/.gitkeep
-ansible-playbooks/group_vars/all/jenkins_override.yml
+ansible-playbooks/jenkins_override.yml
 
 # Jenkins pipeline runtime artifacts (keep directory placeholder)
 jenkins/artifacts/*
