@@ -51,7 +51,7 @@ ui_rule() {
   local char="${1:-─}"
   local width="${2:-$UI_WIDTH}"
   printf "  "
-  ui_c "2" "$(ui_repeat_char "$char" "$width")"
+  ui_c "1;94" "$(ui_repeat_char "$char" "$width")"
   ui_nl
 }
 
@@ -61,8 +61,8 @@ ui_kv() {
   local emoji="${3:-}"
   printf '%s' "$UI_INDENT"
   [[ -n "$emoji" ]] && printf '%s  ' "$emoji"
-  ui_c "36" "$(printf '%-*s' "$UI_KV_LABEL_W" "${key}:")"
-  ui_c "1" "$value"
+  ui_c "1;96" "$(printf '%-*s' "$UI_KV_LABEL_W" "${key}:")"
+  ui_c "1;97" "$value"
   ui_nl
 }
 
@@ -73,12 +73,12 @@ ui_banner() {
   ui_nl
   ui_rule "═"
   printf '  '
-  ui_c "1;35" '🏗️  '
-  ui_c "1;36" "$title"
+  ui_c "1;95" '🏗️  '
+  ui_c "1;96" "$title"
   ui_nl
   if [[ -n "$subtitle" ]]; then
     printf '      '
-    ui_c "33" "$subtitle"
+    ui_c "1;93" "$subtitle"
     ui_nl
   fi
   ui_rule "═"
@@ -92,7 +92,7 @@ ui_section() {
   ui_nl
   ui_rule "═"
   printf '  %s  ' "$emoji"
-  ui_c "1;34" "$title"
+  ui_c "1;94" "$title"
   ui_nl
   ui_rule "─"
 }
@@ -102,7 +102,7 @@ ui_subsection() {
   local emoji="${2:-•}"
   ui_nl
   printf '%s%s  ' "$UI_INDENT" "$emoji"
-  ui_c "1;35" "$title"
+  ui_c "1;95" "$title"
   ui_nl
 }
 
@@ -112,31 +112,31 @@ ui_step() {
   UI_STEP_NUM=$((UI_STEP_NUM + 1))
   ui_nl
   printf '%s' "$UI_INDENT"
-  ui_c "1;36" "Step ${UI_STEP_NUM}:"
+  ui_c "1;96" "Step ${UI_STEP_NUM}:"
   printf ' %s  ' "$emoji"
-  ui_c "1" "$msg"
+  ui_c "1;97" "$msg"
   ui_nl
 }
 
 ui_ok() {
   printf '%s  ' "$UI_INDENT"
-  ui_c "32" '✅'
+  ui_c "1;92" '✅'
   printf '  '
-  ui_c "32" "$*"
+  ui_c "1;92" "$*"
   ui_nl
 }
 
 ui_info() {
   printf '%s' "$UI_INDENT"
-  ui_c "33" '💡  '
-  ui_c "36" "$*"
+  ui_c "1;93" '💡  '
+  ui_c "1;96" "$*"
   ui_nl
 }
 
 ui_warn() {
   {
     printf '%s' "$UI_INDENT"
-    ui_c "33" "⚠️  $*"
+    ui_c "1;93" "⚠️  $*"
     ui_nl
   } >&2
 }
@@ -144,7 +144,7 @@ ui_warn() {
 ui_err() {
   {
     printf '%s' "$UI_INDENT"
-    ui_c "31" "❌  $*"
+    ui_c "1;91" "❌  $*"
     ui_nl
   } >&2
 }
@@ -210,7 +210,7 @@ ui_done() {
   ui_nl
   ui_rule "═"
   printf '  '
-  ui_c "1;32" "🎉  ${msg}"
+  ui_c "1;92" "🎉  ${msg}"
   ui_nl
   ui_rule "═"
   ui_nl
