@@ -37,24 +37,24 @@ variable "vpc_id" {
 }
 
 variable "allow_all" {
-  description = "whether to allow all ingress traffic"
+  description = "When true, allow all inbound traffic from 0.0.0.0/0. When false, allow all inbound traffic from allowed_cidrs only."
   type        = bool
   default     = false
 }
 
 variable "allowed_ports" {
-  description = "List of allowed TCP ports (used when allow_all is false)"
+  description = "Legacy/unused — ingress rules no longer restrict to TCP ports. Kept for backward-compatible tfvars."
   type        = list(number)
   default     = [22, 443, 80, 7180, 7183, 7182]
 
   validation {
-    condition     = var.allow_all || (length(var.allowed_ports) > 0 && !contains(var.allowed_ports, 0))
-    error_message = "allowed_ports must be a non-empty list of positive port numbers when allow_all is false."
+    condition     = length(var.allowed_ports) == 0 || !contains(var.allowed_ports, 0)
+    error_message = "allowed_ports must not contain port 0."
   }
 }
 
 variable "allowed_cidrs" {
-  description = "List of CIDR blocks allowed to access the ports"
+  description = "List of CIDR blocks allowed inbound when allow_all is false"
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }

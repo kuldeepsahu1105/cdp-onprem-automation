@@ -2,6 +2,8 @@
 locals {
   use_existing_sg_by_id = !var.create_new_sg && can(regex("^sg-", var.existing_sg))
   use_existing_sg_by_name = !var.create_new_sg && !can(regex("^sg-", var.existing_sg)) && var.existing_sg != ""
+  # allow_all=true  → open to the world; allow_all=false → restrict sources to allowed_cidrs only
+  external_ingress_cidrs = var.allow_all ? ["0.0.0.0/0"] : var.allowed_cidrs
 }
 
 data "aws_security_group" "existing_sg_by_id" {
@@ -15,12 +17,6 @@ data "aws_security_group" "existing_sg_by_name" {
   vpc_id = var.vpc_id
 }
 
-locals {
-  ingress_tcp_ports = distinct([
-    for port in var.allowed_ports : port if port > 0
-  ])
-}
-
 resource "aws_security_group" "vpc_sg" {
   count       = var.create_new_sg ? 1 : 0
   name        = var.sg_name
@@ -31,27 +27,14 @@ resource "aws_security_group" "vpc_sg" {
     create_before_destroy = true
   }
 
-  # Ingress rule for allowing all traffic (if allow_all is true)
   dynamic "ingress" {
-    for_each = var.allow_all ? [1] : []
+    for_each = [1]
     content {
-      description = "Allow all inbound traffic"
+      description = var.allow_all ? "Allow all inbound traffic from anywhere" : "Allow all inbound traffic from allowed CIDRs"
       from_port   = 0
       to_port     = 0
       protocol    = "-1"
-      cidr_blocks = var.allowed_cidrs
-    }
-  }
-
-  # Ingress rule for specific TCP ports (if allow_all is false)
-  dynamic "ingress" {
-    for_each = var.allow_all ? [] : local.ingress_tcp_ports
-    content {
-      description = "Allow TCP ${ingress.value} from allowed CIDRs"
-      from_port   = ingress.value
-      to_port     = ingress.value
-      protocol    = "tcp"
-      cidr_blocks = var.allowed_cidrs
+      cidr_blocks = local.external_ingress_cidrs
     }
   }
 

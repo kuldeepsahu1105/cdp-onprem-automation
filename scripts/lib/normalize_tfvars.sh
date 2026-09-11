@@ -23,13 +23,5 @@ normalize_tfvars_for_cli() {
   VPC_PUBLIC_SUBNETS_CIDR="$(normalize_tf_hcl_list "${VPC_PUBLIC_SUBNETS_CIDR:-}")"
   VPC_PRIVATE_SUBNETS_CIDR="$(normalize_tf_hcl_list "${VPC_PRIVATE_SUBNETS_CIDR:-}")"
 
-  if [[ "$ALLOW_ALL" == "false" ]]; then
-    case "$ALLOWED_PORTS" in
-      ''|'[]'|'[0]'|'[0,0]')
-        ALLOWED_PORTS='[22,443,80,7180,7183,7182]'
-        ;;
-    esac
-  fi
-
   export ALLOW_ALL ALLOWED_CIDRS ALLOWED_PORTS VPC_AZS VPC_PUBLIC_SUBNETS_CIDR VPC_PRIVATE_SUBNETS_CIDR
 }

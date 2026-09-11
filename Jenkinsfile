@@ -46,9 +46,9 @@ pipeline {
     booleanParam(name: 'ENABLE_VPN_GATEWAY', defaultValue: false, description: 'CREATE_NEW VPC: enable VPN gateway')
     string(name: 'EXISTING_SG_NAME', defaultValue: '', description: 'USE_EXISTING SG: sg-id or name (empty = {ENVIRONMENT}-pvc_cluster_sg)')
     string(name: 'SG_NAME', defaultValue: '', description: 'CREATE_NEW SG: name (empty = {ENVIRONMENT}-pvc_cluster_sg)')
-    booleanParam(name: 'ALLOW_ALL', defaultValue: false, description: 'CREATE_NEW SG: allow all inbound (default off — uses ALLOWED_CIDRS + ALLOWED_PORTS)')
-    string(name: 'ALLOWED_CIDRS', defaultValue: '["137.83.231.109/32", "137.83.231.11/32", "208.127.31.110/32", "208.127.31.11/32", "139.180.248.227/32", "54.254.32.236/32"]', description: 'CREATE_NEW SG: JSON allowed source CIDRs')
-    string(name: 'ALLOWED_PORTS', defaultValue: '[22,443,80,7180,7183,7182]', description: 'CREATE_NEW SG when ALLOW_ALL=false: JSON TCP ports (no spaces)')
+    booleanParam(name: 'ALLOW_ALL', defaultValue: false, description: 'CREATE_NEW SG: unchecked (default) = all protocols from ALLOWED_CIDRS only; checked = all protocols from 0.0.0.0/0')
+    string(name: 'ALLOWED_CIDRS', defaultValue: '["137.83.231.109/32", "137.83.231.11/32", "208.127.31.110/32", "208.127.31.11/32", "139.180.248.227/32", "54.254.32.236/32"]', description: 'CREATE_NEW SG when ALLOW_ALL=false: JSON source CIDRs (all protocols/ports)')
+    string(name: 'ALLOWED_PORTS', defaultValue: '[22,443,80,7180,7183,7182]', description: 'Legacy/unused — ingress no longer restricts to TCP ports (kept for tfvars compatibility)')
     string(name: 'CLDR_EIP_NAME', defaultValue: '', description: 'Elastic IP name (empty = {ENVIRONMENT}-cldr-mngr-eip)')
     string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Name prefix + Terraform workspace (overrides tfvars when set)')
     string(name: 'OWNER', defaultValue: 'ksahu-ygulati', description: 'Owner tag — required for Terraform/Ansible if not set in tfvars')
@@ -554,12 +554,6 @@ def validatePipelineInputs() {
       def cidr = params.VPC_CIDR_BLOCK?.trim()
       if (!cidr || !cidr.matches(/^\\d+\\.\\d+\\.\\d+\\.\\d+\\/\\d+$/)) {
         validationFail("VPC_CIDR_BLOCK '${cidr}' is invalid for VPC_MODE=CREATE_NEW (expected e.g. 172.16.0.0/16).")
-      }
-    }
-    if (sgMode == 'CREATE_NEW' && !params.ALLOW_ALL) {
-      def ports = params.ALLOWED_PORTS?.trim()
-      if (!ports || !ports.startsWith('[')) {
-        validationFail("ALLOWED_PORTS must be a JSON array when ALLOW_ALL=false (got '${ports}').")
       }
     }
   }

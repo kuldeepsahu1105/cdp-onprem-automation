@@ -222,44 +222,43 @@ sudo -u jenkins sudo -n -u holautosa cat /home/holautosa/.aws/credentials | head
 | `VPC_MODE` | `USE_DEFAULT` | Use account default VPC (`create_vpc=false`) |
 | `VPC_MODE` | `CREATE_NEW` | Create VPC — set `VPC_NAME`, `VPC_CIDR_BLOCK`, `VPC_AZS`, subnets, NAT/VPN |
 | `SG_MODE` | `USE_EXISTING` | Lookup SG by name or `sg-id` (default `{ENVIRONMENT}-pvc_cluster_sg`) |
-| `SG_MODE` | `CREATE_NEW` | Terraform creates SG — set `SG_NAME`, `ALLOWED_CIDRS`, `ALLOW_ALL`, `ALLOWED_PORTS` |
+| `SG_MODE` | `CREATE_NEW` | Terraform creates SG — set `SG_NAME`, `ALLOWED_CIDRS`, `ALLOW_ALL` |
 | `CREATE_EIP` | `true` | Elastic IP for Cloudera Manager |
 
 Naming suffix in `.tfvars.yaml`: `sg_name_suffix: pvc_cluster_sg` → `{ENVIRONMENT}-pvc_cluster_sg`.
 
 If `USE_EXISTING` fails (SG not in VPC), switch to **SG_MODE=CREATE_NEW** or set **EXISTING_SG_NAME** to a valid `sg-xxxxxxxx` ID.
 
-### Security group ingress rules (port 0 / wrong ports)
+### Security group ingress rules
 
-**Symptoms:** AWS console shows inbound rules with **port 0**, protocol **TCP**, from `0.0.0.0/0` (or your CIDRs) — instead of SSH (22), HTTPS (443), CM ports (7180, etc.).
+**Default (`ALLOW_ALL=false`, recommended):** One inbound rule — **All traffic** (protocol `-1`, ports 0–0) from **ALLOWED_CIDRS** only. Set office/Jenkins agent IPs as `/32` in **ALLOWED_CIDRS**.
 
-**Cause:** Older defaults used `allow_all=true` and `allowed_ports=[0]`. When `ALLOW_ALL=false`, a malformed `ALLOWED_PORTS` value (e.g. JSON with spaces like `[22, 443, 80]`) could break Terraform `-var` parsing and fall back to port `0`, creating useless TCP rules.
+**Open to world (`ALLOW_ALL=true`):** One inbound rule — **All traffic** from **0.0.0.0/0** (ignores **ALLOWED_CIDRS** for external ingress).
 
 **Jenkins settings (`SG_MODE=CREATE_NEW`):**
 
 | Parameter | Recommended | Notes |
 |---|---|---|
-| `ALLOW_ALL` | **unchecked** (`false`) | When checked, one rule allows all protocols (`-1`), not TCP port 0 |
-| `ALLOWED_PORTS` | `[22,443,80,7180,7183,7182]` | Compact JSON array — **no spaces** after commas |
+| `ALLOW_ALL` | **unchecked** (`false`) | All protocols from **ALLOWED_CIDRS** only |
 | `ALLOWED_CIDRS` | Your office/Jenkins IPs as `/32` | Include Jenkins agent egress IP for Ansible SSH |
+| `ALLOWED_PORTS` | *(legacy, unused)* | Ingress no longer restricts to TCP ports; value is ignored |
 
 **Examples:**
 
 ```
-ALLOWED_PORTS=[22,443,80,7180,7183,7182]     # correct
-ALLOWED_PORTS=[22, 443, 80, 7180, 7183, 7182] # avoid — spaces can break -var parsing
+ALLOWED_CIDRS=["137.83.231.109/32","54.254.32.236/32"]   # compact JSON — no spaces after commas
 ```
 
 `.tfvars.yaml` uses the same compact format:
 
 ```yaml
 allow_all: false
-allowed_ports: '[22,443,80,7180,7183,7182]'
+allowed_cidrs: '["137.83.231.109/32", ...]'
 ```
 
-**Fix existing SG:** Re-run the Jenkins **TERRAFORM** stage on latest `main` with `SG_MODE=CREATE_NEW` and the settings above. Terraform updates ingress rules in place when the SG is already in state (see [Re-run same environment](#re-run-same-environment-ptgty-etc)). Console should show `[tfvars] Security group: allow_all=false allowed_ports=[22,443,...]` in the log.
+**Fix existing SG:** Re-run the Jenkins **TERRAFORM** stage on latest `main` with `SG_MODE=CREATE_NEW` and the settings above. Terraform updates ingress rules in place when the SG is already in state (see [Re-run same environment](#re-run-same-environment-ptgty-etc)). Console should show `[tfvars] Security group: allow_all=false allowed_cidrs=[...]` in the log.
 
-**Verify in AWS:** Inbound rules should list individual TCP ports (22, 443, 80, 7180, …), not a single TCP rule on port 0.
+**Verify in AWS:** Inbound rules should show **All traffic** (`-1`) from your CIDRs (or `0.0.0.0/0` when `ALLOW_ALL=true`), not per-port TCP rules or a useless TCP rule on port 0.
 
 ### Terraform state on Jenkins (holautosa — PSEAutomation pattern)
 
@@ -349,7 +348,7 @@ keypair_name_suffix: pvc-new-keypair
 | Cause | Fix |
 |---|---|
 | Stale `inventory.ini` with **private** IPs (`10.x.x.x`) | Inventory is regenerated from Terraform outputs before each Ansible stage (`regenerate-inventory-from-terraform.sh`). Holautosa restore no longer overwrites `inventory.ini` — only SSH keys. |
-| Jenkins agent IP not in security group | Preflight logs `Jenkins/agent egress IP: …` — add that `/32` to **ALLOWED_CIDRS** when `SG_MODE=CREATE_NEW`, or update the existing SG for `USE_EXISTING`. Port **22** must be open. |
+| Jenkins agent IP not in security group | Preflight logs `Jenkins/agent egress IP: …` — add that `/32` to **ALLOWED_CIDRS** when `SG_MODE=CREATE_NEW` and `ALLOW_ALL=false`, or update the existing SG for `USE_EXISTING`. |
 | Wrong SSH key or permissions | Terraform PEM is copied to `ansible-playbooks/sshkey.pem` (mode `600`). Ansible user is `root` (`group_vars/all.yml`). |
 | Ansible-only run without Terraform | Run `VALIDATE` + `TERRAFORM` once, or ensure holautosa has current state and regenerate inventory manually: `./jenkins/scripts/regenerate-inventory-from-terraform.sh` |
 
