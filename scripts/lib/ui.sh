@@ -10,6 +10,21 @@ ui_is_tty() {
   [[ -t 1 ]]
 }
 
+# Colors: TTY, or Jenkins ansiColor / FORCE_COLOR (stdout may be piped to tee).
+ui_color_enabled() {
+  case "${UI_COLOR:-${FORCE_COLOR:-auto}}" in
+    0|false|no|off|never) return 1 ;;
+    1|true|yes|on|force|always) return 0 ;;
+  esac
+  ui_is_tty && return 0
+  if [[ -n "${JENKINS_URL:-}" || -n "${BUILD_NUMBER:-}" || "${CI:-}" == "true" ]]; then
+    [[ "${TERM:-}" == "dumb" ]] && return 1
+    return 0
+  fi
+  [[ "${CLICOLOR_FORCE:-}" == "1" ]] && return 0
+  return 1
+}
+
 ui_repeat_char() {
   local char="$1"
   local count="$2"
@@ -19,11 +34,11 @@ ui_repeat_char() {
 ui_c() {
   local code="$1"
   shift
-  if ui_is_tty; then
+  if ui_color_enabled; then
     printf '\033[%sm' "$code"
   fi
   printf '%s' "$*"
-  if ui_is_tty; then
+  if ui_color_enabled; then
     printf '\033[0m'
   fi
 }
@@ -160,7 +175,12 @@ ui_inventory_summary() {
   local inventory_file="$1"
   ui_subsection "Host groups" "📊"
   if [[ -f "$inventory_file" ]] && command -v awk >/dev/null 2>&1; then
-    awk -v indent="$UI_INDENT" -v label_w="$UI_KV_LABEL_W" '
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      local group="${line%%:*}"
+      local count="${line##*: }"
+      ui_kv "$group" "${count} host(s)" "💻"
+    done < <(awk -v label_w="$UI_KV_LABEL_W" '
       /^\[/ {
         gsub(/[\[\]]/, "", $0)
         group=$0
@@ -171,10 +191,10 @@ ui_inventory_summary() {
       }
       END {
         for (g in count) {
-          printf "%s💻  %-*s %d host(s)\n", indent, label_w, g ":", count[g]
+          printf "%s: %d host(s)\n", g, count[g]
         }
       }
-    ' "$inventory_file" | sort
+    ' "$inventory_file" | LC_ALL=C sort)
   fi
 }
 

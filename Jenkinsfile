@@ -79,6 +79,10 @@ pipeline {
 
   environment {
     LANG = 'C.UTF-8'
+    FORCE_COLOR = '1'
+    UI_COLOR = '1'
+    ANSIBLE_FORCE_COLOR = 'true'
+    PY_COLORS = '1'
     REPO_ROOT = "${WORKSPACE}"
     LOG_DIR = "${WORKSPACE}/jenkins/artifacts"
     HOL_AUTO_EXEC_DIR = "/home/holautosa/HOL_AUTO_EXEC_DIR"
