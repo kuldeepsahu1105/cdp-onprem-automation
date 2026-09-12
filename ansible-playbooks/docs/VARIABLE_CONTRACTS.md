@@ -23,7 +23,7 @@ End-to-end order inside `sync_deployment_portal_content.yml` (used by `10_setup_
 
 **Playbook-level prerequisites**
 
-- **`10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` play 1 (localhost):** `build_deployment_portal_facts.yml` must run first — sets `deployment_portal_context`, `deployment_portal_anchor_inv`, `caddy_vhost_urls`, `deployment_portal_host_group_effective`, etc. on localhost.
+- **`10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` play 1 (localhost):** `resolve_deployment_portal_host.yml` runs before the Caddy skip gate so play 2 `hosts:` can template `deployment_portal_host_group_effective` even when Caddy is off. `build_deployment_portal_facts.yml` sets `deployment_portal_context`, `deployment_portal_anchor_inv`, `caddy_vhost_urls`, etc. on localhost when the stack runs.
 - **Play 2 (ops host):** `deployment_portal_load_host_facts.yml` before any verify — ops host does not rebuild context locally.
 - **`deployment_portal_verify_milestones`:** play vars on `10_setup` default `[portal, ipa]`; refresh play sets `deployment_portal_verify_post_cm: true` so empty milestone list becomes `[portal, ipa]` (CM requires explicit `cm` in milestones or legacy `deployment_portal_verify_cm_vhost`). Tier A/Tier B pgAdmin checks run only when `pgadmin` is in the list.
 
