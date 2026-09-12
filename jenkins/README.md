@@ -235,6 +235,21 @@ sudo -u jenkins sudo -n -u holautosa cat /home/holautosa/.aws/credentials | head
 | `SG_MODE` | `CREATE_NEW` | Terraform creates SG — set `SG_NAME`, `ALLOWED_CIDRS`, `ALLOW_ALL` |
 | `CREATE_EIP` | `true` | Elastic IP for Cloudera Manager |
 
+#### Terraform combinations (`VPC_MODE` × `SG_MODE`)
+
+Jenkins maps UI choices to Terraform `create_vpc` / `create_new_sg` in `apply_jenkins_pipeline_defaults()`. EC2 instances always use `module.vpc.vpc_id` and `module.security_group.security_group_id` (new or existing). `CREATE_EIP` is independent.
+
+| `VPC_MODE` | `SG_MODE` | Supported | Behavior |
+|---|---|---|---|
+| `USE_DEFAULT` | `USE_EXISTING` | Yes (typical) | Default VPC + lookup SG by `EXISTING_SG_NAME` or `sg-*` in that VPC. Pre-validate checks SG exists in default VPC. |
+| `USE_DEFAULT` | `CREATE_NEW` | Yes | Default VPC + Terraform creates `{ENVIRONMENT}-pvc_cluster_sg` (or `SG_NAME`). |
+| `CREATE_NEW` | `CREATE_NEW` | Yes (greenfield) | New VPC + new SG in that VPC. |
+| `CREATE_NEW` | `USE_EXISTING` | Conditional | SG must already exist **inside the new VPC** (name or `sg-id`). **Not** for first-time VPC create unless you import a pre-created SG — prefer `CREATE_NEW` for both on first run. |
+
+**Not supported:** attaching to a **non-default existing VPC** without creating it (`VPC_MODE` has only `USE_DEFAULT` or `CREATE_NEW`).
+
+**Account requirement:** `USE_DEFAULT` needs a default VPC in `AWS_REGION` (some accounts disable it).
+
 Naming suffix in `.tfvars.yaml`: `sg_name_suffix: pvc_cluster_sg` → `{ENVIRONMENT}-pvc_cluster_sg`.
 
 If `USE_EXISTING` fails (SG not in VPC), switch to **SG_MODE=CREATE_NEW** or set **EXISTING_SG_NAME** to a valid `sg-xxxxxxxx` ID.

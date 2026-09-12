@@ -249,6 +249,9 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
           env.REQUIRE_ANSIBLE = cfg.runAnsible
           env.REQUIRE_TERRAFORM = cfg.runTerraform
           echo "Resolved stages: validate=${cfg.runValidate}, terraform=${cfg.runTerraform}, ansible=${cfg.runAnsible}, phases=${cfg.ansiblePhases}"
+          if (cfg.runValidate != 'true' && cfg.runTerraform != 'true' && cfg.runAnsible != 'true') {
+            error("No pipeline work resolved from PIPELINE_STAGES='${params.PIPELINE_STAGES}'. Use valid checkboxes (e.g. CDH_BASE not CDH_INSTALL) or REFRESH_JENKINSFILE=YES.")
+          }
           echo "Validation checks: ${cfg.validationChecks}"
           echo "AWS creds: USE_CREDENTIALS_USER_AWS=${env.USE_CREDENTIALS_USER_AWS}, AWS_USE_INSTANCE_ROLE=${env.AWS_USE_INSTANCE_ROLE}"
         }
@@ -529,8 +532,30 @@ def parseSelectedStages(def csv) {
   return text.split(',').collect { it.trim() }.findAll { it }
 }
 
+def knownPipelineStages() {
+  return ['VALIDATE', 'TERRAFORM', 'PREREQS', 'IDENTITY', 'CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL']
+}
+
+// Legacy Jenkins job UI values (before checkbox rename) and common typos.
+def pipelineStageAliases() {
+  return [
+    'CDH_INSTALL': 'CDH_BASE',
+    'CDH'        : 'CDH_BASE',
+    'ECS'        : 'ECS_INSTALL',
+  ]
+}
+
+def normalizePipelineStageToken(String token) {
+  def aliases = pipelineStageAliases()
+  def upper = token?.trim()?.toUpperCase()
+  if (!upper) {
+    return upper
+  }
+  return aliases.get(upper, upper)
+}
+
 def effectivePipelineStages(def csv) {
-  def stages = parseSelectedStages(csv)
+  def stages = parseSelectedStages(csv).collect { normalizePipelineStageToken(it) }
   if (stages.isEmpty()) {
     echo "PIPELINE_STAGES not set — using default: ${defaultPipelineStages()}"
     return parseSelectedStages(defaultPipelineStages())
@@ -640,6 +665,18 @@ def validatePipelineInputs() {
   def stages = effectivePipelineStages(params.PIPELINE_STAGES)
   if (stages.isEmpty()) {
     validationFail('PIPELINE_STAGES is empty. Select at least one stage checkbox, or set REFRESH_JENKINSFILE=YES to reload parameters after Jenkinsfile changes.')
+  }
+
+  def known = knownPipelineStages()
+  def unknown = stages.findAll { !known.contains(it) }
+  if (!unknown.isEmpty()) {
+    validationFail("Unknown PIPELINE_STAGES value(s): ${unknown.join(', ')}. Valid checkboxes: ${known.join(', ')}. Old jobs may still send CDH_INSTALL — use CDH_BASE and run REFRESH_JENKINSFILE=YES to reload the parameter UI.")
+  }
+
+  def rawStages = parseSelectedStages(params.PIPELINE_STAGES)
+  def legacy = rawStages.findAll { pipelineStageAliases().containsKey(it.trim().toUpperCase()) }
+  if (!legacy.isEmpty()) {
+    echo "WARN: Legacy PIPELINE_STAGES token(s) ${legacy.join(', ')} → ${legacy.collect { normalizePipelineStageToken(it) }.join(', ')}"
   }
 
   def awsRegionRegex = /^(us|eu|ap|sa|ca|me|af|il|cn|us-gov)-[a-z]+-\d{1}$/
