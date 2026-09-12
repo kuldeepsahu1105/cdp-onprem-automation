@@ -16,10 +16,6 @@
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
 
-    - name: Print cm_api_url (in playbook)
-      ansible.builtin.debug:
-        msg: "cm_api_url is set to {{ cm_api_url }}"
-
     - name: Check existing Cloudera Manager license
       ansible.builtin.uri:
         url: "{{ cm_api_url }}/cm/license"

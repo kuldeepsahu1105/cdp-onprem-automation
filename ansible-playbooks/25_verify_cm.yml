@@ -17,10 +17,6 @@
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
       become: false
 
-    - name: Print cm_api_url (in playbook)
-      ansible.builtin.debug:
-        msg: "cm_api_url is set to {{ cm_api_url }}"
-
     - name: Authenticate with Cloudera Manager API
       ansible.builtin.uri:
         url: "{{ cm_api_url }}/cm/version"
@@ -126,7 +122,7 @@
         msg: "Available Clusters: {{ cm_clusters.json['items'] }}"
         # msg: "Available Clusters: {{ cm_clusters.json.items | map(attribute='name') | list }}"
 
-    - name: Verify CM UI URLs (Tier A/C on cldr-mngr; Tier B when portal disabled)
+    - name: Verify CM UI URLs on cldr-mngr (and optional external when portal disabled)
       ansible.builtin.import_tasks: common_tasks/verify_cm_tiered_urls.yml
 
     # - name: Get the host identifiers and names from Cloudera Manager
