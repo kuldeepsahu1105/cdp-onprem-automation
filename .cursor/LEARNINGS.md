@@ -31,13 +31,13 @@ Scan this before deep-diving playbooks/Jenkins. Details: `ansible-playbooks/docs
 
 ```bash
 ./jenkins/scripts/validate-ansible-yaml.sh    # all common_tasks + playbooks
-./jenkins/scripts/validate-ansible-contracts.sh  # when present on branch (set_fact heuristics)
+./jenkins/scripts/validate-ansible-contracts.sh  # set_fact / import heuristics; see VARIABLE_CONTRACTS.md
 ```
 
 Jenkins: `validate-prereqs.sh` runs YAML parse (+ contracts when wired). **Do not merge** Ansible verify/portal/CM changes without these passing.
 
 ## Git / process (agents)
 
-- Touch **verify + portal + CM host resolution** together; read **`ansible-playbooks/docs/VARIABLE_CONTRACTS.md`** when it exists on the branch.
+- Touch **verify + portal + CM host resolution** together; read **`ansible-playbooks/docs/VARIABLE_CONTRACTS.md`**.
 - Prefer **one PR** with validation over incremental breaks (user pain: half-fixed verify gates).
 - Standalone-first rules: see root **`AGENTS.md`**.
