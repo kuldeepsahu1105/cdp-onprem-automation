@@ -12,7 +12,7 @@ End-to-end order inside `sync_deployment_portal_content.yml` (used by `10_setup_
 
 | Step | Task file | Purpose |
 |------|-----------|---------|
-| 1 | `deployment_portal_load_host_facts.yml` (playbook, before sync) | Copy `deployment_portal_context`, `caddy_vhost_urls`, anchor/IPA/CM FQDNs from `hostvars['localhost']` onto ops host |
+| 1 | `deployment_portal_load_host_facts.yml` (playbook, before sync) | Copy `deployment_portal_context`, `caddy_vhost_urls`, access profile/URLs, anchor/IPA/CM FQDNs from `hostvars['localhost']` onto ops host |
 | 2 | `sync_deployment_portal_content.yml` | Render templates, `docker compose up`, optional monitoring re-sync |
 | 3 | `verify_deployment_portal_caddy.yml` | Container + localhost index, then URL tiers |
 | 3a | → `detect_ansible_control_reachability.yml` | `_acr_*` inputs; publishes `ansible_control_reach_public_only` on **localhost** (CM probes skipped via `ansible_control_reachability_skip_cm_probes`) |
