@@ -79,19 +79,23 @@ ui_c() {
   fi
 }
 
+ui_ci_ansi_console() {
+  [[ "${ANSIBLE_CI_CONSOLE:-${JENKINS_ANSI_CONSOLE:-}}" == "1" ]] && [[ "${TERM:-}" != "dumb" ]]
+}
+
 # Phase/playbook log headers: ANSI in Jenkins console (jenkins_log_pipe + ansiColor) even when
 # UI_COLOR=0 keeps other wrapper labels plain ASCII (run-ansible.sh).
 ui_log_header_color_enabled() {
   case "${UI_COLOR:-${FORCE_COLOR:-auto}}" in
     0|false|no|off|never)
-      [[ "${JENKINS_ANSI_CONSOLE:-}" == "1" ]] && [[ "${TERM:-}" != "dumb" ]] && return 0
+      ui_ci_ansi_console && return 0
       return 1
       ;;
   esac
   if ui_color_enabled; then
     return 0
   fi
-  [[ "${JENKINS_ANSI_CONSOLE:-}" == "1" ]] && [[ "${TERM:-}" != "dumb" ]]
+  ui_ci_ansi_console
 }
 
 ui_log_c() {

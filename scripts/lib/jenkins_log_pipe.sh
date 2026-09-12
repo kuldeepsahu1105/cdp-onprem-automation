@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Tee Jenkins stage output to a log file. Console may use ansiColor; artifact logs stay plain ASCII.
 
+_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=ansible_env.sh
+source "$_lib_dir/ansible_env.sh"
+
 jenkins_strip_ansi_stream() {
   # CSI color sequences and OSC hyperlinks (some terminals emit these around URLs).
   sed -E \
@@ -23,7 +27,7 @@ jenkins_log_pipe() {
   if [[ -n "${BUILD_NUMBER:-}${JENKINS_URL:-}" ]]; then
     # Console: Jenkins ansiColor interprets ANSI on stdout (piped, not a TTY).
     # Artifact log: strip CSI/OSC so access-urls.txt and email stay plain ASCII.
-    export JENKINS_ANSI_CONSOLE=1
+    ci_ansi_prepare_jenkins_console
     case "${ANSIBLE_FORCE_COLOR:-auto}" in
       0|false|no|off) ;;
       *)

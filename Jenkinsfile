@@ -189,8 +189,9 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
   environment {
     LANG = 'C.UTF-8'
     LC_ALL = 'C.UTF-8'
+    TERM = 'xterm'
     UI_ASCII = '1'
-    // Wrapper UI stays plain ASCII; Ansible colors go to console (ansiColor) — artifact logs strip ANSI.
+    // Wrapper UI stays plain ASCII; Ansible/phase headers color via jenkins_log_pipe (ANSI stripped in artifact logs).
     FORCE_COLOR = '0'
     UI_COLOR = '0'
     ANSIBLE_FORCE_COLOR = '1'
