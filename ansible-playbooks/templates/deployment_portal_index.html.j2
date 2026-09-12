@@ -419,15 +419,15 @@
         {% if mon_on %}
         <a class="tile" href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Grafana</span>
-          <span class="tile-hint">{% if ctx.monitoring.grafana_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.grafana_path_url | default('') | length > 0 %}Also :{{ deployment_portal_http_port | default(81) }}/grafana/{% else %}Dashboards{% endif %}</span>
+          <span class="tile-hint">{% if ctx.monitoring.grafana_caddy_url | default('') | length > 0 %}Caddy vhost{% else %}Host :{{ monitoring_grafana_host_port | default(3000) }}{% endif %}</span>
         </a>
         <a class="tile" href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Prometheus</span>
-          <span class="tile-hint">{% if ctx.monitoring.prometheus_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.prometheus_path_url | default('') | length > 0 %}:{{ deployment_portal_http_port | default(81) }}/prometheus/{% else %}Metrics{% endif %}</span>
+          <span class="tile-hint">{% if ctx.monitoring.prometheus_caddy_url | default('') | length > 0 %}Caddy vhost{% else %}Host :{{ monitoring_prometheus_host_port | default(9090) }}{% endif %}</span>
         </a>
         <a class="tile" href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Alertmanager</span>
-          <span class="tile-hint">{% if ctx.monitoring.alertmanager_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.alertmanager_path_url | default('') | length > 0 %}:{{ deployment_portal_http_port | default(81) }}/alertmanager/{% else %}Alerts{% endif %}</span>
+          <span class="tile-hint">{% if ctx.monitoring.alertmanager_caddy_url | default('') | length > 0 %}Caddy vhost{% else %}Host :{{ monitoring_alertmanager_host_port | default(9093) }}{% endif %}</span>
         </a>
         <a class="tile" href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">cAdvisor</span>

@@ -50,21 +50,24 @@
 {% set _prom_path = ('http://' ~ deployment_portal_ops_public_ip ~ ':' ~ (deployment_portal_http_port | string) ~ '/prometheus/') if (deployment_portal_access_profile_effective == 'cloud') else ('http://' ~ deployment_portal_ops_client_host ~ ':' ~ (deployment_portal_http_port | string) ~ '/prometheus/') %}
 {% set _am_path = ('http://' ~ deployment_portal_ops_public_ip ~ ':' ~ (deployment_portal_http_port | string) ~ '/alertmanager/') if (deployment_portal_access_profile_effective == 'cloud') else ('http://' ~ deployment_portal_ops_client_host ~ ':' ~ (deployment_portal_http_port | string) ~ '/alertmanager/') %}
 {% set _cadvisor = deployment_portal_access_urls.primary.cadvisor if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external.cadvisor %}
-{% set _grafana_pick = _grafana_vhost if (_grafana_vhost | length > 0) else _grafana_path %}
-{% set _prom_pick = _prom_vhost if (_prom_vhost | length > 0) else _prom_path %}
-{% set _am_pick = _am_vhost if (_am_vhost | length > 0) else _am_path %}
+{% set _grafana_direct = deployment_portal_access_urls.primary.grafana if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external.grafana %}
+{% set _prom_direct = deployment_portal_access_urls.primary.prometheus if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external.prometheus %}
+{% set _am_direct = deployment_portal_access_urls.primary.alertmanager if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external.alertmanager %}
+{% set _grafana_pick = _grafana_vhost if (_grafana_vhost | length > 0) else _grafana_direct %}
+{% set _prom_pick = _prom_vhost if (_prom_vhost | length > 0) else _prom_direct %}
+{% set _am_pick = _am_vhost if (_am_vhost | length > 0) else _am_direct %}
 - name: "Grafana"
   url: "{{ _grafana_pick }}"
   hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
-  note: "{% if _grafana_vhost | length > 0 %}Caddy vhost {{ caddy_vhost_urls_external.grafana.hostname | default('') }}{% else %}Caddy path /grafana/ on ops :{{ deployment_portal_http_port }}{% endif %}"
+  note: "{% if _grafana_vhost | length > 0 %}Caddy vhost {{ caddy_vhost_urls_external.grafana.hostname | default('') }}; also host :{{ monitoring_grafana_host_port | default(3000) }}{% else %}Host :{{ monitoring_grafana_host_port | default(3000) }}; Caddy path {{ _grafana_path }}{% endif %}"
 - name: "Prometheus"
   url: "{{ _prom_pick }}"
   hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
-  note: "{% if _prom_vhost | length > 0 %}Caddy vhost {{ caddy_vhost_urls_external.prometheus.hostname | default('') }}{% else %}Caddy path /prometheus/ on ops :{{ deployment_portal_http_port }}{% endif %}"
+  note: "{% if _prom_vhost | length > 0 %}Caddy vhost {{ caddy_vhost_urls_external.prometheus.hostname | default('') }}; also host :{{ monitoring_prometheus_host_port | default(9090) }}{% else %}Host :{{ monitoring_prometheus_host_port | default(9090) }}; Caddy path {{ _prom_path }}{% endif %}"
 - name: "Alertmanager"
   url: "{{ _am_pick }}"
   hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
-  note: "{% if _am_vhost | length > 0 %}Caddy vhost {{ caddy_vhost_urls_external.alertmanager.hostname | default('') }}{% else %}Caddy path /alertmanager/ on ops :{{ deployment_portal_http_port }}{% endif %}"
+  note: "{% if _am_vhost | length > 0 %}Caddy vhost {{ caddy_vhost_urls_external.alertmanager.hostname | default('') }}; also host :{{ monitoring_alertmanager_host_port | default(9093) }}{% else %}Host :{{ monitoring_alertmanager_host_port | default(9093) }}; Caddy path {{ _am_path }}{% endif %}"
 - name: "cAdvisor"
   url: "{{ _cadvisor | default('') | trim }}"
   hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"

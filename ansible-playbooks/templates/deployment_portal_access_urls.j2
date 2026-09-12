@@ -1,8 +1,14 @@
 {# YAML access URLs — cloud (public + VPC) or private (bare metal / no public IP) #}
 {% set http_port = deployment_portal_http_port | int %}
 {% set pg_port = deployment_portal_pgadmin_host_port | int %}
+{% set grafana_port = monitoring_grafana_host_port | default(3000) | int %}
+{% set prom_port = monitoring_prometheus_host_port | default(9090) | int %}
+{% set am_port = monitoring_alertmanager_host_port | default(9093) | int %}
 {% macro p() %}{% if http_port != 80 %}:{{ http_port }}{% endif %}{% endmacro %}
 {% macro pg() %}{% if pg_port != 80 %}:{{ pg_port }}{% endif %}{% endmacro %}
+{% macro grafana_path() %}{% if caddy_vhost_enabled | default(false) | bool %}/{% else %}/grafana/{% endif %}{% endmacro %}
+{% macro prom_path() %}{% if caddy_vhost_enabled | default(false) | bool %}/{% else %}/prometheus/{% endif %}{% endmacro %}
+{% macro am_path() %}{% if caddy_vhost_enabled | default(false) | bool %}/{% else %}/alertmanager/{% endif %}{% endmacro %}
 {% set host_pub = deployment_portal_ops_public_ip %}
 {% set host_priv = deployment_portal_ops_private_ip %}
 {% set host_client = deployment_portal_ops_client_host %}
@@ -16,9 +22,12 @@ primary:
   management_ip: "{{ host_priv }}"
   portal: "http://{{ host_client }}{{ p() }}/"
   pgadmin: "http://{{ host_client }}{{ pg() }}/"
-  grafana: "http://{{ host_client }}{{ p() }}/grafana/"
-  prometheus: "http://{{ host_client }}{{ p() }}/prometheus/"
-  alertmanager: "http://{{ host_client }}{{ p() }}/alertmanager/"
+  grafana: "http://{{ host_client }}:{{ grafana_port }}{{ grafana_path() }}"
+  prometheus: "http://{{ host_client }}:{{ prom_port }}{{ prom_path() }}"
+  alertmanager: "http://{{ host_client }}:{{ am_port }}{{ am_path() }}"
+  grafana_caddy_path: "http://{{ host_client }}{{ p() }}/grafana/"
+  prometheus_caddy_path: "http://{{ host_client }}{{ p() }}/prometheus/"
+  alertmanager_caddy_path: "http://{{ host_client }}{{ p() }}/alertmanager/"
   cadvisor: "http://{{ host_priv }}:{{ monitoring_cadvisor_host_port }}/"
 external: {}
 vpc: {}
@@ -30,9 +39,12 @@ external:
   fqdn: "{{ deployment_portal_anchor_fqdn }}"
   portal: "http://{{ host_pub }}{{ p() }}/"
   pgadmin: "http://{{ host_pub }}{{ pg() }}/"
-  grafana: "http://{{ host_pub }}{{ p() }}/grafana/"
-  prometheus: "http://{{ host_pub }}{{ p() }}/prometheus/"
-  alertmanager: "http://{{ host_pub }}{{ p() }}/alertmanager/"
+  grafana: "http://{{ host_pub }}:{{ grafana_port }}{{ grafana_path() }}"
+  prometheus: "http://{{ host_pub }}:{{ prom_port }}{{ prom_path() }}"
+  alertmanager: "http://{{ host_pub }}:{{ am_port }}{{ am_path() }}"
+  grafana_caddy_path: "http://{{ host_pub }}{{ p() }}/grafana/"
+  prometheus_caddy_path: "http://{{ host_pub }}{{ p() }}/prometheus/"
+  alertmanager_caddy_path: "http://{{ host_pub }}{{ p() }}/alertmanager/"
   cadvisor: "http://{{ host_pub }}:{{ monitoring_cadvisor_host_port }}/"
 vpc:
   audience: "Same VPC only (private IP)"
@@ -40,8 +52,11 @@ vpc:
   fqdn: "{{ deployment_portal_anchor_fqdn }}"
   portal: "http://{{ host_priv }}{{ p() }}/"
   pgadmin: "http://{{ host_priv }}{{ pg() }}/"
-  grafana: "http://{{ host_priv }}{{ p() }}/grafana/"
-  prometheus: "http://{{ host_priv }}{{ p() }}/prometheus/"
-  alertmanager: "http://{{ host_priv }}{{ p() }}/alertmanager/"
+  grafana: "http://{{ host_priv }}:{{ grafana_port }}{{ grafana_path() }}"
+  prometheus: "http://{{ host_priv }}:{{ prom_port }}{{ prom_path() }}"
+  alertmanager: "http://{{ host_priv }}:{{ am_port }}{{ am_path() }}"
+  grafana_caddy_path: "http://{{ host_priv }}{{ p() }}/grafana/"
+  prometheus_caddy_path: "http://{{ host_priv }}{{ p() }}/prometheus/"
+  alertmanager_caddy_path: "http://{{ host_priv }}{{ p() }}/alertmanager/"
   cadvisor: "http://{{ host_priv }}:{{ monitoring_cadvisor_host_port }}/"
 {% endif %}

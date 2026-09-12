@@ -1,5 +1,5 @@
 ---
-# Tier A: monitoring UIs via Caddy on localhost (path routes on deployment_portal_http_port).
+# Tier A: monitoring UIs via Caddy on localhost (path routes) and direct host publishes.
 
 - name: Resolve deployment portal URL verify milestones for monitoring checks
   ansible.builtin.import_tasks: resolve_deployment_portal_verify_milestones.yml
@@ -11,6 +11,9 @@
 - name: Set monitoring localhost verify base URL
   ansible.builtin.set_fact:
     _monitoring_local_base: "http://127.0.0.1:{{ deployment_portal_http_port | int }}"
+    _monitoring_grafana_host_suffix: "{{ '/login' if (caddy_vhost_enabled | default(false) | bool) else '/grafana/login' }}"
+    _monitoring_prometheus_host_suffix: "{{ '/-/healthy' if (caddy_vhost_enabled | default(false) | bool) else '/prometheus/-/healthy' }}"
+    _monitoring_alertmanager_host_suffix: "{{ '/-/healthy' if (caddy_vhost_enabled | default(false) | bool) else '/alertmanager/-/healthy' }}"
 
 - name: Verify Grafana via Caddy path route on localhost
   ansible.builtin.uri:
@@ -38,4 +41,46 @@
   retries: 5
   delay: 5
   until: _monitoring_prometheus_path_check is succeeded
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
+
+- name: Verify Grafana on published host port (localhost)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ monitoring_grafana_host_port | int }}{{ _monitoring_grafana_host_suffix }}"
+    method: GET
+    status_code: "{{ deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_grafana_host_check
+  retries: 5
+  delay: 5
+  until: _monitoring_grafana_host_check is succeeded
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
+
+- name: Verify Prometheus on published host port (localhost)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ monitoring_prometheus_host_port | int }}{{ _monitoring_prometheus_host_suffix }}"
+    method: GET
+    status_code: "{{ deployment_portal_url_verify_status_codes | default([200]) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_prometheus_host_check
+  retries: 5
+  delay: 5
+  until: _monitoring_prometheus_host_check is succeeded
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
+
+- name: Verify Alertmanager on published host port (localhost)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ monitoring_alertmanager_host_port | int }}{{ _monitoring_alertmanager_host_suffix }}"
+    method: GET
+    status_code: "{{ deployment_portal_url_verify_status_codes | default([200]) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_alertmanager_host_check
+  retries: 5
+  delay: 5
+  until: _monitoring_alertmanager_host_check is succeeded
   when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
