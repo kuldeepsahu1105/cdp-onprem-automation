@@ -250,9 +250,8 @@ mkdir -p "$OUT_DIR"
   fi
 
   echo ""
-  echo "Service URL verify tiers (RUNBOOK.md): Tier A = localhost on service host (portal 127.0.0.1:<deployment_portal_http_port> (default 81), CM 127.0.0.1:7180 on cldr-mngr);"
-  echo "Tier B = external printed URLs from Jenkins when ansible_control_reachability is public (warn if SG blocks ports);"
-  echo "Tier C = hairpin on ops/CM host (warn only)."
+  echo "Service URL verify tiers (RUNBOOK.md): Tier A = localhost on ops host (portal 127.0.0.1:<deployment_portal_http_port> (default 81)); CM manager IP/FQDN :7180 on cldr-mngr;"
+  echo "Tier B = external printed URLs from Jenkins when ansible_control_reachability is public (warn if SG blocks ports)."
   echo ""
   echo "Vars: deployment_external_url_verify (global), deployment_cm_external_url_verify (per-service)."
   echo "Grep Ansible logs: CDP_ACCESS_URLS_BEGIN  or  Tier B (external)"

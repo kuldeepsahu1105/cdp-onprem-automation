@@ -62,8 +62,7 @@ Printed URLs live in `CDP_ACCESS_URLS_*` / `jenkins/artifacts/access-urls.txt`.
 
 **Cloudera Manager (`25_verify_cm.yml`):**
 
-- **Required (manager-local):** HTTP/HTTPS UI on `cldr-mngr` via `probe_cm_manager_ui_http.yml` and Auto-TLS localhost probe — **fails** the play if CM is down. CM API setup (`set_cm_api_url.yml`) prints `cm_api_url` and probes from Jenkins with delegation per `#57`.
-- **Optional hairpin:** Public-EIP URL from `cldr-mngr` only when `deployment_cm_hairpin_url_verify: true` (default **false**) — **warn** only.
+- **Required (manager-local):** HTTP/HTTPS UI on `cldr-mngr` via `probe_cm_manager_ui_http.yml` (private IP / `ansible_host` / FQDN, then loopback) and Auto-TLS HTTPS on the same bind address — **fails** the play if CM is down. CM API setup (`set_cm_api_url.yml`) prints `cm_api_url` and probes from Jenkins with delegation per `#57`.
 - **External from controller:** Only when `deployment_portal_enabled: false` **and** `deployment_portal_verify_tier_b_enabled: true` (default **false**). With the portal stack enabled, external CM URL warns run from `10_setup` / `35_refresh` on the controller (milestone-scoped), not again in `25_verify_cm`.
 
 **Portal / monitoring / IPA / ECS** use the tier labels below on the ops host and Ansible controller:
@@ -72,7 +71,6 @@ Printed URLs live in `CDP_ACCESS_URLS_*` / `jenkins/artifacts/access-urls.txt`.
 |---|---|---|---|
 | **A (required)** | **Ops host** (`ipaserver`): `http://127.0.0.1:<deployment_portal_http_port>/`, Caddy **Host** vhosts scoped by **`deployment_portal_verify_milestones`** (bootstrap **portal** + **ipa** only; **cm** / **cm_tls** / **monitoring** / **ecs** after each deploy phase). CM milestone UI on `cldr-mngr` runs in portal refresh verify, not via Caddy | Local service health | **Fail** the play for milestones in the active list |
 | **B (external)** | Ansible **controller** when `ansible_control_reachability_effective` is **`public`** | HTTP GET printed **external** URLs (portal/pgAdmin/Grafana Caddy vhosts, CM FQDN + public IP direct ports, IPA, ECS console) via `verify_service_urls_from_controller.yml` | **`deployment_external_url_verify`** (default **`warn`**) or per-service overrides — `warn`, `fail`, or `skip` |
-| **C (optional)** | Ops host | Public-EIP **hairpin** URLs (EC2 calling its own EIP) | **Warn only** |
 
 **When portal verify runs:** After `10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` (`verify_deployment_portal_caddy.yml`). Jenkins **PORTAL** reruns get optional Tier **B** warns for printed URLs when security groups allow; manager-local portal/CM checks are separate as above.
 
@@ -218,7 +216,7 @@ ansible-playbook -i inventory.ini 24_start_cm.yml
 ansible-playbook -i inventory.ini 25_verify_cm.yml
 ansible-playbook -i inventory.ini 26_setup_cm_license.yml
 ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml
-# CM API probes: VPC private_ip from Jenkins (not public EIP hairpin); 127.0.0.1 on cldr-mngr. SG must allow 7180/7183 from Jenkins to private IPs.
+# CM API probes: VPC private_ip from Jenkins (not same-host public EIP); manager IP/FQDN on cldr-mngr. SG must allow 7180/7183 from Jenkins to private IPs.
 ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
 ansible-playbook -i inventory.ini 30_setup_cm_ldap.yml
 ```
