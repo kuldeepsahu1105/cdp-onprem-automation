@@ -1,0 +1,312 @@
+# Rendered by 26_setup_base_cluster.yml — CDP base cluster services and host templates.
+# Toggle services via base_cluster_install_services in group_vars/all.yml (Jenkins ANSIBLE_GROUP_VARS_YAML).
+{% set svc = base_cluster_install_services %}
+services:
+{% if svc.core_settings | default(true) %}
+  - name: core-settings
+    type: CORE_SETTINGS
+    display_name: Core Settings
+{% endif %}
+{% if svc.zookeeper | default(true) %}
+  - name: zookeeper
+    type: ZOOKEEPER
+    display_name: ZooKeeper
+    config:
+      zookeeper_datadir_autocreate: true
+{% endif %}
+{% if svc.hdfs | default(true) %}
+  - name: hdfs
+    type: HDFS
+    display_name: HDFS
+    config:
+      zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+      core_connector: "{{ 'core-settings' if svc.core_settings | default(true) else '' }}"
+    role_groups:
+      - type: DATANODE
+        config:
+          dfs_data_dir_list: /dfs/dn
+      - type: NAMENODE
+        config:
+          dfs_name_dir_list: /dfs/nn
+      - type: SECONDARYNAMENODE
+        config:
+          fs_checkpoint_dir_list: /dfs/snn
+{% endif %}
+{% if svc.ozone | default(true) %}
+  - name: ozone
+    type: OZONE
+    display_name: Ozone
+    config:
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+{% endif %}
+{% if svc.yarn | default(true) %}
+  - name: yarn
+    type: YARN
+    display_name: YARN
+    config:
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+      zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+    role_groups:
+      - type: RESOURCEMANAGER
+        config:
+          yarn_scheduler_maximum_allocation_mb: {{ base_cluster_yarn_rm_max_mb | default(4096) }}
+          yarn_scheduler_maximum_allocation_vcores: {{ base_cluster_yarn_rm_max_vcores | default(4) }}
+      - type: NODEMANAGER
+        config:
+          yarn_nodemanager_resource_memory_mb: {{ base_cluster_yarn_nm_memory_mb | default(4096) }}
+          yarn_nodemanager_resource_cpu_vcores: {{ base_cluster_yarn_nm_vcores | default(4) }}
+          yarn_nodemanager_local_dirs: /tmp/nm
+          yarn_nodemanager_log_dirs: /var/log/nm
+{% endif %}
+{% if svc.tez | default(true) %}
+  - name: tez
+    type: TEZ
+    display_name: Tez
+    config:
+      yarn_service: "{{ 'yarn' if svc.yarn | default(true) else '' }}"
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+{% endif %}
+{% if svc.hive | default(true) %}
+  - name: hive
+    type: HIVE
+    display_name: Hive
+    config:
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+      zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+{% endif %}
+{% if svc.hive_on_tez | default(true) %}
+  - name: hive_on_tez
+    type: HIVE_ON_TEZ
+    display_name: Hive on Tez
+    config:
+      hive_metastore: "{{ 'hive' if svc.hive | default(true) else '' }}"
+      tez_service: "{{ 'tez' if svc.tez | default(true) else '' }}"
+      zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+{% endif %}
+{% if svc.hbase | default(true) %}
+  - name: hbase
+    type: HBASE
+    display_name: HBase
+    config:
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+      zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+{% endif %}
+{% if svc.hue | default(true) %}
+  - name: hue
+    type: HUE
+    display_name: Hue
+    config:
+      hive_service: "{{ 'hive_on_tez' if svc.hive_on_tez | default(true) else ('hive' if svc.hive | default(true) else '') }}"
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+{% endif %}
+{% if svc.iceberg | default(true) %}
+  - name: iceberg
+    type: ICEBERG
+    display_name: Iceberg
+    config:
+      hive_service: "{{ 'hive' if svc.hive | default(true) else '' }}"
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+{% endif %}
+{% if svc.replication | default(true) %}
+  - name: replication
+    type: REPLICATION_MANAGER
+    display_name: Replication Manager
+    config:
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+{% endif %}
+{% if svc.impala | default(true) %}
+  - name: impala
+    type: IMPALA
+    display_name: Impala
+    config:
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+      hive_service: "{{ 'hive' if svc.hive | default(true) else '' }}"
+      hbase_service: "{{ 'hbase' if svc.hbase | default(true) else '' }}"
+{% endif %}
+{% if svc.kafka | default(true) %}
+  - name: kafka
+    type: KAFKA
+    display_name: Kafka
+    config:
+      zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+{% endif %}
+{% if svc.atlas | default(true) %}
+  - name: atlas
+    type: ATLAS
+    display_name: Atlas
+    config:
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+      kafka_service: "{{ 'kafka' if svc.kafka | default(true) else '' }}"
+{% endif %}
+{% if svc.ranger | default(true) %}
+  - name: ranger
+    type: RANGER
+    display_name: Ranger
+    config:
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+      hive_service: "{{ 'hive' if svc.hive | default(true) else '' }}"
+      kafka_service: "{{ 'kafka' if svc.kafka | default(true) else '' }}"
+{% endif %}
+{% if svc.nifi | default(false) %}
+  - name: nifi
+    type: NIFI
+    display_name: NiFi
+{% endif %}
+{% if svc.nifi_registry | default(false) %}
+  - name: nifi_registry
+    type: NIFI_REGISTRY
+    display_name: NiFi Registry
+{% endif %}
+{% if svc.dataviz | default(false) %}
+  - name: dataviz
+    type: DATAVIZ
+    display_name: Data Visualization
+{% endif %}
+{% if svc.phoenix | default(false) %}
+  - name: phoenix
+    type: PHOENIX
+    display_name: Phoenix
+    config:
+      hbase_service: "{{ 'hbase' if svc.hbase | default(true) else '' }}"
+{% endif %}
+{% if svc.knox | default(true) %}
+  - name: knox
+    type: KNOX
+    display_name: Knox
+{% endif %}
+{% if svc.solr | default(false) %}
+  - name: solr
+    type: SOLR
+    display_name: Solr
+{% endif %}
+host_templates:
+  - name: Master
+    role_groups:
+{% if svc.hdfs | default(true) %}
+      - service: hdfs
+        type: NAMENODE
+      - service: hdfs
+        type: SECONDARYNAMENODE
+{% endif %}
+{% if svc.ozone | default(true) %}
+      - service: ozone
+        type: OZONE_MANAGER
+      - service: ozone
+        type: STORAGE_CONTAINER_MANAGER
+{% endif %}
+{% if svc.yarn | default(true) %}
+      - service: yarn
+        type: RESOURCEMANAGER
+      - service: yarn
+        type: JOBHISTORY
+{% endif %}
+{% if svc.hive | default(true) %}
+      - service: hive
+        type: HIVEMETASTORE
+{% endif %}
+{% if svc.hive_on_tez | default(true) %}
+      - service: hive_on_tez
+        type: HIVESERVER2
+{% endif %}
+{% if svc.hbase | default(true) %}
+      - service: hbase
+        type: MASTER
+{% endif %}
+{% if svc.hue | default(true) %}
+      - service: hue
+        type: HUE_SERVER
+      - service: hue
+        type: HUE_LOAD_BALANCER
+{% endif %}
+{% if svc.impala | default(true) %}
+      - service: impala
+        type: STATESTORE
+      - service: impala
+        type: CATALOGSERVER
+{% endif %}
+{% if svc.atlas | default(true) %}
+      - service: atlas
+        type: ATLAS_SERVER
+{% endif %}
+{% if svc.ranger | default(true) %}
+      - service: ranger
+        type: RANGER_ADMIN
+      - service: ranger
+        type: RANGER_TAGSYNC
+      - service: ranger
+        type: RANGER_USERSYNC
+{% endif %}
+{% if svc.replication | default(true) %}
+      - service: replication
+        type: REPLICATION_MANAGER
+{% endif %}
+{% if svc.iceberg | default(true) %}
+      - service: iceberg
+        type: ICEBERG_CATALOG
+{% endif %}
+{% if svc.nifi | default(false) %}
+      - service: nifi
+        type: NIFI_SERVER
+{% endif %}
+{% if svc.nifi_registry | default(false) %}
+      - service: nifi_registry
+        type: NIFI_REGISTRY_SERVER
+{% endif %}
+{% if svc.knox | default(true) %}
+      - service: knox
+        type: KNOX_GATEWAY
+{% endif %}
+{% if svc.phoenix | default(false) %}
+      - service: phoenix
+        type: PHOENIX_QUERY_SERVER
+{% endif %}
+{% if svc.solr | default(false) %}
+      - service: solr
+        type: SOLR_SERVER
+{% endif %}
+  - name: Worker
+    role_groups:
+{% if svc.hdfs | default(true) %}
+      - service: hdfs
+        type: DATANODE
+{% endif %}
+{% if svc.ozone | default(true) %}
+      - service: ozone
+        type: OZONE_DATANODE
+{% endif %}
+{% if svc.yarn | default(true) %}
+      - service: yarn
+        type: NODEMANAGER
+{% endif %}
+{% if svc.zookeeper | default(true) %}
+      - service: zookeeper
+        type: SERVER
+{% endif %}
+{% if svc.hbase | default(true) %}
+      - service: hbase
+        type: REGIONSERVER
+{% endif %}
+{% if svc.hive | default(true) %}
+      - service: hive
+        type: GATEWAY
+{% endif %}
+{% if svc.hive_on_tez | default(true) %}
+      - service: hive_on_tez
+        type: GATEWAY
+{% endif %}
+{% if svc.tez | default(true) %}
+      - service: tez
+        type: GATEWAY
+{% endif %}
+{% if svc.impala | default(true) %}
+      - service: impala
+        type: IMPALAD
+{% endif %}
+{% if svc.kafka | default(true) %}
+      - service: kafka
+        type: BROKER
+{% endif %}
+{% if svc.solr | default(false) %}
+      - service: solr
+        type: SOLR_SERVER
+{% endif %}

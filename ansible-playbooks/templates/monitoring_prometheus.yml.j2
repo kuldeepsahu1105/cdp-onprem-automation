@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - {{ monitoring_alertmanager_container }}:9093
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+
+  - job_name: cadvisor
+    static_configs:
+      - targets:
+          - {{ monitoring_cadvisor_container }}:8080
+
+{% for target in monitoring_prometheus_extra_targets | default([]) %}
+  - job_name: {{ target.job_name }}
+    static_configs:
+      - targets:
+{% for host in target.targets %}
+          - {{ host }}
+{% endfor %}
+{% endfor %}

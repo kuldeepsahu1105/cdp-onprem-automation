@@ -1,0 +1,21 @@
+---
+# Restart CM server + agent on the CM host. Import from a play with hosts: cldr-mngr (not localhost+delegate).
+# systemd module from connection:local plays can target the wrong machine; systemctl on the host is reliable.
+
+- name: Restart Cloudera Manager server and agent via systemctl
+  ansible.builtin.shell: |
+    set -euo pipefail
+    systemctl daemon-reload 2>/dev/null || true
+    for unit in cloudera-scm-server cloudera-scm-agent; do
+      if systemctl cat "${unit}" >/dev/null 2>&1; then
+        systemctl restart "${unit}"
+        echo "restarted ${unit}"
+      else
+        echo "WARN: systemd unit ${unit} not found — skip (CM may use a different unit name or already restarted via API)"
+      fi
+    done
+  args:
+    executable: /bin/bash
+  become: true
+  register: cm_restart_cmd
+  changed_when: "'restarted' in cm_restart_cmd.stdout"

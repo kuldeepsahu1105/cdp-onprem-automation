@@ -1,0 +1,32 @@
+services:
+  caddy:
+    image: {{ deployment_portal_caddy_image }}
+    container_name: {{ deployment_portal_caddy_container }}
+    restart: unless-stopped
+    ports:
+      - "{{ deployment_portal_http_port }}:{{ deployment_portal_http_port }}"
+    volumes:
+      - {{ deployment_portal_config_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro
+      - {{ deployment_portal_www_dir }}:/srv:ro
+    networks:
+      - deployment_portal
+
+  pgadmin:
+    image: {{ deployment_portal_pgadmin_image }}
+    container_name: {{ deployment_portal_pgadmin_container }}
+    restart: unless-stopped
+    ports:
+      - "{{ deployment_portal_pgadmin_host_port }}:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "{{ pgadmin_default_email }}"
+      PGADMIN_DEFAULT_PASSWORD: "{{ pgadmin_default_password }}"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    volumes:
+      - {{ deployment_portal_config_dir }}/pgadmin-servers.json:/pgadmin4/servers.json:ro
+    networks:
+      - deployment_portal
+
+networks:
+  deployment_portal:
+    name: deployment_portal

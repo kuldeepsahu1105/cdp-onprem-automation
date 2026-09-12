@@ -1,0 +1,8 @@
+##### Generated using ansible
+NETWORKING=yes
+NISDOMAIN={{ sysconfig_domain }}      	# cluster / identity DNS domain
+DNS1={{ sysconfig_dns1 }}  	    	# primary DNS (VPC resolver on AWS)
+{% if sysconfig_dns2 | default('') | length > 0 %}
+DNS2={{ sysconfig_dns2 }}  	    	# FreeIPA server (cluster DNS)
+{% endif %}
+NOZEROCONF=yes

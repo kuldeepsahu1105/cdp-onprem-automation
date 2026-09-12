@@ -1,0 +1,7 @@
+collections:
+  - name: community.general
+  - name: community.postgresql
+  - name: ansible.posix
+  - name: community.crypto
+  - name: freeipa.ansible_freeipa
+  - name: git+https://github.com/cloudera-labs/cloudera.cluster.git,devel

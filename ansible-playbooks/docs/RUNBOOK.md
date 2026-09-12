@@ -1,0 +1,341 @@
+# Runbook — How to Use
+
+Step-by-step guide for deploying and tearing down Cloudera Private Cloud with these Ansible playbooks.
+
+All commands assume you are in the `ansible-playbooks/` directory:
+
+```bash
+cd ansible-playbooks
+```
+
+## Prerequisites
+
+1. Install Ansible collections:
+
+```bash
+ansible-galaxy collection install -r requirements.yml
+```
+
+2. Prepare `inventory.ini` with your hosts (see [REFERENCE.md](REFERENCE.md#inventory-groups)).
+3. Configure `group_vars/all.yml` (domain, passwords, AD vars if needed).
+4. Place `license.txt` and an SSH private key in `ansible-playbooks/` (or use `~/.ssh/id_rsa`):
+   - `*.pem` (e.g. `sshkey.pem` copied from Terraform output)
+   - `id_rsa` in `ansible-playbooks/`
+   - `~/.ssh/id_rsa` on the control machine
+   - Or set `ANSIBLE_PRIVATE_KEY=/path/to/key` before running the wrapper
+
+5. **CM archive credentials** (phase 3 only) — use **one** of:
+   - `*info.txt` in `ansible-playbooks/` with `login:` and `password:` lines
+   - `CM_INFO_FILE=/path/to/info.txt`
+   - `CM_REPO_USERNAME` + `CM_REPO_PASSWORD` environment variables
+   - `cm_repo_username` / `cm_repo_password` in `group_vars/all.yml`
+
+   If an info file or env vars are set, the wrapper passes them as Ansible extra vars; you do **not** also need credentials in `all.yml` or manual `-e` flags.
+
+## Control node and OS support
+
+The wrappers and playbooks support:
+
+| Control node | How to run |
+|---|---|
+| Mac laptop (remote) | `brew install ansible jq`; run from repo root or `ansible-playbooks/` |
+| RHEL / Ubuntu laptop (remote) | Install `ansible`, `jq`; run `./clone_and_run_pvc_automation.sh` or `cd ansible-playbooks && ./pvc_setup.sh` |
+| Cluster node (`cldr-mngr`, `ipaserver`) | `CONTROL_MODE=local DEPLOY_PHASE=all ./pvc_setup.sh` from `ansible-playbooks/` (uses `~/.ssh/id_rsa` if no PEM in cwd) |
+
+When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-playbooks/`, the wrapper prompts you to choose. Override with `ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, or `CM_INFO_FILE`.
+
+### Without wrappers (direct `ansible-playbook`)
+
+Jenkins and `pvc_setup.sh` / `clone_and_run_pvc_automation.sh` are optional. From `ansible-playbooks/`:
+
+```bash
+ansible-galaxy collection install -r requirements.yml
+export ANSIBLE_PRIVATE_KEY=/path/to/your-key.pem   # or place sshkey.pem / id_rsa in this directory
+ansible-playbook -i inventory.ini 00_setup_ssh_preqs.yml --private-key "$ANSIBLE_PRIVATE_KEY"
+ansible-playbook -i inventory.ini 22_setup_cm_autotls.yml --private-key "$ANSIBLE_PRIVATE_KEY"
+```
+
+Playbooks resolve SSH keys and Auto-TLS material on the **control machine** via `ANSIBLE_PRIVATE_KEY`, files under `ansible-playbooks/`, or `group_vars` (`cm_private_key_path`, `cm_node_sudo_password`). Wrappers only set the same env vars and `--private-key` for convenience.
+
+| Target OS | CM repo mode | Notes |
+|---|---|---|
+| RHEL 8/9 | `public` or `internal` | Internal mirror: RPM + `createrepo` + CDH parcel |
+| Ubuntu 22.04 / 24.04 | `public` or `internal` | Internal mirror: apt `.deb` mirror + CDH parcel; public uses official `cloudera-manager.list` |
+
+**CDH base cluster:** Parcel suffix defaults to `auto` — `jammy`/`noble` on Ubuntu workers, `el8`/`el9` on RHEL. Override with `cdh_parcel_os_suffix: noble` etc.
+
+### Phased deployment (`pvc_setup.sh`)
+
+```bash
+DEPLOY_PHASE=1 ./pvc_setup.sh    # prerequisites (00–09)
+DEPLOY_PHASE=2 ./pvc_setup.sh    # identity: FreeIPA or AD (auto-detect)
+DEPLOY_PHASE=3 ./pvc_setup.sh    # CM install (17/18/19/20/21)
+DEPLOY_PHASE=4 ./pvc_setup.sh    # autotls, kerberos, CMS, base cluster, ECS (if inventory has ecs-* groups)
+DEPLOY_PHASE=5 ./pvc_setup.sh    # ECS cluster only (27)
+DEPLOY_PHASE=all ./pvc_setup.sh  # full flow
+```
+
+**Dry run** (preview changes without applying):
+
+```bash
+# Ansible — check mode + diff
+DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
+./pvc_setup.sh --dry-run
+
+# Via wrapper
+DRY_RUN=true DEPLOY_PHASE=3 ./clone_and_run_pvc_automation.sh
+
+# Terraform — plan only (no apply, no inventory copy)
+DRY_RUN=true ./clone_and_run_terraform.sh
+```
+
+Set `ANSIBLE_DIFF=false` to omit `--diff` during Ansible dry runs. CM API playbooks (`26`, `27`) may still call Cloudera Manager APIs even in check mode.
+
+Identity is auto-detected: `[ipaserver]` in inventory → FreeIPA; empty ipaserver + `ad_kdc_host` → AD.
+
+---
+
+## Scenario A — AWS deployment with FreeIPA
+
+### 1. Provision infrastructure
+
+From the repo root:
+
+```bash
+./clone_and_run_terraform.sh
+```
+
+This creates EC2 instances and generates `ansible_inventory.ini`. Copy or symlink it to `ansible-playbooks/inventory.ini`.
+
+### 2. Ensure inventory has ipaserver
+
+```ini
+[ipaserver]
+ipaserver ansible_host=<public_ip> private_ip=<private_ip> cldr_hostname=ipaserver
+```
+
+### 3. Detect identity provider
+
+```bash
+ansible-playbook -i inventory.ini 00_detect_identity.yml
+```
+
+Expected: `effective identity provider: freeipa`
+
+### 4. Run Phase 1 (prerequisites)
+
+```bash
+bash pvc_setup.sh
+```
+
+Or run playbooks `00` through `09` individually.
+
+### 5. Run Phase 2 (identity + DNS)
+
+```bash
+ansible-playbook -i inventory.ini 10_identity_setup.yml
+```
+
+### 6. Run Phase 3 (Cloudera Manager)
+
+```bash
+# Public repos (default) — archive.cloudera.com/p/
+ansible-playbook -i inventory.ini 17_download_repos.yml \
+  -e cm_repo_username="<user>" -e cm_repo_password="<pass>"
+
+# OR internal mirror on cldr-mngr (RHEL: RPM; Ubuntu: apt):
+# Set cm_repo_source: internal in group_vars/all.yml, then:
+ansible-playbook -i inventory.ini 16_setup_cm_repos.yml \
+  -e cm_repo_username="<user>" -e cm_repo_password="<pass>"
+
+ansible-playbook -i inventory.ini 18_setup_postgres.yml
+ansible-playbook -i inventory.ini 19_start_cm.yml
+ansible-playbook -i inventory.ini 20_verify_cm.yml
+ansible-playbook -i inventory.ini 21_setup_cm_license.yml
+ansible-playbook -i inventory.ini 22_setup_cm_autotls.yml
+ansible-playbook -i inventory.ini 23_setup_cm_krbs.yml
+ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
+```
+
+If `cm_admin_pass` is not the factory password (`cm_admin_bootstrap_pass`, default `admin`), `20_verify_cm.yml` and later playbooks reset the CM `admin` user to `cm_admin_pass` via the API on first successful connection.
+
+CSD JARs for DataViz / NiFi / NiFi Registry are built from `cdv_version`, `cfm_version`, and related vars during `19_start_cm.yml` (RHEL CM). Set e.g. `cdv_version: "8.1.5"` and update `cdv_dataviz_csd_jar` to match the archive jar name, or pass explicit `scm_csds` URLs.
+
+### 7. Run Phase 4 (CMS + base cluster)
+
+```bash
+ansible-playbook -i inventory.ini 24_setup_cm_cms.yml
+ansible-playbook -i inventory.ini 26_setup_base_cluster.yml
+ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml
+```
+
+`26_setup_base_cluster.yml` builds the cluster from `templates/base_cluster_cluster_spec.j2`. Toggle services with `base_cluster_install_services` in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`). Cluster **create** runs only when the cluster does not exist in CM; adding services to an existing cluster requires CM UI/API changes.
+
+`27_setup_ecs_cluster.yml` is skipped automatically when `[ecs-masters]` / `[ecs-workers]` are empty (`ecs_deploy_enabled: auto`).
+
+### 8. Deployment portal (optional)
+
+```bash
+ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
+# Optional monitoring (or set monitoring_stack_enabled: true in all.yml for playbook 28)
+MONITORING_STACK_ENABLED=true ansible-playbook -i inventory.ini 29_setup_monitoring_stack.yml
+```
+
+Open `http://<cldr-mngr-fqdn>:8088/` for the index (CM, IPA, ECS, PostgreSQL, pgAdmin, node table). pgAdmin: port `5050`.
+
+---
+
+## Scenario B — Bare metal with Active Directory
+
+### 1. Inventory (no ipaserver)
+
+```ini
+[cldr-mngr]
+cldr-mngr ansible_host=10.54.75.123 private_ip=10.54.75.123 cldr_hostname=cldr-mngr
+
+[base-masters]
+pvcbase-master ansible_host=10.54.75.74 private_ip=10.54.75.74 cldr_hostname=pvcbase-master
+```
+
+Leave `[ipaserver]` empty or commented out.
+
+### 2. Configure AD in group_vars/all.yml
+
+```yaml
+identity_provider: auto
+deployment_environment: baremetal
+ad_domain: corp.example.com
+ad_kdc_host: 10.54.75.10
+ad_dns_servers:
+  - "{{ ad_kdc_host }}"
+ad_join_user: svc-cloudera-join
+ad_join_password: "ChangeMe@123"
+```
+
+### 3. Detect and verify
+
+```bash
+ansible-playbook -i inventory.ini 00_detect_identity.yml
+```
+
+Expected: `effective identity provider: ad`
+
+### 4. Prerequisites + identity
+
+```bash
+# Phase 1
+ansible-playbook -i inventory.ini 00_setup_ssh_preqs.yml --limit 'all:!ipaserver'
+# ... run 01-09 or use pvc_setup.sh
+
+# Phase 2 (DNS + realm join only — skips FreeIPA server playbooks)
+ansible-playbook -i inventory.ini 10_identity_setup.yml
+```
+
+### 5. Cloudera Manager + AD integration
+
+```bash
+ansible-playbook -i inventory.ini 19_start_cm.yml
+ansible-playbook -i inventory.ini 21_setup_cm_license.yml
+ansible-playbook -i inventory.ini 23_setup_cm_krbs.yml
+ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
+```
+
+Continue with CMS and base cluster as in Scenario A step 7.
+
+---
+
+## Scenario C — macOS control node (wrapper scripts)
+
+```bash
+# From a directory containing .tfvars.env or .tfvars.yaml and license.txt
+./clone_and_run_pvc_automation.sh
+```
+
+Requirements on macOS:
+- **bash** (scripts use `#!/usr/bin/env bash`)
+- **Homebrew** for auto-install of Terraform, AWS CLI, `jq`
+- `.tfvars.env` or `.tfvars.yaml` in the current directory (or set `TFVARS_FILE`)
+
+YAML example (`.tfvars.yaml`):
+
+```yaml
+aws_region: ap-southeast-1
+environment: development
+cm_version: "7.13.2.10000"
+instance_groups:
+  cldr_mngr:
+    count: 1
+    instance_type: m5.4xlarge
+    volume_size: 300
+```
+
+See repo root `.tfvars.yaml` for the full template.
+
+---
+
+## Cleanup runbook
+
+Always requires explicit confirmation:
+
+```bash
+ansible-playbook -i inventory.ini 99_cleanup.yml \
+  -e cleanup_enabled=true -e cleanup_confirm=true \
+  -e <scope_toggle>=true
+```
+
+### Common cleanup scopes
+
+```bash
+# Stop CMS only
+ansible-playbook -i inventory.ini 99_cleanup.yml \
+  -e cleanup_enabled=true -e cleanup_confirm=true \
+  -e cleanup_stop_cms=true
+
+# Delete base cluster
+ansible-playbook -i inventory.ini 99_cleanup.yml \
+  -e cleanup_enabled=true -e cleanup_confirm=true \
+  -e cleanup_delete_base_cluster=true
+
+# Remove CM, keep PostgreSQL data
+ansible-playbook -i inventory.ini 99_cleanup.yml \
+  -e cleanup_enabled=true -e cleanup_confirm=true \
+  -e cleanup_remove_cm=true -e cleanup_remove_cm_agents=true \
+  -e cleanup_stop_postgres=true
+
+# Full end-to-end teardown
+ansible-playbook -i inventory.ini 99_cleanup.yml \
+  -e cleanup_enabled=true -e cleanup_confirm=true \
+  -e cleanup_e2e=true
+```
+
+See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
+
+---
+
+## Troubleshooting
+
+| Issue | Action |
+|---|---|
+| Wrong identity detected | Run `00_detect_identity.yml`; set `identity_provider: freeipa` or `ad` to override |
+| DNS not persisting on Ubuntu | DNS is applied via netplan — see [REFERENCE.md](REFERENCE.md#dns-configuration) |
+| CM install fails on Ubuntu | Set `cm_repo_username` / `cm_repo_password`; use `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr) |
+| CDH parcel download fails | Ensure worker facts exist (run phase 1 first). Set `cdh_parcel_os_suffix: noble` or `jammy` for Ubuntu workers, `el8`/`el9` for RHEL |
+| PostgreSQL listens on 127.0.0.1 only | Re-run `18_setup_postgres.yml` (uses `pg_ctlcluster restart` on Ubuntu) or `pg_ctlcluster 18 main restart` |
+| SSH restart fails on Ubuntu | Fixed in `00_setup_ssh_preqs.yml` — uses `ssh` service instead of `sshd` |
+| AWS vs bare metal DNS wrong | Set `deployment_environment: aws` or `baremetal` explicitly |
+| NetworkManager restart failed | Fixed in `03_create_etc_hosts.yml` — pull latest `main` |
+
+---
+
+## Quick reference — playbook order
+
+```
+00-09  Prerequisites
+10_identity_setup  Identity + DNS (auto FreeIPA or AD)
+16-21  CM install + license
+22     Auto-TLS
+23-25  Kerberos + LDAP
+24     CMS (Management Service)
+26     Base cluster (HDFS/YARN/ZK)
+99     Cleanup (destructive)
+```

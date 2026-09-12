@@ -1,0 +1,23 @@
+---
+# cm_client on the Ansible controller (required by cloudera.cluster.* modules).
+# Standalone, Jenkins, and wrappers: same pip install on the host running ansible-playbook.
+
+- name: Check cm_client import on controller Python
+  ansible.builtin.command:
+    cmd: "{{ ansible_playbook_python | default(ansible_python_interpreter | default('/usr/bin/python3')) }} -c 'import cm_client'"
+  register: cm_client_import
+  changed_when: false
+  failed_when: false
+
+- name: Install cm_client for cloudera.cluster modules (pip --user)
+  ansible.builtin.pip:
+    name: cm_client
+    executable: pip3
+    extra_args: --user
+  when: cm_client_import.rc != 0
+
+- name: Verify cm_client after pip install
+  ansible.builtin.command:
+    cmd: "{{ ansible_playbook_python | default(ansible_python_interpreter | default('/usr/bin/python3')) }} -c 'import cm_client'"
+  changed_when: false
+  when: cm_client_import.rc != 0

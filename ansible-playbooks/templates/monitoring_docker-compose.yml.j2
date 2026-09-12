@@ -1,0 +1,62 @@
+services:
+  prometheus:
+    image: {{ monitoring_prometheus_image }}
+    container_name: {{ monitoring_prometheus_container }}
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.external-url=http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/prometheus/
+      - --web.route-prefix=/prometheus
+    volumes:
+      - {{ monitoring_config_dir }}/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - deployment_portal
+      - monitoring_internal
+
+  alertmanager:
+    image: {{ monitoring_alertmanager_image }}
+    container_name: {{ monitoring_alertmanager_container }}
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --web.route-prefix=/alertmanager
+      - --web.external-url=http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/alertmanager/
+    volumes:
+      - {{ monitoring_config_dir }}/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    networks:
+      - deployment_portal
+      - monitoring_internal
+
+  grafana:
+    image: {{ monitoring_grafana_image }}
+    container_name: {{ monitoring_grafana_container }}
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: "{{ monitoring_grafana_admin_user }}"
+      GF_SECURITY_ADMIN_PASSWORD: "{{ monitoring_grafana_admin_password }}"
+      GF_SERVER_ROOT_URL: "http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    networks:
+      - deployment_portal
+      - monitoring_internal
+
+  cadvisor:
+    image: {{ monitoring_cadvisor_image }}
+    container_name: {{ monitoring_cadvisor_container }}
+    restart: unless-stopped
+    ports:
+      - "{{ monitoring_cadvisor_host_port }}:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - monitoring_internal
+
+networks:
+  deployment_portal:
+    external: true
+    name: deployment_portal
+  monitoring_internal:
+    name: monitoring_internal

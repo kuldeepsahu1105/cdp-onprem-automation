@@ -1,413 +1,283 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Provision AWS infrastructure for Cloudera PVC (Terraform wrapper).
+#
+# Usage:
+#   ./clone_and_run_terraform.sh
+#   DRY_RUN=true ./clone_and_run_terraform.sh
+#   ./clone_and_run_terraform.sh --dry-run --help
 
-# How to run: OWNER=myname ENVIRONMENT=production ./run_terraform_wrapper.sh
-
-# make sure aws credentials are set or if using sso then logged in to awscli.
-set -e
-set -o pipefail
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-resolve_scripts_lib() {
-    if [[ -f "$SCRIPT_DIR/scripts/lib/load_tfvars.sh" ]]; then
-        printf '%s' "$SCRIPT_DIR/scripts/lib"
-        return 0
-    fi
-    if [[ -f "$SCRIPT_DIR/cdp-onprem-automation/scripts/lib/load_tfvars.sh" ]]; then
-        printf '%s' "$SCRIPT_DIR/cdp-onprem-automation/scripts/lib"
-        return 0
-    fi
-    echo "Error: scripts/lib/load_tfvars.sh not found." >&2
-    return 1
-}
-
 GIT_REPO_NAME="cdp-onprem-automation"
-GIT_REPO_URL="https://github.com/kuldeepsahu1105/$GIT_REPO_NAME.git"
-echo "GIT_REPO_URL: $GIT_REPO_URL"
-GIT_BRANCH="main"
+GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/kuldeepsahu1105/$GIT_REPO_NAME.git}"
+GIT_BRANCH="${GIT_BRANCH:-main}"
 
-print_message() {
-    echo ""
-    echo "================================================================="
-    echo "            🚀 $(echo "$0": "$1") 🚀          "
-    echo "================================================================="
-    echo ""
+HOST_MACHINE_ARCH="$(uname -m)"
+case "$HOST_MACHINE_ARCH" in
+  aarch64|arm64) TF_DL_ARCH="arm64"; AWSCLI_DL_ARCH="aarch64" ;;
+  *) TF_DL_ARCH="amd64"; AWSCLI_DL_ARCH="x86_64" ;;
+esac
+
+resolve_scripts_lib_early() {
+  if [[ -f "$SCRIPT_DIR/scripts/lib/load_tfvars.sh" ]]; then
+    printf '%s' "$SCRIPT_DIR/scripts/lib"
+  elif [[ -f "$SCRIPT_DIR/$GIT_REPO_NAME/scripts/lib/load_tfvars.sh" ]]; then
+    printf '%s' "$SCRIPT_DIR/$GIT_REPO_NAME/scripts/lib"
+  else
+    printf ''
+  fi
 }
 
-# ------------------------------
-# 🛠 INSTALL TERRAFORM & AWSCLI V2 (macOS/Linux)
-# ------------------------------
+ensure_repo_checkout() {
+  if [[ -f "$SCRIPT_DIR/scripts/lib/load_tfvars.sh" ]]; then
+    ui_ok "Repository checkout ready (branch: ${GIT_BRANCH})"
+    return 0
+  fi
+  ui_step "Syncing repository checkout" "📥"
+  local git_quiet=()
+  if declare -F ui_git_quiet >/dev/null 2>&1 && ui_git_quiet; then
+    git_quiet=(--quiet)
+  fi
+  if [[ -d "$GIT_REPO_NAME" ]]; then
+    (cd "$GIT_REPO_NAME" && git fetch "${git_quiet[@]}" origin && git checkout "${git_quiet[@]}" "$GIT_BRANCH" && git pull "${git_quiet[@]}" origin "$GIT_BRANCH")
+    ui_ok "Updated $GIT_REPO_NAME/ (branch: $GIT_BRANCH)"
+  else
+    git clone "${git_quiet[@]}" "$GIT_REPO_URL"
+    (cd "$GIT_REPO_NAME" && git checkout "${git_quiet[@]}" "$GIT_BRANCH")
+    ui_ok "Cloned $GIT_REPO_NAME/ (branch: $GIT_BRANCH)"
+  fi
+}
+
 install_terraform() {
-    print_message "Checking Terraform installation..."
-
-    if command -v terraform &>/dev/null; then
-        echo "✅ Terraform already installed: $(terraform version | head -n1)"
-        return
-    fi
-
-    OS=$(uname | tr '[:upper:]' '[:lower:]')
-    if [[ "$OS" == "darwin" ]]; then
-        echo "🧰 Installing Terraform using Homebrew on macOS..."
-        brew tap hashicorp/tap
-        if [[ "$TERRAFORM_VERSION" == "latest" ]]; then
-            brew install hashicorp/tap/terraform
-        else
-            brew install hashicorp/tap/terraform@$TERRAFORM_VERSION
-            brew link --overwrite --force terraform@$TERRAFORM_VERSION
-        fi
-    elif [[ "$OS" == "linux" ]]; then
-        echo "🧰 Installing Terraform $TERRAFORM_VERSION on Linux..."
-        VERSION=$(curl -s https://checkpoint-api.hashicorp.com/v1/check/terraform | jq -r .current_version)
-        [[ "$TERRAFORM_VERSION" != "latest" ]] && VERSION="$TERRAFORM_VERSION"
-        curl -fsSL "https://releases.hashicorp.com/terraform/${VERSION}/terraform_${VERSION}_linux_amd64.zip" -o terraform.zip
-        unzip terraform.zip
-        sudo mv terraform /usr/local/bin/
-        rm -f terraform.zip
+  ui_step "Terraform" "🏗️"
+  if command -v terraform &>/dev/null; then
+    ui_ok "$(terraform version | head -n1)"
+    return
+  fi
+  local os
+  os="$(uname | tr '[:upper:]' '[:lower:]')"
+  if [[ "$os" == "darwin" ]]; then
+    brew tap hashicorp/tap
+    if [[ "${TERRAFORM_VERSION:-latest}" == "latest" ]]; then
+      brew install hashicorp/tap/terraform
     else
-        echo "❌ Unsupported OS: $OS"
-        exit 1
+      brew install "hashicorp/tap/terraform@${TERRAFORM_VERSION}"
+      brew link --overwrite --force "terraform@${TERRAFORM_VERSION}"
     fi
-    echo "✅ Terraform installed: $(terraform version | head -n1)"
+  elif [[ "$os" == "linux" ]]; then
+    local version
+    version="$(curl -s https://checkpoint-api.hashicorp.com/v1/check/terraform | jq -r .current_version)"
+    [[ "${TERRAFORM_VERSION:-latest}" != "latest" ]] && version="${TERRAFORM_VERSION}"
+    curl -fsSL "https://releases.hashicorp.com/terraform/${version}/terraform_${version}_linux_${TF_DL_ARCH}.zip" -o terraform.zip
+    unzip -q terraform.zip
+    sudo mv terraform /usr/local/bin/
+    rm -f terraform.zip
+  else
+    ui_err "Unsupported OS: $os"
+    exit 1
+  fi
+  ui_ok "Installed $(terraform version | head -n1)"
 }
 
 install_awscli() {
-    print_message "Checking AWS CLI installation..."
-
-    if command -v aws &>/dev/null && [[ "$(aws --version 2>&1)" == *"aws-cli/2"* ]]; then
-        echo "✅ AWS CLI v2 already installed: $(aws --version)"
-        return
-    fi
-
-    OS=$(uname | tr '[:upper:]' '[:lower:]')
-    if [[ "$OS" == "darwin" ]]; then
-        echo "🧰 Installing AWS CLI v2 using Homebrew on macOS..."
-        brew install awscli
-    elif [[ "$OS" == "linux" ]]; then
-        echo "🧰 Installing AWS CLI v2 on Linux..."
-        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-        unzip awscliv2.zip
-        sudo ./aws/install --update
-        rm -rf aws awscliv2.zip
-    else
-        echo "❌ Unsupported OS: $OS"
-        exit 1
-    fi
-    echo "✅ AWS CLI installed: $(aws --version)"
+  ui_step "AWS CLI" "☁️"
+  if command -v aws &>/dev/null && [[ "$(aws --version 2>&1)" == *"aws-cli/2"* ]]; then
+    ui_ok "$(aws --version 2>&1)"
+    return
+  fi
+  local os
+  os="$(uname | tr '[:upper:]' '[:lower:]')"
+  if [[ "$os" == "darwin" ]]; then
+    brew install awscli
+  elif [[ "$os" == "linux" ]]; then
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWSCLI_DL_ARCH}.zip" -o awscliv2.zip
+    unzip -q awscliv2.zip
+    sudo ./aws/install --update
+    rm -rf aws awscliv2.zip
+  else
+    ui_err "Unsupported OS: $os"
+    exit 1
+  fi
+  ui_ok "$(aws --version 2>&1)"
 }
 
 install_jq() {
-    print_message "Checking jq installation..."
-
-    if command -v jq &>/dev/null; then
-        echo "✅ jq already installed: $(jq --version)"
-        return
-    fi
-
-    OS=$(uname | tr '[:upper:]' '[:lower:]')
-    if [[ "$OS" == "darwin" ]]; then
-        echo "🧰 Installing jq using Homebrew on macOS..."
-        brew install jq
-    elif [[ "$OS" == "linux" ]]; then
-        echo "🧰 Installing jq on Linux..."
-        if command -v apt-get &>/dev/null; then
-            sudo apt-get update && sudo apt-get install -y jq
-        elif command -v yum &>/dev/null; then
-            sudo yum install -y jq
-        else
-            echo "❌ Could not install jq automatically on Linux."
-            exit 1
-        fi
+  ui_step "jq" "🔧"
+  if command -v jq &>/dev/null; then
+    ui_ok "$(jq --version)"
+    return
+  fi
+  local os
+  os="$(uname | tr '[:upper:]' '[:lower:]')"
+  if [[ "$os" == "darwin" ]]; then
+    brew install jq
+  elif [[ "$os" == "linux" ]]; then
+    if command -v apt-get &>/dev/null; then
+      sudo apt-get update -qq && sudo apt-get install -y jq
+    elif command -v yum &>/dev/null; then
+      sudo yum install -y jq
     else
-        echo "❌ Unsupported OS: $OS"
-        exit 1
+      ui_err "Could not install jq automatically"
+      exit 1
     fi
-    echo "✅ jq installed: $(jq --version)"
+  else
+    ui_err "Unsupported OS: $os"
+    exit 1
+  fi
+  ui_ok "$(jq --version)"
 }
 
+SCRIPTS_LIB="$(resolve_scripts_lib_early)"
+if [[ -z "$SCRIPTS_LIB" ]]; then
+  ensure_bash_fallback() { :; }
+  ensure_repo_checkout_minimal() {
+    if [[ ! -d "$GIT_REPO_NAME" ]]; then
+      git clone "$GIT_REPO_URL"
+      (cd "$GIT_REPO_NAME" && git checkout "$GIT_BRANCH")
+    fi
+  }
+  ensure_repo_checkout_minimal
+  SCRIPTS_LIB="$SCRIPT_DIR/$GIT_REPO_NAME/scripts/lib"
+fi
+
+# shellcheck source=scripts/lib/portable.sh
+source "$SCRIPTS_LIB/portable.sh"
+# shellcheck source=scripts/lib/ui.sh
+source "$SCRIPTS_LIB/ui.sh"
+# shellcheck source=scripts/lib/wrapper_info.sh
+source "$SCRIPTS_LIB/wrapper_info.sh"
+
+WRAPPER_SHOW_HELP=false
+WRAPPER_REMAINING_ARGS=()
+wrapper_parse_common_args "$@"
+
+if [[ "${WRAPPER_SHOW_HELP:-false}" == "true" ]]; then
+  wrapper_show_help_terraform
+  exit 0
+fi
+
+wrapper_reexec_from_repo_if_needed "$SCRIPT_DIR" "${BASH_SOURCE[0]}" "$(basename "$0")" "${WRAPPER_REMAINING_ARGS[@]}"
+
+REPO_ROOT="$(cd "$SCRIPTS_LIB/../.." && pwd)"
+wrapper_print_identity "CDP On-Prem Terraform Provisioning" "$REPO_ROOT" "$SCRIPTS_LIB"
+
+ui_section "Prerequisites" "🔧"
 install_terraform
 install_awscli
 install_jq
 
-# ------------------------------
-# ✅ AWS CREDENTIALS CHECK
-# ------------------------------
-print_message "Checking AWS credentials..."
+ui_step "AWS credentials" "🔐"
 if ! aws sts get-caller-identity &>/dev/null; then
-    echo "❌ Error: AWS credentials not found or session expired. Run 'aws configure' or 'aws sso login'."
-    exit 1
+  ui_err "AWS credentials not found or expired — run 'aws configure' or 'aws sso login'"
+  exit 1
 fi
-echo "✅ AWS credentials are valid."
+ui_ok "Credentials valid"
 
-# ------------------------------
-# 📁 CLONE AND CD INTO REPO
-# ------------------------------
-print_message "Checking Git installation..."
-if ! command -v git &>/dev/null; then
-    echo "❌ Git is not installed. Installing Git..."
-    OS=$(uname | tr '[:upper:]' '[:lower:]')
-    if [[ "$OS" == "darwin" ]]; then
-        echo "🧰 Installing Git using Homebrew on macOS..."
-        brew install git
-    elif [[ "$OS" == "linux" ]]; then
-        echo "🧰 Installing Git on Linux..."
-        sudo apt-get update && sudo apt-get install -y git || sudo yum install -y git
-    else
-        echo "❌ Unsupported OS: $OS"
-        exit 1
-    fi
-    echo "✅ Git installed: $(git --version)"
-else
-    echo "✅ Git already installed: $(git --version)"
-fi
+ui_step "Repository checkout" "📥"
+ensure_repo_checkout
 
-print_message "Cloning repository if needed..."
-
-if [ ! -d "$GIT_REPO_NAME" ]; then
-    git clone "$GIT_REPO_URL"
-    cd $GIT_REPO_NAME || exit 1
-    git checkout "$GIT_BRANCH"
-    cd ..
-else
-    cd $GIT_REPO_NAME || exit 1
-    git fetch origin
-    git checkout "$GIT_BRANCH"
-    git pull origin "$GIT_BRANCH"
-    cd ..
-fi
-
-# ------------------------------
-# 🔍 LOAD CONFIG (.tfvars.yaml | .tfvars.env)
-# ------------------------------
-print_message "Loading deployment configuration..."
-SCRIPTS_LIB="$(resolve_scripts_lib)"
 # shellcheck source=scripts/lib/load_tfvars.sh
 source "$SCRIPTS_LIB/load_tfvars.sh"
 set -a
 load_tfvars
 set +a
-echo "✅ Loaded configuration from: ${TFVARS_LOADED_FROM}"
+ui_config_summary
 
-print_message "Verify environment name : '$ENVIRONMENT' is set from ${TFVARS_LOADED_FROM}"
-
-cd $GIT_REPO_NAME/terraform-code/cloudera-pvc-terraform || exit 1
-
-print_message "Initializing Terraform..."
-terraform init
-
-# ------------------------------
-# 🔧 OVERRIDABLE CONFIG SECTION
-# ------------------------------
-# Section moved to .tfvars.env file
-
-# ------------------------------
-# 🌱 SET TERRAFORM WORKSPACE
-# ------------------------------
-print_message "Setting Terraform workspace to '${ENVIRONMENT}'..."
-if terraform workspace list | grep -q "${ENVIRONMENT}"; then
-    terraform workspace select "${ENVIRONMENT}"
+if [[ -f "$REPO_ROOT/terraform-code/cloudera-pvc-terraform/main.tf" ]] || [[ -f "$REPO_ROOT/terraform-code/cloudera-pvc-terraform/terraform.tf" ]]; then
+  TERRAFORM_DIR="$REPO_ROOT/terraform-code/cloudera-pvc-terraform"
+  GEN_SCRIPT="$REPO_ROOT/generate_inventory.sh"
+elif [[ -f "$SCRIPT_DIR/$GIT_REPO_NAME/terraform-code/cloudera-pvc-terraform/terraform.tf" ]]; then
+  TERRAFORM_DIR="$SCRIPT_DIR/$GIT_REPO_NAME/terraform-code/cloudera-pvc-terraform"
+  GEN_SCRIPT="$SCRIPT_DIR/$GIT_REPO_NAME/generate_inventory.sh"
 else
-    terraform workspace new "${ENVIRONMENT}"
+  ui_err "Could not locate terraform-code/cloudera-pvc-terraform"
+  exit 1
 fi
 
-# ------------------------------
-# 🧠 DYNAMIC VARS ASSEMBLY
-# ------------------------------
-# This contains all the variables that are passed to Terraform in order
-# i.e. COMMON_VARS, VPC_VARS, SG_VARS, EIP_VARS, KEYPAIR_VARS, INSTANCE_GROUPS_VARS
-# Section moved to .tfvars.env file
+ui_section "Terraform provisioning" "☁️"
+ui_kv "Working directory" "$TERRAFORM_DIR" "📁"
+ui_kv "Workspace" "${ENVIRONMENT}" "🌍"
 
-# ------------------------------
-# 🚀 TERRAFORM EXECUTION
-# ------------------------------
+# shellcheck source=scripts/lib/holautosa_exec_dir.sh
+source "$SCRIPTS_LIB/holautosa_exec_dir.sh"
+prepare_holautosa_workdir || true
+restore_terraform_state_to_workspace "$TERRAFORM_DIR"
 
-print_message "Planning Terraform..."
-terraform plan "${TF_VARS[@]}" -out=tfplan.out
+ui_step "Terraform init" "⚙️"
+cd "$TERRAFORM_DIR"
+# shellcheck source=scripts/lib/terraform_backend.sh
+source "$SCRIPTS_LIB/terraform_backend.sh"
+terraform_init_backend "$TERRAFORM_DIR"
 
-print_message "Applying Terraform..."
-echo "TF_DATA_DIR: $(pwd)"
-ls -l terraform.tfstate* || true
-echo
-terraform apply -auto-approve tfplan.out
-
-print_message "✅ Terraform provisioning complete!"
-
-# ------------------------------
-# 🧾 GENERATE INVENTORY
-# ------------------------------
-print_message "Running generate_inventory.sh..."
-print_message "Generating Ansible inventory..."
-
-# Resolve script's base directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-echo "SCRIPT_DIR is: $SCRIPT_DIR"
-ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-echo "ROOT_DIR is: $ROOT_DIR"
-GEN_SCRIPT="$ROOT_DIR/generate_inventory.sh"
-echo "GEN_SCRIPT is: $GEN_SCRIPT"
-ls -l $GEN_SCRIPT || true
-
-if [ -f "$GEN_SCRIPT" ]; then
-    # bash "$GEN_SCRIPT" > "$OUTPUT_FILE" 2>&1
-    # bash "$GEN_SCRIPT" | tee "$OUTPUT_FILE"
-    bash "$GEN_SCRIPT"
+ui_step "Select workspace: ${ENVIRONMENT}" "🗂️"
+if terraform workspace list | grep -qw "${ENVIRONMENT}"; then
+  terraform workspace select "${ENVIRONMENT}"
+  ui_ok "Workspace '${ENVIRONMENT}' selected"
 else
-    echo "❌ Error: generate_inventory.sh not found at $GEN_SCRIPT"
-    exit 1
+  terraform workspace new "${ENVIRONMENT}"
+  ui_ok "Workspace '${ENVIRONMENT}' created"
+fi
+
+# shellcheck source=scripts/lib/reconcile_terraform_resources.sh
+source "$SCRIPTS_LIB/reconcile_terraform_resources.sh"
+ui_step "Reconcile existing AWS key pair / security group" "🔄"
+if reconcile_terraform_resources; then
+  ui_ok "No Terraform variable changes from reconcile"
+else
+  ui_ok "Reconciled flags — reloading Terraform variables"
+  # shellcheck source=scripts/lib/build_tf_vars.sh
+  source "$SCRIPTS_LIB/build_tf_vars.sh"
+fi
+
+ui_step "Terraform plan" "📝"
+# shellcheck source=scripts/lib/terraform_plan_output.sh
+source "$SCRIPTS_LIB/terraform_plan_output.sh"
+terraform_run_plan "$TERRAFORM_DIR" tfplan.out
+
+case "${DRY_RUN:-false}" in
+  1|true|yes|TRUE|YES|on|ON)
+    persist_terraform_state_from_workspace "$TERRAFORM_DIR"
+    ui_done "Dry run complete — plan only (no apply, no inventory copy)"
+    exit 0
+    ;;
+esac
+
+ui_step "Terraform apply" "🚀"
+terraform apply -auto-approve tfplan.out
+persist_terraform_state_from_workspace "$TERRAFORM_DIR"
+
+ui_section "Ansible inventory" "📦"
+if [[ -f "$GEN_SCRIPT" ]]; then
+  bash "$GEN_SCRIPT"
+else
+  ui_err "generate_inventory.sh not found at $GEN_SCRIPT"
+  exit 1
 fi
 
 OUTPUT_FILE="ansible_inventory.ini"
-# gen_inventory="./inventory.ini"
-# cp $gen_inventory $OUTPUT_FILE
-print_message "Inventory generated at: $OUTPUT_FILE"
-cat "$OUTPUT_FILE"
-print_message "Ansible inventory generation completed."
-print_message "Please check the inventory.ini file for the generated Ansible inventory."
+DEST_INVENTORY="$(cd "$REPO_ROOT/ansible-playbooks" && pwd)/inventory.ini"
 
-# ------------------------------
-# Define source and destination paths
-# ------------------------------
-src_inventory="./$OUTPUT_FILE"
-dest_inventory="../../ansible-test/inventory.ini"
-ansible_dir="../../ansible-test"
-
-# Check if inventory.ini exists in current directory
-if [ -f "$src_inventory" ]; then
-    echo "✅ Found inventory.ini in current directory."
-
-    # Check if ansible directory exists
-    if [ -d "$ansible_dir" ]; then
-        echo "✅ Found Ansible directory: $ansible_dir"
-
-        # Check if destination path is valid (redundant but safe)
-        if [ -d "$(dirname "$dest_inventory")" ]; then
-            cp -vf "$src_inventory" "$dest_inventory"
-            # cp -vf "./inventory_public.ini" "$ansible_dir/"
-            echo "📂 Copied $src_inventory to $dest_inventory"
-            echo
-        else
-            echo "❌ Error: Destination directory $(dirname "$dest_inventory") not found."
-            echo
-            exit 1
-        fi
-    else
-        echo "❌ Error: Ansible directory $ansible_dir not found."
-        echo
-        exit 1
-    fi
+if [[ -f "$OUTPUT_FILE" ]]; then
+  ui_step "Copy inventory to ansible-playbooks" "📋"
+  cp -f "$OUTPUT_FILE" "$DEST_INVENTORY"
+  ui_inventory_summary "$OUTPUT_FILE"
+  ui_ok "Copied inventory to ansible-playbooks/inventory.ini"
 else
-    echo "❌ Error: inventory.ini not found in $(pwd)"
-    echo
-    exit 1
+  ui_err "ansible_inventory.ini not generated"
+  exit 1
 fi
 
-# ------------------------------
-# 🔐 PEM file check and copy
-# ------------------------------
-pem_file=$(find . -maxdepth 1 -type f \( -name "*.pem" \))
-if [ -z "$pem_file" ]; then
-    echo "❌ Error: No .pem or idrsa file found."
-    echo
-    # exit 1
-else
-    echo "✅ Found key file: $pem_file"
-    # cp -vf "$pem_file" "$ansible_dir/$pem_file"
-    # echo "📂 Copied $pem_file to $ansible_dir/$pem_file"
-
-    cp -vf "$pem_file" "../../ansible-test/$pem_file"
-    cp -vf "$pem_file" "../../ansible-test/sshkey.pem"
-    echo "📂 Copied $pem_file to ../../ansible-test/$pem_file"
-    echo
+pem_file="$(find . -maxdepth 1 -type f -name '*.pem' | head -1)"
+if [[ -n "$pem_file" ]]; then
+  ui_step "Copy SSH key to ansible-playbooks" "🔑"
+  cp -f "$pem_file" "$REPO_ROOT/ansible-playbooks/$(basename "$pem_file")"
+  cp -f "$pem_file" "$REPO_ROOT/ansible-playbooks/sshkey.pem"
+  ui_ok "Copied SSH key to ansible-playbooks/"
 fi
-print_message "Terraform Infrastructure Creation Completed..."
 
-# # ------------------------------
+persist_ansible_artifacts_from_workspace
+ui_done "Terraform provisioning complete"
 
-# #!/bin/bash
-
-# set -e
-# set -o pipefail
-
-# print_message() {
-#   echo ""
-#   echo "================================================================="
-#   echo "            🚀 $(echo $0: $1) 🚀          "
-#   echo "================================================================="
-#   echo ""
-# }
-
-# # ------------------------------
-# # 🔧 OVERRIDABLE CONFIG SECTION
-# # ------------------------------
-# AWS_REGION="${AWS_REGION:-ap-southeast-1}"
-# OWNER="${OWNER:-ksahu-ygulati}"
-# ENVIRONMENT="${ENVIRONMENT:-development}"
-# TERRAFORM_VERSION="${TERRAFORM_VERSION:-latest}"
-
-# # ------------------------------
-# # ✅ INSTALL TERRAFORM & AWS CLI
-# # ------------------------------
-# install_tools() {
-#   print_message "Checking Terraform and AWS CLI..."
-
-#   # Check Terraform
-#   if ! command -v terraform &> /dev/null; then
-#     print_message "Installing Terraform..."
-#     if [[ "$OSTYPE" == "darwin"* ]]; then
-#       brew tap hashicorp/tap
-#       brew install hashicorp/tap/terraform
-#     else
-#       sudo apt-get update && sudo apt-get install -y unzip wget
-#       LATEST_URL=$(curl -s https://api.github.com/repos/hashicorp/terraform/releases/latest | grep browser_download_url | grep linux_amd64.zip | cut -d '"' -f 4)
-#       wget -q "$LATEST_URL" -O terraform.zip
-#       unzip -o terraform.zip
-#       sudo mv terraform /usr/local/bin/
-#       rm -f terraform.zip
-#     fi
-#   fi
-
-#   # Check AWS CLI
-#   if ! command -v aws &> /dev/null; then
-#     print_message "Installing AWS CLI..."
-#     if [[ "$OSTYPE" == "darwin"* ]]; then
-#       brew install awscli
-#     else
-#       curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-#       unzip awscliv2.zip
-#       sudo ./aws/install
-#       rm -rf awscliv2.zip aws/
-#     fi
-#   fi
-
-#   echo "✅ Tools ready."
-# }
-
-# install_tools
-
-# # ------------------------------
-# # ✅ AWS CREDENTIALS CHECK
-# # ------------------------------
-# print_message "Checking AWS credentials..."
-# if ! aws sts get-caller-identity &>/dev/null; then
-#   echo "❌ AWS credentials not found or session expired. Run 'aws configure' or 'aws sso login'."
-#   exit 1
-# fi
-# echo "✅ AWS credentials are valid."
-
-# # ------------------------------
-# # 📁 CLONE AND CD INTO REPO
-# # ------------------------------
-# print_message "Cloning repository if needed..."
-# if [ ! -d "cdp-onprem-automation" ]; then
-#   git clone https://github.com/kuldeepsahu1105/cdp-onprem-automation.git
-# fi
-# cd cdp-onprem-automation/terraform-code/cloudera-pvc-terraform || exit 1
-
-# # ------------------------------
-# # 🛠️ Terraform Workspace Handling
-# # ------------------------------
-# print_message "Setting up Terraform workspace: $ENVIRONMENT"
-# if terraform workspace list | grep -qw "$ENVIRONMENT"; then
-#   terraform workspace select "$ENVIRONMENT"
-# else
-#   terraform workspace new "$ENVIRONMENT"
-# fi
+ui_next_steps

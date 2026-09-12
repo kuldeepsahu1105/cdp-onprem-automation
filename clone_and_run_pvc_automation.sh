@@ -1,147 +1,107 @@
 #!/usr/bin/env bash
 
-set -e
-set -o pipefail
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 GIT_REPO_NAME="cdp-onprem-automation"
-GIT_REPO_URL="https://github.com/kuldeepsahu1105/$GIT_REPO_NAME.git"
-GIT_BRANCH="main"
+GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/kuldeepsahu1105/$GIT_REPO_NAME.git}"
+GIT_BRANCH="${GIT_BRANCH:-main}"
 
-resolve_scripts_lib() {
-    if [[ -f "$SCRIPT_DIR/scripts/lib/load_tfvars.sh" ]]; then
-        printf '%s' "$SCRIPT_DIR/scripts/lib"
-        return 0
-    fi
-    if [[ -f "$SCRIPT_DIR/cdp-onprem-automation/scripts/lib/load_tfvars.sh" ]]; then
-        printf '%s' "$SCRIPT_DIR/cdp-onprem-automation/scripts/lib"
-        return 0
-    fi
-    echo "Error: scripts/lib/load_tfvars.sh not found." >&2
-    return 1
+resolve_scripts_lib_early() {
+  if [[ -f "$SCRIPT_DIR/scripts/lib/load_tfvars.sh" ]]; then
+    printf '%s' "$SCRIPT_DIR/scripts/lib"
+  elif [[ -f "$SCRIPT_DIR/$GIT_REPO_NAME/scripts/lib/load_tfvars.sh" ]]; then
+    printf '%s' "$SCRIPT_DIR/$GIT_REPO_NAME/scripts/lib"
+  elif [[ -f "$SCRIPT_DIR/ansible-playbooks/../scripts/lib/load_tfvars.sh" ]]; then
+    printf '%s' "$(cd "$SCRIPT_DIR/ansible-playbooks/.." && pwd)/scripts/lib"
+  else
+    printf ''
+  fi
 }
 
-print_message() {
-    echo ""
-    echo "================================================================="
-    echo "            🚀 $(basename "$0"): $1 🚀          "
-    echo "================================================================="
-    echo ""
-}
+SCRIPTS_LIB="$(resolve_scripts_lib_early)"
 
-print_message "Checking and setting up repository..."
-if [ -d "$GIT_REPO_NAME" ]; then
-    echo "Repository already exists. Pulling latest changes..."
-    (cd "$GIT_REPO_NAME" && git fetch origin && git checkout "$GIT_BRANCH" && git pull origin "$GIT_BRANCH")
-    echo
-else
-    echo "Cloning the repository..."
-    git clone "$GIT_REPO_URL"
-    (cd "$GIT_REPO_NAME" && git checkout "$GIT_BRANCH")
-    echo
+if [[ -z "$SCRIPTS_LIB" ]]; then
+  git_quiet=()
+  if [[ "${VERBOSE:-}" != "1" && "${VERBOSE:-}" != "true" ]]; then
+    git_quiet=(--quiet)
+  fi
+  if [[ -d "$GIT_REPO_NAME" ]]; then
+    (cd "$GIT_REPO_NAME" && git fetch "${git_quiet[@]}" origin && git checkout "${git_quiet[@]}" "$GIT_BRANCH" && git pull "${git_quiet[@]}" origin "$GIT_BRANCH")
+  else
+    git clone "${git_quiet[@]}" "$GIT_REPO_URL"
+    (cd "$GIT_REPO_NAME" && git checkout "${git_quiet[@]}" "$GIT_BRANCH")
+  fi
+  SCRIPTS_LIB="$SCRIPT_DIR/$GIT_REPO_NAME/scripts/lib"
 fi
 
-SCRIPTS_LIB="$(resolve_scripts_lib)"
 # shellcheck source=scripts/lib/portable.sh
 source "$SCRIPTS_LIB/portable.sh"
-ensure_bash
+# shellcheck source=scripts/lib/ansible_env.sh
+source "$SCRIPTS_LIB/ansible_env.sh"
+# shellcheck source=scripts/lib/ui.sh
+source "$SCRIPTS_LIB/ui.sh"
+# shellcheck source=scripts/lib/wrapper_info.sh
+source "$SCRIPTS_LIB/wrapper_info.sh"
+
+WRAPPER_SHOW_HELP=false
+WRAPPER_REMAINING_ARGS=()
+wrapper_parse_common_args "$@"
+
+if [[ "${WRAPPER_SHOW_HELP:-false}" == "true" ]]; then
+  wrapper_show_help_ansible
+  exit 0
+fi
+
+wrapper_reexec_from_repo_if_needed "$SCRIPT_DIR" "${BASH_SOURCE[0]}" "$(basename "$0")" "${WRAPPER_REMAINING_ARGS[@]}"
+
+REPO_ROOT="$(cd "$SCRIPTS_LIB/../.." && pwd)"
+ansible_configure_output
+wrapper_print_identity "Cloudera PVC Ansible Deployment" "$REPO_ROOT" "$SCRIPTS_LIB"
 
 # shellcheck source=scripts/lib/load_tfvars.sh
 source "$SCRIPTS_LIB/load_tfvars.sh"
 set -a
 load_tfvars
 set +a
-echo "Loaded configuration from: ${TFVARS_LOADED_FROM}"
+ui_config_summary
 
-echo "GIT_REPO_URL: $GIT_REPO_URL"
+ui_section "Ansible deployment" "🎯"
+ui_step "Resolving Ansible playbooks directory" "📁"
+ANSIBLE_DIR="$(resolve_ansible_playbooks_dir "$SCRIPT_DIR")"
+ui_kv "Ansible directory" "$ANSIBLE_DIR" "📂"
 
-ANSIBLE_DIR="cdp-onprem-automation/ansible-test"
+ui_note_ssh_key_requirement
+pem_file="$(resolve_private_key "$ANSIBLE_DIR")"
+ui_kv "SSH private key" "$pem_file" "🔑"
 
-pem_file=""
-while IFS= read -r -d '' keyfile; do
-    pem_file="$keyfile"
-    break
-done < <(find "$ANSIBLE_DIR" -maxdepth 1 -type f \( -name "*.pem" -o -name "id_rsa" -o -name "idrsa" \) -print0 2>/dev/null)
-
-if [[ -z "$pem_file" ]]; then
-    echo "Error: No .pem, id_rsa, or idrsa file found in $ANSIBLE_DIR."
-    echo
-    exit 1
-fi
-
-echo "Found key file: $pem_file"
-echo
-
-license_file=""
-while IFS= read -r -d '' candidate; do
-    license_file="$candidate"
-    break
-done < <(find . -maxdepth 1 -type f -iname "*license*" ! -iname "*info.txt" -print0 2>/dev/null)
-
-if [[ -z "$license_file" ]]; then
-    echo "Error: No license file found in the current directory."
-    echo
-    exit 1
-elif [[ "$(basename "$license_file")" = "license.txt" ]]; then
-    echo "license.txt already exists. Nothing to do."
-    echo
-else
-    copy_file "$license_file" ./license.txt
-    echo "Copied $license_file to license.txt"
-    echo
-fi
-
-if [ -d "$ANSIBLE_DIR" ]; then
-    echo "INFO: ansible-test directory exists at: $ANSIBLE_DIR"
-    echo
-
-    if [ ! -f "./license.txt" ]; then
-        echo "ERROR: license.txt NOT found in current directory: $(pwd)"
-        echo "ACTION: Ensure license.txt is present before running the script."
-        echo
-        exit 1
-    else
-        echo "INFO: Found license.txt in current directory."
-        echo
+if [[ "${DEPLOY_PHASE:-1}" =~ ^(3|cm|phase3|4|cluster|phase4|all|full)$ ]]; then
+  materialize_cm_license_content "$ANSIBLE_DIR"
+  if license_file="$(resolve_license_file "$ANSIBLE_DIR" 2>/dev/null)"; then
+    if ! is_dry_run; then
+      ensure_license_txt "$ANSIBLE_DIR" "$license_file"
     fi
-
-    if ! has_glob_match "$ANSIBLE_DIR/*.pem"; then
-        echo "ERROR: No .pem (SSH key) files found in: $ANSIBLE_DIR"
-        echo "ACTION: Ensure SSH key (.pem) is present in ansible-test directory."
-        echo
-        exit 1
-    else
-        echo "INFO: Found .pem file(s) in ansible-test directory."
-        echo
-    fi
-
-    echo "INFO: Copying license.txt to ansible-test directory..."
-    copy_file "./license.txt" "$ANSIBLE_DIR/license.txt"
-    echo
-
-    echo "INFO: Setting correct permissions on .pem files (chmod 600)..."
-    chmod 600 "$ANSIBLE_DIR"/*.pem
-    echo
-
-    echo "INFO: Changing directory to ansible-test..."
-    echo
-    cd "$ANSIBLE_DIR" || {
-        echo "ERROR: Failed to change directory to $ANSIBLE_DIR"
-        echo
-        exit 1
-    }
-
-    echo "INFO: Pulling latest changes from Git..."
-    git pull origin main
-
-else
-    echo "ERROR: ansible-test directory does not exist at: $ANSIBLE_DIR"
-    exit 1
+    ui_kv "License file" "$license_file" "📜"
+  else
+    ui_info "No license file in ansible-playbooks/ — CM may use trial license or group_vars/all.yml"
+  fi
 fi
 
-echo ""
+cd "$ANSIBLE_DIR"
 
-print_message "Executing pvc_setup.sh..."
+ui_step "Executing pvc_setup.sh" "▶"
+ui_kv "Deploy phase" "${DEPLOY_PHASE:-1}" "🔢"
+ui_kv "Control mode" "${CONTROL_MODE:-auto}" "🎚"
 chmod +x pvc_setup.sh
-bash ./pvc_setup.sh
+export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
+export CONTROL_MODE="${CONTROL_MODE:-auto}"
+export DRY_RUN="${DRY_RUN:-false}"
+export PVC_SETUP_FROM_WRAPPER=1
+bash ./pvc_setup.sh "${WRAPPER_REMAINING_ARGS[@]}"
+
+if is_dry_run; then
+  ui_done "Ansible deployment dry run completed (DEPLOY_PHASE=${DEPLOY_PHASE:-1})"
+else
+  ui_done "Ansible deployment completed (DEPLOY_PHASE=${DEPLOY_PHASE:-1})"
+fi

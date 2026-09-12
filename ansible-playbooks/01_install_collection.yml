@@ -1,0 +1,58 @@
+### ansible-playbook -i inventory.ini 01_install_collection.yml
+
+---
+- name: Install Ansible collections on control node
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Install collections from requirements.yml
+      ansible.builtin.command:
+        cmd: ansible-galaxy collection install -r requirements.yml
+        chdir: "{{ playbook_dir }}"
+      changed_when: true
+
+- name: Perform full system update on all hosts
+  hosts: all
+  become: yes
+  tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Ensure package manager utilities are installed (RHEL)
+      ansible.builtin.package:
+        name: "{{ os.pkg_utils }}"
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Update all packages (RHEL)
+      ansible.builtin.package:
+        name: "*"
+        state: latest
+      when: ansible_os_family == "RedHat"
+
+    - name: Update all packages (Debian family)
+      ansible.builtin.apt:
+        upgrade: dist
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Check if reboot is required (RHEL)
+      ansible.builtin.command: "{{ os.reboot_check_command }} {{ os.reboot_check_flag }}"
+      register: reboot_check
+      ignore_errors: yes
+      changed_when: false
+      failed_when: false
+      when:
+        - ansible_os_family == "RedHat"
+        - os.reboot_check_command | length > 0
+
+    - name: Reboot if needed and not ipaserver (RHEL)
+      ansible.builtin.reboot:
+        msg: "Rebooting after update"
+        reboot_timeout: 600
+      when:
+        - ansible_os_family == "RedHat"
+        - os.reboot_check_command | length > 0
+        - reboot_check.rc != 0
+        - inventory_hostname != 'ipaserver'

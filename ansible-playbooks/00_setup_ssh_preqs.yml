@@ -1,0 +1,48 @@
+### ansible-playbook -i inventory.ini 00_setup_ssh_preqs.yml
+# for file in [0-9]*_*; do mv "$file" "$((10#${file%%_*} + 1))_${file#*_}"; done
+---
+- name: Ensure SSH allows password authentication and root login
+  hosts: all:!ipaserver
+  become: yes
+  tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Enable PasswordAuthentication in SSH config
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#*PasswordAuthentication"
+        line: "PasswordAuthentication yes"
+        state: present
+
+    - name: Enable PermitRootLogin in SSH config
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#*PermitRootLogin"
+        line: "PermitRootLogin yes"
+        state: present
+
+    - name: Restart SSH service
+      ansible.builtin.service:
+        name: "{{ os.ssh_service }}"
+        state: restarted
+
+    - name: Ensure root has SSH authorized_keys for key-based login
+      when: ansible_user != 'root'
+      block:
+        - name: Create /root/.ssh directory
+          ansible.builtin.file:
+            path: /root/.ssh
+            state: directory
+            mode: "0700"
+            owner: root
+            group: root
+
+        - name: Copy bootstrap user authorized_keys to root
+          ansible.builtin.copy:
+            src: "/home/{{ ansible_user }}/.ssh/authorized_keys"
+            dest: /root/.ssh/authorized_keys
+            remote_src: true
+            mode: "0600"
+            owner: root
+            group: root
