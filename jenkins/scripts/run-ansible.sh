@@ -48,6 +48,11 @@ log() { printf '[ansible] %s\n' "$*" | tee -a "$LOG_FILE"; }
 
 [[ -f ansible-playbooks/inventory.ini ]] || { log "ERROR: ansible-playbooks/inventory.ini missing"; exit 1; }
 
+# Piped to tee below — disable ANSI so task lines do not show as [0;32m / [0;33m in console and artifacts.
+export ANSIBLE_FORCE_COLOR=0
+export PY_COLORS=0
+export NO_COLOR=1
+
 log "Starting clone_and_run_pvc_automation.sh (DEPLOY_PHASE=${DEPLOY_PHASE}, DRY_RUN=${DRY_RUN})"
 if ! command -v ansible-playbook >/dev/null 2>&1; then
   # shellcheck disable=SC1091

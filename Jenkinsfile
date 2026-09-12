@@ -159,10 +159,9 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
 
   environment {
     LANG = 'C.UTF-8'
-    FORCE_COLOR = '1'
-    UI_COLOR = '1'
-    ANSIBLE_FORCE_COLOR = 'true'
-    PY_COLORS = '1'
+    FORCE_COLOR = 'auto'
+    UI_COLOR = 'auto'
+    ANSIBLE_FORCE_COLOR = 'auto'
     REPO_ROOT = "${WORKSPACE}"
     LOG_DIR = "${WORKSPACE}/jenkins/artifacts"
     HOL_AUTO_EXEC_DIR = "/home/holautosa/HOL_AUTO_EXEC_DIR"

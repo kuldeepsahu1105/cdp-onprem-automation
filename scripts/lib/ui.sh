@@ -20,10 +20,6 @@ ui_color_enabled() {
   case "${UI_COLOR:-${FORCE_COLOR:-auto}}" in
     1|true|yes|on|force|always) return 0 ;;
   esac
-  if [[ -n "${JENKINS_URL:-}" || -n "${BUILD_NUMBER:-}" || "${CI:-}" == "true" ]]; then
-    [[ "${TERM:-}" == "dumb" ]] && return 1
-    return 0
-  fi
   [[ "${CLICOLOR_FORCE:-}" == "1" ]] && return 0
   return 0
 }

@@ -315,21 +315,42 @@ is_dry_run() {
   esac
 }
 
-# Enable Ansible ANSI colors in Jenkins (ansiColor) and local terminals.
+# Ansible colors only when stdout is a TTY (interactive terminal).
+# Jenkins/terraform wrappers pipe to tee (| tee log); force_color there prints literal [32m in logs.
 ansible_configure_output() {
   case "${ANSIBLE_NOCOLOR:-${NO_COLOR:-}}" in
-    1|true|yes|TRUE|YES|on|ON) export ANSIBLE_FORCE_COLOR=false; return 0 ;;
+    1|true|yes|TRUE|YES|on|ON)
+      export ANSIBLE_FORCE_COLOR=0
+      export PY_COLORS=0
+      return 0
+      ;;
   esac
   case "${ANSIBLE_FORCE_COLOR:-auto}" in
-    0|false|no|off) export ANSIBLE_FORCE_COLOR=false; return 0 ;;
-    1|true|yes|on|force) export ANSIBLE_FORCE_COLOR=true ;;
-    auto)
-      if [[ -t 1 ]] || [[ -n "${JENKINS_URL:-}" || -n "${BUILD_NUMBER:-}" || "${CI:-}" == "true" ]]; then
-        [[ "${TERM:-}" == "dumb" ]] || export ANSIBLE_FORCE_COLOR=true
+    0|false|no|off)
+      export ANSIBLE_FORCE_COLOR=0
+      export PY_COLORS=0
+      return 0
+      ;;
+    1|true|yes|on|force)
+      if [[ -t 1 ]]; then
+        export ANSIBLE_FORCE_COLOR=1
+        export PY_COLORS=1
+      else
+        export ANSIBLE_FORCE_COLOR=0
+        export PY_COLORS=0
+      fi
+      return 0
+      ;;
+    auto|*)
+      if [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]]; then
+        export ANSIBLE_FORCE_COLOR=1
+        export PY_COLORS=1
+      else
+        export ANSIBLE_FORCE_COLOR=0
+        export PY_COLORS=0
       fi
       ;;
   esac
-  export PY_COLORS="${PY_COLORS:-1}"
 }
 
 ansible_extra_args() {
