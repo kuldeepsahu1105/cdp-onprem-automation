@@ -1,17 +1,37 @@
 ---
-# Read /api/version for the API slug, then wait on GET /api/<slug>/version.
+# Read unversioned /api/version for the API slug, then wait on GET .../api/<slug>/cm/version.
 
 - name: CM API — read API version before health wait
   ansible.builtin.import_tasks: fetch_cm_api_version_slug.yml
 
-- name: CM API — wait for /api/version on cldr-mngr
-  ansible.builtin.uri:
-    url: >-
+- name: CM API — set health check URL on cldr-mngr path
+  ansible.builtin.set_fact:
+    _cm_api_health_url: >-
       {{
-        cm_protocol ~ '://' ~ cm_api_probe_host ~ ':' ~ (cm_api_port | string)
-        ~ '/api/' ~ cm_api_version
-        ~ '/version'
+        (cm_api_url ~ '/cm/version')
+        if (cm_api_url | default('') | length > 0)
+        else (
+          cm_protocol ~ '://' ~ cm_api_probe_host ~ ':' ~ (cm_api_port | string)
+          ~ '/api/' ~ cm_api_version ~ '/cm/version'
+        )
       }}
+
+- name: CM API — set health check URL on play host path
+  ansible.builtin.set_fact:
+    _cm_api_health_url: >-
+      {{
+        (cm_api_url ~ '/cm/version')
+        if (cm_api_url | default('') | length > 0)
+        else (
+          cm_protocol ~ '://' ~ cm_api_client_host ~ ':' ~ (cm_api_port | string)
+          ~ '/api/' ~ cm_api_version ~ '/cm/version'
+        )
+      }}
+  when: cm_api_probe_delegate_to is not defined or cm_api_probe_delegate_to | length == 0
+
+- name: CM API — wait for /cm/version on cldr-mngr
+  ansible.builtin.uri:
+    url: "{{ _cm_api_health_url }}"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -28,14 +48,9 @@
     - cm_api_probe_delegate_to is defined
     - cm_api_probe_delegate_to | length > 0
 
-- name: CM API — wait for /api/version on this play host
+- name: CM API — wait for /cm/version on this play host
   ansible.builtin.uri:
-    url: >-
-      {{
-        cm_protocol ~ '://' ~ cm_api_client_host ~ ':' ~ (cm_api_port | string)
-        ~ '/api/' ~ cm_api_version
-        ~ '/version'
-      }}
+    url: "{{ _cm_api_health_url }}"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
