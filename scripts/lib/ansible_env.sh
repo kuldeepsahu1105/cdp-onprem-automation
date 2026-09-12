@@ -336,6 +336,7 @@ ansible_extra_args() {
   local key="${1:-}"
   local args=()
   if [[ -n "$key" ]]; then
+    export ANSIBLE_PRIVATE_KEY="$key"
     args+=(--private-key="$key")
   fi
   if [[ -n "${ANSIBLE_LIMIT:-}" ]]; then
