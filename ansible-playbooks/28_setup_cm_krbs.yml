@@ -6,22 +6,11 @@
   hosts: localhost
   connection: local
   gather_facts: no
-  handlers:
-    - name: Restart Cloudera Manager after configuration change
-      ansible.builtin.include_tasks: common_tasks/restart_cm_services.yml
-      delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
-      become: true
-      listen: Restart Cloudera Manager after configuration change
-
-    - name: Refresh CM API URL after CM restart
-      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
-      listen: Restart Cloudera Manager after configuration change
-
-    - name: Wait for CM API after CM restart
-      ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
-      listen: Restart Cloudera Manager after configuration change
-
   tasks:
+    - name: Clear CM restart flag for this play
+      ansible.builtin.set_fact:
+        cm_restart_after_config_change: false
+
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
 
@@ -162,8 +151,19 @@
         - not kerberos_already_configured | default(false)
         - cm_kerberos_config_changed | default(false) | bool
       failed_when: false
-      notify: Restart Cloudera Manager after configuration change
       changed_when: true
+
+    - name: Kerberos — mark Cloudera Manager restart required after AD CM config
+      ansible.builtin.set_fact:
+        cm_restart_after_config_change: true
+      when:
+        - identity_provider_effective == 'ad'
+        - not kerberos_already_configured | default(false)
+        - cm_kerberos_config_changed | default(false) | bool
+
+    - name: Restart Cloudera Manager after Kerberos configuration change
+      ansible.builtin.import_tasks: common_tasks/apply_cm_restart_after_config.yml
+      when: cm_restart_after_config_change | default(false) | bool
 
     - name: Print Kerberos configuration result
       ansible.builtin.debug:

@@ -7,21 +7,6 @@
   hosts: localhost
   connection: local
   gather_facts: no
-  handlers:
-    - name: Restart Cloudera Manager after configuration change
-      ansible.builtin.include_tasks: common_tasks/restart_cm_services.yml
-      delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
-      become: true
-      listen: Restart Cloudera Manager after configuration change
-
-    - name: Refresh CM API URL after CM restart
-      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
-      listen: Restart Cloudera Manager after configuration change
-
-    - name: Wait for CM API after CM restart
-      ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
-      listen: Restart Cloudera Manager after configuration change
-
   tasks:
     - name: Clear Auto-TLS applied flag for this run
       ansible.builtin.set_fact:
@@ -114,12 +99,9 @@
             - auto_tls_response is succeeded
             - auto_tls_response is changed
 
-    - name: Schedule CM restart after Auto-TLS (handler; only when generateCmca changed CM)
-      ansible.builtin.debug:
-        msg: Auto-TLS generateCmca applied; restarting Cloudera Manager via handler.
+    - name: Restart Cloudera Manager after Auto-TLS when generateCmca applied
+      ansible.builtin.import_tasks: common_tasks/apply_cm_restart_after_config.yml
       when: autotls_applied_this_run | default(false) | bool
-      changed_when: true
-      notify: Restart Cloudera Manager after configuration change
 
     - name: Refresh CM API URL after Auto-TLS changes
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml

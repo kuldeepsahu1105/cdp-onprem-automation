@@ -6,24 +6,11 @@
   hosts: localhost
   connection: local
   gather_facts: no
-  handlers:
-    - name: Restart Cloudera Manager server after LDAP change
-      ansible.builtin.systemd:
-        name: cloudera-scm-server
-        state: restarted
-      delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
-      become: true
-      listen: Restart Cloudera Manager after configuration change
-
-    - name: Refresh CM API URL after LDAP restart
-      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
-      listen: Restart Cloudera Manager after configuration change
-
-    - name: Wait for CM API after LDAP restart
-      ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
-      listen: Restart Cloudera Manager after configuration change
-
   tasks:
+    - name: Clear CM restart flag for this play
+      ansible.builtin.set_fact:
+        cm_restart_after_config_change: false
+
     - name: Skip LDAP configuration when disabled
       ansible.builtin.meta: end_play
       when: not cm_ldap_enabled | default(false)
@@ -43,7 +30,11 @@
     - name: Configure Cloudera Manager LDAP settings (REST API)
       ansible.builtin.import_tasks: common_tasks/configure_cm_ldap_api.yml
 
+    - name: Restart Cloudera Manager after LDAP configuration change
+      ansible.builtin.import_tasks: common_tasks/apply_cm_restart_after_ldap.yml
+      when: cm_restart_after_config_change | default(false) | bool
+
     - name: Print LDAP configuration result
       ansible.builtin.debug:
-        msg: LDAP authentication configured in Cloudera Manager (CM restart via handler if settings changed).
+        msg: LDAP authentication configured in Cloudera Manager (CM restarted when settings changed).
       when: cm_ldap_result is defined and cm_ldap_result is changed
