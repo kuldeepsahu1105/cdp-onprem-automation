@@ -48,3 +48,6 @@
           - "Deployment index (refreshed): {{ deployment_portal_context.portal.index_url }}"
           - "pgAdmin: {{ deployment_portal_context.portal.pgadmin_url }}"
           - "Monitoring: {{ monitoring_stack_enabled | default(false) }}"
+
+    - name: Print full access URL report (Jenkins log / email)
+      ansible.builtin.import_tasks: common_tasks/print_deployment_access_urls.yml

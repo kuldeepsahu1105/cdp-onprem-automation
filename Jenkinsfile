@@ -408,6 +408,11 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
             export ANSIBLE_PHASES='${env.ANSIBLE_PHASES ?: ''}'
             ./jenkins/scripts/collect-artifacts.sh
             ./jenkins/scripts/build-summary.sh
+            if [ -f jenkins/artifacts/access-urls.txt ]; then
+              echo '========== CDP access URLs (portal / CM / Caddy) =========='
+              cat jenkins/artifacts/access-urls.txt
+              echo '=========================================================='
+            fi
           """
         }
       }
@@ -823,6 +828,7 @@ def archivePipelineArtifacts() {
   def patterns = [
     'jenkins/artifacts/build-summary.txt',
     'jenkins/artifacts/cm-access.txt',
+    'jenkins/artifacts/access-urls.txt',
     'jenkins/artifacts/inventory.ini',
     'jenkins/artifacts/terraform-*.log',
     'jenkins/artifacts/ansible-*.log',
@@ -859,7 +865,7 @@ def sendPipelineEmail(boolean success) {
   def phaseInfo = env.ANSIBLE_PHASES ?: 'n/a'
 
   def attachmentList = []
-  ['build-summary.txt', 'cm-access.txt', "terraform-${env.BUILD_NUMBER}.log", 'inventory.ini', 'error-summary.txt'].each { name ->
+  ['build-summary.txt', 'cm-access.txt', 'access-urls.txt', "terraform-${env.BUILD_NUMBER}.log", 'inventory.ini', 'error-summary.txt'].each { name ->
     if (fileExists("${env.WORKSPACE}/jenkins/artifacts/${name}")) {
       attachmentList << "jenkins/artifacts/${name}"
     }
@@ -899,6 +905,19 @@ def sendPipelineEmail(boolean success) {
     """
   }
 
+  def accessUrlsFile = "${env.WORKSPACE}/jenkins/artifacts/access-urls.txt"
+  def accessUrlsHtml = ''
+  if (fileExists(accessUrlsFile)) {
+    def urlText = readFile(accessUrlsFile).take(6000)
+      .replace('&', '&amp;')
+      .replace('<', '&lt;')
+      .replace('>', '&gt;')
+    accessUrlsHtml = """
+    <h4 style="color:#2E7D32;">Portal, CM, Caddy &amp; Monitoring URLs</h4>
+    <pre style="background:#e8f5e9;padding:12px;border:1px solid #a5d6a7;white-space:pre-wrap;font-size:13px;">${urlText}</pre>
+    """
+  }
+
   emailext(
     to: env.MAIL_TO,
     subject: "${statusIcon} Jenkins ${statusText}: ${env.JOB_NAME} [${env.BUILD_NUMBER}] — ${stageInfo}",
@@ -920,9 +939,10 @@ def sendPipelineEmail(boolean success) {
     </table>
     ${errorBlock}
     ${cmAccessHtml}
+    ${accessUrlsHtml}
     <h4>Deployment Summary</h4>
     <pre style="background:#fff;padding:12px;border:1px solid #ddd;white-space:pre-wrap;">${summaryText}</pre>
-    <p style="font-size:12px;color:#777;">Attached when available: SSH private key (*.pem), cm-access.txt, build summary, inventory, stage logs.</p>
+    <p style="font-size:12px;color:#777;">Attached when available: SSH private key (*.pem), cm-access.txt, access-urls.txt, build summary, inventory, stage logs.</p>
   </div>
 </body>
 </html>

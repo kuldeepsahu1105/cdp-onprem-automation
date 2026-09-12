@@ -43,6 +43,9 @@ done
 if [[ -x "$REPO_ROOT/jenkins/scripts/build-cm-access-info.sh" ]]; then
   bash "$REPO_ROOT/jenkins/scripts/build-cm-access-info.sh" || log "WARN: cm-access.txt not generated"
 fi
+if [[ -x "$REPO_ROOT/jenkins/scripts/build-access-urls.sh" ]]; then
+  bash "$REPO_ROOT/jenkins/scripts/build-access-urls.sh" || log "WARN: access-urls.txt not generated"
+fi
 
 log "Artifacts collected in $OUT_DIR"
 ls -la "$OUT_DIR"

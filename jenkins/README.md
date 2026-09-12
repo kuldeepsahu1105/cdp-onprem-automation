@@ -164,6 +164,7 @@ Success/failure emails (Email Extension plugin) include:
 
 - **SSH private key** (`*.pem`) attached from `jenkins/artifacts/`
 - **`cm-access.txt`** — CM HTTP/HTTPS URL, admin username/password, SSH example
+- **`access-urls.txt`** — Portal, pgAdmin, Grafana, CM direct vs Caddy lab URLs (also embedded in build summary and email)
 - Build summary, inventory, and stage logs
 
 Set `NOTIFICATION_EMAIL` or rely on `BUILD_USER_EMAIL`. CM credentials come from `group_vars/all.yml` (and Jenkins `ANSIBLE_GROUP_VARS_YAML` overrides when set).

@@ -73,6 +73,12 @@ INVENTORY="$REPO_ROOT/ansible-playbooks/inventory.ini"
     cat "$OUT_DIR/cm-access.txt"
     echo ""
   fi
+  if [[ -f "$OUT_DIR/access-urls.txt" ]]; then
+    echo "Portal / CM / Caddy access URLs:"
+    echo "--------------------------------"
+    cat "$OUT_DIR/access-urls.txt"
+    echo ""
+  fi
   echo "Artifacts directory: $OUT_DIR"
   ls -la "$OUT_DIR" 2>/dev/null || true
 } > "$SUMMARY"

@@ -1,0 +1,8 @@
+---
+# Emit access URLs to Ansible/Jenkins logs (grep CDP_ACCESS_URLS in phase logs).
+
+- name: Print CDP access URLs for Jenkins log and email collectors
+  ansible.builtin.debug:
+    msg: "{{ access_url_lines }}"
+  vars:
+    access_url_lines: "{{ lookup('template', 'deployment_access_urls_report.j2').split('\n') }}"
