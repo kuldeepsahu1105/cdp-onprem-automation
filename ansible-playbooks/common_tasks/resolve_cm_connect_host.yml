@@ -5,7 +5,9 @@
   ansible.builtin.set_fact:
     cm_manager_host_inv: "{{ cm_manager_inventory_host }}"
     cm_host_public: "{{ hostvars[cm_manager_inventory_host].ansible_host | default(cm_manager_inventory_host) }}"
-    cm_host_private: "{{ hostvars[cm_manager_inventory_host].private_ip | default('') }}"
+    cm_host_private: >-
+      {{ hostvars[cm_manager_inventory_host].private_ip
+         | default(hostvars[cm_manager_inventory_host].ansible_host | default('')) }}
     cm_host_fqdn: >-
       {{ hostvars[cm_manager_inventory_host].cldr_hostname | default(cm_manager_inventory_host) }}.{{ cluster_domain }}
 

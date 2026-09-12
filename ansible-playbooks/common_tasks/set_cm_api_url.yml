@@ -68,6 +68,17 @@
         ) else cm_http_port
       }}
 
+- name: Fail CM API probes with connect target when HTTP and HTTPS checks did not succeed
+  ansible.builtin.fail:
+    msg: >-
+      Cloudera Manager API unreachable at http://{{ cm_host }}:{{ cm_http_port }} or
+      https://{{ cm_host }}:{{ cm_https_port }} (connect host {{ cm_connect_host }}).
+      From Jenkins use VPC private_ip in inventory; on cldr-mngr probes use 127.0.0.1.
+      Override with cm_api_connect_host or cm_api_prefer_private_ip: false if API is only on public IP.
+  when:
+    - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
+    - cm_tls_probe_https is not defined or cm_tls_probe_https is failed or (cm_tls_probe_https.status | default(0) not in [200, 301, 303])
+
 - name: Get Cloudera Manager API version
   ansible.builtin.uri:
     url: "{{ cm_protocol }}://{{ cm_host }}:{{ cm_api_port }}/api/version"

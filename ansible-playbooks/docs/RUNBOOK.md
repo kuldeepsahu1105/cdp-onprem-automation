@@ -153,6 +153,7 @@ ansible-playbook -i inventory.ini 19_start_cm.yml
 ansible-playbook -i inventory.ini 20_verify_cm.yml
 ansible-playbook -i inventory.ini 21_setup_cm_license.yml
 ansible-playbook -i inventory.ini 22_setup_cm_autotls.yml
+# CM API probes: VPC private_ip from Jenkins (not public EIP hairpin); 127.0.0.1 on cldr-mngr. SG must allow 7180/7183 from Jenkins to private IPs.
 ansible-playbook -i inventory.ini 23_setup_cm_krbs.yml
 ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
 ```
