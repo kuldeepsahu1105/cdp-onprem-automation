@@ -46,7 +46,7 @@
   ansible.builtin.set_fact:
     cms_target_host: >-
       {{
-        (cms_hosts.json.items | default([]))
+        (cms_hosts.json['items'] | default([]))
         | selectattr('hostname', 'equalto', cm_cms_hostname)
         | list
         | first
@@ -58,12 +58,12 @@
     msg: >-
       Host {{ cm_cms_hostname }} not found in Cloudera Manager /hosts.
       Ensure CM agent is running on cldr-mngr before CMS setup.
-  when: cms_target_host.hostId is not defined and cms_target_host.host_id is not defined
+  when: (cms_target_host.get('hostId', '') | default('') | length) == 0 and (cms_target_host.get('host_id', '') | default('') | length) == 0
 
 - name: CMS — normalize CMS target host id
   ansible.builtin.set_fact:
-    cms_target_host_id: "{{ cms_target_host.hostId | default(cms_target_host.host_id) }}"
-    cms_target_hostname: "{{ cms_target_host.hostname | default(cm_cms_hostname) }}"
+    cms_target_host_id: "{{ cms_target_host['hostId'] | default(cms_target_host['host_id']) }}"
+    cms_target_hostname: "{{ cms_target_host['hostname'] | default(cm_cms_hostname) }}"
 
 - name: CMS — list management role config groups
   ansible.builtin.uri:
@@ -80,13 +80,13 @@
   ansible.builtin.set_fact:
     cms_rcg_servicemonitor: >-
       {{
-        (cms_rcgs.json.items | default([]))
+        (cms_rcgs.json['items'] | default([]))
         | selectattr('roleType', 'equalto', 'SERVICEMONITOR')
         | selectattr('base', 'equalto', true)
         | map(attribute='name')
         | first
         | default(
-          (cms_rcgs.json.items | default([]))
+          (cms_rcgs.json['items'] | default([]))
           | selectattr('roleType', 'equalto', 'SERVICEMONITOR')
           | map(attribute='name')
           | first
@@ -94,13 +94,13 @@
       }}
     cms_rcg_reportsmanager: >-
       {{
-        (cms_rcgs.json.items | default([]))
+        (cms_rcgs.json['items'] | default([]))
         | selectattr('roleType', 'equalto', 'REPORTSMANAGER')
         | selectattr('base', 'equalto', true)
         | map(attribute='name')
         | first
         | default(
-          (cms_rcgs.json.items | default([]))
+          (cms_rcgs.json['items'] | default([]))
           | selectattr('roleType', 'equalto', 'REPORTSMANAGER')
           | map(attribute='name')
           | first
@@ -168,7 +168,7 @@
       - REPORTSMANAGER
     cms_existing_role_types: >-
       {{
-        cms_roles_get.json.items | default([])
+        cms_roles_get.json['items'] | default([])
         | map(attribute='type')
         | list
       }}
