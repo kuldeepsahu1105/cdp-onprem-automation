@@ -29,7 +29,7 @@ http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port 
 }
 
 {% if deployment_portal_has_ipa | default(false) | bool %}
-{# FreeIPA UI via Caddy: cloudera-labs/openshift pattern (redir + HTTP upstream + Referer); see .cursor/LEARNINGS.md #}
+{# FreeIPA UI via Caddy: cloudera-labs/openshift pattern (redir + HTTP upstream + Referer); openshift uses freeipa.* — we use ipa.* (caddy_vhost_service_names.ipa). See .cursor/LEARNINGS.md #}
 http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
   redir / /ipa/ui permanent
   reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {

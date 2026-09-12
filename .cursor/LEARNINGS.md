@@ -26,6 +26,23 @@ Also useful: [cloudera-deploy](https://github.com/cloudera-labs/cloudera-deploy)
 
 On **PORTAL** bootstrap or rerun (`deployment_portal_verify_milestones`: `portal`, `ipa`), Ansible **requires** Caddy on `127.0.0.1:8088` and portal/IPA vhosts only. **pgAdmin** and **Cloudera Manager** Caddy vhost and Tier B external probes are **skipped** until milestones `pgadmin` or `cm` (pvc_setup adds `cm` starting at phase 3). Tier C hairpin and Tier B external checks may still **warn** when Jenkins cannot reach public URLs (SG/CIDR) — that is not a cluster failure if Tier A passed. After **CM_INSTALL**, refresh passes `…,cm` and CM vhost **502** should clear once CM listens on 7180.
 
+## Alignment with cloudera-labs openshift
+
+Reference: cloudera-labs/openshift (cloudera.exe) Caddy + `cloudera.cluster` playbooks. Scope here: portal/Caddy/CM `frontend_url`/`proxy_host` naming — not a full CDH/ECS module migration.
+
+| Labs pattern | Our implementation | Gap / action |
+|--------------|-------------------|--------------|
+| `proxy_host` = `cm.<reverse_proxy_public_ip_dashed>.pvc.cloudera-labs.com`; Caddy on reverse proxy **:80** | `cm.<dashed-ip>.pvc.cloudera-labs.com` on ops Docker Caddy **:8088** (`caddy_vhost_urls.j2`) | Port **8088** is intentional (SG/docs); hostname shape matches. |
+| Install CM Caddy only when CM `uri` status **-1** (unreachable at edge) | PORTAL stage always deploys Caddy; CM vhost **502** until CM is up | Acceptable for Jenkins order; milestone verify gates CM vhost. |
+| CM Caddy upstream **HTTP :7180**, then after Auto-TLS **HTTPS :7183** | `deployment_portal_Caddyfile_vhosts.inc.j2` switches on `autotls_enabled` | Aligned when `autotls_enabled` is set after `27_setup_cm_autotls.yml` + portal refresh. |
+| `cloudera.cluster.cm*` **`module_defaults`**: `host=proxy_host`, `port=80` | CDH/ECS plays still use direct `cm_host` + `cm_api_port`; **`apply_cm_caddy_load_balancer.yml`** uses Caddy vhost + `deployment_portal_http_port` when `cm_config_api_via_caddy_proxy: auto` | Documented; scoped proxy for `frontend_url` apply only (not full collection rewrite). |
+| `frontend_url` via `cm_config` to **`https://proxy_host`** (play after proxy) | `http://cm.<slug>.<base>:8088` via `apply_cm_caddy_load_balancer.yml` after `build_deployment_portal_facts` | Labs HTTPS on :443; we use HTTP on **8088** unless `cm_external_url` overrides. |
+| FreeIPA Caddy **`freeipa.<ip>...`**, `redir / /ipa/ui`, HTTP upstream + **Referer** | Vhost key **`ipa`** (not `freeipa`); redir + HTTP upstream + Host/Referer in `deployment_portal_Caddyfile_vhosts.inc.j2` | Rename to `freeipa` only if DNS/bookmarks must match labs literally (`caddy_vhost_service_names.ipa`). |
+| pgAdmin **`pgadmin.<ip>...`** → host **:5050** or dedicated role | Caddy → `cldr-portal-pgadmin:80`; host maps **5050** (`deployment_portal_pgadmin_host_port`) | See open PRs on pgAdmin email/healthcheck; URL shape aligned. |
+| Deployment summary index: cm, freeipa, pgadmin, knox, ecs | `deployment_portal_index.html.j2` tiles: CM, IPA, pgAdmin, ECS, monitoring | **Knox** vhost not on Caddy; link via base cluster / Knox gateway FQDN only. |
+| ECS **`*.apps.ecs.<ip>...`** wildcard → ECS master **:80** | Single **`ecs.<ip>...`** vhost → `console.<ecs_app_domain>:443` | Wildcard app ingress not proxied on ops Caddy; `apps_wildcard` hint in portal context only. |
+| Knox **`knox.<ip>...`** Caddy vhost | Not implemented | Future: add `knox` to `caddy_vhost_service_names` + vhost block when Knox URL known. |
+
 ## Portal / Caddy
 
 - Listen **8088**; smoke: `http://<ops-public-ip>:8088/`. Vhost FQDN: `portal.<dashed-public-ip>.pvc.cloudera-labs.com` (dashes, not dots in IP segment).

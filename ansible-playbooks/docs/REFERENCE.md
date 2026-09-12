@@ -406,6 +406,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `cm_api_private_reachability_timeout` | `5` | Seconds to test VPC `private_ip` from controller before using public IP |
 | `cm_external_url` | `""` | Override CM Caddy public URL; sets CM API `frontend_url` when non-empty |
 | `cm_apply_caddy_frontend_url` | `auto` | `auto` \| `true` \| `false` — apply Caddy CM vhost to CM `frontend_url` / `cm_host_name` |
+| `cm_config_api_via_caddy_proxy` | `auto` | `auto` \| `true` \| `false` — `apply_cm_caddy_load_balancer.yml` calls `cm_config` via Caddy CM vhost (`:8088`) instead of direct `:7180`/`:7183` |
 | `cm_caddy_public_url` | (fact) | From `caddy_vhost_urls.j2` via `build_deployment_portal_facts.yml` |
 | `ecs_caddy_console_url` | (fact) | Caddy ECS vhost URL for portal index and `ecs_control_plane_url_effective` |
 | `deployment_portal_url_verify_skip_vpc` | `false` | Skip VPC-only portal URL hard-fail during verify (Jenkins sets `true`) |
