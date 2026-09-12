@@ -4,6 +4,9 @@
 #   IPA redirect 301/302 counts as success). CM vhost 502 is warn-only before CM install (Jenkins PORTAL stage).
 #   Tier C (optional on ops host): printed public-EIP / hairpin URLs — warn only when optional.
 #   Tier B (controller): verify_service_urls_from_controller.yml after this file (portal, CM, monitoring, IPA, ECS).
+#
+# Ansible set_fact: do not define multiple keys in one task when a value references another key from
+# that same task (evaluation order is undefined). Split dependent facts or inline hostvars/context.
 
 - name: Set deployment portal URL verification defaults
   ansible.builtin.set_fact:
@@ -43,6 +46,9 @@
       }}
     _portal_verify_from_controller: >-
       {{ (inventory_hostname | default('')) in ['localhost', '127.0.0.1'] }}
+
+- name: Set deployment portal URL verify status codes as integers
+  ansible.builtin.set_fact:
     _portal_url_verify_codes_int: >-
       {{
         _portal_url_verify_codes
@@ -50,6 +56,9 @@
         | map('int')
         | list
       }}
+
+- name: Set deployment portal CM installed hint from context
+  ansible.builtin.set_fact:
     _portal_cm_installed: >-
       {{
         deployment_portal_context.cloudera_manager.cm_installed
@@ -61,18 +70,24 @@
         )
         else false
       }}
+
+- name: Set deployment portal require CM Caddy vhost hint
+  ansible.builtin.set_fact:
     _portal_require_cm_vhost: >-
       {{
         deployment_portal_verify_cm_vhost | default(false) | bool
-        or _portal_cm_installed | bool
+        or (_portal_cm_installed | default(false) | bool)
         or (deployment_portal_verify_post_cm | default(false) | bool)
       }}
+
+- name: Set deployment portal CM Caddy vhost Tier A verify mode
+  ansible.builtin.set_fact:
     _portal_cm_vhost_tier_a_mode: >-
       {{
         deployment_portal_cm_vhost_tier_a_verify
         | default(
             'fail'
-            if (_portal_require_cm_vhost | bool)
+            if (_portal_require_cm_vhost | default(false) | bool)
             else 'warn'
           )
       }}
@@ -168,7 +183,7 @@
       }}
   when: deployment_portal_context is defined
 
-- name: Split required vs optional deployment portal access URL checks
+- name: Set required deployment portal access URL checks
   ansible.builtin.set_fact:
     deployment_portal_access_url_checks_required: >-
       {{
@@ -176,6 +191,10 @@
         | selectattr('optional', 'equalto', false)
         | list
       }}
+  when: deployment_portal_context is defined
+
+- name: Set optional deployment portal access URL checks
+  ansible.builtin.set_fact:
     deployment_portal_access_url_checks_optional: >-
       {{
         deployment_portal_access_url_checks | default([])
@@ -305,7 +324,7 @@
     - deployment_portal_caddy_vhost_checks | default([]) | length > 0
   failed_when: false
 
-- name: Split required vs optional Caddy vhost checks
+- name: Set required Caddy vhost checks
   ansible.builtin.set_fact:
     deployment_portal_caddy_vhost_checks_required: >-
       {{
@@ -313,6 +332,10 @@
         | selectattr('optional', 'equalto', false)
         | list
       }}
+  when: deployment_portal_caddy_vhost_checks | default([]) | length > 0
+
+- name: Set optional Caddy vhost checks
+  ansible.builtin.set_fact:
     deployment_portal_caddy_vhost_checks_optional: >-
       {{
         deployment_portal_caddy_vhost_checks | default([])
