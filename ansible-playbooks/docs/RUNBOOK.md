@@ -62,7 +62,7 @@ The same three-tier model applies to **portal**, **Cloudera Manager**, **Grafana
 
 | Tier | Where it runs | What it checks | On failure |
 |---|---|---|---|
-| **A (required)** | **Ops host** (`ipaserver` / `cldr-mngr`): `http://127.0.0.1:<deployment_portal_http_port>/`, Caddy **Host** vhosts (portal, CM, IPA, Grafana paths). **CM host** (`cldr-mngr`): `http://127.0.0.1:7180/` (API probes delegate here from Jenkins via `set_cm_api_url` / `wait_for_cm_api`) | Local service health | **Fail** the play |
+| **A (required)** | **Ops host** (`ipaserver` / `cldr-mngr`): `http://127.0.0.1:<deployment_portal_http_port>/`, Caddy **Host** vhosts (portal; **CM** when `cm_installed` / `35_refresh` / `deployment_portal_verify_cm_vhost`; IPA redirect **301/302** OK). **CM host** (`cldr-mngr`): `http://127.0.0.1:7180/` (API probes delegate here from Jenkins via `set_cm_api_url` / `wait_for_cm_api`) | Local service health | **Fail** the play (CM vhost **warn** only before CM install — Jenkins **PORTAL** before **CM_INSTALL**) |
 | **B (external)** | Ansible **controller** when `ansible_control_reachability_effective` is **`public`** | HTTP GET printed **external** URLs (portal/pgAdmin/Grafana, CM FQDN + public IP + optional Caddy CM vhost, IPA, ECS console) via `verify_service_urls_from_controller.yml` | **`deployment_external_url_verify`** (default **`warn`**) or per-service `deployment_<service>_external_url_verify` / `deployment_service_external_url_verify` map — `warn`, `fail`, or `skip` |
 | **C (optional)** | Ops or CM host | Public-EIP **hairpin** URLs (EC2 calling its own EIP) | **Warn only** |
 

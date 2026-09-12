@@ -43,6 +43,8 @@
 
     - name: Sync portal templates and stacks
       ansible.builtin.import_tasks: common_tasks/sync_deployment_portal_content.yml
+      vars:
+        deployment_portal_verify_post_cm: true
 
     - name: Print deployment portal URLs
       ansible.builtin.debug:

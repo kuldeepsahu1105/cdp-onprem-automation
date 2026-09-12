@@ -1,6 +1,7 @@
 ---
 # Service URL verify tiers (see RUNBOOK.md § Service URL verification tiers):
-#   Tier A (required on ops host): http://127.0.0.1:8088/ + Caddy vhost Host checks (portal, CM, IPA, Grafana paths).
+#   Tier A (required on ops host): http://127.0.0.1:8088/ + Caddy vhost Host checks (portal; CM when installed/post-CM;
+#   IPA redirect 301/302 counts as success). CM vhost 502 is warn-only before CM install (Jenkins PORTAL stage).
 #   Tier C (optional on ops host): printed public-EIP / hairpin URLs — warn only when optional.
 #   Tier B (controller): verify_service_urls_from_controller.yml after this file (portal, CM, monitoring, IPA, ECS).
 
@@ -42,6 +43,39 @@
       }}
     _portal_verify_from_controller: >-
       {{ (inventory_hostname | default('')) in ['localhost', '127.0.0.1'] }}
+    _portal_url_verify_codes_int: >-
+      {{
+        _portal_url_verify_codes
+        | default(deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]))
+        | map('int')
+        | list
+      }}
+    _portal_cm_installed: >-
+      {{
+        deployment_portal_context.cloudera_manager.cm_installed
+        | default(false)
+        | bool
+        if (
+          deployment_portal_context is defined
+          and deployment_portal_context.cloudera_manager is defined
+        )
+        else false
+      }}
+    _portal_require_cm_vhost: >-
+      {{
+        deployment_portal_verify_cm_vhost | default(false) | bool
+        or _portal_cm_installed | bool
+        or (deployment_portal_verify_post_cm | default(false) | bool)
+      }}
+    _portal_cm_vhost_tier_a_mode: >-
+      {{
+        deployment_portal_cm_vhost_tier_a_verify
+        | default(
+            'fail'
+            if (_portal_require_cm_vhost | bool)
+            else 'warn'
+          )
+      }}
 
 - name: Set deployment portal ops-host verify hint from anchor inventory name
   ansible.builtin.set_fact:
@@ -224,11 +258,16 @@
     deployment_portal_caddy_vhost_checks: >-
       {{
         (
-          [{'name': 'Caddy vhost portal', 'host': caddy_vhost_urls.portal.hostname, 'path': '/'}]
-          + [{'name': 'Caddy vhost CM', 'host': caddy_vhost_urls.cm.hostname, 'path': '/'}]
+          [{'name': 'Caddy vhost portal', 'host': caddy_vhost_urls.portal.hostname, 'path': '/', 'optional': false}]
+          + (
+              [{'name': 'Caddy vhost CM', 'host': caddy_vhost_urls.cm.hostname, 'path': '/',
+                'optional': not (_portal_require_cm_vhost | bool) or (_portal_cm_vhost_tier_a_mode == 'warn')}]
+              if (caddy_vhost_urls.cm.hostname | default('') | length > 0)
+              else []
+            )
           + (
               [{'name': 'Caddy vhost FreeIPA', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
-                'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default('')}]
+                'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false}]
               if (
                 deployment_portal_has_ipa | default(false) | bool
                 and (caddy_vhost_urls.ipa.hostname | default('') | length > 0)
@@ -266,14 +305,53 @@
     - deployment_portal_caddy_vhost_checks | default([]) | length > 0
   failed_when: false
 
-- name: Fail when a Caddy vhost route does not respond
+- name: Split required vs optional Caddy vhost checks
+  ansible.builtin.set_fact:
+    deployment_portal_caddy_vhost_checks_required: >-
+      {{
+        deployment_portal_caddy_vhost_checks | default([])
+        | selectattr('optional', 'equalto', false)
+        | list
+      }}
+    deployment_portal_caddy_vhost_checks_optional: >-
+      {{
+        deployment_portal_caddy_vhost_checks | default([])
+        | selectattr('optional', 'equalto', true)
+        | list
+      }}
+  when: deployment_portal_caddy_vhost_checks | default([]) | length > 0
+
+- name: Warn when optional Caddy vhost route does not respond (CM pre-install / tier warn)
+  ansible.builtin.debug:
+    msg: >-
+      Optional Caddy vhost check did not pass for {{ item.item.name }} (non-blocking before CM install or tier warn).
+      Request: GET {{ _portal_local_base }}{{ item.item.path | default('/') }} with Host: {{ item.item.host }}.
+      HTTP status: {{ item.status | default('n/a') }} (acceptable: {{ _portal_url_verify_codes_int | join('/') }}).
+      {% if 'CM' in item.item.name %}
+      Cloudera Manager is not listening yet on {{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}
+      (expected when Jenkins PORTAL runs before CM_INSTALL — re-run 35_refresh_deployment_portal.yml after CM).
+      {% endif %}
+      Caddy logs: docker logs --tail 40 {{ deployment_portal_caddy_container }}
+  loop: "{{ deployment_portal_caddy_vhost_results.results | default([]) }}"
+  when:
+    - deployment_portal_caddy_vhost_checks | default([]) | length > 0
+    - deployment_portal_caddy_vhost_results is defined
+    - not (item.skipped | default(false) | bool)
+    - item.item.optional | default(false) | bool
+    - >-
+      item.failed | default(false) | bool
+      or (item.status | default(0) | int not in _portal_url_verify_codes_int)
+
+- name: Fail when a required Caddy vhost route does not respond
   ansible.builtin.fail:
     msg: >-
       Caddy vhost check failed for {{ item.item.name }}.
       Request: GET {{ _portal_local_base }}{{ item.item.path | default('/') }}
       with Host: {{ item.item.host }}.
+      HTTP status: {{ item.status | default('n/a') }} (expected {{ _portal_url_verify_codes_int | join('/') }}).
       {% if item.item.upstream_ipa_fqdn is defined and item.item.upstream_ipa_fqdn | length > 0 %}
       FreeIPA upstream must receive Host: {{ item.item.upstream_ipa_fqdn }} (see deployment_portal_Caddyfile_vhosts.inc.j2 header_up).
+      Redirect responses (301/302) are acceptable when Caddy or IPA returns them.
       Confirm https://{{ item.item.upstream_ipa_fqdn }}/ responds on the IPA server and IPA HTTPD is running.
       {% elif 'CM' in item.item.name %}
       Confirm Cloudera Manager is up on {{ deployment_portal_cm_fqdn }} (ports {{ cm_http_port }}/{{ cm_https_port }}).
@@ -284,8 +362,10 @@
   loop: "{{ deployment_portal_caddy_vhost_results.results | default([]) }}"
   when:
     - deployment_portal_caddy_vhost_checks | default([]) | length > 0
+    - deployment_portal_caddy_vhost_results is defined
     - not (item.skipped | default(false) | bool)
-    - item.failed | default(false) or (item.status | default(0) | int not in _portal_url_verify_codes)
+    - not (item.item.optional | default(false) | bool)
+    - (item.status | default(0) | int not in _portal_url_verify_codes_int)
 
 - name: Verify FreeIPA HTTPS responds with IPA FQDN Host header (direct upstream)
   ansible.builtin.uri:

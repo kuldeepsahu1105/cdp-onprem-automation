@@ -311,6 +311,12 @@ cm_api_delegate_probes_to_manager: true
 cm_api_private_reachability_timeout: 5
 # Portal verify: skip VPC-only URL checks when control profile is public-only (Jenkins default)
 deployment_portal_url_verify_skip_vpc: false
+# Tier A: require Caddy CM vhost Host check (default false — auto from deployment_portal_context.cloudera_manager.cm_installed)
+deployment_portal_verify_cm_vhost: false
+# Set by 35_refresh_deployment_portal.yml — require CM vhost after post-CM portal refresh
+deployment_portal_verify_post_cm: false
+# Tier A CM vhost when required: fail (default) or warn (non-blocking, like Tier B warn)
+deployment_portal_cm_vhost_tier_a_verify: fail
 # Tier B: GET external URLs from Ansible controller when ansible_control_reachability is public (warn|fail|skip)
 deployment_external_url_verify: warn
 # Legacy portal-only key (used when deployment_external_url_verify is unset)

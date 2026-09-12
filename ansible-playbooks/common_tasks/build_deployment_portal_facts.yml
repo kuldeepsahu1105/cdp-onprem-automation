@@ -187,6 +187,26 @@
       description: "{{ _cat.description | default('ECS data service') }}"
   when: _url | length > 0
 
+- name: Probe Cloudera Manager HTTP on cldr-mngr (portal context cm_installed hint)
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ cm_http_port | int }}"
+    timeout: "{{ cm_api_private_reachability_timeout | default(5) | int }}"
+    state: started
+  register: deployment_portal_cm_http_probe
+  delegate_to: "{{ groups['cldr-mngr'][0] }}"
+  failed_when: false
+  when:
+    - "'cldr-mngr' in groups"
+    - groups['cldr-mngr'] | default([]) | length > 0
+
+- name: Default CM HTTP probe when cldr-mngr absent
+  ansible.builtin.set_fact:
+    deployment_portal_cm_http_probe:
+      failed: true
+      state: absent
+  when: not (('cldr-mngr' in groups) and (groups['cldr-mngr'] | default([]) | length > 0))
+
 - name: Assemble deployment portal context
   ansible.builtin.set_fact:
     deployment_portal_context:
@@ -243,6 +263,7 @@
         ipa_ui_label: "FreeIPA / IdM"
       cloudera_manager:
         host_fqdn: "{{ deployment_portal_cm_fqdn }}"
+        cm_installed: "{{ deployment_portal_cm_http_probe is succeeded | bool }}"
         ui_url_http: "http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}"
         ui_url_https: "https://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port }}"
         caddy_url: "{{ caddy_vhost_urls_external.cm.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
