@@ -1,3 +1,4 @@
+{% set ctx = deployment_portal_context %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -24,7 +25,6 @@
   </style>
 </head>
 <body>
-{% set ctx = deployment_portal_context %}
   <h1>Cloudera CDP deployment portal</h1>
   <p class="sub">Domain <code>{{ ctx.cluster_domain }}</code> · realm <code>{{ ctx.cluster_realm }}</code> · identity <code>{{ ctx.identity_provider }}</code> · access <code>{{ ctx.access.profile }}</code> ({{ ctx.access.environment }}) · generated {{ ctx.generated_at }}</p>
 

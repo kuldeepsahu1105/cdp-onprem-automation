@@ -17,6 +17,7 @@ For the full deployment sequence, identity scenarios, and cleanup steps, see the
 | Document | Purpose |
 |---|---|
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | **How to run** — step-by-step deployment, FreeIPA/AD scenarios, cleanup, wrapper scripts |
+| [docs/RUN_ORDER.md](docs/RUN_ORDER.md) | **Run order** — Jenkins / `pvc_setup.sh` sequence and duplicate-number routers vs sub-playbooks |
 | [docs/REFERENCE.md](docs/REFERENCE.md) | **Detailed reference** — every playbook, variable, inventory group, DNS behavior, repo modes, cleanup toggles |
 
 ## OS and repository support

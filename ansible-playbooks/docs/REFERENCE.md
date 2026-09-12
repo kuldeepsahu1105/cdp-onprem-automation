@@ -201,6 +201,8 @@ Each host should define: `ansible_host`, `private_ip`, `cldr_hostname`.
 
 Run: `ansible-playbook -i inventory.ini <playbook>.yml`
 
+For Jenkins / wrapper execution order and why some numbers appear twice (10, 14, 16), see [RUN_ORDER.md](RUN_ORDER.md).
+
 ### Phase 1 — Infrastructure & prerequisites
 
 | Playbook | Description |
