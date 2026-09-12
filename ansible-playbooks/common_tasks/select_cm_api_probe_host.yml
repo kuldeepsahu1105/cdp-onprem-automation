@@ -1,6 +1,7 @@
 ---
 # CM API /api/version checks: on cldr-mngr, scm-server may listen on public/FQDN only (not 127.0.0.1).
-# With cm_api_delegate_probes_to_manager (default), checks run on cldr-mngr; set false to try the controller first.
+# Public control profile (Jenkins): probes run on the controller at cm_api_connect_host / public ansible_host.
+# In-VPC localhost plays with cm_api_delegate_probes_to_manager (default) delegate discovery to cldr-mngr.
 
 
 - name: CM API — list addresses on Ansible controller
@@ -9,10 +10,40 @@
       {{
         (
           (
+            [cm_api_connect_host]
+            if (
+              (cm_api_connect_host | default('') | length > 0)
+              and (cm_api_connect_host not in ['127.0.0.1', 'localhost'])
+            )
+            else []
+          )
+          + (
             [cm_host_public]
             if (
               (cm_host_public | default('') | length > 0)
               and (cm_host_public != '127.0.0.1')
+              and (cm_host_public != (cm_api_connect_host | default('')))
+            )
+            else []
+          )
+          + (
+            [hostvars[cm_manager_inventory_host].ansible_host | default('')]
+            if (
+              (hostvars[cm_manager_inventory_host].ansible_host | default('') | length > 0)
+              and (hostvars[cm_manager_inventory_host].ansible_host | default('') not in ['127.0.0.1', 'localhost'])
+              and not (
+                hostvars[cm_manager_inventory_host].ansible_host is match('^10\\.')
+                or hostvars[cm_manager_inventory_host].ansible_host is match('^192\\.168\\.')
+                or hostvars[cm_manager_inventory_host].ansible_host is match('^172\\.(1[6-9]|2[0-9]|3[0-1])\\.')
+              )
+              and (
+                hostvars[cm_manager_inventory_host].ansible_host | default('')
+                != (cm_api_connect_host | default(''))
+              )
+              and (
+                hostvars[cm_manager_inventory_host].ansible_host | default('')
+                != (cm_host_public | default(''))
+              )
             )
             else []
           )

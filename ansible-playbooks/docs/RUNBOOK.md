@@ -50,7 +50,7 @@ Ansible must pick **public** vs **VPC-private** addresses for CM API `uri` probe
 
 | Control node | Typical profile | What to set |
 |---|---|---|
-| **Jenkins** (or any host **outside** the VPC, no route to `10.x` / `172.31.x`) | `public` | Automatic: `run-ansible.sh` sets `ANSIBLE_CONTROL_VIA_JENKINS=1` and `jenkins_override.yml` sets `ansible_control_reachability: public`. CM API uses `ansible_host` (public IP), not `private_ip`; discovery delegates to `cldr-mngr` at `127.0.0.1`. Portal verify skips VPC-only URL hard-fails. |
+| **Jenkins** (or any host **outside** the VPC, no route to `10.x` / `172.31.x`) | `public` | Automatic: `run-ansible.sh` sets `ANSIBLE_CONTROL_VIA_JENKINS=1` and `jenkins_override.yml` sets `ansible_control_reachability: public` and `cm_api_connect_host` to `cldr-mngr` public `ansible_host`. CM API `/api/version` probes run **on the controller** at that public IP (`:7183` then `:7180`), not loopback on `cldr-mngr`. Portal verify skips VPC-only URL hard-fails. |
 | **Bare metal / VPN runner** (targets only on private net, no public IP on hosts) | `private` | Default `auto` probes CM `private_ip` vs public from the controller; prefers private when reachable. Or set `ansible_control_reachability: private` / `deployment_portal_access_profile: private`. |
 | **`CONTROL_MODE=local` on `cldr-mngr`** | `private` (CM API still `127.0.0.1` on-manager) | `CONTROL_MODE=local` — do **not** break standalone runs on the CM host. |
 
@@ -62,7 +62,7 @@ Printed URLs live in `CDP_ACCESS_URLS_*` / `jenkins/artifacts/access-urls.txt`.
 
 **Cloudera Manager (`25_verify_cm.yml`):**
 
-- **Required (manager-local):** HTTP/HTTPS UI on `cldr-mngr` via `probe_cm_manager_ui_http.yml` (private IP / `ansible_host` / FQDN, then loopback) and Auto-TLS HTTPS on the same bind address — **fails** the play if CM is down. CM API setup (`set_cm_api_url.yml`) prints `cm_api_url` and probes from Jenkins with delegation per `#57`.
+- **Required (manager-local):** HTTP/HTTPS UI on `cldr-mngr` via `probe_cm_manager_ui_http.yml` (private IP / `ansible_host` / FQDN, then loopback) and Auto-TLS HTTPS on the same bind address — **fails** the play if CM is down. CM API setup (`set_cm_api_url.yml`) prints `cm_api_url`; Jenkins (public profile) probes the manager **public IP from the controller**; in-VPC localhost plays delegate discovery to `cldr-mngr`.
 - **External from controller:** Only when `deployment_portal_enabled: false` **and** `deployment_portal_verify_tier_b_enabled: true` (default **false**). With the portal stack enabled, external CM URL warns run from `10_setup` / `35_refresh` on the controller (milestone-scoped), not again in `25_verify_cm`.
 
 **Portal / monitoring / IPA / ECS** use the tier labels below on the ops host and Ansible controller:
