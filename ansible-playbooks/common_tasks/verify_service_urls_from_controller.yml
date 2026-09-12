@@ -102,13 +102,15 @@
 - name: Apply Tier B IPA direct cluster FQDN omission to probe list
   ansible.builtin.set_fact:
     _tier_b_url_checks_local: >-
-      {{
-        _tier_b_url_checks_local | default([])
-        | rejectattr('ipa_direct_fqdn', 'equalto', true)
-        | list
-        if (_tier_b_skip_ipa_direct_fqdn | default(false) | bool)
-        else (_tier_b_url_checks_local | default([]))
-      }}
+      {%- set skip_ipa = _tier_b_skip_ipa_direct_fqdn | default(false) | bool -%}
+      {%- set rows = _tier_b_url_checks_local | default([]) -%}
+      {%- set out = [] -%}
+      {%- for row in rows -%}
+      {%- if not (skip_ipa and (row.ipa_direct_fqdn | default(false) | bool)) -%}
+      {%- set _ = out.append(row) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ out }}
   delegate_to: localhost
   run_once: true
 
