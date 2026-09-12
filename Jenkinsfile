@@ -38,7 +38,7 @@ Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INS
 
 Legacy: CDH_BASE (old jobs) expands to CM_TLS_KRB_LDAP + CDH_INSTALL — check those two boxes instead.
 
-PORTAL auto-run: when DEPLOYMENT_PORTAL_ENABLED=true (default) and you select IDENTITY, CM_INSTALL, CM_TLS_KRB_LDAP, CDH_INSTALL, MONITORING, or ECS without PORTAL, the pipeline inserts PORTAL after PREREQS.
+PORTAL auto-run: only when AUTO_INCLUDE_PORTAL_BOOTSTRAP=true and you select CM_INSTALL, CDH_INSTALL, MONITORING, or ECS without PORTAL (not CM_TLS-only or IDENTITY-only). Default: check PORTAL explicitly.
 
 Examples:
   Validate + provision only: VALIDATE,TERRAFORM
@@ -171,6 +171,11 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
       name: 'DEPLOYMENT_PORTAL_ENABLED',
       defaultValue: true,
       description: 'Bootstrap Caddy portal on ops host (10) when MONITORING_STACK_ENABLED=true. Without monitoring, no Caddy/portal — CM stays direct :7180/:7183. CM Caddy vhost uses edge port deployment_portal_http_port (81) proxying to cldr-mngr:7180/7183.'
+    )
+    booleanParam(
+      name: 'AUTO_INCLUDE_PORTAL_BOOTSTRAP',
+      defaultValue: false,
+      description: 'When true and DEPLOYMENT_PORTAL_ENABLED: if you select CM_INSTALL, CDH_INSTALL, MONITORING, or ECS without PORTAL, Jenkins inserts the PORTAL stage after PREREQS. When false (default), run PORTAL only when you check the PORTAL box.'
     )
     booleanParam(
       name: 'ECS_DATA_SERVICES_DEPLOY_ENABLED',
@@ -657,9 +662,9 @@ def effectiveValidationChecks(def csv) {
 def resolvePipelineStages(def stagesCsv, def validationCsv) {
   def stages = effectivePipelineStages(stagesCsv)
   def ansibleStageIds = orderedAnsibleStageIds().findAll { stages.contains(it) }
-  if (portalDeployEnabled() && !ansibleStageIds.contains('PORTAL')) {
+  if (portalDeployEnabled() && isParamEnabled(params.AUTO_INCLUDE_PORTAL_BOOTSTRAP) && !ansibleStageIds.contains('PORTAL')) {
     def needsPortal = ansibleStageIds.any {
-      it in ['IDENTITY', 'CM_INSTALL', 'CM_TLS_KRB_LDAP', 'CDH_INSTALL', 'MONITORING', 'ECS_INSTALL']
+      it in ['CM_INSTALL', 'CDH_INSTALL', 'MONITORING', 'ECS_INSTALL']
     }
     if (needsPortal) {
       def prereqIdx = ansibleStageIds.indexOf('PREREQS')
@@ -668,7 +673,7 @@ def resolvePipelineStages(def stagesCsv, def validationCsv) {
       } else {
         ansibleStageIds = ['PORTAL'] + ansibleStageIds
       }
-      echo 'INFO: DEPLOYMENT_PORTAL_ENABLED — auto-including PORTAL bootstrap before CM (use DEPLOY_PHASE=portal_refresh or DEPLOYMENT_PORTAL_REFRESH=true for 35_refresh).'
+      echo 'INFO: AUTO_INCLUDE_PORTAL_BOOTSTRAP — inserted PORTAL bootstrap (uncheck AUTO_INCLUDE_PORTAL_BOOTSTRAP or check PORTAL yourself to control this).'
     }
   }
   def ansiblePhases = ansibleStageIds.collect { ansiblePhaseForStage(it) }

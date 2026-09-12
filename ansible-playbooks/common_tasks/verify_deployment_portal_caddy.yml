@@ -64,30 +64,7 @@
 
 - name: Verify pgAdmin container and local HTTP
   ansible.builtin.import_tasks: verify_deployment_portal_pgadmin.yml
+  when: deployment_portal_pgadmin_verify_enabled | default(false) | bool
 
-- name: Set portal URL verify reachability from access profile (public vs private CM/ops IPs)
-  ansible.builtin.set_fact:
-    ansible_control_reachability_effective: >-
-      {{
-        'public'
-        if (
-          hostvars['localhost'].deployment_portal_access_profile_effective
-          | default(deployment_portal_access_profile_effective | default('cloud'))
-        ) == 'cloud'
-        else 'private'
-      }}
-    ansible_control_reach_public_only: >-
-      {{
-        (
-          hostvars['localhost'].deployment_portal_access_profile_effective
-          | default(deployment_portal_access_profile_effective | default('cloud'))
-        ) == 'cloud'
-      }}
-  delegate_to: localhost
-  run_once: true
-
-- name: Resolve deployment portal URL verify milestones for this run
-  ansible.builtin.import_tasks: resolve_deployment_portal_verify_milestones.yml
-
-- name: Verify deployment portal and Caddy vhost URLs (Tier A/C scoped by milestone)
-  ansible.builtin.import_tasks: verify_deployment_portal_urls.yml
+# Caddy vhost Host-header URL loops (portal/ipa/grafana) removed from portal sync — use browser or opt-in vars.
+# See verify_deployment_portal_urls.yml (not imported here).

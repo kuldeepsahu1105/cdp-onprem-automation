@@ -1,7 +1,6 @@
 ---
 # Tier B portal + monitoring + IPA + ECS external URL checks from the Ansible controller (not CM — see 25_verify_cm.yml).
-# Tier A (127.0.0.1 + Caddy Host vhosts on the ops host) already ran in verify_deployment_portal_urls.yml.
-# Optional printed portal URLs on the ops host are not HTTP-probed in verify_deployment_portal_urls.yml.
+# Opt-in only (deployment_portal_verify_tier_b_enabled). Portal sync does not run Caddy vhost Host-header URL loops.
 
 - name: Resolve deployment portal URL verify milestones for Tier B
   ansible.builtin.import_tasks: resolve_deployment_portal_verify_milestones.yml

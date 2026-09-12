@@ -57,6 +57,7 @@ fi
 wrapper_reexec_from_repo_if_needed "$SCRIPT_DIR" "${BASH_SOURCE[0]}" "$(basename "$0")" "${WRAPPER_REMAINING_ARGS[@]}"
 
 REPO_ROOT="$(cd "$SCRIPTS_LIB/../.." && pwd)"
+ci_ansi_prepare_jenkins_console
 ansible_configure_output
 wrapper_print_identity "Cloudera PVC Ansible Deployment" "$REPO_ROOT" "$SCRIPTS_LIB"
 

@@ -51,14 +51,20 @@ ui_plain_emoji() {
 # would appear as literal [32m without a TTY even with ansiColor + FORCE_COLOR=1.
 ui_color_enabled() {
   case "${UI_COLOR:-${FORCE_COLOR:-auto}}" in
-    0|false|no|off|never) return 1 ;;
+    0|false|no|off|never)
+      ui_ci_ansi_console && return 0
+      return 1
+      ;;
   esac
-  ui_is_tty || return 1
+  if ui_is_tty; then
+    return 0
+  fi
+  ui_ci_ansi_console && return 0
   case "${UI_COLOR:-${FORCE_COLOR:-auto}}" in
     1|true|yes|on|force|always) return 0 ;;
   esac
   [[ "${CLICOLOR_FORCE:-}" == "1" ]] && return 0
-  return 0
+  return 1
 }
 
 ui_repeat_char() {

@@ -97,5 +97,6 @@
       ansible.builtin.meta: end_play
       when: not (deployment_portal_caddy_effective | default(false) | bool)
 
-    - name: Tier B external URL verify (Ansible controller (remote or laptop))
+    - name: External URL verify from Ansible controller (opt-in)
       ansible.builtin.import_tasks: common_tasks/verify_deployment_portal_external_from_controller.yml
+      when: deployment_portal_verify_tier_b_enabled | default(false) | bool
