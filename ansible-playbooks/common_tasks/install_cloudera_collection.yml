@@ -33,5 +33,5 @@
     cloudera_cluster_galaxy_list.rc != 0
     or 'cloudera.cluster' not in cloudera_cluster_galaxy_list.stdout
 
-- name: Install CM API Python client (cm_client)
+- name: Install controller Python deps (urllib3 1.x pin + cm_client)
   ansible.builtin.import_tasks: install_cm_client_python.yml

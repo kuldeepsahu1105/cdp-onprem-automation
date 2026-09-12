@@ -1,32 +1,63 @@
 ---
-# cm_client on the Ansible controller (required by cloudera.cluster.* modules).
-# urllib3 2.x breaks cm_client RESTClientObject + collection discover_endpoint (TypeError on pool maxsize).
+# Controller-side deps for cloudera.cluster.* (runs from playbooks 28–31, 33 via install_cloudera_collection.yml).
+# urllib3 2.x breaks cm_client RESTClientObject (TypeError in pool maxsize during endpoint discovery).
 
-- name: Check cm_client import on controller Python
-  ansible.builtin.command:
-    cmd: "{{ ansible_playbook_python | default(ansible_python_interpreter | default('/usr/bin/python3')) }} -c 'import cm_client'"
-  register: cm_client_import
-  changed_when: false
-  failed_when: false
+- name: Resolve Python for Ansible controller pip installs
+  ansible.builtin.set_fact:
+    _cm_controller_python: "{{ ansible_playbook_python | default(ansible_python_interpreter | default('python3')) }}"
 
-- name: Install cm_client and urllib3 1.x for cloudera.cluster modules (pip --user)
-  ansible.builtin.pip:
-    name:
-      - cm_client
-      - "urllib3>=1.26.5,<2"
-    executable: pip3
-    extra_args: --user
-  when: cm_client_import.rc != 0
-
-- name: Pin urllib3 1.x when cm_client is already installed (urllib3 2.x incompatible)
+- name: Pin urllib3 1.x on controller (pip3 install --user 'urllib3>=1.26.5,<2')
   ansible.builtin.pip:
     name: "urllib3>=1.26.5,<2"
     executable: pip3
     extra_args: --user
-  when: cm_client_import.rc == 0
+  # Always run — Jenkins images often ship urllib3 2.x
 
-- name: Verify cm_client after pip install
+- name: Check cm_client import on controller Python
   ansible.builtin.command:
-    cmd: "{{ ansible_playbook_python | default(ansible_python_interpreter | default('/usr/bin/python3')) }} -c 'import cm_client'"
+    argv:
+      - "{{ _cm_controller_python }}"
+      - -c
+      - import cm_client
+  register: cm_client_import
   changed_when: false
+  failed_when: false
+
+- name: Install cm_client on controller when missing (pip --user)
+  ansible.builtin.pip:
+    name: cm_client
+    executable: pip3
+    extra_args: --user
   when: cm_client_import.rc != 0
+
+- name: Verify cm_client import after pip install
+  ansible.builtin.command:
+    argv:
+      - "{{ _cm_controller_python }}"
+      - -c
+      - import cm_client
+  changed_when: false
+  failed_when: false
+  register: cm_client_import_after
+  when: cm_client_import.rc != 0
+
+- name: Fail when cm_client is not available on controller
+  ansible.builtin.fail:
+    msg: >-
+      cm_client could not be imported by {{ _cm_controller_python }}.
+      Install manually: pip3 install --user cm_client
+  when:
+    - cm_client_import.rc != 0
+    - cm_client_import_after is defined
+    - cm_client_import_after.rc != 0
+
+- name: Assert controller urllib3 is 1.x (required for cloudera.cluster modules)
+  ansible.builtin.command:
+    argv:
+      - "{{ _cm_controller_python }}"
+      - -c
+      - |
+        import urllib3
+        v = urllib3.__version__.split(".")[0]
+        assert v == "1", f"urllib3 {urllib3.__version__} — need 1.x; playbook should have pinned via pip"
+  changed_when: false
