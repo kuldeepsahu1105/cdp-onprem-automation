@@ -277,12 +277,13 @@ run_phase_3() {
   fi
   run_playbook 23_setup_postgres.yml "${cm_extra[@]}"
   run_playbook 24_start_cm.yml "${cm_extra[@]}"
-  # One ansible-playbook invocation: API probe once, then license (facts persist on localhost).
+  # CM URL/API verify runs here (25) — not in deployment portal refresh (35).
   run_playbook 25_verify_cm.yml 26_setup_cm_license.yml -e ansible_become=false
 }
 
 run_phase_cm_tls() {
   ui_phase_header "CM Auto-TLS, Kerberos, CMS, LDAP"
+  # CM API health waits (e.g. /api/v58/version) run inside 27+ — portal refresh below does not re-probe CM.
   run_playbook 27_setup_cm_autotls.yml
   run_playbook 28_setup_cm_krbs.yml
   run_playbook 29_setup_cm_cms.yml
@@ -346,6 +347,7 @@ _portal_refresh_explicitly_enabled() {
   [[ "${DEPLOYMENT_PORTAL_REFRESH:-false}" == "true" || "${DEPLOYMENT_PORTAL_REFRESH:-false}" == "1" ]]
 }
 
+# Sync Caddy/index + portal/IPA/monitoring URL milestones only (never cm/cm_tls — see 25_verify_cm / 27_setup_cm_autotls).
 _maybe_run_deployment_portal_refresh() {
   local milestones="${1:-}"
   if ! _portal_refresh_explicitly_enabled; then
