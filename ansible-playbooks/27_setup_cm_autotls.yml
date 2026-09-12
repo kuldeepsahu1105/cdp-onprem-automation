@@ -7,6 +7,21 @@
   hosts: localhost
   connection: local
   gather_facts: no
+  handlers:
+    - name: Restart Cloudera Manager after configuration change
+      ansible.builtin.include_tasks: common_tasks/restart_cm_services.yml
+      delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+      become: true
+      listen: Restart Cloudera Manager after configuration change
+
+    - name: Refresh CM API URL after CM restart
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+      listen: Restart Cloudera Manager after configuration change
+
+    - name: Wait for CM API after CM restart
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
+      listen: Restart Cloudera Manager after configuration change
+
   tasks:
     - name: Clear Auto-TLS applied flag for this run
       ansible.builtin.set_fact:
@@ -91,13 +106,20 @@
           when: not use_password
           register: auto_tls_response
 
-        - name: Mark Auto-TLS applied this run (defer wait/restart to CM-host play)
+        - name: Mark Auto-TLS applied this run
           ansible.builtin.set_fact:
             autotls_applied_this_run: true
           when:
             - auto_tls_response is defined
             - auto_tls_response is succeeded
             - auto_tls_response is changed
+
+    - name: Schedule CM restart after Auto-TLS (handler; only when generateCmca changed CM)
+      ansible.builtin.debug:
+        msg: Auto-TLS generateCmca applied; restarting Cloudera Manager via handler.
+      when: autotls_applied_this_run | default(false) | bool
+      changed_when: true
+      notify: Restart Cloudera Manager after configuration change
 
     - name: Refresh CM API URL after Auto-TLS changes
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
@@ -115,19 +137,6 @@
 
     - name: Print Cloudera Manager Access URLs
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
-
-- name: Restart Cloudera Manager services after Auto-TLS (CM host)
-  hosts: cldr-mngr
-  gather_facts: false
-  become: true
-  tasks:
-    - name: End play when Auto-TLS was not applied this run (no restart)
-      ansible.builtin.meta: end_play
-      when: not (hostvars['localhost'].autotls_applied_this_run | default(false) | bool)
-
-    - name: Restart CM server and agent after Auto-TLS API
-      ansible.builtin.import_tasks: common_tasks/restart_cm_services.yml
-      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
 
 - name: Verify CM API after Auto-TLS restart (Ansible controller — public manager IP)
   hosts: localhost

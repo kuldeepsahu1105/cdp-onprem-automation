@@ -14,6 +14,23 @@
   hosts: localhost
   connection: local
   gather_facts: no
+  handlers:
+    - name: Restart Cloudera Manager server after LDAP change
+      ansible.builtin.systemd:
+        name: cloudera-scm-server
+        state: restarted
+      delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+      become: true
+      listen: Restart Cloudera Manager after configuration change
+
+    - name: Refresh CM API URL after LDAP restart
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+      listen: Restart Cloudera Manager after configuration change
+
+    - name: Wait for CM API after LDAP restart
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
+      listen: Restart Cloudera Manager after configuration change
+
   tasks:
     - name: Skip LDAP configuration when disabled
       ansible.builtin.meta: end_play
@@ -49,24 +66,10 @@
           ldap_group_search_filter: "{{ cm_ldap_group_search_filter }}"
           ldap_dn_pattern: "{{ cm_ldap_dn_pattern | default('') }}"
       register: cm_ldap_result
+      notify: Restart Cloudera Manager after configuration change
 
     - name: Print LDAP configuration result
       ansible.builtin.debug:
         msg: "LDAP authentication configured in Cloudera Manager"
       when: cm_ldap_result is changed
 
-    - name: Restart Cloudera Manager Server after LDAP configuration
-      ansible.builtin.systemd:
-        name: cloudera-scm-server
-        state: restarted
-      when: cm_ldap_result is changed
-      delegate_to: cldr-mngr
-
-    - name: Wait for Cloudera Manager API to become available
-      ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
-      when: cm_ldap_result is changed
-
-    - name: Wait for Cloudera Manager Server to start
-      ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
-      delegate_to: cldr-mngr
-      when: cm_ldap_result is changed

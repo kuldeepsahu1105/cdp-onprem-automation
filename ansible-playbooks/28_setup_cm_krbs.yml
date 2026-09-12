@@ -6,6 +6,21 @@
   hosts: localhost
   connection: local
   gather_facts: no
+  handlers:
+    - name: Restart Cloudera Manager after configuration change
+      ansible.builtin.include_tasks: common_tasks/restart_cm_services.yml
+      delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+      become: true
+      listen: Restart Cloudera Manager after configuration change
+
+    - name: Refresh CM API URL after CM restart
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+      listen: Restart Cloudera Manager after configuration change
+
+    - name: Wait for CM API after CM restart
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
+      listen: Restart Cloudera Manager after configuration change
+
   tasks:
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
@@ -39,7 +54,14 @@
         kerberos_already_configured: >-
           {{
             kerberos_config.json is defined and
-            (kerberos_config.json.items | default([]) | selectattr('name', 'equalto', 'SECURITY_REALM') | map(attribute='value') | first | default('') | length > 0)
+            (
+              kerberos_config.json['items'] | default([])
+              | selectattr('name', 'equalto', 'SECURITY_REALM')
+              | map(attribute='value')
+              | first
+              | default('')
+              | length
+            ) > 0
           }}
 
     - name: Import KDC admin credentials into Cloudera Manager
@@ -57,7 +79,8 @@
         status_code: [200, 201, 204, 303, 400]
       register: kdc_import_result
       failed_when: false
-      changed_when: kdc_import_result.status in [200, 201, 204, 303]
+      changed_when: false
+      when: not kerberos_already_configured | default(false)
 
     - name: Wait for importAdminCredentials command (when CM returns a command id)
       ansible.builtin.uri:
@@ -75,6 +98,7 @@
       retries: 40
       delay: 5
       when:
+        - not kerberos_already_configured | default(false)
         - kdc_import_result.json is defined
         - kdc_import_result.json.id is defined
 
@@ -109,7 +133,8 @@
 
     - name: Print KDC credential import result
       ansible.builtin.debug:
-        msg: "KDC credential import status: {{ kdc_import_result.status }}"
+        msg: "KDC credential import status: {{ kdc_import_result.status | default('skipped') }}"
+      when: not kerberos_already_configured | default(false)
 
     - name: Configure Kerberos via Cloudera Manager REST API
       ansible.builtin.import_tasks: common_tasks/configure_cm_kerberos_api.yml
@@ -135,7 +160,10 @@
       when:
         - identity_provider_effective == 'ad'
         - not kerberos_already_configured | default(false)
+        - cm_kerberos_config_changed | default(false) | bool
       failed_when: false
+      notify: Restart Cloudera Manager after configuration change
+      changed_when: true
 
     - name: Print Kerberos configuration result
       ansible.builtin.debug:
@@ -146,36 +174,7 @@
         - cm_kerberos_api_result is defined
         - cm_kerberos_api_result is changed
 
-    - name: Record Kerberos change for CM restart on CM host
-      ansible.builtin.set_fact:
-        cm_kerberos_restart_required: true
-      when: >
-        (cm_kerberos_api_result is defined and cm_kerberos_api_result is changed)
-        or (cm_kerberos_ad_config is defined and cm_kerberos_ad_config is changed)
-
-    - name: Refresh CM API URL after Kerberos changes
-      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
-      when: hostvars['localhost'].get('cm_kerberos_restart_required', false) | bool
-
-    - name: Wait for Cloudera Manager API to become available
-      ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
-      when: hostvars['localhost'].get('cm_kerberos_restart_required', false) | bool
-
-    - name: Wait for Cloudera Manager Server to start
-      ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
-      delegate_to: cldr-mngr
-      when: hostvars['localhost'].get('cm_kerberos_restart_required', false) | bool
-
     - name: Kerberos already configured
       ansible.builtin.debug:
-        msg: "Kerberos is already enabled in Cloudera Manager. Skipping configuration."
+        msg: "Kerberos is already enabled in Cloudera Manager. Skipping configuration and CM restart."
       when: kerberos_already_configured | default(false)
-
-- name: Restart Cloudera Manager services after Kerberos (CM host)
-  hosts: cldr-mngr
-  gather_facts: false
-  become: true
-  tasks:
-    - name: Restart CM server and agent after Kerberos config
-      ansible.builtin.import_tasks: common_tasks/restart_cm_services.yml
-      when: hostvars['localhost']['cm_kerberos_restart_required'] | default(false) | bool

@@ -33,6 +33,37 @@
       - { name: KDC_ADMIN_HOST, value: "{{ kdc_host }}" }
       - { name: KDC_HOST, value: "{{ kdc_host }}" }
 
+- name: Kerberos — detect whether CM Kerberos settings need update
+  ansible.builtin.set_fact:
+    cm_kerberos_config_changed: >-
+      {{
+        (
+          (cm_krb_config_before.json['items'] | default([])
+           | selectattr('name', 'equalto', 'SECURITY_REALM')
+           | map(attribute='value') | first | default('')) != cluster_realm
+        )
+        or (
+          (cm_krb_config_before.json['items'] | default([])
+           | selectattr('name', 'equalto', 'KDC_TYPE')
+           | map(attribute='value') | first | default('')) != krb5_kdc_type
+        )
+        or (
+          (cm_krb_config_before.json['items'] | default([])
+           | selectattr('name', 'equalto', 'KRB_ENC_TYPES')
+           | map(attribute='value') | first | default('')) != cm_krb_enc_types_value
+        )
+        or (
+          (cm_krb_config_before.json['items'] | default([])
+           | selectattr('name', 'equalto', 'KDC_HOST')
+           | map(attribute='value') | first | default('')) != kdc_host
+        )
+        or (
+          (cm_krb_config_before.json['items'] | default([])
+           | selectattr('name', 'equalto', 'KDC_ADMIN_HOST')
+           | map(attribute='value') | first | default('')) != kdc_host
+        )
+      }}
+
 - name: Kerberos — apply CM Kerberos configuration
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/config"
@@ -46,7 +77,14 @@
       items: "{{ cm_krb_desired_items }}"
     status_code: [200, 204, 301, 303]
   register: cm_kerberos_api_result
+  when: cm_kerberos_config_changed | bool
+  notify: Restart Cloudera Manager after configuration change
   changed_when: true
+
+- name: Kerberos — CM Kerberos settings already match desired state
+  ansible.builtin.debug:
+    msg: Kerberos CM configuration already matches group_vars; no PUT or CM restart.
+  when: not (cm_kerberos_config_changed | bool)
 
 - name: Kerberos — read CM Kerberos status after configuration
   ansible.builtin.uri:
