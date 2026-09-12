@@ -265,7 +265,8 @@ base_cluster_install_services:
   dataviz: false
   phoenix: false
   knox: true
-  solr: false
+  # Solr is required for Ranger audit with HDFS (CDP default); disable only if Ranger is false.
+  solr: true
 
 # YARN sizing for small lab clusters (base_cluster_cluster_spec.j2)
 base_cluster_yarn_rm_max_mb: 4096
