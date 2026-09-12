@@ -251,7 +251,8 @@ base_cluster_install_services:
   hive_on_tez: true
   hbase: true
   hue: true
-  iceberg: true
+  # ICEBERG service requires newer CDH parcels (not on CDH 7.3.2); enable when parcel supports it.
+  iceberg: false
   replication: true
   impala: true
   kafka: true

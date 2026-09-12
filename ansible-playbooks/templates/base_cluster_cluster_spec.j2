@@ -129,7 +129,7 @@ services:
       zookeeper_service: zookeeper
 {% endif %}
 {% endif %}
-{% if svc.iceberg | default(true) %}
+{% if svc.iceberg | default(false) %}
   - name: iceberg
     type: ICEBERG
     display_name: Iceberg
@@ -277,7 +277,7 @@ host_templates:
       - service: replication
         type: REPLICATION_MANAGER
 {% endif %}
-{% if svc.iceberg | default(true) %}
+{% if svc.iceberg | default(false) %}
       - service: iceberg
         type: ICEBERG_CATALOG
 {% endif %}
