@@ -1,0 +1,63 @@
+{# YAML document for deployment_portal_live_stats (parsed with from_yaml) #}
+{% set host_items = _portal_cm_hosts.json.items | default([]) %}
+{% set mgmt = _portal_cm_mgmt.json | default({}) if (_portal_cm_mgmt.status | default(0) | int == 200) else {} %}
+{% set ns_clusters = namespace(items=[]) %}
+{% set ns_parcels = namespace(items=[]) %}
+{% for res in (_portal_cm_cluster_services.results | default([])) %}
+{%   if res.status | default(0) | int == 200 %}
+{%     set svcs = res.json.items | default([]) %}
+{%     set ns_svc = namespace(details=[]) %}
+{%     for s in svcs %}
+{%       set _x = ns_svc.details.append({
+  'name': s.name | default(''),
+  'type': s.type | default(''),
+  'service_state': s.serviceState | default(''),
+  'health': s.healthSummary | default(''),
+}) %}
+{%     endfor %}
+{%     set _y = ns_clusters.items.append({
+  'name': res.item,
+  'kind': 'ecs' if (res.item == ecs_cluster_name) else 'base',
+  'services_total': svcs | length,
+  'services_good': svcs | selectattr('healthSummary', 'equalto', 'GOOD') | list | length,
+  'services_concerning': svcs | selectattr('healthSummary', 'equalto', 'CONCERNING') | list | length,
+  'services_bad': svcs | selectattr('healthSummary', 'equalto', 'BAD') | list | length,
+  'services_started_good': svcs | selectattr('serviceState', 'equalto', 'STARTED') | selectattr('healthSummary', 'equalto', 'GOOD') | list | length,
+  'services': ns_svc.details,
+}) %}
+{%   endif %}
+{% endfor %}
+{% for pres in (_portal_cm_cluster_parcels.results | default([])) %}
+{%   if pres.status | default(0) | int == 200 %}
+{%     for p in (pres.json.items | default([])) %}
+{%       if (p.stage | default('')) == 'ACTIVATED' %}
+{%         set _z = ns_parcels.items.append({
+  'cluster': pres.item,
+  'product': p.product | default(''),
+  'version': p.version | default(''),
+  'stage': p.stage | default(''),
+}) %}
+{%       endif %}
+{%     endfor %}
+{%   endif %}
+{% endfor %}
+collected_at: {{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ')) }}
+source: cm_api
+cm_api_available: true
+cm_api_version: "{{ cm_api_version | default('') }}"
+inventory_host_count: {{ deployment_portal_inventory_hosts | default([]) | length }}
+hosts:
+  total: {{ host_items | length }}
+  good: {{ host_items | selectattr('healthSummary', 'equalto', 'GOOD') | list | length }}
+  concerning: {{ host_items | selectattr('healthSummary', 'equalto', 'CONCERNING') | list | length }}
+  bad: {{ host_items | selectattr('healthSummary', 'equalto', 'BAD') | list | length }}
+cm_management_service:
+  display_name: "{{ mgmt.displayName | default('') }}"
+  service_state: "{{ mgmt.serviceState | default('') }}"
+  health: "{{ mgmt.healthSummary | default('') }}"
+clusters: {{ ns_clusters.items | to_json }}
+parcels: {{ ns_parcels.items | to_json }}
+notes:
+  - "CM health, hosts, and parcels update on portal refresh (35_refresh_deployment_portal.yml)."
+  - "{{ _portal_live_poll_meta.prometheus_same_origin_hint | default('') }}"
+poll: {{ _portal_live_poll_meta | to_json }}

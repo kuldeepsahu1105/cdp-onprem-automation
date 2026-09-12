@@ -21,6 +21,12 @@
     dest: "{{ deployment_portal_www_dir }}/index.html"
     mode: "0644"
 
+- name: Render deployment portal live stats JSON
+  ansible.builtin.template:
+    src: deployment_portal_live_stats.json.j2
+    dest: "{{ deployment_portal_www_dir }}/live-stats.json"
+    mode: "0644"
+
 - name: Render pgAdmin server preset
   ansible.builtin.template:
     src: deployment_portal_pgadmin-servers.json.j2
@@ -209,6 +215,12 @@
       ansible.builtin.template:
         src: deployment_portal_index.html.j2
         dest: "{{ deployment_portal_www_dir }}/index.html"
+        mode: "0644"
+
+    - name: Refresh deployment portal live stats JSON after monitoring sync
+      ansible.builtin.template:
+        src: deployment_portal_live_stats.json.j2
+        dest: "{{ deployment_portal_www_dir }}/live-stats.json"
         mode: "0644"
 
 - name: Verify monitoring UIs via Caddy path routes (monitoring milestone)

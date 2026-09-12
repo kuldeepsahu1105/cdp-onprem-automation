@@ -542,3 +542,6 @@
       inventory_hosts: "{{ deployment_portal_inventory_hosts | default([]) }}"
       endpoints: "{{ deployment_portal_endpoints | default([]) }}"
       extra_links: "{{ deployment_portal_extra_links }}"
+
+- name: Collect deployment portal live stats snapshot (CM API + inventory)
+  ansible.builtin.import_tasks: collect_deployment_portal_live_stats.yml

@@ -14,6 +14,14 @@
 {% set prometheus_tile_url = ctx.monitoring.prometheus_caddy_url | default('') if (ctx.monitoring.prometheus_caddy_url | default('') | length > 0) else (ctx.monitoring.prometheus_url | default(ctx.monitoring.prometheus_path_url | default(''))) %}
 {% set alertmanager_tile_url = ctx.monitoring.alertmanager_caddy_url | default('') if (ctx.monitoring.alertmanager_caddy_url | default('') | length > 0) else (ctx.monitoring.alertmanager_url | default(ctx.monitoring.alertmanager_path_url | default(''))) %}
 {% set cadvisor_tile_url = ctx.monitoring.cadvisor_url | default('') %}
+{% set ls = ctx.live_stats | default({}) %}
+{% set ls_poll_prom = ls.poll.prometheus_query_path | default('') if ls.poll is defined else '' %}
+{% set ns_ls = namespace(sgood=0, swarn=0, sbad=0) %}
+{% for cl in ls.clusters | default([]) %}
+{% set ns_ls.sgood = ns_ls.sgood + (cl.services_started_good | default(0) | int) %}
+{% set ns_ls.swarn = ns_ls.swarn + (cl.services_concerning | default(0) | int) %}
+{% set ns_ls.sbad = ns_ls.sbad + (cl.services_bad | default(0) | int) %}
+{% endfor %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -261,6 +269,80 @@
       color: var(--muted);
       margin-right: 0.35rem;
     }
+    .live-stats { margin-bottom: 1.25rem; }
+    .live-stats-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.65rem;
+    }
+    .live-stats-head h2 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0;
+      font-weight: 600;
+    }
+    .live-stats-updated {
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .kpi-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+    }
+    .kpi {
+      flex: 1 1 7.5rem;
+      min-width: 7rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.65rem 0.75rem;
+    }
+    .kpi .kpi-label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+    .kpi .kpi-val {
+      font-size: 1.45rem;
+      font-weight: 700;
+      margin-top: 0.1rem;
+      line-height: 1.15;
+    }
+    .kpi .kpi-sub {
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 0.15rem;
+    }
+    .kpi.kpi-pass .kpi-val { color: #4ade80; }
+    .kpi.kpi-warn .kpi-val { color: #fbbf24; }
+    .kpi.kpi-fail .kpi-val { color: #f87171; }
+    .kpi.kpi-accent .kpi-val { color: var(--accent); }
+    .kpi.kpi-info .kpi-val { color: var(--accent-soft); }
+    .live-note {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin: 0.65rem 0 0;
+      line-height: 1.45;
+    }
+    .health-pill {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 0.1rem 0.45rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .health-pill.good { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+    .health-pill.concerning { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+    .health-pill.bad { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+    .health-pill.na { background: #243044; color: var(--muted); }
     @media (max-width: 480px) {
       .site-header { padding: 0.85rem 1rem; }
       h1 { font-size: 1.15rem; }
@@ -366,6 +448,97 @@
         {% endif %}
       </div>
     </nav>
+
+    <section class="live-stats" id="live-stats" aria-label="Cluster health snapshot">
+      <div class="live-stats-head">
+        <h2>Health snapshot</h2>
+        <span class="live-stats-updated" id="live-stats-updated">
+          {% if ls.collected_at | default('') | length > 0 %}CM snapshot {{ ls.collected_at }}{% else %}Awaiting data{% endif %}
+        </span>
+      </div>
+      <div class="kpi-grid" id="live-stats-kpis">
+        <div class="kpi kpi-info" data-kpi="hosts-total">
+          <div class="kpi-label">CM hosts</div>
+          <div class="kpi-val">{{ ls.hosts.total | default(ls.inventory_host_count | default('—')) }}</div>
+          <div class="kpi-sub" data-kpi-sub="hosts-heartbeat">{% if ls.hosts.good is defined %}{{ ls.hosts.good }}/{{ ls.hosts.total }} GOOD{% else %}inventory {{ ls.inventory_host_count | default('—') }}{% endif %}</div>
+        </div>
+        <div class="kpi kpi-pass" data-kpi="services-good">
+          <div class="kpi-label">Services GOOD</div>
+          <div class="kpi-val" id="kpi-services-good">{% if ls.clusters | default([]) | length > 0 %}{{ ns_ls.sgood }}{% else %}—{% endif %}</div>
+          <div class="kpi-sub">STARTED+GOOD across clusters</div>
+        </div>
+        <div class="kpi kpi-warn" data-kpi="services-warn">
+          <div class="kpi-label">CONCERNING</div>
+          <div class="kpi-val" id="kpi-services-warn">{% if ls.clusters | default([]) | length > 0 %}{{ ns_ls.swarn }}{% else %}—{% endif %}</div>
+          <div class="kpi-sub">CM service health</div>
+        </div>
+        <div class="kpi kpi-fail" data-kpi="services-bad">
+          <div class="kpi-label">BAD</div>
+          <div class="kpi-val" id="kpi-services-bad">{% if ls.clusters | default([]) | length > 0 %}{{ ns_ls.sbad }}{% else %}—{% endif %}</div>
+          <div class="kpi-sub">CM service health</div>
+        </div>
+        {% if mon_on %}
+        <div class="kpi kpi-accent" data-kpi="prom-up">
+          <div class="kpi-label">Prometheus UP</div>
+          <div class="kpi-val" id="kpi-prom-up">—</div>
+          <div class="kpi-sub" data-kpi-sub="prom-detail">{% if ls_poll_prom | length > 0 %}live poll{% else %}enable path routes{% endif %}</div>
+        </div>
+        {% endif %}
+        <div class="kpi kpi-info" data-kpi="parcels">
+          <div class="kpi-label">Parcels</div>
+          <div class="kpi-val" id="kpi-parcels">{{ ls.parcels | default([]) | length }}</div>
+          <div class="kpi-sub">ACTIVATED</div>
+        </div>
+      </div>
+      <p class="live-note" id="live-stats-note">
+        {% if ls.cm_api_available | default(false) %}
+        Service health, host heartbeats, and parcels are captured from the Cloudera Manager API during <code>35_refresh_deployment_portal.yml</code> (not live in the browser).
+        {% else %}
+        Cloudera Manager API snapshot unavailable from Ansible — counts fall back to inventory. Re-run portal refresh after CM is up.
+        {% endif %}
+        {% if mon_on and ls_poll_prom | length > 0 %}
+        Prometheus target count refreshes every 60s on the ops-host portal URL (same origin, path <code>/prometheus</code>).
+        {% elif mon_on %}
+        Open the portal via the ops host port (not the portal-only lab vhost) for in-browser Prometheus polls.
+        {% endif %}
+      </p>
+      {% if ls.clusters | default([]) | length > 0 %}
+      <details class="panel" style="margin-top:0.75rem">
+        <summary><span class="summary-main"><h2 class="section-title">Service health (CM snapshot)</h2></span><span class="panel-chevron" aria-hidden="true">▸</span></summary>
+        <div class="panel-body">
+          <div class="table-scroll">
+            <table id="live-stats-services-table">
+              <thead>
+                <tr>
+                  <th>Cluster</th>
+                  <th>Service</th>
+                  <th>Type</th>
+                  <th>State</th>
+                  <th>Health</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for cl in ls.clusters | default([]) %}
+                {% for svc in cl.services | default([]) %}
+                <tr>
+                  <td><code>{{ cl.name }}</code></td>
+                  <td>{{ svc.name }}</td>
+                  <td>{{ svc.type }}</td>
+                  <td>{{ svc.service_state }}</td>
+                  <td>
+                    {% set _h = svc.health | default('') | upper %}
+                    <span class="health-pill {% if _h == 'GOOD' %}good{% elif _h == 'CONCERNING' %}concerning{% elif _h == 'BAD' %}bad{% else %}na{% endif %}">{{ svc.health }}</span>
+                  </td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+      {% endif %}
+    </section>
 
     {% if ctx.endpoints | default([]) | length > 0 %}
     <section class="flat">
@@ -605,5 +778,85 @@
     </section>
     {% endif %}
   </main>
+  <script>
+  (function () {
+    var POLL_MS = 60000;
+    var initial = {{ ls | tojson }};
+    var promPath = {{ ls_poll_prom | tojson }};
+
+    function sumClusters(clusters, field) {
+      var n = 0;
+      (clusters || []).forEach(function (c) { n += (c[field] || 0) * 1; });
+      return n;
+    }
+
+    function pillClass(health) {
+      var h = (health || '').toUpperCase();
+      if (h === 'GOOD') return 'good';
+      if (h === 'CONCERNING') return 'concerning';
+      if (h === 'BAD') return 'bad';
+      return 'na';
+    }
+
+    function setText(id, val) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = (val === undefined || val === null || val === '') ? '—' : String(val);
+    }
+
+    function applySnapshot(data) {
+      if (!data) return;
+      var hosts = data.hosts || {};
+      var clusters = data.clusters || [];
+      setText('kpi-services-good', sumClusters(clusters, 'services_started_good') || sumClusters(clusters, 'services_good'));
+      setText('kpi-services-warn', sumClusters(clusters, 'services_concerning'));
+      setText('kpi-services-bad', sumClusters(clusters, 'services_bad'));
+      setText('kpi-parcels', (data.parcels || []).length);
+      var updated = document.getElementById('live-stats-updated');
+      if (updated && data.collected_at) {
+        updated.textContent = 'CM snapshot ' + data.collected_at + (data.source === 'cm_api' ? '' : ' (inventory fallback)');
+      }
+      var hb = document.querySelector('[data-kpi-sub="hosts-heartbeat"]');
+      if (hb && hosts.total !== undefined) {
+        hb.textContent = (hosts.good !== undefined ? hosts.good + '/' + hosts.total + ' GOOD' : hosts.total + ' hosts');
+      }
+      var tbody = document.querySelector('#live-stats-services-table tbody');
+      if (tbody && clusters.length) {
+        var rows = '';
+        clusters.forEach(function (cl) {
+          (cl.services || []).forEach(function (svc) {
+            rows += '<tr><td><code>' + cl.name + '</code></td><td>' + (svc.name || '') + '</td><td>' + (svc.type || '') +
+              '</td><td>' + (svc.service_state || '') + '</td><td><span class="health-pill ' + pillClass(svc.health) + '">' +
+              (svc.health || '—') + '</span></td></tr>';
+          });
+        });
+        if (rows) tbody.innerHTML = rows;
+      }
+    }
+
+    function pollSnapshot() {
+      fetch('live-stats.json', { cache: 'no-store', credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(applySnapshot)
+        .catch(function () {});
+    }
+
+    function pollPrometheus() {
+      if (!promPath) return;
+      var q = 'count(up==1)';
+      fetch(promPath + '?query=' + encodeURIComponent(q), { cache: 'no-store', credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (body) {
+          if (!body || body.status !== 'success') return;
+          var val = body.data && body.data.result && body.data.result[0] && body.data.result[0].value;
+          if (val && val.length > 1) setText('kpi-prom-up', val[1]);
+        })
+        .catch(function () {});
+    }
+
+    applySnapshot(initial);
+    pollPrometheus();
+    setInterval(function () { pollSnapshot(); pollPrometheus(); }, POLL_MS);
+  })();
+  </script>
 </body>
 </html>
