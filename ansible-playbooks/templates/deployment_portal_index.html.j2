@@ -460,8 +460,11 @@
           {% if ctx.identity.ipa_ui_url %}
           <li><strong>{{ ctx.identity.ipa_ui_label }} (HTTPS on ipaserver)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_ui_url }}">{{ ctx.identity.ipa_ui_url }}</a></li>
           {% endif %}
-          <li><strong>Cloudera Manager (HTTP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_http }}">{{ ctx.cloudera_manager.ui_url_http }}</a></li>
-          <li><strong>Cloudera Manager (HTTPS)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_https }}">{{ ctx.cloudera_manager.ui_url_https }}</a></li>
+          {% if _cm_caddy | length > 0 %}
+          <li><strong>Cloudera Manager (Caddy vhost)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _cm_caddy }}">{{ _cm_caddy }}</a></li>
+          {% endif %}
+          <li><strong>Cloudera Manager (direct HTTP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_http }}">{{ ctx.cloudera_manager.ui_url_http }}</a> <span class="badge">VPC / admin only</span></li>
+          <li><strong>Cloudera Manager (direct HTTPS)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_https }}">{{ ctx.cloudera_manager.ui_url_https }}</a> <span class="badge">VPC / admin only</span></li>
         </ul>
       </div>
     </details>

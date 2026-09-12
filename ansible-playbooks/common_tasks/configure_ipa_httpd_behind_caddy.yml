@@ -11,7 +11,6 @@
   when:
     - deployment_portal_has_ipa | default(false) | bool
     - ipa_caddy_public_hostname | default('') | length > 0
-    - inventory_hostname in groups.get('ipaserver', [])
 
 - name: Check whether FreeIPA ipa-rewrite HTTPS redirect is already disabled for Caddy
   ansible.builtin.command:
@@ -21,7 +20,6 @@
   failed_when: false
   when:
     - deployment_portal_has_ipa | default(false) | bool
-    - inventory_hostname in groups.get('ipaserver', [])
 
 - name: Disable FreeIPA ipa-rewrite forced HTTPS redirect for HTTP Caddy upstream
   ansible.builtin.replace:
@@ -33,7 +31,6 @@
   register: ipa_rewrite_https_cond
   when:
     - deployment_portal_has_ipa | default(false) | bool
-    - inventory_hostname in groups.get('ipaserver', [])
     - ipa_rewrite_caddy_marker is defined
     - ipa_rewrite_caddy_marker.rc != 0
 
@@ -47,7 +44,6 @@
   register: ipa_rewrite_https_block
   when:
     - deployment_portal_has_ipa | default(false) | bool
-    - inventory_hostname in groups.get('ipaserver', [])
     - ipa_rewrite_https_cond is defined
     - ipa_rewrite_https_cond is changed
 
@@ -57,7 +53,6 @@
     state: reloaded
   when:
     - deployment_portal_has_ipa | default(false) | bool
-    - inventory_hostname in groups.get('ipaserver', [])
     - >-
       (ipa_httpd_caddy_proxy_conf is changed)
       or (ipa_rewrite_https_cond is defined and ipa_rewrite_https_cond is changed)

@@ -389,18 +389,21 @@
       }}
   when: deployment_portal_caddy_vhost_checks | default([]) | length > 0
 
-- name: Note Tier A verify on each PORTAL sync (IPA HTTP 301 without follow_redirects is success)
+- name: Note Tier A verify on each PORTAL sync (301 without follow_redirects is success on Caddy vhosts)
   ansible.builtin.debug:
     msg: >-
       Tier A URL verify runs after every portal sync (including Jenkins PORTAL reruns) against
-      {{ _portal_local_base }} with Caddy vhost Host headers.
-      FreeIPA checks use follow_redirects=no — HTTP 301 (for example GET / to /ipa/modern-ui/, or upstream canonical redirect)
-      is expected and passes when the status is in {{ _portal_url_verify_codes_int | join('/') }}.
+      {{ _portal_local_base }} with Caddy vhost Host headers (follow_redirects=no).
+      HTTP 301/302 on the Caddy vhost (IPA GET / → /ipa/modern-ui/, CM Location rewritten to cm.*)
+      passes when the status is in {{ _portal_url_verify_codes_int | join('/') }}.
+      Direct upstream probes to CM ({{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}/{{ cm_https_port }}) or IPA HTTPD may also return 301 to the cluster FQDN — expected; use the Caddy URLs in the portal index.
       Verbose Ansible output may show redirect responses; the play fails only on unexpected status codes.
   when:
-    - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
-    - deployment_portal_has_ipa | default(false) | bool
     - deployment_portal_caddy_vhost_checks_required | default([]) | length > 0
+    - (
+        (_portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0 and deployment_portal_has_ipa | default(false) | bool)
+        or (_portal_verify_milestones_effective | default([]) | intersect(['cm']) | length > 0)
+      )
 
 - name: Verify required Caddy vhost routes via localhost with Host header (301/302 OK; no follow_redirects)
   ansible.builtin.uri:
@@ -488,7 +491,9 @@
       Confirm http://{{ item.item.upstream_ipa_fqdn }}/ipa/modern-ui/ and /ipa/ui respond on the IPA server and IPA HTTPD is running.
       {% elif 'CM' in item.item.name %}
       Confirm Cloudera Manager is up on {{ deployment_portal_cm_fqdn }} (ports {{ cm_http_port }}/{{ cm_https_port }}).
-      Caddy proxies to {{ deployment_portal_cm_upstream_host | default(deployment_portal_cm_fqdn) }} with header_up Host {{ deployment_portal_cm_fqdn }}.
+      Caddy proxies to {{ deployment_portal_cm_upstream_host | default(deployment_portal_cm_fqdn) }} with header_up Host {{ deployment_portal_cm_fqdn }} and rewrites Location to the cm.* vhost.
+      Re-run 35_refresh_deployment_portal.yml (or CM install play) so apply_cm_caddy_load_balancer.yml sets frontend_url to the Caddy URL (not {{ deployment_portal_cm_fqdn }}:{{ cm_https_port }}).
+      A direct curl to upstream :{{ cm_https_port }} may 301 to the CM FQDN — browsers must use the Caddy vhost on port {{ deployment_portal_http_port }}.
       {% elif 'pgAdmin' in item.item.name %}
       Confirm pgAdmin container {{ deployment_portal_pgadmin_container }} is running and responds on
       http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/ (Caddy reverse_proxies pgadmin:80 on the compose network).
@@ -504,6 +509,29 @@
     - not (item.skipped | default(false) | bool)
     - not (item.item.optional | default(false) | bool)
     - (item.status | default(0) | int not in _portal_url_verify_codes_int)
+
+- name: Verify Cloudera Manager UI on cldr-mngr (direct upstream; 301 to CM FQDN without follow_redirects is OK)
+  ansible.builtin.uri:
+    url: "{{ 'https' if (autotls_enabled | default(false) | bool) else 'http' }}://127.0.0.1:{{ cm_https_port if (autotls_enabled | default(false) | bool) else cm_http_port }}/"
+    method: GET
+    headers:
+      Host: "{{ deployment_portal_cm_fqdn }}"
+    status_code: "{{ _portal_url_verify_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 30
+  register: cm_direct_upstream_ui_check
+  retries: 3
+  delay: 5
+  until: cm_direct_upstream_ui_check is succeeded
+  delegate_to: "{{ groups['cldr-mngr'][0] }}"
+  run_once: true
+  when:
+    - _portal_verify_milestones_effective | default([]) | intersect(['cm']) | length > 0
+    - "'cldr-mngr' in groups"
+    - groups['cldr-mngr'] | default([]) | length > 0
+    - deployment_portal_cm_fqdn | default('') | length > 0
+  failed_when: false
 
 - name: Verify FreeIPA modern UI on ipaserver HTTPD (direct; 301 from IPA without follow_redirects is OK)
   ansible.builtin.uri:
