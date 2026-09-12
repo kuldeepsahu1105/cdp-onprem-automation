@@ -116,7 +116,6 @@
 
     - name: Print Cloudera Manager Access URLs
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
-      when: not (autotls_applied_this_run | default(false))
 
 - name: Restart Cloudera Manager services after Auto-TLS (CM host)
   hosts: cldr-mngr
@@ -153,6 +152,7 @@
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
       delegate_to: "{{ cm_manager_inventory_host }}"
       become: true
+      when: cm_api_wait is not defined or cm_api_wait is failed
 
     - name: Print Cloudera Manager Access URLs after Auto-TLS restart
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml

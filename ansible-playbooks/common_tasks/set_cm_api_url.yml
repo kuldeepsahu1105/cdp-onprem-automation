@@ -235,7 +235,7 @@
         or (
           cm_tls_probe_https is defined
           and cm_tls_probe_https is succeeded
-          and cm_tls_probe_https.status | default(0) in [200, 401, 403]
+          and cm_tls_probe_https.status | default(0) in [200, 301, 303, 401, 403]
         )
       }}
     cm_protocol: >-
@@ -248,7 +248,7 @@
             or (
               cm_tls_probe_https is defined
               and cm_tls_probe_https is succeeded
-              and cm_tls_probe_https.status | default(0) in [200, 401, 403]
+              and cm_tls_probe_https.status | default(0) in [200, 301, 303, 401, 403]
             )
           ) else 'http'
         )
@@ -263,12 +263,19 @@
             or (
               cm_tls_probe_https is defined
               and cm_tls_probe_https is succeeded
-              and cm_tls_probe_https.status | default(0) in [200, 401, 403]
+              and cm_tls_probe_https.status | default(0) in [200, 301, 303, 401, 403]
             )
           ) else cm_http_port
         )
       }}
   when: not (cm_api_discovery_succeeded | default(false) | bool)
+
+- name: CM API — mark Auto-TLS on when API uses HTTPS port
+  ansible.builtin.set_fact:
+    autotls_enabled: true
+  when:
+    - cm_protocol | default('') == 'https'
+    - (cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int)
 
 - name: Fail when CM API HTTP and HTTPS checks did not succeed
   ansible.builtin.fail:

@@ -40,15 +40,48 @@
 #   ansible.builtin.debug:
 #     msg: "✏️  Cloudera Manager Public IP: {{ cm_public_ip }}"
 
+- name: Set Cloudera Manager TLS display flags for access URLs
+  ansible.builtin.set_fact:
+    _cm_display_autotls: >-
+      {{
+        (autotls_enabled | default(false) | bool)
+        or (cm_protocol | default('') == 'https')
+        or ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+      }}
+
 - name: CM API — print Auto-TLS status
   ansible.builtin.debug:
-    msg: "❓ Auto-TLS is enabled: {{ autotls_enabled | default(false) }}"
+    msg: >-
+      Auto-TLS is enabled: {{ _cm_display_autotls | bool }}
+      (API {{ cm_protocol | default('?') }}:{{ cm_api_port | default('?') }})
 
-- name: Set Cloudera Manager protocol and port for access URLs
+- name: Apply Cloudera Manager protocol and ports for access URLs
   ansible.builtin.set_fact:
-    cm_protocol: "{{ cm_protocol | default('https' if (autotls_enabled | default(false)) else 'http') }}"
-    cm_port_ui: "{{ cm_api_port | default(cm_https_port if (autotls_enabled | default(false)) else cm_http_port) }}"
-    cm_port_api: "{{ cm_port_ui }}"
+    cm_protocol: >-
+      {{
+        cm_protocol
+        | default('https' if (_cm_display_autotls | bool) else 'http', true)
+      }}
+    cm_port_ui: >-
+      {{
+        cm_api_port
+        | default(
+            (cm_https_port | default(7183))
+            if (_cm_display_autotls | bool)
+            else (cm_http_port | default(7180)),
+            true
+          )
+      }}
+    cm_port_api: >-
+      {{
+        cm_api_port
+        | default(
+            (cm_https_port | default(7183))
+            if (_cm_display_autotls | bool)
+            else (cm_http_port | default(7180)),
+            true
+          )
+      }}
 
 - name: Set Cloudera Manager URLs
   ansible.builtin.set_fact:
