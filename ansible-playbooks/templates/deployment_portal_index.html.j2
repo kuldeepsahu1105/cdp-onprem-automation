@@ -232,6 +232,23 @@
       margin-left: 0.3rem;
       vertical-align: middle;
     }
+    .role-badge {
+      display: inline-block;
+      background: rgba(91, 159, 212, 0.15);
+      border: 1px solid rgba(91, 159, 212, 0.35);
+      color: #b8d4f0;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      margin: 0.12rem 0.2rem 0.12rem 0;
+      white-space: nowrap;
+    }
+    .group-tag {
+      display: inline-block;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-right: 0.35rem;
+    }
     @media (max-width: 480px) {
       .site-header { padding: 0.85rem 1rem; }
       h1 { font-size: 1.15rem; }
@@ -343,6 +360,35 @@
         {% endif %}
       </div>
     </nav>
+
+    {% if ctx.endpoints | default([]) | length > 0 %}
+    <section class="flat">
+      <h2>Endpoints</h2>
+      <p class="sub">Primary service URLs for operators and Jenkins. Links open in a new tab.</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Service</th>
+              <th>URL</th>
+              <th>Hostname</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ep in ctx.endpoints %}
+            <tr>
+              <td>{{ ep.name }}</td>
+              <td><a href="{{ ep.url }}" target="_blank" rel="noopener noreferrer">{{ ep.url }}</a></td>
+              <td>{% if ep.hostname | default('') | length > 0 %}<code>{{ ep.hostname }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
+              <td>{{ ep.note | default('') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
 
     {% if ctx.access.profile == 'private' %}
     <details class="panel" open>
@@ -533,18 +579,63 @@
     </section>
     {% endif %}
 
+    {% if ctx.inventory_hosts | default([]) | length > 0 %}
     <section class="flat">
-      <h2>Inventory nodes</h2>
+      <h2>Host roles</h2>
+      <p class="sub">Roles derived from Ansible inventory groups and portal facts (CM agent, PostgreSQL, Knox, portal/Caddy on the ops host).</p>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>Group</th><th>Hostname</th><th>FQDN</th><th>IP</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Host</th>
+              <th>FQDN</th>
+              <th>Private IP</th>
+              <th>Public IP</th>
+              <th>Roles installed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in ctx.inventory_hosts %}
+            <tr>
+              <td><code>{{ h.hostname }}</code> <span class="badge">{{ h.inventory_name }}</span></td>
+              <td>{{ h.fqdn }}</td>
+              <td><code>{{ h.private_ip }}</code></td>
+              <td>{% if h.public_ip | default('') | length > 0 %}<code>{{ h.public_ip }}</code>{% else %}<span class="badge">VPC only</span>{% endif %}</td>
+              <td>
+                {% for role in h.role_labels | default([]) %}
+                <span class="role-badge">{{ role }}</span>
+                {% endfor %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="flat">
+      <h2>Hosts with groups</h2>
+      <p class="sub">One row per inventory group membership. Public IP uses <code>ansible_host</code> / hostvars when distinct from private IP; ops reverse-proxy host uses the portal EIP.</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Group</th>
+              <th>Hostname</th>
+              <th>FQDN</th>
+              <th>Private IP</th>
+              <th>Public IP</th>
+            </tr>
+          </thead>
           <tbody>
             {% for n in ctx.nodes %}
             <tr>
-              <td>{{ n.group }}</td>
+              <td><span class="group-tag">{{ n.group }}</span></td>
               <td>{{ n.hostname }}</td>
               <td>{{ n.fqdn }}</td>
-              <td>{{ n.private_ip or n.ansible_host }}</td>
+              <td><code>{{ n.private_ip or n.ansible_host }}</code></td>
+              <td>{% if n.public_ip | default('') | length > 0 %}<code>{{ n.public_ip }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
             </tr>
             {% endfor %}
           </tbody>

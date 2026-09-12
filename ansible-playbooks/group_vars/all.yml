@@ -535,6 +535,14 @@ deployment_portal_inventory_groups:
   - base-workers
   - ecs-masters
   - ecs-workers
+# Human-readable role labels for deployment portal host inventory table
+deployment_portal_inventory_group_labels:
+  ipaserver: FreeIPA server
+  cldr-mngr: Cloudera Manager
+  base-masters: CDH master
+  base-workers: CDH worker
+  ecs-masters: ECS master
+  ecs-workers: ECS worker
 deployment_portal_data_service_links: []
 deployment_portal_extra_links: []
 # Portal URL profile: auto | cloud (public + VPC) | private (bare metal / no public IP)

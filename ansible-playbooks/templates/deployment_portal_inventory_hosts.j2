@@ -1,0 +1,69 @@
+{# YAML list: one row per inventory host (union of deployment_portal_inventory_groups) #}
+{% set _anchor_inv = groups[deployment_portal_host_group_effective][0] %}
+{% set _postgres_inv = deployment_portal_postgres_inv | default('') %}
+{% set _knox = base_cluster_install_services.knox | default(false) | bool %}
+{% set _seen = namespace(hosts=[]) %}
+{% for group_name in deployment_portal_inventory_groups %}
+{% for inv_host in groups.get(group_name, []) %}
+{% if inv_host not in _seen.hosts %}
+{% set _ = _seen.hosts.append(inv_host) %}
+{% set _hv = hostvars[inv_host] %}
+{% set _priv = _hv.private_ip | default(_hv.ansible_host | default('')) %}
+{% set _ah = _hv.ansible_host | default('') %}
+{% set _pub_var = _hv.public_ip | default('') %}
+{% if inv_host == _anchor_inv %}
+{% set _public = deployment_portal_ops_public_ip | default(_ah) %}
+{% elif _pub_var | length > 0 and _pub_var != _priv %}
+{% set _public = _pub_var %}
+{% elif _ah | length > 0 and _ah != _priv %}
+{% set _public = _ah %}
+{% else %}
+{% set _public = '' %}
+{% endif %}
+{% set _groups = [] %}
+{% for gn in deployment_portal_inventory_groups %}
+{% if inv_host in groups.get(gn, []) %}
+{% set _ = _groups.append(gn) %}
+{% endif %}
+{% endfor %}
+{% set _roles = [] %}
+{% for gn in _groups %}
+{% set _label = deployment_portal_inventory_group_labels.get(gn, gn) %}
+{% if _label not in _roles %}
+{% set _ = _roles.append(_label) %}
+{% endif %}
+{% endfor %}
+{% if inv_host == _anchor_inv %}
+{% if 'Portal / Caddy (reverse proxy)' not in _roles %}
+{% set _ = _roles.append('Portal / Caddy (reverse proxy)') %}
+{% endif %}
+{% endif %}
+{% if inv_host == _postgres_inv and 'PostgreSQL (CM DB)' not in _roles %}
+{% set _ = _roles.append('PostgreSQL (CM DB)') %}
+{% endif %}
+{% if inv_host in groups.get('base-masters', []) or inv_host in groups.get('base-workers', []) %}
+{% if 'CM agent' not in _roles %}
+{% set _ = _roles.append('CM agent') %}
+{% endif %}
+{% endif %}
+{% if inv_host in groups.get('ecs-masters', []) or inv_host in groups.get('ecs-workers', []) %}
+{% if 'CM agent' not in _roles %}
+{% set _ = _roles.append('CM agent') %}
+{% endif %}
+{% endif %}
+{% if _knox and inv_host in groups.get('base-masters', []) %}
+{% if 'Knox gateway' not in _roles %}
+{% set _ = _roles.append('Knox gateway') %}
+{% endif %}
+{% endif %}
+- inventory_name: "{{ inv_host }}"
+  hostname: "{{ _hv.cldr_hostname | default(inv_host) }}"
+  fqdn: "{{ _hv.cldr_hostname | default(inv_host) }}.{{ cluster_domain }}"
+  ansible_host: "{{ _ah }}"
+  private_ip: "{{ _priv }}"
+  public_ip: "{{ _public }}"
+  groups: {{ _groups | to_json }}
+  role_labels: {{ _roles | to_json }}
+{% endif %}
+{% endfor %}
+{% endfor %}

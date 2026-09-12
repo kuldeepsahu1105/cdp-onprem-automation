@@ -26,6 +26,13 @@
   ansible.builtin.set_fact:
     deployment_portal_nodes: "{{ lookup('template', 'deployment_portal_nodes.j2') | from_yaml | default([], true) }}"
 
+- name: Render deployment portal host inventory (unique hosts with roles)
+  ansible.builtin.set_fact:
+    deployment_portal_inventory_hosts: >-
+      {{
+        lookup('template', 'deployment_portal_inventory_hosts.j2') | from_yaml | default([], true)
+      }}
+
 - name: Set CM manager FQDN for portal links
   ansible.builtin.set_fact:
     deployment_portal_cm_fqdn: >-
@@ -246,6 +253,13 @@
 
 - name: Resolve Caddy CM/ECS public URL facts
   ansible.builtin.import_tasks: resolve_caddy_service_public_urls.yml
+
+- name: Render deployment portal service endpoints list
+  ansible.builtin.set_fact:
+    deployment_portal_endpoints: >-
+      {{
+        lookup('template', 'deployment_portal_endpoints.j2') | from_yaml | default([], true)
+      }}
 
 - name: Prefer Caddy vhost URLs for monitoring in external access map
   ansible.builtin.set_fact:
@@ -525,4 +539,6 @@
         alertmanager_url_vpc: "{{ deployment_portal_access_urls.vpc.alertmanager | default('') }}"
         cadvisor_url_vpc: "{{ deployment_portal_access_urls.vpc.cadvisor | default('') }}"
       nodes: "{{ deployment_portal_nodes }}"
+      inventory_hosts: "{{ deployment_portal_inventory_hosts | default([]) }}"
+      endpoints: "{{ deployment_portal_endpoints | default([]) }}"
       extra_links: "{{ deployment_portal_extra_links }}"
