@@ -111,9 +111,7 @@
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
       delegate_to: "{{ cm_manager_inventory_host }}"
       become: true
-      when:
-        - not (autotls_applied_this_run | default(false))
-        - cm_api_wait is not defined or cm_api_wait is failed
+      when: not (autotls_applied_this_run | default(false))
 
     - name: Print Cloudera Manager Access URLs
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
@@ -153,7 +151,6 @@
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
       delegate_to: "{{ cm_manager_inventory_host }}"
       become: true
-      when: cm_api_wait is not defined or cm_api_wait is failed
 
     - name: Print Cloudera Manager Access URLs after Auto-TLS restart
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
