@@ -1,5 +1,5 @@
 ---
-# When CM API probes delegate to cldr-mngr, scm-server may listen on FQDN/VPC IP only (not 127.0.0.1).
+# When CM API probes delegate to cldr-mngr, scm-server may listen on public/FQDN only (not 127.0.0.1).
 
 - name: Build CM API probe host candidates on delegated cldr-mngr
   ansible.builtin.set_fact:
@@ -7,12 +7,20 @@
       {{
         (
           ['127.0.0.1']
-          + ([cm_host_fqdn] if (cm_host_fqdn | default('') | length > 0) else [])
+          + (
+            [cm_host_public]
+            if (
+              (cm_host_public | default('') | length > 0)
+              and (cm_host_public != '127.0.0.1')
+            )
+            else []
+          )
           + (
             [hostvars[cm_manager_inventory_host].ansible_fqdn | default('')]
             if (hostvars[cm_manager_inventory_host].ansible_fqdn | default('') | length > 0)
             else []
           )
+          + ([cm_host_fqdn] if (cm_host_fqdn | default('') | length > 0) else [])
           + (
             [hostvars[cm_manager_inventory_host].ansible_hostname | default('')]
             if (hostvars[cm_manager_inventory_host].ansible_hostname | default('') | length > 0)
@@ -22,7 +30,7 @@
             [cm_host_private]
             if (
               (cm_host_private | default('') | length > 0)
-              and (cm_host_private not in ['127.0.0.1', cm_host_fqdn])
+              and (cm_host_private not in ['127.0.0.1', cm_host_public, cm_host_fqdn])
             )
             else []
           )
@@ -54,7 +62,27 @@
     - cm_api_probe_host_candidates is defined
     - cm_api_probe_host_candidates | length > 0
 
-- name: Select CM API probe host that responded on cldr-mngr
+- name: Discover reachable CM API host on cldr-mngr (HTTPS /api/version)
+  ansible.builtin.uri:
+    url: "https://{{ item }}:{{ cm_https_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303]
+    timeout: 15
+  loop: "{{ cm_api_probe_host_candidates }}"
+  register: cm_api_probe_https_discovery
+  failed_when: false
+  delegate_to: "{{ cm_api_probe_delegate_to }}"
+  when:
+    - cm_api_probe_delegate_to | default('') | length > 0
+    - cm_api_probe_host_candidates is defined
+    - cm_api_probe_host_candidates | length > 0
+
+- name: Select CM API probe host that responded on cldr-mngr (HTTP first, then HTTPS)
   ansible.builtin.set_fact:
     cm_api_probe_host: >-
       {{
@@ -67,8 +95,30 @@
           | list
           | first
         )
+        | default(
+          (
+            cm_api_probe_https_discovery.results
+            | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303])
+            | map(attribute='item')
+            | list
+            | first
+          ),
+          true
+        )
         | default(cm_api_probe_host, true)
       }}
   when:
     - cm_api_probe_delegate_to | default('') | length > 0
-    - cm_api_probe_host_discovery is defined
+    - cm_api_probe_host_discovery is defined or cm_api_probe_https_discovery is defined
+
+- name: Align CM API client host with delegated probe discovery (Jenkins/localhost)
+  ansible.builtin.set_fact:
+    cm_api_client_host: "{{ cm_api_probe_host }}"
+    cm_host: "{{ cm_api_probe_host }}"
+  when:
+    - cm_api_controller_is_localhost | default(false) | bool
+    - cm_api_probe_delegate_to | default('') | length > 0
+    - cm_api_probe_host | default('') | length > 0
+    - cm_api_probe_host != '127.0.0.1'

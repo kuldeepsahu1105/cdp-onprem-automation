@@ -58,7 +58,7 @@ Import order in `set_cm_api_url.yml`:
    - **`detect_ansible_control_reachability.yml`** (full CM port probes unless skipped)
    - Sets `cm_connect_host`, `cm_api_client_host`, `cm_api_probe_host`, `cm_api_probe_delegate_to`, `cm_host`
    - Uses `ansible_control_reach_public_only` from reachability detect
-2b. **`select_cm_api_probe_host.yml`** (when probes delegate to cldr-mngr) — tries `127.0.0.1`, FQDN, `ansible_hostname`, private IP; updates `cm_api_probe_host`
+2b. **`select_cm_api_probe_host.yml`** (when probes delegate to cldr-mngr) — tries `127.0.0.1`, `ansible_host`, `ansible_fqdn`, cluster FQDN, `ansible_hostname`, private IP (HTTP then HTTPS per candidate); updates `cm_api_probe_host` and may align `cm_api_client_host` for localhost/Jenkins
 3. `ensure_cm_admin_password.yml`
 4. HTTP/HTTPS probes → `cm_protocol`, `cm_api_port`, **`cm_api_url`**, `cm_api_url_delegated`
 
