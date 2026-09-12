@@ -655,8 +655,8 @@
         <ul class="clean">
           <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>
           <li><strong>pgAdmin</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.pgadmin.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.pgadmin.hostname }}</a></li>
-          <li><strong>CM (Caddy HTTP)</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.cm.hostname }}</a></li>
-          <li><strong>CM (HTTPS direct)</strong> — <a href="{{ ctx.cloudera_manager.ui_url_https }}" target="_blank" rel="noopener noreferrer">{{ ctx.cloudera_manager.host_fqdn }}:7183</a></li>
+          <li><strong>CM (Caddy — use this in browser)</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.cm.url }}</a> <span class="badge">:8088 only; not :7183 on this hostname</span></li>
+          <li><strong>CM (HTTPS direct on manager)</strong> — <a href="{{ ctx.cloudera_manager.ui_url_https }}" target="_blank" rel="noopener noreferrer">{{ ctx.cloudera_manager.ui_url_https }}</a> <span class="badge">{{ ctx.cloudera_manager.host_fqdn }} — not the <code>cm.*</code> Caddy name</span></li>
           {% if mon_on %}
           <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.grafana.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.grafana.hostname }}{% else %}{{ grafana_tile_url }}{% endif %}</a></li>
           <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.prometheus.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.prometheus.hostname }}{% else %}{{ prometheus_tile_url }}{% endif %}</a></li>
