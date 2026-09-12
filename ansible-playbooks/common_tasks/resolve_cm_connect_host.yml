@@ -4,7 +4,35 @@
 - name: Resolve Cloudera Manager API connection address
   ansible.builtin.set_fact:
     cm_manager_host_inv: "{{ cm_manager_inventory_host }}"
-    cm_host_public: "{{ hostvars[cm_manager_inventory_host].ansible_host | default(cm_manager_inventory_host) }}"
+    cm_host_public: >-
+      {{
+        cm_api_connect_host
+        if (cm_api_connect_host | default('') | length > 0)
+        else (
+          hostvars[cm_manager_inventory_host].public_ip | default('')
+          if (
+            (hostvars[cm_manager_inventory_host].public_ip | default('') | length > 0)
+            and not (
+              hostvars[cm_manager_inventory_host].public_ip is match('^10\\.')
+              or hostvars[cm_manager_inventory_host].public_ip is match('^192\\.168\\.')
+              or hostvars[cm_manager_inventory_host].public_ip is match('^172\\.(1[6-9]|2[0-9]|3[0-1])\\.')
+            )
+          )
+          else (
+            hostvars[cm_manager_inventory_host].ansible_host | default(cm_manager_inventory_host)
+            if not (
+              (hostvars[cm_manager_inventory_host].ansible_host | default('')) is match('^10\\.')
+              or (hostvars[cm_manager_inventory_host].ansible_host | default('')) is match('^192\\.168\\.')
+              or (hostvars[cm_manager_inventory_host].ansible_host | default('')) is match('^172\\.(1[6-9]|2[0-9]|3[0-1])\\.')
+            )
+            else (
+              hostvars[cm_manager_inventory_host].ec2_public_ip | default('')
+              if (hostvars[cm_manager_inventory_host].ec2_public_ip | default('') | length > 0)
+              else hostvars[cm_manager_inventory_host].ansible_host | default(cm_manager_inventory_host)
+            )
+          )
+        )
+      }}
     cm_host_private: "{{ hostvars[cm_manager_inventory_host].private_ip | default('') }}"
     cm_host_fqdn: >-
       {{ hostvars[cm_manager_inventory_host].cldr_hostname | default(cm_manager_inventory_host) }}.{{ cluster_domain }}
@@ -172,6 +200,7 @@
 - name: Mirror CM client host to cm_host for API tasks
   ansible.builtin.set_fact:
     cm_host: "{{ cm_api_client_host }}"
+    cm_api_uri_delegate_to: ""
 
 - name: Explain CM API connection target when it differs from browser URL
   ansible.builtin.debug:

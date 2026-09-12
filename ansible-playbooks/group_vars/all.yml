@@ -318,6 +318,8 @@ cm_apply_caddy_frontend_url: auto
 # (host cm.<ip-dashed>.<base>, port deployment_portal_http_port) instead of direct :7180/:7183.
 # Matches cloudera-labs/openshift module_defaults host=proxy_host port=80 on the reverse proxy.
 cm_config_api_via_caddy_proxy: auto
+# fail | warn — warn when Jenkins cannot open CM :7180/:7183 but delegated discovery on cldr-mngr succeeds
+cm_api_verify_mode: fail
 # Portal verify: skip VPC-only URL checks when control profile is public-only (Jenkins default)
 deployment_portal_url_verify_skip_vpc: false
 # Milestone-scoped URL verify (portal, ipa, identity, cm, cm_tls, cdh, monitoring, ecs).

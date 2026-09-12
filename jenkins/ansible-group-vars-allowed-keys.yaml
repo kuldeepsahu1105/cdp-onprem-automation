@@ -63,6 +63,8 @@ allowed_keys:
   - cm_api_connect_host
   - cm_api_delegate_probes_to_manager
   - cm_api_private_reachability_timeout
+  - cm_api_verify_mode
+  - cm_config_api_via_caddy_proxy
   - cm_external_url
   - cm_apply_caddy_frontend_url
   - ansible_controller_outside_vpc

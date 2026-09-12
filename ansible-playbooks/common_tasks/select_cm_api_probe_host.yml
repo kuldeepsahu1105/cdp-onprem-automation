@@ -1,22 +1,28 @@
 ---
 # When CM API probes delegate to cldr-mngr, scm-server may listen on public/FQDN only (not 127.0.0.1).
+# Jenkins/public controllers: try Caddy CM vhost on ops host (:8088) before direct :7180/:7183; fall back to
+# delegated discovery on cldr-mngr when security groups block the controller from CM ports.
 
-- name: Probe CM API via deployment portal Caddy CM vhost (public controller, optional)
+- name: Ensure Caddy CM vhost facts exist for API probes (Jenkins without portal play)
+  ansible.builtin.import_tasks: ensure_cm_caddy_probe_facts.yml
+  when:
+    - cm_api_probe_delegate_to | default('') | length == 0
+    - cm_api_probe_from_controller_public | default(false) | bool
+    - cm_api_controller_is_localhost | default(false) | bool
+    - (cm_config_api_via_caddy_proxy | default('auto') | lower) in ['auto', 'true', '1', 'yes', 'on']
+
+- name: Probe CM API via deployment portal Caddy CM vhost URLs (public controller, Tier 1)
   ansible.builtin.uri:
-    url: "{{ cm_api_caddy_probe_url }}/api/version"
+    url: "{{ item }}/api/version"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     return_content: no
     validate_certs: no
-    status_code: [200, 301, 303]
-    timeout: 15
-  vars:
-    cm_api_caddy_probe_url: >-
-      {{
-        hostvars['localhost'].caddy_vhost_urls_external.cm.url | default('') | trim | regex_replace('/+$', '')
-      }}
+    status_code: [200, 301, 303, 401, 403]
+    timeout: 20
+  loop: "{{ cm_api_caddy_probe_urls | default([]) }}"
   register: cm_api_probe_caddy_discovery
   failed_when: false
   when:
@@ -24,18 +30,74 @@
     - cm_api_probe_from_controller_public | default(false) | bool
     - cm_api_controller_is_localhost | default(false) | bool
     - (cm_config_api_via_caddy_proxy | default('auto') | lower) in ['auto', 'true', '1', 'yes', 'on']
-    - hostvars['localhost'].caddy_vhost_urls_external.cm.url | default('') | length > 0
+    - cm_api_caddy_probe_urls is defined
+    - cm_api_caddy_probe_urls | length > 0
+
+- name: Probe CM UI path via Caddy when /api/version did not respond (public controller)
+  ansible.builtin.uri:
+    url: "{{ item }}/cmf/login"
+    method: GET
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303, 401, 403]
+    timeout: 20
+  loop: "{{ cm_api_caddy_probe_urls | default([]) }}"
+  register: cm_api_probe_caddy_login_discovery
+  failed_when: false
+  when:
+    - cm_api_probe_delegate_to | default('') | length == 0
+    - cm_api_probe_from_controller_public | default(false) | bool
+    - cm_api_controller_is_localhost | default(false) | bool
+    - cm_api_caddy_probe_urls is defined
+    - cm_api_caddy_probe_urls | length > 0
+    - cm_api_probe_caddy_discovery is defined
+    - (
+        cm_api_probe_caddy_discovery.results | default([])
+        | selectattr('status', 'defined')
+        | selectattr('status', 'in', [200, 301, 303, 401, 403])
+        | list
+        | length
+      ) == 0
 
 - name: Use Caddy CM vhost probe result for API client (public controller)
   ansible.builtin.set_fact:
-    cm_api_probe_host: "{{ hostvars['localhost'].caddy_vhost_urls_external.cm.hostname | default(cm_api_client_host) }}"
-    cm_api_client_host: "{{ hostvars['localhost'].caddy_vhost_urls_external.cm.hostname | default(cm_api_client_host) }}"
+    cm_api_probe_host: "{{ _cm_caddy_win_hostname }}"
+    cm_api_client_host: "{{ _cm_caddy_win_hostname }}"
     cm_api_probe_https_first: false
     cm_api_probe_use_caddy_vhost: true
+    cm_api_controller_direct_reachable: true
+  vars:
+    _cm_caddy_win_url: >-
+      {{
+        (
+          cm_api_probe_caddy_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | map(attribute='item')
+          | list
+          | first
+        )
+        | default(
+          (
+            cm_api_probe_caddy_login_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | map(attribute='item')
+            | list
+            | first
+          ),
+          true
+        )
+      }}
+    _cm_caddy_win_hostname: >-
+      {{
+        _cm_caddy_win_url
+        | regex_replace('^https?://', '')
+        | regex_replace('/.*$', '')
+        | regex_replace(':.*$', '')
+      }}
   when:
-    - cm_api_probe_caddy_discovery is defined
-    - cm_api_probe_caddy_discovery is succeeded
-    - cm_api_probe_caddy_discovery.status | default(0) in [200, 301, 303]
+    - _cm_caddy_win_url | default('') | length > 0
 
 - name: Build CM API probe host candidates on public Ansible controller (localhost/Jenkins)
   ansible.builtin.set_fact:
@@ -121,7 +183,7 @@
     force_basic_auth: yes
     return_content: no
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200, 301, 303, 401, 403]
     timeout: 15
   loop: "{{ cm_api_probe_host_candidates }}"
   register: cm_api_probe_https_discovery
@@ -143,7 +205,7 @@
     follow_redirects: none
     return_content: no
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200, 301, 303, 401, 403]
     timeout: 15
   loop: "{{ cm_api_probe_host_candidates }}"
   register: cm_api_probe_host_discovery
@@ -158,7 +220,7 @@
     - (
         cm_api_probe_https_discovery.results | default([])
         | selectattr('status', 'defined')
-        | selectattr('status', 'in', [200, 301, 303])
+        | selectattr('status', 'in', [200, 301, 303, 401, 403])
         | list
         | length
       ) == 0
@@ -171,7 +233,7 @@
           cm_api_probe_https_discovery.results
           | default([])
           | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303])
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
           | map(attribute='item')
           | list
           | first
@@ -181,7 +243,7 @@
             cm_api_probe_host_discovery.results
             | default([])
             | selectattr('status', 'defined')
-            | selectattr('status', 'in', [200, 301, 303])
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
             | map(attribute='item')
             | list
             | first
@@ -196,7 +258,7 @@
           cm_api_probe_https_discovery.results
           | default([])
           | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303])
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
           | map(attribute='item')
           | list
           | first
@@ -206,7 +268,7 @@
             cm_api_probe_host_discovery.results
             | default([])
             | selectattr('status', 'defined')
-            | selectattr('status', 'in', [200, 301, 303])
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
             | map(attribute='item')
             | list
             | first
@@ -293,7 +355,246 @@
     - cm_api_probe_delegate_to | default('') | length > 0
     - cm_api_probe_host_discovery is defined or cm_api_probe_https_discovery is defined
 
-- name: Align CM API client host with delegated probe discovery (Jenkins/localhost)
+- name: Record whether public-controller direct CM API discovery succeeded
+  ansible.builtin.set_fact:
+    cm_api_controller_direct_reachable: >-
+      {{
+        (cm_api_probe_use_caddy_vhost | default(false) | bool)
+        or (
+          (cm_api_probe_https_discovery is defined)
+          and (
+            cm_api_probe_https_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
+        )
+        or (
+          (cm_api_probe_host_discovery is defined)
+          and (
+            cm_api_probe_host_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
+        )
+      }}
+  when:
+    - cm_api_probe_from_controller_public | default(false) | bool
+    - cm_api_probe_delegate_to | default('') | length == 0
+
+- name: Fall back to delegated CM API discovery on cldr-mngr when Jenkins cannot reach CM ports
+  ansible.builtin.set_fact:
+    cm_api_probe_delegate_to: "{{ cm_manager_inventory_host }}"
+    cm_api_probe_host: "127.0.0.1"
+    cm_api_probe_https_first: false
+    cm_api_controller_direct_reachable: false
+    cm_api_delegate_discovery_fallback: true
+  when:
+    - cm_api_probe_from_controller_public | default(false) | bool
+    - cm_api_controller_is_localhost | default(false) | bool
+    - not (cm_api_runner_is_manager | default(false) | bool)
+    - cm_api_delegate_probes_to_manager | default(true) | bool
+    - cm_api_probe_delegate_to | default('') | length == 0
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+    - not (cm_api_controller_direct_reachable | default(false) | bool)
+
+- name: Build CM API probe host candidates on delegated cldr-mngr (fallback from public controller)
+  ansible.builtin.set_fact:
+    cm_api_probe_host_candidates: >-
+      {{
+        (
+          ['127.0.0.1']
+          + (
+            [cm_host_public]
+            if (
+              (cm_host_public | default('') | length > 0)
+              and (cm_host_public != '127.0.0.1')
+            )
+            else []
+          )
+          + (
+            [hostvars[cm_manager_inventory_host].ansible_fqdn | default('')]
+            if (hostvars[cm_manager_inventory_host].ansible_fqdn | default('') | length > 0)
+            else []
+          )
+          + ([cm_host_fqdn] if (cm_host_fqdn | default('') | length > 0) else [])
+          + (
+            [hostvars[cm_manager_inventory_host].ansible_hostname | default('')]
+            if (hostvars[cm_manager_inventory_host].ansible_hostname | default('') | length > 0)
+            else []
+          )
+          + (
+            [cm_host_private]
+            if (
+              (cm_host_private | default('') | length > 0)
+              and (cm_host_private not in ['127.0.0.1', cm_host_public, cm_host_fqdn])
+            )
+            else []
+          )
+        )
+        | unique
+        | reject('equalto', '')
+        | list
+      }}
+  when:
+    - cm_api_delegate_discovery_fallback | default(false) | bool
+    - cm_api_probe_delegate_to | default('') | length > 0
+
+- name: Discover reachable CM API host on cldr-mngr after public-controller failure (HTTP)
+  ansible.builtin.uri:
+    url: "http://{{ item }}:{{ cm_http_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    follow_redirects: none
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303, 401, 403]
+    timeout: 15
+  loop: "{{ cm_api_probe_host_candidates }}"
+  register: cm_api_probe_host_discovery
+  failed_when: false
+  delegate_to: "{{ cm_api_probe_delegate_to }}"
+  when:
+    - cm_api_delegate_discovery_fallback | default(false) | bool
+    - cm_api_probe_host_candidates is defined
+    - cm_api_probe_host_candidates | length > 0
+
+- name: Discover reachable CM API host on cldr-mngr after public-controller failure (HTTPS)
+  ansible.builtin.uri:
+    url: "https://{{ item }}:{{ cm_https_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303, 401, 403]
+    timeout: 15
+  loop: "{{ cm_api_probe_host_candidates }}"
+  register: cm_api_probe_https_discovery
+  failed_when: false
+  delegate_to: "{{ cm_api_probe_delegate_to }}"
+  when:
+    - cm_api_delegate_discovery_fallback | default(false) | bool
+    - cm_api_probe_host_candidates is defined
+    - cm_api_probe_host_candidates | length > 0
+
+- name: Select CM API probe host after delegated fallback discovery
+  ansible.builtin.set_fact:
+    cm_api_probe_host: >-
+      {{
+        (
+          cm_api_probe_host_discovery.results
+          | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | map(attribute='item')
+          | list
+          | first
+        )
+        | default(
+          (
+            cm_api_probe_https_discovery.results
+            | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | map(attribute='item')
+            | list
+            | first
+          ),
+          true
+        )
+        | default(cm_api_probe_host, true)
+      }}
+    cm_api_delegate_discovery_succeeded: >-
+      {{
+        (
+          cm_api_probe_host_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length > 0
+        )
+        or (
+          cm_api_probe_https_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length > 0
+        )
+      }}
+  when:
+    - cm_api_delegate_discovery_fallback | default(false) | bool
+    - cm_api_probe_host_discovery is defined or cm_api_probe_https_discovery is defined
+
+- name: Re-probe Caddy CM vhost from controller after delegated discovery confirms CM is up
+  ansible.builtin.uri:
+    url: "{{ item }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303, 401, 403]
+    timeout: 20
+  loop: "{{ cm_api_caddy_probe_urls | default([]) }}"
+  register: cm_api_probe_caddy_post_delegate
+  failed_when: false
+  when:
+    - cm_api_delegate_discovery_fallback | default(false) | bool
+    - cm_api_delegate_discovery_succeeded | default(false) | bool
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+    - cm_api_caddy_probe_urls is defined
+    - cm_api_caddy_probe_urls | length > 0
+
+- name: Switch CM API client to Caddy vhost after post-delegate Caddy probe
+  ansible.builtin.set_fact:
+    cm_api_probe_host: "{{ _cm_caddy_post_hostname }}"
+    cm_api_client_host: "{{ _cm_caddy_post_hostname }}"
+    cm_api_probe_https_first: false
+    cm_api_probe_use_caddy_vhost: true
+    cm_api_controller_direct_reachable: true
+    cm_api_probe_delegate_to: ""
+  vars:
+    _cm_caddy_post_url: >-
+      {{
+        cm_api_probe_caddy_post_delegate.results | default([])
+        | selectattr('status', 'defined')
+        | selectattr('status', 'in', [200, 301, 303, 401, 403])
+        | map(attribute='item')
+        | list
+        | first
+        | default('', true)
+      }}
+    _cm_caddy_post_hostname: >-
+      {{
+        _cm_caddy_post_url
+        | regex_replace('^https?://', '')
+        | regex_replace('/.*$', '')
+        | regex_replace(':.*$', '')
+      }}
+  when:
+    - _cm_caddy_post_url | default('') | length > 0
+
+- name: Keep CM API client on public IP when only delegated discovery works (controller API calls delegate)
+  ansible.builtin.set_fact:
+    cm_api_client_host: "{{ cm_host_public }}"
+    cm_host: "{{ cm_host_public }}"
+    cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
+  when:
+    - cm_api_controller_is_localhost | default(false) | bool
+    - cm_api_delegate_discovery_fallback | default(false) | bool
+    - cm_api_delegate_discovery_succeeded | default(false) | bool
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+    - cm_api_probe_host | default('') | length > 0
+
+- name: Align CM API client host with delegated probe discovery (in-VPC localhost)
   ansible.builtin.set_fact:
     cm_api_client_host: "{{ cm_api_probe_host }}"
     cm_host: "{{ cm_api_probe_host }}"
@@ -302,3 +603,4 @@
     - cm_api_probe_delegate_to | default('') | length > 0
     - cm_api_probe_host | default('') | length > 0
     - cm_api_probe_host != '127.0.0.1'
+    - not (cm_api_delegate_discovery_fallback | default(false) | bool)
