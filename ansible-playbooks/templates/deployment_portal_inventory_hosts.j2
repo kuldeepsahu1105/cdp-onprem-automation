@@ -1,4 +1,5 @@
 {# YAML list: one row per inventory host (union of deployment_portal_inventory_groups) #}
+{% from 'deployment_portal_resolve_public_ip.inc.j2' import resolve_deployment_portal_public_ip %}
 {% set _anchor_inv = groups[deployment_portal_host_group_effective][0] %}
 {% set _postgres_inv = deployment_portal_postgres_inv | default('') %}
 {% set _knox = base_cluster_install_services.knox | default(false) | bool %}
@@ -12,7 +13,7 @@
 {% set _hv = hostvars[inv_host] %}
 {% set _priv = _hv.private_ip | default(_hv.ansible_host | default('')) %}
 {% set _ah = _hv.ansible_host | default('') %}
-{% include 'deployment_portal_resolve_public_ip.inc.j2' %}
+{% set _public = resolve_deployment_portal_public_ip(_hv, _priv, _ah, inv_host, _anchor_inv) %}
 {% set _groups = [] %}
 {% for gn in deployment_portal_inventory_groups %}
 {% if inv_host in groups.get(gn, []) %}
