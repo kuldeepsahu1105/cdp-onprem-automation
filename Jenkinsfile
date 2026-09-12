@@ -234,6 +234,9 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
     CREDENTIALS_USER = "${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}"
+    CM_API_PREFER_PRIVATE_IP = 'false'
+    ANSIBLE_CONTROLLER_OUTSIDE_VPC = 'true'
+    DEPLOYMENT_PORTAL_URL_VERIFY_SKIP_VPC = 'true'
     PIPELINE_STAGES = "${params.PIPELINE_STAGES?.trim() ?: ''}"
     VALIDATION_CHECKS = "${params.VALIDATION_CHECKS?.trim() ?: ''}"
     BUILD_RESULT = 'IN_PROGRESS'

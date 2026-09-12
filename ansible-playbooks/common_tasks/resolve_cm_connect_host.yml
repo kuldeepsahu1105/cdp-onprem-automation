@@ -5,9 +5,7 @@
   ansible.builtin.set_fact:
     cm_manager_host_inv: "{{ cm_manager_inventory_host }}"
     cm_host_public: "{{ hostvars[cm_manager_inventory_host].ansible_host | default(cm_manager_inventory_host) }}"
-    cm_host_private: >-
-      {{ hostvars[cm_manager_inventory_host].private_ip
-         | default(hostvars[cm_manager_inventory_host].ansible_host | default('')) }}
+    cm_host_private: "{{ hostvars[cm_manager_inventory_host].private_ip | default('') }}"
     cm_host_fqdn: >-
       {{ hostvars[cm_manager_inventory_host].cldr_hostname | default(cm_manager_inventory_host) }}.{{ cluster_domain }}
 
@@ -17,6 +15,32 @@
       {{
         inventory_hostname is defined
         and (inventory_hostname == cm_manager_inventory_host)
+      }}
+    cm_api_controller_is_localhost: >-
+      {{
+        (inventory_hostname | default('localhost')) in ['localhost', '127.0.0.1']
+      }}
+    cm_host_private_is_rfc1918: >-
+      {{
+        cm_host_private | length > 0
+        and (
+          cm_host_private is match('^10\\.')
+          or cm_host_private is match('^192\\.168\\.')
+          or cm_host_private is match('^172\\.(1[6-9]|2[0-9]|3[0-1])\\.')
+        )
+      }}
+
+- name: Decide whether CM API must avoid VPC private addresses from this controller
+  ansible.builtin.set_fact:
+    cm_api_avoid_private_ip: >-
+      {{
+        (ansible_controller_outside_vpc | default(false) | bool)
+        or (
+          (cm_api_controller_is_localhost | bool)
+          and (cm_host_private_is_rfc1918 | bool)
+          and (cm_host_private | length > 0)
+          and (cm_host_private != cm_host_public)
+        )
       }}
 
 - name: Set CM connect host for API probes (legacy cm_connect_host)
@@ -29,12 +53,16 @@
           '127.0.0.1'
           if cm_api_runner_is_manager | bool
           else (
-            cm_host_private
-            if (
-              (cm_api_prefer_private_ip | default(true) | bool)
-              and (cm_host_private | length > 0)
+            cm_host_public
+            if (cm_api_avoid_private_ip | bool)
+            else (
+              cm_host_private
+              if (
+                (cm_api_prefer_private_ip | default(true) | bool)
+                and (cm_host_private | length > 0)
+              )
+              else cm_host_public
             )
-            else cm_host_public
           )
         )
       }}
@@ -50,6 +78,7 @@
   when:
     - not (cm_api_runner_is_manager | bool)
     - cm_api_connect_host | default('') | length == 0
+    - not (cm_api_avoid_private_ip | bool)
     - cm_api_prefer_private_ip | default(true) | bool
     - cm_host_private | length > 0
     - cm_host_private != cm_host_public
@@ -64,16 +93,20 @@
           '127.0.0.1'
           if cm_api_runner_is_manager | bool
           else (
-            cm_host_private
-            if (
-              (cm_api_prefer_private_ip | default(true) | bool)
-              and (cm_host_private | length > 0)
-              and (
-                cm_host_private == cm_host_public
-                or (cm_private_reach_test is defined and cm_private_reach_test is succeeded)
+            cm_host_public
+            if (cm_api_avoid_private_ip | bool)
+            else (
+              cm_host_private
+              if (
+                (cm_api_prefer_private_ip | default(true) | bool)
+                and (cm_host_private | length > 0)
+                and (
+                  cm_host_private == cm_host_public
+                  or (cm_private_reach_test is defined and cm_private_reach_test is succeeded)
+                )
               )
+              else cm_host_public
             )
-            else cm_host_public
           )
         )
       }}
@@ -109,6 +142,6 @@
     msg:
       - "CM API client host (this play): {{ cm_api_client_host }} (inventory runner: {{ inventory_hostname | default('localhost') }})"
       - "CM API discovery probes: {{ cm_api_probe_host }} on {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }}"
+      - "Avoid VPC private IP from controller: {{ cm_api_avoid_private_ip | default(false) }} (ansible_controller_outside_vpc={{ ansible_controller_outside_vpc | default(false) }})"
       - "Browser/public CM URL may use: {{ cm_host_public }}:{{ cm_http_port }} (public IP often times out from the CM host itself on AWS)"
-      - "Jenkins outside VPC: set cm_api_prefer_private_ip false or cm_api_connect_host to the CM public IP if API calls fail after discovery"
-      - "Override with cm_api_connect_host or cm_api_delegate_probes_to_manager in group_vars if needed"
+      - "Override with cm_api_connect_host, cm_api_prefer_private_ip, or cm_api_delegate_probes_to_manager in group_vars if needed"

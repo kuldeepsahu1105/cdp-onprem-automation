@@ -119,8 +119,8 @@
       https://{{ cm_api_probe_host }}:{{ cm_https_port }} (probe on
       {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }}).
       Client host for this play: {{ cm_api_client_host }}.
-      From Jenkins outside VPC set cm_api_prefer_private_ip: false or cm_api_connect_host to the CM public IP.
-      On cldr-mngr probes use 127.0.0.1; discovery is delegated there when the play runs on localhost.
+      Jenkins/outside-VPC controllers must use the CM public IP (ansible_host) or delegate probes to cldr-mngr at 127.0.0.1 — never inventory private_ip.
+      Set ansible_controller_outside_vpc: true or cm_api_prefer_private_ip: false (Jenkins defaults apply both).
   when:
     - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
     - cm_tls_probe_https is not defined or cm_tls_probe_https is failed or (cm_tls_probe_https.status | default(0) not in [200, 301, 303])
@@ -162,8 +162,9 @@
 
 - name: Set base Cloudera Manager API URL
   ansible.builtin.set_fact:
-    cm_api_url: "{{ cm_protocol }}://{{ cm_api_client_host }}:{{ cm_api_port }}/api/{{ cm_api_version_result.content | trim }}"
     cm_api_version: "{{ cm_api_version_result.content | trim }}"
+    cm_api_url: "{{ cm_protocol }}://{{ cm_api_client_host }}:{{ cm_api_port }}/api/{{ cm_api_version_result.content | trim }}"
+    cm_api_url_delegated: "{{ cm_protocol }}://127.0.0.1:{{ cm_api_port }}/api/{{ cm_api_version_result.content | trim }}"
     cm_host: "{{ cm_api_client_host }}"
 
 - name: Print Cloudera Manager API URL

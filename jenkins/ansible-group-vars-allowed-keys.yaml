@@ -62,6 +62,8 @@ allowed_keys:
   - cm_api_connect_host
   - cm_api_delegate_probes_to_manager
   - cm_api_private_reachability_timeout
+  - ansible_controller_outside_vpc
+  - deployment_portal_url_verify_skip_vpc
   - monitoring_grafana_admin_password
   - ecs_data_services_deploy_enabled
   - ecs_control_plane_url

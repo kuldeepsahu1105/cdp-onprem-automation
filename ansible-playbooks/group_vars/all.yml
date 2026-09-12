@@ -299,9 +299,13 @@ cm_http_port: 7180
 # API probes: use private_ip from inventory when Ansible runs off-host; 127.0.0.1 when play targets cldr-mngr
 cm_api_prefer_private_ip: true
 cm_api_connect_host: ""
+# Jenkins / laptop outside AWS VPC: set true (also auto-detected for localhost plays + RFC1918 private_ip)
+ansible_controller_outside_vpc: false
 # When play runs on localhost/Jenkins, run HTTP discovery on cldr-mngr via 127.0.0.1 (not VPC private IP)
 cm_api_delegate_probes_to_manager: true
 cm_api_private_reachability_timeout: 5
+# Portal URL verify on ops host: skip hard-fail on VPC-only portal URLs (Jenkins sets true)
+deployment_portal_url_verify_skip_vpc: false
 # Set true after 22_setup_cm_autotls.yml for Caddy CM reverse-proxy target port
 autotls_enabled: false
 
