@@ -242,15 +242,15 @@
         host_templates:
           - name: ecs_master
             role_groups:
-              - service_type: DOCKER
+              - service: docker
                 type: DOCKER_SERVER
-              - service_type: ECS
+              - service: ecs
                 type: ECS_SERVER
           - name: ecs_workers
             role_groups:
-              - service_type: DOCKER
+              - service: docker
                 type: DOCKER_SERVER
-              - service_type: ECS
+              - service: ecs
                 type: ECS_AGENT
         hosts: "{{ ecs_cluster_hosts }}"
         control_plane:

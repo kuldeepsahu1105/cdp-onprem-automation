@@ -1,5 +1,6 @@
 # Rendered by 31_setup_base_cluster.yml — CDP base cluster services and host templates.
 # Toggle services via base_cluster_install_services in group_vars/all.yml (ANSIBLE_GROUP_VARS_YAML).
+# Service-level config keys: docs/CDP_BASE_CLUSTER_SERVICE_DEPS.md (CM 7.13.2 dependency matrix).
 {% set svc = base_cluster_install_services %}
 services:
 {% if svc.core_settings | default(true) %}
@@ -167,6 +168,15 @@ services:
     config:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
       kafka_service: "{{ 'kafka' if svc.kafka | default(true) else '' }}"
+{% if svc.hbase | default(true) %}
+      hbase_service: hbase
+{% endif %}
+{% if svc.solr | default(false) %}
+      solr_service: solr
+{% endif %}
+{% if svc.ranger | default(true) %}
+      ranger_service: ranger
+{% endif %}
 {% endif %}
 {% if svc.ranger | default(true) %}
   - name: ranger
@@ -174,8 +184,9 @@ services:
     display_name: Ranger
     config:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
-      hive_service: "{{ 'hive' if svc.hive | default(true) else '' }}"
-      kafka_service: "{{ 'kafka' if svc.kafka | default(true) else '' }}"
+{% if svc.solr | default(false) %}
+      solr_service: solr
+{% endif %}
 {% endif %}
 {% if svc.nifi | default(false) %}
   - name: nifi
@@ -215,6 +226,9 @@ services:
   - name: solr
     type: SOLR
     display_name: Solr
+    config:
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+      zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
 {% endif %}
 host_templates:
   - name: Master
