@@ -238,17 +238,20 @@ If `USE_EXISTING` fails (SG not in VPC), switch to **SG_MODE=CREATE_NEW** or set
 
 ### Security group ingress rules
 
-**Default (`ALLOW_ALL=false`, recommended):** One inbound rule — **All traffic** (protocol `-1`, ports 0–0) from **ALLOWED_CIDRS** only. Set office/Jenkins agent IPs as `/32` in **ALLOWED_CIDRS**.
+**Default (`ALLOW_ALL=false`, recommended):** One inbound rule — **All traffic** (protocol `-1`, ports 0–0) from **ALLOWED_CIDRS** only. Set office/Jenkins agent IPs as `/32` in **ALLOWED_CIDRS**. This restricts **who** can connect, not **which ports** — every allowed source can use any protocol/port (SSH, CM UI, Kerberos, etc.).
 
-**Open to world (`ALLOW_ALL=true`):** One inbound rule — **All traffic** from **0.0.0.0/0** (ignores **ALLOWED_CIDRS** for external ingress).
+**Open to world (`ALLOW_ALL=true`):** One inbound rule — **All traffic** from **0.0.0.0/0** (ignores **ALLOWED_CIDRS** for external ingress). Again, **all ports** from the internet — not a port whitelist.
 
 **Jenkins settings (`SG_MODE=CREATE_NEW`):**
 
 | Parameter | Recommended | Notes |
 |---|---|---|
-| `ALLOW_ALL` | **unchecked** (`false`) | All protocols from **ALLOWED_CIDRS** only |
-| `ALLOWED_CIDRS` | Your office/Jenkins IPs as `/32` | Include Jenkins agent egress IP for Ansible SSH |
-| `ALLOWED_PORTS` | *(legacy, unused)* | Ingress no longer restricts to TCP ports; value is ignored |
+| `ALLOW_ALL` | **unchecked** (`false`) | All protocols/ports from **ALLOWED_CIDRS** only |
+| `ALLOWED_CIDRS` | Your office/Jenkins IPs as `/32` | Include Jenkins agent egress IP for Ansible SSH; JSON array |
+| `ALLOWED_PORTS` | *(ignored by Terraform)* | Does **not** limit ingress when `ALLOW_ALL` is true or false. Default `[22,443,80,7180,7183,7182]` is for tfvars compatibility / documentation of common CM ports only |
+| `CLDR_EIP_NAME` | empty → `{ENVIRONMENT}-cldr-mngr-eip` | Name tag for CM Elastic IP when `CREATE_EIP=true`; unrelated to SG port rules |
+
+**If you need port-only ingress (e.g. TCP 22 + 7180 only):** the pipeline’s `CREATE_NEW` SG module does not support that via **ALLOWED_PORTS**. Use **SG_MODE=USE_EXISTING** with a hand-tuned SG in AWS, or extend `terraform-code/cloudera-pvc-terraform/modules/security-group/`.
 
 **Examples:**
 

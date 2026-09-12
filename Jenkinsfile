@@ -59,10 +59,29 @@ EMAIL_FORMAT — validate NOTIFICATION_EMAIL format when that field is non-empty
     booleanParam(name: 'ENABLE_VPN_GATEWAY', defaultValue: false, description: 'CREATE_NEW VPC: enable VPN gateway')
     string(name: 'EXISTING_SG_NAME', defaultValue: '', description: 'USE_EXISTING SG: sg-id or name (empty = {ENVIRONMENT}-pvc_cluster_sg)')
     string(name: 'SG_NAME', defaultValue: '', description: 'CREATE_NEW SG: name (empty = {ENVIRONMENT}-pvc_cluster_sg)')
-    booleanParam(name: 'ALLOW_ALL', defaultValue: false, description: 'CREATE_NEW SG: unchecked (default) = all protocols from ALLOWED_CIDRS only; checked = all protocols from 0.0.0.0/0')
-    string(name: 'ALLOWED_CIDRS', defaultValue: '["137.83.231.109/32", "137.83.231.11/32", "208.127.31.110/32", "208.127.31.11/32", "139.180.248.227/32", "54.254.32.236/32"]', description: 'CREATE_NEW SG when ALLOW_ALL=false: JSON source CIDRs (all protocols/ports)')
-    string(name: 'ALLOWED_PORTS', defaultValue: '[22,443,80,7180,7183,7182]', description: 'Legacy/unused — ingress no longer restricts to TCP ports (kept for tfvars compatibility)')
-    string(name: 'CLDR_EIP_NAME', defaultValue: '', description: 'Elastic IP name (empty = {ENVIRONMENT}-cldr-mngr-eip)')
+    booleanParam(
+      name: 'ALLOW_ALL',
+      defaultValue: false,
+      description: '''CREATE_NEW SG only. Ingress is always all protocols and all ports (AWS "All traffic", protocol -1) — this flag chooses WHO can reach the cluster, not which TCP ports.
+Unchecked (false, recommended): inbound all traffic from ALLOWED_CIDRS only (office/Jenkins /32s). ALLOWED_CIDRS is ignored for external ingress when checked true.
+Checked (true): inbound all traffic from 0.0.0.0/0 (public internet). ALLOWED_PORTS does not narrow ports in either case.'''
+    )
+    string(
+      name: 'ALLOWED_CIDRS',
+      defaultValue: '["137.83.231.109/32", "137.83.231.11/32", "208.127.31.110/32", "208.127.31.11/32", "139.180.248.227/32", "54.254.32.236/32"]',
+      description: '''CREATE_NEW SG when ALLOW_ALL=false: JSON array of source CIDRs (compact JSON, e.g. ["1.2.3.4/32"]). Each CIDR gets one rule: all protocols/ports inbound (not per-port TCP). Include Jenkins agent egress IP for SSH/Ansible. Ignored for external ingress when ALLOW_ALL=true (world-open). SG_MODE=USE_EXISTING: edit rules in AWS console instead.'''
+    )
+    string(
+      name: 'ALLOWED_PORTS',
+      defaultValue: '[22,443,80,7180,7183,7182]',
+      description: '''Not applied to Terraform security group rules (ALLOW_ALL true or false). Ingress is always all traffic from ALLOWED_CIDRS or 0.0.0.0/0; changing this list does not open or close individual TCP ports.
+Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S), 7180 CM UI, 7182/7183 agents/API. Need port-restricted rules only? Use SG_MODE=USE_EXISTING and manage the SG in AWS, or customize the security-group Terraform module.'''
+    )
+    string(
+      name: 'CLDR_EIP_NAME',
+      defaultValue: '',
+      description: '''When CREATE_EIP=true (TERRAFORM): AWS Name tag for the Elastic IP attached to the Cloudera Manager host (cldr-mngr). Empty = {ENVIRONMENT}-cldr-mngr-eip. Does not control security group ports — use ALLOW_ALL + ALLOWED_CIDRS for ingress.'''
+    )
     string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Name prefix + Terraform workspace (overrides tfvars when set)')
     string(name: 'OWNER', defaultValue: 'ksahu-ygulati', description: 'Owner tag — required for Terraform/Ansible if not set in tfvars')
     string(name: 'AWS_REGION', defaultValue: 'ap-southeast-1', description: 'AWS region override (e.g. ap-southeast-1)')
