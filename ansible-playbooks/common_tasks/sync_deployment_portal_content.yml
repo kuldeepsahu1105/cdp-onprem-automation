@@ -113,6 +113,9 @@
   register: pgadmin_recreate_compose
   failed_when: pgadmin_recreate_compose.rc != 0
 
+- name: Ensure portal ports are allowed when firewalld is active
+  ansible.builtin.import_tasks: ensure_deployment_portal_firewall_ports.yml
+
 - name: Verify Caddy container and local portal HTTP
   ansible.builtin.import_tasks: verify_deployment_portal_caddy.yml
 

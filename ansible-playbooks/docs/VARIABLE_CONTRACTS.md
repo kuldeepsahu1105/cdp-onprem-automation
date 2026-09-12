@@ -18,7 +18,8 @@ End-to-end order inside `sync_deployment_portal_content.yml` (used by `10_setup_
 | 3a | → `detect_ansible_control_reachability.yml` | `_acr_*` inputs; publishes `ansible_control_reach_public_only` on **localhost** (CM probes skipped via `ansible_control_reachability_skip_cm_probes`) |
 | 3b | → `resolve_deployment_portal_verify_milestones.yml` | `_portal_verify_milestones_effective`, `deployment_portal_verify_milestones_effective` on localhost |
 | 3c | → `verify_deployment_portal_urls.yml` | Tier A printed URLs + Caddy vhost checks (scoped by milestones) |
-| 3d | → `verify_service_urls_from_controller.yml` | Tier B from controller when milestones non-empty |
+| 3d | *(moved)* | Tier B no longer runs inside `verify_deployment_portal_caddy.yml` on the ops host |
+| 4 | `10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` localhost play | `verify_deployment_portal_external_from_controller.yml` → Tier B from Jenkins when milestones non-empty |
 
 **Playbook-level prerequisites**
 

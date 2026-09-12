@@ -121,12 +121,27 @@
     - _tier_b_run_any | default(false) | bool
     - deployment_tier_b_url_checks_to_probe | default([]) | length > 0
 
+- name: Report Tier B external service URL success from Ansible controller
+  ansible.builtin.debug:
+    msg: >-
+      Tier B (Ansible controller): {{ item.item.name }} responded HTTP {{ item.status }}
+      — {{ item.item.url }} (browser/Jenkins path when security groups allow).
+  loop: "{{ deployment_tier_b_url_results.results | default([]) }}"
+  when:
+    - _tier_b_run_any | default(false) | bool
+    - deployment_tier_b_url_results is defined
+    - not (item.skipped | default(false) | bool)
+    - not (item.failed | default(false) | bool)
+    - item.status | default(0) | int in _tier_b_url_codes
+  delegate_to: localhost
+  run_once: true
+
 - name: Warn when Tier B external service URL does not respond from controller
   ansible.builtin.debug:
     msg:
       - >-
-        Tier B (external) URL check failed from the Ansible controller
-        ({{ inventory_hostname | default('localhost') }} play host; probe ran on localhost).
+        Tier B (Ansible controller / Jenkins): external URL check failed
+        (probe ran with connection: local on the control node, not from the ops EC2 host).
       - "Service: {{ item.item.name }} — {{ item.item.url }}"
       - >-
         Tier A on the cluster host (127.0.0.1 / delegated CM API on cldr-mngr) may still pass while this fails —
