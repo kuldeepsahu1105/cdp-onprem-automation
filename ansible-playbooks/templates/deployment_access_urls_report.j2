@@ -40,7 +40,7 @@ Same VPC (ops private IP):
   FQDN:  {{ deployment_portal_context.cloudera_manager.host_fqdn }}
 
 {% if deployment_portal_context.caddy_vhosts.enabled %}
---- Caddy lab hostnames (reverse proxy on port {{ deployment_portal_http_port | default(8088) }}) ---
+--- Caddy lab hostnames (reverse proxy on port {{ deployment_portal_http_port | default(81) }}) ---
   Mode: {{ deployment_portal_context.caddy_vhosts.dns_mode }} base={{ deployment_portal_context.caddy_vhosts.public_base }}
   Primary (works without lab DNS): {{ deployment_portal_context.access.external.portal | default(deployment_portal_context.access.primary.portal | default('')) }}
   Portal (Caddy vhost):  {{ deployment_portal_context.caddy_vhosts.urls_public.portal.url | default('') }}

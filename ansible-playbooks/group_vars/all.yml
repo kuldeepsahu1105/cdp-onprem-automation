@@ -515,8 +515,8 @@ deployment_portal_enabled: true
 deployment_portal_host_group: auto
 deployment_portal_postgres_host_group: cldr-mngr
 # Caddy edge listener on ops (ipaserver): all vhosts (portal.*, cm.*, ipa.*, …) share this TCP port.
-# Cloudera Manager still listens on cldr-mngr:7180 / :7183; Caddy reverse-proxies to those — not :8088 on the CM host.
-deployment_portal_http_port: 8088
+# Cloudera Manager still listens on cldr-mngr:7180 / :7183; Caddy reverse-proxies to those — not this port on the CM host.
+deployment_portal_http_port: 81
 deployment_portal_pgadmin_host_port: 5050
 deployment_portal_config_dir: /opt/cldr-deployment-portal
 deployment_portal_www_dir: /opt/cldr-deployment-portal/www

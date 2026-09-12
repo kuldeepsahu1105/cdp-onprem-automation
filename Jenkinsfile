@@ -117,9 +117,9 @@ Checked (true): inbound all traffic from 0.0.0.0/0 (public internet). ALLOWED_PO
     )
     string(
       name: 'ALLOWED_PORTS',
-      defaultValue: '[22,443,80,7180,7183,7182,8088,5050,8089]',
+      defaultValue: '[22,443,80,7180,7183,7182,81,5050,8089]',
       description: '''Not applied to Terraform security group rules (ALLOW_ALL true or false). Ingress is always all traffic from ALLOWED_CIDRS or 0.0.0.0/0; changing this list does not open or close individual TCP ports.
-Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/7182/7183 CM; 8088 Caddy deployment portal (ops host, usually ipaserver); 5050 pgAdmin; 8089 cAdvisor. CREATE_NEW SG with ALLOW_ALL=false already allows all ports from ALLOWED_CIDRS. USE_EXISTING SG: ensure those ports are open from Jenkins/office CIDRs.'''
+Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/7182/7183 CM; 81 Caddy deployment portal (deployment_portal_http_port, ops host, usually ipaserver); 5050 pgAdmin; 8089 cAdvisor. CREATE_NEW SG with ALLOW_ALL=false already allows all ports from ALLOWED_CIDRS. USE_EXISTING SG: ensure those ports are open from Jenkins/office CIDRs.'''
     )
     string(
       name: 'CLDR_EIP_NAME',
@@ -165,12 +165,12 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     booleanParam(
       name: 'MONITORING_STACK_ENABLED',
       defaultValue: true,
-      description: 'Deploy Grafana/Prometheus (32) and enable ops Caddy reverse proxy (portal/cm/ipa vhosts on deployment_portal_http_port, default 8088 → CM :7180/:7183 upstream). When false, no PORTAL/Caddy — CM direct only.'
+      description: 'Deploy Grafana/Prometheus (32) and enable ops Caddy reverse proxy (portal/cm/ipa vhosts on deployment_portal_http_port, default 81 → CM :7180/:7183 upstream). When false, no PORTAL/Caddy — CM direct only.'
     )
     booleanParam(
       name: 'DEPLOYMENT_PORTAL_ENABLED',
       defaultValue: true,
-      description: 'Bootstrap Caddy portal on ops host (10) when MONITORING_STACK_ENABLED=true. Without monitoring, no Caddy/portal — CM stays direct :7180/:7183. CM Caddy vhost uses edge port deployment_portal_http_port (8088) proxying to cldr-mngr:7180/7183.'
+      description: 'Bootstrap Caddy portal on ops host (10) when MONITORING_STACK_ENABLED=true. Without monitoring, no Caddy/portal — CM stays direct :7180/:7183. CM Caddy vhost uses edge port deployment_portal_http_port (81) proxying to cldr-mngr:7180/7183.'
     )
     booleanParam(
       name: 'ECS_DATA_SERVICES_DEPLOY_ENABLED',

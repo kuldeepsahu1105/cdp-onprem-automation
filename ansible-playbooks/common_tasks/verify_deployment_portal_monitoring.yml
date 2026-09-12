@@ -1,5 +1,5 @@
 ---
-# Tier A: monitoring UIs via Caddy on localhost (path routes on :8088).
+# Tier A: monitoring UIs via Caddy on localhost (path routes on deployment_portal_http_port).
 
 - name: Resolve deployment portal URL verify milestones for monitoring checks
   ansible.builtin.import_tasks: resolve_deployment_portal_verify_milestones.yml

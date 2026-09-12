@@ -1,5 +1,5 @@
 ---
-# Labs openshift pattern: render Caddy CM vhost (cm.<ops-ip>.pvc.cloudera-labs.com:8088 → cldr-mngr :7180/:7183)
+# Labs openshift pattern: render Caddy CM vhost (cm.<ops-ip>.pvc.cloudera-labs.com:81 → cldr-mngr :7180/:7183)
 # and reload Caddy only — no Tier B verify, no monitoring stack churn.
 
 - name: Detect monitoring on ops host (Caddy template flags)
