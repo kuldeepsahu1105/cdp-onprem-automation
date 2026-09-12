@@ -5,7 +5,7 @@
 #   pgAdmin and CM Caddy vhost probes are omitted until milestones pgadmin / cm).
 #   Tier C (optional on ops host): printed public-EIP / hairpin URLs — warn only when optional.
 #   Tier B (controller): verify_service_urls_from_controller.yml after this file (portal, CM, monitoring, IPA, ECS).
-#   Tier B IPA: public/Jenkins controllers skip direct cluster FQDN (DNS); Caddy ipa.* vhost URLs on :8088 only.
+#   Tier B IPA: public/Jenkins controllers skip direct cluster FQDN (DNS); Caddy ipa.* vhost URLs on deployment_portal_http_port only.
 #
 # Ansible set_fact: do not define multiple keys in one task when a value references another key from
 # that same task (evaluation order is undefined). Split dependent facts or inline hostvars/context.

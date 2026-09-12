@@ -1,6 +1,6 @@
 ---
 # When CM API probes delegate to cldr-mngr, scm-server may listen on public/FQDN only (not 127.0.0.1).
-# Jenkins/public controllers: try Caddy CM vhost on ops host (:8088) before direct :7180/:7183; fall back to
+# Jenkins/public controllers: try Caddy CM vhost on ops host (deployment_portal_http_port, default 81) before direct :7180/:7183; fall back to
 # delegated discovery on cldr-mngr when security groups block the controller from CM ports.
 
 - name: Ensure Caddy CM API probe URL facts exist (Jenkins / public controller)

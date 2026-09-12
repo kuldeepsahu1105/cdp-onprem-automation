@@ -65,7 +65,7 @@ Import order in `set_cm_api_url.yml`:
 
 **CM Caddy frontend (post-CM):** `26_setup_cm_license.yml` and `35_refresh_deployment_portal.yml` (localhost play) call `apply_cm_caddy_load_balancer.yml` after `build_deployment_portal_facts.yml` + `set_cm_api_url.yml`. Sets CM API `frontend_url` and `cm_host_name` to the Caddy CM vhost (not direct `:7180` FQDN).
 
-**Labs `module_defaults` (scoped):** cloudera-labs/openshift routes `cloudera.cluster.cm*` API calls through the CM Caddy vhost (`proxy_host`, port **80**). We only mirror that for **`cm_config` in `apply_cm_caddy_load_balancer.yml`**: when `cm_config_api_via_caddy_proxy` is `auto`/`true`, `host` = `caddy_vhost_urls_external.cm.hostname`, `port` = `deployment_portal_http_port` (8088), `force_tls: false`. Other playbooks keep direct `cm_host` / `cm_api_port` (`:7180` or `:7183`).
+**Labs `module_defaults` (scoped):** cloudera-labs/openshift routes `cloudera.cluster.cm*` API calls through the CM Caddy vhost (`proxy_host`, port **80**). We only mirror that for **`cm_config` in `apply_cm_caddy_load_balancer.yml`**: when `cm_config_api_via_caddy_proxy` is `auto`/`true`, `host` = `caddy_vhost_urls_external.cm.hostname`, `port` = `deployment_portal_http_port` (81), `force_tls: false`. Other playbooks keep direct `cm_host` / `cm_api_port` (`:7180` or `:7183`).
 
 | Fact | Set by |
 |------|--------|
@@ -74,7 +74,7 @@ Import order in `set_cm_api_url.yml`:
 | `cm_api_connect_host` | Optional override in `group_vars/all.yml` |
 | `cm_manager_inventory_host` | `group_vars/all.yml` (default `cldr-mngr` host) |
 | `cm_caddy_public_url`, `cm_frontend_url_effective` | `resolve_caddy_service_public_urls.yml` (after `caddy_vhost_urls.j2` in `build_deployment_portal_facts.yml`) |
-| `pgadmin_caddy_public_url` | `resolve_caddy_service_public_urls.yml` — preferred browser URL for pgAdmin on Caddy port `8088` |
+| `pgadmin_caddy_public_url` | `resolve_caddy_service_public_urls.yml` — preferred browser URL for pgAdmin on Caddy port `deployment_portal_http_port` (default **81**) |
 | `deployment_tier_b_url_checks` | `build_deployment_tier_b_url_checks.yml` on **localhost** — Tier B reads via `hostvars['localhost']` in `verify_service_urls_from_controller.yml` |
 | `ecs_caddy_console_url` | Same; used by `resolve_ecs_control_plane_url.yml` and portal `ecs.console_hint` |
 | `cm_external_url`, `cm_apply_caddy_frontend_url`, `cm_config_api_via_caddy_proxy` | `group_vars/all.yml` — override Caddy CM URL; gate `apply_cm_caddy_load_balancer.yml`; proxy vs direct CM API for `cm_config` |

@@ -1,5 +1,5 @@
 ---
-# CM API probes must use deployment portal Caddy (:8088), not CM :7180/:7183, on cm.<slug> vhost hostnames.
+# CM API probes must use deployment portal Caddy (deployment_portal_http_port), not CM :7180/:7183, on cm.<slug> vhost hostnames.
 
 - name: Detect CM Caddy vhost hostname on API probe target
   ansible.builtin.set_fact:

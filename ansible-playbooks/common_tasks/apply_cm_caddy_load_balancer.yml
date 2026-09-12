@@ -1,6 +1,6 @@
 ---
 # Set Cloudera Manager frontend_url (and hostname override) to the Caddy CM vhost when portal fronts CM.
-# cloudera-labs/openshift: cloudera.cluster.cm* module_defaults host=proxy_host port=80 — here port 8088 on the ops Caddy vhost.
+# cloudera-labs/openshift: cloudera.cluster.cm* module_defaults host=proxy_host port=80 — here deployment_portal_http_port on the ops Caddy vhost; upstream CM :7180/:7183.
 
 - name: Decide whether to apply CM Caddy frontend URL
   ansible.builtin.set_fact:

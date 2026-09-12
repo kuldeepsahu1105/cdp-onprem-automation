@@ -4,7 +4,7 @@
 #
 # Simulated Jenkins probe (ops @ 52.221.251.41, CM public @ 52.76.123.34):
 #   curl -sk 'https://52.76.123.34:7183/api/version'                 # 401 = API reachable (no creds)
-#   curl -sk -u admin:PASS 'http://cm.52-221-251-41.pvc.cloudera-labs.com:8088/api/version'
+#   curl -sk -u admin:PASS 'http://cm.52-221-251-41.pvc.cloudera-labs.com:81/api/version'
 #   curl -sk -u admin:PASS 'https://52.76.123.34:7183/api/version'   # often blocked by SG from Jenkins
 # Ansible uri probes on /api/version accept status_code [200, 301, 303, 401, 403] (see LEARNINGS.md).
 
@@ -86,7 +86,7 @@
     cm_api_caddy_probe_urls: >-
       {%- set slugs = cm_api_caddy_probe_slug_ips | default([]) -%}
       {%- set vhost_base = caddy_vhost_public_base | default('pvc.cloudera-labs.com') -%}
-      {%- set http_port = deployment_portal_http_port | default(8088) | int -%}
+      {%- set http_port = deployment_portal_http_port | default(81) | int -%}
       {%- set port_suffix = (':' ~ (http_port | string)) if (http_port != 80) else '' -%}
       {%- set out = [] -%}
       {%- for item in slugs -%}

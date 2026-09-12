@@ -118,26 +118,26 @@ After cluster deploy, `10_setup_deployment_portal.yml` installs the **ops stack*
 
 | Service | Port / path |
 |---------|-------------|
-| **Caddy deployment index** | `8088` on ops host **public IP** (Jenkins / browser); use **private IP** only from same VPC |
+| **Caddy deployment index** | `81` on ops host **public IP** (Jenkins / browser); use **private IP** only from same VPC |
 | **pgAdmin** | `5050` (connects to CM PostgreSQL on `cldr-mngr`) |
-| **Grafana** | `8088/grafana/` |
-| **Prometheus** | `8088/prometheus/` |
-| **Alertmanager** | `8088/alertmanager/` |
+| **Grafana** | `81/grafana/` (via `deployment_portal_http_port`) |
+| **Prometheus** | `81/prometheus/` |
+| **Alertmanager** | `81/alertmanager/` |
 | **cAdvisor** | `8089` |
 
 `monitoring_stack_enabled` defaults to **`true`** (Grafana included). Disable with `monitoring_stack_enabled: false` or run only `29` later. Extend the index via `deployment_portal_extra_links` and `deployment_portal_data_service_links`.
 
 ### Caddy lab domain (`pvc.cloudera-labs.com`, nip.io-style)
 
-With `caddy_vhost_enabled: true`, Caddy serves **per-service hostnames** on the ops host (port `8088` by default), for example:
+With `caddy_vhost_enabled: true`, Caddy serves **per-service hostnames** on the ops host (port `deployment_portal_http_port` (default **81**) by default), for example:
 
-`http://cm.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → Cloudera Manager  
-`http://grafana.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → Grafana  
-`http://ipa.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → FreeIPA (**`redir /` → `/ipa/modern-ui/`**; also **`/ipa/ui`** legacy; Caddy **`reverse_proxy` HTTP** to ipaserver with **`Host`** + path-matched **`Referer`** — [cloudera-labs/openshift](https://github.com/cloudera-labs/openshift) pattern)
+`http://cm.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → Cloudera Manager  
+`http://grafana.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → Grafana  
+`http://ipa.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → FreeIPA (**`redir /` → `/ipa/modern-ui/`**; also **`/ipa/ui`** legacy; Caddy **`reverse_proxy` HTTP** to ipaserver with **`Host`** + path-matched **`Referer`** — [cloudera-labs/openshift](https://github.com/cloudera-labs/openshift) pattern)
 
 Set `caddy_vhost_dns_mode: classic_nipio` for **`*.nip.io`** names (no custom DNS). Set `flat` for `cm.pvc.cloudera-labs.com` when you point all A records at the ops IP.
 
-Playbooks **28** / **31** verify portal URLs after sync: direct `http://<ops-ip>:8088/`, printed access URLs, and Caddy vhost routes (via `Host` header on `127.0.0.1`). IPA vhost checks also confirm FreeIPA responds to its FQDN `Host` header locally on `ipaserver`.
+Playbooks **28** / **31** verify portal URLs after sync: direct `http://<ops-ip>:81/`, printed access URLs, and Caddy vhost routes (via `Host` header on `127.0.0.1`). IPA vhost checks also confirm FreeIPA responds to its FQDN `Host` header locally on `ipaserver`.
 
 ```bash
 ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml
