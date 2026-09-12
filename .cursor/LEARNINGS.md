@@ -2,6 +2,20 @@
 
 Scan this before deep-diving playbooks/Jenkins. Details: `ansible-playbooks/docs/RUN_ORDER.md`, `REFERENCE.md`, `RUNBOOK.md`.
 
+## Reference examples: [cloudera-labs](https://github.com/cloudera-labs) on GitHub
+
+When implementing or extending **deployment portal**, **Caddy**, **Jenkins**, **Ansible**, **Terraform**, or **CDP/CM** automation in this repo, **look at existing [cloudera-labs](https://github.com/cloudera-labs) org repos for patterns before inventing new ones.** This project already pins some of that stack (for example `cloudera.cluster` in `ansible-playbooks/requirements.yml`).
+
+| Repo | Why it matters here |
+|------|---------------------|
+| [cloudera-labs/cloudera.cluster](https://github.com/cloudera-labs/cloudera.cluster) | Ansible collection for Cloudera Manager / cluster lifecycle — used directly by this repo (`devel` branch). |
+| [cloudera-labs/cloudera-ce-aws](https://github.com/cloudera-labs/cloudera-ce-aws) | Terraform + Ansible on AWS, reverse HTTPS proxies, `group_vars` / playbooks layout — close cousin to PVC ops + portal access patterns. |
+| [cloudera-labs/cloudera.exe](https://github.com/cloudera-labs/cloudera.exe) | Opinionated deployment utilities; includes a **Caddy** role and host prep patterns ([docs](https://cloudera-labs.github.io/cloudera.exe/)). |
+
+Also useful: [cloudera-deploy](https://github.com/cloudera-labs/cloudera-deploy) (ansible-navigator quickstarts), [cldr-runner](https://github.com/cloudera-labs/cldr-runner) (execution environments). Search the org: https://github.com/orgs/cloudera-labs/repositories
+
+**User rule (memorise):** Always refer to **cloudera-labs** on GitHub for examples when adding portal/Caddy/Jenkins/Ansible behavior.
+
 ## Architecture
 
 - **Jenkins outside VPC:** `detect_ansible_control_reachability` → `ansible_control_reachability: public`. Never `uri`/CM/portal checks via `172.31.x` from the controller; delegate CM API discovery to **cldr-mngr** (`select_cm_api_probe_host`: `127.0.0.1`, then **ansible_host** (public), then FQDN; HTTP and HTTPS — Auto-TLS may answer only on `:7183`). Set `cm_api_url` client host from the discovered address for localhost plays. VPN/bare-metal controller → `private`.

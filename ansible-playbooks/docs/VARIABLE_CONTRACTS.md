@@ -1,6 +1,6 @@
 # Ansible variable contracts (portal verify & CM API)
 
-Cross-playbook facts and import order for deployment portal URL verification and Cloudera Manager API probes. **Read this before editing** `verify_*.yml`, `detect_ansible_control_reachability.yml`, `resolve_cm_connect_host.yml`, or portal sync tasks.
+Cross-playbook facts and import order for deployment portal URL verification and Cloudera Manager API probes. **Read this before editing** `verify_*.yml`, `detect_ansible_control_reachability.yml`, `resolve_cm_connect_host.yml`, or portal sync tasks. For upstream Ansible/Caddy/portal patterns, see [`.cursor/LEARNINGS.md`](../../.cursor/LEARNINGS.md) (cloudera-labs reference repos).
 
 Automated checks: `jenkins/scripts/validate-ansible-contracts.sh` (runs from Jenkins `validate-prereqs.sh` after YAML parse).
 
