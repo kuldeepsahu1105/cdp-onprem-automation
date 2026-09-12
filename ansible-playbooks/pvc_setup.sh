@@ -236,6 +236,7 @@ run_phase_1() {
   run_playbook 01_install_collection.yml
   run_playbook 02_set_hostname.yml
   run_playbook 03_create_etc_hosts.yml
+  run_playbook 04_setup_autossh.yml
   run_playbook 05_disable_selinux.yml
   run_playbook 06_prereq_setup.yml
   run_playbook 07_prereq_setup_002.yml
@@ -284,8 +285,7 @@ run_phase_3() {
 
 run_phase_cm_tls() {
   ui_phase_header "CM Auto-TLS, Kerberos, CMS, LDAP"
-  ui_phase_header "Cluster root SSH keys (playbook 04) — required for CM Auto-TLS"
-  run_playbook 04_setup_autossh.yml
+  # Root SSH mesh: playbook 04 runs in PREREQS (phase 1) only — required before CM Auto-TLS (27).
   # CM API health waits (fetch /api/version then /api/<slug>/version) run in 27+ — not portal refresh.
   run_playbook 27_setup_cm_autotls.yml
   run_playbook 28_setup_cm_krbs.yml

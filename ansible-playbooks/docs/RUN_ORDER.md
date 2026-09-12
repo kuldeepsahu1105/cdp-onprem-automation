@@ -14,7 +14,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 4 | PORTAL | `portal` | `10_setup_deployment_portal` |
 | 5 | IDENTITY | `2` / `identity` | `00_detect_identity` → `11_identity_setup` |
 | 6 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
-| 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27`–`30` |
+| 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27`–`30` (requires `04_setup_autossh` from PREREQS) |
 | 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` |
 | 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` (includes portal Caddy/index sync) |
 | 10 | ECS_INSTALL | `5` / `ecs` | `33_setup_ecs_cluster` → optional `34_setup_ecs_data_services` |
@@ -62,7 +62,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | `00_setup_ssh_preqs.yml` | First in wrapper |
 | `00_ensure_collections.yml` | Imported by numbered playbooks |
 | `00_detect_identity.yml` | Before `11_identity_setup` |
-| `01`–`09` | OS prerequisites (`04_setup_autossh.yml` optional manual) |
+| `01`–`09` | OS prerequisites (`04_setup_autossh.yml` in phase 1 after `03_create_etc_hosts`) |
 | `99_cleanup.yml` | Teardown |
 | `unused_legacy_cm_service_enable.yml` | Unused; prefer `29_setup_cm_cms.yml` |
 
