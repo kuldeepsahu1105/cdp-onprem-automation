@@ -12,7 +12,7 @@ Scan this before deep-diving playbooks/Jenkins. Details: `ansible-playbooks/docs
 
 - Listen **8088**; smoke: `http://<ops-public-ip>:8088/`. Vhost FQDN: `portal.<dashed-public-ip>.pvc.cloudera-labs.com` (dashes, not dots in IP segment).
 - Hairpin from the same ops host is optional — warn, do not fail the pipeline on it alone.
-- **IPA** `reverse_proxy`: `header_up Host` = ipaserver FQDN. **CM** block: split HTTP vs HTTPS + `transport` per autotls mode. Post-CM: CM API **`frontend_url`** → Caddy CM vhost (`apply_cm_caddy_load_balancer.yml`); facts **`cm_caddy_public_url`**, **`ecs_caddy_console_url`** from `caddy_vhost_urls.j2`. Tier A / portal CM probe: **`probe_cm_manager_ui_http.yml`** when `127.0.0.1:7180` is closed.
+- **IPA** (match [cloudera-labs/openshift](https://github.com/cloudera-labs/openshift) Caddy vhost): `redir / /ipa/ui permanent`; `reverse_proxy http://<ipaserver-fqdn>` with `header_up Host` and `header_up Referer https://<ipaserver-fqdn>/ipa/ui` (not HTTPS upstream to :443). User URL: `http://ipa.<dashed-ops-ip>.pvc.cloudera-labs.com:8088/`. **CM** block: split HTTP vs HTTPS + `transport` per autotls mode. Post-CM: CM API **`frontend_url`** → Caddy CM vhost (`apply_cm_caddy_load_balancer.yml`); facts **`cm_caddy_public_url`**, **`ecs_caddy_console_url`** from `caddy_vhost_urls.j2`. Tier A / portal CM probe: **`probe_cm_manager_ui_http.yml`** when `127.0.0.1:7180` is closed.
 - **RHEL:** remove `podman-docker` before installing `docker-ce` (conflicts with Docker CE).
 
 ## Ansible pitfalls

@@ -404,9 +404,10 @@
       with Host: {{ item.item.host }}.
       HTTP status: {{ item.status | default('n/a') }} (expected {{ _portal_url_verify_codes_int | join('/') }}).
       {% if item.item.upstream_ipa_fqdn is defined and item.item.upstream_ipa_fqdn | length > 0 %}
-      FreeIPA upstream must receive Host: {{ item.item.upstream_ipa_fqdn }} (see deployment_portal_Caddyfile_vhosts.inc.j2 header_up).
-      Redirect responses (301/302) are acceptable when Caddy or IPA returns them.
-      Confirm https://{{ item.item.upstream_ipa_fqdn }}/ responds on the IPA server and IPA HTTPD is running.
+      FreeIPA upstream must receive Host: {{ item.item.upstream_ipa_fqdn }} and Referer https://{{ item.item.upstream_ipa_fqdn }}/ipa/ui
+      (see deployment_portal_Caddyfile_vhosts.inc.j2; cloudera-labs/openshift Caddy pattern).
+      GET / on the IPA vhost should 301 to /ipa/ui; redirect responses (301/302) are acceptable.
+      Confirm http://{{ item.item.upstream_ipa_fqdn }}/ipa/ui responds on the IPA server and IPA HTTPD is running.
       {% elif 'CM' in item.item.name %}
       Confirm Cloudera Manager is up on {{ deployment_portal_cm_fqdn }} (ports {{ cm_http_port }}/{{ cm_https_port }}).
       {% elif 'pgAdmin' in item.item.name %}
@@ -424,12 +425,13 @@
     - not (item.item.optional | default(false) | bool)
     - (item.status | default(0) | int not in _portal_url_verify_codes_int)
 
-- name: Verify FreeIPA HTTPS responds with IPA FQDN Host header (direct upstream)
+- name: Verify FreeIPA HTTP responds with IPA FQDN Host header (direct upstream)
   ansible.builtin.uri:
-    url: "https://127.0.0.1/"
+    url: "http://127.0.0.1/"
     method: GET
     headers:
       Host: "{{ deployment_portal_ipa_fqdn }}"
+      Referer: "https://{{ deployment_portal_ipa_fqdn }}/ipa/ui"
     status_code: "{{ _portal_url_verify_codes }}"
     follow_redirects: none
     validate_certs: false
@@ -448,9 +450,9 @@
 - name: Fail when FreeIPA does not accept its FQDN Host header locally
   ansible.builtin.fail:
     msg: >-
-      FreeIPA UI did not respond on https://127.0.0.1/ with Host: {{ deployment_portal_ipa_fqdn }}.
-      Caddy IPA vhost proxies with header_up Host {{ deployment_portal_ipa_fqdn }}; fix IPA HTTP/TLS first.
-      Try on {{ inventory_hostname }}: curl -k -H "Host: {{ deployment_portal_ipa_fqdn }}" https://127.0.0.1/
+      FreeIPA UI did not respond on http://127.0.0.1/ with Host: {{ deployment_portal_ipa_fqdn }}.
+      Caddy IPA vhost proxies HTTP with header_up Host and Referer (cloudera-labs/openshift pattern); fix IPA HTTP first.
+      Try on {{ inventory_hostname }}: curl -sS -o /dev/null -w '%{http_code}' -H "Host: {{ deployment_portal_ipa_fqdn }}" -H "Referer: https://{{ deployment_portal_ipa_fqdn }}/ipa/ui" http://127.0.0.1/
   when:
     - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
     - deployment_portal_has_ipa | default(false) | bool
