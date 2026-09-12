@@ -44,14 +44,14 @@ http://{{ caddy_vhost_urls.ecs.hostname }}{% if deployment_portal_http_port | in
 
 {% if monitoring_stack_enabled | default(false) | bool %}
 http://{{ caddy_vhost_urls.grafana.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
-  reverse_proxy {{ monitoring_grafana_container }}:3000
+  reverse_proxy {{ monitoring_grafana_docker_service }}:3000
 }
 
 http://{{ caddy_vhost_urls.prometheus.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
-  reverse_proxy {{ monitoring_prometheus_container }}:9090
+  reverse_proxy {{ monitoring_prometheus_docker_service }}:9090
 }
 
 http://{{ caddy_vhost_urls.alertmanager.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
-  reverse_proxy {{ monitoring_alertmanager_container }}:9093
+  reverse_proxy {{ monitoring_alertmanager_docker_service }}:9093
 }
 {% endif %}

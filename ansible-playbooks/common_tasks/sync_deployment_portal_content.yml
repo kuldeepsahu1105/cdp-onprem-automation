@@ -102,8 +102,8 @@
   register: caddy_recreate_compose
   failed_when: caddy_recreate_compose.rc != 0
 
-- name: Verify Caddy container and local portal HTTP
-  ansible.builtin.import_tasks: verify_deployment_portal_caddy.yml
+- name: Ensure portal and monitoring ports are allowed when firewalld is active
+  ansible.builtin.import_tasks: ensure_deployment_portal_firewall_ports.yml
 
 - name: Sync monitoring stack configuration
   when: monitoring_stack_enabled | default(false) | bool
@@ -156,12 +156,15 @@
       register: caddy_recreate_after_monitoring
       failed_when: caddy_recreate_after_monitoring.rc != 0
 
-    - name: Verify Caddy after monitoring route update
-      ansible.builtin.import_tasks: verify_deployment_portal_caddy.yml
-      when: caddyfile_after_monitoring is changed
-
     - name: Refresh deployment index after monitoring sync
       ansible.builtin.template:
         src: deployment_portal_index.html.j2
         dest: "{{ deployment_portal_www_dir }}/index.html"
         mode: "0644"
+
+- name: Verify monitoring UIs via Caddy path routes (monitoring milestone)
+  ansible.builtin.import_tasks: verify_deployment_portal_monitoring.yml
+  when: monitoring_stack_enabled | default(false) | bool
+
+- name: Verify Caddy container and portal or monitoring URLs (after stacks are up)
+  ansible.builtin.import_tasks: verify_deployment_portal_caddy.yml

@@ -202,6 +202,60 @@
 - name: Resolve Caddy CM/ECS public URL facts
   ansible.builtin.import_tasks: resolve_caddy_service_public_urls.yml
 
+- name: Prefer Caddy vhost URLs for monitoring in external access map
+  ansible.builtin.set_fact:
+    deployment_portal_access_urls: >-
+      {{
+        deployment_portal_access_urls | combine(
+          {
+            'external': (
+              deployment_portal_access_urls.external | default({})
+              | combine(
+                  {
+                    'grafana': caddy_vhost_urls_external.grafana.url | default(''),
+                    'prometheus': caddy_vhost_urls_external.prometheus.url | default(''),
+                    'alertmanager': caddy_vhost_urls_external.alertmanager.url | default(''),
+                  },
+                  recursive=True
+                )
+            )
+          },
+          recursive=True
+        )
+      }}
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - monitoring_stack_enabled | default(false) | bool
+    - deployment_portal_access_profile_effective == 'cloud'
+    - caddy_vhost_urls_external.grafana.url | default('') | length > 0
+
+- name: Prefer Caddy vhost URLs for monitoring in VPC access map
+  ansible.builtin.set_fact:
+    deployment_portal_access_urls: >-
+      {{
+        deployment_portal_access_urls | combine(
+          {
+            'vpc': (
+              deployment_portal_access_urls.vpc | default({})
+              | combine(
+                  {
+                    'grafana': caddy_vhost_urls_vpc.grafana.url | default(''),
+                    'prometheus': caddy_vhost_urls_vpc.prometheus.url | default(''),
+                    'alertmanager': caddy_vhost_urls_vpc.alertmanager.url | default(''),
+                  },
+                  recursive=True
+                )
+            )
+          },
+          recursive=True
+        )
+      }}
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - monitoring_stack_enabled | default(false) | bool
+    - deployment_portal_access_profile_effective == 'cloud'
+    - caddy_vhost_urls_vpc.grafana.url | default('') | length > 0
+
 - name: Assemble deployment portal context
   ansible.builtin.set_fact:
     deployment_portal_context:
@@ -300,6 +354,27 @@
           }}
       monitoring:
         enabled: "{{ monitoring_stack_enabled | default(false) | bool }}"
+        grafana_path_url: >-
+          {{
+            ('http://' + deployment_portal_ops_public_ip + ':' + (deployment_portal_http_port | string) + '/grafana/')
+            if (deployment_portal_access_profile_effective == 'cloud')
+            else ('http://' + deployment_portal_ops_client_host + ':' + (deployment_portal_http_port | string) + '/grafana/')
+          }}
+        prometheus_path_url: >-
+          {{
+            ('http://' + deployment_portal_ops_public_ip + ':' + (deployment_portal_http_port | string) + '/prometheus/')
+            if (deployment_portal_access_profile_effective == 'cloud')
+            else ('http://' + deployment_portal_ops_client_host + ':' + (deployment_portal_http_port | string) + '/prometheus/')
+          }}
+        alertmanager_path_url: >-
+          {{
+            ('http://' + deployment_portal_ops_public_ip + ':' + (deployment_portal_http_port | string) + '/alertmanager/')
+            if (deployment_portal_access_profile_effective == 'cloud')
+            else ('http://' + deployment_portal_ops_client_host + ':' + (deployment_portal_http_port | string) + '/alertmanager/')
+          }}
+        grafana_caddy_url: "{{ caddy_vhost_urls_external.grafana.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
+        prometheus_caddy_url: "{{ caddy_vhost_urls_external.prometheus.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
+        alertmanager_caddy_url: "{{ caddy_vhost_urls_external.alertmanager.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
         grafana_url: >-
           {{
             deployment_portal_access_urls.primary.grafana
