@@ -1,0 +1,135 @@
+---
+# Resolve how the Ansible control node reaches CM / portal URLs (public vs VPC-private).
+# Sets ansible_control_reachability_effective (public|private) and ansible_control_reach_public_only.
+
+- name: Gather Ansible control reachability inputs
+  ansible.builtin.set_fact:
+    _acr_requested: "{{ ansible_control_reachability | default('auto') | lower }}"
+    _acr_jenkins: >-
+      {{
+        (lookup('env', 'JENKINS_URL') | default('') | length > 0)
+        or (lookup('env', 'BUILD_NUMBER') | default('') | length > 0)
+        or (lookup('env', 'ANSIBLE_CONTROL_VIA_JENKINS') | default('') | lower in ['1', 'true', 'yes', 'on'])
+      }}
+    _acr_control_mode: >-
+      {{
+        ansible_control_mode
+        | default(lookup('env', 'CONTROL_MODE') | default('remote', true))
+        | lower
+      }}
+  delegate_to: localhost
+
+- name: Set control-on-cluster-node hint from control mode
+  ansible.builtin.set_fact:
+    _acr_control_on_cluster_node: "{{ _acr_control_mode == 'local' }}"
+  delegate_to: localhost
+
+- name: Test CM private IP reachability from controller (auto profile)
+  ansible.builtin.wait_for:
+    host: "{{ cm_host_private }}"
+    port: "{{ cm_http_port }}"
+    timeout: "{{ cm_api_private_reachability_timeout | default(5) | int }}"
+    state: started
+  register: cm_private_reach_auto
+  failed_when: false
+  delegate_to: localhost
+  when:
+    - _acr_requested == 'auto'
+    - not (_acr_jenkins | bool)
+    - not (_acr_control_on_cluster_node | bool)
+    - not (ansible_controller_outside_vpc | default(false) | bool)
+    - not (ansible_control_reachability_skip_cm_probes | default(false) | bool)
+    - cm_host_private is defined
+    - cm_host_private | default('') | length > 0
+    - cm_host_public is defined
+    - cm_host_private != cm_host_public
+
+- name: Test CM public IP reachability from controller (auto profile)
+  ansible.builtin.wait_for:
+    host: "{{ cm_host_public }}"
+    port: "{{ cm_http_port }}"
+    timeout: "{{ cm_api_private_reachability_timeout | default(5) | int }}"
+    state: started
+  register: cm_public_reach_auto
+  failed_when: false
+  delegate_to: localhost
+  when:
+    - _acr_requested == 'auto'
+    - not (_acr_jenkins | bool)
+    - not (_acr_control_on_cluster_node | bool)
+    - not (ansible_controller_outside_vpc | default(false) | bool)
+    - not (ansible_control_reachability_skip_cm_probes | default(false) | bool)
+    - cm_host_public is defined
+    - cm_host_public | default('') | length > 0
+    - cm_host_private is defined
+    - cm_host_private | default('') | length > 0
+    - cm_host_private != cm_host_public
+
+- name: Resolve effective Ansible control reachability profile
+  ansible.builtin.set_fact:
+    ansible_control_reachability_effective: >-
+      {{
+        _acr_requested
+        if _acr_requested in ['public', 'private']
+        else (
+          'public'
+          if (
+            (_acr_jenkins | bool)
+            or (ansible_controller_outside_vpc | default(false) | bool)
+            or not (cm_api_prefer_private_ip | default(true) | bool)
+          )
+          else (
+            'private'
+            if (_acr_control_on_cluster_node | bool)
+            else (
+              'private'
+              if (
+                cm_private_reach_auto is defined
+                and cm_private_reach_auto is succeeded
+                and (
+                  cm_public_reach_auto is not defined
+                  or cm_public_reach_auto is failed
+                )
+              )
+              else (
+                'public'
+                if (
+                  cm_host_public is defined
+                  and (cm_host_public | default('') | length > 0)
+                  and (
+                    cm_host_private is not defined
+                    or (cm_host_private | default('') | length == 0)
+                    or (
+                      cm_host_private != cm_host_public
+                      and not (
+                        cm_host_public is match('^10\\.')
+                        or cm_host_public is match('^192\\.168\\.')
+                        or cm_host_public is match('^172\\.(1[6-9]|2[0-9]|3[0-1])\\.')
+                      )
+                    )
+                  )
+                )
+                else 'private'
+              )
+            )
+          )
+        )
+      }}
+  delegate_to: localhost
+
+- name: Mirror control reachability profile to legacy facts
+  ansible.builtin.set_fact:
+    ansible_control_reach_public_only: >-
+      {{ ansible_control_reachability_effective == 'public' }}
+    ansible_controller_outside_vpc: >-
+      {{ ansible_control_reachability_effective == 'public' }}
+  delegate_to: localhost
+
+- name: Explain Ansible control reachability profile
+  ansible.builtin.debug:
+    msg:
+      - "Control reachability: requested={{ _acr_requested }}, effective={{ ansible_control_reachability_effective }}"
+      - "Jenkins/control-mode hints: jenkins={{ _acr_jenkins }}, control_mode={{ _acr_control_mode }}"
+      - "CM reachability probes (auto): private={{ cm_private_reach_auto is succeeded if cm_private_reach_auto is defined else 'n/a' }}, public={{ cm_public_reach_auto is succeeded if cm_public_reach_auto is defined else 'n/a' }}"
+  when: ansible_verbosity | default(0) | int >= 1
+  delegate_to: localhost

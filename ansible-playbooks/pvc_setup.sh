@@ -52,8 +52,10 @@ Options:
   --help, -h       Show this help
 
 Environment:
-  DEPLOY_PHASE     1|2|3|4|5|6|all
-  MONITORING_STACK_ENABLED  true|false — run 29_setup_monitoring_stack.yml after portal (phase 4/6)
+  DEPLOY_PHASE     1|2|3|cm_tls|cdh|portal|monitoring|ecs|6|7|4|5|all
+  MONITORING_STACK_ENABLED  true|false (default true) — portal + Grafana/Prometheus bootstrap
+  DEPLOYMENT_PORTAL_ENABLED true|false (default true)
+  ECS_DATA_SERVICES_DEPLOY_ENABLED true|false — run 34_setup_ecs_data_services.yml (phase 5/7)
   DRY_RUN          true|false
   CONTROL_MODE     auto|local|remote
   ANSIBLE_PRIVATE_KEY  SSH key: .pem/id_rsa in ansible-playbooks/, ~/.ssh/id_rsa, or explicit path
@@ -74,6 +76,13 @@ ansible_configure_output
 DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 CONTROL_MODE="$(detect_control_mode "$SCRIPT_DIR/inventory.ini")"
 
+_portal_enabled() {
+  [[ "${DEPLOYMENT_PORTAL_ENABLED:-true}" == "true" || "${DEPLOYMENT_PORTAL_ENABLED:-true}" == "1" ]]
+}
+_monitoring_enabled() {
+  [[ "${MONITORING_STACK_ENABLED:-true}" == "true" || "${MONITORING_STACK_ENABLED:-true}" == "1" ]]
+}
+
 ARCH_ANSIBLE_ARGS=()
 if [[ "${CPU_ARCHITECTURE:-x86_64}" == "arm64" ]]; then
   ARCH_ANSIBLE_ARGS+=(-e "target_cpu_architecture=arm64")
@@ -82,11 +91,12 @@ fi
 if [[ "$CONTROL_MODE" == "local" ]]; then
   ARCH_ANSIBLE_ARGS+=(-e "ansible_user=root")
 fi
+ARCH_ANSIBLE_ARGS+=(-e "ansible_control_mode=${CONTROL_MODE}")
 
 print_banner() {
   if is_dry_run; then
     ui_warn "Dry run enabled — Ansible will use --check --diff (no changes applied)."
-    ui_warn "CM API playbooks (26/27) may still perform live API calls; use DEPLOY_PHASE=1-3 to limit scope."
+    ui_warn "CM API playbooks (31/33) may still perform live API calls; use DEPLOY_PHASE=1-3 to limit scope."
   fi
 }
 
@@ -98,7 +108,9 @@ run_playbook() {
   else
     ui_step "Running ${playbook}" "📜"
   fi
-  ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" "$@"
+  # Collections ensured at script start; skip imported 00_ensure_collections in each playbook.
+  ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" \
+    --skip-tags collections "$@"
 }
 
 cd "$SCRIPT_DIR"
@@ -108,7 +120,7 @@ if [[ "${PVC_SETUP_FROM_WRAPPER:-0}" == "1" ]]; then
   ui_subsection "Playbook execution (pvc_setup.sh)" "📜"
   if is_dry_run; then
     ui_warn "Dry run enabled — Ansible will use --check --diff (no changes applied)."
-    ui_warn "CM API playbooks (26/27) may still perform live API calls; use DEPLOY_PHASE=1-3 to limit scope."
+    ui_warn "CM API playbooks (31/33) may still perform live API calls; use DEPLOY_PHASE=1-3 to limit scope."
   fi
 else
   wrapper_print_identity "Cloudera Private Cloud Deployment (pvc_setup.sh)" "$REPO_ROOT" "$REPO_ROOT/scripts/lib"
@@ -130,7 +142,7 @@ fi
 
 needs_license() {
   case "$DEPLOY_PHASE" in
-    3|cm|phase3|4|cluster|phase4|all|full) return 0 ;;
+    3|cm|phase3|cm_tls|cm_tls_krb_ldap|cdh|cdh_install|4|cluster|phase4|5|ecs|phase5|all|full) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -154,8 +166,13 @@ fi
 
 mapfile -t ANSIBLE_PLAYBOOK_ARGS < <(ansible_extra_args "$PRIVATE_KEY")
 
-ui_step "Install Ansible collections" "📦"
-ansible-galaxy collection install -r requirements.yml
+# Same helper as 00_ensure_collections.yml / manual playbooks (no-op when already installed).
+if _ansible_requirements_collections_present "$SCRIPT_DIR/requirements.yml"; then
+  ui_info "Ansible collections already installed — skipping galaxy (requirements.yml)"
+else
+  ui_step "Install Ansible collections" "📦"
+fi
+ansible_install_collections_if_needed "$SCRIPT_DIR/requirements.yml"
 
 # SSH pre-reqs: include ipaserver when that group has hosts (FreeIPA); skip for AD-only inventory
 if grep -A30 '^\[ipaserver\]' "$SCRIPT_DIR/inventory.ini" | grep -qE '^[^#[:space:]]'; then
@@ -179,9 +196,14 @@ run_phase_1() {
   run_playbook 09_verify_os_prereqs.yml
 }
 
+run_phase_portal() {
+  _run_deployment_portal_bootstrap
+}
+
 run_phase_2() {
   run_playbook 00_detect_identity.yml
-  run_playbook 10_identity_setup.yml
+  run_playbook 11_identity_setup.yml
+  _run_deployment_portal_refresh "portal,ipa,identity"
 }
 
 run_phase_3() {
@@ -197,63 +219,143 @@ run_phase_3() {
     cm_extra=(-e "cm_repo_username=$cm_user" -e "cm_repo_password=$cm_pass")
   fi
   if [[ "$cm_repo_source" == "internal" ]]; then
-    run_playbook 16_setup_cm_repos.yml "${cm_extra[@]}"
+    run_playbook 20_setup_cm_repos.yml "${cm_extra[@]}"
   else
-    run_playbook 17_download_repos.yml "${cm_extra[@]}"
+    run_playbook 22_download_repos.yml "${cm_extra[@]}"
   fi
-  run_playbook 18_setup_postgres.yml "${cm_extra[@]}"
-  run_playbook 19_start_cm.yml "${cm_extra[@]}"
-  run_playbook 20_verify_cm.yml -e ansible_become=false
-  run_playbook 21_setup_cm_license.yml -e ansible_become=false
+  run_playbook 23_setup_postgres.yml "${cm_extra[@]}"
+  run_playbook 24_start_cm.yml "${cm_extra[@]}"
+  run_playbook 25_verify_cm.yml -e ansible_become=false
+  run_playbook 26_setup_cm_license.yml -e ansible_become=false
+  _run_deployment_portal_refresh "portal,ipa,identity,cm"
 }
 
+run_phase_cm_tls() {
+  run_playbook 27_setup_cm_autotls.yml
+  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls"
+  run_playbook 28_setup_cm_krbs.yml
+  run_playbook 29_setup_cm_cms.yml
+  run_playbook 30_setup_cm_ldap.yml
+  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls"
+}
+
+run_phase_cdh() {
+  run_playbook 31_setup_base_cluster.yml
+  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh"
+}
+
+run_phase_monitoring() {
+  if ! _monitoring_enabled; then
+    ui_info "MONITORING_STACK_ENABLED=false — skipping 32_setup_monitoring_stack.yml"
+    return 0
+  fi
+  run_playbook 32_setup_monitoring_stack.yml
+  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring"
+}
+
+# Legacy name: phase 4 = CM security + CDH base (no ECS).
 run_phase_4() {
-  run_playbook 22_setup_cm_autotls.yml
-  run_playbook 23_setup_cm_krbs.yml
-  run_playbook 24_setup_cm_cms.yml
-  run_playbook 25_setup_cm_ldap.yml
-  run_playbook 26_setup_base_cluster.yml
-  run_playbook 27_setup_ecs_cluster.yml
-  _run_deployment_portal_playbooks
+  run_phase_cm_tls
+  run_phase_cdh
 }
 
-_run_deployment_portal_playbooks() {
-  local portal_extra=()
-  if [[ "${MONITORING_STACK_ENABLED:-false}" == "true" || "${MONITORING_STACK_ENABLED:-false}" == "1" ]]; then
-    portal_extra=(-e monitoring_stack_enabled=true)
+_portal_extra_args() {
+  local extra=()
+  if _portal_enabled; then
+    extra+=(-e deployment_portal_enabled=true)
+  else
+    extra+=(-e deployment_portal_enabled=false)
   fi
-  run_playbook 28_setup_deployment_portal.yml "${portal_extra[@]}"
-  if [[ "${MONITORING_STACK_ENABLED:-false}" == "true" || "${MONITORING_STACK_ENABLED:-false}" == "1" ]]; then
-    run_playbook 29_setup_monitoring_stack.yml
+  if _monitoring_enabled; then
+    extra+=(-e monitoring_stack_enabled=true)
+  fi
+  printf '%s\0' "${extra[@]}"
+}
+
+_run_deployment_portal_bootstrap() {
+  if ! _portal_enabled; then
+    return 0
+  fi
+  local portal_extra=()
+  while IFS= read -r -d '' arg; do portal_extra+=("$arg"); done < <(_portal_extra_args)
+  # Bootstrap Caddy/pgAdmin/index only; Grafana/Prometheus via 32 or refresh with monitoring enabled.
+  portal_extra+=(-e monitoring_stack_enabled=false)
+  run_playbook 10_setup_deployment_portal.yml "${portal_extra[@]}"
+}
+
+_run_deployment_portal_refresh() {
+  local milestones="${1:-}"
+  if ! _portal_enabled; then
+    return 0
+  fi
+  local portal_extra=()
+  while IFS= read -r -d '' arg; do portal_extra+=("$arg"); done < <(_portal_extra_args)
+  if [[ -n "$milestones" ]]; then
+    portal_extra+=(-e "deployment_portal_verify_milestones=${milestones}")
+  fi
+  if run_playbook 35_refresh_deployment_portal.yml "${portal_extra[@]}"; then
+    return 0
+  fi
+  ui_warn "Portal refresh failed — running full portal bootstrap (10)."
+  _run_deployment_portal_bootstrap
+}
+
+_run_ecs_data_services() {
+  if [[ "${ECS_DATA_SERVICES_DEPLOY_ENABLED:-false}" == "true" || "${ECS_DATA_SERVICES_DEPLOY_ENABLED:-false}" == "1" ]]; then
+    run_playbook 34_setup_ecs_data_services.yml -e ecs_data_services_deploy_enabled=true
+    _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
   fi
 }
 
 run_phase_6() {
-  _run_deployment_portal_playbooks
+  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
+}
+
+run_phase_7() {
+  _run_ecs_data_services
 }
 
 run_phase_5() {
-  run_playbook 27_setup_ecs_cluster.yml
+  run_playbook 33_setup_ecs_cluster.yml
+  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
+  _run_ecs_data_services
 }
 
 case "$DEPLOY_PHASE" in
-  1|prereq|phase1) run_phase_1 ;;
+  1|prereq|phase1|prereqs) run_phase_1 ;;
   2|identity|phase2) run_phase_2 ;;
-  3|cm|phase3) run_phase_3 ;;
+  3|cm|phase3|cm_install) run_phase_3 ;;
+  cm_tls|cm_tls_krb_ldap|tls|krb|ldap) run_phase_cm_tls ;;
+  cdh|cdh_install|cdh_base|base) run_phase_cdh ;;
+  portal|deployment_portal) run_phase_portal ;;
+  monitoring|monitor) run_phase_monitoring ;;
   4|cluster|phase4) run_phase_4 ;;
   5|ecs|phase5) run_phase_5 ;;
-  6|portal|phase6) run_phase_6 ;;
+  6|portal_refresh|phase6) run_phase_6 ;;
+  7|dataservices|ds|phase7) run_phase_7 ;;
   all|full)
     run_phase_1
     sleep 5
+    if _portal_enabled; then
+      run_phase_portal
+      sleep 5
+    fi
     run_phase_2
     sleep 5
     run_phase_3
     sleep 5
-    run_phase_4
+    run_phase_cm_tls
+    sleep 5
+    run_phase_cdh
+    sleep 5
+    if _monitoring_enabled; then
+      run_phase_monitoring
+      sleep 5
+    fi
+    run_phase_5
     ;;
   *)
-    ui_err "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|4|5|6|all or prereq|identity|cm|cluster|ecs|portal|all)"
+    ui_err "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|cm_tls|cdh|portal|monitoring|ecs|all or prereq|identity|cm_install|…)"
     exit 1
     ;;
 esac

@@ -1,0 +1,66 @@
+### ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml
+#
+# Ops stack on ipaserver (auto) or cldr-mngr: Caddy index, pgAdmin, Prometheus, Grafana,
+# Alertmanager, cAdvisor. CM PostgreSQL remains on cldr-mngr (remote pgAdmin server entry).
+---
+- import_playbook: 00_ensure_collections.yml
+
+- name: Build deployment portal facts
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Skip when deployment portal is disabled
+      ansible.builtin.meta: end_play
+      when: not (deployment_portal_enabled | default(true) | bool)
+
+    - name: Build deployment portal context from inventory
+      ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
+
+- name: Install deployment portal and monitoring (Caddy, pgAdmin, Grafana, Prometheus, …)
+  hosts: "{{ hostvars['localhost']['deployment_portal_host_group_effective'] }}"
+  become: true
+  gather_facts: true
+  vars:
+    deployment_portal_verify_milestones:
+      - portal
+      - ipa
+  tasks:
+    - name: Install deployment portal stack
+      when: deployment_portal_enabled | default(true) | bool
+      block:
+        - name: Load deployment portal context from localhost
+          ansible.builtin.import_tasks: common_tasks/deployment_portal_load_host_facts.yml
+
+        - name: Install container runtime for portal stacks
+          ansible.builtin.import_tasks: common_tasks/install_portal_container_runtime.yml
+
+        - name: Install or update portal and monitoring stacks
+          ansible.builtin.import_tasks: common_tasks/sync_deployment_portal_content.yml
+
+        - name: Print deployment portal URLs
+          ansible.builtin.debug:
+            msg:
+              - "Deployment index: {{ deployment_portal_context.portal.index_url }}"
+              - "pgAdmin (preferred): {{ deployment_portal_context.portal.pgadmin_url }}"
+              - "pgAdmin (direct :{{ deployment_portal_pgadmin_host_port }}): {{ deployment_portal_context.portal.pgadmin_url_direct | default(deployment_portal_context.portal.pgadmin_url) }}"
+              - "Monitoring enabled: {{ monitoring_stack_enabled | default(false) }}"
+
+        - name: Print full access URL report (Jenkins log / email)
+          ansible.builtin.import_tasks: common_tasks/print_deployment_access_urls.yml
+
+- name: Verify external deployment portal URLs from Ansible controller (Tier B)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    deployment_portal_verify_milestones:
+      - portal
+      - ipa
+  tasks:
+    - name: Skip Tier B when deployment portal is disabled
+      ansible.builtin.meta: end_play
+      when: not (deployment_portal_enabled | default(true) | bool)
+
+    - name: Tier B external URL verify (Jenkins / laptop)
+      ansible.builtin.import_tasks: common_tasks/verify_deployment_portal_external_from_controller.yml

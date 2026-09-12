@@ -1,6 +1,8 @@
 ### ansible-playbook -i inventory.ini 00_setup_ssh_preqs.yml
 # for file in [0-9]*_*; do mv "$file" "$((10#${file%%_*} + 1))_${file#*_}"; done
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Ensure SSH allows password authentication and root login
   hosts: all:!ipaserver
   become: yes

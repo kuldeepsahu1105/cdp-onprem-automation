@@ -1,0 +1,75 @@
+========== CDP_ACCESS_URLS_BEGIN ==========
+Deployment portal access profile: {{ deployment_portal_context.access.profile }} ({{ deployment_portal_context.access.environment }})
+Ops host FQDN: {{ deployment_portal_context.ops_host.fqdn }} ({{ deployment_portal_context.ops_host.inventory_group }})
+
+--- Direct (no Caddy) — portal / pgAdmin / monitoring ---
+{% if deployment_portal_context.access.profile == 'private' %}
+Private network (no public IP):
+  Portal:    {{ deployment_portal_context.access.primary.portal }}
+  pgAdmin:   {{ deployment_portal_context.access.primary.pgadmin }}
+{% if deployment_portal_context.monitoring.enabled %}
+  Grafana:     {{ deployment_portal_context.access.primary.grafana }}
+  Prometheus:  {{ deployment_portal_context.access.primary.prometheus }}
+  Alertmanager:{{ deployment_portal_context.access.primary.alertmanager }}
+  cAdvisor:    {{ deployment_portal_context.access.primary.cadvisor }}
+{% endif %}
+{% else %}
+Jenkins / internet (ops public IP):
+  Portal:    {{ deployment_portal_context.access.external.portal }}
+  pgAdmin:   {{ deployment_portal_context.portal.pgadmin_url | default(deployment_portal_context.access.external.pgadmin) }}
+{% if deployment_portal_context.portal.pgadmin_caddy_url | default('') | length > 0 %}
+  pgAdmin (Caddy vhost, preferred): {{ deployment_portal_context.portal.pgadmin_caddy_url }}
+  pgAdmin (direct :{{ deployment_portal_pgadmin_host_port | default(5050) }}): {{ deployment_portal_context.portal.pgadmin_url_direct | default(deployment_portal_context.access.external.pgadmin) }}
+{% endif %}
+{% if deployment_portal_context.monitoring.enabled %}
+  Grafana:     {{ deployment_portal_context.access.external.grafana }}
+  Prometheus:  {{ deployment_portal_context.access.external.prometheus }}
+{% endif %}
+Same VPC (ops private IP):
+  Portal:    {{ deployment_portal_context.access.vpc.portal }}
+  pgAdmin:   {{ deployment_portal_context.access.vpc.pgadmin }}
+{% if deployment_portal_context.monitoring.enabled %}
+  Grafana:     {{ deployment_portal_context.access.vpc.grafana }}
+  Prometheus:  {{ deployment_portal_context.access.vpc.prometheus }}
+{% endif %}
+{% endif %}
+
+--- Cloudera Manager (direct, no Caddy) ---
+  HTTP:  {{ deployment_portal_context.cloudera_manager.ui_url_http }}
+  HTTPS: {{ deployment_portal_context.cloudera_manager.ui_url_https }}
+  FQDN:  {{ deployment_portal_context.cloudera_manager.host_fqdn }}
+
+{% if deployment_portal_context.caddy_vhosts.enabled %}
+--- Caddy lab hostnames (reverse proxy on port {{ deployment_portal_http_port | default(8088) }}) ---
+  Mode: {{ deployment_portal_context.caddy_vhosts.dns_mode }} base={{ deployment_portal_context.caddy_vhosts.public_base }}
+  Primary (works without lab DNS): {{ deployment_portal_context.access.external.portal | default(deployment_portal_context.access.primary.portal | default('')) }}
+  Portal (Caddy vhost):  {{ deployment_portal_context.caddy_vhosts.urls_public.portal.url | default('') }}
+  CM:      {{ deployment_portal_context.caddy_vhosts.urls_public.cm.url | default('') }}
+{% if deployment_portal_context.cloudera_manager.frontend_url | default('') | length > 0 %}
+  CM frontend_url (CM UI): {{ deployment_portal_context.cloudera_manager.frontend_url }}
+{% endif %}
+  pgAdmin: {{ deployment_portal_context.caddy_vhosts.urls_public.pgadmin.url | default('') }}
+{% if deployment_portal_context.monitoring.enabled %}
+  Grafana: {{ deployment_portal_context.caddy_vhosts.urls_public.grafana.url | default('') }}
+{% endif %}
+{% if deployment_portal_context.caddy_vhosts.urls_vpc.portal is defined and (deployment_portal_context.caddy_vhosts.urls_vpc.portal.url | default('') | length > 0) %}
+  Portal (VPC slug): {{ deployment_portal_context.caddy_vhosts.urls_vpc.portal.url }}
+{% endif %}
+{% else %}
+--- Caddy: disabled (use direct URLs above) ---
+{% endif %}
+
+{% if deployment_portal_context.identity.ipa_ui_url | default('') | length > 0 %}
+--- Identity ---
+  FreeIPA: {{ deployment_portal_context.identity.ipa_ui_url }}
+{% endif %}
+{% if deployment_portal_context.ecs.deployed %}
+--- ECS ---
+  Console (automation): {{ deployment_portal_context.ecs.console_hint }}
+  Console (direct):   {{ deployment_portal_context.ecs.console_url_direct | default('') }}
+  Apps:         {{ deployment_portal_context.ecs.apps_wildcard }}
+{% if deployment_portal_context.ecs.caddy_url | default('') | length > 0 %}
+  ECS (Caddy):  {{ deployment_portal_context.ecs.caddy_url }}
+{% endif %}
+{% endif %}
+========== CDP_ACCESS_URLS_END ==========

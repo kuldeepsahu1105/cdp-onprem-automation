@@ -69,7 +69,7 @@ CDH and ECS **deploy versions** are applied by Ansible (`ansible-playbooks/group
 
 ## CDH base cluster deployment
 
-The CDP **base cluster** is deployed by Ansible playbook `26_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, Kerberos, and CMS are in place. By default it installs HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, and Ranger. Optional services (NiFi, NiFi Registry, DataViz, Phoenix, Solr) are off unless enabled in `base_cluster_install_services`. Knox is on by default.
+The CDP **base cluster** is deployed by Ansible playbook `31_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, Kerberos, and CMS are in place. By default it installs HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, and Ranger. Optional services (NiFi, NiFi Registry, DataViz, Phoenix, Solr) are off unless enabled in `base_cluster_install_services`. Knox is on by default.
 
 ### Terraform instance groups (infrastructure)
 
@@ -107,28 +107,46 @@ Spark is bundled in the CDH parcel for `>= 7.3.1` — no separate SPARK3 downloa
 
 ```bash
 # Override at deploy time (example)
-ansible-playbook -i inventory.ini 26_setup_base_cluster.yml \
+ansible-playbook -i inventory.ini 31_setup_base_cluster.yml \
   -e cdh_version=7.3.2.10000 \
   -e cdh_parcel_os_suffix=noble
 ```
 
 ## Deployment portal (Caddy index + pgAdmin)
 
-After cluster deploy, `28_setup_deployment_portal.yml` installs on **`cldr-mngr`** (by default):
+After cluster deploy, `10_setup_deployment_portal.yml` installs the **ops stack** on **`ipaserver`** when `[ipaserver]` exists, otherwise **`cldr-mngr`** (`deployment_portal_host_group: auto`):
 
-- **Caddy** on port `8088` — HTML index with CM, FreeIPA, PostgreSQL, ECS, pgAdmin, and inventory node links
-- **pgAdmin** on port `5050` — preconfigured server entry for CM PostgreSQL
+| Service | Port / path |
+|---------|-------------|
+| **Caddy deployment index** | `8088` on ops host **public IP** (Jenkins / browser); use **private IP** only from same VPC |
+| **pgAdmin** | `5050` (connects to CM PostgreSQL on `cldr-mngr`) |
+| **Grafana** | `8088/grafana/` |
+| **Prometheus** | `8088/prometheus/` |
+| **Alertmanager** | `8088/alertmanager/` |
+| **cAdvisor** | `8089` |
 
-Optional **monitoring** (Prometheus, Grafana, Alertmanager, cAdvisor): set `monitoring_stack_enabled: true` in `group_vars/all.yml`, or run with `MONITORING_STACK_ENABLED=true` (playbooks `28` + `29`). Extend links via `deployment_portal_extra_links` and `deployment_portal_data_service_links`.
+`monitoring_stack_enabled` defaults to **`true`** (Grafana included). Disable with `monitoring_stack_enabled: false` or run only `29` later. Extend the index via `deployment_portal_extra_links` and `deployment_portal_data_service_links`.
+
+### Caddy lab domain (`pvc.cloudera-labs.com`, nip.io-style)
+
+With `caddy_vhost_enabled: true`, Caddy serves **per-service hostnames** on the ops host (port `8088` by default), for example:
+
+`http://cm.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → Cloudera Manager  
+`http://grafana.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → Grafana  
+`http://ipa.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → FreeIPA UI (`redir /` → `/ipa/ui`; Caddy **`reverse_proxy` HTTP** to ipaserver with **`Host`** + **`Referer`** — [cloudera-labs/openshift](https://github.com/cloudera-labs/openshift) pattern)
+
+Set `caddy_vhost_dns_mode: classic_nipio` for **`*.nip.io`** names (no custom DNS). Set `flat` for `cm.pvc.cloudera-labs.com` when you point all A records at the ops IP.
+
+Playbooks **28** / **31** verify portal URLs after sync: direct `http://<ops-ip>:8088/`, printed access URLs, and Caddy vhost routes (via `Host` header on `127.0.0.1`). IPA vhost checks also confirm FreeIPA responds to its FQDN `Host` header locally on `ipaserver`.
 
 ```bash
-ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
+ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml
 MONITORING_STACK_ENABLED=true DEPLOY_PHASE=6 ./pvc_setup.sh
 ```
 
 ## ECS (Data Services) deployment
 
-**ECS** (Cloudera Data Services / Experience Cluster) runs on dedicated nodes and is deployed by `27_setup_ecs_cluster.yml`. It requires the base CDH cluster (`26`) and wildcard DNS (`*.apps.<domain>`) when using FreeIPA.
+**ECS** (Cloudera Data Services / Experience Cluster) runs on dedicated nodes and is deployed by `33_setup_ecs_cluster.yml`. It requires the base CDH cluster (`26`) and wildcard DNS (`*.apps.<domain>`) when using FreeIPA.
 
 ### Terraform instance groups (infrastructure)
 
@@ -177,7 +195,7 @@ cd ansible-playbooks
 DEPLOY_PHASE=5 ./pvc_setup.sh
 
 # Or run playbook directly
-ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml \
+ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml \
   -e ecs_pvc_ds_version=1.5.5-h3300
 ```
 
@@ -220,8 +238,8 @@ Spark is bundled in the CDH parcel for 7.3.1+ — a separate SPARK3 download is 
 - **CM server** on Ubuntu 22.04/24.04: supported with `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr).
 - **CDH workers on Ubuntu 22.04/24.04**: parcels `...-jammy.parcel` and `...-noble.parcel` exist in archive; `cdh_parcel_os_suffix: auto` selects them from worker facts. See [CDH base cluster deployment](#cdh-base-cluster-deployment).
 - **CDH workers on RHEL**: use `el8` / `el9` (or `auto`). ARM64 workers use `el8.aarch64le` / `el9.aarch64le`.
-- **ECS (Data Services)**: see [ECS deployment](#ecs-data-services-deployment) for instance groups, variables, and `27_setup_ecs_cluster.yml`.
-- **Internal mirror**: Ubuntu cldr-mngr mirrors apt `.deb` packages and CDH parcels to its local web server (`16` + `17` playbooks).
+- **ECS (Data Services)**: see [ECS deployment](#ecs-data-services-deployment) for instance groups, variables, and `33_setup_ecs_cluster.yml`.
+- **Internal mirror**: Ubuntu cldr-mngr mirrors apt `.deb` packages and CDH parcels to its local web server (`20` + `22` playbooks).
 
 ### ARM64 / AWS Graviton (optional)
 
@@ -283,9 +301,9 @@ cdp-onprem-automation/
 |---|---|---|
 | Prerequisites | `00`–`09` | SSH, hostname, packages, OS tuning |
 | Identity & DNS | `00_detect`, `10`–`15` | FreeIPA or AD (auto-detected), DNS, wildcard `*.apps` |
-| Cloudera Manager | `16`–`25` | Repos, PostgreSQL, CM install, Auto-TLS, Kerberos, LDAP |
+| Cloudera Manager | `20`–`30` | Repos, PostgreSQL, CM install, Auto-TLS, Kerberos, LDAP |
 | CMS & base cluster | `24`, `26` | Management Service, CDH base cluster (HDFS/YARN/ZK) |
-| ECS (Data Services) | `27` | Experience cluster on `ecs-masters` / `ecs-workers` (skipped when groups empty) |
+| ECS (Data Services) | `33` | Experience cluster on `ecs-masters` / `ecs-workers` (skipped when groups empty) |
 | Cleanup | `99` | Toggle-driven teardown (base cluster, ECS, CMS, CM) |
 
 ```bash
@@ -316,7 +334,7 @@ DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
 
 Declarative **`Jenkinsfile`** with **checkbox stage selection**, input validation, and `REFRESH_JENKINSFILE=YES` to reload parameters after changes.
 
-**Stage checkboxes (`PIPELINE_STAGES`):** `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CDH_BASE`, `ECS_INSTALL` — pick any combination.
+**Stage checkboxes (`PIPELINE_STAGES`):** `VALIDATE`, `TERRAFORM`, `PREREQS`, `PORTAL`, `IDENTITY`, `CM_INSTALL`, `CM_TLS_KRB_LDAP`, `CDH_INSTALL`, `MONITORING`, `ECS_INSTALL` — portal bootstraps before CM; index refreshes after each milestone (`CDH_BASE` legacy → CM_TLS + CDH_INSTALL).
 
 **Validation checkboxes (`VALIDATION_CHECKS`):** `TOOLS`, `AWS_CREDS`, `TFVARS`, `ANSIBLE_SYNTAX`, `INVENTORY`, `EMAIL_FORMAT`.
 

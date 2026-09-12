@@ -21,7 +21,7 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 | Variable | Default |
 |---|---|
 | `cdh_basecluster_name` | `CDH-Cluster` |
-| `base_cluster_install_services` | see `all.yml` | Per-service booleans for `26_setup_base_cluster.yml` (Knox default `true`; NiFi, DataViz, Phoenix, Solr default `false`) |
+| `base_cluster_install_services` | see `all.yml` | Per-service booleans for `31_setup_base_cluster.yml` (Knox default `true`; NiFi, DataViz, Phoenix, Solr default `false`) |
 | `cm_admin_bootstrap_pass` | `admin` | Factory CM password; when `cm_admin_pass` differs, `set_cm_api_url` resets admin via API |
 | `base_cluster_yarn_*` | `4096` / `4` | YARN RM/NM memory and vcore limits in cluster spec template |
 | `ecs_cluster_name` | `ECS-Cluster` |
@@ -91,9 +91,9 @@ With `cdh_parcel_os_suffix: auto` (default), the suffix is derived from the firs
 
 | Playbook | Mode | Description |
 |---|---|---|
-| `16_setup_cm_repos.yml` | both | Router: 16 (internal web) + 17 |
-| `16_setup_internal_repo.yml` | internal | Web server on cldr-mngr only |
-| `17_download_repos.yml` | both | Mirror (internal) or configure public repo on all hosts |
+| `20_setup_cm_repos.yml` | both | Router: 16 (internal web) + 17 |
+| `21_setup_internal_repo.yml` | internal | Web server on cldr-mngr only |
+| `22_download_repos.yml` | both | Mirror (internal) or configure public repo on all hosts |
 
 ### OS-specific settings
 
@@ -109,7 +109,7 @@ On Ubuntu, public mode downloads the official `cloudera-manager.list` from `arch
 
 Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` after `set_os_facts`.
 
-**PostgreSQL paths:** RHEL stores config in the data directory (`postgres_data_dir`). Ubuntu uses separate paths — config in `postgres_config_dir` (`/etc/postgresql/<version>/main`), data in `postgres_data_dir` (`/var/lib/postgresql/<version>/main`). Playbook `18_setup_postgres.yml` deploys templates to `postgres_config_dir`.
+**PostgreSQL paths:** RHEL stores config in the data directory (`postgres_data_dir`). Ubuntu uses separate paths — config in `postgres_config_dir` (`/etc/postgresql/<version>/main`), data in `postgres_data_dir` (`/var/lib/postgresql/<version>/main`). Playbook `23_setup_postgres.yml` deploys templates to `postgres_config_dir`.
 
 ---
 
@@ -201,12 +201,15 @@ Each host should define: `ansible_host`, `private_ip`, `cldr_hostname`.
 
 Run: `ansible-playbook -i inventory.ini <playbook>.yml`
 
+For Jenkins / wrapper execution order and why some numbers appear twice (10, 14, 16), see [RUN_ORDER.md](RUN_ORDER.md).
+
 ### Phase 1 — Infrastructure & prerequisites
 
 | Playbook | Description |
 |---|---|
 | `00_setup_ssh_preqs.yml` | SSH prerequisites |
-| `01_install_collection.yml` | Install Ansible collections on control node (`localhost`); system update on targets |
+| `00_ensure_collections.yml` | Galaxy install from `requirements.yml` (imported by every playbook; same logic as `pvc_setup.sh`) |
+| `01_install_collection.yml` | Imports `00_ensure_collections`; full system update on targets |
 | `02_set_hostname.yml` | Set FQDN hostnames |
 | `03_create_etc_hosts.yml` | Populate `/etc/hosts` |
 | `04_setup_autossh.yml` | Passwordless SSH |
@@ -221,30 +224,30 @@ Run: `ansible-playbook -i inventory.ini <playbook>.yml`
 | Playbook | Description |
 |---|---|
 | `00_detect_identity.yml` | Detect FreeIPA vs AD |
-| `10_identity_setup.yml` | Phase 2 router (all of 10–15) |
-| `10_setup_freeipa_server.yml` | FreeIPA server (skipped for AD) |
-| `11_update_resolv_conf.yml` | DNS (netplan or resolv.conf) |
-| `12_setup_dns_records.yml` | FreeIPA DNS records (skipped for AD) |
-| `13_update_syscfg_network.yml` | `/etc/sysconfig/network` (RHEL) |
-| `14_setup_identity_client.yml` | FreeIPA client or AD realm join |
-| `14_setup_ad_client.yml` | AD realm join only |
-| `14_setup_freeipa_client.yml` | FreeIPA client only |
-| `15_setup_wildcard.yml` | `*.apps` wildcard DNS (FreeIPA only) |
+| `11_identity_setup.yml` | Phase 2 router (all of 10–15) |
+| `12_setup_freeipa_server.yml` | FreeIPA server (skipped for AD) |
+| `13_update_resolv_conf.yml` | DNS (netplan or resolv.conf) |
+| `14_setup_dns_records.yml` | FreeIPA DNS records (skipped for AD) |
+| `15_update_syscfg_network.yml` | `/etc/sysconfig/network` (RHEL) |
+| `16_setup_identity_client.yml` | FreeIPA client or AD realm join |
+| `18_setup_ad_client.yml` | AD realm join only |
+| `17_setup_freeipa_client.yml` | FreeIPA client only |
+| `19_setup_wildcard.yml` | `*.apps` wildcard DNS (FreeIPA only) |
 
 ### Phase 3 — Cloudera Manager
 
 | Playbook | Description |
 |---|---|
-| `16_setup_cm_repos.yml` | **Repo router** — internal web + mirror or public archive config |
-| `16_setup_internal_repo.yml` | Internal HTTP repo web server (skipped when `cm_repo_source=public`) |
-| `17_download_repos.yml` | Mirror from archive (internal) or configure public `archive.cloudera.com/p/` repos |
-| `18_setup_postgres.yml` | PostgreSQL for CM |
-| `19_start_cm.yml` | Install/start CM server + agents |
-| `20_verify_cm.yml` | Verify CM is running |
-| `21_setup_cm_license.yml` | Upload license or trial |
-| `22_setup_cm_autotls.yml` | Enable Auto-TLS |
-| `23_setup_cm_krbs.yml` | Kerberos (FreeIPA or AD KDC) |
-| `25_setup_cm_ldap.yml` | LDAP auth (FreeIPA or AD) |
+| `20_setup_cm_repos.yml` | **Repo router** — internal web + mirror or public archive config |
+| `21_setup_internal_repo.yml` | Internal HTTP repo web server (skipped when `cm_repo_source=public`) |
+| `22_download_repos.yml` | Mirror from archive (internal) or configure public `archive.cloudera.com/p/` repos |
+| `23_setup_postgres.yml` | PostgreSQL for CM |
+| `24_start_cm.yml` | Install/start CM server + agents |
+| `25_verify_cm.yml` | Verify CM is running |
+| `26_setup_cm_license.yml` | Upload license or trial |
+| `27_setup_cm_autotls.yml` | Enable Auto-TLS |
+| `28_setup_cm_krbs.yml` | Kerberos (FreeIPA or AD KDC) |
+| `30_setup_cm_ldap.yml` | LDAP auth (FreeIPA or AD) |
 
 ### Phase 4 — CMS & base cluster
 
@@ -252,11 +255,15 @@ CMS (Management Service) and CDP base cluster are **separate**:
 
 | Playbook | Component | Deploys |
 |---|---|---|
-| `24_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. |
-| `26_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
-| `27_setup_ecs_cluster.yml` | ECS cluster | Cloudera Data Services (DOCKER + ECS), embedded control plane |
-| `28_setup_deployment_portal.yml` | Ops portal | Caddy deployment index, pgAdmin, optional monitoring when `monitoring_stack_enabled` |
-| `29_setup_monitoring_stack.yml` | Monitoring | Prometheus, Grafana, Alertmanager, cAdvisor (requires 28) |
+| `29_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. |
+| `31_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
+| `33_setup_ecs_cluster.yml` | ECS cluster | Cloudera Data Services (DOCKER + ECS), embedded control plane |
+| `10_setup_deployment_portal.yml` | Ops portal bootstrap | Caddy, pgAdmin, optional monitoring on ops host (`auto` → ipaserver else cldr-mngr); run early in phase 1 |
+| `32_setup_monitoring_stack.yml` | Monitoring only | Add monitoring after 28 (requires portal network) |
+| `34_setup_ecs_data_services.yml` | ECS data services | CDW/CDE/CAI via control plane API (credentials + `ecs_data_services_install`; stubs — extend API tasks) |
+
+**ECS API keys (automation):** IAM `createMachineUserAccessKey` requires a **signed** request. Password-only console login is not enough. After ECS is up, either set `ecs_api_access_key_id` / `ecs_api_private_key`, or set a **one-time** bootstrap admin key (`ecs_iam_bootstrap_*` or Jenkins `ECS_IAM_BOOTSTRAP_*` credentials) and enable `ecs_auto_provision_api_access_key` (default `true`) to create machine user `ecs_automation_machine_user` via CDP CLI; keys are cached at `ecs_api_credentials_cache_path`.
+| `35_refresh_deployment_portal.yml` | Portal refresh | Re-render index/Caddy after CM, base, ECS, or DS changes (no full reinstall) |
 
 Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-masters` / `ecs-workers` inventory groups. Skipped when `ecs_deploy_enabled: auto` and ECS groups are empty.
 
@@ -264,12 +271,22 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 
 | Variable | Default | Description |
 |---|---|---|
-| `deployment_portal_enabled` | `true` | Run `28_setup_deployment_portal.yml` |
-| `deployment_portal_http_port` | `8088` | Caddy index + monitoring reverse proxy port |
-| `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI port on CM host |
-| `monitoring_stack_enabled` | `false` | Embed monitoring in playbook 28 |
+| `deployment_portal_enabled` | `true` | Run `10_setup_deployment_portal.yml` |
+| `deployment_portal_host_group` | `auto` | `auto`, `ipaserver`, or `cldr-mngr` — where Caddy/pgAdmin/Grafana run |
+| `deployment_portal_postgres_host_group` | `cldr-mngr` | CM PostgreSQL host for pgAdmin |
+| `deployment_portal_http_port` | `8088` | Caddy index + Grafana/Prometheus/Alertmanager paths |
+| `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI on ops host |
+| `pgadmin_default_email` | `admin@{{ caddy_vhost_public_base }}` | pgAdmin 8 login email (`PGADMIN_DEFAULT_EMAIL`); must not use `.local` cluster domains |
+| `deployment_portal_access_profile` | `auto` | `auto`, `cloud` (public + VPC URLs), or `private` (bare metal / no public IP) |
+| `deployment_portal_prefer_fqdn_urls` | `true` | In `private` profile, use ops FQDN in portal links instead of raw management IP |
+| `deployment_portal_use_private_network_only` | `false` | Force `private` profile even when inventory has distinct public/private IPs |
+| `monitoring_stack_enabled` | `true` | Prometheus + Grafana + Alertmanager + cAdvisor with playbook 28; Jenkins `MONITORING_STACK_ENABLED` checkbox sets this override |
 | `deployment_portal_extra_links` | `[]` | Add `{name, url}` entries to the index page |
 | `monitoring_prometheus_extra_targets` | `[]` | Extra Prometheus scrape jobs |
+| `caddy_vhost_enabled` | `true` | Host-based Caddy URLs (nip.io-style) |
+| `caddy_vhost_public_base` | `pvc.cloudera-labs.com` | Base domain for `svc.<ip-dashed>.<base>` |
+| `caddy_vhost_dns_mode` | `embedded_ip` | `embedded_ip`, `classic_nipio`, or `flat` |
+| `autotls_enabled` | `false` | CM HTTPS port for Caddy `cm.*` vhost backend |
 
 ---
 
@@ -316,10 +333,10 @@ Requires:
 | `DEPLOY_PHASE` | Alias | Playbooks |
 |---|---|---|
 | `1` | `prereq` | `00`–`09` |
-| `2` | `identity` | `00_detect_identity`, `10_identity_setup` |
-| `3` | `cm` | `16`–`21` |
+| `2` | `identity` | `00_detect_identity`, `11_identity_setup` |
+| `3` | `cm` | `20`–`26` |
 | `4` | `cluster` | `22`–`27` (ECS skipped if no ecs inventory) |
-| `5` | `ecs` | `27_setup_ecs_cluster.yml` |
+| `5` | `ecs` | `33_setup_ecs_cluster.yml` |
 | `all` | — | Full flow |
 
 License file is required for phases `3`, `4`, and `all` only.
@@ -381,5 +398,23 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/join_ad_realm.yml` | AD `realm join` |
 | `common_tasks/join_freeipa_client.yml` | IPA client enrollment |
 | `common_tasks/set_cm_api_url.yml` | CM API URL + Auto-TLS detection |
+| `ansible_control_reachability` | `auto` | `auto`, `public` (Jenkins / no VPC route), or `private` (bare metal / VPN / `CONTROL_MODE=local`) |
+| `cm_api_prefer_private_ip` | `true` | Legacy: prefer `private_ip` for CM API when profile is not `public` |
+| `cm_api_connect_host` | `""` | Force CM API target (Jenkins may set `cldr-mngr` `ansible_host` / public IP) |
+| `ansible_controller_outside_vpc` | `false` | Legacy mirror of `public` profile — do not use RFC1918 `private_ip` from controller |
+| `cm_api_delegate_probes_to_manager` | `true` | Run CM API discovery on `cldr-mngr` at `127.0.0.1` when play host is `localhost` |
+| `cm_api_private_reachability_timeout` | `5` | Seconds to test VPC `private_ip` from controller before using public IP |
+| `cm_external_url` | `""` | Override CM Caddy public URL; sets CM API `frontend_url` when non-empty |
+| `cm_apply_caddy_frontend_url` | `auto` | `auto` \| `true` \| `false` — apply Caddy CM vhost to CM `frontend_url` / `cm_host_name` |
+| `cm_config_api_via_caddy_proxy` | `auto` | `auto` \| `true` \| `false` — `apply_cm_caddy_load_balancer.yml` calls `cm_config` via Caddy CM vhost (`:8088`) instead of direct `:7180`/`:7183` |
+| `cm_caddy_public_url` | (fact) | From `caddy_vhost_urls.j2` via `build_deployment_portal_facts.yml` |
+| `ecs_caddy_console_url` | (fact) | Caddy ECS vhost URL for portal index and `ecs_control_plane_url_effective` |
+| `deployment_portal_url_verify_skip_vpc` | `false` | Skip VPC-only portal URL hard-fail during verify (Jenkins sets `true`) |
+| `deployment_external_url_verify` | `warn` | Tier B: GET external service URLs from controller when reachability is `public` — `warn`, `fail`, or `skip` |
+| `deployment_portal_external_url_verify` | `warn` | Legacy Tier B default for portal when `deployment_external_url_verify` is unset |
+| `deployment_service_external_url_verify` | — | Optional map of per-service Tier B modes (`cm`, `portal`, `grafana`, …) |
+| `deployment_cm_external_url_verify` | — | Tier B override for CM URLs only |
 | `common_tasks/install_cloudera_collection.yml` | Galaxy collection install |
 | `common_tasks/cleanup/` | Modular cleanup tasks |
+
+**Cross-playbook variable contracts** (portal verify chain, CM API facts, import order): see [`VARIABLE_CONTRACTS.md`](VARIABLE_CONTRACTS.md).

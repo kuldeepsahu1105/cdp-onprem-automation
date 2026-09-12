@@ -239,7 +239,7 @@ cdh_basecluster_name: "CDH-Cluster"
 base_cluster_master_group: base-masters
 base_cluster_worker_group: base-workers
 
-# CDP base cluster services (26_setup_base_cluster.yml). Override per key in Jenkins via base_cluster_install_services.
+# CDP base cluster services (31_setup_base_cluster.yml). Override per key in Jenkins via base_cluster_install_services.
 base_cluster_install_services:
   core_settings: true
   zookeeper: true
@@ -296,6 +296,46 @@ cm_cms_reports_manager_db_password: rman
 # Cloudera Manager API ports
 cm_https_port: 7183
 cm_http_port: 7180
+# Control-plane reachability (CM API + portal URL verify from the Ansible controller):
+#   auto   — Jenkins/outside-VPC → public ansible_host; CONTROL_MODE=local on cluster → private;
+#            else probe CM private/public from controller (VPN/bare metal prefers private)
+#   public — control node has no route to 10.x/172.31.x (typical Jenkins agent)
+#   private — bare metal / in-VPC / VPN automation (prefer inventory private_ip)
+ansible_control_reachability: auto
+# Legacy toggles (auto profile also reads these; Jenkins run-ansible.sh sets public equivalents)
+cm_api_prefer_private_ip: true
+cm_api_connect_host: ""
+ansible_controller_outside_vpc: false
+# When play runs on localhost/Jenkins, run HTTP discovery on cldr-mngr via 127.0.0.1 (not VPC private IP)
+cm_api_delegate_probes_to_manager: true
+cm_api_private_reachability_timeout: 5
+# CM UI via Caddy vhost (portal): frontend_url + cm_host_name in CM (API). Override full URL here if needed.
+cm_external_url: ""
+# auto | true | false — auto when deployment_portal_enabled + caddy_vhost_enabled + Caddy CM URL exists
+cm_apply_caddy_frontend_url: auto
+# auto | true | false — for apply_cm_caddy_load_balancer.yml only: call cm_config via Caddy CM vhost
+# (host cm.<ip-dashed>.<base>, port deployment_portal_http_port) instead of direct :7180/:7183.
+# Matches cloudera-labs/openshift module_defaults host=proxy_host port=80 on the reverse proxy.
+cm_config_api_via_caddy_proxy: auto
+# Portal verify: skip VPC-only URL checks when control profile is public-only (Jenkins default)
+deployment_portal_url_verify_skip_vpc: false
+# Milestone-scoped URL verify (portal, ipa, identity, cm, cm_tls, cdh, monitoring, ecs).
+# Default [] — 10_setup_deployment_portal sets [portal, ipa]; pvc_setup/35_refresh pass cumulative lists per phase.
+deployment_portal_verify_milestones: []
+# Tier A: require Caddy CM vhost Host check (legacy — prefer deployment_portal_verify_milestones: …,cm)
+deployment_portal_verify_cm_vhost: false
+# Set by 35_refresh_deployment_portal.yml — legacy CM milestone when milestones extra-var omitted
+deployment_portal_verify_post_cm: false
+# Tier A CM vhost when required: fail (default) or warn (non-blocking, like Tier B warn)
+deployment_portal_cm_vhost_tier_a_verify: fail
+# Tier B: GET external URLs from Ansible controller when ansible_control_reachability is public (warn|fail|skip)
+deployment_external_url_verify: warn
+# Legacy portal-only key (used when deployment_external_url_verify is unset)
+deployment_portal_external_url_verify: warn
+# Optional per-service overrides, e.g. deployment_cm_external_url_verify: skip
+# Or map: deployment_service_external_url_verify: { cm: warn, grafana: skip }
+# Set true after 27_setup_cm_autotls.yml for Caddy CM reverse-proxy target port
+autotls_enabled: false
 
 ##### cm_server autotls variables:
 # SSH Authentication (Choose one)
@@ -401,7 +441,7 @@ ecs_cluster_name: "ECS-Cluster"
 
 # ---------------------------------------------------------------------------
 # ECS (Cloudera Data Services / Experience Cluster) deployment
-# Requires base cluster (26) and wildcard DNS (*.apps) when using FreeIPA.
+# Requires base cluster (31) and wildcard DNS (*.apps) when using FreeIPA.
 # Compatible with CDH 7.3.2: CDS 1.5.5 SP3+ (see Cloudera release matrix).
 # ---------------------------------------------------------------------------
 ecs_deploy_enabled: auto  # auto | true | false — auto runs when ecs-masters/workers exist
@@ -428,21 +468,65 @@ ecs_control_plane_vault_mode: embedded
 ecs_control_plane_embedded_db_storage_gb: 50
 ecs_control_plane_embedded_vault_storage_gb: 2
 
+# ECS Data Services (CDW, CDE, CAI) — 34_setup_ecs_data_services.yml
+# IAM access keys are signed API credentials — automation can CREATE machine-user keys after ECS
+# is up only when a bootstrap admin key exists (one-time console key or ecs_iam_bootstrap_*).
+ecs_data_services_deploy_enabled: false
+ecs_control_plane_url: ""  # blank = https://console.{{ ecs_app_domain }}
+ecs_api_access_key_id: ""
+ecs_api_private_key: ""
+ecs_auto_provision_api_access_key: true
+ecs_automation_machine_user: cldr-automation-sa
+ecs_automation_access_key_type: V2
+ecs_iam_bootstrap_access_key_id: ""
+ecs_iam_bootstrap_private_key: ""
+ecs_api_credentials_cache_path: "{{ lookup('env', 'WORKSPACE') | default('/tmp', true) }}/jenkins/artifacts/ecs-automation-api-credentials.yml"
+ecs_control_plane_wait_retries: 40
+ecs_control_plane_wait_delay: 15
+ecs_control_plane_validate_certs: false
+ecs_data_services_use_cdpcurl: true
+ecs_data_services_install: []  # e.g. [cdw, cde, cai] or [{name: cdw, enabled: true}, ...]
+ecs_data_services_catalog:
+  cdw:
+    name: Cloudera Data Warehouse
+    description: CDW on ECS control plane
+    url: ""
+  cde:
+    name: Cloudera Data Engineering
+    description: CDE virtual clusters
+    url: ""
+  cai:
+    name: Cloudera AI
+    description: Cloudera AI workspaces
+    url: ""
+
 # ---------------------------------------------------------------------------
-# Deployment portal (Caddy index + pgAdmin) — 28_setup_deployment_portal.yml
-# Optional monitoring — monitoring_stack_enabled or 29_setup_monitoring_stack.yml
+# Deployment portal + ops UI — 10_setup_deployment_portal.yml
+# Caddy index, pgAdmin, Prometheus, Grafana, Alertmanager, cAdvisor on ops host.
+# auto = ipaserver when [ipaserver] exists, else cldr-mngr. pgAdmin targets CM PostgreSQL on cldr-mngr.
 # ---------------------------------------------------------------------------
 deployment_portal_enabled: true
-deployment_portal_host_group: cldr-mngr
+deployment_portal_host_group: auto
+deployment_portal_postgres_host_group: cldr-mngr
 deployment_portal_http_port: 8088
 deployment_portal_pgadmin_host_port: 5050
 deployment_portal_config_dir: /opt/cldr-deployment-portal
 deployment_portal_www_dir: /opt/cldr-deployment-portal/www
 deployment_portal_caddy_image: caddy:2-alpine
 deployment_portal_caddy_container: cldr-portal-caddy
+# RHEL 'docker' RPM is a Podman shim (no docker.service); install Docker CE for the portal stack.
+portal_docker_use_ce: true
+# When compose plugin is missing, install Compose v2 binary then pip v1
+portal_docker_compose_version: "2.29.2"
+portal_compose_pip_fallback: true
+# Command argv prefix for compose up/restart (set on host by install_portal_container_runtime)
+deployment_portal_compose_argv: ['docker', 'compose']
 deployment_portal_pgadmin_image: dpage/pgadmin4:8
 deployment_portal_pgadmin_container: cldr-portal-pgadmin
-pgadmin_default_email: "admin@{{ cluster_domain }}"
+# When true, print docker logs for pgAdmin after successful PORTAL sync (troubleshooting).
+deployment_portal_pgadmin_debug_logs: false
+# pgAdmin 8 validates PGADMIN_DEFAULT_EMAIL; IPA/cluster .local domains (e.g. cldrsetup.local) fail at container start.
+pgadmin_default_email: "admin@{{ caddy_vhost_public_base }}"
 pgadmin_default_password: "{{ postgres_password }}"
 deployment_portal_inventory_groups:
   - ipaserver
@@ -453,13 +537,41 @@ deployment_portal_inventory_groups:
   - ecs-workers
 deployment_portal_data_service_links: []
 deployment_portal_extra_links: []
+# Portal URL profile: auto | cloud (public + VPC) | private (bare metal / no public IP)
+deployment_portal_access_profile: auto
+# When profile is private, prefer cluster FQDN in links (set false to use management IP only)
+deployment_portal_prefer_fqdn_urls: true
+# Force private profile on cloud-style inventory (no public URLs in portal index)
+deployment_portal_use_private_network_only: false
 
-monitoring_stack_enabled: false
+# Caddy nip.io-style hostnames (all resolve to ops host IP; Caddy reverse-proxies to backends)
+# embedded_ip: cm.10-54-75-123.pvc.cloudera-labs.com  (wildcard DNS on base domain)
+# classic_nipio: cm.10-54-75-123.nip.io  (works without custom DNS)
+# flat: cm.pvc.cloudera-labs.com  (single A record for *.svc → ops IP)
+caddy_vhost_enabled: true
+caddy_vhost_public_base: pvc.cloudera-labs.com
+caddy_vhost_dns_mode: embedded_ip
+# Register nip.io-style vhosts for private IP as well (in-VPC browsers); public slug for Jenkins/internet
+caddy_vhost_register_private_ip: true
+caddy_vhost_service_names:
+  portal: portal
+  cm: cm
+  pgadmin: pgadmin
+  grafana: grafana
+  prometheus: prometheus
+  alertmanager: alertmanager
+  ipa: ipa
+  ecs: ecs
+
+monitoring_stack_enabled: true
 monitoring_config_dir: /opt/cldr-monitoring
 monitoring_prometheus_image: prom/prometheus:v2.54.1
 monitoring_prometheus_container: cldr-mon-prometheus
 monitoring_grafana_image: grafana/grafana:11.2.0
 monitoring_grafana_container: cldr-mon-grafana
+monitoring_grafana_docker_service: grafana
+monitoring_prometheus_docker_service: prometheus
+monitoring_alertmanager_docker_service: alertmanager
 monitoring_alertmanager_image: prom/alertmanager:v0.27.0
 monitoring_alertmanager_container: cldr-mon-alertmanager
 monitoring_cadvisor_image: gcr.io/cadvisor/cadvisor:v0.49.1

@@ -1,5 +1,25 @@
 ---
-- name: Wait for Cloudera Manager API to respond
+- name: Wait for Cloudera Manager API to respond (delegated to CM host when play is on localhost)
+  ansible.builtin.uri:
+    url: "{{ cm_protocol }}://{{ cm_api_probe_host }}:{{ cm_api_port }}/api/{{ cm_api_version }}/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_api_wait
+  until: cm_api_wait.status in [200, 301, 303]
+  retries: 30
+  delay: 10
+  timeout: 30
+  delegate_to: "{{ cm_api_probe_delegate_to }}"
+  when:
+    - cm_api_probe_delegate_to is defined
+    - cm_api_probe_delegate_to | length > 0
+    - cm_api_version is defined
+
+- name: Wait for Cloudera Manager API to respond on play host
   ansible.builtin.uri:
     url: "{{ cm_api_url }}/version"
     method: GET
@@ -12,3 +32,5 @@
   until: cm_api_wait.status in [200, 301, 303]
   retries: 30
   delay: 10
+  timeout: 30
+  when: cm_api_probe_delegate_to is not defined or cm_api_probe_delegate_to | length == 0

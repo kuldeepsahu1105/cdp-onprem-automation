@@ -1,5 +1,7 @@
 # Guidance for Cursor / automation agents
 
+**Repo-specific crux (architecture, portal, Ansible traps, Jenkins):** [`.cursor/LEARNINGS.md`](.cursor/LEARNINGS.md) — read first on portal/CM/verify work.
+
 ## Standalone-first changes
 
 Implement behavior in **Terraform modules**, **Ansible playbooks/tasks**, and **shared `scripts/lib/`** so it works without Jenkins or shell wrappers.
@@ -19,3 +21,11 @@ Implement behavior in **Terraform modules**, **Ansible playbooks/tasks**, and **
 
 - Prefer verifying with direct `ansible-playbook` / `terraform` when touching those trees.
 - Document new optional vars in `ansible-playbooks/docs/RUNBOOK.md` or `REFERENCE.md`, not only `jenkins/README.md`.
+
+## Ansible portal / CM verify edits
+
+Playbooks share facts across `common_tasks/`, numbered playbooks, and `group_vars/all.yml`. Before changing `verify_*.yml`, `detect_ansible_control_reachability.yml`, `resolve_cm_connect_host.yml`, or portal sync/verify imports:
+
+1. Read [`.cursor/LEARNINGS.md`](.cursor/LEARNINGS.md) and **`ansible-playbooks/docs/VARIABLE_CONTRACTS.md`** (import order, required facts, CM API chain).
+2. Run **`./jenkins/scripts/validate-ansible-contracts.sh`** (also runs from Jenkins `validate-prereqs.sh` after YAML parse). Fix new warnings for missing setters or same-task `set_fact` cross-references.
+3. Do not put multiple `set_fact` keys in one task when one value references another key from that same task — split tasks or use `hostvars['localhost']` / `deployment_portal_context` explicitly.

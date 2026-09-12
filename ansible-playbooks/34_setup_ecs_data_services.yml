@@ -1,0 +1,73 @@
+### ansible-playbook -i inventory.ini 34_setup_ecs_data_services.yml
+#
+# Cloudera Data Services on ECS (CDW, CDE, CAI, …) via Control Plane API.
+# Prerequisites:
+#   1. ECS cluster installed (33_setup_ecs_cluster.yml).
+#   2. Management Console reachable at ecs_control_plane_url.
+#   3. API keys: set ecs_api_* or enable ecs_auto_provision_api_access_key with a one-time
+#      bootstrap admin key (console or ecs_iam_bootstrap_* / ECS_IAM_BOOTSTRAP_* env).
+#
+# Set ecs_data_services_deploy_enabled: true and ecs_data_services_install in group_vars.
+# Signed API calls use cdpcurl on the controller when ecs_data_services_use_cdpcurl: true.
+---
+- import_playbook: 00_ensure_collections.yml
+
+- name: Deploy Cloudera Data Services on ECS (API-driven)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Skip when ECS data services automation is disabled
+      ansible.builtin.meta: end_play
+      when: not (ecs_data_services_deploy_enabled | default(false) | bool)
+
+    - name: Validate ECS inventory is present
+      ansible.builtin.assert:
+        that:
+          - groups.get(ecs_cluster_master_group, []) | length > 0
+        fail_msg: >-
+          ECS masters group '{{ ecs_cluster_master_group }}' is empty.
+          Run 33_setup_ecs_cluster.yml first.
+
+    - name: Normalize data services install list
+      ansible.builtin.set_fact:
+        ecs_data_services_install_names: >-
+          {{
+            (
+              ecs_data_services_install
+              | default([])
+              | map('lower')
+              | list
+            )
+            if (
+              ecs_data_services_install | default([]) | length > 0
+              and (ecs_data_services_install | first) is string
+            )
+            else (
+              ecs_data_services_install
+              | default([])
+              | selectattr('enabled', 'defined')
+              | selectattr('enabled')
+              | map(attribute='name')
+              | map('lower')
+              | list
+            )
+          }}
+
+    - name: Wait for ECS Management Console after cluster install
+      ansible.builtin.import_tasks: common_tasks/ecs_wait_control_plane_console.yml
+
+    - name: Provision automation machine-user API access key when needed
+      ansible.builtin.import_tasks: common_tasks/ecs_provision_iam_machine_access_key.yml
+
+    - name: Validate control plane credentials
+      ansible.builtin.import_tasks: common_tasks/ecs_validate_control_plane_credentials.yml
+
+    - name: Install selected data services (stubs — extend with signed API calls)
+      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw.yml
+
+    - name: Install CDE when selected
+      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cde.yml
+
+    - name: Install CAI when selected
+      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai.yml

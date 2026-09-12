@@ -1,0 +1,14 @@
+---
+# CDW — install via Control Plane after access key is created (console or API).
+- name: CDW | Skip when not selected
+  ansible.builtin.debug:
+    msg: "CDW not in ecs_data_services_install list — skipped."
+  when: "'cdw' not in (ecs_data_services_install_names | default([]))"
+
+- name: CDW | Placeholder for Control Plane API install
+  ansible.builtin.debug:
+    msg: >-
+      CDW install: use Management Console > Data Warehouse or Control Plane API with credentials
+      from ecs_api_access_key_id / ecs_api_private_key. Set ecs_data_services_install entry
+      name=cdw and document instance name in ecs_data_services_catalog.cdw.
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"

@@ -1,0 +1,525 @@
+---
+# Service URL verify tiers (see RUNBOOK.md § Service URL verification tiers):
+#   Tier A (ops host): localhost index (verify_deployment_portal_caddy.yml) plus checks scoped by
+#   deployment_portal_verify_milestones (portal/ipa at bootstrap; pgadmin/cm/monitoring/ecs only when listed;
+#   pgAdmin and CM Caddy vhost probes are omitted until milestones pgadmin / cm).
+#   Tier C (optional on ops host): printed public-EIP / hairpin URLs — warn only when optional.
+#   Tier B (controller): verify_service_urls_from_controller.yml after this file (portal, CM, monitoring, IPA, ECS).
+#
+# Ansible set_fact: do not define multiple keys in one task when a value references another key from
+# that same task (evaluation order is undefined). Split dependent facts or inline hostvars/context.
+
+- name: Set deployment portal URL verification defaults
+  ansible.builtin.set_fact:
+    _portal_url_verify_codes: "{{ deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]) }}"
+    _portal_local_base: "http://127.0.0.1:{{ deployment_portal_http_port | int }}"
+    _portal_control_public_only: >-
+      {{
+        hostvars['localhost'].ansible_control_reach_public_only
+        | default(ansible_control_reach_public_only | default(false))
+        | bool
+      }}
+    _portal_skip_vpc_urls: >-
+      {{
+        deployment_portal_url_verify_skip_vpc
+        | default(
+            hostvars['localhost'].ansible_control_reach_public_only
+            | default(ansible_control_reach_public_only | default(false))
+          )
+        | bool
+      }}
+    _portal_rfc1918_url_re: '://(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)'
+    _portal_ops_ansible_host: "{{ ansible_host | default('') }}"
+    _portal_anchor_inv: >-
+      {{
+        hostvars['localhost'].deployment_portal_anchor_inv
+        | default(
+            groups[deployment_portal_context.ops_host.inventory_group][0]
+            if (
+              deployment_portal_context is defined
+              and deployment_portal_context.ops_host is defined
+              and deployment_portal_context.ops_host.inventory_group is defined
+              and (deployment_portal_context.ops_host.inventory_group in groups)
+              and (groups[deployment_portal_context.ops_host.inventory_group] | length > 0)
+            )
+            else inventory_hostname
+          )
+      }}
+    _portal_verify_from_controller: >-
+      {{ (inventory_hostname | default('')) in ['localhost', '127.0.0.1'] }}
+
+- name: Set deployment portal URL verify status codes as integers
+  ansible.builtin.set_fact:
+    _portal_url_verify_codes_int: >-
+      {{
+        _portal_url_verify_codes
+        | default(deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]))
+        | map('int')
+        | list
+      }}
+
+- name: Set deployment portal require CM Caddy vhost from verify milestones
+  ansible.builtin.set_fact:
+    _portal_require_cm_vhost: "{{ 'cm' in (_portal_verify_milestones_effective | default([])) }}"
+
+- name: Set deployment portal CM Caddy vhost Tier A verify mode when CM milestone is active
+  ansible.builtin.set_fact:
+    _portal_cm_vhost_tier_a_mode: >-
+      {{
+        deployment_portal_cm_vhost_tier_a_verify
+        | default('fail')
+      }}
+  when: _portal_require_cm_vhost | default(false) | bool
+
+- name: Set deployment portal ops-host verify hint from anchor inventory name
+  ansible.builtin.set_fact:
+    _portal_verify_on_ops_host: >-
+      {{
+        inventory_hostname
+        == (
+          _portal_anchor_inv
+          | default(
+              hostvars['localhost'].deployment_portal_anchor_inv
+              | default(inventory_hostname)
+            )
+        )
+      }}
+
+- name: Set printed portal URL optional flags (hairpin / ops host / Jenkins public reach)
+  ansible.builtin.set_fact:
+    _portal_optional_primary_portal: >-
+      {{
+        (
+          (_portal_verify_on_ops_host | bool)
+          and (deployment_portal_context.access.primary.portal | default('') | length > 0)
+          and (
+            (deployment_portal_context.access.primary.portal | default('') == deployment_portal_context.access.external.portal | default(''))
+            or (
+              (_portal_ops_ansible_host | length > 0)
+              and (
+                deployment_portal_context.access.primary.portal | default('')
+                | regex_replace('^https?://([^/:]+)(:.*)?(/.*)?$', '\\1')
+              ) == _portal_ops_ansible_host
+            )
+          )
+        )
+        or (
+          (_portal_verify_from_controller | bool)
+          and (_portal_control_public_only | bool)
+          and (
+            deployment_portal_context.access.primary.portal | default('') is search(_portal_rfc1918_url_re)
+            or (
+              (deployment_portal_context.access.external.portal | default('') | length > 0)
+              and (deployment_portal_context.access.primary.portal | default('') == deployment_portal_context.access.external.portal | default(''))
+            )
+          )
+        )
+      }}
+    _portal_optional_external_portal: >-
+      {{
+        (_portal_verify_on_ops_host | bool)
+        or (
+          (_portal_ops_ansible_host | length > 0)
+          and (deployment_portal_context.access.external.portal | default('') | length > 0)
+          and (
+            deployment_portal_context.access.external.portal | default('')
+            | regex_replace('^https?://([^/:]+)(:.*)?(/.*)?$', '\\1')
+          ) == _portal_ops_ansible_host
+        )
+        or (
+          (_portal_verify_from_controller | bool)
+          and (_portal_control_public_only | bool)
+          and (deployment_portal_context.access.external.portal | default('') | length > 0)
+        )
+      }}
+  when:
+    - deployment_portal_context is defined
+    - _portal_verify_milestones_effective | default([]) | intersect(['portal']) | length > 0
+
+- name: Build access URL checks from deployment portal context
+  ansible.builtin.set_fact:
+    deployment_portal_access_url_checks: >-
+      {{
+        (
+          ([{'name': 'portal (primary)', 'url': deployment_portal_context.access.primary.portal | default(''),
+              'optional': _portal_optional_primary_portal | default(false) | bool}]
+           if (deployment_portal_context.access.primary.portal | default('') | length > 0)
+           else [])
+          + ([{'name': 'portal (external)', 'url': deployment_portal_context.access.external.portal | default(''),
+              'optional': _portal_optional_external_portal | default(false) | bool}]
+             if (deployment_portal_context.access.external.portal | default('') | length > 0)
+             else [])
+          + (
+              [{'name': 'portal (vpc)', 'url': deployment_portal_context.access.vpc.portal | default(''), 'optional': true}]
+              if (
+                (deployment_portal_context.access.vpc.portal | default('') | length > 0)
+                and not (_portal_skip_vpc_urls | bool)
+              )
+              else []
+            )
+        )
+        | selectattr('url', 'defined')
+        | selectattr('url', 'ne', '')
+        | list
+      }}
+  when:
+    - deployment_portal_context is defined
+    - _portal_verify_milestones_effective | default([]) | intersect(['portal']) | length > 0
+
+- name: Set required deployment portal access URL checks
+  ansible.builtin.set_fact:
+    deployment_portal_access_url_checks_required: >-
+      {{
+        deployment_portal_access_url_checks | default([])
+        | selectattr('optional', 'equalto', false)
+        | list
+      }}
+  when: deployment_portal_context is defined
+
+- name: Set optional deployment portal access URL checks
+  ansible.builtin.set_fact:
+    deployment_portal_access_url_checks_optional: >-
+      {{
+        deployment_portal_access_url_checks | default([])
+        | selectattr('optional', 'equalto', true)
+        | list
+      }}
+  when: deployment_portal_context is defined
+
+- name: Mark Tier C hairpin optional URL checks to skip on ops host
+  ansible.builtin.set_fact:
+    deployment_portal_access_url_checks_optional: >-
+      {%- set out = [] -%}
+      {%- for row in deployment_portal_access_url_checks_optional | default([]) -%}
+      {%- set url_host = row.url | default('') | regex_replace('^https?://([^/:]+)(:.*)?(/.*)?$', '\\1') -%}
+      {%- set hairpin_skip = (
+            (_portal_verify_on_ops_host | default(false) | bool)
+            and (_portal_ops_ansible_host | default('') | length > 0)
+            and (url_host == _portal_ops_ansible_host)
+          ) -%}
+      {%- set _ = out.append(row | combine({'tier': 'C', 'hairpin_skip_probe': hairpin_skip | bool})) -%}
+      {%- endfor -%}
+      {{ out }}
+  when:
+    - deployment_portal_context is defined
+    - deployment_portal_access_url_checks_optional | default([]) | length > 0
+
+- name: Note Tier C hairpin URL checks skipped on ops host (non-blocking)
+  ansible.builtin.debug:
+    msg: >-
+      Tier C (ops-host hairpin): skipped HTTP probe to {{ item.url }} from {{ inventory_hostname }}
+      (EC2 cannot reliably reach its own public EIP). Tier A: http://127.0.0.1:{{ deployment_portal_http_port | int }}/;
+      Tier B (Ansible controller / browser) validates external access when security groups allow.
+  loop: "{{ deployment_portal_access_url_checks_optional | default([]) }}"
+  loop_control:
+    label: "{{ item.name | default('portal URL') }}"
+  when:
+    - deployment_portal_access_url_checks_optional | default([]) | length > 0
+    - item.hairpin_skip_probe | default(false) | bool
+
+- name: Verify required printed deployment portal access URLs respond
+  ansible.builtin.uri:
+    url: "{{ item.url }}"
+    method: GET
+    status_code: "{{ _portal_url_verify_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 30
+  loop: "{{ deployment_portal_access_url_checks_required | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: deployment_portal_access_url_required_results
+  retries: 3
+  delay: 5
+  until: deployment_portal_access_url_required_results is succeeded
+  when:
+    - deployment_portal_access_url_checks_required | default([]) | length > 0
+
+- name: Probe optional printed deployment portal access URLs (Tier C, warn only)
+  ansible.builtin.uri:
+    url: "{{ item.url }}"
+    method: GET
+    status_code: "{{ _portal_url_verify_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 10
+  loop: >-
+    {{
+      deployment_portal_access_url_checks_optional | default([])
+      | rejectattr('hairpin_skip_probe', 'equalto', true)
+      | list
+    }}
+  loop_control:
+    label: "{{ item.name }}"
+  register: deployment_portal_access_url_optional_results
+  failed_when: false
+  when:
+    - deployment_portal_access_url_checks_optional | default([]) | length > 0
+
+- name: Warn when a Tier C optional printed access URL does not respond
+  ansible.builtin.debug:
+    msg: >-
+      Tier C (optional on {{ inventory_hostname }}): printed URL did not respond
+      {% if _portal_verify_on_ops_host | default(false) | bool %}
+      (if this is the ops public EIP from the same host, prefer Tier A http://127.0.0.1:{{ deployment_portal_http_port | int }}/ — hairpin probes are skipped above):
+      {% elif _portal_verify_from_controller | default(false) | bool and (_portal_control_public_only | default(false) | bool) %}
+      (Ansible control uses public reachability only — see Tier B from the controller play):
+      {% else %}
+      (non-blocking):
+      {% endif %}
+      {{ item.item.url }}
+  loop: "{{ deployment_portal_access_url_optional_results.results | default([]) }}"
+  when:
+    - deployment_portal_access_url_checks_optional | default([]) | length > 0
+    - deployment_portal_access_url_optional_results is defined
+    - not (item.skipped | default(false) | bool)
+    - item.failed | default(false) or (item.status | default(0) | int not in _portal_url_verify_codes)
+
+- name: Fail when a required printed access URL does not respond
+  ansible.builtin.fail:
+    msg: >-
+      Deployment portal access URL check failed for {{ item.item.name }}: {{ item.item.url }}.
+      Expected HTTP {{ _portal_url_verify_codes | join('/') }} from {{ inventory_hostname }}.
+      On the ops host, confirm Caddy on http://127.0.0.1:{{ deployment_portal_http_port | int }}/ first
+      (docker ps, docker logs {{ deployment_portal_caddy_container }}).
+      Public EIP URLs may not respond from the same EC2 instance (hairpin); use a browser or Jenkins outside the VPC.
+      Re-run: ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml
+  loop: "{{ deployment_portal_access_url_required_results.results | default([]) }}"
+  when:
+    - deployment_portal_access_url_checks_required | default([]) | length > 0
+    - deployment_portal_access_url_required_results is defined
+    - not (item.skipped | default(false) | bool)
+    - item.failed | default(false) or (item.status | default(0) | int not in _portal_url_verify_codes)
+
+- name: Build Caddy vhost HTTP checks (Host header routing on localhost)
+  ansible.builtin.set_fact:
+    deployment_portal_caddy_vhost_checks: >-
+      {{
+        (
+          ([{'name': 'Caddy vhost portal', 'host': caddy_vhost_urls.portal.hostname, 'path': '/', 'optional': false}]
+           if (
+             'portal' in (_portal_verify_milestones_effective | default([]))
+             and (caddy_vhost_urls.portal.hostname | default('') | length > 0)
+           )
+           else [])
+          + (
+              [{'name': 'Caddy vhost pgAdmin', 'host': caddy_vhost_urls.pgadmin.hostname, 'path': '/',
+                'optional': false}]
+              if (
+                'pgadmin' in (_portal_verify_milestones_effective | default([]))
+                and (caddy_vhost_urls.pgadmin.hostname | default('') | length > 0)
+              )
+              else []
+            )
+          + (
+              [{'name': 'Caddy vhost CM', 'host': caddy_vhost_urls.cm.hostname, 'path': '/',
+                'optional': (_portal_cm_vhost_tier_a_mode | default('fail') == 'warn')}]
+              if (
+                'cm' in (_portal_verify_milestones_effective | default([]))
+                and (caddy_vhost_urls.cm.hostname | default('') | length > 0)
+              )
+              else []
+            )
+          + (
+              [{'name': 'Caddy vhost FreeIPA', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
+                'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false}]
+              if (
+                'ipa' in (_portal_verify_milestones_effective | default([]))
+                and deployment_portal_has_ipa | default(false) | bool
+                and (caddy_vhost_urls.ipa.hostname | default('') | length > 0)
+                and (deployment_portal_ipa_fqdn | default('') | length > 0)
+              )
+              else []
+            )
+          + (
+              [{'name': 'Caddy vhost Grafana', 'host': caddy_vhost_urls.grafana.hostname, 'path': '/', 'optional': false}]
+              if (
+                'monitoring' in (_portal_verify_milestones_effective | default([]))
+                and (caddy_vhost_urls.grafana.hostname | default('') | length > 0)
+              )
+              else []
+            )
+          + (
+              [{'name': 'Caddy vhost Prometheus', 'host': caddy_vhost_urls.prometheus.hostname, 'path': '/', 'optional': false}]
+              if (
+                'monitoring' in (_portal_verify_milestones_effective | default([]))
+                and (caddy_vhost_urls.prometheus.hostname | default('') | length > 0)
+              )
+              else []
+            )
+          + (
+              [{'name': 'Caddy vhost ECS', 'host': caddy_vhost_urls.ecs.hostname, 'path': '/', 'optional': false}]
+              if (
+                'ecs' in (_portal_verify_milestones_effective | default([]))
+                and (caddy_vhost_urls.ecs.hostname | default('') | length > 0)
+              )
+              else []
+            )
+        )
+      }}
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - caddy_vhost_urls is defined
+    - caddy_vhost_urls | length > 0
+    - _portal_verify_milestones_effective | default([]) | length > 0
+
+- name: Set required Caddy vhost checks
+  ansible.builtin.set_fact:
+    deployment_portal_caddy_vhost_checks_required: >-
+      {{
+        deployment_portal_caddy_vhost_checks | default([])
+        | selectattr('optional', 'equalto', false)
+        | list
+      }}
+  when: deployment_portal_caddy_vhost_checks | default([]) | length > 0
+
+- name: Set optional Caddy vhost checks
+  ansible.builtin.set_fact:
+    deployment_portal_caddy_vhost_checks_optional: >-
+      {{
+        deployment_portal_caddy_vhost_checks | default([])
+        | selectattr('optional', 'equalto', true)
+        | list
+      }}
+  when: deployment_portal_caddy_vhost_checks | default([]) | length > 0
+
+- name: Verify required Caddy vhost routes via localhost with Host header
+  ansible.builtin.uri:
+    url: "{{ _portal_local_base }}{{ item.path | default('/') }}"
+    method: GET
+    headers:
+      Host: "{{ item.host }}"
+    status_code: "{{ _portal_url_verify_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  loop: "{{ deployment_portal_caddy_vhost_checks_required | default([]) }}"
+  loop_control:
+    label: "{{ item.name }} (Host: {{ item.host }})"
+  register: deployment_portal_caddy_vhost_required_results
+  retries: 5
+  delay: 5
+  until: deployment_portal_caddy_vhost_required_results is succeeded
+  when:
+    - deployment_portal_caddy_vhost_checks_required | default([]) | length > 0
+
+- name: Probe optional Caddy vhost routes (single attempt, warn-only)
+  ansible.builtin.uri:
+    url: "{{ _portal_local_base }}{{ item.path | default('/') }}"
+    method: GET
+    headers:
+      Host: "{{ item.host }}"
+    status_code: "{{ _portal_url_verify_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 20
+  loop: "{{ deployment_portal_caddy_vhost_checks_optional | default([]) }}"
+  loop_control:
+    label: "{{ item.name }} (Host: {{ item.host }})"
+  register: deployment_portal_caddy_vhost_optional_results
+  failed_when: false
+  when:
+    - deployment_portal_caddy_vhost_checks_optional | default([]) | length > 0
+
+- name: Combine Caddy vhost probe results for warn/fail handlers
+  ansible.builtin.set_fact:
+    deployment_portal_caddy_vhost_results:
+      results: >-
+        {{
+          (deployment_portal_caddy_vhost_required_results.results | default([]))
+          + (deployment_portal_caddy_vhost_optional_results.results | default([]))
+        }}
+  when: deployment_portal_caddy_vhost_checks | default([]) | length > 0
+
+- name: Warn when optional Caddy vhost route does not respond (CM pre-install / tier warn)
+  ansible.builtin.debug:
+    msg: >-
+      Optional Caddy vhost check did not pass for {{ item.item.name }} (non-blocking before CM install or tier warn).
+      Request: GET {{ _portal_local_base }}{{ item.item.path | default('/') }} with Host: {{ item.item.host }}.
+      HTTP status: {{ item.status | default('n/a') }} (acceptable: {{ _portal_url_verify_codes_int | join('/') }}).
+      {% if 'CM' in item.item.name %}
+      Cloudera Manager is not listening yet on {{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}
+      (expected when Jenkins PORTAL runs before CM_INSTALL — re-run 35_refresh_deployment_portal.yml after CM).
+      {% elif 'pgAdmin' in item.item.name %}
+      pgAdmin Caddy vhost is optional at this milestone (add deployment_portal_verify_milestones pgadmin to hard-gate).
+      Confirm: docker ps --filter name={{ deployment_portal_pgadmin_container }}; curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/
+      {% endif %}
+      Caddy logs: docker logs --tail 40 {{ deployment_portal_caddy_container }}
+  loop: "{{ deployment_portal_caddy_vhost_results.results | default([]) }}"
+  when:
+    - deployment_portal_caddy_vhost_checks | default([]) | length > 0
+    - deployment_portal_caddy_vhost_results is defined
+    - not (item.skipped | default(false) | bool)
+    - item.item.optional | default(false) | bool
+    - >-
+      item.failed | default(false) | bool
+      or (item.status | default(0) | int not in _portal_url_verify_codes_int)
+
+- name: Fail when a required Caddy vhost route does not respond
+  ansible.builtin.fail:
+    msg: >-
+      Caddy vhost check failed for {{ item.item.name }}.
+      Request: GET {{ _portal_local_base }}{{ item.item.path | default('/') }}
+      with Host: {{ item.item.host }}.
+      HTTP status: {{ item.status | default('n/a') }} (expected {{ _portal_url_verify_codes_int | join('/') }}).
+      {% if item.item.upstream_ipa_fqdn is defined and item.item.upstream_ipa_fqdn | length > 0 %}
+      FreeIPA upstream must receive Host: {{ item.item.upstream_ipa_fqdn }} and Referer https://{{ item.item.upstream_ipa_fqdn }}/ipa/ui
+      (see deployment_portal_Caddyfile_vhosts.inc.j2; cloudera-labs/openshift Caddy pattern).
+      GET / on the IPA vhost should 301 to /ipa/ui; redirect responses (301/302) are acceptable.
+      Confirm http://{{ item.item.upstream_ipa_fqdn }}/ipa/ui responds on the IPA server and IPA HTTPD is running.
+      {% elif 'CM' in item.item.name %}
+      Confirm Cloudera Manager is up on {{ deployment_portal_cm_fqdn }} (ports {{ cm_http_port }}/{{ cm_https_port }}).
+      Caddy proxies to {{ deployment_portal_cm_upstream_host | default(deployment_portal_cm_fqdn) }} with header_up Host {{ deployment_portal_cm_fqdn }}.
+      {% elif 'pgAdmin' in item.item.name %}
+      Confirm pgAdmin container {{ deployment_portal_pgadmin_container }} is running and responds on
+      http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/ (Caddy reverse_proxies pgadmin:80 on the compose network).
+      Browsers should use the Caddy vhost on port {{ deployment_portal_http_port }} when direct :{{ deployment_portal_pgadmin_host_port }} is blocked by SG.
+      {% else %}
+      Confirm Caddyfile vhosts and wildcard DNS (or caddy_vhost_dns_mode: classic_nipio) match {{ item.item.host }}.
+      {% endif %}
+      Caddy logs: docker logs --tail 80 {{ deployment_portal_caddy_container }}
+  loop: "{{ deployment_portal_caddy_vhost_results.results | default([]) }}"
+  when:
+    - deployment_portal_caddy_vhost_checks | default([]) | length > 0
+    - deployment_portal_caddy_vhost_results is defined
+    - not (item.skipped | default(false) | bool)
+    - not (item.item.optional | default(false) | bool)
+    - (item.status | default(0) | int not in _portal_url_verify_codes_int)
+
+- name: Verify FreeIPA HTTP responds with IPA FQDN Host header (direct upstream)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1/"
+    method: GET
+    headers:
+      Host: "{{ deployment_portal_ipa_fqdn }}"
+      Referer: "https://{{ deployment_portal_ipa_fqdn }}/ipa/ui"
+    status_code: "{{ _portal_url_verify_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 30
+  register: ipa_direct_host_header_check
+  retries: 3
+  delay: 5
+  until: ipa_direct_host_header_check is succeeded
+  when:
+    - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
+    - deployment_portal_has_ipa | default(false) | bool
+    - deployment_portal_ipa_fqdn | default('') | length > 0
+    - inventory_hostname in groups.get('ipaserver', [])
+  failed_when: false
+
+- name: Fail when FreeIPA does not accept its FQDN Host header locally
+  ansible.builtin.fail:
+    msg: >-
+      FreeIPA UI did not respond on http://127.0.0.1/ with Host: {{ deployment_portal_ipa_fqdn }}.
+      Caddy IPA vhost proxies HTTP with header_up Host and Referer (cloudera-labs/openshift pattern); fix IPA HTTP first.
+      Try on {{ inventory_hostname }}: curl -sS -o /dev/null -w '%{http_code}' -H "Host: {{ deployment_portal_ipa_fqdn }}" -H "Referer: https://{{ deployment_portal_ipa_fqdn }}/ipa/ui" http://127.0.0.1/
+  when:
+    - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
+    - deployment_portal_has_ipa | default(false) | bool
+    - deployment_portal_ipa_fqdn | default('') | length > 0
+    - inventory_hostname in groups.get('ipaserver', [])
+    - ipa_direct_host_header_check is defined
+    - >-
+      ipa_direct_host_header_check is failed
+      or (ipa_direct_host_header_check.status | default(0) | int not in _portal_url_verify_codes)

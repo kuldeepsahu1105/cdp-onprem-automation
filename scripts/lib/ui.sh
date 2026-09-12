@@ -10,6 +10,43 @@ ui_is_tty() {
   [[ -t 1 ]]
 }
 
+# Jenkins and C/POSIX locales often lack UTF-8; Unicode rules/emojis show as mojibake in console logs.
+ui_ascii_enabled() {
+  case "${UI_ASCII:-auto}" in
+    1|true|yes|on) return 0 ;;
+    0|false|no|off) return 1 ;;
+  esac
+  if [[ -n "${JENKINS_URL:-}" || -n "${BUILD_NUMBER:-}" ]]; then
+    return 0
+  fi
+  local loc="${LC_ALL:-${LC_CTYPE:-${LANG:-}}}"
+  [[ "$loc" == *UTF-8* || "$loc" == *utf8* ]] && return 1
+  return 0
+}
+
+ui_rule_char() {
+  local requested="${1:-─}"
+  if ui_ascii_enabled; then
+    case "$requested" in
+      ═) printf '=' ;;
+      ─|━) printf '-' ;;
+      *) printf '-' ;;
+    esac
+  else
+    printf '%s' "$requested"
+  fi
+}
+
+ui_plain_emoji() {
+  local emoji="$1"
+  local ascii="${2:-}"
+  if ui_ascii_enabled; then
+    printf '%s' "$ascii"
+  else
+    printf '%s' "$emoji"
+  fi
+}
+
 # Colors only when stdout is a TTY. Jenkins stages pipe to tee (| tee log), so ANSI
 # would appear as literal [32m without a TTY even with ansiColor + FORCE_COLOR=1.
 ui_color_enabled() {
@@ -47,7 +84,8 @@ ui_nl() {
 }
 
 ui_rule() {
-  local char="${1:-─}"
+  local char
+  char="$(ui_rule_char "${1:-─}")"
   local width="${2:-$UI_WIDTH}"
   printf "  "
   ui_c "2" "$(ui_repeat_char "$char" "$width")"
@@ -72,7 +110,7 @@ ui_banner() {
   ui_nl
   ui_rule "═"
   printf '  '
-  ui_c "1;35" '🏗️  '
+  ui_c "1;35" "$(ui_plain_emoji '🏗️  ' '[*] ')"
   ui_c "1;36" "$title"
   ui_nl
   if [[ -n "$subtitle" ]]; then
@@ -90,7 +128,7 @@ ui_section() {
   UI_STEP_NUM=0
   ui_nl
   ui_rule "═"
-  printf '  %s  ' "$emoji"
+  printf '  %s  ' "$(ui_plain_emoji "$emoji" '*')"
   ui_c "1;34" "$title"
   ui_nl
   ui_rule "─"
@@ -100,7 +138,7 @@ ui_subsection() {
   local title="$1"
   local emoji="${2:-•}"
   ui_nl
-  printf '%s%s  ' "$UI_INDENT" "$emoji"
+  printf '%s%s  ' "$UI_INDENT" "$(ui_plain_emoji "$emoji" '-')"
   ui_c "1;35" "$title"
   ui_nl
 }
@@ -112,14 +150,14 @@ ui_step() {
   ui_nl
   printf '%s' "$UI_INDENT"
   ui_c "1;36" "Step ${UI_STEP_NUM}:"
-  printf ' %s  ' "$emoji"
+  printf ' %s  ' "$(ui_plain_emoji "$emoji" '>')"
   ui_c "1" "$msg"
   ui_nl
 }
 
 ui_ok() {
   printf '%s  ' "$UI_INDENT"
-  ui_c "32" '✅'
+  ui_c "32" "$(ui_plain_emoji '✅' 'OK')"
   printf '  '
   ui_c "32" "$*"
   ui_nl

@@ -1,0 +1,44 @@
+---
+# Sets deployment_portal_host_group_effective and PostgreSQL (CM DB) host facts.
+
+- name: Resolve deployment portal install host group
+  ansible.builtin.set_fact:
+    deployment_portal_host_group_effective: >-
+      {{
+        (
+          'ipaserver'
+          if (
+            (deployment_portal_host_group | default('auto')) == 'auto'
+            and (groups.get('ipaserver', []) | length > 0)
+          )
+          else (
+            'cldr-mngr'
+            if (deployment_portal_host_group | default('auto')) == 'auto'
+            else deployment_portal_host_group
+          )
+        )
+      }}
+
+- name: Validate deployment portal install host group
+  ansible.builtin.assert:
+    that:
+      - deployment_portal_host_group_effective in groups
+      - groups[deployment_portal_host_group_effective] | length > 0
+    fail_msg: >-
+      Deployment portal host group '{{ deployment_portal_host_group_effective }}' is missing or empty.
+      Set deployment_portal_host_group to a valid inventory group (or use auto).
+
+- name: Validate PostgreSQL host group for pgAdmin
+  ansible.builtin.assert:
+    that:
+      - deployment_portal_postgres_host_group in groups
+      - groups[deployment_portal_postgres_host_group] | length > 0
+    fail_msg: >-
+      deployment_portal_postgres_host_group '{{ deployment_portal_postgres_host_group }}'
+      must exist (CM database host, usually cldr-mngr).
+
+- name: Set PostgreSQL FQDN for pgAdmin and portal links
+  ansible.builtin.set_fact:
+    deployment_portal_postgres_fqdn: >-
+      {{ hostvars[groups[deployment_portal_postgres_host_group][0]].cldr_hostname }}.{{ cluster_domain }}
+    deployment_portal_postgres_inv: "{{ groups[deployment_portal_postgres_host_group][0] }}"

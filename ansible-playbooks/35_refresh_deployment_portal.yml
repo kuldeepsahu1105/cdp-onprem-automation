@@ -1,0 +1,90 @@
+### ansible-playbook -i inventory.ini 35_refresh_deployment_portal.yml
+# Update Caddy index/pgAdmin/monitoring URLs after CM, base cluster, ECS, or data services change.
+# Run 28 once (Jenkins PORTAL stage, before CM). Re-run after CM/TLS/CDH/ECS to update the index.
+---
+- import_playbook: 00_ensure_collections.yml
+
+- name: Rebuild deployment portal facts
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Skip when deployment portal is disabled
+      ansible.builtin.meta: end_play
+      when: not (deployment_portal_enabled | default(true) | bool)
+
+    - name: Build deployment portal context from inventory
+      ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
+
+    - name: Install cloudera.cluster collection for CM frontend URL apply
+      ansible.builtin.import_tasks: common_tasks/install_cloudera_collection.yml
+      when:
+        - deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
+        - cm_frontend_url_effective | default('') | length > 0
+
+    - name: Set Cloudera Manager API URL for frontend apply
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+      when:
+        - deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
+        - cm_frontend_url_effective | default('') | length > 0
+
+    - name: Apply CM Caddy frontend URL after portal refresh
+      ansible.builtin.import_tasks: common_tasks/apply_cm_caddy_load_balancer.yml
+      when:
+        - deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
+        - cm_frontend_url_effective | default('') | length > 0
+
+- name: Refresh deployment portal content on ops host
+  hosts: "{{ hostvars['localhost']['deployment_portal_host_group_effective'] }}"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Skip when deployment portal is disabled
+      ansible.builtin.meta: end_host
+      when: not (deployment_portal_enabled | default(true) | bool)
+
+    - name: Load portal context from localhost
+      ansible.builtin.import_tasks: common_tasks/deployment_portal_load_host_facts.yml
+
+    - name: Check whether portal stack was bootstrapped
+      ansible.builtin.stat:
+        path: "{{ deployment_portal_config_dir }}/docker-compose.yml"
+      register: portal_compose_stat
+
+    - name: Require bootstrap before refresh-only run
+      ansible.builtin.fail:
+        msg: >-
+          Deployment portal not installed on {{ inventory_hostname }}
+          (missing {{ deployment_portal_config_dir }}/docker-compose.yml).
+          Run 10_setup_deployment_portal.yml or re-run Jenkins PORTAL stage.
+      when: not portal_compose_stat.stat.exists
+
+    - name: Sync portal templates and stacks
+      ansible.builtin.import_tasks: common_tasks/sync_deployment_portal_content.yml
+      vars:
+        deployment_portal_verify_post_cm: true
+
+    - name: Print deployment portal URLs
+      ansible.builtin.debug:
+        msg:
+          - "Deployment index (refreshed): {{ deployment_portal_context.portal.index_url }}"
+          - "pgAdmin (preferred): {{ deployment_portal_context.portal.pgadmin_url }}"
+          - "pgAdmin (direct :{{ deployment_portal_pgadmin_host_port }}): {{ deployment_portal_context.portal.pgadmin_url_direct | default(deployment_portal_context.portal.pgadmin_url) }}"
+          - "Monitoring: {{ monitoring_stack_enabled | default(false) }}"
+
+    - name: Print full access URL report (Jenkins log / email)
+      ansible.builtin.import_tasks: common_tasks/print_deployment_access_urls.yml
+
+- name: Verify external deployment portal URLs from Ansible controller (Tier B)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    deployment_portal_verify_post_cm: true
+  tasks:
+    - name: Skip Tier B when deployment portal is disabled
+      ansible.builtin.meta: end_play
+      when: not (deployment_portal_enabled | default(true) | bool)
+
+    - name: Tier B external URL verify (Jenkins / laptop)
+      ansible.builtin.import_tasks: common_tasks/verify_deployment_portal_external_from_controller.yml

@@ -5,6 +5,8 @@
 #   ipaserver_domain: cldrsetup.local
 
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Set hostname to IP address
   hosts: all
   become: yes

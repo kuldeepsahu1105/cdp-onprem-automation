@@ -1,0 +1,180 @@
+---
+# Create automation machine-user API keys via CDP IAM API (requires bootstrap admin access key once).
+# IAM APIs are signed — password-only console login cannot call createMachineUserAccessKey.
+
+- name: Resolve ECS control plane URL
+  ansible.builtin.import_tasks: resolve_ecs_control_plane_url.yml
+
+- name: Skip API key provisioning when automation keys already configured
+  ansible.builtin.meta: end_host
+  when:
+    - (ecs_api_access_key_id | default('') | length > 0)
+    - (ecs_api_private_key | default('') | length > 0)
+
+- name: Load cached ECS API credentials from controller file when present
+  ansible.builtin.slurp:
+    src: "{{ ecs_api_credentials_cache_path }}"
+  register: ecs_api_credentials_cache_slurp
+  failed_when: false
+  when:
+    - (ecs_api_access_key_id | default('') | length == 0)
+    - (ecs_api_credentials_cache_path | default('') | length > 0)
+
+- name: Apply cached ECS API credentials
+  ansible.builtin.set_fact:
+    ecs_api_access_key_id: "{{ (ecs_api_credentials_cache_slurp.content | b64decode | from_yaml).access_key_id }}"
+    ecs_api_private_key: "{{ (ecs_api_credentials_cache_slurp.content | b64decode | from_yaml).private_key }}"
+  no_log: true
+  when:
+    - ecs_api_credentials_cache_slurp is defined
+    - ecs_api_credentials_cache_slurp.content is defined
+
+- name: Skip provisioning when credentials loaded from cache
+  ansible.builtin.meta: end_host
+  when:
+    - (ecs_api_access_key_id | default('') | length > 0)
+    - (ecs_api_private_key | default('') | length > 0)
+
+- name: Skip when auto-provision is disabled
+  ansible.builtin.meta: end_host
+  when: not (ecs_auto_provision_api_access_key | default(true) | bool)
+
+- name: Set IAM bootstrap access key from env or group_vars
+  ansible.builtin.set_fact:
+    ecs_iam_bootstrap_access_key_id_effective: >-
+      {{
+        ecs_iam_bootstrap_access_key_id
+        | default(lookup('env', 'ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID'), true)
+        | default('', true)
+        | trim
+      }}
+    ecs_iam_bootstrap_private_key_effective: >-
+      {{
+        ecs_iam_bootstrap_private_key
+        | default(lookup('env', 'ECS_IAM_BOOTSTRAP_PRIVATE_KEY'), true)
+        | default('', true)
+      }}
+
+- name: Require bootstrap admin API key for first-time IAM automation
+  ansible.builtin.fail:
+    msg: >-
+      Cannot create ECS API access keys without an existing signed IAM credential.
+      After ECS is up, generate ONE admin access key in Management Console (User Management),
+      then set ecs_iam_bootstrap_access_key_id / ecs_iam_bootstrap_private_key (or Jenkins
+      ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID / ECS_IAM_BOOTSTRAP_PRIVATE_KEY) and re-run.
+      Automation will create machine user '{{ ecs_automation_machine_user }}' and store keys
+      in {{ ecs_api_credentials_cache_path | default('(set ecs_api_credentials_cache_path)') }}.
+  when:
+    - ecs_iam_bootstrap_access_key_id_effective | length == 0
+    - ecs_iam_bootstrap_private_key_effective | length == 0
+
+- name: Ensure CDP CLI is available on Ansible controller
+  ansible.builtin.pip:
+    name: cdpcli
+    state: present
+    extra_args: --user
+  become: false
+
+- name: Create temporary CDP profile directory for bootstrap IAM
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: cdp_ecs_iam_
+  register: ecs_cdp_profile_dir
+
+- name: Write CDP private cloud config for IAM calls
+  ansible.builtin.copy:
+    dest: "{{ ecs_cdp_profile_dir.path }}/config"
+    mode: "0600"
+    content: |
+      [default]
+      cdp_endpoint_url = {{ ecs_control_plane_url_effective }}
+      form_factor = private
+
+- name: Write bootstrap CDP credentials for IAM calls
+  ansible.builtin.copy:
+    dest: "{{ ecs_cdp_profile_dir.path }}/credentials"
+    mode: "0600"
+    content: |
+      [default]
+      cdp_access_key_id = {{ ecs_iam_bootstrap_access_key_id_effective }}
+      cdp_private_key = {{ ecs_iam_bootstrap_private_key_effective | trim }}
+
+- name: Create ECS automation machine user (ignore if exists)
+  ansible.builtin.command:
+    argv:
+      - cdp
+      - --profile
+      - default
+      - iam
+      - create-machine-user
+      - --machine-user-name
+      - "{{ ecs_automation_machine_user }}"
+  environment:
+    CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
+    CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
+    HOME: "{{ ecs_cdp_profile_dir.path }}"
+  register: ecs_create_machine_user
+  failed_when: >-
+    ecs_create_machine_user.rc != 0
+    and ('already exists' not in (ecs_create_machine_user.stderr | default('') | lower))
+    and ('alreadyexists' not in (ecs_create_machine_user.stderr | default('') | lower))
+
+- name: Create access key for ECS automation machine user
+  ansible.builtin.command:
+    argv:
+      - cdp
+      - --profile
+      - default
+      - iam
+      - create-machine-user-access-key
+      - --machine-user-name
+      - "{{ ecs_automation_machine_user }}"
+      - --type
+      - "{{ ecs_automation_access_key_type }}"
+  environment:
+    CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
+    CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
+    HOME: "{{ ecs_cdp_profile_dir.path }}"
+  register: ecs_create_access_key
+  no_log: true
+
+- name: Parse new ECS automation API credentials
+  ansible.builtin.set_fact:
+    ecs_api_access_key_id: "{{ (ecs_create_access_key.stdout | from_json).accessKey.accessKeyId }}"
+    ecs_api_private_key: "{{ (ecs_create_access_key.stdout | from_json).accessKey.privateKey }}"
+  no_log: true
+  when: ecs_create_access_key.stdout is search('accessKey')
+
+- name: Parse new ECS automation API credentials (alternate JSON shape)
+  ansible.builtin.set_fact:
+    ecs_api_access_key_id: "{{ (ecs_create_access_key.stdout | from_json).accessKeyId }}"
+    ecs_api_private_key: "{{ (ecs_create_access_key.stdout | from_json).privateKey }}"
+  no_log: true
+  when:
+    - ecs_api_access_key_id is not defined or (ecs_api_access_key_id | default('') | length == 0)
+    - ecs_create_access_key.stdout is search('privateKey')
+
+- name: Fail when access key JSON could not be parsed
+  ansible.builtin.fail:
+    msg: >-
+      create-machine-user-access-key succeeded but output was not recognized.
+      Inspect ansible log (no_log) or run manually: cdp iam create-machine-user-access-key
+      --machine-user-name {{ ecs_automation_machine_user }}
+  when: ecs_api_access_key_id is not defined or (ecs_api_access_key_id | default('') | length == 0)
+
+- name: Save ECS API credentials to controller cache file
+  ansible.builtin.copy:
+    dest: "{{ ecs_api_credentials_cache_path }}"
+    mode: "0600"
+    content: |
+      access_key_id: "{{ ecs_api_access_key_id }}"
+      private_key: "{{ ecs_api_private_key }}"
+  no_log: true
+  when: ecs_api_credentials_cache_path | default('') | length > 0
+
+- name: Report ECS automation API key provisioned (store cache file — private key not shown again)
+  ansible.builtin.debug:
+    msg:
+      - "ECS automation machine user: {{ ecs_automation_machine_user }}"
+      - "Access key id: {{ ecs_api_access_key_id }}"
+      - "Private key saved to: {{ ecs_api_credentials_cache_path }} (restrict permissions; not re-displayed)"

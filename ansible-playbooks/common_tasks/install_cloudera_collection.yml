@@ -1,9 +1,23 @@
 ---
+- name: Check whether cloudera.cluster collection is installed
+  ansible.builtin.command:
+    argv:
+      - ansible-galaxy
+      - collection
+      - list
+      - cloudera.cluster
+  register: cloudera_cluster_galaxy_list
+  changed_when: false
+  failed_when: false
+
 - name: Locate ansible-galaxy binary
   ansible.builtin.command: which ansible-galaxy
   register: galaxy_path
   changed_when: false
   failed_when: galaxy_path.rc != 0
+  when: >-
+    cloudera_cluster_galaxy_list.rc != 0
+    or 'cloudera.cluster' not in cloudera_cluster_galaxy_list.stdout
 
 - name: Install cloudera.cluster collection
   ansible.builtin.shell:
@@ -15,6 +29,9 @@
   delay: 5
   until: cloudera_collection_result.rc == 0
   changed_when: "'Nothing to do' not in cloudera_collection_result.stdout"
+  when: >-
+    cloudera_cluster_galaxy_list.rc != 0
+    or 'cloudera.cluster' not in cloudera_cluster_galaxy_list.stdout
 
 - name: Install CM API Python client (cm_client)
   ansible.builtin.import_tasks: install_cm_client_python.yml

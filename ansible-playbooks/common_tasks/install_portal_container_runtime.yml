@@ -1,23 +1,186 @@
 ---
-- name: Install Docker engine (RHEL family)
+# Docker Engine + Compose for deployment portal stacks (RHEL: Docker CE, not podman-docker shim).
+# Prefer: docker-compose-plugin → Compose v2 binary → pip docker-compose (v1 CLI).
+
+- name: Add Docker CE stable repository (RHEL family)
+  ansible.builtin.yum_repository:
+    name: docker-ce-stable
+    description: Docker CE Stable - $basearch
+    baseurl: >-
+      https://download.docker.com/linux/rhel/{{ ansible_distribution_major_version }}/$basearch/stable
+    enabled: true
+    gpgcheck: true
+    gpgkey: https://download.docker.com/linux/rhel/gpg
+  when:
+    - ansible_os_family == 'RedHat'
+    - portal_docker_use_ce | default(true) | bool
+
+# RHEL AppStream podman-docker provides a virtual "docker" package that conflicts with docker-ce.
+- name: Remove podman-docker shim before Docker CE install (RHEL family)
   ansible.builtin.package:
+    name: podman-docker
+    state: absent
+  when:
+    - ansible_os_family == 'RedHat'
+    - portal_docker_use_ce | default(true) | bool
+
+- name: Install Docker CE engine and Compose plugin (RHEL family)
+  ansible.builtin.dnf:
     name:
-      - docker
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
       - docker-compose-plugin
     state: present
-  when: ansible_os_family == 'RedHat'
+    disable_gpg_check: false
+    allowerasing: true
+  when:
+    - ansible_os_family == 'RedHat'
+    - portal_docker_use_ce | default(true) | bool
+  register: portal_docker_ce_install
+
+- name: Install legacy Docker RPM when Docker CE is disabled (RHEL family)
+  ansible.builtin.package:
+    name: docker
+    state: present
+  when:
+    - ansible_os_family == 'RedHat'
+    - not (portal_docker_use_ce | default(true) | bool)
+
+- name: Install Docker Compose plugin package (RHEL family, legacy docker RPM path)
+  ansible.builtin.package:
+    name: docker-compose-plugin
+    state: present
+  when:
+    - ansible_os_family == 'RedHat'
+    - not (portal_docker_use_ce | default(true) | bool)
+  register: portal_compose_plugin_pkg
+  failed_when: false
 
 - name: Install Docker engine (Debian family)
   ansible.builtin.apt:
-    name:
-      - docker.io
-      - docker-compose-plugin
+    name: docker.io
     state: present
     update_cache: true
   when: ansible_os_family == 'Debian'
+
+- name: Install Docker Compose plugin package (Debian family)
+  ansible.builtin.apt:
+    name: docker-compose-plugin
+    state: present
+    update_cache: true
+  when: ansible_os_family == 'Debian'
+  register: portal_compose_plugin_pkg
+  failed_when: false
 
 - name: Enable and start Docker
   ansible.builtin.systemd:
     name: docker
     state: started
     enabled: true
+  register: portal_docker_start
+
+- name: Fail when Docker daemon unit is missing (RHEL podman-docker shim)
+  ansible.builtin.fail:
+    msg: >-
+      Docker service is not available on {{ inventory_hostname }}.
+      On RHEL, the 'docker' package is a Podman CLI shim without docker.service.
+      Keep portal_docker_use_ce: true (default) so Docker CE is installed from download.docker.com
+      (podman-docker is removed automatically when present), or install docker-ce manually
+      after `dnf remove podman-docker` and ensure egress to Docker's repository.
+  when:
+    - portal_docker_start is failed
+    - "'Could not find the requested service docker' in (portal_docker_start.msg | default(''))"
+
+- name: Fail when Docker daemon cannot start
+  ansible.builtin.fail:
+    msg: "Docker failed to start on {{ inventory_hostname }}: {{ portal_docker_start.msg | default('unknown error') }}"
+  when: portal_docker_start is failed
+
+- name: Probe Docker Compose v2 plugin
+  ansible.builtin.command:
+    cmd: docker compose version
+  register: portal_compose_v2_probe
+  changed_when: false
+  failed_when: false
+
+- name: Use Docker Compose v2 for portal stacks
+  ansible.builtin.set_fact:
+    deployment_portal_compose_argv: ['docker', 'compose']
+  when: portal_compose_v2_probe.rc == 0
+
+- name: Ensure Docker CLI plugins directory exists (Compose binary fallback)
+  ansible.builtin.file:
+    path: /usr/local/lib/docker/cli-plugins
+    state: directory
+    mode: "0755"
+  when: deployment_portal_compose_argv is not defined
+
+- name: Set Docker Compose v2 binary architecture
+  ansible.builtin.set_fact:
+    portal_docker_compose_arch: >-
+      {{
+        'aarch64'
+        if ansible_architecture | default('x86_64') in ['aarch64', 'arm64']
+        else 'x86_64'
+      }}
+  when: deployment_portal_compose_argv is not defined
+
+- name: Install Docker Compose v2 CLI plugin (binary fallback)
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/docker/compose/releases/download/v{{ portal_docker_compose_version }}/docker-compose-linux-{{ portal_docker_compose_arch }}
+    dest: /usr/local/lib/docker/cli-plugins/docker-compose
+    mode: "0755"
+  when: deployment_portal_compose_argv is not defined
+  register: portal_compose_binary_install
+  failed_when: false
+
+- name: Probe Docker Compose v2 after binary fallback
+  ansible.builtin.command:
+    cmd: docker compose version
+  register: portal_compose_v2_probe_after_binary
+  changed_when: false
+  failed_when: false
+  when: deployment_portal_compose_argv is not defined
+
+- name: Use Docker Compose v2 after binary fallback
+  ansible.builtin.set_fact:
+    deployment_portal_compose_argv: ['docker', 'compose']
+  when:
+    - deployment_portal_compose_argv is not defined
+    - portal_compose_v2_probe_after_binary is defined
+    - portal_compose_v2_probe_after_binary.rc == 0
+
+- name: Install docker-compose via pip (Compose v1 CLI fallback)
+  ansible.builtin.pip:
+    name: docker-compose
+    state: present
+    executable: "{{ ansible_playbook_python | default(ansible_python_interpreter | default('pip3')) }}"
+  when:
+    - deployment_portal_compose_argv is not defined
+    - portal_compose_pip_fallback | default(true) | bool
+
+- name: Probe docker-compose v1 after pip
+  ansible.builtin.command:
+    cmd: docker-compose version
+  register: portal_compose_v1_probe
+  changed_when: false
+  failed_when: false
+  when: deployment_portal_compose_argv is not defined
+
+- name: Use pip docker-compose (v1) for portal stacks
+  ansible.builtin.set_fact:
+    deployment_portal_compose_argv: ['docker-compose']
+  when:
+    - deployment_portal_compose_argv is not defined
+    - portal_compose_v1_probe is defined
+    - portal_compose_v1_probe.rc == 0
+
+- name: Fail when no Docker Compose CLI is available
+  ansible.builtin.fail:
+    msg: >-
+      Neither 'docker compose' (v2) nor 'docker-compose' (pip v1) is available on {{ inventory_hostname }}.
+      Ensure Docker CE is running, allow GitHub for the Compose v2 binary, or
+      set portal_compose_pip_fallback: true and ensure pip can reach PyPI.
+  when: deployment_portal_compose_argv is not defined

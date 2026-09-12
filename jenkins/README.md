@@ -18,7 +18,13 @@ Declarative pipeline with **checkbox stage selection**, **configurable validatio
 3. Run the job — it aborts immediately after reloading the parameter UI
 4. Run again with your desired stage checkboxes
 
-Parameter **help text** (stages, validation checks, security group, `ALLOWED_PORTS`, `CLDR_EIP_NAME`, etc.) lives in the Jenkinsfile `description` / `descriptionPropertyValue` fields and appears on **Build with Parameters** after a refresh. Stage and validation checkboxes also show a **per-option summary** next to each name via Extended Choice `descriptionPropertyValue`.
+Parameter help after **REFRESH_JENKINSFILE=YES**:
+
+- **`PIPELINE_STAGES_REFERENCE`** — multiline **text** parameter (default = full stage table). Always visible on **Build with Parameters**; use this when Extended Choice long descriptions do not show in your Jenkins theme.
+- **`PIPELINE_STAGES`** — short checkbox help line + per-option hints via Extended Choice `descriptionPropertyValue` (plugin-dependent; some UIs only show these in job configuration).
+- Other parameters — `description` fields on boolean/string/choice params (security group, `ALLOWED_PORTS`, etc.).
+
+Each run also prints a **quick reference** in the console at **Resolve Stages** (see `echoPipelineStagesQuickReference` in the Jenkinsfile).
 
 ## Default parameter values
 
@@ -40,23 +46,28 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 
 If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALIDATE,TERRAFORM`.
 
-**Legacy token:** Older jobs may still submit `CDH_INSTALL` instead of **`CDH_BASE`**. Current Jenkinsfiles map `CDH_INSTALL` → `CDH_BASE` automatically; reload parameters with **REFRESH_JENKINSFILE=YES** so the checkbox label matches. If every deploy stage is skipped but the build is green, check the log for `Resolved stages: validate=false, terraform=false, ansible=false` — that usually means an unrecognized stage name.
+**Legacy token:** Saved jobs may still submit **`CDH_BASE`** — it expands to `CM_TLS_KRB_LDAP` + `CDH_INSTALL`. Run **REFRESH_JENKINSFILE=YES** after Jenkinsfile changes to reload checkboxes.
+
+**Migrate old `PREREQS,IDENTITY,CM_INSTALL,CDH_BASE`:** check **`PREREQS,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL`**. Add **`VALIDATE,TERRAFORM`** if you still provision EC2 (old string omitted them). **`PORTAL`** is auto-inserted when **`DEPLOYMENT_PORTAL_ENABLED=true`** (default) and you select identity/CM/CDH stages without checking PORTAL.
 
 ## Stage checkboxes (`PIPELINE_STAGES`)
 
-Select one or more of the **seven** stage checkboxes: `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CDH_BASE`, `ECS_INSTALL`. The pipeline always runs selected stages in this order (not checkbox order):
+Select one or more stage checkboxes. Fixed run order (each Ansible step is its own Jenkins stage in the UI):
 
-`VALIDATE` → `TERRAFORM` → `PREREQS` → `IDENTITY` → `CM_INSTALL` → `CDH_BASE` → `ECS_INSTALL`
+`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL`
 
 | Checkbox | What runs |
 |---|---|
 | `VALIDATE` | `validate-prereqs.sh` — only checks selected in `VALIDATION_CHECKS` (no deploy) |
 | `TERRAFORM` | EC2/VPC/SG/EIP via Terraform; `inventory.ini` + `.pem` key |
-| `PREREQS` | Ansible **phase 1** — OS prereqs, Java, Python, firewall, SSH bootstrap |
-| `IDENTITY` | Ansible **phase 2** — FreeIPA or Active Directory (from inventory) |
+| `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 |
+| `PORTAL` | Bootstrap Caddy/pgAdmin/index (`10`); before CM when `DEPLOYMENT_PORTAL_ENABLED` |
+| `IDENTITY` | Ansible **phase 2** — FreeIPA or AD; refreshes portal index (`35`) |
 | `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
-| `CDH_BASE` | Ansible **phase 4** — Auto-TLS, Kerberos, CMS, LDAP, CDH base cluster |
-| `ECS_INSTALL` | Ansible **phase 5** — ECS / Data Services (requires base cluster) |
+| `CM_TLS_KRB_LDAP` | Auto-TLS, Kerberos, CMS, LDAP (27–30); portal refresh |
+| `CDH_INSTALL` | CDH base cluster (`31_setup_base_cluster.yml`); portal refresh |
+| `MONITORING` | `32_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
+| `ECS_INSTALL` | ECS cluster (`33`); optional `34_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` |
 
 **Your example:** `VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL` = validate → provision VMs → Ansible phases 1–3 (through Cloudera Manager install).
 
@@ -69,8 +80,8 @@ Select one or more of the **seven** stage checkboxes: `VALIDATE`, `TERRAFORM`, `
 | Prerequisites only | `VALIDATE`, `PREREQS` |
 | CM install only | `VALIDATE`, `CM_INSTALL` |
 | Terraform + CM | `VALIDATE`, `TERRAFORM`, `CM_INSTALL` |
-| CM + CDH base | `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CDH_BASE` |
-| Full stack (through ECS) | `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CDH_BASE`, `ECS_INSTALL` |
+| CM + CDH base | `VALIDATE`, `TERRAFORM`, `PREREQS`, `PORTAL`, `IDENTITY`, `CM_INSTALL`, `CM_TLS_KRB_LDAP`, `CDH_INSTALL` |
+| Full stack (through ECS) | All of the above + `MONITORING`, `ECS_INSTALL` |
 
 Ansible-only stages (no `TERRAFORM`) require existing `ansible-playbooks/inventory.ini`.
 
@@ -127,6 +138,21 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `CM_REPO_USERNAME` | Optional archive.cloudera.com username (empty = skip; no early validation failure) |
 | `CM_REPO_PASSWORD` | Optional archive.cloudera.com password (empty = skip) |
 | `CM_LICENSE_CONTENT` | Optional multiline Cloudera license file content when no `*license*` file on the agent (empty = trial or agent file) |
+| `MONITORING_STACK_ENABLED` | When checked (default), sets Ansible `monitoring_stack_enabled: true` for playbook `28` (Grafana/Prometheus/Alertmanager/cAdvisor). Uncheck to skip. Overrides `monitoring_stack_enabled` in `ANSIBLE_GROUP_VARS_YAML` if both are set. |
+
+**Deployment portal (playbook 10) and CM verify (25)** use the same three URL verification tiers (detail: `ansible-playbooks/docs/RUNBOOK.md` § Service URL verification tiers):
+
+| Tier | Checks | Jenkins typical outcome |
+|---|---|---|
+| **A** (service host, **required**) | Ops: `127.0.0.1:8088` + Caddy **Host** vhosts (portal, CM, IPA, Grafana). CM: `127.0.0.1:7180` on `cldr-mngr` | Must pass or PORTAL / CM verify fails |
+| **B** (Ansible controller, **public** profile) | GET printed external URLs (portal, CM, Grafana, IPA, ECS) from the agent | **`warn`** if SG blocks ports (`deployment_external_url_verify: warn`, default on Jenkins); per-service `deployment_cm_external_url_verify`, etc. |
+| **C** (ops/CM host, optional) | Hairpin to own public EIP | Warn only — does not fail |
+
+Private-IP URLs on the index work only inside the VPC. Ensure SG allows **8088**, **5050**, **7180**/**7183**, etc. from Jenkins/office CIDRs so Tier **B** succeeds. `access-urls.txt` (`build-access-urls.sh`) lists URLs for email; Ansible logs include `CDP_ACCESS_URLS_*` and Tier **B** warnings.
+
+**Control-plane reachability (Jenkins vs VPN / bare metal):** The Jenkins agent has **no route** to VPC `10.x` / `172.31.x` addresses. `run-ansible.sh` exports `ANSIBLE_CONTROL_VIA_JENKINS=1`; `jenkins_override.yml` sets `ansible_control_reachability: public` so CM API and portal verify never treat inventory `private_ip` as the controller target (probes delegate to `cldr-mngr` at `127.0.0.1` where needed). For **bare metal** or **in-VPC/VPN** automation runners, use default `auto` or `ansible_control_reachability: private` in `ANSIBLE_GROUP_VARS_YAML` — Tier **B** is skipped when the effective profile is not `public`.
+
+With **`caddy_vhost_enabled`**, the FreeIPA link uses a lab hostname (`ipa.<ops-ip-dashed>.<base>`). Caddy redirects `/` to `/ipa/ui` and proxies **HTTP** to `<ipaserver-fqdn>` with **`Host`** and **`Referer`** upstream (cloudera-labs/openshift pattern). Playbook **10** (PORTAL stage) verifies tiers after sync; Tier **A** failures include Caddy log hints in the Ansible output.
 
 ## Ansible group_vars override (`ANSIBLE_GROUP_VARS_YAML`)
 
@@ -161,6 +187,7 @@ Success/failure emails (Email Extension plugin) include:
 
 - **SSH private key** (`*.pem`) attached from `jenkins/artifacts/`
 - **`cm-access.txt`** — CM HTTP/HTTPS URL, admin username/password, SSH example
+- **`access-urls.txt`** — Portal, pgAdmin, Grafana, CM direct vs Caddy lab URLs (also embedded in build summary and email)
 - Build summary, inventory, and stage logs
 
 Set `NOTIFICATION_EMAIL` or rely on `BUILD_USER_EMAIL`. CM credentials come from `group_vars/all.yml` (and Jenkins `ANSIBLE_GROUP_VARS_YAML` overrides when set).
@@ -171,6 +198,7 @@ Set `NOTIFICATION_EMAIL` or rely on `BUILD_USER_EMAIL`. CM credentials come from
 |---|---|
 | `build-summary.txt` | Stages, instance counts, inventory |
 | `cm-access.txt` | SSH PEM path, CM URL, CM login (after CM_INSTALL) |
+| `access-urls.txt` | Portal / monitoring / Caddy / CM URLs (from Ansible `CDP_ACCESS_URLS_*` log block or inventory) |
 | `terraform-*.log` | Terraform output |
 | `ansible-*-phaseN.log` | Per-phase Ansible output |
 | `validate-*.log` | Validation output |
@@ -404,7 +432,7 @@ keypair_name_suffix: pvc-new-keypair
 
 | Symptom | Fix |
 |---|---|
-| `No license file found` | Place `*license*` in `ansible-playbooks/`, or let CM use trial license (`21_setup_cm_license.yml`) |
+| `No license file found` | Place `*license*` in `ansible-playbooks/`, or let CM use trial license (`26_setup_cm_license.yml`) |
 | CM repo download fails | Place `*info.txt` in `ansible-playbooks/`, or set `cm_repo_username` / `cm_repo_password` in `group_vars/all.yml` |
 
 ## Local testing

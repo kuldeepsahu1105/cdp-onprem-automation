@@ -1,0 +1,19 @@
+---
+- name: Load deployment portal context from localhost
+  ansible.builtin.set_fact:
+    deployment_portal_context: "{{ hostvars['localhost']['deployment_portal_context'] }}"
+    deployment_portal_anchor_fqdn: "{{ hostvars['localhost']['deployment_portal_anchor_fqdn'] }}"
+    caddy_vhost_urls: "{{ hostvars['localhost']['caddy_vhost_urls'] | default({}) }}"
+    caddy_vhost_urls_external: "{{ hostvars['localhost']['caddy_vhost_urls_external'] | default({}) }}"
+    caddy_vhost_urls_vpc: "{{ hostvars['localhost']['caddy_vhost_urls_vpc'] | default({}) }}"
+    deployment_portal_cm_fqdn: "{{ hostvars['localhost']['deployment_portal_cm_fqdn'] }}"
+    deployment_portal_cm_upstream_host: "{{ hostvars['localhost']['deployment_portal_cm_upstream_host'] | default('') }}"
+    deployment_portal_ops_public_ip: "{{ hostvars['localhost']['deployment_portal_ops_public_ip'] | default('') }}"
+    deployment_portal_ops_private_ip: "{{ hostvars['localhost']['deployment_portal_ops_private_ip'] | default('') }}"
+    deployment_portal_ipa_fqdn: "{{ hostvars['localhost']['deployment_portal_ipa_fqdn'] | default('') }}"
+    deployment_portal_has_ipa: "{{ hostvars['localhost']['deployment_portal_has_ipa'] | default(false) }}"
+    deployment_portal_ecs_present: "{{ hostvars['localhost']['deployment_portal_ecs_present'] | default(false) }}"
+    cm_caddy_public_url: "{{ hostvars['localhost']['cm_caddy_public_url'] | default('') }}"
+    pgadmin_caddy_public_url: "{{ hostvars['localhost']['pgadmin_caddy_public_url'] | default('') }}"
+    ecs_caddy_console_url: "{{ hostvars['localhost']['ecs_caddy_console_url'] | default('') }}"
+    cm_frontend_url_effective: "{{ hostvars['localhost']['cm_frontend_url_effective'] | default('') }}"

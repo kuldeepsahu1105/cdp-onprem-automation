@@ -6,9 +6,8 @@ Automation for deploying and cleaning up Cloudera Private Cloud on **RHEL** and 
 
 ```bash
 cd ansible-playbooks
-ansible-galaxy collection install -r requirements.yml
-ansible-playbook -i inventory.ini 00_detect_identity.yml
-DEPLOY_PHASE=all ./pvc_setup.sh
+./run-playbook.sh 00_detect_identity.yml    # or: ansible-playbook … (imports 00_ensure_collections)
+DEPLOY_PHASE=all ./pvc_setup.sh             # or repo clone_and_run_pvc_automation.sh
 ```
 
 For the full deployment sequence, identity scenarios, and cleanup steps, see the runbook below.
@@ -18,6 +17,7 @@ For the full deployment sequence, identity scenarios, and cleanup steps, see the
 | Document | Purpose |
 |---|---|
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | **How to run** — step-by-step deployment, FreeIPA/AD scenarios, cleanup, wrapper scripts |
+| [docs/RUN_ORDER.md](docs/RUN_ORDER.md) | **Run order** — Jenkins / `pvc_setup.sh` sequence (unique numbers 10–35) |
 | [docs/REFERENCE.md](docs/REFERENCE.md) | **Detailed reference** — every playbook, variable, inventory group, DNS behavior, repo modes, cleanup toggles |
 
 ## OS and repository support
@@ -25,7 +25,7 @@ For the full deployment sequence, identity scenarios, and cleanup steps, see the
 | Component | RHEL 8/9 | Ubuntu 22.04/24.04 |
 |---|---|---|
 | Prerequisites (`00`–`09`) | Yes | Yes |
-| CM install (`19_start_cm`) | Yes | Yes |
+| CM install (`24_start_cm`) | Yes | Yes |
 | Public CM repo | Yes | Yes |
 | Internal CM mirror | RPM + createrepo | apt `.deb` mirror |
 | CDH parcels / base cluster | `el8` / `el9` | `jammy` / `noble` |
@@ -54,10 +54,10 @@ Spark is bundled in the CDH parcel for `>= 7.3.1` — separate SPARK3 download i
 | Phase | Playbooks | Entry point |
 |---|---|---|
 | 1 — Prerequisites | `00`–`09` | `DEPLOY_PHASE=1 ./pvc_setup.sh` |
-| 2 — Identity & DNS | `00_detect`, `10_identity_setup` | `DEPLOY_PHASE=2 ./pvc_setup.sh` |
-| 3 — Cloudera Manager | `16`–`21` | `DEPLOY_PHASE=3 ./pvc_setup.sh` |
-| 4 — CMS & base cluster | `22`–`26` | `DEPLOY_PHASE=4 ./pvc_setup.sh` |
-| 5 — ECS (Data Services) | `27` | `DEPLOY_PHASE=5 ./pvc_setup.sh` |
+| 2 — Identity & DNS | `00_detect`, `11_identity_setup` | `DEPLOY_PHASE=2 ./pvc_setup.sh` |
+| 3 — Cloudera Manager | `20`–`26` | `DEPLOY_PHASE=3 ./pvc_setup.sh` |
+| 4 — TLS, CMS & base cluster | `27`–`31` | `DEPLOY_PHASE=4 ./pvc_setup.sh` |
+| 5 — ECS (Data Services) | `33` (+ optional `34`) | `DEPLOY_PHASE=5 ./pvc_setup.sh` |
 | Cleanup | `99` | `99_cleanup.yml` |
 
 **Dry run:** `DRY_RUN=true ./pvc_setup.sh` or `./pvc_setup.sh --dry-run` — runs Ansible with `--check --diff`. Terraform wrapper: `DRY_RUN=true ./clone_and_run_terraform.sh` (plan only).

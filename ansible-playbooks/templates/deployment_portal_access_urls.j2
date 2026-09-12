@@ -1,0 +1,47 @@
+{# YAML access URLs — cloud (public + VPC) or private (bare metal / no public IP) #}
+{% set http_port = deployment_portal_http_port | int %}
+{% set pg_port = deployment_portal_pgadmin_host_port | int %}
+{% macro p() %}{% if http_port != 80 %}:{{ http_port }}{% endif %}{% endmacro %}
+{% macro pg() %}{% if pg_port != 80 %}:{{ pg_port }}{% endif %}{% endmacro %}
+{% set host_pub = deployment_portal_ops_public_ip %}
+{% set host_priv = deployment_portal_ops_private_ip %}
+{% set host_client = deployment_portal_ops_client_host %}
+profile: {{ deployment_portal_access_profile_effective }}
+environment: {{ deployment_portal_effective_env }}
+{% if deployment_portal_access_profile_effective == 'private' %}
+primary:
+  audience: "Private network / bare metal — use DNS (FreeIPA/AD) or management IP; no public internet required"
+  host: "{{ host_client }}"
+  fqdn: "{{ deployment_portal_anchor_fqdn }}"
+  management_ip: "{{ host_priv }}"
+  portal: "http://{{ host_client }}{{ p() }}/"
+  pgadmin: "http://{{ host_client }}{{ pg() }}/"
+  grafana: "http://{{ host_client }}{{ p() }}/grafana/"
+  prometheus: "http://{{ host_client }}{{ p() }}/prometheus/"
+  alertmanager: "http://{{ host_client }}{{ p() }}/alertmanager/"
+  cadvisor: "http://{{ host_priv }}:{{ monitoring_cadvisor_host_port }}/"
+external: {}
+vpc: {}
+{% else %}
+primary: {}
+external:
+  audience: "Jenkins agent, laptop, internet (public IP — open SG/EIP ports)"
+  ops_ip: "{{ host_pub }}"
+  fqdn: "{{ deployment_portal_anchor_fqdn }}"
+  portal: "http://{{ host_pub }}{{ p() }}/"
+  pgadmin: "http://{{ host_pub }}{{ pg() }}/"
+  grafana: "http://{{ host_pub }}{{ p() }}/grafana/"
+  prometheus: "http://{{ host_pub }}{{ p() }}/prometheus/"
+  alertmanager: "http://{{ host_pub }}{{ p() }}/alertmanager/"
+  cadvisor: "http://{{ host_pub }}:{{ monitoring_cadvisor_host_port }}/"
+vpc:
+  audience: "Same VPC only (private IP)"
+  ops_ip: "{{ host_priv }}"
+  fqdn: "{{ deployment_portal_anchor_fqdn }}"
+  portal: "http://{{ host_priv }}{{ p() }}/"
+  pgadmin: "http://{{ host_priv }}{{ pg() }}/"
+  grafana: "http://{{ host_priv }}{{ p() }}/grafana/"
+  prometheus: "http://{{ host_priv }}{{ p() }}/prometheus/"
+  alertmanager: "http://{{ host_priv }}{{ p() }}/alertmanager/"
+  cadvisor: "http://{{ host_priv }}:{{ monitoring_cadvisor_host_port }}/"
+{% endif %}

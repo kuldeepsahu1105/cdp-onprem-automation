@@ -1,6 +1,8 @@
 ### ansible-playbook -i inventory.ini 08_prereq_setup_003.yml
 
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Enable Repositories and Install Packages
   hosts: all
   become: yes

@@ -2,6 +2,8 @@
 # vars:
 #
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Tasks for remaining prereq on all the hosts
   hosts: all
   become: yes

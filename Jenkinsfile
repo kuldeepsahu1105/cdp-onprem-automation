@@ -10,31 +10,44 @@ pipeline {
     extendedChoice(
       name: 'PIPELINE_STAGES',
       type: 'PT_CHECKBOX',
-      value: 'VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL,CDH_BASE,ECS_INSTALL',
+      value: 'VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL',
       defaultValue: 'VALIDATE,TERRAFORM',
       multiSelectDelimiter: ',',
-      visibleItemCount: 7,
+      visibleItemCount: 10,
       quoteValue: false,
-      description: '''All available stage checkboxes (pick any combination): VALIDATE, TERRAFORM, PREREQS, IDENTITY, CM_INSTALL, CDH_BASE, ECS_INSTALL.
+      description: 'Stages to run (fixed order). See PIPELINE_STAGES_REFERENCE below for full guide. Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. Run REFRESH_JENKINSFILE=YES after Jenkinsfile changes.',
+      descriptionPropertyValue: '''VALIDATE: prereq checks (VALIDATION_CHECKS),TERRAFORM: EC2/VPC/SG/EIP + inventory,PREREQS: Ansible 01-09,PORTAL: portal bootstrap (10),IDENTITY: FreeIPA/AD phase 2,CM_INSTALL: CM server phase 3,CM_TLS_KRB_LDAP: TLS/Kerberos/LDAP 27-30,CDH_INSTALL: base cluster (31),MONITORING: Grafana/Prom (32),ECS_INSTALL: ECS cluster (33)'''
+    )
+    text(
+      name: 'PIPELINE_STAGES_REFERENCE',
+      defaultValue: '''PIPELINE_STAGES — reference (edit optional; default is documentation)
 
-Fixed run order (not checkbox order): VALIDATE → TERRAFORM → PREREQS → IDENTITY → CM_INSTALL → CDH_BASE → ECS_INSTALL.
+Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL
 
-Examples: through CM only = VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL | add CDH = …,CDH_BASE | full stack = VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL,CDH_BASE,ECS_INSTALL.
+| Checkbox | What runs |
+| VALIDATE | validate-prereqs.sh — only VALIDATION_CHECKS you select |
+| TERRAFORM | run-terraform.sh — plan/apply; writes inventory.ini + PEM |
+| PREREQS | Ansible phase 1 (playbooks 01–09) |
+| PORTAL | Deployment portal bootstrap (10); before CM when portal enabled |
+| IDENTITY | Ansible phase 2 — FreeIPA or AD |
+| CM_INSTALL | Ansible phase 3 — CM repos, Postgres, CM server |
+| CM_TLS_KRB_LDAP | Auto-TLS, Kerberos, CMS, LDAP (27–30) |
+| CDH_INSTALL | CDH base cluster (31_setup_base_cluster.yml) |
+| MONITORING | Monitoring stack (32); needs PORTAL; MONITORING_STACK_ENABLED |
+| ECS_INSTALL | ECS (33) + optional data services when ECS_DATA_SERVICES_DEPLOY_ENABLED |
 
-VALIDATE — Jenkins stage "Validate Prerequisites": runs jenkins/scripts/validate-prereqs.sh using only VALIDATION_CHECKS you checked (TOOLS, AWS_CREDS, TFVARS, etc.). Fails before deploy if a check fails. Does not run Terraform apply or Ansible playbooks.
+Legacy: CDH_BASE (old jobs) expands to CM_TLS_KRB_LDAP + CDH_INSTALL — check those two boxes instead.
 
-TERRAFORM — Jenkins stage "Terraform — Provision EC2": runs jenkins/scripts/run-terraform.sh (plan/apply; DRY_RUN = plan/check only). Provisions VPC/SG/EC2/EIP per parameters; persists state under holautosa; writes ansible-playbooks/inventory.ini and SSH PEM.
+PORTAL auto-run: when DEPLOYMENT_PORTAL_ENABLED=true (default) and you select IDENTITY, CM_INSTALL, CM_TLS_KRB_LDAP, CDH_INSTALL, MONITORING, or ECS without PORTAL, the pipeline inserts PORTAL after PREREQS.
 
-PREREQS — Ansible Deploy phase 1 via run-ansible.sh: OS packages Java Python firewall SSH bootstrap (playbooks 01–18 area). Needs inventory.ini (from TERRAFORM or supplied).
+Examples:
+  Validate + provision only: VALIDATE,TERRAFORM
+  Through CM (greenfield): VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL (+ PORTAL auto if portal enabled)
+  Old PREREQS,IDENTITY,CM_INSTALL,CDH_BASE equivalent: PREREQS,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL (+ VALIDATE,TERRAFORM if you still provision VMs; + PORTAL auto when DEPLOYMENT_PORTAL_ENABLED)
 
-IDENTITY — Ansible phase 2: FreeIPA server/client or Active Directory client (auto from inventory groups).
-
-CM_INSTALL — Ansible phase 3: CM repos PostgreSQL CM server and agents license or trial.
-
-CDH_BASE — Ansible phase 4: Cloudera Manager Auto-TLS Kerberos CMS LDAP sync and CDH base cluster deploy (API/parcels); needs CM_INSTALL.
-
-ECS_INSTALL — Ansible phase 5: ECS / Cloudera Data Services cluster install and config; needs CDH_BASE and inventory.''',
-      descriptionPropertyValue: '''VALIDATE stage: validate-prereqs.sh + your VALIDATION_CHECKS only; no TF/Ansible,TERRAFORM stage: run-terraform.sh AWS infra; inventory.ini + PEM,PREREQS: Ansible phase 1 OS/Java/Python/SSH prereqs,IDENTITY: Ansible phase 2 FreeIPA or AD,CM_INSTALL: Ansible phase 3 CM Postgres agents license,CDH_BASE: Ansible phase 4 TLS Kerberos CMS CDH base,ECS_INSTALL: Ansible phase 5 ECS (needs CDH_BASE)'''
+Details: jenkins/README.md
+''',
+      description: 'Read-only stage guide (shown on Build with Parameters). Leave default or copy from here; does not affect the pipeline unless you rely on it for notes.'
     )
     extendedChoice(
       name: 'VALIDATION_CHECKS',
@@ -104,9 +117,9 @@ Checked (true): inbound all traffic from 0.0.0.0/0 (public internet). ALLOWED_PO
     )
     string(
       name: 'ALLOWED_PORTS',
-      defaultValue: '[22,443,80,7180,7183,7182]',
+      defaultValue: '[22,443,80,7180,7183,7182,8088,5050,8089]',
       description: '''Not applied to Terraform security group rules (ALLOW_ALL true or false). Ingress is always all traffic from ALLOWED_CIDRS or 0.0.0.0/0; changing this list does not open or close individual TCP ports.
-Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S), 7180 CM UI, 7182/7183 agents/API. Need port-restricted rules only? Use SG_MODE=USE_EXISTING and manage the SG in AWS, or customize the security-group Terraform module.'''
+Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/7182/7183 CM; 8088 Caddy deployment portal (ops host, usually ipaserver); 5050 pgAdmin; 8089 cAdvisor. CREATE_NEW SG with ALLOW_ALL=false already allows all ports from ALLOWED_CIDRS. USE_EXISTING SG: ensure those ports are open from Jenkins/office CIDRs.'''
     )
     string(
       name: 'CLDR_EIP_NAME',
@@ -138,8 +151,9 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
 # ipaserver_domain: cldrsetup.local
 # cdh_version: "7.3.2.10000"
 # ecs_pvc_ds_version: "1.5.5-h3300"
+# monitoring_stack_enabled: false   # optional — prefer MONITORING_STACK_ENABLED checkbox above
 ''',
-      description: 'Ansible-only YAML (allowed keys only): domain, stack versions, java/postgres/jdbc/psycopg, passwords. Not full all.yml — see jenkins/ansible-group-vars-allowed-keys.yaml'
+      description: 'Ansible-only YAML (allowed keys only): domain, stack versions, java/postgres/jdbc/psycopg, passwords. Not full all.yml — see jenkins/ansible-group-vars-allowed-keys.yaml. Monitoring: use MONITORING_STACK_ENABLED checkbox (wins over textarea).'
     )
     string(name: 'CM_REPO_USERNAME', defaultValue: '', description: 'Optional archive.cloudera.com username (empty = all.yml, *info.txt, or skip)')
     password(name: 'CM_REPO_PASSWORD', defaultValue: '', description: 'Optional archive.cloudera.com password (empty = all.yml, *info.txt, or skip)')
@@ -147,6 +161,21 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
       name: 'CM_LICENSE_CONTENT',
       defaultValue: '',
       description: 'Optional Cloudera license file content (multiline). Used when no *license* file on agent. Empty = trial or existing file on agent.'
+    )
+    booleanParam(
+      name: 'MONITORING_STACK_ENABLED',
+      defaultValue: true,
+      description: 'Deploy Grafana/Prometheus (Ansible MONITORING stage / 32_setup_monitoring_stack.yml). Requires PORTAL stage first. Sets monitoring_stack_enabled.'
+    )
+    booleanParam(
+      name: 'DEPLOYMENT_PORTAL_ENABLED',
+      defaultValue: true,
+      description: 'Bootstrap portal before CM (10_setup_deployment_portal). Index is refreshed incrementally after Identity, CM, TLS, CDH, monitoring, and ECS (35_refresh in each Ansible phase).'
+    )
+    booleanParam(
+      name: 'ECS_DATA_SERVICES_DEPLOY_ENABLED',
+      defaultValue: false,
+      description: 'Run 34_setup_ecs_data_services.yml after ECS phase 5 when checked. Requires ecs_control_plane_url and API access key in ANSIBLE_GROUP_VARS_YAML (create key in ECS console first).'
     )
   }
 
@@ -159,9 +188,13 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
 
   environment {
     LANG = 'C.UTF-8'
-    FORCE_COLOR = '1'
-    UI_COLOR = '1'
+    LC_ALL = 'C.UTF-8'
+    UI_ASCII = '1'
+    // Wrapper UI stays plain ASCII; Ansible colors go to console (ansiColor) — artifact logs strip ANSI.
+    FORCE_COLOR = '0'
+    UI_COLOR = '0'
     ANSIBLE_FORCE_COLOR = '1'
+    PY_COLORS = '1'
     REPO_ROOT = "${WORKSPACE}"
     LOG_DIR = "${WORKSPACE}/jenkins/artifacts"
     HOL_AUTO_EXEC_DIR = "/home/holautosa/HOL_AUTO_EXEC_DIR"
@@ -201,6 +234,10 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
     CREDENTIALS_USER = "${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}"
+    ANSIBLE_CONTROL_VIA_JENKINS = '1'
+    CM_API_PREFER_PRIVATE_IP = 'false'
+    ANSIBLE_CONTROLLER_OUTSIDE_VPC = 'true'
+    DEPLOYMENT_PORTAL_URL_VERIFY_SKIP_VPC = 'true'
     PIPELINE_STAGES = "${params.PIPELINE_STAGES?.trim() ?: ''}"
     VALIDATION_CHECKS = "${params.VALIDATION_CHECKS?.trim() ?: ''}"
     BUILD_RESULT = 'IN_PROGRESS'
@@ -241,6 +278,7 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
           env.RUN_TERRAFORM = cfg.runTerraform
           env.RUN_ANSIBLE = cfg.runAnsible
           env.ANSIBLE_PHASES = cfg.ansiblePhases
+          env.SELECTED_ANSIBLE_STAGES = cfg.selectedAnsibleStages
           env.REQUIRE_INVENTORY = cfg.requireInventory
           env.VALIDATE_INVENTORY = cfg.validateInventory
           env.PIPELINE_ACTION = cfg.summaryLabel
@@ -248,6 +286,8 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
           env.REQUIRE_ANSIBLE = cfg.runAnsible
           env.REQUIRE_TERRAFORM = cfg.runTerraform
           echo "Resolved stages: validate=${cfg.runValidate}, terraform=${cfg.runTerraform}, ansible=${cfg.runAnsible}, phases=${cfg.ansiblePhases}"
+          echo "Ansible stage order: ${cfg.selectedAnsibleStages ?: '(none)'}"
+          echoPipelineStagesQuickReference()
           if (cfg.runValidate != 'true' && cfg.runTerraform != 'true' && cfg.runAnsible != 'true') {
             error("No pipeline work resolved from PIPELINE_STAGES='${params.PIPELINE_STAGES}'. Use valid checkboxes (e.g. CDH_BASE not CDH_INSTALL) or REFRESH_JENKINSFILE=YES.")
           }
@@ -319,61 +359,37 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
       }
     }
 
-    stage('Ansible Deploy') {
-      when { expression { return env.RUN_ANSIBLE == 'true' } }
-      steps {
-        script {
-          def phases = env.ANSIBLE_PHASES.split(',').findAll { it?.trim() }
-          writeAnsibleGroupVarsFragmentFile()
-          def licenseFile = writeCmLicenseContentFile()
-          if (ansibleGroupVarsYamlHasKeys(params.ANSIBLE_GROUP_VARS_YAML?.toString())) {
-            def yamlCheck = sh(
-              script: '''
-                set -euo pipefail
-                export ANSIBLE_GROUP_VARS_FILE="${ANSIBLE_GROUP_VARS_FILE:?}"
-                python3 jenkins/scripts/render-ansible-group-vars-override.py --validate-only /dev/null
-              ''',
-              returnStatus: true,
-              env: [
-                ANSIBLE_GROUP_VARS_FILE: "${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml",
-              ],
-            )
-            if (yamlCheck != 0) {
-              validationFail('ANSIBLE_GROUP_VARS_YAML is invalid or contains disallowed keys — see jenkins/ansible-group-vars-allowed-keys.yaml')
-            }
-          }
-          // Jenkins password params are hudson.util.Secret — unwrap via GString, not .trim() on Secret.
-          def cmPasswordParam = ''
-          if (params.CM_REPO_PASSWORD) {
-            cmPasswordParam = "${params.CM_REPO_PASSWORD}".trim()
-          }
-          def ansiblePhasePrefix = { String phase, String licensePath ->
-            """
-              set -euo pipefail
-              export DEPLOY_PHASE='${phase}'
-              export REQUIRE_INVENTORY=true
-              export ANSIBLE_GROUP_VARS_FILE='${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml'
-              export CM_REPO_USERNAME='${shellEscape(params.CM_REPO_USERNAME?.trim())}'
-              export LICENSE_FILE='${licensePath ? shellEscape(licensePath) : ''}'
-              export CM_LICENSE_CONTENT_FILE='${licensePath ? shellEscape(licensePath) : ''}'
-            """
-          }
-          def runAnsiblePhase = { String phase ->
-            echo "Running Ansible deploy phase ${phase}"
-            def prefix = ansiblePhasePrefix(phase, licenseFile ?: '')
-            if (cmPasswordParam) {
-              withEnv(["CM_REPO_PASSWORD=${cmPasswordParam}"]) {
-                sh prefix + './jenkins/scripts/run-ansible.sh'
-              }
-            } else {
-              sh prefix + './jenkins/scripts/run-ansible.sh'
-            }
-          }
-          for (phase in phases) {
-            runAnsiblePhase(phase)
-          }
-        }
-      }
+    stage('Ansible 1 — Prerequisites') {
+      when { expression { return shouldRunAnsibleStage('PREREQS') } }
+      steps { script { runAnsibleDeployPhase('1') } }
+    }
+    stage('Ansible 2 — Deployment Portal (bootstrap)') {
+      when { expression { return shouldRunAnsibleStage('PORTAL') && portalDeployEnabled() } }
+      steps { script { runAnsibleDeployPhase('portal') } }
+    }
+    stage('Ansible 3 — Identity') {
+      when { expression { return shouldRunAnsibleStage('IDENTITY') } }
+      steps { script { runAnsibleDeployPhase('2') } }
+    }
+    stage('Ansible 4 — CM Install') {
+      when { expression { return shouldRunAnsibleStage('CM_INSTALL') } }
+      steps { script { runAnsibleDeployPhase('3') } }
+    }
+    stage('Ansible 5 — CM TLS / Kerberos / LDAP') {
+      when { expression { return shouldRunAnsibleStage('CM_TLS_KRB_LDAP') } }
+      steps { script { runAnsibleDeployPhase('cm_tls') } }
+    }
+    stage('Ansible 6 — CDH Base Cluster') {
+      when { expression { return shouldRunAnsibleStage('CDH_INSTALL') } }
+      steps { script { runAnsibleDeployPhase('cdh') } }
+    }
+    stage('Ansible 7 — Monitoring Stack') {
+      when { expression { return shouldRunAnsibleStage('MONITORING') && monitoringStackEnabled() } }
+      steps { script { runAnsibleDeployPhase('monitoring') } }
+    }
+    stage('Ansible 8 — ECS Cluster') {
+      when { expression { return shouldRunAnsibleStage('ECS_INSTALL') } }
+      steps { script { runAnsibleDeployPhase('ecs') } }
     }
 
     stage('Build Summary') {
@@ -387,6 +403,11 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
             export ANSIBLE_PHASES='${env.ANSIBLE_PHASES ?: ''}'
             ./jenkins/scripts/collect-artifacts.sh
             ./jenkins/scripts/build-summary.sh
+            if [ -f jenkins/artifacts/access-urls.txt ]; then
+              echo '========== CDP access URLs (portal / CM / Caddy) =========='
+              cat jenkins/artifacts/access-urls.txt
+              echo '=========================================================='
+            fi
           """
         }
       }
@@ -532,16 +553,76 @@ def parseSelectedStages(def csv) {
 }
 
 def knownPipelineStages() {
-  return ['VALIDATE', 'TERRAFORM', 'PREREQS', 'IDENTITY', 'CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL']
+  return [
+    'VALIDATE', 'TERRAFORM', 'PREREQS', 'IDENTITY', 'CM_INSTALL',
+    'CM_TLS_KRB_LDAP', 'CDH_INSTALL', 'PORTAL', 'MONITORING', 'ECS_INSTALL', 'CDH_BASE',
+  ]
+}
+
+def orderedAnsibleStageIds() {
+  return [
+    'PREREQS', 'PORTAL', 'IDENTITY', 'CM_INSTALL', 'CM_TLS_KRB_LDAP', 'CDH_INSTALL',
+    'MONITORING', 'ECS_INSTALL',
+  ]
+}
+
+def echoPipelineStagesQuickReference() {
+  echo '''PIPELINE_STAGES quick reference (full table: Build parameter PIPELINE_STAGES_REFERENCE or jenkins/README.md):
+  VALIDATE → prereqs script | TERRAFORM → EC2/inventory | PREREQS → Ansible 01-09 | PORTAL → bootstrap (10)
+  IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → TLS/LDAP | CDH_INSTALL → base cluster (31)
+  MONITORING → (32) | ECS_INSTALL → (33) | Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL
+  PORTAL may auto-insert when DEPLOYMENT_PORTAL_ENABLED and CM/CDH/ECS stages are selected without PORTAL.'''
+}
+
+def ansiblePhaseForStage(String stageId) {
+  def map = [
+    'PREREQS'         : '1',
+    'IDENTITY'        : '2',
+    'CM_INSTALL'      : '3',
+    'PORTAL'          : 'portal',
+    'CM_TLS_KRB_LDAP' : 'cm_tls',
+    'CDH_INSTALL'     : 'cdh',
+    'MONITORING'      : 'monitoring',
+    'ECS_INSTALL'     : 'ecs',
+  ]
+  return map[stageId]
 }
 
 // Legacy Jenkins job UI values (before checkbox rename) and common typos.
 def pipelineStageAliases() {
   return [
-    'CDH_INSTALL': 'CDH_BASE',
-    'CDH'        : 'CDH_BASE',
+    'CDH'        : 'CDH_INSTALL',
     'ECS'        : 'ECS_INSTALL',
   ]
+}
+
+def expandPipelineStageTokens(List stages) {
+  def result = []
+  stages.each { token ->
+    if (token == 'CDH_BASE') {
+      result << 'CM_TLS_KRB_LDAP'
+      result << 'CDH_INSTALL'
+    } else if (!result.contains(token)) {
+      result << token
+    }
+  }
+  return result
+}
+
+def portalDeployEnabled() {
+  return isParamEnabled(params.DEPLOYMENT_PORTAL_ENABLED)
+}
+
+def monitoringStackEnabled() {
+  return isParamEnabled(params.MONITORING_STACK_ENABLED)
+}
+
+def shouldRunAnsibleStage(String stageId) {
+  if (env.RUN_ANSIBLE != 'true') {
+    return false
+  }
+  def selected = (env.SELECTED_ANSIBLE_STAGES ?: '').split(',').collect { it.trim() }.findAll { it }
+  return selected.contains(stageId)
 }
 
 def normalizePipelineStageToken(String token) {
@@ -557,9 +638,9 @@ def effectivePipelineStages(def csv) {
   def stages = parseSelectedStages(csv).collect { normalizePipelineStageToken(it) }
   if (stages.isEmpty()) {
     echo "PIPELINE_STAGES not set — using default: ${defaultPipelineStages()}"
-    return parseSelectedStages(defaultPipelineStages())
+    stages = parseSelectedStages(defaultPipelineStages())
   }
-  return stages
+  return expandPipelineStageTokens(stages)
 }
 
 def effectiveValidationChecks(def csv) {
@@ -573,14 +654,22 @@ def effectiveValidationChecks(def csv) {
 
 def resolvePipelineStages(def stagesCsv, def validationCsv) {
   def stages = effectivePipelineStages(stagesCsv)
-  def ansibleMap = [
-    'PREREQS'    : '1',
-    'IDENTITY'   : '2',
-    'CM_INSTALL' : '3',
-    'CDH_BASE'   : '4',
-    'ECS_INSTALL': '5',
-  ]
-  def ansiblePhases = stages.findAll { ansibleMap.containsKey(it) }.collect { ansibleMap[it] }
+  def ansibleStageIds = orderedAnsibleStageIds().findAll { stages.contains(it) }
+  if (portalDeployEnabled() && !ansibleStageIds.contains('PORTAL')) {
+    def needsPortal = ansibleStageIds.any {
+      it in ['IDENTITY', 'CM_INSTALL', 'CM_TLS_KRB_LDAP', 'CDH_INSTALL', 'MONITORING', 'ECS_INSTALL']
+    }
+    if (needsPortal) {
+      def prereqIdx = ansibleStageIds.indexOf('PREREQS')
+      if (prereqIdx >= 0) {
+        ansibleStageIds = ansibleStageIds[0..prereqIdx] + ['PORTAL'] + ansibleStageIds.drop(prereqIdx + 1)
+      } else {
+        ansibleStageIds = ['PORTAL'] + ansibleStageIds
+      }
+      echo 'INFO: DEPLOYMENT_PORTAL_ENABLED — auto-including PORTAL bootstrap before CM (incremental index refresh in later phases).'
+    }
+  }
+  def ansiblePhases = ansibleStageIds.collect { ansiblePhaseForStage(it) }
   def runTerraform = stages.contains('TERRAFORM') ? 'true' : 'false'
   def runAnsible = ansiblePhases.isEmpty() ? 'false' : 'true'
   def runValidate = stages.contains('VALIDATE') ? 'true' : 'false'
@@ -591,15 +680,63 @@ def resolvePipelineStages(def stagesCsv, def validationCsv) {
   }
   def summary = stages.isEmpty() ? 'none' : stages.join('+')
   return [
-    runValidate      : runValidate,
-    runTerraform     : runTerraform,
-    runAnsible       : runAnsible,
-    ansiblePhases    : ansiblePhases.join(','),
-    requireInventory : requireInventory,
-    validateInventory: requireInventory,
-    validationChecks : validationChecks,
-    summaryLabel     : summary,
+    runValidate           : runValidate,
+    runTerraform            : runTerraform,
+    runAnsible              : runAnsible,
+    ansiblePhases           : ansiblePhases.join(','),
+    selectedAnsibleStages   : ansibleStageIds.join(','),
+    requireInventory        : requireInventory,
+    validateInventory       : requireInventory,
+    validationChecks        : validationChecks,
+    summaryLabel            : summary,
   ]
+}
+
+def runAnsibleDeployPhase(String phase) {
+  writeAnsibleGroupVarsFragmentFile()
+  def licenseFile = writeCmLicenseContentFile()
+  if (ansibleGroupVarsYamlHasKeys(params.ANSIBLE_GROUP_VARS_YAML?.toString())) {
+    def yamlCheck = sh(
+      script: '''
+        set -euo pipefail
+        export ANSIBLE_GROUP_VARS_FILE="${ANSIBLE_GROUP_VARS_FILE:?}"
+        python3 jenkins/scripts/render-ansible-group-vars-override.py --validate-only /dev/null
+      ''',
+      returnStatus: true,
+      env: [
+        ANSIBLE_GROUP_VARS_FILE: "${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml",
+      ],
+    )
+    if (yamlCheck != 0) {
+      validationFail('ANSIBLE_GROUP_VARS_YAML is invalid or contains disallowed keys — see jenkins/ansible-group-vars-allowed-keys.yaml')
+    }
+  }
+  def cmPasswordParam = ''
+  if (params.CM_REPO_PASSWORD) {
+    cmPasswordParam = "${params.CM_REPO_PASSWORD}".trim()
+  }
+  def prefix = """
+    set -euo pipefail
+    export DEPLOY_PHASE='${phase}'
+    export MONITORING_STACK_ENABLED='${params.MONITORING_STACK_ENABLED}'
+    export DEPLOYMENT_PORTAL_ENABLED='${params.DEPLOYMENT_PORTAL_ENABLED}'
+    export ECS_DATA_SERVICES_DEPLOY_ENABLED='${params.ECS_DATA_SERVICES_DEPLOY_ENABLED}'
+    export ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID='${shellEscape(env.ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID ?: '')}'
+    export ECS_IAM_BOOTSTRAP_PRIVATE_KEY='${shellEscape(env.ECS_IAM_BOOTSTRAP_PRIVATE_KEY ?: '')}'
+    export REQUIRE_INVENTORY=true
+    export ANSIBLE_GROUP_VARS_FILE='${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml'
+    export CM_REPO_USERNAME='${shellEscape(params.CM_REPO_USERNAME?.trim())}'
+    export LICENSE_FILE='${licenseFile ? shellEscape(licenseFile) : ''}'
+    export CM_LICENSE_CONTENT_FILE='${licenseFile ? shellEscape(licenseFile) : ''}'
+  """
+  echo "Running Ansible DEPLOY_PHASE=${phase}"
+  if (cmPasswordParam) {
+    withEnv(["CM_REPO_PASSWORD=${cmPasswordParam}"]) {
+      sh prefix + './jenkins/scripts/run-ansible.sh'
+    }
+  } else {
+    sh prefix + './jenkins/scripts/run-ansible.sh'
+  }
 }
 
 def validationFail(String message) {
@@ -669,7 +806,7 @@ def validatePipelineInputs() {
   def known = knownPipelineStages()
   def unknown = stages.findAll { !known.contains(it) }
   if (!unknown.isEmpty()) {
-    validationFail("Unknown PIPELINE_STAGES value(s): ${unknown.join(', ')}. Valid checkboxes: ${known.join(', ')}. Old jobs may still send CDH_INSTALL — use CDH_BASE and run REFRESH_JENKINSFILE=YES to reload the parameter UI.")
+    validationFail("Unknown PIPELINE_STAGES value(s): ${unknown.join(', ')}. Valid checkboxes: ${orderedAnsibleStageIds().plus(['VALIDATE', 'TERRAFORM', 'CDH_BASE']).join(', ')}. Run REFRESH_JENKINSFILE=YES after Jenkinsfile changes.")
   }
 
   def rawStages = parseSelectedStages(params.PIPELINE_STAGES)
@@ -699,7 +836,7 @@ def validatePipelineInputs() {
     validationFail('OWNER must be 64 characters or fewer.')
   }
 
-  if (stages.contains('TERRAFORM') || stages.any { it in ['PREREQS', 'IDENTITY', 'CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL'] }) {
+  if (stages.contains('TERRAFORM') || stages.any { it in orderedAnsibleStageIds() }) {
     if (!owner) {
       echo 'WARN: OWNER not set in Jenkins UI — must be present in tfvars or validation will fail later.'
     }
@@ -775,13 +912,19 @@ def validatePipelineInputs() {
     validationFail("NOTIFICATION_EMAIL '${email}' is not a valid email address.")
   }
 
-  if (stages.contains('ECS_INSTALL') && !stages.contains('CDH_BASE') && !stages.contains('TERRAFORM')) {
-    echo 'WARN: ECS_INSTALL without CDH_BASE — ensure base cluster already exists.'
+  if (stages.contains('ECS_INSTALL') && !stages.contains('CDH_INSTALL') && !stages.contains('CM_TLS_KRB_LDAP') && !stages.contains('TERRAFORM')) {
+    echo 'WARN: ECS_INSTALL without CDH_INSTALL — ensure base cluster already exists.'
   }
   if (stages.contains('CM_INSTALL') && !stages.contains('PREREQS') && !stages.contains('TERRAFORM')) {
     echo 'WARN: CM_INSTALL without PREREQS — ensure prerequisites were applied previously.'
   }
-  def cmStages = ['CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL']
+  if (stages.contains('MONITORING') && !stages.contains('PORTAL')) {
+    echo 'WARN: MONITORING without PORTAL — ensure 10_setup_deployment_portal.yml ran previously.'
+  }
+  if (stages.contains('CM_TLS_KRB_LDAP') && !stages.contains('CM_INSTALL') && !stages.contains('TERRAFORM')) {
+    echo 'WARN: CM_TLS_KRB_LDAP without CM_INSTALL — ensure Cloudera Manager is installed.'
+  }
+  def cmStages = ['CM_INSTALL', 'CM_TLS_KRB_LDAP', 'CDH_INSTALL', 'ECS_INSTALL']
   if (stages.any { it in cmStages }) {
     if (!cmLicenseContentProvided(params.CM_LICENSE_CONTENT?.toString() ?: '')) {
       echo 'INFO: CM_LICENSE_CONTENT empty — CM phase uses agent *license* file or trial license.'
@@ -791,7 +934,7 @@ def validatePipelineInputs() {
       echo 'INFO: CM_REPO_USERNAME empty — archive creds may come from *info.txt or group_vars/all.yml.'
     }
   }
-  if (stages.contains('TERRAFORM') && stages.any { it in ['PREREQS', 'IDENTITY', 'CM_INSTALL', 'CDH_BASE', 'ECS_INSTALL'] } && params.DRY_RUN) {
+  if (stages.contains('TERRAFORM') && stages.any { it in orderedAnsibleStageIds() } && params.DRY_RUN) {
     echo 'INFO: DRY_RUN applies to both Terraform plan and Ansible check mode in this build.'
   }
 
@@ -802,6 +945,7 @@ def archivePipelineArtifacts() {
   def patterns = [
     'jenkins/artifacts/build-summary.txt',
     'jenkins/artifacts/cm-access.txt',
+    'jenkins/artifacts/access-urls.txt',
     'jenkins/artifacts/inventory.ini',
     'jenkins/artifacts/terraform-*.log',
     'jenkins/artifacts/ansible-*.log',
@@ -838,15 +982,21 @@ def sendPipelineEmail(boolean success) {
   def phaseInfo = env.ANSIBLE_PHASES ?: 'n/a'
 
   def attachmentList = []
-  ['build-summary.txt', 'cm-access.txt', "terraform-${env.BUILD_NUMBER}.log", 'inventory.ini', 'error-summary.txt'].each { name ->
+  ['build-summary.txt', 'cm-access.txt', 'access-urls.txt', "terraform-${env.BUILD_NUMBER}.log", 'inventory.ini', 'error-summary.txt'].each { name ->
     if (fileExists("${env.WORKSPACE}/jenkins/artifacts/${name}")) {
       attachmentList << "jenkins/artifacts/${name}"
     }
   }
-  ['1', '2', '3', '4', '5'].each { phase ->
-    def logName = "ansible-${env.BUILD_NUMBER}-phase${phase}.log"
-    if (fileExists("${env.WORKSPACE}/jenkins/artifacts/${logName}")) {
-      attachmentList << "jenkins/artifacts/${logName}"
+  def phaseLogs = sh(
+    script: "ls ${env.WORKSPACE}/jenkins/artifacts/ansible-${env.BUILD_NUMBER}-phase*.log 2>/dev/null || true",
+    returnStdout: true
+  ).trim()
+  if (phaseLogs) {
+    phaseLogs.split('\n').each { path ->
+      def rel = path.replace("${env.WORKSPACE}/", '')
+      if (rel) {
+        attachmentList << rel
+      }
     }
   }
   if (fileExists("${env.WORKSPACE}/ansible-playbooks/inventory.ini")) {
@@ -878,6 +1028,21 @@ def sendPipelineEmail(boolean success) {
     """
   }
 
+  def accessUrlsFile = "${env.WORKSPACE}/jenkins/artifacts/access-urls.txt"
+  def accessUrlsHtml = ''
+  if (fileExists(accessUrlsFile)) {
+    def urlText = readFile(accessUrlsFile).take(6000)
+      .replaceAll('\u001B\\[[0-9;]*[a-zA-Z]', '')
+      .replaceAll('\u001B\\][^\u0007]*(\u0007|\u001B\\\\)', '')
+      .replace('&', '&amp;')
+      .replace('<', '&lt;')
+      .replace('>', '&gt;')
+    accessUrlsHtml = """
+    <h4 style="color:#2E7D32;">Portal, CM, Caddy &amp; Monitoring URLs</h4>
+    <pre style="background:#e8f5e9;padding:12px;border:1px solid #a5d6a7;white-space:pre-wrap;font-size:13px;">${urlText}</pre>
+    """
+  }
+
   emailext(
     to: env.MAIL_TO,
     subject: "${statusIcon} Jenkins ${statusText}: ${env.JOB_NAME} [${env.BUILD_NUMBER}] — ${stageInfo}",
@@ -899,9 +1064,10 @@ def sendPipelineEmail(boolean success) {
     </table>
     ${errorBlock}
     ${cmAccessHtml}
+    ${accessUrlsHtml}
     <h4>Deployment Summary</h4>
     <pre style="background:#fff;padding:12px;border:1px solid #ddd;white-space:pre-wrap;">${summaryText}</pre>
-    <p style="font-size:12px;color:#777;">Attached when available: SSH private key (*.pem), cm-access.txt, build summary, inventory, stage logs.</p>
+    <p style="font-size:12px;color:#777;">Attached when available: SSH private key (*.pem), cm-access.txt, access-urls.txt, build summary, inventory, stage logs.</p>
   </div>
 </body>
 </html>

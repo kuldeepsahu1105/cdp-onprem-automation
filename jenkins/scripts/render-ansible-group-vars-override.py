@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -23,8 +24,65 @@ ENV_TO_VAR = [
     ("CM_REPO_PASSWORD", "cm_repo_password"),
 ]
 
+# Jenkins booleanParam values (applied after textarea; override all.yml and textarea).
+BOOL_ENV_TO_VAR = [
+    ("MONITORING_STACK_ENABLED", "monitoring_stack_enabled"),
+    ("CM_API_PREFER_PRIVATE_IP", "cm_api_prefer_private_ip"),
+    ("ANSIBLE_CONTROLLER_OUTSIDE_VPC", "ansible_controller_outside_vpc"),
+    ("DEPLOYMENT_PORTAL_URL_VERIFY_SKIP_VPC", "deployment_portal_url_verify_skip_vpc"),
+]
+
 # Use Jenkins CM params instead of pasting these into the textarea.
 TEXTAREA_BLOCKED_KEYS = frozenset({"cm_repo_username", "cm_repo_password"})
+
+_RFC1918_HOST = re.compile(
+    r"^(?:10\.|192\.168\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.)"
+)
+
+
+def _running_on_jenkins() -> bool:
+    return bool(os.environ.get("BUILD_NUMBER") or os.environ.get("JENKINS_URL"))
+
+
+def _inventory_first_public_ip(group: str, inventory_path: Path) -> str:
+    if not inventory_path.is_file():
+        return ""
+    in_group = False
+    for raw in inventory_path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            in_group = line[1:-1].strip() == group
+            continue
+        if not in_group:
+            continue
+        for token in line.split():
+            if token.startswith("ansible_host="):
+                host = token.split("=", 1)[1].strip().strip("'\"")
+                if host and not _RFC1918_HOST.match(host):
+                    return host
+        break
+    return ""
+
+
+def _jenkins_controller_defaults() -> dict:
+    """Ansible from Jenkins cannot reach VPC RFC1918 addresses — use public IPs / delegate probes."""
+    if not _running_on_jenkins():
+        return {}
+    defaults: dict = {
+        "ansible_control_reachability": "public",
+        "ansible_controller_outside_vpc": True,
+        "cm_api_prefer_private_ip": False,
+        "deployment_portal_url_verify_skip_vpc": True,
+        "deployment_external_url_verify": "warn",
+        "deployment_portal_external_url_verify": "warn",
+    }
+    inv = REPO_ROOT / "ansible-playbooks" / "inventory.ini"
+    cm_public = _inventory_first_public_ip("cldr-mngr", inv)
+    if cm_public:
+        defaults["cm_api_connect_host"] = cm_public
+    return defaults
 
 
 def _load_allowed_keys() -> frozenset[str]:
@@ -116,7 +174,7 @@ def main() -> int:
 
     out_path = Path(args[0])
     allowed = _load_allowed_keys()
-    overrides: dict = {}
+    overrides: dict = dict(_jenkins_controller_defaults())
 
     for env_key, var_name in ENV_TO_VAR:
         val = os.environ.get(env_key, "").strip()
@@ -126,6 +184,14 @@ def main() -> int:
     textarea = _filter_textarea_overrides(_load_yaml_fragment(), allowed)
     overrides.update(textarea)
     overrides = _coerce_bool_strings(overrides)
+
+    for env_key, var_name in BOOL_ENV_TO_VAR:
+        if env_key not in os.environ:
+            continue
+        raw = os.environ.get(env_key, "").strip().lower()
+        if raw in ("", "auto"):
+            continue
+        overrides[var_name] = raw in ("true", "1", "yes", "on")
 
     if validate_only:
         print(f"[ansible-vars] YAML override keys OK ({len(textarea)} from textarea)")

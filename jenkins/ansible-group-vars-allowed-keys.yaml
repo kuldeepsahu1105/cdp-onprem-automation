@@ -45,10 +45,50 @@ allowed_keys:
   - base_cluster_yarn_nm_vcores
   - ecs_cluster_name
   - deployment_portal_enabled
+  - deployment_portal_host_group
+  - deployment_portal_postgres_host_group
   - deployment_portal_http_port
   - deployment_portal_pgadmin_host_port
+  - deployment_portal_access_profile
+  - deployment_portal_prefer_fqdn_urls
+  - deployment_portal_use_private_network_only
+  - deployment_environment
   - monitoring_stack_enabled
+  - caddy_vhost_enabled
+  - caddy_vhost_public_base
+  - caddy_vhost_dns_mode
+  - autotls_enabled
+  - ansible_control_reachability
+  - cm_api_prefer_private_ip
+  - cm_api_connect_host
+  - cm_api_delegate_probes_to_manager
+  - cm_api_private_reachability_timeout
+  - cm_external_url
+  - cm_apply_caddy_frontend_url
+  - ansible_controller_outside_vpc
+  - deployment_portal_url_verify_skip_vpc
+  - deployment_external_url_verify
+  - deployment_portal_external_url_verify
+  - deployment_service_external_url_verify
+  - deployment_cm_external_url_verify
+  - deployment_grafana_external_url_verify
+  - deployment_pgadmin_external_url_verify
+  - deployment_ipa_external_url_verify
+  - deployment_ecs_external_url_verify
+  - deployment_prometheus_external_url_verify
   - monitoring_grafana_admin_password
+  - ecs_data_services_deploy_enabled
+  - ecs_control_plane_url
+  - ecs_api_access_key_id
+  - ecs_api_private_key
+  - ecs_auto_provision_api_access_key
+  - ecs_automation_machine_user
+  - ecs_iam_bootstrap_access_key_id
+  - ecs_iam_bootstrap_private_key
+  - ecs_api_credentials_cache_path
+  - ecs_control_plane_validate_certs
+  - ecs_data_services_install
+  - ecs_data_services_catalog
 
   # OS / dependency versions
   - java_version

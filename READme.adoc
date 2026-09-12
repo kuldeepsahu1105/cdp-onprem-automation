@@ -342,22 +342,22 @@ Set `CONTROL_MODE=local` when running on a host listed in `inventory.ini`. See l
 | `10`–`15` — IPA server/client, DNS records
 
 | Cloudera Manager
-| `16`–`21` — repo, PostgreSQL, CM install, license
+| `20`–`26` — repo, PostgreSQL, CM install, license
 
 | CM security
 | `22` Auto-TLS, `23` Kerberos/KDC, `25` LDAP
 
 | CMS & base cluster
-| `24_setup_cm_cms.yml` (Management Service), `26_setup_base_cluster.yml` (full CDP base stack; see `base_cluster_install_services`)
+| `29_setup_cm_cms.yml` (Management Service), `31_setup_base_cluster.yml` (full CDP base stack; see `base_cluster_install_services`)
 
 | ECS (Data Services)
-| `27_setup_ecs_cluster.yml` (DOCKER + ECS experience cluster; requires base cluster)
+| `33_setup_ecs_cluster.yml` (DOCKER + ECS experience cluster; requires base cluster)
 
 | Cleanup
 | `99_cleanup.yml` — toggle-driven teardown (see README)
 |===
 
-WARNING: `24_setup_cm_cms.yml` deploys the *Cloudera Management Service* (Service Monitor, Host Monitor, etc.). The CDP *base cluster* is deployed separately via `26_setup_base_cluster.yml`.
+WARNING: `29_setup_cm_cms.yml` deploys the *Cloudera Management Service* (Service Monitor, Host Monitor, etc.). The CDP *base cluster* is deployed separately via `31_setup_base_cluster.yml`.
 
 === Cleanup
 

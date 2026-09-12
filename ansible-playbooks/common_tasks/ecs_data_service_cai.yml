@@ -1,0 +1,12 @@
+---
+- name: CAI | Skip when not selected
+  ansible.builtin.debug:
+    msg: "CAI not in ecs_data_services_install list — skipped."
+  when: "'cai' not in (ecs_data_services_install_names | default([]))"
+
+- name: CAI | Placeholder for Cloudera AI install
+  ansible.builtin.debug:
+    msg: >-
+      CAI (Cloudera AI) install: provision from Management Console or Control Plane API using the
+      same access key pair. Add service URL to ecs_data_services_catalog.cai when available.
+  when: "'cai' in (ecs_data_services_install_names | default([]))"

@@ -8,6 +8,11 @@ mkdir -p "$LOG_DIR"
 
 cd "$REPO_ROOT"
 export PATH="${HOME}/.local/bin:${PATH}"
+# Plain ASCII wrapper labels; Ansible color is enabled via jenkins_log_pipe + ANSIBLE_FORCE_COLOR.
+export UI_ASCII=1
+export UI_COLOR=0
+export FORCE_COLOR=0
+export ANSIBLE_FORCE_COLOR="${ANSIBLE_FORCE_COLOR:-1}"
 export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
 # shellcheck source=scripts/lib/holautosa_exec_dir.sh
 source "$REPO_ROOT/scripts/lib/holautosa_exec_dir.sh"
@@ -28,6 +33,11 @@ if command -v terraform >/dev/null 2>&1 && [[ -f "${TF_DIR}/terraform.tfstate" |
 fi
 restore_ansible_artifacts_to_workspace
 bash "$REPO_ROOT/jenkins/scripts/regenerate-inventory-from-terraform.sh"
+# Jenkins runs outside the VPC — public control-plane reachability (see ansible_control_reachability).
+export ANSIBLE_CONTROL_VIA_JENKINS="${ANSIBLE_CONTROL_VIA_JENKINS:-1}"
+export CM_API_PREFER_PRIVATE_IP="${CM_API_PREFER_PRIVATE_IP:-false}"
+export ANSIBLE_CONTROLLER_OUTSIDE_VPC="${ANSIBLE_CONTROLLER_OUTSIDE_VPC:-true}"
+export DEPLOYMENT_PORTAL_URL_VERIFY_SKIP_VPC="${DEPLOYMENT_PORTAL_URL_VERIFY_SKIP_VPC:-true}"
 # shellcheck source=jenkins/scripts/aws-credential-check.sh
 source "$REPO_ROOT/jenkins/scripts/aws-credential-check.sh"
 aws_apply_instance_role_if_enabled
@@ -42,6 +52,7 @@ export TFVARS_FILE="${TFVARS_FILE:-.tfvars.yaml}"
 export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 export DRY_RUN="${DRY_RUN:-false}"
 export CONTROL_MODE="${CONTROL_MODE:-auto}"
+export MONITORING_STACK_ENABLED="${MONITORING_STACK_ENABLED:-}"
 
 LOG_FILE="$LOG_DIR/ansible-${BUILD_NUMBER:-local}-phase${DEPLOY_PHASE}.log"
 log() { printf '[ansible] %s\n' "$*" | tee -a "$LOG_FILE"; }

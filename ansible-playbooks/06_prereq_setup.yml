@@ -1,6 +1,8 @@
 ### ansible-playbook -i inventory.ini 06_prereq_setup.yml
 
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: System Update and Package Installation
   hosts: all
   become: yes

@@ -10,11 +10,13 @@ cd ansible-playbooks
 
 ## Prerequisites
 
-1. Install Ansible collections:
+1. **Ansible collections** — any of these (same `requirements.yml`, idempotent):
 
-```bash
-ansible-galaxy collection install -r requirements.yml
-```
+| How you run | Collections |
+|-------------|-------------|
+| **`./pvc_setup.sh`** or repo **`clone_and_run_pvc_automation.sh`** | Installed automatically at start |
+| **Jenkins** `run-ansible.sh` | Same as `pvc_setup.sh` per stage (skip when already installed) |
+| **Single playbook** | `./run-playbook.sh 10_setup_deployment_portal.yml` **or** `ansible-playbook …` (each playbook imports `00_ensure_collections.yml`) **or** once manually: `ansible-galaxy collection install -r requirements.yml` |
 
 2. Prepare `inventory.ini` with your hosts (see [REFERENCE.md](REFERENCE.md#inventory-groups)).
 3. Configure `group_vars/all.yml` (domain, passwords, AD vars if needed).
@@ -42,6 +44,61 @@ The wrappers and playbooks support:
 | RHEL / Ubuntu laptop (remote) | Install `ansible`, `jq`; run `./clone_and_run_pvc_automation.sh` or `cd ansible-playbooks && ./pvc_setup.sh` |
 | Cluster node (`cldr-mngr`, `ipaserver`) | `CONTROL_MODE=local DEPLOY_PHASE=all ./pvc_setup.sh` from `ansible-playbooks/` (uses `~/.ssh/id_rsa` if no PEM in cwd) |
 
+### Control-plane reachability (Jenkins vs VPN / bare metal)
+
+Ansible must pick **public** vs **VPC-private** addresses for CM API `uri` probes and for which portal URLs are required during verify:
+
+| Control node | Typical profile | What to set |
+|---|---|---|
+| **Jenkins** (or any host **outside** the VPC, no route to `10.x` / `172.31.x`) | `public` | Automatic: `run-ansible.sh` sets `ANSIBLE_CONTROL_VIA_JENKINS=1` and `jenkins_override.yml` sets `ansible_control_reachability: public`. CM API uses `ansible_host` (public IP), not `private_ip`; discovery delegates to `cldr-mngr` at `127.0.0.1`. Portal verify skips VPC-only URL hard-fails. |
+| **Bare metal / VPN runner** (targets only on private net, no public IP on hosts) | `private` | Default `auto` probes CM `private_ip` vs public from the controller; prefers private when reachable. Or set `ansible_control_reachability: private` / `deployment_portal_access_profile: private`. |
+| **`CONTROL_MODE=local` on `cldr-mngr`** | `private` (CM API still `127.0.0.1` on-manager) | `CONTROL_MODE=local` — do **not** break standalone runs on the CM host. |
+
+Override in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML`: `ansible_control_reachability: public|private|auto`. Legacy keys `ansible_controller_outside_vpc` and `cm_api_prefer_private_ip` remain supported.
+
+### Service URL verification tiers (portal, CM, monitoring, IPA, ECS)
+
+The same three-tier model applies to **portal**, **Cloudera Manager**, **Grafana/Prometheus**, **FreeIPA**, and **ECS** URLs printed in `CDP_ACCESS_URLS_*` / `jenkins/artifacts/access-urls.txt`.
+
+| Tier | Where it runs | What it checks | On failure |
+|---|---|---|---|
+| **A (required)** | **Ops host** (`ipaserver` / `cldr-mngr`): `http://127.0.0.1:<deployment_portal_http_port>/`, Caddy **Host** vhosts scoped by **`deployment_portal_verify_milestones`** (bootstrap **portal** + **ipa** only; **cm** / **cm_tls** / **monitoring** / **ecs** after each deploy phase). **CM host** (`cldr-mngr`): HTTP UI on `127.0.0.1:7180` **or** CM FQDN/private IP when scm-server does not bind localhost (`probe_cm_manager_ui_http.yml`; API probes use `select_cm_api_probe_host.yml` from Jenkins via `set_cm_api_url`) | Local service health | **Fail** the play for milestones in the active list |
+| **B (external)** | Ansible **controller** when `ansible_control_reachability_effective` is **`public`** | HTTP GET printed **external** URLs (portal/pgAdmin/Grafana, CM FQDN + public IP + optional Caddy CM vhost, IPA, ECS console) via `verify_service_urls_from_controller.yml` | **`deployment_external_url_verify`** (default **`warn`**) or per-service `deployment_<service>_external_url_verify` / `deployment_service_external_url_verify` map — `warn`, `fail`, or `skip` |
+| **C (optional)** | Ops or CM host | Public-EIP **hairpin** URLs (EC2 calling its own EIP) | **Warn only** |
+
+**When it runs:** Portal stack verify after `10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` (`verify_deployment_portal_caddy.yml`). CM UI Tier **A/C** in `25_verify_cm.yml`; CM Tier **B** runs there only when `deployment_portal_enabled: false` (otherwise Tier **B** runs from portal verify, scoped by the same milestones — no duplicate CM Tier **B** in `25_verify_cm.yml`).
+
+### Portal URL verify milestones (by deploy stage)
+
+| Stage / trigger | `deployment_portal_verify_milestones` (cumulative) | Tier **A** Caddy vhosts / host checks | Tier **B** (controller, when public reach) |
+|---|---|---|---|
+| **PORTAL** (`10_setup_deployment_portal.yml`) | `portal`, `ipa` | Portal index, portal + IPA vhosts (required when IPA in inventory); **no** pgAdmin or CM Caddy vhost probes | Portal (+ IPA when in list); **no** pgAdmin Tier **B** until milestone `pgadmin` |
+| **PORTAL pgAdmin hard gate** (optional refresh) | + `pgadmin` | + pgAdmin Caddy vhost required | + pgAdmin external |
+| **IDENTITY** (phase 2 refresh) | + `identity` | Same as PORTAL | + FreeIPA printed / Caddy IPA URLs |
+| **CM_INSTALL** (phase 3 refresh) | + `cm` | + CM Caddy vhost | + CM HTTP / public IP / Caddy CM |
+| **CM_TLS** (phase `cm_tls` refresh) | + `cm_tls` | (CM vhost still required when `cm` present) | + CM HTTPS FQDN |
+| **CDH** (phase `cdh` refresh) | + `cdh` | (index refresh; no extra vhosts) | (no new probes) |
+| **MONITORING** | + `monitoring` | + Grafana / Prometheus vhosts | + Grafana / Prometheus external |
+| **ECS** | + `ecs` | + ECS vhost | + ECS console / Caddy ECS |
+
+Set explicitly: `-e deployment_portal_verify_milestones=cm,cm_tls`. `pvc_setup.sh` passes the cumulative list on each `_run_deployment_portal_refresh`. Legacy `deployment_portal_verify_post_cm: true` on `35_refresh` implies **`portal`, `ipa`** when milestones are omitted (not `cm` — add `cm` via phase 3 refresh or `-e`).
+
+Variables:
+
+- `deployment_external_url_verify` — global Tier **B** mode (`warn` \| `fail` \| `skip`; default `warn`; Jenkins sets `warn`)
+- `deployment_portal_external_url_verify` — legacy alias when global unset
+- `deployment_cm_external_url_verify`, `deployment_grafana_external_url_verify`, … — per-service overrides
+- `deployment_service_external_url_verify` — optional map `{ cm: warn, grafana: skip, … }`
+- `deployment_portal_verify_milestones` — list or comma string (`portal`, `ipa`, `pgadmin`, `identity`, `cm`, `cm_tls`, `cdh`, `monitoring`, `ecs`); default `[]` in `group_vars`; bootstrap play sets `portal` + `ipa` (not `pgadmin` — avoids failing PORTAL on pgAdmin 502 while the container is still starting)
+- `deployment_portal_url_verify_skip_vpc` — skip hard-fail on VPC-only printed URLs when control is public-only (Jenkins sets `true`)
+- `ansible_control_reachability` — must be `public` (or auto → public on Jenkins) for Tier **B**
+
+If Tier **B** warns but Tier **A** passed, open security groups for the relevant ports (**8088**, **5050**, **7180**/**7183**, etc.) from Jenkins/office CIDRs. Grep Ansible logs for `Tier B` or `CDP_ACCESS_URLS_BEGIN`; `jenkins/scripts/build-access-urls.sh` lists URLs for email.
+
+**pgAdmin 502 / :5050 unreachable:** On **ipaserver** (or portal host), `cd {{ deployment_portal_config_dir | default('/opt/cldr-deployment-portal') }}` then `docker ps -a --filter name=cldr-portal-pgadmin` and `curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:5050/`. Caddy must reverse-proxy **`pgadmin:80`** (compose service name). Fix: re-run Jenkins **PORTAL** or `docker compose -f docker-compose.yml up -d --force-recreate pgadmin caddy`. Ansible task `verify_deployment_portal_pgadmin.yml` fails with `docker logs` on error; set `deployment_portal_pgadmin_debug_logs: true` for extra log output after a successful sync.
+
+**pgAdmin restart loop / invalid email:** pgAdmin 8 rejects `PGADMIN_DEFAULT_EMAIL` values like `admin@cldrsetup.local` (from `admin@{{ cluster_domain }}`). Set `pgadmin_default_email` to a real TLD (default `admin@pvc.cloudera-labs.com`), re-render compose, then on the portal host: `cd /opt/cldr-deployment-portal && docker compose up -d --force-recreate pgadmin`.
+
 When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-playbooks/`, the wrapper prompts you to choose. Override with `ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, or `CM_INFO_FILE`.
 
 ### Without wrappers (direct `ansible-playbook`)
@@ -52,7 +109,7 @@ Jenkins and `pvc_setup.sh` / `clone_and_run_pvc_automation.sh` are optional. Fro
 ansible-galaxy collection install -r requirements.yml
 export ANSIBLE_PRIVATE_KEY=/path/to/your-key.pem   # or place sshkey.pem / id_rsa in this directory
 ansible-playbook -i inventory.ini 00_setup_ssh_preqs.yml --private-key "$ANSIBLE_PRIVATE_KEY"
-ansible-playbook -i inventory.ini 22_setup_cm_autotls.yml --private-key "$ANSIBLE_PRIVATE_KEY"
+ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml --private-key "$ANSIBLE_PRIVATE_KEY"
 ```
 
 Playbooks resolve SSH keys and Auto-TLS material on the **control machine** via `ANSIBLE_PRIVATE_KEY`, files under `ansible-playbooks/`, or `group_vars` (`cm_private_key_path`, `cm_node_sudo_password`). Wrappers only set the same env vars and `--private-key` for convenience.
@@ -89,7 +146,7 @@ DRY_RUN=true DEPLOY_PHASE=3 ./clone_and_run_pvc_automation.sh
 DRY_RUN=true ./clone_and_run_terraform.sh
 ```
 
-Set `ANSIBLE_DIFF=false` to omit `--diff` during Ansible dry runs. CM API playbooks (`26`, `27`) may still call Cloudera Manager APIs even in check mode.
+Set `ANSIBLE_DIFF=false` to omit `--diff` during Ansible dry runs. CM API playbooks (`31`, `33`) may still call Cloudera Manager APIs even in check mode.
 
 Identity is auto-detected: `[ipaserver]` in inventory → FreeIPA; empty ipaserver + `ad_kdc_host` → AD.
 
@@ -133,55 +190,66 @@ Or run playbooks `00` through `09` individually.
 ### 5. Run Phase 2 (identity + DNS)
 
 ```bash
-ansible-playbook -i inventory.ini 10_identity_setup.yml
+ansible-playbook -i inventory.ini 11_identity_setup.yml
 ```
 
 ### 6. Run Phase 3 (Cloudera Manager)
 
 ```bash
 # Public repos (default) — archive.cloudera.com/p/
-ansible-playbook -i inventory.ini 17_download_repos.yml \
+ansible-playbook -i inventory.ini 22_download_repos.yml \
   -e cm_repo_username="<user>" -e cm_repo_password="<pass>"
 
 # OR internal mirror on cldr-mngr (RHEL: RPM; Ubuntu: apt):
 # Set cm_repo_source: internal in group_vars/all.yml, then:
-ansible-playbook -i inventory.ini 16_setup_cm_repos.yml \
+ansible-playbook -i inventory.ini 20_setup_cm_repos.yml \
   -e cm_repo_username="<user>" -e cm_repo_password="<pass>"
 
-ansible-playbook -i inventory.ini 18_setup_postgres.yml
-ansible-playbook -i inventory.ini 19_start_cm.yml
-ansible-playbook -i inventory.ini 20_verify_cm.yml
-ansible-playbook -i inventory.ini 21_setup_cm_license.yml
-ansible-playbook -i inventory.ini 22_setup_cm_autotls.yml
-ansible-playbook -i inventory.ini 23_setup_cm_krbs.yml
-ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
+ansible-playbook -i inventory.ini 23_setup_postgres.yml
+ansible-playbook -i inventory.ini 24_start_cm.yml
+ansible-playbook -i inventory.ini 25_verify_cm.yml
+ansible-playbook -i inventory.ini 26_setup_cm_license.yml
+ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml
+# CM API probes: VPC private_ip from Jenkins (not public EIP hairpin); 127.0.0.1 on cldr-mngr. SG must allow 7180/7183 from Jenkins to private IPs.
+ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
+ansible-playbook -i inventory.ini 30_setup_cm_ldap.yml
 ```
 
-If `cm_admin_pass` is not the factory password (`cm_admin_bootstrap_pass`, default `admin`), `20_verify_cm.yml` and later playbooks reset the CM `admin` user to `cm_admin_pass` via the API on first successful connection.
+If `cm_admin_pass` is not the factory password (`cm_admin_bootstrap_pass`, default `admin`), `25_verify_cm.yml` and later playbooks reset the CM `admin` user to `cm_admin_pass` via the API on first successful connection.
 
-CSD JARs for DataViz / NiFi / NiFi Registry are built from `cdv_version`, `cfm_version`, and related vars during `19_start_cm.yml` (RHEL CM). Set e.g. `cdv_version: "8.1.5"` and update `cdv_dataviz_csd_jar` to match the archive jar name, or pass explicit `scm_csds` URLs.
+CSD JARs for DataViz / NiFi / NiFi Registry are built from `cdv_version`, `cfm_version`, and related vars during `24_start_cm.yml` (RHEL CM). Set e.g. `cdv_version: "8.1.5"` and update `cdv_dataviz_csd_jar` to match the archive jar name, or pass explicit `scm_csds` URLs.
 
 ### 7. Run Phase 4 (CMS + base cluster)
 
 ```bash
-ansible-playbook -i inventory.ini 24_setup_cm_cms.yml
-ansible-playbook -i inventory.ini 26_setup_base_cluster.yml
-ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml
+ansible-playbook -i inventory.ini 29_setup_cm_cms.yml
+ansible-playbook -i inventory.ini 31_setup_base_cluster.yml
+ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml
 ```
 
-`26_setup_base_cluster.yml` builds the cluster from `templates/base_cluster_cluster_spec.j2`. Toggle services with `base_cluster_install_services` in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`). Cluster **create** runs only when the cluster does not exist in CM; adding services to an existing cluster requires CM UI/API changes.
+`31_setup_base_cluster.yml` builds the cluster from `templates/base_cluster_cluster_spec.j2`. Toggle services with `base_cluster_install_services` in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`). Cluster **create** runs only when the cluster does not exist in CM; adding services to an existing cluster requires CM UI/API changes.
 
-`27_setup_ecs_cluster.yml` is skipped automatically when `[ecs-masters]` / `[ecs-workers]` are empty (`ecs_deploy_enabled: auto`).
+`33_setup_ecs_cluster.yml` is skipped automatically when `[ecs-masters]` / `[ecs-workers]` are empty (`ecs_deploy_enabled: auto`).
 
 ### 8. Deployment portal (optional)
 
 ```bash
-ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
+ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml
 # Optional monitoring (or set monitoring_stack_enabled: true in all.yml for playbook 28)
-MONITORING_STACK_ENABLED=true ansible-playbook -i inventory.ini 29_setup_monitoring_stack.yml
+MONITORING_STACK_ENABLED=true ansible-playbook -i inventory.ini 32_setup_monitoring_stack.yml
 ```
 
-Open `http://<cldr-mngr-fqdn>:8088/` for the index (CM, IPA, ECS, PostgreSQL, pgAdmin, node table). pgAdmin: port `5050`.
+Ops stack runs on **ipaserver** when present (`deployment_portal_host_group: auto`), else **cldr-mngr**.
+
+**AWS (public IP):** Jenkins and browsers on the internet use `http://<ops-public-ip>:8088/`; hosts inside the VPC can use `http://<ops-private-ip>:8088/`. The generated index lists both. Caddy vhost URLs use a **dashed** ops public IP in the hostname (`portal.52-221-251-41.pvc.cloudera-labs.com`, not dotted); that requires wildcard DNS on `caddy_vhost_public_base` or use `caddy_vhost_dns_mode: classic_nipio`. Playbook 28 fails fast if Caddy does not respond on `http://127.0.0.1:8088/` on the ops host.
+
+**Caddy FreeIPA vhost:** When `[ipaserver]` is present, `http://ipa.<ops-ip-dashed>.<base>:8088/` redirects `/` to `/ipa/ui` and reverse-proxies **HTTP** to `<ipaserver-fqdn>` with **`header_up Host`** and **`header_up Referer https://<ipaserver-fqdn>/ipa/ui`** (same pattern as cloudera-labs/openshift). Tier A checks accept **301** on `/`; on `ipaserver`, Ansible verifies `http://127.0.0.1/` with those headers.
+
+**Caddy CM vhost + CM UI URL:** After CM is up (`26_setup_cm_license.yml` and each `35_refresh_deployment_portal.yml` when CM is installed), Ansible sets Cloudera Manager **`frontend_url`** and **`cm_host_name`** to the Caddy CM vhost (for example `http://cm.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` — no trailing slash) via `apply_cm_caddy_load_balancer.yml`. Caddy **`reverse_proxy`** targets **`cldr-mngr` `private_ip`** with **`header_up Host`** set to the CM cluster FQDN. Override with `cm_external_url` or disable with `cm_apply_caddy_frontend_url: false`. Facts: `cm_caddy_public_url`, `cm_frontend_url_effective` from `caddy_vhost_urls.j2`.
+
+**Caddy ECS console:** When `[ecs-masters]` exists, `http://ecs.<ops-ip-dashed>.<base>:8088/` proxies to `https://console.<ecs_app_domain>`. Automation and the portal index prefer **`ecs_caddy_console_url`** / `ecs_control_plane_url_effective` (set `ecs_control_plane_url` to override). Internal ECS **`ApplicationDomain`** stays `ecs_app_domain` (`apps.<cluster_domain>`); only the published console link changes.
+
+**Bare metal / private network (no public IP):** Set `deployment_environment: baremetal` (or `deployment_portal_access_profile: private`). The portal index shows only private-network URLs — typically `http://<ops-fqdn>:8088/` when `deployment_portal_prefer_fqdn_urls: true`, or `http://<management-ip>:8088/` otherwise. pgAdmin stays on port `5050` on the same ops host; database is **cldr-mngr** PostgreSQL. Caddy lab hostnames use the ops management IP (often `caddy_vhost_dns_mode: flat` with IPA/AD DNS).
 
 ---
 
@@ -228,16 +296,16 @@ ansible-playbook -i inventory.ini 00_setup_ssh_preqs.yml --limit 'all:!ipaserver
 # ... run 01-09 or use pvc_setup.sh
 
 # Phase 2 (DNS + realm join only — skips FreeIPA server playbooks)
-ansible-playbook -i inventory.ini 10_identity_setup.yml
+ansible-playbook -i inventory.ini 11_identity_setup.yml
 ```
 
 ### 5. Cloudera Manager + AD integration
 
 ```bash
-ansible-playbook -i inventory.ini 19_start_cm.yml
-ansible-playbook -i inventory.ini 21_setup_cm_license.yml
-ansible-playbook -i inventory.ini 23_setup_cm_krbs.yml
-ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
+ansible-playbook -i inventory.ini 24_start_cm.yml
+ansible-playbook -i inventory.ini 26_setup_cm_license.yml
+ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
+ansible-playbook -i inventory.ini 30_setup_cm_ldap.yml
 ```
 
 Continue with CMS and base cluster as in Scenario A step 7.
@@ -320,7 +388,7 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 | DNS not persisting on Ubuntu | DNS is applied via netplan — see [REFERENCE.md](REFERENCE.md#dns-configuration) |
 | CM install fails on Ubuntu | Set `cm_repo_username` / `cm_repo_password`; use `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr) |
 | CDH parcel download fails | Ensure worker facts exist (run phase 1 first). Set `cdh_parcel_os_suffix: noble` or `jammy` for Ubuntu workers, `el8`/`el9` for RHEL |
-| PostgreSQL listens on 127.0.0.1 only | Re-run `18_setup_postgres.yml` (uses `pg_ctlcluster restart` on Ubuntu) or `pg_ctlcluster 18 main restart` |
+| PostgreSQL listens on 127.0.0.1 only | Re-run `23_setup_postgres.yml` (uses `pg_ctlcluster restart` on Ubuntu) or `pg_ctlcluster 18 main restart` |
 | SSH restart fails on Ubuntu | Fixed in `00_setup_ssh_preqs.yml` — uses `ssh` service instead of `sshd` |
 | AWS vs bare metal DNS wrong | Set `deployment_environment: aws` or `baremetal` explicitly |
 | NetworkManager restart failed | Fixed in `03_create_etc_hosts.yml` — pull latest `main` |
@@ -331,7 +399,7 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 
 ```
 00-09  Prerequisites
-10_identity_setup  Identity + DNS (auto FreeIPA or AD)
+11_identity_setup  Identity + DNS (auto FreeIPA or AD)
 16-21  CM install + license
 22     Auto-TLS
 23-25  Kerberos + LDAP

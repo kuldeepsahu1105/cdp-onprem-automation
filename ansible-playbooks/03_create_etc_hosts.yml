@@ -3,6 +3,8 @@
 #
 
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Configure /etc/hosts file and Gather System Information
   hosts: all
   become: yes

@@ -1,0 +1,23 @@
+---
+- name: Resolve ECS control plane URL
+  ansible.builtin.import_tasks: resolve_ecs_control_plane_url.yml
+
+- name: Wait for ECS Management Console to respond
+  ansible.builtin.uri:
+    url: "{{ ecs_control_plane_url_effective.rstrip('/') }}/"
+    method: GET
+    validate_certs: "{{ ecs_control_plane_validate_certs | default(false) | bool }}"
+    status_code: [200, 301, 302, 303, 401, 403]
+    timeout: 20
+  register: ecs_console_wait
+  until: ecs_console_wait.status | default(0) in [200, 301, 302, 303, 401, 403]
+  retries: "{{ ecs_control_plane_wait_retries | default(40) }}"
+  delay: "{{ ecs_control_plane_wait_delay | default(15) }}"
+  failed_when: false
+
+- name: Fail when ECS console did not become reachable
+  ansible.builtin.fail:
+    msg: >-
+      ECS console not reachable at {{ ecs_control_plane_url_effective }} after waiting.
+      Confirm ECS cluster services are started and DNS resolves for console.{{ ecs_app_domain }}.
+  when: ecs_console_wait.status | default(0) not in [200, 301, 302, 303, 401, 403]

@@ -1,0 +1,139 @@
+---
+# Set Cloudera Manager frontend_url (and hostname override) to the Caddy CM vhost when portal fronts CM.
+# cloudera-labs/openshift: cloudera.cluster.cm* module_defaults host=proxy_host port=80 — here port 8088 on the ops Caddy vhost.
+
+- name: Decide whether to apply CM Caddy frontend URL
+  ansible.builtin.set_fact:
+    cm_apply_caddy_frontend_url_effective: >-
+      {{
+        false
+        if (cm_apply_caddy_frontend_url | default('auto') | lower | trim) == 'false'
+        else (
+          true
+          if (cm_apply_caddy_frontend_url | default('auto') | lower | trim) == 'true'
+          else (
+            (deployment_portal_enabled | default(true) | bool)
+            and (caddy_vhost_enabled | default(false) | bool)
+            and (cm_frontend_url_effective | default('') | length > 0)
+          )
+        )
+      }}
+
+- name: Decide whether CM API for frontend_url apply uses Caddy vhost (not direct :7180/:7183)
+  ansible.builtin.set_fact:
+    cm_config_api_via_caddy_proxy_effective: >-
+      {{
+        false
+        if (cm_config_api_via_caddy_proxy | default('auto') | lower | trim) == 'false'
+        else (
+          true
+          if (cm_config_api_via_caddy_proxy | default('auto') | lower | trim) == 'true'
+          else (
+            (cm_apply_caddy_frontend_url_effective | default(false) | bool)
+            and (caddy_vhost_urls_external.cm.hostname | default('') | length > 0)
+          )
+        )
+      }}
+  when: cm_apply_caddy_frontend_url_effective | default(false) | bool
+
+- name: Skip CM frontend URL when not using Caddy public URL
+  ansible.builtin.debug:
+    msg: >-
+      Skipping CM frontend_url update
+      (cm_apply_caddy_frontend_url={{ cm_apply_caddy_frontend_url | default('auto') }},
+      cm_frontend_url_effective={{ cm_frontend_url_effective | default('') }}).
+  when: not (cm_apply_caddy_frontend_url_effective | default(false) | bool)
+
+- name: Sanitize CM frontend URL for cm_config (strip whitespace and trailing slashes)
+  ansible.builtin.set_fact:
+    cm_frontend_url_for_api: "{{ cm_frontend_url_effective | trim | regex_replace('/+$', '') }}"
+  when:
+    - cm_apply_caddy_frontend_url_effective | default(false) | bool
+    - cm_frontend_url_effective | default('') | length > 0
+
+- name: Derive CM hostname override from sanitized frontend URL
+  ansible.builtin.set_fact:
+    cm_frontend_hostname_override: >-
+      {{
+        (
+          cm_frontend_url_for_api
+          | regex_replace('^https?://', '')
+          | regex_replace('/.*$', '')
+          | regex_replace(':.*$', '')
+        )
+        | trim
+      }}
+  when:
+    - cm_apply_caddy_frontend_url_effective | default(false) | bool
+    - cm_frontend_url_for_api is defined
+    - cm_frontend_url_for_api | length > 0
+
+- name: Resolve CM API host via Caddy CM vhost (cloudera-labs proxy_host pattern)
+  ansible.builtin.set_fact:
+    cm_config_api_host: "{{ caddy_vhost_urls_external.cm.hostname }}"
+  when:
+    - cm_apply_caddy_frontend_url_effective | default(false) | bool
+    - cm_config_api_via_caddy_proxy_effective | default(false) | bool
+    - caddy_vhost_urls_external.cm.hostname | default('') | length > 0
+
+- name: Resolve CM API port via deployment portal Caddy listener
+  ansible.builtin.set_fact:
+    cm_config_api_port: "{{ deployment_portal_http_port | int }}"
+  when:
+    - cm_apply_caddy_frontend_url_effective | default(false) | bool
+    - cm_config_api_via_caddy_proxy_effective | default(false) | bool
+    - cm_config_api_host is defined
+    - cm_config_api_host | length > 0
+
+- name: Resolve CM API host for direct manager connection
+  ansible.builtin.set_fact:
+    cm_config_api_host: "{{ cm_host }}"
+  when:
+    - cm_apply_caddy_frontend_url_effective | default(false) | bool
+    - not (cm_config_api_via_caddy_proxy_effective | default(false) | bool)
+
+- name: Resolve CM API port for direct manager connection
+  ansible.builtin.set_fact:
+    cm_config_api_port: "{{ cm_api_port }}"
+  when:
+    - cm_apply_caddy_frontend_url_effective | default(false) | bool
+    - not (cm_config_api_via_caddy_proxy_effective | default(false) | bool)
+
+- name: Apply Cloudera Manager frontend URL for Caddy load balancer
+  cloudera.cluster.cm_config:
+    host: "{{ cm_config_api_host }}"
+    port: "{{ cm_config_api_port }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    force_tls: >-
+      {{
+        false
+        if (cm_config_api_via_caddy_proxy_effective | default(false) | bool)
+        else (autotls_enabled | default(false) | bool)
+      }}
+    parameters:
+      frontend_url: "{{ cm_frontend_url_for_api }}"
+      cm_host_name: "{{ cm_frontend_hostname_override }}"
+  register: cm_caddy_frontend_result
+  when:
+    - cm_apply_caddy_frontend_url_effective | default(false) | bool
+    - cm_frontend_url_for_api is defined
+    - cm_frontend_url_for_api | length > 0
+    - cm_config_api_host is defined
+    - cm_config_api_port is defined
+
+- name: Print Cloudera Manager frontend URL applied via API
+  ansible.builtin.debug:
+    msg:
+      - "CM frontend_url set to {{ cm_frontend_url_for_api }} (Caddy vhost / cm_external_url override)"
+      - "CM cm_host_name override: {{ cm_frontend_hostname_override }}"
+      - >-
+        CM API for apply:
+        {{ 'http://' + cm_config_api_host + ':' + (cm_config_api_port | string) + ' (via Caddy vhost)'
+           if (cm_config_api_via_caddy_proxy_effective | default(false) | bool)
+           else (cm_protocol | default('http')) + '://' + cm_config_api_host + ':' + (cm_config_api_port | string) + ' (direct CM API)' }}
+      - "Restart CMS Event Server from CM UI if alert/email links still show the old URL."
+  when:
+    - cm_caddy_frontend_result is defined
+    - cm_caddy_frontend_result is changed

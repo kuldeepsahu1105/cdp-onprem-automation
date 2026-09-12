@@ -1,0 +1,14 @@
+### ansible-playbook -i inventory.ini 00_ensure_collections.yml
+# Control-node Galaxy install (same logic as pvc_setup.sh / Jenkins). Imported by other playbooks.
+---
+- name: Ensure Ansible Galaxy collections on control node
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags:
+    - always
+    - collections
+    - galaxy
+  tasks:
+    - name: Ensure collections from requirements.yml
+      ansible.builtin.import_tasks: common_tasks/ensure_ansible_collections.yml

@@ -1,3 +1,6 @@
+---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Distribute .ssh directory to ECS nodes
   hosts: ecs-masters:ecs-workers
   become: yes

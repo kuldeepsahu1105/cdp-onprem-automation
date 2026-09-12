@@ -4,6 +4,8 @@
 #   [ipaserver] has hosts  -> FreeIPA full flow
 #   [ipaserver] empty + ad_kdc_host set -> AD dependent flow only
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Detect identity provider (FreeIPA vs Active Directory)
   hosts: localhost
   connection: local
