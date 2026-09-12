@@ -16,7 +16,7 @@ cd ansible-playbooks
 |-------------|-------------|
 | **`./pvc_setup.sh`** or repo **`clone_and_run_pvc_automation.sh`** | Installed automatically at start |
 | **Jenkins** `run-ansible.sh` | Same as `pvc_setup.sh` per stage (skip when already installed) |
-| **Single playbook** | `./run-playbook.sh 28_setup_deployment_portal.yml` **or** `ansible-playbook …` (each playbook imports `00_ensure_collections.yml`) **or** once manually: `ansible-galaxy collection install -r requirements.yml` |
+| **Single playbook** | `./run-playbook.sh 10_setup_deployment_portal.yml` **or** `ansible-playbook …` (each playbook imports `00_ensure_collections.yml`) **or** once manually: `ansible-galaxy collection install -r requirements.yml` |
 
 2. Prepare `inventory.ini` with your hosts (see [REFERENCE.md](REFERENCE.md#inventory-groups)).
 3. Configure `group_vars/all.yml` (domain, passwords, AD vars if needed).
@@ -66,7 +66,7 @@ Jenkins and `pvc_setup.sh` / `clone_and_run_pvc_automation.sh` are optional. Fro
 ansible-galaxy collection install -r requirements.yml
 export ANSIBLE_PRIVATE_KEY=/path/to/your-key.pem   # or place sshkey.pem / id_rsa in this directory
 ansible-playbook -i inventory.ini 00_setup_ssh_preqs.yml --private-key "$ANSIBLE_PRIVATE_KEY"
-ansible-playbook -i inventory.ini 22_setup_cm_autotls.yml --private-key "$ANSIBLE_PRIVATE_KEY"
+ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml --private-key "$ANSIBLE_PRIVATE_KEY"
 ```
 
 Playbooks resolve SSH keys and Auto-TLS material on the **control machine** via `ANSIBLE_PRIVATE_KEY`, files under `ansible-playbooks/`, or `group_vars` (`cm_private_key_path`, `cm_node_sudo_password`). Wrappers only set the same env vars and `--private-key` for convenience.
@@ -103,7 +103,7 @@ DRY_RUN=true DEPLOY_PHASE=3 ./clone_and_run_pvc_automation.sh
 DRY_RUN=true ./clone_and_run_terraform.sh
 ```
 
-Set `ANSIBLE_DIFF=false` to omit `--diff` during Ansible dry runs. CM API playbooks (`26`, `27`) may still call Cloudera Manager APIs even in check mode.
+Set `ANSIBLE_DIFF=false` to omit `--diff` during Ansible dry runs. CM API playbooks (`31`, `33`) may still call Cloudera Manager APIs even in check mode.
 
 Identity is auto-detected: `[ipaserver]` in inventory → FreeIPA; empty ipaserver + `ad_kdc_host` → AD.
 
@@ -147,53 +147,53 @@ Or run playbooks `00` through `09` individually.
 ### 5. Run Phase 2 (identity + DNS)
 
 ```bash
-ansible-playbook -i inventory.ini 10_identity_setup.yml
+ansible-playbook -i inventory.ini 11_identity_setup.yml
 ```
 
 ### 6. Run Phase 3 (Cloudera Manager)
 
 ```bash
 # Public repos (default) — archive.cloudera.com/p/
-ansible-playbook -i inventory.ini 17_download_repos.yml \
+ansible-playbook -i inventory.ini 22_download_repos.yml \
   -e cm_repo_username="<user>" -e cm_repo_password="<pass>"
 
 # OR internal mirror on cldr-mngr (RHEL: RPM; Ubuntu: apt):
 # Set cm_repo_source: internal in group_vars/all.yml, then:
-ansible-playbook -i inventory.ini 16_setup_cm_repos.yml \
+ansible-playbook -i inventory.ini 20_setup_cm_repos.yml \
   -e cm_repo_username="<user>" -e cm_repo_password="<pass>"
 
-ansible-playbook -i inventory.ini 18_setup_postgres.yml
-ansible-playbook -i inventory.ini 19_start_cm.yml
-ansible-playbook -i inventory.ini 20_verify_cm.yml
-ansible-playbook -i inventory.ini 21_setup_cm_license.yml
-ansible-playbook -i inventory.ini 22_setup_cm_autotls.yml
+ansible-playbook -i inventory.ini 23_setup_postgres.yml
+ansible-playbook -i inventory.ini 24_start_cm.yml
+ansible-playbook -i inventory.ini 25_verify_cm.yml
+ansible-playbook -i inventory.ini 26_setup_cm_license.yml
+ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml
 # CM API probes: VPC private_ip from Jenkins (not public EIP hairpin); 127.0.0.1 on cldr-mngr. SG must allow 7180/7183 from Jenkins to private IPs.
-ansible-playbook -i inventory.ini 23_setup_cm_krbs.yml
-ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
+ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
+ansible-playbook -i inventory.ini 30_setup_cm_ldap.yml
 ```
 
-If `cm_admin_pass` is not the factory password (`cm_admin_bootstrap_pass`, default `admin`), `20_verify_cm.yml` and later playbooks reset the CM `admin` user to `cm_admin_pass` via the API on first successful connection.
+If `cm_admin_pass` is not the factory password (`cm_admin_bootstrap_pass`, default `admin`), `25_verify_cm.yml` and later playbooks reset the CM `admin` user to `cm_admin_pass` via the API on first successful connection.
 
-CSD JARs for DataViz / NiFi / NiFi Registry are built from `cdv_version`, `cfm_version`, and related vars during `19_start_cm.yml` (RHEL CM). Set e.g. `cdv_version: "8.1.5"` and update `cdv_dataviz_csd_jar` to match the archive jar name, or pass explicit `scm_csds` URLs.
+CSD JARs for DataViz / NiFi / NiFi Registry are built from `cdv_version`, `cfm_version`, and related vars during `24_start_cm.yml` (RHEL CM). Set e.g. `cdv_version: "8.1.5"` and update `cdv_dataviz_csd_jar` to match the archive jar name, or pass explicit `scm_csds` URLs.
 
 ### 7. Run Phase 4 (CMS + base cluster)
 
 ```bash
-ansible-playbook -i inventory.ini 24_setup_cm_cms.yml
-ansible-playbook -i inventory.ini 26_setup_base_cluster.yml
-ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml
+ansible-playbook -i inventory.ini 29_setup_cm_cms.yml
+ansible-playbook -i inventory.ini 31_setup_base_cluster.yml
+ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml
 ```
 
-`26_setup_base_cluster.yml` builds the cluster from `templates/base_cluster_cluster_spec.j2`. Toggle services with `base_cluster_install_services` in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`). Cluster **create** runs only when the cluster does not exist in CM; adding services to an existing cluster requires CM UI/API changes.
+`31_setup_base_cluster.yml` builds the cluster from `templates/base_cluster_cluster_spec.j2`. Toggle services with `base_cluster_install_services` in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`). Cluster **create** runs only when the cluster does not exist in CM; adding services to an existing cluster requires CM UI/API changes.
 
-`27_setup_ecs_cluster.yml` is skipped automatically when `[ecs-masters]` / `[ecs-workers]` are empty (`ecs_deploy_enabled: auto`).
+`33_setup_ecs_cluster.yml` is skipped automatically when `[ecs-masters]` / `[ecs-workers]` are empty (`ecs_deploy_enabled: auto`).
 
 ### 8. Deployment portal (optional)
 
 ```bash
-ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
+ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml
 # Optional monitoring (or set monitoring_stack_enabled: true in all.yml for playbook 28)
-MONITORING_STACK_ENABLED=true ansible-playbook -i inventory.ini 29_setup_monitoring_stack.yml
+MONITORING_STACK_ENABLED=true ansible-playbook -i inventory.ini 32_setup_monitoring_stack.yml
 ```
 
 Ops stack runs on **ipaserver** when present (`deployment_portal_host_group: auto`), else **cldr-mngr**.
@@ -249,16 +249,16 @@ ansible-playbook -i inventory.ini 00_setup_ssh_preqs.yml --limit 'all:!ipaserver
 # ... run 01-09 or use pvc_setup.sh
 
 # Phase 2 (DNS + realm join only — skips FreeIPA server playbooks)
-ansible-playbook -i inventory.ini 10_identity_setup.yml
+ansible-playbook -i inventory.ini 11_identity_setup.yml
 ```
 
 ### 5. Cloudera Manager + AD integration
 
 ```bash
-ansible-playbook -i inventory.ini 19_start_cm.yml
-ansible-playbook -i inventory.ini 21_setup_cm_license.yml
-ansible-playbook -i inventory.ini 23_setup_cm_krbs.yml
-ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
+ansible-playbook -i inventory.ini 24_start_cm.yml
+ansible-playbook -i inventory.ini 26_setup_cm_license.yml
+ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
+ansible-playbook -i inventory.ini 30_setup_cm_ldap.yml
 ```
 
 Continue with CMS and base cluster as in Scenario A step 7.
@@ -341,7 +341,7 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 | DNS not persisting on Ubuntu | DNS is applied via netplan — see [REFERENCE.md](REFERENCE.md#dns-configuration) |
 | CM install fails on Ubuntu | Set `cm_repo_username` / `cm_repo_password`; use `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr) |
 | CDH parcel download fails | Ensure worker facts exist (run phase 1 first). Set `cdh_parcel_os_suffix: noble` or `jammy` for Ubuntu workers, `el8`/`el9` for RHEL |
-| PostgreSQL listens on 127.0.0.1 only | Re-run `18_setup_postgres.yml` (uses `pg_ctlcluster restart` on Ubuntu) or `pg_ctlcluster 18 main restart` |
+| PostgreSQL listens on 127.0.0.1 only | Re-run `23_setup_postgres.yml` (uses `pg_ctlcluster restart` on Ubuntu) or `pg_ctlcluster 18 main restart` |
 | SSH restart fails on Ubuntu | Fixed in `00_setup_ssh_preqs.yml` — uses `ssh` service instead of `sshd` |
 | AWS vs bare metal DNS wrong | Set `deployment_environment: aws` or `baremetal` explicitly |
 | NetworkManager restart failed | Fixed in `03_create_etc_hosts.yml` — pull latest `main` |
@@ -352,7 +352,7 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 
 ```
 00-09  Prerequisites
-10_identity_setup  Identity + DNS (auto FreeIPA or AD)
+11_identity_setup  Identity + DNS (auto FreeIPA or AD)
 16-21  CM install + license
 22     Auto-TLS
 23-25  Kerberos + LDAP

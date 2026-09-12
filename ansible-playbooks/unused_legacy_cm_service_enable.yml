@@ -1,4 +1,4 @@
-### UNUSED — prefer 24_setup_cm_cms.yml
+### UNUSED — prefer 29_setup_cm_cms.yml
 # Former filename: 22_setup_cm_service.yml (duplicate "22" prefix; not in Jenkins/pvc_setup).
 ### ansible-playbook -i inventory.ini unused_legacy_cm_service_enable.yml
 # vars:

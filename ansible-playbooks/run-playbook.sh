@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Run any playbook with the same Galaxy prerequisites as pvc_setup.sh / Jenkins.
 # Usage (from ansible-playbooks/):
-#   ./run-playbook.sh 28_setup_deployment_portal.yml
-#   ./run-playbook.sh -i inventory.ini 18_setup_postgres.yml -e key=val
+#   ./run-playbook.sh 10_setup_deployment_portal.yml
+#   ./run-playbook.sh -i inventory.ini 23_setup_postgres.yml -e key=val
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
+### ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml
 #
 # Ops stack on ipaserver (auto) or cldr-mngr: Caddy index, pgAdmin, Prometheus, Grafana,
 # Alertmanager, cAdvisor. CM PostgreSQL remains on cldr-mngr (remote pgAdmin server entry).

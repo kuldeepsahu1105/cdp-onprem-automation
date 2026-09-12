@@ -16,7 +16,7 @@ pipeline {
       visibleItemCount: 10,
       quoteValue: false,
       description: 'Stages to run (fixed order). See PIPELINE_STAGES_REFERENCE below for full guide. Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. Run REFRESH_JENKINSFILE=YES after Jenkinsfile changes.',
-      descriptionPropertyValue: '''VALIDATE: prereq checks (VALIDATION_CHECKS),TERRAFORM: EC2/VPC/SG/EIP + inventory,PREREQS: Ansible 01-09,PORTAL: portal bootstrap (28),IDENTITY: FreeIPA/AD phase 2,CM_INSTALL: CM server phase 3,CM_TLS_KRB_LDAP: TLS/Kerberos/LDAP 22-25,CDH_INSTALL: base cluster (26),MONITORING: Grafana/Prom (29),ECS_INSTALL: ECS cluster (27)'''
+      descriptionPropertyValue: '''VALIDATE: prereq checks (VALIDATION_CHECKS),TERRAFORM: EC2/VPC/SG/EIP + inventory,PREREQS: Ansible 01-09,PORTAL: portal bootstrap (10),IDENTITY: FreeIPA/AD phase 2,CM_INSTALL: CM server phase 3,CM_TLS_KRB_LDAP: TLS/Kerberos/LDAP 27-30,CDH_INSTALL: base cluster (31),MONITORING: Grafana/Prom (32),ECS_INSTALL: ECS cluster (33)'''
     )
     text(
       name: 'PIPELINE_STAGES_REFERENCE',
@@ -28,13 +28,13 @@ Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INS
 | VALIDATE | validate-prereqs.sh — only VALIDATION_CHECKS you select |
 | TERRAFORM | run-terraform.sh — plan/apply; writes inventory.ini + PEM |
 | PREREQS | Ansible phase 1 (playbooks 01–09) |
-| PORTAL | Deployment portal bootstrap (28); before CM when portal enabled |
+| PORTAL | Deployment portal bootstrap (10); before CM when portal enabled |
 | IDENTITY | Ansible phase 2 — FreeIPA or AD |
 | CM_INSTALL | Ansible phase 3 — CM repos, Postgres, CM server |
-| CM_TLS_KRB_LDAP | Auto-TLS, Kerberos, CMS, LDAP (22–25) |
-| CDH_INSTALL | CDH base cluster (26_setup_base_cluster.yml) |
-| MONITORING | Monitoring stack (29); needs PORTAL; MONITORING_STACK_ENABLED |
-| ECS_INSTALL | ECS (27) + optional data services when ECS_DATA_SERVICES_DEPLOY_ENABLED |
+| CM_TLS_KRB_LDAP | Auto-TLS, Kerberos, CMS, LDAP (27–30) |
+| CDH_INSTALL | CDH base cluster (31_setup_base_cluster.yml) |
+| MONITORING | Monitoring stack (32); needs PORTAL; MONITORING_STACK_ENABLED |
+| ECS_INSTALL | ECS (33) + optional data services when ECS_DATA_SERVICES_DEPLOY_ENABLED |
 
 Legacy: CDH_BASE (old jobs) expands to CM_TLS_KRB_LDAP + CDH_INSTALL — check those two boxes instead.
 
@@ -165,17 +165,17 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     booleanParam(
       name: 'MONITORING_STACK_ENABLED',
       defaultValue: true,
-      description: 'Deploy Grafana/Prometheus (Ansible MONITORING stage / 29_setup_monitoring_stack.yml). Requires PORTAL stage first. Sets monitoring_stack_enabled.'
+      description: 'Deploy Grafana/Prometheus (Ansible MONITORING stage / 32_setup_monitoring_stack.yml). Requires PORTAL stage first. Sets monitoring_stack_enabled.'
     )
     booleanParam(
       name: 'DEPLOYMENT_PORTAL_ENABLED',
       defaultValue: true,
-      description: 'Bootstrap portal before CM (28). Index is refreshed incrementally after Identity, CM, TLS, CDH, monitoring, and ECS (31_refresh in each Ansible phase).'
+      description: 'Bootstrap portal before CM (10_setup_deployment_portal). Index is refreshed incrementally after Identity, CM, TLS, CDH, monitoring, and ECS (35_refresh in each Ansible phase).'
     )
     booleanParam(
       name: 'ECS_DATA_SERVICES_DEPLOY_ENABLED',
       defaultValue: false,
-      description: 'Run 30_setup_ecs_data_services.yml after ECS phase 5 when checked. Requires ecs_control_plane_url and API access key in ANSIBLE_GROUP_VARS_YAML (create key in ECS console first).'
+      description: 'Run 34_setup_ecs_data_services.yml after ECS phase 5 when checked. Requires ecs_control_plane_url and API access key in ANSIBLE_GROUP_VARS_YAML (create key in ECS console first).'
     )
   }
 
@@ -568,9 +568,9 @@ def orderedAnsibleStageIds() {
 
 def echoPipelineStagesQuickReference() {
   echo '''PIPELINE_STAGES quick reference (full table: Build parameter PIPELINE_STAGES_REFERENCE or jenkins/README.md):
-  VALIDATE → prereqs script | TERRAFORM → EC2/inventory | PREREQS → Ansible 01-09 | PORTAL → bootstrap (28)
-  IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → TLS/LDAP | CDH_INSTALL → base cluster (26)
-  MONITORING → (29) | ECS_INSTALL → (27) | Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL
+  VALIDATE → prereqs script | TERRAFORM → EC2/inventory | PREREQS → Ansible 01-09 | PORTAL → bootstrap (10)
+  IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → TLS/LDAP | CDH_INSTALL → base cluster (31)
+  MONITORING → (32) | ECS_INSTALL → (33) | Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL
   PORTAL may auto-insert when DEPLOYMENT_PORTAL_ENABLED and CM/CDH/ECS stages are selected without PORTAL.'''
 }
 
@@ -919,7 +919,7 @@ def validatePipelineInputs() {
     echo 'WARN: CM_INSTALL without PREREQS — ensure prerequisites were applied previously.'
   }
   if (stages.contains('MONITORING') && !stages.contains('PORTAL')) {
-    echo 'WARN: MONITORING without PORTAL — ensure 28_setup_deployment_portal.yml ran previously.'
+    echo 'WARN: MONITORING without PORTAL — ensure 10_setup_deployment_portal.yml ran previously.'
   }
   if (stages.contains('CM_TLS_KRB_LDAP') && !stages.contains('CM_INSTALL') && !stages.contains('TERRAFORM')) {
     echo 'WARN: CM_TLS_KRB_LDAP without CM_INSTALL — ensure Cloudera Manager is installed.'

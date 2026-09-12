@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 20_verify_cm.yml
+### ansible-playbook -i inventory.ini 25_verify_cm.yml
 # vars:
 #   cm_port: 7180
 #   cm_admin_user: "admin"

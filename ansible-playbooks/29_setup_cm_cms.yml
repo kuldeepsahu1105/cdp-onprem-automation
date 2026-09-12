@@ -1,9 +1,9 @@
-### ansible-playbook -i inventory.ini 24_setup_cm_cms.yml
+### ansible-playbook -i inventory.ini 29_setup_cm_cms.yml
 #
 # Enable Cloudera Management Service (CMS) on the CM host.
 # CMS includes: Service Monitor, Host Monitor, Event Server, Alert Publisher,
 # Reports Manager — this is NOT the CDP base cluster (HDFS/YARN/ZK).
-# For base cluster install use 26_setup_base_cluster.yml
+# For base cluster install use 31_setup_base_cluster.yml
 ---
 - import_playbook: 00_ensure_collections.yml
 

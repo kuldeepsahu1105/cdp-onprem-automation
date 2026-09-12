@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 10_setup_freeipa_server.yml
+### ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml
 # vars:
 #   ipaserver_domain: cldrsetup.local
 #   ipaserver_realm: "{{ ipaserver_domain | upper }}"

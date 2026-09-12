@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
+### ansible-playbook -i inventory.ini 30_setup_cm_ldap.yml
 ---
 - import_playbook: 00_ensure_collections.yml
 

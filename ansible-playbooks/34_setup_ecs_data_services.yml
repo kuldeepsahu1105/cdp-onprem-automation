@@ -1,8 +1,8 @@
-### ansible-playbook -i inventory.ini 30_setup_ecs_data_services.yml
+### ansible-playbook -i inventory.ini 34_setup_ecs_data_services.yml
 #
 # Cloudera Data Services on ECS (CDW, CDE, CAI, …) via Control Plane API.
 # Prerequisites:
-#   1. ECS cluster installed (27_setup_ecs_cluster.yml).
+#   1. ECS cluster installed (33_setup_ecs_cluster.yml).
 #   2. Management Console reachable at ecs_control_plane_url.
 #   3. API keys: set ecs_api_* or enable ecs_auto_provision_api_access_key with a one-time
 #      bootstrap admin key (console or ecs_iam_bootstrap_* / ECS_IAM_BOOTSTRAP_* env).
@@ -27,7 +27,7 @@
           - groups.get(ecs_cluster_master_group, []) | length > 0
         fail_msg: >-
           ECS masters group '{{ ecs_cluster_master_group }}' is empty.
-          Run 27_setup_ecs_cluster.yml first.
+          Run 33_setup_ecs_cluster.yml first.
 
     - name: Normalize data services install list
       ansible.builtin.set_fact:

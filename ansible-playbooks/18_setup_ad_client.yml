@@ -1,6 +1,6 @@
-### ansible-playbook -i inventory.ini 14_setup_ad_client.yml
+### ansible-playbook -i inventory.ini 18_setup_ad_client.yml
 #
-# Active Directory realm join only (use 14_setup_identity_client.yml for auto-detect)
+# Active Directory realm join only (use 16_setup_identity_client.yml for auto-detect)
 ---
 - import_playbook: 00_ensure_collections.yml
 

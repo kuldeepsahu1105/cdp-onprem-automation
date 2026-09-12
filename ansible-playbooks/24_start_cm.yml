@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 19_start_cm.yml
+### ansible-playbook -i inventory.ini 24_start_cm.yml
 # vars:
 #   scm_db_name: "scm"
 #   scm_db_user: "scm"

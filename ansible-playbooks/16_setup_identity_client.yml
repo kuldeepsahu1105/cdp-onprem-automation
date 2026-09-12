@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 14_setup_identity_client.yml
+### ansible-playbook -i inventory.ini 16_setup_identity_client.yml
 #
 # Identity client enrollment (auto-detected FreeIPA or Active Directory)
 ---

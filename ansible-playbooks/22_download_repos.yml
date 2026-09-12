@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 17_download_repos.yml
+### ansible-playbook -i inventory.ini 22_download_repos.yml
 #
 # Configure CM/CDH repositories:
 #   cm_repo_source=public   — point hosts at archive.cloudera.com/p/ (default)

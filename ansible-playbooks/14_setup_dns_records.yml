@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 12_setup_dns_records.yml
+### ansible-playbook -i inventory.ini 14_setup_dns_records.yml
 # vars:
 #   ipaadmin_password: "vmware123"
 #   ipaadmin_principal: "admin"

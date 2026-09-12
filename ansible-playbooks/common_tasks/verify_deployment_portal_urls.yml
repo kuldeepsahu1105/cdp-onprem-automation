@@ -81,7 +81,7 @@
       Expected HTTP {{ _portal_url_verify_codes | join('/') }} from the ops host.
       If this URL uses a public IP, confirm security groups allow {{ deployment_portal_http_port | int }}
       and Caddy is listening (docker ps, docker logs {{ deployment_portal_caddy_container }}).
-      Re-run: ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
+      Re-run: ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml
   loop: "{{ deployment_portal_access_url_results.results | default([]) }}"
   when:
     - deployment_portal_access_url_checks | default([]) | length > 0

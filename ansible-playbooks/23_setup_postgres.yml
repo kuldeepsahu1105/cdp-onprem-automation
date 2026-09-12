@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 18_setup_postgres.yml
+### ansible-playbook -i inventory.ini 23_setup_postgres.yml
 # vars:
 #   postgresql_version: 15
 #   postgres_data_dir: "/var/lib/pgsql/{{ postgresql_version }}/data"

@@ -1,6 +1,6 @@
-### ansible-playbook -i inventory.ini 29_setup_monitoring_stack.yml
+### ansible-playbook -i inventory.ini 32_setup_monitoring_stack.yml
 #
-# Prometheus, Grafana, Alertmanager, and cAdvisor (requires 28_setup_deployment_portal.yml first).
+# Prometheus, Grafana, Alertmanager, and cAdvisor (requires 10_setup_deployment_portal.yml first).
 ---
 - import_playbook: 00_ensure_collections.yml
 
@@ -49,7 +49,7 @@
     - name: Fail when deployment portal stack is not installed
       ansible.builtin.fail:
         msg: >-
-          Docker network 'deployment_portal' not found. Run 28_setup_deployment_portal.yml first.
+          Docker network 'deployment_portal' not found. Run 10_setup_deployment_portal.yml first.
       when: portal_network.rc != 0
 
     - name: Create monitoring config directory

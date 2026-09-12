@@ -61,13 +61,13 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | `VALIDATE` | `validate-prereqs.sh` — only checks selected in `VALIDATION_CHECKS` (no deploy) |
 | `TERRAFORM` | EC2/VPC/SG/EIP via Terraform; `inventory.ini` + `.pem` key |
 | `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 |
-| `PORTAL` | Bootstrap Caddy/pgAdmin/index (`28`); before CM when `DEPLOYMENT_PORTAL_ENABLED` |
-| `IDENTITY` | Ansible **phase 2** — FreeIPA or AD; refreshes portal index (`31`) |
+| `PORTAL` | Bootstrap Caddy/pgAdmin/index (`10`); before CM when `DEPLOYMENT_PORTAL_ENABLED` |
+| `IDENTITY` | Ansible **phase 2** — FreeIPA or AD; refreshes portal index (`35`) |
 | `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
-| `CM_TLS_KRB_LDAP` | Auto-TLS, Kerberos, CMS, LDAP (22–25); portal refresh |
-| `CDH_INSTALL` | CDH base cluster (`26_setup_base_cluster.yml`); portal refresh |
-| `MONITORING` | `29_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
-| `ECS_INSTALL` | ECS cluster (`27`); optional `30_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` |
+| `CM_TLS_KRB_LDAP` | Auto-TLS, Kerberos, CMS, LDAP (27–30); portal refresh |
+| `CDH_INSTALL` | CDH base cluster (`31_setup_base_cluster.yml`); portal refresh |
+| `MONITORING` | `32_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
+| `ECS_INSTALL` | ECS cluster (`33`); optional `34_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` |
 
 **Your example:** `VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL` = validate → provision VMs → Ansible phases 1–3 (through Cloudera Manager install).
 
@@ -140,7 +140,7 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `CM_LICENSE_CONTENT` | Optional multiline Cloudera license file content when no `*license*` file on the agent (empty = trial or agent file) |
 | `MONITORING_STACK_ENABLED` | When checked (default), sets Ansible `monitoring_stack_enabled: true` for playbook `28` (Grafana/Prometheus/Alertmanager/cAdvisor). Uncheck to skip. Overrides `monitoring_stack_enabled` in `ANSIBLE_GROUP_VARS_YAML` if both are set. |
 
-**Deployment portal (playbook 28):** open the index on the ops host **public** `ansible_host` (e.g. `http://<EIP>:8088/`). Private-IP URLs on the index page work only from hosts in the same VPC (ipaserver, cldr-mngr, cluster nodes). Ensure SG allows **8088**, **5050**, **8089** from your Jenkins/office CIDRs.
+**Deployment portal (playbook 10):** open the index on the ops host **public** `ansible_host` (e.g. `http://<EIP>:8088/`). Private-IP URLs on the index page work only from hosts in the same VPC (ipaserver, cldr-mngr, cluster nodes). Ensure SG allows **8088**, **5050**, **8089** from your Jenkins/office CIDRs.
 
 **Control-plane reachability (Jenkins vs VPN / bare metal):** The Jenkins agent has **no route** to VPC `10.x` / `172.31.x` addresses. `run-ansible.sh` exports `ANSIBLE_CONTROL_VIA_JENKINS=1`; `jenkins_override.yml` sets `ansible_control_reachability: public` so CM API and portal verify never treat inventory `private_ip` as the controller target (probes delegate to `cldr-mngr` at `127.0.0.1` where needed). For **bare metal** or **in-VPC/VPN** automation runners, use default `auto` or `ansible_control_reachability: private` in `ANSIBLE_GROUP_VARS_YAML` — see `ansible-playbooks/docs/RUNBOOK.md` § Control-plane reachability.
 
@@ -424,7 +424,7 @@ keypair_name_suffix: pvc-new-keypair
 
 | Symptom | Fix |
 |---|---|
-| `No license file found` | Place `*license*` in `ansible-playbooks/`, or let CM use trial license (`21_setup_cm_license.yml`) |
+| `No license file found` | Place `*license*` in `ansible-playbooks/`, or let CM use trial license (`26_setup_cm_license.yml`) |
 | CM repo download fails | Place `*info.txt` in `ansible-playbooks/`, or set `cm_repo_username` / `cm_repo_password` in `group_vars/all.yml` |
 
 ## Local testing

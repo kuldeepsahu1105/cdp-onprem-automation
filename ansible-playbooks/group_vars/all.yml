@@ -239,7 +239,7 @@ cdh_basecluster_name: "CDH-Cluster"
 base_cluster_master_group: base-masters
 base_cluster_worker_group: base-workers
 
-# CDP base cluster services (26_setup_base_cluster.yml). Override per key in Jenkins via base_cluster_install_services.
+# CDP base cluster services (31_setup_base_cluster.yml). Override per key in Jenkins via base_cluster_install_services.
 base_cluster_install_services:
   core_settings: true
   zookeeper: true
@@ -311,7 +311,7 @@ cm_api_delegate_probes_to_manager: true
 cm_api_private_reachability_timeout: 5
 # Portal verify: skip VPC-only URL checks when control profile is public-only (Jenkins default)
 deployment_portal_url_verify_skip_vpc: false
-# Set true after 22_setup_cm_autotls.yml for Caddy CM reverse-proxy target port
+# Set true after 27_setup_cm_autotls.yml for Caddy CM reverse-proxy target port
 autotls_enabled: false
 
 ##### cm_server autotls variables:
@@ -418,7 +418,7 @@ ecs_cluster_name: "ECS-Cluster"
 
 # ---------------------------------------------------------------------------
 # ECS (Cloudera Data Services / Experience Cluster) deployment
-# Requires base cluster (26) and wildcard DNS (*.apps) when using FreeIPA.
+# Requires base cluster (31) and wildcard DNS (*.apps) when using FreeIPA.
 # Compatible with CDH 7.3.2: CDS 1.5.5 SP3+ (see Cloudera release matrix).
 # ---------------------------------------------------------------------------
 ecs_deploy_enabled: auto  # auto | true | false — auto runs when ecs-masters/workers exist
@@ -445,7 +445,7 @@ ecs_control_plane_vault_mode: embedded
 ecs_control_plane_embedded_db_storage_gb: 50
 ecs_control_plane_embedded_vault_storage_gb: 2
 
-# ECS Data Services (CDW, CDE, CAI) — 30_setup_ecs_data_services.yml
+# ECS Data Services (CDW, CDE, CAI) — 34_setup_ecs_data_services.yml
 # IAM access keys are signed API credentials — automation can CREATE machine-user keys after ECS
 # is up only when a bootstrap admin key exists (one-time console key or ecs_iam_bootstrap_*).
 ecs_data_services_deploy_enabled: false
@@ -478,7 +478,7 @@ ecs_data_services_catalog:
     url: ""
 
 # ---------------------------------------------------------------------------
-# Deployment portal + ops UI — 28_setup_deployment_portal.yml
+# Deployment portal + ops UI — 10_setup_deployment_portal.yml
 # Caddy index, pgAdmin, Prometheus, Grafana, Alertmanager, cAdvisor on ops host.
 # auto = ipaserver when [ipaserver] exists, else cldr-mngr. pgAdmin targets CM PostgreSQL on cldr-mngr.
 # ---------------------------------------------------------------------------

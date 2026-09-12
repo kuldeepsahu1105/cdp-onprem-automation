@@ -69,7 +69,7 @@ CDH and ECS **deploy versions** are applied by Ansible (`ansible-playbooks/group
 
 ## CDH base cluster deployment
 
-The CDP **base cluster** is deployed by Ansible playbook `26_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, Kerberos, and CMS are in place. By default it installs HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, and Ranger. Optional services (NiFi, NiFi Registry, DataViz, Phoenix, Solr) are off unless enabled in `base_cluster_install_services`. Knox is on by default.
+The CDP **base cluster** is deployed by Ansible playbook `31_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, Kerberos, and CMS are in place. By default it installs HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, and Ranger. Optional services (NiFi, NiFi Registry, DataViz, Phoenix, Solr) are off unless enabled in `base_cluster_install_services`. Knox is on by default.
 
 ### Terraform instance groups (infrastructure)
 
@@ -107,14 +107,14 @@ Spark is bundled in the CDH parcel for `>= 7.3.1` — no separate SPARK3 downloa
 
 ```bash
 # Override at deploy time (example)
-ansible-playbook -i inventory.ini 26_setup_base_cluster.yml \
+ansible-playbook -i inventory.ini 31_setup_base_cluster.yml \
   -e cdh_version=7.3.2.10000 \
   -e cdh_parcel_os_suffix=noble
 ```
 
 ## Deployment portal (Caddy index + pgAdmin)
 
-After cluster deploy, `28_setup_deployment_portal.yml` installs the **ops stack** on **`ipaserver`** when `[ipaserver]` exists, otherwise **`cldr-mngr`** (`deployment_portal_host_group: auto`):
+After cluster deploy, `10_setup_deployment_portal.yml` installs the **ops stack** on **`ipaserver`** when `[ipaserver]` exists, otherwise **`cldr-mngr`** (`deployment_portal_host_group: auto`):
 
 | Service | Port / path |
 |---------|-------------|
@@ -140,13 +140,13 @@ Set `caddy_vhost_dns_mode: classic_nipio` for **`*.nip.io`** names (no custom DN
 Playbooks **28** / **31** verify portal URLs after sync: direct `http://<ops-ip>:8088/`, printed access URLs, and Caddy vhost routes (via `Host` header on `127.0.0.1`). IPA vhost checks also confirm FreeIPA responds to its FQDN `Host` header locally on `ipaserver`.
 
 ```bash
-ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
+ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml
 MONITORING_STACK_ENABLED=true DEPLOY_PHASE=6 ./pvc_setup.sh
 ```
 
 ## ECS (Data Services) deployment
 
-**ECS** (Cloudera Data Services / Experience Cluster) runs on dedicated nodes and is deployed by `27_setup_ecs_cluster.yml`. It requires the base CDH cluster (`26`) and wildcard DNS (`*.apps.<domain>`) when using FreeIPA.
+**ECS** (Cloudera Data Services / Experience Cluster) runs on dedicated nodes and is deployed by `33_setup_ecs_cluster.yml`. It requires the base CDH cluster (`26`) and wildcard DNS (`*.apps.<domain>`) when using FreeIPA.
 
 ### Terraform instance groups (infrastructure)
 
@@ -195,7 +195,7 @@ cd ansible-playbooks
 DEPLOY_PHASE=5 ./pvc_setup.sh
 
 # Or run playbook directly
-ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml \
+ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml \
   -e ecs_pvc_ds_version=1.5.5-h3300
 ```
 
@@ -238,8 +238,8 @@ Spark is bundled in the CDH parcel for 7.3.1+ — a separate SPARK3 download is 
 - **CM server** on Ubuntu 22.04/24.04: supported with `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr).
 - **CDH workers on Ubuntu 22.04/24.04**: parcels `...-jammy.parcel` and `...-noble.parcel` exist in archive; `cdh_parcel_os_suffix: auto` selects them from worker facts. See [CDH base cluster deployment](#cdh-base-cluster-deployment).
 - **CDH workers on RHEL**: use `el8` / `el9` (or `auto`). ARM64 workers use `el8.aarch64le` / `el9.aarch64le`.
-- **ECS (Data Services)**: see [ECS deployment](#ecs-data-services-deployment) for instance groups, variables, and `27_setup_ecs_cluster.yml`.
-- **Internal mirror**: Ubuntu cldr-mngr mirrors apt `.deb` packages and CDH parcels to its local web server (`16` + `17` playbooks).
+- **ECS (Data Services)**: see [ECS deployment](#ecs-data-services-deployment) for instance groups, variables, and `33_setup_ecs_cluster.yml`.
+- **Internal mirror**: Ubuntu cldr-mngr mirrors apt `.deb` packages and CDH parcels to its local web server (`20` + `22` playbooks).
 
 ### ARM64 / AWS Graviton (optional)
 
@@ -301,9 +301,9 @@ cdp-onprem-automation/
 |---|---|---|
 | Prerequisites | `00`–`09` | SSH, hostname, packages, OS tuning |
 | Identity & DNS | `00_detect`, `10`–`15` | FreeIPA or AD (auto-detected), DNS, wildcard `*.apps` |
-| Cloudera Manager | `16`–`25` | Repos, PostgreSQL, CM install, Auto-TLS, Kerberos, LDAP |
+| Cloudera Manager | `20`–`30` | Repos, PostgreSQL, CM install, Auto-TLS, Kerberos, LDAP |
 | CMS & base cluster | `24`, `26` | Management Service, CDH base cluster (HDFS/YARN/ZK) |
-| ECS (Data Services) | `27` | Experience cluster on `ecs-masters` / `ecs-workers` (skipped when groups empty) |
+| ECS (Data Services) | `33` | Experience cluster on `ecs-masters` / `ecs-workers` (skipped when groups empty) |
 | Cleanup | `99` | Toggle-driven teardown (base cluster, ECS, CMS, CM) |
 
 ```bash

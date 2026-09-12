@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 13_update_syscfg_network.yml
+### ansible-playbook -i inventory.ini 15_update_syscfg_network.yml
 # vars:
 #   ipaserver_domain: cldrsetup.local
 

@@ -1,7 +1,7 @@
-### ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml
+### ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml
 #
 # Install Cloudera Data Services (ECS / Experience Cluster) on ecs-masters/ecs-workers.
-# Requires CDP base cluster (26_setup_base_cluster.yml) and CM agents on ECS nodes.
+# Requires CDP base cluster (31_setup_base_cluster.yml) and CM agents on ECS nodes.
 ---
 - import_playbook: 00_ensure_collections.yml
 

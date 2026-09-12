@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 21_setup_cm_license.yml
+### ansible-playbook -i inventory.ini 26_setup_cm_license.yml
 # vars:
 #   cm_port: 7180
 #   cm_admin_user: "admin"

@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 15_setup_wildcard.yml
+### ansible-playbook -i inventory.ini 19_setup_wildcard.yml
 # vars:
 #   ipaserver_domain: cldrsetup.local
 #   ipaadmin_password: "vmware123"

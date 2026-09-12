@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 23_setup_cm_krbs.yml
+### ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
 ---
 - import_playbook: 00_ensure_collections.yml
 

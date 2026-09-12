@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 16_setup_internal_repo.yml
+### ansible-playbook -i inventory.ini 21_setup_internal_repo.yml
 #
 # Internal web server for CM/CDH mirror — only when cm_repo_source=internal
 ---
