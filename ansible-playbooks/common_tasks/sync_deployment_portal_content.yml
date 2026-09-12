@@ -23,6 +23,7 @@
     src: deployment_portal_pgadmin-servers.json.j2
     dest: "{{ deployment_portal_config_dir }}/pgadmin-servers.json"
     mode: "0644"
+  register: pgadmin_servers_render
 
 - name: Render Caddy configuration
   ansible.builtin.template:
@@ -112,6 +113,19 @@
   when: portal_compose_render is changed
   register: pgadmin_recreate_compose
   failed_when: pgadmin_recreate_compose.rc != 0
+
+- name: Recreate pgAdmin when server preset changed
+  ansible.builtin.command:
+    argv: >-
+      {{
+        deployment_portal_compose_argv
+        + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', 'pgadmin']
+      }}
+  when:
+    - pgadmin_servers_render is changed
+    - not (portal_compose_render is changed)
+  register: pgadmin_recreate_servers
+  failed_when: pgadmin_recreate_servers.rc != 0
 
 - name: Ensure portal ports are allowed when firewalld is active
   ansible.builtin.import_tasks: ensure_deployment_portal_firewall_ports.yml

@@ -3,6 +3,9 @@ services:
     image: {{ deployment_portal_caddy_image }}
     container_name: {{ deployment_portal_caddy_container }}
     restart: unless-stopped
+    depends_on:
+      pgadmin:
+        condition: service_healthy
     ports:
       - "0.0.0.0:{{ deployment_portal_http_port }}:{{ deployment_portal_http_port }}/tcp"
     volumes:
@@ -20,10 +23,15 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: "{{ pgadmin_default_email }}"
       PGADMIN_DEFAULT_PASSWORD: "{{ pgadmin_default_password }}"
-      PGADMIN_CONFIG_SERVER_MODE: "False"
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     volumes:
-      - {{ deployment_portal_config_dir }}/pgadmin-servers.json:/pgadmin4/servers.json:ro
+      - {{ deployment_portal_config_dir }}/pgadmin-servers.json:/pgadmin4/servers.json:ro,z
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/misc/ping || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
     networks:
       - deployment_portal
 

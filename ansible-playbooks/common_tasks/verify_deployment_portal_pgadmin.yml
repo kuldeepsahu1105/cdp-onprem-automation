@@ -1,0 +1,84 @@
+---
+# pgAdmin container must be running and serve HTTP on the published host port (Caddy upstream pgadmin:80).
+
+- name: Check pgAdmin container is running
+  ansible.builtin.command:
+    cmd: >-
+      docker ps --filter name=^{{ deployment_portal_pgadmin_container }}$
+      --filter status=running -q
+  register: pgadmin_container_running
+  changed_when: false
+  failed_when: false
+
+- name: Capture pgAdmin container state when not running
+  ansible.builtin.command:
+    cmd: docker ps -a --filter name={{ deployment_portal_pgadmin_container }} --no-trunc
+  register: pgadmin_container_ps
+  changed_when: false
+  failed_when: false
+  when: pgadmin_container_running.stdout | default('') | trim | length == 0
+
+- name: Capture pgAdmin logs when container is not running
+  ansible.builtin.command:
+    cmd: docker logs --tail 120 {{ deployment_portal_pgadmin_container }}
+  register: pgadmin_logs_not_running
+  changed_when: false
+  failed_when: false
+  when: pgadmin_container_running.stdout | default('') | trim | length == 0
+
+- name: Fail when pgAdmin container is not running
+  ansible.builtin.fail:
+    msg: >-
+      pgAdmin container '{{ deployment_portal_pgadmin_container }}' is not running on {{ inventory_hostname }}.
+      Caddy vhost pgAdmin will return 502 until the container is healthy (upstream must be compose service name pgadmin:80).
+      docker ps -a output:
+      {{ pgadmin_container_ps.stdout | default('(none)') }}
+      Recent logs:
+      {{ pgadmin_logs_not_running.stdout | default('(no logs)') }}
+      Fix: re-run PORTAL or on this host:
+      cd {{ deployment_portal_config_dir }} && docker compose up -d --force-recreate pgadmin
+  when: pgadmin_container_running.stdout | default('') | trim | length == 0
+
+- name: Verify pgAdmin responds on localhost published port
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ deployment_portal_pgadmin_host_port | int }}/"
+    method: GET
+    status_code: [200, 302, 308]
+    follow_redirects: none
+    return_content: false
+  register: pgadmin_local_http
+  retries: 12
+  delay: 5
+  until: pgadmin_local_http is succeeded
+
+- name: Capture pgAdmin logs when local HTTP check failed
+  ansible.builtin.command:
+    cmd: docker logs --tail 120 {{ deployment_portal_pgadmin_container }}
+  register: pgadmin_logs_http_fail
+  changed_when: false
+  failed_when: false
+  when: pgadmin_local_http is failed
+
+- name: Fail when pgAdmin does not respond locally
+  ansible.builtin.fail:
+    msg: >-
+      pgAdmin did not respond on http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/ on {{ inventory_hostname }}.
+      Check image arch (dpage/pgadmin4:8), PGADMIN_DEFAULT_EMAIL/PASSWORD, and port conflicts on :{{ deployment_portal_pgadmin_host_port }}.
+      Recent logs:
+      {{ pgadmin_logs_http_fail.stdout | default('(no logs captured)') }}
+  when: pgadmin_local_http is failed
+
+- name: Show pgAdmin logs for debugging (optional)
+  ansible.builtin.command:
+    cmd: docker logs --tail 80 {{ deployment_portal_pgadmin_container }}
+  register: pgadmin_logs_debug
+  changed_when: false
+  failed_when: false
+  when: deployment_portal_pgadmin_debug_logs | default(false) | bool
+
+- name: Print pgAdmin debug logs
+  ansible.builtin.debug:
+    var: pgadmin_logs_debug.stdout_lines
+  when:
+    - deployment_portal_pgadmin_debug_logs | default(false) | bool
+    - pgadmin_logs_debug is defined

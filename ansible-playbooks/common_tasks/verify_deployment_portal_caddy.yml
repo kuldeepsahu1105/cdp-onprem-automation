@@ -62,6 +62,9 @@
     timeout: 180
     state: started
 
+- name: Verify pgAdmin container and local HTTP
+  ansible.builtin.import_tasks: verify_deployment_portal_pgadmin.yml
+
 - name: Resolve control reachability for portal URL checks
   ansible.builtin.import_tasks: detect_ansible_control_reachability.yml
   vars:

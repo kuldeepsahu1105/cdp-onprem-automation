@@ -95,6 +95,8 @@ Variables:
 
 If Tier **B** warns but Tier **A** passed, open security groups for the relevant ports (**8088**, **5050**, **7180**/**7183**, etc.) from Jenkins/office CIDRs. Grep Ansible logs for `Tier B` or `CDP_ACCESS_URLS_BEGIN`; `jenkins/scripts/build-access-urls.sh` lists URLs for email.
 
+**pgAdmin 502 / :5050 unreachable:** On **ipaserver** (or portal host), `cd {{ deployment_portal_config_dir | default('/opt/cldr-deployment-portal') }}` then `docker ps -a --filter name=cldr-portal-pgadmin` and `curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:5050/`. Caddy must reverse-proxy **`pgadmin:80`** (compose service name). Fix: re-run Jenkins **PORTAL** or `docker compose -f docker-compose.yml up -d --force-recreate pgadmin caddy`. Ansible task `verify_deployment_portal_pgadmin.yml` fails with `docker logs` on error; set `deployment_portal_pgadmin_debug_logs: true` for extra log output after a successful sync.
+
 When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-playbooks/`, the wrapper prompts you to choose. Override with `ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, or `CM_INFO_FILE`.
 
 ### Without wrappers (direct `ansible-playbook`)
