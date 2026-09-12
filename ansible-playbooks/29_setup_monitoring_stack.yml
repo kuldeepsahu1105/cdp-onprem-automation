@@ -7,11 +7,8 @@
   connection: local
   gather_facts: true
   tasks:
-    - name: Require deployment portal host
-      ansible.builtin.assert:
-        that:
-          - deployment_portal_host_group in groups
-          - groups[deployment_portal_host_group] | length > 0
+    - name: Resolve portal install host
+      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
 
     - name: Enable monitoring in portal context for this run
       ansible.builtin.set_fact:
@@ -21,7 +18,7 @@
       ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
 
 - name: Deploy monitoring stack
-  hosts: "{{ deployment_portal_host_group }}"
+  hosts: "{{ hostvars['localhost']['deployment_portal_host_group_effective'] }}"
   become: true
   gather_facts: true
   tasks:

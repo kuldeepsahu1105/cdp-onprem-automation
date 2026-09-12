@@ -1,7 +1,7 @@
 ### ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
 #
-# Caddy deployment index + pgAdmin on the CM / PostgreSQL host (default cldr-mngr).
-# Optional monitoring stack: set monitoring_stack_enabled=true or run 29_setup_monitoring_stack.yml
+# Ops stack on ipaserver (auto) or cldr-mngr: Caddy index, pgAdmin, Prometheus, Grafana,
+# Alertmanager, cAdvisor. CM PostgreSQL remains on cldr-mngr (remote pgAdmin server entry).
 ---
 - name: Build deployment portal facts
   hosts: localhost
@@ -15,8 +15,8 @@
     - name: Build deployment portal context from inventory
       ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
 
-- name: Install deployment portal (Caddy index + pgAdmin)
-  hosts: "{{ deployment_portal_host_group }}"
+- name: Install deployment portal and monitoring (Caddy, pgAdmin, Grafana, Prometheus, …)
+  hosts: "{{ hostvars['localhost']['deployment_portal_host_group_effective'] }}"
   become: true
   gather_facts: true
   tasks:

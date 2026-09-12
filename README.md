@@ -114,12 +114,18 @@ ansible-playbook -i inventory.ini 26_setup_base_cluster.yml \
 
 ## Deployment portal (Caddy index + pgAdmin)
 
-After cluster deploy, `28_setup_deployment_portal.yml` installs on **`cldr-mngr`** (by default):
+After cluster deploy, `28_setup_deployment_portal.yml` installs the **ops stack** on **`ipaserver`** when `[ipaserver]` exists, otherwise **`cldr-mngr`** (`deployment_portal_host_group: auto`):
 
-- **Caddy** on port `8088` — HTML index with CM, FreeIPA, PostgreSQL, ECS, pgAdmin, and inventory node links
-- **pgAdmin** on port `5050` — preconfigured server entry for CM PostgreSQL
+| Service | Port / path |
+|---------|-------------|
+| **Caddy deployment index** | `8088` |
+| **pgAdmin** | `5050` (connects to CM PostgreSQL on `cldr-mngr`) |
+| **Grafana** | `8088/grafana/` |
+| **Prometheus** | `8088/prometheus/` |
+| **Alertmanager** | `8088/alertmanager/` |
+| **cAdvisor** | `8089` |
 
-Optional **monitoring** (Prometheus, Grafana, Alertmanager, cAdvisor): set `monitoring_stack_enabled: true` in `group_vars/all.yml`, or run with `MONITORING_STACK_ENABLED=true` (playbooks `28` + `29`). Extend links via `deployment_portal_extra_links` and `deployment_portal_data_service_links`.
+`monitoring_stack_enabled` defaults to **`true`** (Grafana included). Disable with `monitoring_stack_enabled: false` or run only `29` later. Extend the index via `deployment_portal_extra_links` and `deployment_portal_data_service_links`.
 
 ```bash
 ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml

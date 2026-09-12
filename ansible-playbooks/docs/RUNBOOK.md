@@ -181,7 +181,7 @@ ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
 MONITORING_STACK_ENABLED=true ansible-playbook -i inventory.ini 29_setup_monitoring_stack.yml
 ```
 
-Open `http://<cldr-mngr-fqdn>:8088/` for the index (CM, IPA, ECS, PostgreSQL, pgAdmin, node table). pgAdmin: port `5050`.
+Ops stack runs on **ipaserver** when present (`deployment_portal_host_group: auto`), else **cldr-mngr**. Open `http://<ops-host-fqdn>:8088/` (index, Grafana, Prometheus). pgAdmin: port `5050` on the same ops host; database is **cldr-mngr** PostgreSQL.
 
 ---
 

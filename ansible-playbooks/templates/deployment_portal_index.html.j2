@@ -29,10 +29,16 @@
   <p class="sub">Domain <code>{{ ctx.cluster_domain }}</code> · realm <code>{{ ctx.cluster_realm }}</code> · identity <code>{{ ctx.identity_provider }}</code> · generated {{ ctx.generated_at }}</p>
 
   <section>
-    <h2>Portal &amp; admin UIs</h2>
+    <h2>Ops host (portal, pgAdmin, Grafana, Prometheus)</h2>
     <ul>
-      <li><strong>This index</strong> — <a href="{{ ctx.portal.index_url }}">{{ ctx.portal.index_url }}</a></li>
-      <li><strong>pgAdmin</strong> — <a href="{{ ctx.portal.pgadmin_url }}">{{ ctx.portal.pgadmin_url }}</a> <span class="badge">PostgreSQL</span></li>
+      <li>Host: <code>{{ ctx.ops_host.fqdn }}</code> <span class="badge">{{ ctx.ops_host.inventory_group }}</span></li>
+      <li>{{ ctx.ops_host.services }}</li>
+      <li><strong>Deployment index (Caddy)</strong> — <a href="{{ ctx.portal.index_url }}">{{ ctx.portal.index_url }}</a></li>
+      <li><strong>pgAdmin</strong> — <a href="{{ ctx.portal.pgadmin_url }}">{{ ctx.portal.pgadmin_url }}</a> <span class="badge">connects to CM DB</span></li>
+      {% if ctx.monitoring.enabled %}
+      <li><strong>Grafana</strong> — <a href="{{ ctx.monitoring.grafana_url }}">{{ ctx.monitoring.grafana_url }}</a></li>
+      <li><strong>Prometheus</strong> — <a href="{{ ctx.monitoring.prometheus_url }}">{{ ctx.monitoring.prometheus_url }}</a></li>
+      {% endif %}
       {% if ctx.identity.ipa_ui_url %}
       <li><strong>{{ ctx.identity.ipa_ui_label }}</strong> — <a href="{{ ctx.identity.ipa_ui_url }}">{{ ctx.identity.ipa_ui_url }}</a></li>
       {% endif %}
@@ -79,12 +85,12 @@
 
   {% if ctx.monitoring.enabled %}
   <section>
-    <h2>Monitoring stack</h2>
+    <h2>Monitoring stack (on ops host)</h2>
     <ul>
-      <li><strong>Grafana</strong> — <a href="{{ ctx.monitoring.grafana_url }}">{{ ctx.monitoring.grafana_url }}</a></li>
+      <li><strong>Grafana</strong> — <a href="{{ ctx.monitoring.grafana_url }}">{{ ctx.monitoring.grafana_url }}</a> <span class="badge">dashboards</span></li>
       <li><strong>Prometheus</strong> — <a href="{{ ctx.monitoring.prometheus_url }}">{{ ctx.monitoring.prometheus_url }}</a></li>
       <li><strong>Alertmanager</strong> — <a href="{{ ctx.monitoring.alertmanager_url }}">{{ ctx.monitoring.alertmanager_url }}</a></li>
-      <li><strong>cAdvisor</strong> — <a href="{{ ctx.monitoring.cadvisor_url }}">{{ ctx.monitoring.cadvisor_url }}</a> <span class="badge">host metrics</span></li>
+      <li><strong>cAdvisor</strong> — <a href="{{ ctx.monitoring.cadvisor_url }}">{{ ctx.monitoring.cadvisor_url }}</a> <span class="badge">container metrics</span></li>
     </ul>
   </section>
   {% endif %}

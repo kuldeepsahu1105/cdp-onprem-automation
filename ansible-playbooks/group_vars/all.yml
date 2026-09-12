@@ -429,11 +429,13 @@ ecs_control_plane_embedded_db_storage_gb: 50
 ecs_control_plane_embedded_vault_storage_gb: 2
 
 # ---------------------------------------------------------------------------
-# Deployment portal (Caddy index + pgAdmin) — 28_setup_deployment_portal.yml
-# Optional monitoring — monitoring_stack_enabled or 29_setup_monitoring_stack.yml
+# Deployment portal + ops UI — 28_setup_deployment_portal.yml
+# Caddy index, pgAdmin, Prometheus, Grafana, Alertmanager, cAdvisor on ops host.
+# auto = ipaserver when [ipaserver] exists, else cldr-mngr. pgAdmin targets CM PostgreSQL on cldr-mngr.
 # ---------------------------------------------------------------------------
 deployment_portal_enabled: true
-deployment_portal_host_group: cldr-mngr
+deployment_portal_host_group: auto
+deployment_portal_postgres_host_group: cldr-mngr
 deployment_portal_http_port: 8088
 deployment_portal_pgadmin_host_port: 5050
 deployment_portal_config_dir: /opt/cldr-deployment-portal
@@ -454,7 +456,7 @@ deployment_portal_inventory_groups:
 deployment_portal_data_service_links: []
 deployment_portal_extra_links: []
 
-monitoring_stack_enabled: false
+monitoring_stack_enabled: true
 monitoring_config_dir: /opt/cldr-monitoring
 monitoring_prometheus_image: prom/prometheus:v2.54.1
 monitoring_prometheus_container: cldr-mon-prometheus

@@ -45,6 +45,8 @@ allowed_keys:
   - base_cluster_yarn_nm_vcores
   - ecs_cluster_name
   - deployment_portal_enabled
+  - deployment_portal_host_group
+  - deployment_portal_postgres_host_group
   - deployment_portal_http_port
   - deployment_portal_pgadmin_host_port
   - monitoring_stack_enabled
