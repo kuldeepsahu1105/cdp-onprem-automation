@@ -1,0 +1,110 @@
+---
+# Kerberos CM settings via REST (no cloudera.cluster.cm_kerberos / cm_client — ApiClient API mismatch on controller).
+
+- name: Kerberos — build KDC admin principal for CM import
+  ansible.builtin.set_fact:
+    cm_krb_kdc_admin_principal: >-
+      {{
+        krb5_kdc_admin_user
+        if ('@' in (krb5_kdc_admin_user | string))
+        else (krb5_kdc_admin_user ~ '@' ~ cluster_realm)
+      }}
+    cm_krb_enc_types_value: >-
+      {{
+        krb5_enc_types if (krb5_enc_types is string)
+        else (krb5_enc_types | join(' '))
+      }}
+
+- name: Kerberos — read full CM configuration
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/cm/config"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+  register: cm_krb_config_before
+
+- name: Kerberos — build desired CM Kerberos configuration items
+  ansible.builtin.set_fact:
+    cm_krb_desired_items:
+      - { name: KRB_ENC_TYPES, value: "{{ cm_krb_enc_types_value }}" }
+      - { name: SECURITY_REALM, value: "{{ cluster_realm }}" }
+      - { name: KDC_TYPE, value: "{{ krb5_kdc_type }}" }
+      - { name: KDC_ADMIN_HOST, value: "{{ kdc_host }}" }
+      - { name: KDC_HOST, value: "{{ kdc_host }}" }
+
+- name: Kerberos — apply CM Kerberos configuration
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/cm/config"
+    method: PUT
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body:
+      message: "Ansible — enable Kerberos integration"
+      items: "{{ cm_krb_desired_items }}"
+    status_code: [200]
+  register: cm_kerberos_api_result
+  changed_when: true
+
+- name: Kerberos — read CM Kerberos status
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/cm/kerberosInfo"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+  register: cm_krb_info
+
+- name: Kerberos — import KDC admin credentials when CM is not yet kerberized
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/cm/commands/importAdminCredentials"
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body:
+      username: "{{ cm_krb_kdc_admin_principal }}"
+      password: "{{ krb5_kdc_admin_password }}"
+    status_code: [200, 201, 204, 400]
+  register: cm_krb_import_cmd
+  failed_when: false
+  changed_when: cm_krb_import_cmd.status in [200, 201, 204]
+  when: not (cm_krb_info.json.kerberized | default(false) | bool)
+
+- name: Kerberos — wait for importAdminCredentials command
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/commands/{{ cm_krb_import_cmd.json.id }}"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+  register: cm_krb_import_poll
+  until: >
+    cm_krb_import_poll.json.active is defined
+    and not (cm_krb_import_poll.json.active | bool)
+  retries: 40
+  delay: 5
+  when:
+    - cm_krb_import_cmd.json is defined
+    - cm_krb_import_cmd.json.id is defined
+    - cm_krb_import_cmd.status in [200, 201, 204]
+
+- name: Kerberos — fail when importAdminCredentials command failed
+  ansible.builtin.fail:
+    msg: "importAdminCredentials failed: {{ cm_krb_import_poll.json.resultMessage | default(cm_krb_import_cmd.json | default('unknown')) }}"
+  when:
+    - cm_krb_import_poll is defined
+    - cm_krb_import_poll.json is defined
+    - cm_krb_import_poll.json.success is defined
+    - not (cm_krb_import_poll.json.success | bool)
