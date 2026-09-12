@@ -84,33 +84,19 @@
 - name: Build ordered Caddy CM API probe URL candidates (ops slug, then CM public slug)
   ansible.builtin.set_fact:
     cm_api_caddy_probe_urls: >-
-      {{
-        (
-          [
-            (
-              'http://cm.'
-              + (item | replace('.', '-'))
-              + '.'
-              + (caddy_vhost_public_base | default('pvc.cloudera-labs.com'))
-              + (
-                ':'
-                + (deployment_portal_http_port | default(8088) | string)
-                if (deployment_portal_http_port | default(8088) | int) != 80
-                else ''
-              )
-            )
-            for item in (cm_api_caddy_probe_slug_ips | default([]))
-          ]
-          + (
-            [hostvars['localhost'].caddy_vhost_urls_external.cm.url | default('') | trim | regex_replace('/+$', '')]
-            if (hostvars['localhost'].caddy_vhost_urls_external.cm.url | default('') | length > 0)
-            else []
-          )
-        )
-        | unique
-        | reject('equalto', '')
-        | list
-      }}
+      {%- set slugs = cm_api_caddy_probe_slug_ips | default([]) -%}
+      {%- set vhost_base = caddy_vhost_public_base | default('pvc.cloudera-labs.com') -%}
+      {%- set http_port = deployment_portal_http_port | default(8088) | int -%}
+      {%- set port_suffix = (':' ~ (http_port | string)) if (http_port != 80) else '' -%}
+      {%- set out = [] -%}
+      {%- for item in slugs -%}
+      {%- set _ = out.append('http://cm.' ~ (item | replace('.', '-')) ~ '.' ~ vhost_base ~ port_suffix) -%}
+      {%- endfor -%}
+      {%- set ext_url = hostvars['localhost'].caddy_vhost_urls_external.cm.url | default('') | trim | regex_replace('/+$', '') -%}
+      {%- if ext_url | length > 0 -%}
+      {%- set _ = out.append(ext_url) -%}
+      {%- endif -%}
+      {{ out | unique | reject('equalto', '') | list }}
   when:
     - (cm_config_api_via_caddy_proxy | default('auto') | lower) in ['auto', 'true', '1', 'yes', 'on']
     - cm_api_caddy_probe_slug_ips is defined
