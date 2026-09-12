@@ -1,0 +1,86 @@
+---
+# Set REMOTE_PARCEL_REPO_URLS via PUT /cm/config (no cloudera.cluster.cm_config).
+
+- name: Parcel repo — resolve HTTPS CM API URL
+  ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
+
+- name: Parcel repo — read current CM configuration
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/config"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_parcel_config_get
+  changed_when: false
+
+- name: Parcel repo — build desired remote parcel repository URL list
+  ansible.builtin.set_fact:
+    cm_parcel_repo_urls_effective: >-
+      {{
+        (
+          (
+            (cm_parcel_config_get.json['items'] | default([])
+             | selectattr('name', 'equalto', 'REMOTE_PARCEL_REPO_URLS')
+             | map(attribute='value') | first | default(''))
+            .split(',')
+            | map('trim')
+            | reject('equalto', '')
+            | list
+          )
+          + ([parcel_repo | default('')] if (parcel_repo is defined) else [])
+          + (cm_parcel_repo_extra_urls | default([]))
+          | map('trim')
+          | reject('equalto', '')
+          | list
+          | unique
+        )
+        | join(',')
+      }}
+
+- name: Parcel repo — detect configuration drift
+  ansible.builtin.set_fact:
+    cm_parcel_repo_config_changed: >-
+      {{
+        (
+          (cm_parcel_config_get.json['items'] | default([])
+           | selectattr('name', 'equalto', 'REMOTE_PARCEL_REPO_URLS')
+           | map(attribute='value') | first | default(''))
+          | string
+        ) != (cm_parcel_repo_urls_effective | string)
+      }}
+
+- name: Parcel repo — apply REMOTE_PARCEL_REPO_URLS in Cloudera Manager
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/config"
+    method: PUT
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body:
+      items:
+        - name: REMOTE_PARCEL_REPO_URLS
+          value: "{{ cm_parcel_repo_urls_effective }}"
+    status_code: [200, 204, 301, 303]
+  when:
+    - cm_parcel_repo_urls_effective | length > 0
+    - cm_parcel_repo_config_changed | bool
+
+- name: Parcel repo — refresh Cloudera Manager parcel repositories
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/commands/refreshParcelRepos"
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 201, 202, 204, 301, 303]
+  when:
+    - cm_parcel_repo_urls_effective | length > 0
+    - cm_parcel_repo_config_changed | bool
+  register: cm_parcel_refresh
+  failed_when: false
