@@ -1,7 +1,6 @@
 ---
-# CM URL verification (manager-local required checks; optional hairpin; optional controller external when portal off):
+# CM URL verification (manager-local required checks; optional controller external when portal off):
 #   Required: http(s) UI on cldr-mngr (private IP / ansible_host / FQDN — probe_cm_manager_ui_http.yml).
-#   Optional hairpin: public-EIP URL from cldr-mngr when deployment_cm_hairpin_url_verify is true (warn only).
 #   Optional controller: verify_service_urls_from_controller.yml when portal is disabled and
 #   deployment_portal_verify_tier_b_enabled is true (default false — use 10/35 localhost external play).
 
@@ -81,52 +80,6 @@
     - autotls_enabled | default(false) | bool
     - cm_tier_a_https_result is defined
     - cm_tier_a_https_result is failed or (cm_tier_a_https_result.status | default(0) | int not in _cm_url_verify_codes)
-
-- name: Optional CM public-EIP hairpin (warn)
-  when:
-    - deployment_cm_hairpin_url_verify | default(false) | bool
-    - "'cldr-mngr' in groups and groups['cldr-mngr'] | length > 0"
-  block:
-    - name: Set CM hairpin URL for optional public-EIP probe
-      ansible.builtin.set_fact:
-        _cm_tier_c_public_url: "http://{{ hostvars[groups['cldr-mngr'][0]].ansible_host }}:{{ cm_http_port | int }}/"
-        _cm_tier_c_hairpin: >-
-          {{
-            (hostvars[groups['cldr-mngr'][0]].private_ip | default('') | length > 0)
-            and (
-              hostvars[groups['cldr-mngr'][0]].ansible_host
-              != hostvars[groups['cldr-mngr'][0]].private_ip
-            )
-          }}
-      run_once: true
-
-    - name: Probe optional CM public-EIP URL from cldr-mngr (warn only)
-      ansible.builtin.uri:
-        url: "{{ _cm_tier_c_public_url }}"
-        method: GET
-        status_code: "{{ _cm_url_verify_codes }}"
-        follow_redirects: none
-        validate_certs: false
-        timeout: 10
-      register: cm_tier_c_public_result
-      failed_when: false
-      delegate_to: cldr-mngr
-      run_once: true
-      when:
-        - _cm_tier_c_hairpin | default(false) | bool
-        - _cm_tier_c_public_url | default('') | length > 0
-
-    - name: Warn when optional CM public-EIP hairpin URL did not respond on cldr-mngr
-      ansible.builtin.debug:
-        msg: >-
-          Optional CM public-EIP URL did not respond from cldr-mngr (non-blocking):
-          {{ _cm_tier_c_public_url }}.
-          Manager-local UI verify and Jenkins external URL warns may still succeed.
-      when:
-        - cm_tier_c_public_result is defined
-        - not (cm_tier_c_public_result.skipped | default(false) | bool)
-        - cm_tier_c_public_result.failed | default(false)
-          or (cm_tier_c_public_result.status | default(0) | int not in _cm_url_verify_codes)
 
 - name: External CM URL check from controller (portal disabled only)
   when:

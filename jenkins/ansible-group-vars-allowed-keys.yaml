@@ -72,7 +72,6 @@ allowed_keys:
   - deployment_external_url_verify
   - deployment_portal_external_url_verify
   - deployment_portal_verify_tier_b_enabled
-  - deployment_cm_hairpin_url_verify
   - deployment_service_external_url_verify
   - deployment_cm_external_url_verify
   - deployment_grafana_external_url_verify

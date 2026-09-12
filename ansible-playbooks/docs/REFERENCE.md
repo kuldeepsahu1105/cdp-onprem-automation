@@ -414,7 +414,6 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `deployment_portal_external_url_verify` | `warn` | Legacy Tier B default for portal when `deployment_external_url_verify` is unset |
 | `deployment_service_external_url_verify` | — | Optional map of per-service Tier B modes (`cm`, `portal`, `grafana`, …) |
 | `deployment_portal_verify_tier_b_enabled` | `false` | When `deployment_portal_enabled` is false, run Tier B from `25_verify_cm` (default: use `10`/`35` localhost play) |
-| `deployment_cm_hairpin_url_verify` | `false` | Optional CM public-EIP hairpin probe on `cldr-mngr` (warn only) |
 | `common_tasks/install_cloudera_collection.yml` | Galaxy collection install |
 | `common_tasks/cleanup/` | Modular cleanup tasks |
 

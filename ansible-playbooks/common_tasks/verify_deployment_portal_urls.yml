@@ -3,7 +3,7 @@
 #   Tier A (ops host): localhost index (verify_deployment_portal_caddy.yml) plus checks scoped by
 #   deployment_portal_verify_milestones (portal/ipa at bootstrap; pgadmin/cm/monitoring/ecs only when listed;
 #   pgAdmin Caddy vhost probes omitted until milestone pgadmin; CM uses direct cldr-mngr :7180/:7183 when cm is listed).
-#   Tier C (optional on ops host): printed public-EIP / hairpin URLs — warn only when optional.
+#   Optional printed portal URLs (same-host public EIP, Jenkins public profile) are not HTTP-probed here — Tier B / browser.
 #   Tier B (controller): verify_service_urls_from_controller.yml after this file (portal, CM, monitoring, IPA, ECS).
 #   Tier B IPA: public/Jenkins controllers skip direct cluster FQDN (DNS); Caddy ipa.* vhost URLs on deployment_portal_http_port only.
 #
@@ -85,7 +85,7 @@
         )
       }}
 
-- name: Set printed portal URL optional flags (hairpin / ops host / Jenkins public reach)
+- name: Set printed portal URL optional flags (ops host / Jenkins public reach)
   ansible.builtin.set_fact:
     _portal_optional_primary_portal: >-
       {{
@@ -186,37 +186,6 @@
       }}
   when: deployment_portal_context is defined
 
-- name: Mark Tier C hairpin optional URL checks to skip on ops host
-  ansible.builtin.set_fact:
-    deployment_portal_access_url_checks_optional: >-
-      {%- set out = [] -%}
-      {%- for row in deployment_portal_access_url_checks_optional | default([]) -%}
-      {%- set url_host = row.url | default('') | regex_replace('^https?://([^/:]+)(:.*)?(/.*)?$', '\\1') -%}
-      {%- set hairpin_skip = (
-            (_portal_verify_on_ops_host | default(false) | bool)
-            and (_portal_ops_ansible_host | default('') | length > 0)
-            and (url_host == _portal_ops_ansible_host)
-          ) -%}
-      {%- set _ = out.append(row | combine({'tier': 'C', 'hairpin_skip_probe': hairpin_skip | bool})) -%}
-      {%- endfor -%}
-      {{ out }}
-  when:
-    - deployment_portal_context is defined
-    - deployment_portal_access_url_checks_optional | default([]) | length > 0
-
-- name: Note Tier C hairpin URL checks skipped on ops host (non-blocking)
-  ansible.builtin.debug:
-    msg: >-
-      Tier C (ops-host hairpin): skipped HTTP probe to {{ item.url }} from {{ inventory_hostname }}
-      (EC2 cannot reliably reach its own public EIP). Tier A: http://127.0.0.1:{{ deployment_portal_http_port | int }}/;
-      Tier B (Ansible controller / browser) validates external access when security groups allow.
-  loop: "{{ deployment_portal_access_url_checks_optional | default([]) }}"
-  loop_control:
-    label: "{{ item.name | default('portal URL') }}"
-  when:
-    - deployment_portal_access_url_checks_optional | default([]) | length > 0
-    - item.hairpin_skip_probe | default(false) | bool
-
 - name: Verify required printed deployment portal access URLs respond
   ansible.builtin.uri:
     url: "{{ item.url }}"
@@ -235,43 +204,6 @@
   when:
     - deployment_portal_access_url_checks_required | default([]) | length > 0
 
-- name: Probe optional printed deployment portal access URLs (Tier C, warn only)
-  ansible.builtin.uri:
-    url: "{{ item.url }}"
-    method: GET
-    status_code: "{{ _portal_url_verify_codes }}"
-    follow_redirects: none
-    validate_certs: false
-    timeout: 10
-  loop: >-
-    {%- set out = [] -%}
-    {%- for row in deployment_portal_access_url_checks_optional | default([]) -%}
-    {%- if not (row.hairpin_skip_probe | default(false) | bool) -%}
-    {%- set _ = out.append(row) -%}
-    {%- endif -%}
-    {%- endfor -%}
-    {{ out }}
-  loop_control:
-    label: "{{ item.name }}"
-  register: deployment_portal_access_url_optional_results
-  failed_when: false
-  when:
-    - deployment_portal_access_url_checks_optional | default([]) | length > 0
-
-- name: Warn when a Tier C optional printed access URL does not respond
-  ansible.builtin.debug:
-    msg: >-
-      Tier C warn ({{ inventory_hostname }}): {{ item.item.name | default('portal URL') }} did not respond
-      (HTTP {{ item.status | default('n/a') }}; non-blocking).
-  loop: "{{ deployment_portal_access_url_optional_results.results | default([]) }}"
-  loop_control:
-    label: "{{ item.item.name | default('portal URL') }}"
-  when:
-    - deployment_portal_access_url_checks_optional | default([]) | length > 0
-    - deployment_portal_access_url_optional_results is defined
-    - not (item.skipped | default(false) | bool)
-    - item.failed | default(false) or (item.status | default(0) | int not in _portal_url_verify_codes)
-
 - name: Fail when a required printed access URL does not respond
   ansible.builtin.fail:
     msg: >-
@@ -279,7 +211,7 @@
       Expected HTTP {{ _portal_url_verify_codes | join('/') }} from {{ inventory_hostname }}.
       On the ops host, confirm Caddy on http://127.0.0.1:{{ deployment_portal_http_port | int }}/ first
       (docker ps, docker logs {{ deployment_portal_caddy_container }}).
-      Public EIP URLs may not respond from the same EC2 instance (hairpin); use a browser or Jenkins outside the VPC.
+      Public EIP URLs may not respond from the same EC2 instance; use Tier B from Jenkins or a browser outside the VPC.
       Re-run: ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml
   loop: "{{ deployment_portal_access_url_required_results.results | default([]) }}"
   when:

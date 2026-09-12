@@ -39,7 +39,7 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 | `deployment_portal_anchor_inv` | `build_deployment_portal_facts.yml` (localhost); verify falls back via `hostvars['localhost'].deployment_portal_anchor_inv` | Inventory name of ops/Caddy anchor host |
 | `_portal_verify_milestones_effective` | `resolve_deployment_portal_verify_milestones.yml` | Must run immediately before verify URLs (also imported from `verify_deployment_portal_caddy.yml`) |
 | `caddy_vhost_urls` | `build_deployment_portal_facts.yml` | Required for Caddy vhost Tier A checks |
-| `ansible_control_reach_public_only` | `detect_ansible_control_reachability.yml` (delegate localhost) | Used for optional printed URL / hairpin behavior; read via `hostvars['localhost']` on ops host |
+| `ansible_control_reach_public_only` | `detect_ansible_control_reachability.yml` (delegate localhost) | Marks printed portal URLs optional on ops host / Jenkins public profile; read via `hostvars['localhost']` on ops host |
 | `deployment_portal_has_ipa`, `deployment_portal_ipa_fqdn`, `deployment_portal_cm_fqdn`, `deployment_portal_cm_upstream_host` | `build_deployment_portal_facts.yml` + load on ops | Milestone-gated checks; direct CM UI probes on cldr-mngr |
 | Group defaults | `group_vars/all.yml` | e.g. `deployment_portal_http_port`, `deployment_portal_url_verify_status_codes`, `caddy_vhost_enabled` |
 
@@ -76,7 +76,7 @@ Import order in `set_cm_api_url.yml`:
 | `deployment_tier_b_url_checks` | `build_deployment_tier_b_url_checks.yml` on **localhost** — Tier B reads via `hostvars['localhost']` in `verify_service_urls_from_controller.yml` |
 | `ecs_control_plane_url_effective` | `resolve_ecs_control_plane_url.yml` — `ecs_control_plane_url` or `https://console.<ecs_app_domain>` (no Caddy) |
 
-**Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml` (manager-local UI verify; optional hairpin; optional controller external when portal disabled). `set_cm_api_url.yml` runs first on localhost and prints `cm_api_url`. Portal Caddy verify uses detect with **`ansible_control_reachability_skip_cm_probes: true`** and explicit `cm_host_public` / `cm_host_private` vars — do not assume CM API facts exist on the ops host play.
+**Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml` (manager-local UI verify; optional controller external when portal disabled). `set_cm_api_url.yml` runs first on localhost and prints `cm_api_url`. Portal Caddy verify uses detect with **`ansible_control_reachability_skip_cm_probes: true`** and explicit `cm_host_public` / `cm_host_private` vars — do not assume CM API facts exist on the ops host play.
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 # Tier B: HTTP GET printed external service URLs from the Ansible controller (Jenkins / laptop).
-# Tier A runs on service hosts (portal ops host, CM on cldr-mngr @ 127.0.0.1). Tier C is warn-only on hosts.
+# Tier A runs on service hosts (portal ops host @ 127.0.0.1; CM on cldr-mngr via manager IP/FQDN).
 # Probe list is filtered by deployment_portal_verify_milestones_effective (see build_deployment_tier_b_url_checks.yml).
 #
 # All Tier B facts and probes run on localhost (Jenkins controller), not the portal ops host.

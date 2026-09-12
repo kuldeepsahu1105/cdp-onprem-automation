@@ -306,8 +306,8 @@ ansible_control_reachability: auto
 cm_api_prefer_private_ip: true
 cm_api_connect_host: ""
 ansible_controller_outside_vpc: false
-# When play runs on localhost in-VPC, delegate CM API discovery to cldr-mngr (127.0.0.1).
-# Jenkins/public controllers probe CM ansible_host (HTTPS :7183) from localhost instead (no EC2 hairpin).
+# When play runs on localhost in-VPC, delegate CM API discovery to cldr-mngr (manager IP/FQDN).
+# Jenkins/public controllers probe CM ansible_host (HTTPS :7183) from the controller (not via same-host public EIP).
 cm_api_delegate_probes_to_manager: true
 cm_api_private_reachability_timeout: 5
 # Cloudera Manager UI/API use direct cldr-mngr :7180/:7183 — not Caddy (portal stack is portal/pgAdmin/monitoring/IPA only).
@@ -332,8 +332,6 @@ deployment_portal_cm_vhost_tier_a_verify: fail
 deployment_external_url_verify: warn
 # Tier B from 25_verify_cm when deployment_portal_enabled=false (default off — use 10/35 localhost Tier B play)
 deployment_portal_verify_tier_b_enabled: false
-# Optional CM public-EIP hairpin from cldr-mngr (:7180) — warn only; default off (manager-local + Jenkins external warns cover CM)
-deployment_cm_hairpin_url_verify: false
 # Legacy portal-only key (used when deployment_external_url_verify is unset)
 deployment_portal_external_url_verify: warn
 # Optional per-service overrides, e.g. deployment_cm_external_url_verify: skip

@@ -1,7 +1,7 @@
 ---
 # Tier B portal + CM + monitoring + IPA + ECS external URL checks from the Ansible controller.
 # Tier A (127.0.0.1 + Caddy Host vhosts on the ops host) already ran in verify_deployment_portal_urls.yml.
-# Tier C (hairpin to own public EIP on the ops host) is optional warn-only in that same file.
+# Optional printed portal URLs on the ops host are not HTTP-probed in verify_deployment_portal_urls.yml.
 
 - name: Resolve deployment portal URL verify milestones for Tier B
   ansible.builtin.import_tasks: resolve_deployment_portal_verify_milestones.yml
