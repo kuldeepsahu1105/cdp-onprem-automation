@@ -63,15 +63,6 @@
   register: portal_compose_plugin_pkg
   failed_when: false
 
-- name: Register compose plugin install result for Debian and Docker CE paths
-  ansible.builtin.set_fact:
-    portal_compose_plugin_pkg:
-      failed: false
-  when:
-    - portal_compose_plugin_pkg is not defined
-    - ansible_os_family == 'RedHat'
-    - portal_docker_use_ce | default(true) | bool
-
 - name: Enable and start Docker
   ansible.builtin.systemd:
     name: docker

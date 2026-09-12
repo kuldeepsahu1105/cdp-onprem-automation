@@ -39,7 +39,11 @@
 
 - name: Ensure deployment portal stack is running
   ansible.builtin.command:
-    cmd: docker compose -f {{ deployment_portal_config_dir }}/docker-compose.yml up -d --remove-orphans
+    argv: >-
+      {{
+        deployment_portal_compose_argv
+        + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--remove-orphans']
+      }}
   register: portal_compose_up
   changed_when: >-
     'Creating' in portal_compose_up.stdout
@@ -48,7 +52,11 @@
 
 - name: Restart Caddy when configuration changed
   ansible.builtin.command:
-    cmd: docker compose -f {{ deployment_portal_config_dir }}/docker-compose.yml restart caddy
+    argv: >-
+      {{
+        deployment_portal_compose_argv
+        + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'restart', 'caddy']
+      }}
   when: caddyfile_render is changed
 
 - name: Sync monitoring stack configuration
@@ -74,7 +82,11 @@
 
     - name: Ensure monitoring stack is running
       ansible.builtin.command:
-        cmd: docker compose -f {{ monitoring_config_dir }}/docker-compose.yml up -d --remove-orphans
+        argv: >-
+          {{
+            deployment_portal_compose_argv
+            + ['-f', monitoring_config_dir ~ '/docker-compose.yml', 'up', '-d', '--remove-orphans']
+          }}
       register: monitoring_compose_up
       changed_when: >-
         'Creating' in monitoring_compose_up.stdout
@@ -89,7 +101,11 @@
 
     - name: Restart Caddy after monitoring route update
       ansible.builtin.command:
-        cmd: docker compose -f {{ deployment_portal_config_dir }}/docker-compose.yml restart caddy
+        argv: >-
+          {{
+            deployment_portal_compose_argv
+            + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'restart', 'caddy']
+          }}
       when: caddyfile_after_monitoring is changed
 
     - name: Refresh deployment index after monitoring sync

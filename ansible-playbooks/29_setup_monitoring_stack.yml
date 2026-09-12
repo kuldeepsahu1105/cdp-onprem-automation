@@ -68,7 +68,11 @@
 
     - name: Start monitoring stack
       ansible.builtin.command:
-        cmd: docker compose -f {{ monitoring_config_dir }}/docker-compose.yml up -d --remove-orphans
+        argv: >-
+          {{
+            deployment_portal_compose_argv
+            + ['-f', monitoring_config_dir ~ '/docker-compose.yml', 'up', '-d', '--remove-orphans']
+          }}
 
     - name: Update Caddy routes for monitoring
       ansible.builtin.template:
@@ -79,7 +83,11 @@
 
     - name: Restart Caddy
       ansible.builtin.command:
-        cmd: docker compose -f {{ deployment_portal_config_dir }}/docker-compose.yml restart caddy
+        argv: >-
+          {{
+            deployment_portal_compose_argv
+            + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'restart', 'caddy']
+          }}
       when: caddyfile_updated is changed
 
     - name: Re-render and publish deployment index with monitoring section
