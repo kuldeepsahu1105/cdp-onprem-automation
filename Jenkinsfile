@@ -117,9 +117,9 @@ Checked (true): inbound all traffic from 0.0.0.0/0 (public internet). ALLOWED_PO
     )
     string(
       name: 'ALLOWED_PORTS',
-      defaultValue: '[22,443,80,7180,7183,7182,81,5050,8089]',
+      defaultValue: '[22,443,80,7180,7183,7182,81,5050,3000,9090,9093,8089]',
       description: '''Not applied to Terraform security group rules (ALLOW_ALL true or false). Ingress is always all traffic from ALLOWED_CIDRS or 0.0.0.0/0; changing this list does not open or close individual TCP ports.
-Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/7182/7183 CM; 81 Caddy deployment portal (deployment_portal_http_port, ops host, usually ipaserver); 5050 pgAdmin; 8089 cAdvisor. CREATE_NEW SG with ALLOW_ALL=false already allows all ports from ALLOWED_CIDRS. USE_EXISTING SG: ensure those ports are open from Jenkins/office CIDRs.'''
+Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/7182/7183 CM; 81 Caddy deployment portal (deployment_portal_http_port, ops host, usually ipaserver); 5050 pgAdmin; 3000 Grafana; 9090 Prometheus; 9093 Alertmanager; 8089 cAdvisor. CREATE_NEW SG with ALLOW_ALL=false already allows all ports from ALLOWED_CIDRS. USE_EXISTING SG: ensure those ports are open from Jenkins/office CIDRs.'''
     )
     string(
       name: 'CLDR_EIP_NAME',

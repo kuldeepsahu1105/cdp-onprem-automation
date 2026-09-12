@@ -120,9 +120,9 @@ After cluster deploy, `10_setup_deployment_portal.yml` installs the **ops stack*
 |---------|-------------|
 | **Caddy deployment index** | `81` on ops host **public IP** (Jenkins / browser); use **private IP** only from same VPC |
 | **pgAdmin** | `5050` (connects to CM PostgreSQL on `cldr-mngr`) |
-| **Grafana** | `81/grafana/` (via `deployment_portal_http_port`) |
-| **Prometheus** | `81/prometheus/` |
-| **Alertmanager** | `81/alertmanager/` |
+| **Grafana** | host **`3000`** (`monitoring_grafana_host_port`); also Caddy `81/grafana/` or lab vhost |
+| **Prometheus** | host **`9090`**; also Caddy path or vhost |
+| **Alertmanager** | host **`9093`**; also Caddy path or vhost |
 | **cAdvisor** | `8089` |
 
 `monitoring_stack_enabled` defaults to **`true`** (Grafana included). Disable with `monitoring_stack_enabled: false` or run only `29` later. Extend the index via `deployment_portal_extra_links` and `deployment_portal_data_service_links`.

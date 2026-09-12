@@ -276,6 +276,10 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `deployment_portal_postgres_host_group` | `cldr-mngr` | CM PostgreSQL host for pgAdmin |
 | `deployment_portal_http_port` | `81` | Caddy index + Grafana/Prometheus/Alertmanager paths |
 | `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI on ops host |
+| `monitoring_grafana_host_port` | `3000` | Grafana UI on ops host (docker `HOST:3000`) |
+| `monitoring_prometheus_host_port` | `9090` | Prometheus UI on ops host |
+| `monitoring_alertmanager_host_port` | `9093` | Alertmanager UI on ops host |
+| `monitoring_cadvisor_host_port` | `8089` | cAdvisor metrics UI on ops host |
 | `pgadmin_default_email` | `admin@{{ caddy_vhost_public_base }}` | pgAdmin 8 login email (`PGADMIN_DEFAULT_EMAIL`); must not use `.local` cluster domains |
 | `deployment_portal_access_profile` | `auto` | `auto`, `cloud` (public + VPC URLs), or `private` (bare metal / no public IP) |
 | `deployment_portal_prefer_fqdn_urls` | `true` | In `private` profile, use ops FQDN in portal links instead of raw management IP |

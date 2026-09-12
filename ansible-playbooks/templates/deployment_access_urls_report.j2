@@ -8,10 +8,10 @@ Private network (no public IP):
   Portal:    {{ deployment_portal_context.access.primary.portal }}
   pgAdmin:   {{ deployment_portal_context.access.primary.pgadmin }}
 {% if deployment_portal_context.monitoring.enabled %}
-  Grafana:     {{ deployment_portal_context.access.primary.grafana }}
-  Prometheus:  {{ deployment_portal_context.access.primary.prometheus }}
-  Alertmanager:{{ deployment_portal_context.access.primary.alertmanager }}
-  cAdvisor:    {{ deployment_portal_context.access.primary.cadvisor }}
+  Grafana (host :{{ monitoring_grafana_host_port | default(3000) }}):     {{ deployment_portal_context.access.primary.grafana }}
+  Prometheus (host :{{ monitoring_prometheus_host_port | default(9090) }}):  {{ deployment_portal_context.access.primary.prometheus }}
+  Alertmanager (host :{{ monitoring_alertmanager_host_port | default(9093) }}):{{ deployment_portal_context.access.primary.alertmanager }}
+  cAdvisor (host :{{ monitoring_cadvisor_host_port | default(8089) }}):    {{ deployment_portal_context.access.primary.cadvisor }}
 {% endif %}
 {% else %}
 external (internet) (ops public IP):
@@ -22,15 +22,24 @@ external (internet) (ops public IP):
   pgAdmin (direct :{{ deployment_portal_pgadmin_host_port | default(5050) }}): {{ deployment_portal_context.portal.pgadmin_url_direct | default(deployment_portal_context.access.external.pgadmin) }}
 {% endif %}
 {% if deployment_portal_context.monitoring.enabled %}
-  Grafana:     {{ deployment_portal_context.access.external.grafana }}
-  Prometheus:  {{ deployment_portal_context.access.external.prometheus }}
+  Grafana (host :{{ monitoring_grafana_host_port | default(3000) }}):     {{ deployment_portal_context.monitoring.grafana_url_direct | default(deployment_portal_context.access.external.grafana) }}
+  Prometheus (host :{{ monitoring_prometheus_host_port | default(9090) }}):  {{ deployment_portal_context.monitoring.prometheus_url_direct | default(deployment_portal_context.access.external.prometheus) }}
+  Alertmanager (host :{{ monitoring_alertmanager_host_port | default(9093) }}): {{ deployment_portal_context.monitoring.alertmanager_url_direct | default(deployment_portal_context.access.external.alertmanager | default('')) }}
+  cAdvisor (host :{{ monitoring_cadvisor_host_port | default(8089) }}):    {{ deployment_portal_context.access.external.cadvisor }}
+{% if deployment_portal_context.monitoring.grafana_path_url | default('') | length > 0 %}
+  Grafana (Caddy path):     {{ deployment_portal_context.monitoring.grafana_path_url }}
+  Prometheus (Caddy path):  {{ deployment_portal_context.monitoring.prometheus_path_url }}
+  Alertmanager (Caddy path):{{ deployment_portal_context.monitoring.alertmanager_path_url }}
+{% endif %}
 {% endif %}
 Same VPC (ops private IP):
   Portal:    {{ deployment_portal_context.access.vpc.portal }}
   pgAdmin:   {{ deployment_portal_context.access.vpc.pgadmin }}
 {% if deployment_portal_context.monitoring.enabled %}
-  Grafana:     {{ deployment_portal_context.access.vpc.grafana }}
-  Prometheus:  {{ deployment_portal_context.access.vpc.prometheus }}
+  Grafana (host :{{ monitoring_grafana_host_port | default(3000) }}):     {{ deployment_portal_context.access.vpc.grafana }}
+  Prometheus (host :{{ monitoring_prometheus_host_port | default(9090) }}):  {{ deployment_portal_context.access.vpc.prometheus }}
+  Alertmanager (host :{{ monitoring_alertmanager_host_port | default(9093) }}): {{ deployment_portal_context.access.vpc.alertmanager | default('') }}
+  cAdvisor (host :{{ monitoring_cadvisor_host_port | default(8089) }}):    {{ deployment_portal_context.access.vpc.cadvisor }}
 {% endif %}
 {% endif %}
 
