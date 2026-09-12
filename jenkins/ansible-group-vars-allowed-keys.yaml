@@ -65,7 +65,15 @@ allowed_keys:
   - cm_api_private_reachability_timeout
   - ansible_controller_outside_vpc
   - deployment_portal_url_verify_skip_vpc
+  - deployment_external_url_verify
   - deployment_portal_external_url_verify
+  - deployment_service_external_url_verify
+  - deployment_cm_external_url_verify
+  - deployment_grafana_external_url_verify
+  - deployment_pgadmin_external_url_verify
+  - deployment_ipa_external_url_verify
+  - deployment_ecs_external_url_verify
+  - deployment_prometheus_external_url_verify
   - monitoring_grafana_admin_password
   - ecs_data_services_deploy_enabled
   - ecs_control_plane_url

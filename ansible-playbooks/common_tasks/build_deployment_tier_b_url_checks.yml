@@ -1,0 +1,139 @@
+---
+# Build deployment_tier_b_url_checks on localhost for Tier B (Ansible controller) probes.
+# Optional tier_b_url_verify_scope: all | cm | portal (default all)
+
+- name: Set Tier B URL check build inputs
+  ansible.builtin.set_fact:
+    _tier_b_scope: "{{ tier_b_url_verify_scope | default('all') | lower | trim }}"
+    _tier_b_ctx: >-
+      {{
+        hostvars['localhost'].deployment_portal_context
+        | default(deployment_portal_context | default({}))
+      }}
+    _tier_b_monitoring: "{{ monitoring_stack_enabled | default(false) | bool }}"
+    _tier_b_caddy: "{{ caddy_vhost_enabled | default(false) | bool }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Resolve CM host IPs for Tier B when context is missing
+  ansible.builtin.set_fact:
+    _tier_b_cm_public: >-
+      {{
+        hostvars[groups['cldr-mngr'][0]].ansible_host | default('')
+        if ('cldr-mngr' in groups and groups['cldr-mngr'] | length > 0)
+        else ''
+      }}
+    _tier_b_cm_fqdn: >-
+      {{
+        hostvars[groups['cldr-mngr'][0]].cldr_hostname ~ '.' ~ cluster_domain
+        if ('cldr-mngr' in groups and groups['cldr-mngr'] | length > 0)
+        else ''
+      }}
+  delegate_to: localhost
+  run_once: true
+  when: _tier_b_ctx | length == 0
+
+- name: Build Tier B external URL probe list from deployment portal context
+  ansible.builtin.set_fact:
+    deployment_tier_b_url_checks: >-
+      {{
+        (
+          ([{'name': 'portal (external)', 'url': _tier_b_ctx.access.external.portal | default(''), 'service': 'portal'}]
+           if (_tier_b_scope in ['all', 'portal'])
+           and (_tier_b_ctx.access.external.portal | default('') | length > 0)
+           else [])
+          + ([{'name': 'pgAdmin (external)', 'url': _tier_b_ctx.access.external.pgadmin | default(''), 'service': 'pgadmin'}]
+             if (_tier_b_scope == 'all')
+             and (_tier_b_ctx.access.external.pgadmin | default('') | length > 0)
+             else [])
+          + ([{'name': 'Grafana (external)', 'url': _tier_b_ctx.access.external.grafana | default(''), 'service': 'grafana'}]
+             if (_tier_b_scope == 'all')
+             and _tier_b_monitoring
+             and (_tier_b_ctx.access.external.grafana | default('') | length > 0)
+             else [])
+          + ([{'name': 'Prometheus (external)', 'url': _tier_b_ctx.access.external.prometheus | default(''), 'service': 'prometheus'}]
+             if (_tier_b_scope == 'all')
+             and _tier_b_monitoring
+             and (_tier_b_ctx.access.external.prometheus | default('') | length > 0)
+             else [])
+          + ([{'name': 'CM UI HTTP (FQDN)', 'url': _tier_b_ctx.cloudera_manager.ui_url_http | default('') ~ '/',
+              'service': 'cm'}]
+             if (_tier_b_scope in ['all', 'cm'])
+             and (_tier_b_ctx.cloudera_manager.ui_url_http | default('') | length > 0)
+             else [])
+          + ([{'name': 'CM UI HTTPS (FQDN)', 'url': _tier_b_ctx.cloudera_manager.ui_url_https | default('') ~ '/',
+              'service': 'cm'}]
+             if (_tier_b_scope in ['all', 'cm'])
+             and (autotls_enabled | default(false) | bool)
+             and (_tier_b_ctx.cloudera_manager.ui_url_https | default('') | length > 0)
+             else [])
+          + ([{'name': 'CM UI HTTP (public IP)', 'url': 'http://' ~ _tier_b_ctx.anchor.public_ip ~ ':' ~ (cm_http_port | string) ~ '/',
+              'service': 'cm'}]
+             if (_tier_b_scope in ['all', 'cm'])
+             and (_tier_b_ctx.access.profile | default('') != 'private')
+             and (_tier_b_ctx.anchor.public_ip | default('') | length > 0)
+             else [])
+          + ([{'name': 'CM (Caddy vhost)', 'url': _tier_b_ctx.caddy_vhosts.urls_public.cm.url | default(''), 'service': 'cm'}]
+             if (_tier_b_scope in ['all', 'cm'])
+             and _tier_b_caddy
+             and (_tier_b_ctx.caddy_vhosts.urls_public.cm.url | default('') | length > 0)
+             else [])
+          + ([{'name': 'FreeIPA UI', 'url': _tier_b_ctx.identity.ipa_ui_url | default(''), 'service': 'ipa'}]
+             if (_tier_b_scope == 'all')
+             and (_tier_b_ctx.identity.ipa_ui_url | default('') | length > 0)
+             else [])
+          + ([{'name': 'FreeIPA (Caddy vhost)', 'url': _tier_b_ctx.identity.ipa_caddy_url | default(''), 'service': 'ipa'}]
+             if (_tier_b_scope == 'all')
+             and (_tier_b_ctx.identity.ipa_caddy_url | default('') | length > 0)
+             else [])
+          + ([{'name': 'ECS console', 'url': _tier_b_ctx.ecs.console_hint | default(''), 'service': 'ecs'}]
+             if (_tier_b_scope == 'all')
+             and (_tier_b_ctx.ecs.deployed | default(false) | bool)
+             and (_tier_b_ctx.ecs.console_hint | default('') | length > 0)
+             else [])
+          + ([{'name': 'ECS (Caddy vhost)', 'url': _tier_b_ctx.ecs.caddy_url | default(''), 'service': 'ecs'}]
+             if (_tier_b_scope == 'all')
+             and (_tier_b_ctx.ecs.caddy_url | default('') | length > 0)
+             else [])
+        )
+        | selectattr('url', 'defined')
+        | selectattr('url', 'ne', '')
+        | list
+      }}
+  delegate_to: localhost
+  run_once: true
+  when: _tier_b_ctx | length > 0
+
+- name: Build Tier B CM-only URL probes from inventory (no portal context)
+  ansible.builtin.set_fact:
+    deployment_tier_b_url_checks: >-
+      {{
+        (
+          ([{'name': 'CM UI HTTP (FQDN)', 'url': 'http://' ~ _tier_b_cm_fqdn ~ ':' ~ (cm_http_port | string) ~ '/',
+              'service': 'cm'}]
+           if (_tier_b_cm_fqdn | default('') | length > 0)
+           else [])
+          + ([{'name': 'CM UI HTTPS (FQDN)', 'url': 'https://' ~ _tier_b_cm_fqdn ~ ':' ~ (cm_https_port | string) ~ '/',
+              'service': 'cm'}]
+             if (autotls_enabled | default(false) | bool)
+             and (_tier_b_cm_fqdn | default('') | length > 0)
+             else [])
+          + ([{'name': 'CM UI HTTP (public IP)', 'url': 'http://' ~ _tier_b_cm_public ~ ':' ~ (cm_http_port | string) ~ '/',
+              'service': 'cm'}]
+             if (_tier_b_cm_public | default('') | length > 0)
+             and (
+               hostvars[groups['cldr-mngr'][0]].private_ip | default(_tier_b_cm_public)
+               != _tier_b_cm_public
+             )
+             else [])
+        )
+        | selectattr('url', 'defined')
+        | selectattr('url', 'ne', '')
+        | list
+      }}
+  delegate_to: localhost
+  run_once: true
+  when:
+    - _tier_b_ctx | length == 0
+    - _tier_b_scope in ['all', 'cm']
+    - _tier_b_cm_public | default('') | length > 0 or _tier_b_cm_fqdn | default('') | length > 0

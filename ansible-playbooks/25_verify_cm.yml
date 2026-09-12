@@ -120,6 +120,9 @@
         msg: "Available Clusters: {{ cm_clusters.json['items'] }}"
         # msg: "Available Clusters: {{ cm_clusters.json.items | map(attribute='name') | list }}"
 
+    - name: Verify CM UI URLs (Tier A/C on cldr-mngr; Tier B when portal disabled)
+      ansible.builtin.import_tasks: common_tasks/verify_cm_tiered_urls.yml
+
     # - name: Get the host identifiers and names from Cloudera Manager
     #   uri:
     #     url: "{{ cm_api_url }}/hosts"

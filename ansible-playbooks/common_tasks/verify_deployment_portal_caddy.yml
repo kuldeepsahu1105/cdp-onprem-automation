@@ -75,5 +75,7 @@
 - name: Verify deployment portal and Caddy vhost URLs
   ansible.builtin.import_tasks: verify_deployment_portal_urls.yml
 
-- name: Verify external portal URLs from Ansible controller when control profile is public (Tier B)
-  ansible.builtin.import_tasks: verify_deployment_portal_external_from_controller.yml
+- name: Verify external service URLs from Ansible controller when control profile is public (Tier B)
+  ansible.builtin.import_tasks: verify_service_urls_from_controller.yml
+  vars:
+    tier_b_url_verify_scope: all

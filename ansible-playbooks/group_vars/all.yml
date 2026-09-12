@@ -311,8 +311,12 @@ cm_api_delegate_probes_to_manager: true
 cm_api_private_reachability_timeout: 5
 # Portal verify: skip VPC-only URL checks when control profile is public-only (Jenkins default)
 deployment_portal_url_verify_skip_vpc: false
-# Tier B: GET external portal URL from Ansible controller when ansible_control_reachability is public (warn|fail|skip)
+# Tier B: GET external URLs from Ansible controller when ansible_control_reachability is public (warn|fail|skip)
+deployment_external_url_verify: warn
+# Legacy portal-only key (used when deployment_external_url_verify is unset)
 deployment_portal_external_url_verify: warn
+# Optional per-service overrides, e.g. deployment_cm_external_url_verify: skip
+# Or map: deployment_service_external_url_verify: { cm: warn, grafana: skip }
 # Set true after 27_setup_cm_autotls.yml for Caddy CM reverse-proxy target port
 autotls_enabled: false
 

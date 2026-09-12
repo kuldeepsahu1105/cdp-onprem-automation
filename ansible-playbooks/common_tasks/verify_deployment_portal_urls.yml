@@ -1,8 +1,8 @@
 ---
-# Portal URL verify tiers (see RUNBOOK.md § Portal URL verification tiers):
-#   Tier A (required on ops host): http://127.0.0.1:8088/ + Caddy vhost Host checks below.
+# Service URL verify tiers (see RUNBOOK.md § Service URL verification tiers):
+#   Tier A (required on ops host): http://127.0.0.1:8088/ + Caddy vhost Host checks (portal, CM, IPA, Grafana paths).
 #   Tier C (optional on ops host): printed public-EIP / hairpin URLs — warn only when optional.
-#   Tier B (controller): verify_deployment_portal_external_from_controller.yml after this file (Jenkins / public profile).
+#   Tier B (controller): verify_service_urls_from_controller.yml after this file (portal, CM, monitoring, IPA, ECS).
 
 - name: Set deployment portal URL verification defaults
   ansible.builtin.set_fact:
