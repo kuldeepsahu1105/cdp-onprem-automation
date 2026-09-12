@@ -13,14 +13,10 @@ pipeline {
       value: 'VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL,CDH_BASE,ECS_INSTALL',
       defaultValue: 'VALIDATE,TERRAFORM',
       multiSelectDelimiter: ',',
-      description: '''Stages run in pipeline order (select one or more). Examples: VALIDATE,TERRAFORM | VALIDATE,TERRAFORM,CM_INSTALL | full stack = all boxes.
-VALIDATE — Run validate-prereqs.sh using VALIDATION_CHECKS (tools, AWS, tfvars, etc.). No EC2/Ansible changes.
-TERRAFORM — Provision AWS infra (VPC/SG/EC2/EIP), write inventory.ini + SSH PEM to workspace/holautosa state.
-PREREQS — Ansible phase 1: OS prereqs, Java/Python, packages, SSH prep (needs inventory).
-IDENTITY — Ansible phase 2: FreeIPA server/client or AD client (auto-detect from inventory).
-CM_INSTALL — Ansible phase 3: CM repos, PostgreSQL, CM server/agents, license/trial (needs PREREQS/IDENTITY done earlier unless re-run).
-CDH_BASE — Ansible phase 4: CM Auto-TLS, Kerberos, CMS, LDAP, CDH base cluster API deploy.
-ECS_INSTALL — Ansible phase 5: ECS / Data Services cluster (needs CDH base). Ansible-only runs require existing inventory.ini.'''
+      visibleItemCount: 7,
+      quoteValue: false,
+      description: '''Select stages (pipeline runs in fixed order below; not checkbox order). Common through CM: VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL. Hover each checkbox for a short summary; full text is in the list under each name in Extended Choice UI.''',
+      descriptionPropertyValue: '''validate-prereqs.sh only (see VALIDATION_CHECKS); no EC2 or Ansible changes,Provision AWS (VPC/SG/EC2/EIP); writes inventory.ini and SSH PEM to holautosa state,Ansible phase 1: OS prereqs Java Python packages SSH bootstrap (needs inventory),Ansible phase 2: FreeIPA server/client or AD client from inventory,Ansible phase 3: CM repos PostgreSQL CM server agents license or trial,Ansible phase 4: Auto-TLS Kerberos CMS LDAP CDH base cluster deploy,Ansible phase 5: ECS / Data Services (needs CDH_BASE); Ansible-only needs inventory.ini'''
     )
     extendedChoice(
       name: 'VALIDATION_CHECKS',
@@ -28,13 +24,10 @@ ECS_INSTALL — Ansible phase 5: ECS / Data Services cluster (needs CDH base). A
       value: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY,EMAIL_FORMAT',
       defaultValue: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY',
       multiSelectDelimiter: ',',
-      description: '''Used only when PIPELINE_STAGES includes VALIDATE. Uncheck to skip a check.
-TOOLS — git, jq, python3; + terraform if TERRAFORM selected; + ansible-playbook if Ansible stages selected.
-AWS_CREDS — aws sts get-caller-identity (holautosa ~/.aws or instance role per USE_CREDENTIALS_USER_AWS).
-TFVARS — config file exists; load ENVIRONMENT, OWNER, AWS_REGION; optional AWS keypair/SG pre-check if TERRAFORM selected.
-ANSIBLE_SYNTAX — ansible-playbook --syntax-check on ansible-playbooks/*.yml.
-INVENTORY — ansible-playbooks/inventory.ini must exist (auto-added when Ansible stages run without TERRAFORM).
-EMAIL_FORMAT — validate NOTIFICATION_EMAIL format when that field is non-empty.'''
+      visibleItemCount: 6,
+      quoteValue: false,
+      description: '''Only when PIPELINE_STAGES includes VALIDATE. Example full set: TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY,EMAIL_FORMAT. Uncheck to skip; per-checkbox summary appears beside each name.''',
+      descriptionPropertyValue: '''Required CLIs on agent (git jq python3; adds terraform and ansible-playbook when those stages are selected),aws sts get-caller-identity (CREDENTIALS_USER ~/.aws or instance IAM role),Tfvars file exists; ENVIRONMENT OWNER AWS_REGION load; keypair/SG pre-check if TERRAFORM selected,ansible-playbook --syntax-check on ansible-playbooks/*.yml,ansible-playbooks/inventory.ini must exist (auto-required for Ansible without TERRAFORM),Validate NOTIFICATION_EMAIL when that field is non-empty'''
     )
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
     booleanParam(name: 'USE_CREDENTIALS_USER_AWS', defaultValue: true, description: 'Use CREDENTIALS_USER ~/.aws credentials (default on — uncheck to use EC2 instance IAM role via IMDS)')
@@ -47,9 +40,13 @@ EMAIL_FORMAT — validate NOTIFICATION_EMAIL format when that field is non-empty
     choice(
       name: 'SG_MODE',
       choices: ['USE_EXISTING', 'CREATE_NEW'],
-      description: 'Security group: USE_EXISTING = lookup by name/sg-id (default {ENVIRONMENT}-pvc_cluster_sg). CREATE_NEW = Terraform creates SG — set SG fields below.'
+      description: '''USE_EXISTING: attach existing SG by sg-id or name (default {ENVIRONMENT}-pvc_cluster_sg); edit port/CIDR rules in AWS. CREATE_NEW: Terraform creates SG — ingress is all protocols/ports; use ALLOW_ALL + ALLOWED_CIDRS below (ALLOWED_PORTS does not limit TCP ports).'''
     )
-    booleanParam(name: 'CREATE_EIP', defaultValue: true, description: 'Allocate Elastic IP for Cloudera Manager (cldr-mngr)')
+    booleanParam(
+      name: 'CREATE_EIP',
+      defaultValue: true,
+      description: 'TERRAFORM: allocate Elastic IP for Cloudera Manager (cldr-mngr). Name tag from CLDR_EIP_NAME (empty = {ENVIRONMENT}-cldr-mngr-eip). Does not affect security group rules.'
+    )
     string(name: 'VPC_NAME', defaultValue: '', description: 'CREATE_NEW VPC: name (empty = {ENVIRONMENT}-cldr-vpc)')
     string(name: 'VPC_CIDR_BLOCK', defaultValue: '172.16.0.0/16', description: 'CREATE_NEW VPC: CIDR block')
     string(name: 'VPC_AZS', defaultValue: '["ap-southeast-1a","ap-southeast-1b"]', description: 'CREATE_NEW VPC: JSON AZ list')

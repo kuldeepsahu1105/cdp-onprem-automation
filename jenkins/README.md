@@ -18,6 +18,8 @@ Declarative pipeline with **checkbox stage selection**, **configurable validatio
 3. Run the job — it aborts immediately after reloading the parameter UI
 4. Run again with your desired stage checkboxes
 
+Parameter **help text** (stages, validation checks, security group, `ALLOWED_PORTS`, `CLDR_EIP_NAME`, etc.) lives in the Jenkinsfile `description` / `descriptionPropertyValue` fields and appears on **Build with Parameters** after a refresh. Stage and validation checkboxes also show a **per-option summary** next to each name via Extended Choice `descriptionPropertyValue`.
+
 ## Default parameter values
 
 Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
