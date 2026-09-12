@@ -3,12 +3,13 @@
 # Jenkins/public controllers: try Caddy CM vhost on ops host (:8088) before direct :7180/:7183; fall back to
 # delegated discovery on cldr-mngr when security groups block the controller from CM ports.
 
-- name: Ensure Caddy CM vhost facts exist for API probes (Jenkins without portal play)
+- name: Ensure Caddy CM API probe URL facts exist (Jenkins / public controller)
   ansible.builtin.import_tasks: ensure_cm_caddy_probe_facts.yml
   when:
     - cm_api_probe_delegate_to | default('') | length == 0
     - cm_api_probe_from_controller_public | default(false) | bool
     - cm_api_controller_is_localhost | default(false) | bool
+    - (deployment_portal_enabled | default(true) | bool)
     - (cm_config_api_via_caddy_proxy | default('auto') | lower) in ['auto', 'true', '1', 'yes', 'on']
 
 - name: Probe CM API via deployment portal Caddy CM vhost URLs (public controller, Tier 1)
@@ -126,6 +127,7 @@
         )
         | unique
         | reject('equalto', '')
+        | reject('match', '^cm\\.')
         | list
       }}
   when:
@@ -437,6 +439,7 @@
         )
         | unique
         | reject('equalto', '')
+        | reject('match', '^cm\\.')
         | list
       }}
   when:
@@ -604,3 +607,6 @@
     - cm_api_probe_host | default('') | length > 0
     - cm_api_probe_host != '127.0.0.1'
     - not (cm_api_delegate_discovery_fallback | default(false) | bool)
+
+- name: Normalize CM API probe target when hostname is Caddy CM vhost
+  ansible.builtin.import_tasks: detect_cm_api_caddy_vhost_hostname.yml
