@@ -252,7 +252,11 @@ mkdir -p "$OUT_DIR"
   fi
 
   echo ""
-  echo "Grep Ansible logs: CDP_ACCESS_URLS_BEGIN"
+  echo "Portal verify tiers (RUNBOOK.md): Tier A = 127.0.0.1:8088 on ops host (required);"
+  echo "Tier B = external URL from Jenkins when ansible_control_reachability is public (warn if SG blocks 8088);"
+  echo "Tier C = hairpin on ops host (warn only)."
+  echo ""
+  echo "Grep Ansible logs: CDP_ACCESS_URLS_BEGIN  or  Tier B (external)"
 } > "$OUT_FILE"
 
 printf '[access-urls] Wrote %s\n' "$OUT_FILE"

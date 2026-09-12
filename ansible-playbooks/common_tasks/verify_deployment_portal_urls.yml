@@ -1,6 +1,8 @@
 ---
-# HTTP checks for printed access URLs and Caddy vhost hostnames (runs on ops host after sync).
-# Public-EIP URLs are optional on the ops host (EC2 hairpin); required health checks use 127.0.0.1 (see verify_deployment_portal_caddy.yml).
+# Portal URL verify tiers (see RUNBOOK.md § Portal URL verification tiers):
+#   Tier A (required on ops host): http://127.0.0.1:8088/ + Caddy vhost Host checks below.
+#   Tier C (optional on ops host): printed public-EIP / hairpin URLs — warn only when optional.
+#   Tier B (controller): verify_deployment_portal_external_from_controller.yml after this file (Jenkins / public profile).
 
 - name: Set deployment portal URL verification defaults
   ansible.builtin.set_fact:

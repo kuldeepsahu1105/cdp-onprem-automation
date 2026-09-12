@@ -56,6 +56,26 @@ Ansible must pick **public** vs **VPC-private** addresses for CM API `uri` probe
 
 Override in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML`: `ansible_control_reachability: public|private|auto`. Legacy keys `ansible_controller_outside_vpc` and `cm_api_prefer_private_ip` remain supported.
 
+### Portal URL verification tiers
+
+After playbook `10_setup_deployment_portal.yml` (or `35_refresh_deployment_portal.yml`) syncs Caddy on the ops host (`ipaserver` or `cldr-mngr`), verify runs in three tiers:
+
+| Tier | Where it runs | What it checks | On failure |
+|---|---|---|---|
+| **A (required)** | Ops host | `http://127.0.0.1:<deployment_portal_http_port>/` (default **8088**), Caddy container up, Caddy **Host** vhost routes (portal, CM, IPA) | **Fail** the play — portal stack or vhost/DNS misconfiguration on the host |
+| **B (external)** | Ansible **controller** (`delegate_to: localhost`) when `ansible_control_reachability_effective` is **`public`** (Jenkins default) | HTTP GET the printed **external** portal URL (`deployment_portal_context.access.external.portal`, e.g. `http://<ops-EIP>:8088/`) | Controlled by `deployment_portal_external_url_verify`: **`warn`** (default), **`fail`**, or **`skip`**. Typical Jenkins **`warn`** when the security group blocks **8088** from the agent — Tier A still passes |
+| **C (optional)** | Ops host | Same printed public-EIP URLs as the index (EC2 **hairpin** to own public IP) | **Warn only** — does not fail the play |
+
+Tier **A** answers “is the portal service up on the machine?” Tier **B** answers “can operators/Jenkins reach the public URL?” Tier **C** catches hairpin false negatives without failing deploy.
+
+Variables:
+
+- `deployment_portal_external_url_verify` — `warn` \| `fail` \| `skip` (default `warn`; Jenkins `jenkins_override.yml` sets `warn`)
+- `deployment_portal_url_verify_skip_vpc` — when control profile is public-only, skip hard-fail on VPC-only printed URLs (Jenkins sets `true`)
+- `ansible_control_reachability` — must be `public` (or auto → public on Jenkins) for Tier **B** to run
+
+If Tier **B** warns in Jenkins but Tier **A** passed, open the ops host security group for TCP **8088** (and **5050** / **8089** if used) from your Jenkins/office CIDR. `jenkins/scripts/build-access-urls.sh` still lists URLs for email; grep Ansible logs for `Tier B` or `CDP_ACCESS_URLS_BEGIN`.
+
 When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-playbooks/`, the wrapper prompts you to choose. Override with `ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, or `CM_INFO_FILE`.
 
 ### Without wrappers (direct `ansible-playbook`)

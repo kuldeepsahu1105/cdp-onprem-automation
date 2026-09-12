@@ -75,6 +75,7 @@ def _jenkins_controller_defaults() -> dict:
         "ansible_controller_outside_vpc": True,
         "cm_api_prefer_private_ip": False,
         "deployment_portal_url_verify_skip_vpc": True,
+        "deployment_portal_external_url_verify": "warn",
     }
     inv = REPO_ROOT / "ansible-playbooks" / "inventory.ini"
     cm_public = _inventory_first_public_ip("cldr-mngr", inv)

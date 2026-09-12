@@ -404,5 +404,6 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `cm_api_delegate_probes_to_manager` | `true` | Run CM API discovery on `cldr-mngr` at `127.0.0.1` when play host is `localhost` |
 | `cm_api_private_reachability_timeout` | `5` | Seconds to test VPC `private_ip` from controller before using public IP |
 | `deployment_portal_url_verify_skip_vpc` | `false` | Skip VPC-only portal URL hard-fail during verify (Jenkins sets `true`) |
+| `deployment_portal_external_url_verify` | `warn` | Tier B: GET external portal URL from controller when reachability is `public` — `warn`, `fail`, or `skip` |
 | `common_tasks/install_cloudera_collection.yml` | Galaxy collection install |
 | `common_tasks/cleanup/` | Modular cleanup tasks |

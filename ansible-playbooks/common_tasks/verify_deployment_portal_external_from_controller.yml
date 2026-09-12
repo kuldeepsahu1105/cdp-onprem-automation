@@ -1,0 +1,123 @@
+---
+# Tier B: HTTP GET printed external portal URL(s) from the Ansible controller (e.g. Jenkins).
+# Tier A (127.0.0.1 + Caddy Host vhosts on the ops host) already ran in verify_deployment_portal_urls.yml.
+# Tier C (hairpin to own public EIP on the ops host) is optional warn-only in that same file.
+
+- name: Set Tier B external portal URL verify inputs
+  ansible.builtin.set_fact:
+    _tier_b_mode: "{{ deployment_portal_external_url_verify | default('warn') | lower | trim }}"
+    _tier_b_url_codes: "{{ deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]) }}"
+    _tier_b_ctx: >-
+      {{
+        hostvars['localhost'].deployment_portal_context
+        | default(deployment_portal_context | default({}))
+      }}
+    _tier_b_http_port: "{{ deployment_portal_http_port | default(8088) | int }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Resolve control reachability for Tier B external portal verify
+  ansible.builtin.import_tasks: detect_ansible_control_reachability.yml
+  vars:
+    ansible_control_reachability_skip_cm_probes: true
+    cm_host_public: "{{ _tier_b_ctx.anchor.public_ip | default('') }}"
+    cm_host_private: "{{ _tier_b_ctx.anchor.private_ip | default('') }}"
+  delegate_to: localhost
+  run_once: true
+  when: _tier_b_ctx | length > 0
+
+- name: Build Tier B external portal URL probe list
+  ansible.builtin.set_fact:
+    deployment_portal_external_url_checks: >-
+      {{
+        (
+          [{'name': 'portal (external)', 'url': _tier_b_ctx.access.external.portal | default('')}]
+          | selectattr('url', 'defined')
+          | selectattr('url', 'ne', '')
+          | list
+        )
+      }}
+  delegate_to: localhost
+  run_once: true
+  when:
+    - _tier_b_ctx | length > 0
+    - _tier_b_ctx.access is defined
+
+- name: Decide whether to run Tier B external portal URL probes
+  ansible.builtin.set_fact:
+    _tier_b_run: >-
+      {{
+        (_tier_b_mode != 'skip')
+        and (_tier_b_ctx | length > 0)
+        and (_tier_b_ctx.access.profile | default('') != 'private')
+        and (
+          hostvars['localhost'].ansible_control_reachability_effective | default('')
+          == 'public'
+        )
+        and (deployment_portal_external_url_checks | default([]) | length > 0)
+      }}
+  delegate_to: localhost
+  run_once: true
+  when: _tier_b_ctx | length > 0
+
+- name: Probe external deployment portal URLs from Ansible controller (Tier B)
+  ansible.builtin.uri:
+    url: "{{ item.url }}"
+    method: GET
+    status_code: "{{ _tier_b_url_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 30
+  loop: "{{ deployment_portal_external_url_checks | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: deployment_portal_external_url_results
+  failed_when: false
+  delegate_to: localhost
+  run_once: true
+  when:
+    - _tier_b_run | default(false) | bool
+
+- name: Warn when Tier B external portal URL does not respond from controller
+  ansible.builtin.debug:
+    msg:
+      - >-
+        Tier B (external) deployment portal URL check failed from the Ansible controller
+        ({{ inventory_hostname | default('localhost') }} play host; probe ran on localhost).
+      - "URL: {{ item.item.url }}"
+      - >-
+        Tier A on the ops host (http://127.0.0.1:{{ _tier_b_http_port }}/ and Caddy Host vhost checks) may still pass
+        while this fails — common when the security group blocks TCP {{ _tier_b_http_port }} from Jenkins/office CIDRs.
+      - >-
+        Open ingress on the ops host security group for port {{ _tier_b_http_port }} (and 5050/8089 if needed)
+        from your Jenkins agent or office network. Re-run playbook 10 or Jenkins PORTAL stage after fixing SG rules.
+      - >-
+        Set deployment_portal_external_url_verify: fail to fail the play, or skip to disable Tier B probes
+        (Tier A remains required on the ops host).
+  loop: "{{ deployment_portal_external_url_results.results | default([]) }}"
+  when:
+    - _tier_b_run | default(false) | bool
+    - _tier_b_mode == 'warn'
+    - deployment_portal_external_url_results is defined
+    - not (item.skipped | default(false) | bool)
+    - item.failed | default(false) or (item.status | default(0) | int not in _tier_b_url_codes)
+  delegate_to: localhost
+  run_once: true
+
+- name: Fail when Tier B external portal URL does not respond from controller
+  ansible.builtin.fail:
+    msg: >-
+      Tier B deployment portal URL check failed from the Ansible controller: {{ item.item.name }}
+      {{ item.item.url }} (expected HTTP {{ _tier_b_url_codes | join('/') }}).
+      Local Tier A on the ops host can still succeed when the public EIP is unreachable from outside the VPC
+      (security group / NACL). Allow TCP {{ _tier_b_http_port }} from Jenkins to the ops host public IP
+      (inventory ansible_host), or set deployment_portal_external_url_verify: warn|skip.
+  loop: "{{ deployment_portal_external_url_results.results | default([]) }}"
+  when:
+    - _tier_b_run | default(false) | bool
+    - _tier_b_mode == 'fail'
+    - deployment_portal_external_url_results is defined
+    - not (item.skipped | default(false) | bool)
+    - item.failed | default(false) or (item.status | default(0) | int not in _tier_b_url_codes)
+  delegate_to: localhost
+  run_once: true
