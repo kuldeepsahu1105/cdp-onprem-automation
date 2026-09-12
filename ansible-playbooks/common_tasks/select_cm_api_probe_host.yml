@@ -258,6 +258,30 @@
     - cm_api_probe_delegate_to | default('') | length > 0
     - cm_api_probe_host_discovery is defined or cm_api_probe_https_discovery is defined
 
+- name: Delegate CM API URI from Jenkins when manager discovery selected loopback
+  ansible.builtin.set_fact:
+    cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
+    cm_api_client_host: >-
+      {{
+        cm_api_connect_host
+        if (cm_api_connect_host | default('') | length > 0)
+        else cm_host_public
+      }}
+    cm_host: >-
+      {{
+        cm_api_connect_host
+        if (cm_api_connect_host | default('') | length > 0)
+        else cm_host_public
+      }}
+  when:
+    - cm_api_controller_is_localhost | default(false) | bool
+    - not (cm_api_runner_is_manager | default(false) | bool)
+    - cm_api_probe_delegate_to | default('') | length > 0
+    - cm_api_probe_host | default('') == '127.0.0.1'
+    - not (cm_api_delegate_discovery_fallback | default(false) | bool)
+    - cm_api_uri_delegate_to | default('') | length == 0
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+
 - name: Record whether public-controller direct CM API discovery succeeded
   ansible.builtin.set_fact:
     cm_api_controller_direct_reachable: >-

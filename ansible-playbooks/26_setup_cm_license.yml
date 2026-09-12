@@ -32,6 +32,7 @@
         validate_certs: no
       register: cm_license_info
       changed_when: false
+      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
 
     - name: Print existing cloudera manager license status
       ansible.builtin.debug:
@@ -76,6 +77,7 @@
       register: license_upload_response
       when: cm_license_info.status == 404 and license_file_status.stat.exists
       become: false
+      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
 
     - name: Activate Cloudera Manager trial license (if license file not provided by user)
       uri:
@@ -86,6 +88,7 @@
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
         validate_certs: no
+      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
       # notify:
       #   - Restart cloudera-scm-server
       when:
