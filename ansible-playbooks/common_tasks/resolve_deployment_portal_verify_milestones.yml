@@ -1,6 +1,7 @@
 ---
 # Normalize deployment_portal_verify_milestones (list or comma-separated extra-var string).
-# group_vars default is []. Play 10_setup sets minimum [portal, ipa]. Legacy post-CM refresh adds cm.
+# group_vars default is []. Play 10_setup sets minimum [portal, ipa] (Tier A: portal + IPA vhosts required;
+# pgAdmin Caddy vhost is warn-only until milestone pgadmin). Legacy post-CM refresh adds cm.
 
 - name: Parse deployment portal verify milestones from input
   ansible.builtin.set_fact:

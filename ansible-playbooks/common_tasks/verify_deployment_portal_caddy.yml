@@ -55,6 +55,13 @@
       {{ caddy_logs_tail.stdout | default('(no logs captured)') }}
   when: portal_local_curl is failed
 
+- name: Wait for pgAdmin HTTP port on localhost (portal stack includes pgAdmin)
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ deployment_portal_pgadmin_host_port | int }}"
+    timeout: 180
+    state: started
+
 - name: Resolve control reachability for portal URL checks
   ansible.builtin.import_tasks: detect_ansible_control_reachability.yml
   vars:

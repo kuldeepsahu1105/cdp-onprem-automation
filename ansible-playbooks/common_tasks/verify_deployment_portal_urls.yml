@@ -1,7 +1,8 @@
 ---
 # Service URL verify tiers (see RUNBOOK.md § Service URL verification tiers):
 #   Tier A (ops host): localhost index (verify_deployment_portal_caddy.yml) plus checks scoped by
-#   deployment_portal_verify_milestones (portal/ipa at bootstrap; cm/cm_tls/monitoring/ecs after each deploy phase).
+#   deployment_portal_verify_milestones (portal/ipa at bootstrap; pgadmin optional warn until milestone pgadmin;
+#   cm/cm_tls/monitoring/ecs after each deploy phase).
 #   Tier C (optional on ops host): printed public-EIP / hairpin URLs — warn only when optional.
 #   Tier B (controller): verify_service_urls_from_controller.yml after this file (portal, CM, monitoring, IPA, ECS).
 #
@@ -266,9 +267,13 @@
            )
            else [])
           + (
-              [{'name': 'Caddy vhost pgAdmin', 'host': caddy_vhost_urls.pgadmin.hostname, 'path': '/', 'optional': false}]
+              [{'name': 'Caddy vhost pgAdmin', 'host': caddy_vhost_urls.pgadmin.hostname, 'path': '/',
+                'optional': ('pgadmin' not in (_portal_verify_milestones_effective | default([])))}]
               if (
-                'portal' in (_portal_verify_milestones_effective | default([]))
+                (
+                  'pgadmin' in (_portal_verify_milestones_effective | default([]))
+                  or 'portal' in (_portal_verify_milestones_effective | default([]))
+                )
                 and (caddy_vhost_urls.pgadmin.hostname | default('') | length > 0)
               )
               else []
@@ -375,6 +380,10 @@
       {% if 'CM' in item.item.name %}
       Cloudera Manager is not listening yet on {{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}
       (expected when Jenkins PORTAL runs before CM_INSTALL — re-run 35_refresh_deployment_portal.yml after CM).
+      {% elif 'pgAdmin' in item.item.name %}
+      pgAdmin container may still be starting on {{ inventory_hostname }}:{{ deployment_portal_pgadmin_host_port }}
+      (bootstrap milestones portal+ipa treat this as warn-only — add milestone pgadmin or re-run after compose is healthy).
+      Confirm: docker ps --filter name={{ deployment_portal_pgadmin_container }}; curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/
       {% endif %}
       Caddy logs: docker logs --tail 40 {{ deployment_portal_caddy_container }}
   loop: "{{ deployment_portal_caddy_vhost_results.results | default([]) }}"
@@ -400,6 +409,9 @@
       Confirm https://{{ item.item.upstream_ipa_fqdn }}/ responds on the IPA server and IPA HTTPD is running.
       {% elif 'CM' in item.item.name %}
       Confirm Cloudera Manager is up on {{ deployment_portal_cm_fqdn }} (ports {{ cm_http_port }}/{{ cm_https_port }}).
+      {% elif 'pgAdmin' in item.item.name %}
+      Confirm pgAdmin container {{ deployment_portal_pgadmin_container }} is running and responds on
+      http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/ (Caddy reverse_proxies to that container on the compose network).
       {% else %}
       Confirm Caddyfile vhosts and wildcard DNS (or caddy_vhost_dns_mode: classic_nipio) match {{ item.item.host }}.
       {% endif %}

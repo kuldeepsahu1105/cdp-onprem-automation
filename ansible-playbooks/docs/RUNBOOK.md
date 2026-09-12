@@ -72,7 +72,8 @@ The same three-tier model applies to **portal**, **Cloudera Manager**, **Grafana
 
 | Stage / trigger | `deployment_portal_verify_milestones` (cumulative) | Tier **A** Caddy vhosts / host checks | Tier **B** (controller, when public reach) |
 |---|---|---|---|
-| **PORTAL** (`10_setup_deployment_portal.yml`) | `portal`, `ipa` | Portal index, portal + IPA vhosts; IPA FQDN on `ipaserver` | Portal (+ IPA when in list) |
+| **PORTAL** (`10_setup_deployment_portal.yml`) | `portal`, `ipa` | Portal index, portal + IPA vhosts (required); pgAdmin vhost **warn-only**; IPA FQDN on `ipaserver` | Portal (+ IPA when in list); pgAdmin external optional Tier **B** |
+| **PORTAL pgAdmin hard gate** (optional refresh) | + `pgadmin` | + pgAdmin Caddy vhost required | + pgAdmin external |
 | **IDENTITY** (phase 2 refresh) | + `identity` | Same as PORTAL | + FreeIPA printed / Caddy IPA URLs |
 | **CM_INSTALL** (phase 3 refresh) | + `cm` | + CM Caddy vhost | + CM HTTP / public IP / Caddy CM |
 | **CM_TLS** (phase `cm_tls` refresh) | + `cm_tls` | (CM vhost still required when `cm` present) | + CM HTTPS FQDN |
@@ -88,7 +89,7 @@ Variables:
 - `deployment_portal_external_url_verify` — legacy alias when global unset
 - `deployment_cm_external_url_verify`, `deployment_grafana_external_url_verify`, … — per-service overrides
 - `deployment_service_external_url_verify` — optional map `{ cm: warn, grafana: skip, … }`
-- `deployment_portal_verify_milestones` — list or comma string (`portal`, `ipa`, `identity`, `cm`, `cm_tls`, `cdh`, `monitoring`, `ecs`); default `[]` in `group_vars`; bootstrap play sets `portal` + `ipa`
+- `deployment_portal_verify_milestones` — list or comma string (`portal`, `ipa`, `pgadmin`, `identity`, `cm`, `cm_tls`, `cdh`, `monitoring`, `ecs`); default `[]` in `group_vars`; bootstrap play sets `portal` + `ipa` (not `pgadmin` — avoids failing PORTAL on pgAdmin 502 while the container is still starting)
 - `deployment_portal_url_verify_skip_vpc` — skip hard-fail on VPC-only printed URLs when control is public-only (Jenkins sets `true`)
 - `ansible_control_reachability` — must be `public` (or auto → public on Jenkins) for Tier **B**
 

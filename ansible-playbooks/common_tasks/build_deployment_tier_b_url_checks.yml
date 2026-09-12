@@ -67,7 +67,10 @@
              if (
                (
                  _tier_b_use_milestones
-                 and ('portal' in _tier_b_milestones)
+                 and (
+                   ('pgadmin' in _tier_b_milestones)
+                   or ('portal' in _tier_b_milestones)
+                 )
                )
                or (
                  not _tier_b_use_milestones

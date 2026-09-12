@@ -6,7 +6,7 @@ Scan this before deep-diving playbooks/Jenkins. Details: `ansible-playbooks/docs
 
 - **Jenkins outside VPC:** `detect_ansible_control_reachability` → `ansible_control_reachability: public`. Never `uri`/CM/portal checks via `172.31.x` from the controller; delegate CM API to **cldr-mngr** at `127.0.0.1`. VPN/bare-metal controller → `private`.
 - **Pipeline order:** PREREQS → **PORTAL (10)** → identity → CM → TLS → CDH → monitoring → ECS. Numbered playbooks **10–35** per `ansible-playbooks/docs/RUN_ORDER.md`.
-- **Portal before CM:** Caddy CM vhost **502 is expected** until CM is up. URL verify is **milestone-scoped** (portal + IPA at bootstrap; CM after refresh / post-CM).
+- **Portal before CM:** Caddy CM vhost **502 is expected** until CM is up. URL verify is **milestone-scoped** (portal + IPA at bootstrap; CM after refresh / post-CM). **pgAdmin** Caddy vhost is **warn-only** at `portal`/`ipa` milestones; add milestone **`pgadmin`** to hard-fail on pgAdmin vhost.
 
 ## Portal / Caddy
 
