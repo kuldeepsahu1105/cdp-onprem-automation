@@ -26,6 +26,9 @@ holautosa_purge_terraform_module_cache "$REPO_ROOT/terraform-code/cloudera-pvc-t
 
 log "Git commit: $(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 log "Starting clone_and_run_terraform.sh (DRY_RUN=${DRY_RUN}, AWS creds=${AWS_SHARED_CREDENTIALS_FILE:-instance-role-env}, user=$(id -un))"
+export FORCE_COLOR=0
+export UI_COLOR=0
+export NO_COLOR=1
 set -o pipefail
 ./clone_and_run_terraform.sh 2>&1 | tee -a "$LOG_FILE"
 log "Terraform stage completed"
