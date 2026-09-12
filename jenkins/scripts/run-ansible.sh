@@ -48,10 +48,8 @@ log() { printf '[ansible] %s\n' "$*" | tee -a "$LOG_FILE"; }
 
 [[ -f ansible-playbooks/inventory.ini ]] || { log "ERROR: ansible-playbooks/inventory.ini missing"; exit 1; }
 
-# Piped to tee below — disable ANSI so task lines do not show as [0;32m / [0;33m in console and artifacts.
-export ANSIBLE_FORCE_COLOR=0
-export PY_COLORS=0
-export NO_COLOR=1
+# shellcheck source=scripts/lib/jenkins_log_pipe.sh
+source "$REPO_ROOT/scripts/lib/jenkins_log_pipe.sh"
 
 log "Starting clone_and_run_pvc_automation.sh (DEPLOY_PHASE=${DEPLOY_PHASE}, DRY_RUN=${DRY_RUN})"
 if ! command -v ansible-playbook >/dev/null 2>&1; then
@@ -59,6 +57,6 @@ if ! command -v ansible-playbook >/dev/null 2>&1; then
   source "$REPO_ROOT/jenkins/scripts/ensure-ansible.sh"
 fi
 set -o pipefail
-./clone_and_run_pvc_automation.sh 2>&1 | tee -a "$LOG_FILE"
+jenkins_log_pipe "$LOG_FILE" ./clone_and_run_pvc_automation.sh
 persist_ansible_artifacts_from_workspace || true
 log "Ansible stage completed"

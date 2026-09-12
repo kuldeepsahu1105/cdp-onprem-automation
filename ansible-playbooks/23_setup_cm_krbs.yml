@@ -115,8 +115,10 @@
           {% endfor %}
       when: cm_kerberos_result is changed
 
-    - name: Restart Cloudera Manager services after Kerberos setup
-      ansible.builtin.import_tasks: common_tasks/restart_cm_services.yml
+    - name: Record Kerberos change for CM restart on CM host
+      ansible.builtin.set_stats:
+        data:
+          cm_kerberos_restart_required: true
       when: cm_kerberos_result is changed or (cm_kerberos_ad_config is defined and cm_kerberos_ad_config is changed)
 
     - name: Refresh CM API URL after Kerberos changes
@@ -136,3 +138,12 @@
       ansible.builtin.debug:
         msg: "Kerberos is already enabled in Cloudera Manager. Skipping configuration."
       when: kerberos_already_configured | default(false)
+
+- name: Restart Cloudera Manager services after Kerberos (CM host)
+  hosts: cldr-mngr
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Restart CM server and agent after Kerberos config
+      ansible.builtin.import_tasks: common_tasks/restart_cm_services.yml
+      when: ansible_stats.data.cm_kerberos_restart_required | default(false) | bool

@@ -332,7 +332,7 @@ ansible_configure_output() {
       return 0
       ;;
     1|true|yes|on|force)
-      if [[ -t 1 ]]; then
+      if [[ "${JENKINS_SCRIPT_TTY:-}" == "1" ]] || [[ -t 1 ]]; then
         export ANSIBLE_FORCE_COLOR=1
         export PY_COLORS=1
       else
@@ -342,7 +342,7 @@ ansible_configure_output() {
       return 0
       ;;
     auto|*)
-      if [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]]; then
+      if [[ "${JENKINS_SCRIPT_TTY:-}" == "1" ]] || { [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]]; }; then
         export ANSIBLE_FORCE_COLOR=1
         export PY_COLORS=1
       else
