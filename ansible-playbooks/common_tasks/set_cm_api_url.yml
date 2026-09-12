@@ -120,7 +120,7 @@
       {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }}).
       Client host for this play: {{ cm_api_client_host }}.
       Jenkins/outside-VPC controllers must use the CM public IP (ansible_host) or delegate probes to cldr-mngr at 127.0.0.1 — never inventory private_ip.
-      Set ansible_controller_outside_vpc: true or cm_api_prefer_private_ip: false (Jenkins defaults apply both).
+      Set ansible_control_reachability: public (or legacy ansible_controller_outside_vpc: true / cm_api_prefer_private_ip: false).
   when:
     - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
     - cm_tls_probe_https is not defined or cm_tls_probe_https is failed or (cm_tls_probe_https.status | default(0) not in [200, 301, 303])

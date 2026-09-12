@@ -55,5 +55,22 @@
       {{ caddy_logs_tail.stdout | default('(no logs captured)') }}
   when: portal_local_curl is failed
 
+- name: Resolve control reachability for portal URL checks
+  ansible.builtin.import_tasks: detect_ansible_control_reachability.yml
+  vars:
+    ansible_control_reachability_skip_cm_probes: true
+    cm_host_public: >-
+      {{
+        hostvars[groups['cldr-mngr'][0]].ansible_host | default('')
+        if ('cldr-mngr' in groups and groups['cldr-mngr'] | length > 0)
+        else ''
+      }}
+    cm_host_private: >-
+      {{
+        hostvars[groups['cldr-mngr'][0]].private_ip | default('')
+        if ('cldr-mngr' in groups and groups['cldr-mngr'] | length > 0)
+        else ''
+      }}
+
 - name: Verify deployment portal and Caddy vhost URLs
   ansible.builtin.import_tasks: verify_deployment_portal_urls.yml

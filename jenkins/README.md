@@ -142,6 +142,8 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 
 **Deployment portal (playbook 28):** open the index on the ops host **public** `ansible_host` (e.g. `http://<EIP>:8088/`). Private-IP URLs on the index page work only from hosts in the same VPC (ipaserver, cldr-mngr, cluster nodes). Ensure SG allows **8088**, **5050**, **8089** from your Jenkins/office CIDRs.
 
+**Control-plane reachability (Jenkins vs VPN / bare metal):** The Jenkins agent has **no route** to VPC `10.x` / `172.31.x` addresses. `run-ansible.sh` exports `ANSIBLE_CONTROL_VIA_JENKINS=1`; `jenkins_override.yml` sets `ansible_control_reachability: public` so CM API and portal verify never treat inventory `private_ip` as the controller target (probes delegate to `cldr-mngr` at `127.0.0.1` where needed). For **bare metal** or **in-VPC/VPN** automation runners, use default `auto` or `ansible_control_reachability: private` in `ANSIBLE_GROUP_VARS_YAML` — see `ansible-playbooks/docs/RUNBOOK.md` § Control-plane reachability.
+
 With **`caddy_vhost_enabled`**, the FreeIPA link uses a lab hostname (`ipa.<ops-ip-dashed>.<base>`). Caddy proxies to `https://<ipaserver-fqdn>:443` and sends **`Host: <ipaserver-fqdn>`** upstream so IPA accepts the request. Playbook 28 verifies printed portal URLs and Caddy vhost routes after sync; failures include Caddy log hints in the Ansible output.
 
 ## Ansible group_vars override (`ANSIBLE_GROUP_VARS_YAML`)

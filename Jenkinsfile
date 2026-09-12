@@ -234,6 +234,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
     CREDENTIALS_USER = "${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}"
+    ANSIBLE_CONTROL_VIA_JENKINS = '1'
     CM_API_PREFER_PRIVATE_IP = 'false'
     ANSIBLE_CONTROLLER_OUTSIDE_VPC = 'true'
     DEPLOYMENT_PORTAL_URL_VERIFY_SKIP_VPC = 'true'

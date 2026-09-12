@@ -58,6 +58,7 @@ allowed_keys:
   - caddy_vhost_public_base
   - caddy_vhost_dns_mode
   - autotls_enabled
+  - ansible_control_reachability
   - cm_api_prefer_private_ip
   - cm_api_connect_host
   - cm_api_delegate_probes_to_manager

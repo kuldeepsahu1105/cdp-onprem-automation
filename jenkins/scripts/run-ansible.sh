@@ -34,7 +34,8 @@ if command -v terraform >/dev/null 2>&1 && [[ -f "${TF_DIR}/terraform.tfstate" |
 fi
 restore_ansible_artifacts_to_workspace
 bash "$REPO_ROOT/jenkins/scripts/regenerate-inventory-from-terraform.sh"
-# Jenkins runs outside the VPC — never probe CM/portal via inventory private_ip from localhost.
+# Jenkins runs outside the VPC — public control-plane reachability (see ansible_control_reachability).
+export ANSIBLE_CONTROL_VIA_JENKINS="${ANSIBLE_CONTROL_VIA_JENKINS:-1}"
 export CM_API_PREFER_PRIVATE_IP="${CM_API_PREFER_PRIVATE_IP:-false}"
 export ANSIBLE_CONTROLLER_OUTSIDE_VPC="${ANSIBLE_CONTROLLER_OUTSIDE_VPC:-true}"
 export DEPLOYMENT_PORTAL_URL_VERIFY_SKIP_VPC="${DEPLOYMENT_PORTAL_URL_VERIFY_SKIP_VPC:-true}"

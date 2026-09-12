@@ -5,6 +5,13 @@
   ansible.builtin.set_fact:
     _portal_url_verify_codes: "{{ deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]) }}"
     _portal_local_base: "http://127.0.0.1:{{ deployment_portal_http_port | int }}"
+    _portal_skip_vpc_urls: >-
+      {{
+        deployment_portal_url_verify_skip_vpc
+        | default(ansible_control_reach_public_only | default(false))
+        | bool
+      }}
+    _portal_public_only_control: "{{ ansible_control_reach_public_only | default(false) | bool }}"
 
 - name: Build access URL checks from deployment portal context
   ansible.builtin.set_fact:
@@ -12,12 +19,12 @@
       {{
         (
           ([{'name': 'portal (primary)', 'url': deployment_portal_context.access.primary.portal | default(''),
-              'optional': (ansible_controller_outside_vpc | default(false) | bool)
+              'optional': (_portal_public_only_control | bool)
                 and (deployment_portal_context.access.primary.portal | default('') is search('://(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)'))}]
            if (deployment_portal_context.access.primary.portal | default('') | length > 0)
            else [])
           + ([{'name': 'portal (external)', 'url': deployment_portal_context.access.external.portal | default(''),
-              'optional': (ansible_controller_outside_vpc | default(false) | bool)
+              'optional': (_portal_public_only_control | bool)
                 and (deployment_portal_context.access.external.portal | default('') is search('://(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)'))}]
              if (deployment_portal_context.access.external.portal | default('') | length > 0)
              else [])
@@ -25,7 +32,7 @@
               [{'name': 'portal (vpc)', 'url': deployment_portal_context.access.vpc.portal | default(''), 'optional': true}]
               if (
                 (deployment_portal_context.access.vpc.portal | default('') | length > 0)
-                and not (deployment_portal_url_verify_skip_vpc | default(false) | bool)
+                and not (_portal_skip_vpc_urls | bool)
               )
               else []
             )

@@ -397,9 +397,10 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/join_ad_realm.yml` | AD `realm join` |
 | `common_tasks/join_freeipa_client.yml` | IPA client enrollment |
 | `common_tasks/set_cm_api_url.yml` | CM API URL + Auto-TLS detection |
-| `cm_api_prefer_private_ip` | `true` | Use `private_ip` for CM API when controller can reach it (Jenkins sets `false`) |
-| `cm_api_connect_host` | `""` | Force CM API target (Jenkins sets `cldr-mngr` `ansible_host` / public IP) |
-| `ansible_controller_outside_vpc` | `false` | When `true`, never use RFC1918 `private_ip` for CM API from `localhost` plays |
+| `ansible_control_reachability` | `auto` | `auto`, `public` (Jenkins / no VPC route), or `private` (bare metal / VPN / `CONTROL_MODE=local`) |
+| `cm_api_prefer_private_ip` | `true` | Legacy: prefer `private_ip` for CM API when profile is not `public` |
+| `cm_api_connect_host` | `""` | Force CM API target (Jenkins may set `cldr-mngr` `ansible_host` / public IP) |
+| `ansible_controller_outside_vpc` | `false` | Legacy mirror of `public` profile — do not use RFC1918 `private_ip` from controller |
 | `cm_api_delegate_probes_to_manager` | `true` | Run CM API discovery on `cldr-mngr` at `127.0.0.1` when play host is `localhost` |
 | `cm_api_private_reachability_timeout` | `5` | Seconds to test VPC `private_ip` from controller before using public IP |
 | `deployment_portal_url_verify_skip_vpc` | `false` | Skip VPC-only portal URL hard-fail during verify (Jenkins sets `true`) |

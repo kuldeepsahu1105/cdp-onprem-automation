@@ -9,6 +9,9 @@
     cm_host_fqdn: >-
       {{ hostvars[cm_manager_inventory_host].cldr_hostname | default(cm_manager_inventory_host) }}.{{ cluster_domain }}
 
+- name: Detect Ansible control reachability profile (public vs VPC-private)
+  ansible.builtin.import_tasks: detect_ansible_control_reachability.yml
+
 - name: Detect whether this play host is the CM manager
   ansible.builtin.set_fact:
     cm_api_runner_is_manager: >-
@@ -34,7 +37,7 @@
   ansible.builtin.set_fact:
     cm_api_avoid_private_ip: >-
       {{
-        (ansible_controller_outside_vpc | default(false) | bool)
+        (ansible_control_reach_public_only | default(false) | bool)
         or (
           (cm_api_controller_is_localhost | bool)
           and (cm_host_private_is_rfc1918 | bool)
@@ -142,6 +145,6 @@
     msg:
       - "CM API client host (this play): {{ cm_api_client_host }} (inventory runner: {{ inventory_hostname | default('localhost') }})"
       - "CM API discovery probes: {{ cm_api_probe_host }} on {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }}"
-      - "Avoid VPC private IP from controller: {{ cm_api_avoid_private_ip | default(false) }} (ansible_controller_outside_vpc={{ ansible_controller_outside_vpc | default(false) }})"
+      - "Control reachability: {{ ansible_control_reachability_effective | default('unknown') }} (avoid VPC private from controller={{ cm_api_avoid_private_ip | default(false) }})"
       - "Browser/public CM URL may use: {{ cm_host_public }}:{{ cm_http_port }} (public IP often times out from the CM host itself on AWS)"
       - "Override with cm_api_connect_host, cm_api_prefer_private_ip, or cm_api_delegate_probes_to_manager in group_vars if needed"

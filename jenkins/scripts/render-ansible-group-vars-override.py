@@ -71,6 +71,7 @@ def _jenkins_controller_defaults() -> dict:
     if not _running_on_jenkins():
         return {}
     defaults: dict = {
+        "ansible_control_reachability": "public",
         "ansible_controller_outside_vpc": True,
         "cm_api_prefer_private_ip": False,
         "deployment_portal_url_verify_skip_vpc": True,

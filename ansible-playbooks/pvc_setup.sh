@@ -91,6 +91,7 @@ fi
 if [[ "$CONTROL_MODE" == "local" ]]; then
   ARCH_ANSIBLE_ARGS+=(-e "ansible_user=root")
 fi
+ARCH_ANSIBLE_ARGS+=(-e "ansible_control_mode=${CONTROL_MODE}")
 
 print_banner() {
   if is_dry_run; then

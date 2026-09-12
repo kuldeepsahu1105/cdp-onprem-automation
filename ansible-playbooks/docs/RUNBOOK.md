@@ -44,6 +44,18 @@ The wrappers and playbooks support:
 | RHEL / Ubuntu laptop (remote) | Install `ansible`, `jq`; run `./clone_and_run_pvc_automation.sh` or `cd ansible-playbooks && ./pvc_setup.sh` |
 | Cluster node (`cldr-mngr`, `ipaserver`) | `CONTROL_MODE=local DEPLOY_PHASE=all ./pvc_setup.sh` from `ansible-playbooks/` (uses `~/.ssh/id_rsa` if no PEM in cwd) |
 
+### Control-plane reachability (Jenkins vs VPN / bare metal)
+
+Ansible must pick **public** vs **VPC-private** addresses for CM API `uri` probes and for which portal URLs are required during verify:
+
+| Control node | Typical profile | What to set |
+|---|---|---|
+| **Jenkins** (or any host **outside** the VPC, no route to `10.x` / `172.31.x`) | `public` | Automatic: `run-ansible.sh` sets `ANSIBLE_CONTROL_VIA_JENKINS=1` and `jenkins_override.yml` sets `ansible_control_reachability: public`. CM API uses `ansible_host` (public IP), not `private_ip`; discovery delegates to `cldr-mngr` at `127.0.0.1`. Portal verify skips VPC-only URL hard-fails. |
+| **Bare metal / VPN runner** (targets only on private net, no public IP on hosts) | `private` | Default `auto` probes CM `private_ip` vs public from the controller; prefers private when reachable. Or set `ansible_control_reachability: private` / `deployment_portal_access_profile: private`. |
+| **`CONTROL_MODE=local` on `cldr-mngr`** | `private` (CM API still `127.0.0.1` on-manager) | `CONTROL_MODE=local` — do **not** break standalone runs on the CM host. |
+
+Override in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML`: `ansible_control_reachability: public|private|auto`. Legacy keys `ansible_controller_outside_vpc` and `cm_api_prefer_private_ip` remain supported.
+
 When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-playbooks/`, the wrapper prompts you to choose. Override with `ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, or `CM_INFO_FILE`.
 
 ### Without wrappers (direct `ansible-playbook`)
