@@ -73,15 +73,36 @@ services:
     config:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+      mapreduce_yarn_service: "{{ 'yarn' if svc.yarn | default(true) else '' }}"
+{% if svc.ranger | default(true) %}
+      ranger_service: ranger
+{% endif %}
+{% if svc.hbase | default(true) %}
+      hbase_service: hbase
+{% endif %}
+{% if svc.atlas | default(true) %}
+      atlas_service: atlas
+{% endif %}
 {% endif %}
 {% if svc.hive_on_tez | default(true) %}
   - name: hive_on_tez
     type: HIVE_ON_TEZ
     display_name: Hive on Tez
     config:
-      hive_metastore: "{{ 'hive' if svc.hive | default(true) else '' }}"
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+      hms_connector: "{{ 'hive' if svc.hive | default(true) else '' }}"
       tez_service: "{{ 'tez' if svc.tez | default(true) else '' }}"
+      mapreduce_yarn_service: "{{ 'yarn' if svc.yarn | default(true) else '' }}"
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+{% if svc.ranger | default(true) %}
+      ranger_service: ranger
+{% endif %}
+{% if svc.hbase | default(true) %}
+      hbase_service: hbase
+{% endif %}
+{% if svc.atlas | default(true) %}
+      atlas_service: atlas
+{% endif %}
 {% endif %}
 {% if svc.hbase | default(true) %}
   - name: hbase
@@ -98,6 +119,15 @@ services:
     config:
       hive_service: "{{ 'hive_on_tez' if svc.hive_on_tez | default(true) else ('hive' if svc.hive | default(true) else '') }}"
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+{% if svc.hbase | default(true) %}
+      hbase_service: hbase
+{% endif %}
+{% if svc.impala | default(true) %}
+      impala_service: impala
+{% endif %}
+{% if svc.zookeeper | default(true) %}
+      zookeeper_service: zookeeper
+{% endif %}
 {% endif %}
 {% if svc.iceberg | default(true) %}
   - name: iceberg
@@ -151,16 +181,23 @@ services:
   - name: nifi
     type: NIFI
     display_name: NiFi
+    config:
+      zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
 {% endif %}
 {% if svc.nifi_registry | default(false) %}
   - name: nifi_registry
     type: NIFI_REGISTRY
     display_name: NiFi Registry
+    config:
+      nifi_service: "{{ 'nifi' if svc.nifi | default(false) else '' }}"
 {% endif %}
 {% if svc.dataviz | default(false) %}
   - name: dataviz
     type: DATAVIZ
     display_name: Data Visualization
+    config:
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+      hive_service: "{{ 'hive_on_tez' if svc.hive_on_tez | default(true) else ('hive' if svc.hive | default(true) else '') }}"
 {% endif %}
 {% if svc.phoenix | default(false) %}
   - name: phoenix
@@ -251,6 +288,10 @@ host_templates:
 {% if svc.nifi_registry | default(false) %}
       - service: nifi_registry
         type: NIFI_REGISTRY_SERVER
+{% endif %}
+{% if svc.dataviz | default(false) %}
+      - service: dataviz
+        type: DATAVIZ_SERVER
 {% endif %}
 {% if svc.knox | default(true) %}
       - service: knox

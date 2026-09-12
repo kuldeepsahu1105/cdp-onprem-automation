@@ -257,6 +257,7 @@ base_cluster_install_services:
   kafka: true
   atlas: true
   ranger: true
+  # Optional CFM/CDV (install matching CSDs in 24_start_cm.yml; set true to add to base cluster)
   nifi: false
   nifi_registry: false
   dataviz: false
