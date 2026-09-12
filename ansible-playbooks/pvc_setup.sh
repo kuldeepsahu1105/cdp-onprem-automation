@@ -182,7 +182,8 @@ ui_step "Running 00_setup_ssh_preqs.yml" "📜"
 ansible-playbook 00_setup_ssh_preqs.yml "${ANSIBLE_PLAYBOOK_ARGS[@]}" --limit "$SSH_LIMIT"
 
 run_phase_1() {
-  run_playbook 01_install_collection.yml
+  # Galaxy runs at top of pvc_setup.sh; skip duplicate localhost play in 01 (manual 01 runs without --skip-tags).
+  run_playbook 01_install_collection.yml --skip-tags collections
   run_playbook 02_set_hostname.yml
   run_playbook 03_create_etc_hosts.yml
   run_playbook 05_disable_selinux.yml
