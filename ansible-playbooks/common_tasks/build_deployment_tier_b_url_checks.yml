@@ -215,7 +215,8 @@
              and _tier_b_caddy
              and (_tier_b_ctx.caddy_vhosts.urls_public.cm.url | default('') | length > 0)
              else [])
-          + ([{'name': 'FreeIPA UI', 'url': _tier_b_ctx.identity.ipa_ui_url | default(''), 'service': 'ipa'}]
+          + ([{'name': 'FreeIPA UI (cluster FQDN)', 'url': _tier_b_ctx.identity.ipa_ui_url | default(''),
+              'service': 'ipa', 'ipa_direct_fqdn': true}]
              if (
                (
                  _tier_b_use_milestones
@@ -231,7 +232,8 @@
              )
              and (_tier_b_ctx.identity.ipa_ui_url | default('') | length > 0)
              else [])
-          + ([{'name': 'FreeIPA modern (Caddy vhost)', 'url': _tier_b_ctx.identity.ipa_caddy_modern_url | default(''), 'service': 'ipa'}]
+          + ([{'name': 'FreeIPA modern (Caddy vhost)', 'url': _tier_b_ctx.identity.ipa_caddy_modern_url | default(''),
+              'service': 'ipa', 'ipa_caddy_vhost': true}]
              if (
                (
                  _tier_b_use_milestones
@@ -247,7 +249,8 @@
              )
              and (_tier_b_ctx.identity.ipa_caddy_modern_url | default('') | length > 0)
              else [])
-          + ([{'name': 'FreeIPA legacy (Caddy vhost)', 'url': _tier_b_ctx.identity.ipa_caddy_legacy_url | default(''), 'service': 'ipa'}]
+          + ([{'name': 'FreeIPA legacy (Caddy vhost)', 'url': _tier_b_ctx.identity.ipa_caddy_legacy_url | default(''),
+              'service': 'ipa', 'ipa_caddy_vhost': true}]
              if (
                (
                  _tier_b_use_milestones

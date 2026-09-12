@@ -74,6 +74,7 @@ allowed_keys:
   - deployment_grafana_external_url_verify
   - deployment_pgadmin_external_url_verify
   - deployment_ipa_external_url_verify
+  - deployment_ipa_direct_fqdn_external_url_verify
   - deployment_ecs_external_url_verify
   - deployment_prometheus_external_url_verify
   - monitoring_grafana_admin_password

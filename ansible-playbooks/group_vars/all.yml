@@ -335,6 +335,8 @@ deployment_external_url_verify: warn
 deployment_portal_external_url_verify: warn
 # Optional per-service overrides, e.g. deployment_cm_external_url_verify: skip
 # Or map: deployment_service_external_url_verify: { cm: warn, grafana: skip }
+# Tier B direct https://ipaserver.<domain> from controller: auto skips on public/Jenkins when Caddy IPA vhosts exist
+deployment_ipa_direct_fqdn_external_url_verify: auto
 # Set true after 27_setup_cm_autotls.yml for Caddy CM reverse-proxy target port
 autotls_enabled: false
 
