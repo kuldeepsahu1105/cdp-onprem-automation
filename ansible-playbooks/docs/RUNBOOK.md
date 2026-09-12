@@ -186,7 +186,7 @@ MONITORING_STACK_ENABLED=true ansible-playbook -i inventory.ini 29_setup_monitor
 
 Ops stack runs on **ipaserver** when present (`deployment_portal_host_group: auto`), else **cldr-mngr**.
 
-**AWS (public IP):** Jenkins and browsers on the internet use `http://<ops-public-ip>:8088/`; hosts inside the VPC can use `http://<ops-private-ip>:8088/`. The generated index lists both.
+**AWS (public IP):** Jenkins and browsers on the internet use `http://<ops-public-ip>:8088/`; hosts inside the VPC can use `http://<ops-private-ip>:8088/`. The generated index lists both. Caddy vhost URLs use a **dashed** ops public IP in the hostname (`portal.52-221-251-41.pvc.cloudera-labs.com`, not dotted); that requires wildcard DNS on `caddy_vhost_public_base` or use `caddy_vhost_dns_mode: classic_nipio`. Playbook 28 fails fast if Caddy does not respond on `http://127.0.0.1:8088/` on the ops host.
 
 **Bare metal / private network (no public IP):** Set `deployment_environment: baremetal` (or `deployment_portal_access_profile: private`). The portal index shows only private-network URLs — typically `http://<ops-fqdn>:8088/` when `deployment_portal_prefer_fqdn_urls: true`, or `http://<management-ip>:8088/` otherwise. pgAdmin stays on port `5050` on the same ops host; database is **cldr-mngr** PostgreSQL. Caddy lab hostnames use the ops management IP (often `caddy_vhost_dns_mode: flat` with IPA/AD DNS).
 
