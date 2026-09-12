@@ -1,6 +1,6 @@
 ---
-# Restart CM server + agent on the CM host. Import from a play with hosts: cldr-mngr (not localhost+delegate).
-# systemd module from connection:local plays can target the wrong machine; systemctl on the host is reliable.
+# Restart CM server + agent on cldr-mngr. Used from localhost handlers (27/28) and other plays.
+# delegate_to/become must live on tasks here — not on the handler include_tasks line.
 
 - name: Restart Cloudera Manager server and agent via systemctl
   ansible.builtin.shell: |
@@ -17,5 +17,6 @@
   args:
     executable: /bin/bash
   become: true
+  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
   register: cm_restart_cmd
   changed_when: "'restarted' in cm_restart_cmd.stdout"

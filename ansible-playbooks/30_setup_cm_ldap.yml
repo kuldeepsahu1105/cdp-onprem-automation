@@ -8,11 +8,7 @@
   gather_facts: no
   handlers:
     - name: Restart Cloudera Manager server after LDAP change
-      ansible.builtin.systemd:
-        name: cloudera-scm-server
-        state: restarted
-      delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
-      become: true
+      ansible.builtin.include_tasks: common_tasks/restart_cm_scm_server.yml
       listen: Restart Cloudera Manager after configuration change
 
     - name: Refresh CM API URL after LDAP restart

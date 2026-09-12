@@ -1,0 +1,9 @@
+---
+# Restart only cloudera-scm-server on the CM host (e.g. after LDAP config from a localhost play).
+
+- name: Restart Cloudera Manager server after configuration change
+  ansible.builtin.systemd:
+    name: cloudera-scm-server
+    state: restarted
+  become: true
+  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"

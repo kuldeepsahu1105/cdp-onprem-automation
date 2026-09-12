@@ -9,8 +9,6 @@
   handlers:
     - name: Restart Cloudera Manager after configuration change
       ansible.builtin.include_tasks: common_tasks/restart_cm_services.yml
-      delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
-      become: true
       listen: Restart Cloudera Manager after configuration change
 
     - name: Refresh CM API URL after CM restart
