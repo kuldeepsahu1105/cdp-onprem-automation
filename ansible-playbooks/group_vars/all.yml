@@ -479,6 +479,8 @@ deployment_portal_config_dir: /opt/cldr-deployment-portal
 deployment_portal_www_dir: /opt/cldr-deployment-portal/www
 deployment_portal_caddy_image: caddy:2-alpine
 deployment_portal_caddy_container: cldr-portal-caddy
+# When OS repos lack docker-compose-plugin (common on RHEL), install this Compose v2 binary
+portal_docker_compose_version: "2.29.2"
 deployment_portal_pgadmin_image: dpage/pgadmin4:8
 deployment_portal_pgadmin_container: cldr-portal-pgadmin
 pgadmin_default_email: "admin@{{ cluster_domain }}"

@@ -1,20 +1,68 @@
 ---
+# Docker + Compose v2 for deployment portal stacks. RHEL AppStream often has docker
+# without docker-compose-plugin — install the CLI plugin binary when the package is missing.
+
 - name: Install Docker engine (RHEL family)
   ansible.builtin.package:
-    name:
-      - docker
-      - docker-compose-plugin
+    name: docker
     state: present
   when: ansible_os_family == 'RedHat'
 
+- name: Install Docker Compose plugin package (RHEL family)
+  ansible.builtin.package:
+    name: docker-compose-plugin
+    state: present
+  when: ansible_os_family == 'RedHat'
+  register: portal_compose_plugin_pkg
+  failed_when: false
+
 - name: Install Docker engine (Debian family)
   ansible.builtin.apt:
-    name:
-      - docker.io
-      - docker-compose-plugin
+    name: docker.io
     state: present
     update_cache: true
   when: ansible_os_family == 'Debian'
+
+- name: Install Docker Compose plugin package (Debian family)
+  ansible.builtin.apt:
+    name: docker-compose-plugin
+    state: present
+    update_cache: true
+  when: ansible_os_family == 'Debian'
+  register: portal_compose_plugin_pkg
+  failed_when: false
+
+- name: Ensure Docker CLI plugins directory exists
+  ansible.builtin.file:
+    path: /usr/local/lib/docker/cli-plugins
+    state: directory
+    mode: "0755"
+  when: portal_compose_plugin_pkg is failed or portal_compose_plugin_pkg.rc | default(0) != 0
+
+- name: Set Docker Compose v2 binary architecture
+  ansible.builtin.set_fact:
+    portal_docker_compose_arch: >-
+      {{
+        'aarch64'
+        if ansible_architecture | default('x86_64') in ['aarch64', 'arm64']
+        else 'x86_64'
+      }}
+  when: portal_compose_plugin_pkg is failed or portal_compose_plugin_pkg.rc | default(0) != 0
+
+- name: Install Docker Compose v2 CLI plugin (binary fallback)
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/docker/compose/releases/download/v{{ portal_docker_compose_version }}/docker-compose-linux-{{ portal_docker_compose_arch }}
+    dest: /usr/local/lib/docker/cli-plugins/docker-compose
+    mode: "0755"
+  when: portal_compose_plugin_pkg is failed or portal_compose_plugin_pkg.rc | default(0) != 0
+
+- name: Verify docker compose is available
+  ansible.builtin.command:
+    cmd: docker compose version
+  register: portal_docker_compose_verify
+  changed_when: false
+  failed_when: portal_docker_compose_verify.rc != 0
 
 - name: Enable and start Docker
   ansible.builtin.systemd:
