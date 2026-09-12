@@ -1,9 +1,39 @@
 ---
+# PyPI cm-client only supports ApiClient(host=). cloudera.cluster devel/v5 uses ApiClient(configuration=).
+# Pin v4.0.0 and remove any other cloudera.cluster version first (Ansible loads the highest version).
+
 - name: Resolve ansible-galaxy path
   ansible.builtin.command: which ansible-galaxy
   register: galaxy_path
   changed_when: false
   failed_when: galaxy_path.rc != 0
+
+- name: List installed cloudera.cluster collection versions
+  ansible.builtin.command:
+    argv:
+      - "{{ galaxy_path.stdout }}"
+      - collection
+      - list
+      - cloudera.cluster
+  register: cloudera_cluster_list_before
+  changed_when: false
+  failed_when: false
+
+- name: Show cloudera.cluster versions before install
+  ansible.builtin.debug:
+    msg: "{{ cloudera_cluster_list_before.stdout_lines | default(['(not installed)']) }}"
+  when: cloudera_cluster_list_before.stdout_lines is defined
+
+- name: Remove cloudera.cluster collection (drop devel/v5 so v4.0.0 is used)
+  ansible.builtin.command:
+    argv:
+      - "{{ galaxy_path.stdout }}"
+      - collection
+      - remove
+      - cloudera.cluster
+  register: cloudera_collection_remove
+  failed_when: false
+  changed_when: cloudera_collection_remove.rc == 0
 
 - name: Install cloudera.cluster collection (pinned for PyPI cm_client)
   ansible.builtin.shell:
@@ -15,6 +45,41 @@
   delay: 5
   until: cloudera_collection_result.rc == 0
   changed_when: cloudera_collection_result.rc == 0
+
+- name: List cloudera.cluster after pinned install
+  ansible.builtin.command:
+    argv:
+      - "{{ galaxy_path.stdout }}"
+      - collection
+      - list
+      - cloudera.cluster
+  register: cloudera_cluster_list_after
+  changed_when: false
+
+- name: Fail when devel cloudera.cluster (v5) is still active
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python | default('python3') }}"
+      - -c
+      - |
+        import pathlib
+        import sys
+        roots = [
+            pathlib.Path.home() / ".ansible/collections/ansible_collections/cloudera/cluster",
+            pathlib.Path("/usr/share/ansible/collections/ansible_collections/cloudera/cluster"),
+        ]
+        found = [p for p in roots if (p / "plugins/module_utils/cm_utils.py").is_file()]
+        if not found:
+            sys.exit("cloudera.cluster not found after install")
+        text = (found[0] / "plugins/module_utils/cm_utils.py").read_text()
+        if "ApiClient(configuration=" in text:
+            sys.exit(
+                "cloudera.cluster v5/devel is installed (ApiClient(configuration=)); "
+                "remove it and reinstall {{ cloudera_cluster_collection_git_ref }}"
+            )
+  register: cloudera_cluster_api_verify
+  changed_when: false
+  failed_when: cloudera_cluster_api_verify.rc != 0
 
 - name: Install controller Python deps (urllib3 1.x pin + cm_client)
   ansible.builtin.import_tasks: install_cm_client_python.yml
