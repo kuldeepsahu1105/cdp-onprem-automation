@@ -1,0 +1,23 @@
+# Embedded ECS control plane values (passed as valuesYaml to installEmbeddedControlPlane).
+ContainerInfo:
+  Mode: public
+  CopyDocker: false
+Database:
+  Mode: {{ ecs_control_plane_database_mode }}
+  EmbeddedDbStorage: {{ ecs_control_plane_embedded_db_storage_gb }}
+Vault:
+  Mode: {{ ecs_control_plane_vault_mode }}
+  EmbeddedStorage: {{ ecs_control_plane_embedded_vault_storage_gb }}
+Platform:
+  Name: standard
+ApplicationDomain: "{{ ecs_app_domain }}"
+SecurityContext:
+  Enabled: true
+Services:
+  thunderheadusermanagementprivate:
+    Config:
+      database:
+        name: db-ums
+      admin:
+        username: admin
+        password: "{{ ecs_console_admin_password }}"

@@ -1,0 +1,33 @@
+---
+# Install ECS embedded control plane (cloudera.cluster v4 has no control_plane module).
+
+- name: Build ECS control plane values YAML
+  ansible.builtin.set_fact:
+    ecs_control_plane_values_yaml: "{{ lookup('template', 'ecs_control_plane_values.yaml.j2') }}"
+
+- name: Install ECS embedded control plane via CM API
+  cloudera.cluster.cm_resource:
+    host: "{{ cm_cluster_module_host }}"
+    port: "{{ cm_cluster_module_port }}"
+    version: "{{ cm_api_version }}"
+    force_tls: "{{ cm_cluster_module_force_tls }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    path: /controlPlanes/commands/installEmbeddedControlPlane
+    method: POST
+    body:
+      remoteRepoUrl: "{{ ecs_pvc_repository_url }}"
+      experienceClusterName: "{{ ecs_cluster_name }}"
+      datalakeClusterName: "{{ cdh_basecluster_name }}"
+      valuesYaml: "{{ ecs_control_plane_values_yaml }}"
+  register: ecs_control_plane_install
+  ignore_errors: true
+
+- name: Fail when ECS control plane install returned an unexpected error
+  ansible.builtin.fail:
+    msg: "{{ ecs_control_plane_install.msg | default(ecs_control_plane_install) }}"
+  when:
+    - ecs_control_plane_install is failed
+    - "'already' not in (ecs_control_plane_install.msg | default('') | lower)"
+    - "'409' not in (ecs_control_plane_install.msg | default(''))"

@@ -37,6 +37,7 @@ allowed_keys:
   - csd_install_nifi_registry
   - ecs_pvc_ds_version
   - ecs_parcel_version
+  - ecs_console_admin_password
   - cdh_basecluster_name
   - base_cluster_install_services
   - base_cluster_yarn_rm_max_mb

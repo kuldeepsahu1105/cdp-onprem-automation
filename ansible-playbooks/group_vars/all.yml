@@ -487,6 +487,8 @@ ecs_cp_prometheus_ingress_user: "{{ cm_admin_user }}"
 ecs_cp_prometheus_ingress_password: "{{ cm_admin_pass }}"
 ecs_infra_prometheus_ingress_user: "{{ cm_admin_user }}"
 ecs_infra_prometheus_ingress_password: "{{ cm_admin_pass }}"
+# ECS Management Console bootstrap admin (UMS); must meet CDP complexity rules
+ecs_console_admin_password: "{{ common_password }}"
 ecs_control_plane_database_mode: embedded  # embedded | existing (existing needs full control_plane_config)
 ecs_control_plane_vault_mode: embedded
 ecs_control_plane_embedded_db_storage_gb: 50
