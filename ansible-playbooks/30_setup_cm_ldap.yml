@@ -2,14 +2,6 @@
 ---
 - import_playbook: 00_ensure_collections.yml
 
-- name: Install cloudera.cluster collection on control node
-  hosts: localhost
-  connection: local
-  gather_facts: no
-  tasks:
-    - name: Install cloudera.cluster collection
-      ansible.builtin.import_tasks: common_tasks/install_cloudera_collection.yml
-
 - name: Configure LDAP authentication in Cloudera Manager (FreeIPA or Active Directory)
   hosts: localhost
   connection: local
@@ -48,28 +40,10 @@
           - "User search base: {{ cm_ldap_user_search_base }}"
           - "User search filter: {{ cm_ldap_user_search_filter }}"
 
-    - name: Configure Cloudera Manager LDAP settings
-      cloudera.cluster.cm_config:
-        url: "{{ cm_api_url }}"
-        username: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        verify_tls: false
-        parameters:
-          auth_backend_order: "{{ cm_ldap_auth_backend_order }}"
-          ldap_type: "{{ cm_ldap_type }}"
-          ldap_url: "{{ cm_ldap_url }}"
-          ldap_bind_dn: "{{ cm_ldap_bind_dn }}"
-          ldap_bind_pw: "{{ cm_ldap_bind_password }}"
-          ldap_user_search_base: "{{ cm_ldap_user_search_base }}"
-          ldap_user_search_filter: "{{ cm_ldap_user_search_filter }}"
-          ldap_group_search_base: "{{ cm_ldap_group_search_base }}"
-          ldap_group_search_filter: "{{ cm_ldap_group_search_filter }}"
-          ldap_dn_pattern: "{{ cm_ldap_dn_pattern | default('') }}"
-      register: cm_ldap_result
-      notify: Restart Cloudera Manager after configuration change
+    - name: Configure Cloudera Manager LDAP settings (REST API)
+      ansible.builtin.import_tasks: common_tasks/configure_cm_ldap_api.yml
 
     - name: Print LDAP configuration result
       ansible.builtin.debug:
-        msg: "LDAP authentication configured in Cloudera Manager"
-      when: cm_ldap_result is changed
-
+        msg: LDAP authentication configured in Cloudera Manager (CM restart via handler if settings changed).
+      when: cm_ldap_result is defined and cm_ldap_result is changed
