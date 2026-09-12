@@ -1,4 +1,5 @@
 ### ansible-playbook -i inventory.ini 26_setup_cm_license.yml
+# Run after 36_provision_cm_caddy_reverse_proxy.yml (labs: CM API/license via proxy_host, then frontend_url).
 # vars:
 #   cm_port: 7180
 #   cm_admin_user: "admin"

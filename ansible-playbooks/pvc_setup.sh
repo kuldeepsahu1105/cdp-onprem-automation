@@ -225,10 +225,12 @@ run_phase_3() {
   fi
   run_playbook 23_setup_postgres.yml "${cm_extra[@]}"
   run_playbook 24_start_cm.yml "${cm_extra[@]}"
+  # Labs openshift: Caddy cm.<ops-ip>.pvc… → cldr-mngr :7180/:7183 before CM API/license via proxy (not full 35_refresh).
+  if _portal_enabled; then
+    run_playbook 36_provision_cm_caddy_reverse_proxy.yml
+  fi
   run_playbook 25_verify_cm.yml -e ansible_become=false
   run_playbook 26_setup_cm_license.yml -e ansible_become=false
-  # Portal bootstrap is Jenkins PORTAL / run_phase_portal only. CM frontend_url is set in 26 when Caddy is enabled.
-  # Re-render index + CM Caddy verify on CM_TLS_KRB_LDAP (and later phases), not here.
 }
 
 run_phase_cm_tls() {
