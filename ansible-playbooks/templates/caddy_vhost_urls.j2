@@ -26,9 +26,6 @@ ops_ip: {{ _ops_ip }}
 portal:
   hostname: "{{ vhost(caddy_vhost_service_names.portal) }}"
   url: "{{ url(vhost(caddy_vhost_service_names.portal), '', use_port) }}"
-cm:
-  hostname: "{{ vhost(caddy_vhost_service_names.cm) }}"
-  url: "{{ url(vhost(caddy_vhost_service_names.cm), '', use_port) }}"
 pgadmin:
   hostname: "{{ vhost(caddy_vhost_service_names.pgadmin) }}"
   url: "{{ url(vhost(caddy_vhost_service_names.pgadmin), '', use_port) }}"
@@ -44,6 +41,3 @@ alertmanager:
 ipa:
   hostname: "{{ vhost(caddy_vhost_service_names.ipa) }}"
   url: "{{ url(vhost(caddy_vhost_service_names.ipa), '', use_port) }}"
-ecs:
-  hostname: "{{ vhost(caddy_vhost_service_names.ecs) }}"
-  url: "{{ url(vhost(caddy_vhost_service_names.ecs), '', use_port) }}"

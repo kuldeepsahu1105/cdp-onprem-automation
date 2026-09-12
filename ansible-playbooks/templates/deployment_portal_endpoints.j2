@@ -10,12 +10,6 @@
   hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
   note: "{{ _portal_note }}"
 {% endif %}
-{% if caddy_vhost_enabled | default(false) | bool and caddy_vhost_urls_external.cm.url | default('') | length > 0 %}
-- name: "Cloudera Manager (Caddy HTTP)"
-  url: "{{ caddy_vhost_urls_external.cm.url | trim }}"
-  hostname: "{{ deployment_portal_cm_fqdn | default('') }}"
-  note: "Caddy vhost {{ caddy_vhost_urls_external.cm.hostname | default('') }} → {{ deployment_portal_cm_fqdn | default('cldr-mngr') }}"
-{% endif %}
 {% if deployment_portal_cm_fqdn | default('') | length > 0 %}
 - name: "Cloudera Manager (HTTPS direct)"
   url: "https://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port }}"
@@ -79,15 +73,8 @@
 {% if deployment_portal_ecs_present | bool %}
 {% set _ecs_master = groups[ecs_cluster_master_group][0] if (ecs_cluster_master_group in groups and groups[ecs_cluster_master_group] | default([]) | length > 0) else '' %}
 {% set _ecs_master_ip = hostvars[_ecs_master].ansible_host | default('') if (_ecs_master | length > 0) else '' %}
-{% if ecs_caddy_console_url | default('') | length > 0 %}
-- name: "ECS console"
-  url: "{{ ecs_caddy_console_url | trim }}"
-  hostname: "console.{{ ecs_app_domain }}"
-  note: "HTTPS console{% if _ecs_master_ip | length > 0 %}; ECS master public/management IP {{ _ecs_master_ip }}{% endif %}"
-{% else %}
 - name: "ECS console"
   url: "https://console.{{ ecs_app_domain }}"
   hostname: "console.{{ ecs_app_domain }}"
   note: "Typical ECS console URL{% if _ecs_master_ip | length > 0 %}; ECS master IP {{ _ecs_master_ip }}{% endif %}"
-{% endif %}
 {% endif %}

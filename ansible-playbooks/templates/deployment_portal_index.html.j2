@@ -1,11 +1,10 @@
 {% set ctx = deployment_portal_context %}
-{% set _cm_caddy = ctx.cloudera_manager.caddy_url | default('') | trim | regex_replace('/+$', '') %}
-{% set cm_tile_url = _cm_caddy if (_cm_caddy | length > 0) else ctx.cloudera_manager.ui_url_https %}
+{% set cm_tile_url = ctx.cloudera_manager.ui_url_https %}
 {% set pgadmin_tile_url = ctx.portal.pgadmin_caddy_url | default('') if (ctx.portal.pgadmin_caddy_url | default('') | length > 0) else (ctx.portal.pgadmin_url_direct | default(ctx.portal.pgadmin_url | default(''))) %}
 {% set ipa_modern_url = ctx.identity.ipa_caddy_modern_url | default('') if (ctx.identity.ipa_caddy_modern_url | default('') | length > 0) else (ctx.identity.ipa_caddy_url | default('')) %}
 {% set ipa_legacy_caddy_url = ctx.identity.ipa_caddy_legacy_url | default('') %}
 {% set ipa_tile_url = ipa_modern_url if (ipa_modern_url | length > 0) else (ctx.identity.ipa_ui_url | default('')) %}
-{% set ecs_tile_url = (ctx.ecs.caddy_url | default('') if (ctx.ecs.caddy_url | default('') | length > 0) else (ctx.ecs.console_hint | default(''))) if ctx.ecs.deployed else '' %}
+{% set ecs_tile_url = ctx.ecs.console_hint | default('') if ctx.ecs.deployed else '' %}
 {% set _portal_caddy_url = ctx.caddy_vhosts.urls_public.portal.url | default('') if (ctx.caddy_vhosts.enabled | default(false)) else '' %}
 {% set portal_tile_url = _portal_caddy_url if (_portal_caddy_url | length > 0) else ctx.portal.index_url | default('') %}
 {% set portal_tile_hint = ctx.caddy_vhosts.urls_public.portal.hostname if (_portal_caddy_url | length > 0) else 'Ops host Caddy index' %}
@@ -655,8 +654,7 @@
         <ul class="clean">
           <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>
           <li><strong>pgAdmin</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.pgadmin.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.pgadmin.hostname }}</a></li>
-          <li><strong>CM (Caddy — use this in browser)</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.cm.url }}</a> <span class="badge">:{{ deployment_portal_http_port | default(81) }} only; not :7183 on this hostname</span></li>
-          <li><strong>CM (HTTPS direct on manager)</strong> — <a href="{{ ctx.cloudera_manager.ui_url_https }}" target="_blank" rel="noopener noreferrer">{{ ctx.cloudera_manager.ui_url_https }}</a> <span class="badge">{{ ctx.cloudera_manager.host_fqdn }} — not the <code>cm.*</code> Caddy name</span></li>
+          <li><strong>Cloudera Manager (direct HTTPS)</strong> — <a href="{{ ctx.cloudera_manager.ui_url_https }}" target="_blank" rel="noopener noreferrer">{{ ctx.cloudera_manager.ui_url_https }}</a> <span class="badge">{{ ctx.cloudera_manager.host_fqdn }} :7180/:7183</span></li>
           {% if mon_on %}
           <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.grafana.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.grafana.hostname }}{% else %}{{ grafana_tile_url }}{% endif %}</a></li>
           <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.prometheus.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.prometheus.hostname }}{% else %}{{ prometheus_tile_url }}{% endif %}</a></li>
@@ -695,9 +693,6 @@
           <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ alertmanager_tile_url }}">{{ alertmanager_tile_url }}</a></li>
           <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a> <span class="badge">:8089</span></li>
           {% endif %}
-          {% if _cm_caddy | length > 0 %}
-          <li><strong>Cloudera Manager (Caddy HTTP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _cm_caddy }}">{{ _cm_caddy }}</a></li>
-          {% endif %}
           <li><strong>Cloudera Manager (direct HTTP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_http }}">{{ ctx.cloudera_manager.ui_url_http }}</a> <span class="badge">VPC / admin</span></li>
           <li><strong>Cloudera Manager (direct HTTPS)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_https }}">{{ ctx.cloudera_manager.ui_url_https }}</a> <span class="badge">:7183 on {{ ctx.cloudera_manager.host_fqdn }}</span></li>
           {% if ctx.identity.ipa_caddy_modern_url | default('') | length > 0 %}
@@ -722,7 +717,7 @@
           {% if ctx.ecs.deployed %}
           <li>ECS cluster: <code>{{ ctx.ecs.cluster_name }}</code></li>
           <li>ECS app domain: <code>{{ ctx.ecs.app_domain }}</code></li>
-          <li>ECS console — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.ecs.console_hint }}">{{ ctx.ecs.console_hint }}</a>{% if ctx.ecs.caddy_url | default('') | length > 0 %} <span class="badge">Caddy</span>{% endif %}</li>
+          <li>ECS console — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.ecs.console_hint }}">{{ ctx.ecs.console_hint }}</a></li>
           <li>ECS direct HTTPS — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.ecs.console_url_direct | default('https://console.' ~ ctx.ecs.app_domain) }}">{{ ctx.ecs.console_url_direct | default('https://console.' ~ ctx.ecs.app_domain) }}</a></li>
           <li>Data Services hostnames: <code>{{ ctx.ecs.apps_wildcard }}</code></li>
           {% else %}

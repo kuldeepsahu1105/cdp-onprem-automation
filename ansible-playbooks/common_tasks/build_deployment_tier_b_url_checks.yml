@@ -201,20 +201,6 @@
              and (_tier_b_ctx.access.profile | default('') != 'private')
              and (_tier_b_ctx.anchor.public_ip | default('') | length > 0)
              else [])
-          + ([{'name': 'CM (Caddy vhost)', 'url': _tier_b_ctx.caddy_vhosts.urls_public.cm.url | default(''), 'service': 'cm'}]
-             if (
-               (
-                 _tier_b_use_milestones
-                 and ('cm' in _tier_b_milestones)
-               )
-               or (
-                 not _tier_b_use_milestones
-                 and (_tier_b_scope in ['all', 'cm'])
-               )
-             )
-             and _tier_b_caddy
-             and (_tier_b_ctx.caddy_vhosts.urls_public.cm.url | default('') | length > 0)
-             else [])
           + ([{'name': 'FreeIPA UI (cluster FQDN)', 'url': _tier_b_ctx.identity.ipa_ui_url | default(''),
               'service': 'ipa', 'ipa_direct_fqdn': true}]
              if (
@@ -280,19 +266,6 @@
              )
              and (_tier_b_ctx.ecs.deployed | default(false) | bool)
              and (_tier_b_ctx.ecs.console_hint | default('') | length > 0)
-             else [])
-          + ([{'name': 'ECS (Caddy vhost)', 'url': _tier_b_ctx.ecs.caddy_url | default(''), 'service': 'ecs'}]
-             if (
-               (
-                 _tier_b_use_milestones
-                 and ('ecs' in _tier_b_milestones)
-               )
-               or (
-                 not _tier_b_use_milestones
-                 and (_tier_b_scope == 'all')
-               )
-             )
-             and (_tier_b_ctx.ecs.caddy_url | default('') | length > 0)
              else [])
         )
         | selectattr('url', 'defined')

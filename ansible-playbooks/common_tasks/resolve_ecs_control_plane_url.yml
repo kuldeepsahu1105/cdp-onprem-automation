@@ -1,13 +1,9 @@
 ---
-- name: Set ECS control plane console URL (explicit, Caddy vhost, or app domain)
+- name: Set ECS control plane console URL (explicit override or app domain)
   ansible.builtin.set_fact:
     ecs_control_plane_url_effective: >-
       {{
         ecs_control_plane_url | trim
         if (ecs_control_plane_url | default('') | length > 0)
-        else (
-          ecs_caddy_console_url | trim
-          if (ecs_caddy_console_url | default('') | length > 0)
-          else ('https://console.' + ecs_app_domain)
-        )
+        else ('https://console.' + ecs_app_domain)
       }}

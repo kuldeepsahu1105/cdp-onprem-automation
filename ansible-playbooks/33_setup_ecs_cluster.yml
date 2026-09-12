@@ -134,7 +134,6 @@
           - "PVC DS repo: {{ ecs_pvc_repository_url }}"
           - "App domain: {{ ecs_app_domain }}"
           - "Control plane URL (automation): {{ ecs_control_plane_url_effective | default('') }}"
-          - "ECS Caddy console URL: {{ ecs_caddy_console_url | default('') }}"
           - "Datalake cluster: {{ cdh_basecluster_name }}"
           - "ECS master: {{ ecs_master_fqdn }}"
           - "ECS workers: {{ ecs_worker_fqdns }}"

@@ -22,24 +22,6 @@
     - name: Build deployment portal context from inventory
       ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
 
-    - name: Install cloudera.cluster collection for CM frontend URL apply
-      ansible.builtin.import_tasks: common_tasks/install_cloudera_collection.yml
-      when:
-        - deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
-        - cm_frontend_url_effective | default('') | length > 0
-
-    - name: Set Cloudera Manager API URL for frontend apply
-      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
-      when:
-        - deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
-        - cm_frontend_url_effective | default('') | length > 0
-
-    - name: Apply CM Caddy frontend URL after portal refresh
-      ansible.builtin.import_tasks: common_tasks/apply_cm_caddy_load_balancer.yml
-      when:
-        - deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
-        - cm_frontend_url_effective | default('') | length > 0
-
 - name: Refresh deployment portal content on ops host
   hosts: "{{ hostvars['localhost']['deployment_portal_host_group_effective'] }}"
   become: true

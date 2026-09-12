@@ -310,14 +310,11 @@ ansible_controller_outside_vpc: false
 # Jenkins/public controllers probe CM ansible_host (HTTPS :7183) from localhost instead (no EC2 hairpin).
 cm_api_delegate_probes_to_manager: true
 cm_api_private_reachability_timeout: 5
-# CM UI via Caddy vhost (portal): frontend_url + cm_host_name in CM (API). Override full URL here if needed.
+# Cloudera Manager UI/API use direct cldr-mngr :7180/:7183 — not Caddy (portal stack is portal/pgAdmin/monitoring/IPA only).
 cm_external_url: ""
-# auto | true | false — auto when deployment_portal_enabled + caddy_vhost_enabled + Caddy CM URL exists
-cm_apply_caddy_frontend_url: auto
-# auto | true | false — for apply_cm_caddy_load_balancer.yml only: call cm_config via Caddy CM vhost
-# (host cm.<ip-dashed>.<base>, port deployment_portal_http_port) instead of direct :7180/:7183.
-# Matches cloudera-labs/openshift module_defaults host=proxy_host port=80 on the reverse proxy.
-cm_config_api_via_caddy_proxy: auto
+# Deprecated — CM frontend_url is not set via Caddy; kept for inventory overrides only.
+cm_apply_caddy_frontend_url: false
+cm_config_api_via_caddy_proxy: false
 # fail | warn — warn when Jenkins cannot open CM :7180/:7183 but delegated discovery on cldr-mngr succeeds
 cm_api_verify_mode: fail
 # Portal verify: skip VPC-only URL checks when control profile is public-only (Jenkins default)
@@ -325,7 +322,7 @@ deployment_portal_url_verify_skip_vpc: false
 # Milestone-scoped URL verify (portal, ipa, identity, cm, cm_tls, cdh, monitoring, ecs).
 # Default [] — 10_setup_deployment_portal sets [portal, ipa]; pvc_setup/35_refresh pass cumulative lists per phase.
 deployment_portal_verify_milestones: []
-# Tier A: require Caddy CM vhost Host check (legacy — prefer deployment_portal_verify_milestones: …,cm)
+# Legacy: when milestones list is empty, add cm (direct cldr-mngr UI verify — not Caddy)
 deployment_portal_verify_cm_vhost: false
 # Set by 35_refresh_deployment_portal.yml — legacy CM milestone when milestones extra-var omitted
 deployment_portal_verify_post_cm: false
@@ -339,7 +336,7 @@ deployment_portal_external_url_verify: warn
 # Or map: deployment_service_external_url_verify: { cm: warn, grafana: skip }
 # Tier B direct https://ipaserver.<domain> from controller: auto skips on public/Jenkins when Caddy IPA vhosts exist
 deployment_ipa_direct_fqdn_external_url_verify: auto
-# Set true after 27_setup_cm_autotls.yml for Caddy CM reverse-proxy target port
+# Set true after 27_setup_cm_autotls.yml (CM listens on :7183; Caddy is not used for CM).
 autotls_enabled: false
 
 ##### cm_server autotls variables:
@@ -514,8 +511,8 @@ ecs_data_services_catalog:
 deployment_portal_enabled: true
 deployment_portal_host_group: auto
 deployment_portal_postgres_host_group: cldr-mngr
-# Caddy edge listener on ops (ipaserver): all vhosts (portal.*, cm.*, ipa.*, …) share this TCP port.
-# Cloudera Manager still listens on cldr-mngr:7180 / :7183; Caddy reverse-proxies to those — not this port on the CM host.
+# Caddy edge listener on ops (ipaserver): portal, pgAdmin, monitoring, and IPA vhosts share this TCP port.
+# Cloudera Manager and ECS use direct host ports (cldr-mngr :7180/:7183; ECS console/gateway URLs) — not Caddy.
 deployment_portal_http_port: 81
 deployment_portal_pgadmin_host_port: 5050
 deployment_portal_config_dir: /opt/cldr-deployment-portal
@@ -561,10 +558,10 @@ deployment_portal_prefer_fqdn_urls: true
 deployment_portal_use_private_network_only: false
 
 # Caddy nip.io-style hostnames (all resolve to ops host IP; Caddy reverse-proxies to backends)
-# embedded_ip: cm.10-54-75-123.pvc.cloudera-labs.com  (wildcard DNS on base domain)
-# classic_nipio: cm.10-54-75-123.nip.io  (works without custom DNS)
-# flat: cm.pvc.cloudera-labs.com  (single A record for *.svc → ops IP)
-# Lab vhosts (cm.<ops-ip-dashed>.pvc…, etc.) — tied to monitoring_stack_enabled via deployment_portal_caddy_effective.
+# embedded_ip: portal.10-54-75-123.pvc.cloudera-labs.com  (wildcard DNS on base domain)
+# classic_nipio: portal.10-54-75-123.nip.io  (works without custom DNS)
+# flat: portal.pvc.cloudera-labs.com  (single A record for *.svc → ops IP)
+# Lab vhosts (portal/pgadmin/grafana/prometheus/alertmanager/ipa.<ops-ip-dashed>.pvc…) — deployment_portal_caddy_effective.
 caddy_vhost_enabled: true
 caddy_vhost_public_base: pvc.cloudera-labs.com
 caddy_vhost_dns_mode: embedded_ip
@@ -572,13 +569,11 @@ caddy_vhost_dns_mode: embedded_ip
 caddy_vhost_register_private_ip: true
 caddy_vhost_service_names:
   portal: portal
-  cm: cm
   pgadmin: pgadmin
   grafana: grafana
   prometheus: prometheus
   alertmanager: alertmanager
   ipa: ipa
-  ecs: ecs
 
 monitoring_stack_enabled: true
 monitoring_config_dir: /opt/cldr-monitoring
