@@ -1,5 +1,5 @@
 ### ansible-playbook -i inventory.ini 26_setup_cm_license.yml
-# Run after 36_provision_cm_caddy_reverse_proxy.yml (labs: CM API/license via proxy_host, then frontend_url).
+# Run after 25_verify_cm.yml; CM API uses direct cldr-mngr :7180/:7183 (no Caddy proxy).
 # vars:
 #   cm_port: 7180
 #   cm_admin_user: "admin"
@@ -119,25 +119,6 @@
       ansible.builtin.debug:
         msg: "Started Cloudera Manager with trial license (license file not found in current directory)."
       when: trial_license_response is defined and trial_license_response is changed
-
-    - name: Resolve deployment portal Caddy gate (monitoring_stack_enabled)
-      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_caddy_enabled.yml
-
-    - name: Build deployment portal Caddy URL facts for CM frontend
-      ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
-      when: deployment_portal_caddy_effective | default(false) | bool
-
-    - name: Install cloudera.cluster collection for CM frontend URL
-      ansible.builtin.import_tasks: common_tasks/install_cloudera_collection.yml
-      when:
-        - deployment_portal_caddy_effective | default(false) | bool
-        - cm_frontend_url_effective | default('') | length > 0
-
-    - name: Apply CM Caddy frontend URL in Cloudera Manager
-      ansible.builtin.import_tasks: common_tasks/apply_cm_caddy_load_balancer.yml
-      when:
-        - deployment_portal_caddy_effective | default(false) | bool
-        - cm_frontend_url_effective | default('') | length > 0
 
   # handlers:
   #   - name: Restart cloudera-scm-server

@@ -44,10 +44,6 @@ Same VPC (ops private IP):
   Mode: {{ deployment_portal_context.caddy_vhosts.dns_mode }} base={{ deployment_portal_context.caddy_vhosts.public_base }}
   Primary (works without lab DNS): {{ deployment_portal_context.access.external.portal | default(deployment_portal_context.access.primary.portal | default('')) }}
   Portal (Caddy vhost):  {{ deployment_portal_context.caddy_vhosts.urls_public.portal.url | default('') }}
-  CM:      {{ deployment_portal_context.caddy_vhosts.urls_public.cm.url | default('') }}
-{% if deployment_portal_context.cloudera_manager.frontend_url | default('') | length > 0 %}
-  CM frontend_url (CM UI): {{ deployment_portal_context.cloudera_manager.frontend_url }}
-{% endif %}
   pgAdmin: {{ deployment_portal_context.caddy_vhosts.urls_public.pgadmin.url | default('') }}
 {% if deployment_portal_context.monitoring.enabled %}
   Grafana: {{ deployment_portal_context.caddy_vhosts.urls_public.grafana.url | default('') }}
@@ -68,8 +64,5 @@ Same VPC (ops private IP):
   Console (automation): {{ deployment_portal_context.ecs.console_hint }}
   Console (direct):   {{ deployment_portal_context.ecs.console_url_direct | default('') }}
   Apps:         {{ deployment_portal_context.ecs.apps_wildcard }}
-{% if deployment_portal_context.ecs.caddy_url | default('') | length > 0 %}
-  ECS (Caddy):  {{ deployment_portal_context.ecs.caddy_url }}
-{% endif %}
 {% endif %}
 ========== CDP_ACCESS_URLS_END ==========

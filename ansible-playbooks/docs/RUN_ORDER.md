@@ -13,7 +13,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 3 | PREREQS | `1` / `prereq` | SSH: `00_setup_ssh_preqs` → `01`–`09` |
 | 4 | PORTAL | `portal` | `10_setup_deployment_portal` |
 | 5 | IDENTITY | `2` / `identity` | `00_detect_identity` → `11_identity_setup` → `35_refresh` (via wrapper) |
-| 6 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → **`36_provision_cm_caddy_reverse_proxy`** (Caddy CM vhost → `:7180`/`:7183`) → `25`–`26` (`frontend_url` in `26`; not full `35_refresh`) |
+| 6 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
 | 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `35_refresh` → `28`–`30` → `35_refresh` |
 | 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` → `35_refresh` |
 | 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` → `35_refresh` |
@@ -27,7 +27,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 
 | # | Playbook | Notes |
 |---|----------|--------|
-| 10 | `10_setup_deployment_portal.yml` | Ops portal bootstrap (Caddy edge `deployment_portal_http_port`, default **81**; CM upstream remains cldr-mngr :7180/:7183) |
+| 10 | `10_setup_deployment_portal.yml` | Ops portal bootstrap (Caddy edge `deployment_portal_http_port`, default **81** — portal, pgAdmin, monitoring, IPA; not CM/ECS) |
 | 11 | `11_identity_setup.yml` | Identity **router** |
 | 12 | `12_setup_freeipa_server.yml` | FreeIPA server (skipped for AD) |
 | 13 | `13_update_resolv_conf.yml` | resolv.conf / netplan |

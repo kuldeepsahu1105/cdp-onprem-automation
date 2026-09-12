@@ -131,11 +131,14 @@ After cluster deploy, `10_setup_deployment_portal.yml` installs the **ops stack*
 
 With `caddy_vhost_enabled: true`, Caddy serves **per-service hostnames** on the ops host (port `deployment_portal_http_port` (default **81**) by default), for example:
 
-`http://cm.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → Cloudera Manager  
+`http://portal.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → deployment portal index  
+`http://pgadmin.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → pgAdmin  
 `http://grafana.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → Grafana  
 `http://ipa.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → FreeIPA (**`redir /` → `/ipa/modern-ui/`**; also **`/ipa/ui`** legacy; Caddy **`reverse_proxy` HTTP** to ipaserver with **`Host`** + path-matched **`Referer`** — [cloudera-labs/openshift](https://github.com/cloudera-labs/openshift) pattern)
 
-Set `caddy_vhost_dns_mode: classic_nipio` for **`*.nip.io`** names (no custom DNS). Set `flat` for `cm.pvc.cloudera-labs.com` when you point all A records at the ops IP.
+Cloudera Manager and ECS console use **direct** URLs on `cldr-mngr` (`:7180`/`:7183`) and `https://console.<ecs_app_domain>` — not Caddy.
+
+Set `caddy_vhost_dns_mode: classic_nipio` for **`*.nip.io`** names (no custom DNS). Set `flat` for `portal.pvc.cloudera-labs.com` when you point all A records at the ops IP.
 
 Playbooks **28** / **31** verify portal URLs after sync: direct `http://<ops-ip>:81/`, printed access URLs, and Caddy vhost routes (via `Host` header on `127.0.0.1`). IPA vhost checks also confirm FreeIPA responds to its FQDN `Host` header locally on `ipaserver`.
 

@@ -40,7 +40,7 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 | `_portal_verify_milestones_effective` | `resolve_deployment_portal_verify_milestones.yml` | Must run immediately before verify URLs (also imported from `verify_deployment_portal_caddy.yml`) |
 | `caddy_vhost_urls` | `build_deployment_portal_facts.yml` | Required for Caddy vhost Tier A checks |
 | `ansible_control_reach_public_only` | `detect_ansible_control_reachability.yml` (delegate localhost) | Used for optional printed URL / hairpin behavior; read via `hostvars['localhost']` on ops host |
-| `deployment_portal_has_ipa`, `deployment_portal_ipa_fqdn`, `deployment_portal_cm_fqdn`, `deployment_portal_cm_upstream_host` | `build_deployment_portal_facts.yml` + load on ops | Milestone-gated checks; Caddy CM `reverse_proxy` target (private IP) |
+| `deployment_portal_has_ipa`, `deployment_portal_ipa_fqdn`, `deployment_portal_cm_fqdn`, `deployment_portal_cm_upstream_host` | `build_deployment_portal_facts.yml` + load on ops | Milestone-gated checks; direct CM UI probes on cldr-mngr |
 | Group defaults | `group_vars/all.yml` | e.g. `deployment_portal_http_port`, `deployment_portal_url_verify_status_codes`, `caddy_vhost_enabled` |
 
 **Internal `_portal_*` facts:** defined in earlier tasks within `verify_deployment_portal_urls.yml` itself — do not combine dependent keys in a **single** `set_fact` task (Ansible key order is undefined). See comment at top of that file.
@@ -59,13 +59,11 @@ Import order in `set_cm_api_url.yml`:
    - **`detect_ansible_control_reachability.yml`** (full CM port probes unless skipped)
    - Sets `cm_connect_host`, `cm_api_client_host`, `cm_api_probe_host`, `cm_api_probe_delegate_to`, `cm_host`
    - Uses `ansible_control_reach_public_only` from reachability detect
-2b. **`select_cm_api_probe_host.yml`** — when **`cm_api_probe_from_controller_public`** (Jenkins/localhost + effective `public`), probes **on the controller**: optional Caddy CM vhost URL, then `ansible_host`/FQDN (HTTPS then HTTP). When probes **delegate to cldr-mngr**, tries `127.0.0.1`, `ansible_host`, FQDN, private IP (HTTP then HTTPS per candidate); updates `cm_api_probe_host` and `cm_api_client_host`
+2b. **`select_cm_api_probe_host.yml`** — when **`cm_api_probe_from_controller_public`** (Jenkins/localhost + effective `public`), probes **on the controller** at `ansible_host`/FQDN (HTTPS then HTTP). When probes **delegate to cldr-mngr**, tries `127.0.0.1`, `ansible_host`, FQDN, private IP (HTTP then HTTPS per candidate); updates `cm_api_probe_host` and `cm_api_client_host`. **Caddy is not used for CM** — direct `:7180`/`:7183` only.
 3. `ensure_cm_admin_password.yml`
 4. HTTP/HTTPS probes → `cm_protocol`, `cm_api_port`, **`cm_api_url`**, `cm_api_url_delegated`
 
-**CM Caddy frontend (post-CM):** `26_setup_cm_license.yml` and `35_refresh_deployment_portal.yml` (localhost play) call `apply_cm_caddy_load_balancer.yml` after `build_deployment_portal_facts.yml` + `set_cm_api_url.yml`. Sets CM API `frontend_url` and `cm_host_name` to the Caddy CM vhost (not direct `:7180` FQDN).
-
-**Labs `module_defaults` (scoped):** cloudera-labs/openshift routes `cloudera.cluster.cm*` API calls through the CM Caddy vhost (`proxy_host`, port **80**). We only mirror that for **`cm_config` in `apply_cm_caddy_load_balancer.yml`**: when `cm_config_api_via_caddy_proxy` is `auto`/`true`, `host` = `caddy_vhost_urls_external.cm.hostname`, `port` = `deployment_portal_http_port` (81), `force_tls: false`. Other playbooks keep direct `cm_host` / `cm_api_port` (`:7180` or `:7183`).
+**CM UI:** Cloudera Manager **`frontend_url`** is not set via Caddy. Portal index and Jenkins list **direct** `https://cldr-mngr.<domain>:7183` (or `:7180`). Optional `cm_external_url` in `group_vars` sets `cm_frontend_url_effective` only when you need a custom published URL.
 
 | Fact | Set by |
 |------|--------|
@@ -73,11 +71,10 @@ Import order in `set_cm_api_url.yml`:
 | `_acr_*` | Same file; transient inputs — do not use in `when:` across other task files |
 | `cm_api_connect_host` | Optional override in `group_vars/all.yml` |
 | `cm_manager_inventory_host` | `group_vars/all.yml` (default `cldr-mngr` host) |
-| `cm_caddy_public_url`, `cm_frontend_url_effective` | `resolve_caddy_service_public_urls.yml` (after `caddy_vhost_urls.j2` in `build_deployment_portal_facts.yml`) |
+| `cm_frontend_url_effective` | `resolve_caddy_service_public_urls.yml` — optional `cm_external_url` override only |
 | `pgadmin_caddy_public_url` | `resolve_caddy_service_public_urls.yml` — preferred browser URL for pgAdmin on Caddy port `deployment_portal_http_port` (default **81**) |
 | `deployment_tier_b_url_checks` | `build_deployment_tier_b_url_checks.yml` on **localhost** — Tier B reads via `hostvars['localhost']` in `verify_service_urls_from_controller.yml` |
-| `ecs_caddy_console_url` | Same; used by `resolve_ecs_control_plane_url.yml` and portal `ecs.console_hint` |
-| `cm_external_url`, `cm_apply_caddy_frontend_url`, `cm_config_api_via_caddy_proxy` | `group_vars/all.yml` — override Caddy CM URL; gate `apply_cm_caddy_load_balancer.yml`; proxy vs direct CM API for `cm_config` |
+| `ecs_control_plane_url_effective` | `resolve_ecs_control_plane_url.yml` — `ecs_control_plane_url` or `https://console.<ecs_app_domain>` (no Caddy) |
 
 **Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml` (imports `set_cm_api_url.yml` and Tier B controller verify). Portal Caddy verify uses detect with **`ansible_control_reachability_skip_cm_probes: true`** and explicit `cm_host_public` / `cm_host_private` vars — do not assume CM API facts exist on the ops host play.
 

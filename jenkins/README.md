@@ -144,7 +144,7 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 
 | Tier | Checks | Jenkins typical outcome |
 |---|---|---|
-| **A** (service host, **required**) | Ops: `127.0.0.1:<deployment_portal_http_port> (default 81)` + Caddy **Host** vhosts (portal, CM, IPA, Grafana). CM: `127.0.0.1:7180` on `cldr-mngr` | Must pass or PORTAL / CM verify fails |
+| **A** (service host, **required**) | Ops: `127.0.0.1:<deployment_portal_http_port> (default 81)` + Caddy **Host** vhosts (portal, pgAdmin, IPA, Grafana/Prometheus/Alertmanager). CM: `127.0.0.1:7180` on `cldr-mngr` (not Caddy) | Must pass or PORTAL / CM verify fails |
 | **B** (Ansible controller, **public** profile) | GET printed external URLs (portal, CM, Grafana, IPA, ECS) from the agent | **`warn`** if SG blocks ports (`deployment_external_url_verify: warn`, default on Jenkins); per-service `deployment_cm_external_url_verify`, etc. |
 | **C** (ops/CM host, optional) | Hairpin to own public EIP | Warn only — does not fail |
 
@@ -163,7 +163,7 @@ Jenkins `text` parameters render as a **multiline text area**. Only **Ansible-on
 - Merged at runtime via `ansible-playbooks/jenkins_override.yml` + `-e @file` (not committed; never under `group_vars/all/`).
 - Disallowed or unknown keys fail validation when Ansible stages are selected.
 - CM archive login: use `CM_REPO_USERNAME` / `CM_REPO_PASSWORD` (not the textarea).
-- **Caddy edge port:** default **`deployment_portal_http_port: 81`** in `group_vars/all.yml`. Do not paste legacy **`8088`** into the textarea — CM API Caddy probes and Tier **B** checks use this port. Jenkins `render-ansible-group-vars-override.py` rewrites **8088 → 81** and always injects **81** on the controller so stale overrides cannot probe `:8088` after Caddy moved to **81**. Open security group **81** from the Jenkins agent CIDR for CM/portal Tier **B**.
+- **Caddy edge port:** default **`deployment_portal_http_port: 81`** in `group_vars/all.yml` (portal/pgAdmin/monitoring/IPA vhosts). Do not paste legacy **`8088`** into the textarea. Jenkins `render-ansible-group-vars-override.py` rewrites **8088 → 81**. Open security group **81** from the Jenkins agent CIDR for portal Tier **B**; CM uses **7180**/**7183** on `cldr-mngr` (not Caddy).
 
 ## License and CM archive credentials
 

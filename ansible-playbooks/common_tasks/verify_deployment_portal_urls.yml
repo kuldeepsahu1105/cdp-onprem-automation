@@ -2,7 +2,7 @@
 # Service URL verify tiers (see RUNBOOK.md § Service URL verification tiers):
 #   Tier A (ops host): localhost index (verify_deployment_portal_caddy.yml) plus checks scoped by
 #   deployment_portal_verify_milestones (portal/ipa at bootstrap; pgadmin/cm/monitoring/ecs only when listed;
-#   pgAdmin and CM Caddy vhost probes are omitted until milestones pgadmin / cm).
+#   pgAdmin Caddy vhost probes omitted until milestone pgadmin; CM uses direct cldr-mngr :7180/:7183 when cm is listed).
 #   Tier C (optional on ops host): printed public-EIP / hairpin URLs — warn only when optional.
 #   Tier B (controller): verify_service_urls_from_controller.yml after this file (portal, CM, monitoring, IPA, ECS).
 #   Tier B IPA: public/Jenkins controllers skip direct cluster FQDN (DNS); Caddy ipa.* vhost URLs on deployment_portal_http_port only.
@@ -58,19 +58,6 @@
         | map('int')
         | list
       }}
-
-- name: Set deployment portal require CM Caddy vhost from verify milestones
-  ansible.builtin.set_fact:
-    _portal_require_cm_vhost: "{{ 'cm' in (_portal_verify_milestones_effective | default([])) }}"
-
-- name: Set deployment portal CM Caddy vhost Tier A verify mode when CM milestone is active
-  ansible.builtin.set_fact:
-    _portal_cm_vhost_tier_a_mode: >-
-      {{
-        deployment_portal_cm_vhost_tier_a_verify
-        | default('fail')
-      }}
-  when: _portal_require_cm_vhost | default(false) | bool
 
 - name: Set Tier A Caddy vhost warn-only for portal and ipa at bootstrap milestones only
   ansible.builtin.set_fact:
@@ -323,15 +310,6 @@
               else []
             )
           + (
-              [{'name': 'Caddy vhost CM', 'host': caddy_vhost_urls.cm.hostname, 'path': '/',
-                'optional': (_portal_cm_vhost_tier_a_mode | default('fail') == 'warn')}]
-              if (
-                'cm' in (_portal_verify_milestones_effective | default([]))
-                and (caddy_vhost_urls.cm.hostname | default('') | length > 0)
-              )
-              else []
-            )
-          + (
               [
                 {'name': 'IPA Caddy vhost GET / (expect 301 → /ipa/modern-ui/)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
                  'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
@@ -361,14 +339,6 @@
               if (
                 'monitoring' in (_portal_verify_milestones_effective | default([]))
                 and (caddy_vhost_urls.prometheus.hostname | default('') | length > 0)
-              )
-              else []
-            )
-          + (
-              [{'name': 'Caddy vhost ECS', 'host': caddy_vhost_urls.ecs.hostname, 'path': '/', 'optional': false}]
-              if (
-                'ecs' in (_portal_verify_milestones_effective | default([]))
-                and (caddy_vhost_urls.ecs.hostname | default('') | length > 0)
               )
               else []
             )
@@ -405,9 +375,8 @@
     msg: >-
       Tier A URL verify runs after every portal sync (including Jenkins PORTAL reruns) against
       {{ _portal_local_base }} with Caddy vhost Host headers (follow_redirects=no).
-      HTTP 301/302 on the Caddy vhost (IPA GET / → /ipa/modern-ui/, CM Location rewritten to cm.*)
-      passes when the status is in {{ _portal_url_verify_codes_int | join('/') }}.
-      Direct upstream probes to CM ({{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}/{{ cm_https_port }}) or IPA HTTPD may also return 301 to the cluster FQDN — expected; use the Caddy URLs in the portal index.
+      HTTP 301/302 on the Caddy vhost (IPA GET / → /ipa/modern-ui/) passes when the status is in {{ _portal_url_verify_codes_int | join('/') }}.
+      Cloudera Manager is verified on cldr-mngr :{{ cm_http_port }}/:{{ cm_https_port }} (not via Caddy). IPA HTTPD may return 301 to the cluster FQDN — expected; use Caddy IPA vhosts in the portal index.
       Verbose Ansible output may show redirect responses; the play fails only on unexpected status codes.
   when:
     - deployment_portal_caddy_vhost_checks_required | default([]) | length > 0
@@ -492,11 +461,6 @@
       (see deployment_portal_Caddyfile_vhosts.inc.j2; cloudera-labs/openshift Caddy pattern).
       GET / on the IPA vhost should 301 to /ipa/modern-ui/; /ipa/modern-ui/ and /ipa/ui should return 200 or redirect (301/302).
       Confirm http://{{ item.item.upstream_ipa_fqdn }}/ipa/modern-ui/ and /ipa/ui respond on the IPA server and IPA HTTPD is running.
-      {% elif 'CM' in item.item.name %}
-      Confirm Cloudera Manager is up on {{ deployment_portal_cm_fqdn }} (ports {{ cm_http_port }}/{{ cm_https_port }}).
-      Caddy proxies to {{ deployment_portal_cm_upstream_host | default(deployment_portal_cm_fqdn) }} with header_up Host {{ deployment_portal_cm_fqdn }} and rewrites Location to the cm.* vhost.
-      Re-run 35_refresh_deployment_portal.yml (or CM install play) so apply_cm_caddy_load_balancer.yml sets frontend_url to the Caddy URL (not {{ deployment_portal_cm_fqdn }}:{{ cm_https_port }}).
-      A direct curl to upstream :{{ cm_https_port }} may 301 to the CM FQDN — browsers must use the Caddy vhost on port {{ deployment_portal_http_port }}.
       {% elif 'pgAdmin' in item.item.name %}
       Confirm pgAdmin container {{ deployment_portal_pgadmin_container }} is running and responds on
       http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/ (Caddy reverse_proxies pgadmin:80 on the compose network).
@@ -513,12 +477,29 @@
     - not (item.item.optional | default(false) | bool)
     - (item.status | default(0) | int not in _portal_url_verify_codes_int)
 
-- name: Verify Cloudera Manager UI on cldr-mngr (direct upstream; 301 to CM FQDN without follow_redirects is OK)
+- name: Probe Cloudera Manager UI on cldr-mngr (Tier A — 127.0.0.1 then FQDN/private; not via Caddy)
+  ansible.builtin.import_tasks: probe_cm_manager_ui_http.yml
+  when:
+    - _portal_verify_milestones_effective | default([]) | intersect(['cm']) | length > 0
+    - "'cldr-mngr' in groups"
+    - groups['cldr-mngr'] | default([]) | length > 0
+
+- name: Fail when Cloudera Manager Tier A HTTP UI check failed on cldr-mngr
+  ansible.builtin.fail:
+    msg: >-
+      Cloudera Manager UI did not respond on cldr-mngr (Tier A) at any of
+      {{ cm_manager_ui_probe_hosts | default(['127.0.0.1']) | join(', ') }}:{{ cm_http_port }}.
+      Confirm cloudera-scm-server is active (scm-server often binds FQDN/VPC IP, not 127.0.0.1).
+  when:
+    - _portal_verify_milestones_effective | default([]) | intersect(['cm']) | length > 0
+    - deployment_portal_cm_http_probe is defined
+    - deployment_portal_cm_http_probe.failed | default(true) | bool
+    - not (autotls_enabled | default(false) | bool)
+
+- name: Probe Cloudera Manager UI HTTPS on cldr-mngr (Tier A when Auto-TLS)
   ansible.builtin.uri:
-    url: "{{ 'https' if (autotls_enabled | default(false) | bool) else 'http' }}://127.0.0.1:{{ cm_https_port if (autotls_enabled | default(false) | bool) else cm_http_port }}/"
+    url: "https://127.0.0.1:{{ cm_https_port | int }}/"
     method: GET
-    headers:
-      Host: "{{ deployment_portal_cm_fqdn }}"
     status_code: "{{ _portal_url_verify_codes }}"
     follow_redirects: none
     validate_certs: false
@@ -530,11 +511,20 @@
   delegate_to: "{{ groups['cldr-mngr'][0] }}"
   run_once: true
   when:
-    - _portal_verify_milestones_effective | default([]) | intersect(['cm']) | length > 0
+    - _portal_verify_milestones_effective | default([]) | intersect(['cm', 'cm_tls']) | length > 0
+    - autotls_enabled | default(false) | bool
     - "'cldr-mngr' in groups"
     - groups['cldr-mngr'] | default([]) | length > 0
-    - deployment_portal_cm_fqdn | default('') | length > 0
-  failed_when: false
+
+- name: Fail when Cloudera Manager Tier A HTTPS UI check failed on cldr-mngr
+  ansible.builtin.fail:
+    msg: >-
+      Cloudera Manager UI did not respond at https://127.0.0.1:{{ cm_https_port }}/ on cldr-mngr (Tier A, Auto-TLS).
+  when:
+    - _portal_verify_milestones_effective | default([]) | intersect(['cm', 'cm_tls']) | length > 0
+    - autotls_enabled | default(false) | bool
+    - cm_direct_upstream_ui_check is defined
+    - cm_direct_upstream_ui_check is failed or (cm_direct_upstream_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)
 
 - name: Verify FreeIPA modern UI on ipaserver HTTPD (direct; 301 from IPA without follow_redirects is OK)
   ansible.builtin.uri:
