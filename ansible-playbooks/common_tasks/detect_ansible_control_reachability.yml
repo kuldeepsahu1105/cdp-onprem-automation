@@ -17,7 +17,12 @@
         | default(lookup('env', 'CONTROL_MODE') | default('remote', true))
         | lower
       }}
+  delegate_to: localhost
+
+- name: Set control-on-cluster-node hint from control mode
+  ansible.builtin.set_fact:
     _acr_control_on_cluster_node: "{{ _acr_control_mode == 'local' }}"
+  delegate_to: localhost
 
 - name: Test CM private IP reachability from controller (auto profile)
   ansible.builtin.wait_for:
@@ -27,6 +32,7 @@
     state: started
   register: cm_private_reach_auto
   failed_when: false
+  delegate_to: localhost
   when:
     - _acr_requested == 'auto'
     - not (_acr_jenkins | bool)
@@ -46,6 +52,7 @@
     state: started
   register: cm_public_reach_auto
   failed_when: false
+  delegate_to: localhost
   when:
     - _acr_requested == 'auto'
     - not (_acr_jenkins | bool)
@@ -108,6 +115,7 @@
           )
         )
       }}
+  delegate_to: localhost
 
 - name: Mirror control reachability profile to legacy facts
   ansible.builtin.set_fact:
@@ -115,6 +123,7 @@
       {{ ansible_control_reachability_effective == 'public' }}
     ansible_controller_outside_vpc: >-
       {{ ansible_control_reachability_effective == 'public' }}
+  delegate_to: localhost
 
 - name: Explain Ansible control reachability profile
   ansible.builtin.debug:
@@ -123,3 +132,4 @@
       - "Jenkins/control-mode hints: jenkins={{ _acr_jenkins }}, control_mode={{ _acr_control_mode }}"
       - "CM reachability probes (auto): private={{ cm_private_reach_auto is succeeded if cm_private_reach_auto is defined else 'n/a' }}, public={{ cm_public_reach_auto is succeeded if cm_public_reach_auto is defined else 'n/a' }}"
   when: ansible_verbosity | default(0) | int >= 1
+  delegate_to: localhost
