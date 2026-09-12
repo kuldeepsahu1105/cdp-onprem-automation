@@ -104,19 +104,26 @@ print_banner() {
 }
 
 run_playbook() {
-  local playbook="$1"
-  shift || true
-  ui_playbook_header "$playbook" start
+  local -a playbooks=()
+  while (($#)) && [[ "$1" == *.yml ]]; do
+    playbooks+=("$1")
+    shift
+  done
+  local label="${playbooks[0]}"
+  if ((${#playbooks[@]} > 1)); then
+    label="${playbooks[*]}"
+  fi
+  ui_playbook_header "$label" start
   if is_dry_run; then
     ui_info "Dry-run — Ansible --check --diff (no changes applied)"
   fi
   # Collections ensured at script start; skip imported 00_ensure_collections in each playbook.
-  if ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" \
+  if ansible-playbook "${playbooks[@]}" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" \
     --skip-tags collections "$@"; then
-    ui_playbook_header "$playbook" end
+    ui_playbook_header "$label" end
   else
     local rc=$?
-    ui_err "PLAYBOOK FAILED: ${playbook} (exit ${rc})"
+    ui_err "PLAYBOOK FAILED: ${label} (exit ${rc})"
     return "$rc"
   fi
 }
@@ -270,8 +277,8 @@ run_phase_3() {
   fi
   run_playbook 23_setup_postgres.yml "${cm_extra[@]}"
   run_playbook 24_start_cm.yml "${cm_extra[@]}"
-  run_playbook 25_verify_cm.yml -e ansible_become=false
-  run_playbook 26_setup_cm_license.yml -e ansible_become=false
+  # One ansible-playbook invocation: API probe once, then license (facts persist on localhost).
+  run_playbook 25_verify_cm.yml 26_setup_cm_license.yml -e ansible_become=false
 }
 
 run_phase_cm_tls() {

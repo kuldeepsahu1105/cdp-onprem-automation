@@ -168,29 +168,5 @@
         - cloudera-scm-agent
       register: cm_services_status
 
-##### Print CM UI HTTP Public URL
-- name: Fetch and Print Cloudera Manager Public HTTP URL
-  hosts: localhost
-  gather_facts: no
-  tasks:
-    - name: Get public IP of CM server from ipify
-      ansible.builtin.uri:
-        url: "https://api.ipify.org/"
-        return_content: yes
-      register: public_ip_result
-      delegate_to: cldr-mngr
-
-    - name: Print Cloudera Manager Public URL
-      ansible.builtin.debug:
-        msg: "Cloudera Manager Public HTTP URL: http://{{ public_ip_result.content }}:{{ cm_port }}/"
-
-    - name: Resolve CM API probe context for admin password alignment
-      ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
-
-    - name: Align Cloudera Manager admin password with group_vars after CM server start
-      ansible.builtin.import_tasks: common_tasks/ensure_cm_admin_password.yml
-
-    - name: Set up Cloudera Manager API URL (probe protocol and print URLs)
-      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
-      become: no
+# CM API probe, password alignment, and verify: playbook 25_verify_cm.yml (once per CM install phase).
 

@@ -1,5 +1,4 @@
-- name: Set up Cloudera Manager API URL
-  ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+# Requires cm_api_url / autotls_enabled from set_cm_api_url.yml in the same play (no second full API probe).
 
 # - name: Print Cloudera Manager API URL
 #   ansible.builtin.debug:

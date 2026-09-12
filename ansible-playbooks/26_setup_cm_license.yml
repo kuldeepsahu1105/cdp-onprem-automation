@@ -13,8 +13,9 @@
   hosts: localhost
   gather_facts: true
   tasks:
-    - name: Set up Cloudera Manager API URL
+    - name: Set up Cloudera Manager API URL when not already resolved in this run
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+      when: cm_api_url | default('') | length == 0
 
     - name: Check existing Cloudera Manager license
       ansible.builtin.uri:

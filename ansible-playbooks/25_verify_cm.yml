@@ -13,6 +13,12 @@
   hosts: localhost
   gather_facts: no
   tasks:
+    - name: Resolve CM API probe context
+      ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
+
+    - name: Align Cloudera Manager admin password with group_vars after CM server start
+      ansible.builtin.import_tasks: common_tasks/ensure_cm_admin_password.yml
+
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
       become: false
@@ -36,24 +42,6 @@
     - name: Print Cloudera Manager API Version and Build Timestamp
       ansible.builtin.debug:
         msg: "Cloudera Manager Version: {{ cm_version.json.version }}, Build Timestamp: {{ cm_version.json.buildTimestamp }}"
-
-    - name: Check existing Cloudera Manager license
-      ansible.builtin.uri:
-        url: "{{ cm_api_url }}/cm/license"
-        method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: yes
-        return_content: yes
-        status_code: [200, 301, 303, 404] # 404 if no license installed
-        validate_certs: no
-      register: cm_license_status
-      changed_when: false
-      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
-
-    - name: Print Cloudera Manager License Status
-      ansible.builtin.debug:
-        msg: "Cloudera Manager License: {{ 'Installed' if cm_license_status.status == 200 else 'Not Installed' }}"
 
     - name: Check Cloudera SCM Server service status
       ansible.builtin.shell: "systemctl is-active cloudera-scm-server"
