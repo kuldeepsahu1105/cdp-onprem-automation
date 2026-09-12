@@ -25,7 +25,7 @@ vpc: {}
 {% else %}
 primary: {}
 external:
-  audience: "Jenkins agent, laptop, internet (public IP — open SG/EIP ports)"
+  audience: "remote Ansible controller, laptop, internet (public IP — open SG/EIP ports)"
   ops_ip: "{{ host_pub }}"
   fqdn: "{{ deployment_portal_anchor_fqdn }}"
   portal: "http://{{ host_pub }}{{ p() }}/"

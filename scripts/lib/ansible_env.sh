@@ -189,7 +189,7 @@ resolve_private_key() {
   return 1
 }
 
-# Write CM license from Jenkins/CLI when no *license* file exists on the agent.
+# Write CM license from pipeline env or CLI when no *license* file exists on the controller.
 # Sources (first match): LICENSE_FILE, CM_LICENSE_CONTENT_FILE, CM_LICENSE_CONTENT env.
 materialize_cm_license_content() {
   local ansible_dir="${1:-.}"
@@ -332,7 +332,7 @@ _ansible_requirements_collections_present() {
   return 0
 }
 
-# Jenkins runs one DEPLOY_PHASE per stage; each invokes pvc_setup.sh — install collections once.
+# CI pipelines run one DEPLOY_PHASE per stage; each invokes pvc_setup.sh — install collections once.
 ansible_install_collections_if_needed() {
   local req="${1:?requirements.yml path}"
   case "${PVC_SKIP_GALAXY_INSTALL:-}" in
@@ -345,10 +345,9 @@ ansible_install_collections_if_needed() {
   ansible-galaxy collection install -r "$req"
 }
 
-# Ansible colors on an interactive TTY, or Jenkins console (ansiColor + jenkins_log_pipe).
-# Piped artifact logs strip ANSI in jenkins_log_pipe; console stdout keeps color codes.
-ansible_jenkins_ansi_console() {
-  [[ "${JENKINS_ANSI_CONSOLE:-}" == "1" ]] && [[ "${TERM:-}" != "dumb" ]]
+# Ansible colors on an interactive TTY, or CI console with forced ANSI (piped log tee strips ANSI for artifacts).
+ansible_ci_ansi_console() {
+  [[ "${ANSIBLE_CI_CONSOLE:-${JENKINS_ANSI_CONSOLE:-}}" == "1" ]] && [[ "${TERM:-}" != "dumb" ]]
 }
 
 ansible_configure_output() {
@@ -366,7 +365,7 @@ ansible_configure_output() {
       return 0
       ;;
     1|true|yes|on|force)
-      if [[ "${JENKINS_SCRIPT_TTY:-}" == "1" ]] || ansible_jenkins_ansi_console || [[ -t 1 ]]; then
+      if [[ "${ANSIBLE_SCRIPT_TTY:-${JENKINS_SCRIPT_TTY:-}}" == "1" ]] || ansible_ci_ansi_console || [[ -t 1 ]]; then
         export ANSIBLE_FORCE_COLOR=1
         export PY_COLORS=1
       else
@@ -376,7 +375,7 @@ ansible_configure_output() {
       return 0
       ;;
     auto|*)
-      if [[ "${JENKINS_SCRIPT_TTY:-}" == "1" ]] || ansible_jenkins_ansi_console \
+      if [[ "${ANSIBLE_SCRIPT_TTY:-${JENKINS_SCRIPT_TTY:-}}" == "1" ]] || ansible_ci_ansi_console \
         || { [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]]; }; then
         export ANSIBLE_FORCE_COLOR=1
         export PY_COLORS=1

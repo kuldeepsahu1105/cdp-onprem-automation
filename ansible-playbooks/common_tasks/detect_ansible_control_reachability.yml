@@ -5,11 +5,12 @@
 - name: Gather Ansible control reachability inputs
   ansible.builtin.set_fact:
     _acr_requested: "{{ ansible_control_reachability | default('auto') | lower }}"
-    _acr_jenkins: >-
+    _acr_remote_controller: >-
       {{
-        (lookup('env', 'JENKINS_URL') | default('') | length > 0)
-        or (lookup('env', 'BUILD_NUMBER') | default('') | length > 0)
+        (lookup('env', 'ANSIBLE_CONTROL_REMOTE') | default('') | lower in ['1', 'true', 'yes', 'on'])
         or (lookup('env', 'ANSIBLE_CONTROL_VIA_JENKINS') | default('') | lower in ['1', 'true', 'yes', 'on'])
+        or (lookup('env', 'CI') | default('') | length > 0)
+        or (lookup('env', 'BUILD_NUMBER') | default('') | length > 0)
       }}
     _acr_control_mode: >-
       {{
@@ -35,7 +36,7 @@
   delegate_to: localhost
   when:
     - _acr_requested == 'auto'
-    - not (_acr_jenkins | bool)
+    - not (_acr_remote_controller | bool)
     - not (_acr_control_on_cluster_node | bool)
     - not (ansible_controller_outside_vpc | default(false) | bool)
     - not (ansible_control_reachability_skip_cm_probes | default(false) | bool)
@@ -55,7 +56,7 @@
   delegate_to: localhost
   when:
     - _acr_requested == 'auto'
-    - not (_acr_jenkins | bool)
+    - not (_acr_remote_controller | bool)
     - not (_acr_control_on_cluster_node | bool)
     - not (ansible_controller_outside_vpc | default(false) | bool)
     - not (ansible_control_reachability_skip_cm_probes | default(false) | bool)
@@ -74,7 +75,7 @@
         else (
           'public'
           if (
-            (_acr_jenkins | bool)
+            (_acr_remote_controller | bool)
             or (ansible_controller_outside_vpc | default(false) | bool)
             or not (cm_api_prefer_private_ip | default(true) | bool)
           )
@@ -123,13 +124,14 @@
       {{ ansible_control_reachability_effective == 'public' }}
     ansible_controller_outside_vpc: >-
       {{ ansible_control_reachability_effective == 'public' }}
+    ansible_control_remote_runner: "{{ _acr_remote_controller | bool }}"
   delegate_to: localhost
 
 - name: Explain Ansible control reachability profile
   ansible.builtin.debug:
     msg:
       - "Control reachability: requested={{ _acr_requested }}, effective={{ ansible_control_reachability_effective }}"
-      - "Jenkins/control-mode hints: jenkins={{ _acr_jenkins }}, control_mode={{ _acr_control_mode }}"
+      - "Remote-controller hints: remote_runner={{ _acr_remote_controller }}, control_mode={{ _acr_control_mode }}"
       - "CM reachability probes (auto): private={{ cm_private_reach_auto is succeeded if cm_private_reach_auto is defined else 'n/a' }}, public={{ cm_public_reach_auto is succeeded if cm_public_reach_auto is defined else 'n/a' }}"
   when: ansible_verbosity | default(0) | int >= 1
   delegate_to: localhost

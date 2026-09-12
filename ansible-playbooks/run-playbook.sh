@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run any playbook with the same Galaxy prerequisites as pvc_setup.sh / Jenkins.
+# Run any playbook with the same Galaxy prerequisites as pvc_setup.sh / CI.
 # Usage (from ansible-playbooks/):
 #   ./run-playbook.sh 10_setup_deployment_portal.yml
 #   ./run-playbook.sh -i inventory.ini 23_setup_postgres.yml -e key=val

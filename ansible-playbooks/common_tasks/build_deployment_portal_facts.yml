@@ -159,14 +159,14 @@
     - caddy_vhost_enabled | default(false) | bool
     - deployment_portal_access_profile_effective == 'private'
 
-- name: Set Caddy vhost IP for public URL map (cloud / Jenkins / internet)
+- name: Set Caddy vhost IP for public URL map (cloud / external (internet))
   ansible.builtin.set_fact:
     caddy_vhost_ip_for_urls: "{{ deployment_portal_ops_public_ip }}"
   when:
     - caddy_vhost_enabled | default(false) | bool
     - deployment_portal_access_profile_effective == 'cloud'
 
-- name: Build Caddy vhost external URL map for public IP (cloud / Jenkins / internet)
+- name: Build Caddy vhost external URL map for public IP (cloud / external (internet))
   ansible.builtin.set_fact:
     caddy_vhost_urls_external: "{{ lookup('template', 'caddy_vhost_urls.j2') | from_yaml }}"
   when:

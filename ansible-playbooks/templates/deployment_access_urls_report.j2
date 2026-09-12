@@ -14,7 +14,7 @@ Private network (no public IP):
   cAdvisor:    {{ deployment_portal_context.access.primary.cadvisor }}
 {% endif %}
 {% else %}
-Jenkins / internet (ops public IP):
+external (internet) (ops public IP):
   Portal:    {{ deployment_portal_context.access.external.portal }}
   pgAdmin:   {{ deployment_portal_context.portal.pgadmin_url | default(deployment_portal_context.access.external.pgadmin) }}
 {% if deployment_portal_context.portal.pgadmin_caddy_url | default('') | length > 0 %}

@@ -1,8 +1,8 @@
 ---
 # When CM API probes delegate to cldr-mngr, scm-server may listen on public/FQDN only (not 127.0.0.1).
-# Jenkins/public controllers probe direct CM :7180/:7183 (ansible_host/FQDN) or delegate to cldr-mngr.
+# Remote/public controllers probe direct CM :7180/:7183 (ansible_host/FQDN) or delegate to cldr-mngr.
 
-- name: Build CM API probe host candidates on public Ansible controller (localhost/Jenkins)
+- name: Build CM API probe host candidates on public Ansible controller (localhost play)
   ansible.builtin.set_fact:
     cm_api_probe_host_candidates: >-
       {{
@@ -266,7 +266,7 @@
     - cm_api_probe_delegate_to | default('') | length > 0
     - cm_api_probe_host_discovery is defined or cm_api_probe_https_discovery is defined
 
-- name: Delegate CM API URI from Jenkins when manager discovery selected loopback
+- name: Delegate CM API URI from the Ansible controller when manager discovery selected loopback
   ansible.builtin.set_fact:
     cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
     cm_api_client_host: >-
@@ -320,7 +320,7 @@
     - cm_api_probe_from_controller_public | default(false) | bool
     - cm_api_probe_delegate_to | default('') | length == 0
 
-- name: Fall back to delegated CM API discovery on cldr-mngr when Jenkins cannot reach CM ports
+- name: Fall back to delegated CM API discovery on cldr-mngr when remote controller cannot reach CM ports
   ansible.builtin.set_fact:
     cm_api_probe_delegate_to: "{{ cm_manager_inventory_host }}"
     cm_api_probe_host: >-

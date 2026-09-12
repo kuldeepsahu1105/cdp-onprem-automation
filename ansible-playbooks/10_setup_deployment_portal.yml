@@ -57,7 +57,7 @@
               - "Monitoring install (extra-var): {{ monitoring_stack_enabled | default(false) }}"
               - "Monitoring routes/index: {{ hostvars['localhost']['deployment_portal_monitoring_routes_enabled'] | default(false) }}"
 
-        - name: Print full access URL report (Jenkins log / email)
+        - name: Print full access URL report (pipeline log / email)
           ansible.builtin.import_tasks: common_tasks/print_deployment_access_urls.yml
 
 - name: Verify external deployment portal URLs from Ansible controller (Tier B)
@@ -73,5 +73,5 @@
       ansible.builtin.meta: end_play
       when: not (deployment_portal_caddy_effective | default(false) | bool)
 
-    - name: Tier B external URL verify (Jenkins / laptop)
+    - name: Tier B external URL verify (Ansible controller (remote or laptop))
       ansible.builtin.import_tasks: common_tasks/verify_deployment_portal_external_from_controller.yml
