@@ -40,9 +40,22 @@
             else inventory_hostname
           )
       }}
-    _portal_verify_on_ops_host: "{{ inventory_hostname == _portal_anchor_inv }}"
     _portal_verify_from_controller: >-
       {{ (inventory_hostname | default('')) in ['localhost', '127.0.0.1'] }}
+
+- name: Set deployment portal ops-host verify hint from anchor inventory name
+  ansible.builtin.set_fact:
+    _portal_verify_on_ops_host: >-
+      {{
+        inventory_hostname
+        == (
+          _portal_anchor_inv
+          | default(
+              hostvars['localhost'].deployment_portal_anchor_inv
+              | default(inventory_hostname)
+            )
+        )
+      }}
 
 - name: Set printed portal URL optional flags (hairpin / ops host / Jenkins public reach)
   ansible.builtin.set_fact:
@@ -119,6 +132,10 @@
         | selectattr('url', 'ne', '')
         | list
       }}
+  when: deployment_portal_context is defined
+
+- name: Split required vs optional deployment portal access URL checks
+  ansible.builtin.set_fact:
     deployment_portal_access_url_checks_required: >-
       {{
         deployment_portal_access_url_checks | default([])
