@@ -3,7 +3,7 @@
 }
 
 {% if caddy_vhost_enabled | default(false) | bool %}
-{# nip.io-style vhosts — public IP slug (Jenkins / internet); optional private slug for in-VPC #}
+{# nip.io-style vhosts — public IP slug (external (internet)); optional private slug for in-VPC #}
 {% set caddy_vhost_urls = caddy_vhost_urls_external %}
 {% include 'deployment_portal_Caddyfile_vhosts.inc.j2' %}
 {% if caddy_vhost_register_private_ip | default(true) | bool and (caddy_vhost_urls_vpc is defined) and (caddy_vhost_urls_vpc | length > 0) %}

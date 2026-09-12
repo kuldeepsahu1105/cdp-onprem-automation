@@ -1,6 +1,6 @@
 ---
 # cm_client on the Ansible controller (required by cloudera.cluster.* modules).
-# Standalone, Jenkins, and wrappers: same pip install on the host running ansible-playbook.
+# Standalone CI, and wrappers: same pip install on the host running ansible-playbook.
 
 - name: Check cm_client import on controller Python
   ansible.builtin.command:

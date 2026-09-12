@@ -1,9 +1,9 @@
 ---
-# Tier B: HTTP GET printed external service URLs from the Ansible controller (Jenkins / laptop).
+# Tier B: HTTP GET printed external service URLs from the Ansible controller (remote CI or laptop).
 # Tier A runs on service hosts (portal ops host @ 127.0.0.1; CM on cldr-mngr via manager IP/FQDN).
 # Probe list is filtered by deployment_portal_verify_milestones_effective (see build_deployment_tier_b_url_checks.yml).
 #
-# All Tier B facts and probes run on localhost (Jenkins controller), not the portal ops host.
+# All Tier B facts and probes run on localhost (Ansible controller), not the portal ops host.
 #
 # Modes (per service, fallback chain):
 #   deployment_<service>_external_url_verify → deployment_external_url_verify → deployment_portal_external_url_verify (portal only) → warn
@@ -25,12 +25,6 @@
         | default(deployment_portal_context | default({}))
       }}
     _tier_b_url_checks_local: "{{ hostvars['localhost'].deployment_tier_b_url_checks | default([]) }}"
-    _tier_b_jenkins: >-
-      {{
-        (lookup('env', 'JENKINS_URL') | default('') | length > 0)
-        or (lookup('env', 'BUILD_NUMBER') | default('') | length > 0)
-        or (lookup('env', 'ANSIBLE_CONTROL_VIA_JENKINS') | default('') | lower in ['1', 'true', 'yes', 'on'])
-      }}
   delegate_to: localhost
   run_once: true
 
@@ -63,7 +57,7 @@
       {{
         (ansible_control_reachability_effective | default('') == 'public')
         or (ansible_control_reach_public_only | default(false) | bool)
-        or (_tier_b_jenkins | default(false) | bool)
+        or (ansible_control_remote_runner | default(false) | bool)
       }}
   delegate_to: localhost
   run_once: true
@@ -173,7 +167,7 @@
           or (_tier_b_ctx.access.profile | default('') != 'private')
         )
         and (
-          (_tier_b_jenkins | bool)
+          (ansible_control_remote_runner | default(false) | bool)
           or (ansible_control_reachability_effective | default('') == 'public')
           or (ansible_control_reach_public_only | default(false) | bool)
         )
@@ -229,7 +223,7 @@
     msg: >-
       Tier B warn: {{ item.item.name }} did not respond from controller
       (HTTP {{ item.status | default('n/a') }}; expected {{ _tier_b_url_codes | join('/') }}).
-      Tier A may still pass — open SG for Jenkins or set deployment_{{ item.item.service | default('service') }}_external_url_verify: skip.
+      Tier A may still pass — open SG to the Ansible controller or set deployment_{{ item.item.service | default('service') }}_external_url_verify: skip.
   loop: "{{ deployment_tier_b_url_results.results | default([]) }}"
   loop_control:
     label: "{{ item.item.name | default('URL') }}"

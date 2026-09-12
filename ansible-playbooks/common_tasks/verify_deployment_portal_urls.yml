@@ -3,9 +3,9 @@
 #   Tier A (ops host): localhost index (verify_deployment_portal_caddy.yml) plus checks scoped by
 #   deployment_portal_verify_milestones (portal/ipa at bootstrap; pgadmin/cm/monitoring/ecs only when listed;
 #   pgAdmin Caddy vhost probes omitted until milestone pgadmin; CM uses direct cldr-mngr :7180/:7183 when cm is listed).
-#   Optional printed portal URLs (same-host public EIP, Jenkins public profile) are not HTTP-probed here — Tier B / browser.
+#   Optional printed portal URLs (same-host public EIP, remote public controller profile) are not HTTP-probed here — Tier B / browser.
 #   Tier B (controller): verify_service_urls_from_controller.yml after this file (portal, CM, monitoring, IPA, ECS).
-#   Tier B IPA: public/Jenkins controllers skip direct cluster FQDN (DNS); Caddy ipa.* vhost URLs on deployment_portal_http_port only.
+#   Tier B IPA: public remote controllers skip direct cluster FQDN (DNS); Caddy ipa.* vhost URLs on deployment_portal_http_port only.
 #
 # Ansible set_fact: do not define multiple keys in one task when a value references another key from
 # that same task (evaluation order is undefined). Split dependent facts or inline hostvars/context.
@@ -85,7 +85,7 @@
         )
       }}
 
-- name: Set printed portal URL optional flags (ops host / Jenkins public reach)
+- name: Set printed portal URL optional flags (ops host / Ansible controller public reach)
   ansible.builtin.set_fact:
     _portal_optional_primary_portal: >-
       {{
@@ -211,7 +211,7 @@
       Expected HTTP {{ _portal_url_verify_codes | join('/') }} from {{ inventory_hostname }}.
       On the ops host, confirm Caddy on http://127.0.0.1:{{ deployment_portal_http_port | int }}/ first
       (docker ps, docker logs {{ deployment_portal_caddy_container }}).
-      Public EIP URLs may not respond from the same EC2 instance; use Tier B from Jenkins or a browser outside the VPC.
+      Public EIP URLs may not respond from the same EC2 instance; use Tier B from the Ansible controller or a browser outside the VPC.
       Re-run: ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml
   loop: "{{ deployment_portal_access_url_required_results.results | default([]) }}"
   when:
@@ -305,7 +305,7 @@
 - name: Note Tier A verify on each PORTAL sync (301 without follow_redirects is success on Caddy vhosts)
   ansible.builtin.debug:
     msg: >-
-      Tier A URL verify runs after every portal sync (including Jenkins PORTAL reruns) against
+      Tier A URL verify runs after every portal sync (including PORTAL deploy reruns) against
       {{ _portal_local_base }} with Caddy vhost Host headers (follow_redirects=no).
       HTTP 301/302 on the Caddy vhost (IPA GET / → /ipa/modern-ui/) passes when the status is in {{ _portal_url_verify_codes_int | join('/') }}.
       Cloudera Manager is verified on cldr-mngr :{{ cm_http_port }}/:{{ cm_https_port }} (not via Caddy). IPA HTTPD may return 301 to the cluster FQDN — expected; use Caddy IPA vhosts in the portal index.

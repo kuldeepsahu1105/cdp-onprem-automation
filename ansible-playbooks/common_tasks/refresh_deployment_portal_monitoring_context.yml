@@ -1,6 +1,6 @@
 ---
 # After ops-host monitoring probe: align portal context + endpoints with deployed stack.
-# Jenkins often passes monitoring_stack_enabled=false while containers already exist on ipaserver.
+# Ansible controller often passes monitoring_stack_enabled=false while containers already exist on ipaserver.
 
 - name: Compute effective monitoring visibility for portal index
   ansible.builtin.set_fact:

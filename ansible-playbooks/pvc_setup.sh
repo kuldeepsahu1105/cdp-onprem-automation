@@ -64,8 +64,8 @@ Environment:
   CM_INFO_FILE         *info.txt with archive login:/password: (phase 3)
   CM_REPO_USERNAME     Archive creds — alternative to info file or all.yml
   CM_REPO_PASSWORD     Archive creds — alternative to info file or all.yml
-  CM_LICENSE_CONTENT   License file body when no *license* file on disk (Jenkins textarea)
-  LICENSE_FILE         Path to license file (set by Jenkins or manually)
+  CM_LICENSE_CONTENT   License file body when no *license* file on disk (pipeline license textarea)
+  LICENSE_FILE         Path to license file (set by Ansible controller or manually)
 
 Run from: ansible-playbooks/ inside a git clone (needs ../scripts/lib/ui.sh)
 EOF

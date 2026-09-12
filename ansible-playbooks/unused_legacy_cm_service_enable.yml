@@ -1,5 +1,5 @@
 ### UNUSED — prefer 29_setup_cm_cms.yml
-# Former filename: 22_setup_cm_service.yml (duplicate "22" prefix; not in Jenkins/pvc_setup).
+# Former filename: 22_setup_cm_service.yml (duplicate "22" prefix; not in pvc_setup).
 ### ansible-playbook -i inventory.ini unused_legacy_cm_service_enable.yml
 # vars:
 #   cm_port: 7180

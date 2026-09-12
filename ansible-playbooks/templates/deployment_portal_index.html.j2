@@ -610,7 +610,7 @@
     <details class="panel" open>
       <summary><span class="summary-main"><h2 class="section-title">Network access</h2></span>{{ panel_chevron | safe }}</summary>
       <div class="panel-body">
-        <p class="sub"><strong>Internet / Jenkins</strong> — {{ ctx.access.external.audience }}</p>
+        <p class="sub"><strong>Internet / external</strong> — {{ ctx.access.external.audience }}</p>
         <ul class="clean">
           <li>Ops public IP: <code>{{ ctx.access.external.ops_ip }}</code></li>
           <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.portal }}">{{ ctx.access.external.portal }}</a></li>
@@ -649,7 +649,7 @@
         {% if ctx.access.profile == 'private' %}
         <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — hostnames resolve to the ops host on your private network (FreeIPA/AD DNS or static records). No public internet required.</p>
         {% else %}
-        <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — public-IP hostnames for Jenkins/internet; private-IP hostnames when registered for in-VPC use.</p>
+        <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — public-IP hostnames for external/internet; private-IP hostnames when registered for in-VPC use.</p>
         {% endif %}
         <ul class="clean">
           <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>

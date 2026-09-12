@@ -239,7 +239,7 @@ cdh_basecluster_name: "CDH-Cluster"
 base_cluster_master_group: base-masters
 base_cluster_worker_group: base-workers
 
-# CDP base cluster services (31_setup_base_cluster.yml). Override per key in Jenkins via base_cluster_install_services.
+# CDP base cluster services (31_setup_base_cluster.yml). Override per key in Ansible controller via base_cluster_install_services.
 base_cluster_install_services:
   core_settings: true
   zookeeper: true
@@ -297,17 +297,17 @@ cm_cms_reports_manager_db_password: rman
 cm_https_port: 7183
 cm_http_port: 7180
 # Control-plane reachability (CM API + portal URL verify from the Ansible controller):
-#   auto   — Jenkins/outside-VPC → public ansible_host; CONTROL_MODE=local on cluster → private;
+#   auto   — remote controller outside VPC → public ansible_host; CONTROL_MODE=local on cluster → private;
 #            else probe CM private/public from controller (VPN/bare metal prefers private)
-#   public — control node has no route to 10.x/172.31.x (typical Jenkins agent)
+#   public — control node has no route to 10.x/172.31.x (typical Ansible controller host)
 #   private — bare metal / in-VPC / VPN automation (prefer inventory private_ip)
 ansible_control_reachability: auto
-# Legacy toggles (auto profile also reads these; Jenkins run-ansible.sh sets public equivalents)
+# Legacy toggles (auto profile also reads these; Ansible controller run-ansible.sh sets public equivalents)
 cm_api_prefer_private_ip: true
 cm_api_connect_host: ""
 ansible_controller_outside_vpc: false
 # When play runs on localhost in-VPC, delegate CM API discovery to cldr-mngr (manager IP/FQDN).
-# Jenkins/public controllers probe CM ansible_host (HTTPS :7183) from the controller (not via same-host public EIP).
+# Remote/public controllers probe CM ansible_host (HTTPS :7183) from the controller (not via same-host public EIP).
 cm_api_delegate_probes_to_manager: true
 cm_api_private_reachability_timeout: 5
 # Cloudera Manager UI/API use direct cldr-mngr :7180/:7183 — not Caddy (portal stack is portal/pgAdmin/monitoring/IPA only).
@@ -315,9 +315,9 @@ cm_external_url: ""
 # Deprecated — CM frontend_url is not set via Caddy; kept for inventory overrides only.
 cm_apply_caddy_frontend_url: false
 cm_config_api_via_caddy_proxy: false
-# fail | warn — warn when Jenkins cannot open CM :7180/:7183 but delegated discovery on cldr-mngr succeeds
+# fail | warn — warn when remote controller cannot open CM :7180/:7183 but delegated discovery on cldr-mngr succeeds
 cm_api_verify_mode: fail
-# Portal verify: skip VPC-only URL checks when control profile is public-only (Jenkins default)
+# Portal verify: skip VPC-only URL checks when control profile is public-only (remote controller default)
 deployment_portal_url_verify_skip_vpc: false
 # Milestone-scoped URL verify (portal, ipa, identity, cm, cm_tls, cdh, monitoring, ecs).
 # Default [] — 10_setup_deployment_portal sets [portal, ipa]; pvc_setup/35_refresh pass cumulative lists per phase.
@@ -336,7 +336,7 @@ deployment_portal_verify_tier_b_enabled: false
 deployment_portal_external_url_verify: warn
 # Optional per-service overrides, e.g. deployment_cm_external_url_verify: skip
 # Or map: deployment_service_external_url_verify: { cm: warn, grafana: skip }
-# Tier B direct https://ipaserver.<domain> from controller: auto skips on public/Jenkins when Caddy IPA vhosts exist
+# Tier B direct https://ipaserver.<domain> from controller: auto skips on public remote when Caddy IPA vhosts exist
 deployment_ipa_direct_fqdn_external_url_verify: auto
 # Set true after 27_setup_cm_autotls.yml (CM listens on :7183; Caddy is not used for CM).
 autotls_enabled: false
@@ -344,7 +344,7 @@ autotls_enabled: false
 ##### cm_server autotls variables:
 # SSH Authentication (Choose one)
 # cm_node_sudo_password: "your-root-pass"  # Required for password-based authentication # Either commented out or defined but not set to empty string
-# Path on Ansible controller (Jenkins/laptop), not on CM host. Empty = auto (sshkey.pem / ansible_ssh_private_key_file).
+# Path on Ansible controller (CI runner or laptop), not on CM host. Empty = auto (sshkey.pem / ansible_ssh_private_key_file).
 cm_private_key_path: ""
 cm_priv_key_passphrase: "" # If private key is encrypted, provide cm_priv_key_passphrase
 
@@ -484,7 +484,7 @@ ecs_automation_machine_user: cldr-automation-sa
 ecs_automation_access_key_type: V2
 ecs_iam_bootstrap_access_key_id: ""
 ecs_iam_bootstrap_private_key: ""
-ecs_api_credentials_cache_path: "{{ lookup('env', 'WORKSPACE') | default('/tmp', true) }}/jenkins/artifacts/ecs-automation-api-credentials.yml"
+ecs_api_credentials_cache_path: "{{ lookup('env', 'CDP_ARTIFACTS_DIR') | default(lookup('env', 'WORKSPACE') | default('/tmp', true) ~ '/artifacts', true) }}/ecs-automation-api-credentials.yml"
 ecs_control_plane_wait_retries: 40
 ecs_control_plane_wait_delay: 15
 ecs_control_plane_validate_certs: false
@@ -567,7 +567,7 @@ deployment_portal_use_private_network_only: false
 caddy_vhost_enabled: true
 caddy_vhost_public_base: pvc.cloudera-labs.com
 caddy_vhost_dns_mode: embedded_ip
-# Register nip.io-style vhosts for private IP as well (in-VPC browsers); public slug for Jenkins/internet
+# Register nip.io-style vhosts for private IP as well (in-VPC browsers); public slug for external/internet
 caddy_vhost_register_private_ip: true
 caddy_vhost_service_names:
   portal: portal

@@ -4,6 +4,7 @@ set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 LOG_DIR="${LOG_DIR:-$REPO_ROOT/jenkins/artifacts}"
+export CDP_ARTIFACTS_DIR="${CDP_ARTIFACTS_DIR:-$LOG_DIR}"
 mkdir -p "$LOG_DIR"
 
 cd "$REPO_ROOT"
@@ -34,6 +35,7 @@ fi
 restore_ansible_artifacts_to_workspace
 bash "$REPO_ROOT/jenkins/scripts/regenerate-inventory-from-terraform.sh"
 # Jenkins runs outside the VPC — public control-plane reachability (see ansible_control_reachability).
+export ANSIBLE_CONTROL_REMOTE="${ANSIBLE_CONTROL_REMOTE:-1}"
 export ANSIBLE_CONTROL_VIA_JENKINS="${ANSIBLE_CONTROL_VIA_JENKINS:-1}"
 export CM_API_PREFER_PRIVATE_IP="${CM_API_PREFER_PRIVATE_IP:-false}"
 export ANSIBLE_CONTROLLER_OUTSIDE_VPC="${ANSIBLE_CONTROLLER_OUTSIDE_VPC:-true}"

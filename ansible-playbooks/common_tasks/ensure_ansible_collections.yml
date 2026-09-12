@@ -1,5 +1,5 @@
 ---
-# Single source of truth: scripts/lib/ansible_env.sh (pvc_setup, clone wrapper, Jenkins, manual playbooks).
+# Single source of truth: scripts/lib/ansible_env.sh (pvc_setup, clone wrapper, CI runners, manual playbooks).
 - name: Ensure Ansible collections (shared control-node helper)
   ansible.builtin.command:
     cmd: >-

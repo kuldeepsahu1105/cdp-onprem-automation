@@ -1,6 +1,6 @@
 ---
 # Resolve SSH private key on the Ansible controller for CM Auto-TLS (key-based API).
-# Works with: ansible-playbook only, pvc_setup.sh, Jenkins, or any wrapper — no Jenkins-specific paths.
+# Works with: ansible-playbook only, pvc_setup.sh, or any wrapper — no runner-specific paths.
 # After 00_setup_ssh_preqs, root on cluster nodes accepts the same key as ansible_user (e.g. ec2-user PEM).
 
 - name: Resolve Auto-TLS private key on Ansible controller

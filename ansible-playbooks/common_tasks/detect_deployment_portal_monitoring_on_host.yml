@@ -1,6 +1,6 @@
 ---
 # Detect Prometheus/Grafana on the portal ops host (play target = ops). Use before Caddy/index sync
-# when Jenkins PORTAL passes -e monitoring_stack_enabled=false (extra-var beats set_fact on ops host).
+# when Ansible controller PORTAL passes -e monitoring_stack_enabled=false (extra-var beats set_fact on ops host).
 
 - name: Probe Grafana container on portal ops host (local Docker)
   ansible.builtin.command:

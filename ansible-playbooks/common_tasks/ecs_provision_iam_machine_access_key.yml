@@ -60,7 +60,7 @@
     msg: >-
       Cannot create ECS API access keys without an existing signed IAM credential.
       After ECS is up, generate ONE admin access key in Management Console (User Management),
-      then set ecs_iam_bootstrap_access_key_id / ecs_iam_bootstrap_private_key (or Jenkins
+      then set ecs_iam_bootstrap_access_key_id / ecs_iam_bootstrap_private_key (or pipeline override
       ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID / ECS_IAM_BOOTSTRAP_PRIVATE_KEY) and re-run.
       Automation will create machine user '{{ ecs_automation_machine_user }}' and store keys
       in {{ ecs_api_credentials_cache_path | default('(set ecs_api_credentials_cache_path)') }}.

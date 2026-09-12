@@ -1,6 +1,6 @@
 ### ansible-playbook -i inventory.ini 35_refresh_deployment_portal.yml
 # Update Caddy index/pgAdmin/monitoring URLs after CM, base cluster, ECS, or data services change.
-# Run 28 once (Jenkins PORTAL stage, before CM). Re-run after CM/TLS/CDH/ECS to update the index.
+# Run 28 once (PORTAL deploy phase, before CM). Re-run after CM/TLS/CDH/ECS to update the index.
 ---
 - import_playbook: 00_ensure_collections.yml
 
@@ -44,7 +44,7 @@
         msg: >-
           Deployment portal not installed on {{ inventory_hostname }}
           (missing {{ deployment_portal_config_dir }}/docker-compose.yml).
-          Run 10_setup_deployment_portal.yml or re-run Jenkins PORTAL stage.
+          Run 10_setup_deployment_portal.yml or re-run PORTAL deploy phase.
       when: not portal_compose_stat.stat.exists
 
     - name: Sync portal templates and stacks
@@ -60,7 +60,7 @@
           - "pgAdmin (direct :{{ deployment_portal_pgadmin_host_port }}): {{ deployment_portal_context.portal.pgadmin_url_direct | default(deployment_portal_context.portal.pgadmin_url) }}"
           - "Monitoring routes: {{ deployment_portal_monitoring_routes_enabled | default(false) }}"
 
-    - name: Print full access URL report (Jenkins log / email)
+    - name: Print full access URL report (pipeline log / email)
       ansible.builtin.import_tasks: common_tasks/print_deployment_access_urls.yml
 
 - name: Verify external deployment portal URLs from Ansible controller (Tier B)
@@ -74,5 +74,5 @@
       ansible.builtin.meta: end_play
       when: not (deployment_portal_caddy_effective | default(false) | bool)
 
-    - name: Tier B external URL verify (Jenkins / laptop)
+    - name: Tier B external URL verify (Ansible controller (remote or laptop))
       ansible.builtin.import_tasks: common_tasks/verify_deployment_portal_external_from_controller.yml

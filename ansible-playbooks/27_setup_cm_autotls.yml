@@ -1,5 +1,5 @@
 ### ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml
-# Standalone (no Jenkins/wrapper): cd ansible-playbooks && ANSIBLE_PRIVATE_KEY=/path/to/key ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml
+# Standalone (no wrapper): cd ansible-playbooks && ANSIBLE_PRIVATE_KEY=/path/to/key ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml
 ---
 - import_playbook: 00_ensure_collections.yml
 
@@ -86,7 +86,7 @@
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
       when: not (autotls_applied_this_run | default(false))
 
-    - name: Wait for Cloudera Manager Server to start (on CM host, not Jenkins)
+    - name: Wait for Cloudera Manager Server to start (on CM host, not the Ansible controller)
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
       delegate_to: "{{ cm_manager_inventory_host }}"
       become: true
