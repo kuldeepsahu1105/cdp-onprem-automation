@@ -1,5 +1,5 @@
 ---
-# Cloudera Management Service (CMS) via REST — no cloudera.cluster.cm_service / cm_client.
+# Cloudera Management Service (CMS) via REST — aligned with Cloudera Labs cm_service settings.
 
 - name: CMS — resolve HTTPS CM API URL
   ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
@@ -42,23 +42,77 @@
     status_code: [200, 301, 303]
   register: cms_hosts
 
-- name: CMS — resolve host id for CMS roles
+- name: CMS — resolve CM host entry for CMS roles (FQDN, short name, or manager IP)
   ansible.builtin.set_fact:
     cms_target_host: >-
       {{
-        (cms_hosts.json['items'] | default([]))
-        | selectattr('hostname', 'equalto', cm_cms_hostname)
-        | list
-        | first
-        | default({})
+        (
+          (cms_hosts.json['items'] | default([]))
+          | selectattr('hostname', 'equalto', cm_cms_hostname)
+          | list
+          | first
+        )
+        | default(
+          (cms_hosts.json['items'] | default([]))
+          | selectattr(
+              'hostname',
+              'equalto',
+              hostvars[cm_manager_inventory_host].cldr_hostname | default(cm_manager_inventory_host)
+            )
+          | list
+          | first,
+          true
+        )
+        | default(
+          (cms_hosts.json['items'] | default([]))
+          | selectattr(
+              'hostname',
+              'match',
+              '^'
+              ~ (hostvars[cm_manager_inventory_host].cldr_hostname | default(cm_manager_inventory_host))
+              ~ '\\.'
+            )
+          | list
+          | first,
+          true
+        )
+        | default(
+          (cms_hosts.json['items'] | default([]))
+          | selectattr(
+              'ipAddress',
+              'equalto',
+              hostvars[cm_manager_inventory_host].ansible_host | default('')
+            )
+          | list
+          | first,
+          true
+        )
+        | default(
+          (cms_hosts.json['items'] | default([]))
+          | selectattr(
+              'ipAddress',
+              'equalto',
+              hostvars[cm_manager_inventory_host].private_ip | default('')
+            )
+          | list
+          | first,
+          true
+        )
+        | default(
+          ((cms_hosts.json['items'] | default([]) | length) == 1)
+          | ternary((cms_hosts.json['items'] | default([]) | first), {}),
+          true
+        )
       }}
 
 - name: CMS — fail when CMS target host is not registered in CM
   ansible.builtin.fail:
     msg: >-
-      Host {{ cm_cms_hostname }} not found in Cloudera Manager /hosts.
-      Ensure CM agent is running on cldr-mngr before CMS setup.
-  when: (cms_target_host.get('hostId', '') | default('') | length) == 0 and (cms_target_host.get('host_id', '') | default('') | length) == 0
+      Could not match a Cloudera Manager host for CMS roles (wanted {{ cm_cms_hostname }}).
+      Registered hostnames:
+      {{ (cms_hosts.json['items'] | default([]) | map(attribute='hostname') | list) | join(', ') }}.
+      Ensure the CM agent is running on {{ cm_manager_inventory_host }} before CMS setup.
+  when: (cms_target_host['hostId'] | default('')) | length == 0 and (cms_target_host['host_id'] | default('')) | length == 0
 
 - name: CMS — normalize CMS target host id
   ansible.builtin.set_fact:
@@ -121,6 +175,7 @@
         - name: firehose_non_java_memory_bytes
           value: "{{ cm_cms_servicemonitor_memory_bytes | string }}"
     status_code: [200, 204, 301, 303]
+  register: cms_rcg_servicemonitor_put
   when: cms_rcg_servicemonitor | default('') | length > 0
 
 - name: CMS — configure Reports Manager role config group
@@ -145,6 +200,7 @@
         - name: headlamp_database_password
           value: "{{ cm_cms_reports_manager_db_password }}"
     status_code: [200, 204, 301, 303]
+  register: cms_rcg_reportsmanager_put
   when: cms_rcg_reportsmanager | default('') | length > 0
 
 - name: CMS — list existing management roles
@@ -194,7 +250,85 @@
     label: "{{ item }}"
   register: cms_roles_create
 
-- name: CMS — read management service state before start
+- name: CMS — fail when CMS roles exist on a host other than the CM node
+  ansible.builtin.fail:
+    msg: >-
+      CMS role {{ item.name }} ({{ item.type }}) is on host
+      {{ item.hostRef.hostname | default(item.hostRef.hostId) }}, expected {{ cms_target_hostname }}.
+      Stop CMS in the UI, delete misplaced roles, and re-run 29_setup_cm_cms.yml.
+  loop: "{{ cms_roles_get.json['items'] | default([]) }}"
+  loop_control:
+    label: "{{ item.type }}"
+  when:
+    - item.type in cms_role_types_desired
+    - (item.hostRef.hostId | default('') | string) != (cms_target_host_id | string)
+    - (item.hostRef.hostname | default('')) | length > 0
+    - (item.hostRef.hostname | default('')) != cms_target_hostname
+
+- name: CMS — record whether CMS configuration changed this run
+  ansible.builtin.set_fact:
+    cms_config_changed: >-
+      {{
+        (cms_setup is defined and cms_setup is changed)
+        or (cms_rcg_servicemonitor_put is defined and cms_rcg_servicemonitor_put is changed)
+        or (cms_rcg_reportsmanager_put is defined and cms_rcg_reportsmanager_put is changed)
+        or (
+          cms_roles_create is defined
+          and (
+            cms_roles_create.results | default([])
+            | selectattr('changed', 'defined')
+            | selectattr('changed')
+            | list
+            | length > 0
+          )
+        )
+        or (cm_cms_force_restart | default(false) | bool)
+      }}
+
+- name: CMS — refresh management roles before start/restart decision
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/roles"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cms_roles_before_action
+
+- name: CMS — detect unhealthy Service Monitor or Host Monitor roles
+  ansible.builtin.set_fact:
+    cms_monitor_roles: >-
+      {{
+        cms_roles_before_action.json['items'] | default([])
+        | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+        | list
+      }}
+    cms_monitors_healthy: >-
+      {{
+        (
+          cms_roles_before_action.json['items'] | default([])
+          | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+          | list
+          | length
+        ) == 2
+        and (
+          cms_roles_before_action.json['items'] | default([])
+          | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+          | rejectattr('roleState', 'equalto', 'RUNNING')
+          | list
+          | length
+        ) == 0
+        and (
+          cms_roles_before_action.json['items'] | default([])
+          | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+          | selectattr('healthSummary', 'equalto', 'BAD')
+          | list
+          | length
+        ) == 0
+      }}
+
+- name: CMS — read management service state before start/restart
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/service"
     method: GET
@@ -203,9 +337,33 @@
     force_basic_auth: yes
     validate_certs: no
     status_code: [200, 301, 303]
-  register: cms_service_before_start
+  register: cms_service_before_action
 
-- name: CMS — start management service
+- name: CMS — restart management service (unhealthy monitors or config drift)
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/commands/restart"
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 201, 204, 301, 303]
+  register: cms_restart_cmd
+  when:
+    - cms_service_before_action.json.serviceState | default('') == 'STARTED'
+    - not (cms_monitors_healthy | bool) or (cms_config_changed | bool)
+
+- name: CMS — wait for CMS restart command
+  ansible.builtin.import_tasks: wait_cm_api_command.yml
+  vars:
+    cm_api_command_id: "{{ cms_restart_cmd.json.id }}"
+    cm_api_command_poll_retries: 90
+  when:
+    - cms_restart_cmd is defined
+    - cms_restart_cmd is not skipped
+    - cms_restart_cmd.json.id is defined
+
+- name: CMS — start management service when stopped
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/service/commands/start"
     method: POST
@@ -215,41 +373,68 @@
     validate_certs: no
     status_code: [200, 201, 204, 301, 303]
   register: cms_start_cmd
-  when: cms_service_before_start.json.serviceState | default('') != 'STARTED'
+  when:
+    - cms_service_before_action.json.serviceState | default('') != 'STARTED'
+    - cms_restart_cmd.skipped | default(true)
 
-- name: CMS — wait for start command
+- name: CMS — wait for CMS start command
+  ansible.builtin.import_tasks: wait_cm_api_command.yml
+  vars:
+    cm_api_command_id: "{{ cms_start_cmd.json.id }}"
+    cm_api_command_poll_retries: 90
+  when:
+    - cms_start_cmd is defined
+    - cms_start_cmd is not skipped
+    - cms_start_cmd.json.id is defined
+
+- name: CMS — wait for Service Monitor and Host Monitor to reach RUNNING
   ansible.builtin.uri:
-    url: "{{ cm_krb_api_url }}/commands/{{ cms_start_cmd.json.id }}"
+    url: "{{ cm_krb_api_url }}/cm/service/roles"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
     status_code: [200, 301, 303]
-  register: cms_start_poll
+  register: cms_roles_health_poll
   until: >
-    cms_start_poll.json.active is defined
-    and not (cms_start_poll.json.active | bool)
-  retries: 60
-  delay: 10
-  when:
-    - cms_start_cmd is defined
-    - cms_start_cmd.json is defined
-    - cms_start_cmd.json.id is defined
+    (
+      cms_roles_health_poll.json['items'] | default([])
+      | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+      | list
+      | length
+    ) == 2
+    and (
+      cms_roles_health_poll.json['items'] | default([])
+      | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+      | rejectattr('roleState', 'equalto', 'RUNNING')
+      | list
+      | length
+    ) == 0
+  retries: "{{ cm_cms_monitor_wait_retries | default(30) }}"
+  delay: "{{ cm_cms_monitor_wait_delay | default(20) }}"
 
-- name: CMS — fail when start command failed
+- name: CMS — fail when Service Monitor or Host Monitor did not become healthy
   ansible.builtin.fail:
     msg: >-
-      CMS start failed:
-      {{ cms_start_poll.json.resultMessage | default(cms_start_poll.json.result_message | default('unknown')) }}
-  when:
-    - cms_start_poll is defined
-    - cms_start_poll.json is defined
-    - cms_start_poll.json.success is defined
-    - not (cms_start_poll.json.success | bool)
+      Service Monitor / Host Monitor are not RUNNING after CMS start/restart:
+      {{ cms_roles_health_poll.json['items'] | default([])
+         | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+         | list }}.
+      Check firehose and CM agent logs on {{ cms_target_hostname }}.
+  when: >
+    (
+      cms_roles_health_poll.json['items'] | default([])
+      | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+      | rejectattr('roleState', 'equalto', 'RUNNING')
+      | list
+      | length
+    ) > 0
 
 - name: CMS — record result for playbook debug
   ansible.builtin.set_fact:
     cms_result:
-      changed: true
-      service_state: STARTED
+      changed: "{{ cms_config_changed | default(false) }}"
+      service_state: "{{ cms_service_before_action.json.serviceState | default('UNKNOWN') }}"
+      cms_target_hostname: "{{ cms_target_hostname }}"
+      monitors_healthy: true

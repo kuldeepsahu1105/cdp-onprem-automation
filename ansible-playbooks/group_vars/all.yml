@@ -288,7 +288,8 @@ krb5_ad_delete_on_regenerate: true
 cm_manager_inventory_host: "{{ groups['cldr-mngr'][0] if ('cldr-mngr' in groups and groups['cldr-mngr'] | length > 0) else '' }}"
 cm_cms_hostname: "{{ hostvars[cm_manager_inventory_host].cldr_hostname | default(cm_manager_inventory_host) }}.{{ cluster_domain }}"
 cm_cms_servicemonitor_memory_bytes: 6442450944
-cm_cms_reports_manager_db_host: "{{ cm_cms_hostname }}"
+# Reports Manager JDBC — Postgres runs on cldr-mngr (23_setup_postgres.yml); loopback avoids FQDN/TLS edge cases.
+cm_cms_reports_manager_db_host: "127.0.0.1"
 cm_cms_reports_manager_db_name: rman
 cm_cms_reports_manager_db_user: rman
 cm_cms_reports_manager_db_password: rman
