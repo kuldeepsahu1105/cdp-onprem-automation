@@ -22,17 +22,28 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 |---|---|
 | `cdh_basecluster_name` | `CDH-Cluster` |
 | `ecs_cluster_name` | `ECS-Cluster` |
+| `ecs_deploy_enabled` | `auto` | `auto`, `true`, or `false` — deploy ECS when ecs inventory groups exist |
+| `ecs_pvc_ds_version` | `1.5.5-h2000` | CDS repo tag (`1.5.5-h2100` for SP2 CHF1, etc.) |
+| `ecs_parcel_version` | `""` | Optional override; auto-discovered from CM after parcel repo refresh |
+| `ecs_app_domain` | `apps.<domain>` | Application domain for ECS services |
 
 ### CM/CDH repository source
 
 | Variable | Default | Description |
 |---|---|---|
-| `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/ direct; `internal` = mirror on cldr-mngr (RHEL only) |
+| `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/ direct; `internal` = mirror on cldr-mngr |
 | `cm_repo_public_base_url` | `https://archive.cloudera.com/p` | Public archive base URL |
 | `cm_repo_mirror_host` | cldr-mngr IP | Internal mirror HTTP host |
 | `parcel_repo` | computed | Public or internal parcel URL based on `cm_repo_source` |
-| `cm_repo_username` | — | Required for public mode (archive credentials) |
-| `cm_repo_password` | — | Required for public mode |
+| `cdh_parcel_os_suffix` | `auto` | Parcel filename suffix: `auto`, `el8`, `el9`, `jammy`, `noble`, `sles15`, `el8.aarch64le` |
+| `cdh_parcel_target_group` | `base-workers` | Inventory group used to auto-detect worker OS for parcel suffix |
+| `cdh_parcel_os_suffix_fallback` | `el8` | Fallback when auto-detect cannot read worker facts |
+| `cm_debian_use_ubuntu_repo` | `false` | Debian: use Ubuntu apt archive paths when `true` |
+| `cm_debian_ubuntu_compat_version` | `2204` | Ubuntu archive version for Debian (`2204` or `2404`) |
+| `scm_csds` | `[]` | CSD JAR URLs (all OS); leave empty on Ubuntu/Debian |
+| `scm_csds_redhat` | list | CSD JAR URLs for RHEL-based CM (RPM archive paths) |
+| `cm_repo_username` | — | Required (archive credentials) |
+| `cm_repo_password` | — | Required (archive credentials) |
 
 **Spark parcel:** For CDH `>= 7.3.1`, Spark is bundled in the CDH parcel — a separate SPARK3 download is skipped automatically (`cdh_spark_bundled_min_version`). Set `spark_version` only for older CDH releases that need a standalone Spark parcel.
 
@@ -42,11 +53,30 @@ cm_repo_source: public
 cm_repo_username: "your-cloudera-account"
 cm_repo_password: "your-password"
 
-# Internal mirror — download RPMs/parcels to cldr-mngr web server (RHEL/CentOS/Rocky only)
+# Internal mirror — CM + CDH parcels served from cldr-mngr web server
 cm_repo_source: internal
 ```
 
-Ubuntu/Debian hosts must use `cm_repo_source: public`. The internal mirror playbooks download RPM packages and run `createrepo`; Ubuntu CM installs from archive APT repositories configured by `17_download_repos.yml`.
+**Internal mirror by OS:**
+
+| cldr-mngr OS | Mirror format | What is downloaded |
+|---|---|---|
+| RHEL 8/9 | yum/RPM + `createrepo` | CM RPMs, CDH parcel (`-el8`/`-el9`) |
+| Ubuntu 22.04/24.04 | apt | CM `.deb` packages + `Packages` index, CDH parcel |
+| Debian | apt (with `cm_debian_use_ubuntu_repo: true`) | Same as Ubuntu path |
+
+**CDH parcel suffixes in archive** (CDH 7.3.2 example):
+
+| Suffix | Target OS |
+|---|---|
+| `el8` | RHEL / Rocky / Alma 8 (x86_64) |
+| `el9` | RHEL / Rocky / Alma 9 (x86_64) |
+| `el8.aarch64le` / `el9.aarch64le` | RHEL on ARM64 |
+| `jammy` | Ubuntu 22.04 workers |
+| `noble` | Ubuntu 24.04 workers |
+| `sles15` | SLES 15 |
+
+With `cdh_parcel_os_suffix: auto` (default), the suffix is derived from the first host in `cdh_parcel_target_group` (`base-workers`). Override explicitly when workers are mixed or facts are not gathered yet.
 
 | Playbook | Mode | Description |
 |---|---|---|
@@ -165,7 +195,7 @@ Run: `ansible-playbook -i inventory.ini <playbook>.yml`
 | Playbook | Description |
 |---|---|
 | `00_setup_ssh_preqs.yml` | SSH prerequisites |
-| `01_install_collection.yml` | Install collections, system update |
+| `01_install_collection.yml` | Install Ansible collections on control node (`localhost`); system update on targets |
 | `02_set_hostname.yml` | Set FQDN hostnames |
 | `03_create_etc_hosts.yml` | Populate `/etc/hosts` |
 | `04_setup_autossh.yml` | Passwordless SSH |
@@ -213,6 +243,9 @@ CMS (Management Service) and CDP base cluster are **separate**:
 |---|---|---|
 | `24_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. |
 | `26_setup_base_cluster.yml` | Base cluster | ZooKeeper, HDFS, YARN |
+| `27_setup_ecs_cluster.yml` | ECS cluster | Cloudera Data Services (DOCKER + ECS), embedded control plane |
+
+Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-masters` / `ecs-workers` inventory groups. Skipped when `ecs_deploy_enabled: auto` and ECS groups are empty.
 
 ---
 
@@ -250,8 +283,36 @@ Requires:
 |---|---|---|
 | `clone_and_run_terraform.sh` | repo root | Terraform + inventory generation |
 | `clone_and_run_pvc_automation.sh` | repo root | Clone repo, run `pvc_setup.sh` |
-| `pvc_setup.sh` | `ansible-test/` | Run numbered playbooks |
+| `pvc_setup.sh` | `ansible-test/` | Phased playbook runner (`DEPLOY_PHASE`) |
+| `scripts/lib/ansible_env.sh` | repo root | Control mode, SSH key, license, CM creds resolution |
 | `scripts/lib/portable.sh` | repo root | macOS/Linux portable helpers |
+
+### `pvc_setup.sh` phases
+
+| `DEPLOY_PHASE` | Alias | Playbooks |
+|---|---|---|
+| `1` | `prereq` | `00`–`09` |
+| `2` | `identity` | `00_detect_identity`, `10_identity_setup` |
+| `3` | `cm` | `16`–`21` |
+| `4` | `cluster` | `22`–`27` (ECS skipped if no ecs inventory) |
+| `5` | `ecs` | `27_setup_ecs_cluster.yml` |
+| `all` | — | Full flow |
+
+License file is required for phases `3`, `4`, and `all` only.
+
+### Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `DEPLOY_PHASE` | `1`, `2`, `3`, `4`, or `all` (default `1`) |
+| `CONTROL_MODE` | `remote` (default), `local`, or `auto` — whether Ansible runs from a cluster node |
+| `ANSIBLE_PRIVATE_KEY` | SSH private key path (skips interactive prompt) |
+| `LICENSE_FILE` | Cloudera license file (phases 3/4/all) |
+| `CM_INFO_FILE` | `*info.txt` with archive `login:` / `password:` |
+| `CM_REPO_USERNAME` / `CM_REPO_PASSWORD` | Archive credentials (alternative to `CM_INFO_FILE`) |
+| `ANSIBLE_LIMIT` | Passed through to `ansible-playbook --limit` |
+
+When multiple `*.pem`, `*license*`, or `*info.txt` files exist in `ansible-test/`, `ansible_env.sh` prompts interactively. Non-interactive runs must set the env vars above.
 
 ### macOS notes
 
@@ -261,14 +322,39 @@ Requires:
 
 ---
 
+## Ansible collections (`requirements.yml`)
+
+| Collection | Purpose |
+|---|---|
+| `community.general` | General modules |
+| `community.postgresql` | PostgreSQL modules (Ubuntu/Debian) |
+| `ansible.posix` | POSIX helpers |
+| `community.crypto` | TLS/crypto |
+| `freeipa.ansible_freeipa` | FreeIPA server/client |
+| `cloudera.cluster` (devel) | CM/CDP API modules |
+
+Install: `ansible-galaxy collection install -r requirements.yml`
+
 ## Common task modules
 
 | Path | Purpose |
 |---|---|
+| `common_tasks/set_os_facts.yml` | Load `os_vars` map per OS family |
 | `common_tasks/detect_identity_provider.yml` | FreeIPA vs AD detection |
 | `common_tasks/set_dns_facts.yml` | AWS/bare metal DNS facts |
 | `common_tasks/configure_resolv_conf.yml` | netplan or resolv.conf |
+| `common_tasks/configure_cm_repo.yml` | Public or internal CM repo setup |
+| `common_tasks/prepare_debian_cm_install.yml` | Ubuntu/Debian apt prep (needrestart, etc.) |
+| `common_tasks/install_cm_packages.yml` | OS-aware CM server/agent package install |
+| `common_tasks/set_cm_mirror_facts.yml` | Internal mirror URL facts |
+| `common_tasks/mirror_internal_cm_rhel.yml` | RPM mirror + createrepo |
+| `common_tasks/mirror_internal_cm_apt.yml` | apt `.deb` mirror + Packages index |
+| `common_tasks/install_postgresql_repo.yml` | PGDG repo per OS |
+| `common_tasks/init_postgresql.yml` | PostgreSQL init |
+| `common_tasks/restart_postgresql.yml` | OS-aware PostgreSQL restart |
+| `common_tasks/disable_firewall.yml` | firewalld (RHEL) or ufw skip |
 | `common_tasks/join_ad_realm.yml` | AD `realm join` |
 | `common_tasks/join_freeipa_client.yml` | IPA client enrollment |
 | `common_tasks/set_cm_api_url.yml` | CM API URL + Auto-TLS detection |
+| `common_tasks/install_cloudera_collection.yml` | Galaxy collection install |
 | `common_tasks/cleanup/` | Modular cleanup tasks |

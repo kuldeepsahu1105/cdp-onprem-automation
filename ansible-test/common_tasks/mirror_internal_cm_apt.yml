@@ -1,0 +1,80 @@
+---
+- name: Create apt mirror root directory
+  ansible.builtin.file:
+    path: "{{ cm_apt_mirror_root }}"
+    state: directory
+    mode: "0755"
+
+- name: Download apt repository metadata from archive
+  ansible.builtin.get_url:
+    url: "{{ cm_apt_archive_url }}/{{ item }}"
+    dest: "{{ cm_apt_mirror_root }}/{{ item }}"
+    mode: "0644"
+    url_username: "{{ cm_repo_username }}"
+    url_password: "{{ cm_repo_password }}"
+    force_basic_auth: true
+  loop:
+    - archive.key
+    - Release
+    - Packages.gz
+    - InRelease
+  register: apt_meta_download
+  failed_when: false
+
+- name: Download Packages.bz2 when Packages.gz is unavailable
+  ansible.builtin.get_url:
+    url: "{{ cm_apt_archive_url }}/Packages.bz2"
+    dest: "{{ cm_apt_mirror_root }}/Packages.bz2"
+    mode: "0644"
+    url_username: "{{ cm_repo_username }}"
+    url_password: "{{ cm_repo_password }}"
+    force_basic_auth: true
+  when: not (apt_meta_download.results | selectattr('item', 'equalto', 'Packages.gz') | selectattr('failed', 'equalto', false) | list | length > 0)
+  failed_when: false
+
+- name: Extract .deb filenames from Packages index
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cd "{{ cm_apt_mirror_root }}"
+    if [[ -f Packages.gz ]]; then
+      zcat Packages.gz | awk '/^Filename: / {print $2}'
+    elif [[ -f Packages.bz2 ]]; then
+      bzcat Packages.bz2 | awk '/^Filename: / {print $2}'
+    elif [[ -f Packages ]]; then
+      awk '/^Filename: / {print $2}' Packages
+    else
+      echo "No Packages index found" >&2
+      exit 1
+    fi
+  args:
+    executable: /bin/bash
+  register: apt_deb_list
+  changed_when: false
+
+- name: Download CM .deb packages into apt mirror
+  ansible.builtin.get_url:
+    url: "{{ cm_apt_archive_url }}/{{ item }}"
+    dest: "{{ cm_apt_mirror_root }}/{{ item }}"
+    mode: "0644"
+    url_username: "{{ cm_repo_username }}"
+    url_password: "{{ cm_repo_password }}"
+    force_basic_auth: true
+  loop: "{{ apt_deb_list.stdout_lines | select('match', '.+') | list }}"
+  when: apt_deb_list.stdout_lines | select('match', '.+') | list | length > 0
+
+- name: Download CDH parcel for internal mirror (apt path)
+  ansible.builtin.get_url:
+    url: "https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/{{ cdh_repo_product }}/{{ cdh_version }}/parcels/{{ cdh_parcel_filename }}"
+    dest: "{{ cldr_repos_path }}/{{ cdh_repo_product }}/{{ cdh_version }}/"
+    url_username: "{{ cm_repo_username }}"
+    url_password: "{{ cm_repo_password }}"
+    force_basic_auth: true
+    mode: "0644"
+
+- name: Write internal apt sources list for mirror clients
+  ansible.builtin.copy:
+    dest: "{{ cm_apt_mirror_root }}/cloudera-manager.list"
+    mode: "0644"
+    content: |
+      # Cloudera Manager {{ cm_version }} — internal apt mirror
+      deb [arch={{ 'amd64' if ansible_architecture == 'x86_64' else ansible_architecture }}] http://{{ ansible_default_ipv4.address }}/cloudera-repos/cloudera-manager/apt {{ cm_apt_suite }} contrib

@@ -54,8 +54,18 @@ echo "Using SSH private key: $PRIVATE_KEY"
 
 patch_ansible_private_key_in_group_vars "$SCRIPT_DIR" "$PRIVATE_KEY"
 
-LICENSE_KEY="$(resolve_license_file "$SCRIPT_DIR")"
-echo "Using license file: $LICENSE_KEY"
+needs_license() {
+  case "$DEPLOY_PHASE" in
+    3|cm|phase3|4|cluster|phase4|all|full) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if needs_license; then
+  LICENSE_KEY="$(resolve_license_file "$SCRIPT_DIR")"
+  echo "Using license file: $LICENSE_KEY"
+  ensure_license_txt "$SCRIPT_DIR" "$LICENSE_KEY"
+fi
 
 load_cm_repo_credentials "$SCRIPT_DIR" || true
 if [[ -n "${CM_REPO_USERID:-}" ]]; then
@@ -116,6 +126,11 @@ run_phase_4() {
   run_playbook 24_setup_cm_cms.yml
   run_playbook 25_setup_cm_ldap.yml
   run_playbook 26_setup_base_cluster.yml
+  run_playbook 27_setup_ecs_cluster.yml
+}
+
+run_phase_5() {
+  run_playbook 27_setup_ecs_cluster.yml
 }
 
 case "$DEPLOY_PHASE" in
@@ -123,6 +138,7 @@ case "$DEPLOY_PHASE" in
   2|identity|phase2) run_phase_2 ;;
   3|cm|phase3) run_phase_3 ;;
   4|cluster|phase4) run_phase_4 ;;
+  5|ecs|phase5) run_phase_5 ;;
   all|full)
     run_phase_1
     sleep 5
@@ -133,7 +149,7 @@ case "$DEPLOY_PHASE" in
     run_phase_4
     ;;
   *)
-    echo "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|4|all or prereq|identity|cm|cluster|all)"
+    echo "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|4|5|all or prereq|identity|cm|cluster|ecs|all)"
     exit 1
     ;;
 esac

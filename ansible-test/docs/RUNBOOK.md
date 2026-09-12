@@ -30,11 +30,15 @@ The wrappers and playbooks support:
 | RHEL / Ubuntu laptop (remote) | Install `ansible`, `jq`; run `./clone_and_run_pvc_automation.sh` or `cd ansible-test && ./pvc_setup.sh` |
 | Cluster node (`cldr-mngr`, `ipaserver`) | `CONTROL_MODE=local DEPLOY_PHASE=all ./pvc_setup.sh` from `ansible-test/` (uses `~/.ssh/id_rsa` if no PEM in cwd) |
 
+When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-test/`, the wrapper prompts you to choose. Override with `ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, or `CM_INFO_FILE`.
+
 | Target OS | CM repo mode | Notes |
 |---|---|---|
-| RHEL 8/9 | `public` or `internal` | Internal mirror downloads RPMs + createrepo |
-| Ubuntu 22.04 / 24.04 | `public` only | Downloads official `cloudera-manager.list` + `archive.key` |
-| Debian | `public` only | Cloudera publishes Ubuntu apt repos; set `cm_debian_use_ubuntu_repo: true` to use `ubuntu2204` packages |
+| RHEL 8/9 | `public` or `internal` | Internal mirror: RPM + `createrepo` + CDH parcel |
+| Ubuntu 22.04 / 24.04 | `public` or `internal` | Internal mirror: apt `.deb` mirror + CDH parcel; public uses official `cloudera-manager.list` |
+| Debian | `public` or `internal`* | *Set `cm_debian_use_ubuntu_repo: true` for apt paths |
+
+**CDH base cluster:** Parcel suffix defaults to `auto` — `jammy`/`noble` on Ubuntu workers, `el8`/`el9` on RHEL. Override with `cdh_parcel_os_suffix: noble` etc.
 
 ### Phased deployment (`pvc_setup.sh`)
 
@@ -42,7 +46,8 @@ The wrappers and playbooks support:
 DEPLOY_PHASE=1 ./pvc_setup.sh    # prerequisites (00–09)
 DEPLOY_PHASE=2 ./pvc_setup.sh    # identity: FreeIPA or AD (auto-detect)
 DEPLOY_PHASE=3 ./pvc_setup.sh    # CM install (17/18/19/20/21)
-DEPLOY_PHASE=4 ./pvc_setup.sh    # autotls, kerberos, CMS, base cluster
+DEPLOY_PHASE=4 ./pvc_setup.sh    # autotls, kerberos, CMS, base cluster, ECS (if inventory has ecs-* groups)
+DEPLOY_PHASE=5 ./pvc_setup.sh    # ECS cluster only (27)
 DEPLOY_PHASE=all ./pvc_setup.sh  # full flow
 ```
 
@@ -98,7 +103,7 @@ ansible-playbook -i inventory.ini 10_identity_setup.yml
 ansible-playbook -i inventory.ini 17_download_repos.yml \
   -e cm_repo_username="<user>" -e cm_repo_password="<pass>"
 
-# OR internal mirror on cldr-mngr:
+# OR internal mirror on cldr-mngr (RHEL: RPM; Ubuntu: apt):
 # Set cm_repo_source: internal in group_vars/all.yml, then:
 ansible-playbook -i inventory.ini 16_setup_cm_repos.yml \
   -e cm_repo_username="<user>" -e cm_repo_password="<pass>"
@@ -117,7 +122,10 @@ ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
 ```bash
 ansible-playbook -i inventory.ini 24_setup_cm_cms.yml
 ansible-playbook -i inventory.ini 26_setup_base_cluster.yml
+ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml
 ```
+
+`27_setup_ecs_cluster.yml` is skipped automatically when `[ecs-masters]` / `[ecs-workers]` are empty (`ecs_deploy_enabled: auto`).
 
 ---
 
@@ -254,8 +262,8 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 |---|---|
 | Wrong identity detected | Run `00_detect_identity.yml`; set `identity_provider: freeipa` or `ad` to override |
 | DNS not persisting on Ubuntu | DNS is applied via netplan — see [REFERENCE.md](REFERENCE.md#dns-configuration) |
-| CM install fails on Ubuntu | Use `cm_repo_source: public` and set `cm_repo_username` / `cm_repo_password`; internal mirror is RHEL-only |
-| CM apt install on Ubuntu 24.04 | Playbook `19_start_cm.yml` downloads official `cloudera-manager.list`, imports `archive.key`, and disables needrestart auto-restarts |
+| CM install fails on Ubuntu | Set `cm_repo_username` / `cm_repo_password`; use `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr) |
+| CDH parcel download fails | Ensure worker facts exist (run phase 1 first). Set `cdh_parcel_os_suffix: noble` or `jammy` for Ubuntu workers, `el8`/`el9` for RHEL |
 | PostgreSQL listens on 127.0.0.1 only | Re-run `18_setup_postgres.yml` (uses `pg_ctlcluster restart` on Ubuntu) or `pg_ctlcluster 18 main restart` |
 | SSH restart fails on Ubuntu | Fixed in `00_setup_ssh_preqs.yml` — uses `ssh` service instead of `sshd` |
 | AWS vs bare metal DNS wrong | Set `deployment_environment: aws` or `baremetal` explicitly |

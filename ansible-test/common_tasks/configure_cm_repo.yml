@@ -107,13 +107,37 @@
     - ansible_os_family == "Debian"
     - cm_repo_source == 'public'
 
-- name: Import Cloudera Manager apt archive signing key
+- name: Import Cloudera Manager apt archive signing key (public)
   ansible.builtin.apt_key:
     file: /tmp/cloudera-cm-archive.key
     state: present
   when:
     - ansible_os_family == "Debian"
     - cm_repo_source == 'public'
+
+- name: Set CM apt suite for internal mirror clients
+  ansible.builtin.set_fact:
+    cm_apt_suite: "{{ ansible_distribution_release }}-cm{{ cm_version.split('.')[:3] | join('.') }}"
+  when:
+    - ansible_os_family == "Debian"
+    - cm_repo_source == 'internal'
+
+- name: Download Cloudera Manager apt archive signing key (internal mirror)
+  ansible.builtin.get_url:
+    url: "http://{{ cm_repo_mirror_host }}/cloudera-repos/cloudera-manager/apt/archive.key"
+    dest: /tmp/cloudera-cm-archive.key
+    mode: "0644"
+  when:
+    - ansible_os_family == "Debian"
+    - cm_repo_source == 'internal'
+
+- name: Import Cloudera Manager apt archive signing key (internal mirror)
+  ansible.builtin.apt_key:
+    file: /tmp/cloudera-cm-archive.key
+    state: present
+  when:
+    - ansible_os_family == "Debian"
+    - cm_repo_source == 'internal'
 
 - name: Configure Cloudera Manager apt repository from template (internal mirror)
   ansible.builtin.template:

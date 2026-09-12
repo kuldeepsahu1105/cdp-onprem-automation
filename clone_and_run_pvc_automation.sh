@@ -51,12 +51,11 @@ ANSIBLE_DIR="$(resolve_ansible_test_dir "$SCRIPT_DIR")"
 echo "Ansible directory: $ANSIBLE_DIR"
 
 pem_file="$(resolve_private_key "$ANSIBLE_DIR")"
-echo "Found key file: $pem_file"
+echo "Using SSH private key: $pem_file"
 
-license_file="$(resolve_license_file "$ANSIBLE_DIR" 2>/dev/null || true)"
-if [[ -n "$license_file" && "$(basename "$license_file")" != "license.txt" ]]; then
-    copy_file "$license_file" "$ANSIBLE_DIR/license.txt"
-    echo "Copied license to $ANSIBLE_DIR/license.txt"
+if [[ "${DEPLOY_PHASE:-1}" =~ ^(3|cm|phase3|4|cluster|phase4|all|full)$ ]]; then
+  license_file="$(resolve_license_file "$ANSIBLE_DIR")"
+  ensure_license_txt "$ANSIBLE_DIR" "$license_file"
 fi
 
 cd "$ANSIBLE_DIR"
