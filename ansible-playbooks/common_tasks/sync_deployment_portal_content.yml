@@ -31,6 +31,18 @@
     mode: "0644"
   register: caddyfile_render
 
+- name: Validate pgAdmin default email (pgAdmin 8 rejects .local and non-TLD addresses)
+  ansible.builtin.assert:
+    that:
+      - _pgadmin_default_email | length > 0
+      - _pgadmin_default_email is match('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+      - not (_pgadmin_default_email is search('\\.local$'))
+    fail_msg: >-
+      pgadmin_default_email '{{ pgadmin_default_email }}' is not accepted by pgAdmin 8 (PGADMIN_DEFAULT_EMAIL).
+      Use a lab address with a real TLD (default admin@{{ caddy_vhost_public_base }}), not admin@<cluster_domain> when the domain is .local.
+  vars:
+    _pgadmin_default_email: "{{ pgadmin_default_email | trim }}"
+
 - name: Render deployment portal Docker Compose file
   ansible.builtin.template:
     src: deployment_portal_docker-compose.yml.j2

@@ -519,7 +519,8 @@ portal_compose_pip_fallback: true
 deployment_portal_compose_argv: ['docker', 'compose']
 deployment_portal_pgadmin_image: dpage/pgadmin4:8
 deployment_portal_pgadmin_container: cldr-portal-pgadmin
-pgadmin_default_email: "admin@{{ cluster_domain }}"
+# pgAdmin 8 validates PGADMIN_DEFAULT_EMAIL; IPA/cluster .local domains (e.g. cldrsetup.local) fail at container start.
+pgadmin_default_email: "admin@{{ caddy_vhost_public_base }}"
 pgadmin_default_password: "{{ postgres_password }}"
 deployment_portal_inventory_groups:
   - ipaserver
