@@ -42,6 +42,7 @@ export TFVARS_FILE="${TFVARS_FILE:-.tfvars.yaml}"
 export DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 export DRY_RUN="${DRY_RUN:-false}"
 export CONTROL_MODE="${CONTROL_MODE:-auto}"
+export MONITORING_STACK_ENABLED="${MONITORING_STACK_ENABLED:-}"
 
 LOG_FILE="$LOG_DIR/ansible-${BUILD_NUMBER:-local}-phase${DEPLOY_PHASE}.log"
 log() { printf '[ansible] %s\n' "$*" | tee -a "$LOG_FILE"; }

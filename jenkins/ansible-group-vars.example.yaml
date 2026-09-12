@@ -16,3 +16,4 @@
 # postgresql_version: 18
 # postgres_jdbc_version: "42.7.10"
 # psycopg2_binary_version: "2.9.9"
+# monitoring_stack_enabled: false  # prefer Jenkins MONITORING_STACK_ENABLED checkbox

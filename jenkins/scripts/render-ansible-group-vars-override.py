@@ -23,6 +23,11 @@ ENV_TO_VAR = [
     ("CM_REPO_PASSWORD", "cm_repo_password"),
 ]
 
+# Jenkins booleanParam values (applied after textarea; override all.yml and textarea).
+BOOL_ENV_TO_VAR = [
+    ("MONITORING_STACK_ENABLED", "monitoring_stack_enabled"),
+]
+
 # Use Jenkins CM params instead of pasting these into the textarea.
 TEXTAREA_BLOCKED_KEYS = frozenset({"cm_repo_username", "cm_repo_password"})
 
@@ -126,6 +131,14 @@ def main() -> int:
     textarea = _filter_textarea_overrides(_load_yaml_fragment(), allowed)
     overrides.update(textarea)
     overrides = _coerce_bool_strings(overrides)
+
+    for env_key, var_name in BOOL_ENV_TO_VAR:
+        if env_key not in os.environ:
+            continue
+        raw = os.environ.get(env_key, "").strip().lower()
+        if raw in ("", "auto"):
+            continue
+        overrides[var_name] = raw in ("true", "1", "yes", "on")
 
     if validate_only:
         print(f"[ansible-vars] YAML override keys OK ({len(textarea)} from textarea)")

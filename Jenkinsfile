@@ -138,8 +138,9 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
 # ipaserver_domain: cldrsetup.local
 # cdh_version: "7.3.2.10000"
 # ecs_pvc_ds_version: "1.5.5-h3300"
+# monitoring_stack_enabled: false   # optional — prefer MONITORING_STACK_ENABLED checkbox above
 ''',
-      description: 'Ansible-only YAML (allowed keys only): domain, stack versions, java/postgres/jdbc/psycopg, passwords. Not full all.yml — see jenkins/ansible-group-vars-allowed-keys.yaml'
+      description: 'Ansible-only YAML (allowed keys only): domain, stack versions, java/postgres/jdbc/psycopg, passwords. Not full all.yml — see jenkins/ansible-group-vars-allowed-keys.yaml. Monitoring: use MONITORING_STACK_ENABLED checkbox (wins over textarea).'
     )
     string(name: 'CM_REPO_USERNAME', defaultValue: '', description: 'Optional archive.cloudera.com username (empty = all.yml, *info.txt, or skip)')
     password(name: 'CM_REPO_PASSWORD', defaultValue: '', description: 'Optional archive.cloudera.com password (empty = all.yml, *info.txt, or skip)')
@@ -147,6 +148,11 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
       name: 'CM_LICENSE_CONTENT',
       defaultValue: '',
       description: 'Optional Cloudera license file content (multiline). Used when no *license* file on agent. Empty = trial or existing file on agent.'
+    )
+    booleanParam(
+      name: 'MONITORING_STACK_ENABLED',
+      defaultValue: true,
+      description: 'Ansible: deploy Prometheus, Grafana, Alertmanager, and cAdvisor with 28_setup_deployment_portal.yml (phase 4). Sets monitoring_stack_enabled in Ansible overrides. Uncheck to skip monitoring; overrides ANSIBLE_GROUP_VARS_YAML if both are set.'
     )
   }
 
@@ -351,6 +357,7 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
             """
               set -euo pipefail
               export DEPLOY_PHASE='${phase}'
+              export MONITORING_STACK_ENABLED='${params.MONITORING_STACK_ENABLED}'
               export REQUIRE_INVENTORY=true
               export ANSIBLE_GROUP_VARS_FILE='${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml'
               export CM_REPO_USERNAME='${shellEscape(params.CM_REPO_USERNAME?.trim())}'
