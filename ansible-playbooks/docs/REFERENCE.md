@@ -410,3 +410,5 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `deployment_cm_external_url_verify` | — | Tier B override for CM URLs only |
 | `common_tasks/install_cloudera_collection.yml` | Galaxy collection install |
 | `common_tasks/cleanup/` | Modular cleanup tasks |
+
+**Cross-playbook variable contracts** (portal verify chain, CM API facts, import order): see [`VARIABLE_CONTRACTS.md`](VARIABLE_CONTRACTS.md).
