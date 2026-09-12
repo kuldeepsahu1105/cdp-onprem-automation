@@ -40,17 +40,21 @@ If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALI
 
 ## Stage checkboxes (`PIPELINE_STAGES`)
 
-Select one or more stages (executed in order):
+Select one or more stages. The pipeline always runs them in this order (not checkbox order):
+
+`VALIDATE` → `TERRAFORM` → `PREREQS` → `IDENTITY` → `CM_INSTALL` → `CDH_BASE` → `ECS_INSTALL`
 
 | Checkbox | What runs |
 |---|---|
-| `VALIDATE` | Tools, AWS, tfvars, Ansible syntax (per `VALIDATION_CHECKS`) |
-| `TERRAFORM` | EC2 + `inventory.ini` + PEM |
-| `PREREQS` | Ansible phase 1 — prerequisites |
-| `IDENTITY` | Ansible phase 2 — FreeIPA/AD |
-| `CM_INSTALL` | Ansible phase 3 — Cloudera Manager |
-| `CDH_BASE` | Ansible phase 4 — CDH base cluster |
-| `ECS_INSTALL` | Ansible phase 5 — ECS Data Services |
+| `VALIDATE` | `validate-prereqs.sh` — only checks selected in `VALIDATION_CHECKS` (no deploy) |
+| `TERRAFORM` | EC2/VPC/SG/EIP via Terraform; `inventory.ini` + `.pem` key |
+| `PREREQS` | Ansible **phase 1** — OS prereqs, Java, Python, firewall, SSH bootstrap |
+| `IDENTITY` | Ansible **phase 2** — FreeIPA or Active Directory (from inventory) |
+| `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
+| `CDH_BASE` | Ansible **phase 4** — Auto-TLS, Kerberos, CMS, LDAP, CDH base cluster |
+| `ECS_INSTALL` | Ansible **phase 5** — ECS / Data Services (requires base cluster) |
+
+**Your example:** `VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL` = validate → provision VMs → Ansible phases 1–3 (through Cloudera Manager install).
 
 **Examples:**
 
@@ -69,18 +73,18 @@ Multiple Ansible checkboxes run **sequentially** (e.g. `PREREQS` + `CM_INSTALL` 
 
 ## Validation checkboxes (`VALIDATION_CHECKS`)
 
-Used when `VALIDATE` stage is selected:
+Used only when `PIPELINE_STAGES` includes **`VALIDATE`**. Example: `TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY,EMAIL_FORMAT`.
 
 | Checkbox | Check |
 |---|---|
-| `TOOLS` | `git`, `jq`, `aws`, `terraform`, `ansible-playbook`, `python3` |
-| `AWS_CREDS` | `aws sts get-caller-identity` |
-| `TFVARS` | Config file exists; `ENVIRONMENT`, `OWNER`, `AWS_REGION` loaded |
-| `ANSIBLE_SYNTAX` | `ansible-playbook --syntax-check` on playbooks |
-| `INVENTORY` | `ansible-playbooks/inventory.ini` exists |
-| `EMAIL_FORMAT` | `NOTIFICATION_EMAIL` format (when set) |
+| `TOOLS` | Required CLI tools on the agent (`git`, `jq`, `python3`; adds `terraform` / `ansible-playbook` when those stages are selected) |
+| `AWS_CREDS` | `aws sts get-caller-identity` (credentials user or instance role) |
+| `TFVARS` | Tfvars file exists; `ENVIRONMENT`, `OWNER`, `AWS_REGION` load; AWS keypair/SG checks if `TERRAFORM` is also selected |
+| `ANSIBLE_SYNTAX` | `ansible-playbook --syntax-check` on all numbered playbooks |
+| `INVENTORY` | `ansible-playbooks/inventory.ini` present (required for Ansible-only runs; auto-enabled if you skip `TERRAFORM` but select Ansible stages) |
+| `EMAIL_FORMAT` | `NOTIFICATION_EMAIL` is a valid address when non-empty |
 
-`INVENTORY` is auto-added when Ansible stages run without `TERRAFORM`.
+`INVENTORY` is auto-added to validation when Ansible stages run without `TERRAFORM`.
 
 ## Input validation (Groovy — before checkout)
 

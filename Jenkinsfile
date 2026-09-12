@@ -13,7 +13,14 @@ pipeline {
       value: 'VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL,CDH_BASE,ECS_INSTALL',
       defaultValue: 'VALIDATE,TERRAFORM',
       multiSelectDelimiter: ',',
-      description: 'Select stages to run (executed in order: Validate → Terraform → Ansible phases 1→5)'
+      description: '''Stages run in pipeline order (select one or more). Examples: VALIDATE,TERRAFORM | VALIDATE,TERRAFORM,CM_INSTALL | full stack = all boxes.
+VALIDATE — Run validate-prereqs.sh using VALIDATION_CHECKS (tools, AWS, tfvars, etc.). No EC2/Ansible changes.
+TERRAFORM — Provision AWS infra (VPC/SG/EC2/EIP), write inventory.ini + SSH PEM to workspace/holautosa state.
+PREREQS — Ansible phase 1: OS prereqs, Java/Python, packages, SSH prep (needs inventory).
+IDENTITY — Ansible phase 2: FreeIPA server/client or AD client (auto-detect from inventory).
+CM_INSTALL — Ansible phase 3: CM repos, PostgreSQL, CM server/agents, license/trial (needs PREREQS/IDENTITY done earlier unless re-run).
+CDH_BASE — Ansible phase 4: CM Auto-TLS, Kerberos, CMS, LDAP, CDH base cluster API deploy.
+ECS_INSTALL — Ansible phase 5: ECS / Data Services cluster (needs CDH base). Ansible-only runs require existing inventory.ini.'''
     )
     extendedChoice(
       name: 'VALIDATION_CHECKS',
@@ -21,7 +28,13 @@ pipeline {
       value: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY,EMAIL_FORMAT',
       defaultValue: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY',
       multiSelectDelimiter: ',',
-      description: 'Validation checks when VALIDATE stage is selected (INVENTORY auto-enabled for Ansible-only runs)'
+      description: '''Used only when PIPELINE_STAGES includes VALIDATE. Uncheck to skip a check.
+TOOLS — git, jq, python3; + terraform if TERRAFORM selected; + ansible-playbook if Ansible stages selected.
+AWS_CREDS — aws sts get-caller-identity (holautosa ~/.aws or instance role per USE_CREDENTIALS_USER_AWS).
+TFVARS — config file exists; load ENVIRONMENT, OWNER, AWS_REGION; optional AWS keypair/SG pre-check if TERRAFORM selected.
+ANSIBLE_SYNTAX — ansible-playbook --syntax-check on ansible-playbooks/*.yml.
+INVENTORY — ansible-playbooks/inventory.ini must exist (auto-added when Ansible stages run without TERRAFORM).
+EMAIL_FORMAT — validate NOTIFICATION_EMAIL format when that field is non-empty.'''
     )
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
     booleanParam(name: 'USE_CREDENTIALS_USER_AWS', defaultValue: true, description: 'Use CREDENTIALS_USER ~/.aws credentials (default on — uncheck to use EC2 instance IAM role via IMDS)')
