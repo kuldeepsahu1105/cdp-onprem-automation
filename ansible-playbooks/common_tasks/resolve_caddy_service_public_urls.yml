@@ -1,0 +1,51 @@
+---
+# Top-level facts for Caddy vhost URLs (portal context, CM frontend_url, ECS console).
+# Requires caddy_vhost_urls_external (from build_deployment_portal_facts) when Caddy is enabled.
+
+- name: Default empty Caddy service public URLs when vhosts disabled
+  ansible.builtin.set_fact:
+    cm_caddy_public_url: ""
+    ecs_caddy_console_url: ""
+  when: not (caddy_vhost_enabled | default(false) | bool)
+
+- name: Set CM Caddy public URL from vhost map
+  ansible.builtin.set_fact:
+    cm_caddy_public_url: "{{ caddy_vhost_urls_external.cm.url | default('') | trim }}"
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - caddy_vhost_urls_external is defined
+    - caddy_vhost_urls_external.cm is defined
+
+- name: Set ECS Caddy console URL from vhost map
+  ansible.builtin.set_fact:
+    ecs_caddy_console_url: "{{ caddy_vhost_urls_external.ecs.url | default('') | trim }}"
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - deployment_portal_ecs_present | default(false) | bool
+    - caddy_vhost_urls_external is defined
+    - caddy_vhost_urls_external.ecs is defined
+
+- name: Clear ECS Caddy console URL when ECS not in inventory
+  ansible.builtin.set_fact:
+    ecs_caddy_console_url: ""
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - not (deployment_portal_ecs_present | default(false) | bool)
+
+- name: Apply manual CM external URL override to Caddy fact
+  ansible.builtin.set_fact:
+    cm_caddy_public_url: "{{ cm_external_url | trim }}"
+  when: cm_external_url | default('') | length > 0
+
+- name: Resolve CM frontend URL for Cloudera Manager (frontend_url API)
+  ansible.builtin.set_fact:
+    cm_frontend_url_effective: >-
+      {{
+        (
+          cm_external_url
+          if (cm_external_url | default('') | length > 0)
+          else (cm_caddy_public_url | default(''))
+        )
+        | trim
+        | regex_replace('/+$', '')
+      }}

@@ -1,0 +1,101 @@
+---
+# Probe CM Admin UI HTTP on cldr-mngr (127.0.0.1, then FQDN/private — scm-server may not bind localhost).
+
+- name: Set CM manager UI probe status codes
+  ansible.builtin.set_fact:
+    cm_manager_ui_probe_status_codes: >-
+      {{
+        deployment_service_url_verify_status_codes
+        | default(deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]))
+      }}
+
+- name: Build CM UI HTTP probe host candidates on cldr-mngr
+  ansible.builtin.set_fact:
+    cm_manager_ui_probe_hosts: >-
+      {{
+        (
+          ['127.0.0.1']
+          + ([deployment_portal_cm_fqdn] if (deployment_portal_cm_fqdn | default('') | length > 0) else [])
+          + (
+            [hostvars[groups['cldr-mngr'][0]].ansible_fqdn | default('')]
+            if (
+              'cldr-mngr' in groups
+              and groups['cldr-mngr'] | default([]) | length > 0
+              and (hostvars[groups['cldr-mngr'][0]].ansible_fqdn | default('') | length > 0)
+            )
+            else []
+          )
+          + (
+            [hostvars[groups['cldr-mngr'][0]].ansible_hostname | default('')]
+            if (
+              'cldr-mngr' in groups
+              and groups['cldr-mngr'] | default([]) | length > 0
+              and (hostvars[groups['cldr-mngr'][0]].ansible_hostname | default('') | length > 0)
+            )
+            else []
+          )
+          + (
+            [hostvars[groups['cldr-mngr'][0]].private_ip | default('')]
+            if (
+              'cldr-mngr' in groups
+              and groups['cldr-mngr'] | default([]) | length > 0
+              and (hostvars[groups['cldr-mngr'][0]].private_ip | default('') | length > 0)
+              and (
+                hostvars[groups['cldr-mngr'][0]].private_ip | default('')
+                not in ['127.0.0.1', deployment_portal_cm_fqdn | default('')]
+              )
+            )
+            else []
+          )
+        )
+        | unique
+        | reject('equalto', '')
+        | list
+      }}
+  when:
+    - "'cldr-mngr' in groups"
+    - groups['cldr-mngr'] | default([]) | length > 0
+
+- name: Probe Cloudera Manager UI HTTP on cldr-mngr (multi-host)
+  ansible.builtin.uri:
+    url: "http://{{ item }}:{{ cm_http_port | int }}/"
+    method: GET
+    status_code: "{{ cm_manager_ui_probe_status_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 15
+  loop: "{{ cm_manager_ui_probe_hosts | default([]) }}"
+  register: cm_manager_ui_probe_results
+  failed_when: false
+  delegate_to: "{{ groups['cldr-mngr'][0] }}"
+  run_once: true
+  when:
+    - cm_manager_ui_probe_hosts is defined
+    - cm_manager_ui_probe_hosts | length > 0
+
+- name: Record CM UI probe outcome for portal context
+  ansible.builtin.set_fact:
+    deployment_portal_cm_http_probe:
+      failed: >-
+        {{
+          (
+            cm_manager_ui_probe_results.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', cm_manager_ui_probe_status_codes)
+            | list
+            | length
+          ) == 0
+        }}
+    cm_manager_ui_probe_host_effective: >-
+      {{
+        (
+          cm_manager_ui_probe_results.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', cm_manager_ui_probe_status_codes)
+          | map(attribute='item')
+          | list
+          | first
+        )
+        | default('', true)
+      }}
+  when: cm_manager_ui_probe_results is defined

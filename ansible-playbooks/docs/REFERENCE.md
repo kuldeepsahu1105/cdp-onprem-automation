@@ -403,6 +403,10 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `ansible_controller_outside_vpc` | `false` | Legacy mirror of `public` profile — do not use RFC1918 `private_ip` from controller |
 | `cm_api_delegate_probes_to_manager` | `true` | Run CM API discovery on `cldr-mngr` at `127.0.0.1` when play host is `localhost` |
 | `cm_api_private_reachability_timeout` | `5` | Seconds to test VPC `private_ip` from controller before using public IP |
+| `cm_external_url` | `""` | Override CM Caddy public URL; sets CM API `frontend_url` when non-empty |
+| `cm_apply_caddy_frontend_url` | `auto` | `auto` \| `true` \| `false` — apply Caddy CM vhost to CM `frontend_url` / `cm_host_name` |
+| `cm_caddy_public_url` | (fact) | From `caddy_vhost_urls.j2` via `build_deployment_portal_facts.yml` |
+| `ecs_caddy_console_url` | (fact) | Caddy ECS vhost URL for portal index and `ecs_control_plane_url_effective` |
 | `deployment_portal_url_verify_skip_vpc` | `false` | Skip VPC-only portal URL hard-fail during verify (Jenkins sets `true`) |
 | `deployment_external_url_verify` | `warn` | Tier B: GET external service URLs from controller when reachability is `public` — `warn`, `fail`, or `skip` |
 | `deployment_portal_external_url_verify` | `warn` | Legacy Tier B default for portal when `deployment_external_url_verify` is unset |

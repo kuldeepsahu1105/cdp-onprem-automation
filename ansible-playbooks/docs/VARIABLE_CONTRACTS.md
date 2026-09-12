@@ -62,12 +62,17 @@ Import order in `set_cm_api_url.yml`:
 3. `ensure_cm_admin_password.yml`
 4. HTTP/HTTPS probes → `cm_protocol`, `cm_api_port`, **`cm_api_url`**, `cm_api_url_delegated`
 
+**CM Caddy frontend (post-CM):** `26_setup_cm_license.yml` and `35_refresh_deployment_portal.yml` (localhost play) call `apply_cm_caddy_load_balancer.yml` after `build_deployment_portal_facts.yml` + `set_cm_api_url.yml`. Sets CM API `frontend_url` and `cm_host_name` to the Caddy CM vhost (not direct `:7180` FQDN).
+
 | Fact | Set by |
 |------|--------|
 | `ansible_control_reachability_effective`, `ansible_control_reach_public_only` | `detect_ansible_control_reachability.yml` (localhost) |
 | `_acr_*` | Same file; transient inputs — do not use in `when:` across other task files |
 | `cm_api_connect_host` | Optional override in `group_vars/all.yml` |
 | `cm_manager_inventory_host` | `group_vars/all.yml` (default `cldr-mngr` host) |
+| `cm_caddy_public_url`, `cm_frontend_url_effective` | `resolve_caddy_service_public_urls.yml` (after `caddy_vhost_urls.j2` in `build_deployment_portal_facts.yml`) |
+| `ecs_caddy_console_url` | Same; used by `resolve_ecs_control_plane_url.yml` and portal `ecs.console_hint` |
+| `cm_external_url`, `cm_apply_caddy_frontend_url` | `group_vars/all.yml` — override Caddy CM URL; gate `apply_cm_caddy_load_balancer.yml` |
 
 **Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml` (imports `set_cm_api_url.yml` and Tier B controller verify). Portal Caddy verify uses detect with **`ansible_control_reachability_skip_cm_probes: true`** and explicit `cm_host_public` / `cm_host_private` vars — do not assume CM API facts exist on the ops host play.
 

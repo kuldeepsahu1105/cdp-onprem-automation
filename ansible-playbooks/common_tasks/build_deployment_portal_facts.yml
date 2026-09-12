@@ -187,15 +187,8 @@
       description: "{{ _cat.description | default('ECS data service') }}"
   when: _url | length > 0
 
-- name: Probe Cloudera Manager HTTP on cldr-mngr (portal context cm_installed hint)
-  ansible.builtin.wait_for:
-    host: 127.0.0.1
-    port: "{{ cm_http_port | int }}"
-    timeout: "{{ cm_api_private_reachability_timeout | default(5) | int }}"
-    state: started
-  register: deployment_portal_cm_http_probe
-  delegate_to: "{{ groups['cldr-mngr'][0] }}"
-  failed_when: false
+- name: Probe Cloudera Manager UI HTTP on cldr-mngr (portal context cm_installed hint)
+  ansible.builtin.import_tasks: probe_cm_manager_ui_http.yml
   when:
     - "'cldr-mngr' in groups"
     - groups['cldr-mngr'] | default([]) | length > 0
@@ -204,8 +197,10 @@
   ansible.builtin.set_fact:
     deployment_portal_cm_http_probe:
       failed: true
-      state: absent
   when: not (('cldr-mngr' in groups) and (groups['cldr-mngr'] | default([]) | length > 0))
+
+- name: Resolve Caddy CM/ECS public URL facts
+  ansible.builtin.import_tasks: resolve_caddy_service_public_urls.yml
 
 - name: Assemble deployment portal context
   ansible.builtin.set_fact:
@@ -263,7 +258,9 @@
         ipa_ui_label: "FreeIPA / IdM"
       cloudera_manager:
         host_fqdn: "{{ deployment_portal_cm_fqdn }}"
-        cm_installed: "{{ deployment_portal_cm_http_probe is succeeded | bool }}"
+        cm_installed: "{{ not (deployment_portal_cm_http_probe.failed | default(true) | bool) }}"
+        caddy_public_url: "{{ cm_caddy_public_url | default('') }}"
+        frontend_url: "{{ cm_frontend_url_effective | default('') }}"
         ui_url_http: "http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}"
         ui_url_https: "https://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port }}"
         caddy_url: "{{ caddy_vhost_urls_external.cm.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
@@ -285,16 +282,14 @@
         deployed: "{{ deployment_portal_ecs_present | bool }}"
         cluster_name: "{{ ecs_cluster_name }}"
         app_domain: "{{ ecs_app_domain }}"
-        console_hint: "https://console.{{ ecs_app_domain }}"
-        caddy_url: >-
+        console_hint: >-
           {{
-            caddy_vhost_urls_external.ecs.url | default('')
-            if (
-              caddy_vhost_enabled | default(false) | bool
-              and deployment_portal_ecs_present | bool
-            )
-            else ''
+            ecs_caddy_console_url
+            if (ecs_caddy_console_url | default('') | length > 0)
+            else ('https://console.' + ecs_app_domain)
           }}
+        console_url_direct: "https://console.{{ ecs_app_domain }}"
+        caddy_url: "{{ ecs_caddy_console_url | default('') }}"
         apps_wildcard: "https://*.{{ ecs_app_domain }}"
       data_services:
         links: >-

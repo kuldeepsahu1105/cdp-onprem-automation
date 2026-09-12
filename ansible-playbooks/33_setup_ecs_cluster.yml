@@ -52,6 +52,15 @@
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
 
+    - name: Build deployment portal Caddy URL facts for ECS console
+      ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
+      when:
+        - deployment_portal_enabled | default(true) | bool
+        - caddy_vhost_enabled | default(false) | bool
+
+    - name: Resolve ECS control plane console URL (Caddy vhost when configured)
+      ansible.builtin.import_tasks: common_tasks/resolve_ecs_control_plane_url.yml
+
     - name: Validate ECS inventory groups
       ansible.builtin.assert:
         that:
@@ -124,6 +133,8 @@
           - "Cluster name: {{ ecs_cluster_name }}"
           - "PVC DS repo: {{ ecs_pvc_repository_url }}"
           - "App domain: {{ ecs_app_domain }}"
+          - "Control plane URL (automation): {{ ecs_control_plane_url_effective | default('') }}"
+          - "ECS Caddy console URL: {{ ecs_caddy_console_url | default('') }}"
           - "Datalake cluster: {{ cdh_basecluster_name }}"
           - "ECS master: {{ ecs_master_fqdn }}"
           - "ECS workers: {{ ecs_worker_fqdns }}"
