@@ -33,6 +33,9 @@
           )
         )
       }}
+
+- name: Mirror CM connect host to cm_host for API tasks
+  ansible.builtin.set_fact:
     cm_host: "{{ cm_connect_host }}"
 
 - name: Explain CM API connection target when it differs from browser URL
