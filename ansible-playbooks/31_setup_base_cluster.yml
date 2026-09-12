@@ -74,9 +74,12 @@
       ansible.builtin.import_tasks: common_tasks/configure_cm_parcel_repo_api.yml
       when: parcel_repo is defined
 
+    - name: Resolve CM API endpoint for cloudera.cluster modules
+      ansible.builtin.import_tasks: common_tasks/resolve_cm_cluster_module_endpoint.yml
+
     - name: Check if base cluster already exists
       ansible.builtin.uri:
-        url: "{{ cm_api_url }}/clusters/{{ cdh_basecluster_name }}"
+        url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}"
         method: GET
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
@@ -87,7 +90,10 @@
 
     - name: Create and start CDP Base Cluster
       cloudera.cluster.cluster:
-        url: "{{ cm_api_url }}"
+        host: "{{ cm_cluster_module_host }}"
+        port: "{{ cm_cluster_module_port }}"
+        version: "{{ cm_api_version }}"
+        force_tls: "{{ cm_cluster_module_force_tls }}"
         username: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
         verify_tls: false
@@ -106,7 +112,10 @@
 
     - name: Start existing base cluster services
       cloudera.cluster.cluster:
-        url: "{{ cm_api_url }}"
+        host: "{{ cm_cluster_module_host }}"
+        port: "{{ cm_cluster_module_port }}"
+        version: "{{ cm_api_version }}"
+        force_tls: "{{ cm_cluster_module_force_tls }}"
         username: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
         verify_tls: false

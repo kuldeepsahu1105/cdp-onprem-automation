@@ -251,12 +251,15 @@ base_cluster_install_services:
   hive_on_tez: true
   hbase: true
   hue: true
-  iceberg: true
-  replication: true
+  # ICEBERG service requires newer CDH parcels (not on CDH 7.3.2); enable when parcel supports it.
+  iceberg: false
+  # Replication Manager is not on CDH 7.3.2; enable when the parcel supports REPLICATION_MANAGER.
+  replication: false
   impala: true
   kafka: true
   atlas: true
   ranger: true
+  # Optional CFM/CDV (install matching CSDs in 24_start_cm.yml; set true to add to base cluster)
   nifi: false
   nifi_registry: false
   dataviz: false

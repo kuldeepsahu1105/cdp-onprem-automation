@@ -1,0 +1,40 @@
+---
+# cloudera.cluster.* modules use cm_client (not ansible uri). After Auto-TLS, prefer the
+# same HTTPS API base as Kerberos/LDAP/parcel REST (cm_krb_api_url).
+
+- name: Cluster module — refresh CM API URL facts
+  ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
+
+- name: Cluster module — set host/port for cloudera.cluster modules
+  ansible.builtin.set_fact:
+    cm_cluster_module_api_url: "{{ cm_krb_api_url | default(cm_api_url) }}"
+    cm_cluster_module_host: "{{ _cm_api_url_host | default(cm_api_client_host) }}"
+    cm_cluster_module_port: >-
+      {{
+        (cm_https_port | default(7183) | int)
+        if ((cm_protocol | default('http')) == 'https')
+        else (cm_http_port | default(7180) | int)
+      }}
+    cm_cluster_module_force_tls: "{{ (cm_protocol | default('http')) == 'https' }}"
+
+- name: Cluster module — verify CM API accepts admin credentials
+  ansible.builtin.uri:
+    url: "{{ cm_cluster_module_api_url }}/users/{{ cm_admin_user }}"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 401, 403, 404]
+  register: cm_cluster_module_auth_probe
+  changed_when: false
+
+- name: Cluster module — fail when CM API rejects admin password
+  ansible.builtin.fail:
+    msg: >-
+      Cloudera Manager API returned {{ cm_cluster_module_auth_probe.status }} for admin user
+      '{{ cm_admin_user }}' at {{ cm_cluster_module_api_url }}.
+      Set cm_admin_pass (Jenkins ANSIBLE_GROUP_VARS_YAML / vault) to the current CM admin password.
+      After LDAP, cm_ldap_auth_backend_order must allow local admin (e.g. DB_THEN_LDAP).
+      Re-run 24_start_cm.yml if the password was reset from the factory default.
+  when: cm_cluster_module_auth_probe.status | default(0) | int in [401, 403]
