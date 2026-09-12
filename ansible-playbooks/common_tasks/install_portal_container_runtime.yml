@@ -109,7 +109,7 @@
     deployment_portal_compose_argv: ['docker', 'compose']
   when: portal_compose_v2_probe.rc == 0
 
-- name: Ensure Docker CLI plugins directory exists (Compose binary fallback)
+- name: Portal — ensure Docker CLI plugins directory exists (Compose binary install)
   ansible.builtin.file:
     path: /usr/local/lib/docker/cli-plugins
     state: directory
@@ -126,7 +126,7 @@
       }}
   when: deployment_portal_compose_argv is not defined
 
-- name: Install Docker Compose v2 CLI plugin (binary fallback)
+- name: Portal — install Docker Compose v2 CLI plugin (binary)
   ansible.builtin.get_url:
     url: >-
       https://github.com/docker/compose/releases/download/v{{ portal_docker_compose_version }}/docker-compose-linux-{{ portal_docker_compose_arch }}
@@ -136,7 +136,7 @@
   register: portal_compose_binary_install
   failed_when: false
 
-- name: Probe Docker Compose v2 after binary fallback
+- name: Portal — check Docker Compose v2 after binary install
   ansible.builtin.command:
     cmd: docker compose version
   register: portal_compose_v2_probe_after_binary
@@ -144,7 +144,7 @@
   failed_when: false
   when: deployment_portal_compose_argv is not defined
 
-- name: Use Docker Compose v2 after binary fallback
+- name: Portal — use Docker Compose v2 after binary install
   ansible.builtin.set_fact:
     deployment_portal_compose_argv: ['docker', 'compose']
   when:
@@ -152,7 +152,7 @@
     - portal_compose_v2_probe_after_binary is defined
     - portal_compose_v2_probe_after_binary.rc == 0
 
-- name: Install docker-compose via pip (Compose v1 CLI fallback)
+- name: Portal — install docker-compose via pip (Compose v1 CLI)
   ansible.builtin.pip:
     name: docker-compose
     state: present
@@ -161,7 +161,7 @@
     - deployment_portal_compose_argv is not defined
     - portal_compose_pip_fallback | default(true) | bool
 
-- name: Probe docker-compose v1 after pip
+- name: Portal — check docker-compose v1 after pip
   ansible.builtin.command:
     cmd: docker-compose version
   register: portal_compose_v1_probe

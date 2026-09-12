@@ -17,13 +17,13 @@
   failed_when: false
   changed_when: false
 
-- name: Probe monitoring compose file on portal ops host
+- name: Portal — check monitoring compose file on ops host
   ansible.builtin.stat:
     path: "{{ monitoring_config_dir }}/docker-compose.yml"
   become: true
   register: _portal_monitoring_compose_stat_host
 
-- name: Set deployment portal monitoring deployed from ops host probe
+- name: Portal — set monitoring deployed flag from ops host checks
   ansible.builtin.set_fact:
     deployment_portal_monitoring_deployed: >-
       {{
