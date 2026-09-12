@@ -252,25 +252,5 @@
   ansible.builtin.import_tasks: verify_deployment_portal_monitoring.yml
   when: deployment_portal_monitoring_routes_enabled | default(false) | bool
 
-- name: Collect portal live stats from CM API (manager public or private IP, :7183/:7180)
-  ansible.builtin.import_tasks: collect_deployment_portal_live_stats.yml
-  delegate_to: localhost
-  run_once: true
-  when: deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
-
-- name: Re-render deployment portal index after CM live stats
-  ansible.builtin.template:
-    src: deployment_portal_index.html.j2
-    dest: "{{ deployment_portal_www_dir }}/index.html"
-    mode: "0644"
-  when: deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
-
-- name: Re-render deployment portal live stats JSON after CM API snapshot
-  ansible.builtin.template:
-    src: deployment_portal_live_stats.json.j2
-    dest: "{{ deployment_portal_www_dir }}/live-stats.json"
-    mode: "0644"
-  when: deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
-
 - name: Verify Caddy container and portal or monitoring URLs (after stacks are up)
   ansible.builtin.import_tasks: verify_deployment_portal_caddy.yml

@@ -1,6 +1,5 @@
 ---
-# Snapshot cluster health from CM API for portal KPIs (refreshed on 35_refresh / portal sync).
-# Browsers cannot call the CM API directly (basic auth + CORS).
+# Portal index KPIs from inventory only — no Cloudera Manager API calls (CM verify is playbook 25+).
 
 - name: Set Prometheus poll path for portal live stats
   ansible.builtin.set_fact:
@@ -30,7 +29,7 @@
           )
         }}
 
-- name: Initialize portal live stats from inventory when CM is not installed
+- name: Initialize portal live stats from inventory
   ansible.builtin.set_fact:
     deployment_portal_live_stats: >-
       {{
@@ -43,119 +42,10 @@
           'clusters': [],
           'cm_management_service': {},
           'parcels': [],
-          'notes': ['Cloudera Manager not reachable from Ansible — counts are inventory-only.'],
+          'notes': ['Inventory-only snapshot (no CM API from deployment portal playbook).'],
           'poll': _portal_live_poll_meta,
         }
       }}
-  when: >-
-    not (deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool)
-    or (deployment_portal_live_stats_skip_cm_api | default(false) | bool)
-
-- name: Collect live portal stats from Cloudera Manager API
-  when:
-    - deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
-    - not (deployment_portal_live_stats_skip_cm_api | default(false) | bool)
-    - "'cldr-mngr' in groups"
-    - groups['cldr-mngr'] | default([]) | length > 0
-  block:
-    - name: Resolve Cloudera Manager API URL for live stats
-      ansible.builtin.import_tasks: resolve_portal_cm_api_url.yml
-
-    - name: Fetch CM hosts (heartbeats / health summary)
-      ansible.builtin.uri:
-        url: "{{ cm_api_url }}/hosts"
-        method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: true
-        status_code: [200]
-        validate_certs: false
-        return_content: true
-      register: _portal_cm_hosts
-      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
-
-    - name: Fetch Cloudera Management Service status
-      ansible.builtin.uri:
-        url: "{{ cm_api_url }}/cm/service"
-        method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: true
-        status_code: [200]
-        validate_certs: false
-        return_content: true
-      register: _portal_cm_mgmt
-      failed_when: false
-      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
-
-    - name: Build cluster list for portal live stats
-      ansible.builtin.set_fact:
-        _portal_stats_cluster_names: >-
-          {{
-            [cdh_basecluster_name]
-            + (
-              [ecs_cluster_name]
-              if (deployment_portal_ecs_present | default(false) | bool)
-              else []
-            )
-          }}
-
-    - name: Fetch CM services per cluster
-      ansible.builtin.uri:
-        url: "{{ cm_api_url }}/clusters/{{ item }}/services"
-        method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: true
-        status_code: [200, 404]
-        validate_certs: false
-        return_content: true
-      loop: "{{ _portal_stats_cluster_names }}"
-      register: _portal_cm_cluster_services
-      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
-
-    - name: Fetch activated parcels per cluster
-      ansible.builtin.uri:
-        url: "{{ cm_api_url }}/clusters/{{ item }}/parcels"
-        method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: true
-        status_code: [200, 404]
-        validate_certs: false
-        return_content: true
-      loop: "{{ _portal_stats_cluster_names }}"
-      register: _portal_cm_cluster_parcels
-      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
-
-    - name: Render portal live stats structure from CM API payloads
-      ansible.builtin.set_fact:
-        deployment_portal_live_stats: >-
-          {{
-            lookup('template', 'deployment_portal_live_stats_payload.j2') | from_yaml
-          }}
-
-  rescue:
-    - name: Record CM API failure for portal live stats
-      ansible.builtin.set_fact:
-        deployment_portal_live_stats: >-
-          {{
-            {
-              'collected_at': ansible_date_time.iso8601 | default(lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ')),
-              'source': 'inventory',
-              'cm_api_available': false,
-              'inventory_host_count': deployment_portal_inventory_hosts | default([]) | length,
-              'hosts': {},
-              'clusters': [],
-              'cm_management_service': {},
-              'parcels': [],
-              'notes': [
-                'CM API snapshot failed during portal refresh: '
-                ~ (ansible_failed_result.msg | default('unknown error') | string)
-              ],
-              'poll': _portal_live_poll_meta,
-            }
-          }}
 
 - name: Merge live stats into deployment portal context
   ansible.builtin.set_fact:

@@ -246,18 +246,6 @@
       description: "{{ _cat.description | default('ECS data service') }}"
   when: _url | length > 0
 
-- name: Probe Cloudera Manager UI on manager IP (portal context cm_installed hint)
-  ansible.builtin.import_tasks: probe_portal_cm_installed_hint.yml
-  when:
-    - "'cldr-mngr' in groups"
-    - groups['cldr-mngr'] | default([]) | length > 0
-
-- name: Default CM HTTP probe when cldr-mngr absent
-  ansible.builtin.set_fact:
-    deployment_portal_cm_http_probe:
-      failed: true
-  when: not (('cldr-mngr' in groups) and (groups['cldr-mngr'] | default([]) | length > 0))
-
 - name: Resolve Caddy pgAdmin public URL facts
   ansible.builtin.import_tasks: resolve_caddy_service_public_urls.yml
 
@@ -415,7 +403,7 @@
         ipa_ui_legacy_label: "FreeIPA (legacy UI)"
       cloudera_manager:
         host_fqdn: "{{ deployment_portal_cm_fqdn }}"
-        cm_installed: "{{ not (deployment_portal_cm_http_probe.failed | default(true) | bool) }}"
+        cm_installed: false
         caddy_public_url: ""
         frontend_url: "{{ cm_frontend_url_effective | default('') }}"
         ui_url_http: "http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}"
@@ -564,7 +552,5 @@
       endpoints: "{{ deployment_portal_endpoints | default([]) }}"
       extra_links: "{{ deployment_portal_extra_links }}"
 
-- name: Initialize portal live stats (inventory only; CM API snapshot runs after portal sync when CM is up)
+- name: Initialize portal live stats (inventory only)
   ansible.builtin.import_tasks: collect_deployment_portal_live_stats.yml
-  vars:
-    deployment_portal_live_stats_skip_cm_api: true

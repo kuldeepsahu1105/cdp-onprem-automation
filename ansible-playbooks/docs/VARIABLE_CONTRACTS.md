@@ -70,7 +70,7 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 | `deployment_tier_b_url_checks` | `build_deployment_tier_b_url_checks.yml` on **localhost** — Tier B reads via `hostvars['localhost']` in `verify_service_urls_from_controller.yml` |
 | `ecs_control_plane_url_effective` | `resolve_ecs_control_plane_url.yml` — `ecs_control_plane_url` or `https://console.<ecs_app_domain>` (no Caddy) |
 
-**Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml`. Portal uses `resolve_portal_cm_api_url.yml` (manager public/private `:7183`/`:7180` only) — not `set_cm_api_url.yml` or password alignment.
+**Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml`. Deployment portal playbooks (**10**, **35**) do **not** call CM API or CM UI probes — index links use inventory FQDNs only; live-stats JSON is inventory-only.
 
 ---
 
