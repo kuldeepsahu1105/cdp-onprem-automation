@@ -117,9 +117,9 @@ Checked (true): inbound all traffic from 0.0.0.0/0 (public internet). ALLOWED_PO
     )
     string(
       name: 'ALLOWED_PORTS',
-      defaultValue: '[22,443,80,7180,7183,7182]',
+      defaultValue: '[22,443,80,7180,7183,7182,8088,5050,8089]',
       description: '''Not applied to Terraform security group rules (ALLOW_ALL true or false). Ingress is always all traffic from ALLOWED_CIDRS or 0.0.0.0/0; changing this list does not open or close individual TCP ports.
-Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S), 7180 CM UI, 7182/7183 agents/API. Need port-restricted rules only? Use SG_MODE=USE_EXISTING and manage the SG in AWS, or customize the security-group Terraform module.'''
+Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/7182/7183 CM; 8088 Caddy deployment portal (ops host, usually ipaserver); 5050 pgAdmin; 8089 cAdvisor. CREATE_NEW SG with ALLOW_ALL=false already allows all ports from ALLOWED_CIDRS. USE_EXISTING SG: ensure those ports are open from Jenkins/office CIDRs.'''
     )
     string(
       name: 'CLDR_EIP_NAME',
@@ -188,9 +188,13 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
 
   environment {
     LANG = 'C.UTF-8'
-    FORCE_COLOR = '1'
-    UI_COLOR = '1'
-    ANSIBLE_FORCE_COLOR = '1'
+    LC_ALL = 'C.UTF-8'
+    UI_ASCII = '1'
+    // Wrappers pipe to tee (no TTY): force_color prints literal [32m and corrupts copied URLs.
+    FORCE_COLOR = '0'
+    UI_COLOR = '0'
+    ANSIBLE_FORCE_COLOR = 'auto'
+    PY_COLORS = 'auto'
     REPO_ROOT = "${WORKSPACE}"
     LOG_DIR = "${WORKSPACE}/jenkins/artifacts"
     HOL_AUTO_EXEC_DIR = "/home/holautosa/HOL_AUTO_EXEC_DIR"
@@ -1024,6 +1028,8 @@ def sendPipelineEmail(boolean success) {
   def accessUrlsHtml = ''
   if (fileExists(accessUrlsFile)) {
     def urlText = readFile(accessUrlsFile).take(6000)
+      .replaceAll('\u001B\\[[0-9;]*[a-zA-Z]', '')
+      .replaceAll('\u001B\\][^\u0007]*(\u0007|\u001B\\\\)', '')
       .replace('&', '&amp;')
       .replace('<', '&lt;')
       .replace('>', '&gt;')

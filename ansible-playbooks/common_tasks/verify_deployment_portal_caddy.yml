@@ -1,0 +1,59 @@
+---
+# Post-deploy checks: Caddy container running, portal responds on localhost.
+
+- name: Check Caddy container is running
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - -f
+      - '{{ "{{" }}.State.Running{{ "}}" }}'
+      - "{{ deployment_portal_caddy_container }}"
+  register: caddy_container_running
+  changed_when: false
+  failed_when: false
+
+- name: Fail when Caddy container is not running
+  ansible.builtin.fail:
+    msg: >-
+      Caddy container '{{ deployment_portal_caddy_container }}' is not running on {{ inventory_hostname }}.
+      Run: docker ps -a; docker logs {{ deployment_portal_caddy_container }}; journalctl -u docker -n 80
+      Compose dir: {{ deployment_portal_config_dir }}
+  when: caddy_container_running.stdout | default('') | trim != 'true'
+
+- name: Wait for Caddy HTTP port on localhost
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ deployment_portal_http_port | int }}"
+    timeout: 120
+    state: started
+
+- name: Verify deployment portal index responds on localhost
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ deployment_portal_http_port }}/"
+    method: GET
+    status_code: 200
+    return_content: false
+  register: portal_local_curl
+  retries: 5
+  delay: 3
+  until: portal_local_curl is succeeded
+
+- name: Show Caddy logs when local portal check failed
+  ansible.builtin.command:
+    cmd: docker logs --tail 100 {{ deployment_portal_caddy_container }}
+  register: caddy_logs_tail
+  changed_when: false
+  failed_when: false
+  when: portal_local_curl is failed
+
+- name: Fail with Caddy logs when portal does not respond locally
+  ansible.builtin.fail:
+    msg: >-
+      Deployment portal did not respond on http://127.0.0.1:{{ deployment_portal_http_port }}/ on {{ inventory_hostname }}.
+      From a browser use ops public IP (inventory ansible_host), e.g. http://<ops-public-ip>:{{ deployment_portal_http_port }}/.
+      Caddy vhost URLs use dashed public IP in the hostname (52-221-251-41 not 52.221.251.41) and need wildcard DNS on
+      {{ caddy_vhost_public_base | default('pvc.cloudera-labs.com') }} — or set caddy_vhost_dns_mode: classic_nipio.
+      Recent Caddy logs:
+      {{ caddy_logs_tail.stdout | default('(no logs captured)') }}
+  when: portal_local_curl is failed

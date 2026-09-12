@@ -36,6 +36,33 @@
     src: deployment_portal_docker-compose.yml.j2
     dest: "{{ deployment_portal_config_dir }}/docker-compose.yml"
     mode: "0644"
+  register: portal_compose_render
+
+- name: Validate Caddyfile before compose up
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - -v
+      - "{{ deployment_portal_config_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro,z"
+      - "{{ deployment_portal_caddy_image }}"
+      - caddy
+      - validate
+      - --config
+      - /etc/caddy/Caddyfile
+      - --adapter
+      - caddyfile
+  register: caddy_validate_pre_up
+  changed_when: false
+
+- name: Fail when rendered Caddyfile is invalid
+  ansible.builtin.fail:
+    msg: >-
+      Caddyfile failed validation on {{ inventory_hostname }} before docker compose up.
+      Check caddy_vhost facts (ops public/private IP) and monitoring routes.
+      {{ caddy_validate_pre_up.stderr | default('') | trim }}
+  when: caddy_validate_pre_up.rc != 0
 
 - name: Ensure deployment portal stack is running
   ansible.builtin.command:
@@ -45,19 +72,38 @@
         + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--remove-orphans']
       }}
   register: portal_compose_up
+  failed_when: portal_compose_up.rc != 0
   changed_when: >-
-    'Creating' in portal_compose_up.stdout
-    or 'Starting' in portal_compose_up.stdout
-    or 'Recreating' in portal_compose_up.stdout
+    'Creating' in (portal_compose_up.stdout ~ portal_compose_up.stderr)
+    or 'Starting' in (portal_compose_up.stdout ~ portal_compose_up.stderr)
+    or 'Recreating' in (portal_compose_up.stdout ~ portal_compose_up.stderr)
 
-- name: Restart Caddy when configuration changed
+- name: Recreate Caddy when Caddyfile changed
   ansible.builtin.command:
     argv: >-
       {{
         deployment_portal_compose_argv
-        + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'restart', 'caddy']
+        + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', 'caddy']
       }}
   when: caddyfile_render is changed
+  register: caddy_recreate
+  failed_when: caddy_recreate.rc != 0
+
+- name: Recreate Caddy when compose file changed
+  ansible.builtin.command:
+    argv: >-
+      {{
+        deployment_portal_compose_argv
+        + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', 'caddy']
+      }}
+  when:
+    - portal_compose_render is changed
+    - not (caddyfile_render is changed)
+  register: caddy_recreate_compose
+  failed_when: caddy_recreate_compose.rc != 0
+
+- name: Verify Caddy container and local portal HTTP
+  ansible.builtin.import_tasks: verify_deployment_portal_caddy.yml
 
 - name: Sync monitoring stack configuration
   when: monitoring_stack_enabled | default(false) | bool
@@ -99,13 +145,19 @@
         mode: "0644"
       register: caddyfile_after_monitoring
 
-    - name: Restart Caddy after monitoring route update
+    - name: Recreate Caddy after monitoring route update
       ansible.builtin.command:
         argv: >-
           {{
             deployment_portal_compose_argv
-            + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'restart', 'caddy']
+            + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', 'caddy']
           }}
+      when: caddyfile_after_monitoring is changed
+      register: caddy_recreate_after_monitoring
+      failed_when: caddy_recreate_after_monitoring.rc != 0
+
+    - name: Verify Caddy after monitoring route update
+      ansible.builtin.import_tasks: verify_deployment_portal_caddy.yml
       when: caddyfile_after_monitoring is changed
 
     - name: Refresh deployment index after monitoring sync

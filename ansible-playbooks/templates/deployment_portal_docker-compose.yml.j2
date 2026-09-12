@@ -4,10 +4,10 @@ services:
     container_name: {{ deployment_portal_caddy_container }}
     restart: unless-stopped
     ports:
-      - "{{ deployment_portal_http_port }}:{{ deployment_portal_http_port }}"
+      - "0.0.0.0:{{ deployment_portal_http_port }}:{{ deployment_portal_http_port }}/tcp"
     volumes:
-      - {{ deployment_portal_config_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro
-      - {{ deployment_portal_www_dir }}:/srv:ro
+      - {{ deployment_portal_config_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro,z
+      - {{ deployment_portal_www_dir }}:/srv:ro,z
     networks:
       - deployment_portal
 
