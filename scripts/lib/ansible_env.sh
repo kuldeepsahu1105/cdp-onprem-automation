@@ -345,9 +345,23 @@ ansible_install_collections_if_needed() {
   ansible-galaxy collection install -r "$req"
 }
 
+# Jenkins ansiColor + jenkins_log_pipe: stdout is piped (not a TTY) but the console renders ANSI.
+ci_ansi_console_enabled() {
+  [[ "${ANSIBLE_CI_CONSOLE:-${JENKINS_ANSI_CONSOLE:-}}" == "1" ]] && [[ "${TERM:-}" != "dumb" ]]
+}
+
+ci_ansi_prepare_jenkins_console() {
+  [[ -n "${BUILD_NUMBER:-}${JENKINS_URL:-}" ]] || return 0
+  case "${TERM:-}" in
+    ''|dumb) export TERM=xterm ;;
+  esac
+  export JENKINS_ANSI_CONSOLE=1
+  export ANSIBLE_CI_CONSOLE=1
+}
+
 # Ansible colors on an interactive TTY, or CI console with forced ANSI (piped log tee strips ANSI for artifacts).
 ansible_ci_ansi_console() {
-  [[ "${ANSIBLE_CI_CONSOLE:-${JENKINS_ANSI_CONSOLE:-}}" == "1" ]] && [[ "${TERM:-}" != "dumb" ]]
+  ci_ansi_console_enabled
 }
 
 ansible_configure_output() {

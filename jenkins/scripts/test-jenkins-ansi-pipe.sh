@@ -20,7 +20,7 @@ fail() {
   exit 1
 }
 
-BUILD_NUMBER=1 JENKINS_URL=http://jenkins/ TERM=xterm \
+BUILD_NUMBER=1 JENKINS_URL=http://jenkins/ TERM=dumb \
   bash -c "source '$REPO_ROOT/scripts/lib/jenkins_log_pipe.sh'; jenkins_log_pipe '$LOG' bash -c \"printf '\\\\033[32mok\\\\033[0m\\\\n'; printf 'https://example.com/cm\\\\n'\"" \
   >"$OUT" 2>&1
 
@@ -32,13 +32,21 @@ if grep -q $'\033' "$LOG"; then
 fi
 grep -q 'https://example.com/cm' "$LOG" || fail "log file should keep URL line"
 
+BUILD_NUMBER=1 JENKINS_URL=http://jenkins/ TERM=dumb UI_COLOR=0 \
+  bash -c "source '$REPO_ROOT/scripts/lib/jenkins_log_pipe.sh'; jenkins_log_pipe '$TMP/header.out' bash -c \"source '$REPO_ROOT/scripts/lib/ui.sh'; ui_phase_header 'probe'\"" \
+  >"$TMP/header-console.txt" 2>&1
+grep -q $'\033' "$TMP/header-console.txt" \
+  || fail "phase header should be colored on Jenkins console when TERM=dumb (upgraded in log pipe)"
+! grep -q $'\033' "$TMP/header.out" \
+  || fail "phase header log artifact must stay plain"
+
 unset NO_COLOR ANSIBLE_NOCOLOR
-export JENKINS_ANSI_CONSOLE=1
+export ANSIBLE_CI_CONSOLE=1
 export ANSIBLE_FORCE_COLOR=1
 export TERM=xterm
 ansible_configure_output
 [[ "${ANSIBLE_FORCE_COLOR}" == "1" && "${PY_COLORS}" == "1" ]] \
-  || fail "ansible_configure_output should enable color with JENKINS_ANSI_CONSOLE"
+  || fail "ansible_configure_output should enable color with ANSIBLE_CI_CONSOLE"
 
 unset JENKINS_ANSI_CONSOLE NO_COLOR ANSIBLE_NOCOLOR
 export ANSIBLE_FORCE_COLOR=1

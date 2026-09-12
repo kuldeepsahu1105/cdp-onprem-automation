@@ -11,6 +11,19 @@ Declarative pipeline with **checkbox stage selection**, **configurable validatio
 | [Email Extension](https://plugins.jenkins.io/email-ext/) | Success/failure notifications |
 | [AnsiColor](https://plugins.jenkins.io/ansi-color/) | Colored console (optional) |
 
+## Console colors (Ansible, phase headers, Terraform apply)
+
+The pipeline uses `options { ansiColor('xterm') }` and `environment { TERM = 'xterm' }`. Stage wrappers (`run-ansible.sh`, `run-terraform.sh`) tee through `jenkins_log_pipe`, which sets `JENKINS_ANSI_CONSOLE=1` and `ANSIBLE_CI_CONSOLE=1`, upgrades `TERM` when the agent reports `dumb`, and strips ANSI only into artifact log files.
+
+| Variable | Typical Jenkins value | Role |
+|---|---|---|
+| `UI_COLOR` / `FORCE_COLOR` | `0` | Plain ASCII wrapper labels (`ui_kv`, banners); phase/playbook headers still color via `ui_log_c` when CI console flags are set |
+| `ANSIBLE_FORCE_COLOR` | `1` | Allow Ansible color when `ansible_configure_output` sees CI console or a TTY |
+| `JENKINS_ANSI_CONSOLE` / `ANSIBLE_CI_CONSOLE` | Set to `1` inside `jenkins_log_pipe` only | Force Ansible + highlighted phase headers while stdout is piped to `tee` |
+| `JENKINS_SCRIPT_TTY` | unset (do not set in Jenkinsfile) | Legacy opt-in for local/CI scripts without the log pipe |
+
+Self-test: `jenkins/scripts/test-jenkins-ansi-pipe.sh`.
+
 ## Reload parameters after Jenkinsfile changes
 
 1. Open **Build with Parameters**

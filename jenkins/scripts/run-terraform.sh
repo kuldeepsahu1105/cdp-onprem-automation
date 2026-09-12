@@ -7,9 +7,11 @@ LOG_DIR="${LOG_DIR:-$REPO_ROOT/jenkins/artifacts}"
 mkdir -p "$LOG_DIR"
 
 cd "$REPO_ROOT"
+# Wrapper labels plain; tool output may use ANSI on the Jenkins console via jenkins_log_pipe.
 export UI_ASCII=1
 export UI_COLOR=0
 export FORCE_COLOR=0
+export ANSIBLE_FORCE_COLOR="${ANSIBLE_FORCE_COLOR:-1}"
 export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
 # shellcheck source=jenkins/scripts/aws-credential-check.sh
 source "$REPO_ROOT/jenkins/scripts/aws-credential-check.sh"
