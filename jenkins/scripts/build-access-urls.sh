@@ -196,9 +196,17 @@ mkdir -p "$OUT_DIR"
     echo "  Portal:     $(url_with_port http "$ops_fqdn" "$http_port" /)"
     echo "  pgAdmin:    $(url_with_port http "$ops_fqdn" "$pg_port" /)"
     if [[ "$monitoring_on" == "true" || "$monitoring_on" == "1" ]]; then
-      echo "  Grafana:    $(url_with_port http "$ops_fqdn" "$grafana_port" /)"
-      echo "  Prometheus: $(url_with_port http "$ops_fqdn" "$prom_port" /)"
-      echo "  Alertmanager: $(url_with_port http "$ops_fqdn" "$am_port" /)"
+      gf_path="/grafana/"
+      prom_path="/prometheus/"
+      am_path="/alertmanager/"
+      if [[ "$caddy_on" == "true" || "$caddy_on" == "1" ]]; then
+        gf_path="/"
+        prom_path="/"
+        am_path="/"
+      fi
+      echo "  Grafana:    $(url_with_port http "$ops_fqdn" "$grafana_port" "$gf_path")"
+      echo "  Prometheus: $(url_with_port http "$ops_fqdn" "$prom_port" "$prom_path")"
+      echo "  Alertmanager: $(url_with_port http "$ops_fqdn" "$am_port" "$am_path")"
       echo "  cAdvisor:   $(url_with_port http "$ops_fqdn" "$cadvisor_port" /)"
       echo "  (Caddy paths on :${http_port}: /grafana/, /prometheus/, /alertmanager/)"
     fi
@@ -207,9 +215,17 @@ mkdir -p "$OUT_DIR"
     echo "  Portal:     $(url_with_port http "$ops_pub" "$http_port" /)"
     echo "  pgAdmin:    $(url_with_port http "$ops_pub" "$pg_port" /)"
     if [[ "$monitoring_on" == "true" || "$monitoring_on" == "1" ]]; then
-      echo "  Grafana:    $(url_with_port http "$ops_pub" "$grafana_port" /)"
-      echo "  Prometheus: $(url_with_port http "$ops_pub" "$prom_port" /)"
-      echo "  Alertmanager: $(url_with_port http "$ops_pub" "$am_port" /)"
+      gf_path="/grafana/"
+      prom_path="/prometheus/"
+      am_path="/alertmanager/"
+      if [[ "$caddy_on" == "true" || "$caddy_on" == "1" ]]; then
+        gf_path="/"
+        prom_path="/"
+        am_path="/"
+      fi
+      echo "  Grafana:    $(url_with_port http "$ops_pub" "$grafana_port" "$gf_path")"
+      echo "  Prometheus: $(url_with_port http "$ops_pub" "$prom_port" "$prom_path")"
+      echo "  Alertmanager: $(url_with_port http "$ops_pub" "$am_port" "$am_path")"
       echo "  cAdvisor:   $(url_with_port http "$ops_pub" "$cadvisor_port" /)"
       echo "  (Caddy paths on :${http_port}: /grafana/, /prometheus/, /alertmanager/)"
     fi
@@ -217,9 +233,17 @@ mkdir -p "$OUT_DIR"
     echo "  Portal:     $(url_with_port http "$ops_priv" "$http_port" /)"
     echo "  pgAdmin:    $(url_with_port http "$ops_priv" "$pg_port" /)"
     if [[ "$monitoring_on" == "true" || "$monitoring_on" == "1" ]]; then
-      echo "  Grafana:    $(url_with_port http "$ops_priv" "$grafana_port" /)"
-      echo "  Prometheus: $(url_with_port http "$ops_priv" "$prom_port" /)"
-      echo "  Alertmanager: $(url_with_port http "$ops_priv" "$am_port" /)"
+      gf_path="/grafana/"
+      prom_path="/prometheus/"
+      am_path="/alertmanager/"
+      if [[ "$caddy_on" == "true" || "$caddy_on" == "1" ]]; then
+        gf_path="/"
+        prom_path="/"
+        am_path="/"
+      fi
+      echo "  Grafana:    $(url_with_port http "$ops_priv" "$grafana_port" "$gf_path")"
+      echo "  Prometheus: $(url_with_port http "$ops_priv" "$prom_port" "$prom_path")"
+      echo "  Alertmanager: $(url_with_port http "$ops_priv" "$am_port" "$am_path")"
       echo "  cAdvisor:   $(url_with_port http "$ops_priv" "$cadvisor_port" /)"
       echo "  (Caddy paths on :${http_port}: /grafana/, /prometheus/, /alertmanager/)"
     fi
