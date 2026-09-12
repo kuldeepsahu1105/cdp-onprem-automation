@@ -6,7 +6,7 @@
   ansible.builtin.set_fact:
     deployment_portal_monitoring_deployed: false
 
-- name: Probe Grafana container on portal ops host
+- name: Portal — check Grafana container on ops host
   ansible.builtin.command:
     argv:
       - docker

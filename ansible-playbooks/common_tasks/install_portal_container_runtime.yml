@@ -97,7 +97,7 @@
     msg: "Docker failed to start on {{ inventory_hostname }}: {{ portal_docker_start.msg | default('unknown error') }}"
   when: portal_docker_start is failed
 
-- name: Probe Docker Compose v2 plugin
+- name: Portal — check Docker Compose v2 plugin
   ansible.builtin.command:
     cmd: docker compose version
   register: portal_compose_v2_probe
