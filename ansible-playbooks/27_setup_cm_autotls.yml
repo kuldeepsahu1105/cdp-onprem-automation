@@ -8,6 +8,10 @@
   connection: local
   gather_facts: no
   tasks:
+    - name: Clear Auto-TLS applied flag for this run
+      ansible.builtin.set_fact:
+        autotls_applied_this_run: false
+
     - name: Resolve CM API probe context
       ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
 
@@ -21,8 +25,15 @@
       ansible.builtin.debug:
         msg: "Auto-TLS is already enabled: {{ autotls_enabled }}"
 
+    - name: Skip Auto-TLS enable and CM restart (already enabled)
+      ansible.builtin.debug:
+        msg: >-
+          Cloudera Manager Auto-TLS is already on (HTTPS :{{ cm_https_port }}).
+          Skipping generateCmca and the CM host restart play.
+      when: autotls_enabled | default(false) | bool
+
     - name: Perform Auto-TLS setup only if not already enabled
-      when: not autotls_enabled
+      when: not (autotls_enabled | default(false) | bool)
       block:
         - name: Check if password authentication is used
           ansible.builtin.set_fact:
@@ -82,7 +93,10 @@
         - name: Mark Auto-TLS applied this run (defer wait/restart to CM-host play)
           ansible.builtin.set_fact:
             autotls_applied_this_run: true
-          when: auto_tls_response is succeeded
+          when:
+            - auto_tls_response is defined
+            - auto_tls_response is succeeded
+            - auto_tls_response is changed
 
     - name: Refresh CM API URL after Auto-TLS changes
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
@@ -107,6 +121,10 @@
   gather_facts: false
   become: true
   tasks:
+    - name: End play when Auto-TLS was not applied this run (no restart)
+      ansible.builtin.meta: end_play
+      when: not (hostvars['localhost'].autotls_applied_this_run | default(false) | bool)
+
     - name: Restart CM server and agent after Auto-TLS API
       ansible.builtin.import_tasks: common_tasks/restart_cm_services.yml
       when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
