@@ -1,0 +1,14 @@
+---
+# CM install/verify: inventory + reachability + probe host selection (no password changes, no /api/version probes).
+# Import before ensure_cm_admin_password.yml or set_cm_api_url.yml.
+
+- name: Validate CM manager inventory group
+  ansible.builtin.import_tasks: validate_inventory_groups.yml
+  vars:
+    required_inventory_group: cldr-mngr
+
+- name: Resolve reachable CM API host (manager IP/FQDN; loopback only when on cldr-mngr)
+  ansible.builtin.import_tasks: resolve_cm_connect_host.yml
+
+- name: CM API — find working address (controller or cldr-mngr)
+  ansible.builtin.import_tasks: select_cm_api_probe_host.yml

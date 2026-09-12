@@ -1,17 +1,9 @@
 ---
-- name: Validate CM manager inventory group
-  ansible.builtin.import_tasks: validate_inventory_groups.yml
-  vars:
-    required_inventory_group: cldr-mngr
+# Probes only — no admin password reset (see 24_start_cm.yml / 27_setup_cm_autotls.yml).
 
-- name: Resolve reachable CM API host (manager IP/FQDN; loopback only when on cldr-mngr)
-  ansible.builtin.import_tasks: resolve_cm_connect_host.yml
-
-- name: CM API — find working address (controller or cldr-mngr)
-  ansible.builtin.import_tasks: select_cm_api_probe_host.yml
-
-- name: Ensure CM admin password matches group_vars when not factory default
-  ansible.builtin.import_tasks: ensure_cm_admin_password.yml
+- name: Resolve CM API probe context when not already set
+  ansible.builtin.import_tasks: resolve_cm_api_probe_context.yml
+  when: cm_api_probe_host | default('') | length == 0
 
 - name: CM API — GET /api/version (HTTPS) on cldr-mngr
   ansible.builtin.uri:

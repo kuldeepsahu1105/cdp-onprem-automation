@@ -49,19 +49,13 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 
 ---
 
-## CM API chain: before `set_cm_api_url.yml` / CM URI tasks
+## CM API chain: CM playbooks only (not deployment portal)
 
-Import order in `set_cm_api_url.yml`:
+**Admin password API reset:** `ensure_cm_admin_password.yml` runs in **`24_start_cm.yml`** (after first server start) and **`27_setup_cm_autotls.yml`** (before Auto-TLS API). It is **not** imported from portal playbooks or from read-only API probes.
 
-1. `validate_inventory_groups.yml` (`cldr-mngr` present)
-2. **`resolve_cm_connect_host.yml`**
-   - Sets `cm_host_public`, `cm_host_private`, `cm_host_fqdn`, `cm_manager_host_inv`
-   - **`detect_ansible_control_reachability.yml`** (full CM port probes unless skipped)
-   - Sets `cm_connect_host`, `cm_api_client_host`, `cm_api_probe_host`, `cm_api_probe_delegate_to`, `cm_host`
-   - Uses `ansible_control_reach_public_only` from reachability detect
-2b. **`select_cm_api_probe_host.yml`** — when **`cm_api_probe_from_controller_public`** (Jenkins/localhost + effective `public`), probes **on the controller** at `ansible_host`/FQDN (HTTPS then HTTP). When probes **delegate to cldr-mngr**, tries **private IP**, `ansible_host`, public IP, FQDN, then `127.0.0.1` (HTTP then HTTPS per candidate); updates `cm_api_probe_host` and `cm_api_client_host`. If discovery on cldr-mngr selects **`127.0.0.1`**, sets **`cm_api_uri_delegate_to`** so localhost plays run `uri` on the manager while **`cm_api_client_host`** stays a reachable address (`cm_api_connect_host` or `cm_host_public`). **Caddy is not used for CM** — direct `:7180`/`:7183` only.
-3. `ensure_cm_admin_password.yml`
-4. HTTP/HTTPS probes → `cm_protocol`, `cm_api_port`, **`cm_api_url`**, `cm_api_url_delegated`
+**Probe context:** `resolve_cm_api_probe_context.yml` → `resolve_cm_connect_host.yml` + `select_cm_api_probe_host.yml`.
+
+**`set_cm_api_url.yml`:** HTTP/HTTPS `/api/version` probes → `cm_protocol`, `cm_api_port`, **`cm_api_url`** (imports probe context only when `cm_api_probe_host` is unset).
 
 **CM UI:** Cloudera Manager **`frontend_url`** is not set via Caddy. Portal index and Jenkins list **direct** `https://cldr-mngr.<domain>:7183` (or `:7180`). Optional `cm_external_url` in `group_vars` sets `cm_frontend_url_effective` only when you need a custom published URL.
 
@@ -76,7 +70,7 @@ Import order in `set_cm_api_url.yml`:
 | `deployment_tier_b_url_checks` | `build_deployment_tier_b_url_checks.yml` on **localhost** — Tier B reads via `hostvars['localhost']` in `verify_service_urls_from_controller.yml` |
 | `ecs_control_plane_url_effective` | `resolve_ecs_control_plane_url.yml` — `ecs_control_plane_url` or `https://console.<ecs_app_domain>` (no Caddy) |
 
-**Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml` (manager-local UI verify; optional controller external when portal disabled). `set_cm_api_url.yml` runs first on localhost and prints `cm_api_url`. Portal Caddy verify uses detect with **`ansible_control_reachability_skip_cm_probes: true`** and explicit `cm_host_public` / `cm_host_private` vars — do not assume CM API facts exist on the ops host play.
+**Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml`. Portal uses `resolve_portal_cm_api_url.yml` (manager public/private `:7183`/`:7180` only) — not `set_cm_api_url.yml` or password alignment.
 
 ---
 

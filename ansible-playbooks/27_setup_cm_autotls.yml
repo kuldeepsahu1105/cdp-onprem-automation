@@ -8,6 +8,12 @@
   connection: local
   gather_facts: no
   tasks:
+    - name: Resolve CM API probe context
+      ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
+
+    - name: Align Cloudera Manager admin password with group_vars (before Auto-TLS API)
+      ansible.builtin.import_tasks: common_tasks/ensure_cm_admin_password.yml
+
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
 
