@@ -4,9 +4,14 @@
 #   ansible.builtin.debug:
 #     msg: "cm_api_url is set to {{ cm_api_url }}"
 
-- name: Extract API version from cm_api_url
+- name: Extract API version from cm_api_url when not already set
   ansible.builtin.set_fact:
-    cm_api_version: "{{ cm_api_url | regex_search('/api/(v[0-9]+)', '\\1') | first | default('v54') }}"
+    cm_api_version: >-
+      {{
+        (cm_api_url | regex_search('/api/(v[0-9]+)', '\\1') | first)
+        | default(cm_api_version_default, true)
+      }}
+  when: cm_api_version | default('') | length == 0
 
 # - name: Print extracted API version
 #   ansible.builtin.debug:

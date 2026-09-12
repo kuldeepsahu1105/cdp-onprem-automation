@@ -451,7 +451,7 @@
           _cm_api_version_content
           | regex_search('v[0-9]+')
         )
-        | default(cm_api_version_default | default('v58'), true)
+        | default(cm_api_version_default, true)
       }}
 
 - name: Set base Cloudera Manager API URL

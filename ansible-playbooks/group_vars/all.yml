@@ -316,7 +316,7 @@ cm_apply_caddy_frontend_url: false
 cm_config_api_via_caddy_proxy: false
 # fail | warn — reserved for CM API reachability policy (default fail)
 cm_api_verify_mode: fail
-# Default CM REST API version segment for health waits (GET /api/v58/version) when /api/version discovery is skipped
+# CM REST API path segment (v58, v59, …) when /api/version discovery is skipped; override per CM major if needed
 cm_api_version_default: v58
 # Portal verify: skip VPC-only URL checks when control profile is public-only (remote controller default)
 deployment_portal_url_verify_skip_vpc: false

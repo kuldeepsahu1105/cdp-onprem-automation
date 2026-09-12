@@ -283,7 +283,7 @@ run_phase_3() {
 
 run_phase_cm_tls() {
   ui_phase_header "CM Auto-TLS, Kerberos, CMS, LDAP"
-  # CM API health waits (e.g. /api/v58/version) run inside 27+ — portal refresh below does not re-probe CM.
+  # CM API health waits (/api/<version>/version from discovery or cm_api_version_default) run in 27+ — not portal refresh.
   run_playbook 27_setup_cm_autotls.yml
   run_playbook 28_setup_cm_krbs.yml
   run_playbook 29_setup_cm_cms.yml
