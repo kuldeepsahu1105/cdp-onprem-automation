@@ -405,7 +405,7 @@
     - cm_api_probe_host_discovery is defined or cm_api_probe_https_discovery is defined
     - (cm_api_probe_delegate_to | default('') | length > 0) or (cm_api_probe_on_manager_local | default(false) | bool)
 
-- name: Align CM API client host on cldr-mngr play host after discovery
+- name: CM API — set client host on cldr-mngr after address scan
   ansible.builtin.set_fact:
     cm_api_client_host: "{{ cm_api_probe_host }}"
     cm_host: "{{ cm_api_probe_host }}"
@@ -414,7 +414,7 @@
     - cm_api_discovery_succeeded | default(false) | bool
     - cm_api_probe_host | default('') | length > 0
 
-- name: Use manager bind address for in-VPC localhost plays when uri must delegate
+- name: CM API — use manager bind address on in-VPC localhost plays
   ansible.builtin.set_fact:
     cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
     cm_api_client_host: >-

@@ -12,7 +12,7 @@
       ansible.builtin.set_fact:
         autotls_applied_this_run: false
 
-    - name: Resolve CM API probe context
+    - name: CM API — set connection context
       ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
 
     - name: Align Cloudera Manager admin password with group_vars (before Auto-TLS API)
@@ -138,7 +138,7 @@
       ansible.builtin.meta: end_play
       when: not (autotls_applied_this_run | default(false) | bool)
 
-    - name: Refresh CM API URL after service restart (controller probes public IP)
+    - name: CM API — refresh API URL after restart (public manager IP)
       ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
 
     - name: Set up Cloudera Manager API URL after restart

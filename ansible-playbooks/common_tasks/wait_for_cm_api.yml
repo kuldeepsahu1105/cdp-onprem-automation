@@ -1,10 +1,10 @@
 ---
-# Refresh API slug from GET /api/version, then health-check GET /api/<slug>/version.
+# Read /api/version for the API slug, then wait on GET /api/<slug>/version.
 
-- name: Fetch latest CM API version slug before health wait
+- name: CM API — read API version before health wait
   ansible.builtin.import_tasks: fetch_cm_api_version_slug.yml
 
-- name: Wait for Cloudera Manager API to respond (delegated to CM host when play is on localhost)
+- name: CM API — wait for /api/version on cldr-mngr
   ansible.builtin.uri:
     url: >-
       {{
@@ -28,7 +28,7 @@
     - cm_api_probe_delegate_to is defined
     - cm_api_probe_delegate_to | length > 0
 
-- name: Wait for Cloudera Manager API to respond on play host
+- name: CM API — wait for /api/version on this play host
   ansible.builtin.uri:
     url: >-
       {{

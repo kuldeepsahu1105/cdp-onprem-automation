@@ -209,7 +209,7 @@
         )
       }}
 
-- name: Set Cloudera Manager API probe target on Ansible controller (public IP)
+- name: CM API — set check host on Ansible controller (public IP)
   ansible.builtin.set_fact:
     cm_api_probe_delegate_to: ""
     cm_api_probe_host: "{{ cm_api_client_host }}"
@@ -218,7 +218,7 @@
   when:
     - cm_api_probe_from_controller_public | default(false) | bool
 
-- name: Set Cloudera Manager API probe target on cldr-mngr
+- name: CM API — set check host on cldr-mngr
   ansible.builtin.set_fact:
     cm_api_probe_delegate_to: "{{ cm_manager_inventory_host }}"
     cm_api_probe_host: "{{ cm_connect_host }}"
@@ -227,14 +227,14 @@
     - cm_api_delegate_probes_to_manager | default(true) | bool
     - not (cm_api_probe_from_controller_public | default(false) | bool)
 
-- name: Set Cloudera Manager API probe target on cldr-mngr (local play)
+- name: CM API — set check host on cldr-mngr (local play)
   ansible.builtin.set_fact:
     cm_api_probe_delegate_to: ""
     cm_api_probe_host: "{{ cm_connect_host }}"
     cm_api_probe_https_first: false
   when: cm_api_probe_on_manager_local | bool
 
-- name: Set Cloudera Manager API probe target from connect host (no manager delegation)
+- name: CM API — set check host from connect address
   ansible.builtin.set_fact:
     cm_api_probe_delegate_to: ""
     cm_api_probe_host: "{{ cm_connect_host }}"

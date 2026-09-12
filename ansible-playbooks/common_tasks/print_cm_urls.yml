@@ -40,7 +40,7 @@
 #   ansible.builtin.debug:
 #     msg: "✏️  Cloudera Manager Public IP: {{ cm_public_ip }}"
 
-- name: Print Auto-TLS status (from set_cm_api_url probes)
+- name: CM API — print Auto-TLS status
   ansible.builtin.debug:
     msg: "❓ Auto-TLS is enabled: {{ autotls_enabled | default(false) }}"
 

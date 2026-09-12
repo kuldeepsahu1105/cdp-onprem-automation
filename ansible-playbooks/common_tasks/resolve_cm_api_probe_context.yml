@@ -14,7 +14,7 @@
   ansible.builtin.import_tasks: select_cm_api_probe_host.yml
   when: not (cm_api_probe_from_controller_public | default(false) | bool)
 
-- name: Use Cloudera Manager public address for API probe context
+- name: CM API — use manager public IP for connection context
   ansible.builtin.set_fact:
     cm_host: "{{ cm_api_client_host }}"
     cm_api_probe_host: "{{ cm_api_client_host }}"

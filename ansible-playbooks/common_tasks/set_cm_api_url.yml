@@ -1,17 +1,17 @@
 ---
-# Probes only — no admin password reset (see 24_start_cm.yml / 27_setup_cm_autotls.yml).
+# CM API URL setup only — no admin password reset (see 24_start_cm.yml / 27_setup_cm_autotls.yml).
 
-- name: Resolve CM API probe context when not already set
+- name: CM API — set connection context when missing
   ansible.builtin.import_tasks: resolve_cm_api_probe_context.yml
   when: cm_api_probe_host | default('') | length == 0
 
-- name: Use Cloudera Manager public address for API checks from controller
+- name: CM API — use manager public IP on Ansible controller
   ansible.builtin.set_fact:
     cm_host: "{{ cm_api_client_host }}"
     cm_api_probe_host: "{{ cm_api_client_host }}"
   when: cm_api_probe_from_controller_public | default(false) | bool
 
-- name: Probe Cloudera Manager HTTPS API on cldr-mngr
+- name: CM API — GET /api/version (HTTPS) on cldr-mngr
   ansible.builtin.uri:
     url: "https://{{ cm_api_probe_host }}:{{ cm_https_port }}/api/version"
     method: GET
@@ -34,7 +34,7 @@
     - not (cm_api_discovery_succeeded | default(false) | bool)
   delegate_to: "{{ cm_api_probe_delegate_to }}"
 
-- name: Probe Cloudera Manager HTTPS API (Auto-TLS redirect detection)
+- name: CM API — GET /api/version (HTTPS) on Ansible controller
   ansible.builtin.uri:
     url: "https://{{ cm_api_client_host }}:{{ cm_https_port }}/api/version"
     method: GET
@@ -57,7 +57,7 @@
     - not (cm_api_probe_on_manager_local | default(false) | bool)
     - not (cm_api_discovery_succeeded | default(false) | bool)
 
-- name: Probe Cloudera Manager HTTP API on cldr-mngr
+- name: CM API — GET /api/version (HTTP) on cldr-mngr
   ansible.builtin.uri:
     url: "http://{{ cm_api_probe_host }}:{{ cm_http_port }}/api/version"
     method: GET
@@ -86,7 +86,7 @@
       )
     - not (cm_api_discovery_succeeded | default(false) | bool)
 
-- name: Probe Cloudera Manager HTTP API (Auto-TLS redirect detection)
+- name: CM API — GET /api/version (HTTP) on Ansible controller
   ansible.builtin.uri:
     url: "http://{{ cm_api_client_host }}:{{ cm_http_port }}/api/version"
     method: GET
@@ -114,7 +114,7 @@
       )
     - not (cm_api_discovery_succeeded | default(false) | bool)
 
-- name: Probe Cloudera Manager HTTPS API on cldr-mngr (fallback when HTTP is unavailable)
+- name: CM API — GET /api/version (HTTPS) on cldr-mngr after HTTP failed
   ansible.builtin.uri:
     url: "https://{{ cm_api_probe_host }}:{{ cm_https_port }}/api/version"
     method: GET
@@ -138,7 +138,7 @@
     - not (cm_api_discovery_succeeded | default(false) | bool)
   delegate_to: "{{ cm_api_probe_delegate_to }}"
 
-- name: Probe Cloudera Manager HTTPS API (fallback when HTTP is unavailable)
+- name: CM API — GET /api/version (HTTPS) on Ansible controller after HTTP failed
   ansible.builtin.uri:
     url: "https://{{ cm_api_client_host }}:{{ cm_https_port }}/api/version"
     method: GET
@@ -162,7 +162,7 @@
     - not (cm_api_probe_on_manager_local | default(false) | bool)
     - not (cm_api_discovery_succeeded | default(false) | bool)
 
-- name: Set CM protocol and port based on probe results (cldr-mngr bind scan)
+- name: CM API — set protocol and port from /api/version results (cldr-mngr address scan)
   ansible.builtin.set_fact:
     autotls_enabled: >-
       {{
@@ -227,7 +227,7 @@
     - cm_api_discovery_succeeded | default(false) | bool
     - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
 
-- name: Set CM protocol and port based on probe results
+- name: CM API — set protocol and port from /api/version results
   ansible.builtin.set_fact:
     autotls_enabled: >-
       {{
@@ -295,10 +295,10 @@
     - cm_tls_probe_http is not defined or cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
     - cm_tls_probe_https is not defined or cm_tls_probe_https is failed or (cm_tls_probe_https.status | default(0) not in [200, 301, 303, 401, 403])
 
-- name: Fetch CM API version slug from /api/version
+- name: CM API — read API version from /api/version
   ansible.builtin.import_tasks: fetch_cm_api_version_slug.yml
 
-- name: Avoid loopback CM API URL on the Ansible controller when not delegating uri to cldr-mngr
+- name: CM API — use manager public IP for API URL on Ansible controller
   ansible.builtin.set_fact:
     _cm_api_url_host_prefer_public: >-
       {{
@@ -319,7 +319,7 @@
         or (cm_host_public | default('') | length > 0)
       )
 
-- name: Resolve CM API URL host for uri tasks on this play (loopback only when delegating uri to cldr-mngr)
+- name: CM API — set host for API URL on this play
   ansible.builtin.set_fact:
     _cm_api_url_host: >-
       {{
@@ -349,7 +349,7 @@
         )
       }}
 
-- name: Set base Cloudera Manager API URL
+- name: CM API — set base API URL
   ansible.builtin.set_fact:
     cm_api_url: >-
       {{
@@ -359,7 +359,7 @@
     cm_host: "{{ cm_api_client_host }}"
   when: cm_api_version | default('') | length > 0
 
-- name: Print Cloudera Manager API URL
+- name: CM API — print API URL
   ansible.builtin.debug:
     msg:
       - "cm_api_url: {{ cm_api_url }}"

@@ -13,7 +13,7 @@
   hosts: localhost
   gather_facts: no
   tasks:
-    - name: Resolve CM API probe context
+    - name: CM API — set connection context
       ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
 
     - name: Align Cloudera Manager admin password with group_vars after CM server start

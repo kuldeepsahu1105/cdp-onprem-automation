@@ -59,7 +59,7 @@
         | list
       }}
 
-- name: Set Tier A Caddy vhost warn-only for portal and ipa at bootstrap milestones only
+- name: Portal — set Caddy vhost warn-only for portal and ipa at bootstrap
   ansible.builtin.set_fact:
     _portal_bootstrap_milestone_vhost_warn: >-
       {{
@@ -302,7 +302,7 @@
       }}
   when: deployment_portal_caddy_vhost_checks | default([]) | length > 0
 
-- name: Note Tier A verify on each PORTAL sync (301 without follow_redirects is success on Caddy vhosts)
+- name: Portal — note URL verify on each sync (301 without follow_redirects is OK on Caddy vhosts)
   ansible.builtin.debug:
     msg: >-
       Tier A URL verify runs after every portal sync (including PORTAL deploy reruns) against
@@ -334,7 +334,7 @@
   when:
     - deployment_portal_caddy_vhost_checks_required | default([]) | length > 0
 
-- name: Probe optional Caddy vhost routes (single attempt, warn-only)
+- name: Portal — check optional Caddy vhost routes (warn-only)
   ansible.builtin.uri:
     url: "{{ _portal_local_base }}{{ item.path | default('/') }}"
     method: GET
@@ -352,7 +352,7 @@
   when:
     - deployment_portal_caddy_vhost_checks_optional | default([]) | length > 0
 
-- name: Combine Caddy vhost probe results for warn/fail handlers
+- name: Portal — combine optional Caddy vhost check results
   ansible.builtin.set_fact:
     deployment_portal_caddy_vhost_results:
       results: >-

@@ -9,13 +9,13 @@
 #   deployment_<service>_external_url_verify → deployment_external_url_verify → deployment_portal_external_url_verify (portal only) → warn
 # Values: warn | fail | skip
 
-- name: Build Tier B URL check list when not pre-supplied
+- name: External URLs — build check list when not pre-supplied
   ansible.builtin.import_tasks: build_deployment_tier_b_url_checks.yml
   delegate_to: localhost
   run_once: true
   when: hostvars['localhost'].deployment_tier_b_url_checks | default([]) | length == 0
 
-- name: Set Tier B controller verify defaults
+- name: External URLs — set verify defaults on controller
   ansible.builtin.set_fact:
     _tier_b_url_codes: "{{ deployment_service_url_verify_status_codes | default(deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308])) }}"
     _tier_b_global_mode: "{{ deployment_external_url_verify | default(deployment_portal_external_url_verify | default('warn')) | lower | trim }}"
@@ -28,7 +28,7 @@
   delegate_to: localhost
   run_once: true
 
-- name: Set Tier B reachability from portal access profile (ops/CM public vs private IPs)
+- name: External URLs — set reachability from portal access profile
   ansible.builtin.set_fact:
     ansible_control_reachability_effective: >-
       {{
@@ -49,7 +49,7 @@
   delegate_to: localhost
   run_once: true
 
-- name: Set Tier B public-controller flag for IPA direct FQDN URL policy
+- name: External URLs — set public-controller flag for IPA FQDN policy
   ansible.builtin.set_fact:
     _tier_b_public_controller: >-
       {{
@@ -60,7 +60,7 @@
   delegate_to: localhost
   run_once: true
 
-- name: Decide whether to omit Tier B direct FreeIPA cluster FQDN URL check
+- name: External URLs — decide whether to skip direct FreeIPA cluster FQDN check
   ansible.builtin.set_fact:
     _tier_b_skip_ipa_direct_fqdn: >-
       {{
@@ -75,10 +75,10 @@
   delegate_to: localhost
   run_once: true
 
-- name: Note Tier B direct FreeIPA cluster FQDN check omitted (public controller)
+- name: External URLs — note direct FreeIPA cluster FQDN check skipped (public controller)
   ansible.builtin.debug:
     msg: >-
-      Tier B: skipping direct FreeIPA cluster FQDN URL from Ansible controller
+      Skipping direct FreeIPA cluster FQDN URL from Ansible controller
       (check Caddy IPA vhost URLs on :{{ deployment_portal_http_port | default(81) }} instead).
   when:
     - _tier_b_skip_ipa_direct_fqdn | default(false) | bool
@@ -91,7 +91,7 @@
   delegate_to: localhost
   run_once: true
 
-- name: Apply Tier B IPA direct cluster FQDN omission to URL list
+- name: External URLs — apply IPA direct FQDN skip to URL list
   ansible.builtin.set_fact:
     _tier_b_url_checks_local: >-
       {%- set skip_ipa = _tier_b_skip_ipa_direct_fqdn | default(false) | bool -%}
@@ -106,7 +106,7 @@
   delegate_to: localhost
   run_once: true
 
-- name: Resolve per-service Tier B verify mode on URL checks
+- name: External URLs — set per-service verify mode
   ansible.builtin.set_fact:
     deployment_tier_b_url_checks_effective: >-
       {%- set rows = _tier_b_url_checks_local | default([]) -%}
@@ -133,7 +133,7 @@
   run_once: true
   when: _tier_b_url_checks_local | default([]) | length > 0
 
-- name: Filter Tier B URL checks that are not skipped
+- name: External URLs — filter checks that are not skipped
   ansible.builtin.set_fact:
     deployment_tier_b_url_checks_to_probe: >-
       {{
@@ -145,7 +145,7 @@
   run_once: true
   when: deployment_tier_b_url_checks_effective | default([]) | length > 0
 
-- name: Set Tier B URL rows for run gate
+- name: External URLs — set URL rows for run gate
   ansible.builtin.set_fact:
     _tier_b_probes_for_run: >-
       {{
@@ -155,7 +155,7 @@
   delegate_to: localhost
   run_once: true
 
-- name: Decide whether to run Tier B external URL checks
+- name: External URLs — decide whether to run checks from controller
   ansible.builtin.set_fact:
     _tier_b_run_any: >-
       {{
@@ -173,7 +173,7 @@
   delegate_to: localhost
   run_once: true
 
-- name: GET external service URLs from Ansible controller (Tier B)
+- name: External URLs — GET service URLs from Ansible controller
   ansible.builtin.uri:
     url: "{{ item.url }}"
     method: GET
@@ -198,7 +198,7 @@
     - _tier_b_run_any | default(false) | bool
     - deployment_tier_b_url_checks_to_probe | default([]) | length > 0
 
-- name: Compute Tier B FreeIPA Caddy vhost success (suppress redundant direct-FQDN warns)
+- name: External URLs — check FreeIPA Caddy vhost success (suppress redundant direct-FQDN warns)
   ansible.builtin.set_fact:
     _tier_b_ipa_caddy_ok: >-
       {%- set codes = _tier_b_url_codes | default([200, 301, 302, 303, 307, 308]) | map('int') | list -%}
@@ -216,12 +216,12 @@
   run_once: true
   when: deployment_tier_b_url_results is defined
 
-- name: Warn when Tier B external service URL does not respond from controller
+- name: External URLs — warn when service URL does not respond from controller
   ansible.builtin.debug:
     msg: >-
-      Tier B warn: {{ item.item.name }} did not respond from controller
+      External URL warn: {{ item.item.name }} did not respond from controller
       (HTTP {{ item.status | default('n/a') }}; expected {{ _tier_b_url_codes | join('/') }}).
-      Tier A may still pass — open SG to the Ansible controller or set deployment_{{ item.item.service | default('service') }}_external_url_verify: skip.
+      Ops-host checks may still pass — open SG to the Ansible controller or set deployment_{{ item.item.service | default('service') }}_external_url_verify: skip.
   loop: "{{ deployment_tier_b_url_results.results | default([]) }}"
   loop_control:
     label: "{{ item.item.name | default('URL') }}"
@@ -238,10 +238,10 @@
   delegate_to: localhost
   run_once: true
 
-- name: Fail when Tier B external service URL does not respond from controller
+- name: External URLs — fail when service URL does not respond from controller
   ansible.builtin.fail:
     msg: >-
-      Tier B fail: {{ item.item.name }} — {{ item.item.url }}
+      External URL fail: {{ item.item.name }} — {{ item.item.url }}
       (HTTP {{ item.status | default('n/a') }}; expected {{ _tier_b_url_codes | join('/') }}).
       Set deployment_{{ item.item.service | default('service') }}_external_url_verify: warn|skip or fix SG access.
   loop: "{{ deployment_tier_b_url_results.results | default([]) }}"

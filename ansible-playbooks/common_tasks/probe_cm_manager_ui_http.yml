@@ -1,7 +1,7 @@
 ---
-# Probe CM Admin UI HTTP on cldr-mngr (private IP / ansible_host / FQDN first; 127.0.0.1 last).
+# Check CM Admin UI HTTP on cldr-mngr (private IP / ansible_host / FQDN first; 127.0.0.1 last).
 
-- name: Set CM manager UI probe status codes
+- name: CM UI — set allowed HTTP status codes
   ansible.builtin.set_fact:
     cm_manager_ui_probe_status_codes: >-
       {{
@@ -9,7 +9,7 @@
         | default(deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]))
       }}
 
-- name: Build CM UI HTTP probe host candidates on cldr-mngr
+- name: CM UI — build HTTP check host list on cldr-mngr
   ansible.builtin.set_fact:
     cm_manager_ui_probe_hosts: >-
       {{
@@ -63,7 +63,7 @@
     - "'cldr-mngr' in groups"
     - groups['cldr-mngr'] | default([]) | length > 0
 
-- name: Probe Cloudera Manager UI HTTP on cldr-mngr (multi-host)
+- name: CM UI — GET / on cldr-mngr (try manager addresses)
   ansible.builtin.uri:
     url: "http://{{ item }}:{{ cm_http_port | int }}/"
     method: GET
@@ -80,7 +80,7 @@
     - cm_manager_ui_probe_hosts is defined
     - cm_manager_ui_probe_hosts | length > 0
 
-- name: Record CM UI probe outcome for portal context
+- name: CM UI — record HTTP check result
   ansible.builtin.set_fact:
     deployment_portal_cm_http_probe:
       failed: >-
