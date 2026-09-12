@@ -205,11 +205,25 @@ databases:
   - { name: "das", user: "das", password: "das" }
 
 scm_csds: []
-# Optional CSD JARs for RHEL-based CM (RPM archive paths). Leave scm_csds empty on Ubuntu/Debian.
-scm_csds_redhat:
-  - https://archive.cloudera.com/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar
-  - https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel/NIFIREGISTRY-1.28.1.2.1.7.3004-1.jar
-  - https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel/NIFI-1.28.1.2.1.7.3004-1.jar
+# Optional explicit CSD URL list (overrides auto-built URLs). Leave empty to build from version vars below.
+scm_csds_redhat: []
+
+# CSD archive versions (https://archive.cloudera.com/p/...). Update jar basenames when build ids change.
+cdv_version: "8.0.7"
+cdv_dataviz_csd_jar: "DATAVIZ-{{ cdv_version }}-b50.p1.71299628.jar"
+cfm_version: "2.1.7.3004"
+cfm_nifi_app_version: "1.28.1"
+cfm_nifi_csd_jar: "NIFI-{{ cfm_nifi_app_version }}.{{ cfm_version }}-1.jar"
+cfm_nifi_registry_csd_jar: "NIFIREGISTRY-{{ cfm_nifi_app_version }}.{{ cfm_version }}-1.jar"
+# redhat8 | redhat9 | auto (CM host RHEL major version)
+csd_redhat_repo: auto
+# When scm_csds / scm_csds_redhat are empty, build URLs from versions (RHEL CM only)
+csd_build_urls_enabled: true
+# Include a CSD only when matching base_cluster_install_services toggle (set false to install all three)
+csd_respect_service_toggles: true
+csd_install_dataviz: true
+csd_install_nifi: true
+csd_install_nifi_registry: true
 
 # When true, pure Debian hosts use Ubuntu CM apt repo path (Cloudera supports Ubuntu only)
 cm_debian_use_ubuntu_repo: false
@@ -219,6 +233,8 @@ cm_debian_ubuntu_compat_version: "2204"
 cm_port: 7180
 cm_admin_user: "admin"
 cm_admin_pass: "admin"
+# Factory CM login password on first boot (used to reset to cm_admin_pass when different)
+cm_admin_bootstrap_pass: "admin"
 cdh_basecluster_name: "CDH-Cluster"
 base_cluster_master_group: base-masters
 base_cluster_worker_group: base-workers
@@ -245,7 +261,7 @@ base_cluster_install_services:
   nifi_registry: false
   dataviz: false
   phoenix: false
-  knox: false
+  knox: true
   solr: false
 
 # YARN sizing for small lab clusters (base_cluster_cluster_spec.j2)
@@ -411,6 +427,47 @@ ecs_control_plane_database_mode: embedded  # embedded | existing (existing needs
 ecs_control_plane_vault_mode: embedded
 ecs_control_plane_embedded_db_storage_gb: 50
 ecs_control_plane_embedded_vault_storage_gb: 2
+
+# ---------------------------------------------------------------------------
+# Deployment portal (Caddy index + pgAdmin) — 28_setup_deployment_portal.yml
+# Optional monitoring — monitoring_stack_enabled or 29_setup_monitoring_stack.yml
+# ---------------------------------------------------------------------------
+deployment_portal_enabled: true
+deployment_portal_host_group: cldr-mngr
+deployment_portal_http_port: 8088
+deployment_portal_pgadmin_host_port: 5050
+deployment_portal_config_dir: /opt/cldr-deployment-portal
+deployment_portal_www_dir: /opt/cldr-deployment-portal/www
+deployment_portal_caddy_image: caddy:2-alpine
+deployment_portal_caddy_container: cldr-portal-caddy
+deployment_portal_pgadmin_image: dpage/pgadmin4:8
+deployment_portal_pgadmin_container: cldr-portal-pgadmin
+pgadmin_default_email: "admin@{{ cluster_domain }}"
+pgadmin_default_password: "{{ postgres_password }}"
+deployment_portal_inventory_groups:
+  - ipaserver
+  - cldr-mngr
+  - base-masters
+  - base-workers
+  - ecs-masters
+  - ecs-workers
+deployment_portal_data_service_links: []
+deployment_portal_extra_links: []
+
+monitoring_stack_enabled: false
+monitoring_config_dir: /opt/cldr-monitoring
+monitoring_prometheus_image: prom/prometheus:v2.54.1
+monitoring_prometheus_container: cldr-mon-prometheus
+monitoring_grafana_image: grafana/grafana:11.2.0
+monitoring_grafana_container: cldr-mon-grafana
+monitoring_alertmanager_image: prom/alertmanager:v0.27.0
+monitoring_alertmanager_container: cldr-mon-alertmanager
+monitoring_cadvisor_image: gcr.io/cadvisor/cadvisor:v0.49.1
+monitoring_cadvisor_container: cldr-mon-cadvisor
+monitoring_cadvisor_host_port: 8089
+monitoring_grafana_admin_user: admin
+monitoring_grafana_admin_password: "{{ postgres_password }}"
+monitoring_prometheus_extra_targets: []
 
 # Service users/groups removed during E2E cleanup
 cleanup_service_users:

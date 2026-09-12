@@ -1,0 +1,132 @@
+---
+# Build deployment_portal_context on localhost (play should gather_facts: true).
+
+- name: Validate deployment portal host group
+  ansible.builtin.assert:
+    that:
+      - deployment_portal_host_group in groups
+      - groups[deployment_portal_host_group] | length > 0
+    fail_msg: "deployment_portal_host_group '{{ deployment_portal_host_group }}' must exist in inventory."
+
+- name: Set deployment portal anchor host facts
+  ansible.builtin.set_fact:
+    deployment_portal_anchor_inv: "{{ groups[deployment_portal_host_group][0] }}"
+    deployment_portal_anchor_fqdn: >-
+      {{ hostvars[groups[deployment_portal_host_group][0]].cldr_hostname }}.{{ cluster_domain }}
+    deployment_portal_anchor_ip: "{{ hostvars[groups[deployment_portal_host_group][0]].ansible_host }}"
+
+- name: Render deployment portal node inventory
+  ansible.builtin.set_fact:
+    deployment_portal_nodes: "{{ lookup('template', 'deployment_portal_nodes.j2') | from_yaml | default([], true) }}"
+
+- name: Set CM manager FQDN for portal links
+  ansible.builtin.set_fact:
+    deployment_portal_cm_fqdn: >-
+      {{
+        hostvars[groups['cldr-mngr'][0]].cldr_hostname ~ '.' ~ cluster_domain
+        if ('cldr-mngr' in groups and groups['cldr-mngr'] | length > 0)
+        else deployment_portal_anchor_fqdn
+      }}
+
+- name: Detect FreeIPA server in inventory
+  ansible.builtin.set_fact:
+    deployment_portal_has_ipa: "{{ groups.get('ipaserver', []) | length > 0 }}"
+
+- name: Set FreeIPA UI hostname
+  ansible.builtin.set_fact:
+    deployment_portal_ipa_fqdn: >-
+      {{ hostvars[groups['ipaserver'][0]].cldr_hostname }}.{{ cluster_domain }}
+  when: deployment_portal_has_ipa | bool
+
+- name: Detect ECS inventory
+  ansible.builtin.set_fact:
+    deployment_portal_ecs_present: >-
+      {{
+        (ecs_cluster_master_group in groups)
+        and (groups[ecs_cluster_master_group] | default([]) | length > 0)
+      }}
+
+- name: Set base cluster master FQDN for service links
+  ansible.builtin.set_fact:
+    deployment_portal_base_master_fqdn: >-
+      {{
+        hostvars[groups[base_cluster_master_group][0]].cldr_hostname ~ '.' ~ cluster_domain
+        if (
+          base_cluster_master_group in groups
+          and groups[base_cluster_master_group] | length > 0
+        )
+        else ''
+      }}
+
+- name: Initialize dynamic data service links
+  ansible.builtin.set_fact:
+    deployment_portal_dynamic_links: []
+
+- name: Build dynamic data service links from enabled base cluster services
+  ansible.builtin.set_fact:
+    deployment_portal_dynamic_links: "{{ deployment_portal_dynamic_links + [item.link] }}"
+  loop:
+    - condition: "{{ base_cluster_install_services.hue | default(false) }}"
+      link:
+        name: Hue
+        url: "http://{{ deployment_portal_base_master_fqdn }}:8888"
+        description: Base cluster Hue UI
+    - condition: "{{ base_cluster_install_services.ranger | default(false) }}"
+      link:
+        name: Ranger Admin
+        url: "http://{{ deployment_portal_base_master_fqdn }}:6080"
+        description: Base cluster Ranger
+    - condition: "{{ base_cluster_install_services.knox | default(false) }}"
+      link:
+        name: Knox Gateway
+        url: "https://{{ deployment_portal_base_master_fqdn }}:8443/gateway/homepage/home"
+        description: Knox (default TLS port; verify in CM)
+  when:
+    - deployment_portal_base_master_fqdn | length > 0
+    - item.condition | bool
+
+- name: Assemble deployment portal context
+  ansible.builtin.set_fact:
+    deployment_portal_context:
+      generated_at: "{{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ')) }}"
+      cluster_domain: "{{ cluster_domain }}"
+      cluster_realm: "{{ cluster_realm }}"
+      identity_provider: "{{ identity_provider_effective }}"
+      versions:
+        cm: "{{ cm_version }}"
+        cdh: "{{ cdh_version }}"
+        ecs_cds: "{{ ecs_pvc_ds_version }}"
+      anchor:
+        fqdn: "{{ deployment_portal_anchor_fqdn }}"
+        ip: "{{ deployment_portal_anchor_ip }}"
+      portal:
+        index_url: "http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/"
+        pgadmin_url: "http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_pgadmin_host_port }}/"
+      identity:
+        ipa_ui_url: "{{ ('https://' + deployment_portal_ipa_fqdn) if deployment_portal_has_ipa | bool else '' }}"
+        ipa_ui_label: "FreeIPA / IdM"
+      cloudera_manager:
+        host_fqdn: "{{ deployment_portal_cm_fqdn }}"
+        ui_url_http: "http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}"
+        ui_url_https: "https://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port }}"
+        cluster_name: "{{ cdh_basecluster_name }}"
+      postgresql:
+        host_fqdn: "{{ deployment_portal_anchor_fqdn }}"
+        port: "{{ postgres_port }}"
+        database_host_note: "PostgreSQL for CM runs on {{ deployment_portal_anchor_fqdn }}:{{ postgres_port }}"
+      ecs:
+        deployed: "{{ deployment_portal_ecs_present | bool }}"
+        cluster_name: "{{ ecs_cluster_name }}"
+        app_domain: "{{ ecs_app_domain }}"
+        console_hint: "https://console.{{ ecs_app_domain }}"
+        apps_wildcard: "https://*.{{ ecs_app_domain }}"
+      data_services:
+        links: "{{ deployment_portal_data_service_links + (deployment_portal_dynamic_links | default([])) }}"
+      monitoring:
+        enabled: "{{ monitoring_stack_enabled | default(false) | bool }}"
+        grafana_url: "http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/grafana/"
+        prometheus_url: "http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/prometheus/"
+        alertmanager_url: "http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/alertmanager/"
+        cadvisor_url: "http://{{ deployment_portal_anchor_fqdn }}:{{ monitoring_cadvisor_host_port }}/"
+      nodes: "{{ deployment_portal_nodes }}"
+      extra_links: "{{ deployment_portal_extra_links }}"

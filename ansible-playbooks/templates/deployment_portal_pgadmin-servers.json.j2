@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "CM PostgreSQL ({{ deployment_portal_context.postgresql.host_fqdn }})",
+      "Group": "CDP",
+      "Host": "{{ deployment_portal_context.postgresql.host_fqdn }}",
+      "Port": {{ deployment_portal_context.postgresql.port }},
+      "MaintenanceDB": "postgres",
+      "Username": "{{ postgres_user }}",
+      "SSLMode": "prefer",
+      "Comment": "Cloudera Manager external database"
+    }
+  }
+}

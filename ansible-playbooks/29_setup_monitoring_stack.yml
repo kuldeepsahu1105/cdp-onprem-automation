@@ -1,0 +1,96 @@
+### ansible-playbook -i inventory.ini 29_setup_monitoring_stack.yml
+#
+# Prometheus, Grafana, Alertmanager, and cAdvisor (requires 28_setup_deployment_portal.yml first).
+---
+- name: Build deployment portal facts for monitoring URLs
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Require deployment portal host
+      ansible.builtin.assert:
+        that:
+          - deployment_portal_host_group in groups
+          - groups[deployment_portal_host_group] | length > 0
+
+    - name: Enable monitoring in portal context for this run
+      ansible.builtin.set_fact:
+        monitoring_stack_enabled: true
+
+    - name: Build deployment portal context from inventory
+      ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
+
+- name: Deploy monitoring stack
+  hosts: "{{ deployment_portal_host_group }}"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Enable monitoring for this run
+      ansible.builtin.set_fact:
+        monitoring_stack_enabled: true
+
+    - name: Load deployment portal context from localhost
+      ansible.builtin.set_fact:
+        deployment_portal_context: "{{ hostvars['localhost']['deployment_portal_context'] }}"
+        deployment_portal_anchor_fqdn: "{{ hostvars['localhost']['deployment_portal_anchor_fqdn'] }}"
+
+    - name: Ensure container runtime is available
+      ansible.builtin.import_tasks: common_tasks/install_portal_container_runtime.yml
+
+    - name: Ensure deployment portal network exists
+      ansible.builtin.command:
+        cmd: docker network inspect deployment_portal
+      register: portal_network
+      failed_when: false
+      changed_when: false
+
+    - name: Fail when deployment portal stack is not installed
+      ansible.builtin.fail:
+        msg: >-
+          Docker network 'deployment_portal' not found. Run 28_setup_deployment_portal.yml first.
+      when: portal_network.rc != 0
+
+    - name: Create monitoring config directory
+      ansible.builtin.file:
+        path: "{{ monitoring_config_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Render monitoring configuration files
+      ansible.builtin.template:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - { src: monitoring_prometheus.yml.j2, dest: "{{ monitoring_config_dir }}/prometheus.yml" }
+        - { src: monitoring_alertmanager.yml.j2, dest: "{{ monitoring_config_dir }}/alertmanager.yml" }
+        - { src: monitoring_docker-compose.yml.j2, dest: "{{ monitoring_config_dir }}/docker-compose.yml" }
+
+    - name: Start monitoring stack
+      ansible.builtin.command:
+        cmd: docker compose -f {{ monitoring_config_dir }}/docker-compose.yml up -d --remove-orphans
+
+    - name: Update Caddy routes for monitoring
+      ansible.builtin.template:
+        src: deployment_portal_Caddyfile.j2
+        dest: "{{ deployment_portal_config_dir }}/Caddyfile"
+        mode: "0644"
+      register: caddyfile_updated
+
+    - name: Restart Caddy
+      ansible.builtin.command:
+        cmd: docker compose -f {{ deployment_portal_config_dir }}/docker-compose.yml restart caddy
+      when: caddyfile_updated is changed
+
+    - name: Re-render and publish deployment index with monitoring section
+      ansible.builtin.template:
+        src: deployment_portal_index.html.j2
+        dest: "{{ deployment_portal_www_dir }}/index.html"
+        mode: "0644"
+
+    - name: Print monitoring URLs
+      ansible.builtin.debug:
+        msg:
+          - "Grafana: {{ deployment_portal_context.monitoring.grafana_url }}"
+          - "Prometheus: {{ deployment_portal_context.monitoring.prometheus_url }}"
+          - "cAdvisor: {{ deployment_portal_context.monitoring.cadvisor_url }}"

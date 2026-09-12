@@ -21,7 +21,8 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 | Variable | Default |
 |---|---|
 | `cdh_basecluster_name` | `CDH-Cluster` |
-| `base_cluster_install_services` | see `all.yml` | Per-service booleans for `26_setup_base_cluster.yml` (NiFi, DataViz, Phoenix, Knox, Solr default `false`) |
+| `base_cluster_install_services` | see `all.yml` | Per-service booleans for `26_setup_base_cluster.yml` (Knox default `true`; NiFi, DataViz, Phoenix, Solr default `false`) |
+| `cm_admin_bootstrap_pass` | `admin` | Factory CM password; when `cm_admin_pass` differs, `set_cm_api_url` resets admin via API |
 | `base_cluster_yarn_*` | `4096` / `4` | YARN RM/NM memory and vcore limits in cluster spec template |
 | `ecs_cluster_name` | `ECS-Cluster` |
 | `ecs_deploy_enabled` | `auto` | `auto`, `true`, or `false` — deploy ECS when ecs inventory groups exist |
@@ -43,8 +44,16 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 | `target_cpu_architecture` | `auto` | `auto`, `x86_64`, or `arm64` — set by wrapper when `CPU_ARCHITECTURE=arm64` |
 | `ecs_deploy_on_arm64` | `false` | Allow ECS on ARM64/Graviton (experimental) |
 | `cdh_parcel_arm64_suffix` | `.aarch64le` | Appended to parcel suffix on ARM64 workers when `auto` |
-| `scm_csds` | `[]` | CSD JAR URLs (all OS); leave empty on Ubuntu |
-| `scm_csds_redhat` | list | CSD JAR URLs for RHEL-based CM (RPM archive paths) |
+| `scm_csds` | `[]` | Explicit CSD JAR URLs (overrides auto-built list) |
+| `scm_csds_redhat` | `[]` | Optional explicit RHEL CSD URL list (overrides auto-build) |
+| `cdv_version` | `8.0.7` | Cloudera Data Visualization (CDV) CSD path version, e.g. `8.1.5` |
+| `cdv_dataviz_csd_jar` | `DATAVIZ-{{ cdv_version }}-…` | DATAVIZ CSD jar basename under `cdv/<version>/<redhat8\|9>/yum/` |
+| `cfm_version` | `2.1.7.3004` | Cloudera Flow Management (NiFi) CSD path version |
+| `cfm_nifi_app_version` | `1.28.1` | NiFi app version segment in `NIFI-*.jar` / `NIFIREGISTRY-*.jar` |
+| `cfm_nifi_csd_jar` / `cfm_nifi_registry_csd_jar` | computed | Jar basenames under `cfm2/<cfm_version>/…/parcel/` |
+| `csd_redhat_repo` | `auto` | `redhat8`, `redhat9`, or `auto` from CM host OS |
+| `csd_build_urls_enabled` | `true` | Build CSD URLs from version vars on RHEL when lists above are empty |
+| `csd_respect_service_toggles` | `true` | Only include CSDs for enabled `base_cluster_install_services` keys |
 | `cm_repo_username` | — | Required (archive credentials) |
 | `cm_repo_password` | — | Required (archive credentials) |
 
@@ -246,8 +255,21 @@ CMS (Management Service) and CDP base cluster are **separate**:
 | `24_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. |
 | `26_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
 | `27_setup_ecs_cluster.yml` | ECS cluster | Cloudera Data Services (DOCKER + ECS), embedded control plane |
+| `28_setup_deployment_portal.yml` | Ops portal | Caddy deployment index, pgAdmin, optional monitoring when `monitoring_stack_enabled` |
+| `29_setup_monitoring_stack.yml` | Monitoring | Prometheus, Grafana, Alertmanager, cAdvisor (requires 28) |
 
 Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-masters` / `ecs-workers` inventory groups. Skipped when `ecs_deploy_enabled: auto` and ECS groups are empty.
+
+### Deployment portal & monitoring (`group_vars/all.yml`)
+
+| Variable | Default | Description |
+|---|---|---|
+| `deployment_portal_enabled` | `true` | Run `28_setup_deployment_portal.yml` |
+| `deployment_portal_http_port` | `8088` | Caddy index + monitoring reverse proxy port |
+| `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI port on CM host |
+| `monitoring_stack_enabled` | `false` | Embed monitoring in playbook 28 |
+| `deployment_portal_extra_links` | `[]` | Add `{name, url}` entries to the index page |
+| `monitoring_prometheus_extra_targets` | `[]` | Extra Prometheus scrape jobs |
 
 ---
 

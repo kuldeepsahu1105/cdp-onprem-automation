@@ -1,0 +1,23 @@
+---
+- name: Install Docker engine (RHEL family)
+  ansible.builtin.package:
+    name:
+      - docker
+      - docker-compose-plugin
+    state: present
+  when: ansible_os_family == 'RedHat'
+
+- name: Install Docker engine (Debian family)
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+  when: ansible_os_family == 'Debian'
+
+- name: Enable and start Docker
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true

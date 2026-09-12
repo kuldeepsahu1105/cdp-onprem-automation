@@ -1,0 +1,129 @@
+### ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
+#
+# Caddy deployment index + pgAdmin on the CM / PostgreSQL host (default cldr-mngr).
+# Optional monitoring stack: set monitoring_stack_enabled=true or run 29_setup_monitoring_stack.yml
+---
+- name: Build deployment portal facts
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Skip when deployment portal is disabled
+      ansible.builtin.meta: end_play
+      when: not (deployment_portal_enabled | default(true) | bool)
+
+    - name: Build deployment portal context from inventory
+      ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
+
+- name: Install deployment portal (Caddy index + pgAdmin)
+  hosts: "{{ deployment_portal_host_group }}"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Install deployment portal stack
+      when: deployment_portal_enabled | default(true) | bool
+      block:
+        - name: Load deployment portal context from localhost
+          ansible.builtin.set_fact:
+            deployment_portal_context: "{{ hostvars['localhost']['deployment_portal_context'] }}"
+            deployment_portal_anchor_fqdn: "{{ hostvars['localhost']['deployment_portal_anchor_fqdn'] }}"
+
+        - name: Install container runtime for portal stacks
+          ansible.builtin.import_tasks: common_tasks/install_portal_container_runtime.yml
+
+        - name: Create deployment portal directories
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            mode: "0755"
+          loop:
+            - "{{ deployment_portal_config_dir }}"
+            - "{{ deployment_portal_www_dir }}"
+            - "{{ monitoring_config_dir }}"
+
+        - name: Render deployment portal index page
+          ansible.builtin.template:
+            src: deployment_portal_index.html.j2
+            dest: "{{ deployment_portal_www_dir }}/index.html"
+            mode: "0644"
+
+        - name: Render pgAdmin server preset
+          ansible.builtin.template:
+            src: deployment_portal_pgadmin-servers.json.j2
+            dest: "{{ deployment_portal_config_dir }}/pgadmin-servers.json"
+            mode: "0644"
+
+        - name: Render Caddy configuration
+          ansible.builtin.template:
+            src: deployment_portal_Caddyfile.j2
+            dest: "{{ deployment_portal_config_dir }}/Caddyfile"
+            mode: "0644"
+
+        - name: Render deployment portal Docker Compose file
+          ansible.builtin.template:
+            src: deployment_portal_docker-compose.yml.j2
+            dest: "{{ deployment_portal_config_dir }}/docker-compose.yml"
+            mode: "0644"
+
+        - name: Start deployment portal stack (Caddy + pgAdmin)
+          ansible.builtin.command:
+            cmd: docker compose -f {{ deployment_portal_config_dir }}/docker-compose.yml up -d --remove-orphans
+          register: portal_compose_up
+          changed_when: >-
+            'Creating' in portal_compose_up.stdout
+            or 'Starting' in portal_compose_up.stdout
+            or 'Recreating' in portal_compose_up.stdout
+
+        - name: Deploy optional monitoring stack
+          when: monitoring_stack_enabled | default(false) | bool
+          block:
+            - name: Render Prometheus configuration
+              ansible.builtin.template:
+                src: monitoring_prometheus.yml.j2
+                dest: "{{ monitoring_config_dir }}/prometheus.yml"
+                mode: "0644"
+
+            - name: Render Alertmanager configuration
+              ansible.builtin.template:
+                src: monitoring_alertmanager.yml.j2
+                dest: "{{ monitoring_config_dir }}/alertmanager.yml"
+                mode: "0644"
+
+            - name: Render monitoring Docker Compose file
+              ansible.builtin.template:
+                src: monitoring_docker-compose.yml.j2
+                dest: "{{ monitoring_config_dir }}/docker-compose.yml"
+                mode: "0644"
+
+            - name: Start monitoring stack
+              ansible.builtin.command:
+                cmd: docker compose -f {{ monitoring_config_dir }}/docker-compose.yml up -d --remove-orphans
+              register: monitoring_compose_up
+              changed_when: >-
+                'Creating' in monitoring_compose_up.stdout
+                or 'Starting' in monitoring_compose_up.stdout
+
+            - name: Re-render Caddy with monitoring routes
+              ansible.builtin.template:
+                src: deployment_portal_Caddyfile.j2
+                dest: "{{ deployment_portal_config_dir }}/Caddyfile"
+                mode: "0644"
+              register: caddyfile_monitoring
+
+            - name: Restart Caddy after monitoring routes update
+              ansible.builtin.command:
+                cmd: docker compose -f {{ deployment_portal_config_dir }}/docker-compose.yml restart caddy
+              when: caddyfile_monitoring is changed
+
+            - name: Refresh deployment index with monitoring links
+              ansible.builtin.template:
+                src: deployment_portal_index.html.j2
+                dest: "{{ deployment_portal_www_dir }}/index.html"
+                mode: "0644"
+
+        - name: Print deployment portal URLs
+          ansible.builtin.debug:
+            msg:
+              - "Deployment index: {{ deployment_portal_context.portal.index_url }}"
+              - "pgAdmin: {{ deployment_portal_context.portal.pgadmin_url }}"
+              - "Monitoring enabled: {{ monitoring_stack_enabled | default(false) }}"

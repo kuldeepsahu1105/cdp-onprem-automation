@@ -69,7 +69,7 @@ CDH and ECS **deploy versions** are applied by Ansible (`ansible-playbooks/group
 
 ## CDH base cluster deployment
 
-The CDP **base cluster** is deployed by Ansible playbook `26_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, Kerberos, and CMS are in place. By default it installs HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, and Ranger. Optional services (NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr) are off unless enabled in `base_cluster_install_services`.
+The CDP **base cluster** is deployed by Ansible playbook `26_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, Kerberos, and CMS are in place. By default it installs HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, and Ranger. Optional services (NiFi, NiFi Registry, DataViz, Phoenix, Solr) are off unless enabled in `base_cluster_install_services`. Knox is on by default.
 
 ### Terraform instance groups (infrastructure)
 
@@ -110,6 +110,20 @@ Spark is bundled in the CDH parcel for `>= 7.3.1` — no separate SPARK3 downloa
 ansible-playbook -i inventory.ini 26_setup_base_cluster.yml \
   -e cdh_version=7.3.2.10000 \
   -e cdh_parcel_os_suffix=noble
+```
+
+## Deployment portal (Caddy index + pgAdmin)
+
+After cluster deploy, `28_setup_deployment_portal.yml` installs on **`cldr-mngr`** (by default):
+
+- **Caddy** on port `8088` — HTML index with CM, FreeIPA, PostgreSQL, ECS, pgAdmin, and inventory node links
+- **pgAdmin** on port `5050` — preconfigured server entry for CM PostgreSQL
+
+Optional **monitoring** (Prometheus, Grafana, Alertmanager, cAdvisor): set `monitoring_stack_enabled: true` in `group_vars/all.yml`, or run with `MONITORING_STACK_ENABLED=true` (playbooks `28` + `29`). Extend links via `deployment_portal_extra_links` and `deployment_portal_data_service_links`.
+
+```bash
+ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
+MONITORING_STACK_ENABLED=true DEPLOY_PHASE=6 ./pvc_setup.sh
 ```
 
 ## ECS (Data Services) deployment

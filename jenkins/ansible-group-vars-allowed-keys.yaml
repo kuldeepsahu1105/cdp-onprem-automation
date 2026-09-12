@@ -14,6 +14,7 @@ allowed_keys:
   - ad_ldap_bind_password
   - cm_admin_user
   - cm_admin_pass
+  - cm_admin_bootstrap_pass
   - postgres_password
   - scm_db_password
 
@@ -22,6 +23,18 @@ allowed_keys:
   - cm_numeric_version
   - cdh_version
   - cdh_numeric_version
+  - cdv_version
+  - cdv_dataviz_csd_jar
+  - cfm_version
+  - cfm_nifi_app_version
+  - cfm_nifi_csd_jar
+  - cfm_nifi_registry_csd_jar
+  - csd_redhat_repo
+  - csd_build_urls_enabled
+  - csd_respect_service_toggles
+  - csd_install_dataviz
+  - csd_install_nifi
+  - csd_install_nifi_registry
   - ecs_pvc_ds_version
   - ecs_parcel_version
   - cdh_basecluster_name
@@ -31,6 +44,11 @@ allowed_keys:
   - base_cluster_yarn_nm_memory_mb
   - base_cluster_yarn_nm_vcores
   - ecs_cluster_name
+  - deployment_portal_enabled
+  - deployment_portal_http_port
+  - deployment_portal_pgadmin_host_port
+  - monitoring_stack_enabled
+  - monitoring_grafana_admin_password
 
   # OS / dependency versions
   - java_version

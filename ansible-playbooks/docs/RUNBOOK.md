@@ -157,6 +157,10 @@ ansible-playbook -i inventory.ini 23_setup_cm_krbs.yml
 ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
 ```
 
+If `cm_admin_pass` is not the factory password (`cm_admin_bootstrap_pass`, default `admin`), `20_verify_cm.yml` and later playbooks reset the CM `admin` user to `cm_admin_pass` via the API on first successful connection.
+
+CSD JARs for DataViz / NiFi / NiFi Registry are built from `cdv_version`, `cfm_version`, and related vars during `19_start_cm.yml` (RHEL CM). Set e.g. `cdv_version: "8.1.5"` and update `cdv_dataviz_csd_jar` to match the archive jar name, or pass explicit `scm_csds` URLs.
+
 ### 7. Run Phase 4 (CMS + base cluster)
 
 ```bash
@@ -168,6 +172,16 @@ ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml
 `26_setup_base_cluster.yml` builds the cluster from `templates/base_cluster_cluster_spec.j2`. Toggle services with `base_cluster_install_services` in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`). Cluster **create** runs only when the cluster does not exist in CM; adding services to an existing cluster requires CM UI/API changes.
 
 `27_setup_ecs_cluster.yml` is skipped automatically when `[ecs-masters]` / `[ecs-workers]` are empty (`ecs_deploy_enabled: auto`).
+
+### 8. Deployment portal (optional)
+
+```bash
+ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
+# Optional monitoring (or set monitoring_stack_enabled: true in all.yml for playbook 28)
+MONITORING_STACK_ENABLED=true ansible-playbook -i inventory.ini 29_setup_monitoring_stack.yml
+```
+
+Open `http://<cldr-mngr-fqdn>:8088/` for the index (CM, IPA, ECS, PostgreSQL, pgAdmin, node table). pgAdmin: port `5050`.
 
 ---
 
