@@ -3,12 +3,9 @@
 
 - name: Check Caddy container is running
   ansible.builtin.command:
-    argv:
-      - docker
-      - inspect
-      - -f
-      - '{{ "{{" }}.State.Running{{ "}}" }}'
-      - "{{ deployment_portal_caddy_container }}"
+    cmd: >-
+      docker ps --filter name=^{{ deployment_portal_caddy_container }}$
+      --filter status=running -q
   register: caddy_container_running
   changed_when: false
   failed_when: false
@@ -19,7 +16,7 @@
       Caddy container '{{ deployment_portal_caddy_container }}' is not running on {{ inventory_hostname }}.
       Run: docker ps -a; docker logs {{ deployment_portal_caddy_container }}; journalctl -u docker -n 80
       Compose dir: {{ deployment_portal_config_dir }}
-  when: caddy_container_running.stdout | default('') | trim != 'true'
+  when: caddy_container_running.stdout | default('') | trim | length == 0
 
 - name: Wait for Caddy HTTP port on localhost
   ansible.builtin.wait_for:
