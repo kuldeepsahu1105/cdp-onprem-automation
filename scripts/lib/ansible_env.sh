@@ -364,6 +364,11 @@ patch_ansible_private_key_in_group_vars() {
   sed_inplace "$gv" "/^ansible_ssh_private_key_file:/c\\
 ansible_ssh_private_key_file: $key
 "
+  if grep -q '^cm_private_key_path:' "$gv"; then
+    sed_inplace "$gv" "/^cm_private_key_path:/c\\
+cm_private_key_path: $key
+"
+  fi
 }
 
 # Copy selected license to ansible-playbooks/license.txt when needed by CM playbooks.

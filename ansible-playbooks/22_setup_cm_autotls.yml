@@ -40,15 +40,19 @@
           when: use_password
           register: auto_tls_response
 
-        - name: Create Auto-TLS JSON file (Key-based)
-          ansible.builtin.template:
-            src: auto-tls-key.json.j2
-            dest: /tmp/auto-tls-key.json
+        - name: Resolve controller SSH key for Auto-TLS (Key-based)
+          ansible.builtin.import_tasks: common_tasks/resolve_cm_autotls_private_key.yml
           when: not use_password
 
         - name: Set private key as a single line (for Key-based)
           ansible.builtin.set_fact:
-            node_key_one_line: "{{ lookup('file', cm_private_key_path) | replace('\n', '\\n') | replace('\"', '\\\"') }}"
+            node_key_one_line: "{{ lookup('file', autotls_controller_key_path) | replace('\n', '\\n') | replace('\"', '\\\"') }}"
+          when: not use_password
+
+        - name: Create Auto-TLS JSON file (Key-based)
+          ansible.builtin.template:
+            src: auto-tls-key.json.j2
+            dest: /tmp/auto-tls-key.json
           when: not use_password
 
         - name: Enable Auto-TLS (Key-based)

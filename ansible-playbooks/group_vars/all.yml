@@ -252,7 +252,8 @@ cm_http_port: 7180
 ##### cm_server autotls variables:
 # SSH Authentication (Choose one)
 # cm_node_sudo_password: "your-root-pass"  # Required for password-based authentication # Either commented out or defined but not set to empty string
-cm_private_key_path: "/root/.ssh/id_rsa" # Required for key-based authentication
+# Path on Ansible controller (Jenkins/laptop), not on CM host. Empty = auto (sshkey.pem / ansible_ssh_private_key_file).
+cm_private_key_path: ""
 cm_priv_key_passphrase: "" # If private key is encrypted, provide cm_priv_key_passphrase
 
 # OS User for Key-Based/Password based Authentication for AutoTLS

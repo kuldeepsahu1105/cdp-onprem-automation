@@ -1,0 +1,29 @@
+---
+# Resolve SSH private key on the Ansible controller for CM Auto-TLS (key-based API).
+# After 00_setup_ssh_preqs, root on cluster nodes accepts the same key as ansible_user (e.g. ec2-user PEM).
+
+- name: Resolve Auto-TLS private key on Ansible controller
+  ansible.builtin.set_fact:
+    autotls_controller_key_path: "{{ lookup('ansible.builtin.first_found', _autotls_key_lookup, errors='ignore') | default('', true) }}"
+  vars:
+    _cm_key: "{{ cm_private_key_path | default('', true) | trim }}"
+    _rel_keys:
+      - "{{ ansible_ssh_private_key_file | default('id_rsa') | regex_replace('^\\./', '') }}"
+      - "sshkey.pem"
+      - "id_rsa"
+    _autotls_key_lookup:
+      files: "{{ ([_cm_key] if (_cm_key | length > 0) else []) + _rel_keys }}"
+      paths:
+        - "{{ playbook_dir }}"
+        - "{{ lookup('env', 'HOME') }}/.ssh"
+        - "/root/.ssh"
+      skip: true
+
+- name: Fail when Auto-TLS key-based auth has no private key on controller
+  ansible.builtin.fail:
+    msg: >-
+      No SSH private key found for Auto-TLS on this controller (searched cm_private_key_path,
+      ansible-playbooks/sshkey.pem, ansible_ssh_private_key_file).
+      Set cm_node_sudo_password for password-based Auto-TLS, or place the Terraform PEM at
+      ansible-playbooks/sshkey.pem (Jenkins after TERRAFORM stage).
+  when: autotls_controller_key_path is not defined or autotls_controller_key_path | length == 0
