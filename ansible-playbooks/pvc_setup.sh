@@ -287,13 +287,13 @@ run_phase_cm_tls() {
   run_playbook 28_setup_cm_krbs.yml
   run_playbook 29_setup_cm_cms.yml
   run_playbook 30_setup_cm_ldap.yml
-  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls"
+  _maybe_run_deployment_portal_refresh "portal,ipa,identity"
 }
 
 run_phase_cdh() {
   ui_phase_header "CDH base cluster"
   run_playbook 31_setup_base_cluster.yml
-  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh"
+  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh"
 }
 
 run_phase_monitoring() {
@@ -304,7 +304,7 @@ run_phase_monitoring() {
   ui_phase_header "Monitoring stack (Grafana / Prometheus)"
   # Playbook 32 syncs Caddy/index (sync_deployment_portal_content) — no separate 35_refresh here.
   run_playbook 32_setup_monitoring_stack.yml
-  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring"
+  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring"
 }
 
 # Legacy name: phase 4 = CM security + CDH base (no ECS).
@@ -374,13 +374,13 @@ _run_deployment_portal_refresh() {
 _run_ecs_data_services() {
   if [[ "${ECS_DATA_SERVICES_DEPLOY_ENABLED:-false}" == "true" || "${ECS_DATA_SERVICES_DEPLOY_ENABLED:-false}" == "1" ]]; then
     run_playbook 34_setup_ecs_data_services.yml -e ecs_data_services_deploy_enabled=true
-    _maybe_run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
+    _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
   fi
 }
 
 run_phase_6() {
   ui_phase_header "6 — Deployment portal refresh (playbook 35)"
-  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
+  _run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
 }
 
 run_phase_7() {
@@ -391,7 +391,7 @@ run_phase_7() {
 run_phase_5() {
   ui_phase_header "5 — ECS cluster install"
   run_playbook 33_setup_ecs_cluster.yml
-  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
+  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
   _run_ecs_data_services
 }
 

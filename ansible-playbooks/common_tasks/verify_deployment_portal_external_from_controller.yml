@@ -1,5 +1,5 @@
 ---
-# Tier B portal + CM + monitoring + IPA + ECS external URL checks from the Ansible controller.
+# Tier B portal + monitoring + IPA + ECS external URL checks from the Ansible controller (not CM — see 25_verify_cm.yml).
 # Tier A (127.0.0.1 + Caddy Host vhosts on the ops host) already ran in verify_deployment_portal_urls.yml.
 # Optional printed portal URLs on the ops host are not HTTP-probed in verify_deployment_portal_urls.yml.
 

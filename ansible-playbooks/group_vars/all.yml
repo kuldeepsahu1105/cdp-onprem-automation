@@ -316,12 +316,14 @@ cm_apply_caddy_frontend_url: false
 cm_config_api_via_caddy_proxy: false
 # fail | warn — reserved for CM API reachability policy (default fail)
 cm_api_verify_mode: fail
+# Default CM REST API version segment for health waits (GET /api/v58/version) when /api/version discovery is skipped
+cm_api_version_default: v58
 # Portal verify: skip VPC-only URL checks when control profile is public-only (remote controller default)
 deployment_portal_url_verify_skip_vpc: false
 # Milestone-scoped URL verify (portal, ipa, identity, cm, cm_tls, cdh, monitoring, ecs).
 # Default [] — 10_setup_deployment_portal sets [portal, ipa]; pvc_setup/35_refresh pass cumulative lists per phase.
 deployment_portal_verify_milestones: []
-# Legacy: when milestones list is empty, add cm (direct cldr-mngr UI verify — not Caddy)
+# Deprecated no-op — CM URL verify is only in 25_verify_cm.yml (portal milestones strip cm/cm_tls)
 deployment_portal_verify_cm_vhost: false
 # Set by 35_refresh_deployment_portal.yml — legacy CM milestone when milestones extra-var omitted
 deployment_portal_verify_post_cm: false

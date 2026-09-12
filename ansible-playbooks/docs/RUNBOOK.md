@@ -63,14 +63,14 @@ Printed URLs live in `CDP_ACCESS_URLS_*` / `jenkins/artifacts/access-urls.txt`.
 **Cloudera Manager (`25_verify_cm.yml`):**
 
 - **Required (manager-local):** HTTP/HTTPS UI on `cldr-mngr` via `probe_cm_manager_ui_http.yml` (private IP / `ansible_host` / FQDN, then loopback) and Auto-TLS HTTPS on the same bind address — **fails** the play if CM is down. CM API setup (`set_cm_api_url.yml`) prints `cm_api_url` and probes from Jenkins with delegation per `#57`.
-- **External from controller:** Only when `deployment_portal_enabled: false` **and** `deployment_portal_verify_tier_b_enabled: true` (default **false**). With the portal stack enabled, external CM URL warns run from `10_setup` / `35_refresh` on the controller (milestone-scoped), not again in `25_verify_cm`.
+- **External from controller:** Only when `deployment_portal_enabled: false` **and** `deployment_portal_verify_tier_b_enabled: true` (default **false**). With the portal stack enabled, Tier **B** from `10_setup` / `35_refresh` covers portal/monitoring/IPA/ECS milestones only — **not** CM (CM external checks run in `25_verify_cm.yml` when enabled there).
 
 **Portal / monitoring / IPA / ECS** use the tier labels below on the ops host and Ansible controller:
 
 | Tier | Where it runs | What it checks | On failure |
 |---|---|---|---|
-| **A (required)** | **Ops host** (`ipaserver`): `http://127.0.0.1:<deployment_portal_http_port>/`, Caddy **Host** vhosts scoped by **`deployment_portal_verify_milestones`** (bootstrap **portal** + **ipa** only; **cm** / **cm_tls** / **monitoring** / **ecs** after each deploy phase). CM milestone UI on `cldr-mngr` runs in portal refresh verify, not via Caddy | Local service health | **Fail** the play for milestones in the active list |
-| **B (external)** | Ansible **controller** when `ansible_control_reachability_effective` is **`public`** | HTTP GET printed **external** URLs (portal/pgAdmin/Grafana Caddy vhosts, CM FQDN + public IP direct ports, IPA, ECS console) via `verify_service_urls_from_controller.yml` | **`deployment_external_url_verify`** (default **`warn`**) or per-service overrides — `warn`, `fail`, or `skip` |
+| **A (required)** | **Ops host** (`ipaserver`): `http://127.0.0.1:<deployment_portal_http_port>/`, Caddy **Host** vhosts scoped by **`deployment_portal_verify_milestones`** (bootstrap **portal** + **ipa**; **monitoring** / **ecs** / **pgadmin** when listed). **`cm` / `cm_tls` are stripped** — CM UI is verified in `25_verify_cm.yml` only | Local service health | **Fail** the play for milestones in the active list |
+| **B (external)** | Ansible **controller** when `ansible_control_reachability_effective` is **`public`** | HTTP GET printed **external** URLs for portal stack services (portal/pgAdmin/Grafana Caddy vhosts, IPA, ECS console) via `verify_service_urls_from_controller.yml` — **not CM** | **`deployment_external_url_verify`** (default **`warn`**) or per-service overrides — `warn`, `fail`, or `skip` |
 
 **When portal verify runs:** After `10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` (`verify_deployment_portal_caddy.yml`). Jenkins **PORTAL** reruns get optional Tier **B** warns for printed URLs when security groups allow; manager-local portal/CM checks are separate as above.
 
@@ -82,12 +82,12 @@ Printed URLs live in `CDP_ACCESS_URLS_*` / `jenkins/artifacts/access-urls.txt`.
 | **PORTAL pgAdmin hard gate** (optional refresh) | + `pgadmin` | + pgAdmin Caddy vhost required | + pgAdmin external |
 | **IDENTITY** (phase 2 refresh) | + `identity` | Same as PORTAL | + FreeIPA printed / Caddy IPA URLs |
 | **CM_INSTALL** | — | — | CM `frontend_url` via `26_setup_cm_license.yml` (direct FQDN); **no** `35_refresh` |
-| **CM_TLS** (first `35_refresh` after CM) | + `cm`, `cm_tls` | CM UI on cldr-mngr `:7180`/`:7183` (`probe_cm_manager_ui_http.yml`) | + CM HTTP FQDN + public IP `:7180`; + CM HTTPS FQDN `:7183` |
+| **CM_TLS** (phase `cm_tls`; no CM URL verify in portal refresh) | (same portal milestones as prior refresh — `pvc_setup.sh` passes `portal,ipa,identity` without `cm`/`cm_tls`) | Portal + IPA vhosts only | CM external URLs: **`25_verify_cm.yml`** |
 | **CDH** (phase `cdh` refresh) | + `cdh` | (index refresh; no extra vhosts) | (no new probes) |
 | **MONITORING** | + `monitoring` | + Grafana / Prometheus vhosts | + Grafana / Prometheus external |
 | **ECS** | + `ecs` | (no Caddy — ECS not on portal stack) | + ECS console / gateway URLs (`console_hint`) |
 
-Set explicitly: `-e deployment_portal_verify_milestones=cm,cm_tls`. `pvc_setup.sh` runs `35_refresh` on `DEPLOY_PHASE=portal_refresh` (or when `DEPLOYMENT_PORTAL_REFRESH=true`). Legacy `deployment_portal_verify_post_cm: true` on `35_refresh` implies **`portal`, `ipa`** when milestones are omitted (not `cm` — add `cm` via `-e` or a portal refresh with the desired milestone list).
+`pvc_setup.sh` portal refresh milestone strings omit **`cm` / `cm_tls`** (CM verify is playbook **`25_verify_cm.yml`** after CM install). `pvc_setup.sh` runs `35_refresh` when `DEPLOYMENT_PORTAL_REFRESH=true`. Legacy `deployment_portal_verify_post_cm: true` on `35_refresh` implies **`portal`, `ipa`** when milestones are omitted; `resolve_deployment_portal_verify_milestones.yml` always strips **`cm` / `cm_tls`** if passed via `-e`.
 
 Variables:
 
@@ -95,7 +95,7 @@ Variables:
 - `deployment_portal_external_url_verify` — legacy alias when global unset
 - `deployment_cm_external_url_verify`, `deployment_grafana_external_url_verify`, … — per-service overrides
 - `deployment_service_external_url_verify` — optional map `{ cm: warn, grafana: skip, … }`
-- `deployment_portal_verify_milestones` — list or comma string (`portal`, `ipa`, `pgadmin`, `identity`, `cm`, `cm_tls`, `cdh`, `monitoring`, `ecs`); default `[]` in `group_vars`; bootstrap play sets `portal` + `ipa` (not `pgadmin` — avoids failing PORTAL on pgAdmin 502 while the container is still starting)
+- `deployment_portal_verify_milestones` — list or comma string (`portal`, `ipa`, `pgadmin`, `identity`, `cdh`, `monitoring`, `ecs`; **`cm` / `cm_tls` ignored** for portal verify); default `[]` in `group_vars`; bootstrap play sets `portal` + `ipa` (not `pgadmin` — avoids failing PORTAL on pgAdmin 502 while the container is still starting)
 - `deployment_portal_url_verify_skip_vpc` — skip hard-fail on VPC-only printed URLs when control is public-only (Jenkins sets `true`)
 - `ansible_control_reachability` — must be `public` (or auto → public on Jenkins) for Tier **B**
 

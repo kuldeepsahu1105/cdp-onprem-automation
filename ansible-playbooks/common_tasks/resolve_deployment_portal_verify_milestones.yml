@@ -1,7 +1,7 @@
 ---
 # Normalize deployment_portal_verify_milestones (list or comma-separated extra-var string).
 # group_vars default is []. Play 10_setup sets minimum [portal, ipa] (Tier A: portal + IPA vhosts required;
-# pgAdmin / CM Tier A and Tier B run only when milestones pgadmin / cm are explicit). Legacy post_cm → portal+ipa only.
+# pgAdmin runs only when milestone pgadmin is explicit. CM / cm_tls checks belong in 25_verify_cm.yml — never portal refresh.
 
 - name: Parse deployment portal verify milestones from input
   ansible.builtin.set_fact:
@@ -35,12 +35,14 @@
     - _portal_verify_milestones_list | length == 0
     - deployment_portal_verify_post_cm | default(false) | bool
 
-- name: Apply legacy CM vhost flag when list is still empty
+- name: Drop CM milestones from portal verify (use 25_verify_cm.yml for CM URL checks)
   ansible.builtin.set_fact:
-    _portal_verify_milestones_list: ['portal', 'ipa', 'cm']
-  when:
-    - _portal_verify_milestones_list | length == 0
-    - deployment_portal_verify_cm_vhost | default(false) | bool
+    _portal_verify_milestones_list: >-
+      {{
+        _portal_verify_milestones_list
+        | reject('in', ['cm', 'cm_tls'])
+        | list
+      }}
 
 - name: Set effective deployment portal verify milestones
   ansible.builtin.set_fact:

@@ -1,10 +1,10 @@
 ---
 # Service URL verify tiers (see RUNBOOK.md § Service URL verification tiers):
 #   Tier A (ops host): localhost index (verify_deployment_portal_caddy.yml) plus checks scoped by
-#   deployment_portal_verify_milestones (portal/ipa at bootstrap; pgadmin/cm/monitoring/ecs only when listed;
-#   pgAdmin Caddy vhost probes omitted until milestone pgadmin; CM uses direct cldr-mngr :7180/:7183 when cm is listed).
+#   deployment_portal_verify_milestones (portal/ipa at bootstrap; pgadmin/monitoring/ecs only when listed;
+#   pgAdmin Caddy vhost probes omitted until milestone pgadmin). CM / cm_tls milestones are stripped — use 25_verify_cm.yml.
 #   Optional printed portal URLs (same-host public EIP, remote public controller profile) are not HTTP-probed here — Tier B / browser.
-#   Tier B (controller): verify_service_urls_from_controller.yml after this file (portal, CM, monitoring, IPA, ECS).
+#   Tier B (controller): verify_service_urls_from_controller.yml after this file (portal, monitoring, IPA, ECS — not CM).
 #   Tier B IPA: public remote controllers skip direct cluster FQDN (DNS); Caddy ipa.* vhost URLs on deployment_portal_http_port only.
 #
 # Ansible set_fact: do not define multiple keys in one task when a value references another key from
@@ -308,14 +308,11 @@
       Tier A URL verify runs after every portal sync (including PORTAL deploy reruns) against
       {{ _portal_local_base }} with Caddy vhost Host headers (follow_redirects=no).
       HTTP 301/302 on the Caddy vhost (IPA GET / → /ipa/modern-ui/) passes when the status is in {{ _portal_url_verify_codes_int | join('/') }}.
-      Cloudera Manager is verified on cldr-mngr :{{ cm_http_port }}/:{{ cm_https_port }} (not via Caddy). IPA HTTPD may return 301 to the cluster FQDN — expected; use Caddy IPA vhosts in the portal index.
+      Cloudera Manager URL checks run in 25_verify_cm.yml only (not portal refresh). IPA HTTPD may return 301 to the cluster FQDN — expected; use Caddy IPA vhosts in the portal index.
       Verbose Ansible output may show redirect responses; the play fails only on unexpected status codes.
   when:
     - deployment_portal_caddy_vhost_checks_required | default([]) | length > 0
-    - (
-        (_portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0 and deployment_portal_has_ipa | default(false) | bool)
-        or (_portal_verify_milestones_effective | default([]) | intersect(['cm']) | length > 0)
-      )
+    - (_portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0 and deployment_portal_has_ipa | default(false) | bool)
 
 - name: Verify required Caddy vhost routes via localhost with Host header (301/302 OK; no follow_redirects)
   ansible.builtin.uri:
@@ -408,55 +405,6 @@
     - not (item.skipped | default(false) | bool)
     - not (item.item.optional | default(false) | bool)
     - (item.status | default(0) | int not in _portal_url_verify_codes_int)
-
-- name: Probe Cloudera Manager UI on cldr-mngr (Tier A — 127.0.0.1 then FQDN/private; not via Caddy)
-  ansible.builtin.import_tasks: probe_cm_manager_ui_http.yml
-  when:
-    - _portal_verify_milestones_effective | default([]) | intersect(['cm']) | length > 0
-    - "'cldr-mngr' in groups"
-    - groups['cldr-mngr'] | default([]) | length > 0
-
-- name: Fail when Cloudera Manager Tier A HTTP UI check failed on cldr-mngr
-  ansible.builtin.fail:
-    msg: >-
-      Cloudera Manager UI did not respond on cldr-mngr (Tier A) at any of
-      {{ cm_manager_ui_probe_hosts | default(['127.0.0.1']) | join(', ') }}:{{ cm_http_port }}.
-      Confirm cloudera-scm-server is active (scm-server often binds FQDN/VPC IP, not 127.0.0.1).
-  when:
-    - _portal_verify_milestones_effective | default([]) | intersect(['cm']) | length > 0
-    - deployment_portal_cm_http_probe is defined
-    - deployment_portal_cm_http_probe.failed | default(true) | bool
-    - not (autotls_enabled | default(false) | bool)
-
-- name: Probe Cloudera Manager UI HTTPS on cldr-mngr (Tier A when Auto-TLS)
-  ansible.builtin.uri:
-    url: "https://127.0.0.1:{{ cm_https_port | int }}/"
-    method: GET
-    status_code: "{{ _portal_url_verify_codes }}"
-    follow_redirects: none
-    validate_certs: false
-    timeout: 30
-  register: cm_direct_upstream_ui_check
-  retries: 3
-  delay: 5
-  until: cm_direct_upstream_ui_check is succeeded
-  delegate_to: "{{ groups['cldr-mngr'][0] }}"
-  run_once: true
-  when:
-    - _portal_verify_milestones_effective | default([]) | intersect(['cm', 'cm_tls']) | length > 0
-    - autotls_enabled | default(false) | bool
-    - "'cldr-mngr' in groups"
-    - groups['cldr-mngr'] | default([]) | length > 0
-
-- name: Fail when Cloudera Manager Tier A HTTPS UI check failed on cldr-mngr
-  ansible.builtin.fail:
-    msg: >-
-      Cloudera Manager UI did not respond at https://127.0.0.1:{{ cm_https_port }}/ on cldr-mngr (Tier A, Auto-TLS).
-  when:
-    - _portal_verify_milestones_effective | default([]) | intersect(['cm', 'cm_tls']) | length > 0
-    - autotls_enabled | default(false) | bool
-    - cm_direct_upstream_ui_check is defined
-    - cm_direct_upstream_ui_check is failed or (cm_direct_upstream_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)
 
 - name: Verify FreeIPA modern UI on ipaserver HTTPD (direct; 301 from IPA without follow_redirects is OK)
   ansible.builtin.uri:

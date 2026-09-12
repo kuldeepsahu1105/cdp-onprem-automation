@@ -25,7 +25,7 @@ End-to-end order inside `sync_deployment_portal_content.yml` (used by `10_setup_
 
 - **`10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` play 1 (localhost):** `resolve_deployment_portal_host.yml` runs before the Caddy skip gate so play 2 `hosts:` can template `deployment_portal_host_group_effective` even when Caddy is off. `build_deployment_portal_facts.yml` sets `deployment_portal_context`, `deployment_portal_anchor_inv`, `caddy_vhost_urls`, etc. on localhost when the stack runs.
 - **Play 2 (ops host):** `deployment_portal_load_host_facts.yml` before any verify — ops host does not rebuild context locally.
-- **`deployment_portal_verify_milestones`:** play vars on `10_setup` default `[portal, ipa]`; refresh play sets `deployment_portal_verify_post_cm: true` so empty milestone list becomes `[portal, ipa]` (CM requires explicit `cm` in milestones or legacy `deployment_portal_verify_cm_vhost`). Tier A/Tier B pgAdmin checks run only when `pgadmin` is in the list.
+- **`deployment_portal_verify_milestones`:** play vars on `10_setup` default `[portal, ipa]`; refresh play sets `deployment_portal_verify_post_cm: true` so empty milestone list becomes `[portal, ipa]`. `resolve_deployment_portal_verify_milestones.yml` always strips `cm` / `cm_tls` — CM URL checks run only in `25_verify_cm.yml`. Tier A/Tier B pgAdmin checks run only when `pgadmin` is in the list.
 
 Standalone external verify (no sync): `verify_deployment_portal_external_from_controller.yml` runs milestones resolve + Tier B only.
 
@@ -40,7 +40,7 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 | `_portal_verify_milestones_effective` | `resolve_deployment_portal_verify_milestones.yml` | Must run immediately before verify URLs (also imported from `verify_deployment_portal_caddy.yml`) |
 | `caddy_vhost_urls` | `build_deployment_portal_facts.yml` | Required for Caddy vhost Tier A checks |
 | `ansible_control_reach_public_only` | `detect_ansible_control_reachability.yml` (delegate localhost) | Marks printed portal URLs optional on ops host / Jenkins public profile; read via `hostvars['localhost']` on ops host |
-| `deployment_portal_has_ipa`, `deployment_portal_ipa_fqdn`, `deployment_portal_cm_fqdn`, `deployment_portal_cm_upstream_host` | `build_deployment_portal_facts.yml` + load on ops | Milestone-gated checks; direct CM UI probes on cldr-mngr |
+| `deployment_portal_has_ipa`, `deployment_portal_ipa_fqdn`, `deployment_portal_cm_fqdn`, `deployment_portal_cm_upstream_host` | `build_deployment_portal_facts.yml` + load on ops | Index/link facts only; CM UI/API probes are not run from portal verify |
 | Group defaults | `group_vars/all.yml` | e.g. `deployment_portal_http_port`, `deployment_portal_url_verify_status_codes`, `caddy_vhost_enabled` |
 
 **Internal `_portal_*` facts:** defined in earlier tasks within `verify_deployment_portal_urls.yml` itself — do not combine dependent keys in a **single** `set_fact` task (Ansible key order is undefined). See comment at top of that file.
@@ -55,7 +55,7 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 
 **Probe context:** `resolve_cm_api_probe_context.yml` → `resolve_cm_connect_host.yml` + `select_cm_api_probe_host.yml`.
 
-**`set_cm_api_url.yml`:** HTTP/HTTPS `/api/version` probes → `cm_protocol`, `cm_api_port`, **`cm_api_url`** (imports probe context only when `cm_api_probe_host` is unset).
+**`set_cm_api_url.yml`:** HTTP/HTTPS `/api/version` probes → `cm_protocol`, `cm_api_port`, **`cm_api_version`**, **`cm_api_url`** (imports probe context only when `cm_api_probe_host` is unset). **`wait_for_cm_api.yml`** health-checks `GET /api/{{ cm_api_version | default(cm_api_version_default) }}/version` (default **`v58`**).
 
 **CM UI:** Cloudera Manager **`frontend_url`** is not set via Caddy. Portal index and Jenkins list **direct** `https://cldr-mngr.<domain>:7183` (or `:7180`). Optional `cm_external_url` in `group_vars` sets `cm_frontend_url_effective` only when you need a custom published URL.
 
