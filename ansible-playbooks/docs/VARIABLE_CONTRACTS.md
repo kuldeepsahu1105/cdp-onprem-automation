@@ -55,7 +55,7 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 
 **Probe context:** `resolve_cm_api_probe_context.yml` → `resolve_cm_connect_host.yml` + `select_cm_api_probe_host.yml`.
 
-**`set_cm_api_url.yml`:** HTTP/HTTPS `/api/version` probes → `cm_protocol`, `cm_api_port`, **`cm_api_version`**, **`cm_api_url`** (imports probe context only when `cm_api_probe_host` is unset). **`wait_for_cm_api.yml`** health-checks `GET /api/{{ cm_api_version | default(cm_api_version_default) }}/version` (default **`v58`**).
+**`set_cm_api_url.yml`:** HTTP/HTTPS `/api/version` probes → `cm_protocol`, `cm_api_port`, **`cm_api_version`**, **`cm_api_url`** (imports probe context only when `cm_api_probe_host` is unset). **`wait_for_cm_api.yml`** health-checks `GET /api/<slug>/version` using **`cm_api_version`** from `/api/version` discovery, else **`cm_api_version_default`** in `group_vars/all.yml` (no hardcoded slug in tasks).
 
 **CM UI:** Cloudera Manager **`frontend_url`** is not set via Caddy. Portal index and Jenkins list **direct** `https://cldr-mngr.<domain>:7183` (or `:7180`). Optional `cm_external_url` in `group_vars` sets `cm_frontend_url_effective` only when you need a custom published URL.
 
