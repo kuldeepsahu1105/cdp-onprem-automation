@@ -54,6 +54,8 @@ allowed_keys:
   - caddy_vhost_public_base
   - caddy_vhost_dns_mode
   - autotls_enabled
+  - cm_api_prefer_private_ip
+  - cm_api_connect_host
   - monitoring_grafana_admin_password
 
   # OS / dependency versions

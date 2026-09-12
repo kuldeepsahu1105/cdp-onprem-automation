@@ -4,9 +4,8 @@
   vars:
     required_inventory_group: cldr-mngr
 
-- name: Set Cloudera Manager host
-  ansible.builtin.set_fact:
-    cm_host: "{{ hostvars[cm_manager_inventory_host].ansible_host | default(cm_manager_inventory_host) }}"
+- name: Resolve reachable CM API host (127.0.0.1 on cldr-mngr, else private/public IP)
+  ansible.builtin.import_tasks: resolve_cm_connect_host.yml
 
 - name: Ensure CM admin password matches group_vars when not factory default
   ansible.builtin.import_tasks: ensure_cm_admin_password.yml
@@ -24,8 +23,9 @@
     status_code: [200, 301, 303]
   register: cm_tls_probe_http
   until: cm_tls_probe_http is succeeded
-  retries: 5
-  delay: 5
+  retries: 2
+  delay: 3
+  timeout: 15
   ignore_errors: yes
 
 - name: Probe Cloudera Manager HTTPS API (fallback when HTTP is unavailable)
@@ -40,8 +40,9 @@
     status_code: [200, 301, 303]
   register: cm_tls_probe_https
   until: cm_tls_probe_https is succeeded
-  retries: 5
-  delay: 5
+  retries: 2
+  delay: 3
+  timeout: 15
   ignore_errors: yes
   when: cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
 
@@ -81,6 +82,7 @@
   until: cm_api_version_result is succeeded
   retries: 10
   delay: 6
+  timeout: 30
 
 - name: Set base Cloudera Manager API URL
   ansible.builtin.set_fact:

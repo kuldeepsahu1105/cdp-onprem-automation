@@ -296,6 +296,9 @@ cm_cms_reports_manager_db_password: rman
 # Cloudera Manager API ports
 cm_https_port: 7183
 cm_http_port: 7180
+# API probes: use private_ip from inventory when Ansible runs off-host; 127.0.0.1 when play targets cldr-mngr
+cm_api_prefer_private_ip: true
+cm_api_connect_host: ""
 # Set true after 22_setup_cm_autotls.yml for Caddy CM reverse-proxy target port
 autotls_enabled: false
 
