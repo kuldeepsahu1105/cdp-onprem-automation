@@ -40,6 +40,8 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 
 If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALIDATE,TERRAFORM`.
 
+**Legacy token:** Older jobs may still submit `CDH_INSTALL` instead of **`CDH_BASE`**. Current Jenkinsfiles map `CDH_INSTALL` → `CDH_BASE` automatically; reload parameters with **REFRESH_JENKINSFILE=YES** so the checkbox label matches. If every deploy stage is skipped but the build is green, check the log for `Resolved stages: validate=false, terraform=false, ansible=false` — that usually means an unrecognized stage name.
+
 ## Stage checkboxes (`PIPELINE_STAGES`)
 
 Select one or more of the **seven** stage checkboxes: `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CDH_BASE`, `ECS_INSTALL`. The pipeline always runs selected stages in this order (not checkbox order):
