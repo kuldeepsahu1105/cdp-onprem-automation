@@ -66,7 +66,7 @@
 
     - name: Configure Active Directory-specific Kerberos settings
       ansible.builtin.uri:
-        url: "{{ cm_api_url }}/cm/kerberosConfig"
+        url: "{{ cm_krb_api_url | default(cm_api_url) }}/cm/kerberosConfig"
         method: PUT
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
