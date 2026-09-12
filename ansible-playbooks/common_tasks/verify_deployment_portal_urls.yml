@@ -1,17 +1,95 @@
 ---
 # HTTP checks for printed access URLs and Caddy vhost hostnames (runs on ops host after sync).
+# Public-EIP URLs are optional on the ops host (EC2 hairpin); required health checks use 127.0.0.1 (see verify_deployment_portal_caddy.yml).
 
 - name: Set deployment portal URL verification defaults
   ansible.builtin.set_fact:
     _portal_url_verify_codes: "{{ deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]) }}"
     _portal_local_base: "http://127.0.0.1:{{ deployment_portal_http_port | int }}"
-    _portal_skip_vpc_urls: >-
+    _portal_control_public_only: >-
       {{
-        deployment_portal_url_verify_skip_vpc
+        hostvars['localhost'].ansible_control_reach_public_only
         | default(ansible_control_reach_public_only | default(false))
         | bool
       }}
-    _portal_public_only_control: "{{ ansible_control_reach_public_only | default(false) | bool }}"
+    _portal_skip_vpc_urls: >-
+      {{
+        deployment_portal_url_verify_skip_vpc
+        | default(
+            hostvars['localhost'].ansible_control_reach_public_only
+            | default(ansible_control_reach_public_only | default(false))
+          )
+        | bool
+      }}
+    _portal_rfc1918_url_re: '://(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)'
+    _portal_ops_ansible_host: "{{ ansible_host | default('') }}"
+    _portal_anchor_inv: >-
+      {{
+        hostvars['localhost'].deployment_portal_anchor_inv
+        | default(
+            groups[deployment_portal_context.ops_host.inventory_group][0]
+            if (
+              deployment_portal_context is defined
+              and deployment_portal_context.ops_host is defined
+              and deployment_portal_context.ops_host.inventory_group is defined
+              and (deployment_portal_context.ops_host.inventory_group in groups)
+              and (groups[deployment_portal_context.ops_host.inventory_group] | length > 0)
+            )
+            else inventory_hostname
+          )
+      }}
+    _portal_verify_on_ops_host: "{{ inventory_hostname == _portal_anchor_inv }}"
+    _portal_verify_from_controller: >-
+      {{ (inventory_hostname | default('')) in ['localhost', '127.0.0.1'] }}
+
+- name: Set printed portal URL optional flags (hairpin / ops host / Jenkins public reach)
+  ansible.builtin.set_fact:
+    _portal_optional_primary_portal: >-
+      {{
+        (
+          (_portal_verify_on_ops_host | bool)
+          and (deployment_portal_context.access.primary.portal | default('') | length > 0)
+          and (
+            (deployment_portal_context.access.primary.portal | default('') == deployment_portal_context.access.external.portal | default(''))
+            or (
+              (_portal_ops_ansible_host | length > 0)
+              and (
+                deployment_portal_context.access.primary.portal | default('')
+                | regex_replace('^https?://([^/:]+)(:.*)?(/.*)?$', '\\1')
+              ) == _portal_ops_ansible_host
+            )
+          )
+        )
+        or (
+          (_portal_verify_from_controller | bool)
+          and (_portal_control_public_only | bool)
+          and (
+            deployment_portal_context.access.primary.portal | default('') is search(_portal_rfc1918_url_re)
+            or (
+              (deployment_portal_context.access.external.portal | default('') | length > 0)
+              and (deployment_portal_context.access.primary.portal | default('') == deployment_portal_context.access.external.portal | default(''))
+            )
+          )
+        )
+      }}
+    _portal_optional_external_portal: >-
+      {{
+        (_portal_verify_on_ops_host | bool)
+        or (
+          (_portal_ops_ansible_host | length > 0)
+          and (deployment_portal_context.access.external.portal | default('') | length > 0)
+          and (
+            deployment_portal_context.access.external.portal | default('')
+            | regex_replace('^https?://([^/:]+)(:.*)?(/.*)?$', '\\1')
+          ) == _portal_ops_ansible_host
+        )
+        or (
+          (_portal_verify_from_controller | bool)
+          and (_portal_control_public_only | bool)
+          and (deployment_portal_context.access.external.portal | default('') | length > 0)
+        )
+      }}
+  when: deployment_portal_context is defined
 
 - name: Build access URL checks from deployment portal context
   ansible.builtin.set_fact:
@@ -19,13 +97,11 @@
       {{
         (
           ([{'name': 'portal (primary)', 'url': deployment_portal_context.access.primary.portal | default(''),
-              'optional': (_portal_public_only_control | bool)
-                and (deployment_portal_context.access.primary.portal | default('') is search('://(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)'))}]
+              'optional': _portal_optional_primary_portal | default(false) | bool}]
            if (deployment_portal_context.access.primary.portal | default('') | length > 0)
            else [])
           + ([{'name': 'portal (external)', 'url': deployment_portal_context.access.external.portal | default(''),
-              'optional': (_portal_public_only_control | bool)
-                and (deployment_portal_context.access.external.portal | default('') is search('://(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)'))}]
+              'optional': _portal_optional_external_portal | default(false) | bool}]
              if (deployment_portal_context.access.external.portal | default('') | length > 0)
              else [])
           + (
@@ -41,9 +117,21 @@
         | selectattr('url', 'ne', '')
         | list
       }}
+    deployment_portal_access_url_checks_required: >-
+      {{
+        deployment_portal_access_url_checks | default([])
+        | selectattr('optional', 'equalto', false)
+        | list
+      }}
+    deployment_portal_access_url_checks_optional: >-
+      {{
+        deployment_portal_access_url_checks | default([])
+        | selectattr('optional', 'equalto', true)
+        | list
+      }}
   when: deployment_portal_context is defined
 
-- name: Verify printed deployment portal access URLs respond
+- name: Verify required printed deployment portal access URLs respond
   ansible.builtin.uri:
     url: "{{ item.url }}"
     method: GET
@@ -51,42 +139,65 @@
     follow_redirects: none
     validate_certs: false
     timeout: 30
-  loop: "{{ deployment_portal_access_url_checks | default([]) }}"
+  loop: "{{ deployment_portal_access_url_checks_required | default([]) }}"
   loop_control:
     label: "{{ item.name }}"
-  register: deployment_portal_access_url_results
+  register: deployment_portal_access_url_required_results
   retries: 3
   delay: 5
-  until: deployment_portal_access_url_results is succeeded
+  until: deployment_portal_access_url_required_results is succeeded
   when:
-    - deployment_portal_access_url_checks | default([]) | length > 0
-  failed_when: false
+    - deployment_portal_access_url_checks_required | default([]) | length > 0
 
-- name: Warn when an optional VPC-only access URL does not respond locally
+- name: Probe optional printed deployment portal access URLs (warn only)
+  ansible.builtin.uri:
+    url: "{{ item.url }}"
+    method: GET
+    status_code: "{{ _portal_url_verify_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 10
+  loop: "{{ deployment_portal_access_url_checks_optional | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: deployment_portal_access_url_optional_results
+  failed_when: false
+  when:
+    - deployment_portal_access_url_checks_optional | default([]) | length > 0
+
+- name: Warn when an optional printed access URL does not respond
   ansible.builtin.debug:
     msg: >-
-      Optional VPC portal URL did not respond from {{ inventory_hostname }} (expected when checking only public paths from Jenkins):
+      Optional deployment portal URL did not respond from {{ inventory_hostname }}
+      {% if _portal_verify_on_ops_host | default(false) | bool %}
+      (common for public EIP hairpin on the ops host — use http://127.0.0.1:{{ deployment_portal_http_port | int }}/ or Caddy vhost Host checks below):
+      {% elif _portal_verify_from_controller | default(false) | bool and (_portal_control_public_only | default(false) | bool) %}
+      (expected when Ansible control reaches the cluster only via public IP, e.g. Jenkins outside the VPC):
+      {% else %}
+      (non-blocking):
+      {% endif %}
       {{ item.item.url }}
-  loop: "{{ deployment_portal_access_url_results.results | default([]) }}"
+  loop: "{{ deployment_portal_access_url_optional_results.results | default([]) }}"
   when:
-    - deployment_portal_access_url_checks | default([]) | length > 0
+    - deployment_portal_access_url_checks_optional | default([]) | length > 0
+    - deployment_portal_access_url_optional_results is defined
     - not (item.skipped | default(false) | bool)
-    - item.item.optional | default(false) | bool
     - item.failed | default(false) or (item.status | default(0) | int not in _portal_url_verify_codes)
 
 - name: Fail when a required printed access URL does not respond
   ansible.builtin.fail:
     msg: >-
       Deployment portal access URL check failed for {{ item.item.name }}: {{ item.item.url }}.
-      Expected HTTP {{ _portal_url_verify_codes | join('/') }} from the ops host.
-      If this URL uses a public IP, confirm security groups allow {{ deployment_portal_http_port | int }}
-      and Caddy is listening (docker ps, docker logs {{ deployment_portal_caddy_container }}).
+      Expected HTTP {{ _portal_url_verify_codes | join('/') }} from {{ inventory_hostname }}.
+      On the ops host, confirm Caddy on http://127.0.0.1:{{ deployment_portal_http_port | int }}/ first
+      (docker ps, docker logs {{ deployment_portal_caddy_container }}).
+      Public EIP URLs may not respond from the same EC2 instance (hairpin); use a browser or Jenkins outside the VPC.
       Re-run: ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml
-  loop: "{{ deployment_portal_access_url_results.results | default([]) }}"
+  loop: "{{ deployment_portal_access_url_required_results.results | default([]) }}"
   when:
-    - deployment_portal_access_url_checks | default([]) | length > 0
+    - deployment_portal_access_url_checks_required | default([]) | length > 0
+    - deployment_portal_access_url_required_results is defined
     - not (item.skipped | default(false) | bool)
-    - not (item.item.optional | default(false) | bool)
     - item.failed | default(false) or (item.status | default(0) | int not in _portal_url_verify_codes)
 
 - name: Build Caddy vhost HTTP checks (Host header routing on localhost)
