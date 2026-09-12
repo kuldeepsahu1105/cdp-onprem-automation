@@ -1,3 +1,8 @@
+# Host publishes: Caddy edge (deployment_portal_http_port, default 81) and pgAdmin (deployment_portal_pgadmin_host_port, default 5050).
+# Grafana/Prometheus/Alertmanager are not published here — they join network deployment_portal via monitoring_docker-compose.yml.j2
+# and are reached at http://<ops>:<deployment_portal_http_port>/grafana|prometheus|alertmanager/ through Caddy.
+# After changing deployment_portal_http_port (legacy labs used 8088), re-run PORTAL or on the ops host:
+#   docker compose -f {{ deployment_portal_config_dir }}/docker-compose.yml up -d --force-recreate caddy
 services:
   caddy:
     image: {{ deployment_portal_caddy_image }}
