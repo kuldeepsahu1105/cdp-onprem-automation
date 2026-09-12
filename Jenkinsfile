@@ -15,8 +15,22 @@ pipeline {
       multiSelectDelimiter: ',',
       visibleItemCount: 7,
       quoteValue: false,
-      description: '''Select stages (pipeline runs in fixed order below; not checkbox order). Common through CM: VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL. Hover each checkbox for a short summary; full text is in the list under each name in Extended Choice UI.''',
-      descriptionPropertyValue: '''validate-prereqs.sh only (see VALIDATION_CHECKS); no EC2 or Ansible changes,Provision AWS (VPC/SG/EC2/EIP); writes inventory.ini and SSH PEM to holautosa state,Ansible phase 1: OS prereqs Java Python packages SSH bootstrap (needs inventory),Ansible phase 2: FreeIPA server/client or AD client from inventory,Ansible phase 3: CM repos PostgreSQL CM server agents license or trial,Ansible phase 4: Auto-TLS Kerberos CMS LDAP CDH base cluster deploy,Ansible phase 5: ECS / Data Services (needs CDH_BASE); Ansible-only needs inventory.ini'''
+      description: '''Fixed run order (not checkbox order): VALIDATE → TERRAFORM → PREREQS → IDENTITY → CM_INSTALL → CDH_BASE → ECS_INSTALL. Example through CM: VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL.
+
+VALIDATE — Jenkins stage "Validate Prerequisites": runs jenkins/scripts/validate-prereqs.sh using only VALIDATION_CHECKS you checked (TOOLS, AWS_CREDS, TFVARS, etc.). Fails before deploy if a check fails. Does not run Terraform apply or Ansible playbooks.
+
+TERRAFORM — Jenkins stage "Terraform — Provision EC2": runs jenkins/scripts/run-terraform.sh (plan/apply; DRY_RUN = plan/check only). Provisions VPC/SG/EC2/EIP per parameters; persists state under holautosa; writes ansible-playbooks/inventory.ini and SSH PEM.
+
+PREREQS — Ansible Deploy phase 1 via run-ansible.sh: OS packages Java Python firewall SSH bootstrap (playbooks 01–18 area). Needs inventory.ini (from TERRAFORM or supplied).
+
+IDENTITY — Ansible phase 2: FreeIPA server/client or Active Directory client (auto from inventory groups).
+
+CM_INSTALL — Ansible phase 3: CM repos PostgreSQL CM server and agents license or trial.
+
+CDH_BASE — Ansible phase 4: Auto-TLS Kerberos CMS LDAP CDH base cluster API deploy.
+
+ECS_INSTALL — Ansible phase 5: ECS / Data Services cluster; requires CDH_BASE and inventory.''',
+      descriptionPropertyValue: '''VALIDATE stage: validate-prereqs.sh + your VALIDATION_CHECKS only; no TF/Ansible,TERRAFORM stage: run-terraform.sh AWS infra; inventory.ini + PEM,PREREQS: Ansible phase 1 OS/Java/Python/SSH prereqs,IDENTITY: Ansible phase 2 FreeIPA or AD,CM_INSTALL: Ansible phase 3 CM Postgres agents license,CDH_BASE: Ansible phase 4 TLS Kerberos CMS CDH base,ECS_INSTALL: Ansible phase 5 ECS (needs CDH_BASE)'''
     )
     extendedChoice(
       name: 'VALIDATION_CHECKS',
@@ -26,8 +40,20 @@ pipeline {
       multiSelectDelimiter: ',',
       visibleItemCount: 6,
       quoteValue: false,
-      description: '''Only when PIPELINE_STAGES includes VALIDATE. Example full set: TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY,EMAIL_FORMAT. Uncheck to skip; per-checkbox summary appears beside each name.''',
-      descriptionPropertyValue: '''Required CLIs on agent (git jq python3; adds terraform and ansible-playbook when those stages are selected),aws sts get-caller-identity (CREDENTIALS_USER ~/.aws or instance IAM role),Tfvars file exists; ENVIRONMENT OWNER AWS_REGION load; keypair/SG pre-check if TERRAFORM selected,ansible-playbook --syntax-check on ansible-playbooks/*.yml,ansible-playbooks/inventory.ini must exist (auto-required for Ansible without TERRAFORM),Validate NOTIFICATION_EMAIL when that field is non-empty'''
+      description: '''Used only when PIPELINE_STAGES includes VALIDATE (validate-prereqs.sh + Check Parameters). Example: TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY,EMAIL_FORMAT. Uncheck any box to skip that check.
+
+TOOLS — On Jenkins agent: which git jq aws python3; adds terraform if TERRAFORM stage selected; adds ansible-playbook if any Ansible stage selected or ANSIBLE_SYNTAX checked.
+
+AWS_CREDS — aws_cred_diagnose + aws sts get-caller-identity (CREDENTIALS_USER ~/.aws when USE_CREDENTIALS_USER_AWS=true else instance IAM role).
+
+TFVARS — Resolve TFVARS_FILE; load ENVIRONMENT OWNER AWS_REGION from config; if TERRAFORM also selected runs validate-aws-resources.sh (keypair + security group exist or creatable).
+
+ANSIBLE_SYNTAX — ansible-playbook --syntax-check on each numbered playbook under ansible-playbooks/ (installs local ansible if needed).
+
+INVENTORY — Fail if ansible-playbooks/inventory.ini missing (auto-enabled when you select Ansible stages without TERRAFORM).
+
+EMAIL_FORMAT — In Check Parameters: regex-validate NOTIFICATION_EMAIL when non-empty (in addition to tfvars/email usage).''',
+      descriptionPropertyValue: '''TOOLS: verify CLIs on agent; +terraform if TERRAFORM; +ansible-playbook if Ansible stages or ANSIBLE_SYNTAX,AWS_CREDS: aws sts get-caller-identity (holautosa ~/.aws or instance role),TFVARS: tfvars file + ENVIRONMENT/OWNER/REGION; AWS keypair/SG pre-check if TERRAFORM,ANSIBLE_SYNTAX: syntax-check all numbered ansible-playbooks/*.yml,INVENTORY: require ansible-playbooks/inventory.ini on disk,EMAIL_FORMAT: validate NOTIFICATION_EMAIL format in Check Parameters when set'''
     )
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
     booleanParam(name: 'USE_CREDENTIALS_USER_AWS', defaultValue: true, description: 'Use CREDENTIALS_USER ~/.aws credentials (default on — uncheck to use EC2 instance IAM role via IMDS)')
