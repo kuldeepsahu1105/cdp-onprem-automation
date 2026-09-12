@@ -337,6 +337,16 @@ _ansible_requirements_collections_present() {
       if ! grep -qE '^4\.' <<<"$cc_versions"; then
         return 1
       fi
+      # v4.0.0–v4.3.x lack plugins/modules/cluster.py (31/33 need cloudera.cluster.cluster).
+      local cc_ver cluster_mod
+      cc_ver="$(ansible-galaxy collection list cloudera.cluster 2>/dev/null | awk '$1=="cloudera.cluster" {print $2; exit}')"
+      if [[ -z "$cc_ver" ]] || [[ "$(printf '%s\n' '4.4.0' "$cc_ver" | sort -V | head -1)" != "4.4.0" ]]; then
+        return 1
+      fi
+      cluster_mod="${HOME}/.ansible/collections/ansible_collections/cloudera/cluster/plugins/modules/cluster.py"
+      if [[ ! -f "$cluster_mod" ]] && [[ ! -f /usr/share/ansible/collections/ansible_collections/cloudera/cluster/plugins/modules/cluster.py ]]; then
+        return 1
+      fi
     elif ! ansible-galaxy collection list "$name" 2>/dev/null | grep -qF "$name"; then
       return 1
     fi
