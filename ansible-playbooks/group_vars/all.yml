@@ -219,6 +219,8 @@ cm_debian_ubuntu_compat_version: "2204"
 cm_port: 7180
 cm_admin_user: "admin"
 cm_admin_pass: "admin"
+# Factory CM login password on first boot (used to reset to cm_admin_pass when different)
+cm_admin_bootstrap_pass: "admin"
 cdh_basecluster_name: "CDH-Cluster"
 base_cluster_master_group: base-masters
 base_cluster_worker_group: base-workers
@@ -245,7 +247,7 @@ base_cluster_install_services:
   nifi_registry: false
   dataviz: false
   phoenix: false
-  knox: false
+  knox: true
   solr: false
 
 # YARN sizing for small lab clusters (base_cluster_cluster_spec.j2)

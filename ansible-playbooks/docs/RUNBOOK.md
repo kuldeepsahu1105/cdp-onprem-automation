@@ -157,6 +157,8 @@ ansible-playbook -i inventory.ini 23_setup_cm_krbs.yml
 ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
 ```
 
+If `cm_admin_pass` is not the factory password (`cm_admin_bootstrap_pass`, default `admin`), `20_verify_cm.yml` and later playbooks reset the CM `admin` user to `cm_admin_pass` via the API on first successful connection.
+
 ### 7. Run Phase 4 (CMS + base cluster)
 
 ```bash

@@ -169,7 +169,7 @@ services:
     config:
       hbase_service: "{{ 'hbase' if svc.hbase | default(true) else '' }}"
 {% endif %}
-{% if svc.knox | default(false) %}
+{% if svc.knox | default(true) %}
   - name: knox
     type: KNOX
     display_name: Knox
@@ -252,7 +252,7 @@ host_templates:
       - service: nifi_registry
         type: NIFI_REGISTRY_SERVER
 {% endif %}
-{% if svc.knox | default(false) %}
+{% if svc.knox | default(true) %}
       - service: knox
         type: KNOX_GATEWAY
 {% endif %}

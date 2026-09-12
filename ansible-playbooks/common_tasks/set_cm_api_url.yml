@@ -8,6 +8,9 @@
   ansible.builtin.set_fact:
     cm_host: "{{ hostvars[cm_manager_inventory_host].ansible_host | default(cm_manager_inventory_host) }}"
 
+- name: Ensure CM admin password matches group_vars when not factory default
+  ansible.builtin.import_tasks: ensure_cm_admin_password.yml
+
 - name: Probe Cloudera Manager HTTP API (Auto-TLS redirect detection)
   ansible.builtin.uri:
     url: "http://{{ cm_host }}:{{ cm_http_port }}/api/version"
