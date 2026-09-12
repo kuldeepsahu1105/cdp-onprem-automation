@@ -9,13 +9,21 @@
   connection: local
   gather_facts: true
   tasks:
-    - name: Resolve deployment portal Caddy gate (monitoring_stack_enabled)
+    - name: Resolve deployment portal Caddy gate (portal + caddy_vhost flags)
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_caddy_enabled.yml
 
     - name: Resolve deployment portal install host group (play hosts line when Caddy skipped)
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
 
-    - name: Skip when Caddy portal stack is disabled
+    - name: "SKIPPED PORTAL refresh — Caddy stack disabled (see gate report above)"
+      ansible.builtin.debug:
+        msg: >-
+          SKIPPED PORTAL refresh: deployment_portal_caddy_effective=false
+          (deployment_portal_enabled={{ deployment_portal_enabled | default(true) | bool }},
+          caddy_vhost_enabled={{ caddy_vhost_enabled | default(true) | bool }}).
+      when: not (deployment_portal_caddy_effective | default(false) | bool)
+
+    - name: "SKIPPED PORTAL refresh — end localhost play (Caddy stack disabled)"
       ansible.builtin.meta: end_play
       when: not (deployment_portal_caddy_effective | default(false) | bool)
 
@@ -27,7 +35,7 @@
   become: true
   gather_facts: true
   tasks:
-    - name: Skip when Caddy portal stack is disabled
+    - name: "SKIPPED PORTAL refresh — end ops host (Caddy stack disabled on controller)"
       ansible.builtin.meta: end_host
       when: not (hostvars['localhost'].deployment_portal_caddy_effective | default(false) | bool)
 

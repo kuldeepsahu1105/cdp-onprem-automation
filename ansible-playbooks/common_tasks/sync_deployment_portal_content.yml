@@ -160,6 +160,18 @@
   register: pgadmin_recreate_servers
   failed_when: pgadmin_recreate_servers.rc != 0
 
+- name: Force-recreate portal edge containers when stack recreate requested (PORTAL re-run)
+  ansible.builtin.command:
+    argv: >-
+      {{
+        deployment_portal_compose_argv
+        + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', 'caddy', 'pgadmin']
+      }}
+  when: deployment_portal_stack_recreate | default(false) | bool
+  register: portal_stack_force_recreate
+  failed_when: portal_stack_force_recreate.rc != 0
+  changed_when: true
+
 - name: Ensure portal and monitoring ports are allowed when firewalld is active
   ansible.builtin.import_tasks: ensure_deployment_portal_firewall_ports.yml
 

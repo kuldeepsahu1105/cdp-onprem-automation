@@ -10,13 +10,22 @@
   connection: local
   gather_facts: true
   tasks:
-    - name: Resolve deployment portal Caddy gate (monitoring_stack_enabled)
+    - name: Resolve deployment portal Caddy gate (portal + caddy_vhost flags)
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_caddy_enabled.yml
 
     - name: Resolve deployment portal install host group (play hosts line when Caddy skipped)
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
 
-    - name: Skip when Caddy portal stack is disabled (monitoring off or portal off)
+    - name: "SKIPPED PORTAL — Caddy stack disabled (see Report deployment portal Caddy gate above)"
+      ansible.builtin.debug:
+        msg: >-
+          SKIPPED PORTAL: deployment_portal_caddy_effective=false
+          (deployment_portal_enabled={{ deployment_portal_enabled | default(true) | bool }},
+          caddy_vhost_enabled={{ caddy_vhost_enabled | default(true) | bool }}).
+          No portal install or Tier B verify will run in this playbook.
+      when: not (deployment_portal_caddy_effective | default(false) | bool)
+
+    - name: "SKIPPED PORTAL — end localhost play (Caddy stack disabled)"
       ansible.builtin.meta: end_play
       when: not (deployment_portal_caddy_effective | default(false) | bool)
 
@@ -32,7 +41,7 @@
       - portal
       - ipa
   tasks:
-    - name: Skip when Caddy portal stack is disabled
+    - name: "SKIPPED PORTAL — end ops host (Caddy stack disabled on controller)"
       ansible.builtin.meta: end_host
       when: not (hostvars['localhost'].deployment_portal_caddy_effective | default(false) | bool)
 
@@ -47,6 +56,21 @@
 
         - name: Install or update portal and monitoring stacks
           ansible.builtin.import_tasks: common_tasks/sync_deployment_portal_content.yml
+
+        - name: Stat portal compose after mandated install
+          ansible.builtin.stat:
+            path: "{{ deployment_portal_config_dir }}/docker-compose.yml"
+          register: portal_compose_post_install
+          when: deployment_portal_install_required | default(false) | bool
+
+        - name: Fail when mandated PORTAL install did not lay down compose on ops host
+          ansible.builtin.fail:
+            msg: >-
+              deployment_portal_install_required=true but {{ deployment_portal_config_dir }}/docker-compose.yml
+              is missing on {{ inventory_hostname }} after sync (install may have been skipped).
+          when:
+            - deployment_portal_install_required | default(false) | bool
+            - not (portal_compose_post_install.stat.exists | default(false) | bool)
 
         - name: Print deployment portal URLs
           ansible.builtin.debug:
@@ -69,7 +93,7 @@
       - portal
       - ipa
   tasks:
-    - name: Skip Tier B when Caddy portal stack is disabled
+    - name: "SKIPPED PORTAL Tier B — Caddy stack disabled"
       ansible.builtin.meta: end_play
       when: not (deployment_portal_caddy_effective | default(false) | bool)
 

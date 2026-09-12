@@ -78,9 +78,8 @@ ansible_configure_output
 DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 CONTROL_MODE="$(detect_control_mode "$SCRIPT_DIR/inventory.ini")"
 
-# Caddy / deployment portal stack (ops reverse proxy) — only when monitoring is enabled (default on).
+# Caddy / deployment portal stack (ops reverse proxy) — DEPLOYMENT_PORTAL_ENABLED (monitoring is separate).
 _portal_enabled() {
-  _monitoring_enabled || return 1
   [[ "${DEPLOYMENT_PORTAL_ENABLED:-true}" == "true" || "${DEPLOYMENT_PORTAL_ENABLED:-true}" == "1" ]]
 }
 _monitoring_enabled() {
@@ -238,6 +237,9 @@ run_phase_1() {
 
 run_phase_portal() {
   ui_phase_header "deployment portal bootstrap (playbook 10)"
+  if ! _portal_enabled; then
+    ui_warn "DEPLOY_PHASE=portal will not install Caddy/pgAdmin (DEPLOYMENT_PORTAL_ENABLED is off)."
+  fi
   _run_deployment_portal_bootstrap
 }
 
@@ -310,26 +312,27 @@ _portal_extra_args() {
     extra+=(-e monitoring_stack_enabled=true)
   else
     extra+=(-e monitoring_stack_enabled=false)
-    extra+=(-e deployment_portal_enabled=false)
-    extra+=(-e caddy_vhost_enabled=false)
   fi
   if _portal_enabled; then
     extra+=(-e deployment_portal_enabled=true)
-  elif _monitoring_enabled; then
+    extra+=(-e caddy_vhost_enabled=true)
+  else
     extra+=(-e deployment_portal_enabled=false)
+    extra+=(-e caddy_vhost_enabled=false)
   fi
   printf '%s\0' "${extra[@]}"
 }
 
 _run_deployment_portal_bootstrap() {
   if ! _portal_enabled; then
+    ui_warn "Portal bootstrap skipped: set DEPLOYMENT_PORTAL_ENABLED=true to install Caddy/pgAdmin on ipaserver."
     return 0
   fi
   local portal_extra=()
   while IFS= read -r -d '' arg; do portal_extra+=("$arg"); done < <(_portal_extra_args)
-  # Bootstrap Caddy/pgAdmin/index only; do not install 32 here. Caddy/index still wire monitoring
-  # when detect_deployment_portal_monitoring_on_host finds a running stack (routes_enabled fact).
-  portal_extra+=(-e monitoring_stack_enabled=false)
+  # Defer Grafana/Prometheus to playbook 32 when MONITORING_STACK_ENABLED=false; does not gate Caddy.
+  portal_extra+=(-e deployment_portal_install_required=true)
+  portal_extra+=(-e deployment_portal_stack_recreate=true)
   run_playbook 10_setup_deployment_portal.yml "${portal_extra[@]}"
 }
 
@@ -428,6 +431,8 @@ esac
 if [[ "${PVC_SETUP_FROM_WRAPPER:-}" != "1" ]]; then
   if is_dry_run; then
     ui_done "Phase ${DEPLOY_PHASE} dry run completed (no changes applied)"
+  elif [[ "$DEPLOY_PHASE" == "portal" || "$DEPLOY_PHASE" == "deployment_portal" ]] && ! _portal_enabled; then
+    ui_warn "Phase ${DEPLOY_PHASE} finished with no portal/Caddy install (DEPLOYMENT_PORTAL_ENABLED is off)."
   else
     ui_done "Phase ${DEPLOY_PHASE} completed successfully"
   fi
