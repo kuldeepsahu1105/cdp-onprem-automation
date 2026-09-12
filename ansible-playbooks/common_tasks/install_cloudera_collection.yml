@@ -1,6 +1,6 @@
 ---
 # PyPI cm-client only supports ApiClient(host=). cloudera.cluster devel/v5 uses ApiClient(configuration=).
-# Pin v4.0.0 and remove any other cloudera.cluster version first (Ansible loads the highest version).
+# Pin v4.4.0+ (cluster module); remove v5/devel first (Ansible loads the highest version).
 
 - name: Resolve ansible-galaxy path
   ansible.builtin.command: which ansible-galaxy
@@ -24,7 +24,7 @@
     msg: "{{ cloudera_cluster_list_before.stdout_lines | default(['(not installed)']) }}"
   when: cloudera_cluster_list_before.stdout_lines is defined
 
-- name: Remove cloudera.cluster collection (drop devel/v5 so v4.0.0 is used)
+- name: Remove cloudera.cluster collection (drop devel/v5 before pinned v4 install)
   ansible.builtin.command:
     argv:
       - "{{ galaxy_path.stdout }}"
@@ -76,6 +76,12 @@
             sys.exit(
                 "cloudera.cluster v5/devel is installed (ApiClient(configuration=)); "
                 "remove it and reinstall {{ cloudera_cluster_collection_git_ref }}"
+            )
+        cluster_mod = found[0] / "plugins/modules/cluster.py"
+        if not cluster_mod.is_file():
+            sys.exit(
+                "cloudera.cluster is missing plugins/modules/cluster.py "
+                "(v4.0.0 has no cluster module); reinstall {{ cloudera_cluster_collection_git_ref }}"
             )
   register: cloudera_cluster_api_verify
   changed_when: false

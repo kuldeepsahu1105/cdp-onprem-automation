@@ -337,6 +337,16 @@ _ansible_requirements_collections_present() {
       if ! grep -qE '^4\.' <<<"$cc_versions"; then
         return 1
       fi
+      # v4.0.0–v4.3.x lack plugins/modules/cluster.py (31/33 need cloudera.cluster.cluster).
+      local cc_ver cluster_mod
+      cc_ver="$(ansible-galaxy collection list cloudera.cluster 2>/dev/null | awk '$1=="cloudera.cluster" {print $2; exit}')"
+      if [[ -z "$cc_ver" ]] || [[ "$(printf '%s\n' '4.4.0' "$cc_ver" | sort -V | head -1)" != "4.4.0" ]]; then
+        return 1
+      fi
+      cluster_mod="${HOME}/.ansible/collections/ansible_collections/cloudera/cluster/plugins/modules/cluster.py"
+      if [[ ! -f "$cluster_mod" ]] && [[ ! -f /usr/share/ansible/collections/ansible_collections/cloudera/cluster/plugins/modules/cluster.py ]]; then
+        return 1
+      fi
     elif ! ansible-galaxy collection list "$name" 2>/dev/null | grep -qF "$name"; then
       return 1
     fi
@@ -344,17 +354,69 @@ _ansible_requirements_collections_present() {
   return 0
 }
 
+_ansible_cloudera_cluster_git_ref_from_requirements() {
+  local req="${1:?requirements.yml path}"
+  awk '
+    /cloudera-labs\/cloudera\.cluster\.git/ {
+      line = $0
+      sub(/.*cloudera\.cluster\.git,?/, "", line)
+      gsub(/["[:space:]]+.*/, "", line)
+      print line
+      exit
+    }
+  ' "$req"
+}
+
+_ansible_cloudera_cluster_module_path() {
+  local p
+  for p in \
+    "${HOME}/.ansible/collections/ansible_collections/cloudera/cluster/plugins/modules/cluster.py" \
+    "/usr/share/ansible/collections/ansible_collections/cloudera/cluster/plugins/modules/cluster.py"; do
+    if [[ -f "$p" ]]; then
+      printf '%s\n' "$p"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Jenkins may skip galaxy when 4.0.0 is listed but cluster.py is missing — force pinned git install.
+_ansible_ensure_pinned_cloudera_cluster() {
+  local req="${1:?requirements.yml path}"
+  local ref cc_ver galaxy_bin
+  ref="$(_ansible_cloudera_cluster_git_ref_from_requirements "$req")"
+  [[ -n "$ref" ]] || return 0
+  galaxy_bin="$(command -v ansible-galaxy || true)"
+  [[ -n "$galaxy_bin" ]] || return 0
+  cc_ver="$("$galaxy_bin" collection list cloudera.cluster 2>/dev/null | awk '$1=="cloudera.cluster" {print $2; exit}')"
+  if [[ -n "$cc_ver" ]] && _ansible_cloudera_cluster_module_path >/dev/null; then
+    if [[ "$(printf '%s\n' '4.4.0' "$cc_ver" | sort -V | head -1)" == "4.4.0" ]]; then
+      return 0
+    fi
+  fi
+  printf '%s\n' "Installing pinned cloudera.cluster (${ref}) for cloudera.cluster.cluster module"
+  "$galaxy_bin" collection remove cloudera.cluster 2>/dev/null || true
+  "$galaxy_bin" collection install --force "git+https://github.com/cloudera-labs/cloudera.cluster.git,${ref}"
+  if ! _ansible_cloudera_cluster_module_path >/dev/null; then
+    printf '%s\n' "ERROR: cloudera.cluster still missing plugins/modules/cluster.py after install (${ref}). Use git ref v4.4.0+ in requirements.yml." >&2
+    return 1
+  fi
+}
+
 # CI pipelines run one DEPLOY_PHASE per stage; each invokes pvc_setup.sh — install collections once.
 ansible_install_collections_if_needed() {
   local req="${1:?requirements.yml path}"
   case "${PVC_SKIP_GALAXY_INSTALL:-}" in
-    1|true|yes|TRUE|YES|on|ON) return 0 ;;
+    1|true|yes|TRUE|YES|on|ON)
+      _ansible_ensure_pinned_cloudera_cluster "$req"
+      return 0
+      ;;
   esac
-  if _ansible_requirements_collections_present "$req"; then
-    return 0
+  if ! _ansible_requirements_collections_present "$req"; then
+    printf '%s\n' "Installing Ansible collections from requirements.yml"
+    ansible-galaxy collection install -r "$req"
   fi
-  printf '%s\n' "Installing Ansible collections from requirements.yml"
-  ansible-galaxy collection install -r "$req"
+  _ansible_ensure_pinned_cloudera_cluster "$req"
 }
 
 # Jenkins ansiColor + jenkins_log_pipe: stdout is piped (not a TTY) but the console renders ANSI.
