@@ -116,9 +116,8 @@
       when: cm_kerberos_result is changed
 
     - name: Record Kerberos change for CM restart on CM host
-      ansible.builtin.set_stats:
-        data:
-          cm_kerberos_restart_required: true
+      ansible.builtin.set_fact:
+        cm_kerberos_restart_required: true
       when: cm_kerberos_result is changed or (cm_kerberos_ad_config is defined and cm_kerberos_ad_config is changed)
 
     - name: Refresh CM API URL after Kerberos changes
@@ -146,4 +145,4 @@
   tasks:
     - name: Restart CM server and agent after Kerberos config
       ansible.builtin.import_tasks: common_tasks/restart_cm_services.yml
-      when: ansible_stats.data.cm_kerberos_restart_required | default(false) | bool
+      when: hostvars['localhost']['cm_kerberos_restart_required'] | default(false) | bool

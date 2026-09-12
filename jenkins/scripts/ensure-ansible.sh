@@ -48,3 +48,8 @@ fi
 
 command -v ansible-playbook >/dev/null 2>&1 || fail "ansible-playbook still missing after install attempt"
 log "OK ansible-playbook installed ($(/usr/bin/env ansible-playbook --version 2>&1 | head -1))"
+
+if ! python3 -c "import cm_client" 2>/dev/null; then
+  log "Installing cm_client Python package (cloudera.cluster modules)"
+  pip3 install --user cm_client 2>&1 | tee -a "$LOG_FILE" || log "WARN: cm_client pip install failed — Kerberos/CMS API playbooks may fail"
+fi

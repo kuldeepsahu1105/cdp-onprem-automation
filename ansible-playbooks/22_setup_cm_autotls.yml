@@ -71,12 +71,6 @@
           when: not use_password
           register: auto_tls_response
 
-        - name: Record Auto-TLS API success (restart on CM host in next play)
-          ansible.builtin.set_stats:
-            data:
-              cm_autotls_restart_required: true
-          when: auto_tls_response is succeeded
-
         - name: Mark Auto-TLS applied this run (defer wait/restart to CM-host play)
           ansible.builtin.set_fact:
             autotls_applied_this_run: true
@@ -105,20 +99,20 @@
   tasks:
     - name: Restart CM server and agent after Auto-TLS API
       ansible.builtin.import_tasks: common_tasks/restart_cm_services.yml
-      when: ansible_stats.data.cm_autotls_restart_required | default(false) | bool
+      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
 
     - name: Refresh CM API URL after service restart
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
-      when: ansible_stats.data.cm_autotls_restart_required | default(false) | bool
+      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
 
     - name: Wait for Cloudera Manager API after restart
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
-      when: ansible_stats.data.cm_autotls_restart_required | default(false) | bool
+      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
 
     - name: Wait for Cloudera Manager Server active after restart
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
-      when: ansible_stats.data.cm_autotls_restart_required | default(false) | bool
+      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
 
     - name: Print Cloudera Manager Access URLs after Auto-TLS restart
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
-      when: ansible_stats.data.cm_autotls_restart_required | default(false) | bool
+      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
