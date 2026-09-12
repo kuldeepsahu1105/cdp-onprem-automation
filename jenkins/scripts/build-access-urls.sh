@@ -140,7 +140,7 @@ mkdir -p "$OUT_DIR"
     exit 0
   fi
 
-  http_port="$(read_group_var deployment_portal_http_port 81)"
+  http_port="$(read_group_var deployment_portal_http_port 80)"
   pg_port="$(read_group_var deployment_portal_pgadmin_host_port 5050)"
   cm_http="$(read_group_var cm_http_port 7180)"
   cm_https="$(read_group_var cm_https_port 7183)"
@@ -250,7 +250,7 @@ mkdir -p "$OUT_DIR"
   fi
 
   echo ""
-  echo "Service URL verify tiers (RUNBOOK.md): Tier A = localhost on ops host (portal 127.0.0.1:<deployment_portal_http_port> (default 81)); CM manager IP/FQDN :7180 on cldr-mngr;"
+  echo "Service URL verify tiers (RUNBOOK.md): Tier A = localhost on ops host (portal 127.0.0.1:<deployment_portal_http_port> (default 80)); CM manager IP/FQDN :7180 on cldr-mngr;"
   echo "Tier B = external printed URLs from Jenkins when ansible_control_reachability is public (warn if SG blocks ports)."
   echo ""
   echo "Vars: deployment_external_url_verify (global), deployment_cm_external_url_verify (per-service)."

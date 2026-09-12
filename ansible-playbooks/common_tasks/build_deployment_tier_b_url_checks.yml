@@ -49,7 +49,7 @@
           'http://'
           ~ _tier_b_ctx.anchor.public_ip
           ~ ':'
-          ~ (deployment_portal_http_port | default(81) | string)
+          ~ (deployment_portal_http_port | default(80) | string)
           ~ '/'
         )
         if (

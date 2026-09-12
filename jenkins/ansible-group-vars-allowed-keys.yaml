@@ -48,6 +48,7 @@ allowed_keys:
   - deployment_portal_host_group
   - deployment_portal_postgres_host_group
   - deployment_portal_http_port
+  - deployment_portal_caddy_host_port
   - deployment_portal_pgadmin_host_port
   - deployment_portal_access_profile
   - deployment_portal_prefer_fqdn_urls

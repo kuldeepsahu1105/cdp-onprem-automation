@@ -157,10 +157,10 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 
 | Tier | Checks | Jenkins typical outcome |
 |---|---|---|
-| **A** (service host, **required**) | Ops: `127.0.0.1:<deployment_portal_http_port> (default 81)` + Caddy **Host** vhosts (portal, pgAdmin, IPA, Grafana/Prometheus/Alertmanager). CM: manager private IP / `ansible_host` / FQDN `:7180` on `cldr-mngr` (not Caddy) | Must pass or PORTAL / CM verify fails |
+| **A** (service host, **required**) | Ops: `127.0.0.1:<deployment_portal_http_port> (default 80)` + Caddy **Host** vhosts (portal, pgAdmin, IPA, Grafana/Prometheus/Alertmanager). CM: manager private IP / `ansible_host` / FQDN `:7180` on `cldr-mngr` (not Caddy) | Must pass or PORTAL / CM verify fails |
 | **B** (Ansible controller, **public** profile) | GET printed external URLs (portal, CM, Grafana, IPA, ECS) from the agent | **`warn`** if SG blocks ports (`deployment_external_url_verify: warn`, default on Jenkins); per-service `deployment_cm_external_url_verify`, etc. |
 
-Private-IP URLs on the index work only inside the VPC. Ensure SG allows **81** (`deployment_portal_http_port`), **5050**, **7180**/**7183**, etc. from Jenkins/office CIDRs so Tier **B** succeeds. `access-urls.txt` (`build-access-urls.sh`) lists URLs for email; Ansible logs include `CDP_ACCESS_URLS_*` and Tier **B** warnings.
+Private-IP URLs on the index work only inside the VPC. Ensure SG allows **80** (or **`deployment_portal_caddy_host_port`** / `deployment_portal_http_port` when not 80), **5050**, **7180**/**7183**, etc. from Jenkins/office CIDRs so Tier **B** succeeds. `access-urls.txt` (`build-access-urls.sh`) lists URLs for email; Ansible logs include `CDP_ACCESS_URLS_*` and Tier **B** warnings.
 
 **Control-plane reachability (Jenkins vs VPN / bare metal):** The Jenkins agent has **no route** to VPC `10.x` / `172.31.x` addresses. `run-ansible.sh` exports `ANSIBLE_CONTROL_VIA_JENKINS=1`; `jenkins_override.yml` sets `ansible_control_reachability: public` so CM API and portal verify never treat inventory `private_ip` as the controller target (probes delegate to `cldr-mngr` at manager IP/FQDN where needed). For **bare metal** or **in-VPC/VPN** automation runners, use default `auto` or `ansible_control_reachability: private` in `ANSIBLE_GROUP_VARS_YAML` — Tier **B** is skipped when the effective profile is not `public`.
 
@@ -175,7 +175,7 @@ Jenkins `text` parameters render as a **multiline text area**. Only **Ansible-on
 - Merged at runtime via `ansible-playbooks/jenkins_override.yml` + `-e @file` (not committed; never under `group_vars/all/`).
 - Disallowed or unknown keys fail validation when Ansible stages are selected.
 - CM archive login: use `CM_REPO_USERNAME` / `CM_REPO_PASSWORD` (not the textarea).
-- **Caddy edge port:** default **`deployment_portal_http_port: 81`** in `group_vars/all.yml` (portal/pgAdmin/monitoring/IPA vhosts). Do not paste legacy **`8088`** into the textarea. Jenkins `render-ansible-group-vars-override.py` rewrites **8088 → 81**. Open security group **81** from the Jenkins agent CIDR for portal Tier **B**; CM uses **7180**/**7183** on `cldr-mngr` (not Caddy).
+- **Caddy edge port:** default **`deployment_portal_http_port: 80`** with compose **`80:80`** (`deployment_portal_caddy_host_port` optional, e.g. host **81** → container **80**). Do not paste legacy **`8088`**. Jenkins `render-ansible-group-vars-override.py` rewrites **8088 → 80**. Open security group **80** (or configured host port) from the Jenkins agent CIDR for portal Tier **B**; CM uses **7180**/**7183** on `cldr-mngr` (not Caddy).
 
 ## License and CM archive credentials
 

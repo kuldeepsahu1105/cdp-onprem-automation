@@ -512,9 +512,12 @@ ecs_data_services_catalog:
 deployment_portal_enabled: true
 deployment_portal_host_group: auto
 deployment_portal_postgres_host_group: cldr-mngr
-# Caddy edge listener on ops (ipaserver): portal, pgAdmin, monitoring, and IPA vhosts share this TCP port.
+# Caddy listener inside the container (Caddyfile :port). URLs and vhosts use this port (omit :80 in hostnames when 80).
 # Cloudera Manager and ECS use direct host ports (cldr-mngr :7180/:7183; ECS console/gateway URLs) — not Caddy.
-deployment_portal_http_port: 81
+deployment_portal_http_port: 80
+# Host TCP publish for Caddy (docker HOST:CONTAINER). Unset = same as deployment_portal_http_port (default 80:80).
+# Example alternate edge: deployment_portal_http_port: 80, deployment_portal_caddy_host_port: 81 → 0.0.0.0:81:80.
+# deployment_portal_caddy_host_port: 80
 deployment_portal_pgadmin_host_port: 5050
 deployment_portal_config_dir: /opt/cldr-deployment-portal
 deployment_portal_www_dir: /opt/cldr-deployment-portal/www

@@ -81,7 +81,7 @@
   ansible.builtin.debug:
     msg: >-
       Tier B: skipping direct FreeIPA cluster FQDN URL from Ansible controller
-      (check Caddy IPA vhost URLs on :{{ deployment_portal_http_port | default(81) }} instead).
+      (check Caddy IPA vhost URLs on :{{ deployment_portal_http_port | default(80) }} instead).
   when:
     - _tier_b_skip_ipa_direct_fqdn | default(false) | bool
     - >-

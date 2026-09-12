@@ -28,7 +28,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 
 | # | Playbook | Notes |
 |---|----------|--------|
-| 10 | `10_setup_deployment_portal.yml` | Ops portal bootstrap (Caddy edge `deployment_portal_http_port`, default **81** — portal, pgAdmin, monitoring, IPA; not CM/ECS) |
+| 10 | `10_setup_deployment_portal.yml` | Ops portal bootstrap (Caddy `deployment_portal_http_port`, default **80** / compose **80:80** — portal, pgAdmin, monitoring, IPA; not CM/ECS) |
 | 11 | `11_identity_setup.yml` | Identity **router** |
 | 12 | `12_setup_freeipa_server.yml` | FreeIPA server (skipped for AD) |
 | 13 | `13_update_resolv_conf.yml` | resolv.conf / netplan |

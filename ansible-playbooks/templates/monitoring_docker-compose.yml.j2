@@ -1,5 +1,5 @@
 # Intentional: prometheus, alertmanager, and grafana have no host ports — only the deployment_portal Docker network.
-# Browsers and Jenkins Tier A/B use Caddy on deployment_portal_http_port (default 81) path routes (/prometheus/, /grafana/, /alertmanager/).
+# Browsers and Jenkins Tier A/B use Caddy on deployment_portal_http_port (default 80) path routes (/prometheus/, /grafana/, /alertmanager/).
 # cAdvisor is the exception: host port monitoring_cadvisor_host_port (default 8089) for container metrics outside Caddy.
 services:
   prometheus:

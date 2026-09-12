@@ -72,7 +72,8 @@ Import order in `set_cm_api_url.yml`:
 | `cm_api_connect_host` | Optional override in `group_vars/all.yml` |
 | `cm_manager_inventory_host` | `group_vars/all.yml` (default `cldr-mngr` host) |
 | `cm_frontend_url_effective` | `resolve_caddy_service_public_urls.yml` — optional `cm_external_url` override only |
-| `pgadmin_caddy_public_url` | `resolve_caddy_service_public_urls.yml` — preferred browser URL for pgAdmin on Caddy port `deployment_portal_http_port` (default **81**) |
+| `pgadmin_caddy_public_url` | `resolve_caddy_service_public_urls.yml` — preferred browser URL for pgAdmin on Caddy port `deployment_portal_http_port` (default **80**) |
+| `deployment_portal_caddy_host_port` | Optional Docker host publish for Caddy; defaults to `deployment_portal_http_port` (`80:80`) |
 | `deployment_tier_b_url_checks` | `build_deployment_tier_b_url_checks.yml` on **localhost** — Tier B reads via `hostvars['localhost']` in `verify_service_urls_from_controller.yml` |
 | `ecs_control_plane_url_effective` | `resolve_ecs_control_plane_url.yml` — `ecs_control_plane_url` or `https://console.<ecs_app_domain>` (no Caddy) |
 

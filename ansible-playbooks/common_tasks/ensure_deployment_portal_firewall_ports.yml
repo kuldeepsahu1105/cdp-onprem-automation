@@ -1,5 +1,5 @@
 ---
-# Open portal Caddy (deployment_portal_http_port), pgAdmin (5050), and cAdvisor (8089) when firewalld is active on the ops host.
+# Open portal Caddy host publish, pgAdmin (5050), and cAdvisor (8089) when firewalld is active on the ops host.
 # PREREQS normally disable firewalld; this is idempotent when an admin re-enables it.
 
 - name: Check firewalld service state on portal host
@@ -15,10 +15,14 @@
     permanent: true
     state: enabled
     immediate: true
-  loop:
-    - "{{ deployment_portal_http_port | int }}"
-    - "{{ deployment_portal_pgadmin_host_port | int }}"
-    - "{{ monitoring_cadvisor_host_port | int }}"
+  loop: >-
+    {{
+      [
+        deployment_portal_caddy_host_port | default(deployment_portal_http_port) | int,
+        deployment_portal_pgadmin_host_port | int,
+        monitoring_cadvisor_host_port | int,
+      ] | unique
+    }}
   when:
     - _portal_firewalld_svc is succeeded
     - (_portal_firewalld_svc.status.ActiveState | default('inactive')) == 'active'

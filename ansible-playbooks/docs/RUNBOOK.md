@@ -99,11 +99,19 @@ Variables:
 - `deployment_portal_url_verify_skip_vpc` — skip hard-fail on VPC-only printed URLs when control is public-only (Jenkins sets `true`)
 - `ansible_control_reachability` — must be `public` (or auto → public on Jenkins) for Tier **B**
 
-If Tier **B** warns but Tier **A** passed, open security groups for the relevant ports (**81** (`deployment_portal_http_port`), **5050**, **7180**/**7183**, etc.) from Jenkins/office CIDRs. Grep Ansible logs for `Tier B` or `CDP_ACCESS_URLS_BEGIN`; `jenkins/scripts/build-access-urls.sh` lists URLs for email.
+If Tier **B** warns but Tier **A** passed, open security groups for the relevant ports (**80** or **`deployment_portal_caddy_host_port`** when set, **5050**, **7180**/**7183**, etc.) from Jenkins/office CIDRs. Grep Ansible logs for `Tier B` or `CDP_ACCESS_URLS_BEGIN`; `jenkins/scripts/build-access-urls.sh` lists URLs for email.
 
-**Caddy still on legacy :8088 in `docker ps`:** `deployment_portal_docker-compose.yml.j2` binds `0.0.0.0:{{ deployment_portal_http_port }}` (repo default **81** since group_vars moved off 8088). An ops host that was provisioned earlier keeps the old publish until compose is re-rendered and Caddy is recreated — `docker compose up -d` alone does not remapping ports. Fix: re-run Jenkins **PORTAL** (play 10/35 re-templates compose and `--force-recreate caddy` when the file changes) or on **ipaserver**: `cd /opt/cldr-deployment-portal && docker compose up -d --force-recreate caddy`. Confirm with `curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:81/`.
+**Caddy still on legacy :8088 (or wrong HOST:CONTAINER) in `docker ps`:** Compose publishes `0.0.0.0:<deployment_portal_caddy_host_port>:<deployment_portal_http_port>` (repo default **`80:80`**). Older stacks used symmetric **8088:8088** or **81:81**; changing `group_vars` alone does not remap ports until compose is re-rendered and Caddy is **force-recreated** (`docker compose up -d` without recreate keeps the old publish). Fix: re-run Jenkins **PORTAL** (play 10/35 re-templates compose and `--force-recreate caddy` when the file changes) or on **ipaserver**:
 
-**Monitoring containers with no host ports:** Grafana, Prometheus, and Alertmanager are **by design** not published on the host; only **cAdvisor** uses **8089** (`monitoring_cadvisor_host_port`). Use Caddy on port **81** (`/grafana/`, `/prometheus/`, `/alertmanager/`) or per-service Caddy vhosts when `caddy_vhost_enabled` is true.
+```bash
+cd /opt/cldr-deployment-portal
+docker compose -f docker-compose.yml up -d --force-recreate caddy
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:80/
+```
+
+Use `:81/` only when `deployment_portal_http_port` or `deployment_portal_caddy_host_port` is **81**.
+
+**Monitoring containers with no host ports:** Grafana, Prometheus, and Alertmanager are **by design** not published on the host; only **cAdvisor** uses **8089** (`monitoring_cadvisor_host_port`). Use Caddy on `deployment_portal_http_port` (default **80**) path routes (`/grafana/`, `/prometheus/`, `/alertmanager/`) or per-service Caddy vhosts when `caddy_vhost_enabled` is true.
 
 **pgAdmin 502 / :5050 unreachable:** On **ipaserver** (or portal host), `cd {{ deployment_portal_config_dir | default('/opt/cldr-deployment-portal') }}` then `docker ps -a --filter name=cldr-portal-pgadmin` and `curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:5050/`. Caddy must reverse-proxy **`pgadmin:80`** (compose service name). Fix: re-run Jenkins **PORTAL** or `docker compose -f docker-compose.yml up -d --force-recreate pgadmin caddy`. Ansible task `verify_deployment_portal_pgadmin.yml` fails with `docker logs` on error; set `deployment_portal_pgadmin_debug_logs: true` for extra log output after a successful sync.
 
@@ -251,15 +259,15 @@ MONITORING_STACK_ENABLED=true ansible-playbook -i inventory.ini 32_setup_monitor
 
 Ops stack runs on **ipaserver** when present (`deployment_portal_host_group: auto`), else **cldr-mngr**.
 
-**AWS (public IP):** Jenkins and browsers on the internet use `http://<ops-public-ip>:81/`; hosts inside the VPC can use `http://<ops-private-ip>:81/`. The generated index lists both. Caddy vhost URLs use a **dashed** ops public IP in the hostname (`portal.52-221-251-41.pvc.cloudera-labs.com`, not dotted); that requires wildcard DNS on `caddy_vhost_public_base` or use `caddy_vhost_dns_mode: classic_nipio`. Playbook 28 fails fast if Caddy does not respond on `http://127.0.0.1:<deployment_portal_http_port> (default 81)/` on the ops host.
+**AWS (public IP):** Jenkins and browsers on the internet use `http://<ops-public-ip>/` when `deployment_portal_http_port` is **80** (append `:port/` when using e.g. **81**); hosts inside the VPC can use the private IP the same way. The generated index lists both. Caddy vhost URLs use a **dashed** ops public IP in the hostname (`portal.52-221-251-41.pvc.cloudera-labs.com`, not dotted); that requires wildcard DNS on `caddy_vhost_public_base` or use `caddy_vhost_dns_mode: classic_nipio`. Playbook 28 fails fast if Caddy does not respond on `http://127.0.0.1:<deployment_portal_http_port> (default 80)/` on the ops host.
 
-**Caddy FreeIPA vhost:** When `[ipaserver]` is present, `http://ipa.<ops-ip-dashed>.<base>:81/` redirects `/` to **`/ipa/modern-ui/`** (default landing) and reverse-proxies **HTTP** to `<ipaserver-fqdn>` for **`/ipa/modern-ui/`** and **`/ipa/ui`** with **`header_up Host`** and path-matched **`header_up Referer`** (cloudera-labs/openshift pattern). Tier A checks accept **301** on `/` and **200/301** on both UI paths; on `ipaserver`, Ansible verifies `/ipa/modern-ui/` and `/ipa/ui` with matching Referer headers.
+**Caddy FreeIPA vhost:** When `[ipaserver]` is present, `http://ipa.<ops-ip-dashed>.<base>/` (or `:port/` when not 80) redirects `/` to **`/ipa/modern-ui/`** (default landing) and reverse-proxies **HTTP** to `<ipaserver-fqdn>` for **`/ipa/modern-ui/`** and **`/ipa/ui`** with **`header_up Host`** and path-matched **`header_up Referer`** (cloudera-labs/openshift pattern). Tier A checks accept **301** on `/` and **200/301** on both UI paths; on `ipaserver`, Ansible verifies `/ipa/modern-ui/` and `/ipa/ui` with matching Referer headers.
 
 **Cloudera Manager (not via Caddy):** Use direct **`https://<cldr-mngr-fqdn>:7183`** (or `:7180` before Auto-TLS) from browsers and Jenkins Tier **B**. Caddy on the ops host serves portal, pgAdmin, monitoring, and IPA only. Optional `cm_external_url` sets a custom published CM URL in portal facts; it does not configure Caddy.
 
 **ECS console (not via Caddy):** Published console URL is **`https://console.<ecs_app_domain>`** (`ecs_control_plane_url_effective`). Override with `ecs_control_plane_url` when needed. Internal ECS **`ApplicationDomain`** stays `ecs_app_domain`.
 
-**Bare metal / private network (no public IP):** Set `deployment_environment: baremetal` (or `deployment_portal_access_profile: private`). The portal index shows only private-network URLs — typically `http://<ops-fqdn>:81/` when `deployment_portal_prefer_fqdn_urls: true`, or `http://<management-ip>:81/` otherwise. pgAdmin stays on port `5050` on the same ops host; database is **cldr-mngr** PostgreSQL. Caddy lab hostnames use the ops management IP (often `caddy_vhost_dns_mode: flat` with IPA/AD DNS).
+**Bare metal / private network (no public IP):** Set `deployment_environment: baremetal` (or `deployment_portal_access_profile: private`). The portal index shows only private-network URLs — typically `http://<ops-fqdn>/` (or with explicit port when not 80) when `deployment_portal_prefer_fqdn_urls: true`, or the management IP otherwise. pgAdmin stays on port `5050` on the same ops host; database is **cldr-mngr** PostgreSQL. Caddy lab hostnames use the ops management IP (often `caddy_vhost_dns_mode: flat` with IPA/AD DNS).
 
 ---
 

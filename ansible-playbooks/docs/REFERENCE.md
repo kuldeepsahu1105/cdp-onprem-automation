@@ -274,7 +274,8 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `deployment_portal_enabled` | `true` | Run `10_setup_deployment_portal.yml` |
 | `deployment_portal_host_group` | `auto` | `auto`, `ipaserver`, or `cldr-mngr` — where Caddy/pgAdmin/Grafana run |
 | `deployment_portal_postgres_host_group` | `cldr-mngr` | CM PostgreSQL host for pgAdmin |
-| `deployment_portal_http_port` | `81` | Caddy index + Grafana/Prometheus/Alertmanager paths |
+| `deployment_portal_http_port` | `80` | Caddy container listener; index + Grafana/Prometheus/Alertmanager paths |
+| `deployment_portal_caddy_host_port` | (same as http) | Docker HOST publish for Caddy (`HOST:CONTAINER`, default `80:80`) |
 | `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI on ops host |
 | `pgadmin_default_email` | `admin@{{ caddy_vhost_public_base }}` | pgAdmin 8 login email (`PGADMIN_DEFAULT_EMAIL`); must not use `.local` cluster domains |
 | `deployment_portal_access_profile` | `auto` | `auto`, `cloud` (public + VPC URLs), or `private` (bare metal / no public IP) |
