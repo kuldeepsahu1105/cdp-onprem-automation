@@ -6,6 +6,7 @@
   ansible.builtin.set_fact:
     cm_caddy_public_url: ""
     ecs_caddy_console_url: ""
+    pgadmin_caddy_public_url: ""
   when: not (caddy_vhost_enabled | default(false) | bool)
 
 - name: Set CM Caddy public URL from vhost map
@@ -24,6 +25,14 @@
     - deployment_portal_ecs_present | default(false) | bool
     - caddy_vhost_urls_external is defined
     - caddy_vhost_urls_external.ecs is defined
+
+- name: Set pgAdmin Caddy public URL from vhost map
+  ansible.builtin.set_fact:
+    pgadmin_caddy_public_url: "{{ caddy_vhost_urls_external.pgadmin.url | default('') | trim }}"
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - caddy_vhost_urls_external is defined
+    - caddy_vhost_urls_external.pgadmin is defined
 
 - name: Clear ECS Caddy console URL when ECS not in inventory
   ansible.builtin.set_fact:

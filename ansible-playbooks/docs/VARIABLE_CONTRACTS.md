@@ -71,6 +71,7 @@ Import order in `set_cm_api_url.yml`:
 | `cm_api_connect_host` | Optional override in `group_vars/all.yml` |
 | `cm_manager_inventory_host` | `group_vars/all.yml` (default `cldr-mngr` host) |
 | `cm_caddy_public_url`, `cm_frontend_url_effective` | `resolve_caddy_service_public_urls.yml` (after `caddy_vhost_urls.j2` in `build_deployment_portal_facts.yml`) |
+| `pgadmin_caddy_public_url` | `resolve_caddy_service_public_urls.yml` — preferred browser URL for pgAdmin on Caddy port `8088` |
 | `ecs_caddy_console_url` | Same; used by `resolve_ecs_control_plane_url.yml` and portal `ecs.console_hint` |
 | `cm_external_url`, `cm_apply_caddy_frontend_url` | `group_vars/all.yml` — override Caddy CM URL; gate `apply_cm_caddy_load_balancer.yml` |
 

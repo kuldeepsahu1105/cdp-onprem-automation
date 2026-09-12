@@ -411,7 +411,8 @@
       Confirm Cloudera Manager is up on {{ deployment_portal_cm_fqdn }} (ports {{ cm_http_port }}/{{ cm_https_port }}).
       {% elif 'pgAdmin' in item.item.name %}
       Confirm pgAdmin container {{ deployment_portal_pgadmin_container }} is running and responds on
-      http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/ (Caddy reverse_proxies to that container on the compose network).
+      http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/ (Caddy reverse_proxies pgadmin:80 on the compose network).
+      Browsers should use the Caddy vhost on port {{ deployment_portal_http_port }} when direct :{{ deployment_portal_pgadmin_host_port }} is blocked by SG.
       {% else %}
       Confirm Caddyfile vhosts and wildcard DNS (or caddy_vhost_dns_mode: classic_nipio) match {{ item.item.host }}.
       {% endif %}

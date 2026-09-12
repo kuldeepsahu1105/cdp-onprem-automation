@@ -102,6 +102,17 @@
   register: caddy_recreate_compose
   failed_when: caddy_recreate_compose.rc != 0
 
+- name: Recreate pgAdmin when compose file changed (port publish / image)
+  ansible.builtin.command:
+    argv: >-
+      {{
+        deployment_portal_compose_argv
+        + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', 'pgadmin']
+      }}
+  when: portal_compose_render is changed
+  register: pgadmin_recreate_compose
+  failed_when: pgadmin_recreate_compose.rc != 0
+
 - name: Verify Caddy container and local portal HTTP
   ansible.builtin.import_tasks: verify_deployment_portal_caddy.yml
 

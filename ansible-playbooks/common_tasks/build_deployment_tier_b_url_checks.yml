@@ -27,6 +27,21 @@
   delegate_to: localhost
   run_once: true
 
+- name: Set Tier B pgAdmin external probe URL (prefer Caddy vhost on portal port)
+  ansible.builtin.set_fact:
+    _tier_b_pgadmin_external_url: >-
+      {{
+        _tier_b_ctx.caddy_vhosts.urls_public.pgadmin.url | default('')
+        if (
+          _tier_b_caddy | default(false) | bool
+          and (_tier_b_ctx.caddy_vhosts.urls_public.pgadmin.url | default('') | length > 0)
+        )
+        else (_tier_b_ctx.access.external.pgadmin | default(''))
+      }}
+  delegate_to: localhost
+  run_once: true
+  when: _tier_b_ctx | length > 0
+
 - name: Resolve CM host IPs for Tier B when context is missing
   ansible.builtin.set_fact:
     _tier_b_cm_public: >-
@@ -63,7 +78,7 @@
            )
            and (_tier_b_ctx.access.external.portal | default('') | length > 0)
            else [])
-          + ([{'name': 'pgAdmin (external)', 'url': _tier_b_ctx.access.external.pgadmin | default(''), 'service': 'pgadmin'}]
+          + ([{'name': 'pgAdmin (external)', 'url': _tier_b_pgadmin_external_url | default(_tier_b_ctx.access.external.pgadmin | default('')), 'service': 'pgadmin'}]
              if (
                (
                  _tier_b_use_milestones
@@ -77,7 +92,7 @@
                  and (_tier_b_scope == 'all')
                )
              )
-             and (_tier_b_ctx.access.external.pgadmin | default('') | length > 0)
+             and (_tier_b_pgadmin_external_url | default(_tier_b_ctx.access.external.pgadmin | default('')) | length > 0)
              else [])
           + ([{'name': 'Grafana (external)', 'url': _tier_b_ctx.access.external.grafana | default(''), 'service': 'grafana'}]
              if (

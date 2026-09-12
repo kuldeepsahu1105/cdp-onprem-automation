@@ -18,7 +18,7 @@ http://{{ caddy_vhost_urls.portal.hostname }}{% if deployment_portal_http_port |
 }
 
 http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
-  reverse_proxy {{ deployment_portal_pgadmin_container }}:80
+  reverse_proxy pgadmin:80
 }
 
 {% if deployment_portal_has_ipa | default(false) | bool %}

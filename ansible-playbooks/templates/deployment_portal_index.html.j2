@@ -1,5 +1,6 @@
 {% set ctx = deployment_portal_context %}
 {% set cm_tile_url = ctx.cloudera_manager.caddy_url | default('') if (ctx.cloudera_manager.caddy_url | default('') | length > 0) else ctx.cloudera_manager.ui_url_https %}
+{% set pgadmin_tile_url = ctx.portal.pgadmin_caddy_url | default('') if (ctx.portal.pgadmin_caddy_url | default('') | length > 0) else (ctx.portal.pgadmin_url_direct | default(ctx.portal.pgadmin_url | default(''))) %}
 {% set ipa_tile_url = ctx.identity.ipa_caddy_url | default('') if (ctx.identity.ipa_caddy_url | default('') | length > 0) else (ctx.identity.ipa_ui_url | default('')) %}
 {% set ecs_tile_url = (ctx.ecs.caddy_url | default('') if (ctx.ecs.caddy_url | default('') | length > 0) else (ctx.ecs.console_hint | default(''))) if ctx.ecs.deployed else '' %}
 <!DOCTYPE html>
@@ -267,10 +268,10 @@
           <span class="tile-hint">Cluster admin UI</span>
         </a>
         {% endif %}
-        {% if ctx.portal.pgadmin_url | default('') | length > 0 %}
-        <a class="tile" href="{{ ctx.portal.pgadmin_url }}">
+        {% if pgadmin_tile_url | length > 0 %}
+        <a class="tile" href="{{ pgadmin_tile_url }}">
           <span class="tile-label">pgAdmin</span>
-          <span class="tile-hint">CM PostgreSQL</span>
+          <span class="tile-hint">CM PostgreSQL{% if ctx.portal.pgadmin_caddy_url | default('') | length > 0 %} (Caddy){% endif %}</span>
         </a>
         {% endif %}
         {% if ctx.monitoring.enabled and (ctx.monitoring.grafana_url | default('') | length > 0) %}
@@ -375,6 +376,7 @@
         {% endif %}
         <ul class="clean">
           <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>
+          <li><strong>pgAdmin</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.pgadmin.url }}">{{ ctx.caddy_vhosts.urls_public.pgadmin.hostname }}</a></li>
           <li><strong>CM</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}">{{ ctx.caddy_vhosts.urls_public.cm.hostname }}</a></li>
           {% if ctx.caddy_vhosts.urls_vpc.portal is defined and ctx.caddy_vhosts.urls_vpc.portal.url | default('') | length > 0 %}
           <li><strong>Portal (VPC slug)</strong> — <a href="{{ ctx.caddy_vhosts.urls_vpc.portal.url }}">{{ ctx.caddy_vhosts.urls_vpc.portal.hostname }}</a></li>
@@ -391,7 +393,10 @@
           <li>Host: <code>{{ ctx.ops_host.fqdn }}</code> <span class="badge">{{ ctx.ops_host.inventory_group }}</span></li>
           <li>{{ ctx.ops_host.services }}</li>
           <li><strong>Deployment index (Caddy)</strong> — <a href="{{ ctx.portal.index_url }}">{{ ctx.portal.index_url }}</a></li>
-          <li><strong>pgAdmin</strong> — <a href="{{ ctx.portal.pgadmin_url }}">{{ ctx.portal.pgadmin_url }}</a> <span class="badge">connects to CM DB</span></li>
+          <li><strong>pgAdmin</strong> — <a href="{{ pgadmin_tile_url }}">{{ pgadmin_tile_url }}</a> <span class="badge">connects to CM DB</span></li>
+          {% if ctx.portal.pgadmin_caddy_url | default('') | length > 0 and ctx.portal.pgadmin_url_direct | default('') | length > 0 %}
+          <li><strong>pgAdmin (direct port)</strong> — <a href="{{ ctx.portal.pgadmin_url_direct }}">{{ ctx.portal.pgadmin_url_direct }}</a></li>
+          {% endif %}
           {% if ctx.monitoring.enabled %}
           <li><strong>Grafana</strong> — <a href="{{ ctx.monitoring.grafana_url }}">{{ ctx.monitoring.grafana_url }}</a></li>
           <li><strong>Prometheus</strong> — <a href="{{ ctx.monitoring.prometheus_url }}">{{ ctx.monitoring.prometheus_url }}</a></li>

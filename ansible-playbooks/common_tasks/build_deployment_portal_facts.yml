@@ -236,11 +236,22 @@
             if (deployment_portal_access_profile_effective == 'private')
             else deployment_portal_access_urls.external.portal
           }}
-        pgadmin_url: >-
+        pgadmin_url_direct: >-
           {{
             deployment_portal_access_urls.primary.pgadmin
             if (deployment_portal_access_profile_effective == 'private')
             else deployment_portal_access_urls.external.pgadmin
+          }}
+        pgadmin_caddy_url: "{{ pgadmin_caddy_public_url | default('') }}"
+        pgadmin_url: >-
+          {{
+            pgadmin_caddy_public_url
+            if (pgadmin_caddy_public_url | default('') | length > 0)
+            else (
+              deployment_portal_access_urls.primary.pgadmin
+              if (deployment_portal_access_profile_effective == 'private')
+              else deployment_portal_access_urls.external.pgadmin
+            )
           }}
         index_url_vpc: "{{ deployment_portal_access_urls.vpc.portal | default('') }}"
         pgadmin_url_vpc: "{{ deployment_portal_access_urls.vpc.pgadmin | default('') }}"

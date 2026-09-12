@@ -16,7 +16,7 @@ services:
     container_name: {{ deployment_portal_pgadmin_container }}
     restart: unless-stopped
     ports:
-      - "{{ deployment_portal_pgadmin_host_port }}:80"
+      - "0.0.0.0:{{ deployment_portal_pgadmin_host_port }}:80/tcp"
     environment:
       PGADMIN_DEFAULT_EMAIL: "{{ pgadmin_default_email }}"
       PGADMIN_DEFAULT_PASSWORD: "{{ pgadmin_default_password }}"
