@@ -63,8 +63,8 @@ services:
     type: TEZ
     display_name: Tez
     config:
+      # Tez depends on YARN only (not hdfs_service) — see CDP service dependency matrix.
       yarn_service: "{{ 'yarn' if svc.yarn | default(true) else '' }}"
-      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
 {% endif %}
 {% if svc.hive | default(true) %}
   - name: hive
