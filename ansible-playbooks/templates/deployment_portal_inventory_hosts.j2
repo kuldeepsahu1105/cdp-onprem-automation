@@ -27,6 +27,9 @@
 {% if inv_host == _anchor_inv %}
 {% if 'Portal / Caddy (reverse proxy)' not in _roles %}{% set _ = _roles.append('Portal / Caddy (reverse proxy)') %}{% endif %}
 {% if 'pgAdmin (container)' not in _roles %}{% set _ = _roles.append('pgAdmin (container)') %}{% endif %}
+{% if _mon and 'Grafana (container)' not in _roles %}{% set _ = _roles.append('Grafana (container)') %}{% endif %}
+{% if _mon and 'Prometheus (container)' not in _roles %}{% set _ = _roles.append('Prometheus (container)') %}{% endif %}
+{% if _mon and 'Alertmanager (container)' not in _roles %}{% set _ = _roles.append('Alertmanager (container)') %}{% endif %}
 {% if _mon and 'cAdvisor (container metrics)' not in _roles %}{% set _ = _roles.append('cAdvisor (container metrics)') %}{% endif %}
 {% if 'Docker (portal stack)' not in _roles %}{% set _ = _roles.append('Docker (portal stack)') %}{% endif %}
 {% endif %}
@@ -41,9 +44,11 @@
 {% endif %}
 {% if inv_host in groups.get('ecs-masters', []) %}
 {% if 'ECS master' not in _roles %}{% set _ = _roles.append('ECS master') %}{% endif %}
+{% if 'Docker (ECS)' not in _roles %}{% set _ = _roles.append('Docker (ECS)') %}{% endif %}
 {% endif %}
 {% if inv_host in groups.get('ecs-workers', []) %}
 {% if 'ECS worker' not in _roles %}{% set _ = _roles.append('ECS worker') %}{% endif %}
+{% if 'Docker (ECS agent)' not in _roles %}{% set _ = _roles.append('Docker (ECS agent)') %}{% endif %}
 {% endif %}
 {% set _ht = (_hv.host_template | default(_hv.cldr_host_template | default('')) | string) | trim | lower %}
 {% if _ht == 'master' and 'CDP Runtime master (host template)' not in _roles %}
@@ -59,6 +64,11 @@
 {% if _svc.hdfs | default(true) | bool and 'HDFS NameNode' not in _roles %}{% set _ = _roles.append('HDFS NameNode') %}{% endif %}
 {% if _svc.yarn | default(true) | bool and 'YARN ResourceManager' not in _roles %}{% set _ = _roles.append('YARN ResourceManager') %}{% endif %}
 {% if _svc.hbase | default(true) | bool and 'HBase Master' not in _roles %}{% set _ = _roles.append('HBase Master') %}{% endif %}
+{% if _svc.ozone | default(true) | bool and 'Ozone' not in _roles %}{% set _ = _roles.append('Ozone') %}{% endif %}
+{% if (_svc.hive | default(true) | bool or _svc.hive_on_tez | default(true) | bool) and 'Hive' not in _roles %}{% set _ = _roles.append('Hive') %}{% endif %}
+{% if _svc.impala | default(true) | bool and 'Impala' not in _roles %}{% set _ = _roles.append('Impala') %}{% endif %}
+{% if _svc.kafka | default(true) | bool and 'Kafka' not in _roles %}{% set _ = _roles.append('Kafka') %}{% endif %}
+{% if _svc.ranger | default(true) | bool and 'Ranger' not in _roles %}{% set _ = _roles.append('Ranger') %}{% endif %}
 {% if _svc.hue | default(false) | bool and 'Hue' not in _roles %}{% set _ = _roles.append('Hue') %}{% endif %}
 {% if _svc.zookeeper | default(true) | bool and 'ZooKeeper' not in _roles %}{% set _ = _roles.append('ZooKeeper') %}{% endif %}
 {% endif %}
@@ -66,6 +76,7 @@
 {% if _svc.hdfs | default(true) | bool and 'HDFS DataNode' not in _roles %}{% set _ = _roles.append('HDFS DataNode') %}{% endif %}
 {% if _svc.yarn | default(true) | bool and 'YARN NodeManager' not in _roles %}{% set _ = _roles.append('YARN NodeManager') %}{% endif %}
 {% if _svc.hbase | default(true) | bool and 'HBase RegionServer' not in _roles %}{% set _ = _roles.append('HBase RegionServer') %}{% endif %}
+{% if _svc.ozone | default(true) | bool and 'Ozone' not in _roles %}{% set _ = _roles.append('Ozone') %}{% endif %}
 {% if _svc.zookeeper | default(true) | bool and 'ZooKeeper' not in _roles %}{% set _ = _roles.append('ZooKeeper') %}{% endif %}
 {% endif %}
 {% set _knox_host = _hv.knox_gateway | default(_hv.knox | default(false)) | bool %}

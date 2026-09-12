@@ -1,0 +1,62 @@
+---
+# After ops-host monitoring probe: align portal context + endpoints with deployed stack.
+# Jenkins often passes monitoring_stack_enabled=false while containers already exist on ipaserver.
+
+- name: Compute effective monitoring visibility for portal index
+  ansible.builtin.set_fact:
+    _portal_mon_effective: >-
+      {{
+        (monitoring_stack_enabled | default(false) | bool)
+        or (deployment_portal_monitoring_deployed | default(false) | bool)
+        or (deployment_portal_monitoring_routes_enabled | default(false) | bool)
+        or (deployment_portal_context.monitoring.enabled | default(false) | bool)
+        or (deployment_portal_context.monitoring.routes_enabled | default(false) | bool)
+      }}
+  when: deployment_portal_context is defined
+
+- name: Re-render deployment portal endpoints after monitoring probe
+  ansible.builtin.set_fact:
+    deployment_portal_endpoints: >-
+      {{
+        lookup('template', 'deployment_portal_endpoints.j2') | from_yaml | default([], true)
+      }}
+  when:
+    - deployment_portal_context is defined
+    - _portal_mon_effective | default(false) | bool
+
+- name: Re-render planned roles after monitoring probe
+  ansible.builtin.set_fact:
+    deployment_portal_planned_roles: >-
+      {{
+        lookup('template', 'deployment_portal_planned_roles.j2') | from_yaml | default([], true)
+      }}
+  when:
+    - deployment_portal_context is defined
+    - _portal_mon_effective | default(false) | bool
+
+- name: Merge monitoring flags and endpoints into deployment portal context
+  ansible.builtin.set_fact:
+    deployment_portal_context: >-
+      {{
+        deployment_portal_context | combine(
+          {
+            'monitoring': (
+              deployment_portal_context.monitoring | default({})
+              | combine(
+                  {
+                    'enabled': (_portal_mon_effective | default(false) | bool),
+                    'routes_enabled': (deployment_portal_monitoring_routes_enabled | default(false) | bool),
+                  },
+                  recursive=True
+                )
+            ),
+            'endpoints': (
+              deployment_portal_endpoints
+              if (_portal_mon_effective | default(false) | bool)
+              else (deployment_portal_context.endpoints | default([]))
+            ),
+          },
+          recursive=True
+        )
+      }}
+  when: deployment_portal_context is defined

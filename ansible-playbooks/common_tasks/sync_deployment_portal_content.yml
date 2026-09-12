@@ -5,6 +5,9 @@
 - name: Detect monitoring stack on portal ops host before Caddy/index render
   ansible.builtin.import_tasks: detect_deployment_portal_monitoring_on_host.yml
 
+- name: Refresh portal context monitoring flags and endpoints after ops-host probe
+  ansible.builtin.import_tasks: refresh_deployment_portal_monitoring_context.yml
+
 - name: Create deployment portal directories
   ansible.builtin.file:
     path: "{{ item }}"

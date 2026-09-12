@@ -33,6 +33,13 @@
         lookup('template', 'deployment_portal_inventory_hosts.j2') | from_yaml | default([], true)
       }}
 
+- name: Render planned/configured role map for portal index
+  ansible.builtin.set_fact:
+    deployment_portal_planned_roles: >-
+      {{
+        lookup('template', 'deployment_portal_planned_roles.j2') | from_yaml | default([], true)
+      }}
+
 - name: Set CM manager FQDN for portal links
   ansible.builtin.set_fact:
     deployment_portal_cm_fqdn: >-
@@ -542,6 +549,7 @@
         cadvisor_url_vpc: "{{ deployment_portal_access_urls.vpc.cadvisor | default('') }}"
       nodes: "{{ deployment_portal_nodes }}"
       inventory_hosts: "{{ deployment_portal_inventory_hosts | default([]) }}"
+      planned_roles: "{{ deployment_portal_planned_roles | default([]) }}"
       endpoints: "{{ deployment_portal_endpoints | default([]) }}"
       extra_links: "{{ deployment_portal_extra_links }}"
 

@@ -9,11 +9,30 @@
 {% set _portal_caddy_url = ctx.caddy_vhosts.urls_public.portal.url | default('') if (ctx.caddy_vhosts.enabled | default(false)) else '' %}
 {% set portal_tile_url = _portal_caddy_url if (_portal_caddy_url | length > 0) else ctx.portal.index_url | default('') %}
 {% set portal_tile_hint = ctx.caddy_vhosts.urls_public.portal.hostname if (_portal_caddy_url | length > 0) else 'Ops host Caddy index' %}
-{% set mon_on = (ctx.monitoring.enabled | default(false) | bool) or (ctx.monitoring.routes_enabled | default(false) | bool) %}
+{% set mon_on = (
+  (ctx.monitoring.enabled | default(false) | bool)
+  or (ctx.monitoring.routes_enabled | default(false) | bool)
+  or (deployment_portal_monitoring_routes_enabled | default(false) | bool)
+  or (deployment_portal_monitoring_deployed | default(false) | bool)
+  or (monitoring_stack_enabled | default(false) | bool)
+) %}
 {% set grafana_tile_url = ctx.monitoring.grafana_caddy_url | default('') if (ctx.monitoring.grafana_caddy_url | default('') | length > 0) else (ctx.monitoring.grafana_url | default(ctx.monitoring.grafana_path_url | default(''))) %}
 {% set prometheus_tile_url = ctx.monitoring.prometheus_caddy_url | default('') if (ctx.monitoring.prometheus_caddy_url | default('') | length > 0) else (ctx.monitoring.prometheus_url | default(ctx.monitoring.prometheus_path_url | default(''))) %}
 {% set alertmanager_tile_url = ctx.monitoring.alertmanager_caddy_url | default('') if (ctx.monitoring.alertmanager_caddy_url | default('') | length > 0) else (ctx.monitoring.alertmanager_url | default(ctx.monitoring.alertmanager_path_url | default(''))) %}
 {% set cadvisor_tile_url = ctx.monitoring.cadvisor_url | default('') %}
+{% if mon_on and (grafana_tile_url | length == 0) %}
+{% set grafana_tile_url = ctx.monitoring.grafana_path_url | default(ctx.access.external.grafana | default(ctx.access.primary.grafana | default(''))) %}
+{% endif %}
+{% if mon_on and (prometheus_tile_url | length == 0) %}
+{% set prometheus_tile_url = ctx.monitoring.prometheus_path_url | default(ctx.access.external.prometheus | default(ctx.access.primary.prometheus | default(''))) %}
+{% endif %}
+{% if mon_on and (alertmanager_tile_url | length == 0) %}
+{% set alertmanager_tile_url = ctx.monitoring.alertmanager_path_url | default(ctx.access.external.alertmanager | default(ctx.access.primary.alertmanager | default(''))) %}
+{% endif %}
+{% if mon_on and (cadvisor_tile_url | length == 0) %}
+{% set cadvisor_tile_url = ctx.access.external.cadvisor | default(ctx.access.primary.cadvisor | default('')) %}
+{% endif %}
+{% set panel_chevron %}<span class="panel-chevron" aria-hidden="true"><svg class="chevron-icon" viewBox="0 0 16 16" width="14" height="14" focusable="false"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>{% endset %}
 {% set ls = ctx.live_stats | default({}) %}
 {% set ls_poll_prom = ls.poll.prometheus_query_path | default('') if ls.poll is defined else '' %}
 {% set ns_ls = namespace(sgood=0, swarn=0, sbad=0) %}
@@ -204,10 +223,13 @@
     details.panel > summary .panel-chevron {
       flex-shrink: 0;
       color: var(--muted);
-      font-size: 0.9rem;
       line-height: 1;
       transition: transform 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
+    details.panel > summary .panel-chevron .chevron-icon { display: block; }
     details.panel[open] > summary .panel-chevron { transform: rotate(90deg); }
     details.panel > summary:hover { background: rgba(255, 255, 255, 0.03); }
     .panel-body {
@@ -395,28 +417,22 @@
           <span class="tile-hint">CM PostgreSQL{% if ctx.portal.pgadmin_caddy_url | default('') | length > 0 %} (Caddy){% endif %}</span>
         </a>
         {% endif %}
-        {% if mon_on and (grafana_tile_url | length > 0) %}
+        {% if mon_on %}
         <a class="tile" href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Grafana</span>
-          <span class="tile-hint">Dashboards{% if ctx.monitoring.grafana_caddy_url | default('') | length > 0 %} (Caddy vhost){% endif %}</span>
+          <span class="tile-hint">{% if ctx.monitoring.grafana_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.grafana_path_url | default('') | length > 0 %}Also :{{ deployment_portal_http_port | default(8088) }}/grafana/{% else %}Dashboards{% endif %}</span>
         </a>
-        {% endif %}
-        {% if mon_on and (prometheus_tile_url | length > 0) %}
         <a class="tile" href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Prometheus</span>
-          <span class="tile-hint">Metrics</span>
+          <span class="tile-hint">{% if ctx.monitoring.prometheus_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.prometheus_path_url | default('') | length > 0 %}:{{ deployment_portal_http_port | default(8088) }}/prometheus/{% else %}Metrics{% endif %}</span>
         </a>
-        {% endif %}
-        {% if mon_on and (alertmanager_tile_url | length > 0) %}
         <a class="tile" href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Alertmanager</span>
-          <span class="tile-hint">Alerts</span>
+          <span class="tile-hint">{% if ctx.monitoring.alertmanager_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.alertmanager_path_url | default('') | length > 0 %}:{{ deployment_portal_http_port | default(8088) }}/alertmanager/{% else %}Alerts{% endif %}</span>
         </a>
-        {% endif %}
-        {% if mon_on and (cadvisor_tile_url | length > 0) %}
         <a class="tile" href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">cAdvisor</span>
-          <span class="tile-hint">Container metrics (:8089)</span>
+          <span class="tile-hint">Container metrics (host :{{ monitoring_cadvisor_host_port | default(8089) }})</span>
         </a>
         {% endif %}
         {% if ipa_tile_url | length > 0 %}
@@ -506,7 +522,7 @@
       </p>
       {% if ls.clusters | default([]) | length > 0 %}
       <details class="panel" style="margin-top:0.75rem">
-        <summary><span class="summary-main"><h2 class="section-title">Service health (CM snapshot)</h2></span><span class="panel-chevron" aria-hidden="true">▸</span></summary>
+        <summary><span class="summary-main"><h2 class="section-title">Service health (CM snapshot)</h2></span>{{ panel_chevron | safe }}</summary>
         <div class="panel-body">
           <div class="table-scroll">
             <table id="live-stats-services-table">
@@ -545,7 +561,7 @@
     {% if ctx.endpoints | default([]) | length > 0 %}
     <section class="flat">
       <h2>Endpoints</h2>
-      <p class="sub"><strong>Service</strong> is the product or UI name. <strong>Hostname</strong> is the inventory FQDN of the backing host (or ECS console name). Links open in a new tab.</p>
+      <p class="sub"><strong>Service</strong> is the product or UI name. <strong>Hostname</strong> is the inventory FQDN of the backing host (or ECS console name). Links open in a new tab.{% if mon_on %} Monitoring rows prefer Caddy vhosts, then ops <code>:{{ deployment_portal_http_port | default(8088) }}</code> path routes; cAdvisor uses host port <code>{{ monitoring_cadvisor_host_port | default(8089) }}</code>.{% endif %}</p>
       <div class="table-scroll">
         <table>
           <thead>
@@ -573,7 +589,7 @@
 
     {% if ctx.access.profile == 'private' %}
     <details class="panel" open>
-      <summary><span class="summary-main"><h2 class="section-title">Network access (private lab)</h2></span><span class="panel-chevron" aria-hidden="true">▸</span></summary>
+      <summary><span class="summary-main"><h2 class="section-title">Network access (private lab)</h2></span>{{ panel_chevron | safe }}</summary>
       <div class="panel-body">
         <p class="sub">{{ ctx.access.primary.audience }}</p>
         <ul class="clean">
@@ -593,7 +609,7 @@
     </details>
     {% else %}
     <details class="panel" open>
-      <summary><span class="summary-main"><h2 class="section-title">Network access</h2></span><span class="panel-chevron" aria-hidden="true">▸</span></summary>
+      <summary><span class="summary-main"><h2 class="section-title">Network access</h2></span>{{ panel_chevron | safe }}</summary>
       <div class="panel-body">
         <p class="sub"><strong>Internet / Jenkins</strong> — {{ ctx.access.external.audience }}</p>
         <ul class="clean">
@@ -629,7 +645,7 @@
 
     {% if ctx.caddy_vhosts.enabled %}
     <details class="panel">
-      <summary><span class="summary-main"><h2 class="section-title">Lab domain (Caddy) — {{ ctx.caddy_vhosts.public_base }}</h2></span><span class="panel-chevron" aria-hidden="true">▸</span></summary>
+      <summary><span class="summary-main"><h2 class="section-title">Lab domain (Caddy) — {{ ctx.caddy_vhosts.public_base }}</h2></span>{{ panel_chevron | safe }}</summary>
       <div class="panel-body">
         {% if ctx.access.profile == 'private' %}
         <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — hostnames resolve to the ops host on your private network (FreeIPA/AD DNS or static records). No public internet required.</p>
@@ -664,7 +680,7 @@
     {% endif %}
 
     <details class="panel">
-      <summary><span class="summary-main"><h2 class="section-title">Ops host &amp; platform details</h2></span><span class="panel-chevron" aria-hidden="true">▸</span></summary>
+      <summary><span class="summary-main"><h2 class="section-title">Ops host &amp; platform details</h2></span>{{ panel_chevron | safe }}</summary>
       <div class="panel-body">
         <p class="sub">Reverse proxy and containerized UIs on <code>{{ ctx.ops_host.fqdn }}</code> <span class="badge">{{ ctx.ops_host.inventory_group }}</span>. {{ ctx.ops_host.services }}</p>
         <ul class="clean">
@@ -736,6 +752,7 @@
     {% if mon_on %}
     <section class="flat">
       <h2>Monitoring stack (on ops host)</h2>
+      <p class="sub">Prefer Caddy lab vhosts when DNS is configured; otherwise use ops host <code>:{{ deployment_portal_http_port | default(8088) }}</code> path routes or cAdvisor on <code>:{{ monitoring_cadvisor_host_port | default(8089) }}</code>.</p>
       <ul class="clean">
         <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{{ grafana_tile_url }}</a> <span class="badge">Caddy vhost or /grafana/</span></li>
         <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{{ prometheus_tile_url }}</a> <span class="badge">Caddy vhost or /prometheus/</span></li>
@@ -747,6 +764,71 @@
           Alertmanager <a href="{{ ctx.monitoring.alertmanager_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.alertmanager_path_url }}</a></li>
         {% endif %}
       </ul>
+    </section>
+    {% endif %}
+
+    {% if ctx.planned_roles | default([]) | length > 0 %}
+    <section class="flat">
+      <h2>Planned / configured roles</h2>
+      <p class="sub">From Ansible inventory groups, <code>host_template</code> hostvars, <code>base_cluster_install_services</code>, and the monitoring portal stack on the ops host (<code>{{ ctx.ops_host.inventory_group | default('ipaserver') }}</code>).</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Stack</th>
+              <th>Role</th>
+              <th>Placement</th>
+              <th>Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in ctx.planned_roles %}
+            <tr>
+              <td>{{ row.stack }}</td>
+              <td>{{ row.role }}</td>
+              <td><code>{{ row.placement }}</code></td>
+              <td><span class="badge">{{ row.source }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if ls.clusters | default([]) | length > 0 %}
+    <section class="flat">
+      <h2>CM services (live snapshot)</h2>
+      <p class="sub">From Cloudera Manager API at portal refresh; same data as the health snapshot KPIs above.</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Cluster</th>
+              <th>Service</th>
+              <th>Type</th>
+              <th>State</th>
+              <th>Health</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cl in ls.clusters | default([]) %}
+            {% for svc in cl.services | default([]) %}
+            <tr>
+              <td><code>{{ cl.name }}</code></td>
+              <td>{{ svc.name }}</td>
+              <td>{{ svc.type }}</td>
+              <td>{{ svc.service_state }}</td>
+              <td>
+                {% set _h = svc.health | default('') | upper %}
+                <span class="health-pill {% if _h == 'GOOD' %}good{% elif _h == 'CONCERNING' %}concerning{% elif _h == 'BAD' %}bad{% else %}na{% endif %}">{{ svc.health }}</span>
+              </td>
+            </tr>
+            {% endfor %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </section>
     {% endif %}
 
