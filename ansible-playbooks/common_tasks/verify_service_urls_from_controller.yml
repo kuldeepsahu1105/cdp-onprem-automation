@@ -1,15 +1,15 @@
 ---
 # Tier B: HTTP GET printed external service URLs from the Ansible controller (remote CI or laptop).
 # Tier A runs on service hosts (portal ops host @ 127.0.0.1; CM on cldr-mngr via manager IP/FQDN).
-# Probe list is filtered by deployment_portal_verify_milestones_effective (see build_deployment_tier_b_url_checks.yml).
+# URL list is filtered by deployment_portal_verify_milestones_effective (see build_deployment_tier_b_url_checks.yml).
 #
-# All Tier B facts and probes run on localhost (Ansible controller), not the portal ops host.
+# All Tier B facts and URL checks run on localhost (Ansible controller), not the portal ops host.
 #
-# Modes (per service, fallback chain):
+# Modes (per service, precedence chain):
 #   deployment_<service>_external_url_verify → deployment_external_url_verify → deployment_portal_external_url_verify (portal only) → warn
 # Values: warn | fail | skip
 
-- name: Build Tier B URL probe list when not pre-supplied
+- name: Build Tier B URL check list when not pre-supplied
   ansible.builtin.import_tasks: build_deployment_tier_b_url_checks.yml
   delegate_to: localhost
   run_once: true
@@ -51,7 +51,7 @@
   delegate_to: localhost
   run_once: true
 
-- name: Set Tier B public-controller flag for IPA direct FQDN probe policy
+- name: Set Tier B public-controller flag for IPA direct FQDN URL policy
   ansible.builtin.set_fact:
     _tier_b_public_controller: >-
       {{
@@ -62,7 +62,7 @@
   delegate_to: localhost
   run_once: true
 
-- name: Decide whether to omit Tier B direct FreeIPA cluster FQDN probe
+- name: Decide whether to omit Tier B direct FreeIPA cluster FQDN URL check
   ansible.builtin.set_fact:
     _tier_b_skip_ipa_direct_fqdn: >-
       {{
@@ -77,11 +77,11 @@
   delegate_to: localhost
   run_once: true
 
-- name: Note Tier B direct FreeIPA cluster FQDN probe omitted (public controller)
+- name: Note Tier B direct FreeIPA cluster FQDN check omitted (public controller)
   ansible.builtin.debug:
     msg: >-
-      Tier B: skipping direct FreeIPA cluster FQDN probe from Ansible controller
-      (probe Caddy IPA vhost URLs on :{{ deployment_portal_http_port | default(81) }} instead).
+      Tier B: skipping direct FreeIPA cluster FQDN URL from Ansible controller
+      (check Caddy IPA vhost URLs on :{{ deployment_portal_http_port | default(81) }} instead).
   when:
     - _tier_b_skip_ipa_direct_fqdn | default(false) | bool
     - >-
@@ -93,7 +93,7 @@
   delegate_to: localhost
   run_once: true
 
-- name: Apply Tier B IPA direct cluster FQDN omission to probe list
+- name: Apply Tier B IPA direct cluster FQDN omission to URL list
   ansible.builtin.set_fact:
     _tier_b_url_checks_local: >-
       {%- set skip_ipa = _tier_b_skip_ipa_direct_fqdn | default(false) | bool -%}
@@ -147,7 +147,7 @@
   run_once: true
   when: deployment_tier_b_url_checks_effective | default([]) | length > 0
 
-- name: Set Tier B probe rows for run gate
+- name: Set Tier B URL rows for run gate
   ansible.builtin.set_fact:
     _tier_b_probes_for_run: >-
       {{
@@ -157,7 +157,7 @@
   delegate_to: localhost
   run_once: true
 
-- name: Decide whether to run Tier B external URL probes
+- name: Decide whether to run Tier B external URL checks
   ansible.builtin.set_fact:
     _tier_b_run_any: >-
       {{
@@ -175,7 +175,7 @@
   delegate_to: localhost
   run_once: true
 
-- name: Probe external service URLs from Ansible controller (Tier B)
+- name: GET external service URLs from Ansible controller (Tier B)
   ansible.builtin.uri:
     url: "{{ item.url }}"
     method: GET
@@ -200,7 +200,7 @@
     - _tier_b_run_any | default(false) | bool
     - deployment_tier_b_url_checks_to_probe | default([]) | length > 0
 
-- name: Compute Tier B FreeIPA Caddy vhost probe success (suppress redundant direct-FQDN warns)
+- name: Compute Tier B FreeIPA Caddy vhost success (suppress redundant direct-FQDN warns)
   ansible.builtin.set_fact:
     _tier_b_ipa_caddy_ok: >-
       {%- set codes = _tier_b_url_codes | default([200, 301, 302, 303, 307, 308]) | map('int') | list -%}

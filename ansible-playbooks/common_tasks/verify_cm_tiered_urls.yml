@@ -8,7 +8,7 @@
   ansible.builtin.set_fact:
     _cm_url_verify_codes: "{{ deployment_service_url_verify_status_codes | default(deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308])) }}"
 
-- name: Set CM FQDN for UI probes on cldr-mngr
+- name: Set CM FQDN for UI checks on cldr-mngr
   ansible.builtin.set_fact:
     deployment_portal_cm_fqdn: >-
       {{ hostvars[groups['cldr-mngr'][0]].cldr_hostname ~ '.' ~ cluster_domain }}
@@ -19,13 +19,13 @@
   ansible.builtin.import_tasks: probe_cm_manager_ui_http.yml
   when: "'cldr-mngr' in groups and groups['cldr-mngr'] | length > 0"
 
-- name: Set CM HTTPS UI probe URL from manager bind address
+- name: Set CM HTTPS UI URL from manager bind address
   ansible.builtin.set_fact:
     _cm_tier_a_https: "https://{{ cm_manager_ui_probe_host_effective }}:{{ cm_https_port | int }}/"
   when:
     - cm_manager_ui_probe_host_effective | default('') | length > 0
 
-- name: Set CM HTTPS UI probe URL fallback from manager inventory
+- name: Set CM HTTPS UI URL from manager inventory when bind address unknown
   ansible.builtin.set_fact:
     _cm_tier_a_https: >-
       {{
@@ -86,7 +86,7 @@
     - not (deployment_portal_enabled | default(true) | bool)
     - deployment_portal_verify_tier_b_enabled | default(false) | bool
   block:
-    - name: Run external CM URL probes from Ansible controller
+    - name: Run external CM URL checks from Ansible controller
       ansible.builtin.include_tasks: verify_service_urls_from_controller.yml
       vars:
         tier_b_url_verify_scope: cm
