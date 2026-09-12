@@ -315,6 +315,35 @@ is_dry_run() {
   esac
 }
 
+# Collections named in ansible-playbooks/requirements.yml (used to skip redundant galaxy runs).
+_ansible_requirements_collections_present() {
+  local req="${1:?requirements.yml path}"
+  local name
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    if [[ "$name" == git+* ]]; then
+      if ! ansible-galaxy collection list cloudera.cluster 2>/dev/null | grep -qE 'cloudera\.cluster'; then
+        return 1
+      fi
+    elif ! ansible-galaxy collection list "$name" 2>/dev/null | grep -qF "$name"; then
+      return 1
+    fi
+  done < <(awk '/^[[:space:]]+- name:/ { sub(/^[[:space:]]+- name:[[:space:]]*/, ""); print }' "$req")
+  return 0
+}
+
+# Jenkins runs one DEPLOY_PHASE per stage; each invokes pvc_setup.sh — install collections once.
+ansible_install_collections_if_needed() {
+  local req="${1:?requirements.yml path}"
+  case "${PVC_SKIP_GALAXY_INSTALL:-}" in
+    1|true|yes|TRUE|YES|on|ON) return 0 ;;
+  esac
+  if _ansible_requirements_collections_present "$req"; then
+    return 0
+  fi
+  ansible-galaxy collection install -r "$req"
+}
+
 # Ansible colors only when stdout is a TTY (interactive terminal).
 # Jenkins/terraform wrappers pipe to tee (| tee log); force_color there prints literal [32m in logs.
 ansible_configure_output() {

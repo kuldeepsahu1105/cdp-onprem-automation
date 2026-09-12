@@ -163,8 +163,12 @@ fi
 
 mapfile -t ANSIBLE_PLAYBOOK_ARGS < <(ansible_extra_args "$PRIVATE_KEY")
 
-ui_step "Install Ansible collections" "📦"
-ansible-galaxy collection install -r requirements.yml
+if _ansible_requirements_collections_present "$SCRIPT_DIR/requirements.yml"; then
+  ui_info "Ansible collections already installed — skipping galaxy (requirements.yml)"
+else
+  ui_step "Install Ansible collections" "📦"
+  ansible_install_collections_if_needed "$SCRIPT_DIR/requirements.yml"
+fi
 
 # SSH pre-reqs: include ipaserver when that group has hosts (FreeIPA); skip for AD-only inventory
 if grep -A30 '^\[ipaserver\]' "$SCRIPT_DIR/inventory.ini" | grep -qE '^[^#[:space:]]'; then

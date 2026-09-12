@@ -1,16 +1,7 @@
 ### ansible-playbook -i inventory.ini 01_install_collection.yml
 
 ---
-- name: Install Ansible collections on control node
-  hosts: localhost
-  connection: local
-  gather_facts: no
-  tasks:
-    - name: Install collections from requirements.yml
-      ansible.builtin.command:
-        cmd: ansible-galaxy collection install -r requirements.yml
-        chdir: "{{ playbook_dir }}"
-      changed_when: true
+# Galaxy install runs once in pvc_setup.sh (skipped when collections are already present).
 
 - name: Perform full system update on all hosts
   hosts: all
