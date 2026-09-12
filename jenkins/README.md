@@ -42,7 +42,7 @@ If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALI
 
 ## Stage checkboxes (`PIPELINE_STAGES`)
 
-Select one or more stages. The pipeline always runs them in this order (not checkbox order):
+Select one or more of the **seven** stage checkboxes: `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CDH_BASE`, `ECS_INSTALL`. The pipeline always runs selected stages in this order (not checkbox order):
 
 `VALIDATE` → `TERRAFORM` → `PREREQS` → `IDENTITY` → `CM_INSTALL` → `CDH_BASE` → `ECS_INSTALL`
 
