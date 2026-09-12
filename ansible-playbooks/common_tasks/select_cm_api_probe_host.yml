@@ -293,7 +293,7 @@
     follow_redirects: none
     return_content: no
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200, 301, 303, 401, 403]
     timeout: 15
   loop: "{{ cm_api_probe_host_candidates }}"
   register: cm_api_probe_host_discovery
@@ -313,7 +313,7 @@
     force_basic_auth: yes
     return_content: no
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200, 301, 303, 401, 403]
     timeout: 15
   loop: "{{ cm_api_probe_host_candidates }}"
   register: cm_api_probe_https_discovery
@@ -332,7 +332,7 @@
           cm_api_probe_host_discovery.results
           | default([])
           | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303])
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
           | map(attribute='item')
           | list
           | first
@@ -342,7 +342,7 @@
             cm_api_probe_https_discovery.results
             | default([])
             | selectattr('status', 'defined')
-            | selectattr('status', 'in', [200, 301, 303])
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
             | map(attribute='item')
             | list
             | first

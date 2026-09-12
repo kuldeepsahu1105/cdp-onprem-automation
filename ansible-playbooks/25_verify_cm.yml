@@ -3,6 +3,8 @@
 #   cm_port: 7180
 #   cm_admin_user: "admin"
 #   cm_admin_pass: "admin"
+# CM API reachability: unauthenticated GET /api/version may return 401 — that still means the API is up
+# (see common_tasks/set_cm_api_url.yml and .cursor/LEARNINGS.md).
 
 ---
 - import_playbook: 00_ensure_collections.yml

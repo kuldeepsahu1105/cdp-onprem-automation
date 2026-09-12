@@ -102,7 +102,7 @@
         (cm_api_probe_https_first | default(false) | bool)
         and (cm_tls_probe_https is defined)
         and (cm_tls_probe_https is succeeded)
-        and (cm_tls_probe_https.status | default(0) in [200, 301, 303])
+        and (cm_tls_probe_https.status | default(0) in [200, 301, 303, 401, 403])
       )
 
 - name: Probe Cloudera Manager HTTP API on play host when not delegating
@@ -129,7 +129,7 @@
         (cm_api_probe_https_first | default(false) | bool)
         and (cm_tls_probe_https is defined)
         and (cm_tls_probe_https is succeeded)
-        and (cm_tls_probe_https.status | default(0) in [200, 301, 303])
+        and (cm_tls_probe_https.status | default(0) in [200, 301, 303, 401, 403])
       )
 
 - name: Probe Cloudera Manager HTTPS API (fallback when HTTP is unavailable)
@@ -141,7 +141,7 @@
     force_basic_auth: yes
     return_content: no
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200, 301, 303, 401, 403]
   register: cm_tls_probe_https
   until: cm_tls_probe_https is succeeded
   retries: 2
@@ -151,7 +151,7 @@
   when:
     - not (cm_api_probe_https_first | default(false) | bool)
     - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
-    - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
+    - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
     - cm_api_probe_delegate_to | default('') | length > 0
   delegate_to: "{{ cm_api_probe_delegate_to }}"
 
@@ -164,7 +164,7 @@
     force_basic_auth: yes
     return_content: no
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200, 301, 303, 401, 403]
   register: cm_tls_probe_https
   until: cm_tls_probe_https is succeeded
   retries: 2
@@ -174,7 +174,7 @@
   when:
     - not (cm_api_probe_https_first | default(false) | bool)
     - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
-    - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
+    - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
     - cm_api_probe_delegate_to | default('') | length == 0
 
 - name: Set CM protocol and port based on probe results
@@ -182,7 +182,11 @@
     autotls_enabled: >-
       {{
         (cm_tls_probe_http.status | default(0) in [301, 303])
-        or (cm_tls_probe_https is defined and cm_tls_probe_https is succeeded and cm_tls_probe_https.status | default(0) == 200)
+        or (
+          cm_tls_probe_https is defined
+          and cm_tls_probe_https is succeeded
+          and cm_tls_probe_https.status | default(0) in [200, 401, 403]
+        )
       }}
     cm_protocol: >-
       {{
@@ -191,7 +195,11 @@
         else (
           'https' if (
             (cm_tls_probe_http.status | default(0) in [301, 303])
-            or (cm_tls_probe_https is defined and cm_tls_probe_https is succeeded and cm_tls_probe_https.status | default(0) == 200)
+            or (
+              cm_tls_probe_https is defined
+              and cm_tls_probe_https is succeeded
+              and cm_tls_probe_https.status | default(0) in [200, 401, 403]
+            )
           ) else 'http'
         )
       }}
@@ -202,7 +210,11 @@
         else (
           cm_https_port if (
             (cm_tls_probe_http.status | default(0) in [301, 303])
-            or (cm_tls_probe_https is defined and cm_tls_probe_https is succeeded and cm_tls_probe_https.status | default(0) == 200)
+            or (
+              cm_tls_probe_https is defined
+              and cm_tls_probe_https is succeeded
+              and cm_tls_probe_https.status | default(0) in [200, 401, 403]
+            )
           ) else cm_http_port
         )
       }}
@@ -283,13 +295,13 @@
         (cm_api_probe_use_caddy_vhost | default(false) | bool)
         and (cm_tls_probe_http is defined)
         and (cm_tls_probe_http is succeeded)
-        and (cm_tls_probe_http.status | default(0) in [200, 301, 303])
+        and (cm_tls_probe_http.status | default(0) in [200, 301, 303, 401, 403])
       )
     - not (
         (cm_api_probe_https_first | default(false) | bool)
         and (cm_tls_probe_https is defined)
         and (cm_tls_probe_https is succeeded)
-        and (cm_tls_probe_https.status | default(0) in [200, 301, 303])
+        and (cm_tls_probe_https.status | default(0) in [200, 301, 303, 401, 403])
       )
     - cm_tls_probe_http is not defined or cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
     - cm_tls_probe_https is not defined or cm_tls_probe_https is failed or (cm_tls_probe_https.status | default(0) not in [200, 301, 303, 401, 403])
@@ -363,7 +375,7 @@
     - cm_api_probe_host | default('') | length > 0
     - cm_tls_probe_https is defined
     - cm_tls_probe_https is succeeded
-    - cm_tls_probe_https.status | default(0) in [200, 301, 303]
+    - cm_tls_probe_https.status | default(0) in [200, 301, 303, 401, 403]
 
 - name: Set base Cloudera Manager API URL
   ansible.builtin.set_fact:

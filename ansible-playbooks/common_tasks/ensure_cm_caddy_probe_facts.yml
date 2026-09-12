@@ -3,8 +3,10 @@
 # Ops host (ipaserver) public IP is the usual nip.io slug; also try CM public IP when it differs.
 #
 # Simulated Jenkins probe (ops @ 52.221.251.41, CM public @ 52.76.123.34):
+#   curl -sk 'https://52.76.123.34:7183/api/version'                 # 401 = API reachable (no creds)
 #   curl -sk -u admin:PASS 'http://cm.52-221-251-41.pvc.cloudera-labs.com:8088/api/version'
 #   curl -sk -u admin:PASS 'https://52.76.123.34:7183/api/version'   # often blocked by SG from Jenkins
+# Ansible uri probes on /api/version accept status_code [200, 301, 303, 401, 403] (see LEARNINGS.md).
 
 - name: Resolve deployment portal ops host inventory name for Caddy slug
   ansible.builtin.set_fact:
