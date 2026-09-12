@@ -332,7 +332,6 @@ _run_deployment_portal_bootstrap() {
   while IFS= read -r -d '' arg; do portal_extra+=("$arg"); done < <(_portal_extra_args)
   # Defer Grafana/Prometheus to playbook 32 when MONITORING_STACK_ENABLED=false; does not gate Caddy.
   portal_extra+=(-e deployment_portal_install_required=true)
-  portal_extra+=(-e deployment_portal_stack_recreate=true)
   run_playbook 10_setup_deployment_portal.yml "${portal_extra[@]}"
 }
 

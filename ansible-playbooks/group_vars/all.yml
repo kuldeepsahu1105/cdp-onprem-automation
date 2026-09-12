@@ -512,8 +512,6 @@ ecs_data_services_catalog:
 deployment_portal_enabled: true
 # Set by Jenkins PORTAL / pvc_setup bootstrap — fail instead of silent skip when Caddy gate is off.
 deployment_portal_install_required: false
-# PORTAL re-run: force-recreate Caddy/pgAdmin after sync (reloads mounts even when templates unchanged).
-deployment_portal_stack_recreate: false
 deployment_portal_host_group: auto
 deployment_portal_postgres_host_group: cldr-mngr
 # Caddy edge listener on ops (ipaserver): portal, pgAdmin, monitoring, and IPA vhosts share this TCP port.
