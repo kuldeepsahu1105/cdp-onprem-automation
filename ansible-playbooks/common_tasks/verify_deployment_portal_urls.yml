@@ -72,6 +72,18 @@
       }}
   when: _portal_require_cm_vhost | default(false) | bool
 
+- name: Set Tier A Caddy vhost warn-only for portal and ipa at bootstrap milestones only
+  ansible.builtin.set_fact:
+    _portal_bootstrap_milestone_vhost_warn: >-
+      {{
+        (
+          (_portal_verify_milestones_effective | default([]) | difference(['portal', 'ipa']) | length) == 0
+        )
+        and (
+          (_portal_verify_milestones_effective | default([]) | intersect(['portal', 'ipa']) | length) > 0
+        )
+      }}
+
 - name: Set deployment portal ops-host verify hint from anchor inventory name
   ansible.builtin.set_fact:
     _portal_verify_on_ops_host: >-
@@ -226,7 +238,6 @@
     follow_redirects: none
     validate_certs: false
     timeout: 30
-    quiet: true
   loop: "{{ deployment_portal_access_url_checks_required | default([]) }}"
   loop_control:
     label: "{{ item.name }}"
@@ -245,7 +256,6 @@
     follow_redirects: none
     validate_certs: false
     timeout: 10
-    quiet: true
   loop: >-
     {{
       deployment_portal_access_url_checks_optional | default([])
@@ -294,7 +304,8 @@
     deployment_portal_caddy_vhost_checks: >-
       {{
         (
-          ([{'name': 'Caddy vhost portal', 'host': caddy_vhost_urls.portal.hostname, 'path': '/', 'optional': false}]
+          ([{'name': 'Caddy vhost portal', 'host': caddy_vhost_urls.portal.hostname, 'path': '/',
+             'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool}]
            if (
              'portal' in (_portal_verify_milestones_effective | default([]))
              and (caddy_vhost_urls.portal.hostname | default('') | length > 0)
@@ -321,11 +332,11 @@
           + (
               [
                 {'name': 'IPA Caddy vhost GET / (expect 301 → /ipa/modern-ui/)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
-                 'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false},
+                 'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
                 {'name': 'IPA Caddy vhost GET /ipa/modern-ui/ (200 or 301 OK)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/modern-ui/',
-                 'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false},
+                 'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
                 {'name': 'IPA Caddy vhost GET /ipa/ui (200 or 301 OK)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/ui',
-                 'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false},
+                 'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
               ]
               if (
                 'ipa' in (_portal_verify_milestones_effective | default([]))
@@ -413,7 +424,6 @@
     follow_redirects: none
     validate_certs: false
     timeout: 45
-    quiet: true
   loop: "{{ deployment_portal_caddy_vhost_checks_required | default([]) }}"
   loop_control:
     label: "{{ item.name }} (Host: {{ item.host }})"
@@ -434,7 +444,6 @@
     follow_redirects: none
     validate_certs: false
     timeout: 20
-    quiet: true
   loop: "{{ deployment_portal_caddy_vhost_checks_optional | default([]) }}"
   loop_control:
     label: "{{ item.name }} (Host: {{ item.host }})"
@@ -512,7 +521,6 @@
     follow_redirects: none
     validate_certs: false
     timeout: 30
-    quiet: true
   register: cm_direct_upstream_ui_check
   retries: 3
   delay: 5
@@ -537,7 +545,6 @@
     follow_redirects: none
     validate_certs: false
     timeout: 30
-    quiet: true
   register: ipa_direct_modern_ui_check
   retries: 3
   delay: 5
@@ -560,7 +567,6 @@
     follow_redirects: none
     validate_certs: false
     timeout: 30
-    quiet: true
   register: ipa_direct_legacy_ui_check
   retries: 3
   delay: 5

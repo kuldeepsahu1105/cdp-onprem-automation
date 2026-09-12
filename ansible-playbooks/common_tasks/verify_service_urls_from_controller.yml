@@ -193,7 +193,6 @@
     follow_redirects: none
     validate_certs: false
     timeout: 30
-    quiet: true
   loop: "{{ deployment_tier_b_url_checks_to_probe | default([]) }}"
   loop_control:
     label: "{{ item.name }}{% if item.http_host | default('') | length > 0 %} (Host: {{ item.http_host }}){% endif %}"
