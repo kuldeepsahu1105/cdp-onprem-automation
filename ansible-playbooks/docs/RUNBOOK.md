@@ -81,7 +81,7 @@ The same three-tier model applies to **portal**, **Cloudera Manager**, **Grafana
 | **MONITORING** | + `monitoring` | + Grafana / Prometheus vhosts | + Grafana / Prometheus external |
 | **ECS** | + `ecs` | (no Caddy — ECS not on portal stack) | + ECS console / gateway URLs (`console_hint`) |
 
-Set explicitly: `-e deployment_portal_verify_milestones=cm,cm_tls`. `pvc_setup.sh` passes the cumulative list on each `_run_deployment_portal_refresh` (Identity, CM_TLS, CDH, monitoring, ECS — not CM_INSTALL). Legacy `deployment_portal_verify_post_cm: true` on `35_refresh` implies **`portal`, `ipa`** when milestones are omitted (not `cm` — add `cm` via CM_TLS refresh or `-e`).
+Set explicitly: `-e deployment_portal_verify_milestones=cm,cm_tls`. `pvc_setup.sh` runs `35_refresh` on `DEPLOY_PHASE=portal_refresh` (or when `DEPLOYMENT_PORTAL_REFRESH=true`). Legacy `deployment_portal_verify_post_cm: true` on `35_refresh` implies **`portal`, `ipa`** when milestones are omitted (not `cm` — add `cm` via `-e` or a portal refresh with the desired milestone list).
 
 Variables:
 

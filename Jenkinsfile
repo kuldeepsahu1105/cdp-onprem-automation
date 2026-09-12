@@ -667,7 +667,7 @@ def resolvePipelineStages(def stagesCsv, def validationCsv) {
       } else {
         ansibleStageIds = ['PORTAL'] + ansibleStageIds
       }
-      echo 'INFO: DEPLOYMENT_PORTAL_ENABLED — auto-including PORTAL bootstrap before CM (incremental index refresh in later phases).'
+      echo 'INFO: DEPLOYMENT_PORTAL_ENABLED — auto-including PORTAL bootstrap before CM (use DEPLOY_PHASE=portal_refresh or DEPLOYMENT_PORTAL_REFRESH=true for 35_refresh).'
     }
   }
   def ansiblePhases = ansibleStageIds.collect { ansiblePhaseForStage(it) }
