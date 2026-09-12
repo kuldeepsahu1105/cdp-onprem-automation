@@ -12,30 +12,15 @@
     - name: Resolve deployment portal Caddy gate (monitoring_stack_enabled)
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_caddy_enabled.yml
 
+    - name: Resolve deployment portal install host group (play hosts line when Caddy skipped)
+      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
+
     - name: Skip when Caddy portal stack is disabled
       ansible.builtin.meta: end_play
       when: not (deployment_portal_caddy_effective | default(false) | bool)
 
     - name: Build deployment portal context from inventory
       ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
-
-    - name: Install cloudera.cluster collection for CM frontend URL apply
-      ansible.builtin.import_tasks: common_tasks/install_cloudera_collection.yml
-      when:
-        - deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
-        - cm_frontend_url_effective | default('') | length > 0
-
-    - name: Set Cloudera Manager API URL for frontend apply
-      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
-      when:
-        - deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
-        - cm_frontend_url_effective | default('') | length > 0
-
-    - name: Apply CM Caddy frontend URL after portal refresh
-      ansible.builtin.import_tasks: common_tasks/apply_cm_caddy_load_balancer.yml
-      when:
-        - deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
-        - cm_frontend_url_effective | default('') | length > 0
 
 - name: Refresh deployment portal content on ops host
   hosts: "{{ hostvars['localhost']['deployment_portal_host_group_effective'] }}"

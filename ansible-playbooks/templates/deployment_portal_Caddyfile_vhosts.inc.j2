@@ -1,43 +1,5 @@
 {# Included per IP slug (public + optional private). Variable: caddy_vhost_urls #}
-{% set _cm_upstream = deployment_portal_cm_upstream_host | default('') | trim %}
-{% if _cm_upstream | length == 0 %}
-{%   set _cm_upstream = deployment_portal_cm_fqdn %}
-{% endif %}
-{% set _cm_caddy_origin = 'http://{http.request.host}' ~ (':' ~ (deployment_portal_http_port | int) if (deployment_portal_http_port | int) != 80 else '') %}
 {% set _ipa_caddy_origin = 'http://{http.request.host}' ~ (':' ~ (deployment_portal_http_port | int) if (deployment_portal_http_port | int) != 80 else '') %}
-http://{{ caddy_vhost_urls.cm.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
-{% if autotls_enabled | default(false) | bool %}
-  reverse_proxy https://{{ _cm_upstream }}:{{ cm_https_port }} {
-    header_up Host {{ deployment_portal_cm_fqdn }}
-    header_up X-Forwarded-Host {http.request.host}
-    header_up X-Forwarded-Proto {http.request.scheme}
-    transport http {
-      tls_insecure_skip_verify
-    }
-    @cm_upstream_redirect header Location *
-    handle_response @cm_upstream_redirect {
-      header >Location https://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port }} {{ _cm_caddy_origin }}
-      header >Location https://{{ deployment_portal_cm_fqdn }} {{ _cm_caddy_origin }}
-      header >Location http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }} {{ _cm_caddy_origin }}
-      header >Location http://{{ deployment_portal_cm_fqdn }} {{ _cm_caddy_origin }}
-    }
-  }
-{% else %}
-  reverse_proxy http://{{ _cm_upstream }}:{{ cm_http_port }} {
-    header_up Host {{ deployment_portal_cm_fqdn }}
-    header_up X-Forwarded-Host {http.request.host}
-    header_up X-Forwarded-Proto {http.request.scheme}
-    @cm_upstream_redirect header Location *
-    handle_response @cm_upstream_redirect {
-      header >Location https://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port }} {{ _cm_caddy_origin }}
-      header >Location https://{{ deployment_portal_cm_fqdn }} {{ _cm_caddy_origin }}
-      header >Location http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }} {{ _cm_caddy_origin }}
-      header >Location http://{{ deployment_portal_cm_fqdn }} {{ _cm_caddy_origin }}
-    }
-  }
-{% endif %}
-}
-
 http://{{ caddy_vhost_urls.portal.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
   root * /srv
   try_files {path} /index.html
@@ -62,16 +24,6 @@ http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | in
     handle_response @ipa_upstream_redirect {
       header >Location https://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
       header >Location http://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
-    }
-  }
-}
-{% endif %}
-
-{% if deployment_portal_ecs_present | default(false) | bool %}
-http://{{ caddy_vhost_urls.ecs.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
-  reverse_proxy https://console.{{ ecs_app_domain }}:443 {
-    transport http {
-      tls_insecure_skip_verify
     }
   }
 }

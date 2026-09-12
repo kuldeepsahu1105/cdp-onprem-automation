@@ -105,14 +105,19 @@ print_banner() {
 run_playbook() {
   local playbook="$1"
   shift || true
+  ui_playbook_header "$playbook" start
   if is_dry_run; then
-    ui_step "Dry-run ${playbook}" "🧪"
-  else
-    ui_step "Running ${playbook}" "📜"
+    ui_info "Dry-run — Ansible --check --diff (no changes applied)"
   fi
   # Collections ensured at script start; skip imported 00_ensure_collections in each playbook.
-  ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" \
-    --skip-tags collections "$@"
+  if ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" \
+    --skip-tags collections "$@"; then
+    ui_playbook_header "$playbook" end
+  else
+    local rc=$?
+    ui_err "PLAYBOOK FAILED: ${playbook} (exit ${rc})"
+    return "$rc"
+  fi
 }
 
 cd "$SCRIPT_DIR"
@@ -184,10 +189,17 @@ else
 fi
 ui_section "SSH prerequisites" "🔐"
 ui_kv "Limit" "$SSH_LIMIT" "🎯"
-ui_step "Running 00_setup_ssh_preqs.yml" "📜"
-ansible-playbook 00_setup_ssh_preqs.yml "${ANSIBLE_PLAYBOOK_ARGS[@]}" --limit "$SSH_LIMIT"
+ui_playbook_header "00_setup_ssh_preqs.yml" start
+if ansible-playbook 00_setup_ssh_preqs.yml "${ANSIBLE_PLAYBOOK_ARGS[@]}" --limit "$SSH_LIMIT"; then
+  ui_playbook_header "00_setup_ssh_preqs.yml" end
+else
+  rc=$?
+  ui_err "PLAYBOOK FAILED: 00_setup_ssh_preqs.yml (exit ${rc})"
+  exit "$rc"
+fi
 
 run_phase_1() {
+  ui_phase_header "1 — OS prerequisites (playbooks 01–09)"
   run_playbook 01_install_collection.yml
   run_playbook 02_set_hostname.yml
   run_playbook 03_create_etc_hosts.yml
@@ -199,16 +211,19 @@ run_phase_1() {
 }
 
 run_phase_portal() {
+  ui_phase_header "deployment portal bootstrap (playbook 10)"
   _run_deployment_portal_bootstrap
 }
 
 run_phase_2() {
+  ui_phase_header "2 — Identity (FreeIPA / AD)"
   run_playbook 00_detect_identity.yml
   run_playbook 11_identity_setup.yml
   _run_deployment_portal_refresh "portal,ipa,identity"
 }
 
 run_phase_3() {
+  ui_phase_header "3 — Cloudera Manager install"
   local cm_user="${CM_REPO_USERID:-${CM_REPO_USERNAME:-}}"
   local cm_pass="${CM_REPO_PASSWD:-${CM_REPO_PASSWORD:-}}"
   local cm_extra=()
@@ -227,15 +242,12 @@ run_phase_3() {
   fi
   run_playbook 23_setup_postgres.yml "${cm_extra[@]}"
   run_playbook 24_start_cm.yml "${cm_extra[@]}"
-  # Labs openshift: Caddy cm.<ops-ip>.pvc… → cldr-mngr :7180/:7183 before CM API/license via proxy (not full 35_refresh).
-  if _portal_enabled; then
-    run_playbook 36_provision_cm_caddy_reverse_proxy.yml
-  fi
   run_playbook 25_verify_cm.yml -e ansible_become=false
   run_playbook 26_setup_cm_license.yml -e ansible_become=false
 }
 
 run_phase_cm_tls() {
+  ui_phase_header "CM Auto-TLS, Kerberos, CMS, LDAP"
   run_playbook 27_setup_cm_autotls.yml
   _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls"
   run_playbook 28_setup_cm_krbs.yml
@@ -245,6 +257,7 @@ run_phase_cm_tls() {
 }
 
 run_phase_cdh() {
+  ui_phase_header "CDH base cluster"
   run_playbook 31_setup_base_cluster.yml
   _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh"
 }
@@ -254,6 +267,7 @@ run_phase_monitoring() {
     ui_info "MONITORING_STACK_ENABLED=false — skipping 32_setup_monitoring_stack.yml"
     return 0
   fi
+  ui_phase_header "Monitoring stack (Grafana / Prometheus)"
   run_playbook 32_setup_monitoring_stack.yml
   _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring"
 }
@@ -318,14 +332,17 @@ _run_ecs_data_services() {
 }
 
 run_phase_6() {
+  ui_phase_header "6 — Deployment portal refresh (playbook 35)"
   _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
 }
 
 run_phase_7() {
+  ui_phase_header "7 — ECS data services (playbook 34)"
   _run_ecs_data_services
 }
 
 run_phase_5() {
+  ui_phase_header "5 — ECS cluster install"
   run_playbook 33_setup_ecs_cluster.yml
   _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
   _run_ecs_data_services

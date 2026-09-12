@@ -63,7 +63,7 @@ The same three-tier model applies to **portal**, **Cloudera Manager**, **Grafana
 | Tier | Where it runs | What it checks | On failure |
 |---|---|---|---|
 | **A (required)** | **Ops host** (`ipaserver` / `cldr-mngr`): `http://127.0.0.1:<deployment_portal_http_port>/`, Caddy **Host** vhosts scoped by **`deployment_portal_verify_milestones`** (bootstrap **portal** + **ipa** only; **cm** / **cm_tls** / **monitoring** / **ecs** after each deploy phase). **CM host** (`cldr-mngr`): HTTP UI on `127.0.0.1:7180` **or** CM FQDN/private IP when scm-server does not bind localhost (`probe_cm_manager_ui_http.yml`; API probes use `select_cm_api_probe_host.yml` from Jenkins via `set_cm_api_url`) | Local service health | **Fail** the play for milestones in the active list |
-| **B (external)** | Ansible **controller** when `ansible_control_reachability_effective` is **`public`** | HTTP GET printed **external** URLs (portal/pgAdmin/Grafana, CM FQDN + public IP + optional Caddy CM vhost, IPA, ECS console) via `verify_service_urls_from_controller.yml` | **`deployment_external_url_verify`** (default **`warn`**) or per-service `deployment_<service>_external_url_verify` / `deployment_service_external_url_verify` map — `warn`, `fail`, or `skip` |
+| **B (external)** | Ansible **controller** when `ansible_control_reachability_effective` is **`public`** | HTTP GET printed **external** URLs (portal/pgAdmin/Grafana Caddy vhosts, CM FQDN + public IP direct ports, IPA, ECS console) via `verify_service_urls_from_controller.yml` | **`deployment_external_url_verify`** (default **`warn`**) or per-service `deployment_<service>_external_url_verify` / `deployment_service_external_url_verify` map — `warn`, `fail`, or `skip` |
 | **C (optional)** | Ops or CM host | Public-EIP **hairpin** URLs (EC2 calling its own EIP) | **Warn only** |
 
 **When it runs:** Portal stack verify after `10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` (`verify_deployment_portal_caddy.yml`). CM UI Tier **A/C** in `25_verify_cm.yml`; CM Tier **B** runs there only when `deployment_portal_enabled: false` (otherwise Tier **B** runs from portal verify, scoped by the same milestones — no duplicate CM Tier **B** in `25_verify_cm.yml`).
@@ -75,11 +75,11 @@ The same three-tier model applies to **portal**, **Cloudera Manager**, **Grafana
 | **PORTAL** (`10_setup_deployment_portal.yml`) | `portal`, `ipa` | Portal index, portal + IPA vhosts (required when IPA in inventory); **no** pgAdmin or CM Caddy vhost probes | Portal (+ IPA when in list); **no** pgAdmin Tier **B** until milestone `pgadmin` |
 | **PORTAL pgAdmin hard gate** (optional refresh) | + `pgadmin` | + pgAdmin Caddy vhost required | + pgAdmin external |
 | **IDENTITY** (phase 2 refresh) | + `identity` | Same as PORTAL | + FreeIPA printed / Caddy IPA URLs |
-| **CM_INSTALL** | — | — | CM `frontend_url` via `26_setup_cm_license.yml` when Caddy enabled; **no** `35_refresh` |
-| **CM_TLS** (first `35_refresh` after CM) | + `cm`, `cm_tls` | + CM Caddy vhost | + CM HTTP / public IP / Caddy CM; + CM HTTPS FQDN |
+| **CM_INSTALL** | — | — | CM `frontend_url` via `26_setup_cm_license.yml` (direct FQDN); **no** `35_refresh` |
+| **CM_TLS** (first `35_refresh` after CM) | + `cm`, `cm_tls` | CM UI on cldr-mngr `:7180`/`:7183` (`probe_cm_manager_ui_http.yml`) | + CM HTTP FQDN + public IP `:7180`; + CM HTTPS FQDN `:7183` |
 | **CDH** (phase `cdh` refresh) | + `cdh` | (index refresh; no extra vhosts) | (no new probes) |
 | **MONITORING** | + `monitoring` | + Grafana / Prometheus vhosts | + Grafana / Prometheus external |
-| **ECS** | + `ecs` | + ECS vhost | + ECS console / Caddy ECS |
+| **ECS** | + `ecs` | (no Caddy — ECS not on portal stack) | + ECS console / gateway URLs (`console_hint`) |
 
 Set explicitly: `-e deployment_portal_verify_milestones=cm,cm_tls`. `pvc_setup.sh` passes the cumulative list on each `_run_deployment_portal_refresh` (Identity, CM_TLS, CDH, monitoring, ECS — not CM_INSTALL). Legacy `deployment_portal_verify_post_cm: true` on `35_refresh` implies **`portal`, `ipa`** when milestones are omitted (not `cm` — add `cm` via CM_TLS refresh or `-e`).
 
@@ -245,9 +245,9 @@ Ops stack runs on **ipaserver** when present (`deployment_portal_host_group: aut
 
 **Caddy FreeIPA vhost:** When `[ipaserver]` is present, `http://ipa.<ops-ip-dashed>.<base>:81/` redirects `/` to **`/ipa/modern-ui/`** (default landing) and reverse-proxies **HTTP** to `<ipaserver-fqdn>` for **`/ipa/modern-ui/`** and **`/ipa/ui`** with **`header_up Host`** and path-matched **`header_up Referer`** (cloudera-labs/openshift pattern). Tier A checks accept **301** on `/` and **200/301** on both UI paths; on `ipaserver`, Ansible verifies `/ipa/modern-ui/` and `/ipa/ui` with matching Referer headers.
 
-**Caddy CM vhost + CM UI URL:** After CM is up (`26_setup_cm_license.yml` and each `35_refresh_deployment_portal.yml` when CM is installed), Ansible sets Cloudera Manager **`frontend_url`** and **`cm_host_name`** to the Caddy CM vhost (for example `http://cm.<ops-ip-dashed>.pvc.cloudera-labs.com:81` — no trailing slash) via `apply_cm_caddy_load_balancer.yml`. Caddy **`reverse_proxy`** targets **`cldr-mngr` `private_ip`** with **`header_up Host`** set to the CM cluster FQDN. Override with `cm_external_url` or disable with `cm_apply_caddy_frontend_url: false`. Facts: `cm_caddy_public_url`, `cm_frontend_url_effective` from `caddy_vhost_urls.j2`.
+**Cloudera Manager (not via Caddy):** Use direct **`https://<cldr-mngr-fqdn>:7183`** (or `:7180` before Auto-TLS) from browsers and Jenkins Tier **B**. Caddy on the ops host serves portal, pgAdmin, monitoring, and IPA only. Optional `cm_external_url` sets a custom published CM URL in portal facts; it does not configure Caddy.
 
-**Caddy ECS console:** When `[ecs-masters]` exists, `http://ecs.<ops-ip-dashed>.<base>:81/` proxies to `https://console.<ecs_app_domain>`. Automation and the portal index prefer **`ecs_caddy_console_url`** / `ecs_control_plane_url_effective` (set `ecs_control_plane_url` to override). Internal ECS **`ApplicationDomain`** stays `ecs_app_domain` (`apps.<cluster_domain>`); only the published console link changes.
+**ECS console (not via Caddy):** Published console URL is **`https://console.<ecs_app_domain>`** (`ecs_control_plane_url_effective`). Override with `ecs_control_plane_url` when needed. Internal ECS **`ApplicationDomain`** stays `ecs_app_domain`.
 
 **Bare metal / private network (no public IP):** Set `deployment_environment: baremetal` (or `deployment_portal_access_profile: private`). The portal index shows only private-network URLs — typically `http://<ops-fqdn>:81/` when `deployment_portal_prefer_fqdn_urls: true`, or `http://<management-ip>:81/` otherwise. pgAdmin stays on port `5050` on the same ops host; database is **cldr-mngr** PostgreSQL. Caddy lab hostnames use the ops management IP (often `caddy_vhost_dns_mode: flat` with IPA/AD DNS).
 

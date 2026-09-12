@@ -66,6 +66,18 @@ def _inventory_first_public_ip(group: str, inventory_path: Path) -> str:
     return ""
 
 
+def _normalize_deployment_portal_http_port(overrides: dict) -> None:
+    """Legacy labs used Caddy on :8088; repo default is :81 (group_vars/all.yml)."""
+    port = overrides.get("deployment_portal_http_port")
+    if port in (8088, "8088"):
+        print(
+            "[ansible-vars] WARN: deployment_portal_http_port 8088 is deprecated; using 81 "
+            "(remove 8088 from ANSIBLE_GROUP_VARS_YAML)",
+            file=sys.stderr,
+        )
+        overrides["deployment_portal_http_port"] = 81
+
+
 def _jenkins_controller_defaults() -> dict:
     """Ansible from Jenkins cannot reach VPC RFC1918 addresses — use public IPs / delegate probes."""
     if not _running_on_jenkins():
@@ -79,6 +91,8 @@ def _jenkins_controller_defaults() -> dict:
         "deployment_portal_external_url_verify": "warn",
         "deployment_ipa_direct_fqdn_external_url_verify": "skip",
         "cm_api_verify_mode": "warn",
+        # Caddy edge on ops (ipaserver); CM API Caddy probes use this port — not 8088.
+        "deployment_portal_http_port": 81,
     }
     inv = REPO_ROOT / "ansible-playbooks" / "inventory.ini"
     cm_public = _inventory_first_public_ip("cldr-mngr", inv)
@@ -192,6 +206,8 @@ def main() -> int:
         if raw in ("", "auto"):
             continue
         overrides[var_name] = raw in ("true", "1", "yes", "on")
+
+    _normalize_deployment_portal_http_port(overrides)
 
     # Jenkins controller safety defaults win over ANSIBLE_GROUP_VARS_YAML (e.g. cm_api_verify_mode: warn).
     overrides.update(_jenkins_controller_defaults())

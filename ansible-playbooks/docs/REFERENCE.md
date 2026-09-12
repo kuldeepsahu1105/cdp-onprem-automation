@@ -286,7 +286,7 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `caddy_vhost_enabled` | `true` | Host-based Caddy URLs (nip.io-style) |
 | `caddy_vhost_public_base` | `pvc.cloudera-labs.com` | Base domain for `svc.<ip-dashed>.<base>` |
 | `caddy_vhost_dns_mode` | `embedded_ip` | `embedded_ip`, `classic_nipio`, or `flat` |
-| `autotls_enabled` | `false` | CM HTTPS port for Caddy `cm.*` vhost backend |
+| `autotls_enabled` | `false` | CM listens on `:7183` (direct; not via Caddy) |
 
 ---
 
@@ -405,10 +405,10 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `cm_api_delegate_probes_to_manager` | `true` | In-VPC localhost plays: delegate CM API discovery to `cldr-mngr`. Skipped when control reachability is `public` (Jenkins probes `ansible_host` from the controller) |
 | `cm_api_private_reachability_timeout` | `5` | Seconds to test VPC `private_ip` from controller before using public IP |
 | `cm_external_url` | `""` | Override CM Caddy public URL; sets CM API `frontend_url` when non-empty |
-| `cm_apply_caddy_frontend_url` | `auto` | `auto` \| `true` \| `false` — apply Caddy CM vhost to CM `frontend_url` / `cm_host_name` |
-| `cm_config_api_via_caddy_proxy` | `auto` | `auto` \| `true` \| `false` — `apply_cm_caddy_load_balancer.yml` calls `cm_config` via Caddy CM vhost (`:81`) instead of direct `:7180`/`:7183` |
-| `cm_caddy_public_url` | (fact) | From `caddy_vhost_urls.j2` via `build_deployment_portal_facts.yml` |
-| `ecs_caddy_console_url` | (fact) | Caddy ECS vhost URL for portal index and `ecs_control_plane_url_effective` |
+| `cm_apply_caddy_frontend_url` | `false` | Deprecated — CM is not fronted by Caddy |
+| `cm_config_api_via_caddy_proxy` | `false` | Deprecated — CM API probes use direct `:7180`/`:7183` |
+| `cm_frontend_url_effective` | (fact) | Optional `cm_external_url` override only |
+| `ecs_control_plane_url_effective` | (fact) | `ecs_control_plane_url` or `https://console.<ecs_app_domain>` |
 | `deployment_portal_url_verify_skip_vpc` | `false` | Skip VPC-only portal URL hard-fail during verify (Jenkins sets `true`) |
 | `deployment_external_url_verify` | `warn` | Tier B: GET external service URLs from controller when reachability is `public` — `warn`, `fail`, or `skip` |
 | `deployment_portal_external_url_verify` | `warn` | Legacy Tier B default for portal when `deployment_external_url_verify` is unset |

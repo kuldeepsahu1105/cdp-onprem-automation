@@ -79,6 +79,61 @@ ui_c() {
   fi
 }
 
+# Phase/playbook log headers: ANSI in Jenkins console (jenkins_log_pipe + ansiColor) even when
+# UI_COLOR=0 keeps other wrapper labels plain ASCII (run-ansible.sh).
+ui_log_header_color_enabled() {
+  case "${UI_COLOR:-${FORCE_COLOR:-auto}}" in
+    0|false|no|off|never)
+      [[ "${JENKINS_ANSI_CONSOLE:-}" == "1" ]] && [[ "${TERM:-}" != "dumb" ]] && return 0
+      return 1
+      ;;
+  esac
+  if ui_color_enabled; then
+    return 0
+  fi
+  [[ "${JENKINS_ANSI_CONSOLE:-}" == "1" ]] && [[ "${TERM:-}" != "dumb" ]]
+}
+
+ui_log_c() {
+  local code="$1"
+  shift
+  if ui_log_header_color_enabled; then
+    printf '\033[%sm' "$code"
+  fi
+  printf '%s' "$*"
+  if ui_log_header_color_enabled; then
+    printf '\033[0m'
+  fi
+}
+
+ui_phase_header() {
+  local phase="$1"
+  ui_nl
+  ui_rule "═"
+  printf '  '
+  ui_log_c "1;33" "PHASE: ${phase}"
+  ui_nl
+  ui_rule "═"
+  ui_nl
+}
+
+ui_playbook_header() {
+  local playbook="$1"
+  local kind="${2:-start}"
+  ui_nl
+  if [[ "$kind" == "end" ]]; then
+    printf '  '
+    ui_log_c "1;32" "PLAYBOOK DONE: ${playbook}"
+  else
+    ui_rule "─"
+    printf '  '
+    ui_log_c "1;36" "PLAYBOOK: ${playbook}"
+    ui_nl
+    ui_rule "─"
+  fi
+  ui_nl
+}
+
 ui_nl() {
   echo ""
 }
