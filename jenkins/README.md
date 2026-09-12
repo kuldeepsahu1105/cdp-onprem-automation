@@ -52,10 +52,11 @@ Select one or more of the **seven** stage checkboxes: `VALIDATE`, `TERRAFORM`, `
 |---|---|
 | `VALIDATE` | `validate-prereqs.sh` — only checks selected in `VALIDATION_CHECKS` (no deploy) |
 | `TERRAFORM` | EC2/VPC/SG/EIP via Terraform; `inventory.ini` + `.pem` key |
-| `PREREQS` | Ansible **phase 1** — OS prereqs, Java, Python, firewall, SSH bootstrap |
+| `PREREQS` | Ansible **phase 1** — OS prereqs, Java, Python, firewall, SSH bootstrap; **bootstraps** deployment portal + monitoring when `DEPLOYMENT_PORTAL_ENABLED` / `MONITORING_STACK_ENABLED` (defaults **true**) |
 | `IDENTITY` | Ansible **phase 2** — FreeIPA or Active Directory (from inventory) |
 | `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
-| `CDH_BASE` | Ansible **phase 4** — Auto-TLS, Kerberos, CMS, LDAP, CDH base cluster; **ends with** `28_setup_deployment_portal.yml` (Caddy/pgAdmin) and optional `29_setup_monitoring_stack.yml` when `MONITORING_STACK_ENABLED` is checked |
+| `CDH_BASE` | Ansible **phase 4** — Auto-TLS, Kerberos, CMS, LDAP, CDH base cluster, ECS in same phase; **refreshes** portal index after Auto-TLS, base cluster, and ECS (`31_refresh_deployment_portal.yml`) |
+| `ECS_INSTALL` | Ansible **phase 5** — ECS cluster; portal refresh; optional `30_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` is checked |
 | `ECS_INSTALL` | Ansible **phase 5** — ECS / Data Services (requires base cluster) |
 
 **Your example:** `VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL` = validate → provision VMs → Ansible phases 1–3 (through Cloudera Manager install).

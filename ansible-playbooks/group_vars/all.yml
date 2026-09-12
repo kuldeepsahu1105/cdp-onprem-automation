@@ -433,6 +433,29 @@ ecs_control_plane_vault_mode: embedded
 ecs_control_plane_embedded_db_storage_gb: 50
 ecs_control_plane_embedded_vault_storage_gb: 2
 
+# ECS Data Services (CDW, CDE, CAI) — 30_setup_ecs_data_services.yml
+# Create API access key in Management Console (User Management) before enabling.
+ecs_data_services_deploy_enabled: false
+ecs_control_plane_url: ""  # e.g. https://console.apps.{{ ecs_app_domain }}
+ecs_api_access_key_id: ""
+ecs_api_private_key: ""
+ecs_control_plane_validate_certs: false
+ecs_data_services_use_cdpcurl: true
+ecs_data_services_install: []  # e.g. [cdw, cde, cai] or [{name: cdw, enabled: true}, ...]
+ecs_data_services_catalog:
+  cdw:
+    name: Cloudera Data Warehouse
+    description: CDW on ECS control plane
+    url: ""
+  cde:
+    name: Cloudera Data Engineering
+    description: CDE virtual clusters
+    url: ""
+  cai:
+    name: Cloudera AI
+    description: Cloudera AI workspaces
+    url: ""
+
 # ---------------------------------------------------------------------------
 # Deployment portal + ops UI — 28_setup_deployment_portal.yml
 # Caddy index, pgAdmin, Prometheus, Grafana, Alertmanager, cAdvisor on ops host.

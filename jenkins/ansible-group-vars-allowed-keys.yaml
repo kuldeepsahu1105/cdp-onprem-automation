@@ -61,6 +61,13 @@ allowed_keys:
   - cm_api_prefer_private_ip
   - cm_api_connect_host
   - monitoring_grafana_admin_password
+  - ecs_data_services_deploy_enabled
+  - ecs_control_plane_url
+  - ecs_api_access_key_id
+  - ecs_api_private_key
+  - ecs_control_plane_validate_certs
+  - ecs_data_services_install
+  - ecs_data_services_catalog
 
   # OS / dependency versions
   - java_version

@@ -152,7 +152,17 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
     booleanParam(
       name: 'MONITORING_STACK_ENABLED',
       defaultValue: true,
-      description: 'Ansible: deploy Prometheus, Grafana, Alertmanager, and cAdvisor with 28_setup_deployment_portal.yml (phase 4). Sets monitoring_stack_enabled in Ansible overrides. Uncheck to skip monitoring; overrides ANSIBLE_GROUP_VARS_YAML if both are set.'
+      description: 'Deploy Grafana, Prometheus, Alertmanager, and cAdvisor with the ops portal (bootstrap in PREREQS phase 1; index refreshed after CM/base/ECS). Sets monitoring_stack_enabled. Uncheck to skip.'
+    )
+    booleanParam(
+      name: 'DEPLOYMENT_PORTAL_ENABLED',
+      defaultValue: true,
+      description: 'Bootstrap Caddy/pgAdmin portal in Ansible phase 1 (PREREQS) and refresh index after CM, base cluster, and ECS milestones.'
+    )
+    booleanParam(
+      name: 'ECS_DATA_SERVICES_DEPLOY_ENABLED',
+      defaultValue: false,
+      description: 'Run 30_setup_ecs_data_services.yml after ECS phase 5 when checked. Requires ecs_control_plane_url and API access key in ANSIBLE_GROUP_VARS_YAML (create key in ECS console first).'
     )
   }
 
@@ -358,6 +368,8 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
               set -euo pipefail
               export DEPLOY_PHASE='${phase}'
               export MONITORING_STACK_ENABLED='${params.MONITORING_STACK_ENABLED}'
+              export DEPLOYMENT_PORTAL_ENABLED='${params.DEPLOYMENT_PORTAL_ENABLED}'
+              export ECS_DATA_SERVICES_DEPLOY_ENABLED='${params.ECS_DATA_SERVICES_DEPLOY_ENABLED}'
               export REQUIRE_INVENTORY=true
               export ANSIBLE_GROUP_VARS_FILE='${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml'
               export CM_REPO_USERNAME='${shellEscape(params.CM_REPO_USERNAME?.trim())}'

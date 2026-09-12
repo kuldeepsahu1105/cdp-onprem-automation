@@ -136,6 +136,26 @@
     caddy_vhost_urls_external: {}
   when: not (caddy_vhost_enabled | default(false) | bool)
 
+- name: Initialize ECS data service portal links
+  ansible.builtin.set_fact:
+    deployment_portal_ecs_ds_links: []
+
+- name: Add ECS data service URLs to portal when configured
+  ansible.builtin.set_fact:
+    deployment_portal_ecs_ds_links: "{{ deployment_portal_ecs_ds_links + [item.link] }}"
+  loop:
+    - key: cdw
+    - key: cde
+    - key: cai
+  vars:
+    _cat: "{{ ecs_data_services_catalog[item.key] | default({}) }}"
+    _url: "{{ _cat.url | default('') }}"
+    link:
+      name: "{{ _cat.name | default(item.key | upper) }}"
+      url: "{{ _url }}"
+      description: "{{ _cat.description | default('ECS data service') }}"
+  when: _url | length > 0
+
 - name: Assemble deployment portal context
   ansible.builtin.set_fact:
     deployment_portal_context:
@@ -225,7 +245,12 @@
           }}
         apps_wildcard: "https://*.{{ ecs_app_domain }}"
       data_services:
-        links: "{{ deployment_portal_data_service_links + (deployment_portal_dynamic_links | default([])) }}"
+        links: >-
+          {{
+            deployment_portal_data_service_links
+            + (deployment_portal_dynamic_links | default([]))
+            + (deployment_portal_ecs_ds_links | default([]))
+          }}
       monitoring:
         enabled: "{{ monitoring_stack_enabled | default(false) | bool }}"
         grafana_url: >-

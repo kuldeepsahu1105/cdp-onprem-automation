@@ -255,8 +255,10 @@ CMS (Management Service) and CDP base cluster are **separate**:
 | `24_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. |
 | `26_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
 | `27_setup_ecs_cluster.yml` | ECS cluster | Cloudera Data Services (DOCKER + ECS), embedded control plane |
-| `28_setup_deployment_portal.yml` | Ops portal | Caddy index, pgAdmin, Prometheus, Grafana, Alertmanager, cAdvisor on ops host (`auto` → ipaserver else cldr-mngr) |
-| `29_setup_monitoring_stack.yml` | Monitoring | Re-run or add monitoring after 28 (requires portal network) |
+| `28_setup_deployment_portal.yml` | Ops portal bootstrap | Caddy, pgAdmin, optional monitoring on ops host (`auto` → ipaserver else cldr-mngr); run early in phase 1 |
+| `29_setup_monitoring_stack.yml` | Monitoring only | Add monitoring after 28 (requires portal network) |
+| `30_setup_ecs_data_services.yml` | ECS data services | CDW/CDE/CAI via control plane API (credentials + `ecs_data_services_install`; stubs — extend API tasks) |
+| `31_refresh_deployment_portal.yml` | Portal refresh | Re-render index/Caddy after CM, base, ECS, or DS changes (no full reinstall) |
 
 Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-masters` / `ecs-workers` inventory groups. Skipped when `ecs_deploy_enabled: auto` and ECS groups are empty.
 
