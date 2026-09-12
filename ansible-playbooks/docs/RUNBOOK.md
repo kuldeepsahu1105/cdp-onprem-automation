@@ -56,17 +56,25 @@ Ansible must pick **public** vs **VPC-private** addresses for CM API `uri` probe
 
 Override in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML`: `ansible_control_reachability: public|private|auto`. Legacy keys `ansible_controller_outside_vpc` and `cm_api_prefer_private_ip` remain supported.
 
-### Service URL verification tiers (portal, CM, monitoring, IPA, ECS)
+### Service URL verification (portal stack + Cloudera Manager)
 
-The same three-tier model applies to **portal**, **Cloudera Manager**, **Grafana/Prometheus**, **FreeIPA**, and **ECS** URLs printed in `CDP_ACCESS_URLS_*` / `jenkins/artifacts/access-urls.txt`.
+Printed URLs live in `CDP_ACCESS_URLS_*` / `jenkins/artifacts/access-urls.txt`.
+
+**Cloudera Manager (`25_verify_cm.yml`):**
+
+- **Required (manager-local):** HTTP/HTTPS UI on `cldr-mngr` via `probe_cm_manager_ui_http.yml` and Auto-TLS localhost probe — **fails** the play if CM is down. CM API setup (`set_cm_api_url.yml`) prints `cm_api_url` and probes from Jenkins with delegation per `#57`.
+- **Optional hairpin:** Public-EIP URL from `cldr-mngr` only when `deployment_cm_hairpin_url_verify: true` (default **false**) — **warn** only.
+- **External from controller:** Only when `deployment_portal_enabled: false` **and** `deployment_portal_verify_tier_b_enabled: true` (default **false**). With the portal stack enabled, external CM URL warns run from `10_setup` / `35_refresh` on the controller (milestone-scoped), not again in `25_verify_cm`.
+
+**Portal / monitoring / IPA / ECS** use the tier labels below on the ops host and Ansible controller:
 
 | Tier | Where it runs | What it checks | On failure |
 |---|---|---|---|
-| **A (required)** | **Ops host** (`ipaserver` / `cldr-mngr`): `http://127.0.0.1:<deployment_portal_http_port>/`, Caddy **Host** vhosts scoped by **`deployment_portal_verify_milestones`** (bootstrap **portal** + **ipa** only; **cm** / **cm_tls** / **monitoring** / **ecs** after each deploy phase). **CM host** (`cldr-mngr`): HTTP UI on `127.0.0.1:7180` **or** CM FQDN/private IP when scm-server does not bind localhost (`probe_cm_manager_ui_http.yml`; API probes use `select_cm_api_probe_host.yml` from Jenkins via `set_cm_api_url`) | Local service health | **Fail** the play for milestones in the active list |
-| **B (external)** | Ansible **controller** when `ansible_control_reachability_effective` is **`public`** | HTTP GET printed **external** URLs (portal/pgAdmin/Grafana Caddy vhosts, CM FQDN + public IP direct ports, IPA, ECS console) via `verify_service_urls_from_controller.yml` | **`deployment_external_url_verify`** (default **`warn`**) or per-service `deployment_<service>_external_url_verify` / `deployment_service_external_url_verify` map — `warn`, `fail`, or `skip` |
-| **C (optional)** | Ops or CM host | Public-EIP **hairpin** URLs (EC2 calling its own EIP) | **Warn only** |
+| **A (required)** | **Ops host** (`ipaserver`): `http://127.0.0.1:<deployment_portal_http_port>/`, Caddy **Host** vhosts scoped by **`deployment_portal_verify_milestones`** (bootstrap **portal** + **ipa** only; **cm** / **cm_tls** / **monitoring** / **ecs** after each deploy phase). CM milestone UI on `cldr-mngr` runs in portal refresh verify, not via Caddy | Local service health | **Fail** the play for milestones in the active list |
+| **B (external)** | Ansible **controller** when `ansible_control_reachability_effective` is **`public`** | HTTP GET printed **external** URLs (portal/pgAdmin/Grafana Caddy vhosts, CM FQDN + public IP direct ports, IPA, ECS console) via `verify_service_urls_from_controller.yml` | **`deployment_external_url_verify`** (default **`warn`**) or per-service overrides — `warn`, `fail`, or `skip` |
+| **C (optional)** | Ops host | Public-EIP **hairpin** URLs (EC2 calling its own EIP) | **Warn only** |
 
-**When it runs:** Portal stack verify after `10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` (`verify_deployment_portal_caddy.yml`). CM UI Tier **A/C** in `25_verify_cm.yml`; CM Tier **B** runs there only when `deployment_portal_enabled: false` (otherwise Tier **B** runs from portal verify, scoped by the same milestones — no duplicate CM Tier **B** in `25_verify_cm.yml`).
+**When portal verify runs:** After `10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` (`verify_deployment_portal_caddy.yml`). Jenkins **PORTAL** reruns get optional Tier **B** warns for printed URLs when security groups allow; manager-local portal/CM checks are separate as above.
 
 ### Portal URL verify milestones (by deploy stage)
 

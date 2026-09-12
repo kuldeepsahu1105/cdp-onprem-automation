@@ -326,13 +326,13 @@ deployment_portal_verify_milestones: []
 deployment_portal_verify_cm_vhost: false
 # Set by 35_refresh_deployment_portal.yml — legacy CM milestone when milestones extra-var omitted
 deployment_portal_verify_post_cm: false
-# Deprecated — CM Tier A is direct on cldr-mngr; kept for inventory overrides
+# Deprecated — CM UI verify is direct on cldr-mngr; kept for inventory overrides
 deployment_portal_cm_vhost_tier_a_verify: fail
 # Tier B: GET external URLs from Ansible controller when ansible_control_reachability is public (warn|fail|skip)
 deployment_external_url_verify: warn
 # Tier B from 25_verify_cm when deployment_portal_enabled=false (default off — use 10/35 localhost Tier B play)
 deployment_portal_verify_tier_b_enabled: false
-# Tier C CM hairpin (cldr-mngr → own public EIP :7180) — warn only; default off (Tier A + Jenkins Tier B cover CM)
+# Optional CM public-EIP hairpin from cldr-mngr (:7180) — warn only; default off (manager-local + Jenkins external warns cover CM)
 deployment_cm_hairpin_url_verify: false
 # Legacy portal-only key (used when deployment_external_url_verify is unset)
 deployment_portal_external_url_verify: warn

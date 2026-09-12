@@ -76,7 +76,7 @@ Import order in `set_cm_api_url.yml`:
 | `deployment_tier_b_url_checks` | `build_deployment_tier_b_url_checks.yml` on **localhost** — Tier B reads via `hostvars['localhost']` in `verify_service_urls_from_controller.yml` |
 | `ecs_control_plane_url_effective` | `resolve_ecs_control_plane_url.yml` — `ecs_control_plane_url` or `https://console.<ecs_app_domain>` (no Caddy) |
 
-**Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml` (imports `set_cm_api_url.yml` and Tier B controller verify). Portal Caddy verify uses detect with **`ansible_control_reachability_skip_cm_probes: true`** and explicit `cm_host_public` / `cm_host_private` vars — do not assume CM API facts exist on the ops host play.
+**Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml` (manager-local UI verify; optional hairpin; optional controller external when portal disabled). `set_cm_api_url.yml` runs first on localhost and prints `cm_api_url`. Portal Caddy verify uses detect with **`ansible_control_reachability_skip_cm_probes: true`** and explicit `cm_host_public` / `cm_host_private` vars — do not assume CM API facts exist on the ops host play.
 
 ---
 
