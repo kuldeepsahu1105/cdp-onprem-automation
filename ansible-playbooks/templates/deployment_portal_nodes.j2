@@ -5,16 +5,7 @@
 {% set _hv = hostvars[inv_host] %}
 {% set _priv = _hv.private_ip | default(_hv.ansible_host | default('')) %}
 {% set _ah = _hv.ansible_host | default('') %}
-{% set _pub_var = _hv.public_ip | default('') %}
-{% if inv_host == _anchor_inv %}
-{% set _public = deployment_portal_ops_public_ip | default(_ah) %}
-{% elif _pub_var | length > 0 and _pub_var != _priv %}
-{% set _public = _pub_var %}
-{% elif _ah | length > 0 and _ah != _priv %}
-{% set _public = _ah %}
-{% else %}
-{% set _public = '' %}
-{% endif %}
+{% include 'deployment_portal_resolve_public_ip.inc.j2' %}
 - group: "{{ group_name }}"
   inventory_name: "{{ inv_host }}"
   hostname: "{{ _hv.cldr_hostname | default(inv_host) }}"

@@ -1,71 +1,73 @@
 {# YAML list of primary service endpoints for the deployment portal index #}
 {% set _portal_url = deployment_portal_access_urls.primary.portal if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external.portal %}
-{% if _portal_url | default('') | trim | length > 0 %}
-- name: "Deployment portal (index)"
-  url: "{{ _portal_url | trim }}"
-  hostname: ""
-  note: "Caddy :{{ deployment_portal_http_port }}"
-{% endif %}
-{% if caddy_vhost_enabled | default(false) | bool and caddy_vhost_urls_external.portal.url | default('') | length > 0 %}
-- name: "Portal (lab hostname)"
-  url: "{{ caddy_vhost_urls_external.portal.url | trim }}"
-  hostname: "{{ caddy_vhost_urls_external.portal.hostname | default('') }}"
-  note: "Caddy vhost"
+{% set _portal_caddy = caddy_vhost_urls_external.portal.url | default('') | trim if (caddy_vhost_enabled | default(false) | bool) else '' %}
+{% set _portal_pick = _portal_caddy if (_portal_caddy | length > 0) else (_portal_url | default('') | trim) %}
+{% if _portal_pick | length > 0 %}
+{% set _portal_note = ('Caddy lab vhost ' ~ caddy_vhost_urls_external.portal.hostname | default('')) if (_portal_caddy | length > 0) else ('Caddy :' ~ (deployment_portal_http_port | string) ~ ' on ' ~ (deployment_portal_anchor_fqdn | default('ops host'))) %}
+- name: "Deployment portal"
+  url: "{{ _portal_pick }}"
+  hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
+  note: "{{ _portal_note }}"
 {% endif %}
 {% if caddy_vhost_enabled | default(false) | bool and caddy_vhost_urls_external.cm.url | default('') | length > 0 %}
-- name: "Cloudera Manager"
+- name: "Cloudera Manager (Caddy HTTP)"
   url: "{{ caddy_vhost_urls_external.cm.url | trim }}"
-  hostname: "{{ caddy_vhost_urls_external.cm.hostname | default('') }}"
-  note: "Caddy vhost"
-{% elif deployment_portal_cm_fqdn | default('') | length > 0 %}
-- name: "Cloudera Manager"
+  hostname: "{{ deployment_portal_cm_fqdn | default('') }}"
+  note: "Caddy vhost {{ caddy_vhost_urls_external.cm.hostname | default('') }} → {{ deployment_portal_cm_fqdn | default('cldr-mngr') }}"
+{% endif %}
+{% if deployment_portal_cm_fqdn | default('') | length > 0 %}
+- name: "Cloudera Manager (HTTPS direct)"
   url: "https://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port }}"
   hostname: "{{ deployment_portal_cm_fqdn }}"
-  note: "Direct HTTPS"
+  note: "Direct TLS on cldr-mngr :{{ cm_https_port }}"
 {% endif %}
 {% if pgadmin_caddy_public_url | default('') | length > 0 %}
 - name: "pgAdmin"
   url: "{{ pgadmin_caddy_public_url | trim }}"
-  hostname: "{{ caddy_vhost_urls_external.pgadmin.hostname | default('') }}"
-  note: "Caddy vhost"
+  hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
+  note: "Caddy vhost {{ caddy_vhost_urls_external.pgadmin.hostname | default('') }}; CM DB on {{ deployment_portal_postgres_fqdn | default('') }}"
 {% endif %}
 {% if deployment_portal_has_ipa | bool and caddy_vhost_urls_external.ipa.url | default('') | length > 0 %}
 - name: "FreeIPA (modern UI)"
   url: "{{ (caddy_vhost_urls_external.ipa.url | trim | regex_replace('/+$', '')) ~ '/ipa/modern-ui/' }}"
-  hostname: "{{ caddy_vhost_urls_external.ipa.hostname | default('') }}"
-  note: "Caddy vhost"
+  hostname: "{{ deployment_portal_ipa_fqdn | default('') }}"
+  note: "Caddy vhost {{ caddy_vhost_urls_external.ipa.hostname | default('') }}"
 - name: "FreeIPA (legacy UI)"
   url: "{{ (caddy_vhost_urls_external.ipa.url | trim | regex_replace('/+$', '')) ~ '/ipa/ui' }}"
-  hostname: "{{ caddy_vhost_urls_external.ipa.hostname | default('') }}"
-  note: "Caddy vhost"
+  hostname: "{{ deployment_portal_ipa_fqdn | default('') }}"
+  note: "Caddy vhost {{ caddy_vhost_urls_external.ipa.hostname | default('') }}"
 {% elif deployment_portal_ipa_fqdn | default('') | length > 0 %}
 - name: "FreeIPA"
   url: "https://{{ deployment_portal_ipa_fqdn }}"
   hostname: "{{ deployment_portal_ipa_fqdn }}"
-  note: "Direct on ipaserver"
+  note: "Direct HTTPS on ipaserver"
 {% endif %}
 {% if (monitoring_stack_enabled | default(false) | bool) or (deployment_portal_monitoring_deployed | default(false) | bool) %}
 {% if caddy_vhost_urls_external.grafana.url | default('') | length > 0 %}
 - name: "Grafana"
   url: "{{ caddy_vhost_urls_external.grafana.url | trim }}"
-  hostname: "{{ caddy_vhost_urls_external.grafana.hostname | default('') }}"
-  note: "Monitoring"
+  hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
+  note: "Monitoring on ops host; vhost {{ caddy_vhost_urls_external.grafana.hostname | default('') }}"
 {% endif %}
 {% if caddy_vhost_urls_external.prometheus.url | default('') | length > 0 %}
 - name: "Prometheus"
   url: "{{ caddy_vhost_urls_external.prometheus.url | trim }}"
-  hostname: "{{ caddy_vhost_urls_external.prometheus.hostname | default('') }}"
-  note: "Monitoring"
+  hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
+  note: "Monitoring on ops host; vhost {{ caddy_vhost_urls_external.prometheus.hostname | default('') }}"
 {% endif %}
 {% endif %}
-{% if deployment_portal_ecs_present | bool and ecs_caddy_console_url | default('') | length > 0 %}
+{% if deployment_portal_ecs_present | bool %}
+{% set _ecs_master = groups[ecs_cluster_master_group][0] if (ecs_cluster_master_group in groups and groups[ecs_cluster_master_group] | default([]) | length > 0) else '' %}
+{% set _ecs_master_ip = hostvars[_ecs_master].ansible_host | default('') if (_ecs_master | length > 0) else '' %}
+{% if ecs_caddy_console_url | default('') | length > 0 %}
 - name: "ECS console"
   url: "{{ ecs_caddy_console_url | trim }}"
-  hostname: ""
-  note: "Caddy vhost"
-{% elif deployment_portal_ecs_present | bool %}
+  hostname: "console.{{ ecs_app_domain }}"
+  note: "HTTPS console{% if _ecs_master_ip | length > 0 %}; ECS master public/management IP {{ _ecs_master_ip }}{% endif %}"
+{% else %}
 - name: "ECS console"
   url: "https://console.{{ ecs_app_domain }}"
   hostname: "console.{{ ecs_app_domain }}"
-  note: "Typical console URL"
+  note: "Typical ECS console URL{% if _ecs_master_ip | length > 0 %}; ECS master IP {{ _ecs_master_ip }}{% endif %}"
+{% endif %}
 {% endif %}

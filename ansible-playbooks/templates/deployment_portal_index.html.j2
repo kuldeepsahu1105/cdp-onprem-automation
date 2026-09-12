@@ -6,6 +6,9 @@
 {% set ipa_legacy_caddy_url = ctx.identity.ipa_caddy_legacy_url | default('') %}
 {% set ipa_tile_url = ipa_modern_url if (ipa_modern_url | length > 0) else (ctx.identity.ipa_ui_url | default('')) %}
 {% set ecs_tile_url = (ctx.ecs.caddy_url | default('') if (ctx.ecs.caddy_url | default('') | length > 0) else (ctx.ecs.console_hint | default(''))) if ctx.ecs.deployed else '' %}
+{% set _portal_caddy_url = ctx.caddy_vhosts.urls_public.portal.url | default('') if (ctx.caddy_vhosts.enabled | default(false)) else '' %}
+{% set portal_tile_url = _portal_caddy_url if (_portal_caddy_url | length > 0) else ctx.portal.index_url | default('') %}
+{% set portal_tile_hint = ctx.caddy_vhosts.urls_public.portal.hostname if (_portal_caddy_url | length > 0) else 'Ops host Caddy index' %}
 {% set mon_on = ctx.monitoring.enabled | default(false) | bool %}
 {% set grafana_tile_url = ctx.monitoring.grafana_caddy_url | default('') if (ctx.monitoring.grafana_caddy_url | default('') | length > 0) else (ctx.monitoring.grafana_url | default(ctx.monitoring.grafana_path_url | default(''))) %}
 {% set prometheus_tile_url = ctx.monitoring.prometheus_caddy_url | default('') if (ctx.monitoring.prometheus_caddy_url | default('') | length > 0) else (ctx.monitoring.prometheus_url | default(ctx.monitoring.prometheus_path_url | default(''))) %}
@@ -129,21 +132,24 @@
     }
     .tile-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
       gap: 0.65rem;
+      align-items: stretch;
     }
     a.tile {
       display: flex;
       flex-direction: column;
-      gap: 0.15rem;
+      justify-content: flex-start;
+      gap: 0.2rem;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 0.85rem 0.9rem;
+      padding: 0.9rem 0.95rem;
       color: var(--text);
       text-decoration: none;
       transition: background 0.15s, border-color 0.15s;
-      min-height: 4.5rem;
+      min-height: 5.25rem;
+      height: 100%;
     }
     a.tile:hover {
       background: var(--tile-hover);
@@ -176,17 +182,23 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 0.5rem;
+      gap: 0.75rem;
       user-select: none;
     }
     details.panel > summary::-webkit-details-marker { display: none; }
-    details.panel > summary::after {
-      content: "▸";
-      color: var(--muted);
-      font-size: 0.85rem;
-      transition: transform 0.15s;
+    details.panel > summary::marker { content: none; display: none; }
+    details.panel > summary .summary-main {
+      flex: 1;
+      min-width: 0;
     }
-    details.panel[open] > summary::after { transform: rotate(90deg); }
+    details.panel > summary .panel-chevron {
+      flex-shrink: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1;
+      transition: transform 0.15s ease;
+    }
+    details.panel[open] > summary .panel-chevron { transform: rotate(90deg); }
     details.panel > summary:hover { background: rgba(255, 255, 255, 0.03); }
     .panel-body {
       padding: 0 1rem 1rem;
@@ -346,16 +358,10 @@
           <span class="tile-hint">{% if ctx.ecs.deployed %}{{ ctx.ecs.cluster_name }}{% else %}Console{% endif %}</span>
         </a>
         {% endif %}
-        {% if ctx.portal.index_url | default('') | length > 0 %}
-        <a class="tile" target="_blank" rel="noopener noreferrer" href="{{ ctx.portal.index_url }}">
-          <span class="tile-label">Portal index</span>
-          <span class="tile-hint">This page (Caddy)</span>
-        </a>
-        {% endif %}
-        {% if ctx.caddy_vhosts.enabled and (ctx.caddy_vhosts.urls_public.portal.url | default('') | length > 0) %}
-        <a class="tile" target="_blank" rel="noopener noreferrer" href="{{ ctx.caddy_vhosts.urls_public.portal.url }}">
-          <span class="tile-label">Portal (lab hostname)</span>
-          <span class="tile-hint">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</span>
+        {% if portal_tile_url | length > 0 %}
+        <a class="tile tile-accent" target="_blank" rel="noopener noreferrer" href="{{ portal_tile_url }}">
+          <span class="tile-label">Deployment portal</span>
+          <span class="tile-hint">{{ portal_tile_hint }}</span>
         </a>
         {% endif %}
       </div>
@@ -364,7 +370,7 @@
     {% if ctx.endpoints | default([]) | length > 0 %}
     <section class="flat">
       <h2>Endpoints</h2>
-      <p class="sub">Primary service URLs for operators and Jenkins. Links open in a new tab.</p>
+      <p class="sub"><strong>Service</strong> is the product or UI name. <strong>Hostname</strong> is the inventory FQDN of the backing host (or ECS console name). Links open in a new tab.</p>
       <div class="table-scroll">
         <table>
           <thead>
@@ -392,7 +398,7 @@
 
     {% if ctx.access.profile == 'private' %}
     <details class="panel" open>
-      <summary><h2 class="section-title">Private network (no public IP)</h2></summary>
+      <summary><span class="summary-main"><h2 class="section-title">Network access (private lab)</h2></span><span class="panel-chevron" aria-hidden="true">▸</span></summary>
       <div class="panel-body">
         <p class="sub">{{ ctx.access.primary.audience }}</p>
         <ul class="clean">
@@ -412,30 +418,30 @@
     </details>
     {% else %}
     <details class="panel" open>
-      <summary><h2 class="section-title">From Jenkins / internet (public IP)</h2></summary>
+      <summary><span class="summary-main"><h2 class="section-title">Network access</h2></span><span class="panel-chevron" aria-hidden="true">▸</span></summary>
       <div class="panel-body">
-        <p class="sub">{{ ctx.access.external.audience }}</p>
+        <p class="sub"><strong>Internet / Jenkins</strong> — {{ ctx.access.external.audience }}</p>
         <ul class="clean">
           <li>Ops public IP: <code>{{ ctx.access.external.ops_ip }}</code></li>
           <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.portal }}">{{ ctx.access.external.portal }}</a></li>
           <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.pgadmin }}">{{ ctx.access.external.pgadmin }}</a></li>
           {% if ctx.monitoring.enabled %}
           <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.grafana }}">{{ ctx.access.external.grafana }}</a></li>
+          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.prometheus }}">{{ ctx.access.external.prometheus }}</a></li>
+          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.alertmanager }}">{{ ctx.access.external.alertmanager }}</a></li>
+          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.cadvisor }}">{{ ctx.access.external.cadvisor }}</a></li>
           {% endif %}
         </ul>
-      </div>
-    </details>
-
-    <details class="panel">
-      <summary><h2 class="section-title">From same VPC (private IP)</h2></summary>
-      <div class="panel-body">
-        <p class="sub">{{ ctx.access.vpc.audience }}</p>
+        <p class="sub" style="margin-top:0.85rem"><strong>Same VPC (private IP)</strong> — {{ ctx.access.vpc.audience }}</p>
         <ul class="clean">
           <li>Ops private IP: <code>{{ ctx.access.vpc.ops_ip }}</code></li>
           <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.portal }}">{{ ctx.access.vpc.portal }}</a></li>
           <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.pgadmin }}">{{ ctx.access.vpc.pgadmin }}</a></li>
           {% if ctx.monitoring.enabled %}
           <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.grafana }}">{{ ctx.access.vpc.grafana }}</a></li>
+          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.prometheus }}">{{ ctx.access.vpc.prometheus }}</a></li>
+          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.alertmanager }}">{{ ctx.access.vpc.alertmanager }}</a></li>
+          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.cadvisor }}">{{ ctx.access.vpc.cadvisor }}</a></li>
           {% endif %}
         </ul>
       </div>
@@ -444,7 +450,7 @@
 
     {% if ctx.caddy_vhosts.enabled %}
     <details class="panel">
-      <summary><h2 class="section-title">Lab domain (Caddy) — {{ ctx.caddy_vhosts.public_base }}</h2></summary>
+      <summary><span class="summary-main"><h2 class="section-title">Lab domain (Caddy) — {{ ctx.caddy_vhosts.public_base }}</h2></span><span class="panel-chevron" aria-hidden="true">▸</span></summary>
       <div class="panel-body">
         {% if ctx.access.profile == 'private' %}
         <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — hostnames resolve to the ops host on your private network (FreeIPA/AD DNS or static records). No public internet required.</p>
@@ -454,7 +460,8 @@
         <ul class="clean">
           <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>
           <li><strong>pgAdmin</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.pgadmin.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.pgadmin.hostname }}</a></li>
-          <li><strong>CM</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.cm.hostname }}</a></li>
+          <li><strong>CM (Caddy HTTP)</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.cm.hostname }}</a></li>
+          <li><strong>CM (HTTPS direct)</strong> — <a href="{{ ctx.cloudera_manager.ui_url_https }}" target="_blank" rel="noopener noreferrer">{{ ctx.cloudera_manager.host_fqdn }}:7183</a></li>
           {% if mon_on and ctx.caddy_vhosts.urls_public.grafana is defined %}
           <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.grafana.hostname }}</a></li>
           <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.prometheus.hostname }}</a></li>
@@ -483,20 +490,20 @@
     {% endif %}
 
     <details class="panel">
-      <summary><h2 class="section-title">Ops host (portal, pgAdmin, Grafana, Prometheus)</h2></summary>
+      <summary><span class="summary-main"><h2 class="section-title">Ops host &amp; platform details</h2></span><span class="panel-chevron" aria-hidden="true">▸</span></summary>
       <div class="panel-body">
+        <p class="sub">Reverse proxy and containerized UIs on <code>{{ ctx.ops_host.fqdn }}</code> <span class="badge">{{ ctx.ops_host.inventory_group }}</span>. {{ ctx.ops_host.services }}</p>
         <ul class="clean">
-          <li>Host: <code>{{ ctx.ops_host.fqdn }}</code> <span class="badge">{{ ctx.ops_host.inventory_group }}</span></li>
-          <li>{{ ctx.ops_host.services }}</li>
-          <li><strong>Deployment index (Caddy)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.portal.index_url }}">{{ ctx.portal.index_url }}</a></li>
-          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ pgadmin_tile_url }}">{{ pgadmin_tile_url }}</a> <span class="badge">connects to CM DB</span></li>
+          <li><strong>Deployment portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ portal_tile_url | default(ctx.portal.index_url) }}">{{ portal_tile_url | default(ctx.portal.index_url) }}</a></li>
+          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ pgadmin_tile_url }}">{{ pgadmin_tile_url }}</a> <span class="badge">CM DB on {{ ctx.postgresql.host_fqdn }}</span></li>
           {% if ctx.portal.pgadmin_caddy_url | default('') | length > 0 and ctx.portal.pgadmin_url_direct | default('') | length > 0 %}
           <li><strong>pgAdmin (direct port)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.portal.pgadmin_url_direct }}">{{ ctx.portal.pgadmin_url_direct }}</a></li>
           {% endif %}
-          {% if ctx.monitoring.enabled %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.monitoring.grafana_url }}">{{ ctx.monitoring.grafana_url }}</a></li>
-          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.monitoring.prometheus_url }}">{{ ctx.monitoring.prometheus_url }}</a></li>
+          {% if _cm_caddy | length > 0 %}
+          <li><strong>Cloudera Manager (Caddy HTTP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _cm_caddy }}">{{ _cm_caddy }}</a></li>
           {% endif %}
+          <li><strong>Cloudera Manager (direct HTTP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_http }}">{{ ctx.cloudera_manager.ui_url_http }}</a> <span class="badge">VPC / admin</span></li>
+          <li><strong>Cloudera Manager (direct HTTPS)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_https }}">{{ ctx.cloudera_manager.ui_url_https }}</a> <span class="badge">:7183 on {{ ctx.cloudera_manager.host_fqdn }}</span></li>
           {% if ctx.identity.ipa_caddy_modern_url | default('') | length > 0 %}
           <li><strong>{{ ctx.identity.ipa_ui_modern_label | default('FreeIPA (modern UI)') }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_caddy_modern_url }}">{{ ctx.identity.ipa_caddy_modern_url }}</a></li>
           {% endif %}
@@ -506,83 +513,61 @@
           {% if ctx.identity.ipa_ui_url %}
           <li><strong>{{ ctx.identity.ipa_ui_label }} (HTTPS on ipaserver)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_ui_url }}">{{ ctx.identity.ipa_ui_url }}</a></li>
           {% endif %}
-          {% if _cm_caddy | length > 0 %}
-          <li><strong>Cloudera Manager (Caddy vhost)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _cm_caddy }}">{{ _cm_caddy }}</a></li>
-          {% endif %}
-          <li><strong>Cloudera Manager (direct HTTP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_http }}">{{ ctx.cloudera_manager.ui_url_http }}</a> <span class="badge">VPC / admin only</span></li>
-          <li><strong>Cloudera Manager (direct HTTPS)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_https }}">{{ ctx.cloudera_manager.ui_url_https }}</a> <span class="badge">VPC / admin only</span></li>
         </ul>
+        <h2 class="section-title" style="margin-top:1rem">PostgreSQL</h2>
+        <ul class="clean">
+          <li>Host: <code>{{ ctx.postgresql.host_fqdn }}</code></li>
+          <li>Port: <code>{{ ctx.postgresql.port }}</code></li>
+          <li>{{ ctx.postgresql.database_host_note }}</li>
+        </ul>
+        <h2 class="section-title" style="margin-top:1rem">Clusters</h2>
+        <ul class="clean">
+          <li>CDP Runtime base cluster: <code>{{ ctx.cloudera_manager.cluster_name }}</code></li>
+          {% if ctx.ecs.deployed %}
+          <li>ECS cluster: <code>{{ ctx.ecs.cluster_name }}</code></li>
+          <li>ECS app domain: <code>{{ ctx.ecs.app_domain }}</code></li>
+          <li>ECS console — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.ecs.console_hint }}">{{ ctx.ecs.console_hint }}</a>{% if ctx.ecs.caddy_url | default('') | length > 0 %} <span class="badge">Caddy</span>{% endif %}</li>
+          <li>ECS direct HTTPS — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.ecs.console_url_direct | default('https://console.' ~ ctx.ecs.app_domain) }}">{{ ctx.ecs.console_url_direct | default('https://console.' ~ ctx.ecs.app_domain) }}</a></li>
+          <li>Data Services hostnames: <code>{{ ctx.ecs.apps_wildcard }}</code></li>
+          {% else %}
+          <li>ECS: <span class="badge">not in inventory</span></li>
+          {% endif %}
+        </ul>
+        <p class="sub">Versions — CM {{ ctx.versions.cm }} · CDP Runtime {{ ctx.versions.cdh }} · CDS {{ ctx.versions.ecs_cds }}</p>
+        {% if ctx.data_services.links | length > 0 %}
+        <h2 class="section-title" style="margin-top:1rem">Data services &amp; related URLs</h2>
+        <ul class="clean">
+          {% for link in ctx.data_services.links %}
+          <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — <a target="_blank" rel="noopener noreferrer" href="{{ link.url }}">{{ link.url }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if mon_on %}
+        <h2 class="section-title" style="margin-top:1rem">Monitoring path fallbacks</h2>
+        <ul class="clean">
+          {% if ctx.monitoring.grafana_path_url | default('') | length > 0 %}
+          <li>Grafana <a href="{{ ctx.monitoring.grafana_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.grafana_path_url }}</a>;
+            Prometheus <a href="{{ ctx.monitoring.prometheus_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.prometheus_path_url }}</a>;
+            Alertmanager <a href="{{ ctx.monitoring.alertmanager_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.alertmanager_path_url }}</a></li>
+          {% endif %}
+          <li>cAdvisor host port — <a href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">{{ cadvisor_tile_url }}</a></li>
+        </ul>
+        {% endif %}
+        {% if ctx.extra_links | length > 0 %}
+        <h2 class="section-title" style="margin-top:1rem">Additional links</h2>
+        <ul class="clean">
+          {% for link in ctx.extra_links %}
+          <li><strong>{{ link.name }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ link.url }}">{{ link.url }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
       </div>
     </details>
 
-    <section class="flat">
-      <h2>PostgreSQL</h2>
-      <ul class="clean">
-        <li>Host: <code>{{ ctx.postgresql.host_fqdn }}</code></li>
-        <li>Port: <code>{{ ctx.postgresql.port }}</code></li>
-        <li>{{ ctx.postgresql.database_host_note }}</li>
-      </ul>
-    </section>
-
-    <section class="flat">
-      <h2>Clusters</h2>
-      <ul class="clean">
-        <li>CDH base cluster: <code>{{ ctx.cloudera_manager.cluster_name }}</code></li>
-        {% if ctx.ecs.deployed %}
-        <li>ECS cluster: <code>{{ ctx.ecs.cluster_name }}</code></li>
-        <li>ECS app domain: <code>{{ ctx.ecs.app_domain }}</code></li>
-        <li>ECS console (typical): <a target="_blank" rel="noopener noreferrer" href="{{ ctx.ecs.console_hint }}">{{ ctx.ecs.console_hint }}</a></li>
-        <li>Data Services hostnames: <code>{{ ctx.ecs.apps_wildcard }}</code></li>
-        {% else %}
-        <li>ECS: <span class="badge">not in inventory</span></li>
-        {% endif %}
-      </ul>
-      <p class="sub">Versions — CM {{ ctx.versions.cm }} · CDH {{ ctx.versions.cdh }} · CDS {{ ctx.versions.ecs_cds }}</p>
-    </section>
-
-    {% if ctx.data_services.links | length > 0 %}
-    <section class="flat">
-      <h2>Data services &amp; related URLs</h2>
-      <ul class="clean">
-        {% for link in ctx.data_services.links %}
-        <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — <a target="_blank" rel="noopener noreferrer" href="{{ link.url }}">{{ link.url }}</a></li>
-        {% endfor %}
-      </ul>
-    </section>
-    {% endif %}
-
-    {% if mon_on %}
-    <section class="flat">
-      <h2>Monitoring stack (on ops host)</h2>
-      <ul class="clean">
-        <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{{ grafana_tile_url }}</a> <span class="badge">Caddy vhost or /grafana/</span></li>
-        <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{{ prometheus_tile_url }}</a> <span class="badge">Caddy vhost or /prometheus/</span></li>
-        <li><strong>Alertmanager</strong> — <a href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">{{ alertmanager_tile_url }}</a> <span class="badge">Caddy vhost or /alertmanager/</span></li>
-        <li><strong>cAdvisor</strong> — <a href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">{{ cadvisor_tile_url }}</a> <span class="badge">host port 8089</span></li>
-        {% if ctx.monitoring.grafana_path_url | default('') | length > 0 %}
-        <li><strong>Caddy path fallbacks</strong> — Grafana <a href="{{ ctx.monitoring.grafana_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.grafana_path_url }}</a>;
-          Prometheus <a href="{{ ctx.monitoring.prometheus_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.prometheus_path_url }}</a>;
-          Alertmanager <a href="{{ ctx.monitoring.alertmanager_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.alertmanager_path_url }}</a></li>
-        {% endif %}
-      </ul>
-    </section>
-    {% endif %}
-
-    {% if ctx.extra_links | length > 0 %}
-    <section class="flat">
-      <h2>Additional links</h2>
-      <ul class="clean">
-        {% for link in ctx.extra_links %}
-        <li><strong>{{ link.name }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ link.url }}">{{ link.url }}</a></li>
-        {% endfor %}
-      </ul>
-    </section>
-    {% endif %}
-
     {% if ctx.inventory_hosts | default([]) | length > 0 %}
     <section class="flat">
-      <h2>Host roles</h2>
-      <p class="sub">Roles derived from Ansible inventory groups and portal facts (CM agent, PostgreSQL, Knox, portal/Caddy on the ops host).</p>
+      <h2>Host inventory</h2>
+      <p class="sub">One row per host: Ansible groups, addresses, and inferred roles from inventory groups and enabled base-cluster services.</p>
       <div class="table-scroll">
         <table>
           <thead>
@@ -591,6 +576,7 @@
               <th>FQDN</th>
               <th>Private IP</th>
               <th>Public IP</th>
+              <th>Inventory groups</th>
               <th>Roles installed</th>
             </tr>
           </thead>
@@ -598,9 +584,14 @@
             {% for h in ctx.inventory_hosts %}
             <tr>
               <td><code>{{ h.hostname }}</code> <span class="badge">{{ h.inventory_name }}</span></td>
-              <td>{{ h.fqdn }}</td>
+              <td><code>{{ h.fqdn }}</code></td>
               <td><code>{{ h.private_ip }}</code></td>
-              <td>{% if h.public_ip | default('') | length > 0 %}<code>{{ h.public_ip }}</code>{% else %}<span class="badge">VPC only</span>{% endif %}</td>
+              <td>{% if h.public_ip | default('') | length > 0 and ('{{' not in (h.public_ip | string)) %}<code>{{ h.public_ip }}</code>{% else %}<span class="badge">VPC only</span>{% endif %}</td>
+              <td>
+                {% for gl in h.group_labels | default(h.groups | default([])) %}
+                <span class="group-tag">{{ gl }}</span>
+                {% endfor %}
+              </td>
               <td>
                 {% for role in h.role_labels | default([]) %}
                 <span class="role-badge">{{ role }}</span>
@@ -613,35 +604,6 @@
       </div>
     </section>
     {% endif %}
-
-    <section class="flat">
-      <h2>Hosts with groups</h2>
-      <p class="sub">One row per inventory group membership. Public IP uses <code>ansible_host</code> / hostvars when distinct from private IP; ops reverse-proxy host uses the portal EIP.</p>
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Group</th>
-              <th>Hostname</th>
-              <th>FQDN</th>
-              <th>Private IP</th>
-              <th>Public IP</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for n in ctx.nodes %}
-            <tr>
-              <td><span class="group-tag">{{ n.group }}</span></td>
-              <td>{{ n.hostname }}</td>
-              <td>{{ n.fqdn }}</td>
-              <td><code>{{ n.private_ip or n.ansible_host }}</code></td>
-              <td>{% if n.public_ip | default('') | length > 0 %}<code>{{ n.public_ip }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </section>
   </main>
 </body>
 </html>

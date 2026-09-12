@@ -544,8 +544,8 @@ deployment_portal_inventory_groups:
 deployment_portal_inventory_group_labels:
   ipaserver: FreeIPA server
   cldr-mngr: Cloudera Manager
-  base-masters: CDH master
-  base-workers: CDH worker
+  base-masters: CDP Runtime master
+  base-workers: CDP Runtime worker
   ecs-masters: ECS master
   ecs-workers: ECS worker
 deployment_portal_data_service_links: []

@@ -1,0 +1,27 @@
+{# Sets _public for inv_host using hostvars (not literal group_vars Jinja). Requires _hv, _priv, _ah, inv_host, _anchor_inv. #}
+{% set _pub_raw = (_hv.public_ip | default('') | string) | trim %}
+{% set _pub_unresolved = (_pub_raw is search('\\{\\{')) or ('ansible_default_ipv4' in _pub_raw) %}
+{% set _fact_pub = '' %}
+{% if _hv.ansible_default_ipv4 is defined and _hv.ansible_default_ipv4.address is defined %}
+{% set _fact_pub = _hv.ansible_default_ipv4.address | default('') | trim %}
+{% endif %}
+{% if deployment_portal_access_profile_effective | default('cloud') == 'private' %}
+{% set _public = '' %}
+{% elif inv_host == _anchor_inv %}
+{% set _ops_pub = deployment_portal_ops_public_ip | default('') | trim %}
+{% if _ops_pub | length > 0 and _ops_pub != _priv %}
+{% set _public = _ops_pub %}
+{% elif _ah | length > 0 and _ah != _priv %}
+{% set _public = _ah %}
+{% else %}
+{% set _public = '' %}
+{% endif %}
+{% elif not _pub_unresolved and _pub_raw | length > 0 and _pub_raw != _priv %}
+{% set _public = _pub_raw %}
+{% elif _fact_pub | length > 0 and _fact_pub != _priv %}
+{% set _public = _fact_pub %}
+{% elif _ah | length > 0 and _ah != _priv %}
+{% set _public = _ah %}
+{% else %}
+{% set _public = '' %}
+{% endif %}
