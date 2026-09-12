@@ -13,7 +13,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 3 | PREREQS | `1` / `prereq` | SSH: `00_setup_ssh_preqs` → `01`–`09` |
 | 4 | PORTAL | `portal` | `10_setup_deployment_portal` |
 | 5 | IDENTITY | `2` / `identity` | `00_detect_identity` → `11_identity_setup` → `35_refresh` (via wrapper) |
-| 6 | CM_INSTALL | `3` / `cm` | `20_setup_cm_repos` or `22_download_repos` → `23`–`26` → `35_refresh` |
+| 6 | CM_INSTALL | `3` / `cm` | `20_setup_cm_repos` or `22_download_repos` → `23`–`26` (no `35_refresh`; portal already bootstrapped in PORTAL) |
 | 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `35_refresh` → `28`–`30` → `35_refresh` |
 | 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` → `35_refresh` |
 | 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` → `35_refresh` |

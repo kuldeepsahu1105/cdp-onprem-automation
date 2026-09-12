@@ -227,7 +227,8 @@ run_phase_3() {
   run_playbook 24_start_cm.yml "${cm_extra[@]}"
   run_playbook 25_verify_cm.yml -e ansible_become=false
   run_playbook 26_setup_cm_license.yml -e ansible_become=false
-  _run_deployment_portal_refresh "portal,ipa,identity,cm"
+  # Portal bootstrap is Jenkins PORTAL / run_phase_portal only. CM frontend_url is set in 26 when Caddy is enabled.
+  # Re-render index + CM Caddy verify on CM_TLS_KRB_LDAP (and later phases), not here.
 }
 
 run_phase_cm_tls() {

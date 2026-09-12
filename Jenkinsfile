@@ -170,7 +170,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     booleanParam(
       name: 'DEPLOYMENT_PORTAL_ENABLED',
       defaultValue: true,
-      description: 'Bootstrap portal before CM (10_setup_deployment_portal). Index is refreshed incrementally after Identity, CM, TLS, CDH, monitoring, and ECS (35_refresh in each Ansible phase).'
+      description: 'Bootstrap portal in PORTAL stage (10_setup_deployment_portal). Index refresh (35_refresh) runs after Identity, CM_TLS, CDH, monitoring, and ECS — not after CM_INSTALL (CM frontend_url still applied in 26 when Caddy is enabled).'
     )
     booleanParam(
       name: 'ECS_DATA_SERVICES_DEPLOY_ENABLED',
