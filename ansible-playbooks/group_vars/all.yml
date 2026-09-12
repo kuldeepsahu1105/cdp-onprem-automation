@@ -306,7 +306,8 @@ ansible_control_reachability: auto
 cm_api_prefer_private_ip: true
 cm_api_connect_host: ""
 ansible_controller_outside_vpc: false
-# When play runs on localhost/Jenkins, run HTTP discovery on cldr-mngr via 127.0.0.1 (not VPC private IP)
+# When play runs on localhost in-VPC, delegate CM API discovery to cldr-mngr (127.0.0.1).
+# Jenkins/public controllers probe CM ansible_host (HTTPS :7183) from localhost instead (no EC2 hairpin).
 cm_api_delegate_probes_to_manager: true
 cm_api_private_reachability_timeout: 5
 # CM UI via Caddy vhost (portal): frontend_url + cm_host_name in CM (API). Override full URL here if needed.

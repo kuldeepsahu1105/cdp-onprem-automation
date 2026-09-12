@@ -13,6 +13,70 @@
 - name: Ensure CM admin password matches group_vars when not factory default
   ansible.builtin.import_tasks: ensure_cm_admin_password.yml
 
+- name: Probe Cloudera Manager HTTPS API first (public Jenkins controller)
+  ansible.builtin.uri:
+    url: "https://{{ cm_api_probe_host }}:{{ cm_https_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_tls_probe_https
+  until: cm_tls_probe_https is succeeded
+  retries: 2
+  delay: 3
+  timeout: 15
+  ignore_errors: yes
+  when:
+    - cm_api_probe_https_first | default(false) | bool
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+    - cm_api_probe_delegate_to | default('') | length > 0
+  delegate_to: "{{ cm_api_probe_delegate_to }}"
+
+- name: Probe Cloudera Manager HTTPS API first on play host (public controller)
+  ansible.builtin.uri:
+    url: "https://{{ cm_api_probe_host }}:{{ cm_https_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_tls_probe_https
+  until: cm_tls_probe_https is succeeded
+  retries: 2
+  delay: 3
+  timeout: 15
+  ignore_errors: yes
+  when:
+    - cm_api_probe_https_first | default(false) | bool
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+    - cm_api_probe_delegate_to | default('') | length == 0
+
+- name: Probe Cloudera Manager HTTP API via Caddy vhost (public controller)
+  ansible.builtin.uri:
+    url: "http://{{ cm_api_probe_host }}:{{ deployment_portal_http_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    follow_redirects: none
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_tls_probe_http
+  until: cm_tls_probe_http is succeeded
+  retries: 2
+  delay: 3
+  timeout: 15
+  ignore_errors: yes
+  when:
+    - cm_api_probe_use_caddy_vhost | default(false) | bool
+    - cm_api_probe_delegate_to | default('') | length == 0
+
 - name: Probe Cloudera Manager HTTP API (Auto-TLS redirect detection)
   ansible.builtin.uri:
     url: "http://{{ cm_api_probe_host }}:{{ cm_http_port }}/api/version"
@@ -31,7 +95,15 @@
   timeout: 15
   ignore_errors: yes
   delegate_to: "{{ cm_api_probe_delegate_to }}"
-  when: cm_api_probe_delegate_to | default('') | length > 0
+  when:
+    - cm_api_probe_delegate_to | default('') | length > 0
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+    - not (
+        (cm_api_probe_https_first | default(false) | bool)
+        and (cm_tls_probe_https is defined)
+        and (cm_tls_probe_https is succeeded)
+        and (cm_tls_probe_https.status | default(0) in [200, 301, 303])
+      )
 
 - name: Probe Cloudera Manager HTTP API on play host when not delegating
   ansible.builtin.uri:
@@ -50,7 +122,15 @@
   delay: 3
   timeout: 15
   ignore_errors: yes
-  when: cm_api_probe_delegate_to | default('') | length == 0
+  when:
+    - cm_api_probe_delegate_to | default('') | length == 0
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+    - not (
+        (cm_api_probe_https_first | default(false) | bool)
+        and (cm_tls_probe_https is defined)
+        and (cm_tls_probe_https is succeeded)
+        and (cm_tls_probe_https.status | default(0) in [200, 301, 303])
+      )
 
 - name: Probe Cloudera Manager HTTPS API (fallback when HTTP is unavailable)
   ansible.builtin.uri:
@@ -69,6 +149,8 @@
   timeout: 15
   ignore_errors: yes
   when:
+    - not (cm_api_probe_https_first | default(false) | bool)
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
     - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
     - cm_api_probe_delegate_to | default('') | length > 0
   delegate_to: "{{ cm_api_probe_delegate_to }}"
@@ -90,6 +172,8 @@
   timeout: 15
   ignore_errors: yes
   when:
+    - not (cm_api_probe_https_first | default(false) | bool)
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
     - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
     - cm_api_probe_delegate_to | default('') | length == 0
 
@@ -102,17 +186,25 @@
       }}
     cm_protocol: >-
       {{
-        'https' if (
-          (cm_tls_probe_http.status | default(0) in [301, 303])
-          or (cm_tls_probe_https is defined and cm_tls_probe_https is succeeded and cm_tls_probe_https.status | default(0) == 200)
-        ) else 'http'
+        'http'
+        if (cm_api_probe_use_caddy_vhost | default(false) | bool)
+        else (
+          'https' if (
+            (cm_tls_probe_http.status | default(0) in [301, 303])
+            or (cm_tls_probe_https is defined and cm_tls_probe_https is succeeded and cm_tls_probe_https.status | default(0) == 200)
+          ) else 'http'
+        )
       }}
     cm_api_port: >-
       {{
-        cm_https_port if (
-          (cm_tls_probe_http.status | default(0) in [301, 303])
-          or (cm_tls_probe_https is defined and cm_tls_probe_https is succeeded and cm_tls_probe_https.status | default(0) == 200)
-        ) else cm_http_port
+        deployment_portal_http_port
+        if (cm_api_probe_use_caddy_vhost | default(false) | bool)
+        else (
+          cm_https_port if (
+            (cm_tls_probe_http.status | default(0) in [301, 303])
+            or (cm_tls_probe_https is defined and cm_tls_probe_https is succeeded and cm_tls_probe_https.status | default(0) == 200)
+          ) else cm_http_port
+        )
       }}
 
 - name: Fail CM API probes with connect target when HTTP and HTTPS checks did not succeed
@@ -126,7 +218,19 @@
       Jenkins/outside-VPC controllers use the CM public IP for uri from localhost; discovery runs on cldr-mngr (127.0.0.1, ansible_host, FQDN; HTTPS {{ cm_https_port }} OK without {{ cm_http_port }}).
       Set ansible_control_reachability: public (or legacy ansible_controller_outside_vpc: true / cm_api_prefer_private_ip: false).
   when:
-    - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
+    - not (
+        (cm_api_probe_use_caddy_vhost | default(false) | bool)
+        and (cm_tls_probe_http is defined)
+        and (cm_tls_probe_http is succeeded)
+        and (cm_tls_probe_http.status | default(0) in [200, 301, 303])
+      )
+    - not (
+        (cm_api_probe_https_first | default(false) | bool)
+        and (cm_tls_probe_https is defined)
+        and (cm_tls_probe_https is succeeded)
+        and (cm_tls_probe_https.status | default(0) in [200, 301, 303])
+      )
+    - cm_tls_probe_http is not defined or cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
     - cm_tls_probe_https is not defined or cm_tls_probe_https is failed or (cm_tls_probe_https.status | default(0) not in [200, 301, 303])
 
 - name: Get Cloudera Manager API version
