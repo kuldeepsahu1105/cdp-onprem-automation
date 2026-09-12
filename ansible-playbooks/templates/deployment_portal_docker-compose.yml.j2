@@ -21,8 +21,9 @@ services:
     ports:
       - "0.0.0.0:{{ deployment_portal_pgadmin_host_port }}:80/tcp"
     environment:
-      PGADMIN_DEFAULT_EMAIL: "{{ pgadmin_default_email }}"
-      PGADMIN_DEFAULT_PASSWORD: "{{ pgadmin_default_password }}"
+      PGADMIN_DEFAULT_EMAIL: "{{ pgadmin_default_email | trim }}"
+      PGADMIN_DEFAULT_PASSWORD: "{{ pgadmin_default_password | trim }}"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     volumes:
       - {{ deployment_portal_config_dir }}/pgadmin-servers.json:/pgadmin4/servers.json:ro,z
