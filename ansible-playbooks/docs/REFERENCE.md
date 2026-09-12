@@ -21,6 +21,8 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 | Variable | Default |
 |---|---|
 | `cdh_basecluster_name` | `CDH-Cluster` |
+| `base_cluster_install_services` | see `all.yml` | Per-service booleans for `26_setup_base_cluster.yml` (NiFi, DataViz, Phoenix, Knox, Solr default `false`) |
+| `base_cluster_yarn_*` | `4096` / `4` | YARN RM/NM memory and vcore limits in cluster spec template |
 | `ecs_cluster_name` | `ECS-Cluster` |
 | `ecs_deploy_enabled` | `auto` | `auto`, `true`, or `false` — deploy ECS when ecs inventory groups exist |
 | `ecs_pvc_ds_version` | `1.5.5-h3300` | CDS repo tag (`1.5.5-h3300` = SP3 CHF3; older: `1.5.5-h2000` SP2, `1.5.5-h2100` SP2 CHF1) |
@@ -242,7 +244,7 @@ CMS (Management Service) and CDP base cluster are **separate**:
 | Playbook | Component | Deploys |
 |---|---|---|
 | `24_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. |
-| `26_setup_base_cluster.yml` | Base cluster | ZooKeeper, HDFS, YARN |
+| `26_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
 | `27_setup_ecs_cluster.yml` | ECS cluster | Cloudera Data Services (DOCKER + ECS), embedded control plane |
 
 Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-masters` / `ecs-workers` inventory groups. Skipped when `ecs_deploy_enabled: auto` and ECS groups are empty.

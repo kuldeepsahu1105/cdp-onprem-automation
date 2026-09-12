@@ -25,6 +25,11 @@ allowed_keys:
   - ecs_pvc_ds_version
   - ecs_parcel_version
   - cdh_basecluster_name
+  - base_cluster_install_services
+  - base_cluster_yarn_rm_max_mb
+  - base_cluster_yarn_rm_max_vcores
+  - base_cluster_yarn_nm_memory_mb
+  - base_cluster_yarn_nm_vcores
   - ecs_cluster_name
 
   # OS / dependency versions

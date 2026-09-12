@@ -348,7 +348,7 @@ Set `CONTROL_MODE=local` when running on a host listed in `inventory.ini`. See l
 | `22` Auto-TLS, `23` Kerberos/KDC, `25` LDAP
 
 | CMS & base cluster
-| `24_setup_cm_cms.yml` (Management Service), `26_setup_base_cluster.yml` (HDFS/YARN/ZK)
+| `24_setup_cm_cms.yml` (Management Service), `26_setup_base_cluster.yml` (full CDP base stack; see `base_cluster_install_services`)
 
 | ECS (Data Services)
 | `27_setup_ecs_cluster.yml` (DOCKER + ECS experience cluster; requires base cluster)

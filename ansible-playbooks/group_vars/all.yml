@@ -222,6 +222,38 @@ cm_admin_pass: "admin"
 cdh_basecluster_name: "CDH-Cluster"
 base_cluster_master_group: base-masters
 base_cluster_worker_group: base-workers
+
+# CDP base cluster services (26_setup_base_cluster.yml). Override per key in Jenkins via base_cluster_install_services.
+base_cluster_install_services:
+  core_settings: true
+  zookeeper: true
+  hdfs: true
+  ozone: true
+  yarn: true
+  tez: true
+  hive: true
+  hive_on_tez: true
+  hbase: true
+  hue: true
+  iceberg: true
+  replication: true
+  impala: true
+  kafka: true
+  atlas: true
+  ranger: true
+  nifi: false
+  nifi_registry: false
+  dataviz: false
+  phoenix: false
+  knox: false
+  solr: false
+
+# YARN sizing for small lab clusters (base_cluster_cluster_spec.j2)
+base_cluster_yarn_rm_max_mb: 4096
+base_cluster_yarn_rm_max_vcores: 4
+base_cluster_yarn_nm_memory_mb: 4096
+base_cluster_yarn_nm_vcores: 4
+
 cdh_parcel_version: "{{ cdh_version.split('.')[:3] | join('.') }}-1.cdh{{ cdh_version.split('.')[:3] | join('.') }}.p{{ cdh_version.split('.')[-1] }}.{{ cdh_numeric_version }}"
 kerberos_principal: "{{ ipaadmin_principal }}/{{ ipaadmin_principal }}@{{ cluster_realm }}"
 kerberos_password: "{{ ipaadmin_password }}"
