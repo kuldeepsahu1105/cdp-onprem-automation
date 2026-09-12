@@ -18,7 +18,13 @@ Declarative pipeline with **checkbox stage selection**, **configurable validatio
 3. Run the job — it aborts immediately after reloading the parameter UI
 4. Run again with your desired stage checkboxes
 
-Parameter **help text** (stages, validation checks, security group, `ALLOWED_PORTS`, `CLDR_EIP_NAME`, etc.) lives in the Jenkinsfile `description` / `descriptionPropertyValue` fields and appears on **Build with Parameters** after a refresh. Stage and validation checkboxes also show a **per-option summary** next to each name via Extended Choice `descriptionPropertyValue`.
+Parameter help after **REFRESH_JENKINSFILE=YES**:
+
+- **`PIPELINE_STAGES_REFERENCE`** — multiline **text** parameter (default = full stage table). Always visible on **Build with Parameters**; use this when Extended Choice long descriptions do not show in your Jenkins theme.
+- **`PIPELINE_STAGES`** — short checkbox help line + per-option hints via Extended Choice `descriptionPropertyValue` (plugin-dependent; some UIs only show these in job configuration).
+- Other parameters — `description` fields on boolean/string/choice params (security group, `ALLOWED_PORTS`, etc.).
+
+Each run also prints a **quick reference** in the console at **Resolve Stages** (see `echoPipelineStagesQuickReference` in the Jenkinsfile).
 
 ## Default parameter values
 
@@ -42,22 +48,24 @@ If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALI
 
 **Legacy token:** Saved jobs may still submit **`CDH_BASE`** — it expands to `CM_TLS_KRB_LDAP` + `CDH_INSTALL`. Run **REFRESH_JENKINSFILE=YES** after Jenkinsfile changes to reload checkboxes.
 
+**Migrate old `PREREQS,IDENTITY,CM_INSTALL,CDH_BASE`:** check **`PREREQS,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL`**. Add **`VALIDATE,TERRAFORM`** if you still provision EC2 (old string omitted them). **`PORTAL`** is auto-inserted when **`DEPLOYMENT_PORTAL_ENABLED=true`** (default) and you select identity/CM/CDH stages without checking PORTAL.
+
 ## Stage checkboxes (`PIPELINE_STAGES`)
 
 Select one or more stage checkboxes. Fixed run order (each Ansible step is its own Jenkins stage in the UI):
 
-`VALIDATE` → `TERRAFORM` → `PREREQS` → `IDENTITY` → `CM_INSTALL` → `PORTAL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL`
+`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL`
 
 | Checkbox | What runs |
 |---|---|
 | `VALIDATE` | `validate-prereqs.sh` — only checks selected in `VALIDATION_CHECKS` (no deploy) |
 | `TERRAFORM` | EC2/VPC/SG/EIP via Terraform; `inventory.ini` + `.pem` key |
-| `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 (no portal/monitoring) |
-| `IDENTITY` | Ansible **phase 2** — FreeIPA or Active Directory (from inventory) |
+| `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 |
+| `PORTAL` | Bootstrap Caddy/pgAdmin/index (`28`); before CM when `DEPLOYMENT_PORTAL_ENABLED` |
+| `IDENTITY` | Ansible **phase 2** — FreeIPA or AD; refreshes portal index (`31`) |
 | `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
-| `PORTAL` | `28_setup_deployment_portal.yml` (when `DEPLOYMENT_PORTAL_ENABLED`) |
-| `CM_TLS_KRB_LDAP` | Auto-TLS, Kerberos, CMS, LDAP (22–25) |
-| `CDH_INSTALL` | CDH base cluster (`26_setup_base_cluster.yml`) |
+| `CM_TLS_KRB_LDAP` | Auto-TLS, Kerberos, CMS, LDAP (22–25); portal refresh |
+| `CDH_INSTALL` | CDH base cluster (`26_setup_base_cluster.yml`); portal refresh |
 | `MONITORING` | `29_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
 | `ECS_INSTALL` | ECS cluster (`27`); optional `30_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` |
 
@@ -72,7 +80,7 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | Prerequisites only | `VALIDATE`, `PREREQS` |
 | CM install only | `VALIDATE`, `CM_INSTALL` |
 | Terraform + CM | `VALIDATE`, `TERRAFORM`, `CM_INSTALL` |
-| CM + CDH base | `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `PORTAL`, `CM_TLS_KRB_LDAP`, `CDH_INSTALL` |
+| CM + CDH base | `VALIDATE`, `TERRAFORM`, `PREREQS`, `PORTAL`, `IDENTITY`, `CM_INSTALL`, `CM_TLS_KRB_LDAP`, `CDH_INSTALL` |
 | Full stack (through ECS) | All of the above + `MONITORING`, `ECS_INSTALL` |
 
 Ansible-only stages (no `TERRAFORM`) require existing `ansible-playbooks/inventory.ini`.
