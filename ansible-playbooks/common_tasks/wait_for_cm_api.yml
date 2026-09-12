@@ -63,3 +63,8 @@
   delay: 10
   timeout: 30
   when: cm_api_probe_delegate_to is not defined or cm_api_probe_delegate_to | length == 0
+
+- name: CM API — record successful health wait
+  ansible.builtin.set_fact:
+    cm_api_health_ok: true
+  when: cm_api_wait is defined and cm_api_wait is succeeded

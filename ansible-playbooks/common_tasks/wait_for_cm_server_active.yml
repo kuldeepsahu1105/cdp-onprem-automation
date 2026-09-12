@@ -1,5 +1,5 @@
 ---
-# systemctl is-active: 0=active, 3=inactive (not an error — we wait below). Fail only on unknown rc (e.g. 4).
+# systemctl is-active: 0=active, 3=inactive/activating (wait below). Fail only on unknown rc (e.g. 4).
 - name: Check if Cloudera Manager Server is already running
   ansible.builtin.command: systemctl is-active cloudera-scm-server
   register: cm_status
@@ -9,27 +9,45 @@
 
 - name: Print Cloudera SCM Server startup status - ALREADY RUNNING
   ansible.builtin.debug:
-    msg: "Cloudera SCM Server is already running."
-  when: cm_status.stdout == "active"
+    msg: "Cloudera SCM Server is already running (systemctl rc=0)."
+  when: cm_status.rc | int == 0
+
+# API /cm/version can succeed while systemd still reports activating — avoid a second TCP wait + 5m poll.
+- name: Wait for Cloudera Manager Server systemd active (short poll after API health)
+  ansible.builtin.command: systemctl is-active cloudera-scm-server
+  register: cm_active_after_api
+  until: cm_active_after_api.rc | int == 0
+  retries: 20
+  delay: 3
+  changed_when: false
+  failed_when: cm_active_after_api.rc | int not in [0, 3]
+  become: true
+  when:
+    - cm_status.rc | int != 0
+    - cm_api_health_ok | default(false) | bool
 
 - name: Wait for Cloudera Manager Server port
   ansible.builtin.wait_for:
     port: "{{ cm_api_port | default(cm_https_port) | default(cm_http_port) | default(7180) }}"
-    host: "{{ cm_api_probe_host | default(ansible_default_ipv4.address) | default('127.0.0.1') }}"
-    delay: 10
-    timeout: 300
-  when: cm_status.stdout != "active"
+    host: 127.0.0.1
+    delay: 2
+    timeout: 120
+  when:
+    - cm_status.rc | int != 0
+    - not (cm_api_health_ok | default(false) | bool)
 
 - name: Wait for Cloudera Manager Server systemd active state
   ansible.builtin.command: systemctl is-active cloudera-scm-server
   register: cm_active_check
-  until: cm_active_check.rc | int == 0 and cm_active_check.stdout == "active"
-  retries: 30
-  delay: 10
+  until: cm_active_check.rc | int == 0
+  retries: 24
+  delay: 5
   changed_when: false
   failed_when: cm_active_check.rc | int not in [0, 3]
   become: true
-  when: cm_status.stdout != "active"
+  when:
+    - cm_status.rc | int != 0
+    - not (cm_api_health_ok | default(false) | bool)
 
 - name: Require Cloudera Manager Server active (systemctl exit code 0 only)
   ansible.builtin.command: systemctl is-active cloudera-scm-server

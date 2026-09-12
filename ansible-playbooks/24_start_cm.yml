@@ -128,16 +128,7 @@
       register: cm_service_status
 
     # ----------------------------------------
-    # Wait for CM server port to be available
-    # ----------------------------------------
-    - name: Wait for Cloudera Manager Server port (HTTP)
-      ansible.builtin.wait_for:
-        port: "{{ cm_http_port }}"
-        delay: 10
-        timeout: 300
-
-    # ----------------------------------------
-    # Additional validation (if needed)
+    # Wait for CM systemd active (includes local port wait when needed)
     # ----------------------------------------
     - name: Wait for Cloudera Manager to become active
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
