@@ -216,12 +216,8 @@
 
 - name: CMS — build missing management role instances
   ansible.builtin.set_fact:
-    cms_role_types_desired:
-      - SERVICEMONITOR
-      - HOSTMONITOR
-      - EVENTSERVER
-      - ALERTPUBLISHER
-      - REPORTSMANAGER
+    cms_role_types_desired: "{{ cm_cms_role_types }}"
+    cms_health_role_types: "{{ cm_cms_health_role_types }}"
     cms_existing_role_types: >-
       {{
         cms_roles_get.json['items'] | default([])
@@ -296,32 +292,32 @@
     status_code: [200, 301, 303]
   register: cms_roles_before_action
 
-- name: CMS — detect unhealthy Service Monitor or Host Monitor roles
+- name: CMS — detect unhealthy Service Monitor, Host Monitor, or Reports Manager roles
   ansible.builtin.set_fact:
-    cms_monitor_roles: >-
+    cms_health_roles: >-
       {{
         cms_roles_before_action.json['items'] | default([])
-        | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+        | selectattr('type', 'in', cms_health_role_types)
         | list
       }}
     cms_monitors_healthy: >-
       {{
         (
           cms_roles_before_action.json['items'] | default([])
-          | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+          | selectattr('type', 'in', cms_health_role_types)
           | list
           | length
-        ) == 2
+        ) == (cms_health_role_types | length)
         and (
           cms_roles_before_action.json['items'] | default([])
-          | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+          | selectattr('type', 'in', cms_health_role_types)
           | rejectattr('roleState', 'equalto', 'RUNNING')
           | list
           | length
         ) == 0
         and (
           cms_roles_before_action.json['items'] | default([])
-          | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+          | selectattr('type', 'in', cms_health_role_types)
           | selectattr('healthSummary', 'equalto', 'BAD')
           | list
           | length
@@ -339,7 +335,7 @@
     status_code: [200, 301, 303]
   register: cms_service_before_action
 
-- name: CMS — restart management service (unhealthy monitors or config drift)
+- name: CMS — restart management service (unhealthy CMS roles or config drift)
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/service/commands/restart"
     method: POST
@@ -387,7 +383,7 @@
     - cms_start_cmd is not skipped
     - cms_start_cmd.json.id is defined
 
-- name: CMS — wait for Service Monitor and Host Monitor to reach RUNNING
+- name: CMS — wait for Service Monitor, Host Monitor, and Reports Manager to reach RUNNING
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/service/roles"
     method: GET
@@ -400,13 +396,13 @@
   until: >
     (
       cms_roles_health_poll.json['items'] | default([])
-      | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+      | selectattr('type', 'in', cms_health_role_types)
       | list
       | length
-    ) == 2
+    ) == (cms_health_role_types | length)
     and (
       cms_roles_health_poll.json['items'] | default([])
-      | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+      | selectattr('type', 'in', cms_health_role_types)
       | rejectattr('roleState', 'equalto', 'RUNNING')
       | list
       | length
@@ -414,18 +410,19 @@
   retries: "{{ cm_cms_monitor_wait_retries | default(30) }}"
   delay: "{{ cm_cms_monitor_wait_delay | default(20) }}"
 
-- name: CMS — fail when Service Monitor or Host Monitor did not become healthy
+- name: CMS — fail when critical CMS roles did not become healthy
   ansible.builtin.fail:
     msg: >-
-      Service Monitor / Host Monitor are not RUNNING after CMS start/restart:
+      Service Monitor, Host Monitor, or Reports Manager are not RUNNING after CMS start/restart:
       {{ cms_roles_health_poll.json['items'] | default([])
-         | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+         | selectattr('type', 'in', cms_health_role_types)
          | list }}.
-      Check firehose and CM agent logs on {{ cms_target_hostname }}.
+      Reports Manager DB host is {{ cm_cms_reports_manager_db_host }} (Postgres on {{ cm_postgres_inventory_host }}).
+      Check firehose/headlamp and CM agent logs on {{ cms_target_hostname }}.
   when: >
     (
       cms_roles_health_poll.json['items'] | default([])
-      | selectattr('type', 'in', ['SERVICEMONITOR', 'HOSTMONITOR'])
+      | selectattr('type', 'in', cms_health_role_types)
       | rejectattr('roleState', 'equalto', 'RUNNING')
       | list
       | length
