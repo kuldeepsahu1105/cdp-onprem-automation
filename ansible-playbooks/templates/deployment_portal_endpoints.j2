@@ -1,4 +1,5 @@
 {# YAML list of primary service endpoints for the deployment portal index #}
+{% set _mon = (monitoring_stack_enabled | default(false) | bool) or (deployment_portal_monitoring_deployed | default(false) | bool) or (deployment_portal_monitoring_routes_enabled | default(false) | bool) %}
 {% set _portal_url = deployment_portal_access_urls.primary.portal if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external.portal %}
 {% set _portal_caddy = caddy_vhost_urls_external.portal.url | default('') | trim if (caddy_vhost_enabled | default(false) | bool) else '' %}
 {% set _portal_pick = _portal_caddy if (_portal_caddy | length > 0) else (_portal_url | default('') | trim) %}
@@ -26,6 +27,11 @@
   url: "{{ pgadmin_caddy_public_url | trim }}"
   hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
   note: "Caddy vhost {{ caddy_vhost_urls_external.pgadmin.hostname | default('') }}; CM DB on {{ deployment_portal_postgres_fqdn | default('') }}"
+{% elif deployment_portal_access_urls.external.pgadmin | default('') | length > 0 %}
+- name: "pgAdmin"
+  url: "{{ deployment_portal_access_urls.external.pgadmin | trim }}"
+  hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
+  note: "Ops host :{{ deployment_portal_pgadmin_host_port }}; CM DB on {{ deployment_portal_postgres_fqdn | default('') }}"
 {% endif %}
 {% if deployment_portal_has_ipa | bool and caddy_vhost_urls_external.ipa.url | default('') | length > 0 %}
 - name: "FreeIPA (modern UI)"
@@ -42,19 +48,33 @@
   hostname: "{{ deployment_portal_ipa_fqdn }}"
   note: "Direct HTTPS on ipaserver"
 {% endif %}
-{% if (monitoring_stack_enabled | default(false) | bool) or (deployment_portal_monitoring_deployed | default(false) | bool) %}
-{% if caddy_vhost_urls_external.grafana.url | default('') | length > 0 %}
+{% if _mon %}
+{% set _grafana_vhost = caddy_vhost_urls_external.grafana.url | default('') | trim %}
+{% set _prom_vhost = caddy_vhost_urls_external.prometheus.url | default('') | trim %}
+{% set _am_vhost = caddy_vhost_urls_external.alertmanager.url | default('') | trim %}
+{% set _grafana_path = ('http://' ~ deployment_portal_ops_public_ip ~ ':' ~ (deployment_portal_http_port | string) ~ '/grafana/') if (deployment_portal_access_profile_effective == 'cloud') else ('http://' ~ deployment_portal_ops_client_host ~ ':' ~ (deployment_portal_http_port | string) ~ '/grafana/') %}
+{% set _prom_path = ('http://' ~ deployment_portal_ops_public_ip ~ ':' ~ (deployment_portal_http_port | string) ~ '/prometheus/') if (deployment_portal_access_profile_effective == 'cloud') else ('http://' ~ deployment_portal_ops_client_host ~ ':' ~ (deployment_portal_http_port | string) ~ '/prometheus/') %}
+{% set _am_path = ('http://' ~ deployment_portal_ops_public_ip ~ ':' ~ (deployment_portal_http_port | string) ~ '/alertmanager/') if (deployment_portal_access_profile_effective == 'cloud') else ('http://' ~ deployment_portal_ops_client_host ~ ':' ~ (deployment_portal_http_port | string) ~ '/alertmanager/') %}
+{% set _cadvisor = deployment_portal_access_urls.primary.cadvisor if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external.cadvisor %}
+{% set _grafana_pick = _grafana_vhost if (_grafana_vhost | length > 0) else _grafana_path %}
+{% set _prom_pick = _prom_vhost if (_prom_vhost | length > 0) else _prom_path %}
+{% set _am_pick = _am_vhost if (_am_vhost | length > 0) else _am_path %}
 - name: "Grafana"
-  url: "{{ caddy_vhost_urls_external.grafana.url | trim }}"
+  url: "{{ _grafana_pick }}"
   hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
-  note: "Monitoring on ops host; vhost {{ caddy_vhost_urls_external.grafana.hostname | default('') }}"
-{% endif %}
-{% if caddy_vhost_urls_external.prometheus.url | default('') | length > 0 %}
+  note: "{% if _grafana_vhost | length > 0 %}Caddy vhost {{ caddy_vhost_urls_external.grafana.hostname | default('') }}{% else %}Caddy path /grafana/ on ops :{{ deployment_portal_http_port }}{% endif %}"
 - name: "Prometheus"
-  url: "{{ caddy_vhost_urls_external.prometheus.url | trim }}"
+  url: "{{ _prom_pick }}"
   hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
-  note: "Monitoring on ops host; vhost {{ caddy_vhost_urls_external.prometheus.hostname | default('') }}"
-{% endif %}
+  note: "{% if _prom_vhost | length > 0 %}Caddy vhost {{ caddy_vhost_urls_external.prometheus.hostname | default('') }}{% else %}Caddy path /prometheus/ on ops :{{ deployment_portal_http_port }}{% endif %}"
+- name: "Alertmanager"
+  url: "{{ _am_pick }}"
+  hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
+  note: "{% if _am_vhost | length > 0 %}Caddy vhost {{ caddy_vhost_urls_external.alertmanager.hostname | default('') }}{% else %}Caddy path /alertmanager/ on ops :{{ deployment_portal_http_port }}{% endif %}"
+- name: "cAdvisor"
+  url: "{{ _cadvisor | default('') | trim }}"
+  hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
+  note: "Container metrics on ops host :{{ monitoring_cadvisor_host_port }}"
 {% endif %}
 {% if deployment_portal_ecs_present | bool %}
 {% set _ecs_master = groups[ecs_cluster_master_group][0] if (ecs_cluster_master_group in groups and groups[ecs_cluster_master_group] | default([]) | length > 0) else '' %}

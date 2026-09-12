@@ -4,7 +4,7 @@
 {% set _postgres_inv = deployment_portal_postgres_inv | default('') %}
 {% set _knox = base_cluster_install_services.knox | default(false) | bool %}
 {% set _svc = base_cluster_install_services | default({}) %}
-{% set _mon = (monitoring_stack_enabled | default(false) | bool) or (deployment_portal_monitoring_deployed | default(false) | bool) %}
+{% set _mon = (monitoring_stack_enabled | default(false) | bool) or (deployment_portal_monitoring_deployed | default(false) | bool) or (deployment_portal_monitoring_routes_enabled | default(false) | bool) %}
 {% set _seen = namespace(hosts=[]) %}
 {% for group_name in deployment_portal_inventory_groups %}
 {% for inv_host in groups.get(group_name, []) %}
@@ -21,70 +21,56 @@
 {% endif %}
 {% endfor %}
 {% set _roles = [] %}
-{% for gn in _groups %}
-{% set _label = deployment_portal_inventory_group_labels.get(gn, gn) %}
-{% if _label not in _roles %}
-{% set _ = _roles.append(_label) %}
+{% if inv_host in groups.get('ipaserver', []) %}
+{% if 'FreeIPA server' not in _roles %}{% set _ = _roles.append('FreeIPA server') %}{% endif %}
 {% endif %}
-{% endfor %}
 {% if inv_host == _anchor_inv %}
-{% if 'Portal / Caddy (reverse proxy)' not in _roles %}
-{% set _ = _roles.append('Portal / Caddy (reverse proxy)') %}
-{% endif %}
-{% if 'pgAdmin (container)' not in _roles %}
-{% set _ = _roles.append('pgAdmin (container)') %}
-{% endif %}
-{% if _mon and 'cAdvisor (container metrics)' not in _roles %}
-{% set _ = _roles.append('cAdvisor (container metrics)') %}
-{% endif %}
-{% if 'Docker (portal stack)' not in _roles %}
-{% set _ = _roles.append('Docker (portal stack)') %}
-{% endif %}
+{% if 'Portal / Caddy (reverse proxy)' not in _roles %}{% set _ = _roles.append('Portal / Caddy (reverse proxy)') %}{% endif %}
+{% if 'pgAdmin (container)' not in _roles %}{% set _ = _roles.append('pgAdmin (container)') %}{% endif %}
+{% if _mon and 'cAdvisor (container metrics)' not in _roles %}{% set _ = _roles.append('cAdvisor (container metrics)') %}{% endif %}
+{% if 'Docker (portal stack)' not in _roles %}{% set _ = _roles.append('Docker (portal stack)') %}{% endif %}
 {% endif %}
 {% if inv_host == _postgres_inv and 'PostgreSQL (CM DB)' not in _roles %}
 {% set _ = _roles.append('PostgreSQL (CM DB)') %}
 {% endif %}
 {% if inv_host in groups.get('cldr-mngr', []) %}
-{% if 'Cloudera Manager server' not in _roles %}
-{% set _ = _roles.append('Cloudera Manager server') %}
+{% if 'Cloudera Manager server' not in _roles %}{% set _ = _roles.append('Cloudera Manager server') %}{% endif %}
 {% endif %}
+{% if inv_host in groups.get('base-masters', []) or inv_host in groups.get('base-workers', []) or inv_host in groups.get('ecs-masters', []) or inv_host in groups.get('ecs-workers', []) %}
+{% if 'CM agent' not in _roles %}{% set _ = _roles.append('CM agent') %}{% endif %}
 {% endif %}
-{% if inv_host in groups.get('base-masters', []) or inv_host in groups.get('base-workers', []) %}
-{% if 'CM agent' not in _roles %}
-{% set _ = _roles.append('CM agent') %}
+{% if inv_host in groups.get('ecs-masters', []) %}
+{% if 'ECS master' not in _roles %}{% set _ = _roles.append('ECS master') %}{% endif %}
 {% endif %}
+{% if inv_host in groups.get('ecs-workers', []) %}
+{% if 'ECS worker' not in _roles %}{% set _ = _roles.append('ECS worker') %}{% endif %}
 {% endif %}
-{% if inv_host in groups.get('ecs-masters', []) or inv_host in groups.get('ecs-workers', []) %}
-{% if 'CM agent' not in _roles %}
-{% set _ = _roles.append('CM agent') %}
-{% endif %}
+{% set _ht = (_hv.host_template | default(_hv.cldr_host_template | default('')) | string) | trim | lower %}
+{% if _ht == 'master' and 'CDP Runtime master (host template)' not in _roles %}
+{% set _ = _roles.append('CDP Runtime master (host template)') %}
+{% elif _ht == 'worker' and 'CDP Runtime worker (host template)' not in _roles %}
+{% set _ = _roles.append('CDP Runtime worker (host template)') %}
+{% elif _ht in ['ecs_master', 'ecs-master'] and 'ECS master (host template)' not in _roles %}
+{% set _ = _roles.append('ECS master (host template)') %}
+{% elif _ht in ['ecs_workers', 'ecs_workers', 'ecs-worker'] and 'ECS worker (host template)' not in _roles %}
+{% set _ = _roles.append('ECS worker (host template)') %}
 {% endif %}
 {% if inv_host in groups.get('base-masters', []) %}
-{% if _svc.hdfs | default(true) | bool and 'HDFS NameNode' not in _roles %}
-{% set _ = _roles.append('HDFS NameNode') %}
-{% endif %}
-{% if _svc.yarn | default(true) | bool and 'YARN ResourceManager' not in _roles %}
-{% set _ = _roles.append('YARN ResourceManager') %}
-{% endif %}
-{% if _svc.hbase | default(true) | bool and 'HBase Master' not in _roles %}
-{% set _ = _roles.append('HBase Master') %}
-{% endif %}
-{% if _svc.hue | default(false) | bool and 'Hue' not in _roles %}
-{% set _ = _roles.append('Hue') %}
-{% endif %}
+{% if _svc.hdfs | default(true) | bool and 'HDFS NameNode' not in _roles %}{% set _ = _roles.append('HDFS NameNode') %}{% endif %}
+{% if _svc.yarn | default(true) | bool and 'YARN ResourceManager' not in _roles %}{% set _ = _roles.append('YARN ResourceManager') %}{% endif %}
+{% if _svc.hbase | default(true) | bool and 'HBase Master' not in _roles %}{% set _ = _roles.append('HBase Master') %}{% endif %}
+{% if _svc.hue | default(false) | bool and 'Hue' not in _roles %}{% set _ = _roles.append('Hue') %}{% endif %}
+{% if _svc.zookeeper | default(true) | bool and 'ZooKeeper' not in _roles %}{% set _ = _roles.append('ZooKeeper') %}{% endif %}
 {% endif %}
 {% if inv_host in groups.get('base-workers', []) %}
-{% if _svc.hdfs | default(true) | bool and 'HDFS DataNode' not in _roles %}
-{% set _ = _roles.append('HDFS DataNode') %}
+{% if _svc.hdfs | default(true) | bool and 'HDFS DataNode' not in _roles %}{% set _ = _roles.append('HDFS DataNode') %}{% endif %}
+{% if _svc.yarn | default(true) | bool and 'YARN NodeManager' not in _roles %}{% set _ = _roles.append('YARN NodeManager') %}{% endif %}
+{% if _svc.hbase | default(true) | bool and 'HBase RegionServer' not in _roles %}{% set _ = _roles.append('HBase RegionServer') %}{% endif %}
+{% if _svc.zookeeper | default(true) | bool and 'ZooKeeper' not in _roles %}{% set _ = _roles.append('ZooKeeper') %}{% endif %}
 {% endif %}
-{% if _svc.yarn | default(true) | bool and 'YARN NodeManager' not in _roles %}
-{% set _ = _roles.append('YARN NodeManager') %}
-{% endif %}
-{% endif %}
-{% if _knox and inv_host in groups.get('base-masters', []) %}
-{% if 'Knox gateway' not in _roles %}
-{% set _ = _roles.append('Knox gateway') %}
-{% endif %}
+{% set _knox_host = _hv.knox_gateway | default(_hv.knox | default(false)) | bool %}
+{% if (_knox or _knox_host) and inv_host in groups.get('base-masters', []) %}
+{% if 'Knox gateway' not in _roles %}{% set _ = _roles.append('Knox gateway') %}{% endif %}
 {% endif %}
 {% set _group_labels = [] %}
 {% for gn in _groups %}

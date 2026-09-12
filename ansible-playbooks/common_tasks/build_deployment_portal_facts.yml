@@ -458,7 +458,9 @@
           {{
             (monitoring_stack_enabled | default(false) | bool)
             or (deployment_portal_monitoring_deployed | default(false) | bool)
+            or (deployment_portal_monitoring_routes_enabled | default(false) | bool)
           }}
+        routes_enabled: "{{ deployment_portal_monitoring_routes_enabled | default(false) | bool }}"
         grafana_path_url: >-
           {{
             ('http://' + deployment_portal_ops_public_ip + ':' + (deployment_portal_http_port | string) + '/grafana/')

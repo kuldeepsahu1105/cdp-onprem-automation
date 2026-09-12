@@ -9,7 +9,7 @@
 {% set _portal_caddy_url = ctx.caddy_vhosts.urls_public.portal.url | default('') if (ctx.caddy_vhosts.enabled | default(false)) else '' %}
 {% set portal_tile_url = _portal_caddy_url if (_portal_caddy_url | length > 0) else ctx.portal.index_url | default('') %}
 {% set portal_tile_hint = ctx.caddy_vhosts.urls_public.portal.hostname if (_portal_caddy_url | length > 0) else 'Ops host Caddy index' %}
-{% set mon_on = ctx.monitoring.enabled | default(false) | bool %}
+{% set mon_on = (ctx.monitoring.enabled | default(false) | bool) or (ctx.monitoring.routes_enabled | default(false) | bool) %}
 {% set grafana_tile_url = ctx.monitoring.grafana_caddy_url | default('') if (ctx.monitoring.grafana_caddy_url | default('') | length > 0) else (ctx.monitoring.grafana_url | default(ctx.monitoring.grafana_path_url | default(''))) %}
 {% set prometheus_tile_url = ctx.monitoring.prometheus_caddy_url | default('') if (ctx.monitoring.prometheus_caddy_url | default('') | length > 0) else (ctx.monitoring.prometheus_url | default(ctx.monitoring.prometheus_path_url | default(''))) %}
 {% set alertmanager_tile_url = ctx.monitoring.alertmanager_caddy_url | default('') if (ctx.monitoring.alertmanager_caddy_url | default('') | length > 0) else (ctx.monitoring.alertmanager_url | default(ctx.monitoring.alertmanager_path_url | default(''))) %}
@@ -140,7 +140,8 @@
     }
     .tile-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+      grid-auto-rows: 1fr;
       gap: 0.65rem;
       align-items: stretch;
     }
@@ -156,7 +157,8 @@
       color: var(--text);
       text-decoration: none;
       transition: background 0.15s, border-color 0.15s;
-      min-height: 5.25rem;
+      min-height: 6.5rem;
+      min-width: 10.5rem;
       height: 100%;
     }
     a.tile:hover {
@@ -580,11 +582,11 @@
           <li>URL host in links: <code>{{ ctx.access.primary.host }}</code></li>
           <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.portal }}">{{ ctx.access.primary.portal }}</a></li>
           <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.pgadmin }}">{{ ctx.access.primary.pgadmin }}</a></li>
-          {% if ctx.monitoring.enabled %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.grafana }}">{{ ctx.access.primary.grafana }}</a></li>
-          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.prometheus }}">{{ ctx.access.primary.prometheus }}</a></li>
-          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.alertmanager }}">{{ ctx.access.primary.alertmanager }}</a></li>
-          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.cadvisor }}">{{ ctx.access.primary.cadvisor }}</a></li>
+          {% if mon_on %}
+          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ grafana_tile_url }}">{{ grafana_tile_url }}</a></li>
+          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ prometheus_tile_url }}">{{ prometheus_tile_url }}</a></li>
+          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ alertmanager_tile_url }}">{{ alertmanager_tile_url }}</a></li>
+          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a></li>
           {% endif %}
         </ul>
       </div>
@@ -598,11 +600,11 @@
           <li>Ops public IP: <code>{{ ctx.access.external.ops_ip }}</code></li>
           <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.portal }}">{{ ctx.access.external.portal }}</a></li>
           <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.pgadmin }}">{{ ctx.access.external.pgadmin }}</a></li>
-          {% if ctx.monitoring.enabled %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.grafana }}">{{ ctx.access.external.grafana }}</a></li>
-          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.prometheus }}">{{ ctx.access.external.prometheus }}</a></li>
-          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.alertmanager }}">{{ ctx.access.external.alertmanager }}</a></li>
-          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.cadvisor }}">{{ ctx.access.external.cadvisor }}</a></li>
+          {% if mon_on %}
+          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ grafana_tile_url }}">{{ grafana_tile_url }}</a></li>
+          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ prometheus_tile_url }}">{{ prometheus_tile_url }}</a></li>
+          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ alertmanager_tile_url }}">{{ alertmanager_tile_url }}</a></li>
+          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a></li>
           {% endif %}
         </ul>
         <p class="sub" style="margin-top:0.85rem"><strong>Same VPC (private IP)</strong> — {{ ctx.access.vpc.audience }}</p>
@@ -610,11 +612,15 @@
           <li>Ops private IP: <code>{{ ctx.access.vpc.ops_ip }}</code></li>
           <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.portal }}">{{ ctx.access.vpc.portal }}</a></li>
           <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.pgadmin }}">{{ ctx.access.vpc.pgadmin }}</a></li>
-          {% if ctx.monitoring.enabled %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.grafana }}">{{ ctx.access.vpc.grafana }}</a></li>
-          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.prometheus }}">{{ ctx.access.vpc.prometheus }}</a></li>
-          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.alertmanager }}">{{ ctx.access.vpc.alertmanager }}</a></li>
-          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.cadvisor }}">{{ ctx.access.vpc.cadvisor }}</a></li>
+          {% if mon_on %}
+          {% set _vpc_graf = ctx.monitoring.grafana_url_vpc | default(ctx.caddy_vhosts.urls_vpc.grafana.url | default(ctx.access.vpc.grafana)) %}
+          {% set _vpc_prom = ctx.monitoring.prometheus_url_vpc | default(ctx.caddy_vhosts.urls_vpc.prometheus.url | default(ctx.access.vpc.prometheus)) %}
+          {% set _vpc_am = ctx.monitoring.alertmanager_url_vpc | default(ctx.caddy_vhosts.urls_vpc.alertmanager.url | default(ctx.access.vpc.alertmanager)) %}
+          {% set _vpc_cadv = ctx.monitoring.cadvisor_url_vpc | default(ctx.access.vpc.cadvisor) %}
+          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _vpc_graf }}">{{ _vpc_graf }}</a></li>
+          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _vpc_prom }}">{{ _vpc_prom }}</a></li>
+          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _vpc_am }}">{{ _vpc_am }}</a></li>
+          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _vpc_cadv }}">{{ _vpc_cadv }}</a></li>
           {% endif %}
         </ul>
       </div>
@@ -635,15 +641,10 @@
           <li><strong>pgAdmin</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.pgadmin.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.pgadmin.hostname }}</a></li>
           <li><strong>CM (Caddy HTTP)</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.cm.hostname }}</a></li>
           <li><strong>CM (HTTPS direct)</strong> — <a href="{{ ctx.cloudera_manager.ui_url_https }}" target="_blank" rel="noopener noreferrer">{{ ctx.cloudera_manager.host_fqdn }}:7183</a></li>
-          {% if mon_on and ctx.caddy_vhosts.urls_public.grafana is defined %}
-          <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.grafana.hostname }}</a></li>
-          <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.prometheus.hostname }}</a></li>
-          <li><strong>Alertmanager</strong> — <a href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.alertmanager.hostname }}</a></li>
-          <li><strong>cAdvisor</strong> — <a href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">{{ cadvisor_tile_url }}</a></li>
-          {% elif mon_on %}
-          <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{{ grafana_tile_url }}</a></li>
-          <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{{ prometheus_tile_url }}</a></li>
-          <li><strong>Alertmanager</strong> — <a href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">{{ alertmanager_tile_url }}</a></li>
+          {% if mon_on %}
+          <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.grafana.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.grafana.hostname }}{% else %}{{ grafana_tile_url }}{% endif %}</a></li>
+          <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.prometheus.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.prometheus.hostname }}{% else %}{{ prometheus_tile_url }}{% endif %}</a></li>
+          <li><strong>Alertmanager</strong> — <a href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.alertmanager.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.alertmanager.hostname }}{% else %}{{ alertmanager_tile_url }}{% endif %}</a></li>
           <li><strong>cAdvisor</strong> — <a href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">{{ cadvisor_tile_url }}</a></li>
           {% endif %}
           {% if ctx.caddy_vhosts.urls_vpc.portal is defined and ctx.caddy_vhosts.urls_vpc.portal.url | default('') | length > 0 %}
@@ -671,6 +672,12 @@
           <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ pgadmin_tile_url }}">{{ pgadmin_tile_url }}</a> <span class="badge">CM DB on {{ ctx.postgresql.host_fqdn }}</span></li>
           {% if ctx.portal.pgadmin_caddy_url | default('') | length > 0 and ctx.portal.pgadmin_url_direct | default('') | length > 0 %}
           <li><strong>pgAdmin (direct port)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.portal.pgadmin_url_direct }}">{{ ctx.portal.pgadmin_url_direct }}</a></li>
+          {% endif %}
+          {% if mon_on %}
+          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ grafana_tile_url }}">{{ grafana_tile_url }}</a></li>
+          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ prometheus_tile_url }}">{{ prometheus_tile_url }}</a></li>
+          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ alertmanager_tile_url }}">{{ alertmanager_tile_url }}</a></li>
+          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a> <span class="badge">:8089</span></li>
           {% endif %}
           {% if _cm_caddy | length > 0 %}
           <li><strong>Cloudera Manager (Caddy HTTP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _cm_caddy }}">{{ _cm_caddy }}</a></li>
@@ -715,17 +722,6 @@
           {% endfor %}
         </ul>
         {% endif %}
-        {% if mon_on %}
-        <h2 class="section-title" style="margin-top:1rem">Monitoring path fallbacks</h2>
-        <ul class="clean">
-          {% if ctx.monitoring.grafana_path_url | default('') | length > 0 %}
-          <li>Grafana <a href="{{ ctx.monitoring.grafana_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.grafana_path_url }}</a>;
-            Prometheus <a href="{{ ctx.monitoring.prometheus_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.prometheus_path_url }}</a>;
-            Alertmanager <a href="{{ ctx.monitoring.alertmanager_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.alertmanager_path_url }}</a></li>
-          {% endif %}
-          <li>cAdvisor host port — <a href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">{{ cadvisor_tile_url }}</a></li>
-        </ul>
-        {% endif %}
         {% if ctx.extra_links | length > 0 %}
         <h2 class="section-title" style="margin-top:1rem">Additional links</h2>
         <ul class="clean">
@@ -736,6 +732,23 @@
         {% endif %}
       </div>
     </details>
+
+    {% if mon_on %}
+    <section class="flat">
+      <h2>Monitoring stack (on ops host)</h2>
+      <ul class="clean">
+        <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{{ grafana_tile_url }}</a> <span class="badge">Caddy vhost or /grafana/</span></li>
+        <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{{ prometheus_tile_url }}</a> <span class="badge">Caddy vhost or /prometheus/</span></li>
+        <li><strong>Alertmanager</strong> — <a href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">{{ alertmanager_tile_url }}</a> <span class="badge">Caddy vhost or /alertmanager/</span></li>
+        <li><strong>cAdvisor</strong> — <a href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">{{ cadvisor_tile_url }}</a> <span class="badge">host port {{ monitoring_cadvisor_host_port | default(8089) }}</span></li>
+        {% if ctx.monitoring.grafana_path_url | default('') | length > 0 %}
+        <li><strong>Caddy path fallbacks</strong> — Grafana <a href="{{ ctx.monitoring.grafana_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.grafana_path_url }}</a>;
+          Prometheus <a href="{{ ctx.monitoring.prometheus_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.prometheus_path_url }}</a>;
+          Alertmanager <a href="{{ ctx.monitoring.alertmanager_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.alertmanager_path_url }}</a></li>
+        {% endif %}
+      </ul>
+    </section>
+    {% endif %}
 
     {% if ctx.inventory_hosts | default([]) | length > 0 %}
     <section class="flat">
