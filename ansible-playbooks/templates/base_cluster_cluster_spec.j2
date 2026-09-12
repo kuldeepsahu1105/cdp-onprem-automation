@@ -137,7 +137,7 @@ services:
       hive_service: "{{ 'hive' if svc.hive | default(true) else '' }}"
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
 {% endif %}
-{% if svc.replication | default(true) %}
+{% if svc.replication | default(false) %}
   - name: replication
     type: REPLICATION_MANAGER
     display_name: Replication Manager
@@ -273,7 +273,7 @@ host_templates:
       - service: ranger
         type: RANGER_USERSYNC
 {% endif %}
-{% if svc.replication | default(true) %}
+{% if svc.replication | default(false) %}
       - service: replication
         type: REPLICATION_MANAGER
 {% endif %}

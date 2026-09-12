@@ -253,7 +253,8 @@ base_cluster_install_services:
   hue: true
   # ICEBERG service requires newer CDH parcels (not on CDH 7.3.2); enable when parcel supports it.
   iceberg: false
-  replication: true
+  # Replication Manager is not on CDH 7.3.2; enable when the parcel supports REPLICATION_MANAGER.
+  replication: false
   impala: true
   kafka: true
   atlas: true
