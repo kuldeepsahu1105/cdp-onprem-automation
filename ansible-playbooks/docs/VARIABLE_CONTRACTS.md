@@ -40,7 +40,7 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 | `_portal_verify_milestones_effective` | `resolve_deployment_portal_verify_milestones.yml` | Must run immediately before verify URLs (also imported from `verify_deployment_portal_caddy.yml`) |
 | `caddy_vhost_urls` | `build_deployment_portal_facts.yml` | Required for Caddy vhost Tier A checks |
 | `ansible_control_reach_public_only` | `detect_ansible_control_reachability.yml` (delegate localhost) | Used for optional printed URL / hairpin behavior; read via `hostvars['localhost']` on ops host |
-| `deployment_portal_has_ipa`, `deployment_portal_ipa_fqdn`, `deployment_portal_cm_fqdn` | `build_deployment_portal_facts.yml` + load on ops | Milestone-gated checks |
+| `deployment_portal_has_ipa`, `deployment_portal_ipa_fqdn`, `deployment_portal_cm_fqdn`, `deployment_portal_cm_upstream_host` | `build_deployment_portal_facts.yml` + load on ops | Milestone-gated checks; Caddy CM `reverse_proxy` target (private IP) |
 | Group defaults | `group_vars/all.yml` | e.g. `deployment_portal_http_port`, `deployment_portal_url_verify_status_codes`, `caddy_vhost_enabled` |
 
 **Internal `_portal_*` facts:** defined in earlier tasks within `verify_deployment_portal_urls.yml` itself — do not combine dependent keys in a **single** `set_fact` task (Ansible key order is undefined). See comment at top of that file.

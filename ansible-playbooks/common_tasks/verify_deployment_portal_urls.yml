@@ -468,6 +468,7 @@
       Confirm https://{{ item.item.upstream_ipa_fqdn }}/ responds on the IPA server and IPA HTTPD is running.
       {% elif 'CM' in item.item.name %}
       Confirm Cloudera Manager is up on {{ deployment_portal_cm_fqdn }} (ports {{ cm_http_port }}/{{ cm_https_port }}).
+      Caddy proxies to {{ deployment_portal_cm_upstream_host | default(deployment_portal_cm_fqdn) }} with header_up Host {{ deployment_portal_cm_fqdn }}.
       {% elif 'pgAdmin' in item.item.name %}
       Confirm pgAdmin container {{ deployment_portal_pgadmin_container }} is running and responds on
       http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/ (Caddy reverse_proxies pgadmin:80 on the compose network).

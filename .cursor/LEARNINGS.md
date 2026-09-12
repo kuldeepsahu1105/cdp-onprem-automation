@@ -16,7 +16,7 @@ On **PORTAL** bootstrap or rerun (`deployment_portal_verify_milestones`: `portal
 
 - Listen **8088**; smoke: `http://<ops-public-ip>:8088/`. Vhost FQDN: `portal.<dashed-public-ip>.pvc.cloudera-labs.com` (dashes, not dots in IP segment).
 - Hairpin from the same ops host is optional — warn, do not fail the pipeline on it alone.
-- **IPA** `reverse_proxy`: `header_up Host` = ipaserver FQDN. **CM** block: split HTTP vs HTTPS + `transport` per autotls mode. Post-CM: CM API **`frontend_url`** → Caddy CM vhost (`apply_cm_caddy_load_balancer.yml`); facts **`cm_caddy_public_url`**, **`ecs_caddy_console_url`** from `caddy_vhost_urls.j2`. Tier A / portal CM probe: **`probe_cm_manager_ui_http.yml`** when `127.0.0.1:7180` is closed.
+- **IPA** `reverse_proxy`: `header_up Host` = ipaserver FQDN. **CM** block: upstream **`deployment_portal_cm_upstream_host`** (cldr-mngr `private_ip`) + `header_up Host` = CM FQDN; HTTP vs HTTPS + `transport` per autotls mode. Post-CM: CM API **`frontend_url`** → Caddy CM vhost (`apply_cm_caddy_load_balancer.yml`, trim/sanitize — stray newlines in `cm_host_name` cause broken redirects like `//n`); facts **`cm_caddy_public_url`**, **`ecs_caddy_console_url`** from `caddy_vhost_urls.j2` (no trailing slash). Tier A / portal CM probe: **`probe_cm_manager_ui_http.yml`** when `127.0.0.1:7180` is closed.
 - **pgAdmin:** Caddy upstream must use compose service name **`pgadmin:80`** (not `container_name`). Publish **`0.0.0.0:5050:80`** when SG allows direct UI. Tier B from Jenkins: GET `http://<ops-public-ip>:8088/` with **`Host: pgadmin.<slug>.<base>`** (same as Tier A vhost checks) — not only `:5050`.
 - **RHEL:** remove `podman-docker` before installing `docker-ce` (conflicts with Docker CE).
 

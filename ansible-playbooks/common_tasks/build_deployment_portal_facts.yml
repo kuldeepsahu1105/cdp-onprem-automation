@@ -32,6 +32,35 @@
         else deployment_portal_anchor_fqdn
       }}
 
+- name: Set CM upstream address for Caddy reverse_proxy on ops host
+  ansible.builtin.set_fact:
+    deployment_portal_cm_upstream_host: >-
+      {{
+        hostvars[groups['cldr-mngr'][0]].private_ip | default('')
+        if (
+          'cldr-mngr' in groups
+          and groups['cldr-mngr'] | default([]) | length > 0
+          and (hostvars[groups['cldr-mngr'][0]].private_ip | default('') | length > 0)
+        )
+        else ''
+      }}
+  when:
+    - "'cldr-mngr' in groups"
+    - groups['cldr-mngr'] | default([]) | length > 0
+
+- name: Default CM upstream to ansible_host when private_ip unset
+  ansible.builtin.set_fact:
+    deployment_portal_cm_upstream_host: "{{ hostvars[groups['cldr-mngr'][0]].ansible_host }}"
+  when:
+    - "'cldr-mngr' in groups"
+    - groups['cldr-mngr'] | default([]) | length > 0
+    - deployment_portal_cm_upstream_host | default('') | length == 0
+
+- name: Clear CM upstream when cldr-mngr absent
+  ansible.builtin.set_fact:
+    deployment_portal_cm_upstream_host: ""
+  when: not (('cldr-mngr' in groups) and (groups['cldr-mngr'] | default([]) | length > 0))
+
 - name: Detect FreeIPA server in inventory
   ansible.builtin.set_fact:
     deployment_portal_has_ipa: "{{ groups.get('ipaserver', []) | length > 0 }}"
@@ -274,7 +303,12 @@
         frontend_url: "{{ cm_frontend_url_effective | default('') }}"
         ui_url_http: "http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}"
         ui_url_https: "https://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port }}"
-        caddy_url: "{{ caddy_vhost_urls_external.cm.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
+        caddy_url: >-
+          {{
+            (caddy_vhost_urls_external.cm.url | default('') | trim | regex_replace('/+$', ''))
+            if (caddy_vhost_enabled | default(false) | bool)
+            else ''
+          }}
         caddy_url_vpc: "{{ caddy_vhost_urls_vpc.cm.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
         ui_url_public: "http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}"
         ui_url_vpc: "http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}"

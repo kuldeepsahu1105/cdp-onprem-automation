@@ -1,5 +1,6 @@
 {% set ctx = deployment_portal_context %}
-{% set cm_tile_url = ctx.cloudera_manager.caddy_url | default('') if (ctx.cloudera_manager.caddy_url | default('') | length > 0) else ctx.cloudera_manager.ui_url_https %}
+{% set _cm_caddy = ctx.cloudera_manager.caddy_url | default('') | trim | regex_replace('/+$', '') %}
+{% set cm_tile_url = _cm_caddy if (_cm_caddy | length > 0) else ctx.cloudera_manager.ui_url_https %}
 {% set pgadmin_tile_url = ctx.portal.pgadmin_caddy_url | default('') if (ctx.portal.pgadmin_caddy_url | default('') | length > 0) else (ctx.portal.pgadmin_url_direct | default(ctx.portal.pgadmin_url | default(''))) %}
 {% set ipa_tile_url = ctx.identity.ipa_caddy_url | default('') if (ctx.identity.ipa_caddy_url | default('') | length > 0) else (ctx.identity.ipa_ui_url | default('')) %}
 {% set ecs_tile_url = (ctx.ecs.caddy_url | default('') if (ctx.ecs.caddy_url | default('') | length > 0) else (ctx.ecs.console_hint | default(''))) if ctx.ecs.deployed else '' %}

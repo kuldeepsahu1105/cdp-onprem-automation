@@ -26,13 +26,19 @@
       cm_frontend_url_effective={{ cm_frontend_url_effective | default('') }}).
   when: not (cm_apply_caddy_frontend_url_effective | default(false) | bool)
 
-- name: Parse CM frontend URL for cm_config
+- name: Sanitize CM frontend URL for cm_config (strip whitespace and trailing slashes)
   ansible.builtin.set_fact:
-    cm_frontend_url_for_api: "{{ cm_frontend_url_effective | regex_replace('/+$', '') }}"
+    cm_frontend_url_for_api: "{{ cm_frontend_url_effective | trim | regex_replace('/+$', '') }}"
+  when:
+    - cm_apply_caddy_frontend_url_effective | default(false) | bool
+    - cm_frontend_url_effective | default('') | length > 0
+
+- name: Derive CM hostname override from sanitized frontend URL
+  ansible.builtin.set_fact:
     cm_frontend_hostname_override: >-
       {{
         (
-          cm_frontend_url_effective
+          cm_frontend_url_for_api
           | regex_replace('^https?://', '')
           | regex_replace('/.*$', '')
           | regex_replace(':.*$', '')
@@ -41,7 +47,8 @@
       }}
   when:
     - cm_apply_caddy_frontend_url_effective | default(false) | bool
-    - cm_frontend_url_effective | default('') | length > 0
+    - cm_frontend_url_for_api is defined
+    - cm_frontend_url_for_api | length > 0
 
 - name: Apply Cloudera Manager frontend URL for Caddy load balancer
   cloudera.cluster.cm_config:

@@ -180,6 +180,7 @@ def check_verify_when_setters() -> list[str]:
         "deployment_portal_has_ipa",
         "deployment_portal_ipa_fqdn",
         "deployment_portal_cm_fqdn",
+        "deployment_portal_cm_upstream_host",
         "deployment_portal_anchor_inv",
         "ansible_control_reach_public_only",
         "ansible_control_reachability_effective",
