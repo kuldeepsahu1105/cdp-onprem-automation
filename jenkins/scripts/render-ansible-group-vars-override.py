@@ -91,7 +91,7 @@ def _jenkins_controller_defaults() -> dict:
         "deployment_portal_external_url_verify": "warn",
         "deployment_ipa_direct_fqdn_external_url_verify": "skip",
         "cm_api_verify_mode": "warn",
-        # Caddy edge on ops (ipaserver); CM API Caddy probes use this port — not 8088.
+        # Caddy edge on ops (ipaserver) for portal/pgAdmin/monitoring/IPA — not 8088. CM API uses :7180/:7183.
         "deployment_portal_http_port": 81,
     }
     inv = REPO_ROOT / "ansible-playbooks" / "inventory.ini"

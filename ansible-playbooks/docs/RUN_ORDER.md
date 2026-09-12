@@ -10,18 +10,19 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 |------:|-----------------|----------------|---------------------------|
 | 1 | VALIDATE | — | (outside Ansible) |
 | 2 | TERRAFORM | — | inventory generation |
-| 3 | PREREQS | `1` / `prereq` | SSH: `00_setup_ssh_preqs` → `01`–`09` |
+| 3 | PREREQS | `1` / `prereq` | SSH: `00_setup_ssh_preqs` → `01`–`09` (`00` only on PREREQS / `all`; override with `ANSIBLE_RUN_SSH_PREQS`) |
 | 4 | PORTAL | `portal` | `10_setup_deployment_portal` |
-| 5 | IDENTITY | `2` / `identity` | `00_detect_identity` → `11_identity_setup` → `35_refresh` (via wrapper) |
+| 5 | IDENTITY | `2` / `identity` | `00_detect_identity` → `11_identity_setup` |
 | 6 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
-| 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `35_refresh` → `28`–`30` → `35_refresh` |
-| 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` → `35_refresh` |
-| 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` → `35_refresh` |
-| 10 | ECS_INSTALL | `5` / `ecs` | `33_setup_ecs_cluster` → `35_refresh` → optional `34_setup_ecs_data_services` |
+| 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27`–`30` |
+| 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` |
+| 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` (includes portal Caddy/index sync) |
+| 10 | ECS_INSTALL | `5` / `ecs` | `33_setup_ecs_cluster` → optional `34_setup_ecs_data_services` |
+| — | (manual) | `6` / `portal_refresh` | `35_refresh_deployment_portal` (milestone URL verify / index refresh) |
 
 **Full local flow:** `DEPLOY_PHASE=all ./pvc_setup.sh` = phases 1 → portal (`10`) → identity → CM → cm_tls → CDH → monitoring (if enabled) → ECS.
 
-**Portal refresh:** After bootstrap (`10`), `_run_deployment_portal_refresh` in `pvc_setup.sh` runs `35_refresh_deployment_portal.yml` after each major phase when the portal is enabled.
+**Portal refresh:** Bootstrap (`10`) runs only on `DEPLOY_PHASE=portal` (Jenkins **PORTAL**). `35_refresh_deployment_portal.yml` runs on `DEPLOY_PHASE=6` / `portal_refresh`, or when `DEPLOYMENT_PORTAL_REFRESH=true` on other phases. Monitoring stage updates Caddy via `32_setup_monitoring_stack.yml` (no extra `35` unless refresh is requested).
 
 ## Sequential index (10–35)
 
