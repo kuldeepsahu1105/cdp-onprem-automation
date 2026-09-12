@@ -42,7 +42,22 @@
     cm_api_probe_host_candidates: >-
       {{
         (
-          ['127.0.0.1']
+          (
+            [cm_host_private]
+            if (
+              (cm_host_private | default('') | length > 0)
+              and (cm_host_private != '127.0.0.1')
+            )
+            else []
+          )
+          + (
+            [hostvars[cm_manager_inventory_host].ansible_host | default('')]
+            if (
+              (hostvars[cm_manager_inventory_host].ansible_host | default('') | length > 0)
+              and (hostvars[cm_manager_inventory_host].ansible_host | default('') not in ['127.0.0.1', 'localhost'])
+            )
+            else []
+          )
           + (
             [cm_host_public]
             if (
@@ -62,14 +77,7 @@
             if (hostvars[cm_manager_inventory_host].ansible_hostname | default('') | length > 0)
             else []
           )
-          + (
-            [cm_host_private]
-            if (
-              (cm_host_private | default('') | length > 0)
-              and (cm_host_private not in ['127.0.0.1', cm_host_public, cm_host_fqdn])
-            )
-            else []
-          )
+          + ['127.0.0.1']
         )
         | unique
         | reject('equalto', '')
@@ -315,7 +323,16 @@
 - name: Fall back to delegated CM API discovery on cldr-mngr when Jenkins cannot reach CM ports
   ansible.builtin.set_fact:
     cm_api_probe_delegate_to: "{{ cm_manager_inventory_host }}"
-    cm_api_probe_host: "127.0.0.1"
+    cm_api_probe_host: >-
+      {{
+        cm_host_public
+        if (cm_host_public | default('') | length > 0)
+        else (
+          cm_host_private
+          if (cm_host_private | default('') | length > 0)
+          else ''
+        )
+      }}
     cm_api_probe_https_first: false
     cm_api_controller_direct_reachable: false
     cm_api_delegate_discovery_fallback: true
@@ -333,7 +350,22 @@
     cm_api_probe_host_candidates: >-
       {{
         (
-          ['127.0.0.1']
+          (
+            [cm_host_private]
+            if (
+              (cm_host_private | default('') | length > 0)
+              and (cm_host_private != '127.0.0.1')
+            )
+            else []
+          )
+          + (
+            [hostvars[cm_manager_inventory_host].ansible_host | default('')]
+            if (
+              (hostvars[cm_manager_inventory_host].ansible_host | default('') | length > 0)
+              and (hostvars[cm_manager_inventory_host].ansible_host | default('') not in ['127.0.0.1', 'localhost'])
+            )
+            else []
+          )
           + (
             [cm_host_public]
             if (
@@ -353,14 +385,7 @@
             if (hostvars[cm_manager_inventory_host].ansible_hostname | default('') | length > 0)
             else []
           )
-          + (
-            [cm_host_private]
-            if (
-              (cm_host_private | default('') | length > 0)
-              and (cm_host_private not in ['127.0.0.1', cm_host_public, cm_host_fqdn])
-            )
-            else []
-          )
+          + ['127.0.0.1']
         )
         | unique
         | reject('equalto', '')

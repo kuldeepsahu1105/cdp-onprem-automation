@@ -1,5 +1,5 @@
 ---
-# Probe CM Admin UI HTTP on cldr-mngr (127.0.0.1, then FQDN/private — scm-server may not bind localhost).
+# Probe CM Admin UI HTTP on cldr-mngr (private IP / ansible_host / FQDN first; 127.0.0.1 last).
 
 - name: Set CM manager UI probe status codes
   ansible.builtin.set_fact:
@@ -14,7 +14,26 @@
     cm_manager_ui_probe_hosts: >-
       {{
         (
-          ['127.0.0.1']
+          (
+            [hostvars[groups['cldr-mngr'][0]].private_ip | default('')]
+            if (
+              'cldr-mngr' in groups
+              and groups['cldr-mngr'] | default([]) | length > 0
+              and (hostvars[groups['cldr-mngr'][0]].private_ip | default('') | length > 0)
+              and (hostvars[groups['cldr-mngr'][0]].private_ip | default('') != '127.0.0.1')
+            )
+            else []
+          )
+          + (
+            [hostvars[groups['cldr-mngr'][0]].ansible_host | default('')]
+            if (
+              'cldr-mngr' in groups
+              and groups['cldr-mngr'] | default([]) | length > 0
+              and (hostvars[groups['cldr-mngr'][0]].ansible_host | default('') | length > 0)
+              and (hostvars[groups['cldr-mngr'][0]].ansible_host | default('') not in ['127.0.0.1', 'localhost'])
+            )
+            else []
+          )
           + ([deployment_portal_cm_fqdn] if (deployment_portal_cm_fqdn | default('') | length > 0) else [])
           + (
             [hostvars[groups['cldr-mngr'][0]].ansible_fqdn | default('')]
@@ -34,19 +53,7 @@
             )
             else []
           )
-          + (
-            [hostvars[groups['cldr-mngr'][0]].private_ip | default('')]
-            if (
-              'cldr-mngr' in groups
-              and groups['cldr-mngr'] | default([]) | length > 0
-              and (hostvars[groups['cldr-mngr'][0]].private_ip | default('') | length > 0)
-              and (
-                hostvars[groups['cldr-mngr'][0]].private_ip | default('')
-                not in ['127.0.0.1', deployment_portal_cm_fqdn | default('')]
-              )
-            )
-            else []
-          )
+          + ['127.0.0.1']
         )
         | unique
         | reject('equalto', '')
