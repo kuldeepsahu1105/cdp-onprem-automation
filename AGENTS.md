@@ -1,5 +1,7 @@
 # Guidance for Cursor / automation agents
 
+**Repo-specific crux (architecture, portal, Ansible traps, Jenkins):** [`.cursor/LEARNINGS.md`](.cursor/LEARNINGS.md) — read first on portal/CM/verify work.
+
 ## Standalone-first changes
 
 Implement behavior in **Terraform modules**, **Ansible playbooks/tasks**, and **shared `scripts/lib/`** so it works without Jenkins or shell wrappers.
@@ -19,6 +21,10 @@ Implement behavior in **Terraform modules**, **Ansible playbooks/tasks**, and **
 
 - Prefer verifying with direct `ansible-playbook` / `terraform` when touching those trees.
 - Document new optional vars in `ansible-playbooks/docs/RUNBOOK.md` or `REFERENCE.md`, not only `jenkins/README.md`.
+
+## Ansible portal / CM verify edits
+
+Before changing `verify_*.yml`, `detect_ansible_control_reachability.yml`, `resolve_cm_connect_host.yml`, or portal sync/verify imports: follow [`.cursor/LEARNINGS.md`](.cursor/LEARNINGS.md) and `ansible-playbooks/docs/VARIABLE_CONTRACTS.md` (when present); run validate scripts listed there.
 
 ## Ansible portal / CM verify edits
 
