@@ -52,7 +52,7 @@ Options:
   --help, -h       Show this help
 
 Environment:
-  DEPLOY_PHASE     1|2|3|4|5|6|7|all
+  DEPLOY_PHASE     1|2|3|cm_tls|cdh|portal|monitoring|ecs|6|7|4|5|all
   MONITORING_STACK_ENABLED  true|false (default true) — portal + Grafana/Prometheus bootstrap
   DEPLOYMENT_PORTAL_ENABLED true|false (default true)
   ECS_DATA_SERVICES_DEPLOY_ENABLED true|false — run 30_setup_ecs_data_services.yml (phase 5/7)
@@ -139,7 +139,7 @@ fi
 
 needs_license() {
   case "$DEPLOY_PHASE" in
-    3|cm|phase3|4|cluster|phase4|all|full) return 0 ;;
+    3|cm|phase3|cm_tls|cm_tls_krb_ldap|cdh|cdh_install|4|cluster|phase4|5|ecs|phase5|all|full) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -186,6 +186,9 @@ run_phase_1() {
   run_playbook 07_prereq_setup_002.yml
   run_playbook 08_prereq_setup_003.yml
   run_playbook 09_verify_os_prereqs.yml
+}
+
+run_phase_portal() {
   _run_deployment_portal_bootstrap
 }
 
@@ -219,16 +222,33 @@ run_phase_3() {
   _run_deployment_portal_refresh
 }
 
-run_phase_4() {
+run_phase_cm_tls() {
   run_playbook 22_setup_cm_autotls.yml
   _run_deployment_portal_refresh
   run_playbook 23_setup_cm_krbs.yml
   run_playbook 24_setup_cm_cms.yml
   run_playbook 25_setup_cm_ldap.yml
+  _run_deployment_portal_refresh
+}
+
+run_phase_cdh() {
   run_playbook 26_setup_base_cluster.yml
   _run_deployment_portal_refresh
-  run_playbook 27_setup_ecs_cluster.yml
+}
+
+run_phase_monitoring() {
+  if ! _monitoring_enabled; then
+    ui_info "MONITORING_STACK_ENABLED=false — skipping 29_setup_monitoring_stack.yml"
+    return 0
+  fi
+  run_playbook 29_setup_monitoring_stack.yml
   _run_deployment_portal_refresh
+}
+
+# Legacy name: phase 4 = CM security + CDH base (no ECS).
+run_phase_4() {
+  run_phase_cm_tls
+  run_phase_cdh
 }
 
 _portal_extra_args() {
@@ -288,24 +308,40 @@ run_phase_5() {
 }
 
 case "$DEPLOY_PHASE" in
-  1|prereq|phase1) run_phase_1 ;;
+  1|prereq|phase1|prereqs) run_phase_1 ;;
   2|identity|phase2) run_phase_2 ;;
-  3|cm|phase3) run_phase_3 ;;
+  3|cm|phase3|cm_install) run_phase_3 ;;
+  cm_tls|cm_tls_krb_ldap|tls|krb|ldap) run_phase_cm_tls ;;
+  cdh|cdh_install|cdh_base|base) run_phase_cdh ;;
+  portal|deployment_portal) run_phase_portal ;;
+  monitoring|monitor) run_phase_monitoring ;;
   4|cluster|phase4) run_phase_4 ;;
   5|ecs|phase5) run_phase_5 ;;
-  6|portal|phase6) run_phase_6 ;;
+  6|portal_refresh|phase6) run_phase_6 ;;
   7|dataservices|ds|phase7) run_phase_7 ;;
   all|full)
     run_phase_1
     sleep 5
     run_phase_2
     sleep 5
+    if _portal_enabled; then
+      run_phase_portal
+      sleep 5
+    fi
     run_phase_3
     sleep 5
-    run_phase_4
+    run_phase_cm_tls
+    sleep 5
+    run_phase_cdh
+    sleep 5
+    if _monitoring_enabled; then
+      run_phase_monitoring
+      sleep 5
+    fi
+    run_phase_5
     ;;
   *)
-    ui_err "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|4|5|6|7|all or prereq|identity|cm|cluster|ecs|portal|dataservices|all)"
+    ui_err "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|cm_tls|cdh|portal|monitoring|ecs|all or prereq|identity|cm_install|…)"
     exit 1
     ;;
 esac

@@ -331,7 +331,7 @@ DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
 
 Declarative **`Jenkinsfile`** with **checkbox stage selection**, input validation, and `REFRESH_JENKINSFILE=YES` to reload parameters after changes.
 
-**Stage checkboxes (`PIPELINE_STAGES`):** `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CDH_BASE`, `ECS_INSTALL` — pick any combination.
+**Stage checkboxes (`PIPELINE_STAGES`):** `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `PORTAL`, `CM_TLS_KRB_LDAP`, `CDH_INSTALL`, `MONITORING`, `ECS_INSTALL` — pick any combination (`CDH_BASE` legacy expands to TLS/LDAP + CDH install).
 
 **Validation checkboxes (`VALIDATION_CHECKS`):** `TOOLS`, `AWS_CREDS`, `TFVARS`, `ANSIBLE_SYNTAX`, `INVENTORY`, `EMAIL_FORMAT`.
 
