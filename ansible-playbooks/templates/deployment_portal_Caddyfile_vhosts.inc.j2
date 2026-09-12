@@ -1,10 +1,14 @@
 {# Included per IP slug (public + optional private). Variable: caddy_vhost_urls #}
 http://{{ caddy_vhost_urls.cm.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
-  reverse_proxy {% if autotls_enabled | default(false) | bool %}https{% else %}http{% endif %}://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port if (autotls_enabled | default(false) | bool) else cm_http_port }} {
+{% if autotls_enabled | default(false) | bool %}
+  reverse_proxy https://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port }} {
     transport http {
       tls_insecure_skip_verify
     }
   }
+{% else %}
+  reverse_proxy http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}
+{% endif %}
 }
 
 http://{{ caddy_vhost_urls.portal.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
