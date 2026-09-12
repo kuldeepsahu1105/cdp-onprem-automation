@@ -98,32 +98,63 @@
   ansible.builtin.set_fact:
     deployment_portal_access_urls: "{{ lookup('template', 'deployment_portal_access_urls.j2') | from_yaml }}"
 
-- name: Build Caddy vhost URL map (private network / bare metal)
+- name: Set Caddy vhost IP for URL map (private network / bare metal)
   ansible.builtin.set_fact:
     caddy_vhost_ip_for_urls: "{{ deployment_portal_ops_private_ip }}"
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - deployment_portal_access_profile_effective == 'private'
+
+- name: Build Caddy vhost external URL map (private network / bare metal)
+  ansible.builtin.set_fact:
     caddy_vhost_urls_external: "{{ lookup('template', 'caddy_vhost_urls.j2') | from_yaml }}"
     caddy_vhost_urls_vpc: {}
   when:
     - caddy_vhost_enabled | default(false) | bool
     - deployment_portal_access_profile_effective == 'private'
 
-- name: Build Caddy vhost URL map for public IP (cloud / Jenkins / internet)
+- name: Set Caddy vhost IP for public URL map (cloud / Jenkins / internet)
   ansible.builtin.set_fact:
     caddy_vhost_ip_for_urls: "{{ deployment_portal_ops_public_ip }}"
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - deployment_portal_access_profile_effective == 'cloud'
+
+- name: Build Caddy vhost external URL map for public IP (cloud / Jenkins / internet)
+  ansible.builtin.set_fact:
     caddy_vhost_urls_external: "{{ lookup('template', 'caddy_vhost_urls.j2') | from_yaml }}"
   when:
     - caddy_vhost_enabled | default(false) | bool
     - deployment_portal_access_profile_effective == 'cloud'
 
-- name: Build Caddy vhost URL map for private IP (in-VPC clients on cloud)
+- name: Set Caddy vhost IP for VPC URL map (in-VPC clients on cloud)
   ansible.builtin.set_fact:
     caddy_vhost_ip_for_urls: "{{ deployment_portal_ops_private_ip }}"
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - deployment_portal_access_profile_effective == 'cloud'
+    - caddy_vhost_register_private_ip | default(true) | bool
+    - deployment_portal_ops_private_ip != deployment_portal_ops_public_ip
+
+- name: Build Caddy vhost VPC URL map (in-VPC clients on cloud)
+  ansible.builtin.set_fact:
     caddy_vhost_urls_vpc: "{{ lookup('template', 'caddy_vhost_urls.j2') | from_yaml }}"
   when:
     - caddy_vhost_enabled | default(false) | bool
     - deployment_portal_access_profile_effective == 'cloud'
     - caddy_vhost_register_private_ip | default(true) | bool
     - deployment_portal_ops_private_ip != deployment_portal_ops_public_ip
+
+- name: Default empty Caddy VPC vhost map on cloud when private slug not used
+  ansible.builtin.set_fact:
+    caddy_vhost_urls_vpc: {}
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - deployment_portal_access_profile_effective == 'cloud'
+    - not (
+        caddy_vhost_register_private_ip | default(true) | bool
+        and deployment_portal_ops_private_ip != deployment_portal_ops_public_ip
+      )
 
 - name: Set primary Caddy vhost map for portal context
   ansible.builtin.set_fact:
