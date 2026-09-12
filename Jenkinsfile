@@ -31,7 +31,7 @@ IDENTITY — Ansible phase 2: FreeIPA server/client or Active Directory client (
 
 CM_INSTALL — Ansible phase 3: CM repos PostgreSQL CM server and agents license or trial.
 
-CDH_BASE — Ansible phase 4: Cloudera Manager Auto-TLS Kerberos CMS LDAP sync and CDH base cluster deploy (API/parcels); needs CM_INSTALL.
+CDH_BASE — Ansible phase 4: Auto-TLS Kerberos CMS LDAP CDH base cluster; then deployment portal (Caddy/pgAdmin) and optional monitoring stack (playbooks 28/29) when MONITORING_STACK_ENABLED is checked; needs CM_INSTALL.
 
 ECS_INSTALL — Ansible phase 5: ECS / Cloudera Data Services cluster install and config; needs CDH_BASE and inventory.''',
       descriptionPropertyValue: '''VALIDATE stage: validate-prereqs.sh + your VALIDATION_CHECKS only; no TF/Ansible,TERRAFORM stage: run-terraform.sh AWS infra; inventory.ini + PEM,PREREQS: Ansible phase 1 OS/Java/Python/SSH prereqs,IDENTITY: Ansible phase 2 FreeIPA or AD,CM_INSTALL: Ansible phase 3 CM Postgres agents license,CDH_BASE: Ansible phase 4 TLS Kerberos CMS CDH base,ECS_INSTALL: Ansible phase 5 ECS (needs CDH_BASE)'''
