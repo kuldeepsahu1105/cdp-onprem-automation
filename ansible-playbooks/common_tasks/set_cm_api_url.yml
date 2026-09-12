@@ -341,17 +341,6 @@
     - cm_api_probe_delegate_to | default('') | length == 0
     - cm_api_uri_delegate_to | default('') | length == 0
 
-- name: Use discovered probe host for Jenkins/localhost CM API client URL
-  ansible.builtin.set_fact:
-    cm_api_client_host: "{{ cm_api_probe_host }}"
-  when:
-    - cm_api_controller_is_localhost | default(false) | bool
-    - cm_api_probe_delegate_to | default('') | length > 0
-    - cm_api_probe_host | default('') | length > 0
-    - cm_tls_probe_https is defined
-    - cm_tls_probe_https is succeeded
-    - cm_tls_probe_https.status | default(0) in [200, 301, 303, 401, 403]
-
 - name: Resolve Cloudera Manager API version string from version probe results
   ansible.builtin.set_fact:
     _cm_api_version_content: >-
@@ -392,16 +381,38 @@
       probe_host={{ cm_api_probe_host }}).
   when: _cm_api_version_content | default('') | length == 0
 
+- name: Resolve CM API URL host for uri tasks on this play (loopback only when delegating to cldr-mngr)
+  ansible.builtin.set_fact:
+    _cm_api_url_host: >-
+      {{
+        cm_api_probe_host
+        if (cm_api_uri_delegate_to | default('') | length > 0)
+        else (
+          cm_api_connect_host
+          if (
+            (cm_api_connect_host | default('') | length > 0)
+            and (cm_api_controller_is_localhost | default(false) | bool)
+            and not (cm_api_runner_is_manager | default(false) | bool)
+          )
+          else (
+            cm_host_public
+            if (
+              (cm_api_controller_is_localhost | default(false) | bool)
+              and not (cm_api_runner_is_manager | default(false) | bool)
+              and (cm_api_client_host | default('') in ['127.0.0.1', 'localhost', ''])
+              and (cm_host_public | default('') | length > 0)
+            )
+            else cm_api_client_host
+          )
+        )
+      }}
+
 - name: Set base Cloudera Manager API URL
   ansible.builtin.set_fact:
     cm_api_version: "{{ _cm_api_version_content }}"
     cm_api_url: >-
       {{
-        cm_protocol + '://' + (
-          cm_api_probe_host
-          if (cm_api_uri_delegate_to | default('') | length > 0)
-          else cm_api_client_host
-        ) + ':' + (cm_api_port | string) + '/api/' + _cm_api_version_content
+        cm_protocol + '://' + _cm_api_url_host + ':' + (cm_api_port | string) + '/api/' + _cm_api_version_content
       }}
     cm_api_url_delegated: "{{ cm_protocol }}://{{ cm_api_probe_host }}:{{ cm_api_port }}/api/{{ _cm_api_version_content }}"
     cm_host: "{{ cm_api_client_host }}"
