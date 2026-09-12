@@ -1,0 +1,35 @@
+---
+# HTTPS CM API base for Kerberos REST (PUT /cm/config rejects HTTP :7180 with 303).
+
+- name: Kerberos — refresh CM API URL
+  ansible.builtin.import_tasks: set_cm_api_url.yml
+
+- name: Kerberos — use HTTPS API base when CM redirects HTTP to TLS
+  ansible.builtin.set_fact:
+    cm_krb_api_url: >-
+      {{
+        'https://'
+        ~ (_cm_api_url_host | default(cm_host_public | default(cm_api_client_host)))
+        ~ ':'
+        ~ (cm_https_port | default(7183) | string)
+        ~ '/api/'
+        ~ cm_api_version
+      }}
+  when:
+    - (cm_protocol | default('http')) == 'http'
+    - (autotls_enabled | default(false) | bool)
+      or (':' ~ (cm_http_port | default(7180) | string) ~ '/' in (cm_api_url | default('')))
+
+- name: Kerberos — use discovered CM API URL for REST calls
+  ansible.builtin.set_fact:
+    cm_krb_api_url: "{{ cm_api_url }}"
+  when: cm_krb_api_url is not defined
+
+- name: Kerberos — build KDC admin principal for CM import
+  ansible.builtin.set_fact:
+    cm_krb_kdc_admin_principal: >-
+      {{
+        krb5_kdc_admin_user
+        if ('@' in (krb5_kdc_admin_user | string))
+        else (krb5_kdc_admin_user ~ '@' ~ cluster_realm)
+      }}

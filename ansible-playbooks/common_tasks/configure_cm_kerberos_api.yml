@@ -1,38 +1,11 @@
 ---
-# Kerberos CM settings via REST (no cloudera.cluster.cm_kerberos / cm_client — ApiClient API mismatch on controller).
+# Kerberos CM settings via REST (credentials import runs once in 28_setup_cm_krbs.yml).
 
-- name: Kerberos — refresh CM API URL before configuration
-  ansible.builtin.import_tasks: set_cm_api_url.yml
+- name: Kerberos — resolve HTTPS CM API URL
+  ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
 
-- name: Kerberos — use HTTPS API base when CM redirects HTTP to TLS (PUT returns 303 on :7180)
+- name: Kerberos — build Kerberos encryption types value
   ansible.builtin.set_fact:
-    cm_krb_api_url: >-
-      {{
-        'https://'
-        ~ (_cm_api_url_host | default(cm_host_public | default(cm_api_client_host)))
-        ~ ':'
-        ~ (cm_https_port | default(7183) | string)
-        ~ '/api/'
-        ~ cm_api_version
-      }}
-  when:
-    - (cm_protocol | default('http')) == 'http'
-    - (autotls_enabled | default(false) | bool)
-      or (':' ~ (cm_http_port | default(7180) | string) ~ '/' in (cm_api_url | default('')))
-
-- name: Kerberos — use discovered CM API URL for Kerberos REST calls
-  ansible.builtin.set_fact:
-    cm_krb_api_url: "{{ cm_api_url }}"
-  when: cm_krb_api_url is not defined
-
-- name: Kerberos — build KDC admin principal for CM import
-  ansible.builtin.set_fact:
-    cm_krb_kdc_admin_principal: >-
-      {{
-        krb5_kdc_admin_user
-        if ('@' in (krb5_kdc_admin_user | string))
-        else (krb5_kdc_admin_user ~ '@' ~ cluster_realm)
-      }}
     cm_krb_enc_types_value: >-
       {{
         krb5_enc_types if (krb5_enc_types is string)
@@ -49,6 +22,7 @@
     validate_certs: no
     status_code: [200, 301, 303]
   register: cm_krb_config_before
+  changed_when: false
 
 - name: Kerberos — build desired CM Kerberos configuration items
   ansible.builtin.set_fact:
@@ -74,7 +48,7 @@
   register: cm_kerberos_api_result
   changed_when: true
 
-- name: Kerberos — read CM Kerberos status
+- name: Kerberos — read CM Kerberos status after configuration
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/kerberosInfo"
     method: GET
@@ -84,57 +58,4 @@
     validate_certs: no
     status_code: [200, 301, 303]
   register: cm_krb_info
-
-- name: Kerberos — import KDC admin credentials when CM is not yet kerberized
-  ansible.builtin.uri:
-    url: "{{ cm_krb_api_url }}/cm/commands/importAdminCredentials"
-    method: POST
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: yes
-    validate_certs: no
-    body_format: json
-    body:
-      username: "{{ cm_krb_kdc_admin_principal }}"
-      password: "{{ krb5_kdc_admin_password }}"
-    status_code: [200, 201, 204, 303, 400]
-  register: cm_krb_import_cmd
-  failed_when: false
-  changed_when: cm_krb_import_cmd.status in [200, 201, 204]
-  when: not (cm_krb_info.json.kerberized | default(false) | bool)
-
-- name: Kerberos — wait for importAdminCredentials command
-  ansible.builtin.uri:
-    url: "{{ cm_krb_api_url }}/commands/{{ cm_krb_import_cmd.json.id }}"
-    method: GET
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: yes
-    validate_certs: no
-    status_code: [200, 301, 303]
-  register: cm_krb_import_poll
-  until: >
-    cm_krb_import_poll.json.active is defined
-    and not (cm_krb_import_poll.json.active | bool)
-  retries: 40
-  delay: 5
-  when:
-    - cm_krb_import_cmd.json is defined
-    - cm_krb_import_cmd.json.id is defined
-    - cm_krb_import_cmd.status in [200, 201, 204]
-
-- name: Kerberos — fail when importAdminCredentials command failed
-  ansible.builtin.fail:
-    msg: >-
-      importAdminCredentials failed:
-      {{ cm_krb_import_poll.json.resultMessage | default(cm_krb_import_poll.json.result_message | default('unknown')) }}
-  when:
-    - cm_krb_import_poll is defined
-    - cm_krb_import_poll.json is defined
-    - cm_krb_import_poll.json.success is defined
-    - not (cm_krb_import_poll.json.success | bool)
-    - >
-      'already exists' not in (
-        cm_krb_import_poll.json.resultMessage | default(cm_krb_import_poll.json.result_message | default(''))
-        | lower
-      )
+  changed_when: false

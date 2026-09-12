@@ -10,6 +10,9 @@
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
 
+    - name: Kerberos — resolve HTTPS CM API URL and KDC admin principal
+      ansible.builtin.import_tasks: common_tasks/resolve_cm_krb_api_url.yml
+
     - name: Print Kerberos integration targets
       ansible.builtin.debug:
         msg:
@@ -41,7 +44,7 @@
 
     - name: Import KDC admin credentials into Cloudera Manager
       ansible.builtin.uri:
-        url: "{{ cm_api_url }}/cm/commands/importAdminCredentials"
+        url: "{{ cm_krb_api_url }}/cm/commands/importAdminCredentials"
         method: POST
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
@@ -49,12 +52,60 @@
         validate_certs: no
         body_format: json
         body:
-          username: "{{ krb5_kdc_admin_user }}"
+          username: "{{ cm_krb_kdc_admin_principal }}"
           password: "{{ krb5_kdc_admin_password }}"
         status_code: [200, 201, 204, 303, 400]
       register: kdc_import_result
       failed_when: false
-      changed_when: kdc_import_result.status in [200, 201, 204]
+      changed_when: kdc_import_result.status in [200, 201, 204, 303]
+
+    - name: Wait for importAdminCredentials command (when CM returns a command id)
+      ansible.builtin.uri:
+        url: "{{ cm_krb_api_url }}/commands/{{ kdc_import_result.json.id }}"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 301, 303]
+      register: kdc_import_poll
+      until: >
+        kdc_import_poll.json.active is defined
+        and not (kdc_import_poll.json.active | bool)
+      retries: 40
+      delay: 5
+      when:
+        - kdc_import_result.json is defined
+        - kdc_import_result.json.id is defined
+
+    - name: Accept importAdminCredentials when credentials already exist
+      ansible.builtin.debug:
+        msg: >-
+          importAdminCredentials finished (success may be false when principal already exists):
+          {{ kdc_import_poll.json.resultMessage | default(kdc_import_poll.json.result_message | default('n/a')) }}
+      when: kdc_import_poll is defined
+
+    - name: Fail when importAdminCredentials command failed
+      ansible.builtin.fail:
+        msg: >-
+          importAdminCredentials failed:
+          {{ kdc_import_poll.json.resultMessage | default(kdc_import_poll.json.result_message | default('unknown')) }}
+      when:
+        - kdc_import_poll is defined
+        - kdc_import_poll.json is defined
+        - kdc_import_poll.json.success is defined
+        - not (kdc_import_poll.json.success | bool)
+        - >
+          (
+            kdc_import_poll.json.resultMessage
+            | default(kdc_import_poll.json.result_message | default(''))
+            | trim
+          ) | length > 0
+        - >
+          'already exists' not in (
+            kdc_import_poll.json.resultMessage | default(kdc_import_poll.json.result_message | default(''))
+            | lower
+          )
 
     - name: Print KDC credential import result
       ansible.builtin.debug:
