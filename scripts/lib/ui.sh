@@ -10,19 +10,22 @@ ui_is_tty() {
   [[ -t 1 ]]
 }
 
-# Colors: TTY, or Jenkins ansiColor / FORCE_COLOR (stdout may be piped to tee).
+# Colors only when stdout is a TTY. Jenkins stages pipe to tee (| tee log), so ANSI
+# would appear as literal [32m without a TTY even with ansiColor + FORCE_COLOR=1.
 ui_color_enabled() {
   case "${UI_COLOR:-${FORCE_COLOR:-auto}}" in
     0|false|no|off|never) return 1 ;;
+  esac
+  ui_is_tty || return 1
+  case "${UI_COLOR:-${FORCE_COLOR:-auto}}" in
     1|true|yes|on|force|always) return 0 ;;
   esac
-  ui_is_tty && return 0
   if [[ -n "${JENKINS_URL:-}" || -n "${BUILD_NUMBER:-}" || "${CI:-}" == "true" ]]; then
     [[ "${TERM:-}" == "dumb" ]] && return 1
     return 0
   fi
   [[ "${CLICOLOR_FORCE:-}" == "1" ]] && return 0
-  return 1
+  return 0
 }
 
 ui_repeat_char() {
