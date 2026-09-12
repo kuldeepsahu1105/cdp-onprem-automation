@@ -188,6 +188,7 @@ def check_verify_when_setters() -> list[str]:
         "_portal_verify_milestones_effective": "resolve_deployment_portal_verify_milestones.yml",
         "deployment_portal_verify_milestones_effective": "resolve_deployment_portal_verify_milestones.yml",
         "deployment_portal_context": "build_deployment_portal_facts.yml / deployment_portal_load_host_facts.yml",
+        "deployment_portal_cm_http_probe": "probe_cm_manager_ui_http.yml / build_deployment_portal_facts.yml",
         "ansible_control_reach_public_only": "detect_ansible_control_reachability.yml",
     }
     warnings: list[str] = []
