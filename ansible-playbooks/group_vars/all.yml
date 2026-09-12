@@ -460,6 +460,12 @@ deployment_portal_inventory_groups:
   - ecs-workers
 deployment_portal_data_service_links: []
 deployment_portal_extra_links: []
+# Portal URL profile: auto | cloud (public + VPC) | private (bare metal / no public IP)
+deployment_portal_access_profile: auto
+# When profile is private, prefer cluster FQDN in links (set false to use management IP only)
+deployment_portal_prefer_fqdn_urls: true
+# Force private profile on cloud-style inventory (no public URLs in portal index)
+deployment_portal_use_private_network_only: false
 
 # Caddy nip.io-style hostnames (all resolve to ops host IP; Caddy reverse-proxies to backends)
 # embedded_ip: cm.10-54-75-123.pvc.cloudera-labs.com  (wildcard DNS on base domain)

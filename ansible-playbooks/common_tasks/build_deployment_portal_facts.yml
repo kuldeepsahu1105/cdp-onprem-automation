@@ -16,6 +16,9 @@
     deployment_portal_anchor_ip: "{{ hostvars[groups[deployment_portal_host_group_effective][0]].ansible_host }}"
     deployment_portal_anchor_group: "{{ deployment_portal_host_group_effective }}"
 
+- name: Resolve portal access profile (cloud vs private / bare metal)
+  ansible.builtin.import_tasks: resolve_deployment_portal_access_profile.yml
+
 - name: Render deployment portal node inventory
   ansible.builtin.set_fact:
     deployment_portal_nodes: "{{ lookup('template', 'deployment_portal_nodes.j2') | from_yaml | default([], true) }}"
@@ -95,18 +98,30 @@
   ansible.builtin.set_fact:
     deployment_portal_access_urls: "{{ lookup('template', 'deployment_portal_access_urls.j2') | from_yaml }}"
 
-- name: Build Caddy vhost URL map for public IP (Jenkins / internet)
+- name: Build Caddy vhost URL map (private network / bare metal)
+  ansible.builtin.set_fact:
+    caddy_vhost_ip_for_urls: "{{ deployment_portal_ops_private_ip }}"
+    caddy_vhost_urls_external: "{{ lookup('template', 'caddy_vhost_urls.j2') | from_yaml }}"
+    caddy_vhost_urls_vpc: {}
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - deployment_portal_access_profile_effective == 'private'
+
+- name: Build Caddy vhost URL map for public IP (cloud / Jenkins / internet)
   ansible.builtin.set_fact:
     caddy_vhost_ip_for_urls: "{{ deployment_portal_ops_public_ip }}"
     caddy_vhost_urls_external: "{{ lookup('template', 'caddy_vhost_urls.j2') | from_yaml }}"
-  when: caddy_vhost_enabled | default(false) | bool
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - deployment_portal_access_profile_effective == 'cloud'
 
-- name: Build Caddy vhost URL map for private IP (in-VPC clients)
+- name: Build Caddy vhost URL map for private IP (in-VPC clients on cloud)
   ansible.builtin.set_fact:
     caddy_vhost_ip_for_urls: "{{ deployment_portal_ops_private_ip }}"
     caddy_vhost_urls_vpc: "{{ lookup('template', 'caddy_vhost_urls.j2') | from_yaml }}"
   when:
     - caddy_vhost_enabled | default(false) | bool
+    - deployment_portal_access_profile_effective == 'cloud'
     - caddy_vhost_register_private_ip | default(true) | bool
     - deployment_portal_ops_private_ip != deployment_portal_ops_public_ip
 
@@ -137,8 +152,11 @@
         public_ip: "{{ deployment_portal_ops_public_ip }}"
         private_ip: "{{ deployment_portal_ops_private_ip }}"
       access:
-        external: "{{ deployment_portal_access_urls.external }}"
-        vpc: "{{ deployment_portal_access_urls.vpc }}"
+        profile: "{{ deployment_portal_access_urls.profile }}"
+        environment: "{{ deployment_portal_access_urls.environment }}"
+        primary: "{{ deployment_portal_access_urls.primary | default({}) }}"
+        external: "{{ deployment_portal_access_urls.external | default({}) }}"
+        vpc: "{{ deployment_portal_access_urls.vpc | default({}) }}"
       caddy_vhosts:
         enabled: "{{ caddy_vhost_enabled | default(false) | bool }}"
         dns_mode: "{{ caddy_vhost_dns_mode }}"
@@ -146,10 +164,20 @@
         urls_public: "{{ caddy_vhost_urls_external | default({}) }}"
         urls_vpc: "{{ caddy_vhost_urls_vpc | default({}) }}"
       portal:
-        index_url: "{{ deployment_portal_access_urls.external.portal }}"
-        pgadmin_url: "{{ deployment_portal_access_urls.external.pgadmin }}"
-        index_url_vpc: "{{ deployment_portal_access_urls.vpc.portal }}"
-        pgadmin_url_vpc: "{{ deployment_portal_access_urls.vpc.pgadmin }}"
+        index_url: >-
+          {{
+            deployment_portal_access_urls.primary.portal
+            if (deployment_portal_access_profile_effective == 'private')
+            else deployment_portal_access_urls.external.portal
+          }}
+        pgadmin_url: >-
+          {{
+            deployment_portal_access_urls.primary.pgadmin
+            if (deployment_portal_access_profile_effective == 'private')
+            else deployment_portal_access_urls.external.pgadmin
+          }}
+        index_url_vpc: "{{ deployment_portal_access_urls.vpc.portal | default('') }}"
+        pgadmin_url_vpc: "{{ deployment_portal_access_urls.vpc.pgadmin | default('') }}"
       identity:
         ipa_ui_url: "{{ ('https://' + deployment_portal_ipa_fqdn) if deployment_portal_has_ipa | bool else '' }}"
         ipa_caddy_url: >-
@@ -200,13 +228,33 @@
         links: "{{ deployment_portal_data_service_links + (deployment_portal_dynamic_links | default([])) }}"
       monitoring:
         enabled: "{{ monitoring_stack_enabled | default(false) | bool }}"
-        grafana_url: "{{ deployment_portal_access_urls.external.grafana }}"
-        prometheus_url: "{{ deployment_portal_access_urls.external.prometheus }}"
-        alertmanager_url: "{{ deployment_portal_access_urls.external.alertmanager }}"
-        cadvisor_url: "{{ deployment_portal_access_urls.external.cadvisor }}"
-        grafana_url_vpc: "{{ deployment_portal_access_urls.vpc.grafana }}"
-        prometheus_url_vpc: "{{ deployment_portal_access_urls.vpc.prometheus }}"
-        alertmanager_url_vpc: "{{ deployment_portal_access_urls.vpc.alertmanager }}"
-        cadvisor_url_vpc: "{{ deployment_portal_access_urls.vpc.cadvisor }}"
+        grafana_url: >-
+          {{
+            deployment_portal_access_urls.primary.grafana
+            if (deployment_portal_access_profile_effective == 'private')
+            else deployment_portal_access_urls.external.grafana
+          }}
+        prometheus_url: >-
+          {{
+            deployment_portal_access_urls.primary.prometheus
+            if (deployment_portal_access_profile_effective == 'private')
+            else deployment_portal_access_urls.external.prometheus
+          }}
+        alertmanager_url: >-
+          {{
+            deployment_portal_access_urls.primary.alertmanager
+            if (deployment_portal_access_profile_effective == 'private')
+            else deployment_portal_access_urls.external.alertmanager
+          }}
+        cadvisor_url: >-
+          {{
+            deployment_portal_access_urls.primary.cadvisor
+            if (deployment_portal_access_profile_effective == 'private')
+            else deployment_portal_access_urls.external.cadvisor
+          }}
+        grafana_url_vpc: "{{ deployment_portal_access_urls.vpc.grafana | default('') }}"
+        prometheus_url_vpc: "{{ deployment_portal_access_urls.vpc.prometheus | default('') }}"
+        alertmanager_url_vpc: "{{ deployment_portal_access_urls.vpc.alertmanager | default('') }}"
+        cadvisor_url_vpc: "{{ deployment_portal_access_urls.vpc.cadvisor | default('') }}"
       nodes: "{{ deployment_portal_nodes }}"
       extra_links: "{{ deployment_portal_extra_links }}"

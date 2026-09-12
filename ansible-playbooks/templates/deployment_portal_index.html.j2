@@ -26,8 +26,27 @@
 <body>
 {% set ctx = deployment_portal_context %}
   <h1>Cloudera CDP deployment portal</h1>
-  <p class="sub">Domain <code>{{ ctx.cluster_domain }}</code> · realm <code>{{ ctx.cluster_realm }}</code> · identity <code>{{ ctx.identity_provider }}</code> · generated {{ ctx.generated_at }}</p>
+  <p class="sub">Domain <code>{{ ctx.cluster_domain }}</code> · realm <code>{{ ctx.cluster_realm }}</code> · identity <code>{{ ctx.identity_provider }}</code> · access <code>{{ ctx.access.profile }}</code> ({{ ctx.access.environment }}) · generated {{ ctx.generated_at }}</p>
 
+  {% if ctx.access.profile == 'private' %}
+  <section>
+    <h2>Private network (no public IP)</h2>
+    <p class="sub">{{ ctx.access.primary.audience }}</p>
+    <ul>
+      <li>Ops FQDN: <code>{{ ctx.access.primary.fqdn }}</code></li>
+      <li>Management IP: <code>{{ ctx.access.primary.management_ip }}</code></li>
+      <li>URL host in links: <code>{{ ctx.access.primary.host }}</code></li>
+      <li><strong>Portal</strong> — <a href="{{ ctx.access.primary.portal }}">{{ ctx.access.primary.portal }}</a></li>
+      <li><strong>pgAdmin</strong> — <a href="{{ ctx.access.primary.pgadmin }}">{{ ctx.access.primary.pgadmin }}</a></li>
+      {% if ctx.monitoring.enabled %}
+      <li><strong>Grafana</strong> — <a href="{{ ctx.access.primary.grafana }}">{{ ctx.access.primary.grafana }}</a></li>
+      <li><strong>Prometheus</strong> — <a href="{{ ctx.access.primary.prometheus }}">{{ ctx.access.primary.prometheus }}</a></li>
+      <li><strong>Alertmanager</strong> — <a href="{{ ctx.access.primary.alertmanager }}">{{ ctx.access.primary.alertmanager }}</a></li>
+      <li><strong>cAdvisor</strong> — <a href="{{ ctx.access.primary.cadvisor }}">{{ ctx.access.primary.cadvisor }}</a></li>
+      {% endif %}
+    </ul>
+  </section>
+  {% else %}
   <section>
     <h2>From Jenkins / internet (public IP)</h2>
     <p class="sub">{{ ctx.access.external.audience }}</p>
@@ -53,15 +72,20 @@
       {% endif %}
     </ul>
   </section>
+  {% endif %}
 
   {% if ctx.caddy_vhosts.enabled %}
   <section>
     <h2>Lab domain (Caddy) — {{ ctx.caddy_vhosts.public_base }}</h2>
+    {% if ctx.access.profile == 'private' %}
+    <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — hostnames resolve to the ops host on your private network (FreeIPA/AD DNS or static records). No public internet required.</p>
+    {% else %}
     <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — public-IP hostnames for Jenkins/internet; private-IP hostnames when registered for in-VPC use.</p>
+    {% endif %}
     <ul>
-      <li><strong>Portal (public slug)</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>
-      <li><strong>CM (public slug)</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}">{{ ctx.caddy_vhosts.urls_public.cm.hostname }}</a></li>
-      {% if ctx.caddy_vhosts.urls_vpc.portal is defined %}
+      <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>
+      <li><strong>CM</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}">{{ ctx.caddy_vhosts.urls_public.cm.hostname }}</a></li>
+      {% if ctx.caddy_vhosts.urls_vpc.portal is defined and ctx.caddy_vhosts.urls_vpc.portal.url | default('') | length > 0 %}
       <li><strong>Portal (VPC slug)</strong> — <a href="{{ ctx.caddy_vhosts.urls_vpc.portal.url }}">{{ ctx.caddy_vhosts.urls_vpc.portal.hostname }}</a></li>
       {% endif %}
     </ul>

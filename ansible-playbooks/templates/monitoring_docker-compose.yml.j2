@@ -6,7 +6,7 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --web.external-url={{
-          caddy_vhost_urls.prometheus.url
+          caddy_vhost_urls_external.prometheus.url
           if (caddy_vhost_enabled | default(false) | bool)
           else ('http://' + deployment_portal_anchor_fqdn + ':' + (deployment_portal_http_port | string) + '/prometheus/')
         }}
@@ -24,7 +24,7 @@ services:
     command:
       - --config.file=/etc/alertmanager/alertmanager.yml
       - --web.external-url={{
-          caddy_vhost_urls.alertmanager.url
+          caddy_vhost_urls_external.alertmanager.url
           if (caddy_vhost_enabled | default(false) | bool)
           else ('http://' + deployment_portal_anchor_fqdn + ':' + (deployment_portal_http_port | string) + '/alertmanager/')
         }}
@@ -44,7 +44,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: "{{ monitoring_grafana_admin_password }}"
       GF_SERVER_ROOT_URL: >-
         {{
-          caddy_vhost_urls.grafana.url
+          caddy_vhost_urls_external.grafana.url
           if (caddy_vhost_enabled | default(false) | bool)
           else ('http://' + deployment_portal_anchor_fqdn + ':' + (deployment_portal_http_port | string) + '/grafana/')
         }}
