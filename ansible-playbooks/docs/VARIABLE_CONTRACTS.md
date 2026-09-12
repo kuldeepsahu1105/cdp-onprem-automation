@@ -64,6 +64,8 @@ Import order in `set_cm_api_url.yml`:
 
 **CM Caddy frontend (post-CM):** `26_setup_cm_license.yml` and `35_refresh_deployment_portal.yml` (localhost play) call `apply_cm_caddy_load_balancer.yml` after `build_deployment_portal_facts.yml` + `set_cm_api_url.yml`. Sets CM API `frontend_url` and `cm_host_name` to the Caddy CM vhost (not direct `:7180` FQDN).
 
+**Labs `module_defaults` (scoped):** cloudera-labs/openshift routes `cloudera.cluster.cm*` API calls through the CM Caddy vhost (`proxy_host`, port **80**). We only mirror that for **`cm_config` in `apply_cm_caddy_load_balancer.yml`**: when `cm_config_api_via_caddy_proxy` is `auto`/`true`, `host` = `caddy_vhost_urls_external.cm.hostname`, `port` = `deployment_portal_http_port` (8088), `force_tls: false`. Other playbooks keep direct `cm_host` / `cm_api_port` (`:7180` or `:7183`).
+
 | Fact | Set by |
 |------|--------|
 | `ansible_control_reachability_effective`, `ansible_control_reach_public_only` | `detect_ansible_control_reachability.yml` (localhost) |
@@ -72,7 +74,7 @@ Import order in `set_cm_api_url.yml`:
 | `cm_manager_inventory_host` | `group_vars/all.yml` (default `cldr-mngr` host) |
 | `cm_caddy_public_url`, `cm_frontend_url_effective` | `resolve_caddy_service_public_urls.yml` (after `caddy_vhost_urls.j2` in `build_deployment_portal_facts.yml`) |
 | `ecs_caddy_console_url` | Same; used by `resolve_ecs_control_plane_url.yml` and portal `ecs.console_hint` |
-| `cm_external_url`, `cm_apply_caddy_frontend_url` | `group_vars/all.yml` — override Caddy CM URL; gate `apply_cm_caddy_load_balancer.yml` |
+| `cm_external_url`, `cm_apply_caddy_frontend_url`, `cm_config_api_via_caddy_proxy` | `group_vars/all.yml` — override Caddy CM URL; gate `apply_cm_caddy_load_balancer.yml`; proxy vs direct CM API for `cm_config` |
 
 **Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml` (imports `set_cm_api_url.yml` and Tier B controller verify). Portal Caddy verify uses detect with **`ansible_control_reachability_skip_cm_probes: true`** and explicit `cm_host_public` / `cm_host_private` vars — do not assume CM API facts exist on the ops host play.
 

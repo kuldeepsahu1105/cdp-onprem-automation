@@ -22,12 +22,12 @@ http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port 
 }
 
 {% if deployment_portal_has_ipa | default(false) | bool %}
+{# FreeIPA UI: cloudera-labs/openshift uses vhost label freeipa.*; we use ipa.* (caddy_vhost_service_names.ipa). #}
 http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
-  reverse_proxy https://{{ deployment_portal_ipa_fqdn }}:443 {
+  redir / /ipa/ui permanent
+  reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
     header_up Host {{ deployment_portal_ipa_fqdn }}
-    transport http {
-      tls_insecure_skip_verify
-    }
+    header_up Referer https://{{ deployment_portal_ipa_fqdn }}/ipa/ui
   }
 }
 {% endif %}
