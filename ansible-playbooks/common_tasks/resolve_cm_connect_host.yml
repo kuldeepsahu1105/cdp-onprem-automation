@@ -144,7 +144,7 @@
   ansible.builtin.debug:
     msg:
       - "CM API client host (this play): {{ cm_api_client_host }} (inventory runner: {{ inventory_hostname | default('localhost') }})"
-      - "CM API discovery probes: {{ cm_api_probe_host }} on {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }}"
+      - "CM API discovery probes: {{ cm_api_probe_host }} (127.0.0.1 then FQDN/private on cldr-mngr) on {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }}"
       - "Control reachability: {{ ansible_control_reachability_effective | default('unknown') }} (avoid VPC private from controller={{ cm_api_avoid_private_ip | default(false) }})"
       - "Browser/public CM URL may use: {{ cm_host_public }}:{{ cm_http_port }} (public IP often times out from the CM host itself on AWS)"
       - "Override with cm_api_connect_host, cm_api_prefer_private_ip, or cm_api_delegate_probes_to_manager in group_vars if needed"

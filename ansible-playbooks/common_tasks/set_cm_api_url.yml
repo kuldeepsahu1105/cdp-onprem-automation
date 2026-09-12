@@ -7,6 +7,9 @@
 - name: Resolve reachable CM API host (127.0.0.1 on cldr-mngr, else private/public IP)
   ansible.builtin.import_tasks: resolve_cm_connect_host.yml
 
+- name: Pick reachable CM API probe address on delegated cldr-mngr
+  ansible.builtin.import_tasks: select_cm_api_probe_host.yml
+
 - name: Ensure CM admin password matches group_vars when not factory default
   ansible.builtin.import_tasks: ensure_cm_admin_password.yml
 
@@ -119,7 +122,8 @@
       https://{{ cm_api_probe_host }}:{{ cm_https_port }} (probe on
       {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }}).
       Client host for this play: {{ cm_api_client_host }}.
-      Jenkins/outside-VPC controllers must use the CM public IP (ansible_host) or delegate probes to cldr-mngr at 127.0.0.1 — never inventory private_ip.
+      Delegated probes tried: {{ cm_api_probe_host_candidates | default([cm_api_probe_host]) | join(', ') }}.
+      Jenkins/outside-VPC controllers use the CM public IP for uri from localhost; discovery runs on cldr-mngr (127.0.0.1, FQDN, private IP).
       Set ansible_control_reachability: public (or legacy ansible_controller_outside_vpc: true / cm_api_prefer_private_ip: false).
   when:
     - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])

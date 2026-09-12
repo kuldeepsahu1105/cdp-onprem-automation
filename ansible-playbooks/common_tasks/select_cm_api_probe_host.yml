@@ -1,0 +1,74 @@
+---
+# When CM API probes delegate to cldr-mngr, scm-server may listen on FQDN/VPC IP only (not 127.0.0.1).
+
+- name: Build CM API probe host candidates on delegated cldr-mngr
+  ansible.builtin.set_fact:
+    cm_api_probe_host_candidates: >-
+      {{
+        (
+          ['127.0.0.1']
+          + ([cm_host_fqdn] if (cm_host_fqdn | default('') | length > 0) else [])
+          + (
+            [hostvars[cm_manager_inventory_host].ansible_fqdn | default('')]
+            if (hostvars[cm_manager_inventory_host].ansible_fqdn | default('') | length > 0)
+            else []
+          )
+          + (
+            [hostvars[cm_manager_inventory_host].ansible_hostname | default('')]
+            if (hostvars[cm_manager_inventory_host].ansible_hostname | default('') | length > 0)
+            else []
+          )
+          + (
+            [cm_host_private]
+            if (
+              (cm_host_private | default('') | length > 0)
+              and (cm_host_private not in ['127.0.0.1', cm_host_fqdn])
+            )
+            else []
+          )
+        )
+        | unique
+        | reject('equalto', '')
+        | list
+      }}
+  when: cm_api_probe_delegate_to | default('') | length > 0
+
+- name: Discover reachable CM API host on cldr-mngr (HTTP /api/version)
+  ansible.builtin.uri:
+    url: "http://{{ item }}:{{ cm_http_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    follow_redirects: none
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303]
+    timeout: 15
+  loop: "{{ cm_api_probe_host_candidates }}"
+  register: cm_api_probe_host_discovery
+  failed_when: false
+  delegate_to: "{{ cm_api_probe_delegate_to }}"
+  when:
+    - cm_api_probe_delegate_to | default('') | length > 0
+    - cm_api_probe_host_candidates is defined
+    - cm_api_probe_host_candidates | length > 0
+
+- name: Select CM API probe host that responded on cldr-mngr
+  ansible.builtin.set_fact:
+    cm_api_probe_host: >-
+      {{
+        (
+          cm_api_probe_host_discovery.results
+          | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303])
+          | map(attribute='item')
+          | list
+          | first
+        )
+        | default(cm_api_probe_host, true)
+      }}
+  when:
+    - cm_api_probe_delegate_to | default('') | length > 0
+    - cm_api_probe_host_discovery is defined
