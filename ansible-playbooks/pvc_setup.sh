@@ -53,6 +53,8 @@ Options:
 
 Environment:
   DEPLOY_PHASE     1|2|3|cm_tls|cdh|portal|monitoring|ecs|6|7|4|5|all
+  ANSIBLE_RUN_SSH_PREQS   auto|true|false (default auto) — 00_setup_ssh_preqs on phase 1/all only
+  DEPLOYMENT_PORTAL_REFRESH true|false (default false) — run 35_refresh from non-portal phases when true
   MONITORING_STACK_ENABLED  true|false (default true) — portal + Grafana/Prometheus bootstrap
   DEPLOYMENT_PORTAL_ENABLED true|false (default true)
   ECS_DATA_SERVICES_DEPLOY_ENABLED true|false — run 34_setup_ecs_data_services.yml (phase 5/7)
@@ -181,21 +183,45 @@ else
 fi
 ansible_install_collections_if_needed "$SCRIPT_DIR/requirements.yml"
 
-# SSH pre-reqs: include ipaserver when that group has hosts (FreeIPA); skip for AD-only inventory
-if grep -A30 '^\[ipaserver\]' "$SCRIPT_DIR/inventory.ini" | grep -qE '^[^#[:space:]]'; then
-  SSH_LIMIT="${ANSIBLE_LIMIT_SSH:-all}"
+_should_run_ssh_preqs() {
+  case "${ANSIBLE_RUN_SSH_PREQS:-auto}" in
+    true|1|yes) return 0 ;;
+    false|0|no) return 1 ;;
+    auto)
+      case "$DEPLOY_PHASE" in
+        1|prereq|phase1|prereqs|all|full) return 0 ;;
+        *) return 1 ;;
+      esac
+      ;;
+    *)
+      ui_warn "Unknown ANSIBLE_RUN_SSH_PREQS=${ANSIBLE_RUN_SSH_PREQS} — treating as auto"
+      case "$DEPLOY_PHASE" in
+        1|prereq|phase1|prereqs|all|full) return 0 ;;
+        *) return 1 ;;
+      esac
+      ;;
+  esac
+}
+
+if _should_run_ssh_preqs; then
+  # SSH pre-reqs: include ipaserver when that group has hosts (FreeIPA); skip for AD-only inventory
+  if grep -A30 '^\[ipaserver\]' "$SCRIPT_DIR/inventory.ini" | grep -qE '^[^#[:space:]]'; then
+    SSH_LIMIT="${ANSIBLE_LIMIT_SSH:-all}"
+  else
+    SSH_LIMIT="${ANSIBLE_LIMIT_SSH:-all:!ipaserver}"
+  fi
+  ui_section "SSH prerequisites" "🔐"
+  ui_kv "Limit" "$SSH_LIMIT" "🎯"
+  ui_playbook_header "00_setup_ssh_preqs.yml" start
+  if ansible-playbook 00_setup_ssh_preqs.yml "${ANSIBLE_PLAYBOOK_ARGS[@]}" --limit "$SSH_LIMIT"; then
+    ui_playbook_header "00_setup_ssh_preqs.yml" end
+  else
+    rc=$?
+    ui_err "PLAYBOOK FAILED: 00_setup_ssh_preqs.yml (exit ${rc})"
+    exit "$rc"
+  fi
 else
-  SSH_LIMIT="${ANSIBLE_LIMIT_SSH:-all:!ipaserver}"
-fi
-ui_section "SSH prerequisites" "🔐"
-ui_kv "Limit" "$SSH_LIMIT" "🎯"
-ui_playbook_header "00_setup_ssh_preqs.yml" start
-if ansible-playbook 00_setup_ssh_preqs.yml "${ANSIBLE_PLAYBOOK_ARGS[@]}" --limit "$SSH_LIMIT"; then
-  ui_playbook_header "00_setup_ssh_preqs.yml" end
-else
-  rc=$?
-  ui_err "PLAYBOOK FAILED: 00_setup_ssh_preqs.yml (exit ${rc})"
-  exit "$rc"
+  ui_info "Skipping 00_setup_ssh_preqs.yml (DEPLOY_PHASE=${DEPLOY_PHASE}, ANSIBLE_RUN_SSH_PREQS=${ANSIBLE_RUN_SSH_PREQS:-auto})"
 fi
 
 run_phase_1() {
@@ -219,7 +245,7 @@ run_phase_2() {
   ui_phase_header "2 — Identity (FreeIPA / AD)"
   run_playbook 00_detect_identity.yml
   run_playbook 11_identity_setup.yml
-  _run_deployment_portal_refresh "portal,ipa,identity"
+  _maybe_run_deployment_portal_refresh "portal,ipa,identity"
 }
 
 run_phase_3() {
@@ -249,17 +275,16 @@ run_phase_3() {
 run_phase_cm_tls() {
   ui_phase_header "CM Auto-TLS, Kerberos, CMS, LDAP"
   run_playbook 27_setup_cm_autotls.yml
-  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls"
   run_playbook 28_setup_cm_krbs.yml
   run_playbook 29_setup_cm_cms.yml
   run_playbook 30_setup_cm_ldap.yml
-  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls"
+  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls"
 }
 
 run_phase_cdh() {
   ui_phase_header "CDH base cluster"
   run_playbook 31_setup_base_cluster.yml
-  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh"
+  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh"
 }
 
 run_phase_monitoring() {
@@ -268,8 +293,9 @@ run_phase_monitoring() {
     return 0
   fi
   ui_phase_header "Monitoring stack (Grafana / Prometheus)"
+  # Playbook 32 syncs Caddy/index (sync_deployment_portal_content) — no separate 35_refresh here.
   run_playbook 32_setup_monitoring_stack.yml
-  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring"
+  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring"
 }
 
 # Legacy name: phase 4 = CM security + CDH base (no ECS).
@@ -307,6 +333,18 @@ _run_deployment_portal_bootstrap() {
   run_playbook 10_setup_deployment_portal.yml "${portal_extra[@]}"
 }
 
+_portal_refresh_explicitly_enabled() {
+  [[ "${DEPLOYMENT_PORTAL_REFRESH:-false}" == "true" || "${DEPLOYMENT_PORTAL_REFRESH:-false}" == "1" ]]
+}
+
+_maybe_run_deployment_portal_refresh() {
+  local milestones="${1:-}"
+  if ! _portal_refresh_explicitly_enabled; then
+    return 0
+  fi
+  _run_deployment_portal_refresh "$milestones"
+}
+
 _run_deployment_portal_refresh() {
   local milestones="${1:-}"
   if ! _portal_enabled; then
@@ -327,7 +365,7 @@ _run_deployment_portal_refresh() {
 _run_ecs_data_services() {
   if [[ "${ECS_DATA_SERVICES_DEPLOY_ENABLED:-false}" == "true" || "${ECS_DATA_SERVICES_DEPLOY_ENABLED:-false}" == "1" ]]; then
     run_playbook 34_setup_ecs_data_services.yml -e ecs_data_services_deploy_enabled=true
-    _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
+    _maybe_run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
   fi
 }
 
@@ -344,7 +382,7 @@ run_phase_7() {
 run_phase_5() {
   ui_phase_header "5 — ECS cluster install"
   run_playbook 33_setup_ecs_cluster.yml
-  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
+  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
   _run_ecs_data_services
 }
 
