@@ -28,24 +28,41 @@
   <h1>Cloudera CDP deployment portal</h1>
   <p class="sub">Domain <code>{{ ctx.cluster_domain }}</code> · realm <code>{{ ctx.cluster_realm }}</code> · identity <code>{{ ctx.identity_provider }}</code> · generated {{ ctx.generated_at }}</p>
 
+  <section>
+    <h2>From Jenkins / internet (public IP)</h2>
+    <p class="sub">{{ ctx.access.external.audience }}</p>
+    <ul>
+      <li>Ops public IP: <code>{{ ctx.access.external.ops_ip }}</code></li>
+      <li><strong>Portal</strong> — <a href="{{ ctx.access.external.portal }}">{{ ctx.access.external.portal }}</a></li>
+      <li><strong>pgAdmin</strong> — <a href="{{ ctx.access.external.pgadmin }}">{{ ctx.access.external.pgadmin }}</a></li>
+      {% if ctx.monitoring.enabled %}
+      <li><strong>Grafana</strong> — <a href="{{ ctx.access.external.grafana }}">{{ ctx.access.external.grafana }}</a></li>
+      {% endif %}
+    </ul>
+  </section>
+
+  <section>
+    <h2>From same VPC (private IP)</h2>
+    <p class="sub">{{ ctx.access.vpc.audience }}</p>
+    <ul>
+      <li>Ops private IP: <code>{{ ctx.access.vpc.ops_ip }}</code></li>
+      <li><strong>Portal</strong> — <a href="{{ ctx.access.vpc.portal }}">{{ ctx.access.vpc.portal }}</a></li>
+      <li><strong>pgAdmin</strong> — <a href="{{ ctx.access.vpc.pgadmin }}">{{ ctx.access.vpc.pgadmin }}</a></li>
+      {% if ctx.monitoring.enabled %}
+      <li><strong>Grafana</strong> — <a href="{{ ctx.access.vpc.grafana }}">{{ ctx.access.vpc.grafana }}</a></li>
+      {% endif %}
+    </ul>
+  </section>
+
   {% if ctx.caddy_vhosts.enabled %}
   <section>
-    <h2>Lab domain (Caddy / nip.io-style) — {{ ctx.caddy_vhosts.public_base }}</h2>
-    <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> · ops IP <code>{{ ctx.caddy_vhosts.ops_ip }}</code> — hostnames resolve to the ops host; Caddy proxies to Cloudera and other UIs.</p>
+    <h2>Lab domain (Caddy) — {{ ctx.caddy_vhosts.public_base }}</h2>
+    <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — public-IP hostnames for Jenkins/internet; private-IP hostnames when registered for in-VPC use.</p>
     <ul>
-      <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls.portal.url }}">{{ ctx.caddy_vhosts.urls.portal.hostname }}</a></li>
-      <li><strong>Cloudera Manager</strong> — <a href="{{ ctx.caddy_vhosts.urls.cm.url }}">{{ ctx.caddy_vhosts.urls.cm.hostname }}</a></li>
-      <li><strong>pgAdmin</strong> — <a href="{{ ctx.caddy_vhosts.urls.pgadmin.url }}">{{ ctx.caddy_vhosts.urls.pgadmin.hostname }}</a></li>
-      {% if ctx.monitoring.enabled %}
-      <li><strong>Grafana</strong> — <a href="{{ ctx.caddy_vhosts.urls.grafana.url }}">{{ ctx.caddy_vhosts.urls.grafana.hostname }}</a></li>
-      <li><strong>Prometheus</strong> — <a href="{{ ctx.caddy_vhosts.urls.prometheus.url }}">{{ ctx.caddy_vhosts.urls.prometheus.hostname }}</a></li>
-      <li><strong>Alertmanager</strong> — <a href="{{ ctx.caddy_vhosts.urls.alertmanager.url }}">{{ ctx.caddy_vhosts.urls.alertmanager.hostname }}</a></li>
-      {% endif %}
-      {% if ctx.identity.ipa_caddy_url %}
-      <li><strong>FreeIPA</strong> — <a href="{{ ctx.identity.ipa_caddy_url }}">{{ ctx.caddy_vhosts.urls.ipa.hostname }}</a></li>
-      {% endif %}
-      {% if ctx.ecs.caddy_url %}
-      <li><strong>ECS console (proxy)</strong> — <a href="{{ ctx.ecs.caddy_url }}">{{ ctx.caddy_vhosts.urls.ecs.hostname }}</a></li>
+      <li><strong>Portal (public slug)</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>
+      <li><strong>CM (public slug)</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}">{{ ctx.caddy_vhosts.urls_public.cm.hostname }}</a></li>
+      {% if ctx.caddy_vhosts.urls_vpc.portal is defined %}
+      <li><strong>Portal (VPC slug)</strong> — <a href="{{ ctx.caddy_vhosts.urls_vpc.portal.url }}">{{ ctx.caddy_vhosts.urls_vpc.portal.hostname }}</a></li>
       {% endif %}
     </ul>
   </section>

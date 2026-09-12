@@ -1,0 +1,25 @@
+{# YAML: external (Jenkins / internet) vs vpc (same VPC / cluster nodes) #}
+{% set http_port = deployment_portal_http_port | int %}
+{% set pg_port = deployment_portal_pgadmin_host_port | int %}
+{% macro p(host) %}{% if http_port != 80 %}:{{ http_port }}{% endif %}{% endmacro %}
+{% macro pg(host) %}{% if pg_port != 80 %}:{{ pg_port }}{% endif %}{% endmacro %}
+external:
+  audience: "Jenkins agent, laptop, internet (public IP — open SG/EIP ports)"
+  ops_ip: "{{ deployment_portal_ops_public_ip }}"
+  fqdn: "{{ deployment_portal_anchor_fqdn }}"
+  portal: "http://{{ deployment_portal_ops_public_ip }}{{ p(deployment_portal_ops_public_ip) }}/"
+  pgadmin: "http://{{ deployment_portal_ops_public_ip }}{{ pg(deployment_portal_ops_public_ip) }}/"
+  grafana: "http://{{ deployment_portal_ops_public_ip }}{{ p(deployment_portal_ops_public_ip) }}/grafana/"
+  prometheus: "http://{{ deployment_portal_ops_public_ip }}{{ p(deployment_portal_ops_public_ip) }}/prometheus/"
+  alertmanager: "http://{{ deployment_portal_ops_public_ip }}{{ p(deployment_portal_ops_public_ip) }}/alertmanager/"
+  cadvisor: "http://{{ deployment_portal_ops_public_ip }}:{{ monitoring_cadvisor_host_port }}/"
+vpc:
+  audience: "ipaserver, cldr-mngr, cluster nodes in the same VPC (private IP only)"
+  ops_ip: "{{ deployment_portal_ops_private_ip }}"
+  fqdn: "{{ deployment_portal_anchor_fqdn }}"
+  portal: "http://{{ deployment_portal_ops_private_ip }}{{ p(deployment_portal_ops_private_ip) }}/"
+  pgadmin: "http://{{ deployment_portal_ops_private_ip }}{{ pg(deployment_portal_ops_private_ip) }}/"
+  grafana: "http://{{ deployment_portal_ops_private_ip }}{{ p(deployment_portal_ops_private_ip) }}/grafana/"
+  prometheus: "http://{{ deployment_portal_ops_private_ip }}{{ p(deployment_portal_ops_private_ip) }}/prometheus/"
+  alertmanager: "http://{{ deployment_portal_ops_private_ip }}{{ p(deployment_portal_ops_private_ip) }}/alertmanager/"
+  cadvisor: "http://{{ deployment_portal_ops_private_ip }}:{{ monitoring_cadvisor_host_port }}/"

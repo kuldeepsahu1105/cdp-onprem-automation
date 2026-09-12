@@ -129,6 +129,8 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `CM_LICENSE_CONTENT` | Optional multiline Cloudera license file content when no `*license*` file on the agent (empty = trial or agent file) |
 | `MONITORING_STACK_ENABLED` | When checked (default), sets Ansible `monitoring_stack_enabled: true` for playbook `28` (Grafana/Prometheus/Alertmanager/cAdvisor). Uncheck to skip. Overrides `monitoring_stack_enabled` in `ANSIBLE_GROUP_VARS_YAML` if both are set. |
 
+**Deployment portal (playbook 28):** open the index on the ops host **public** `ansible_host` (e.g. `http://<EIP>:8088/`). Private-IP URLs on the index page work only from hosts in the same VPC (ipaserver, cldr-mngr, cluster nodes). Ensure SG allows **8088**, **5050**, **8089** from your Jenkins/office CIDRs.
+
 ## Ansible group_vars override (`ANSIBLE_GROUP_VARS_YAML`)
 
 Jenkins `text` parameters render as a **multiline text area**. Only **Ansible-only** keys are accepted (domain, passwords, CM/CDH/ECS versions, java/postgres/jdbc/psycopg, etc.) — not the full `all.yml` and not Terraform/Jenkins UI fields.

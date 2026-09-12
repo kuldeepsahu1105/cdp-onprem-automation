@@ -28,6 +28,8 @@
             deployment_portal_context: "{{ hostvars['localhost']['deployment_portal_context'] }}"
             deployment_portal_anchor_fqdn: "{{ hostvars['localhost']['deployment_portal_anchor_fqdn'] }}"
             caddy_vhost_urls: "{{ hostvars['localhost']['caddy_vhost_urls'] | default({}) }}"
+            caddy_vhost_urls_external: "{{ hostvars['localhost']['caddy_vhost_urls_external'] | default({}) }}"
+            caddy_vhost_urls_vpc: "{{ hostvars['localhost']['caddy_vhost_urls_vpc'] | default({}) }}"
             deployment_portal_cm_fqdn: "{{ hostvars['localhost']['deployment_portal_cm_fqdn'] }}"
             deployment_portal_ipa_fqdn: "{{ hostvars['localhost']['deployment_portal_ipa_fqdn'] | default('') }}"
             deployment_portal_has_ipa: "{{ hostvars['localhost']['deployment_portal_has_ipa'] | default(false) }}"

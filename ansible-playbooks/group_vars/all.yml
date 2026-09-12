@@ -468,6 +468,8 @@ deployment_portal_extra_links: []
 caddy_vhost_enabled: true
 caddy_vhost_public_base: pvc.cloudera-labs.com
 caddy_vhost_dns_mode: embedded_ip
+# Register nip.io-style vhosts for private IP as well (in-VPC browsers); public slug for Jenkins/internet
+caddy_vhost_register_private_ip: true
 caddy_vhost_service_names:
   portal: portal
   cm: cm

@@ -118,7 +118,7 @@ After cluster deploy, `28_setup_deployment_portal.yml` installs the **ops stack*
 
 | Service | Port / path |
 |---------|-------------|
-| **Caddy deployment index** | `8088` |
+| **Caddy deployment index** | `8088` on ops host **public IP** (Jenkins / browser); use **private IP** only from same VPC |
 | **pgAdmin** | `5050` (connects to CM PostgreSQL on `cldr-mngr`) |
 | **Grafana** | `8088/grafana/` |
 | **Prometheus** | `8088/prometheus/` |

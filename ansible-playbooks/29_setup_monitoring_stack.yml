@@ -31,6 +31,8 @@
         deployment_portal_context: "{{ hostvars['localhost']['deployment_portal_context'] }}"
         deployment_portal_anchor_fqdn: "{{ hostvars['localhost']['deployment_portal_anchor_fqdn'] }}"
         caddy_vhost_urls: "{{ hostvars['localhost']['caddy_vhost_urls'] | default({}) }}"
+        caddy_vhost_urls_external: "{{ hostvars['localhost']['caddy_vhost_urls_external'] | default({}) }}"
+        caddy_vhost_urls_vpc: "{{ hostvars['localhost']['caddy_vhost_urls_vpc'] | default({}) }}"
 
     - name: Ensure container runtime is available
       ansible.builtin.import_tasks: common_tasks/install_portal_container_runtime.yml
