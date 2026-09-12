@@ -1,0 +1,42 @@
+---
+# Detect Prometheus/Grafana on the portal ops host (play target = ops). Use before Caddy/index sync
+# when Jenkins PORTAL passes -e monitoring_stack_enabled=false (extra-var beats set_fact on ops host).
+
+- name: Probe Grafana container on portal ops host (local Docker)
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --filter
+      - "name={{ monitoring_grafana_container }}"
+      - --filter
+      - status=running
+      - -q
+  become: true
+  register: _portal_monitoring_grafana_probe_host
+  failed_when: false
+  changed_when: false
+
+- name: Probe monitoring compose file on portal ops host
+  ansible.builtin.stat:
+    path: "{{ monitoring_config_dir }}/docker-compose.yml"
+  become: true
+  register: _portal_monitoring_compose_stat_host
+
+- name: Set deployment portal monitoring deployed from ops host probe
+  ansible.builtin.set_fact:
+    deployment_portal_monitoring_deployed: >-
+      {{
+        (
+          (_portal_monitoring_grafana_probe_host.stdout | default('') | trim | length > 0)
+          or (_portal_monitoring_compose_stat_host.stat.exists | default(false) | bool)
+        ) | bool
+      }}
+
+- name: Set monitoring route flag on ops host (Caddy templates; not overridden by extra-vars)
+  ansible.builtin.set_fact:
+    deployment_portal_monitoring_routes_enabled: >-
+      {{
+        (monitoring_stack_enabled | default(false) | bool)
+        or (deployment_portal_monitoring_deployed | default(false) | bool)
+      }}

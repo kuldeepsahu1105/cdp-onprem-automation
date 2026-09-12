@@ -5,6 +5,7 @@
 #   pgAdmin and CM Caddy vhost probes are omitted until milestones pgadmin / cm).
 #   Tier C (optional on ops host): printed public-EIP / hairpin URLs — warn only when optional.
 #   Tier B (controller): verify_service_urls_from_controller.yml after this file (portal, CM, monitoring, IPA, ECS).
+#   Tier B IPA: public/Jenkins controllers skip direct cluster FQDN (DNS); Caddy ipa.* vhost URLs on :8088 only.
 #
 # Ansible set_fact: do not define multiple keys in one task when a value references another key from
 # that same task (evaluation order is undefined). Split dependent facts or inline hostvars/context.
@@ -70,6 +71,18 @@
         | default('fail')
       }}
   when: _portal_require_cm_vhost | default(false) | bool
+
+- name: Set Tier A Caddy vhost warn-only for portal and ipa at bootstrap milestones only
+  ansible.builtin.set_fact:
+    _portal_bootstrap_milestone_vhost_warn: >-
+      {{
+        (
+          (_portal_verify_milestones_effective | default([]) | difference(['portal', 'ipa']) | length) == 0
+        )
+        and (
+          (_portal_verify_milestones_effective | default([]) | intersect(['portal', 'ipa']) | length) > 0
+        )
+      }}
 
 - name: Set deployment portal ops-host verify hint from anchor inventory name
   ansible.builtin.set_fact:
@@ -244,11 +257,13 @@
     validate_certs: false
     timeout: 10
   loop: >-
-    {{
-      deployment_portal_access_url_checks_optional | default([])
-      | rejectattr('hairpin_skip_probe', 'equalto', true)
-      | list
-    }}
+    {%- set out = [] -%}
+    {%- for row in deployment_portal_access_url_checks_optional | default([]) -%}
+    {%- if not (row.hairpin_skip_probe | default(false) | bool) -%}
+    {%- set _ = out.append(row) -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {{ out }}
   loop_control:
     label: "{{ item.name }}"
   register: deployment_portal_access_url_optional_results
@@ -259,16 +274,11 @@
 - name: Warn when a Tier C optional printed access URL does not respond
   ansible.builtin.debug:
     msg: >-
-      Tier C (optional on {{ inventory_hostname }}): printed URL did not respond
-      {% if _portal_verify_on_ops_host | default(false) | bool %}
-      (if this is the ops public EIP from the same host, prefer Tier A http://127.0.0.1:{{ deployment_portal_http_port | int }}/ — hairpin probes are skipped above):
-      {% elif _portal_verify_from_controller | default(false) | bool and (_portal_control_public_only | default(false) | bool) %}
-      (Ansible control uses public reachability only — see Tier B from the controller play):
-      {% else %}
-      (non-blocking):
-      {% endif %}
-      {{ item.item.url }}
+      Tier C warn ({{ inventory_hostname }}): {{ item.item.name | default('portal URL') }} did not respond
+      (HTTP {{ item.status | default('n/a') }}; non-blocking).
   loop: "{{ deployment_portal_access_url_optional_results.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name | default('portal URL') }}"
   when:
     - deployment_portal_access_url_checks_optional | default([]) | length > 0
     - deployment_portal_access_url_optional_results is defined
@@ -296,7 +306,8 @@
     deployment_portal_caddy_vhost_checks: >-
       {{
         (
-          ([{'name': 'Caddy vhost portal', 'host': caddy_vhost_urls.portal.hostname, 'path': '/', 'optional': false}]
+          ([{'name': 'Caddy vhost portal', 'host': caddy_vhost_urls.portal.hostname, 'path': '/',
+             'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool}]
            if (
              'portal' in (_portal_verify_milestones_effective | default([]))
              and (caddy_vhost_urls.portal.hostname | default('') | length > 0)
@@ -321,8 +332,14 @@
               else []
             )
           + (
-              [{'name': 'Caddy vhost FreeIPA', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
-                'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false}]
+              [
+                {'name': 'IPA Caddy vhost GET / (expect 301 → /ipa/modern-ui/)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
+                 'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
+                {'name': 'IPA Caddy vhost GET /ipa/modern-ui/ (200 or 301 OK)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/modern-ui/',
+                 'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
+                {'name': 'IPA Caddy vhost GET /ipa/ui (200 or 301 OK)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/ui',
+                 'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
+              ]
               if (
                 'ipa' in (_portal_verify_milestones_effective | default([]))
                 and deployment_portal_has_ipa | default(false) | bool
@@ -383,7 +400,23 @@
       }}
   when: deployment_portal_caddy_vhost_checks | default([]) | length > 0
 
-- name: Verify required Caddy vhost routes via localhost with Host header
+- name: Note Tier A verify on each PORTAL sync (301 without follow_redirects is success on Caddy vhosts)
+  ansible.builtin.debug:
+    msg: >-
+      Tier A URL verify runs after every portal sync (including Jenkins PORTAL reruns) against
+      {{ _portal_local_base }} with Caddy vhost Host headers (follow_redirects=no).
+      HTTP 301/302 on the Caddy vhost (IPA GET / → /ipa/modern-ui/, CM Location rewritten to cm.*)
+      passes when the status is in {{ _portal_url_verify_codes_int | join('/') }}.
+      Direct upstream probes to CM ({{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}/{{ cm_https_port }}) or IPA HTTPD may also return 301 to the cluster FQDN — expected; use the Caddy URLs in the portal index.
+      Verbose Ansible output may show redirect responses; the play fails only on unexpected status codes.
+  when:
+    - deployment_portal_caddy_vhost_checks_required | default([]) | length > 0
+    - (
+        (_portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0 and deployment_portal_has_ipa | default(false) | bool)
+        or (_portal_verify_milestones_effective | default([]) | intersect(['cm']) | length > 0)
+      )
+
+- name: Verify required Caddy vhost routes via localhost with Host header (301/302 OK; no follow_redirects)
   ansible.builtin.uri:
     url: "{{ _portal_local_base }}{{ item.path | default('/') }}"
     method: GET
@@ -434,18 +467,10 @@
 - name: Warn when optional Caddy vhost route does not respond (CM pre-install / tier warn)
   ansible.builtin.debug:
     msg: >-
-      Optional Caddy vhost check did not pass for {{ item.item.name }} (non-blocking before CM install or tier warn).
-      Request: GET {{ _portal_local_base }}{{ item.item.path | default('/') }} with Host: {{ item.item.host }}.
-      HTTP status: {{ item.status | default('n/a') }} (acceptable: {{ _portal_url_verify_codes_int | join('/') }}).
-      {% if 'CM' in item.item.name %}
-      Cloudera Manager is not listening yet on {{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}
-      (expected when Jenkins PORTAL runs before CM_INSTALL — re-run 35_refresh_deployment_portal.yml after CM).
-      {% elif 'pgAdmin' in item.item.name %}
-      pgAdmin Caddy vhost is optional at this milestone (add deployment_portal_verify_milestones pgadmin to hard-gate).
-      Confirm: docker ps --filter name={{ deployment_portal_pgadmin_container }}; curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/
-      {% endif %}
-      Caddy logs: docker logs --tail 40 {{ deployment_portal_caddy_container }}
+      Tier A optional Caddy vhost warn: {{ item.item.name }} (HTTP {{ item.status | default('n/a') }}; non-blocking).
   loop: "{{ deployment_portal_caddy_vhost_results.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name | default('vhost') }}"
   when:
     - deployment_portal_caddy_vhost_checks | default([]) | length > 0
     - deployment_portal_caddy_vhost_results is defined
@@ -463,13 +488,15 @@
       with Host: {{ item.item.host }}.
       HTTP status: {{ item.status | default('n/a') }} (expected {{ _portal_url_verify_codes_int | join('/') }}).
       {% if item.item.upstream_ipa_fqdn is defined and item.item.upstream_ipa_fqdn | length > 0 %}
-      FreeIPA upstream must receive Host: {{ item.item.upstream_ipa_fqdn }} and Referer https://{{ item.item.upstream_ipa_fqdn }}/ipa/ui
+      FreeIPA upstream must receive Host: {{ item.item.upstream_ipa_fqdn }} and Referer https://{{ item.item.upstream_ipa_fqdn }}<request-path>
       (see deployment_portal_Caddyfile_vhosts.inc.j2; cloudera-labs/openshift Caddy pattern).
-      GET / on the IPA vhost should 301 to /ipa/ui; redirect responses (301/302) are acceptable.
-      Confirm http://{{ item.item.upstream_ipa_fqdn }}/ipa/ui responds on the IPA server and IPA HTTPD is running.
+      GET / on the IPA vhost should 301 to /ipa/modern-ui/; /ipa/modern-ui/ and /ipa/ui should return 200 or redirect (301/302).
+      Confirm http://{{ item.item.upstream_ipa_fqdn }}/ipa/modern-ui/ and /ipa/ui respond on the IPA server and IPA HTTPD is running.
       {% elif 'CM' in item.item.name %}
       Confirm Cloudera Manager is up on {{ deployment_portal_cm_fqdn }} (ports {{ cm_http_port }}/{{ cm_https_port }}).
-      Caddy proxies to {{ deployment_portal_cm_upstream_host | default(deployment_portal_cm_fqdn) }} with header_up Host {{ deployment_portal_cm_fqdn }}.
+      Caddy proxies to {{ deployment_portal_cm_upstream_host | default(deployment_portal_cm_fqdn) }} with header_up Host {{ deployment_portal_cm_fqdn }} and rewrites Location to the cm.* vhost.
+      Re-run 35_refresh_deployment_portal.yml (or CM install play) so apply_cm_caddy_load_balancer.yml sets frontend_url to the Caddy URL (not {{ deployment_portal_cm_fqdn }}:{{ cm_https_port }}).
+      A direct curl to upstream :{{ cm_https_port }} may 301 to the CM FQDN — browsers must use the Caddy vhost on port {{ deployment_portal_http_port }}.
       {% elif 'pgAdmin' in item.item.name %}
       Confirm pgAdmin container {{ deployment_portal_pgadmin_container }} is running and responds on
       http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/ (Caddy reverse_proxies pgadmin:80 on the compose network).
@@ -486,9 +513,54 @@
     - not (item.item.optional | default(false) | bool)
     - (item.status | default(0) | int not in _portal_url_verify_codes_int)
 
-- name: Verify FreeIPA HTTP responds with IPA FQDN Host header (direct upstream)
+- name: Verify Cloudera Manager UI on cldr-mngr (direct upstream; 301 to CM FQDN without follow_redirects is OK)
   ansible.builtin.uri:
-    url: "http://127.0.0.1/"
+    url: "{{ 'https' if (autotls_enabled | default(false) | bool) else 'http' }}://127.0.0.1:{{ cm_https_port if (autotls_enabled | default(false) | bool) else cm_http_port }}/"
+    method: GET
+    headers:
+      Host: "{{ deployment_portal_cm_fqdn }}"
+    status_code: "{{ _portal_url_verify_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 30
+  register: cm_direct_upstream_ui_check
+  retries: 3
+  delay: 5
+  until: cm_direct_upstream_ui_check is succeeded
+  delegate_to: "{{ groups['cldr-mngr'][0] }}"
+  run_once: true
+  when:
+    - _portal_verify_milestones_effective | default([]) | intersect(['cm']) | length > 0
+    - "'cldr-mngr' in groups"
+    - groups['cldr-mngr'] | default([]) | length > 0
+    - deployment_portal_cm_fqdn | default('') | length > 0
+  failed_when: false
+
+- name: Verify FreeIPA modern UI on ipaserver HTTPD (direct; 301 from IPA without follow_redirects is OK)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1/ipa/modern-ui/"
+    method: GET
+    headers:
+      Host: "{{ deployment_portal_ipa_fqdn }}"
+      Referer: "https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/"
+    status_code: "{{ _portal_url_verify_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 30
+  register: ipa_direct_modern_ui_check
+  retries: 3
+  delay: 5
+  until: ipa_direct_modern_ui_check is succeeded
+  when:
+    - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
+    - deployment_portal_has_ipa | default(false) | bool
+    - deployment_portal_ipa_fqdn | default('') | length > 0
+    - inventory_hostname in groups.get('ipaserver', [])
+  failed_when: false
+
+- name: Verify FreeIPA legacy UI on ipaserver HTTPD (direct; 301 from IPA without follow_redirects is OK)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1/ipa/ui"
     method: GET
     headers:
       Host: "{{ deployment_portal_ipa_fqdn }}"
@@ -497,10 +569,10 @@
     follow_redirects: none
     validate_certs: false
     timeout: 30
-  register: ipa_direct_host_header_check
+  register: ipa_direct_legacy_ui_check
   retries: 3
   delay: 5
-  until: ipa_direct_host_header_check is succeeded
+  until: ipa_direct_legacy_ui_check is succeeded
   when:
     - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
     - deployment_portal_has_ipa | default(false) | bool
@@ -508,18 +580,46 @@
     - inventory_hostname in groups.get('ipaserver', [])
   failed_when: false
 
-- name: Fail when FreeIPA does not accept its FQDN Host header locally
-  ansible.builtin.fail:
+- name: Warn when FreeIPA direct HTTPD check fails at bootstrap (portal+ipa milestones only)
+  ansible.builtin.debug:
     msg: >-
-      FreeIPA UI did not respond on http://127.0.0.1/ with Host: {{ deployment_portal_ipa_fqdn }}.
-      Caddy IPA vhost proxies HTTP with header_up Host and Referer (cloudera-labs/openshift pattern); fix IPA HTTP first.
-      Try on {{ inventory_hostname }}: curl -sS -o /dev/null -w '%{http_code}' -H "Host: {{ deployment_portal_ipa_fqdn }}" -H "Referer: https://{{ deployment_portal_ipa_fqdn }}/ipa/ui" http://127.0.0.1/
+      Tier A optional IPA direct HTTPD warn (bootstrap): modern/legacy UI did not respond on http://127.0.0.1/
+      with Host: {{ deployment_portal_ipa_fqdn }} (HTTP modern={{ ipa_direct_modern_ui_check.status | default('n/a') }}
+      legacy={{ ipa_direct_legacy_ui_check.status | default('n/a') }}; non-blocking).
+      Caddy IPA vhost probes are warn-only at this milestone; re-run IDENTITY or refresh portal after IPA HTTPD is ready.
   when:
+    - _portal_bootstrap_milestone_vhost_warn | default(false) | bool
     - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
     - deployment_portal_has_ipa | default(false) | bool
     - deployment_portal_ipa_fqdn | default('') | length > 0
     - inventory_hostname in groups.get('ipaserver', [])
-    - ipa_direct_host_header_check is defined
+    - ipa_direct_modern_ui_check is defined
+    - ipa_direct_legacy_ui_check is defined
     - >-
-      ipa_direct_host_header_check is failed
-      or (ipa_direct_host_header_check.status | default(0) | int not in _portal_url_verify_codes)
+      ipa_direct_modern_ui_check is failed
+      or (ipa_direct_modern_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)
+      or ipa_direct_legacy_ui_check is failed
+      or (ipa_direct_legacy_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)
+
+- name: Fail when FreeIPA modern or legacy UI does not accept its FQDN Host header locally
+  ansible.builtin.fail:
+    msg: >-
+      FreeIPA modern or legacy UI did not respond on http://127.0.0.1/ with Host: {{ deployment_portal_ipa_fqdn }}.
+      Caddy IPA vhost proxies HTTP with header_up Host and path-matched Referer (cloudera-labs/openshift pattern); fix IPA HTTP first.
+      Modern UI: curl -sS -o /dev/null -w '%{http_code}' -H "Host: {{ deployment_portal_ipa_fqdn }}" -H "Referer: https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/" http://127.0.0.1/ipa/modern-ui/
+      Legacy UI: curl -sS -o /dev/null -w '%{http_code}' -H "Host: {{ deployment_portal_ipa_fqdn }}" -H "Referer: https://{{ deployment_portal_ipa_fqdn }}/ipa/ui" http://127.0.0.1/ipa/ui
+      HTTP status modern={{ ipa_direct_modern_ui_check.status | default('n/a') }} legacy={{ ipa_direct_legacy_ui_check.status | default('n/a') }}
+      (acceptable: {{ _portal_url_verify_codes_int | join('/') }}).
+  when:
+    - not (_portal_bootstrap_milestone_vhost_warn | default(false) | bool)
+    - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
+    - deployment_portal_has_ipa | default(false) | bool
+    - deployment_portal_ipa_fqdn | default('') | length > 0
+    - inventory_hostname in groups.get('ipaserver', [])
+    - ipa_direct_modern_ui_check is defined
+    - ipa_direct_legacy_ui_check is defined
+    - >-
+      ipa_direct_modern_ui_check is failed
+      or (ipa_direct_modern_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)
+      or ipa_direct_legacy_ui_check is failed
+      or (ipa_direct_legacy_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)

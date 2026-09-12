@@ -2,8 +2,45 @@
 {% set _cm_caddy = ctx.cloudera_manager.caddy_url | default('') | trim | regex_replace('/+$', '') %}
 {% set cm_tile_url = _cm_caddy if (_cm_caddy | length > 0) else ctx.cloudera_manager.ui_url_https %}
 {% set pgadmin_tile_url = ctx.portal.pgadmin_caddy_url | default('') if (ctx.portal.pgadmin_caddy_url | default('') | length > 0) else (ctx.portal.pgadmin_url_direct | default(ctx.portal.pgadmin_url | default(''))) %}
-{% set ipa_tile_url = ctx.identity.ipa_caddy_url | default('') if (ctx.identity.ipa_caddy_url | default('') | length > 0) else (ctx.identity.ipa_ui_url | default('')) %}
+{% set ipa_modern_url = ctx.identity.ipa_caddy_modern_url | default('') if (ctx.identity.ipa_caddy_modern_url | default('') | length > 0) else (ctx.identity.ipa_caddy_url | default('')) %}
+{% set ipa_legacy_caddy_url = ctx.identity.ipa_caddy_legacy_url | default('') %}
+{% set ipa_tile_url = ipa_modern_url if (ipa_modern_url | length > 0) else (ctx.identity.ipa_ui_url | default('')) %}
 {% set ecs_tile_url = (ctx.ecs.caddy_url | default('') if (ctx.ecs.caddy_url | default('') | length > 0) else (ctx.ecs.console_hint | default(''))) if ctx.ecs.deployed else '' %}
+{% set _portal_caddy_url = ctx.caddy_vhosts.urls_public.portal.url | default('') if (ctx.caddy_vhosts.enabled | default(false)) else '' %}
+{% set portal_tile_url = _portal_caddy_url if (_portal_caddy_url | length > 0) else ctx.portal.index_url | default('') %}
+{% set portal_tile_hint = ctx.caddy_vhosts.urls_public.portal.hostname if (_portal_caddy_url | length > 0) else 'Ops host Caddy index' %}
+{% set mon_on = (
+  (ctx.monitoring.enabled | default(false) | bool)
+  or (ctx.monitoring.routes_enabled | default(false) | bool)
+  or (deployment_portal_monitoring_routes_enabled | default(false) | bool)
+  or (deployment_portal_monitoring_deployed | default(false) | bool)
+  or (monitoring_stack_enabled | default(false) | bool)
+) %}
+{% set grafana_tile_url = ctx.monitoring.grafana_caddy_url | default('') if (ctx.monitoring.grafana_caddy_url | default('') | length > 0) else (ctx.monitoring.grafana_url | default(ctx.monitoring.grafana_path_url | default(''))) %}
+{% set prometheus_tile_url = ctx.monitoring.prometheus_caddy_url | default('') if (ctx.monitoring.prometheus_caddy_url | default('') | length > 0) else (ctx.monitoring.prometheus_url | default(ctx.monitoring.prometheus_path_url | default(''))) %}
+{% set alertmanager_tile_url = ctx.monitoring.alertmanager_caddy_url | default('') if (ctx.monitoring.alertmanager_caddy_url | default('') | length > 0) else (ctx.monitoring.alertmanager_url | default(ctx.monitoring.alertmanager_path_url | default(''))) %}
+{% set cadvisor_tile_url = ctx.monitoring.cadvisor_url | default('') %}
+{% if mon_on and (grafana_tile_url | length == 0) %}
+{% set grafana_tile_url = ctx.monitoring.grafana_path_url | default(ctx.access.external.grafana | default(ctx.access.primary.grafana | default(''))) %}
+{% endif %}
+{% if mon_on and (prometheus_tile_url | length == 0) %}
+{% set prometheus_tile_url = ctx.monitoring.prometheus_path_url | default(ctx.access.external.prometheus | default(ctx.access.primary.prometheus | default(''))) %}
+{% endif %}
+{% if mon_on and (alertmanager_tile_url | length == 0) %}
+{% set alertmanager_tile_url = ctx.monitoring.alertmanager_path_url | default(ctx.access.external.alertmanager | default(ctx.access.primary.alertmanager | default(''))) %}
+{% endif %}
+{% if mon_on and (cadvisor_tile_url | length == 0) %}
+{% set cadvisor_tile_url = ctx.access.external.cadvisor | default(ctx.access.primary.cadvisor | default('')) %}
+{% endif %}
+{% set panel_chevron %}<span class="panel-chevron" aria-hidden="true"><svg class="chevron-icon" viewBox="0 0 16 16" width="14" height="14" focusable="false"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>{% endset %}
+{% set ls = ctx.live_stats | default({}) %}
+{% set ls_poll_prom = ls.poll.prometheus_query_path | default('') if ls.poll is defined else '' %}
+{% set ns_ls = namespace(sgood=0, swarn=0, sbad=0) %}
+{% for cl in ls.clusters | default([]) %}
+{% set ns_ls.sgood = ns_ls.sgood + (cl.services_started_good | default(0) | int) %}
+{% set ns_ls.swarn = ns_ls.swarn + (cl.services_concerning | default(0) | int) %}
+{% set ns_ls.sbad = ns_ls.sbad + (cl.services_bad | default(0) | int) %}
+{% endfor %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -122,21 +159,26 @@
     }
     .tile-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+      grid-auto-rows: 1fr;
       gap: 0.65rem;
+      align-items: stretch;
     }
     a.tile {
       display: flex;
       flex-direction: column;
-      gap: 0.15rem;
+      justify-content: flex-start;
+      gap: 0.2rem;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 0.85rem 0.9rem;
+      padding: 0.9rem 0.95rem;
       color: var(--text);
       text-decoration: none;
       transition: background 0.15s, border-color 0.15s;
-      min-height: 4.5rem;
+      min-height: 6.5rem;
+      min-width: 10.5rem;
+      height: 100%;
     }
     a.tile:hover {
       background: var(--tile-hover);
@@ -169,17 +211,26 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 0.5rem;
+      gap: 0.75rem;
       user-select: none;
     }
     details.panel > summary::-webkit-details-marker { display: none; }
-    details.panel > summary::after {
-      content: "▸";
-      color: var(--muted);
-      font-size: 0.85rem;
-      transition: transform 0.15s;
+    details.panel > summary::marker { content: none; display: none; }
+    details.panel > summary .summary-main {
+      flex: 1;
+      min-width: 0;
     }
-    details.panel[open] > summary::after { transform: rotate(90deg); }
+    details.panel > summary .panel-chevron {
+      flex-shrink: 0;
+      color: var(--muted);
+      line-height: 1;
+      transition: transform 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    details.panel > summary .panel-chevron .chevron-icon { display: block; }
+    details.panel[open] > summary .panel-chevron { transform: rotate(90deg); }
     details.panel > summary:hover { background: rgba(255, 255, 255, 0.03); }
     .panel-body {
       padding: 0 1rem 1rem;
@@ -225,6 +276,97 @@
       margin-left: 0.3rem;
       vertical-align: middle;
     }
+    .role-badge {
+      display: inline-block;
+      background: rgba(91, 159, 212, 0.15);
+      border: 1px solid rgba(91, 159, 212, 0.35);
+      color: #b8d4f0;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      margin: 0.12rem 0.2rem 0.12rem 0;
+      white-space: nowrap;
+    }
+    .group-tag {
+      display: inline-block;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-right: 0.35rem;
+    }
+    .live-stats { margin-bottom: 1.25rem; }
+    .live-stats-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.65rem;
+    }
+    .live-stats-head h2 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0;
+      font-weight: 600;
+    }
+    .live-stats-updated {
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .kpi-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+    }
+    .kpi {
+      flex: 1 1 7.5rem;
+      min-width: 7rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.65rem 0.75rem;
+    }
+    .kpi .kpi-label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+    .kpi .kpi-val {
+      font-size: 1.45rem;
+      font-weight: 700;
+      margin-top: 0.1rem;
+      line-height: 1.15;
+    }
+    .kpi .kpi-sub {
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 0.15rem;
+    }
+    .kpi.kpi-pass .kpi-val { color: #4ade80; }
+    .kpi.kpi-warn .kpi-val { color: #fbbf24; }
+    .kpi.kpi-fail .kpi-val { color: #f87171; }
+    .kpi.kpi-accent .kpi-val { color: var(--accent); }
+    .kpi.kpi-info .kpi-val { color: var(--accent-soft); }
+    .live-note {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin: 0.65rem 0 0;
+      line-height: 1.45;
+    }
+    .health-pill {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 0.1rem 0.45rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .health-pill.good { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+    .health-pill.concerning { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+    .health-pill.bad { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+    .health-pill.na { background: #243044; color: var(--muted); }
     @media (max-width: 480px) {
       .site-header { padding: 0.85rem 1rem; }
       h1 { font-size: 1.15rem; }
@@ -275,22 +417,39 @@
           <span class="tile-hint">CM PostgreSQL{% if ctx.portal.pgadmin_caddy_url | default('') | length > 0 %} (Caddy){% endif %}</span>
         </a>
         {% endif %}
-        {% if ctx.monitoring.enabled and (ctx.monitoring.grafana_url | default('') | length > 0) %}
-        <a class="tile" href="{{ ctx.monitoring.grafana_url }}" target="_blank" rel="noopener noreferrer">
+        {% if mon_on %}
+        <a class="tile" href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Grafana</span>
-          <span class="tile-hint">Dashboards</span>
+          <span class="tile-hint">{% if ctx.monitoring.grafana_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.grafana_path_url | default('') | length > 0 %}Also :{{ deployment_portal_http_port | default(8088) }}/grafana/{% else %}Dashboards{% endif %}</span>
         </a>
-        {% endif %}
-        {% if ctx.monitoring.enabled and (ctx.monitoring.prometheus_url | default('') | length > 0) %}
-        <a class="tile" href="{{ ctx.monitoring.prometheus_url }}" target="_blank" rel="noopener noreferrer">
+        <a class="tile" href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Prometheus</span>
-          <span class="tile-hint">Metrics</span>
+          <span class="tile-hint">{% if ctx.monitoring.prometheus_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.prometheus_path_url | default('') | length > 0 %}:{{ deployment_portal_http_port | default(8088) }}/prometheus/{% else %}Metrics{% endif %}</span>
+        </a>
+        <a class="tile" href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">
+          <span class="tile-label">Alertmanager</span>
+          <span class="tile-hint">{% if ctx.monitoring.alertmanager_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.alertmanager_path_url | default('') | length > 0 %}:{{ deployment_portal_http_port | default(8088) }}/alertmanager/{% else %}Alerts{% endif %}</span>
+        </a>
+        <a class="tile" href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">
+          <span class="tile-label">cAdvisor</span>
+          <span class="tile-hint">Container metrics (host :{{ monitoring_cadvisor_host_port | default(8089) }})</span>
         </a>
         {% endif %}
         {% if ipa_tile_url | length > 0 %}
         <a class="tile" href="{{ ipa_tile_url }}" target="_blank" rel="noopener noreferrer">
-          <span class="tile-label">{{ ctx.identity.ipa_ui_label }}</span>
-          <span class="tile-hint">Identity management</span>
+          <span class="tile-label">{{ ctx.identity.ipa_ui_modern_label | default(ctx.identity.ipa_ui_label) }}</span>
+          <span class="tile-hint">Identity management (default)</span>
+        </a>
+        {% endif %}
+        {% if ipa_legacy_caddy_url | length > 0 %}
+        <a class="tile" href="{{ ipa_legacy_caddy_url }}" target="_blank" rel="noopener noreferrer">
+          <span class="tile-label">{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (legacy UI)') }}</span>
+          <span class="tile-hint">Classic Web UI</span>
+        </a>
+        {% elif ctx.identity.ipa_ui_url | default('') | length > 0 and ipa_tile_url != ctx.identity.ipa_ui_url %}
+        <a class="tile" href="{{ ctx.identity.ipa_ui_url }}" target="_blank" rel="noopener noreferrer">
+          <span class="tile-label">{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (direct HTTPS)') }}</span>
+          <span class="tile-hint">{{ ctx.identity.ipa_ui_url }}</span>
         </a>
         {% endif %}
         {% if ecs_tile_url | length > 0 %}
@@ -299,24 +458,138 @@
           <span class="tile-hint">{% if ctx.ecs.deployed %}{{ ctx.ecs.cluster_name }}{% else %}Console{% endif %}</span>
         </a>
         {% endif %}
-        {% if ctx.portal.index_url | default('') | length > 0 %}
-        <a class="tile" target="_blank" rel="noopener noreferrer" href="{{ ctx.portal.index_url }}">
-          <span class="tile-label">Portal index</span>
-          <span class="tile-hint">This page (Caddy)</span>
-        </a>
-        {% endif %}
-        {% if ctx.caddy_vhosts.enabled and (ctx.caddy_vhosts.urls_public.portal.url | default('') | length > 0) %}
-        <a class="tile" target="_blank" rel="noopener noreferrer" href="{{ ctx.caddy_vhosts.urls_public.portal.url }}">
-          <span class="tile-label">Portal (lab hostname)</span>
-          <span class="tile-hint">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</span>
+        {% if portal_tile_url | length > 0 %}
+        <a class="tile tile-accent" target="_blank" rel="noopener noreferrer" href="{{ portal_tile_url }}">
+          <span class="tile-label">Deployment portal</span>
+          <span class="tile-hint">{{ portal_tile_hint }}</span>
         </a>
         {% endif %}
       </div>
     </nav>
 
+    <section class="live-stats" id="live-stats" aria-label="Cluster health snapshot">
+      <div class="live-stats-head">
+        <h2>Health snapshot</h2>
+        <span class="live-stats-updated" id="live-stats-updated">
+          {% if ls.collected_at | default('') | length > 0 %}CM snapshot {{ ls.collected_at }}{% else %}Awaiting data{% endif %}
+        </span>
+      </div>
+      <div class="kpi-grid" id="live-stats-kpis">
+        <div class="kpi kpi-info" data-kpi="hosts-total">
+          <div class="kpi-label">CM hosts</div>
+          <div class="kpi-val">{{ ls.hosts.total | default(ls.inventory_host_count | default('—')) }}</div>
+          <div class="kpi-sub" data-kpi-sub="hosts-heartbeat">{% if ls.hosts.good is defined %}{{ ls.hosts.good }}/{{ ls.hosts.total }} GOOD{% else %}inventory {{ ls.inventory_host_count | default('—') }}{% endif %}</div>
+        </div>
+        <div class="kpi kpi-pass" data-kpi="services-good">
+          <div class="kpi-label">Services GOOD</div>
+          <div class="kpi-val" id="kpi-services-good">{% if ls.clusters | default([]) | length > 0 %}{{ ns_ls.sgood }}{% else %}—{% endif %}</div>
+          <div class="kpi-sub">STARTED+GOOD across clusters</div>
+        </div>
+        <div class="kpi kpi-warn" data-kpi="services-warn">
+          <div class="kpi-label">CONCERNING</div>
+          <div class="kpi-val" id="kpi-services-warn">{% if ls.clusters | default([]) | length > 0 %}{{ ns_ls.swarn }}{% else %}—{% endif %}</div>
+          <div class="kpi-sub">CM service health</div>
+        </div>
+        <div class="kpi kpi-fail" data-kpi="services-bad">
+          <div class="kpi-label">BAD</div>
+          <div class="kpi-val" id="kpi-services-bad">{% if ls.clusters | default([]) | length > 0 %}{{ ns_ls.sbad }}{% else %}—{% endif %}</div>
+          <div class="kpi-sub">CM service health</div>
+        </div>
+        {% if mon_on %}
+        <div class="kpi kpi-accent" data-kpi="prom-up">
+          <div class="kpi-label">Prometheus UP</div>
+          <div class="kpi-val" id="kpi-prom-up">—</div>
+          <div class="kpi-sub" data-kpi-sub="prom-detail">{% if ls_poll_prom | length > 0 %}live poll{% else %}enable path routes{% endif %}</div>
+        </div>
+        {% endif %}
+        <div class="kpi kpi-info" data-kpi="parcels">
+          <div class="kpi-label">Parcels</div>
+          <div class="kpi-val" id="kpi-parcels">{{ ls.parcels | default([]) | length }}</div>
+          <div class="kpi-sub">ACTIVATED</div>
+        </div>
+      </div>
+      <p class="live-note" id="live-stats-note">
+        {% if ls.cm_api_available | default(false) %}
+        Service health, host heartbeats, and parcels are captured from the Cloudera Manager API during <code>35_refresh_deployment_portal.yml</code> (not live in the browser).
+        {% else %}
+        Cloudera Manager API snapshot unavailable from Ansible — counts fall back to inventory. Re-run portal refresh after CM is up.
+        {% endif %}
+        {% if mon_on and ls_poll_prom | length > 0 %}
+        Prometheus target count refreshes every 60s on the ops-host portal URL (same origin, path <code>/prometheus</code>).
+        {% elif mon_on %}
+        Open the portal via the ops host port (not the portal-only lab vhost) for in-browser Prometheus polls.
+        {% endif %}
+      </p>
+      {% if ls.clusters | default([]) | length > 0 %}
+      <details class="panel" style="margin-top:0.75rem">
+        <summary><span class="summary-main"><h2 class="section-title">Service health (CM snapshot)</h2></span>{{ panel_chevron | safe }}</summary>
+        <div class="panel-body">
+          <div class="table-scroll">
+            <table id="live-stats-services-table">
+              <thead>
+                <tr>
+                  <th>Cluster</th>
+                  <th>Service</th>
+                  <th>Type</th>
+                  <th>State</th>
+                  <th>Health</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for cl in ls.clusters | default([]) %}
+                {% for svc in cl.services | default([]) %}
+                <tr>
+                  <td><code>{{ cl.name }}</code></td>
+                  <td>{{ svc.name }}</td>
+                  <td>{{ svc.type }}</td>
+                  <td>{{ svc.service_state }}</td>
+                  <td>
+                    {% set _h = svc.health | default('') | upper %}
+                    <span class="health-pill {% if _h == 'GOOD' %}good{% elif _h == 'CONCERNING' %}concerning{% elif _h == 'BAD' %}bad{% else %}na{% endif %}">{{ svc.health }}</span>
+                  </td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+      {% endif %}
+    </section>
+
+    {% if ctx.endpoints | default([]) | length > 0 %}
+    <section class="flat">
+      <h2>Endpoints</h2>
+      <p class="sub"><strong>Service</strong> is the product or UI name. <strong>Hostname</strong> is the inventory FQDN of the backing host (or ECS console name). Links open in a new tab.{% if mon_on %} Monitoring rows prefer Caddy vhosts, then ops <code>:{{ deployment_portal_http_port | default(8088) }}</code> path routes; cAdvisor uses host port <code>{{ monitoring_cadvisor_host_port | default(8089) }}</code>.{% endif %}</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Service</th>
+              <th>URL</th>
+              <th>Hostname</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ep in ctx.endpoints %}
+            <tr>
+              <td>{{ ep.name }}</td>
+              <td><a href="{{ ep.url }}" target="_blank" rel="noopener noreferrer">{{ ep.url }}</a></td>
+              <td>{% if ep.hostname | default('') | length > 0 %}<code>{{ ep.hostname }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
+              <td>{{ ep.note | default('') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
     {% if ctx.access.profile == 'private' %}
     <details class="panel" open>
-      <summary><h2 class="section-title">Private network (no public IP)</h2></summary>
+      <summary><span class="summary-main"><h2 class="section-title">Network access (private lab)</h2></span>{{ panel_chevron | safe }}</summary>
       <div class="panel-body">
         <p class="sub">{{ ctx.access.primary.audience }}</p>
         <ul class="clean">
@@ -325,41 +598,45 @@
           <li>URL host in links: <code>{{ ctx.access.primary.host }}</code></li>
           <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.portal }}">{{ ctx.access.primary.portal }}</a></li>
           <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.pgadmin }}">{{ ctx.access.primary.pgadmin }}</a></li>
-          {% if ctx.monitoring.enabled %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.grafana }}">{{ ctx.access.primary.grafana }}</a></li>
-          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.prometheus }}">{{ ctx.access.primary.prometheus }}</a></li>
-          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.alertmanager }}">{{ ctx.access.primary.alertmanager }}</a></li>
-          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.cadvisor }}">{{ ctx.access.primary.cadvisor }}</a></li>
+          {% if mon_on %}
+          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ grafana_tile_url }}">{{ grafana_tile_url }}</a></li>
+          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ prometheus_tile_url }}">{{ prometheus_tile_url }}</a></li>
+          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ alertmanager_tile_url }}">{{ alertmanager_tile_url }}</a></li>
+          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a></li>
           {% endif %}
         </ul>
       </div>
     </details>
     {% else %}
     <details class="panel" open>
-      <summary><h2 class="section-title">From Jenkins / internet (public IP)</h2></summary>
+      <summary><span class="summary-main"><h2 class="section-title">Network access</h2></span>{{ panel_chevron | safe }}</summary>
       <div class="panel-body">
-        <p class="sub">{{ ctx.access.external.audience }}</p>
+        <p class="sub"><strong>Internet / Jenkins</strong> — {{ ctx.access.external.audience }}</p>
         <ul class="clean">
           <li>Ops public IP: <code>{{ ctx.access.external.ops_ip }}</code></li>
           <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.portal }}">{{ ctx.access.external.portal }}</a></li>
           <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.pgadmin }}">{{ ctx.access.external.pgadmin }}</a></li>
-          {% if ctx.monitoring.enabled %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.grafana }}">{{ ctx.access.external.grafana }}</a></li>
+          {% if mon_on %}
+          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ grafana_tile_url }}">{{ grafana_tile_url }}</a></li>
+          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ prometheus_tile_url }}">{{ prometheus_tile_url }}</a></li>
+          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ alertmanager_tile_url }}">{{ alertmanager_tile_url }}</a></li>
+          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a></li>
           {% endif %}
         </ul>
-      </div>
-    </details>
-
-    <details class="panel">
-      <summary><h2 class="section-title">From same VPC (private IP)</h2></summary>
-      <div class="panel-body">
-        <p class="sub">{{ ctx.access.vpc.audience }}</p>
+        <p class="sub" style="margin-top:0.85rem"><strong>Same VPC (private IP)</strong> — {{ ctx.access.vpc.audience }}</p>
         <ul class="clean">
           <li>Ops private IP: <code>{{ ctx.access.vpc.ops_ip }}</code></li>
           <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.portal }}">{{ ctx.access.vpc.portal }}</a></li>
           <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.pgadmin }}">{{ ctx.access.vpc.pgadmin }}</a></li>
-          {% if ctx.monitoring.enabled %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.grafana }}">{{ ctx.access.vpc.grafana }}</a></li>
+          {% if mon_on %}
+          {% set _vpc_graf = ctx.monitoring.grafana_url_vpc | default(ctx.caddy_vhosts.urls_vpc.grafana.url | default(ctx.access.vpc.grafana)) %}
+          {% set _vpc_prom = ctx.monitoring.prometheus_url_vpc | default(ctx.caddy_vhosts.urls_vpc.prometheus.url | default(ctx.access.vpc.prometheus)) %}
+          {% set _vpc_am = ctx.monitoring.alertmanager_url_vpc | default(ctx.caddy_vhosts.urls_vpc.alertmanager.url | default(ctx.access.vpc.alertmanager)) %}
+          {% set _vpc_cadv = ctx.monitoring.cadvisor_url_vpc | default(ctx.access.vpc.cadvisor) %}
+          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _vpc_graf }}">{{ _vpc_graf }}</a></li>
+          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _vpc_prom }}">{{ _vpc_prom }}</a></li>
+          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _vpc_am }}">{{ _vpc_am }}</a></li>
+          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _vpc_cadv }}">{{ _vpc_cadv }}</a></li>
           {% endif %}
         </ul>
       </div>
@@ -368,7 +645,7 @@
 
     {% if ctx.caddy_vhosts.enabled %}
     <details class="panel">
-      <summary><h2 class="section-title">Lab domain (Caddy) — {{ ctx.caddy_vhosts.public_base }}</h2></summary>
+      <summary><span class="summary-main"><h2 class="section-title">Lab domain (Caddy) — {{ ctx.caddy_vhosts.public_base }}</h2></span>{{ panel_chevron | safe }}</summary>
       <div class="panel-body">
         {% if ctx.access.profile == 'private' %}
         <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — hostnames resolve to the ops host on your private network (FreeIPA/AD DNS or static records). No public internet required.</p>
@@ -378,14 +655,24 @@
         <ul class="clean">
           <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>
           <li><strong>pgAdmin</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.pgadmin.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.pgadmin.hostname }}</a></li>
-          <li><strong>CM</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.cm.hostname }}</a></li>
-          {% if ctx.monitoring.enabled and ctx.caddy_vhosts.urls_public.grafana is defined %}
-          <li><strong>Grafana</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.grafana.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.grafana.hostname }}</a></li>
-          <li><strong>Prometheus</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.prometheus.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.prometheus.hostname }}</a></li>
-          <li><strong>Alertmanager</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.alertmanager.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.alertmanager.hostname }}</a></li>
+          <li><strong>CM (Caddy HTTP)</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.cm.hostname }}</a></li>
+          <li><strong>CM (HTTPS direct)</strong> — <a href="{{ ctx.cloudera_manager.ui_url_https }}" target="_blank" rel="noopener noreferrer">{{ ctx.cloudera_manager.host_fqdn }}:7183</a></li>
+          {% if mon_on %}
+          <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.grafana.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.grafana.hostname }}{% else %}{{ grafana_tile_url }}{% endif %}</a></li>
+          <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.prometheus.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.prometheus.hostname }}{% else %}{{ prometheus_tile_url }}{% endif %}</a></li>
+          <li><strong>Alertmanager</strong> — <a href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.alertmanager.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.alertmanager.hostname }}{% else %}{{ alertmanager_tile_url }}{% endif %}</a></li>
+          <li><strong>cAdvisor</strong> — <a href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">{{ cadvisor_tile_url }}</a></li>
           {% endif %}
           {% if ctx.caddy_vhosts.urls_vpc.portal is defined and ctx.caddy_vhosts.urls_vpc.portal.url | default('') | length > 0 %}
           <li><strong>Portal (VPC slug)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.caddy_vhosts.urls_vpc.portal.url }}">{{ ctx.caddy_vhosts.urls_vpc.portal.hostname }}</a></li>
+          {% endif %}
+          {% if ctx.identity.ipa_caddy_modern_url | default('') | length > 0 %}
+          <li><strong>{{ ctx.identity.ipa_ui_modern_label | default('FreeIPA (modern UI)') }}</strong> — <a href="{{ ctx.identity.ipa_caddy_modern_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.ipa.hostname }}/ipa/modern-ui/</a></li>
+          {% endif %}
+          {% if ctx.identity.ipa_caddy_legacy_url | default('') | length > 0 %}
+          <li><strong>{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (legacy UI)') }}</strong> — <a href="{{ ctx.identity.ipa_caddy_legacy_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.ipa.hostname }}/ipa/ui</a></li>
+          {% elif ctx.identity.ipa_caddy_url | default('') | length > 0 %}
+          <li><strong>{{ ctx.identity.ipa_ui_label }}</strong> — <a href="{{ ctx.identity.ipa_caddy_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.ipa.hostname }}</a> (redirects to modern UI)</li>
           {% endif %}
         </ul>
       </div>
@@ -393,73 +680,84 @@
     {% endif %}
 
     <details class="panel">
-      <summary><h2 class="section-title">Ops host (portal, pgAdmin, Grafana, Prometheus)</h2></summary>
+      <summary><span class="summary-main"><h2 class="section-title">Ops host &amp; platform details</h2></span>{{ panel_chevron | safe }}</summary>
       <div class="panel-body">
+        <p class="sub">Reverse proxy and containerized UIs on <code>{{ ctx.ops_host.fqdn }}</code> <span class="badge">{{ ctx.ops_host.inventory_group }}</span>. {{ ctx.ops_host.services }}</p>
         <ul class="clean">
-          <li>Host: <code>{{ ctx.ops_host.fqdn }}</code> <span class="badge">{{ ctx.ops_host.inventory_group }}</span></li>
-          <li>{{ ctx.ops_host.services }}</li>
-          <li><strong>Deployment index (Caddy)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.portal.index_url }}">{{ ctx.portal.index_url }}</a></li>
-          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ pgadmin_tile_url }}">{{ pgadmin_tile_url }}</a> <span class="badge">connects to CM DB</span></li>
+          <li><strong>Deployment portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ portal_tile_url | default(ctx.portal.index_url) }}">{{ portal_tile_url | default(ctx.portal.index_url) }}</a></li>
+          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ pgadmin_tile_url }}">{{ pgadmin_tile_url }}</a> <span class="badge">CM DB on {{ ctx.postgresql.host_fqdn }}</span></li>
           {% if ctx.portal.pgadmin_caddy_url | default('') | length > 0 and ctx.portal.pgadmin_url_direct | default('') | length > 0 %}
           <li><strong>pgAdmin (direct port)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.portal.pgadmin_url_direct }}">{{ ctx.portal.pgadmin_url_direct }}</a></li>
           {% endif %}
-          {% if ctx.monitoring.enabled %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.monitoring.grafana_url }}">{{ ctx.monitoring.grafana_url }}</a></li>
-          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.monitoring.prometheus_url }}">{{ ctx.monitoring.prometheus_url }}</a></li>
+          {% if mon_on %}
+          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ grafana_tile_url }}">{{ grafana_tile_url }}</a></li>
+          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ prometheus_tile_url }}">{{ prometheus_tile_url }}</a></li>
+          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ alertmanager_tile_url }}">{{ alertmanager_tile_url }}</a></li>
+          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a> <span class="badge">:8089</span></li>
+          {% endif %}
+          {% if _cm_caddy | length > 0 %}
+          <li><strong>Cloudera Manager (Caddy HTTP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ _cm_caddy }}">{{ _cm_caddy }}</a></li>
+          {% endif %}
+          <li><strong>Cloudera Manager (direct HTTP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_http }}">{{ ctx.cloudera_manager.ui_url_http }}</a> <span class="badge">VPC / admin</span></li>
+          <li><strong>Cloudera Manager (direct HTTPS)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_https }}">{{ ctx.cloudera_manager.ui_url_https }}</a> <span class="badge">:7183 on {{ ctx.cloudera_manager.host_fqdn }}</span></li>
+          {% if ctx.identity.ipa_caddy_modern_url | default('') | length > 0 %}
+          <li><strong>{{ ctx.identity.ipa_ui_modern_label | default('FreeIPA (modern UI)') }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_caddy_modern_url }}">{{ ctx.identity.ipa_caddy_modern_url }}</a></li>
+          {% endif %}
+          {% if ctx.identity.ipa_caddy_legacy_url | default('') | length > 0 %}
+          <li><strong>{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (legacy UI)') }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_caddy_legacy_url }}">{{ ctx.identity.ipa_caddy_legacy_url }}</a></li>
           {% endif %}
           {% if ctx.identity.ipa_ui_url %}
-          <li><strong>{{ ctx.identity.ipa_ui_label }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_ui_url }}">{{ ctx.identity.ipa_ui_url }}</a></li>
+          <li><strong>{{ ctx.identity.ipa_ui_label }} (HTTPS on ipaserver)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_ui_url }}">{{ ctx.identity.ipa_ui_url }}</a></li>
           {% endif %}
-          <li><strong>Cloudera Manager (HTTP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_http }}">{{ ctx.cloudera_manager.ui_url_http }}</a></li>
-          <li><strong>Cloudera Manager (HTTPS)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_https }}">{{ ctx.cloudera_manager.ui_url_https }}</a></li>
         </ul>
+        <h2 class="section-title" style="margin-top:1rem">PostgreSQL</h2>
+        <ul class="clean">
+          <li>Host: <code>{{ ctx.postgresql.host_fqdn }}</code></li>
+          <li>Port: <code>{{ ctx.postgresql.port }}</code></li>
+          <li>{{ ctx.postgresql.database_host_note }}</li>
+        </ul>
+        <h2 class="section-title" style="margin-top:1rem">Clusters</h2>
+        <ul class="clean">
+          <li>CDP Runtime base cluster: <code>{{ ctx.cloudera_manager.cluster_name }}</code></li>
+          {% if ctx.ecs.deployed %}
+          <li>ECS cluster: <code>{{ ctx.ecs.cluster_name }}</code></li>
+          <li>ECS app domain: <code>{{ ctx.ecs.app_domain }}</code></li>
+          <li>ECS console — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.ecs.console_hint }}">{{ ctx.ecs.console_hint }}</a>{% if ctx.ecs.caddy_url | default('') | length > 0 %} <span class="badge">Caddy</span>{% endif %}</li>
+          <li>ECS direct HTTPS — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.ecs.console_url_direct | default('https://console.' ~ ctx.ecs.app_domain) }}">{{ ctx.ecs.console_url_direct | default('https://console.' ~ ctx.ecs.app_domain) }}</a></li>
+          <li>Data Services hostnames: <code>{{ ctx.ecs.apps_wildcard }}</code></li>
+          {% else %}
+          <li>ECS: <span class="badge">not in inventory</span></li>
+          {% endif %}
+        </ul>
+        <p class="sub">Versions — CM {{ ctx.versions.cm }} · CDP Runtime {{ ctx.versions.cdh }} · CDS {{ ctx.versions.ecs_cds }}</p>
+        {% if ctx.data_services.links | length > 0 %}
+        <h2 class="section-title" style="margin-top:1rem">Data services &amp; related URLs</h2>
+        <ul class="clean">
+          {% for link in ctx.data_services.links %}
+          <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — <a target="_blank" rel="noopener noreferrer" href="{{ link.url }}">{{ link.url }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if ctx.extra_links | length > 0 %}
+        <h2 class="section-title" style="margin-top:1rem">Additional links</h2>
+        <ul class="clean">
+          {% for link in ctx.extra_links %}
+          <li><strong>{{ link.name }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ link.url }}">{{ link.url }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
       </div>
     </details>
 
-    <section class="flat">
-      <h2>PostgreSQL</h2>
-      <ul class="clean">
-        <li>Host: <code>{{ ctx.postgresql.host_fqdn }}</code></li>
-        <li>Port: <code>{{ ctx.postgresql.port }}</code></li>
-        <li>{{ ctx.postgresql.database_host_note }}</li>
-      </ul>
-    </section>
-
-    <section class="flat">
-      <h2>Clusters</h2>
-      <ul class="clean">
-        <li>CDH base cluster: <code>{{ ctx.cloudera_manager.cluster_name }}</code></li>
-        {% if ctx.ecs.deployed %}
-        <li>ECS cluster: <code>{{ ctx.ecs.cluster_name }}</code></li>
-        <li>ECS app domain: <code>{{ ctx.ecs.app_domain }}</code></li>
-        <li>ECS console (typical): <a target="_blank" rel="noopener noreferrer" href="{{ ctx.ecs.console_hint }}">{{ ctx.ecs.console_hint }}</a></li>
-        <li>Data Services hostnames: <code>{{ ctx.ecs.apps_wildcard }}</code></li>
-        {% else %}
-        <li>ECS: <span class="badge">not in inventory</span></li>
-        {% endif %}
-      </ul>
-      <p class="sub">Versions — CM {{ ctx.versions.cm }} · CDH {{ ctx.versions.cdh }} · CDS {{ ctx.versions.ecs_cds }}</p>
-    </section>
-
-    {% if ctx.data_services.links | length > 0 %}
-    <section class="flat">
-      <h2>Data services &amp; related URLs</h2>
-      <ul class="clean">
-        {% for link in ctx.data_services.links %}
-        <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — <a target="_blank" rel="noopener noreferrer" href="{{ link.url }}">{{ link.url }}</a></li>
-        {% endfor %}
-      </ul>
-    </section>
-    {% endif %}
-
-    {% if ctx.monitoring.enabled %}
+    {% if mon_on %}
     <section class="flat">
       <h2>Monitoring stack (on ops host)</h2>
+      <p class="sub">Prefer Caddy lab vhosts when DNS is configured; otherwise use ops host <code>:{{ deployment_portal_http_port | default(8088) }}</code> path routes or cAdvisor on <code>:{{ monitoring_cadvisor_host_port | default(8089) }}</code>.</p>
       <ul class="clean">
-        <li><strong>Grafana</strong> — <a href="{{ ctx.monitoring.grafana_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.grafana_url }}</a> <span class="badge">via Caddy</span></li>
-        <li><strong>Prometheus</strong> — <a href="{{ ctx.monitoring.prometheus_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.prometheus_url }}</a> <span class="badge">via Caddy</span></li>
-        <li><strong>Alertmanager</strong> — <a href="{{ ctx.monitoring.alertmanager_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.alertmanager_url }}</a> <span class="badge">via Caddy</span></li>
-        <li><strong>cAdvisor</strong> — <a href="{{ ctx.monitoring.cadvisor_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.cadvisor_url }}</a> <span class="badge">host port 8089</span></li>
+        <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{{ grafana_tile_url }}</a> <span class="badge">Caddy vhost or /grafana/</span></li>
+        <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{{ prometheus_tile_url }}</a> <span class="badge">Caddy vhost or /prometheus/</span></li>
+        <li><strong>Alertmanager</strong> — <a href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">{{ alertmanager_tile_url }}</a> <span class="badge">Caddy vhost or /alertmanager/</span></li>
+        <li><strong>cAdvisor</strong> — <a href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">{{ cadvisor_tile_url }}</a> <span class="badge">host port {{ monitoring_cadvisor_host_port | default(8089) }}</span></li>
         {% if ctx.monitoring.grafana_path_url | default('') | length > 0 %}
         <li><strong>Caddy path fallbacks</strong> — Grafana <a href="{{ ctx.monitoring.grafana_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.grafana_path_url }}</a>;
           Prometheus <a href="{{ ctx.monitoring.prometheus_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.prometheus_path_url }}</a>;
@@ -469,35 +767,191 @@
     </section>
     {% endif %}
 
-    {% if ctx.extra_links | length > 0 %}
+    {% if ctx.planned_roles | default([]) | length > 0 %}
     <section class="flat">
-      <h2>Additional links</h2>
-      <ul class="clean">
-        {% for link in ctx.extra_links %}
-        <li><strong>{{ link.name }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ link.url }}">{{ link.url }}</a></li>
-        {% endfor %}
-      </ul>
-    </section>
-    {% endif %}
-
-    <section class="flat">
-      <h2>Inventory nodes</h2>
+      <h2>Planned / configured roles</h2>
+      <p class="sub">From Ansible inventory groups, <code>host_template</code> hostvars, <code>base_cluster_install_services</code>, and the monitoring portal stack on the ops host (<code>{{ ctx.ops_host.inventory_group | default('ipaserver') }}</code>).</p>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>Group</th><th>Hostname</th><th>FQDN</th><th>IP</th></tr></thead>
-          <tbody>
-            {% for n in ctx.nodes %}
+          <thead>
             <tr>
-              <td>{{ n.group }}</td>
-              <td>{{ n.hostname }}</td>
-              <td>{{ n.fqdn }}</td>
-              <td>{{ n.private_ip or n.ansible_host }}</td>
+              <th>Stack</th>
+              <th>Role</th>
+              <th>Placement</th>
+              <th>Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in ctx.planned_roles %}
+            <tr>
+              <td>{{ row.stack }}</td>
+              <td>{{ row.role }}</td>
+              <td><code>{{ row.placement }}</code></td>
+              <td><span class="badge">{{ row.source }}</span></td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
     </section>
+    {% endif %}
+
+    {% if ls.clusters | default([]) | length > 0 %}
+    <section class="flat">
+      <h2>CM services (live snapshot)</h2>
+      <p class="sub">From Cloudera Manager API at portal refresh; same data as the health snapshot KPIs above.</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Cluster</th>
+              <th>Service</th>
+              <th>Type</th>
+              <th>State</th>
+              <th>Health</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cl in ls.clusters | default([]) %}
+            {% for svc in cl.services | default([]) %}
+            <tr>
+              <td><code>{{ cl.name }}</code></td>
+              <td>{{ svc.name }}</td>
+              <td>{{ svc.type }}</td>
+              <td>{{ svc.service_state }}</td>
+              <td>
+                {% set _h = svc.health | default('') | upper %}
+                <span class="health-pill {% if _h == 'GOOD' %}good{% elif _h == 'CONCERNING' %}concerning{% elif _h == 'BAD' %}bad{% else %}na{% endif %}">{{ svc.health }}</span>
+              </td>
+            </tr>
+            {% endfor %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if ctx.inventory_hosts | default([]) | length > 0 %}
+    <section class="flat">
+      <h2>Host inventory</h2>
+      <p class="sub">One row per host: Ansible groups, addresses, and inferred roles from inventory groups, hostvars (e.g. <code>host_template</code>, Knox), and enabled base-cluster services.</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Host</th>
+              <th>FQDN</th>
+              <th>Private IP</th>
+              <th>Public IP</th>
+              <th>Inventory groups</th>
+              <th>Roles installed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in ctx.inventory_hosts %}
+            <tr>
+              <td><code>{{ h.hostname }}</code> <span class="badge">{{ h.inventory_name }}</span></td>
+              <td><code>{{ h.fqdn }}</code></td>
+              <td><code>{{ h.private_ip }}</code></td>
+              <td>{% if h.public_ip | default('') | length > 0 and ('{{' not in (h.public_ip | string)) %}<code>{{ h.public_ip }}</code>{% else %}<span class="badge">VPC only</span>{% endif %}</td>
+              <td>
+                {% for gl in h.group_labels | default(h.groups | default([])) %}
+                <span class="group-tag">{{ gl }}</span>
+                {% endfor %}
+              </td>
+              <td>
+                {% for role in h.role_labels | default([]) %}
+                <span class="role-badge">{{ role }}</span>
+                {% endfor %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
   </main>
+  <script>
+  (function () {
+    var POLL_MS = 60000;
+    var initial = {{ ls | tojson }};
+    var promPath = {{ ls_poll_prom | tojson }};
+
+    function sumClusters(clusters, field) {
+      var n = 0;
+      (clusters || []).forEach(function (c) { n += (c[field] || 0) * 1; });
+      return n;
+    }
+
+    function pillClass(health) {
+      var h = (health || '').toUpperCase();
+      if (h === 'GOOD') return 'good';
+      if (h === 'CONCERNING') return 'concerning';
+      if (h === 'BAD') return 'bad';
+      return 'na';
+    }
+
+    function setText(id, val) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = (val === undefined || val === null || val === '') ? '—' : String(val);
+    }
+
+    function applySnapshot(data) {
+      if (!data) return;
+      var hosts = data.hosts || {};
+      var clusters = data.clusters || [];
+      setText('kpi-services-good', sumClusters(clusters, 'services_started_good') || sumClusters(clusters, 'services_good'));
+      setText('kpi-services-warn', sumClusters(clusters, 'services_concerning'));
+      setText('kpi-services-bad', sumClusters(clusters, 'services_bad'));
+      setText('kpi-parcels', (data.parcels || []).length);
+      var updated = document.getElementById('live-stats-updated');
+      if (updated && data.collected_at) {
+        updated.textContent = 'CM snapshot ' + data.collected_at + (data.source === 'cm_api' ? '' : ' (inventory fallback)');
+      }
+      var hb = document.querySelector('[data-kpi-sub="hosts-heartbeat"]');
+      if (hb && hosts.total !== undefined) {
+        hb.textContent = (hosts.good !== undefined ? hosts.good + '/' + hosts.total + ' GOOD' : hosts.total + ' hosts');
+      }
+      var tbody = document.querySelector('#live-stats-services-table tbody');
+      if (tbody && clusters.length) {
+        var rows = '';
+        clusters.forEach(function (cl) {
+          (cl.services || []).forEach(function (svc) {
+            rows += '<tr><td><code>' + cl.name + '</code></td><td>' + (svc.name || '') + '</td><td>' + (svc.type || '') +
+              '</td><td>' + (svc.service_state || '') + '</td><td><span class="health-pill ' + pillClass(svc.health) + '">' +
+              (svc.health || '—') + '</span></td></tr>';
+          });
+        });
+        if (rows) tbody.innerHTML = rows;
+      }
+    }
+
+    function pollSnapshot() {
+      fetch('live-stats.json', { cache: 'no-store', credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(applySnapshot)
+        .catch(function () {});
+    }
+
+    function pollPrometheus() {
+      if (!promPath) return;
+      var q = 'count(up==1)';
+      fetch(promPath + '?query=' + encodeURIComponent(q), { cache: 'no-store', credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (body) {
+          if (!body || body.status !== 'success') return;
+          var val = body.data && body.data.result && body.data.result[0] && body.data.result[0].value;
+          if (val && val.length > 1) setText('kpi-prom-up', val[1]);
+        })
+        .catch(function () {});
+    }
+
+    applySnapshot(initial);
+    pollPrometheus();
+    setInterval(function () { pollSnapshot(); pollPrometheus(); }, POLL_MS);
+  })();
+  </script>
 </body>
 </html>

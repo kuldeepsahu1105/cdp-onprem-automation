@@ -1,0 +1,66 @@
+---
+# Detect Prometheus/Grafana stack on the portal ops host (localhost play delegates).
+# Promotes monitoring_stack_enabled when containers exist but extra-vars left it false (e.g. after PORTAL bootstrap).
+
+- name: Default deployment portal monitoring not deployed
+  ansible.builtin.set_fact:
+    deployment_portal_monitoring_deployed: false
+
+- name: Probe Grafana container on portal ops host
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --filter
+      - "name={{ monitoring_grafana_container }}"
+      - --filter
+      - status=running
+      - -q
+  delegate_to: "{{ groups[deployment_portal_host_group_effective][0] }}"
+  become: true
+  register: _portal_monitoring_grafana_probe
+  failed_when: false
+  changed_when: false
+  when:
+    - deployment_portal_host_group_effective is defined
+    - deployment_portal_host_group_effective in groups
+    - groups[deployment_portal_host_group_effective] | default([]) | length > 0
+
+- name: Probe monitoring compose file on portal ops host
+  ansible.builtin.stat:
+    path: "{{ monitoring_config_dir }}/docker-compose.yml"
+  delegate_to: "{{ groups[deployment_portal_host_group_effective][0] }}"
+  become: true
+  register: _portal_monitoring_compose_stat
+  when:
+    - deployment_portal_host_group_effective is defined
+    - deployment_portal_host_group_effective in groups
+    - groups[deployment_portal_host_group_effective] | default([]) | length > 0
+
+- name: Set deployment portal monitoring deployed from probe
+  ansible.builtin.set_fact:
+    deployment_portal_monitoring_deployed: >-
+      {{
+        (
+          (_portal_monitoring_grafana_probe.stdout | default('') | trim | length > 0)
+          or (_portal_monitoring_compose_stat.stat.exists | default(false) | bool)
+        ) | bool
+      }}
+  when:
+    - _portal_monitoring_grafana_probe is defined
+    - not (_portal_monitoring_grafana_probe.skipped | default(false) | bool)
+
+- name: Promote monitoring_stack_enabled when monitoring stack is already deployed
+  ansible.builtin.set_fact:
+    monitoring_stack_enabled: true
+  when:
+    - deployment_portal_monitoring_deployed | default(false) | bool
+    - not (monitoring_stack_enabled | default(false) | bool)
+
+- name: Set monitoring route flag for Caddy and portal index
+  ansible.builtin.set_fact:
+    deployment_portal_monitoring_routes_enabled: >-
+      {{
+        (monitoring_stack_enabled | default(false) | bool)
+        or (deployment_portal_monitoring_deployed | default(false) | bool)
+      }}

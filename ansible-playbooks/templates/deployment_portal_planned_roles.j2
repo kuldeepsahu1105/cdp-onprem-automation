@@ -1,0 +1,36 @@
+{# JSON array for from_yaml — planned roles from groups + base_cluster_install_services #}
+{% set _svc = base_cluster_install_services | default({}) %}
+{% set _mon = (monitoring_stack_enabled | default(false) | bool) or (deployment_portal_monitoring_deployed | default(false) | bool) or (deployment_portal_monitoring_routes_enabled | default(false) | bool) %}
+{% set _ecs = deployment_portal_ecs_present | default(false) | bool %}
+{% set _ops = deployment_portal_host_group_effective | default('ipaserver') %}
+{% set _pg_host = deployment_portal_postgres_inv | default('cldr-mngr') %}
+{% set _rows = namespace(items=[]) %}
+{% if true %}{% set _ = _rows.items.append({'stack': 'Cloudera Manager', 'role': 'CM server', 'placement': 'cldr-mngr', 'source': 'inventory'}) %}{% endif %}
+{% if true %}{% set _ = _rows.items.append({'stack': 'Cloudera Manager', 'role': 'PostgreSQL (CM DB)', 'placement': _pg_host, 'source': 'inventory'}) %}{% endif %}
+{% if true %}{% set _ = _rows.items.append({'stack': 'Cloudera Manager', 'role': 'CM agent', 'placement': 'base-masters, base-workers, ecs-masters, ecs-workers', 'source': 'inventory'}) %}{% endif %}
+{% if _svc.hdfs | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'HDFS NameNode', 'placement': 'base-masters', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _svc.hdfs | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'HDFS DataNode', 'placement': 'base-workers', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _svc.yarn | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'YARN ResourceManager', 'placement': 'base-masters', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _svc.yarn | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'YARN NodeManager', 'placement': 'base-workers', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _svc.zookeeper | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'ZooKeeper', 'placement': 'base-masters + base-workers', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _svc.hbase | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'HBase Master', 'placement': 'base-masters', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _svc.hbase | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'HBase RegionServer', 'placement': 'base-workers', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _svc.ozone | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'Ozone', 'placement': 'base-masters + base-workers', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if (_svc.hive | default(true) | bool) or (_svc.hive_on_tez | default(true) | bool) %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'Hive / Hive-on-Tez', 'placement': 'base cluster hosts', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _svc.impala | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'Impala', 'placement': 'base cluster hosts', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _svc.kafka | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'Kafka', 'placement': 'base cluster hosts', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _svc.atlas | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'Atlas', 'placement': 'base cluster hosts', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _svc.ranger | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'Ranger', 'placement': 'base cluster hosts', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _svc.knox | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'Knox gateway', 'placement': 'base-masters (hostvar knox_gateway)', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _svc.hue | default(false) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'Hue', 'placement': 'base-masters', 'source': 'base_cluster_install_services'}) %}{% endif %}
+{% if _ecs %}{% set _ = _rows.items.append({'stack': 'ECS / Data Services', 'role': 'ECS server (master)', 'placement': 'ecs-masters', 'source': 'inventory'}) %}{% endif %}
+{% if _ecs %}{% set _ = _rows.items.append({'stack': 'ECS / Data Services', 'role': 'ECS agent + Docker', 'placement': 'ecs-workers', 'source': 'inventory'}) %}{% endif %}
+{% if groups.get('ipaserver', []) | length > 0 %}{% set _ = _rows.items.append({'stack': 'Identity', 'role': 'FreeIPA server', 'placement': 'ipaserver', 'source': 'inventory'}) %}{% endif %}
+{% set _ = _rows.items.append({'stack': 'Deployment portal stack', 'role': 'Caddy reverse proxy', 'placement': _ops, 'source': 'portal playbook'}) %}
+{% set _ = _rows.items.append({'stack': 'Deployment portal stack', 'role': 'pgAdmin (container)', 'placement': _ops, 'source': 'portal playbook'}) %}
+{% set _ = _rows.items.append({'stack': 'Deployment portal stack', 'role': 'Docker (portal stack)', 'placement': _ops, 'source': 'portal playbook'}) %}
+{% if _mon %}{% set _ = _rows.items.append({'stack': 'Monitoring (ops host)', 'role': 'Grafana (container)', 'placement': _ops, 'source': 'monitoring_stack / Caddy'}) %}{% endif %}
+{% if _mon %}{% set _ = _rows.items.append({'stack': 'Monitoring (ops host)', 'role': 'Prometheus (container)', 'placement': _ops, 'source': 'monitoring_stack / Caddy'}) %}{% endif %}
+{% if _mon %}{% set _ = _rows.items.append({'stack': 'Monitoring (ops host)', 'role': 'Alertmanager (container)', 'placement': _ops, 'source': 'monitoring_stack / Caddy'}) %}{% endif %}
+{% if _mon %}{% set _ = _rows.items.append({'stack': 'Monitoring (ops host)', 'role': 'cAdvisor (host :' ~ (monitoring_cadvisor_host_port | default(8089) | string) ~ ')', 'placement': _ops, 'source': 'monitoring_stack'}) %}{% endif %}
+{{ _rows.items | to_json }}

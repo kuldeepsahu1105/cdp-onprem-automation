@@ -1,11 +1,18 @@
-{# YAML list of inventory nodes for the deployment portal #}
+{# YAML list of inventory nodes for the deployment portal (one row per group membership) #}
+{% from 'deployment_portal_resolve_public_ip.inc.j2' import resolve_deployment_portal_public_ip %}
+{% set _anchor_inv = groups[deployment_portal_host_group_effective][0] %}
 {% for group_name in deployment_portal_inventory_groups %}
 {% for inv_host in groups.get(group_name, []) %}
+{% set _hv = hostvars[inv_host] %}
+{% set _priv = _hv.private_ip | default(_hv.ansible_host | default('')) %}
+{% set _ah = _hv.ansible_host | default('') %}
+{% set _public = resolve_deployment_portal_public_ip(_hv, _priv, _ah, inv_host, _anchor_inv) %}
 - group: "{{ group_name }}"
   inventory_name: "{{ inv_host }}"
-  hostname: "{{ hostvars[inv_host].cldr_hostname | default(inv_host) }}"
-  fqdn: "{{ hostvars[inv_host].cldr_hostname | default(inv_host) }}.{{ cluster_domain }}"
-  ansible_host: "{{ hostvars[inv_host].ansible_host | default('') }}"
-  private_ip: "{{ hostvars[inv_host].private_ip | default(hostvars[inv_host].ansible_host | default('')) }}"
+  hostname: "{{ _hv.cldr_hostname | default(inv_host) }}"
+  fqdn: "{{ _hv.cldr_hostname | default(inv_host) }}.{{ cluster_domain }}"
+  ansible_host: "{{ _ah }}"
+  private_ip: "{{ _priv }}"
+  public_ip: "{{ _public }}"
 {% endfor %}
 {% endfor %}

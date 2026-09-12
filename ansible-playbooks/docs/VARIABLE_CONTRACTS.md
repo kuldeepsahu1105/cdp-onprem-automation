@@ -12,7 +12,7 @@ End-to-end order inside `sync_deployment_portal_content.yml` (used by `10_setup_
 
 | Step | Task file | Purpose |
 |------|-----------|---------|
-| 1 | `deployment_portal_load_host_facts.yml` (playbook, before sync) | Copy `deployment_portal_context`, `caddy_vhost_urls`, anchor/IPA/CM FQDNs from `hostvars['localhost']` onto ops host |
+| 1 | `deployment_portal_load_host_facts.yml` (playbook, before sync) | Copy `deployment_portal_context`, `caddy_vhost_urls`, access profile/URLs, anchor/IPA/CM FQDNs from `hostvars['localhost']` onto ops host |
 | 2 | `sync_deployment_portal_content.yml` | Render templates, `docker compose up`, optional monitoring re-sync |
 | 3 | `verify_deployment_portal_caddy.yml` | Container + localhost index, then URL tiers |
 | 3a | → `detect_ansible_control_reachability.yml` | `_acr_*` inputs; publishes `ansible_control_reach_public_only` on **localhost** (CM probes skipped via `ansible_control_reachability_skip_cm_probes`) |
@@ -59,7 +59,7 @@ Import order in `set_cm_api_url.yml`:
    - **`detect_ansible_control_reachability.yml`** (full CM port probes unless skipped)
    - Sets `cm_connect_host`, `cm_api_client_host`, `cm_api_probe_host`, `cm_api_probe_delegate_to`, `cm_host`
    - Uses `ansible_control_reach_public_only` from reachability detect
-2b. **`select_cm_api_probe_host.yml`** (when probes delegate to cldr-mngr) — tries `127.0.0.1`, `ansible_host`, `ansible_fqdn`, cluster FQDN, `ansible_hostname`, private IP (HTTP then HTTPS per candidate); updates `cm_api_probe_host` and may align `cm_api_client_host` for localhost/Jenkins
+2b. **`select_cm_api_probe_host.yml`** — when **`cm_api_probe_from_controller_public`** (Jenkins/localhost + effective `public`), probes **on the controller**: optional Caddy CM vhost URL, then `ansible_host`/FQDN (HTTPS then HTTP). When probes **delegate to cldr-mngr**, tries `127.0.0.1`, `ansible_host`, FQDN, private IP (HTTP then HTTPS per candidate); updates `cm_api_probe_host` and `cm_api_client_host`
 3. `ensure_cm_admin_password.yml`
 4. HTTP/HTTPS probes → `cm_protocol`, `cm_api_port`, **`cm_api_url`**, `cm_api_url_delegated`
 

@@ -2,6 +2,12 @@
 # Re-render portal index, Caddy, pgAdmin, and optional monitoring from deployment_portal_context.
 # Requires deployment_portal_context (and related facts) on the play host.
 
+- name: Detect monitoring stack on portal ops host before Caddy/index render
+  ansible.builtin.import_tasks: detect_deployment_portal_monitoring_on_host.yml
+
+- name: Refresh portal context monitoring flags and endpoints after ops-host probe
+  ansible.builtin.import_tasks: refresh_deployment_portal_monitoring_context.yml
+
 - name: Create deployment portal directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -18,6 +24,12 @@
     dest: "{{ deployment_portal_www_dir }}/index.html"
     mode: "0644"
 
+- name: Render deployment portal live stats JSON
+  ansible.builtin.template:
+    src: deployment_portal_live_stats.json.j2
+    dest: "{{ deployment_portal_www_dir }}/live-stats.json"
+    mode: "0644"
+
 - name: Render pgAdmin server preset
   ansible.builtin.template:
     src: deployment_portal_pgadmin-servers.json.j2
@@ -31,6 +43,15 @@
     dest: "{{ deployment_portal_config_dir }}/Caddyfile"
     mode: "0644"
   register: caddyfile_render
+
+- name: Configure FreeIPA HTTPD on ipaserver for deployment portal Caddy proxy
+  ansible.builtin.import_tasks: configure_ipa_httpd_behind_caddy.yml
+  delegate_to: "{{ groups['ipaserver'][0] }}"
+  run_once: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - groups.get('ipaserver', []) | length > 0
+    - ipa_caddy_public_hostname | default('') | length > 0
 
 - name: Validate pgAdmin default email (pgAdmin 8 rejects .local and non-TLD addresses)
   ansible.builtin.assert:
@@ -143,7 +164,7 @@
   ansible.builtin.import_tasks: ensure_deployment_portal_firewall_ports.yml
 
 - name: Sync monitoring stack configuration
-  when: monitoring_stack_enabled | default(false) | bool
+  when: deployment_portal_monitoring_routes_enabled | default(false) | bool
   block:
     - name: Render Prometheus configuration
       ansible.builtin.template:
@@ -199,9 +220,15 @@
         dest: "{{ deployment_portal_www_dir }}/index.html"
         mode: "0644"
 
+    - name: Refresh deployment portal live stats JSON after monitoring sync
+      ansible.builtin.template:
+        src: deployment_portal_live_stats.json.j2
+        dest: "{{ deployment_portal_www_dir }}/live-stats.json"
+        mode: "0644"
+
 - name: Verify monitoring UIs via Caddy path routes (monitoring milestone)
   ansible.builtin.import_tasks: verify_deployment_portal_monitoring.yml
-  when: monitoring_stack_enabled | default(false) | bool
+  when: deployment_portal_monitoring_routes_enabled | default(false) | bool
 
 - name: Verify Caddy container and portal or monitoring URLs (after stacks are up)
   ansible.builtin.import_tasks: verify_deployment_portal_caddy.yml

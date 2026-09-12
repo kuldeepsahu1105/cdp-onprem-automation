@@ -306,7 +306,8 @@ ansible_control_reachability: auto
 cm_api_prefer_private_ip: true
 cm_api_connect_host: ""
 ansible_controller_outside_vpc: false
-# When play runs on localhost/Jenkins, run HTTP discovery on cldr-mngr via 127.0.0.1 (not VPC private IP)
+# When play runs on localhost in-VPC, delegate CM API discovery to cldr-mngr (127.0.0.1).
+# Jenkins/public controllers probe CM ansible_host (HTTPS :7183) from localhost instead (no EC2 hairpin).
 cm_api_delegate_probes_to_manager: true
 cm_api_private_reachability_timeout: 5
 # CM UI via Caddy vhost (portal): frontend_url + cm_host_name in CM (API). Override full URL here if needed.
@@ -317,6 +318,8 @@ cm_apply_caddy_frontend_url: auto
 # (host cm.<ip-dashed>.<base>, port deployment_portal_http_port) instead of direct :7180/:7183.
 # Matches cloudera-labs/openshift module_defaults host=proxy_host port=80 on the reverse proxy.
 cm_config_api_via_caddy_proxy: auto
+# fail | warn — warn when Jenkins cannot open CM :7180/:7183 but delegated discovery on cldr-mngr succeeds
+cm_api_verify_mode: fail
 # Portal verify: skip VPC-only URL checks when control profile is public-only (Jenkins default)
 deployment_portal_url_verify_skip_vpc: false
 # Milestone-scoped URL verify (portal, ipa, identity, cm, cm_tls, cdh, monitoring, ecs).
@@ -334,6 +337,8 @@ deployment_external_url_verify: warn
 deployment_portal_external_url_verify: warn
 # Optional per-service overrides, e.g. deployment_cm_external_url_verify: skip
 # Or map: deployment_service_external_url_verify: { cm: warn, grafana: skip }
+# Tier B direct https://ipaserver.<domain> from controller: auto skips on public/Jenkins when Caddy IPA vhosts exist
+deployment_ipa_direct_fqdn_external_url_verify: auto
 # Set true after 27_setup_cm_autotls.yml for Caddy CM reverse-proxy target port
 autotls_enabled: false
 
@@ -535,6 +540,14 @@ deployment_portal_inventory_groups:
   - base-workers
   - ecs-masters
   - ecs-workers
+# Human-readable role labels for deployment portal host inventory table
+deployment_portal_inventory_group_labels:
+  ipaserver: FreeIPA server
+  cldr-mngr: Cloudera Manager
+  base-masters: CDP Runtime master
+  base-workers: CDP Runtime worker
+  ecs-masters: ECS master
+  ecs-workers: ECS worker
 deployment_portal_data_service_links: []
 deployment_portal_extra_links: []
 # Portal URL profile: auto | cloud (public + VPC) | private (bare metal / no public IP)

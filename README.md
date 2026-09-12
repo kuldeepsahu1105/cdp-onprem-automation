@@ -133,7 +133,7 @@ With `caddy_vhost_enabled: true`, Caddy serves **per-service hostnames** on the 
 
 `http://cm.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → Cloudera Manager  
 `http://grafana.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → Grafana  
-`http://ipa.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → FreeIPA UI (`redir /` → `/ipa/ui`; Caddy **`reverse_proxy` HTTP** to ipaserver with **`Host`** + **`Referer`** — [cloudera-labs/openshift](https://github.com/cloudera-labs/openshift) pattern)
+`http://ipa.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → FreeIPA (**`redir /` → `/ipa/modern-ui/`**; also **`/ipa/ui`** legacy; Caddy **`reverse_proxy` HTTP** to ipaserver with **`Host`** + path-matched **`Referer`** — [cloudera-labs/openshift](https://github.com/cloudera-labs/openshift) pattern)
 
 Set `caddy_vhost_dns_mode: classic_nipio` for **`*.nip.io`** names (no custom DNS). Set `flat` for `cm.pvc.cloudera-labs.com` when you point all A records at the ops IP.
 

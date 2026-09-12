@@ -4,9 +4,9 @@
 - name: Resolve deployment portal URL verify milestones for monitoring checks
   ansible.builtin.import_tasks: resolve_deployment_portal_verify_milestones.yml
 
-- name: Skip monitoring localhost checks when stack disabled
+- name: Skip monitoring localhost checks when monitoring routes are disabled
   ansible.builtin.meta: end_host
-  when: not (monitoring_stack_enabled | default(false) | bool)
+  when: not (deployment_portal_monitoring_routes_enabled | default(false) | bool)
 
 - name: Set monitoring localhost verify base URL
   ansible.builtin.set_fact:

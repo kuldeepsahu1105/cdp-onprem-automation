@@ -402,7 +402,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `cm_api_prefer_private_ip` | `true` | Legacy: prefer `private_ip` for CM API when profile is not `public` |
 | `cm_api_connect_host` | `""` | Force CM API target (Jenkins may set `cldr-mngr` `ansible_host` / public IP) |
 | `ansible_controller_outside_vpc` | `false` | Legacy mirror of `public` profile — do not use RFC1918 `private_ip` from controller |
-| `cm_api_delegate_probes_to_manager` | `true` | Run CM API discovery on `cldr-mngr` at `127.0.0.1` when play host is `localhost` |
+| `cm_api_delegate_probes_to_manager` | `true` | In-VPC localhost plays: delegate CM API discovery to `cldr-mngr`. Skipped when control reachability is `public` (Jenkins probes `ansible_host` from the controller) |
 | `cm_api_private_reachability_timeout` | `5` | Seconds to test VPC `private_ip` from controller before using public IP |
 | `cm_external_url` | `""` | Override CM Caddy public URL; sets CM API `frontend_url` when non-empty |
 | `cm_apply_caddy_frontend_url` | `auto` | `auto` \| `true` \| `false` — apply Caddy CM vhost to CM `frontend_url` / `cm_host_name` |

@@ -4,6 +4,9 @@
 - name: Resolve portal install host and PostgreSQL host
   ansible.builtin.import_tasks: resolve_deployment_portal_host.yml
 
+- name: Detect deployed monitoring stack on portal ops host
+  ansible.builtin.import_tasks: detect_deployment_portal_monitoring.yml
+
 - name: Set deployment portal anchor host facts (Caddy / Grafana / Prometheus / pgAdmin)
   ansible.builtin.set_fact:
     deployment_portal_anchor_inv: "{{ groups[deployment_portal_host_group_effective][0] }}"
@@ -22,6 +25,20 @@
 - name: Render deployment portal node inventory
   ansible.builtin.set_fact:
     deployment_portal_nodes: "{{ lookup('template', 'deployment_portal_nodes.j2') | from_yaml | default([], true) }}"
+
+- name: Render deployment portal host inventory (unique hosts with roles)
+  ansible.builtin.set_fact:
+    deployment_portal_inventory_hosts: >-
+      {{
+        lookup('template', 'deployment_portal_inventory_hosts.j2') | from_yaml | default([], true)
+      }}
+
+- name: Render planned/configured role map for portal index
+  ansible.builtin.set_fact:
+    deployment_portal_planned_roles: >-
+      {{
+        lookup('template', 'deployment_portal_planned_roles.j2') | from_yaml | default([], true)
+      }}
 
 - name: Set CM manager FQDN for portal links
   ansible.builtin.set_fact:
@@ -190,6 +207,19 @@
     caddy_vhost_urls: "{{ caddy_vhost_urls_external }}"
   when: caddy_vhost_enabled | default(false) | bool
 
+- name: Set IPA Caddy vhost hostname for HTTPD Referer mapping
+  ansible.builtin.set_fact:
+    ipa_caddy_public_hostname: "{{ caddy_vhost_urls.ipa.hostname | default('') }}"
+  when:
+    - deployment_portal_has_ipa | bool
+    - caddy_vhost_enabled | default(false) | bool
+    - caddy_vhost_urls.ipa.hostname | default('') | length > 0
+
+- name: Clear IPA Caddy vhost hostname when IPA or Caddy vhosts are disabled
+  ansible.builtin.set_fact:
+    ipa_caddy_public_hostname: ""
+  when: not (deployment_portal_has_ipa | bool and caddy_vhost_enabled | default(false) | bool)
+
 - name: Default empty Caddy vhost map when disabled
   ansible.builtin.set_fact:
     caddy_vhost_urls: {}
@@ -231,6 +261,13 @@
 - name: Resolve Caddy CM/ECS public URL facts
   ansible.builtin.import_tasks: resolve_caddy_service_public_urls.yml
 
+- name: Render deployment portal service endpoints list
+  ansible.builtin.set_fact:
+    deployment_portal_endpoints: >-
+      {{
+        lookup('template', 'deployment_portal_endpoints.j2') | from_yaml | default([], true)
+      }}
+
 - name: Prefer Caddy vhost URLs for monitoring in external access map
   ansible.builtin.set_fact:
     deployment_portal_access_urls: >-
@@ -254,7 +291,7 @@
       }}
   when:
     - caddy_vhost_enabled | default(false) | bool
-    - monitoring_stack_enabled | default(false) | bool
+    - (monitoring_stack_enabled | default(false) | bool) or (deployment_portal_monitoring_deployed | default(false) | bool)
     - deployment_portal_access_profile_effective == 'cloud'
     - caddy_vhost_urls_external.grafana.url | default('') | length > 0
 
@@ -281,7 +318,7 @@
       }}
   when:
     - caddy_vhost_enabled | default(false) | bool
-    - monitoring_stack_enabled | default(false) | bool
+    - (monitoring_stack_enabled | default(false) | bool) or (deployment_portal_monitoring_deployed | default(false) | bool)
     - deployment_portal_access_profile_effective == 'cloud'
     - caddy_vhost_urls_vpc.grafana.url | default('') | length > 0
 
@@ -349,7 +386,33 @@
             )
             else ''
           }}
+        ipa_caddy_modern_url: >-
+          {{
+            (
+              caddy_vhost_urls_external.ipa.url | default('') | trim | regex_replace('/+$', '')
+              + '/ipa/modern-ui/'
+            )
+            if (
+              caddy_vhost_enabled | default(false) | bool
+              and deployment_portal_has_ipa | bool
+            )
+            else ''
+          }}
+        ipa_caddy_legacy_url: >-
+          {{
+            (
+              caddy_vhost_urls_external.ipa.url | default('') | trim | regex_replace('/+$', '')
+              + '/ipa/ui'
+            )
+            if (
+              caddy_vhost_enabled | default(false) | bool
+              and deployment_portal_has_ipa | bool
+            )
+            else ''
+          }}
         ipa_ui_label: "FreeIPA / IdM"
+        ipa_ui_modern_label: "FreeIPA (modern UI)"
+        ipa_ui_legacy_label: "FreeIPA (legacy UI)"
       cloudera_manager:
         host_fqdn: "{{ deployment_portal_cm_fqdn }}"
         cm_installed: "{{ not (deployment_portal_cm_http_probe.failed | default(true) | bool) }}"
@@ -398,7 +461,13 @@
             + (deployment_portal_ecs_ds_links | default([]))
           }}
       monitoring:
-        enabled: "{{ monitoring_stack_enabled | default(false) | bool }}"
+        enabled: >-
+          {{
+            (monitoring_stack_enabled | default(false) | bool)
+            or (deployment_portal_monitoring_deployed | default(false) | bool)
+            or (deployment_portal_monitoring_routes_enabled | default(false) | bool)
+          }}
+        routes_enabled: "{{ deployment_portal_monitoring_routes_enabled | default(false) | bool }}"
         grafana_path_url: >-
           {{
             ('http://' + deployment_portal_ops_public_ip + ':' + (deployment_portal_http_port | string) + '/grafana/')
@@ -422,21 +491,51 @@
         alertmanager_caddy_url: "{{ caddy_vhost_urls_external.alertmanager.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
         grafana_url: >-
           {{
-            deployment_portal_access_urls.primary.grafana
-            if (deployment_portal_access_profile_effective == 'private')
-            else deployment_portal_access_urls.external.grafana
+            (
+              caddy_vhost_urls_external.grafana.url | default('')
+              if (
+                caddy_vhost_enabled | default(false) | bool
+                and (caddy_vhost_urls_external.grafana.url | default('') | length > 0)
+              )
+              else ''
+            )
+            or (
+              deployment_portal_access_urls.primary.grafana
+              if (deployment_portal_access_profile_effective == 'private')
+              else deployment_portal_access_urls.external.grafana
+            )
           }}
         prometheus_url: >-
           {{
-            deployment_portal_access_urls.primary.prometheus
-            if (deployment_portal_access_profile_effective == 'private')
-            else deployment_portal_access_urls.external.prometheus
+            (
+              caddy_vhost_urls_external.prometheus.url | default('')
+              if (
+                caddy_vhost_enabled | default(false) | bool
+                and (caddy_vhost_urls_external.prometheus.url | default('') | length > 0)
+              )
+              else ''
+            )
+            or (
+              deployment_portal_access_urls.primary.prometheus
+              if (deployment_portal_access_profile_effective == 'private')
+              else deployment_portal_access_urls.external.prometheus
+            )
           }}
         alertmanager_url: >-
           {{
-            deployment_portal_access_urls.primary.alertmanager
-            if (deployment_portal_access_profile_effective == 'private')
-            else deployment_portal_access_urls.external.alertmanager
+            (
+              caddy_vhost_urls_external.alertmanager.url | default('')
+              if (
+                caddy_vhost_enabled | default(false) | bool
+                and (caddy_vhost_urls_external.alertmanager.url | default('') | length > 0)
+              )
+              else ''
+            )
+            or (
+              deployment_portal_access_urls.primary.alertmanager
+              if (deployment_portal_access_profile_effective == 'private')
+              else deployment_portal_access_urls.external.alertmanager
+            )
           }}
         cadvisor_url: >-
           {{
@@ -449,4 +548,10 @@
         alertmanager_url_vpc: "{{ deployment_portal_access_urls.vpc.alertmanager | default('') }}"
         cadvisor_url_vpc: "{{ deployment_portal_access_urls.vpc.cadvisor | default('') }}"
       nodes: "{{ deployment_portal_nodes }}"
+      inventory_hosts: "{{ deployment_portal_inventory_hosts | default([]) }}"
+      planned_roles: "{{ deployment_portal_planned_roles | default([]) }}"
+      endpoints: "{{ deployment_portal_endpoints | default([]) }}"
       extra_links: "{{ deployment_portal_extra_links }}"
+
+- name: Collect deployment portal live stats snapshot (CM API + inventory)
+  ansible.builtin.import_tasks: collect_deployment_portal_live_stats.yml

@@ -21,7 +21,7 @@ http://:{{ deployment_portal_http_port }} {
     file_server
   }
 
-{% if monitoring_stack_enabled | default(false) | bool %}
+{% if deployment_portal_monitoring_routes_enabled | default(false) | bool %}
   handle /grafana/* {
     reverse_proxy {{ monitoring_grafana_docker_service }}:3000
   }
@@ -46,7 +46,7 @@ http://:{{ deployment_portal_http_port }} {
     file_server
   }
 
-{% if monitoring_stack_enabled | default(false) | bool %}
+{% if deployment_portal_monitoring_routes_enabled | default(false) | bool %}
   handle /grafana/* {
     reverse_proxy {{ monitoring_grafana_docker_service }}:3000
   }

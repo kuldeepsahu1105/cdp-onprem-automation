@@ -3,6 +3,8 @@
 #   cm_port: 7180
 #   cm_admin_user: "admin"
 #   cm_admin_pass: "admin"
+# CM API reachability: unauthenticated GET /api/version may return 401 — that still means the API is up
+# (see common_tasks/set_cm_api_url.yml and .cursor/LEARNINGS.md).
 
 ---
 - import_playbook: 00_ensure_collections.yml
@@ -29,6 +31,7 @@
         status_code: [200, 301, 303]
         validate_certs: no
       register: cm_version
+      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
 
     # - name: Print Cloudera Manager API Version Response
     #   ansible.builtin.debug:
@@ -50,6 +53,7 @@
         validate_certs: no
       register: cm_license_status
       changed_when: false
+      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
 
     - name: Print Cloudera Manager License Status
       ansible.builtin.debug:
@@ -88,6 +92,7 @@
         validate_certs: no
       register: cm_service_status
       failed_when: false
+      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
 
     - name: Print Cloudera Management Services Status
       ansible.builtin.debug:
@@ -114,6 +119,7 @@
         status_code: [200, 301, 303]
         validate_certs: no
       register: cm_clusters
+      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
 
     - name: Print Available Clusters
       ansible.builtin.debug:
