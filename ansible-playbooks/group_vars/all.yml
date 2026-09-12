@@ -326,7 +326,7 @@ deployment_portal_verify_milestones: []
 deployment_portal_verify_cm_vhost: false
 # Set by 35_refresh_deployment_portal.yml — legacy CM milestone when milestones extra-var omitted
 deployment_portal_verify_post_cm: false
-# Tier A CM vhost when required: fail (default) or warn (non-blocking, like Tier B warn)
+# Deprecated — CM Tier A is direct on cldr-mngr; kept for inventory overrides
 deployment_portal_cm_vhost_tier_a_verify: fail
 # Tier B: GET external URLs from Ansible controller when ansible_control_reachability is public (warn|fail|skip)
 deployment_external_url_verify: warn
