@@ -4,7 +4,7 @@
   vars:
     required_inventory_group: cldr-mngr
 
-- name: Resolve reachable CM API host (127.0.0.1 on cldr-mngr, else private/public IP)
+- name: Resolve reachable CM API host (manager IP/FQDN; loopback only when on cldr-mngr)
   ansible.builtin.import_tasks: resolve_cm_connect_host.yml
 
 - name: Pick reachable CM API probe address on delegated cldr-mngr
@@ -203,39 +203,57 @@
     cm_protocol: >-
       {{
         'https'
-        if (cm_api_probe_host | default('') == '127.0.0.1')
-        and (
+        if (
           cm_api_probe_https_discovery.results | default([])
           | selectattr('status', 'defined')
           | selectattr('status', 'in', [200, 301, 303, 401, 403])
           | list
           | length > 0
         )
+        and (
+          cm_api_probe_host_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length
+        ) == 0
         else 'http'
       }}
     cm_api_port: >-
       {{
         cm_https_port
-        if (cm_api_probe_host | default('') == '127.0.0.1')
-        and (
+        if (
           cm_api_probe_https_discovery.results | default([])
           | selectattr('status', 'defined')
           | selectattr('status', 'in', [200, 301, 303, 401, 403])
           | list
           | length > 0
         )
+        and (
+          cm_api_probe_host_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length
+        ) == 0
         else cm_http_port
       }}
     autotls_enabled: >-
       {{
-        (cm_api_probe_host | default('') == '127.0.0.1')
-        and (
+        (
           cm_api_probe_https_discovery.results | default([])
           | selectattr('status', 'defined')
           | selectattr('status', 'in', [200, 301, 303, 401, 403])
           | list
           | length > 0
         )
+        and (
+          cm_api_probe_host_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length
+        ) == 0
       }}
   when:
     - cm_api_delegate_discovery_succeeded | default(false) | bool
@@ -381,28 +399,53 @@
       probe_host={{ cm_api_probe_host }}).
   when: _cm_api_version_content | default('') | length == 0
 
-- name: Resolve CM API URL host for uri tasks on this play (loopback only when delegating to cldr-mngr)
+- name: Avoid loopback CM API URL on Jenkins when not delegating uri to cldr-mngr
+  ansible.builtin.set_fact:
+    _cm_api_url_host_prefer_public: >-
+      {{
+        cm_api_connect_host
+        if (cm_api_connect_host | default('') | length > 0)
+        else cm_host_public
+      }}
+  when:
+    - cm_api_controller_is_localhost | default(false) | bool
+    - not (cm_api_runner_is_manager | default(false) | bool)
+    - cm_api_uri_delegate_to | default('') | length == 0
+    - (
+        (cm_api_client_host | default('') in ['127.0.0.1', 'localhost', ''])
+        or (cm_api_probe_host | default('') in ['127.0.0.1', 'localhost'])
+      )
+    - (
+        (cm_api_connect_host | default('') | length > 0)
+        or (cm_host_public | default('') | length > 0)
+      )
+
+- name: Resolve CM API URL host for uri tasks on this play (loopback only when delegating uri to cldr-mngr)
   ansible.builtin.set_fact:
     _cm_api_url_host: >-
       {{
         cm_api_probe_host
         if (cm_api_uri_delegate_to | default('') | length > 0)
         else (
-          cm_api_connect_host
-          if (
-            (cm_api_connect_host | default('') | length > 0)
-            and (cm_api_controller_is_localhost | default(false) | bool)
-            and not (cm_api_runner_is_manager | default(false) | bool)
-          )
+          _cm_api_url_host_prefer_public
+          if (_cm_api_url_host_prefer_public is defined)
           else (
-            cm_host_public
+            cm_api_connect_host
             if (
-              (cm_api_controller_is_localhost | default(false) | bool)
+              (cm_api_connect_host | default('') | length > 0)
+              and (cm_api_controller_is_localhost | default(false) | bool)
               and not (cm_api_runner_is_manager | default(false) | bool)
-              and (cm_api_client_host | default('') in ['127.0.0.1', 'localhost', ''])
-              and (cm_host_public | default('') | length > 0)
             )
-            else cm_api_client_host
+            else (
+              cm_host_public
+              if (
+                (cm_api_controller_is_localhost | default(false) | bool)
+                and not (cm_api_runner_is_manager | default(false) | bool)
+                and (cm_api_client_host | default('') in ['127.0.0.1', 'localhost', ''])
+                and (cm_host_public | default('') | length > 0)
+              )
+              else cm_api_client_host
+            )
           )
         )
       }}

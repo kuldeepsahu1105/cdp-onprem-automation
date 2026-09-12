@@ -1,6 +1,6 @@
 ---
 # CM URL verification (manager-local required checks; optional hairpin; optional controller external when portal off):
-#   Required: http(s) UI on cldr-mngr (127.0.0.1 / FQDN — probe_cm_manager_ui_http.yml; same path as cm_api_delegate_probes_to_manager).
+#   Required: http(s) UI on cldr-mngr (private IP / ansible_host / FQDN — probe_cm_manager_ui_http.yml).
 #   Optional hairpin: public-EIP URL from cldr-mngr when deployment_cm_hairpin_url_verify is true (warn only).
 #   Optional controller: verify_service_urls_from_controller.yml when portal is disabled and
 #   deployment_portal_verify_tier_b_enabled is true (default false — use 10/35 localhost external play).
@@ -8,7 +8,6 @@
 - name: Set CM URL verify defaults
   ansible.builtin.set_fact:
     _cm_url_verify_codes: "{{ deployment_service_url_verify_status_codes | default(deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308])) }}"
-    _cm_tier_a_https: "https://127.0.0.1:{{ cm_https_port | int }}/"
 
 - name: Set CM FQDN for UI probes on cldr-mngr
   ansible.builtin.set_fact:
@@ -17,9 +16,34 @@
   run_once: true
   when: "'cldr-mngr' in groups and groups['cldr-mngr'] | length > 0"
 
-- name: Verify CM UI HTTP on cldr-mngr (127.0.0.1 then FQDN/private)
+- name: Verify CM UI HTTP on cldr-mngr (private IP / ansible_host / FQDN)
   ansible.builtin.import_tasks: probe_cm_manager_ui_http.yml
   when: "'cldr-mngr' in groups and groups['cldr-mngr'] | length > 0"
+
+- name: Set CM HTTPS UI probe URL from manager bind address
+  ansible.builtin.set_fact:
+    _cm_tier_a_https: "https://{{ cm_manager_ui_probe_host_effective }}:{{ cm_https_port | int }}/"
+  when:
+    - cm_manager_ui_probe_host_effective | default('') | length > 0
+
+- name: Set CM HTTPS UI probe URL fallback from manager inventory
+  ansible.builtin.set_fact:
+    _cm_tier_a_https: >-
+      {{
+        'https://'
+        + (
+          hostvars[groups['cldr-mngr'][0]].private_ip | default('')
+          if (
+            hostvars[groups['cldr-mngr'][0]].private_ip | default('') | length > 0
+            and hostvars[groups['cldr-mngr'][0]].private_ip | default('') != '127.0.0.1'
+          )
+          else hostvars[groups['cldr-mngr'][0]].ansible_host | default('127.0.0.1')
+        )
+        + ':' + (cm_https_port | string) + '/'
+      }}
+  when:
+    - _cm_tier_a_https is not defined
+    - "'cldr-mngr' in groups and groups['cldr-mngr'] | length > 0"
 
 - name: Verify CM UI HTTPS on cldr-mngr (Auto-TLS)
   ansible.builtin.uri:
@@ -33,7 +57,9 @@
   retries: 3
   delay: 5
   until: cm_tier_a_https_result is succeeded
-  when: autotls_enabled | default(false) | bool
+  when:
+    - autotls_enabled | default(false) | bool
+    - _cm_tier_a_https is defined
   delegate_to: cldr-mngr
   run_once: true
 
@@ -41,7 +67,7 @@
   ansible.builtin.fail:
     msg: >-
       Cloudera Manager UI did not respond on cldr-mngr at any of
-      {{ cm_manager_ui_probe_hosts | default(['127.0.0.1']) | join(', ') }}:{{ cm_http_port }}.
+      {{ cm_manager_ui_probe_hosts | default(['manager IP/FQDN']) | join(', ') }}:{{ cm_http_port }}.
       Confirm cloudera-scm-server is active (scm-server often binds FQDN/VPC IP, not 127.0.0.1).
   when:
     - deployment_portal_cm_http_probe is defined
