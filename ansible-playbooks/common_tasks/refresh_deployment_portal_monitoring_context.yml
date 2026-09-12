@@ -55,6 +55,11 @@
               if (_portal_mon_effective | default(false) | bool)
               else (deployment_portal_context.endpoints | default([]))
             ),
+            'planned_roles': (
+              deployment_portal_planned_roles
+              if (_portal_mon_effective | default(false) | bool)
+              else (deployment_portal_context.planned_roles | default([]))
+            ),
           },
           recursive=True
         )

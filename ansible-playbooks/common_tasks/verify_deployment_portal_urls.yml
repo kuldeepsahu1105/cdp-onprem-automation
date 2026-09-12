@@ -257,11 +257,13 @@
     validate_certs: false
     timeout: 10
   loop: >-
-    {{
-      deployment_portal_access_url_checks_optional | default([])
-      | rejectattr('hairpin_skip_probe', 'equalto', true)
-      | list
-    }}
+    {%- set out = [] -%}
+    {%- for row in deployment_portal_access_url_checks_optional | default([]) -%}
+    {%- if not (row.hairpin_skip_probe | default(false) | bool) -%}
+    {%- set _ = out.append(row) -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {{ out }}
   loop_control:
     label: "{{ item.name }}"
   register: deployment_portal_access_url_optional_results
@@ -578,6 +580,27 @@
     - inventory_hostname in groups.get('ipaserver', [])
   failed_when: false
 
+- name: Warn when FreeIPA direct HTTPD check fails at bootstrap (portal+ipa milestones only)
+  ansible.builtin.debug:
+    msg: >-
+      Tier A optional IPA direct HTTPD warn (bootstrap): modern/legacy UI did not respond on http://127.0.0.1/
+      with Host: {{ deployment_portal_ipa_fqdn }} (HTTP modern={{ ipa_direct_modern_ui_check.status | default('n/a') }}
+      legacy={{ ipa_direct_legacy_ui_check.status | default('n/a') }}; non-blocking).
+      Caddy IPA vhost probes are warn-only at this milestone; re-run IDENTITY or refresh portal after IPA HTTPD is ready.
+  when:
+    - _portal_bootstrap_milestone_vhost_warn | default(false) | bool
+    - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
+    - deployment_portal_has_ipa | default(false) | bool
+    - deployment_portal_ipa_fqdn | default('') | length > 0
+    - inventory_hostname in groups.get('ipaserver', [])
+    - ipa_direct_modern_ui_check is defined
+    - ipa_direct_legacy_ui_check is defined
+    - >-
+      ipa_direct_modern_ui_check is failed
+      or (ipa_direct_modern_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)
+      or ipa_direct_legacy_ui_check is failed
+      or (ipa_direct_legacy_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)
+
 - name: Fail when FreeIPA modern or legacy UI does not accept its FQDN Host header locally
   ansible.builtin.fail:
     msg: >-
@@ -588,6 +611,7 @@
       HTTP status modern={{ ipa_direct_modern_ui_check.status | default('n/a') }} legacy={{ ipa_direct_legacy_ui_check.status | default('n/a') }}
       (acceptable: {{ _portal_url_verify_codes_int | join('/') }}).
   when:
+    - not (_portal_bootstrap_milestone_vhost_warn | default(false) | bool)
     - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
     - deployment_portal_has_ipa | default(false) | bool
     - deployment_portal_ipa_fqdn | default('') | length > 0
