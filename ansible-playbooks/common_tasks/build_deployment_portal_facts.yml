@@ -193,6 +193,19 @@
     caddy_vhost_urls: "{{ caddy_vhost_urls_external }}"
   when: caddy_vhost_enabled | default(false) | bool
 
+- name: Set IPA Caddy vhost hostname for HTTPD Referer mapping
+  ansible.builtin.set_fact:
+    ipa_caddy_public_hostname: "{{ caddy_vhost_urls.ipa.hostname | default('') }}"
+  when:
+    - deployment_portal_has_ipa | bool
+    - caddy_vhost_enabled | default(false) | bool
+    - caddy_vhost_urls.ipa.hostname | default('') | length > 0
+
+- name: Clear IPA Caddy vhost hostname when IPA or Caddy vhosts are disabled
+  ansible.builtin.set_fact:
+    ipa_caddy_public_hostname: ""
+  when: not (deployment_portal_has_ipa | bool and caddy_vhost_enabled | default(false) | bool)
+
 - name: Default empty Caddy vhost map when disabled
   ansible.builtin.set_fact:
     caddy_vhost_urls: {}

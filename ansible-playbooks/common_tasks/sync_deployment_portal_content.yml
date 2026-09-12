@@ -32,6 +32,9 @@
     mode: "0644"
   register: caddyfile_render
 
+- name: Configure FreeIPA HTTPD for deployment portal Caddy proxy
+  ansible.builtin.import_tasks: configure_ipa_httpd_behind_caddy.yml
+
 - name: Validate pgAdmin default email (pgAdmin 8 rejects .local and non-TLD addresses)
   ansible.builtin.assert:
     that:

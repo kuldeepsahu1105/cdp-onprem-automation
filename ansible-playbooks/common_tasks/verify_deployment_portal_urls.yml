@@ -322,11 +322,11 @@
             )
           + (
               [
-                {'name': 'Caddy vhost FreeIPA (root redirect)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
+                {'name': 'IPA Caddy vhost GET / (expect 301 → /ipa/modern-ui/)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
                  'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false},
-                {'name': 'Caddy vhost FreeIPA modern UI', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/modern-ui/',
+                {'name': 'IPA Caddy vhost GET /ipa/modern-ui/ (200 or 301 OK)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/modern-ui/',
                  'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false},
-                {'name': 'Caddy vhost FreeIPA legacy UI', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/ui',
+                {'name': 'IPA Caddy vhost GET /ipa/ui (200 or 301 OK)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/ui',
                  'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false},
               ]
               if (
@@ -389,7 +389,20 @@
       }}
   when: deployment_portal_caddy_vhost_checks | default([]) | length > 0
 
-- name: Verify required Caddy vhost routes via localhost with Host header
+- name: Note Tier A verify on each PORTAL sync (IPA HTTP 301 without follow_redirects is success)
+  ansible.builtin.debug:
+    msg: >-
+      Tier A URL verify runs after every portal sync (including Jenkins PORTAL reruns) against
+      {{ _portal_local_base }} with Caddy vhost Host headers.
+      FreeIPA checks use follow_redirects=no — HTTP 301 (for example GET / to /ipa/modern-ui/, or upstream canonical redirect)
+      is expected and passes when the status is in {{ _portal_url_verify_codes_int | join('/') }}.
+      Verbose Ansible output may show redirect responses; the play fails only on unexpected status codes.
+  when:
+    - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
+    - deployment_portal_has_ipa | default(false) | bool
+    - deployment_portal_caddy_vhost_checks_required | default([]) | length > 0
+
+- name: Verify required Caddy vhost routes via localhost with Host header (301/302 OK; no follow_redirects)
   ansible.builtin.uri:
     url: "{{ _portal_local_base }}{{ item.path | default('/') }}"
     method: GET
@@ -492,7 +505,7 @@
     - not (item.item.optional | default(false) | bool)
     - (item.status | default(0) | int not in _portal_url_verify_codes_int)
 
-- name: Verify FreeIPA modern UI path with IPA FQDN Host header (direct upstream)
+- name: Verify FreeIPA modern UI on ipaserver HTTPD (direct; 301 from IPA without follow_redirects is OK)
   ansible.builtin.uri:
     url: "http://127.0.0.1/ipa/modern-ui/"
     method: GET
@@ -514,7 +527,7 @@
     - inventory_hostname in groups.get('ipaserver', [])
   failed_when: false
 
-- name: Verify FreeIPA legacy UI path with IPA FQDN Host header (direct upstream)
+- name: Verify FreeIPA legacy UI on ipaserver HTTPD (direct; 301 from IPA without follow_redirects is OK)
   ansible.builtin.uri:
     url: "http://127.0.0.1/ipa/ui"
     method: GET

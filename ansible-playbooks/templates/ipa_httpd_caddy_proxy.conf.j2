@@ -1,0 +1,6 @@
+# Managed by Ansible — FreeIPA HTTPD behind deployment portal Caddy (cloudera-labs/openshift ipa-rewrite pattern).
+# Maps the public Caddy vhost hostname to IPA canonical Host/Referer and relaxes forced HTTPS redirect for /ipa over HTTP from Caddy.
+
+<IfModule mod_headers.c>
+  RequestHeader edit Referer ^https?://{{ ipa_caddy_public_hostname | replace('.', '\\.') }}/ https://{{ deployment_portal_ipa_fqdn }}/
+</IfModule>

@@ -1,0 +1,64 @@
+---
+# FreeIPA Apache tweaks when UI is reached via deployment portal Caddy vhost (HTTP upstream).
+# Complements Caddy header_up Host/Referer and handle_response Location rewrite in deployment_portal_Caddyfile_vhosts.inc.j2.
+
+- name: Install FreeIPA HTTPD snippet for deployment portal Caddy proxy
+  ansible.builtin.template:
+    src: ipa_httpd_caddy_proxy.conf.j2
+    dest: /etc/httpd/conf.d/zz-ipa-caddy-proxy.conf
+    mode: "0644"
+  register: ipa_httpd_caddy_proxy_conf
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - inventory_hostname in groups.get('ipaserver', [])
+
+- name: Check whether FreeIPA ipa-rewrite HTTPS redirect is already disabled for Caddy
+  ansible.builtin.command:
+    cmd: grep -q 'ANSIBLE_CADDY_HTTP_UPSTREAM' /etc/httpd/conf.d/ipa-rewrite.conf
+  register: ipa_rewrite_caddy_marker
+  changed_when: false
+  failed_when: false
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - inventory_hostname in groups.get('ipaserver', [])
+
+- name: Disable FreeIPA ipa-rewrite forced HTTPS redirect for HTTP Caddy upstream
+  ansible.builtin.replace:
+    path: /etc/httpd/conf.d/ipa-rewrite.conf
+    after: '# Redirect to the secure port if not displaying an error or retrieving'
+    before: '# Rewrite for plugin'
+    regexp: '^RewriteCond %\{SERVER_PORT\}  !\^443\$'
+    replace: '# ANSIBLE_CADDY_HTTP_UPSTREAM — keep /ipa on HTTP when proxied from Caddy\n# RewriteCond %{SERVER_PORT}  !^443$'
+  register: ipa_rewrite_https_cond
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - inventory_hostname in groups.get('ipaserver', [])
+    - ipa_rewrite_caddy_marker is defined
+    - ipa_rewrite_caddy_marker.rc != 0
+
+- name: Comment remaining lines in ipa-rewrite HTTPS redirect block for Caddy
+  ansible.builtin.replace:
+    path: /etc/httpd/conf.d/ipa-rewrite.conf
+    after: '# ANSIBLE_CADDY_HTTP_UPSTREAM'
+    before: '# Rewrite for plugin'
+    regexp: '^(RewriteCond %\{REQUEST_URI\}|RewriteRule \^/ipa/)'
+    replace: '# \1'
+  register: ipa_rewrite_https_block
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - inventory_hostname in groups.get('ipaserver', [])
+    - ipa_rewrite_https_cond is defined
+    - ipa_rewrite_https_cond is changed
+
+- name: Reload httpd when FreeIPA Caddy proxy configuration changed
+  ansible.builtin.service:
+    name: httpd
+    state: reloaded
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - inventory_hostname in groups.get('ipaserver', [])
+    - >-
+      (ipa_httpd_caddy_proxy_conf is changed)
+      or (ipa_rewrite_https_cond is defined and ipa_rewrite_https_cond is changed)
+      or (ipa_rewrite_https_block is defined and ipa_rewrite_https_block is changed)

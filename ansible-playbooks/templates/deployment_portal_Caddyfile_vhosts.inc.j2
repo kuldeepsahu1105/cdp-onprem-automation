@@ -3,6 +3,7 @@
 {% if _cm_upstream | length == 0 %}
 {%   set _cm_upstream = deployment_portal_cm_fqdn %}
 {% endif %}
+{% set _ipa_caddy_origin = 'http://{http.request.host}' ~ (':' ~ (deployment_portal_http_port | int) if (deployment_portal_http_port | int) != 80 else '') %}
 http://{{ caddy_vhost_urls.cm.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
 {% if autotls_enabled | default(false) | bool %}
   reverse_proxy https://{{ _cm_upstream }}:{{ cm_https_port }} {
@@ -29,12 +30,20 @@ http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port 
 }
 
 {% if deployment_portal_has_ipa | default(false) | bool %}
-{# FreeIPA dual UI via Caddy: default landing modern-ui; legacy /ipa/ui still proxied. HTTP upstream + Host + path-matched Referer (openshift pattern; vhost key ipa.*). See .cursor/LEARNINGS.md #}
+{# FreeIPA dual UI via Caddy: path-only root redirect; HTTP upstream + Host + Referer; rewrite upstream Location to stay on ipa.* vhost (openshift / ipa-rewrite pattern). See .cursor/LEARNINGS.md #}
 http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
-  redir / /ipa/modern-ui/ permanent
+  @ipa_root path /
+  redir @ipa_root /ipa/modern-ui/ 301
   reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
     header_up Host {{ deployment_portal_ipa_fqdn }}
     header_up Referer https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}
+    header_up X-Forwarded-Host {http.request.host}
+    header_up X-Forwarded-Proto {http.request.scheme}
+    @ipa_upstream_redirect header Location *
+    handle_response @ipa_upstream_redirect {
+      header >Location https://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
+      header >Location http://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
+    }
   }
 }
 {% endif %}
