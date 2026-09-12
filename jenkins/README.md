@@ -175,6 +175,7 @@ Set `NOTIFICATION_EMAIL` or rely on `BUILD_USER_EMAIL`. CM credentials come from
 |---|---|
 | `build-summary.txt` | Stages, instance counts, inventory |
 | `cm-access.txt` | SSH PEM path, CM URL, CM login (after CM_INSTALL) |
+| `access-urls.txt` | Portal / monitoring / Caddy / CM URLs (from Ansible `CDP_ACCESS_URLS_*` log block or inventory) |
 | `terraform-*.log` | Terraform output |
 | `ansible-*-phaseN.log` | Per-phase Ansible output |
 | `validate-*.log` | Validation output |
