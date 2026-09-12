@@ -72,7 +72,7 @@ The same three-tier model applies to **portal**, **Cloudera Manager**, **Grafana
 
 | Stage / trigger | `deployment_portal_verify_milestones` (cumulative) | Tier **A** Caddy vhosts / host checks | Tier **B** (controller, when public reach) |
 |---|---|---|---|
-| **PORTAL** (`10_setup_deployment_portal.yml`) | `portal`, `ipa` | Portal index, portal + IPA vhosts (required); pgAdmin vhost **warn-only**; IPA FQDN on `ipaserver` | Portal (+ IPA when in list); pgAdmin external optional Tier **B** |
+| **PORTAL** (`10_setup_deployment_portal.yml`) | `portal`, `ipa` | Portal index, portal + IPA vhosts (required when IPA in inventory); **no** pgAdmin or CM Caddy vhost probes | Portal (+ IPA when in list); **no** pgAdmin Tier **B** until milestone `pgadmin` |
 | **PORTAL pgAdmin hard gate** (optional refresh) | + `pgadmin` | + pgAdmin Caddy vhost required | + pgAdmin external |
 | **IDENTITY** (phase 2 refresh) | + `identity` | Same as PORTAL | + FreeIPA printed / Caddy IPA URLs |
 | **CM_INSTALL** (phase 3 refresh) | + `cm` | + CM Caddy vhost | + CM HTTP / public IP / Caddy CM |
@@ -81,7 +81,7 @@ The same three-tier model applies to **portal**, **Cloudera Manager**, **Grafana
 | **MONITORING** | + `monitoring` | + Grafana / Prometheus vhosts | + Grafana / Prometheus external |
 | **ECS** | + `ecs` | + ECS vhost | + ECS console / Caddy ECS |
 
-Set explicitly: `-e deployment_portal_verify_milestones=cm,cm_tls`. `pvc_setup.sh` passes the cumulative list on each `_run_deployment_portal_refresh`. Legacy `deployment_portal_verify_post_cm: true` on `35_refresh` implies `portal`, `ipa`, `cm` when milestones are omitted.
+Set explicitly: `-e deployment_portal_verify_milestones=cm,cm_tls`. `pvc_setup.sh` passes the cumulative list on each `_run_deployment_portal_refresh`. Legacy `deployment_portal_verify_post_cm: true` on `35_refresh` implies **`portal`, `ipa`** when milestones are omitted (not `cm` — add `cm` via phase 3 refresh or `-e`).
 
 Variables:
 
