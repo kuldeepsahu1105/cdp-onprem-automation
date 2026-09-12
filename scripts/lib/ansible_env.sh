@@ -131,7 +131,34 @@ prompt_select_file() {
   done
 }
 
+ansible_ssh_key_help() {
+  cat <<'EOF'
+SSH private key required for Ansible execution (SSH to cluster hosts).
+
+Accepted key locations / formats:
+  • ansible-playbooks/*.pem   (e.g. Terraform-generated key)
+  • ansible-playbooks/id_rsa
+  • ~/.ssh/id_rsa             (your default home SSH key)
+  • ANSIBLE_PRIVATE_KEY=/path/to/key
+
+Examples:
+  cp my-key.pem ansible-playbooks/sshkey.pem
+  ANSIBLE_PRIVATE_KEY=~/.ssh/id_rsa ./clone_and_run_pvc_automation.sh
+EOF
+}
+
+ui_note_ssh_key_requirement() {
+  if declare -F ui_info >/dev/null 2>&1; then
+    ui_info "SSH key required for Ansible: .pem or id_rsa in ansible-playbooks/, ~/.ssh/id_rsa, or ANSIBLE_PRIVATE_KEY=/path/to/key"
+  fi
+}
+
 resolve_private_key() {
+  # Ansible requires an SSH private key to reach inventory hosts.
+  # Search order:
+  #   1. ANSIBLE_PRIVATE_KEY (explicit path)
+  #   2. ansible-playbooks/*.pem, id_rsa, or idrsa
+  #   3. ~/.ssh/id_rsa (default home key)
   local ansible_dir="${1:-.}"
   local -a keys=()
   local key=""
@@ -158,7 +185,7 @@ resolve_private_key() {
   fi
 
   echo "Error: No SSH private key found in $ansible_dir or ~/.ssh/id_rsa." >&2
-  echo "Set ANSIBLE_PRIVATE_KEY=/path/to/key and re-run." >&2
+  ansible_ssh_key_help >&2
   return 1
 }
 
@@ -191,7 +218,38 @@ resolve_license_file() {
   return 1
 }
 
+ansible_cm_credentials_help() {
+  cat <<'EOF'
+Cloudera archive credentials (phase 3 CM install) — provide ONE of:
+
+  1. *info.txt in ansible-playbooks/  (or CM_INFO_FILE=/path/to/info.txt)
+     Format:
+       login: your-cloudera-account
+       password: your-password
+
+  2. CM_REPO_USERNAME + CM_REPO_PASSWORD environment variables
+
+  3. cm_repo_username / cm_repo_password in group_vars/all.yml
+
+If an info file or env vars are set, the wrapper passes them as -e extra vars
+and you do not need real credentials in all.yml or manual -e flags.
+
+Other settings (cm_repo_source, cm_version, etc.) still come from all.yml.
+EOF
+}
+
+ui_note_cm_credentials_requirement() {
+  if declare -F ui_info >/dev/null 2>&1; then
+    ui_info "CM archive creds (phase 3): use *info.txt, CM_REPO_USERNAME/PASSWORD, or all.yml — one source only"
+  fi
+}
+
 load_cm_repo_credentials() {
+  # Cloudera archive.cloudera.com credentials for phase 3 (CM install).
+  # Only ONE source is required (first match wins):
+  #   1. CM_REPO_USERNAME + CM_REPO_PASSWORD
+  #   2. CM_INFO_FILE or *info.txt in ansible-playbooks/ (login:/password: lines)
+  #   3. Else fall back to cm_repo_username / cm_repo_password in group_vars/all.yml
   local ansible_dir="${1:-.}"
   local -a info_files=()
   local info_file=""
@@ -212,13 +270,21 @@ load_cm_repo_credentials() {
   fi
 
   if [[ -z "$info_file" ]]; then
-    echo "Warning: No *info.txt with CM archive credentials; set CM_REPO_USERNAME/CM_REPO_PASSWORD." >&2
+    echo "Warning: No CM archive credentials from env or *info.txt; using group_vars/all.yml if set." >&2
+    echo "  (See: ansible_cm_credentials_help or DEPLOY_PHASE=3 --help)" >&2
     return 1
   fi
 
   CM_REPO_USERID="$(awk -F': *' '/^login:/ {print $2}' "$info_file")"
   CM_REPO_PASSWD="$(awk -F': *' '/^password:/ {print $2}' "$info_file")"
   export CM_REPO_USERID CM_REPO_PASSWD
+}
+
+is_dry_run() {
+  case "${DRY_RUN:-${ANSIBLE_DRY_RUN:-false}}" in
+    1|true|yes|TRUE|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 ansible_extra_args() {
@@ -229,6 +295,12 @@ ansible_extra_args() {
   fi
   if [[ -n "${ANSIBLE_LIMIT:-}" ]]; then
     args+=(--limit "$ANSIBLE_LIMIT")
+  fi
+  if is_dry_run; then
+    args+=(--check)
+    if [[ "${ANSIBLE_DIFF:-true}" != "false" ]]; then
+      args+=(--diff)
+    fi
   fi
   printf '%s\n' "${args[@]}"
 }

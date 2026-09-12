@@ -6,26 +6,26 @@ TF_VARS=(
     -var="aws_region=${AWS_REGION}"
     -var="pvc_cluster_tags={owner=\"${OWNER}\", environment=\"${ENVIRONMENT}\"}"
 
-    -var="create_vpc=false"
-    -var="vpc_name=${ENVIRONMENT}-cldr-vpc"
-    -var="vpc_cidr_block=172.16.0.0/16"
-    -var='azs=["ap-southeast-1a","ap-southeast-1b"]'
-    -var='public_subnets_cidr=["172.16.0.0/24"]'
-    -var='private_subnets_cidr=[]'
-    -var="enable_nat_gateway=false"
-    -var="enable_vpn_gateway=false"
+    -var="create_vpc=${CREATE_VPC}"
+    -var="vpc_name=${VPC_NAME}"
+    -var="vpc_cidr_block=${VPC_CIDR_BLOCK}"
+    -var="azs=${VPC_AZS}"
+    -var="public_subnets_cidr=${VPC_PUBLIC_SUBNETS_CIDR}"
+    -var="private_subnets_cidr=${VPC_PRIVATE_SUBNETS_CIDR}"
+    -var="enable_nat_gateway=${ENABLE_NAT_GATEWAY}"
+    -var="enable_vpn_gateway=${ENABLE_VPN_GATEWAY}"
 
-    -var="create_new_sg=false"
-    -var='allowed_cidrs=["137.83.231.109/32", "137.83.231.11/32", "208.127.31.110/32", "208.127.31.11/32", "139.180.248.227/32"]'
-    -var='allowed_ports=[0]'
-    -var="sg_name=${ENVIRONMENT}-pvc_cluster_sg"
+    -var="create_new_sg=${CREATE_NEW_SG}"
+    -var="allowed_cidrs=${ALLOWED_CIDRS}"
+    -var="allowed_ports=${ALLOWED_PORTS}"
+    -var="sg_name=${SG_NAME}"
     -var="existing_sg=${EXISTING_SG_NAME}"
 
-    -var="create_eip=true"
-    -var="cldr_eip_name=${ENVIRONMENT}-cldr-mngr-eip"
+    -var="create_eip=${CREATE_EIP}"
+    -var="cldr_eip_name=${CLDR_EIP_NAME}"
 
-    -var="create_keypair=true"
-    -var="keypair_name=${ENVIRONMENT}-pvc-new-keypair"
+    -var="create_keypair=${CREATE_KEYPAIR}"
+    -var="keypair_name=${KEYPAIR_NAME}"
     -var="existing_keypair_name=${EXISTING_KEYPAIR_NAME}"
 
     -var='instance_groups={

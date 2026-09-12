@@ -31,8 +31,26 @@ KEY_MAP = {
     "environment": "ENVIRONMENT",
     "terraform_version": "TERRAFORM_VERSION",
     "cm_version": "CM_VERSION",
+    "cdh_version": "CDH_VERSION",
+    "ecs_pvc_ds_version": "ECS_PVC_DS_VERSION",
+    "create_vpc": "CREATE_VPC",
+    "create_new_sg": "CREATE_NEW_SG",
+    "create_keypair": "CREATE_KEYPAIR",
+    "create_eip": "CREATE_EIP",
     "existing_sg_name": "EXISTING_SG_NAME",
     "existing_keypair_name": "EXISTING_KEYPAIR_NAME",
+    "vpc_name": "VPC_NAME",
+    "vpc_cidr_block": "VPC_CIDR_BLOCK",
+    "vpc_azs": "VPC_AZS",
+    "vpc_public_subnets_cidr": "VPC_PUBLIC_SUBNETS_CIDR",
+    "vpc_private_subnets_cidr": "VPC_PRIVATE_SUBNETS_CIDR",
+    "enable_nat_gateway": "ENABLE_NAT_GATEWAY",
+    "enable_vpn_gateway": "ENABLE_VPN_GATEWAY",
+    "sg_name": "SG_NAME",
+    "allowed_cidrs": "ALLOWED_CIDRS",
+    "allowed_ports": "ALLOWED_PORTS",
+    "keypair_name": "KEYPAIR_NAME",
+    "cldr_eip_name": "CLDR_EIP_NAME",
     "ami_id": "AMI_ID",
     "cpu_architecture": "CPU_ARCHITECTURE",
     "apply_graviton_defaults": "APPLY_GRAVITON_DEFAULTS",
@@ -59,6 +77,8 @@ def _export(name: str, value) -> str:
         return ""
     if isinstance(value, bool):
         value = "true" if value else "false"
+    elif isinstance(value, (list, dict)):
+        value = json.dumps(value)
     return f"export {name}={_shell_quote(str(value))}"
 
 

@@ -23,7 +23,7 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 | `cdh_basecluster_name` | `CDH-Cluster` |
 | `ecs_cluster_name` | `ECS-Cluster` |
 | `ecs_deploy_enabled` | `auto` | `auto`, `true`, or `false` — deploy ECS when ecs inventory groups exist |
-| `ecs_pvc_ds_version` | `1.5.5-h2000` | CDS repo tag (`1.5.5-h2100` for SP2 CHF1, etc.) |
+| `ecs_pvc_ds_version` | `1.5.5-h3300` | CDS repo tag (`1.5.5-h3300` = SP3 CHF3; older: `1.5.5-h2000` SP2, `1.5.5-h2100` SP2 CHF1) |
 | `ecs_parcel_version` | `""` | Optional override; auto-discovered from CM after parcel repo refresh |
 | `ecs_app_domain` | `apps.<domain>` | Application domain for ECS services |
 

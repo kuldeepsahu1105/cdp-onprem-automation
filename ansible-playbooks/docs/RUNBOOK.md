@@ -18,7 +18,19 @@ ansible-galaxy collection install -r requirements.yml
 
 2. Prepare `inventory.ini` with your hosts (see [REFERENCE.md](REFERENCE.md#inventory-groups)).
 3. Configure `group_vars/all.yml` (domain, passwords, AD vars if needed).
-4. Place `license.txt` and SSH key (`id_rsa` or `.pem`) in `ansible-playbooks/`.
+4. Place `license.txt` and an SSH private key in `ansible-playbooks/` (or use `~/.ssh/id_rsa`):
+   - `*.pem` (e.g. `sshkey.pem` copied from Terraform output)
+   - `id_rsa` in `ansible-playbooks/`
+   - `~/.ssh/id_rsa` on the control machine
+   - Or set `ANSIBLE_PRIVATE_KEY=/path/to/key` before running the wrapper
+
+5. **CM archive credentials** (phase 3 only) — use **one** of:
+   - `*info.txt` in `ansible-playbooks/` with `login:` and `password:` lines
+   - `CM_INFO_FILE=/path/to/info.txt`
+   - `CM_REPO_USERNAME` + `CM_REPO_PASSWORD` environment variables
+   - `cm_repo_username` / `cm_repo_password` in `group_vars/all.yml`
+
+   If an info file or env vars are set, the wrapper passes them as Ansible extra vars; you do **not** also need credentials in `all.yml` or manual `-e` flags.
 
 ## Control node and OS support
 
@@ -49,6 +61,22 @@ DEPLOY_PHASE=4 ./pvc_setup.sh    # autotls, kerberos, CMS, base cluster, ECS (if
 DEPLOY_PHASE=5 ./pvc_setup.sh    # ECS cluster only (27)
 DEPLOY_PHASE=all ./pvc_setup.sh  # full flow
 ```
+
+**Dry run** (preview changes without applying):
+
+```bash
+# Ansible — check mode + diff
+DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
+./pvc_setup.sh --dry-run
+
+# Via wrapper
+DRY_RUN=true DEPLOY_PHASE=3 ./clone_and_run_pvc_automation.sh
+
+# Terraform — plan only (no apply, no inventory copy)
+DRY_RUN=true ./clone_and_run_terraform.sh
+```
+
+Set `ANSIBLE_DIFF=false` to omit `--diff` during Ansible dry runs. CM API playbooks (`26`, `27`) may still call Cloudera Manager APIs even in check mode.
 
 Identity is auto-detected: `[ipaserver]` in inventory → FreeIPA; empty ipaserver + `ad_kdc_host` → AD.
 

@@ -44,7 +44,7 @@ For the full deployment sequence, identity scenarios, and cleanup steps, see the
 | `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/; `internal` = local mirror on cldr-mngr |
 | `deployment_environment` | `auto` | AWS vs bare-metal DNS behavior |
 | `ecs_deploy_enabled` | `auto` | Deploy ECS when `[ecs-masters]` / `[ecs-workers]` exist in inventory |
-| `ecs_pvc_ds_version` | `1.5.5-h2000` | CDS repo tag for ECS parcels (CDS 1.5.5 SP2) |
+| `ecs_pvc_ds_version` | `1.5.5-h3300` | CDS repo tag (CDS 1.5.5 SP3 CHF3) |
 | `ecs_cluster_name` | `ECS-Cluster` | ECS cluster name in Cloudera Manager |
 
 Spark is bundled in the CDH parcel for `>= 7.3.1` — separate SPARK3 download is skipped automatically. See [REFERENCE.md — Spark parcel](docs/REFERENCE.md#cmcdh-repository-source).
@@ -59,5 +59,7 @@ Spark is bundled in the CDH parcel for `>= 7.3.1` — separate SPARK3 download i
 | 4 — CMS & base cluster | `22`–`26` | `DEPLOY_PHASE=4 ./pvc_setup.sh` |
 | 5 — ECS (Data Services) | `27` | `DEPLOY_PHASE=5 ./pvc_setup.sh` |
 | Cleanup | `99` | `99_cleanup.yml` |
+
+**Dry run:** `DRY_RUN=true ./pvc_setup.sh` or `./pvc_setup.sh --dry-run` — runs Ansible with `--check --diff`. Terraform wrapper: `DRY_RUN=true ./clone_and_run_terraform.sh` (plan only).
 
 See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full execution steps and [docs/REFERENCE.md](docs/REFERENCE.md) for playbook and variable details.

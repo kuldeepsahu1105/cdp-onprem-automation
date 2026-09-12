@@ -12,7 +12,6 @@
 aws_region: ap-southeast-1
 owner: ksahu-ygulati
 environment: development
-terraform_version: latest
 
 # Optional ARM64 / Graviton (uncomment to enable)
 # cpu_architecture: arm64
@@ -20,12 +19,42 @@ terraform_version: latest
 # auto_resolve_arm64_ami: true
 # ecs_deploy_on_arm64: false
 
-# --- Cloudera versions -------------------------------------------------------
-cm_version: "7.13.2.10000"
+# --- Terraform: create new vs use existing -----------------------------------
+# create_vpc: false          # false = default VPC; true = create vpc_name/cidr below
+# create_new_sg: false        # false = existing_sg_name; true = create sg_name
+# create_keypair: false       # false = existing_keypair_name; true = new KEYPAIR_NAME + .pem
+# create_eip: true
+create_vpc: false
+create_new_sg: false
+create_keypair: false
+create_eip: true
 
-# --- AWS existing resources ----------------------------------------------------
 existing_sg_name: testing-pvc_cluster_sg
 existing_keypair_name: kuldeep-pvc-session
+
+# New VPC (only when create_vpc: true)
+# vpc_name: development-cldr-vpc
+# vpc_cidr_block: 172.16.0.0/16
+# vpc_azs: '["ap-southeast-1a","ap-southeast-1b"]'
+# vpc_public_subnets_cidr: '["172.16.0.0/24"]'
+# vpc_private_subnets_cidr: '[]'
+# enable_nat_gateway: false
+# enable_vpn_gateway: false
+
+# New SG (only when create_new_sg: true)
+# sg_name: development-pvc_cluster_sg
+# allowed_cidrs: '["0.0.0.0/0"]'
+# allowed_ports: '[0]'
+
+# New keypair (only when create_keypair: true)
+# keypair_name: development-pvc-new-keypair
+
+# cldr_eip_name: development-cldr-mngr-eip
+
+# --- Cloudera versions (Ansible — deploy versions live in group_vars/all.yml) --
+cm_version: "7.13.2.10000"
+# cdh_version: "7.3.2.10000"
+# ecs_pvc_ds_version: "1.5.5-h3300"
 
 # --- AMI (shared by all groups) ----------------------------------------------
 ami_id: ami-0a66a47c24c021954
@@ -56,3 +85,6 @@ instance_groups:
     count: 7
     instance_type: r5a.4xlarge
     volume_size: 1300
+
+# --- Tooling (rarely changed) ------------------------------------------------
+terraform_version: latest

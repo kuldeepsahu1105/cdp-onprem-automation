@@ -44,23 +44,28 @@ Both formats set the same variables and produce the same `TF_VARS` for Terraform
 
 | Section | Variables |
 |---|---|
-| General | `AWS_REGION`, `OWNER`, `ENVIRONMENT`, `TERRAFORM_VERSION` |
+| General | `AWS_REGION`, `OWNER`, `ENVIRONMENT` |
 | CPU architecture | `CPU_ARCHITECTURE` (`x86_64` \| `arm64`), `APPLY_GRAVITON_DEFAULTS`, `AUTO_RESOLVE_ARM64_AMI`, `ECS_DEPLOY_ON_ARM64` |
-| Cloudera | `CM_VERSION` |
-| AWS resources | `EXISTING_SG_NAME`, `EXISTING_KEYPAIR_NAME` |
+| Terraform resource mode | `CREATE_VPC`, `CREATE_NEW_SG`, `CREATE_KEYPAIR`, `CREATE_EIP` |
+| Existing AWS resources | `EXISTING_SG_NAME`, `EXISTING_KEYPAIR_NAME` (when create flags are `false`) |
+| New VPC / SG / keypair | `VPC_*`, `SG_NAME`, `ALLOWED_CIDRS`, `KEYPAIR_NAME`, `CLDR_EIP_NAME` (when create flags are `true`) |
+| Cloudera versions | `CM_VERSION`; optional commented `CDH_VERSION`, `ECS_PVC_DS_VERSION` (Ansible deploy uses `group_vars/all.yml`) |
 | AMI | `AMI_ID` (shared across instance groups) |
 | Instance groups | `CLDR_MNGR_*`, `IPA_SERVER_*`, `PVCBASE_*`, `PVCECS_*` |
+| Tooling | `TERRAFORM_VERSION` (default `latest`, at bottom of file) |
+
+When `EXISTING_SG_NAME` and `EXISTING_KEYPAIR_NAME` are set, use `CREATE_NEW_SG=false` and `CREATE_KEYPAIR=false` — no other duplicate true/false flags needed. `CREATE_VPC=false` uses the account default VPC.
 
 ```bash
-# .tfvars.env — edit by section, one variable per line with inline comments
-ENVIRONMENT="staging"
-PVCBASE_WORKER_COUNT=5
-PVCBASE_WORKER_INSTANCE_TYPE="m5.4xlarge"
-PVCECS_WORKER_COUNT=7
-PVCECS_WORKER_VOLUME_SIZE=1300
+# .tfvars.env — typical existing-resources layout
+CREATE_VPC="false"
+CREATE_NEW_SG="false"
+CREATE_KEYPAIR="false"
+EXISTING_SG_NAME="testing-pvc_cluster_sg"
+EXISTING_KEYPAIR_NAME="kuldeep-pvc-session"
 ```
 
-CDH and ECS **software versions** and cluster settings are configured in Ansible (`ansible-playbooks/group_vars/all.yml`), not in `.tfvars.env` / `.tfvars.yaml`. Terraform only provisions the EC2 instance groups; Ansible deploys the clusters onto those hosts.
+CDH and ECS **deploy versions** are applied by Ansible (`ansible-playbooks/group_vars/all.yml`). Optional `CDH_VERSION` / `ECS_PVC_DS_VERSION` comments in tfvars are for reference only — edit `all.yml` before cluster deploy.
 
 ## CDH base cluster deployment
 
@@ -136,7 +141,7 @@ Set `PVCECS_*_COUNT=0` in tfvars to skip ECS infrastructure entirely, or leave g
 | `ecs_cluster_name` | `ECS-Cluster` | ECS cluster name in Cloudera Manager |
 | `ecs_cluster_master_group` | `ecs-masters` | Inventory group for ECS master |
 | `ecs_cluster_worker_group` | `ecs-workers` | Inventory group for ECS workers |
-| `ecs_pvc_ds_version` | `1.5.5-h2000` | CDS repo tag (CDS 1.5.5 SP2; use `1.5.5-h2100` for SP2 CHF1) |
+| `ecs_pvc_ds_version` | `1.5.5-h3300` | CDS repo tag (CDS 1.5.5 SP3 CHF3) |
 | `ecs_pvc_repository_url` | computed | `https://archive.cloudera.com/p/cdp-pvc-ds/<version>` |
 | `ecs_parcel_repo_url` | computed | ECS parcel repo under CDS path |
 | `ecs_parcel_version` | `""` | Optional override; auto-discovered from CM when empty |
@@ -149,7 +154,7 @@ Set `PVCECS_*_COUNT=0` in tfvars to skip ECS infrastructure entirely, or leave g
 | `ecs_control_plane_vault_mode` | `embedded` | Vault storage mode |
 | `ecs_k8s_webui_secret_admin_token` | `ChangeMe@ECS-WebUI` | K8s web UI admin token — change before deploy |
 
-Compatible with CDH 7.3.2: CDS 1.5.5 SP2+ (see Cloudera release matrix).
+Compatible with CDH 7.3.2: CDS 1.5.5 SP3 CHF3+ (see Cloudera release matrix).
 
 ```bash
 # ECS only (after base cluster is up)
@@ -158,7 +163,7 @@ DEPLOY_PHASE=5 ./pvc_setup.sh
 
 # Or run playbook directly
 ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml \
-  -e ecs_pvc_ds_version=1.5.5-h2000
+  -e ecs_pvc_ds_version=1.5.5-h3300
 ```
 
 ### ECS cleanup toggles (`99_cleanup.yml`)
@@ -272,8 +277,10 @@ cdp-onprem-automation/
 cd ansible-playbooks
 ansible-galaxy collection install -r requirements.yml
 ansible-playbook -i inventory.ini 00_detect_identity.yml
-ansible-playbook -i inventory.ini 10_identity_setup.yml
-# ... see RUNBOOK.md for full sequence
+DEPLOY_PHASE=all ./pvc_setup.sh
+
+# Dry run (preview changes, no apply)
+DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
 ```
 
 ## Key features
@@ -283,8 +290,48 @@ ansible-playbook -i inventory.ini 10_identity_setup.yml
 - **OS-independent playbooks** — RHEL and Ubuntu via `os_vars` map
 - **Persistent DNS** — netplan (Ubuntu) or resolv.conf; AWS vs bare-metal auto-detection
 - **Safe cleanup** — `99_cleanup.yml` with explicit confirmation and per-component toggles
+- **Dry run** — `DRY_RUN=true` for Ansible (`--check --diff`) or Terraform (plan only)
 
 ## Authors
 
 - Kuldeep Sahu — ksahu@cloudera.com
 - Yash Gulati — ygulati@cloudera.com
+
+## Jenkins CI/CD
+
+Declarative **`Jenkinsfile`** with **checkbox stage selection**, input validation, and `REFRESH_JENKINSFILE=YES` to reload parameters after changes.
+
+**Stage checkboxes (`PIPELINE_STAGES`):** `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CDH_BASE`, `ECS_INSTALL` — pick any combination.
+
+**Validation checkboxes (`VALIDATION_CHECKS`):** `TOOLS`, `AWS_CREDS`, `TFVARS`, `ANSIBLE_SYNTAX`, `INVENTORY`, `EMAIL_FORMAT`.
+
+Requires the [Extended Choice Parameter](https://plugins.jenkins.io/extended-choice-parameter/) plugin. See [jenkins/README.md](jenkins/README.md) for setup, examples, and tfvars UI overrides.
+
+## Troubleshooting — UI / dry run not showing
+
+You need a **recent git checkout** (commit `979b503` or later). From your clone:
+
+```bash
+cd /Users/ksahu/cdp-onprem-automation   # or your clone path
+git pull origin main
+test -f scripts/lib/ui.sh && echo "UI OK" || echo "OLD CODE — pull again"
+git rev-parse --short HEAD              # should be 979b503 or newer
+```
+
+**Where to run:**
+
+| Entry point | Command |
+|---|---|
+| Repo root (recommended) | `./clone_and_run_pvc_automation.sh` or `DRY_RUN=true ./clone_and_run_terraform.sh` |
+| Ansible only | `cd ansible-playbooks && DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh` |
+| Deployment dir (wget wrappers) | Put `.tfvars` next to wrapper; wrapper re-execs into `cdp-onprem-automation/` after clone |
+
+**Dry run:**
+
+```bash
+DRY_RUN=true DEPLOY_PHASE=1 ./clone_and_run_pvc_automation.sh
+./clone_and_run_pvc_automation.sh --dry-run --help
+DRY_RUN=true ./clone_and_run_terraform.sh
+```
+
+Running `ansible-playbook` directly **bypasses** the wrapper UI. Use `./pvc_setup.sh` or the top-level wrappers.

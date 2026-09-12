@@ -41,6 +41,9 @@ load_tfvars() {
     local config_file
     config_file="$(load_tfvars__resolve_file)"
 
+    # shellcheck source=scripts/lib/jenkins_overrides.sh
+    source "$load_tfvars__lib_dir/jenkins_overrides.sh"
+
     case "$config_file" in
         *.yaml|*.yml)
             if ! command -v python3 >/dev/null 2>&1; then
@@ -49,6 +52,7 @@ load_tfvars() {
             fi
             # shellcheck disable=SC1090
             eval "$(python3 "$load_tfvars__lib_dir/parse_tfvars_yaml.py" "$config_file")"
+            apply_jenkins_overrides
             # shellcheck source=scripts/lib/tfvars_defaults.sh
             source "$load_tfvars__lib_dir/tfvars_defaults.sh"
             # shellcheck source=scripts/lib/build_tf_vars.sh
@@ -59,6 +63,9 @@ load_tfvars() {
             # shellcheck disable=SC1090
             source "$config_file"
             set +a
+            apply_jenkins_overrides
+            # shellcheck source=scripts/lib/build_tf_vars.sh
+            source "$load_tfvars__lib_dir/build_tf_vars.sh"
             ;;
         *)
             echo "Error: unsupported config file extension: $config_file" >&2
