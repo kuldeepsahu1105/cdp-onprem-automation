@@ -1,4 +1,7 @@
 {% set ctx = deployment_portal_context %}
+{% set cm_tile_url = ctx.cloudera_manager.caddy_url | default('') if (ctx.cloudera_manager.caddy_url | default('') | length > 0) else ctx.cloudera_manager.ui_url_https %}
+{% set ipa_tile_url = ctx.identity.ipa_caddy_url | default('') if (ctx.identity.ipa_caddy_url | default('') | length > 0) else (ctx.identity.ipa_ui_url | default('')) %}
+{% set ecs_tile_url = (ctx.ecs.caddy_url | default('') if (ctx.ecs.caddy_url | default('') | length > 0) else (ctx.ecs.console_hint | default(''))) if ctx.ecs.deployed else '' %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,185 +9,479 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>CDP Deployment Portal — {{ ctx.cluster_domain }}</title>
   <style>
-    :root { --bg: #0f1419; --card: #1a2332; --text: #e7ecf3; --muted: #9aa8bc; --accent: #5b9fd4; --border: #2d3a4d; }
+    :root {
+      --bg: #0c1017;
+      --bg-elevated: #121926;
+      --card: #1a2332;
+      --text: #e8edf4;
+      --muted: #94a3b8;
+      --accent: #f96702;
+      --accent-soft: #5b9fd4;
+      --border: #2d3a4d;
+      --tile-hover: #243044;
+      --max-w: 960px;
+      --radius: 10px;
+    }
     * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 1.5rem; line-height: 1.5; }
-    h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
-    .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
-    section { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
-    h2 { font-size: 1.05rem; margin: 0 0 0.75rem; color: var(--accent); }
-    ul { margin: 0; padding-left: 1.2rem; }
-    li { margin: 0.35rem 0; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 0;
+      line-height: 1.55;
+    }
     a { color: #7ec8ff; text-decoration: none; }
     a:hover { text-decoration: underline; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-    th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }
+    code {
+      background: #0b1018;
+      padding: 0.12rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.85em;
+      word-break: break-all;
+    }
+    .site-header {
+      background: linear-gradient(135deg, #1a2332 0%, #0f1419 55%, #1a1208 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 1.25rem 1.25rem;
+    }
+    .site-header-inner {
+      max-width: var(--max-w);
+      margin: 0 auto;
+    }
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .brand-mark {
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+    }
+    .brand-mark svg { display: block; width: 100%; height: 100%; }
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 650;
+      margin: 0;
+      letter-spacing: -0.02em;
+    }
+    .brand-tag {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-top: 0.85rem;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.2rem 0.65rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .chip strong { color: var(--text); font-weight: 600; margin-right: 0.25rem; }
+    .wrap {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 1.25rem 1rem 2rem;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin: 0 0 0.75rem;
+    }
+    h2.section-title {
+      font-size: 0.95rem;
+      margin: 0;
+      color: var(--accent-soft);
+      font-weight: 600;
+    }
+    .quick-actions {
+      margin-bottom: 1.25rem;
+    }
+    .quick-actions h2 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0 0 0.65rem;
+      font-weight: 600;
+    }
+    .tile-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 0.65rem;
+    }
+    a.tile {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.85rem 0.9rem;
+      color: var(--text);
+      text-decoration: none;
+      transition: background 0.15s, border-color 0.15s;
+      min-height: 4.5rem;
+    }
+    a.tile:hover {
+      background: var(--tile-hover);
+      border-color: #3d4f66;
+      text-decoration: none;
+    }
+    a.tile .tile-label {
+      font-weight: 650;
+      font-size: 0.95rem;
+    }
+    a.tile .tile-hint {
+      font-size: 0.72rem;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+    a.tile.tile-accent {
+      border-color: rgba(249, 103, 2, 0.35);
+    }
+    details.panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 0.75rem;
+      overflow: hidden;
+    }
+    details.panel > summary {
+      cursor: pointer;
+      padding: 0.85rem 1rem;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      user-select: none;
+    }
+    details.panel > summary::-webkit-details-marker { display: none; }
+    details.panel > summary::after {
+      content: "▸";
+      color: var(--muted);
+      font-size: 0.85rem;
+      transition: transform 0.15s;
+    }
+    details.panel[open] > summary::after { transform: rotate(90deg); }
+    details.panel > summary:hover { background: rgba(255, 255, 255, 0.03); }
+    .panel-body {
+      padding: 0 1rem 1rem;
+      border-top: 1px solid var(--border);
+    }
+    section.flat {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+      margin-bottom: 0.75rem;
+    }
+    section.flat h2 {
+      font-size: 0.95rem;
+      margin: 0 0 0.75rem;
+      color: var(--accent-soft);
+      font-weight: 600;
+    }
+    ul.clean {
+      margin: 0;
+      padding-left: 1.15rem;
+    }
+    ul.clean li { margin: 0.4rem 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.45rem 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
     th { color: var(--muted); font-weight: 600; }
-    code { background: #0b1018; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.85em; }
-    .badge { display: inline-block; background: #243044; color: var(--muted); padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.35rem; }
+    .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .badge {
+      display: inline-block;
+      background: #243044;
+      color: var(--muted);
+      padding: 0.12rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      margin-left: 0.3rem;
+      vertical-align: middle;
+    }
+    @media (max-width: 480px) {
+      .site-header { padding: 0.85rem 1rem; }
+      h1 { font-size: 1.15rem; }
+      .wrap { padding: 1rem 0.75rem 1.5rem; }
+      .tile-grid { grid-template-columns: repeat(2, 1fr); }
+    }
   </style>
 </head>
 <body>
-  <h1>Cloudera CDP deployment portal</h1>
-  <p class="sub">Domain <code>{{ ctx.cluster_domain }}</code> · realm <code>{{ ctx.cluster_realm }}</code> · identity <code>{{ ctx.identity_provider }}</code> · access <code>{{ ctx.access.profile }}</code> ({{ ctx.access.environment }}) · generated {{ ctx.generated_at }}</p>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" role="img">
+            <rect width="40" height="40" rx="8" fill="#1a2332"/>
+            <path d="M8 28 L20 10 L32 28 Z" fill="none" stroke="#f96702" stroke-width="2.2" stroke-linejoin="round"/>
+            <circle cx="20" cy="22" r="3" fill="#5b9fd4"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-tag">Cloudera Data Platform</div>
+          <h1>Deployment portal</h1>
+        </div>
+      </div>
+      <div class="meta-row">
+        <span class="chip"><strong>Domain</strong> {{ ctx.cluster_domain }}</span>
+        <span class="chip"><strong>Realm</strong> {{ ctx.cluster_realm }}</span>
+        <span class="chip"><strong>Identity</strong> {{ ctx.identity_provider }}</span>
+        <span class="chip"><strong>Access</strong> {{ ctx.access.profile }} ({{ ctx.access.environment }})</span>
+        <span class="chip"><strong>Generated</strong> {{ ctx.generated_at }}</span>
+      </div>
+    </div>
+  </header>
 
-  {% if ctx.access.profile == 'private' %}
-  <section>
-    <h2>Private network (no public IP)</h2>
-    <p class="sub">{{ ctx.access.primary.audience }}</p>
-    <ul>
-      <li>Ops FQDN: <code>{{ ctx.access.primary.fqdn }}</code></li>
-      <li>Management IP: <code>{{ ctx.access.primary.management_ip }}</code></li>
-      <li>URL host in links: <code>{{ ctx.access.primary.host }}</code></li>
-      <li><strong>Portal</strong> — <a href="{{ ctx.access.primary.portal }}">{{ ctx.access.primary.portal }}</a></li>
-      <li><strong>pgAdmin</strong> — <a href="{{ ctx.access.primary.pgadmin }}">{{ ctx.access.primary.pgadmin }}</a></li>
-      {% if ctx.monitoring.enabled %}
-      <li><strong>Grafana</strong> — <a href="{{ ctx.access.primary.grafana }}">{{ ctx.access.primary.grafana }}</a></li>
-      <li><strong>Prometheus</strong> — <a href="{{ ctx.access.primary.prometheus }}">{{ ctx.access.primary.prometheus }}</a></li>
-      <li><strong>Alertmanager</strong> — <a href="{{ ctx.access.primary.alertmanager }}">{{ ctx.access.primary.alertmanager }}</a></li>
-      <li><strong>cAdvisor</strong> — <a href="{{ ctx.access.primary.cadvisor }}">{{ ctx.access.primary.cadvisor }}</a></li>
-      {% endif %}
-    </ul>
-  </section>
-  {% else %}
-  <section>
-    <h2>From Jenkins / internet (public IP)</h2>
-    <p class="sub">{{ ctx.access.external.audience }}</p>
-    <ul>
-      <li>Ops public IP: <code>{{ ctx.access.external.ops_ip }}</code></li>
-      <li><strong>Portal</strong> — <a href="{{ ctx.access.external.portal }}">{{ ctx.access.external.portal }}</a></li>
-      <li><strong>pgAdmin</strong> — <a href="{{ ctx.access.external.pgadmin }}">{{ ctx.access.external.pgadmin }}</a></li>
-      {% if ctx.monitoring.enabled %}
-      <li><strong>Grafana</strong> — <a href="{{ ctx.access.external.grafana }}">{{ ctx.access.external.grafana }}</a></li>
-      {% endif %}
-    </ul>
-  </section>
+  <main class="wrap">
+    <nav class="quick-actions" aria-label="Primary services">
+      <h2>Quick open</h2>
+      <div class="tile-grid">
+        {% if cm_tile_url | length > 0 %}
+        <a class="tile tile-accent" href="{{ cm_tile_url }}">
+          <span class="tile-label">Cloudera Manager</span>
+          <span class="tile-hint">Cluster admin UI</span>
+        </a>
+        {% endif %}
+        {% if ctx.portal.pgadmin_url | default('') | length > 0 %}
+        <a class="tile" href="{{ ctx.portal.pgadmin_url }}">
+          <span class="tile-label">pgAdmin</span>
+          <span class="tile-hint">CM PostgreSQL</span>
+        </a>
+        {% endif %}
+        {% if ctx.monitoring.enabled and (ctx.monitoring.grafana_url | default('') | length > 0) %}
+        <a class="tile" href="{{ ctx.monitoring.grafana_url }}">
+          <span class="tile-label">Grafana</span>
+          <span class="tile-hint">Dashboards</span>
+        </a>
+        {% endif %}
+        {% if ctx.monitoring.enabled and (ctx.monitoring.prometheus_url | default('') | length > 0) %}
+        <a class="tile" href="{{ ctx.monitoring.prometheus_url }}">
+          <span class="tile-label">Prometheus</span>
+          <span class="tile-hint">Metrics</span>
+        </a>
+        {% endif %}
+        {% if ipa_tile_url | length > 0 %}
+        <a class="tile" href="{{ ipa_tile_url }}">
+          <span class="tile-label">{{ ctx.identity.ipa_ui_label }}</span>
+          <span class="tile-hint">Identity management</span>
+        </a>
+        {% endif %}
+        {% if ecs_tile_url | length > 0 %}
+        <a class="tile" href="{{ ecs_tile_url }}">
+          <span class="tile-label">ECS</span>
+          <span class="tile-hint">{% if ctx.ecs.deployed %}{{ ctx.ecs.cluster_name }}{% else %}Console{% endif %}</span>
+        </a>
+        {% endif %}
+        {% if ctx.portal.index_url | default('') | length > 0 %}
+        <a class="tile" href="{{ ctx.portal.index_url }}">
+          <span class="tile-label">Portal index</span>
+          <span class="tile-hint">This page (Caddy)</span>
+        </a>
+        {% endif %}
+        {% if ctx.caddy_vhosts.enabled and (ctx.caddy_vhosts.urls_public.portal.url | default('') | length > 0) %}
+        <a class="tile" href="{{ ctx.caddy_vhosts.urls_public.portal.url }}">
+          <span class="tile-label">Portal (lab hostname)</span>
+          <span class="tile-hint">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</span>
+        </a>
+        {% endif %}
+      </div>
+    </nav>
 
-  <section>
-    <h2>From same VPC (private IP)</h2>
-    <p class="sub">{{ ctx.access.vpc.audience }}</p>
-    <ul>
-      <li>Ops private IP: <code>{{ ctx.access.vpc.ops_ip }}</code></li>
-      <li><strong>Portal</strong> — <a href="{{ ctx.access.vpc.portal }}">{{ ctx.access.vpc.portal }}</a></li>
-      <li><strong>pgAdmin</strong> — <a href="{{ ctx.access.vpc.pgadmin }}">{{ ctx.access.vpc.pgadmin }}</a></li>
-      {% if ctx.monitoring.enabled %}
-      <li><strong>Grafana</strong> — <a href="{{ ctx.access.vpc.grafana }}">{{ ctx.access.vpc.grafana }}</a></li>
-      {% endif %}
-    </ul>
-  </section>
-  {% endif %}
-
-  {% if ctx.caddy_vhosts.enabled %}
-  <section>
-    <h2>Lab domain (Caddy) — {{ ctx.caddy_vhosts.public_base }}</h2>
     {% if ctx.access.profile == 'private' %}
-    <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — hostnames resolve to the ops host on your private network (FreeIPA/AD DNS or static records). No public internet required.</p>
+    <details class="panel" open>
+      <summary><h2 class="section-title">Private network (no public IP)</h2></summary>
+      <div class="panel-body">
+        <p class="sub">{{ ctx.access.primary.audience }}</p>
+        <ul class="clean">
+          <li>Ops FQDN: <code>{{ ctx.access.primary.fqdn }}</code></li>
+          <li>Management IP: <code>{{ ctx.access.primary.management_ip }}</code></li>
+          <li>URL host in links: <code>{{ ctx.access.primary.host }}</code></li>
+          <li><strong>Portal</strong> — <a href="{{ ctx.access.primary.portal }}">{{ ctx.access.primary.portal }}</a></li>
+          <li><strong>pgAdmin</strong> — <a href="{{ ctx.access.primary.pgadmin }}">{{ ctx.access.primary.pgadmin }}</a></li>
+          {% if ctx.monitoring.enabled %}
+          <li><strong>Grafana</strong> — <a href="{{ ctx.access.primary.grafana }}">{{ ctx.access.primary.grafana }}</a></li>
+          <li><strong>Prometheus</strong> — <a href="{{ ctx.access.primary.prometheus }}">{{ ctx.access.primary.prometheus }}</a></li>
+          <li><strong>Alertmanager</strong> — <a href="{{ ctx.access.primary.alertmanager }}">{{ ctx.access.primary.alertmanager }}</a></li>
+          <li><strong>cAdvisor</strong> — <a href="{{ ctx.access.primary.cadvisor }}">{{ ctx.access.primary.cadvisor }}</a></li>
+          {% endif %}
+        </ul>
+      </div>
+    </details>
     {% else %}
-    <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — public-IP hostnames for Jenkins/internet; private-IP hostnames when registered for in-VPC use.</p>
+    <details class="panel" open>
+      <summary><h2 class="section-title">From Jenkins / internet (public IP)</h2></summary>
+      <div class="panel-body">
+        <p class="sub">{{ ctx.access.external.audience }}</p>
+        <ul class="clean">
+          <li>Ops public IP: <code>{{ ctx.access.external.ops_ip }}</code></li>
+          <li><strong>Portal</strong> — <a href="{{ ctx.access.external.portal }}">{{ ctx.access.external.portal }}</a></li>
+          <li><strong>pgAdmin</strong> — <a href="{{ ctx.access.external.pgadmin }}">{{ ctx.access.external.pgadmin }}</a></li>
+          {% if ctx.monitoring.enabled %}
+          <li><strong>Grafana</strong> — <a href="{{ ctx.access.external.grafana }}">{{ ctx.access.external.grafana }}</a></li>
+          {% endif %}
+        </ul>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary><h2 class="section-title">From same VPC (private IP)</h2></summary>
+      <div class="panel-body">
+        <p class="sub">{{ ctx.access.vpc.audience }}</p>
+        <ul class="clean">
+          <li>Ops private IP: <code>{{ ctx.access.vpc.ops_ip }}</code></li>
+          <li><strong>Portal</strong> — <a href="{{ ctx.access.vpc.portal }}">{{ ctx.access.vpc.portal }}</a></li>
+          <li><strong>pgAdmin</strong> — <a href="{{ ctx.access.vpc.pgadmin }}">{{ ctx.access.vpc.pgadmin }}</a></li>
+          {% if ctx.monitoring.enabled %}
+          <li><strong>Grafana</strong> — <a href="{{ ctx.access.vpc.grafana }}">{{ ctx.access.vpc.grafana }}</a></li>
+          {% endif %}
+        </ul>
+      </div>
+    </details>
     {% endif %}
-    <ul>
-      <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>
-      <li><strong>CM</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}">{{ ctx.caddy_vhosts.urls_public.cm.hostname }}</a></li>
-      {% if ctx.caddy_vhosts.urls_vpc.portal is defined and ctx.caddy_vhosts.urls_vpc.portal.url | default('') | length > 0 %}
-      <li><strong>Portal (VPC slug)</strong> — <a href="{{ ctx.caddy_vhosts.urls_vpc.portal.url }}">{{ ctx.caddy_vhosts.urls_vpc.portal.hostname }}</a></li>
-      {% endif %}
-    </ul>
-  </section>
-  {% endif %}
 
-  <section>
-    <h2>Ops host (portal, pgAdmin, Grafana, Prometheus)</h2>
-    <ul>
-      <li>Host: <code>{{ ctx.ops_host.fqdn }}</code> <span class="badge">{{ ctx.ops_host.inventory_group }}</span></li>
-      <li>{{ ctx.ops_host.services }}</li>
-      <li><strong>Deployment index (Caddy)</strong> — <a href="{{ ctx.portal.index_url }}">{{ ctx.portal.index_url }}</a></li>
-      <li><strong>pgAdmin</strong> — <a href="{{ ctx.portal.pgadmin_url }}">{{ ctx.portal.pgadmin_url }}</a> <span class="badge">connects to CM DB</span></li>
-      {% if ctx.monitoring.enabled %}
-      <li><strong>Grafana</strong> — <a href="{{ ctx.monitoring.grafana_url }}">{{ ctx.monitoring.grafana_url }}</a></li>
-      <li><strong>Prometheus</strong> — <a href="{{ ctx.monitoring.prometheus_url }}">{{ ctx.monitoring.prometheus_url }}</a></li>
-      {% endif %}
-      {% if ctx.identity.ipa_ui_url %}
-      <li><strong>{{ ctx.identity.ipa_ui_label }}</strong> — <a href="{{ ctx.identity.ipa_ui_url }}">{{ ctx.identity.ipa_ui_url }}</a></li>
-      {% endif %}
-      <li><strong>Cloudera Manager (HTTP)</strong> — <a href="{{ ctx.cloudera_manager.ui_url_http }}">{{ ctx.cloudera_manager.ui_url_http }}</a></li>
-      <li><strong>Cloudera Manager (HTTPS)</strong> — <a href="{{ ctx.cloudera_manager.ui_url_https }}">{{ ctx.cloudera_manager.ui_url_https }}</a></li>
-    </ul>
-  </section>
+    {% if ctx.caddy_vhosts.enabled %}
+    <details class="panel">
+      <summary><h2 class="section-title">Lab domain (Caddy) — {{ ctx.caddy_vhosts.public_base }}</h2></summary>
+      <div class="panel-body">
+        {% if ctx.access.profile == 'private' %}
+        <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — hostnames resolve to the ops host on your private network (FreeIPA/AD DNS or static records). No public internet required.</p>
+        {% else %}
+        <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — public-IP hostnames for Jenkins/internet; private-IP hostnames when registered for in-VPC use.</p>
+        {% endif %}
+        <ul class="clean">
+          <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>
+          <li><strong>CM</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}">{{ ctx.caddy_vhosts.urls_public.cm.hostname }}</a></li>
+          {% if ctx.caddy_vhosts.urls_vpc.portal is defined and ctx.caddy_vhosts.urls_vpc.portal.url | default('') | length > 0 %}
+          <li><strong>Portal (VPC slug)</strong> — <a href="{{ ctx.caddy_vhosts.urls_vpc.portal.url }}">{{ ctx.caddy_vhosts.urls_vpc.portal.hostname }}</a></li>
+          {% endif %}
+        </ul>
+      </div>
+    </details>
+    {% endif %}
 
-  <section>
-    <h2>PostgreSQL</h2>
-    <ul>
-      <li>Host: <code>{{ ctx.postgresql.host_fqdn }}</code></li>
-      <li>Port: <code>{{ ctx.postgresql.port }}</code></li>
-      <li>{{ ctx.postgresql.database_host_note }}</li>
-    </ul>
-  </section>
+    <details class="panel">
+      <summary><h2 class="section-title">Ops host (portal, pgAdmin, Grafana, Prometheus)</h2></summary>
+      <div class="panel-body">
+        <ul class="clean">
+          <li>Host: <code>{{ ctx.ops_host.fqdn }}</code> <span class="badge">{{ ctx.ops_host.inventory_group }}</span></li>
+          <li>{{ ctx.ops_host.services }}</li>
+          <li><strong>Deployment index (Caddy)</strong> — <a href="{{ ctx.portal.index_url }}">{{ ctx.portal.index_url }}</a></li>
+          <li><strong>pgAdmin</strong> — <a href="{{ ctx.portal.pgadmin_url }}">{{ ctx.portal.pgadmin_url }}</a> <span class="badge">connects to CM DB</span></li>
+          {% if ctx.monitoring.enabled %}
+          <li><strong>Grafana</strong> — <a href="{{ ctx.monitoring.grafana_url }}">{{ ctx.monitoring.grafana_url }}</a></li>
+          <li><strong>Prometheus</strong> — <a href="{{ ctx.monitoring.prometheus_url }}">{{ ctx.monitoring.prometheus_url }}</a></li>
+          {% endif %}
+          {% if ctx.identity.ipa_ui_url %}
+          <li><strong>{{ ctx.identity.ipa_ui_label }}</strong> — <a href="{{ ctx.identity.ipa_ui_url }}">{{ ctx.identity.ipa_ui_url }}</a></li>
+          {% endif %}
+          <li><strong>Cloudera Manager (HTTP)</strong> — <a href="{{ ctx.cloudera_manager.ui_url_http }}">{{ ctx.cloudera_manager.ui_url_http }}</a></li>
+          <li><strong>Cloudera Manager (HTTPS)</strong> — <a href="{{ ctx.cloudera_manager.ui_url_https }}">{{ ctx.cloudera_manager.ui_url_https }}</a></li>
+        </ul>
+      </div>
+    </details>
 
-  <section>
-    <h2>Clusters</h2>
-    <ul>
-      <li>CDH base cluster: <code>{{ ctx.cloudera_manager.cluster_name }}</code></li>
-      {% if ctx.ecs.deployed %}
-      <li>ECS cluster: <code>{{ ctx.ecs.cluster_name }}</code></li>
-      <li>ECS app domain: <code>{{ ctx.ecs.app_domain }}</code></li>
-      <li>ECS console (typical): <a href="{{ ctx.ecs.console_hint }}">{{ ctx.ecs.console_hint }}</a></li>
-      <li>Data Services hostnames: <code>{{ ctx.ecs.apps_wildcard }}</code></li>
-      {% else %}
-      <li>ECS: <span class="badge">not in inventory</span></li>
-      {% endif %}
-    </ul>
-    <p class="sub">Versions — CM {{ ctx.versions.cm }} · CDH {{ ctx.versions.cdh }} · CDS {{ ctx.versions.ecs_cds }}</p>
-  </section>
+    <section class="flat">
+      <h2>PostgreSQL</h2>
+      <ul class="clean">
+        <li>Host: <code>{{ ctx.postgresql.host_fqdn }}</code></li>
+        <li>Port: <code>{{ ctx.postgresql.port }}</code></li>
+        <li>{{ ctx.postgresql.database_host_note }}</li>
+      </ul>
+    </section>
 
-  {% if ctx.data_services.links | length > 0 %}
-  <section>
-    <h2>Data services &amp; related URLs</h2>
-    <ul>
-      {% for link in ctx.data_services.links %}
-      <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — <a href="{{ link.url }}">{{ link.url }}</a></li>
-      {% endfor %}
-    </ul>
-  </section>
-  {% endif %}
+    <section class="flat">
+      <h2>Clusters</h2>
+      <ul class="clean">
+        <li>CDH base cluster: <code>{{ ctx.cloudera_manager.cluster_name }}</code></li>
+        {% if ctx.ecs.deployed %}
+        <li>ECS cluster: <code>{{ ctx.ecs.cluster_name }}</code></li>
+        <li>ECS app domain: <code>{{ ctx.ecs.app_domain }}</code></li>
+        <li>ECS console (typical): <a href="{{ ctx.ecs.console_hint }}">{{ ctx.ecs.console_hint }}</a></li>
+        <li>Data Services hostnames: <code>{{ ctx.ecs.apps_wildcard }}</code></li>
+        {% else %}
+        <li>ECS: <span class="badge">not in inventory</span></li>
+        {% endif %}
+      </ul>
+      <p class="sub">Versions — CM {{ ctx.versions.cm }} · CDH {{ ctx.versions.cdh }} · CDS {{ ctx.versions.ecs_cds }}</p>
+    </section>
 
-  {% if ctx.monitoring.enabled %}
-  <section>
-    <h2>Monitoring stack (on ops host)</h2>
-    <ul>
-      <li><strong>Grafana</strong> — <a href="{{ ctx.monitoring.grafana_url }}">{{ ctx.monitoring.grafana_url }}</a> <span class="badge">dashboards</span></li>
-      <li><strong>Prometheus</strong> — <a href="{{ ctx.monitoring.prometheus_url }}">{{ ctx.monitoring.prometheus_url }}</a></li>
-      <li><strong>Alertmanager</strong> — <a href="{{ ctx.monitoring.alertmanager_url }}">{{ ctx.monitoring.alertmanager_url }}</a></li>
-      <li><strong>cAdvisor</strong> — <a href="{{ ctx.monitoring.cadvisor_url }}">{{ ctx.monitoring.cadvisor_url }}</a> <span class="badge">container metrics</span></li>
-    </ul>
-  </section>
-  {% endif %}
-
-  {% if ctx.extra_links | length > 0 %}
-  <section>
-    <h2>Additional links</h2>
-    <ul>
-      {% for link in ctx.extra_links %}
-      <li><strong>{{ link.name }}</strong> — <a href="{{ link.url }}">{{ link.url }}</a></li>
-      {% endfor %}
-    </ul>
-  </section>
-  {% endif %}
-
-  <section>
-    <h2>Inventory nodes</h2>
-    <table>
-      <thead><tr><th>Group</th><th>Hostname</th><th>FQDN</th><th>IP</th></tr></thead>
-      <tbody>
-        {% for n in ctx.nodes %}
-        <tr>
-          <td>{{ n.group }}</td>
-          <td>{{ n.hostname }}</td>
-          <td>{{ n.fqdn }}</td>
-          <td>{{ n.private_ip or n.ansible_host }}</td>
-        </tr>
+    {% if ctx.data_services.links | length > 0 %}
+    <section class="flat">
+      <h2>Data services &amp; related URLs</h2>
+      <ul class="clean">
+        {% for link in ctx.data_services.links %}
+        <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — <a href="{{ link.url }}">{{ link.url }}</a></li>
         {% endfor %}
-      </tbody>
-    </table>
-  </section>
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if ctx.monitoring.enabled %}
+    <section class="flat">
+      <h2>Monitoring stack (on ops host)</h2>
+      <ul class="clean">
+        <li><strong>Grafana</strong> — <a href="{{ ctx.monitoring.grafana_url }}">{{ ctx.monitoring.grafana_url }}</a> <span class="badge">dashboards</span></li>
+        <li><strong>Prometheus</strong> — <a href="{{ ctx.monitoring.prometheus_url }}">{{ ctx.monitoring.prometheus_url }}</a></li>
+        <li><strong>Alertmanager</strong> — <a href="{{ ctx.monitoring.alertmanager_url }}">{{ ctx.monitoring.alertmanager_url }}</a></li>
+        <li><strong>cAdvisor</strong> — <a href="{{ ctx.monitoring.cadvisor_url }}">{{ ctx.monitoring.cadvisor_url }}</a> <span class="badge">container metrics</span></li>
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if ctx.extra_links | length > 0 %}
+    <section class="flat">
+      <h2>Additional links</h2>
+      <ul class="clean">
+        {% for link in ctx.extra_links %}
+        <li><strong>{{ link.name }}</strong> — <a href="{{ link.url }}">{{ link.url }}</a></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    <section class="flat">
+      <h2>Inventory nodes</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Group</th><th>Hostname</th><th>FQDN</th><th>IP</th></tr></thead>
+          <tbody>
+            {% for n in ctx.nodes %}
+            <tr>
+              <td>{{ n.group }}</td>
+              <td>{{ n.hostname }}</td>
+              <td>{{ n.fqdn }}</td>
+              <td>{{ n.private_ip or n.ansible_host }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
 </body>
 </html>
