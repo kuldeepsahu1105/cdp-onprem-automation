@@ -4,6 +4,14 @@
 - name: LDAP — resolve HTTPS CM API URL
   ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
 
+- name: LDAP — validate Authentication Backend Order value
+  ansible.builtin.assert:
+    that:
+      - cm_ldap_auth_backend_order in cm_ldap_auth_backend_order_allowed
+    fail_msg: >-
+      cm_ldap_auth_backend_order={{ cm_ldap_auth_backend_order }} is invalid.
+      Allowed: {{ cm_ldap_auth_backend_order_allowed | join(', ') }}.
+
 - name: LDAP — build desired CM LDAP configuration items
   ansible.builtin.set_fact:
     cm_ldap_desired_items:

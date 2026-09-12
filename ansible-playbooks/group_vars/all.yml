@@ -364,8 +364,15 @@ krb5_enc_types: "{{ 'aes256-cts aes128-cts' if identity_provider_effective == 'a
 ipa_kdc_host: "ipaserver.{{ ipaserver_domain }}"
 
 # Cloudera Manager LDAP integration (FreeIPA or Active Directory)
+# AUTH_BACKEND_ORDER must be one of: DB_ONLY, LDAP_THEN_DB, DB_THEN_LDAP, LDAP_ONLY, EXTERNAL_ONLY_WITHOUT_DB_ADMINS
 cm_ldap_enabled: true
-cm_ldap_auth_backend_order: "EXTERNAL_AND_DB"
+cm_ldap_auth_backend_order: DB_THEN_LDAP
+cm_ldap_auth_backend_order_allowed:
+  - DB_ONLY
+  - LDAP_THEN_DB
+  - DB_THEN_LDAP
+  - LDAP_ONLY
+  - EXTERNAL_ONLY_WITHOUT_DB_ADMINS
 cm_ldap_type: "LDAP"
 cm_ldap_url: >-
   {{ 'ldaps://' + ad_kdc_host + ':636' if identity_provider_effective == 'ad'
