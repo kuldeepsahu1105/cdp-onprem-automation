@@ -267,8 +267,8 @@ print_message "Please check the inventory.ini file for the generated Ansible inv
 # Define source and destination paths
 # ------------------------------
 src_inventory="./$OUTPUT_FILE"
-dest_inventory="../../ansible-test/inventory.ini"
-ansible_dir="../../ansible-test"
+dest_inventory="../../ansible-playbooks/inventory.ini"
+ansible_dir="../../ansible-playbooks"
 
 # Check if inventory.ini exists in current directory
 if [ -f "$src_inventory" ]; then
@@ -313,9 +313,9 @@ else
     # cp -vf "$pem_file" "$ansible_dir/$pem_file"
     # echo "📂 Copied $pem_file to $ansible_dir/$pem_file"
 
-    cp -vf "$pem_file" "../../ansible-test/$pem_file"
-    cp -vf "$pem_file" "../../ansible-test/sshkey.pem"
-    echo "📂 Copied $pem_file to ../../ansible-test/$pem_file"
+    cp -vf "$pem_file" "../../ansible-playbooks/$pem_file"
+    cp -vf "$pem_file" "../../ansible-playbooks/sshkey.pem"
+    echo "📂 Copied $pem_file to ../../ansible-playbooks/$pem_file"
     echo
 fi
 print_message "Terraform Infrastructure Creation Completed..."

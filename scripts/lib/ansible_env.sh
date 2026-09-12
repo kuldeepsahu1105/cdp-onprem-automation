@@ -17,28 +17,28 @@ resolve_scripts_lib() {
     printf '%s/../scripts/lib' "$base"
     return 0
   fi
-  echo "Error: scripts/lib not found (start from repo root or ansible-test)." >&2
+  echo "Error: scripts/lib not found (start from repo root or ansible-playbooks)." >&2
   return 1
 }
 
-# Find ansible-test regardless of flat vs nested repo layout.
-resolve_ansible_test_dir() {
+# Find ansible-playbooks regardless of flat vs nested repo layout.
+resolve_ansible_playbooks_dir() {
   local start="${1:-$(pwd)}"
   local candidate=""
 
   for candidate in \
     "$start" \
-    "$start/ansible-test" \
-    "$start/cdp-onprem-automation/ansible-test" \
-    "$(cd "$start/.." 2>/dev/null && pwd)/ansible-test" \
-    "$(cd "$start/../.." 2>/dev/null && pwd)/ansible-test"; do
+    "$start/ansible-playbooks" \
+    "$start/cdp-onprem-automation/ansible-playbooks" \
+    "$(cd "$start/.." 2>/dev/null && pwd)/ansible-playbooks" \
+    "$(cd "$start/../.." 2>/dev/null && pwd)/ansible-playbooks"; do
     if [[ -f "$candidate/ansible.cfg" && -f "$candidate/inventory.ini" ]]; then
       printf '%s' "$(cd "$candidate" && pwd)"
       return 0
     fi
   done
 
-  echo "Error: ansible-test directory not found (need ansible.cfg + inventory.ini)." >&2
+  echo "Error: ansible-playbooks directory not found (need ansible.cfg + inventory.ini)." >&2
   return 1
 }
 
@@ -246,7 +246,7 @@ ansible_ssh_private_key_file: $key
 "
 }
 
-# Copy selected license to ansible-test/license.txt when needed by CM playbooks.
+# Copy selected license to ansible-playbooks/license.txt when needed by CM playbooks.
 ensure_license_txt() {
   local ansible_dir="$1"
   local license_file="$2"

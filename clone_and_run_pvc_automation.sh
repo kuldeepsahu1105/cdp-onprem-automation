@@ -19,8 +19,8 @@ print_message() {
 SCRIPTS_LIB=""
 if [[ -f "$SCRIPT_DIR/scripts/lib/load_tfvars.sh" ]]; then
     SCRIPTS_LIB="$SCRIPT_DIR/scripts/lib"
-elif [[ -f "$SCRIPT_DIR/ansible-test/../scripts/lib/load_tfvars.sh" ]]; then
-    SCRIPTS_LIB="$(cd "$SCRIPT_DIR/ansible-test/.." && pwd)/scripts/lib"
+elif [[ -f "$SCRIPT_DIR/ansible-playbooks/../scripts/lib/load_tfvars.sh" ]]; then
+    SCRIPTS_LIB="$(cd "$SCRIPT_DIR/ansible-playbooks/.." && pwd)/scripts/lib"
 else
     print_message "Checking and setting up repository..."
     if [[ -d "$GIT_REPO_NAME" ]]; then
@@ -47,7 +47,7 @@ load_tfvars
 set +a
 echo "Loaded configuration from: ${TFVARS_LOADED_FROM:-manual}"
 
-ANSIBLE_DIR="$(resolve_ansible_test_dir "$SCRIPT_DIR")"
+ANSIBLE_DIR="$(resolve_ansible_playbooks_dir "$SCRIPT_DIR")"
 echo "Ansible directory: $ANSIBLE_DIR"
 
 pem_file="$(resolve_private_key "$ANSIBLE_DIR")"

@@ -154,30 +154,8 @@
       vars:
         cm_package_list: "{{ cldr_mngr_packages.client }}"
 
-    # - name: Get cldr-mngr hostname from inventory
-    #   set_fact:
-    #     cldr_mngr_fqdn: "{{ hostvars['cldr-mngr']['cldr_hostname'] }}"
-
-    # - name: debug
-    #   debug:
-    #     msg: "cldr-mngr FQDN: {{ cldr_mngr_fqdn }}"
-
-
-    - name: Configure Cloudera Manager Agent
-      ansible.builtin.lineinfile:
-        path: /etc/cloudera-scm-agent/config.ini
-        regexp: "^server_host="
-        line: "server_host={{ hostvars['cldr-mngr']['ansible_fqdn'] }}"
-
-    - name: Print the updated config.ini file with updated server details
-      ansible.builtin.command:
-        cmd: grep server /etc/cloudera-scm-agent/config.ini
-      register: config_ini_output
-      changed_when: false
-
-    - name: Display config.ini content with updated server details
-      ansible.builtin.debug:
-        msg: "{{ config_ini_output.stdout_lines }}"
+    - name: Configure CM agent server_host to cldr-mngr FQDN
+      ansible.builtin.import_tasks: common_tasks/configure_cm_agent.yml
 
     - name: Ensure Cloudera Manager Agent is enabled and started
       ansible.builtin.systemd:

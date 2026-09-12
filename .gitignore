@@ -20,7 +20,7 @@ license.txt
 
 # Ansible runtime
 **/logs/*
-!ansible-test/logs/.gitkeep
+!ansible-playbooks/logs/.gitkeep
 
 # Local inventory overrides (keep inventory.ini as template if needed)
-ansible-test/inventory.ini.bak
+ansible-playbooks/inventory.ini.bak
