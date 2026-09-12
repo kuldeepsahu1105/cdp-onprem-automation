@@ -1,4 +1,5 @@
 ### ansible-playbook -i inventory.ini 22_setup_cm_autotls.yml
+# Standalone (no Jenkins/wrapper): cd ansible-playbooks && ANSIBLE_PRIVATE_KEY=/path/to/key ansible-playbook -i inventory.ini 22_setup_cm_autotls.yml
 ---
 - name: Enable Auto-TLS in Cloudera Manager
   hosts: localhost
@@ -40,15 +41,19 @@
           when: use_password
           register: auto_tls_response
 
-        - name: Create Auto-TLS JSON file (Key-based)
-          ansible.builtin.template:
-            src: auto-tls-key.json.j2
-            dest: /tmp/auto-tls-key.json
+        - name: Resolve controller SSH key for Auto-TLS (Key-based)
+          ansible.builtin.import_tasks: common_tasks/resolve_cm_autotls_private_key.yml
           when: not use_password
 
         - name: Set private key as a single line (for Key-based)
           ansible.builtin.set_fact:
-            node_key_one_line: "{{ lookup('file', cm_private_key_path) | replace('\n', '\\n') | replace('\"', '\\\"') }}"
+            node_key_one_line: "{{ lookup('file', autotls_controller_key_path) | replace('\n', '\\n') | replace('\"', '\\\"') }}"
+          when: not use_password
+
+        - name: Create Auto-TLS JSON file (Key-based)
+          ansible.builtin.template:
+            src: auto-tls-key.json.j2
+            dest: /tmp/auto-tls-key.json
           when: not use_password
 
         - name: Enable Auto-TLS (Key-based)
@@ -66,25 +71,48 @@
           when: not use_password
           register: auto_tls_response
 
-        - name: Restart Cloudera Manager services after Auto-TLS setup
-          ansible.builtin.systemd:
-            name: "{{ item }}"
-            state: restarted
-          loop:
-            - cloudera-scm-server
-            - cloudera-scm-agent
+        - name: Mark Auto-TLS applied this run (defer wait/restart to CM-host play)
+          ansible.builtin.set_fact:
+            autotls_applied_this_run: true
           when: auto_tls_response is succeeded
-          delegate_to: cldr-mngr
 
     - name: Refresh CM API URL after Auto-TLS changes
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+      when: not (autotls_applied_this_run | default(false))
 
     - name: Wait for Cloudera Manager API to become available
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
+      when: not (autotls_applied_this_run | default(false))
 
     - name: Wait for Cloudera Manager Server to start
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
-      delegate_to: cldr-mngr
+      when: not (autotls_applied_this_run | default(false))
 
     - name: Print Cloudera Manager Access URLs
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
+      when: not (autotls_applied_this_run | default(false))
+
+- name: Restart Cloudera Manager services after Auto-TLS (CM host)
+  hosts: cldr-mngr
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Restart CM server and agent after Auto-TLS API
+      ansible.builtin.import_tasks: common_tasks/restart_cm_services.yml
+      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
+
+    - name: Refresh CM API URL after service restart
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
+
+    - name: Wait for Cloudera Manager API after restart
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
+      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
+
+    - name: Wait for Cloudera Manager Server active after restart
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
+      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
+
+    - name: Print Cloudera Manager Access URLs after Auto-TLS restart
+      ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
+      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool

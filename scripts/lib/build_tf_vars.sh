@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Build the TF_VARS array from environment variables.
-# Requires tfvars_defaults.sh to have been sourced first.
+# Requires tfvars_defaults.sh and normalize_tfvars_for_cli to have been sourced first.
+
+if [[ "${CREATE_NEW_SG:-false}" == "true" ]]; then
+  printf '[tfvars] Security group: allow_all=%s allowed_cidrs=%s\n' \
+    "${ALLOW_ALL:-false}" "${ALLOWED_CIDRS:-}"
+fi
 
 TF_VARS=(
     -var="aws_region=${AWS_REGION}"
@@ -16,8 +21,8 @@ TF_VARS=(
     -var="enable_vpn_gateway=${ENABLE_VPN_GATEWAY}"
 
     -var="create_new_sg=${CREATE_NEW_SG}"
+    -var="allow_all=${ALLOW_ALL}"
     -var="allowed_cidrs=${ALLOWED_CIDRS}"
-    -var="allowed_ports=${ALLOWED_PORTS}"
     -var="sg_name=${SG_NAME}"
     -var="existing_sg=${EXISTING_SG_NAME}"
 

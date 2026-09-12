@@ -26,3 +26,23 @@
       ansible.builtin.service:
         name: "{{ os.ssh_service }}"
         state: restarted
+
+    - name: Ensure root has SSH authorized_keys for key-based login
+      when: ansible_user != 'root'
+      block:
+        - name: Create /root/.ssh directory
+          ansible.builtin.file:
+            path: /root/.ssh
+            state: directory
+            mode: "0700"
+            owner: root
+            group: root
+
+        - name: Copy bootstrap user authorized_keys to root
+          ansible.builtin.copy:
+            src: "/home/{{ ansible_user }}/.ssh/authorized_keys"
+            dest: /root/.ssh/authorized_keys
+            remote_src: true
+            mode: "0600"
+            owner: root
+            group: root

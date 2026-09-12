@@ -31,6 +31,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$REPO_ROOT/scripts/lib/portable.sh"
 # shellcheck source=../scripts/lib/ansible_env.sh
 source "$REPO_ROOT/scripts/lib/ansible_env.sh"
+# shellcheck source=../scripts/lib/ansible_group_vars_overrides.sh
+source "$REPO_ROOT/scripts/lib/ansible_group_vars_overrides.sh"
 # shellcheck source=../scripts/lib/ui.sh
 source "$REPO_ROOT/scripts/lib/ui.sh"
 # shellcheck source=../scripts/lib/wrapper_info.sh
@@ -57,6 +59,8 @@ Environment:
   CM_INFO_FILE         *info.txt with archive login:/password: (phase 3)
   CM_REPO_USERNAME     Archive creds — alternative to info file or all.yml
   CM_REPO_PASSWORD     Archive creds — alternative to info file or all.yml
+  CM_LICENSE_CONTENT   License file body when no *license* file on disk (Jenkins textarea)
+  LICENSE_FILE         Path to license file (set by Jenkins or manually)
 
 Run from: ansible-playbooks/ inside a git clone (needs ../scripts/lib/ui.sh)
 EOF
@@ -64,6 +68,7 @@ EOF
 fi
 
 ensure_bash
+ansible_configure_output
 
 DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 CONTROL_MODE="$(detect_control_mode "$SCRIPT_DIR/inventory.ini")"
@@ -72,6 +77,9 @@ ARCH_ANSIBLE_ARGS=()
 if [[ "${CPU_ARCHITECTURE:-x86_64}" == "arm64" ]]; then
   ARCH_ANSIBLE_ARGS+=(-e "target_cpu_architecture=arm64")
   ARCH_ANSIBLE_ARGS+=(-e "ecs_deploy_on_arm64=${ECS_DEPLOY_ON_ARM64:-false}")
+fi
+if [[ "$CONTROL_MODE" == "local" ]]; then
+  ARCH_ANSIBLE_ARGS+=(-e "ansible_user=root")
 fi
 
 print_banner() {
@@ -93,6 +101,7 @@ run_playbook() {
 }
 
 cd "$SCRIPT_DIR"
+apply_ansible_group_vars_overrides "$REPO_ROOT" "$SCRIPT_DIR"
 
 if [[ "${PVC_SETUP_FROM_WRAPPER:-0}" == "1" ]]; then
   ui_subsection "Playbook execution (pvc_setup.sh)" "📜"
@@ -126,19 +135,20 @@ needs_license() {
 }
 
 if needs_license; then
-  LICENSE_KEY="$(resolve_license_file "$SCRIPT_DIR")"
-  if ! is_dry_run; then
-    ensure_license_txt "$SCRIPT_DIR" "$LICENSE_KEY"
+  materialize_cm_license_content "$SCRIPT_DIR"
+  if LICENSE_KEY="$(resolve_license_file "$SCRIPT_DIR" 2>/dev/null)"; then
+    if ! is_dry_run; then
+      ensure_license_txt "$SCRIPT_DIR" "$LICENSE_KEY"
+    fi
+    ui_kv "License file" "$LICENSE_KEY" "📜"
+  else
+    ui_info "No license file in ansible-playbooks/ — CM may use trial license or group_vars/all.yml"
   fi
-  ui_kv "License file" "$LICENSE_KEY" "📜"
 fi
 
 load_cm_repo_credentials "$SCRIPT_DIR" || true
 if [[ -n "${CM_REPO_USERID:-}" ]]; then
   ui_kv "CM archive user" "$CM_REPO_USERID" "👤"
-  ui_info "CM credentials from info file or env (overrides all.yml for phase 3)"
-elif [[ "${DEPLOY_PHASE:-1}" =~ ^(3|cm|phase3|4|cluster|phase4|all|full)$ ]]; then
-  ui_note_cm_credentials_requirement
 fi
 
 mapfile -t ANSIBLE_PLAYBOOK_ARGS < <(ansible_extra_args "$PRIVATE_KEY")
@@ -146,8 +156,12 @@ mapfile -t ANSIBLE_PLAYBOOK_ARGS < <(ansible_extra_args "$PRIVATE_KEY")
 ui_step "Install Ansible collections" "📦"
 ansible-galaxy collection install -r requirements.yml
 
-# SSH pre-reqs: skip ipaserver for AD; include all for FreeIPA if ipaserver is a managed node
-SSH_LIMIT="${ANSIBLE_LIMIT_SSH:-all:!ipaserver}"
+# SSH pre-reqs: include ipaserver when that group has hosts (FreeIPA); skip for AD-only inventory
+if grep -A30 '^\[ipaserver\]' "$SCRIPT_DIR/inventory.ini" | grep -qE '^[^#[:space:]]'; then
+  SSH_LIMIT="${ANSIBLE_LIMIT_SSH:-all}"
+else
+  SSH_LIMIT="${ANSIBLE_LIMIT_SSH:-all:!ipaserver}"
+fi
 ui_section "SSH prerequisites" "🔐"
 ui_kv "Limit" "$SSH_LIMIT" "🎯"
 ui_step "Running 00_setup_ssh_preqs.yml" "📜"

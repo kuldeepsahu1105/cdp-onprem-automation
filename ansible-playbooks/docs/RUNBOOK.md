@@ -44,6 +44,19 @@ The wrappers and playbooks support:
 
 When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-playbooks/`, the wrapper prompts you to choose. Override with `ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, or `CM_INFO_FILE`.
 
+### Without wrappers (direct `ansible-playbook`)
+
+Jenkins and `pvc_setup.sh` / `clone_and_run_pvc_automation.sh` are optional. From `ansible-playbooks/`:
+
+```bash
+ansible-galaxy collection install -r requirements.yml
+export ANSIBLE_PRIVATE_KEY=/path/to/your-key.pem   # or place sshkey.pem / id_rsa in this directory
+ansible-playbook -i inventory.ini 00_setup_ssh_preqs.yml --private-key "$ANSIBLE_PRIVATE_KEY"
+ansible-playbook -i inventory.ini 22_setup_cm_autotls.yml --private-key "$ANSIBLE_PRIVATE_KEY"
+```
+
+Playbooks resolve SSH keys and Auto-TLS material on the **control machine** via `ANSIBLE_PRIVATE_KEY`, files under `ansible-playbooks/`, or `group_vars` (`cm_private_key_path`, `cm_node_sudo_password`). Wrappers only set the same env vars and `--private-key` for convenience.
+
 | Target OS | CM repo mode | Notes |
 |---|---|---|
 | RHEL 8/9 | `public` or `internal` | Internal mirror: RPM + `createrepo` + CDH parcel |
@@ -151,6 +164,8 @@ ansible-playbook -i inventory.ini 24_setup_cm_cms.yml
 ansible-playbook -i inventory.ini 26_setup_base_cluster.yml
 ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml
 ```
+
+`26_setup_base_cluster.yml` builds the cluster from `templates/base_cluster_cluster_spec.j2`. Toggle services with `base_cluster_install_services` in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`). Cluster **create** runs only when the cluster does not exist in CM; adding services to an existing cluster requires CM UI/API changes.
 
 `27_setup_ecs_cluster.yml` is skipped automatically when `[ecs-masters]` / `[ecs-workers]` are empty (`ecs_deploy_enabled: auto`).
 

@@ -1,0 +1,48 @@
+# Keys allowed in Jenkins ANSIBLE_GROUP_VARS_YAML (Ansible-only — not Terraform/Jenkins UI).
+# CM archive login uses CM_REPO_USERNAME / CM_REPO_PASSWORD parameters instead.
+allowed_keys:
+  # Identity / domain
+  - identity_provider
+  - ipaserver_domain
+  - ad_domain
+  - ad_kdc_host
+  - ad_join_user
+
+  # Passwords (ansible group_vars — not Jenkins/Terraform)
+  - ipaadmin_password
+  - ad_join_password
+  - ad_ldap_bind_password
+  - cm_admin_user
+  - cm_admin_pass
+  - postgres_password
+  - scm_db_password
+
+  # Cloudera / CDH / ECS versions
+  - cm_version
+  - cm_numeric_version
+  - cdh_version
+  - cdh_numeric_version
+  - ecs_pvc_ds_version
+  - ecs_parcel_version
+  - cdh_basecluster_name
+  - base_cluster_install_services
+  - base_cluster_yarn_rm_max_mb
+  - base_cluster_yarn_rm_max_vcores
+  - base_cluster_yarn_nm_memory_mb
+  - base_cluster_yarn_nm_vcores
+  - ecs_cluster_name
+
+  # OS / dependency versions
+  - java_version
+  - python_version
+  - postgresql_version
+  - postgres_jdbc_version
+  - psycopg2_binary_version
+
+  # Repo / parcel options (ansible deploy)
+  - cm_repo_source
+  - cdh_parcel_os_suffix
+  - target_cpu_architecture
+  - ecs_deploy_on_arm64
+  - cm_debian_use_ubuntu_repo
+  - cm_debian_ubuntu_compat_version

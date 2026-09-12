@@ -189,10 +189,40 @@ resolve_private_key() {
   return 1
 }
 
+# Write CM license from Jenkins/CLI when no *license* file exists on the agent.
+# Sources (first match): LICENSE_FILE, CM_LICENSE_CONTENT_FILE, CM_LICENSE_CONTENT env.
+materialize_cm_license_content() {
+  local ansible_dir="${1:-.}"
+
+  if [[ -n "${LICENSE_FILE:-}" && -f "${LICENSE_FILE}" ]]; then
+    return 0
+  fi
+
+  local src_file="${CM_LICENSE_CONTENT_FILE:-}"
+  if [[ -n "$src_file" && -f "$src_file" ]]; then
+    export LICENSE_FILE="$src_file"
+    printf '[license] Using license file from CM_LICENSE_CONTENT_FILE=%s\n' "$LICENSE_FILE"
+    return 0
+  fi
+
+  local content="${CM_LICENSE_CONTENT:-}"
+  if [[ -z "${content//[[:space:]]/}" ]]; then
+    return 0
+  fi
+
+  local dest="${ansible_dir}/license.txt"
+  printf '%s' "$content" > "$dest"
+  chmod 600 "$dest" 2>/dev/null || true
+  export LICENSE_FILE="$dest"
+  printf '[license] Wrote license from CM_LICENSE_CONTENT to %s\n' "$dest"
+}
+
 resolve_license_file() {
   local ansible_dir="${1:-.}"
   local -a licenses=()
   local license=""
+
+  materialize_cm_license_content "$ansible_dir"
 
   if [[ -n "${LICENSE_FILE:-}" && -f "${LICENSE_FILE}" ]]; then
     printf '%s' "${LICENSE_FILE}"
@@ -270,8 +300,6 @@ load_cm_repo_credentials() {
   fi
 
   if [[ -z "$info_file" ]]; then
-    echo "Warning: No CM archive credentials from env or *info.txt; using group_vars/all.yml if set." >&2
-    echo "  (See: ansible_cm_credentials_help or DEPLOY_PHASE=3 --help)" >&2
     return 1
   fi
 
@@ -287,14 +315,56 @@ is_dry_run() {
   esac
 }
 
+# Ansible colors only when stdout is a TTY (interactive terminal).
+# Jenkins/terraform wrappers pipe to tee (| tee log); force_color there prints literal [32m in logs.
+ansible_configure_output() {
+  case "${ANSIBLE_NOCOLOR:-${NO_COLOR:-}}" in
+    1|true|yes|TRUE|YES|on|ON)
+      export ANSIBLE_FORCE_COLOR=0
+      export PY_COLORS=0
+      return 0
+      ;;
+  esac
+  case "${ANSIBLE_FORCE_COLOR:-auto}" in
+    0|false|no|off)
+      export ANSIBLE_FORCE_COLOR=0
+      export PY_COLORS=0
+      return 0
+      ;;
+    1|true|yes|on|force)
+      if [[ "${JENKINS_SCRIPT_TTY:-}" == "1" ]] || [[ -t 1 ]]; then
+        export ANSIBLE_FORCE_COLOR=1
+        export PY_COLORS=1
+      else
+        export ANSIBLE_FORCE_COLOR=0
+        export PY_COLORS=0
+      fi
+      return 0
+      ;;
+    auto|*)
+      if [[ "${JENKINS_SCRIPT_TTY:-}" == "1" ]] || { [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]]; }; then
+        export ANSIBLE_FORCE_COLOR=1
+        export PY_COLORS=1
+      else
+        export ANSIBLE_FORCE_COLOR=0
+        export PY_COLORS=0
+      fi
+      ;;
+  esac
+}
+
 ansible_extra_args() {
   local key="${1:-}"
   local args=()
   if [[ -n "$key" ]]; then
+    export ANSIBLE_PRIVATE_KEY="$key"
     args+=(--private-key="$key")
   fi
   if [[ -n "${ANSIBLE_LIMIT:-}" ]]; then
     args+=(--limit "$ANSIBLE_LIMIT")
+  fi
+  if [[ -n "${ANSIBLE_GROUP_VARS_OVERRIDE_FILE:-}" && -f "${ANSIBLE_GROUP_VARS_OVERRIDE_FILE}" ]]; then
+    args+=(-e "@${ANSIBLE_GROUP_VARS_OVERRIDE_FILE}")
   fi
   if is_dry_run; then
     args+=(--check)
@@ -316,6 +386,11 @@ patch_ansible_private_key_in_group_vars() {
   sed_inplace "$gv" "/^ansible_ssh_private_key_file:/c\\
 ansible_ssh_private_key_file: $key
 "
+  if grep -q '^cm_private_key_path:' "$gv"; then
+    sed_inplace "$gv" "/^cm_private_key_path:/c\\
+cm_private_key_path: $key
+"
+  fi
 }
 
 # Copy selected license to ansible-playbooks/license.txt when needed by CM playbooks.

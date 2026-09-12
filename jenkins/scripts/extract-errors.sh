@@ -13,7 +13,7 @@ append_matches() {
   local label="$1" file="$2"
   [[ -f "$file" ]] || return 0
   local hits
-  hits="$(grep -Ein 'fatal:|error:|FAILED!|Error:|non-zero return code|❌|ui_err' "$file" 2>/dev/null | tail -40 || true)"
+  hits="$(grep -Ein 'fatal:|error:|ERROR:|FAILED!|Error:|non-zero return code|Required tool not found|❌|ui_err' "$file" 2>/dev/null | tail -40 || true)"
   if [[ -n "$hits" ]]; then
     {
       echo "=== $label ($file) ==="

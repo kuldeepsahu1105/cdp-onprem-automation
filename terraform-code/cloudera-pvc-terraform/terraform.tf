@@ -5,12 +5,5 @@ terraform {
       version = "~> 5.0"
     }
   }
-
-  # backend "s3" {
-  #   bucket = "pvc-cluster-terraform-backend"     # Replace with your S3 bucket name
-  #   # dynamodb_table = "pvc-terraform-lock-table"
-  #   use_lockfile = true                          # S3 Native Locking
-  #   key          = "pvc_setup/terraform.tfstate" # Path where the state file will be stored inside the bucket
-  #   region       = "ap-southeast-1"              # AWS region of the S3 bucket
-  # }
+  # Local state — persisted on Jenkins agent under holautosa HOL_AUTO_EXEC_DIR (see holautosa_exec_dir.sh).
 }

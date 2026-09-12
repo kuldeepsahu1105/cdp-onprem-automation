@@ -1,0 +1,36 @@
+---
+# Resolve SSH private key on the Ansible controller for CM Auto-TLS (key-based API).
+# Works with: ansible-playbook only, pvc_setup.sh, Jenkins, or any wrapper — no Jenkins-specific paths.
+# After 00_setup_ssh_preqs, root on cluster nodes accepts the same key as ansible_user (e.g. ec2-user PEM).
+
+- name: Resolve Auto-TLS private key on Ansible controller
+  ansible.builtin.set_fact:
+    autotls_controller_key_path: "{{ lookup('ansible.builtin.first_found', _autotls_key_lookup, errors='ignore') | default('', true) }}"
+  vars:
+    _explicit: "{{ autotls_private_key_path | default(cm_private_key_path, true) | default('', true) | trim }}"
+    _env_key: "{{ lookup('env', 'ANSIBLE_PRIVATE_KEY') | default('', true) | trim | expanduser }}"
+    _rel_keys:
+      - "{{ ansible_ssh_private_key_file | default('id_rsa') | regex_replace('^\\./', '') }}"
+      - "sshkey.pem"
+      - "id_rsa"
+    _file_candidates: >-
+      {{
+        ([_explicit] if (_explicit | length > 0) else [])
+        + ([_env_key] if (_env_key | length > 0) else [])
+        + _rel_keys
+      }}
+    _autotls_key_lookup:
+      files: "{{ _file_candidates }}"
+      paths:
+        - "{{ playbook_dir }}"
+        - "{{ lookup('env', 'HOME') | default('/root', true) }}/.ssh"
+      skip: true
+
+- name: Fail when Auto-TLS key-based auth has no private key on controller
+  ansible.builtin.fail:
+    msg: >-
+      No SSH private key on this machine for Auto-TLS (key-based).
+      Provide one of: ANSIBLE_PRIVATE_KEY=/path/to/key, -e autotls_private_key_path=/path,
+      cm_private_key_path in group_vars, *.pem or id_rsa under ansible-playbooks/, or
+      cm_node_sudo_password for password-based Auto-TLS.
+  when: (autotls_controller_key_path | default('') | trim) == ''

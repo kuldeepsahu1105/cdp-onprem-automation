@@ -29,6 +29,10 @@ INVENTORY="$REPO_ROOT/ansible-playbooks/inventory.ini"
   echo "Environment:  ${ENVIRONMENT:-n/a}"
   echo "AWS Region:   ${AWS_REGION:-n/a}"
   echo "Owner:        ${OWNER:-n/a}"
+  echo "Credentials:  ${CREDENTIALS_USER:-holautosa}"
+  echo "VPC:            ${VPC_MODE:-USE_DEFAULT} (create_vpc=${CREATE_VPC:-false})"
+  echo "Security grp:   ${SG_MODE:-USE_EXISTING} (create_new_sg=${CREATE_NEW_SG:-false}, name=${EXISTING_SG_NAME:-${SG_NAME:-n/a}})"
+  echo "Key pair:       ${KEYPAIR_NAME:-n/a} (create=${CREATE_KEYPAIR:-false})"
   echo "Deploy Phase: ${DEPLOY_PHASE:-n/a}"
   echo "Dry Run:      ${DRY_RUN:-false}"
   echo "Terraform:    ${RUN_TERRAFORM:-false}"
@@ -63,6 +67,12 @@ INVENTORY="$REPO_ROOT/ansible-playbooks/inventory.ini"
     echo "Inventory: not generated"
   fi
   echo ""
+  if [[ -f "$OUT_DIR/cm-access.txt" ]]; then
+    echo "SSH / Cloudera Manager access:"
+    echo "------------------------------"
+    cat "$OUT_DIR/cm-access.txt"
+    echo ""
+  fi
   echo "Artifacts directory: $OUT_DIR"
   ls -la "$OUT_DIR" 2>/dev/null || true
 } > "$SUMMARY"

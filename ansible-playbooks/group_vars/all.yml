@@ -1,6 +1,8 @@
 ---
 # ansible_config_vars:
-ansible_user: root
+# Fresh RHEL EC2 AMIs reject root SSH until bootstrap; use ec2-user + become (ansible.cfg).
+# Override for in-VPC local control: ansible_user=root or CONTROL_MODE=local in pvc_setup.sh
+ansible_user: ec2-user
 ansible_ssh_private_key_file: ./id_rsa
 ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
 # ansible_galaxy: "/usr/bin/ansible-galaxy"
@@ -39,7 +41,7 @@ cluster_domain: "{{ ad_domain if identity_provider_effective == 'ad' else ipaser
 cluster_realm: "{{ cluster_domain | upper }}"
 
 # ipa_server_vars:
-ipaserver_domain: ntnxlab.local
+ipaserver_domain: cldrsetup.local
 ipaserver_realm: "{{ ipaserver_domain | upper }}"
 ipaadmin_principal: "admin"
 ipaadmin_password: "PseTeam@123"
@@ -101,6 +103,7 @@ cert_subj: "/C={{ cert_country }}/ST={{ cert_state }}/L={{ cert_locality }}/O={{
 # Variables for wildcard record and postgres jdbc driver setup:
 wildcard_dns_record: "*.apps"
 postgres_jdbc_version: "42.7.10"  # Configurable version
+psycopg2_binary_version: ""  # empty = latest from pip; pin e.g. "2.9.9"
 jdbc_driver_url: "https://jdbc.postgresql.org/download/postgresql-{{ postgres_jdbc_version }}.jar"
 jdbc_driver_dest: "/usr/share/java/postgresql-connector-java.jar"
 
@@ -219,6 +222,38 @@ cm_admin_pass: "admin"
 cdh_basecluster_name: "CDH-Cluster"
 base_cluster_master_group: base-masters
 base_cluster_worker_group: base-workers
+
+# CDP base cluster services (26_setup_base_cluster.yml). Override per key in Jenkins via base_cluster_install_services.
+base_cluster_install_services:
+  core_settings: true
+  zookeeper: true
+  hdfs: true
+  ozone: true
+  yarn: true
+  tez: true
+  hive: true
+  hive_on_tez: true
+  hbase: true
+  hue: true
+  iceberg: true
+  replication: true
+  impala: true
+  kafka: true
+  atlas: true
+  ranger: true
+  nifi: false
+  nifi_registry: false
+  dataviz: false
+  phoenix: false
+  knox: false
+  solr: false
+
+# YARN sizing for small lab clusters (base_cluster_cluster_spec.j2)
+base_cluster_yarn_rm_max_mb: 4096
+base_cluster_yarn_rm_max_vcores: 4
+base_cluster_yarn_nm_memory_mb: 4096
+base_cluster_yarn_nm_vcores: 4
+
 cdh_parcel_version: "{{ cdh_version.split('.')[:3] | join('.') }}-1.cdh{{ cdh_version.split('.')[:3] | join('.') }}.p{{ cdh_version.split('.')[-1] }}.{{ cdh_numeric_version }}"
 kerberos_principal: "{{ ipaadmin_principal }}/{{ ipaadmin_principal }}@{{ cluster_realm }}"
 kerberos_password: "{{ ipaadmin_password }}"
@@ -249,7 +284,8 @@ cm_http_port: 7180
 ##### cm_server autotls variables:
 # SSH Authentication (Choose one)
 # cm_node_sudo_password: "your-root-pass"  # Required for password-based authentication # Either commented out or defined but not set to empty string
-cm_private_key_path: "/root/.ssh/id_rsa" # Required for key-based authentication
+# Path on Ansible controller (Jenkins/laptop), not on CM host. Empty = auto (sshkey.pem / ansible_ssh_private_key_file).
+cm_private_key_path: ""
 cm_priv_key_passphrase: "" # If private key is encrypted, provide cm_priv_key_passphrase
 
 # OS User for Key-Based/Password based Authentication for AutoTLS
@@ -511,6 +547,7 @@ os_vars:
       - "postgresql{{ postgresql_version }}"
       - "postgresql{{ postgresql_version }}-server"
       - "postgresql{{ postgresql_version }}-libs"
+      - python3-pip
     postgres_client_packages:
       - "postgresql{{ postgresql_version }}"
     postgres_repo_url: "https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}/pgdg-redhat-repo-latest.noarch.rpm"

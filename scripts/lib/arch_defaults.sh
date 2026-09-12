@@ -13,7 +13,7 @@ AUTO_RESOLVE_ARM64_AMI="${AUTO_RESOLVE_ARM64_AMI:-true}"
 ECS_DEPLOY_ON_ARM64="${ECS_DEPLOY_ON_ARM64:-false}"
 
 # Default x86_64 AMI placeholder (RHEL 9.7, ap-southeast-1) — replaced when AUTO_RESOLVE_ARM64_AMI runs.
-_DEFAULT_X86_AMI="ami-0a66a47c24c021954"
+_DEFAULT_X86_AMI="ami-030a276b398df7eb7"
 
 map_instance_type_to_graviton() {
   case "$1" in

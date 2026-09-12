@@ -12,7 +12,7 @@ variable "create_new_sg" {
 }
 
 variable "existing_sg" {
-  description = "The name of the existing security group (if using an existing one)"
+  description = "Existing security group: sg-xxxxxxxx ID or name in the target VPC"
   type        = string
   default     = ""
 }
@@ -37,19 +37,13 @@ variable "vpc_id" {
 }
 
 variable "allow_all" {
-  description = "whether to allow all ingress traffic"
-  type    = bool
-  default = true
-}
-
-variable "allowed_ports" {
-  description = "List of allowed ports"
-  type        = list(number)
-  default     = [0]
+  description = "When true, allow all inbound traffic from 0.0.0.0/0. When false, allow all inbound traffic from allowed_cidrs only."
+  type        = bool
+  default     = false
 }
 
 variable "allowed_cidrs" {
-  description = "List of CIDR blocks allowed to access the ports"
+  description = "List of CIDR blocks allowed inbound when allow_all is false"
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }

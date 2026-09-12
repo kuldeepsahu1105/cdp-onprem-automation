@@ -69,7 +69,7 @@ CDH and ECS **deploy versions** are applied by Ansible (`ansible-playbooks/group
 
 ## CDH base cluster deployment
 
-The CDP **base cluster** (HDFS, YARN, ZooKeeper) is deployed by Ansible playbook `26_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, Kerberos, and CMS are in place.
+The CDP **base cluster** is deployed by Ansible playbook `26_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, Kerberos, and CMS are in place. By default it installs HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, and Ranger. Optional services (NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr) are off unless enabled in `base_cluster_install_services`.
 
 ### Terraform instance groups (infrastructure)
 
@@ -96,6 +96,7 @@ Terraform generates `inventory.ini` with these groups when you run `clone_and_ru
 | `cdh_basecluster_name` | `CDH-Cluster` | Cluster name in Cloudera Manager |
 | `base_cluster_master_group` | `base-masters` | Inventory group for master host |
 | `base_cluster_worker_group` | `base-workers` | Inventory group for worker hosts |
+| `base_cluster_install_services` | see `all.yml` | Per-service booleans for base cluster create |
 | `cdh_parcel_os_suffix` | `auto` | Parcel OS suffix: `auto`, `el8`, `el9`, `jammy`, `noble`, `el8.aarch64le` |
 | `cdh_parcel_target_group` | `base-workers` | Group used to auto-detect worker OS for parcel suffix |
 | `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/; `internal` = mirror on cldr-mngr |

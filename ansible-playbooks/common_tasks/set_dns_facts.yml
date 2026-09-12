@@ -85,7 +85,7 @@
         | default(hostvars[groups['ipaserver'][0]].ansible_host)
       }}
   when:
-    - identity_provider | default('freeipa') == 'freeipa'
+    - identity_provider_effective == 'freeipa'
     - groups.get('ipaserver') is defined
     - groups['ipaserver'] | length > 0
 
@@ -123,17 +123,39 @@
       }}
   when: identity_provider_effective == 'freeipa'
 
-- name: Build DNS nameservers for FreeIPA
+- name: Build DNS nameservers for FreeIPA server host (local BIND)
   ansible.builtin.set_fact:
     dns_nameservers: >-
       {{
-        ([ipa_server_dns_ip]
+        (['127.0.0.1']
         + ([effective_vpc_dns_resolver] if effective_deployment_env == 'aws' and effective_vpc_dns_resolver | default('') | length > 0 else [])
-        + (extra_dns_nameservers | default([]))
-        + ['127.0.0.1'])
+        + (extra_dns_nameservers | default([])))
         | unique
       }}
-  when: identity_provider_effective == 'freeipa'
+  when:
+    - identity_provider_effective == 'freeipa'
+    - groups.get('ipaserver') is defined
+    - groups['ipaserver'] | length > 0
+    - inventory_hostname in groups['ipaserver']
+
+- name: Build DNS nameservers for FreeIPA cluster clients
+  ansible.builtin.set_fact:
+    dns_nameservers: >-
+      {{
+        (([effective_vpc_dns_resolver] if effective_deployment_env == 'aws' and effective_vpc_dns_resolver | default('') | length > 0 else [])
+        + [ipa_server_dns_ip | default(
+            hostvars[groups['ipaserver'][0]].private_ip
+            | default(hostvars[groups['ipaserver'][0]].ansible_host, true),
+            true
+          )]
+        + (extra_dns_nameservers | default([])))
+        | unique
+      }}
+  when:
+    - identity_provider_effective == 'freeipa'
+    - groups.get('ipaserver') is defined
+    - groups['ipaserver'] | length > 0
+    - inventory_hostname not in groups['ipaserver']
 
 - name: Print resolved DNS configuration
   ansible.builtin.debug:

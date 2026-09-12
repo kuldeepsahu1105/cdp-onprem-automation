@@ -103,24 +103,35 @@
       ansible.builtin.debug:
         msg: "PostgreSQL version is {{ pg_version.stdout }}"
 
-    - name: Verify psycopg2 is installed using pip3 list on all hosts except ipaserver
-      ansible.builtin.shell: "pip3 list | grep psycopg2"
-      register: psycopg2_check_pip
-      failed_when: psycopg2_check_pip.rc != 0
-      changed_when: false
-      when: inventory_hostname != 'ipaserver'
+    - name: Ensure python3-pip for Ansible PostgreSQL modules (CM-only path)
+      ansible.builtin.package:
+        name: python3-pip
+        state: present
+      when: ansible_os_family == "RedHat"
 
-    - name: Verify psycopg2 is installed using Python import on all hosts except ipaserver
-      ansible.builtin.shell: "python3 -c 'import psycopg2'"
+    - name: Ensure pip is available for system python3
+      ansible.builtin.pip:
+        name: pip
+        state: latest
+        executable: pip3
+      become: yes
+
+    - name: Ensure psycopg2-binary for Ansible PostgreSQL modules (system python3)
+      ansible.builtin.pip:
+        name: "{{ 'psycopg2-binary==' + psycopg2_binary_version if psycopg2_binary_version | default('') | length > 0 else 'psycopg2-binary' }}"
+        state: present
+        executable: pip3
+      become: yes
+
+    - name: Verify psycopg2 import for Ansible interpreter (/usr/bin/python3)
+      ansible.builtin.command: /usr/bin/python3 -c 'import psycopg2'
       register: psycopg2_check_import
       failed_when: psycopg2_check_import.rc != 0
       changed_when: false
-      when: inventory_hostname != 'ipaserver'
 
-    - name: Display psycopg2 version
+    - name: Display psycopg2 availability for Ansible modules
       ansible.builtin.debug:
-        msg: "Psycopg2 version: {{ psycopg2_check_pip.stdout }}"
-      when: psycopg2_check_pip is defined
+        msg: "psycopg2 import OK for /usr/bin/python3 (required by community.postgresql modules)"
 
     ##### Postgres Configuration updates
     - name: Deploy updated PostgreSQL configuration files

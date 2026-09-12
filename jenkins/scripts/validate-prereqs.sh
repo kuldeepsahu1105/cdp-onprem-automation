@@ -31,7 +31,17 @@ else
 fi
 
 if should_validate "${VALIDATE_TOOLS:-true}" "TOOLS"; then
-  for tool in git jq aws terraform ansible-playbook python3; do
+  tools=(git jq aws python3)
+  if is_enabled "${REQUIRE_TERRAFORM:-false}"; then
+    tools+=(terraform)
+  fi
+  if is_enabled "${REQUIRE_ANSIBLE:-false}" || should_validate "${VALIDATE_ANSIBLE_SYNTAX:-true}" "ANSIBLE_SYNTAX"; then
+    # shellcheck disable=SC1091
+    source "$REPO_ROOT/jenkins/scripts/ensure-ansible.sh"
+    export PATH="${HOME}/.local/bin:${PATH}"
+    tools+=(ansible-playbook)
+  fi
+  for tool in "${tools[@]}"; do
     command -v "$tool" >/dev/null 2>&1 || fail "Required tool not found: $tool"
     log "OK tool: $tool ($(${tool} --version 2>&1 | head -1))"
   done
@@ -40,7 +50,10 @@ else
 fi
 
 if should_validate "${VALIDATE_AWS:-true}" "AWS_CREDS"; then
-  aws sts get-caller-identity >/dev/null || fail "AWS credentials invalid — configure Jenkins AWS credentials or run aws sso login on agent"
+  # shellcheck source=jenkins/scripts/aws-credential-check.sh
+  source "$REPO_ROOT/jenkins/scripts/aws-credential-check.sh"
+  aws_cred_diagnose | tee -a "$LOG_FILE"
+  aws_verify_caller_identity | tee -a "$LOG_FILE" || fail "AWS credentials invalid — see [aws-creds] hints above (instance role may be overridden by stale Jenkins AWS_* env vars)"
   log "OK AWS credentials"
 else
   log "Skipping AWS credential check"
@@ -57,6 +70,17 @@ if should_validate "${VALIDATE_TFVARS:-true}" "TFVARS" && [[ -n "${TFVARS_FILE:-
   [[ -n "${AWS_REGION:-}" ]] || fail "AWS_REGION not set after loading tfvars"
   [[ -n "${OWNER:-}" ]] || fail "OWNER not set after loading tfvars (set in tfvars or Jenkins OWNER parameter)"
   log "OK tfvars loaded (environment=${ENVIRONMENT}, region=${AWS_REGION}, owner=${OWNER})"
+  log "  infra: vpc_mode=${VPC_MODE:-USE_DEFAULT} create_vpc=${CREATE_VPC:-false} sg_mode=${SG_MODE:-USE_EXISTING} create_new_sg=${CREATE_NEW_SG:-false}"
+  log "  names: keypair=${KEYPAIR_NAME:-n/a} sg=${EXISTING_SG_NAME:-${SG_NAME:-n/a}}"
+
+  if is_enabled "${REQUIRE_TERRAFORM:-false}"; then
+    # shellcheck source=jenkins/scripts/aws-credential-check.sh
+    source "$REPO_ROOT/jenkins/scripts/aws-credential-check.sh"
+    aws_apply_instance_role_if_enabled
+    # shellcheck source=jenkins/scripts/validate-aws-resources.sh
+    source "$REPO_ROOT/jenkins/scripts/validate-aws-resources.sh"
+    validate_aws_resources | tee -a "$LOG_FILE" || fail "AWS resource pre-check failed — fix key pair or security group in tfvars"
+  fi
 fi
 
 INVENTORY="${REPO_ROOT}/ansible-playbooks/inventory.ini"
@@ -66,6 +90,9 @@ if is_enabled "${REQUIRE_INVENTORY:-false}" || should_validate "${VALIDATE_INVEN
 fi
 
 if should_validate "${VALIDATE_ANSIBLE_SYNTAX:-true}" "ANSIBLE_SYNTAX"; then
+  # shellcheck disable=SC1091
+  source "$REPO_ROOT/jenkins/scripts/ensure-ansible.sh"
+  export PATH="${HOME}/.local/bin:${PATH}"
   log "Ansible syntax check (ansible-playbooks/)"
   cd "$REPO_ROOT/ansible-playbooks"
   while IFS= read -r pb; do

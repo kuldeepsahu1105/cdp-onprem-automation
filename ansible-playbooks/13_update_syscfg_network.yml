@@ -16,20 +16,56 @@
   become: yes
   vars:
     sysconfig_domain: "{{ cluster_domain }}"
-    sysconfig_dns1: >-
-      {{
-        hostvars[groups['ipaserver'][0]].ansible_default_ipv4.address
-        if identity_provider_effective == 'freeipa' and ipa_server_in_inventory | bool
-        else ad_kdc_host
-      }}
 
   tasks:
+    - name: Resolve DNS facts for sysconfig network
+      ansible.builtin.import_tasks: common_tasks/set_dns_facts.yml
+
+    - name: Set sysconfig DNS targets
+      ansible.builtin.set_fact:
+        sysconfig_dns1: >-
+          {{
+            '127.0.0.1'
+            if identity_provider_effective == 'freeipa'
+              and ipa_server_in_inventory | bool
+              and inventory_hostname in groups.get('ipaserver', [])
+            else effective_vpc_dns_resolver
+            if effective_deployment_env == 'aws'
+              and effective_vpc_dns_resolver | default('') | length > 0
+              and identity_provider_effective == 'freeipa'
+              and ipa_server_in_inventory | bool
+            else (
+              hostvars[groups['ipaserver'][0]].private_ip
+              | default(hostvars[groups['ipaserver'][0]].ansible_host)
+              if identity_provider_effective == 'freeipa' and ipa_server_in_inventory | bool
+              else ad_kdc_host
+            )
+          }}
+        sysconfig_dns2: >-
+          {{
+            effective_vpc_dns_resolver
+            if identity_provider_effective == 'freeipa'
+              and ipa_server_in_inventory | bool
+              and inventory_hostname in groups.get('ipaserver', [])
+              and effective_deployment_env == 'aws'
+              and effective_vpc_dns_resolver | default('') | length > 0
+            else hostvars[groups['ipaserver'][0]].private_ip
+            | default(hostvars[groups['ipaserver'][0]].ansible_host)
+            if effective_deployment_env == 'aws'
+              and effective_vpc_dns_resolver | default('') | length > 0
+              and identity_provider_effective == 'freeipa'
+              and ipa_server_in_inventory | bool
+              and inventory_hostname not in groups.get('ipaserver', [])
+            else ''
+          }}
+
     - name: Print sysconfig network targets
       ansible.builtin.debug:
         msg:
           - "Identity provider: {{ identity_provider_effective }}"
           - "DOMAIN: {{ sysconfig_domain }}"
           - "DNS1: {{ sysconfig_dns1 }}"
+          - "DNS2: {{ sysconfig_dns2 | default('') }}"
 
     - name: Read current /etc/sysconfig/network
       ansible.builtin.slurp:
@@ -42,6 +78,9 @@
         src: templates/sysconfig_network.j2
         dest: /etc/sysconfig/network
         backup: yes
+
+    - name: Re-apply resolv.conf after sysconfig network update
+      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
 
     - name: Verify new /etc/sysconfig/network content
       ansible.builtin.command:

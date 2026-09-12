@@ -200,9 +200,16 @@ ui_section "Terraform provisioning" "☁️"
 ui_kv "Working directory" "$TERRAFORM_DIR" "📁"
 ui_kv "Workspace" "${ENVIRONMENT}" "🌍"
 
+# shellcheck source=scripts/lib/holautosa_exec_dir.sh
+source "$SCRIPTS_LIB/holautosa_exec_dir.sh"
+prepare_holautosa_workdir || true
+restore_terraform_state_to_workspace "$TERRAFORM_DIR"
+
 ui_step "Terraform init" "⚙️"
 cd "$TERRAFORM_DIR"
-terraform init -input=false
+# shellcheck source=scripts/lib/terraform_backend.sh
+source "$SCRIPTS_LIB/terraform_backend.sh"
+terraform_init_backend "$TERRAFORM_DIR"
 
 ui_step "Select workspace: ${ENVIRONMENT}" "🗂️"
 if terraform workspace list | grep -qw "${ENVIRONMENT}"; then
@@ -213,11 +220,25 @@ else
   ui_ok "Workspace '${ENVIRONMENT}' created"
 fi
 
+# shellcheck source=scripts/lib/reconcile_terraform_resources.sh
+source "$SCRIPTS_LIB/reconcile_terraform_resources.sh"
+ui_step "Reconcile existing AWS key pair / security group" "🔄"
+if reconcile_terraform_resources; then
+  ui_ok "No Terraform variable changes from reconcile"
+else
+  ui_ok "Reconciled flags — reloading Terraform variables"
+  # shellcheck source=scripts/lib/build_tf_vars.sh
+  source "$SCRIPTS_LIB/build_tf_vars.sh"
+fi
+
 ui_step "Terraform plan" "📝"
-terraform plan "${TF_VARS[@]}" -out=tfplan.out
+# shellcheck source=scripts/lib/terraform_plan_output.sh
+source "$SCRIPTS_LIB/terraform_plan_output.sh"
+terraform_run_plan "$TERRAFORM_DIR" tfplan.out
 
 case "${DRY_RUN:-false}" in
   1|true|yes|TRUE|YES|on|ON)
+    persist_terraform_state_from_workspace "$TERRAFORM_DIR"
     ui_done "Dry run complete — plan only (no apply, no inventory copy)"
     exit 0
     ;;
@@ -225,7 +246,7 @@ esac
 
 ui_step "Terraform apply" "🚀"
 terraform apply -auto-approve tfplan.out
-ui_done "Terraform provisioning complete"
+persist_terraform_state_from_workspace "$TERRAFORM_DIR"
 
 ui_section "Ansible inventory" "📦"
 if [[ -f "$GEN_SCRIPT" ]]; then
@@ -255,5 +276,8 @@ if [[ -n "$pem_file" ]]; then
   cp -f "$pem_file" "$REPO_ROOT/ansible-playbooks/sshkey.pem"
   ui_ok "Copied SSH key to ansible-playbooks/"
 fi
+
+persist_ansible_artifacts_from_workspace
+ui_done "Terraform provisioning complete"
 
 ui_next_steps
