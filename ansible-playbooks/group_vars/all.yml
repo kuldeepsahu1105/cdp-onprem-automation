@@ -479,8 +479,13 @@ deployment_portal_config_dir: /opt/cldr-deployment-portal
 deployment_portal_www_dir: /opt/cldr-deployment-portal/www
 deployment_portal_caddy_image: caddy:2-alpine
 deployment_portal_caddy_container: cldr-portal-caddy
-# When OS repos lack docker-compose-plugin (common on RHEL), install this Compose v2 binary
+# RHEL 'docker' RPM is a Podman shim (no docker.service); install Docker CE for the portal stack.
+portal_docker_use_ce: true
+# When compose plugin is missing, install Compose v2 binary then pip v1
 portal_docker_compose_version: "2.29.2"
+portal_compose_pip_fallback: true
+# Command argv prefix for compose up/restart (set on host by install_portal_container_runtime)
+deployment_portal_compose_argv: ['docker', 'compose']
 deployment_portal_pgadmin_image: dpage/pgadmin4:8
 deployment_portal_pgadmin_container: cldr-portal-pgadmin
 pgadmin_default_email: "admin@{{ cluster_domain }}"

@@ -8,6 +8,8 @@ mkdir -p "$LOG_DIR"
 
 cd "$REPO_ROOT"
 export PATH="${HOME}/.local/bin:${PATH}"
+# Avoid UTF-8 box-drawing mojibake in Jenkins console (C locale / ansiColor).
+export UI_ASCII=1
 export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
 # shellcheck source=scripts/lib/holautosa_exec_dir.sh
 source "$REPO_ROOT/scripts/lib/holautosa_exec_dir.sh"
