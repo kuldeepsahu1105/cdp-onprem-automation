@@ -1,5 +1,5 @@
 ---
-# Open portal Caddy (8088) and pgAdmin (5050) when firewalld is active on the ops host.
+# Open portal Caddy (8088), pgAdmin (5050), and cAdvisor (8089) when firewalld is active on the ops host.
 # PREREQS normally disable firewalld; this is idempotent when an admin re-enables it.
 
 - name: Check firewalld service state on portal host
@@ -9,7 +9,7 @@
   failed_when: false
   changed_when: false
 
-- name: Allow deployment portal HTTP and pgAdmin ports in firewalld
+- name: Allow deployment portal, pgAdmin, and monitoring ports in firewalld
   ansible.posix.firewalld:
     port: "{{ item }}/tcp"
     permanent: true
@@ -18,6 +18,7 @@
   loop:
     - "{{ deployment_portal_http_port | int }}"
     - "{{ deployment_portal_pgadmin_host_port | int }}"
+    - "{{ monitoring_cadvisor_host_port | int }}"
   when:
     - _portal_firewalld_svc is succeeded
     - (_portal_firewalld_svc.status.ActiveState | default('inactive')) == 'active'

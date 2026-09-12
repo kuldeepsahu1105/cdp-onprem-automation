@@ -565,6 +565,9 @@ monitoring_prometheus_image: prom/prometheus:v2.54.1
 monitoring_prometheus_container: cldr-mon-prometheus
 monitoring_grafana_image: grafana/grafana:11.2.0
 monitoring_grafana_container: cldr-mon-grafana
+monitoring_grafana_docker_service: grafana
+monitoring_prometheus_docker_service: prometheus
+monitoring_alertmanager_docker_service: alertmanager
 monitoring_alertmanager_image: prom/alertmanager:v0.27.0
 monitoring_alertmanager_container: cldr-mon-alertmanager
 monitoring_cadvisor_image: gcr.io/cadvisor/cadvisor:v0.49.1

@@ -1,0 +1,41 @@
+---
+# Tier A: monitoring UIs via Caddy on localhost (path routes on :8088).
+
+- name: Resolve deployment portal URL verify milestones for monitoring checks
+  ansible.builtin.import_tasks: resolve_deployment_portal_verify_milestones.yml
+
+- name: Skip monitoring localhost checks when stack disabled
+  ansible.builtin.meta: end_host
+  when: not (monitoring_stack_enabled | default(false) | bool)
+
+- name: Set monitoring localhost verify base URL
+  ansible.builtin.set_fact:
+    _monitoring_local_base: "http://127.0.0.1:{{ deployment_portal_http_port | int }}"
+
+- name: Verify Grafana via Caddy path route on localhost
+  ansible.builtin.uri:
+    url: "{{ _monitoring_local_base }}/grafana/login"
+    method: GET
+    status_code: "{{ deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_grafana_path_check
+  retries: 5
+  delay: 5
+  until: _monitoring_grafana_path_check is succeeded
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
+
+- name: Verify Prometheus via Caddy path route on localhost
+  ansible.builtin.uri:
+    url: "{{ _monitoring_local_base }}/prometheus/-/healthy"
+    method: GET
+    status_code: "{{ deployment_portal_url_verify_status_codes | default([200]) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_prometheus_path_check
+  retries: 5
+  delay: 5
+  until: _monitoring_prometheus_path_check is succeeded
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
