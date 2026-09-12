@@ -43,17 +43,17 @@
       ansible.builtin.debug:
         msg: "Cloudera Manager Version: {{ cm_version.json.version }}, Build Timestamp: {{ cm_version.json.buildTimestamp }}"
 
-    - name: Check Cloudera SCM Server service status
-      ansible.builtin.shell: "systemctl is-active cloudera-scm-server"
+    - name: Require Cloudera SCM Server active on cldr-mngr (systemctl exit code 0 only)
+      ansible.builtin.command: systemctl is-active cloudera-scm-server
       register: scm_server_status
       delegate_to: cldr-mngr
+      become: true
       changed_when: false
-      failed_when: false
-      ignore_errors: true
+      failed_when: scm_server_status.rc | int != 0
 
     - name: Print Cloudera SCM Server Service Status
       ansible.builtin.debug:
-        msg: "Cloudera SCM Server is {{ scm_server_status.stdout | default('not running') }}"
+        msg: "Cloudera SCM Server is {{ scm_server_status.stdout }} (systemctl rc=0)."
 
     - name: Check Cloudera Manager Service status
       ansible.builtin.shell: systemctl status cloudera-scm-server --no-pager

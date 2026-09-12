@@ -2,6 +2,13 @@
 - name: Set OS-specific facts
   ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
+# CM holds JDBC pools to Postgres; record whether we must restart CM after PG comes back.
+- name: Check if Cloudera Manager Server is running before PostgreSQL restart
+  ansible.builtin.command: systemctl is-active cloudera-scm-server
+  register: cm_active_before_pg_restart
+  changed_when: false
+  failed_when: cm_active_before_pg_restart.rc | int not in [0, 3]
+
 - name: Restart PostgreSQL to apply configuration (RHEL)
   ansible.builtin.systemd:
     name: "{{ os.postgres_service }}"
@@ -51,3 +58,13 @@
       PostgreSQL is still bound to localhost only (127.0.0.1:{{ postgres_port }}).
       Expected listen_addresses='*' in {{ postgres_config_dir }}/postgresql.conf
       and a full cluster restart.
+
+- name: Restart Cloudera Manager after PostgreSQL restart (refresh DB connections)
+  ansible.builtin.systemd:
+    name: cloudera-scm-server
+    state: restarted
+  when: cm_active_before_pg_restart.rc | int == 0
+
+- name: Wait for Cloudera Manager Server after PostgreSQL restart
+  ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
+  when: cm_active_before_pg_restart.rc | int == 0
