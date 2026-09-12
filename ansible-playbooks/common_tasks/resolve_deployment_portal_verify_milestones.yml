@@ -1,0 +1,52 @@
+---
+# Normalize deployment_portal_verify_milestones (list or comma-separated extra-var string).
+# group_vars default is []. Play 10_setup sets minimum [portal, ipa]. Legacy post-CM refresh adds cm.
+
+- name: Parse deployment portal verify milestones from input
+  ansible.builtin.set_fact:
+    _portal_verify_milestones_input: >-
+      {{
+        deployment_portal_verify_milestones
+        | default([])
+      }}
+
+- name: Coerce deployment portal verify milestones to a trimmed lowercase list
+  ansible.builtin.set_fact:
+    _portal_verify_milestones_list: >-
+      {{
+        (
+          _portal_verify_milestones_input.split(',')
+          if (_portal_verify_milestones_input is string)
+          else _portal_verify_milestones_input
+        )
+        | map('string')
+        | map('trim')
+        | map('lower')
+        | reject('equalto', '')
+        | list
+        | unique
+      }}
+
+- name: Apply legacy post-CM portal refresh milestones when list is empty
+  ansible.builtin.set_fact:
+    _portal_verify_milestones_list: ['portal', 'ipa', 'cm']
+  when:
+    - _portal_verify_milestones_list | length == 0
+    - deployment_portal_verify_post_cm | default(false) | bool
+
+- name: Apply legacy CM vhost flag when list is still empty
+  ansible.builtin.set_fact:
+    _portal_verify_milestones_list: ['portal', 'ipa', 'cm']
+  when:
+    - _portal_verify_milestones_list | length == 0
+    - deployment_portal_verify_cm_vhost | default(false) | bool
+
+- name: Set effective deployment portal verify milestones
+  ansible.builtin.set_fact:
+    _portal_verify_milestones_effective: "{{ _portal_verify_milestones_list }}"
+
+- name: Publish effective portal verify milestones on localhost for Tier B (run_once)
+  ansible.builtin.set_fact:
+    deployment_portal_verify_milestones_effective: "{{ _portal_verify_milestones_effective }}"
+  delegate_to: localhost
+  run_once: true

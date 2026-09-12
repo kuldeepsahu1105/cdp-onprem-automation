@@ -21,6 +21,10 @@
   hosts: "{{ hostvars['localhost']['deployment_portal_host_group_effective'] }}"
   become: true
   gather_facts: true
+  vars:
+    deployment_portal_verify_milestones:
+      - portal
+      - ipa
   tasks:
     - name: Install deployment portal stack
       when: deployment_portal_enabled | default(true) | bool

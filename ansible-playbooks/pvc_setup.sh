@@ -203,7 +203,7 @@ run_phase_portal() {
 run_phase_2() {
   run_playbook 00_detect_identity.yml
   run_playbook 11_identity_setup.yml
-  _run_deployment_portal_refresh
+  _run_deployment_portal_refresh "portal,ipa,identity"
 }
 
 run_phase_3() {
@@ -227,21 +227,21 @@ run_phase_3() {
   run_playbook 24_start_cm.yml "${cm_extra[@]}"
   run_playbook 25_verify_cm.yml -e ansible_become=false
   run_playbook 26_setup_cm_license.yml -e ansible_become=false
-  _run_deployment_portal_refresh
+  _run_deployment_portal_refresh "portal,ipa,identity,cm"
 }
 
 run_phase_cm_tls() {
   run_playbook 27_setup_cm_autotls.yml
-  _run_deployment_portal_refresh
+  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls"
   run_playbook 28_setup_cm_krbs.yml
   run_playbook 29_setup_cm_cms.yml
   run_playbook 30_setup_cm_ldap.yml
-  _run_deployment_portal_refresh
+  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls"
 }
 
 run_phase_cdh() {
   run_playbook 31_setup_base_cluster.yml
-  _run_deployment_portal_refresh
+  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh"
 }
 
 run_phase_monitoring() {
@@ -250,7 +250,7 @@ run_phase_monitoring() {
     return 0
   fi
   run_playbook 32_setup_monitoring_stack.yml
-  _run_deployment_portal_refresh
+  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring"
 }
 
 # Legacy name: phase 4 = CM security + CDH base (no ECS).
@@ -284,11 +284,15 @@ _run_deployment_portal_bootstrap() {
 }
 
 _run_deployment_portal_refresh() {
+  local milestones="${1:-}"
   if ! _portal_enabled; then
     return 0
   fi
   local portal_extra=()
   while IFS= read -r -d '' arg; do portal_extra+=("$arg"); done < <(_portal_extra_args)
+  if [[ -n "$milestones" ]]; then
+    portal_extra+=(-e "deployment_portal_verify_milestones=${milestones}")
+  fi
   if run_playbook 35_refresh_deployment_portal.yml "${portal_extra[@]}"; then
     return 0
   fi
@@ -299,12 +303,12 @@ _run_deployment_portal_refresh() {
 _run_ecs_data_services() {
   if [[ "${ECS_DATA_SERVICES_DEPLOY_ENABLED:-false}" == "true" || "${ECS_DATA_SERVICES_DEPLOY_ENABLED:-false}" == "1" ]]; then
     run_playbook 34_setup_ecs_data_services.yml -e ecs_data_services_deploy_enabled=true
-    _run_deployment_portal_refresh
+    _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
   fi
 }
 
 run_phase_6() {
-  _run_deployment_portal_refresh
+  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
 }
 
 run_phase_7() {
@@ -313,7 +317,7 @@ run_phase_7() {
 
 run_phase_5() {
   run_playbook 33_setup_ecs_cluster.yml
-  _run_deployment_portal_refresh
+  _run_deployment_portal_refresh "portal,ipa,identity,cm,cm_tls,cdh,monitoring,ecs"
   _run_ecs_data_services
 }
 

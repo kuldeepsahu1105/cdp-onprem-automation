@@ -1,7 +1,7 @@
 ---
 # Service URL verify tiers (see RUNBOOK.md § Service URL verification tiers):
-#   Tier A (required on ops host): http://127.0.0.1:8088/ + Caddy vhost Host checks (portal; CM when installed/post-CM;
-#   IPA redirect 301/302 counts as success). CM vhost 502 is warn-only before CM install (Jenkins PORTAL stage).
+#   Tier A (ops host): localhost index (verify_deployment_portal_caddy.yml) plus checks scoped by
+#   deployment_portal_verify_milestones (portal/ipa at bootstrap; cm/cm_tls/monitoring/ecs after each deploy phase).
 #   Tier C (optional on ops host): printed public-EIP / hairpin URLs — warn only when optional.
 #   Tier B (controller): verify_service_urls_from_controller.yml after this file (portal, CM, monitoring, IPA, ECS).
 #
@@ -57,40 +57,18 @@
         | list
       }}
 
-- name: Set deployment portal CM installed hint from context
+- name: Set deployment portal require CM Caddy vhost from verify milestones
   ansible.builtin.set_fact:
-    _portal_cm_installed: >-
-      {{
-        deployment_portal_context.cloudera_manager.cm_installed
-        | default(false)
-        | bool
-        if (
-          deployment_portal_context is defined
-          and deployment_portal_context.cloudera_manager is defined
-        )
-        else false
-      }}
+    _portal_require_cm_vhost: "{{ 'cm' in (_portal_verify_milestones_effective | default([])) }}"
 
-- name: Set deployment portal require CM Caddy vhost hint
-  ansible.builtin.set_fact:
-    _portal_require_cm_vhost: >-
-      {{
-        deployment_portal_verify_cm_vhost | default(false) | bool
-        or (_portal_cm_installed | default(false) | bool)
-        or (deployment_portal_verify_post_cm | default(false) | bool)
-      }}
-
-- name: Set deployment portal CM Caddy vhost Tier A verify mode
+- name: Set deployment portal CM Caddy vhost Tier A verify mode when CM milestone is active
   ansible.builtin.set_fact:
     _portal_cm_vhost_tier_a_mode: >-
       {{
         deployment_portal_cm_vhost_tier_a_verify
-        | default(
-            'fail'
-            if (_portal_require_cm_vhost | default(false) | bool)
-            else 'warn'
-          )
+        | default('fail')
       }}
+  when: _portal_require_cm_vhost | default(false) | bool
 
 - name: Set deployment portal ops-host verify hint from anchor inventory name
   ansible.builtin.set_fact:
@@ -153,7 +131,9 @@
           and (deployment_portal_context.access.external.portal | default('') | length > 0)
         )
       }}
-  when: deployment_portal_context is defined
+  when:
+    - deployment_portal_context is defined
+    - 'portal' in (_portal_verify_milestones_effective | default([]))
 
 - name: Build access URL checks from deployment portal context
   ansible.builtin.set_fact:
@@ -181,7 +161,9 @@
         | selectattr('url', 'ne', '')
         | list
       }}
-  when: deployment_portal_context is defined
+  when:
+    - deployment_portal_context is defined
+    - 'portal' in (_portal_verify_milestones_effective | default([]))
 
 - name: Set required deployment portal access URL checks
   ansible.builtin.set_fact:
@@ -277,20 +259,61 @@
     deployment_portal_caddy_vhost_checks: >-
       {{
         (
-          [{'name': 'Caddy vhost portal', 'host': caddy_vhost_urls.portal.hostname, 'path': '/', 'optional': false}]
+          ([{'name': 'Caddy vhost portal', 'host': caddy_vhost_urls.portal.hostname, 'path': '/', 'optional': false}]
+           if (
+             'portal' in (_portal_verify_milestones_effective | default([]))
+             and (caddy_vhost_urls.portal.hostname | default('') | length > 0)
+           )
+           else [])
+          + (
+              [{'name': 'Caddy vhost pgAdmin', 'host': caddy_vhost_urls.pgadmin.hostname, 'path': '/', 'optional': false}]
+              if (
+                'portal' in (_portal_verify_milestones_effective | default([]))
+                and (caddy_vhost_urls.pgadmin.hostname | default('') | length > 0)
+              )
+              else []
+            )
           + (
               [{'name': 'Caddy vhost CM', 'host': caddy_vhost_urls.cm.hostname, 'path': '/',
-                'optional': not (_portal_require_cm_vhost | bool) or (_portal_cm_vhost_tier_a_mode == 'warn')}]
-              if (caddy_vhost_urls.cm.hostname | default('') | length > 0)
+                'optional': (_portal_cm_vhost_tier_a_mode | default('fail') == 'warn')}]
+              if (
+                'cm' in (_portal_verify_milestones_effective | default([]))
+                and (caddy_vhost_urls.cm.hostname | default('') | length > 0)
+              )
               else []
             )
           + (
               [{'name': 'Caddy vhost FreeIPA', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
                 'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false}]
               if (
-                deployment_portal_has_ipa | default(false) | bool
+                'ipa' in (_portal_verify_milestones_effective | default([]))
+                and deployment_portal_has_ipa | default(false) | bool
                 and (caddy_vhost_urls.ipa.hostname | default('') | length > 0)
                 and (deployment_portal_ipa_fqdn | default('') | length > 0)
+              )
+              else []
+            )
+          + (
+              [{'name': 'Caddy vhost Grafana', 'host': caddy_vhost_urls.grafana.hostname, 'path': '/', 'optional': false}]
+              if (
+                'monitoring' in (_portal_verify_milestones_effective | default([]))
+                and (caddy_vhost_urls.grafana.hostname | default('') | length > 0)
+              )
+              else []
+            )
+          + (
+              [{'name': 'Caddy vhost Prometheus', 'host': caddy_vhost_urls.prometheus.hostname, 'path': '/', 'optional': false}]
+              if (
+                'monitoring' in (_portal_verify_milestones_effective | default([]))
+                and (caddy_vhost_urls.prometheus.hostname | default('') | length > 0)
+              )
+              else []
+            )
+          + (
+              [{'name': 'Caddy vhost ECS', 'host': caddy_vhost_urls.ecs.hostname, 'path': '/', 'optional': false}]
+              if (
+                'ecs' in (_portal_verify_milestones_effective | default([]))
+                and (caddy_vhost_urls.ecs.hostname | default('') | length > 0)
               )
               else []
             )
@@ -300,8 +323,7 @@
     - caddy_vhost_enabled | default(false) | bool
     - caddy_vhost_urls is defined
     - caddy_vhost_urls | length > 0
-    - caddy_vhost_urls.portal.hostname is defined
-    - caddy_vhost_urls.cm.hostname is defined
+    - _portal_verify_milestones_effective | default([]) | length > 0
 
 - name: Verify Caddy vhost routes via localhost with Host header
   ansible.builtin.uri:
@@ -405,6 +427,7 @@
   delay: 5
   until: ipa_direct_host_header_check is succeeded
   when:
+    - 'ipa' in (_portal_verify_milestones_effective | default([]))
     - deployment_portal_has_ipa | default(false) | bool
     - deployment_portal_ipa_fqdn | default('') | length > 0
     - inventory_hostname in groups.get('ipaserver', [])
@@ -417,6 +440,7 @@
       Caddy IPA vhost proxies with header_up Host {{ deployment_portal_ipa_fqdn }}; fix IPA HTTP/TLS first.
       Try on {{ inventory_hostname }}: curl -k -H "Host: {{ deployment_portal_ipa_fqdn }}" https://127.0.0.1/
   when:
+    - 'ipa' in (_portal_verify_milestones_effective | default([]))
     - deployment_portal_has_ipa | default(false) | bool
     - deployment_portal_ipa_fqdn | default('') | length > 0
     - inventory_hostname in groups.get('ipaserver', [])

@@ -1,6 +1,7 @@
 ---
 # Build deployment_tier_b_url_checks on localhost for Tier B (Ansible controller) probes.
-# Optional tier_b_url_verify_scope: all | cm | portal (default all)
+# Primary filter: deployment_portal_verify_milestones_effective (from resolve_deployment_portal_verify_milestones.yml).
+# Legacy fallback: tier_b_url_verify_scope all | cm | portal when milestone list is empty.
 
 - name: Set Tier B URL check build inputs
   ansible.builtin.set_fact:
@@ -12,6 +13,17 @@
       }}
     _tier_b_monitoring: "{{ monitoring_stack_enabled | default(false) | bool }}"
     _tier_b_caddy: "{{ caddy_vhost_enabled | default(false) | bool }}"
+    _tier_b_milestones: >-
+      {{
+        deployment_portal_verify_milestones_effective
+        | default(hostvars['localhost'].deployment_portal_verify_milestones_effective | default([]))
+      }}
+  delegate_to: localhost
+  run_once: true
+
+- name: Set Tier B milestone filter mode
+  ansible.builtin.set_fact:
+    _tier_b_use_milestones: "{{ (_tier_b_milestones | default([]) | length > 0) }}"
   delegate_to: localhost
   run_once: true
 
@@ -39,60 +51,183 @@
       {{
         (
           ([{'name': 'portal (external)', 'url': _tier_b_ctx.access.external.portal | default(''), 'service': 'portal'}]
-           if (_tier_b_scope in ['all', 'portal'])
+           if (
+             (
+               _tier_b_use_milestones
+               and ('portal' in _tier_b_milestones)
+             )
+             or (
+               not _tier_b_use_milestones
+               and (_tier_b_scope in ['all', 'portal'])
+             )
+           )
            and (_tier_b_ctx.access.external.portal | default('') | length > 0)
            else [])
           + ([{'name': 'pgAdmin (external)', 'url': _tier_b_ctx.access.external.pgadmin | default(''), 'service': 'pgadmin'}]
-             if (_tier_b_scope == 'all')
+             if (
+               (
+                 _tier_b_use_milestones
+                 and ('portal' in _tier_b_milestones)
+               )
+               or (
+                 not _tier_b_use_milestones
+                 and (_tier_b_scope == 'all')
+               )
+             )
              and (_tier_b_ctx.access.external.pgadmin | default('') | length > 0)
              else [])
           + ([{'name': 'Grafana (external)', 'url': _tier_b_ctx.access.external.grafana | default(''), 'service': 'grafana'}]
-             if (_tier_b_scope == 'all')
+             if (
+               (
+                 _tier_b_use_milestones
+                 and ('monitoring' in _tier_b_milestones)
+               )
+               or (
+                 not _tier_b_use_milestones
+                 and (_tier_b_scope == 'all')
+                 and _tier_b_monitoring
+               )
+             )
              and _tier_b_monitoring
              and (_tier_b_ctx.access.external.grafana | default('') | length > 0)
              else [])
           + ([{'name': 'Prometheus (external)', 'url': _tier_b_ctx.access.external.prometheus | default(''), 'service': 'prometheus'}]
-             if (_tier_b_scope == 'all')
+             if (
+               (
+                 _tier_b_use_milestones
+                 and ('monitoring' in _tier_b_milestones)
+               )
+               or (
+                 not _tier_b_use_milestones
+                 and (_tier_b_scope == 'all')
+                 and _tier_b_monitoring
+               )
+             )
              and _tier_b_monitoring
              and (_tier_b_ctx.access.external.prometheus | default('') | length > 0)
              else [])
           + ([{'name': 'CM UI HTTP (FQDN)', 'url': _tier_b_ctx.cloudera_manager.ui_url_http | default('') ~ '/',
               'service': 'cm'}]
-             if (_tier_b_scope in ['all', 'cm'])
+             if (
+               (
+                 _tier_b_use_milestones
+                 and ('cm' in _tier_b_milestones)
+               )
+               or (
+                 not _tier_b_use_milestones
+                 and (_tier_b_scope in ['all', 'cm'])
+               )
+             )
              and (_tier_b_ctx.cloudera_manager.ui_url_http | default('') | length > 0)
              else [])
           + ([{'name': 'CM UI HTTPS (FQDN)', 'url': _tier_b_ctx.cloudera_manager.ui_url_https | default('') ~ '/',
               'service': 'cm'}]
-             if (_tier_b_scope in ['all', 'cm'])
-             and (autotls_enabled | default(false) | bool)
+             if (
+               (
+                 _tier_b_use_milestones
+                 and (
+                   ('cm_tls' in _tier_b_milestones)
+                   or (
+                     ('cm' in _tier_b_milestones)
+                     and (autotls_enabled | default(false) | bool)
+                   )
+                 )
+               )
+               or (
+                 not _tier_b_use_milestones
+                 and (_tier_b_scope in ['all', 'cm'])
+                 and (autotls_enabled | default(false) | bool)
+               )
+             )
              and (_tier_b_ctx.cloudera_manager.ui_url_https | default('') | length > 0)
              else [])
           + ([{'name': 'CM UI HTTP (public IP)', 'url': 'http://' ~ _tier_b_ctx.anchor.public_ip ~ ':' ~ (cm_http_port | string) ~ '/',
               'service': 'cm'}]
-             if (_tier_b_scope in ['all', 'cm'])
+             if (
+               (
+                 _tier_b_use_milestones
+                 and ('cm' in _tier_b_milestones)
+               )
+               or (
+                 not _tier_b_use_milestones
+                 and (_tier_b_scope in ['all', 'cm'])
+               )
+             )
              and (_tier_b_ctx.access.profile | default('') != 'private')
              and (_tier_b_ctx.anchor.public_ip | default('') | length > 0)
              else [])
           + ([{'name': 'CM (Caddy vhost)', 'url': _tier_b_ctx.caddy_vhosts.urls_public.cm.url | default(''), 'service': 'cm'}]
-             if (_tier_b_scope in ['all', 'cm'])
+             if (
+               (
+                 _tier_b_use_milestones
+                 and ('cm' in _tier_b_milestones)
+               )
+               or (
+                 not _tier_b_use_milestones
+                 and (_tier_b_scope in ['all', 'cm'])
+               )
+             )
              and _tier_b_caddy
              and (_tier_b_ctx.caddy_vhosts.urls_public.cm.url | default('') | length > 0)
              else [])
           + ([{'name': 'FreeIPA UI', 'url': _tier_b_ctx.identity.ipa_ui_url | default(''), 'service': 'ipa'}]
-             if (_tier_b_scope == 'all')
+             if (
+               (
+                 _tier_b_use_milestones
+                 and (
+                   ('ipa' in _tier_b_milestones)
+                   or ('identity' in _tier_b_milestones)
+                 )
+               )
+               or (
+                 not _tier_b_use_milestones
+                 and (_tier_b_scope == 'all')
+               )
+             )
              and (_tier_b_ctx.identity.ipa_ui_url | default('') | length > 0)
              else [])
           + ([{'name': 'FreeIPA (Caddy vhost)', 'url': _tier_b_ctx.identity.ipa_caddy_url | default(''), 'service': 'ipa'}]
-             if (_tier_b_scope == 'all')
+             if (
+               (
+                 _tier_b_use_milestones
+                 and (
+                   ('ipa' in _tier_b_milestones)
+                   or ('identity' in _tier_b_milestones)
+                 )
+               )
+               or (
+                 not _tier_b_use_milestones
+                 and (_tier_b_scope == 'all')
+               )
+             )
              and (_tier_b_ctx.identity.ipa_caddy_url | default('') | length > 0)
              else [])
           + ([{'name': 'ECS console', 'url': _tier_b_ctx.ecs.console_hint | default(''), 'service': 'ecs'}]
-             if (_tier_b_scope == 'all')
+             if (
+               (
+                 _tier_b_use_milestones
+                 and ('ecs' in _tier_b_milestones)
+               )
+               or (
+                 not _tier_b_use_milestones
+                 and (_tier_b_scope == 'all')
+                 and (_tier_b_ctx.ecs.deployed | default(false) | bool)
+               )
+             )
              and (_tier_b_ctx.ecs.deployed | default(false) | bool)
              and (_tier_b_ctx.ecs.console_hint | default('') | length > 0)
              else [])
           + ([{'name': 'ECS (Caddy vhost)', 'url': _tier_b_ctx.ecs.caddy_url | default(''), 'service': 'ecs'}]
-             if (_tier_b_scope == 'all')
+             if (
+               (
+                 _tier_b_use_milestones
+                 and ('ecs' in _tier_b_milestones)
+               )
+               or (
+                 not _tier_b_use_milestones
+                 and (_tier_b_scope == 'all')
+               )
+             )
              and (_tier_b_ctx.ecs.caddy_url | default('') | length > 0)
              else [])
         )

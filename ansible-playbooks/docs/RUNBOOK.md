@@ -62,11 +62,25 @@ The same three-tier model applies to **portal**, **Cloudera Manager**, **Grafana
 
 | Tier | Where it runs | What it checks | On failure |
 |---|---|---|---|
-| **A (required)** | **Ops host** (`ipaserver` / `cldr-mngr`): `http://127.0.0.1:<deployment_portal_http_port>/`, Caddy **Host** vhosts (portal; **CM** when `cm_installed` / `35_refresh` / `deployment_portal_verify_cm_vhost`; IPA redirect **301/302** OK). **CM host** (`cldr-mngr`): `http://127.0.0.1:7180/` (API probes delegate here from Jenkins via `set_cm_api_url` / `wait_for_cm_api`) | Local service health | **Fail** the play (CM vhost **warn** only before CM install — Jenkins **PORTAL** before **CM_INSTALL**) |
+| **A (required)** | **Ops host** (`ipaserver` / `cldr-mngr`): `http://127.0.0.1:<deployment_portal_http_port>/`, Caddy **Host** vhosts scoped by **`deployment_portal_verify_milestones`** (bootstrap **portal** + **ipa** only; **cm** / **cm_tls** / **monitoring** / **ecs** after each deploy phase). **CM host** (`cldr-mngr`): `http://127.0.0.1:7180/` (API probes delegate here from Jenkins via `set_cm_api_url` / `wait_for_cm_api`) | Local service health | **Fail** the play for milestones in the active list |
 | **B (external)** | Ansible **controller** when `ansible_control_reachability_effective` is **`public`** | HTTP GET printed **external** URLs (portal/pgAdmin/Grafana, CM FQDN + public IP + optional Caddy CM vhost, IPA, ECS console) via `verify_service_urls_from_controller.yml` | **`deployment_external_url_verify`** (default **`warn`**) or per-service `deployment_<service>_external_url_verify` / `deployment_service_external_url_verify` map — `warn`, `fail`, or `skip` |
 | **C (optional)** | Ops or CM host | Public-EIP **hairpin** URLs (EC2 calling its own EIP) | **Warn only** |
 
-**When it runs:** Portal stack verify after `10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` (`verify_deployment_portal_caddy.yml`). CM UI Tier **A/C** in `25_verify_cm.yml`; CM Tier **B** runs there only when `deployment_portal_enabled: false` (otherwise portal verify covers all services once — no duplicate CM Tier **B**).
+**When it runs:** Portal stack verify after `10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` (`verify_deployment_portal_caddy.yml`). CM UI Tier **A/C** in `25_verify_cm.yml`; CM Tier **B** runs there only when `deployment_portal_enabled: false` (otherwise Tier **B** runs from portal verify, scoped by the same milestones — no duplicate CM Tier **B** in `25_verify_cm.yml`).
+
+### Portal URL verify milestones (by deploy stage)
+
+| Stage / trigger | `deployment_portal_verify_milestones` (cumulative) | Tier **A** Caddy vhosts / host checks | Tier **B** (controller, when public reach) |
+|---|---|---|---|
+| **PORTAL** (`10_setup_deployment_portal.yml`) | `portal`, `ipa` | Portal index, portal + IPA vhosts; IPA FQDN on `ipaserver` | Portal (+ IPA when in list) |
+| **IDENTITY** (phase 2 refresh) | + `identity` | Same as PORTAL | + FreeIPA printed / Caddy IPA URLs |
+| **CM_INSTALL** (phase 3 refresh) | + `cm` | + CM Caddy vhost | + CM HTTP / public IP / Caddy CM |
+| **CM_TLS** (phase `cm_tls` refresh) | + `cm_tls` | (CM vhost still required when `cm` present) | + CM HTTPS FQDN |
+| **CDH** (phase `cdh` refresh) | + `cdh` | (index refresh; no extra vhosts) | (no new probes) |
+| **MONITORING** | + `monitoring` | + Grafana / Prometheus vhosts | + Grafana / Prometheus external |
+| **ECS** | + `ecs` | + ECS vhost | + ECS console / Caddy ECS |
+
+Set explicitly: `-e deployment_portal_verify_milestones=cm,cm_tls`. `pvc_setup.sh` passes the cumulative list on each `_run_deployment_portal_refresh`. Legacy `deployment_portal_verify_post_cm: true` on `35_refresh` implies `portal`, `ipa`, `cm` when milestones are omitted.
 
 Variables:
 
@@ -74,6 +88,7 @@ Variables:
 - `deployment_portal_external_url_verify` — legacy alias when global unset
 - `deployment_cm_external_url_verify`, `deployment_grafana_external_url_verify`, … — per-service overrides
 - `deployment_service_external_url_verify` — optional map `{ cm: warn, grafana: skip, … }`
+- `deployment_portal_verify_milestones` — list or comma string (`portal`, `ipa`, `identity`, `cm`, `cm_tls`, `cdh`, `monitoring`, `ecs`); default `[]` in `group_vars`; bootstrap play sets `portal` + `ipa`
 - `deployment_portal_url_verify_skip_vpc` — skip hard-fail on VPC-only printed URLs when control is public-only (Jenkins sets `true`)
 - `ansible_control_reachability` — must be `public` (or auto → public on Jenkins) for Tier **B**
 

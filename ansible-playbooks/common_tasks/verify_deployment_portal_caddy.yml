@@ -72,10 +72,12 @@
         else ''
       }}
 
-- name: Verify deployment portal and Caddy vhost URLs
+- name: Resolve deployment portal URL verify milestones for this run
+  ansible.builtin.import_tasks: resolve_deployment_portal_verify_milestones.yml
+
+- name: Verify deployment portal and Caddy vhost URLs (Tier A scoped by milestone)
   ansible.builtin.import_tasks: verify_deployment_portal_urls.yml
 
 - name: Verify external service URLs from Ansible controller when control profile is public (Tier B)
   ansible.builtin.import_tasks: verify_service_urls_from_controller.yml
-  vars:
-    tier_b_url_verify_scope: all
+  when: _portal_verify_milestones_effective | default([]) | length > 0
