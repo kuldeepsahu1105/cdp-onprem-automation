@@ -12,6 +12,9 @@
     - name: Resolve deployment portal Caddy gate (monitoring_stack_enabled)
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_caddy_enabled.yml
 
+    - name: Resolve deployment portal install host group (play hosts line when Caddy skipped)
+      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
+
     - name: Skip when Caddy portal stack is disabled
       ansible.builtin.meta: end_play
       when: not (deployment_portal_caddy_effective | default(false) | bool)
