@@ -1,0 +1,59 @@
+---
+# Ask Cloudera Manager whether Auto-TLS is configured (do not infer only from :7183 probes).
+
+- name: CM API — GET CM global configuration
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/cm/config"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: _cm_autotls_config_api
+  delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
+
+- name: CM API — parse Auto-TLS flags from CM configuration
+  ansible.builtin.set_fact:
+    _cm_autotls_config_flag_hits: >-
+      {{
+        _cm_config_items
+        | selectattr('name', 'defined')
+        | selectattr('name', 'in', _cm_autotls_config_flag_names)
+        | selectattr('value', 'defined')
+        | selectattr('value', 'in', [true, 'true', 'True', 'TRUE', 'yes', 'Yes', '1'])
+        | map(attribute='name')
+        | list
+      }}
+    _cm_autotls_ca_cert_value: >-
+      {{
+        (
+          _cm_config_items
+          | selectattr('name', 'defined')
+          | selectattr('name', 'in', ['auto_tls_ca_cert', 'AUTO_TLS_CA_CERT'])
+          | map(attribute='value')
+          | first
+          | default('', true)
+        )
+      }}
+  vars:
+    _cm_config_items: "{{ _cm_autotls_config_api.json['items'] | default([]) }}"
+    _cm_autotls_config_flag_names:
+      - enable_auto_tls
+      - ENABLE_AUTO_TLS
+      - autoTlsEnabled
+      - auto_tls_enabled
+
+- name: CM API — set Auto-TLS enabled from CM configuration
+  ansible.builtin.set_fact:
+    cm_autotls_api_enabled: >-
+      {{
+        (_cm_autotls_config_flag_hits | default([]) | length > 0)
+        or ((_cm_autotls_ca_cert_value | default('') | trim | length) > 0)
+      }}
+
+- name: CM API — print Auto-TLS state from CM API configuration
+  ansible.builtin.debug:
+    msg: >-
+      CM API Auto-TLS configured: {{ cm_autotls_api_enabled | default(false) | bool }}
+      (HTTPS probe autotls_enabled={{ autotls_enabled | default(false) }} — probes alone do not skip generateCmca).

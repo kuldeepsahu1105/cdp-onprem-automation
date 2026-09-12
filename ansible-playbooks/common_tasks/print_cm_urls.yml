@@ -44,7 +44,8 @@
   ansible.builtin.set_fact:
     _cm_display_autotls: >-
       {{
-        (autotls_enabled | default(false) | bool)
+        (cm_autotls_api_enabled | default(false) | bool)
+        or (autotls_enabled | default(false) | bool)
         or (cm_protocol | default('') == 'https')
         or ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
       }}

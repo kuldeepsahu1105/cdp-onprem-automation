@@ -356,6 +356,8 @@ cm_srvr_sudo_user: "root" # Set the default SSH user for key-based/password-base
 
 # Cloudera Manager Auto-TLS
 use_freeipa_for_crt_mgmt: false # Set to true if FreeIPA is used for certificate management
+# Run generateCmca even when CM API reports Auto-TLS already configured (repair / re-apply)
+cm_autotls_force_run: false
 
 ##### KDC integration for cldr-mngr:
 krb5_enc_types: "{{ 'aes256-cts aes128-cts' if identity_provider_effective == 'ad' else 'aes256-cts aes128-cts rc4-hmac' }}"

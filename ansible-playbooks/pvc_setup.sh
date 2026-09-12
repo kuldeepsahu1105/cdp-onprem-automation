@@ -284,6 +284,8 @@ run_phase_3() {
 
 run_phase_cm_tls() {
   ui_phase_header "CM Auto-TLS, Kerberos, CMS, LDAP"
+  ui_phase_header "Cluster root SSH keys (playbook 04) — required for CM Auto-TLS"
+  run_playbook 04_setup_autossh.yml
   # CM API health waits (fetch /api/version then /api/<slug>/version) run in 27+ — not portal refresh.
   run_playbook 27_setup_cm_autotls.yml
   run_playbook 28_setup_cm_krbs.yml
