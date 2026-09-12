@@ -508,7 +508,7 @@ ecs_data_services_catalog:
 # Caddy index, pgAdmin, Prometheus, Grafana, Alertmanager, cAdvisor on ops host.
 # auto = ipaserver when [ipaserver] exists, else cldr-mngr. pgAdmin targets CM PostgreSQL on cldr-mngr.
 # ---------------------------------------------------------------------------
-# Portal + Caddy reverse proxy on ops host — only when monitoring_stack_enabled (default true). See resolve_deployment_portal_caddy_enabled.yml.
+# Portal + Caddy on ops host when deployment_portal_enabled + caddy_vhost_enabled (resolve_deployment_portal_caddy_enabled.yml). monitoring_stack_enabled gates monitoring install in sync only.
 deployment_portal_enabled: true
 deployment_portal_host_group: auto
 deployment_portal_postgres_host_group: cldr-mngr

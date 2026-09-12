@@ -10,13 +10,22 @@
   connection: local
   gather_facts: true
   tasks:
-    - name: Resolve deployment portal Caddy gate (monitoring_stack_enabled)
+    - name: Resolve deployment portal Caddy gate (portal + caddy_vhost flags)
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_caddy_enabled.yml
 
     - name: Resolve deployment portal install host group (play hosts line when Caddy skipped)
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
 
-    - name: Skip when Caddy portal stack is disabled (monitoring off or portal off)
+    - name: "SKIPPED PORTAL — Caddy stack disabled (see Report deployment portal Caddy gate above)"
+      ansible.builtin.debug:
+        msg: >-
+          SKIPPED PORTAL: deployment_portal_caddy_effective=false
+          (deployment_portal_enabled={{ deployment_portal_enabled | default(true) | bool }},
+          caddy_vhost_enabled={{ caddy_vhost_enabled | default(true) | bool }}).
+          No portal install or Tier B verify will run in this playbook.
+      when: not (deployment_portal_caddy_effective | default(false) | bool)
+
+    - name: "SKIPPED PORTAL — end localhost play (Caddy stack disabled)"
       ansible.builtin.meta: end_play
       when: not (deployment_portal_caddy_effective | default(false) | bool)
 
@@ -32,7 +41,7 @@
       - portal
       - ipa
   tasks:
-    - name: Skip when Caddy portal stack is disabled
+    - name: "SKIPPED PORTAL — end ops host (Caddy stack disabled on controller)"
       ansible.builtin.meta: end_host
       when: not (hostvars['localhost'].deployment_portal_caddy_effective | default(false) | bool)
 
@@ -69,7 +78,7 @@
       - portal
       - ipa
   tasks:
-    - name: Skip Tier B when Caddy portal stack is disabled
+    - name: "SKIPPED PORTAL Tier B — Caddy stack disabled"
       ansible.builtin.meta: end_play
       when: not (deployment_portal_caddy_effective | default(false) | bool)
 

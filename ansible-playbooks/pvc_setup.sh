@@ -327,9 +327,10 @@ _run_deployment_portal_bootstrap() {
   fi
   local portal_extra=()
   while IFS= read -r -d '' arg; do portal_extra+=("$arg"); done < <(_portal_extra_args)
-  # Bootstrap Caddy/pgAdmin/index only; do not install 32 here. Caddy/index still wire monitoring
-  # when detect_deployment_portal_monitoring_on_host finds a running stack (routes_enabled fact).
+  # Defer Grafana/Prometheus compose to playbook 32 (sync block uses deployment_portal_monitoring_routes_enabled).
+  # Does not gate Caddy — resolve_deployment_portal_caddy_enabled.yml uses deployment_portal_enabled + caddy_vhost_enabled.
   portal_extra+=(-e monitoring_stack_enabled=false)
+  portal_extra+=(-e deployment_portal_install_required=true)
   run_playbook 10_setup_deployment_portal.yml "${portal_extra[@]}"
 }
 
