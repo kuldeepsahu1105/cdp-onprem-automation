@@ -27,16 +27,39 @@
   delegate_to: localhost
   run_once: true
 
-- name: Set Tier B pgAdmin external probe URL (prefer Caddy vhost on portal port)
+- name: Set Tier B pgAdmin external probe URL (ops public IP :8088 + Caddy Host header)
   ansible.builtin.set_fact:
-    _tier_b_pgadmin_external_url: >-
+    _tier_b_pgadmin_vhost_hostname: >-
       {{
-        _tier_b_ctx.caddy_vhosts.urls_public.pgadmin.url | default('')
+        _tier_b_ctx.caddy_vhosts.urls_public.pgadmin.hostname | default('')
         if (
           _tier_b_caddy | default(false) | bool
-          and (_tier_b_ctx.caddy_vhosts.urls_public.pgadmin.url | default('') | length > 0)
+          and (_tier_b_ctx.caddy_vhosts.urls_public.pgadmin.hostname | default('') | length > 0)
         )
-        else (_tier_b_ctx.access.external.pgadmin | default(''))
+        else ''
+      }}
+    _tier_b_pgadmin_external_url: >-
+      {{
+        (
+          'http://'
+          ~ _tier_b_ctx.anchor.public_ip
+          ~ ':'
+          ~ (deployment_portal_http_port | default(8088) | string)
+          ~ '/'
+        )
+        if (
+          _tier_b_caddy | default(false) | bool
+          and (_tier_b_ctx.caddy_vhosts.urls_public.pgadmin.hostname | default('') | length > 0)
+          and (_tier_b_ctx.anchor.public_ip | default('') | length > 0)
+        )
+        else (
+          _tier_b_ctx.caddy_vhosts.urls_public.pgadmin.url | default('')
+          if (
+            _tier_b_caddy | default(false) | bool
+            and (_tier_b_ctx.caddy_vhosts.urls_public.pgadmin.url | default('') | length > 0)
+          )
+          else (_tier_b_ctx.access.external.pgadmin | default(''))
+        )
       }}
   delegate_to: localhost
   run_once: true
@@ -78,7 +101,9 @@
            )
            and (_tier_b_ctx.access.external.portal | default('') | length > 0)
            else [])
-          + ([{'name': 'pgAdmin (external)', 'url': _tier_b_pgadmin_external_url | default(_tier_b_ctx.access.external.pgadmin | default('')), 'service': 'pgadmin'}]
+          + ([{'name': 'pgAdmin (external)', 'url': _tier_b_pgadmin_external_url | default(_tier_b_ctx.access.external.pgadmin | default('')),
+              'http_host': _tier_b_pgadmin_vhost_hostname | default(''),
+              'service': 'pgadmin'}]
              if (
                (
                  _tier_b_use_milestones

@@ -3,13 +3,17 @@
 # Tier A runs on service hosts (portal ops host, CM on cldr-mngr @ 127.0.0.1). Tier C is warn-only on hosts.
 # Probe list is filtered by deployment_portal_verify_milestones_effective (see build_deployment_tier_b_url_checks.yml).
 #
+# All Tier B facts and probes run on localhost (Jenkins controller), not the portal ops host.
+#
 # Modes (per service, fallback chain):
 #   deployment_<service>_external_url_verify → deployment_external_url_verify → deployment_portal_external_url_verify (portal only) → warn
 # Values: warn | fail | skip
 
 - name: Build Tier B URL probe list when not pre-supplied
   ansible.builtin.import_tasks: build_deployment_tier_b_url_checks.yml
-  when: deployment_tier_b_url_checks is not defined
+  delegate_to: localhost
+  run_once: true
+  when: hostvars['localhost'].deployment_tier_b_url_checks | default([]) | length == 0
 
 - name: Set Tier B controller verify defaults
   ansible.builtin.set_fact:
@@ -19,6 +23,13 @@
       {{
         hostvars['localhost'].deployment_portal_context
         | default(deployment_portal_context | default({}))
+      }}
+    _tier_b_url_checks_local: "{{ hostvars['localhost'].deployment_tier_b_url_checks | default([]) }}"
+    _tier_b_jenkins: >-
+      {{
+        (lookup('env', 'JENKINS_URL') | default('') | length > 0)
+        or (lookup('env', 'BUILD_NUMBER') | default('') | length > 0)
+        or (lookup('env', 'ANSIBLE_CONTROL_VIA_JENKINS') | default('') | lower in ['1', 'true', 'yes', 'on'])
       }}
   delegate_to: localhost
   run_once: true
@@ -49,7 +60,7 @@
 - name: Resolve per-service Tier B verify mode on URL checks
   ansible.builtin.set_fact:
     deployment_tier_b_url_checks_effective: >-
-      {%- set rows = deployment_tier_b_url_checks | default([]) -%}
+      {%- set rows = _tier_b_url_checks_local | default([]) -%}
       {%- set out = [] -%}
       {%- for row in rows -%}
       {%- set svc = row.service | default('service') -%}
@@ -71,7 +82,7 @@
       {{ out }}
   delegate_to: localhost
   run_once: true
-  when: deployment_tier_b_url_checks | default([]) | length > 0
+  when: _tier_b_url_checks_local | default([]) | length > 0
 
 - name: Filter Tier B URL checks that are not skipped
   ansible.builtin.set_fact:
@@ -85,18 +96,29 @@
   run_once: true
   when: deployment_tier_b_url_checks_effective | default([]) | length > 0
 
+- name: Set Tier B probe rows for run gate
+  ansible.builtin.set_fact:
+    _tier_b_probes_for_run: >-
+      {{
+        deployment_tier_b_url_checks_to_probe
+        | default(deployment_tier_b_url_checks_effective | default(_tier_b_url_checks_local | default([])))
+      }}
+  delegate_to: localhost
+  run_once: true
+
 - name: Decide whether to run Tier B external URL probes
   ansible.builtin.set_fact:
     _tier_b_run_any: >-
       {{
-        (deployment_tier_b_url_checks_effective | default([]) | length > 0)
+        (_tier_b_probes_for_run | default([]) | length > 0)
         and (
-          _tier_b_ctx | length == 0
+          (_tier_b_ctx | length == 0)
           or (_tier_b_ctx.access.profile | default('') != 'private')
         )
         and (
-          hostvars['localhost'].ansible_control_reachability_effective | default('')
-          == 'public'
+          (_tier_b_jenkins | bool)
+          or (ansible_control_reachability_effective | default('') == 'public')
+          or (ansible_control_reach_public_only | default(false) | bool)
         )
       }}
   delegate_to: localhost
@@ -106,13 +128,19 @@
   ansible.builtin.uri:
     url: "{{ item.url }}"
     method: GET
+    headers: >-
+      {{
+        {'Host': item.http_host}
+        if (item.http_host | default('') | length > 0)
+        else omit
+      }}
     status_code: "{{ _tier_b_url_codes }}"
     follow_redirects: none
     validate_certs: false
     timeout: 30
   loop: "{{ deployment_tier_b_url_checks_to_probe | default([]) }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.name }}{% if item.http_host | default('') | length > 0 %} (Host: {{ item.http_host }}){% endif %}"
   register: deployment_tier_b_url_results
   failed_when: false
   delegate_to: localhost
@@ -121,28 +149,13 @@
     - _tier_b_run_any | default(false) | bool
     - deployment_tier_b_url_checks_to_probe | default([]) | length > 0
 
-- name: Report Tier B external service URL success from Ansible controller
-  ansible.builtin.debug:
-    msg: >-
-      Tier B (Ansible controller): {{ item.item.name }} responded HTTP {{ item.status }}
-      — {{ item.item.url }} (browser/Jenkins path when security groups allow).
-  loop: "{{ deployment_tier_b_url_results.results | default([]) }}"
-  when:
-    - _tier_b_run_any | default(false) | bool
-    - deployment_tier_b_url_results is defined
-    - not (item.skipped | default(false) | bool)
-    - not (item.failed | default(false) | bool)
-    - item.status | default(0) | int in _tier_b_url_codes
-  delegate_to: localhost
-  run_once: true
-
 - name: Warn when Tier B external service URL does not respond from controller
   ansible.builtin.debug:
     msg:
       - >-
-        Tier B (Ansible controller / Jenkins): external URL check failed
-        (probe ran with connection: local on the control node, not from the ops EC2 host).
-      - "Service: {{ item.item.name }} — {{ item.item.url }}"
+        Tier B (external) URL check failed from the Ansible controller
+        (probe ran on localhost / Jenkins).
+      - "Service: {{ item.item.name }} — {{ item.item.url }}{% if item.item.http_host | default('') | length > 0 %} (Host: {{ item.item.http_host }}){% endif %}"
       - >-
         Tier A on the cluster host (127.0.0.1 / delegated CM API on cldr-mngr) may still pass while this fails —
         typical when security groups block ports from Jenkins/office CIDRs (portal 8088, CM 7180/7183, etc.).
@@ -163,7 +176,8 @@
   ansible.builtin.fail:
     msg: >-
       Tier B URL check failed from the Ansible controller: {{ item.item.name }}
-      {{ item.item.url }} (expected HTTP {{ _tier_b_url_codes | join('/') }}).
+      {{ item.item.url }}{% if item.item.http_host | default('') | length > 0 %} (Host: {{ item.item.http_host }}){% endif %}
+      (expected HTTP {{ _tier_b_url_codes | join('/') }}).
       Tier A local checks may still succeed when the public endpoint is unreachable from outside the VPC.
       Adjust security groups or set deployment_{{ item.item.service | default('service') }}_external_url_verify: warn|skip
       or deployment_external_url_verify: warn|skip.

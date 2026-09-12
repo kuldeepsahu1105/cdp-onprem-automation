@@ -78,6 +78,8 @@
         if ('cldr-mngr' in groups and groups['cldr-mngr'] | length > 0)
         else ''
       }}
+  delegate_to: localhost
+  run_once: true
 
 - name: Resolve deployment portal URL verify milestones for this run
   ansible.builtin.import_tasks: resolve_deployment_portal_verify_milestones.yml

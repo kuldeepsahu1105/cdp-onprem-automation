@@ -16,7 +16,11 @@ Private network (no public IP):
 {% else %}
 Jenkins / internet (ops public IP):
   Portal:    {{ deployment_portal_context.access.external.portal }}
-  pgAdmin:   {{ deployment_portal_context.access.external.pgadmin }}
+  pgAdmin:   {{ deployment_portal_context.portal.pgadmin_url | default(deployment_portal_context.access.external.pgadmin) }}
+{% if deployment_portal_context.portal.pgadmin_caddy_url | default('') | length > 0 %}
+  pgAdmin (Caddy vhost, preferred): {{ deployment_portal_context.portal.pgadmin_caddy_url }}
+  pgAdmin (direct :{{ deployment_portal_pgadmin_host_port | default(5050) }}): {{ deployment_portal_context.portal.pgadmin_url_direct | default(deployment_portal_context.access.external.pgadmin) }}
+{% endif %}
 {% if deployment_portal_context.monitoring.enabled %}
   Grafana:     {{ deployment_portal_context.access.external.grafana }}
   Prometheus:  {{ deployment_portal_context.access.external.prometheus }}

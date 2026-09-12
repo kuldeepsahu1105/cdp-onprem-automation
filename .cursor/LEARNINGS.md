@@ -13,13 +13,14 @@ Scan this before deep-diving playbooks/Jenkins. Details: `ansible-playbooks/docs
 - Listen **8088**; smoke: `http://<ops-public-ip>:8088/`. Vhost FQDN: `portal.<dashed-public-ip>.pvc.cloudera-labs.com` (dashes, not dots in IP segment).
 - Hairpin from the same ops host is optional — warn, do not fail the pipeline on it alone.
 - **IPA** `reverse_proxy`: `header_up Host` = ipaserver FQDN. **CM** block: split HTTP vs HTTPS + `transport` per autotls mode. Post-CM: CM API **`frontend_url`** → Caddy CM vhost (`apply_cm_caddy_load_balancer.yml`); facts **`cm_caddy_public_url`**, **`ecs_caddy_console_url`** from `caddy_vhost_urls.j2`. Tier A / portal CM probe: **`probe_cm_manager_ui_http.yml`** when `127.0.0.1:7180` is closed.
+- **pgAdmin:** Caddy upstream must use compose service name **`pgadmin:80`** (not `container_name`). Publish **`0.0.0.0:5050:80`** when SG allows direct UI. Tier B from Jenkins: GET `http://<ops-public-ip>:8088/` with **`Host: pgadmin.<slug>.<base>`** (same as Tier A vhost checks) — not only `:5050`.
 - **RHEL:** remove `podman-docker` before installing `docker-ce` (conflicts with Docker CE).
 
 ## Ansible pitfalls
 
 - **Never** multiple `set_fact` keys in one task when values reference sibling keys (`_acr_*`, `_portal_*`, etc.) — split tasks or use explicit `hostvars` / `deployment_portal_context`.
 - **`when:` lists** with Jinja `in` on items: use `intersect` filter or quote the full expression — bare YAML breaks parsing.
-- **`detect_ansible_control_reachability`:** probes/`set_fact` for control mode → **`delegate_to: localhost`** (env vars, not remote host).
+- **`detect_ansible_control_reachability`:** probes/`set_fact` for control mode → **`delegate_to: localhost`** (env vars, not remote host). **Tier B** builds `deployment_tier_b_url_checks` on localhost — read via `hostvars['localhost']`; `_tier_b_run_any` is true under Jenkins (`BUILD_NUMBER` / `JENKINS_URL`) when probes exist.
 - **Galaxy:** `ansible_install_collections_if_needed.yml`; `00_ensure_collections` import; `pvc_setup.sh` can skip collections tag when already installed.
 
 ## Jenkins UI
