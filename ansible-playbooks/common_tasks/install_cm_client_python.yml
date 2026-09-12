@@ -1,6 +1,6 @@
 ---
 # cm_client on the Ansible controller (required by cloudera.cluster.* modules).
-# Standalone CI, and wrappers: same pip install on the host running ansible-playbook.
+# urllib3 2.x breaks cm_client RESTClientObject + collection discover_endpoint (TypeError on pool maxsize).
 
 - name: Check cm_client import on controller Python
   ansible.builtin.command:
@@ -9,12 +9,21 @@
   changed_when: false
   failed_when: false
 
-- name: Install cm_client for cloudera.cluster modules (pip --user)
+- name: Install cm_client and urllib3 1.x for cloudera.cluster modules (pip --user)
   ansible.builtin.pip:
-    name: cm_client
+    name:
+      - cm_client
+      - "urllib3>=1.26.5,<2"
     executable: pip3
     extra_args: --user
   when: cm_client_import.rc != 0
+
+- name: Pin urllib3 1.x when cm_client is already installed (urllib3 2.x incompatible)
+  ansible.builtin.pip:
+    name: "urllib3>=1.26.5,<2"
+    executable: pip3
+    extra_args: --user
+  when: cm_client_import.rc == 0
 
 - name: Verify cm_client after pip install
   ansible.builtin.command:

@@ -49,12 +49,10 @@
 
     - name: Configure and start Cloudera Management Service
       cloudera.cluster.cm_service:
-        host: "{{ cm_host }}"
-        port: "{{ cm_api_port }}"
+        url: "{{ cm_api_url }}"
         username: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
         verify_tls: false
-        force_tls: "{{ autotls_enabled | default(false) }}"
         state: started
         role_config_groups:
           - type: SERVICEMONITOR

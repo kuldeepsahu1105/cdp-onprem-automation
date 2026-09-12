@@ -33,12 +33,10 @@
 
     - name: Configure Cloudera Manager LDAP settings
       cloudera.cluster.cm_config:
-        host: "{{ cm_host }}"
-        port: "{{ cm_api_port }}"
+        url: "{{ cm_api_url }}"
         username: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
         verify_tls: false
-        force_tls: "{{ autotls_enabled | default(false) }}"
         parameters:
           auth_backend_order: "{{ cm_ldap_auth_backend_order }}"
           ldap_type: "{{ cm_ldap_type }}"

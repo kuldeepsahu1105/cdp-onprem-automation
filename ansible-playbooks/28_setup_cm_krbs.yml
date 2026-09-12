@@ -70,8 +70,7 @@
 
     - name: Configure Kerberos via Cloudera Manager API
       cloudera.cluster.cm_kerberos:
-        host: "{{ cm_host }}"
-        port: "{{ cm_api_port }}"
+        url: "{{ cm_api_url }}"
         username: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
         security_realm: "{{ cluster_realm }}"
@@ -82,7 +81,6 @@
         kdc_admin_user: "{{ krb5_kdc_admin_user if '@' in krb5_kdc_admin_user else krb5_kdc_admin_user + '@' + cluster_realm }}"
         kdc_admin_password: "{{ krb5_kdc_admin_password }}"
         verify_tls: false
-        force_tls: "{{ autotls_enabled | default(false) }}"
         state: present
       register: cm_kerberos_result
       when: not kerberos_already_configured | default(false)
