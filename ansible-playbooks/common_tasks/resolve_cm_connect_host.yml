@@ -11,7 +11,15 @@
     cm_host_fqdn: >-
       {{ hostvars[cm_manager_inventory_host].cldr_hostname | default(cm_manager_inventory_host) }}.{{ cluster_domain }}
 
-- name: Set CM connect host for API probes
+- name: Detect whether this play host is the CM manager
+  ansible.builtin.set_fact:
+    cm_api_runner_is_manager: >-
+      {{
+        inventory_hostname is defined
+        and (inventory_hostname == cm_manager_inventory_host)
+      }}
+
+- name: Set CM connect host for API probes (legacy cm_connect_host)
   ansible.builtin.set_fact:
     cm_connect_host: >-
       {{
@@ -19,10 +27,7 @@
         if (cm_api_connect_host | default('') | length > 0)
         else (
           '127.0.0.1'
-          if (
-            inventory_hostname is defined
-            and inventory_hostname == cm_manager_inventory_host
-          )
+          if cm_api_runner_is_manager | bool
           else (
             cm_host_private
             if (
@@ -34,13 +39,76 @@
         )
       }}
 
-- name: Mirror CM connect host to cm_host for API tasks
+- name: Test CM private IP reachability from Ansible controller
+  ansible.builtin.wait_for:
+    host: "{{ cm_host_private }}"
+    port: "{{ cm_http_port }}"
+    timeout: "{{ cm_api_private_reachability_timeout | default(5) | int }}"
+    state: started
+  register: cm_private_reach_test
+  failed_when: false
+  when:
+    - not (cm_api_runner_is_manager | bool)
+    - cm_api_connect_host | default('') | length == 0
+    - cm_api_prefer_private_ip | default(true) | bool
+    - cm_host_private | length > 0
+    - cm_host_private != cm_host_public
+
+- name: Set CM API client host (URL base for uri tasks on this play host)
   ansible.builtin.set_fact:
-    cm_host: "{{ cm_connect_host }}"
+    cm_api_client_host: >-
+      {{
+        cm_api_connect_host
+        if (cm_api_connect_host | default('') | length > 0)
+        else (
+          '127.0.0.1'
+          if cm_api_runner_is_manager | bool
+          else (
+            cm_host_private
+            if (
+              (cm_api_prefer_private_ip | default(true) | bool)
+              and (cm_host_private | length > 0)
+              and (
+                cm_host_private == cm_host_public
+                or (cm_private_reach_test is defined and cm_private_reach_test is succeeded)
+              )
+            )
+            else cm_host_public
+          )
+        )
+      }}
+
+- name: Set CM API probe delegation (localhost/Jenkins → cldr-mngr, 127.0.0.1)
+  ansible.builtin.set_fact:
+    cm_api_probe_delegate_to: "{{ cm_manager_inventory_host }}"
+    cm_api_probe_host: "127.0.0.1"
+  when:
+    - not (cm_api_runner_is_manager | bool)
+    - cm_api_delegate_probes_to_manager | default(true) | bool
+
+- name: Set CM API probe target when running on CM manager
+  ansible.builtin.set_fact:
+    cm_api_probe_delegate_to: ""
+    cm_api_probe_host: "{{ cm_connect_host }}"
+  when: cm_api_runner_is_manager | bool
+
+- name: Set CM API probe target when probe delegation is disabled
+  ansible.builtin.set_fact:
+    cm_api_probe_delegate_to: ""
+    cm_api_probe_host: "{{ cm_connect_host }}"
+  when:
+    - not (cm_api_runner_is_manager | bool)
+    - not (cm_api_delegate_probes_to_manager | default(true) | bool)
+
+- name: Mirror CM client host to cm_host for API tasks
+  ansible.builtin.set_fact:
+    cm_host: "{{ cm_api_client_host }}"
 
 - name: Explain CM API connection target when it differs from browser URL
   ansible.builtin.debug:
     msg:
-      - "CM API probes use connect host: {{ cm_connect_host }} (inventory runner: {{ inventory_hostname | default('localhost') }})"
+      - "CM API client host (this play): {{ cm_api_client_host }} (inventory runner: {{ inventory_hostname | default('localhost') }})"
+      - "CM API discovery probes: {{ cm_api_probe_host }} on {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }}"
       - "Browser/public CM URL may use: {{ cm_host_public }}:{{ cm_http_port }} (public IP often times out from the CM host itself on AWS)"
-      - "Override with cm_api_connect_host or cm_api_prefer_private_ip in group_vars if needed"
+      - "Jenkins outside VPC: set cm_api_prefer_private_ip false or cm_api_connect_host to the CM public IP if API calls fail after discovery"
+      - "Override with cm_api_connect_host or cm_api_delegate_probes_to_manager in group_vars if needed"

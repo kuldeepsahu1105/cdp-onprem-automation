@@ -397,7 +397,9 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/join_ad_realm.yml` | AD `realm join` |
 | `common_tasks/join_freeipa_client.yml` | IPA client enrollment |
 | `common_tasks/set_cm_api_url.yml` | CM API URL + Auto-TLS detection |
-| `cm_api_prefer_private_ip` | `true` | Use `private_ip` for CM API from controller (not public IP) |
+| `cm_api_prefer_private_ip` | `true` | Use `private_ip` for CM API from controller when reachable (falls back to public IP) |
 | `cm_api_connect_host` | `""` | Force CM API target (e.g. `127.0.0.1` or public IP) |
+| `cm_api_delegate_probes_to_manager` | `true` | Run CM API discovery on `cldr-mngr` at `127.0.0.1` when play host is `localhost` |
+| `cm_api_private_reachability_timeout` | `5` | Seconds to test VPC `private_ip` from controller before using public IP |
 | `common_tasks/install_cloudera_collection.yml` | Galaxy collection install |
 | `common_tasks/cleanup/` | Modular cleanup tasks |

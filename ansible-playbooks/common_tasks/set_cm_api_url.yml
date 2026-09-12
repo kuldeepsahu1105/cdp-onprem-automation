@@ -12,7 +12,7 @@
 
 - name: Probe Cloudera Manager HTTP API (Auto-TLS redirect detection)
   ansible.builtin.uri:
-    url: "http://{{ cm_host }}:{{ cm_http_port }}/api/version"
+    url: "http://{{ cm_api_probe_host }}:{{ cm_http_port }}/api/version"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -27,10 +27,31 @@
   delay: 3
   timeout: 15
   ignore_errors: yes
+  delegate_to: "{{ cm_api_probe_delegate_to }}"
+  when: cm_api_probe_delegate_to | default('') | length > 0
+
+- name: Probe Cloudera Manager HTTP API on play host when not delegating
+  ansible.builtin.uri:
+    url: "http://{{ cm_api_probe_host }}:{{ cm_http_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    follow_redirects: none
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_tls_probe_http
+  until: cm_tls_probe_http is succeeded
+  retries: 2
+  delay: 3
+  timeout: 15
+  ignore_errors: yes
+  when: cm_api_probe_delegate_to | default('') | length == 0
 
 - name: Probe Cloudera Manager HTTPS API (fallback when HTTP is unavailable)
   ansible.builtin.uri:
-    url: "https://{{ cm_host }}:{{ cm_https_port }}/api/version"
+    url: "https://{{ cm_api_probe_host }}:{{ cm_https_port }}/api/version"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -44,7 +65,30 @@
   delay: 3
   timeout: 15
   ignore_errors: yes
-  when: cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
+  when:
+    - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
+    - cm_api_probe_delegate_to | default('') | length > 0
+  delegate_to: "{{ cm_api_probe_delegate_to }}"
+
+- name: Probe Cloudera Manager HTTPS API on play host when not delegating
+  ansible.builtin.uri:
+    url: "https://{{ cm_api_probe_host }}:{{ cm_https_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_tls_probe_https
+  until: cm_tls_probe_https is succeeded
+  retries: 2
+  delay: 3
+  timeout: 15
+  ignore_errors: yes
+  when:
+    - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
+    - cm_api_probe_delegate_to | default('') | length == 0
 
 - name: Set CM protocol and port based on probe results
   ansible.builtin.set_fact:
@@ -71,17 +115,19 @@
 - name: Fail CM API probes with connect target when HTTP and HTTPS checks did not succeed
   ansible.builtin.fail:
     msg: >-
-      Cloudera Manager API unreachable at http://{{ cm_host }}:{{ cm_http_port }} or
-      https://{{ cm_host }}:{{ cm_https_port }} (connect host {{ cm_connect_host }}).
-      From Jenkins use VPC private_ip in inventory; on cldr-mngr probes use 127.0.0.1.
-      Override with cm_api_connect_host or cm_api_prefer_private_ip: false if API is only on public IP.
+      Cloudera Manager API unreachable at http://{{ cm_api_probe_host }}:{{ cm_http_port }} or
+      https://{{ cm_api_probe_host }}:{{ cm_https_port }} (probe on
+      {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }}).
+      Client host for this play: {{ cm_api_client_host }}.
+      From Jenkins outside VPC set cm_api_prefer_private_ip: false or cm_api_connect_host to the CM public IP.
+      On cldr-mngr probes use 127.0.0.1; discovery is delegated there when the play runs on localhost.
   when:
     - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
     - cm_tls_probe_https is not defined or cm_tls_probe_https is failed or (cm_tls_probe_https.status | default(0) not in [200, 301, 303])
 
 - name: Get Cloudera Manager API version
   ansible.builtin.uri:
-    url: "{{ cm_protocol }}://{{ cm_host }}:{{ cm_api_port }}/api/version"
+    url: "{{ cm_protocol }}://{{ cm_api_probe_host }}:{{ cm_api_port }}/api/version"
     method: GET
     status_code: [200, 301, 303]
     user: "{{ cm_admin_user }}"
@@ -94,11 +140,31 @@
   retries: 10
   delay: 6
   timeout: 30
+  delegate_to: "{{ cm_api_probe_delegate_to }}"
+  when: cm_api_probe_delegate_to | default('') | length > 0
+
+- name: Get Cloudera Manager API version on play host when not delegating
+  ansible.builtin.uri:
+    url: "{{ cm_protocol }}://{{ cm_api_probe_host }}:{{ cm_api_port }}/api/version"
+    method: GET
+    status_code: [200, 301, 303]
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    return_content: yes
+    validate_certs: no
+  register: cm_api_version_result
+  until: cm_api_version_result is succeeded
+  retries: 10
+  delay: 6
+  timeout: 30
+  when: cm_api_probe_delegate_to | default('') | length == 0
 
 - name: Set base Cloudera Manager API URL
   ansible.builtin.set_fact:
-    cm_api_url: "{{ cm_protocol }}://{{ cm_host }}:{{ cm_api_port }}/api/{{ cm_api_version_result.content | trim }}"
+    cm_api_url: "{{ cm_protocol }}://{{ cm_api_client_host }}:{{ cm_api_port }}/api/{{ cm_api_version_result.content | trim }}"
     cm_api_version: "{{ cm_api_version_result.content | trim }}"
+    cm_host: "{{ cm_api_client_host }}"
 
 - name: Print Cloudera Manager API URL
   ansible.builtin.debug:

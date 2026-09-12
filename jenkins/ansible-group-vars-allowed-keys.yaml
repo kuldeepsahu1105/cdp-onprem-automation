@@ -60,6 +60,8 @@ allowed_keys:
   - autotls_enabled
   - cm_api_prefer_private_ip
   - cm_api_connect_host
+  - cm_api_delegate_probes_to_manager
+  - cm_api_private_reachability_timeout
   - monitoring_grafana_admin_password
   - ecs_data_services_deploy_enabled
   - ecs_control_plane_url
