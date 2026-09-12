@@ -1,8 +1,8 @@
 ---
-# When CM API probes delegate to cldr-mngr, scm-server may listen on public/FQDN only (not 127.0.0.1).
-# Remote/public controllers probe direct CM :7180/:7183 (ansible_host/FQDN) or delegate to cldr-mngr.
+# CM API /api/version checks: on cldr-mngr, scm-server may listen on public/FQDN only (not 127.0.0.1).
+# With cm_api_delegate_probes_to_manager (default), checks run on cldr-mngr; set false to try the controller first.
 
-- name: Build CM API probe host candidates on public Ansible controller (localhost play)
+- name: CM API — list addresses on Ansible controller
   ansible.builtin.set_fact:
     cm_api_probe_host_candidates: >-
       {{
@@ -37,7 +37,7 @@
     - cm_api_probe_from_controller_public | default(false) | bool
     - cm_api_controller_is_localhost | default(false) | bool
 
-- name: Build CM API probe host candidates on delegated cldr-mngr
+- name: CM API — list addresses on cldr-mngr
   ansible.builtin.set_fact:
     cm_api_probe_host_candidates: >-
       {{
@@ -85,7 +85,7 @@
       }}
   when: cm_api_probe_delegate_to | default('') | length > 0
 
-- name: Discover reachable CM API host on public controller (HTTPS /api/version first)
+- name: CM API — try /api/version (HTTPS) from Ansible controller
   ansible.builtin.uri:
     url: "https://{{ item }}:{{ cm_https_port }}/api/version"
     method: GET
@@ -106,7 +106,7 @@
     - cm_api_probe_host_candidates is defined
     - cm_api_probe_host_candidates | length > 0
 
-- name: Discover reachable CM API host on public controller (HTTP /api/version)
+- name: CM API — try /api/version (HTTP) from Ansible controller
   ansible.builtin.uri:
     url: "http://{{ item }}:{{ cm_http_port }}/api/version"
     method: GET
@@ -136,7 +136,7 @@
         | length
       ) == 0
 
-- name: Select CM API probe host on public controller (HTTPS first, then HTTP)
+- name: CM API — pick working address on Ansible controller (HTTPS, then HTTP)
   ansible.builtin.set_fact:
     cm_api_probe_host: >-
       {{
@@ -194,7 +194,7 @@
     - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
     - cm_api_probe_https_discovery is defined or cm_api_probe_host_discovery is defined
 
-- name: Discover reachable CM API host on cldr-mngr (HTTP /api/version)
+- name: CM API — try /api/version (HTTP) on cldr-mngr
   ansible.builtin.uri:
     url: "http://{{ item }}:{{ cm_http_port }}/api/version"
     method: GET
@@ -215,7 +215,7 @@
     - cm_api_probe_host_candidates is defined
     - cm_api_probe_host_candidates | length > 0
 
-- name: Discover reachable CM API host on cldr-mngr (HTTPS /api/version)
+- name: CM API — try /api/version (HTTPS) on cldr-mngr
   ansible.builtin.uri:
     url: "https://{{ item }}:{{ cm_https_port }}/api/version"
     method: GET
@@ -235,7 +235,7 @@
     - cm_api_probe_host_candidates is defined
     - cm_api_probe_host_candidates | length > 0
 
-- name: Select CM API probe host that responded on cldr-mngr (HTTP first, then HTTPS)
+- name: CM API — pick working address on cldr-mngr (HTTP, then HTTPS)
   ansible.builtin.set_fact:
     cm_api_probe_host: >-
       {{
@@ -266,7 +266,7 @@
     - cm_api_probe_delegate_to | default('') | length > 0
     - cm_api_probe_host_discovery is defined or cm_api_probe_https_discovery is defined
 
-- name: Delegate CM API URI from the Ansible controller when manager discovery selected loopback
+- name: CM API — run later uri tasks on cldr-mngr when only loopback answered
   ansible.builtin.set_fact:
     cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
     cm_api_client_host: >-
@@ -286,218 +286,10 @@
     - not (cm_api_runner_is_manager | default(false) | bool)
     - cm_api_probe_delegate_to | default('') | length > 0
     - cm_api_probe_host | default('') == '127.0.0.1'
-    - not (cm_api_delegate_discovery_fallback | default(false) | bool)
     - cm_api_uri_delegate_to | default('') | length == 0
     - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
 
-- name: Record whether public-controller direct CM API discovery succeeded
-  ansible.builtin.set_fact:
-    cm_api_controller_direct_reachable: >-
-      {{
-        (cm_api_probe_use_caddy_vhost | default(false) | bool)
-        or (
-          (cm_api_probe_https_discovery is defined)
-          and (
-            cm_api_probe_https_discovery.results | default([])
-            | selectattr('status', 'defined')
-            | selectattr('status', 'in', [200, 301, 303, 401, 403])
-            | list
-            | length > 0
-          )
-        )
-        or (
-          (cm_api_probe_host_discovery is defined)
-          and (
-            cm_api_probe_host_discovery.results | default([])
-            | selectattr('status', 'defined')
-            | selectattr('status', 'in', [200, 301, 303, 401, 403])
-            | list
-            | length > 0
-          )
-        )
-      }}
-  when:
-    - cm_api_probe_from_controller_public | default(false) | bool
-    - cm_api_probe_delegate_to | default('') | length == 0
-
-- name: Fall back to delegated CM API discovery on cldr-mngr when remote controller cannot reach CM ports
-  ansible.builtin.set_fact:
-    cm_api_probe_delegate_to: "{{ cm_manager_inventory_host }}"
-    cm_api_probe_host: >-
-      {{
-        cm_host_public
-        if (cm_host_public | default('') | length > 0)
-        else (
-          cm_host_private
-          if (cm_host_private | default('') | length > 0)
-          else ''
-        )
-      }}
-    cm_api_probe_https_first: false
-    cm_api_controller_direct_reachable: false
-    cm_api_delegate_discovery_fallback: true
-  when:
-    - cm_api_probe_from_controller_public | default(false) | bool
-    - cm_api_controller_is_localhost | default(false) | bool
-    - not (cm_api_runner_is_manager | default(false) | bool)
-    - cm_api_delegate_probes_to_manager | default(true) | bool
-    - cm_api_probe_delegate_to | default('') | length == 0
-    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
-    - not (cm_api_controller_direct_reachable | default(false) | bool)
-
-- name: Build CM API probe host candidates on delegated cldr-mngr (fallback from public controller)
-  ansible.builtin.set_fact:
-    cm_api_probe_host_candidates: >-
-      {{
-        (
-          (
-            [cm_host_private]
-            if (
-              (cm_host_private | default('') | length > 0)
-              and (cm_host_private != '127.0.0.1')
-            )
-            else []
-          )
-          + (
-            [hostvars[cm_manager_inventory_host].ansible_host | default('')]
-            if (
-              (hostvars[cm_manager_inventory_host].ansible_host | default('') | length > 0)
-              and (hostvars[cm_manager_inventory_host].ansible_host | default('') not in ['127.0.0.1', 'localhost'])
-            )
-            else []
-          )
-          + (
-            [cm_host_public]
-            if (
-              (cm_host_public | default('') | length > 0)
-              and (cm_host_public != '127.0.0.1')
-            )
-            else []
-          )
-          + (
-            [hostvars[cm_manager_inventory_host].ansible_fqdn | default('')]
-            if (hostvars[cm_manager_inventory_host].ansible_fqdn | default('') | length > 0)
-            else []
-          )
-          + ([cm_host_fqdn] if (cm_host_fqdn | default('') | length > 0) else [])
-          + (
-            [hostvars[cm_manager_inventory_host].ansible_hostname | default('')]
-            if (hostvars[cm_manager_inventory_host].ansible_hostname | default('') | length > 0)
-            else []
-          )
-          + ['127.0.0.1']
-        )
-        | unique
-        | reject('equalto', '')
-        | reject('match', '^cm\\.')
-        | list
-      }}
-  when:
-    - cm_api_delegate_discovery_fallback | default(false) | bool
-    - cm_api_probe_delegate_to | default('') | length > 0
-
-- name: Discover reachable CM API host on cldr-mngr after public-controller failure (HTTP)
-  ansible.builtin.uri:
-    url: "http://{{ item }}:{{ cm_http_port }}/api/version"
-    method: GET
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: yes
-    follow_redirects: none
-    return_content: no
-    validate_certs: no
-    status_code: [200, 301, 303, 401, 403]
-    timeout: 15
-  loop: "{{ cm_api_probe_host_candidates }}"
-  register: cm_api_probe_host_discovery
-  failed_when: false
-  delegate_to: "{{ cm_api_probe_delegate_to }}"
-  when:
-    - cm_api_delegate_discovery_fallback | default(false) | bool
-    - cm_api_probe_host_candidates is defined
-    - cm_api_probe_host_candidates | length > 0
-
-- name: Discover reachable CM API host on cldr-mngr after public-controller failure (HTTPS)
-  ansible.builtin.uri:
-    url: "https://{{ item }}:{{ cm_https_port }}/api/version"
-    method: GET
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: yes
-    return_content: no
-    validate_certs: no
-    status_code: [200, 301, 303, 401, 403]
-    timeout: 15
-  loop: "{{ cm_api_probe_host_candidates }}"
-  register: cm_api_probe_https_discovery
-  failed_when: false
-  delegate_to: "{{ cm_api_probe_delegate_to }}"
-  when:
-    - cm_api_delegate_discovery_fallback | default(false) | bool
-    - cm_api_probe_host_candidates is defined
-    - cm_api_probe_host_candidates | length > 0
-
-- name: Select CM API probe host after delegated fallback discovery
-  ansible.builtin.set_fact:
-    cm_api_probe_host: >-
-      {{
-        (
-          cm_api_probe_host_discovery.results
-          | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | map(attribute='item')
-          | list
-          | first
-        )
-        | default(
-          (
-            cm_api_probe_https_discovery.results
-            | default([])
-            | selectattr('status', 'defined')
-            | selectattr('status', 'in', [200, 301, 303, 401, 403])
-            | map(attribute='item')
-            | list
-            | first
-          ),
-          true
-        )
-        | default(cm_api_probe_host, true)
-      }}
-    cm_api_delegate_discovery_succeeded: >-
-      {{
-        (
-          cm_api_probe_host_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length > 0
-        )
-        or (
-          cm_api_probe_https_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length > 0
-        )
-      }}
-  when:
-    - cm_api_delegate_discovery_fallback | default(false) | bool
-    - cm_api_probe_host_discovery is defined or cm_api_probe_https_discovery is defined
-
-- name: Keep CM API client on public IP when only delegated discovery works (controller API calls delegate)
-  ansible.builtin.set_fact:
-    cm_api_client_host: "{{ cm_host_public }}"
-    cm_host: "{{ cm_host_public }}"
-    cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
-  when:
-    - cm_api_controller_is_localhost | default(false) | bool
-    - cm_api_delegate_discovery_fallback | default(false) | bool
-    - cm_api_delegate_discovery_succeeded | default(false) | bool
-    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
-    - cm_api_probe_host | default('') | length > 0
-
-- name: Align CM API client host with delegated probe discovery (in-VPC localhost)
+- name: CM API — align client host with working address on cldr-mngr
   ansible.builtin.set_fact:
     cm_api_client_host: "{{ cm_api_probe_host }}"
     cm_host: "{{ cm_api_probe_host }}"
@@ -506,4 +298,3 @@
     - cm_api_probe_delegate_to | default('') | length > 0
     - cm_api_probe_host | default('') | length > 0
     - cm_api_probe_host != '127.0.0.1'
-    - not (cm_api_delegate_discovery_fallback | default(false) | bool)

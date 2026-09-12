@@ -7,13 +7,13 @@
 - name: Resolve reachable CM API host (manager IP/FQDN; loopback only when on cldr-mngr)
   ansible.builtin.import_tasks: resolve_cm_connect_host.yml
 
-- name: Pick reachable CM API probe address on delegated cldr-mngr
+- name: CM API — find working address (controller or cldr-mngr)
   ansible.builtin.import_tasks: select_cm_api_probe_host.yml
 
 - name: Ensure CM admin password matches group_vars when not factory default
   ansible.builtin.import_tasks: ensure_cm_admin_password.yml
 
-- name: Probe Cloudera Manager HTTPS API first (public Ansible controller controller)
+- name: CM API — GET /api/version (HTTPS) on cldr-mngr
   ansible.builtin.uri:
     url: "https://{{ cm_api_probe_host }}:{{ cm_https_port }}/api/version"
     method: GET
@@ -35,7 +35,7 @@
     - cm_api_probe_delegate_to | default('') | length > 0
   delegate_to: "{{ cm_api_probe_delegate_to }}"
 
-- name: Probe Cloudera Manager HTTPS API first on play host (public controller)
+- name: CM API — GET /api/version (HTTPS) on Ansible controller
   ansible.builtin.uri:
     url: "https://{{ cm_api_probe_host }}:{{ cm_https_port }}/api/version"
     method: GET
@@ -56,7 +56,7 @@
     - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
     - cm_api_probe_delegate_to | default('') | length == 0
 
-- name: Probe Cloudera Manager HTTP API (Auto-TLS redirect detection)
+- name: CM API — GET /api/version (HTTP) on cldr-mngr
   ansible.builtin.uri:
     url: "http://{{ cm_api_probe_host }}:{{ cm_http_port }}/api/version"
     method: GET
@@ -84,7 +84,7 @@
         and (cm_tls_probe_https.status | default(0) in [200, 301, 303, 401, 403])
       )
 
-- name: Probe Cloudera Manager HTTP API on play host when not delegating
+- name: CM API — GET /api/version (HTTP) on Ansible controller
   ansible.builtin.uri:
     url: "http://{{ cm_api_probe_host }}:{{ cm_http_port }}/api/version"
     method: GET
@@ -111,7 +111,7 @@
         and (cm_tls_probe_https.status | default(0) in [200, 301, 303, 401, 403])
       )
 
-- name: Probe Cloudera Manager HTTPS API (fallback when HTTP is unavailable)
+- name: CM API — GET /api/version (HTTPS) on cldr-mngr after HTTP failed
   ansible.builtin.uri:
     url: "https://{{ cm_api_probe_host }}:{{ cm_https_port }}/api/version"
     method: GET
@@ -134,7 +134,7 @@
     - cm_api_probe_delegate_to | default('') | length > 0
   delegate_to: "{{ cm_api_probe_delegate_to }}"
 
-- name: Probe Cloudera Manager HTTPS API on play host when not delegating
+- name: CM API — GET /api/version (HTTPS) on Ansible controller after HTTP failed
   ansible.builtin.uri:
     url: "https://{{ cm_api_probe_host }}:{{ cm_https_port }}/api/version"
     method: GET
@@ -156,7 +156,7 @@
     - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
     - cm_api_probe_delegate_to | default('') | length == 0
 
-- name: Set CM protocol and port based on probe results
+- name: CM API — set protocol and port from /api/version results
   ansible.builtin.set_fact:
     autotls_enabled: >-
       {{
@@ -198,94 +198,16 @@
         )
       }}
 
-- name: Bootstrap CM protocol from delegated fallback when direct controller probes did not run
-  ansible.builtin.set_fact:
-    cm_protocol: >-
-      {{
-        'https'
-        if (
-          cm_api_probe_https_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length > 0
-        )
-        and (
-          cm_api_probe_host_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length
-        ) == 0
-        else 'http'
-      }}
-    cm_api_port: >-
-      {{
-        cm_https_port
-        if (
-          cm_api_probe_https_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length > 0
-        )
-        and (
-          cm_api_probe_host_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length
-        ) == 0
-        else cm_http_port
-      }}
-    autotls_enabled: >-
-      {{
-        (
-          cm_api_probe_https_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length > 0
-        )
-        and (
-          cm_api_probe_host_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length
-        ) == 0
-      }}
-  when:
-    - cm_api_delegate_discovery_succeeded | default(false) | bool
-    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
-    - cm_tls_probe_http is not defined or cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
-    - cm_tls_probe_https is not defined or cm_tls_probe_https is failed or (cm_tls_probe_https.status | default(0) not in [200, 301, 303, 401, 403])
-
-- name: Warn when CM API is reachable only via cldr-mngr delegation (remote controller network may block :7180/:7183)
-  ansible.builtin.debug:
-    msg:
-      - >-
-        CM API direct probes from {{ inventory_hostname | default('localhost') }} failed
-        (http://{{ cm_host_public }}:{{ cm_http_port }}, https://{{ cm_host_public }}:{{ cm_https_port }}).
-        Discovery on {{ cm_manager_inventory_host }} succeeded at {{ cm_api_probe_host }}.
-        Subsequent API calls will delegate to {{ cm_api_uri_delegate_to | default(cm_manager_inventory_host) }}.
-        Open CM ports :7180/:7183 to the Ansible controller host or delegate probes to cldr-mngr.
-      - "cm_api_verify_mode={{ cm_api_verify_mode | default('fail') }}"
-  when:
-    - cm_api_delegate_discovery_succeeded | default(false) | bool
-    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
-    - (cm_api_verify_mode | default('fail') | lower) == 'warn'
-
-- name: Fail CM API probes with connect target when HTTP and HTTPS checks did not succeed
+- name: Fail when CM API HTTP and HTTPS checks did not succeed
   ansible.builtin.fail:
     msg: >-
       Cloudera Manager API unreachable at http://{{ cm_api_probe_host }}:{{ cm_http_port }}
-      or https://{{ cm_api_probe_host }}:{{ cm_https_port }} (probe on
+      or https://{{ cm_api_probe_host }}:{{ cm_https_port }} (checked on
       {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }}).
       Client host for this play: {{ cm_api_client_host }}.
       CM hosts tried: {{ cm_api_probe_host_candidates | default([cm_api_probe_host]) | join(', ') }}.
-      If the CM UI works in a browser but this fails, security groups likely block the Ansible controller host from direct CM ports.
-      Set cm_api_verify_mode: warn to continue when discovery on cldr-mngr succeeds, or open CM ports to the Ansible controller.
+      If the CM UI works in a browser but this fails, security groups may block CM ports :7180/:7183
+      from the Ansible controller; keep cm_api_delegate_probes_to_manager: true (default) or open those ports.
   when:
     - not (
         (cm_api_probe_https_first | default(false) | bool)
@@ -295,12 +217,6 @@
       )
     - cm_tls_probe_http is not defined or cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
     - cm_tls_probe_https is not defined or cm_tls_probe_https is failed or (cm_tls_probe_https.status | default(0) not in [200, 301, 303, 401, 403])
-    - not (
-        (cm_api_verify_mode | default('fail') | lower) == 'warn'
-        and (cm_api_delegate_discovery_succeeded | default(false) | bool)
-      )
-    - not (cm_api_delegate_discovery_succeeded | default(false) | bool)
-    - not (cm_api_controller_direct_reachable | default(false) | bool)
 
 - name: Get Cloudera Manager API version
   ansible.builtin.uri:
@@ -359,7 +275,7 @@
     - cm_api_probe_delegate_to | default('') | length == 0
     - cm_api_uri_delegate_to | default('') | length == 0
 
-- name: Resolve Cloudera Manager API version string from version probe results
+- name: Resolve Cloudera Manager API version string from /api/version results
   ansible.builtin.set_fact:
     _cm_api_version_content: >-
       {{
@@ -390,13 +306,13 @@
         ) | default('', true) | trim
       }}
 
-- name: Fail when CM API version probe did not return a version string
+- name: Fail when CM API /api/version did not return a version string
   ansible.builtin.fail:
     msg: >-
-      Cloudera Manager /api/version did not return a version string after probes succeeded
-      (probe_delegate={{ cm_api_probe_delegate_to | default('') }},
-      uri_delegate={{ cm_api_uri_delegate_to | default('') }},
-      probe_host={{ cm_api_probe_host }}).
+      Cloudera Manager /api/version did not return a version string after HTTP/HTTPS checks succeeded
+      (check host={{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }},
+      uri on cldr-mngr={{ cm_api_uri_delegate_to | default('') }},
+      address={{ cm_api_probe_host }}).
   when: _cm_api_version_content | default('') | length == 0
 
 - name: Avoid loopback CM API URL on the Ansible controller when not delegating uri to cldr-mngr
