@@ -597,8 +597,11 @@ def ansiblePhaseForStage(String stageId) {
 // Legacy Jenkins job UI values (before checkbox rename) and common typos.
 def pipelineStageAliases() {
   return [
-    'CDH'        : 'CDH_INSTALL',
-    'ECS'        : 'ECS_INSTALL',
+    'CDH'            : 'CDH_INSTALL',
+    'ECS'            : 'ECS_INSTALL',
+    'CM_TLS'         : 'CM_TLS_KRB_LDAP',
+    'CM_TLS_KRB'     : 'CM_TLS_KRB_LDAP',
+    'TLS_KRB_LDAP'   : 'CM_TLS_KRB_LDAP',
   ]
 }
 
@@ -634,7 +637,8 @@ def shouldRunAnsibleStage(String stageId) {
 
 def normalizePipelineStageToken(String token) {
   def aliases = pipelineStageAliases()
-  def upper = token?.trim()?.toUpperCase()
+  // Accept UI typos / old job configs: ECS-INSTALL → ECS_INSTALL, CM-TLS-KRB-LDAP → CM_TLS_KRB_LDAP
+  def upper = token?.trim()?.toUpperCase()?.replace('-', '_')
   if (!upper) {
     return upper
   }
@@ -813,7 +817,7 @@ def validatePipelineInputs() {
   def known = knownPipelineStages()
   def unknown = stages.findAll { !known.contains(it) }
   if (!unknown.isEmpty()) {
-    validationFail("Unknown PIPELINE_STAGES value(s): ${unknown.join(', ')}. Valid checkboxes: ${orderedAnsibleStageIds().plus(['VALIDATE', 'TERRAFORM', 'CDH_BASE']).join(', ')}. Run REFRESH_JENKINSFILE=YES after Jenkinsfile changes.")
+    validationFail("Unknown PIPELINE_STAGES value(s): ${unknown.join(', ')}. Valid checkboxes: ${orderedAnsibleStageIds().plus(['VALIDATE', 'TERRAFORM', 'CDH_BASE']).join(', ')} (use ECS_INSTALL not ECS-INSTALL). Run REFRESH_JENKINSFILE=YES after Jenkinsfile changes.")
   }
 
   def rawStages = parseSelectedStages(params.PIPELINE_STAGES)
