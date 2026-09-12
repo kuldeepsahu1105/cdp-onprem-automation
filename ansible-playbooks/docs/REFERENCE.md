@@ -413,7 +413,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `deployment_external_url_verify` | `warn` | Tier B: GET external service URLs from controller when reachability is `public` — `warn`, `fail`, or `skip` |
 | `deployment_portal_external_url_verify` | `warn` | Legacy Tier B default for portal when `deployment_external_url_verify` is unset |
 | `deployment_service_external_url_verify` | — | Optional map of per-service Tier B modes (`cm`, `portal`, `grafana`, …) |
-| `deployment_cm_external_url_verify` | — | Tier B override for CM URLs only |
+| `deployment_portal_verify_tier_b_enabled` | `false` | When `deployment_portal_enabled` is false, run Tier B from `25_verify_cm` (default: use `10`/`35` localhost play) |
 | `common_tasks/install_cloudera_collection.yml` | Galaxy collection install |
 | `common_tasks/cleanup/` | Modular cleanup tasks |
 

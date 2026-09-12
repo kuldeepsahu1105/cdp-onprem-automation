@@ -140,17 +140,16 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `CM_LICENSE_CONTENT` | Optional multiline Cloudera license file content when no `*license*` file on the agent (empty = trial or agent file) |
 | `MONITORING_STACK_ENABLED` | When checked (default), sets Ansible `monitoring_stack_enabled: true` for playbook `28` (Grafana/Prometheus/Alertmanager/cAdvisor). Uncheck to skip. Overrides `monitoring_stack_enabled` in `ANSIBLE_GROUP_VARS_YAML` if both are set. |
 
-**Deployment portal (playbook 10) and CM verify (25)** use the same three URL verification tiers (detail: `ansible-playbooks/docs/RUNBOOK.md` § Service URL verification tiers):
+**Deployment portal (playbook 10) and CM verify (25)** use two URL verification tiers (detail: `ansible-playbooks/docs/RUNBOOK.md` § Service URL verification tiers):
 
 | Tier | Checks | Jenkins typical outcome |
 |---|---|---|
-| **A** (service host, **required**) | Ops: `127.0.0.1:<deployment_portal_http_port> (default 81)` + Caddy **Host** vhosts (portal, pgAdmin, IPA, Grafana/Prometheus/Alertmanager). CM: `127.0.0.1:7180` on `cldr-mngr` (not Caddy) | Must pass or PORTAL / CM verify fails |
+| **A** (service host, **required**) | Ops: `127.0.0.1:<deployment_portal_http_port> (default 81)` + Caddy **Host** vhosts (portal, pgAdmin, IPA, Grafana/Prometheus/Alertmanager). CM: manager private IP / `ansible_host` / FQDN `:7180` on `cldr-mngr` (not Caddy) | Must pass or PORTAL / CM verify fails |
 | **B** (Ansible controller, **public** profile) | GET printed external URLs (portal, CM, Grafana, IPA, ECS) from the agent | **`warn`** if SG blocks ports (`deployment_external_url_verify: warn`, default on Jenkins); per-service `deployment_cm_external_url_verify`, etc. |
-| **C** (ops/CM host, optional) | Hairpin to own public EIP | Warn only — does not fail |
 
 Private-IP URLs on the index work only inside the VPC. Ensure SG allows **81** (`deployment_portal_http_port`), **5050**, **7180**/**7183**, etc. from Jenkins/office CIDRs so Tier **B** succeeds. `access-urls.txt` (`build-access-urls.sh`) lists URLs for email; Ansible logs include `CDP_ACCESS_URLS_*` and Tier **B** warnings.
 
-**Control-plane reachability (Jenkins vs VPN / bare metal):** The Jenkins agent has **no route** to VPC `10.x` / `172.31.x` addresses. `run-ansible.sh` exports `ANSIBLE_CONTROL_VIA_JENKINS=1`; `jenkins_override.yml` sets `ansible_control_reachability: public` so CM API and portal verify never treat inventory `private_ip` as the controller target (probes delegate to `cldr-mngr` at `127.0.0.1` where needed). For **bare metal** or **in-VPC/VPN** automation runners, use default `auto` or `ansible_control_reachability: private` in `ANSIBLE_GROUP_VARS_YAML` — Tier **B** is skipped when the effective profile is not `public`.
+**Control-plane reachability (Jenkins vs VPN / bare metal):** The Jenkins agent has **no route** to VPC `10.x` / `172.31.x` addresses. `run-ansible.sh` exports `ANSIBLE_CONTROL_VIA_JENKINS=1`; `jenkins_override.yml` sets `ansible_control_reachability: public` so CM API and portal verify never treat inventory `private_ip` as the controller target (probes delegate to `cldr-mngr` at manager IP/FQDN where needed). For **bare metal** or **in-VPC/VPN** automation runners, use default `auto` or `ansible_control_reachability: private` in `ANSIBLE_GROUP_VARS_YAML` — Tier **B** is skipped when the effective profile is not `public`.
 
 With **`caddy_vhost_enabled`**, the FreeIPA links use a lab hostname (`ipa.<ops-ip-dashed>.<base>`): default **`/ipa/modern-ui/`** plus legacy **`/ipa/ui`**. Caddy redirects `/` to modern UI and proxies **HTTP** to `<ipaserver-fqdn>` with **`Host`** and path-matched **`Referer`** upstream (cloudera-labs/openshift pattern). Playbook **10** (PORTAL stage) verifies tiers after sync; Tier **A** failures include Caddy log hints in the Ansible output.
 

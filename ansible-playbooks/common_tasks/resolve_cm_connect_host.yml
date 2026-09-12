@@ -1,5 +1,5 @@
 ---
-# Pick a reachable address for CM API probes (avoids EC2 hairpin timeout to public IP on cldr-mngr).
+# Pick a reachable address for CM API probes (avoids same-host public-EIP timeout on cldr-mngr).
 
 - name: Resolve Cloudera Manager API connection address
   ansible.builtin.set_fact:
@@ -166,7 +166,7 @@
         )
       }}
 
-- name: Set CM API probe target for public Ansible controller (no delegate — avoid EC2 hairpin)
+- name: Set CM API probe target for public Ansible controller (no delegate — probe from controller)
   ansible.builtin.set_fact:
     cm_api_probe_delegate_to: ""
     cm_api_probe_host: "{{ cm_api_client_host }}"
@@ -174,10 +174,10 @@
   when:
     - cm_api_probe_from_controller_public | default(false) | bool
 
-- name: Set CM API probe delegation (in-VPC localhost → cldr-mngr discovery at 127.0.0.1)
+- name: Set CM API probe delegation (in-VPC — discover bind address on cldr-mngr)
   ansible.builtin.set_fact:
     cm_api_probe_delegate_to: "{{ cm_manager_inventory_host }}"
-    cm_api_probe_host: "127.0.0.1"
+    cm_api_probe_host: "{{ cm_connect_host }}"
   when:
     - not (cm_api_runner_is_manager | bool)
     - cm_api_delegate_probes_to_manager | default(true) | bool
@@ -206,7 +206,7 @@
   ansible.builtin.debug:
     msg:
       - "CM API client host (this play): {{ cm_api_client_host }} (inventory runner: {{ inventory_hostname | default('localhost') }})"
-      - "CM API discovery probes: {{ cm_api_probe_host }} on {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }} (public controller={{ cm_api_probe_from_controller_public | default(false) }}; delegated discovery tries 127.0.0.1, ansible_host, FQDN on cldr-mngr)"
+      - "CM API discovery probes: {{ cm_api_probe_host }} on {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }} (public controller={{ cm_api_probe_from_controller_public | default(false) }}; delegated discovery tries private IP, ansible_host, FQDN, then 127.0.0.1 on cldr-mngr)"
       - "Control reachability: {{ ansible_control_reachability_effective | default('unknown') }} (avoid VPC private from controller={{ cm_api_avoid_private_ip | default(false) }})"
       - "Browser/public CM URL may use: {{ cm_host_public }}:{{ cm_http_port }} (public IP often times out from the CM host itself on AWS)"
       - "Override with cm_api_connect_host, cm_api_prefer_private_ip, or cm_api_delegate_probes_to_manager in group_vars if needed"
