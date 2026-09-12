@@ -1,0 +1,27 @@
+{
+  admin off
+}
+
+:{{ deployment_portal_http_port }} {
+  root * /srv
+
+  @static not path /grafana* /prometheus* /alertmanager*
+  handle @static {
+    try_files {path} /index.html
+    file_server
+  }
+
+{% if monitoring_stack_enabled | default(false) | bool %}
+  handle_path /grafana/* {
+    reverse_proxy {{ monitoring_grafana_container }}:3000
+  }
+
+  handle_path /prometheus/* {
+    reverse_proxy {{ monitoring_prometheus_container }}:9090
+  }
+
+  handle_path /alertmanager/* {
+    reverse_proxy {{ monitoring_alertmanager_container }}:9093
+  }
+{% endif %}
+}

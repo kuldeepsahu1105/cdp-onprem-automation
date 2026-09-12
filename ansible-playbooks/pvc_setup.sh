@@ -52,7 +52,8 @@ Options:
   --help, -h       Show this help
 
 Environment:
-  DEPLOY_PHASE     1|2|3|4|5|all
+  DEPLOY_PHASE     1|2|3|4|5|6|all
+  MONITORING_STACK_ENABLED  true|false — run 29_setup_monitoring_stack.yml after portal (phase 4/6)
   DRY_RUN          true|false
   CONTROL_MODE     auto|local|remote
   ANSIBLE_PRIVATE_KEY  SSH key: .pem/id_rsa in ansible-playbooks/, ~/.ssh/id_rsa, or explicit path
@@ -213,6 +214,22 @@ run_phase_4() {
   run_playbook 25_setup_cm_ldap.yml
   run_playbook 26_setup_base_cluster.yml
   run_playbook 27_setup_ecs_cluster.yml
+  _run_deployment_portal_playbooks
+}
+
+_run_deployment_portal_playbooks() {
+  local portal_extra=()
+  if [[ "${MONITORING_STACK_ENABLED:-false}" == "true" || "${MONITORING_STACK_ENABLED:-false}" == "1" ]]; then
+    portal_extra=(-e monitoring_stack_enabled=true)
+  fi
+  run_playbook 28_setup_deployment_portal.yml "${portal_extra[@]}"
+  if [[ "${MONITORING_STACK_ENABLED:-false}" == "true" || "${MONITORING_STACK_ENABLED:-false}" == "1" ]]; then
+    run_playbook 29_setup_monitoring_stack.yml
+  fi
+}
+
+run_phase_6() {
+  _run_deployment_portal_playbooks
 }
 
 run_phase_5() {
@@ -225,6 +242,7 @@ case "$DEPLOY_PHASE" in
   3|cm|phase3) run_phase_3 ;;
   4|cluster|phase4) run_phase_4 ;;
   5|ecs|phase5) run_phase_5 ;;
+  6|portal|phase6) run_phase_6 ;;
   all|full)
     run_phase_1
     sleep 5
@@ -235,7 +253,7 @@ case "$DEPLOY_PHASE" in
     run_phase_4
     ;;
   *)
-    ui_err "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|4|5|all or prereq|identity|cm|cluster|ecs|all)"
+    ui_err "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|4|5|6|all or prereq|identity|cm|cluster|ecs|portal|all)"
     exit 1
     ;;
 esac

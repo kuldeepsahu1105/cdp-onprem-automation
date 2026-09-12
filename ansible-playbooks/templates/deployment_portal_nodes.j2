@@ -1,0 +1,11 @@
+{# YAML list of inventory nodes for the deployment portal #}
+{% for group_name in deployment_portal_inventory_groups %}
+{% for inv_host in groups.get(group_name, []) %}
+- group: "{{ group_name }}"
+  inventory_name: "{{ inv_host }}"
+  hostname: "{{ hostvars[inv_host].cldr_hostname | default(inv_host) }}"
+  fqdn: "{{ hostvars[inv_host].cldr_hostname | default(inv_host) }}.{{ cluster_domain }}"
+  ansible_host: "{{ hostvars[inv_host].ansible_host | default('') }}"
+  private_ip: "{{ hostvars[inv_host].private_ip | default(hostvars[inv_host].ansible_host | default('')) }}"
+{% endfor %}
+{% endfor %}

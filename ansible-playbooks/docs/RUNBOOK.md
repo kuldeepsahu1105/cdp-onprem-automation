@@ -173,6 +173,16 @@ ansible-playbook -i inventory.ini 27_setup_ecs_cluster.yml
 
 `27_setup_ecs_cluster.yml` is skipped automatically when `[ecs-masters]` / `[ecs-workers]` are empty (`ecs_deploy_enabled: auto`).
 
+### 8. Deployment portal (optional)
+
+```bash
+ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
+# Optional monitoring (or set monitoring_stack_enabled: true in all.yml for playbook 28)
+MONITORING_STACK_ENABLED=true ansible-playbook -i inventory.ini 29_setup_monitoring_stack.yml
+```
+
+Open `http://<cldr-mngr-fqdn>:8088/` for the index (CM, IPA, ECS, PostgreSQL, pgAdmin, node table). pgAdmin: port `5050`.
+
 ---
 
 ## Scenario B — Bare metal with Active Directory

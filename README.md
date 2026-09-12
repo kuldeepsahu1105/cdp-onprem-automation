@@ -112,6 +112,20 @@ ansible-playbook -i inventory.ini 26_setup_base_cluster.yml \
   -e cdh_parcel_os_suffix=noble
 ```
 
+## Deployment portal (Caddy index + pgAdmin)
+
+After cluster deploy, `28_setup_deployment_portal.yml` installs on **`cldr-mngr`** (by default):
+
+- **Caddy** on port `8088` — HTML index with CM, FreeIPA, PostgreSQL, ECS, pgAdmin, and inventory node links
+- **pgAdmin** on port `5050` — preconfigured server entry for CM PostgreSQL
+
+Optional **monitoring** (Prometheus, Grafana, Alertmanager, cAdvisor): set `monitoring_stack_enabled: true` in `group_vars/all.yml`, or run with `MONITORING_STACK_ENABLED=true` (playbooks `28` + `29`). Extend links via `deployment_portal_extra_links` and `deployment_portal_data_service_links`.
+
+```bash
+ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
+MONITORING_STACK_ENABLED=true DEPLOY_PHASE=6 ./pvc_setup.sh
+```
+
 ## ECS (Data Services) deployment
 
 **ECS** (Cloudera Data Services / Experience Cluster) runs on dedicated nodes and is deployed by `27_setup_ecs_cluster.yml`. It requires the base CDH cluster (`26`) and wildcard DNS (`*.apps.<domain>`) when using FreeIPA.

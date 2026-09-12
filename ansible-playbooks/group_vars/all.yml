@@ -428,6 +428,47 @@ ecs_control_plane_vault_mode: embedded
 ecs_control_plane_embedded_db_storage_gb: 50
 ecs_control_plane_embedded_vault_storage_gb: 2
 
+# ---------------------------------------------------------------------------
+# Deployment portal (Caddy index + pgAdmin) — 28_setup_deployment_portal.yml
+# Optional monitoring — monitoring_stack_enabled or 29_setup_monitoring_stack.yml
+# ---------------------------------------------------------------------------
+deployment_portal_enabled: true
+deployment_portal_host_group: cldr-mngr
+deployment_portal_http_port: 8088
+deployment_portal_pgadmin_host_port: 5050
+deployment_portal_config_dir: /opt/cldr-deployment-portal
+deployment_portal_www_dir: /opt/cldr-deployment-portal/www
+deployment_portal_caddy_image: caddy:2-alpine
+deployment_portal_caddy_container: cldr-portal-caddy
+deployment_portal_pgadmin_image: dpage/pgadmin4:8
+deployment_portal_pgadmin_container: cldr-portal-pgadmin
+pgadmin_default_email: "admin@{{ cluster_domain }}"
+pgadmin_default_password: "{{ postgres_password }}"
+deployment_portal_inventory_groups:
+  - ipaserver
+  - cldr-mngr
+  - base-masters
+  - base-workers
+  - ecs-masters
+  - ecs-workers
+deployment_portal_data_service_links: []
+deployment_portal_extra_links: []
+
+monitoring_stack_enabled: false
+monitoring_config_dir: /opt/cldr-monitoring
+monitoring_prometheus_image: prom/prometheus:v2.54.1
+monitoring_prometheus_container: cldr-mon-prometheus
+monitoring_grafana_image: grafana/grafana:11.2.0
+monitoring_grafana_container: cldr-mon-grafana
+monitoring_alertmanager_image: prom/alertmanager:v0.27.0
+monitoring_alertmanager_container: cldr-mon-alertmanager
+monitoring_cadvisor_image: gcr.io/cadvisor/cadvisor:v0.49.1
+monitoring_cadvisor_container: cldr-mon-cadvisor
+monitoring_cadvisor_host_port: 8089
+monitoring_grafana_admin_user: admin
+monitoring_grafana_admin_password: "{{ postgres_password }}"
+monitoring_prometheus_extra_targets: []
+
 # Service users/groups removed during E2E cleanup
 cleanup_service_users:
   - hdfs
