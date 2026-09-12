@@ -9,9 +9,12 @@
   connection: local
   gather_facts: true
   tasks:
-    - name: Skip when deployment portal is disabled
+    - name: Resolve deployment portal Caddy gate (monitoring_stack_enabled)
+      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_caddy_enabled.yml
+
+    - name: Skip when Caddy portal stack is disabled
       ansible.builtin.meta: end_play
-      when: not (deployment_portal_enabled | default(true) | bool)
+      when: not (deployment_portal_caddy_effective | default(false) | bool)
 
     - name: Build deployment portal context from inventory
       ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
@@ -39,9 +42,9 @@
   become: true
   gather_facts: true
   tasks:
-    - name: Skip when deployment portal is disabled
+    - name: Skip when Caddy portal stack is disabled
       ansible.builtin.meta: end_host
-      when: not (deployment_portal_enabled | default(true) | bool)
+      when: not (hostvars['localhost'].deployment_portal_caddy_effective | default(false) | bool)
 
     - name: Load portal context from localhost
       ansible.builtin.import_tasks: common_tasks/deployment_portal_load_host_facts.yml
@@ -84,7 +87,7 @@
   tasks:
     - name: Skip Tier B when deployment portal is disabled
       ansible.builtin.meta: end_play
-      when: not (deployment_portal_enabled | default(true) | bool)
+      when: not (deployment_portal_caddy_effective | default(false) | bool)
 
     - name: Tier B external URL verify (Jenkins / laptop)
       ansible.builtin.import_tasks: common_tasks/verify_deployment_portal_external_from_controller.yml

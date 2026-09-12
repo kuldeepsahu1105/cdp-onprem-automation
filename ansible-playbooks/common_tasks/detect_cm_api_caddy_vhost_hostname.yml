@@ -1,0 +1,22 @@
+---
+# CM API probes must use deployment portal Caddy (deployment_portal_http_port), not CM :7180/:7183, on cm.<slug> vhost hostnames.
+
+- name: Detect CM Caddy vhost hostname on API probe target
+  ansible.builtin.set_fact:
+    cm_api_probe_use_caddy_vhost: true
+    cm_api_probe_https_first: false
+  when:
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+    - cm_api_probe_host | default('') | length > 0
+    - cm_api_probe_host is match('^cm\\.')
+
+- name: Detect CM Caddy vhost hostname on API client host
+  ansible.builtin.set_fact:
+    cm_api_probe_host: "{{ cm_api_client_host }}"
+    cm_api_probe_use_caddy_vhost: true
+    cm_api_probe_https_first: false
+  when:
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+    - cm_api_client_host | default('') | length > 0
+    - cm_api_client_host is match('^cm\\.')
+    - cm_api_probe_host | default('') != cm_api_client_host

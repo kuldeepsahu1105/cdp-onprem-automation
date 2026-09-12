@@ -10,6 +10,9 @@
 - name: Pick reachable CM API probe address on delegated cldr-mngr
   ansible.builtin.import_tasks: select_cm_api_probe_host.yml
 
+- name: Normalize CM API probe target when hostname is Caddy CM vhost
+  ansible.builtin.import_tasks: detect_cm_api_caddy_vhost_hostname.yml
+
 - name: Ensure CM admin password matches group_vars when not factory default
   ansible.builtin.import_tasks: ensure_cm_admin_password.yml
 
@@ -282,13 +285,20 @@
 - name: Fail CM API probes with connect target when HTTP and HTTPS checks did not succeed
   ansible.builtin.fail:
     msg: >-
-      Cloudera Manager API unreachable at http://{{ cm_api_probe_host }}:{{ cm_http_port }} or
-      https://{{ cm_api_probe_host }}:{{ cm_https_port }} (probe on
+      Cloudera Manager API unreachable at {{
+        'http://' ~ cm_api_probe_host ~ ':' ~ (deployment_portal_http_port | default(81) | string) ~ '/api/version'
+        if (cm_api_probe_use_caddy_vhost | default(false) | bool)
+        else (
+          'http://' ~ cm_api_probe_host ~ ':' ~ (cm_http_port | string)
+          ~ ' or https://' ~ cm_api_probe_host ~ ':' ~ (cm_https_port | string)
+        )
+      }} (probe on
       {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }}).
       Client host for this play: {{ cm_api_client_host }}.
-      Delegated probes tried: {{ cm_api_probe_host_candidates | default([cm_api_probe_host]) | join(', ') }}.
-      Jenkins: try portal Caddy first (http://cm.<ops-public-dashed>.{{ caddy_vhost_public_base }}:{{ deployment_portal_http_port }}/api/version).
-      If the CM UI works in a browser but this fails, security groups likely block the Jenkins agent from :{{ cm_http_port }}/:{{ cm_https_port }}.
+      Caddy probe URLs tried: {{ cm_api_caddy_probe_urls | default([]) | join(', ') }}.
+      Direct CM hosts tried: {{ cm_api_probe_host_candidates | default([cm_api_probe_host]) | join(', ') }}.
+      Jenkins: use portal Caddy (http://cm.<ops-public-dashed>.{{ caddy_vhost_public_base | default('pvc.cloudera-labs.com') }}:{{ deployment_portal_http_port }}/api/version).
+      If the CM UI works in a browser but this fails, security groups likely block the Jenkins agent from direct CM ports.
       Set cm_api_verify_mode: warn to continue when discovery on cldr-mngr succeeds, or open CM ports to Jenkins.
   when:
     - not (
@@ -310,6 +320,27 @@
         and (cm_api_delegate_discovery_succeeded | default(false) | bool)
       )
     - not (cm_api_delegate_discovery_succeeded | default(false) | bool)
+    - not (cm_api_controller_direct_reachable | default(false) | bool)
+    - not (
+        (cm_api_probe_caddy_discovery is defined)
+        and (
+          cm_api_probe_caddy_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length > 0
+        )
+      )
+    - not (
+        (cm_api_probe_caddy_login_discovery is defined)
+        and (
+          cm_api_probe_caddy_login_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length > 0
+        )
+      )
 
 - name: Get Cloudera Manager API version
   ansible.builtin.uri:

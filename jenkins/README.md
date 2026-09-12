@@ -144,11 +144,11 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 
 | Tier | Checks | Jenkins typical outcome |
 |---|---|---|
-| **A** (service host, **required**) | Ops: `127.0.0.1:8088` + Caddy **Host** vhosts (portal, CM, IPA, Grafana). CM: `127.0.0.1:7180` on `cldr-mngr` | Must pass or PORTAL / CM verify fails |
+| **A** (service host, **required**) | Ops: `127.0.0.1:<deployment_portal_http_port> (default 81)` + Caddy **Host** vhosts (portal, CM, IPA, Grafana). CM: `127.0.0.1:7180` on `cldr-mngr` | Must pass or PORTAL / CM verify fails |
 | **B** (Ansible controller, **public** profile) | GET printed external URLs (portal, CM, Grafana, IPA, ECS) from the agent | **`warn`** if SG blocks ports (`deployment_external_url_verify: warn`, default on Jenkins); per-service `deployment_cm_external_url_verify`, etc. |
 | **C** (ops/CM host, optional) | Hairpin to own public EIP | Warn only — does not fail |
 
-Private-IP URLs on the index work only inside the VPC. Ensure SG allows **8088**, **5050**, **7180**/**7183**, etc. from Jenkins/office CIDRs so Tier **B** succeeds. `access-urls.txt` (`build-access-urls.sh`) lists URLs for email; Ansible logs include `CDP_ACCESS_URLS_*` and Tier **B** warnings.
+Private-IP URLs on the index work only inside the VPC. Ensure SG allows **81** (`deployment_portal_http_port`), **5050**, **7180**/**7183**, etc. from Jenkins/office CIDRs so Tier **B** succeeds. `access-urls.txt` (`build-access-urls.sh`) lists URLs for email; Ansible logs include `CDP_ACCESS_URLS_*` and Tier **B** warnings.
 
 **Control-plane reachability (Jenkins vs VPN / bare metal):** The Jenkins agent has **no route** to VPC `10.x` / `172.31.x` addresses. `run-ansible.sh` exports `ANSIBLE_CONTROL_VIA_JENKINS=1`; `jenkins_override.yml` sets `ansible_control_reachability: public` so CM API and portal verify never treat inventory `private_ip` as the controller target (probes delegate to `cldr-mngr` at `127.0.0.1` where needed). For **bare metal** or **in-VPC/VPN** automation runners, use default `auto` or `ansible_control_reachability: private` in `ANSIBLE_GROUP_VARS_YAML` — Tier **B** is skipped when the effective profile is not `public`.
 

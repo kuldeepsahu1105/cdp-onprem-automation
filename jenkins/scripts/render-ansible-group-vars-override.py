@@ -176,16 +176,14 @@ def main() -> int:
 
     out_path = Path(args[0])
     allowed = _load_allowed_keys()
-    overrides: dict = dict(_jenkins_controller_defaults())
+    overrides: dict = _coerce_bool_strings(
+        _filter_textarea_overrides(_load_yaml_fragment(), allowed)
+    )
 
     for env_key, var_name in ENV_TO_VAR:
         val = os.environ.get(env_key, "").strip()
         if val:
             overrides[var_name] = val
-
-    textarea = _filter_textarea_overrides(_load_yaml_fragment(), allowed)
-    overrides.update(textarea)
-    overrides = _coerce_bool_strings(overrides)
 
     for env_key, var_name in BOOL_ENV_TO_VAR:
         if env_key not in os.environ:
@@ -194,6 +192,9 @@ def main() -> int:
         if raw in ("", "auto"):
             continue
         overrides[var_name] = raw in ("true", "1", "yes", "on")
+
+    # Jenkins controller safety defaults win over ANSIBLE_GROUP_VARS_YAML (e.g. cm_api_verify_mode: warn).
+    overrides.update(_jenkins_controller_defaults())
 
     if validate_only:
         print(f"[ansible-vars] YAML override keys OK ({len(textarea)} from textarea)")

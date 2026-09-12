@@ -76,7 +76,9 @@ ansible_configure_output
 DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 CONTROL_MODE="$(detect_control_mode "$SCRIPT_DIR/inventory.ini")"
 
+# Caddy / deployment portal stack (ops reverse proxy) — only when monitoring is enabled (default on).
 _portal_enabled() {
+  _monitoring_enabled || return 1
   [[ "${DEPLOYMENT_PORTAL_ENABLED:-true}" == "true" || "${DEPLOYMENT_PORTAL_ENABLED:-true}" == "1" ]]
 }
 _monitoring_enabled() {
@@ -225,9 +227,12 @@ run_phase_3() {
   fi
   run_playbook 23_setup_postgres.yml "${cm_extra[@]}"
   run_playbook 24_start_cm.yml "${cm_extra[@]}"
+  # Labs openshift: Caddy cm.<ops-ip>.pvc… → cldr-mngr :7180/:7183 before CM API/license via proxy (not full 35_refresh).
+  if _portal_enabled; then
+    run_playbook 36_provision_cm_caddy_reverse_proxy.yml
+  fi
   run_playbook 25_verify_cm.yml -e ansible_become=false
   run_playbook 26_setup_cm_license.yml -e ansible_become=false
-  _run_deployment_portal_refresh "portal,ipa,identity,cm"
 }
 
 run_phase_cm_tls() {
@@ -261,13 +266,17 @@ run_phase_4() {
 
 _portal_extra_args() {
   local extra=()
-  if _portal_enabled; then
-    extra+=(-e deployment_portal_enabled=true)
-  else
-    extra+=(-e deployment_portal_enabled=false)
-  fi
   if _monitoring_enabled; then
     extra+=(-e monitoring_stack_enabled=true)
+  else
+    extra+=(-e monitoring_stack_enabled=false)
+    extra+=(-e deployment_portal_enabled=false)
+    extra+=(-e caddy_vhost_enabled=false)
+  fi
+  if _portal_enabled; then
+    extra+=(-e deployment_portal_enabled=true)
+  elif _monitoring_enabled; then
+    extra+=(-e deployment_portal_enabled=false)
   fi
   printf '%s\0' "${extra[@]}"
 }
