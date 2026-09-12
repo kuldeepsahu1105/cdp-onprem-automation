@@ -1,0 +1,255 @@
+---
+# Cloudera Management Service (CMS) via REST — no cloudera.cluster.cm_service / cm_client.
+
+- name: CMS — resolve HTTPS CM API URL
+  ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
+
+- name: CMS — read management service
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 404]
+  register: cms_service_get
+  failed_when: false
+
+- name: CMS — create management service when missing
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service"
+    method: PUT
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body:
+      type: MGMT
+    status_code: [200, 201, 204, 301, 303]
+  register: cms_setup
+  when: cms_service_get.status == 404
+
+- name: CMS — list CM hosts for role placement
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/hosts"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cms_hosts
+
+- name: CMS — resolve host id for CMS roles
+  ansible.builtin.set_fact:
+    cms_target_host: >-
+      {{
+        (cms_hosts.json.items | default([]))
+        | selectattr('hostname', 'equalto', cm_cms_hostname)
+        | list
+        | first
+        | default({})
+      }}
+
+- name: CMS — fail when CMS target host is not registered in CM
+  ansible.builtin.fail:
+    msg: >-
+      Host {{ cm_cms_hostname }} not found in Cloudera Manager /hosts.
+      Ensure CM agent is running on cldr-mngr before CMS setup.
+  when: cms_target_host.hostId is not defined and cms_target_host.host_id is not defined
+
+- name: CMS — normalize CMS target host id
+  ansible.builtin.set_fact:
+    cms_target_host_id: "{{ cms_target_host.hostId | default(cms_target_host.host_id) }}"
+    cms_target_hostname: "{{ cms_target_host.hostname | default(cm_cms_hostname) }}"
+
+- name: CMS — list management role config groups
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/roleConfigGroups"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cms_rcgs
+
+- name: CMS — pick base role config group names
+  ansible.builtin.set_fact:
+    cms_rcg_servicemonitor: >-
+      {{
+        (cms_rcgs.json.items | default([]))
+        | selectattr('roleType', 'equalto', 'SERVICEMONITOR')
+        | selectattr('base', 'equalto', true)
+        | map(attribute='name')
+        | first
+        | default(
+          (cms_rcgs.json.items | default([]))
+          | selectattr('roleType', 'equalto', 'SERVICEMONITOR')
+          | map(attribute='name')
+          | first
+        )
+      }}
+    cms_rcg_reportsmanager: >-
+      {{
+        (cms_rcgs.json.items | default([]))
+        | selectattr('roleType', 'equalto', 'REPORTSMANAGER')
+        | selectattr('base', 'equalto', true)
+        | map(attribute='name')
+        | first
+        | default(
+          (cms_rcgs.json.items | default([]))
+          | selectattr('roleType', 'equalto', 'REPORTSMANAGER')
+          | map(attribute='name')
+          | first
+        )
+      }}
+
+- name: CMS — configure Service Monitor role config group
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/roleConfigGroups/{{ cms_rcg_servicemonitor }}/config"
+    method: PUT
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body:
+      items:
+        - name: firehose_non_java_memory_bytes
+          value: "{{ cm_cms_servicemonitor_memory_bytes | string }}"
+    status_code: [200, 204, 301, 303]
+  when: cms_rcg_servicemonitor | default('') | length > 0
+
+- name: CMS — configure Reports Manager role config group
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/roleConfigGroups/{{ cms_rcg_reportsmanager }}/config"
+    method: PUT
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body:
+      items:
+        - name: headlamp_database_type
+          value: postgresql
+        - name: headlamp_database_host
+          value: "{{ cm_cms_reports_manager_db_host }}"
+        - name: headlamp_database_name
+          value: "{{ cm_cms_reports_manager_db_name }}"
+        - name: headlamp_database_user
+          value: "{{ cm_cms_reports_manager_db_user }}"
+        - name: headlamp_database_password
+          value: "{{ cm_cms_reports_manager_db_password }}"
+    status_code: [200, 204, 301, 303]
+  when: cms_rcg_reportsmanager | default('') | length > 0
+
+- name: CMS — list existing management roles
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/roles"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cms_roles_get
+
+- name: CMS — build missing management role instances
+  ansible.builtin.set_fact:
+    cms_role_types_desired:
+      - SERVICEMONITOR
+      - HOSTMONITOR
+      - EVENTSERVER
+      - ALERTPUBLISHER
+      - REPORTSMANAGER
+    cms_existing_role_types: >-
+      {{
+        cms_roles_get.json.items | default([])
+        | map(attribute='type')
+        | list
+      }}
+
+- name: CMS — create missing CMS roles on target host
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/roles"
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body:
+      items:
+        - type: "{{ item }}"
+          hostRef:
+            hostId: "{{ cms_target_host_id }}"
+            hostname: "{{ cms_target_hostname }}"
+    status_code: [200, 201, 204, 301, 303]
+  loop: "{{ cms_role_types_desired | difference(cms_existing_role_types) }}"
+  loop_control:
+    label: "{{ item }}"
+  register: cms_roles_create
+
+- name: CMS — read management service state before start
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cms_service_before_start
+
+- name: CMS — start management service
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/commands/start"
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 201, 204, 301, 303]
+  register: cms_start_cmd
+  when: cms_service_before_start.json.serviceState | default('') != 'STARTED'
+
+- name: CMS — wait for start command
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/commands/{{ cms_start_cmd.json.id }}"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cms_start_poll
+  until: >
+    cms_start_poll.json.active is defined
+    and not (cms_start_poll.json.active | bool)
+  retries: 60
+  delay: 10
+  when:
+    - cms_start_cmd is defined
+    - cms_start_cmd.json is defined
+    - cms_start_cmd.json.id is defined
+
+- name: CMS — fail when start command failed
+  ansible.builtin.fail:
+    msg: >-
+      CMS start failed:
+      {{ cms_start_poll.json.resultMessage | default(cms_start_poll.json.result_message | default('unknown')) }}
+  when:
+    - cms_start_poll is defined
+    - cms_start_poll.json is defined
+    - cms_start_poll.json.success is defined
+    - not (cms_start_poll.json.success | bool)
+
+- name: CMS — record result for playbook debug
+  ansible.builtin.set_fact:
+    cms_result:
+      changed: true
+      service_state: STARTED
