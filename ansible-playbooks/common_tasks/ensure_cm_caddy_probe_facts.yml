@@ -98,6 +98,7 @@
       {%- endif -%}
       {{ out | unique | reject('equalto', '') | list }}
   when:
+    - (deployment_portal_enabled | default(true) | bool)
     - (cm_config_api_via_caddy_proxy | default('auto') | lower) in ['auto', 'true', '1', 'yes', 'on']
     - cm_api_caddy_probe_slug_ips is defined
     - cm_api_caddy_probe_slug_ips | length > 0
