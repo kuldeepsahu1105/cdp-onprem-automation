@@ -17,3 +17,4 @@
 # postgres_jdbc_version: "42.7.10"
 # psycopg2_binary_version: "2.9.9"
 # monitoring_stack_enabled: false  # prefer Jenkins MONITORING_STACK_ENABLED checkbox
+# deployment_portal_http_port: 81  # Caddy edge on ops; do not use legacy 8088 (Jenkins forces 81)
