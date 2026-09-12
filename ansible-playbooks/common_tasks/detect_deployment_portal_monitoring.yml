@@ -56,3 +56,11 @@
   when:
     - deployment_portal_monitoring_deployed | default(false) | bool
     - not (monitoring_stack_enabled | default(false) | bool)
+
+- name: Set monitoring route flag for Caddy and portal index
+  ansible.builtin.set_fact:
+    deployment_portal_monitoring_routes_enabled: >-
+      {{
+        (monitoring_stack_enabled | default(false) | bool)
+        or (deployment_portal_monitoring_deployed | default(false) | bool)
+      }}

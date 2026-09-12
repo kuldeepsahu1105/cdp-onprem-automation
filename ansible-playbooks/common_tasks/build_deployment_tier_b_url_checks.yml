@@ -11,13 +11,18 @@
         hostvars['localhost'].deployment_portal_context
         | default(deployment_portal_context | default({}))
       }}
-    _tier_b_monitoring: "{{ monitoring_stack_enabled | default(false) | bool }}"
     _tier_b_caddy: "{{ caddy_vhost_enabled | default(false) | bool }}"
     _tier_b_milestones: >-
       {{
         deployment_portal_verify_milestones_effective
         | default(hostvars['localhost'].deployment_portal_verify_milestones_effective | default([]))
       }}
+  delegate_to: localhost
+  run_once: true
+
+- name: Set Tier B monitoring flag from portal context
+  ansible.builtin.set_fact:
+    _tier_b_monitoring: "{{ _tier_b_ctx.monitoring.enabled | default(false) | bool }}"
   delegate_to: localhost
   run_once: true
 

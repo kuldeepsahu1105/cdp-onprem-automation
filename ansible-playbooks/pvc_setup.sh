@@ -278,7 +278,8 @@ _run_deployment_portal_bootstrap() {
   fi
   local portal_extra=()
   while IFS= read -r -d '' arg; do portal_extra+=("$arg"); done < <(_portal_extra_args)
-  # Bootstrap Caddy/pgAdmin/index only; Grafana/Prometheus via 32 or refresh with monitoring enabled.
+  # Bootstrap Caddy/pgAdmin/index only; do not install 32 here. Caddy/index still wire monitoring
+  # when detect_deployment_portal_monitoring_on_host finds a running stack (routes_enabled fact).
   portal_extra+=(-e monitoring_stack_enabled=false)
   run_playbook 10_setup_deployment_portal.yml "${portal_extra[@]}"
 }

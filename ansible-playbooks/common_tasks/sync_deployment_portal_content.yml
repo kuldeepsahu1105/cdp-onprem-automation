@@ -2,6 +2,9 @@
 # Re-render portal index, Caddy, pgAdmin, and optional monitoring from deployment_portal_context.
 # Requires deployment_portal_context (and related facts) on the play host.
 
+- name: Detect monitoring stack on portal ops host before Caddy/index render
+  ansible.builtin.import_tasks: detect_deployment_portal_monitoring_on_host.yml
+
 - name: Create deployment portal directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -152,7 +155,7 @@
   ansible.builtin.import_tasks: ensure_deployment_portal_firewall_ports.yml
 
 - name: Sync monitoring stack configuration
-  when: monitoring_stack_enabled | default(false) | bool
+  when: deployment_portal_monitoring_routes_enabled | default(false) | bool
   block:
     - name: Render Prometheus configuration
       ansible.builtin.template:
@@ -210,7 +213,7 @@
 
 - name: Verify monitoring UIs via Caddy path routes (monitoring milestone)
   ansible.builtin.import_tasks: verify_deployment_portal_monitoring.yml
-  when: monitoring_stack_enabled | default(false) | bool
+  when: deployment_portal_monitoring_routes_enabled | default(false) | bool
 
 - name: Verify Caddy container and portal or monitoring URLs (after stacks are up)
   ansible.builtin.import_tasks: verify_deployment_portal_caddy.yml

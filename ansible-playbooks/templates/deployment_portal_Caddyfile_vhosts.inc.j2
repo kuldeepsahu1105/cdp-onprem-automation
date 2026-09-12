@@ -77,7 +77,7 @@ http://{{ caddy_vhost_urls.ecs.hostname }}{% if deployment_portal_http_port | in
 }
 {% endif %}
 
-{% if monitoring_stack_enabled | default(false) | bool %}
+{% if deployment_portal_monitoring_routes_enabled | default(false) | bool %}
 http://{{ caddy_vhost_urls.grafana.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
   reverse_proxy {{ monitoring_grafana_docker_service }}:3000
 }

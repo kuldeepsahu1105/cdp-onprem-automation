@@ -44,7 +44,8 @@
               - "Deployment index: {{ deployment_portal_context.portal.index_url }}"
               - "pgAdmin (preferred): {{ deployment_portal_context.portal.pgadmin_url }}"
               - "pgAdmin (direct :{{ deployment_portal_pgadmin_host_port }}): {{ deployment_portal_context.portal.pgadmin_url_direct | default(deployment_portal_context.portal.pgadmin_url) }}"
-              - "Monitoring enabled: {{ monitoring_stack_enabled | default(false) }}"
+              - "Monitoring install (extra-var): {{ monitoring_stack_enabled | default(false) }}"
+              - "Monitoring routes/index: {{ hostvars['localhost']['deployment_portal_monitoring_routes_enabled'] | default(false) }}"
 
         - name: Print full access URL report (Jenkins log / email)
           ansible.builtin.import_tasks: common_tasks/print_deployment_access_urls.yml
