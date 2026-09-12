@@ -20,7 +20,8 @@ Upstream **[5.0.0](https://github.com/cloudera-labs/cloudera.cluster/releases/ta
 | `install_cm_client_python.yml` | Install v57 client per eng guidance (replace `pip install cm_client`) |
 | `install_cloudera_collection.yml` | Invert verify: require `ApiClient(configuration=)`; require `cluster.py` |
 | `scripts/lib/ansible_env.sh` | Min collection version 5.0.0 when migrating |
-| Playbooks 31/33 | Re-test `cloudera.cluster.cluster` args (5.x renames e.g. `auto_tls`) |
+| Playbooks 31/33 | Re-test `cloudera.cluster.cluster` args (5.x renames e.g. `auto_tls`); keep `docs/CDP_BASE_CLUSTER_SERVICE_DEPS.md` in sync |
+| Base cluster template | Prefer incremental `cloudera.cluster.service` (ozone-base pattern) if bulk `cluster` create still hits CM 400s on 5.x |
 
 ## Do not merge this branch until
 
