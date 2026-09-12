@@ -359,6 +359,10 @@ use_freeipa_for_crt_mgmt: false # Set to true if FreeIPA is used for certificate
 # Run generateCmca even when CM API reports Auto-TLS already configured (repair / re-apply)
 cm_autotls_force_run: false
 
+# cloudera.cluster collection: devel (v5) expects cm_client ApiClient(configuration=);
+# PyPI cm-client uses ApiClient(host=). Pin v4.0.0 for cluster/cm_config modules in 31/33.
+cloudera_cluster_collection_git_ref: v4.0.0
+
 ##### KDC integration for cldr-mngr:
 krb5_enc_types: "{{ 'aes256-cts aes128-cts' if identity_provider_effective == 'ad' else 'aes256-cts aes128-cts rc4-hmac' }}"
 ipa_kdc_host: "ipaserver.{{ ipaserver_domain }}"

@@ -70,14 +70,8 @@
           Services to install:
           {{ base_cluster_spec.services | map(attribute='name') | list | join(', ') }}
 
-    - name: Set remote parcel repository URL in Cloudera Manager
-      cloudera.cluster.cm_config:
-        url: "{{ cm_api_url }}"
-        username: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        verify_tls: false
-        parameters:
-          REMOTE_PARCEL_REPO_URLS: "{{ parcel_repo }}"
+    - name: Set remote parcel repository URL in Cloudera Manager (REST API)
+      ansible.builtin.import_tasks: common_tasks/configure_cm_parcel_repo_api.yml
       when: parcel_repo is defined
 
     - name: Check if base cluster already exists
