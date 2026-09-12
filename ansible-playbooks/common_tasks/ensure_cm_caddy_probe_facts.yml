@@ -8,6 +8,9 @@
 #   curl -sk -u admin:PASS 'https://52.76.123.34:7183/api/version'   # often blocked by SG from Jenkins
 # Ansible uri probes on /api/version accept status_code [200, 301, 303, 401, 403] (see LEARNINGS.md).
 
+- name: Resolve deployment portal Caddy gate (monitoring_stack_enabled)
+  ansible.builtin.import_tasks: resolve_deployment_portal_caddy_enabled.yml
+
 - name: Resolve deployment portal ops host inventory name for Caddy slug
   ansible.builtin.set_fact:
     _cm_caddy_ops_inv: >-
@@ -98,7 +101,7 @@
       {%- endif -%}
       {{ out | unique | reject('equalto', '') | list }}
   when:
-    - (deployment_portal_enabled | default(true) | bool)
+    - (deployment_portal_caddy_effective | default(false) | bool)
     - (cm_config_api_via_caddy_proxy | default('auto') | lower) in ['auto', 'true', '1', 'yes', 'on']
     - cm_api_caddy_probe_slug_ips is defined
     - cm_api_caddy_probe_slug_ips | length > 0

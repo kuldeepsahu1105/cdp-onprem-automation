@@ -76,7 +76,9 @@ ansible_configure_output
 DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 CONTROL_MODE="$(detect_control_mode "$SCRIPT_DIR/inventory.ini")"
 
+# Caddy / deployment portal stack (ops reverse proxy) — only when monitoring is enabled (default on).
 _portal_enabled() {
+  _monitoring_enabled || return 1
   [[ "${DEPLOYMENT_PORTAL_ENABLED:-true}" == "true" || "${DEPLOYMENT_PORTAL_ENABLED:-true}" == "1" ]]
 }
 _monitoring_enabled() {
@@ -264,13 +266,17 @@ run_phase_4() {
 
 _portal_extra_args() {
   local extra=()
-  if _portal_enabled; then
-    extra+=(-e deployment_portal_enabled=true)
-  else
-    extra+=(-e deployment_portal_enabled=false)
-  fi
   if _monitoring_enabled; then
     extra+=(-e monitoring_stack_enabled=true)
+  else
+    extra+=(-e monitoring_stack_enabled=false)
+    extra+=(-e deployment_portal_enabled=false)
+    extra+=(-e caddy_vhost_enabled=false)
+  fi
+  if _portal_enabled; then
+    extra+=(-e deployment_portal_enabled=true)
+  elif _monitoring_enabled; then
+    extra+=(-e deployment_portal_enabled=false)
   fi
   printf '%s\0' "${extra[@]}"
 }

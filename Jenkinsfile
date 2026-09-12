@@ -165,12 +165,12 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     booleanParam(
       name: 'MONITORING_STACK_ENABLED',
       defaultValue: true,
-      description: 'Deploy Grafana/Prometheus (Ansible MONITORING stage / 32_setup_monitoring_stack.yml). Requires PORTAL stage first. Sets monitoring_stack_enabled.'
+      description: 'Deploy Grafana/Prometheus (32) and enable ops Caddy reverse proxy (portal/cm/ipa vhosts on deployment_portal_http_port, default 8088 → CM :7180/:7183 upstream). When false, no PORTAL/Caddy — CM direct only.'
     )
     booleanParam(
       name: 'DEPLOYMENT_PORTAL_ENABLED',
       defaultValue: true,
-      description: 'Bootstrap portal in PORTAL stage (10_setup_deployment_portal). Index refresh (35_refresh) runs after Identity, CM_TLS, CDH, monitoring, and ECS — not after CM_INSTALL (CM frontend_url still applied in 26 when Caddy is enabled).'
+      description: 'Bootstrap Caddy portal on ops host (10) when MONITORING_STACK_ENABLED=true. Without monitoring, no Caddy/portal — CM stays direct :7180/:7183. CM Caddy vhost uses edge port deployment_portal_http_port (8088) proxying to cldr-mngr:7180/7183.'
     )
     booleanParam(
       name: 'ECS_DATA_SERVICES_DEPLOY_ENABLED',
@@ -610,7 +610,8 @@ def expandPipelineStageTokens(List stages) {
 }
 
 def portalDeployEnabled() {
-  return isParamEnabled(params.DEPLOYMENT_PORTAL_ENABLED)
+  // Caddy / portal stack requires monitoring (ops reverse proxy for Grafana + CM/pgAdmin vhosts).
+  return isParamEnabled(params.DEPLOYMENT_PORTAL_ENABLED) && monitoringStackEnabled()
 }
 
 def monitoringStackEnabled() {
