@@ -82,6 +82,20 @@ Configured in `ansible-test/group_vars/all.yml`:
 
 Spark is bundled in the CDH parcel for 7.3.1+ — a separate SPARK3 download is not required.
 
+## Nutanix Terraform
+
+Provision VMs on Nutanix AHV (separate from the AWS workflow):
+
+```bash
+cd nutanix_terraform
+cp terraform.tfvars.example terraform.tfvars   # edit cluster, subnet, credentials
+terraform init
+terraform plan
+terraform apply
+```
+
+See [nutanix_terraform/README.md](nutanix_terraform/README.md).
+
 ## Repository layout
 
 ```
@@ -98,7 +112,8 @@ cdp-onprem-automation/
 │   │   └── REFERENCE.md          # Variables, playbooks, inventory
 │   ├── group_vars/all.yml        # All configuration defaults
 │   └── inventory.ini             # Host groups
-└── terraform-aws-csk-network/    # VPC/network module
+├── terraform-code/                 # AWS EC2 Terraform
+└── nutanix_terraform/              # Nutanix VM Terraform
 ```
 
 ## Ansible phases (summary)

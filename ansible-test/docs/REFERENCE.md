@@ -27,7 +27,7 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 
 | Variable | Default | Description |
 |---|---|---|
-| `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/ direct; `internal` = mirror on cldr-mngr |
+| `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/ direct; `internal` = mirror on cldr-mngr (RHEL only) |
 | `cm_repo_public_base_url` | `https://archive.cloudera.com/p` | Public archive base URL |
 | `cm_repo_mirror_host` | cldr-mngr IP | Internal mirror HTTP host |
 | `parcel_repo` | computed | Public or internal parcel URL based on `cm_repo_source` |
@@ -42,9 +42,11 @@ cm_repo_source: public
 cm_repo_username: "your-cloudera-account"
 cm_repo_password: "your-password"
 
-# Internal mirror — download RPMs/parcels to cldr-mngr web server
+# Internal mirror — download RPMs/parcels to cldr-mngr web server (RHEL/CentOS/Rocky only)
 cm_repo_source: internal
 ```
+
+Ubuntu/Debian hosts must use `cm_repo_source: public`. The internal mirror playbooks download RPM packages and run `createrepo`; Ubuntu CM installs from archive APT repositories configured by `17_download_repos.yml`.
 
 | Playbook | Mode | Description |
 |---|---|---|
@@ -59,7 +61,14 @@ Package names and paths are in the `os_vars` map:
 - `os_vars.RedHat` — RHEL/Rocky/Alma
 - `os_vars.Debian` — Ubuntu/Debian
 
-Access at runtime: `{{ os_vars[ansible_os_family].<key> }}`
+| `cm_repo_dir` | `/etc/yum.repos.d` (RHEL) or `/etc/apt/sources.list.d` (Ubuntu) | CM repo drop-in directory |
+| `cm_repo_file` | `cloudera-manager.repo` or `cloudera-manager.list` | CM repo file name per OS |
+
+On Ubuntu, public mode downloads the official `cloudera-manager.list` from `archive.cloudera.com/p/cm7/<version>/ubuntu2404/apt/` (or `ubuntu2204`, etc.) and imports `archive.key` — matching the Cloudera installation guide.
+
+Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` after `set_os_facts`.
+
+**PostgreSQL paths:** RHEL stores config in the data directory (`postgres_data_dir`). Ubuntu/Debian uses separate paths — config in `postgres_config_dir` (`/etc/postgresql/<version>/main`), data in `postgres_data_dir` (`/var/lib/postgresql/<version>/main`). Playbook `18_setup_postgres.yml` deploys templates to `postgres_config_dir`.
 
 ---
 

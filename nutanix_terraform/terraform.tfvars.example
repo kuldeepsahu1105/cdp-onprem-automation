@@ -1,0 +1,6 @@
+cluster_name = "Cluster Name"
+subnet_name  = "Primary"
+user         = "Prism Central admin user"
+password     = "Password"
+endpoint     = "IP address of Prism Central"
+image_uri    = "https://mirror.pkgbuild.com/images/v20210515.22945/Arch-Linux-x86_64-basic-20210515.22945.qcow2"

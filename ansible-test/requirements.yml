@@ -1,5 +1,6 @@
 collections:
   - name: community.general
+  - name: community.postgresql
   - name: ansible.posix
   - name: community.crypto
   - name: freeipa.ansible_freeipa

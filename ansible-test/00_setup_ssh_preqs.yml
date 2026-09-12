@@ -5,6 +5,9 @@
   hosts: all:!ipaserver
   become: yes
   tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
     - name: Enable PasswordAuthentication in SSH config
       ansible.builtin.lineinfile:
         path: /etc/ssh/sshd_config
@@ -21,5 +24,5 @@
 
     - name: Restart SSH service
       ansible.builtin.service:
-        name: sshd
+        name: "{{ os.ssh_service }}"
         state: restarted

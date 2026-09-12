@@ -32,7 +32,7 @@
     rm -rf /etc/oozie /etc/kafka* /etc/zeppelin* /etc/spark* /etc/sqoop*
     rm -rf /etc/schemaregistry /etc/solr* /etc/hive-hcatalog /etc/hive-webhcat
     rm -rf /etc/kudu* /etc/tez* /etc/streams* /etc/nifi*
-    rm -rf /usr/share/cmf /var/lib/cloudera* /var/cache/yum/cloudera*
+    rm -rf /usr/share/cmf /var/lib/cloudera* /var/cache/yum/cloudera* /var/cache/apt/archives/partial
     rm -rf /var/log/cloudera* /var/run/cloudera* /opt/cloudera
   args:
     warn: false

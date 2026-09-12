@@ -14,16 +14,16 @@
   changed_when: false
   failed_when: false
 
-- name: Install PostgreSQL PGDG repository (RHEL)
+- name: Install PostgreSQL PGDG repository (RHEL family)
   ansible.builtin.package:
-    name: "{{ os_vars.RedHat.postgres_repo_url }}"
+    name: "{{ os_vars[ansible_os_family].postgres_repo_url }}"
     state: present
     disable_gpg_check: true
   when: ansible_os_family == "RedHat"
 
-- name: Install PostgreSQL APT repository key (Ubuntu)
+- name: Install PostgreSQL APT repository key (Debian family)
   ansible.builtin.get_url:
-    url: "{{ os_vars.Debian.postgres_apt_key_url }}"
+    url: "{{ os_vars[ansible_os_family].postgres_apt_key_url }}"
     dest: /tmp/postgresql.asc
     mode: "0644"
   when: ansible_os_family == "Debian"
@@ -34,14 +34,14 @@
     creates: /usr/share/keyrings/postgresql.gpg
   when: ansible_os_family == "Debian"
 
-- name: Add PostgreSQL APT repository (Ubuntu)
+- name: Add PostgreSQL APT repository (Debian family)
   ansible.builtin.apt_repository:
-    repo: "{{ os_vars.Debian.postgres_apt_repo }}"
+    repo: "{{ os_vars[ansible_os_family].postgres_apt_repo }}"
     state: present
     filename: pgdg
   when: ansible_os_family == "Debian"
 
-- name: Update apt cache after adding PostgreSQL repo (Ubuntu)
+- name: Update apt cache after adding PostgreSQL repo (Debian family)
   ansible.builtin.apt:
     update_cache: true
   when: ansible_os_family == "Debian"

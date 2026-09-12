@@ -151,6 +151,7 @@ cldr_repos_path: "{{ webserver_path }}/cloudera-repos"
 # CM/CDH repository source: public | internal
 # public   — use archive.cloudera.com/p/ directly (default, no local mirror)
 # internal — mirror RPMs/parcels to cldr-mngr web server (16 + 17 playbooks)
+#            RHEL/CentOS/Rocky only; Ubuntu/Debian must use public
 # ---------------------------------------------------------------------------
 cm_repo_source: public
 cm_repo_public_base_url: "https://archive.cloudera.com/p"
@@ -192,10 +193,16 @@ databases:
   - { name: "smm", user: "smm", password: "smm" }
   - { name: "das", user: "das", password: "das" }
 
-scm_csds: 
+scm_csds: []
+# Optional CSD JARs for RHEL-based CM (RPM archive paths). Leave scm_csds empty on Ubuntu/Debian.
+scm_csds_redhat:
   - https://archive.cloudera.com/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar
   - https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel/NIFIREGISTRY-1.28.1.2.1.7.3004-1.jar
   - https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel/NIFI-1.28.1.2.1.7.3004-1.jar
+
+# When true, pure Debian hosts use Ubuntu CM apt repo path (Cloudera supports Ubuntu only)
+cm_debian_use_ubuntu_repo: false
+cm_debian_ubuntu_compat_version: "2204"
 
 ##### cm_server api configs:
 cm_port: 7180
@@ -393,7 +400,7 @@ cleanup_cm_process_users:
   - yarn
   - zookeeper
 
-# CM packages to remove (RHEL; skipped on Ubuntu when supports_cloudera_rpm is false)
+# CM packages to remove (same package names on RHEL yum and Ubuntu apt)
 cleanup_cm_packages:
   - cloudera-manager-server
   - cloudera-manager-server-db-2
@@ -434,6 +441,7 @@ os_vars:
       - "java-{{ java_version }}-openjdk"
       - "java-{{ java_version }}-openjdk-devel"
     firewall_service: firewalld
+    ssh_service: sshd
     chrony_service: chronyd
     web_server_packages:
       - httpd
@@ -445,9 +453,13 @@ os_vars:
     web_server_ssl_cert: /etc/pki/tls/certs/httpd.crt
     webserver_path: /var/www/html
     yum_repo_dir: /etc/yum.repos.d
+    cm_repo_dir: /etc/yum.repos.d
+    cm_repo_file: cloudera-manager.repo
+    cm_package_cache_glob: /var/cache/yum/cloudera*
     rc_local_path: /etc/rc.d/rc.local
     dns_config_method: resolv_conf
     postgres_data_dir: "/var/lib/pgsql/{{ postgresql_version }}/data"
+    postgres_config_dir: "/var/lib/pgsql/{{ postgresql_version }}/data"
     postgres_bin_dir: "/usr/pgsql-{{ postgresql_version }}/bin"
     postgres_service: "postgresql-{{ postgresql_version }}"
     postgres_server_packages:
@@ -482,7 +494,7 @@ os_vars:
       - krb5-workstation
     supports_selinux: true
     supports_tuned: true
-    supports_cloudera_rpm: true
+    supports_internal_rpm_mirror: true
 
   Debian:
     pkg_mgr: apt
@@ -509,6 +521,7 @@ os_vars:
     java_packages:
       - "openjdk-{{ java_version }}-jdk"
     firewall_service: ufw
+    ssh_service: ssh
     chrony_service: chrony
     web_server_packages:
       - apache2
@@ -519,15 +532,22 @@ os_vars:
     web_server_ssl_cert: /etc/ssl/certs/apache-selfsigned.crt
     webserver_path: /var/www/html
     yum_repo_dir: /etc/apt/sources.list.d
+    cm_repo_dir: /etc/apt/sources.list.d
+    cm_repo_file: cloudera-manager.list
+    cm_package_cache_glob: /var/cache/apt/archives
     rc_local_path: /etc/rc.local
     netplan_dns_file: /etc/netplan/99-cloudera-dns.yaml
     dns_config_method: netplan
     postgres_data_dir: "/var/lib/postgresql/{{ postgresql_version }}/main"
+    postgres_config_dir: "/etc/postgresql/{{ postgresql_version }}/main"
     postgres_bin_dir: "/usr/lib/postgresql/{{ postgresql_version }}/bin"
     postgres_service: "postgresql@{{ postgresql_version }}-main"
+    postgres_group: postgres
     postgres_server_packages:
       - "postgresql-{{ postgresql_version }}"
       - "postgresql-client-{{ postgresql_version }}"
+      - postgresql-common
+      - python3-psycopg2
     postgres_client_packages:
       - "postgresql-client-{{ postgresql_version }}"
     postgres_apt_key_url: "https://www.postgresql.org/media/keys/ACCC4CF8.asc"
@@ -557,4 +577,4 @@ os_vars:
       - krb5-user
     supports_selinux: false
     supports_tuned: false
-    supports_cloudera_rpm: false
+    supports_internal_rpm_mirror: false

@@ -37,6 +37,21 @@ ensure_jq() {
     brew install jq
     return 0
   fi
+  if command -v apt-get >/dev/null 2>&1; then
+    echo "Installing jq with apt..."
+    sudo apt-get update -qq && sudo apt-get install -y jq
+    return 0
+  fi
+  if command -v dnf >/dev/null 2>&1; then
+    echo "Installing jq with dnf..."
+    sudo dnf install -y jq
+    return 0
+  fi
+  if command -v yum >/dev/null 2>&1; then
+    echo "Installing jq with yum..."
+    sudo yum install -y jq
+    return 0
+  fi
   echo "Install jq and re-run (e.g. brew install jq on macOS)."
   return 1
 }
