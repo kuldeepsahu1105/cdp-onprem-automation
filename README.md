@@ -133,8 +133,11 @@ With `caddy_vhost_enabled: true`, Caddy serves **per-service hostnames** on the 
 
 `http://cm.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → Cloudera Manager  
 `http://grafana.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → Grafana  
+`http://ipa.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → FreeIPA UI (Caddy sets **`Host: <ipaserver FQDN>`** on the upstream HTTPS request so IPA accepts the vhost URL)
 
 Set `caddy_vhost_dns_mode: classic_nipio` for **`*.nip.io`** names (no custom DNS). Set `flat` for `cm.pvc.cloudera-labs.com` when you point all A records at the ops IP.
+
+Playbooks **28** / **31** verify portal URLs after sync: direct `http://<ops-ip>:8088/`, printed access URLs, and Caddy vhost routes (via `Host` header on `127.0.0.1`). IPA vhost checks also confirm FreeIPA responds to its FQDN `Host` header locally on `ipaserver`.
 
 ```bash
 ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml

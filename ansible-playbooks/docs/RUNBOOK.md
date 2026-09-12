@@ -188,6 +188,8 @@ Ops stack runs on **ipaserver** when present (`deployment_portal_host_group: aut
 
 **AWS (public IP):** Jenkins and browsers on the internet use `http://<ops-public-ip>:8088/`; hosts inside the VPC can use `http://<ops-private-ip>:8088/`. The generated index lists both. Caddy vhost URLs use a **dashed** ops public IP in the hostname (`portal.52-221-251-41.pvc.cloudera-labs.com`, not dotted); that requires wildcard DNS on `caddy_vhost_public_base` or use `caddy_vhost_dns_mode: classic_nipio`. Playbook 28 fails fast if Caddy does not respond on `http://127.0.0.1:8088/` on the ops host.
 
+**Caddy FreeIPA vhost:** When `[ipaserver]` is present, `http://ipa.<ops-ip-dashed>.<base>:8088/` reverse-proxies to `https://<ipaserver-fqdn>:443` with **`header_up Host <ipaserver-fqdn>`** so the browser can use the lab hostname while IPA still sees its certificate name. Post-deploy checks curl the printed portal URLs and exercise Caddy vhost routing with the correct `Host` header; on `ipaserver`, Ansible also verifies `curl -k -H "Host: <ipaserver-fqdn>" https://127.0.0.1/`.
+
 **Bare metal / private network (no public IP):** Set `deployment_environment: baremetal` (or `deployment_portal_access_profile: private`). The portal index shows only private-network URLs — typically `http://<ops-fqdn>:8088/` when `deployment_portal_prefer_fqdn_urls: true`, or `http://<management-ip>:8088/` otherwise. pgAdmin stays on port `5050` on the same ops host; database is **cldr-mngr** PostgreSQL. Caddy lab hostnames use the ops management IP (often `caddy_vhost_dns_mode: flat` with IPA/AD DNS).
 
 ---

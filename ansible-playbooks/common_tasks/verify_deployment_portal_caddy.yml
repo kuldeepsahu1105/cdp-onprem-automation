@@ -54,3 +54,6 @@
       Recent Caddy logs:
       {{ caddy_logs_tail.stdout | default('(no logs captured)') }}
   when: portal_local_curl is failed
+
+- name: Verify deployment portal and Caddy vhost URLs
+  ansible.builtin.import_tasks: verify_deployment_portal_urls.yml

@@ -1,0 +1,186 @@
+---
+# HTTP checks for printed access URLs and Caddy vhost hostnames (runs on ops host after sync).
+
+- name: Set deployment portal URL verification defaults
+  ansible.builtin.set_fact:
+    _portal_url_verify_codes: "{{ deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]) }}"
+    _portal_local_base: "http://127.0.0.1:{{ deployment_portal_http_port | int }}"
+
+- name: Build access URL checks from deployment portal context
+  ansible.builtin.set_fact:
+    deployment_portal_access_url_checks: >-
+      {{
+        (
+          ([{'name': 'portal (primary)', 'url': deployment_portal_context.access.primary.portal | default(''),
+              'optional': (ansible_controller_outside_vpc | default(false) | bool)
+                and (deployment_portal_context.access.primary.portal | default('') is search('://(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)'))}]
+           if (deployment_portal_context.access.primary.portal | default('') | length > 0)
+           else [])
+          + ([{'name': 'portal (external)', 'url': deployment_portal_context.access.external.portal | default(''),
+              'optional': (ansible_controller_outside_vpc | default(false) | bool)
+                and (deployment_portal_context.access.external.portal | default('') is search('://(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)'))}]
+             if (deployment_portal_context.access.external.portal | default('') | length > 0)
+             else [])
+          + (
+              [{'name': 'portal (vpc)', 'url': deployment_portal_context.access.vpc.portal | default(''), 'optional': true}]
+              if (
+                (deployment_portal_context.access.vpc.portal | default('') | length > 0)
+                and not (deployment_portal_url_verify_skip_vpc | default(false) | bool)
+              )
+              else []
+            )
+        )
+        | selectattr('url', 'defined')
+        | selectattr('url', 'ne', '')
+        | list
+      }}
+  when: deployment_portal_context is defined
+
+- name: Verify printed deployment portal access URLs respond
+  ansible.builtin.uri:
+    url: "{{ item.url }}"
+    method: GET
+    status_code: "{{ _portal_url_verify_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 30
+  loop: "{{ deployment_portal_access_url_checks | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: deployment_portal_access_url_results
+  retries: 3
+  delay: 5
+  until: deployment_portal_access_url_results is succeeded
+  when:
+    - deployment_portal_access_url_checks | default([]) | length > 0
+  failed_when: false
+
+- name: Warn when an optional VPC-only access URL does not respond locally
+  ansible.builtin.debug:
+    msg: >-
+      Optional VPC portal URL did not respond from {{ inventory_hostname }} (expected when checking only public paths from Jenkins):
+      {{ item.item.url }}
+  loop: "{{ deployment_portal_access_url_results.results | default([]) }}"
+  when:
+    - deployment_portal_access_url_checks | default([]) | length > 0
+    - not (item.skipped | default(false) | bool)
+    - item.item.optional | default(false) | bool
+    - item.failed | default(false) or (item.status | default(0) | int not in _portal_url_verify_codes)
+
+- name: Fail when a required printed access URL does not respond
+  ansible.builtin.fail:
+    msg: >-
+      Deployment portal access URL check failed for {{ item.item.name }}: {{ item.item.url }}.
+      Expected HTTP {{ _portal_url_verify_codes | join('/') }} from the ops host.
+      If this URL uses a public IP, confirm security groups allow {{ deployment_portal_http_port | int }}
+      and Caddy is listening (docker ps, docker logs {{ deployment_portal_caddy_container }}).
+      Re-run: ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
+  loop: "{{ deployment_portal_access_url_results.results | default([]) }}"
+  when:
+    - deployment_portal_access_url_checks | default([]) | length > 0
+    - not (item.skipped | default(false) | bool)
+    - not (item.item.optional | default(false) | bool)
+    - item.failed | default(false) or (item.status | default(0) | int not in _portal_url_verify_codes)
+
+- name: Build Caddy vhost HTTP checks (Host header routing on localhost)
+  ansible.builtin.set_fact:
+    deployment_portal_caddy_vhost_checks: >-
+      {{
+        (
+          [{'name': 'Caddy vhost portal', 'host': caddy_vhost_urls.portal.hostname, 'path': '/'}]
+          + [{'name': 'Caddy vhost CM', 'host': caddy_vhost_urls.cm.hostname, 'path': '/'}]
+          + (
+              [{'name': 'Caddy vhost FreeIPA', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
+                'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default('')}]
+              if (
+                deployment_portal_has_ipa | default(false) | bool
+                and (caddy_vhost_urls.ipa.hostname | default('') | length > 0)
+                and (deployment_portal_ipa_fqdn | default('') | length > 0)
+              )
+              else []
+            )
+        )
+      }}
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - caddy_vhost_urls is defined
+    - caddy_vhost_urls | length > 0
+    - caddy_vhost_urls.portal.hostname is defined
+    - caddy_vhost_urls.cm.hostname is defined
+
+- name: Verify Caddy vhost routes via localhost with Host header
+  ansible.builtin.uri:
+    url: "{{ _portal_local_base }}{{ item.path | default('/') }}"
+    method: GET
+    headers:
+      Host: "{{ item.host }}"
+    status_code: "{{ _portal_url_verify_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  loop: "{{ deployment_portal_caddy_vhost_checks | default([]) }}"
+  loop_control:
+    label: "{{ item.name }} (Host: {{ item.host }})"
+  register: deployment_portal_caddy_vhost_results
+  retries: 5
+  delay: 5
+  until: deployment_portal_caddy_vhost_results is succeeded
+  when:
+    - deployment_portal_caddy_vhost_checks | default([]) | length > 0
+  failed_when: false
+
+- name: Fail when a Caddy vhost route does not respond
+  ansible.builtin.fail:
+    msg: >-
+      Caddy vhost check failed for {{ item.item.name }}.
+      Request: GET {{ _portal_local_base }}{{ item.item.path | default('/') }}
+      with Host: {{ item.item.host }}.
+      {% if item.item.upstream_ipa_fqdn is defined and item.item.upstream_ipa_fqdn | length > 0 %}
+      FreeIPA upstream must receive Host: {{ item.item.upstream_ipa_fqdn }} (see deployment_portal_Caddyfile_vhosts.inc.j2 header_up).
+      Confirm https://{{ item.item.upstream_ipa_fqdn }}/ responds on the IPA server and IPA HTTPD is running.
+      {% elif 'CM' in item.item.name %}
+      Confirm Cloudera Manager is up on {{ deployment_portal_cm_fqdn }} (ports {{ cm_http_port }}/{{ cm_https_port }}).
+      {% else %}
+      Confirm Caddyfile vhosts and wildcard DNS (or caddy_vhost_dns_mode: classic_nipio) match {{ item.item.host }}.
+      {% endif %}
+      Caddy logs: docker logs --tail 80 {{ deployment_portal_caddy_container }}
+  loop: "{{ deployment_portal_caddy_vhost_results.results | default([]) }}"
+  when:
+    - deployment_portal_caddy_vhost_checks | default([]) | length > 0
+    - not (item.skipped | default(false) | bool)
+    - item.failed | default(false) or (item.status | default(0) | int not in _portal_url_verify_codes)
+
+- name: Verify FreeIPA HTTPS responds with IPA FQDN Host header (direct upstream)
+  ansible.builtin.uri:
+    url: "https://127.0.0.1/"
+    method: GET
+    headers:
+      Host: "{{ deployment_portal_ipa_fqdn }}"
+    status_code: "{{ _portal_url_verify_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 30
+  register: ipa_direct_host_header_check
+  retries: 3
+  delay: 5
+  until: ipa_direct_host_header_check is succeeded
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - deployment_portal_ipa_fqdn | default('') | length > 0
+    - inventory_hostname in groups.get('ipaserver', [])
+  failed_when: false
+
+- name: Fail when FreeIPA does not accept its FQDN Host header locally
+  ansible.builtin.fail:
+    msg: >-
+      FreeIPA UI did not respond on https://127.0.0.1/ with Host: {{ deployment_portal_ipa_fqdn }}.
+      Caddy IPA vhost proxies with header_up Host {{ deployment_portal_ipa_fqdn }}; fix IPA HTTP/TLS first.
+      Try on {{ inventory_hostname }}: curl -k -H "Host: {{ deployment_portal_ipa_fqdn }}" https://127.0.0.1/
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - deployment_portal_ipa_fqdn | default('') | length > 0
+    - inventory_hostname in groups.get('ipaserver', [])
+    - ipa_direct_host_header_check is defined
+    - >-
+      ipa_direct_host_header_check is failed
+      or (ipa_direct_host_header_check.status | default(0) | int not in _portal_url_verify_codes)
