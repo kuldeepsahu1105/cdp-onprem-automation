@@ -69,9 +69,9 @@
       - portal
       - ipa
   tasks:
-    - name: Skip Tier B when deployment portal is disabled
+    - name: Skip Tier B when Caddy portal stack is disabled
       ansible.builtin.meta: end_play
-      when: not (deployment_portal_enabled | default(true) | bool)
+      when: not (deployment_portal_caddy_effective | default(false) | bool)
 
     - name: Tier B external URL verify (Jenkins / laptop)
       ansible.builtin.import_tasks: common_tasks/verify_deployment_portal_external_from_controller.yml

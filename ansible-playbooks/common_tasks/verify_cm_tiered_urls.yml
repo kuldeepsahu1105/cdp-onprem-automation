@@ -2,7 +2,8 @@
 # CM URL verification tiers (mirror portal model):
 #   Tier A (required): http(s)://127.0.0.1 on cldr-mngr (same path as cm_api_delegate_probes_to_manager).
 #   Tier C (optional): public-EIP / hairpin CM URL on cldr-mngr — warn only.
-#   Tier B (controller): verify_service_urls_from_controller.yml when portal is disabled (CM-only scope).
+#   Tier B (controller): verify_service_urls_from_controller.yml when portal is disabled and
+#   deployment_portal_verify_tier_b_enabled is true (default false — use 10/35 localhost Tier B play).
 
 - name: Set CM tiered URL verify defaults
   ansible.builtin.set_fact:
@@ -55,50 +56,58 @@
     - cm_tier_a_https_result is defined
     - cm_tier_a_https_result is failed or (cm_tier_a_https_result.status | default(0) | int not in _cm_url_verify_codes)
 
-- name: Set CM hairpin URL for Tier C optional probe
-  ansible.builtin.set_fact:
-    _cm_tier_c_public_url: "http://{{ hostvars[groups['cldr-mngr'][0]].ansible_host }}:{{ cm_http_port | int }}/"
-    _cm_tier_c_hairpin: >-
-      {{
-        (hostvars[groups['cldr-mngr'][0]].private_ip | default('') | length > 0)
-        and (
-          hostvars[groups['cldr-mngr'][0]].ansible_host
-          != hostvars[groups['cldr-mngr'][0]].private_ip
-        )
-      }}
-  run_once: true
-  when: "'cldr-mngr' in groups and groups['cldr-mngr'] | length > 0"
-
-- name: Probe optional CM public-EIP URL from cldr-mngr (Tier C hairpin, warn only)
-  ansible.builtin.uri:
-    url: "{{ _cm_tier_c_public_url }}"
-    method: GET
-    status_code: "{{ _cm_url_verify_codes }}"
-    follow_redirects: none
-    validate_certs: false
-    timeout: 10
-  register: cm_tier_c_public_result
-  failed_when: false
-  delegate_to: cldr-mngr
-  run_once: true
+- name: Optional CM public-EIP hairpin probe on cldr-mngr (Tier C, warn only)
   when:
-    - _cm_tier_c_hairpin | default(false) | bool
-    - _cm_tier_c_public_url | default('') | length > 0
+    - deployment_cm_hairpin_url_verify | default(false) | bool
+    - "'cldr-mngr' in groups and groups['cldr-mngr'] | length > 0"
+  block:
+    - name: Set CM hairpin URL for Tier C optional probe
+      ansible.builtin.set_fact:
+        _cm_tier_c_public_url: "http://{{ hostvars[groups['cldr-mngr'][0]].ansible_host }}:{{ cm_http_port | int }}/"
+        _cm_tier_c_hairpin: >-
+          {{
+            (hostvars[groups['cldr-mngr'][0]].private_ip | default('') | length > 0)
+            and (
+              hostvars[groups['cldr-mngr'][0]].ansible_host
+              != hostvars[groups['cldr-mngr'][0]].private_ip
+            )
+          }}
+      run_once: true
 
-- name: Warn when CM Tier C hairpin URL did not respond on cldr-mngr
-  ansible.builtin.debug:
-    msg: >-
-      Optional CM URL did not respond from cldr-mngr (Tier C hairpin — non-blocking):
-      {{ _cm_tier_c_public_url }}.
-      Tier A on 127.0.0.1 and Tier B from Jenkins may still succeed.
+    - name: Probe optional CM public-EIP URL from cldr-mngr (Tier C hairpin, warn only)
+      ansible.builtin.uri:
+        url: "{{ _cm_tier_c_public_url }}"
+        method: GET
+        status_code: "{{ _cm_url_verify_codes }}"
+        follow_redirects: none
+        validate_certs: false
+        timeout: 10
+      register: cm_tier_c_public_result
+      failed_when: false
+      delegate_to: cldr-mngr
+      run_once: true
+      when:
+        - _cm_tier_c_hairpin | default(false) | bool
+        - _cm_tier_c_public_url | default('') | length > 0
+
+    - name: Warn when CM Tier C hairpin URL did not respond on cldr-mngr
+      ansible.builtin.debug:
+        msg: >-
+          Optional CM URL did not respond from cldr-mngr (Tier C hairpin — non-blocking):
+          {{ _cm_tier_c_public_url }}.
+          Tier A on 127.0.0.1 and Tier B from Jenkins may still succeed.
+      when:
+        - cm_tier_c_public_result is defined
+        - not (cm_tier_c_public_result.skipped | default(false) | bool)
+        - cm_tier_c_public_result.failed | default(false)
+          or (cm_tier_c_public_result.status | default(0) | int not in _cm_url_verify_codes)
+
+- name: Tier B CM external URL verify from controller (portal-disabled clusters only)
   when:
-    - cm_tier_c_public_result is defined
-    - not (cm_tier_c_public_result.skipped | default(false) | bool)
-    - cm_tier_c_public_result.failed | default(false)
-      or (cm_tier_c_public_result.status | default(0) | int not in _cm_url_verify_codes)
-
-- name: Tier B CM external URL verify from controller when deployment portal is disabled
-  ansible.builtin.import_tasks: verify_service_urls_from_controller.yml
-  vars:
-    tier_b_url_verify_scope: cm
-  when: not (deployment_portal_enabled | default(true) | bool)
+    - not (deployment_portal_enabled | default(true) | bool)
+    - deployment_portal_verify_tier_b_enabled | default(false) | bool
+  block:
+    - name: Run Tier B CM URL probes from Ansible controller
+      ansible.builtin.include_tasks: verify_service_urls_from_controller.yml
+      vars:
+        tier_b_url_verify_scope: cm
