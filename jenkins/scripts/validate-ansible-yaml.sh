@@ -17,7 +17,11 @@ except ImportError:
     sys.exit(1)
 
 root = Path(os.environ["ANSIBLE_DIR"])
-paths = sorted(set(root.glob("common_tasks/**/*.yml")) | set(root.glob("common_tasks/*.yml")))
+paths = sorted(
+    set(root.glob("common_tasks/**/*.yml"))
+    | set(root.glob("common_tasks/*.yml"))
+    | set(root.glob("[0-9]*.yml"))
+)
 errors = []
 for path in sorted(paths):
     try:
@@ -31,5 +35,5 @@ if errors:
         print(f"[validate-ansible-yaml] ERROR: {line}", file=sys.stderr)
     sys.exit(1)
 
-print(f"[validate-ansible-yaml] OK: {len(paths)} file(s) under common_tasks/")
+print(f"[validate-ansible-yaml] OK: {len(paths)} Ansible YAML file(s) parsed")
 PY

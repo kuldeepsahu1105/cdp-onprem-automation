@@ -89,6 +89,13 @@ if is_enabled "${REQUIRE_INVENTORY:-false}" || should_validate "${VALIDATE_INVEN
   log "OK inventory: $INVENTORY"
 fi
 
+# Fast PyYAML parse (no inventory/ansible); catches broken when: list items before syntax-check.
+if command -v python3 >/dev/null 2>&1; then
+  "$REPO_ROOT/jenkins/scripts/validate-ansible-yaml.sh" | tee -a "$LOG_FILE"
+else
+  log "Skipping Ansible YAML parse (python3 not available)"
+fi
+
 if should_validate "${VALIDATE_ANSIBLE_SYNTAX:-true}" "ANSIBLE_SYNTAX"; then
   # shellcheck disable=SC1091
   source "$REPO_ROOT/jenkins/scripts/ensure-ansible.sh"
@@ -99,8 +106,6 @@ if should_validate "${VALIDATE_ANSIBLE_SYNTAX:-true}" "ANSIBLE_SYNTAX"; then
     ansible-playbook --syntax-check "$pb" >/dev/null
     log "  syntax OK: $(basename "$pb")"
   done < <(find . -maxdepth 1 -name '[0-9]*.yml' -type f | sort)
-  # shellcheck disable=SC1091
-  source "$REPO_ROOT/jenkins/scripts/validate-ansible-yaml.sh" | tee -a "$LOG_FILE"
 else
   log "Skipping Ansible syntax check"
 fi
