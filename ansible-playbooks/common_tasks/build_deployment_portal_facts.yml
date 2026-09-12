@@ -35,6 +35,11 @@
       {{ hostvars[groups['ipaserver'][0]].cldr_hostname }}.{{ cluster_domain }}
   when: deployment_portal_has_ipa | bool
 
+- name: Clear FreeIPA hostname when not in inventory
+  ansible.builtin.set_fact:
+    deployment_portal_ipa_fqdn: ""
+  when: not deployment_portal_has_ipa | bool
+
 - name: Detect ECS inventory
   ansible.builtin.set_fact:
     deployment_portal_ecs_present: >-
@@ -82,6 +87,20 @@
     - deployment_portal_base_master_fqdn | length > 0
     - item.condition | bool
 
+- name: Set nip.io-style vhost public IP (Caddy listener on ops host)
+  ansible.builtin.set_fact:
+    caddy_vhost_public_ip: "{{ deployment_portal_anchor_ip }}"
+
+- name: Build Caddy vhost URL map (nip.io-style hostnames)
+  ansible.builtin.set_fact:
+    caddy_vhost_urls: "{{ lookup('template', 'caddy_vhost_urls.j2') | from_yaml }}"
+  when: caddy_vhost_enabled | default(false) | bool
+
+- name: Default empty Caddy vhost map when disabled
+  ansible.builtin.set_fact:
+    caddy_vhost_urls: {}
+  when: not (caddy_vhost_enabled | default(false) | bool)
+
 - name: Assemble deployment portal context
   ansible.builtin.set_fact:
     deployment_portal_context:
@@ -96,16 +115,47 @@
       anchor:
         fqdn: "{{ deployment_portal_anchor_fqdn }}"
         ip: "{{ deployment_portal_anchor_ip }}"
+      caddy_vhosts:
+        enabled: "{{ caddy_vhost_enabled | default(false) | bool }}"
+        dns_mode: "{{ caddy_vhost_dns_mode }}"
+        public_base: "{{ caddy_vhost_public_base }}"
+        ops_ip: "{{ caddy_vhost_public_ip }}"
+        urls: "{{ caddy_vhost_urls }}"
       portal:
-        index_url: "http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/"
-        pgadmin_url: "http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_pgadmin_host_port }}/"
+        index_url: >-
+          {{
+            caddy_vhost_urls.portal.url
+            if (caddy_vhost_enabled | default(false) | bool)
+            else ('http://' + deployment_portal_anchor_fqdn + ':' + (deployment_portal_http_port | string) + '/')
+          }}
+        pgadmin_url: >-
+          {{
+            caddy_vhost_urls.pgadmin.url
+            if (caddy_vhost_enabled | default(false) | bool)
+            else ('http://' + deployment_portal_anchor_fqdn + ':' + (deployment_portal_pgadmin_host_port | string) + '/')
+          }}
       identity:
         ipa_ui_url: "{{ ('https://' + deployment_portal_ipa_fqdn) if deployment_portal_has_ipa | bool else '' }}"
+        ipa_caddy_url: >-
+          {{
+            caddy_vhost_urls.ipa.url
+            if (
+              caddy_vhost_enabled | default(false) | bool
+              and deployment_portal_has_ipa | bool
+            )
+            else ''
+          }}
         ipa_ui_label: "FreeIPA / IdM"
       cloudera_manager:
         host_fqdn: "{{ deployment_portal_cm_fqdn }}"
         ui_url_http: "http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}"
         ui_url_https: "https://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port }}"
+        caddy_url: >-
+          {{
+            caddy_vhost_urls.cm.url
+            if (caddy_vhost_enabled | default(false) | bool)
+            else ''
+          }}
         cluster_name: "{{ cdh_basecluster_name }}"
       postgresql:
         host_fqdn: "{{ deployment_portal_postgres_fqdn }}"
@@ -122,14 +172,38 @@
         cluster_name: "{{ ecs_cluster_name }}"
         app_domain: "{{ ecs_app_domain }}"
         console_hint: "https://console.{{ ecs_app_domain }}"
+        caddy_url: >-
+          {{
+            caddy_vhost_urls.ecs.url
+            if (
+              caddy_vhost_enabled | default(false) | bool
+              and deployment_portal_ecs_present | bool
+            )
+            else ''
+          }}
         apps_wildcard: "https://*.{{ ecs_app_domain }}"
       data_services:
         links: "{{ deployment_portal_data_service_links + (deployment_portal_dynamic_links | default([])) }}"
       monitoring:
         enabled: "{{ monitoring_stack_enabled | default(false) | bool }}"
-        grafana_url: "http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/grafana/"
-        prometheus_url: "http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/prometheus/"
-        alertmanager_url: "http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/alertmanager/"
+        grafana_url: >-
+          {{
+            caddy_vhost_urls.grafana.url
+            if (caddy_vhost_enabled | default(false) | bool)
+            else ('http://' + deployment_portal_anchor_fqdn + ':' + (deployment_portal_http_port | string) + '/grafana/')
+          }}
+        prometheus_url: >-
+          {{
+            caddy_vhost_urls.prometheus.url
+            if (caddy_vhost_enabled | default(false) | bool)
+            else ('http://' + deployment_portal_anchor_fqdn + ':' + (deployment_portal_http_port | string) + '/prometheus/')
+          }}
+        alertmanager_url: >-
+          {{
+            caddy_vhost_urls.alertmanager.url
+            if (caddy_vhost_enabled | default(false) | bool)
+            else ('http://' + deployment_portal_anchor_fqdn + ':' + (deployment_portal_http_port | string) + '/alertmanager/')
+          }}
         cadvisor_url: "http://{{ deployment_portal_anchor_fqdn }}:{{ monitoring_cadvisor_host_port }}/"
       nodes: "{{ deployment_portal_nodes }}"
       extra_links: "{{ deployment_portal_extra_links }}"

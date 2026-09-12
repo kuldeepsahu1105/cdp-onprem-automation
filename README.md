@@ -127,6 +127,15 @@ After cluster deploy, `28_setup_deployment_portal.yml` installs the **ops stack*
 
 `monitoring_stack_enabled` defaults to **`true`** (Grafana included). Disable with `monitoring_stack_enabled: false` or run only `29` later. Extend the index via `deployment_portal_extra_links` and `deployment_portal_data_service_links`.
 
+### Caddy lab domain (`pvc.cloudera-labs.com`, nip.io-style)
+
+With `caddy_vhost_enabled: true`, Caddy serves **per-service hostnames** on the ops host (port `8088` by default), for example:
+
+`http://cm.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → Cloudera Manager  
+`http://grafana.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → Grafana  
+
+Set `caddy_vhost_dns_mode: classic_nipio` for **`*.nip.io`** names (no custom DNS). Set `flat` for `cm.pvc.cloudera-labs.com` when you point all A records at the ops IP.
+
 ```bash
 ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
 MONITORING_STACK_ENABLED=true DEPLOY_PHASE=6 ./pvc_setup.sh

@@ -296,6 +296,8 @@ cm_cms_reports_manager_db_password: rman
 # Cloudera Manager API ports
 cm_https_port: 7183
 cm_http_port: 7180
+# Set true after 22_setup_cm_autotls.yml for Caddy CM reverse-proxy target port
+autotls_enabled: false
 
 ##### cm_server autotls variables:
 # SSH Authentication (Choose one)
@@ -455,6 +457,23 @@ deployment_portal_inventory_groups:
   - ecs-workers
 deployment_portal_data_service_links: []
 deployment_portal_extra_links: []
+
+# Caddy nip.io-style hostnames (all resolve to ops host IP; Caddy reverse-proxies to backends)
+# embedded_ip: cm.10-54-75-123.pvc.cloudera-labs.com  (wildcard DNS on base domain)
+# classic_nipio: cm.10-54-75-123.nip.io  (works without custom DNS)
+# flat: cm.pvc.cloudera-labs.com  (single A record for *.svc → ops IP)
+caddy_vhost_enabled: true
+caddy_vhost_public_base: pvc.cloudera-labs.com
+caddy_vhost_dns_mode: embedded_ip
+caddy_vhost_service_names:
+  portal: portal
+  cm: cm
+  pgadmin: pgadmin
+  grafana: grafana
+  prometheus: prometheus
+  alertmanager: alertmanager
+  ipa: ipa
+  ecs: ecs
 
 monitoring_stack_enabled: true
 monitoring_config_dir: /opt/cldr-monitoring

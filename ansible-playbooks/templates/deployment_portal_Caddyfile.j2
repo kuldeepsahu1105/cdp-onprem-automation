@@ -2,6 +2,86 @@
   admin off
 }
 
+{% if caddy_vhost_enabled | default(false) | bool %}
+{# --- nip.io-style hostnames (e.g. cm.10-54-75-123.pvc.cloudera-labs.com) --- #}
+http://{{ caddy_vhost_urls.cm.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
+  reverse_proxy {% if autotls_enabled | default(false) | bool %}https{% else %}http{% endif %}://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port if (autotls_enabled | default(false) | bool) else cm_http_port }} {
+    transport http {
+      tls_insecure_skip_verify
+    }
+  }
+}
+
+http://{{ caddy_vhost_urls.portal.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
+  root * /srv
+  try_files {path} /index.html
+  file_server
+}
+
+http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
+  reverse_proxy {{ deployment_portal_pgadmin_container }}:80
+}
+
+{% if deployment_portal_has_ipa | default(false) | bool %}
+http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
+  reverse_proxy https://{{ deployment_portal_ipa_fqdn }}:443 {
+    transport http {
+      tls_insecure_skip_verify
+    }
+  }
+}
+{% endif %}
+
+{% if deployment_portal_ecs_present | default(false) | bool %}
+http://{{ caddy_vhost_urls.ecs.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
+  reverse_proxy https://console.{{ ecs_app_domain }}:443 {
+    transport http {
+      tls_insecure_skip_verify
+    }
+  }
+}
+{% endif %}
+
+{% if monitoring_stack_enabled | default(false) | bool %}
+http://{{ caddy_vhost_urls.grafana.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
+  reverse_proxy {{ monitoring_grafana_container }}:3000
+}
+
+http://{{ caddy_vhost_urls.prometheus.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
+  reverse_proxy {{ monitoring_prometheus_container }}:9090
+}
+
+http://{{ caddy_vhost_urls.alertmanager.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
+  reverse_proxy {{ monitoring_alertmanager_container }}:9093
+}
+{% endif %}
+
+{# Fallback: IP:port path-based routes (legacy) #}
+http://:{{ deployment_portal_http_port }} {
+  root * /srv
+
+  @static not path /grafana* /prometheus* /alertmanager*
+  handle @static {
+    try_files {path} /index.html
+    file_server
+  }
+
+{% if monitoring_stack_enabled | default(false) | bool %}
+  handle_path /grafana/* {
+    reverse_proxy {{ monitoring_grafana_container }}:3000
+  }
+
+  handle_path /prometheus/* {
+    reverse_proxy {{ monitoring_prometheus_container }}:9090
+  }
+
+  handle_path /alertmanager/* {
+    reverse_proxy {{ monitoring_alertmanager_container }}:9093
+  }
+{% endif %}
+}
+
+{% else %}
 :{{ deployment_portal_http_port }} {
   root * /srv
 
@@ -25,3 +105,4 @@
   }
 {% endif %}
 }
+{% endif %}

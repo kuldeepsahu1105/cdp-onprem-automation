@@ -265,11 +265,17 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | Variable | Default | Description |
 |---|---|---|
 | `deployment_portal_enabled` | `true` | Run `28_setup_deployment_portal.yml` |
-| `deployment_portal_http_port` | `8088` | Caddy index + monitoring reverse proxy port |
-| `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI port on CM host |
-| `monitoring_stack_enabled` | `false` | Embed monitoring in playbook 28 |
+| `deployment_portal_host_group` | `auto` | `auto`, `ipaserver`, or `cldr-mngr` — where Caddy/pgAdmin/Grafana run |
+| `deployment_portal_postgres_host_group` | `cldr-mngr` | CM PostgreSQL host for pgAdmin |
+| `deployment_portal_http_port` | `8088` | Caddy index + Grafana/Prometheus/Alertmanager paths |
+| `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI on ops host |
+| `monitoring_stack_enabled` | `true` | Prometheus + Grafana + Alertmanager + cAdvisor with playbook 28 |
 | `deployment_portal_extra_links` | `[]` | Add `{name, url}` entries to the index page |
 | `monitoring_prometheus_extra_targets` | `[]` | Extra Prometheus scrape jobs |
+| `caddy_vhost_enabled` | `true` | Host-based Caddy URLs (nip.io-style) |
+| `caddy_vhost_public_base` | `pvc.cloudera-labs.com` | Base domain for `svc.<ip-dashed>.<base>` |
+| `caddy_vhost_dns_mode` | `embedded_ip` | `embedded_ip`, `classic_nipio`, or `flat` |
+| `autotls_enabled` | `false` | CM HTTPS port for Caddy `cm.*` vhost backend |
 
 ---
 

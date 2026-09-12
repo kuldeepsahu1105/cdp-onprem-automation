@@ -28,6 +28,29 @@
   <h1>Cloudera CDP deployment portal</h1>
   <p class="sub">Domain <code>{{ ctx.cluster_domain }}</code> · realm <code>{{ ctx.cluster_realm }}</code> · identity <code>{{ ctx.identity_provider }}</code> · generated {{ ctx.generated_at }}</p>
 
+  {% if ctx.caddy_vhosts.enabled %}
+  <section>
+    <h2>Lab domain (Caddy / nip.io-style) — {{ ctx.caddy_vhosts.public_base }}</h2>
+    <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> · ops IP <code>{{ ctx.caddy_vhosts.ops_ip }}</code> — hostnames resolve to the ops host; Caddy proxies to Cloudera and other UIs.</p>
+    <ul>
+      <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls.portal.url }}">{{ ctx.caddy_vhosts.urls.portal.hostname }}</a></li>
+      <li><strong>Cloudera Manager</strong> — <a href="{{ ctx.caddy_vhosts.urls.cm.url }}">{{ ctx.caddy_vhosts.urls.cm.hostname }}</a></li>
+      <li><strong>pgAdmin</strong> — <a href="{{ ctx.caddy_vhosts.urls.pgadmin.url }}">{{ ctx.caddy_vhosts.urls.pgadmin.hostname }}</a></li>
+      {% if ctx.monitoring.enabled %}
+      <li><strong>Grafana</strong> — <a href="{{ ctx.caddy_vhosts.urls.grafana.url }}">{{ ctx.caddy_vhosts.urls.grafana.hostname }}</a></li>
+      <li><strong>Prometheus</strong> — <a href="{{ ctx.caddy_vhosts.urls.prometheus.url }}">{{ ctx.caddy_vhosts.urls.prometheus.hostname }}</a></li>
+      <li><strong>Alertmanager</strong> — <a href="{{ ctx.caddy_vhosts.urls.alertmanager.url }}">{{ ctx.caddy_vhosts.urls.alertmanager.hostname }}</a></li>
+      {% endif %}
+      {% if ctx.identity.ipa_caddy_url %}
+      <li><strong>FreeIPA</strong> — <a href="{{ ctx.identity.ipa_caddy_url }}">{{ ctx.caddy_vhosts.urls.ipa.hostname }}</a></li>
+      {% endif %}
+      {% if ctx.ecs.caddy_url %}
+      <li><strong>ECS console (proxy)</strong> — <a href="{{ ctx.ecs.caddy_url }}">{{ ctx.caddy_vhosts.urls.ecs.hostname }}</a></li>
+      {% endif %}
+    </ul>
+  </section>
+  {% endif %}
+
   <section>
     <h2>Ops host (portal, pgAdmin, Grafana, Prometheus)</h2>
     <ul>

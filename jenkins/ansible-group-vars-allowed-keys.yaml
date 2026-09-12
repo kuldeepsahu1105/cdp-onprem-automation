@@ -50,6 +50,10 @@ allowed_keys:
   - deployment_portal_http_port
   - deployment_portal_pgadmin_host_port
   - monitoring_stack_enabled
+  - caddy_vhost_enabled
+  - caddy_vhost_public_base
+  - caddy_vhost_dns_mode
+  - autotls_enabled
   - monitoring_grafana_admin_password
 
   # OS / dependency versions
