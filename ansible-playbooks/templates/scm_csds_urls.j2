@@ -1,0 +1,18 @@
+{# Renders a YAML list of CSD download URLs for the CM host OS (RHEL). #}
+{% if csd_redhat_repo | default('auto') == 'auto' %}
+{% set rh_yum = 'redhat' ~ (ansible_distribution_major_version | default('8') | string) %}
+{% else %}
+{% set rh_yum = csd_redhat_repo %}
+{% endif %}
+{% set archive = cm_repo_public_base_url | default('https://archive.cloudera.com/p') %}
+{% set svc = base_cluster_install_services | default({}) %}
+{% set use_svc_toggles = csd_respect_service_toggles | default(true) %}
+{% if csd_install_dataviz | default(true) and ((not use_svc_toggles) or (svc.dataviz | default(false))) %}
+- {{ archive }}/cdv/{{ cdv_version }}/{{ rh_yum }}/yum/{{ cdv_dataviz_csd_jar }}
+{% endif %}
+{% if csd_install_nifi_registry | default(true) and ((not use_svc_toggles) or (svc.nifi_registry | default(false))) %}
+- {{ archive }}/cfm2/{{ cfm_version }}/{{ rh_yum }}/yum/tars/parcel/{{ cfm_nifi_registry_csd_jar }}
+{% endif %}
+{% if csd_install_nifi | default(true) and ((not use_svc_toggles) or (svc.nifi | default(false))) %}
+- {{ archive }}/cfm2/{{ cfm_version }}/{{ rh_yum }}/yum/tars/parcel/{{ cfm_nifi_csd_jar }}
+{% endif %}

@@ -44,8 +44,16 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 | `target_cpu_architecture` | `auto` | `auto`, `x86_64`, or `arm64` — set by wrapper when `CPU_ARCHITECTURE=arm64` |
 | `ecs_deploy_on_arm64` | `false` | Allow ECS on ARM64/Graviton (experimental) |
 | `cdh_parcel_arm64_suffix` | `.aarch64le` | Appended to parcel suffix on ARM64 workers when `auto` |
-| `scm_csds` | `[]` | CSD JAR URLs (all OS); leave empty on Ubuntu |
-| `scm_csds_redhat` | list | CSD JAR URLs for RHEL-based CM (RPM archive paths) |
+| `scm_csds` | `[]` | Explicit CSD JAR URLs (overrides auto-built list) |
+| `scm_csds_redhat` | `[]` | Optional explicit RHEL CSD URL list (overrides auto-build) |
+| `cdv_version` | `8.0.7` | Cloudera Data Visualization (CDV) CSD path version, e.g. `8.1.5` |
+| `cdv_dataviz_csd_jar` | `DATAVIZ-{{ cdv_version }}-…` | DATAVIZ CSD jar basename under `cdv/<version>/<redhat8\|9>/yum/` |
+| `cfm_version` | `2.1.7.3004` | Cloudera Flow Management (NiFi) CSD path version |
+| `cfm_nifi_app_version` | `1.28.1` | NiFi app version segment in `NIFI-*.jar` / `NIFIREGISTRY-*.jar` |
+| `cfm_nifi_csd_jar` / `cfm_nifi_registry_csd_jar` | computed | Jar basenames under `cfm2/<cfm_version>/…/parcel/` |
+| `csd_redhat_repo` | `auto` | `redhat8`, `redhat9`, or `auto` from CM host OS |
+| `csd_build_urls_enabled` | `true` | Build CSD URLs from version vars on RHEL when lists above are empty |
+| `csd_respect_service_toggles` | `true` | Only include CSDs for enabled `base_cluster_install_services` keys |
 | `cm_repo_username` | — | Required (archive credentials) |
 | `cm_repo_password` | — | Required (archive credentials) |
 

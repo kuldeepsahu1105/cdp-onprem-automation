@@ -205,11 +205,25 @@ databases:
   - { name: "das", user: "das", password: "das" }
 
 scm_csds: []
-# Optional CSD JARs for RHEL-based CM (RPM archive paths). Leave scm_csds empty on Ubuntu/Debian.
-scm_csds_redhat:
-  - https://archive.cloudera.com/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar
-  - https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel/NIFIREGISTRY-1.28.1.2.1.7.3004-1.jar
-  - https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel/NIFI-1.28.1.2.1.7.3004-1.jar
+# Optional explicit CSD URL list (overrides auto-built URLs). Leave empty to build from version vars below.
+scm_csds_redhat: []
+
+# CSD archive versions (https://archive.cloudera.com/p/...). Update jar basenames when build ids change.
+cdv_version: "8.0.7"
+cdv_dataviz_csd_jar: "DATAVIZ-{{ cdv_version }}-b50.p1.71299628.jar"
+cfm_version: "2.1.7.3004"
+cfm_nifi_app_version: "1.28.1"
+cfm_nifi_csd_jar: "NIFI-{{ cfm_nifi_app_version }}.{{ cfm_version }}-1.jar"
+cfm_nifi_registry_csd_jar: "NIFIREGISTRY-{{ cfm_nifi_app_version }}.{{ cfm_version }}-1.jar"
+# redhat8 | redhat9 | auto (CM host RHEL major version)
+csd_redhat_repo: auto
+# When scm_csds / scm_csds_redhat are empty, build URLs from versions (RHEL CM only)
+csd_build_urls_enabled: true
+# Include a CSD only when matching base_cluster_install_services toggle (set false to install all three)
+csd_respect_service_toggles: true
+csd_install_dataviz: true
+csd_install_nifi: true
+csd_install_nifi_registry: true
 
 # When true, pure Debian hosts use Ubuntu CM apt repo path (Cloudera supports Ubuntu only)
 cm_debian_use_ubuntu_repo: false

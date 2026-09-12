@@ -23,6 +23,18 @@ allowed_keys:
   - cm_numeric_version
   - cdh_version
   - cdh_numeric_version
+  - cdv_version
+  - cdv_dataviz_csd_jar
+  - cfm_version
+  - cfm_nifi_app_version
+  - cfm_nifi_csd_jar
+  - cfm_nifi_registry_csd_jar
+  - csd_redhat_repo
+  - csd_build_urls_enabled
+  - csd_respect_service_toggles
+  - csd_install_dataviz
+  - csd_install_nifi
+  - csd_install_nifi_registry
   - ecs_pvc_ds_version
   - ecs_parcel_version
   - cdh_basecluster_name
