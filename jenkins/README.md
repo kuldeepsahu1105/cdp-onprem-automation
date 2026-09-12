@@ -18,7 +18,13 @@ Declarative pipeline with **checkbox stage selection**, **configurable validatio
 3. Run the job — it aborts immediately after reloading the parameter UI
 4. Run again with your desired stage checkboxes
 
-Parameter **help text** (stages, validation checks, security group, `ALLOWED_PORTS`, `CLDR_EIP_NAME`, etc.) lives in the Jenkinsfile `description` / `descriptionPropertyValue` fields and appears on **Build with Parameters** after a refresh. Stage and validation checkboxes also show a **per-option summary** next to each name via Extended Choice `descriptionPropertyValue`.
+Parameter help after **REFRESH_JENKINSFILE=YES**:
+
+- **`PIPELINE_STAGES_REFERENCE`** — multiline **text** parameter (default = full stage table). Always visible on **Build with Parameters**; use this when Extended Choice long descriptions do not show in your Jenkins theme.
+- **`PIPELINE_STAGES`** — short checkbox help line + per-option hints via Extended Choice `descriptionPropertyValue` (plugin-dependent; some UIs only show these in job configuration).
+- Other parameters — `description` fields on boolean/string/choice params (security group, `ALLOWED_PORTS`, etc.).
+
+Each run also prints a **quick reference** in the console at **Resolve Stages** (see `echoPipelineStagesQuickReference` in the Jenkinsfile).
 
 ## Default parameter values
 
@@ -41,6 +47,8 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALIDATE,TERRAFORM`.
 
 **Legacy token:** Saved jobs may still submit **`CDH_BASE`** — it expands to `CM_TLS_KRB_LDAP` + `CDH_INSTALL`. Run **REFRESH_JENKINSFILE=YES** after Jenkinsfile changes to reload checkboxes.
+
+**Migrate old `PREREQS,IDENTITY,CM_INSTALL,CDH_BASE`:** check **`PREREQS,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL`**. Add **`VALIDATE,TERRAFORM`** if you still provision EC2 (old string omitted them). **`PORTAL`** is auto-inserted when **`DEPLOYMENT_PORTAL_ENABLED=true`** (default) and you select identity/CM/CDH stages without checking PORTAL.
 
 ## Stage checkboxes (`PIPELINE_STAGES`)
 
