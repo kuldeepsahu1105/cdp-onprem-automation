@@ -270,6 +270,8 @@ _run_deployment_portal_bootstrap() {
   fi
   local portal_extra=()
   while IFS= read -r -d '' arg; do portal_extra+=("$arg"); done < <(_portal_extra_args)
+  # Bootstrap Caddy/pgAdmin/index only; Grafana/Prometheus via 29 or refresh with monitoring enabled.
+  portal_extra+=(-e monitoring_stack_enabled=false)
   run_playbook 28_setup_deployment_portal.yml "${portal_extra[@]}"
 }
 
@@ -322,6 +324,10 @@ case "$DEPLOY_PHASE" in
   all|full)
     run_phase_1
     sleep 5
+    if _portal_enabled; then
+      run_phase_portal
+      sleep 5
+    fi
     run_phase_2
     sleep 5
     run_phase_3
@@ -330,10 +336,6 @@ case "$DEPLOY_PHASE" in
     sleep 5
     run_phase_cdh
     sleep 5
-    if _portal_enabled; then
-      run_phase_portal
-      sleep 5
-    fi
     if _monitoring_enabled; then
       run_phase_monitoring
       sleep 5

@@ -46,18 +46,18 @@ If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALI
 
 Select one or more stage checkboxes. Fixed run order (each Ansible step is its own Jenkins stage in the UI):
 
-`VALIDATE` → `TERRAFORM` → `PREREQS` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `PORTAL` → `MONITORING` → `ECS_INSTALL`
+`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL`
 
 | Checkbox | What runs |
 |---|---|
 | `VALIDATE` | `validate-prereqs.sh` — only checks selected in `VALIDATION_CHECKS` (no deploy) |
 | `TERRAFORM` | EC2/VPC/SG/EIP via Terraform; `inventory.ini` + `.pem` key |
-| `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 (no portal/monitoring) |
-| `IDENTITY` | Ansible **phase 2** — FreeIPA or Active Directory (from inventory) |
+| `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 |
+| `PORTAL` | Bootstrap Caddy/pgAdmin/index (`28`); before CM when `DEPLOYMENT_PORTAL_ENABLED` |
+| `IDENTITY` | Ansible **phase 2** — FreeIPA or AD; refreshes portal index (`31`) |
 | `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
-| `CM_TLS_KRB_LDAP` | Auto-TLS, Kerberos, CMS, LDAP (22–25) |
-| `CDH_INSTALL` | CDH base cluster (`26_setup_base_cluster.yml`) |
-| `PORTAL` | `28_setup_deployment_portal.yml` (when `DEPLOYMENT_PORTAL_ENABLED`; after CM/CDH milestones) |
+| `CM_TLS_KRB_LDAP` | Auto-TLS, Kerberos, CMS, LDAP (22–25); portal refresh |
+| `CDH_INSTALL` | CDH base cluster (`26_setup_base_cluster.yml`); portal refresh |
 | `MONITORING` | `29_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
 | `ECS_INSTALL` | ECS cluster (`27`); optional `30_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` |
 
@@ -72,7 +72,7 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | Prerequisites only | `VALIDATE`, `PREREQS` |
 | CM install only | `VALIDATE`, `CM_INSTALL` |
 | Terraform + CM | `VALIDATE`, `TERRAFORM`, `CM_INSTALL` |
-| CM + CDH base | `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CM_TLS_KRB_LDAP`, `CDH_INSTALL`, `PORTAL` |
+| CM + CDH base | `VALIDATE`, `TERRAFORM`, `PREREQS`, `PORTAL`, `IDENTITY`, `CM_INSTALL`, `CM_TLS_KRB_LDAP`, `CDH_INSTALL` |
 | Full stack (through ECS) | All of the above + `MONITORING`, `ECS_INSTALL` |
 
 Ansible-only stages (no `TERRAFORM`) require existing `ansible-playbooks/inventory.ini`.

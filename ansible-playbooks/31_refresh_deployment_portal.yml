@@ -1,6 +1,6 @@
 ### ansible-playbook -i inventory.ini 31_refresh_deployment_portal.yml
 # Update Caddy index/pgAdmin/monitoring URLs after CM, base cluster, ECS, or data services change.
-# Run 28_setup_deployment_portal.yml once first (or DEPLOY_PHASE=1 with portal bootstrap).
+# Run 28 once (Jenkins PORTAL stage, before CM). Re-run after CM/TLS/CDH/ECS to update the index.
 ---
 - name: Rebuild deployment portal facts
   hosts: localhost

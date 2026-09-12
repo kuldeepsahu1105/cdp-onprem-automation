@@ -10,14 +10,16 @@ pipeline {
     extendedChoice(
       name: 'PIPELINE_STAGES',
       type: 'PT_CHECKBOX',
-      value: 'VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,PORTAL,MONITORING,ECS_INSTALL',
+      value: 'VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL',
       defaultValue: 'VALIDATE,TERRAFORM',
       multiSelectDelimiter: ',',
       visibleItemCount: 10,
       quoteValue: false,
-      description: '''Stage checkboxes (any combination): VALIDATE, TERRAFORM, PREREQS, IDENTITY, CM_INSTALL, CM_TLS_KRB_LDAP, CDH_INSTALL, PORTAL, MONITORING, ECS_INSTALL.
+      description: '''Stage checkboxes (any combination): VALIDATE, TERRAFORM, PREREQS, PORTAL, IDENTITY, CM_INSTALL, CM_TLS_KRB_LDAP, CDH_INSTALL, MONITORING, ECS_INSTALL.
 
-Fixed run order: VALIDATE → TERRAFORM → PREREQS → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → PORTAL → MONITORING → ECS_INSTALL.
+Fixed run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL.
+
+PORTAL bootstraps Caddy/pgAdmin/index (playbook 28) before CM; CM/TLS/CDH/ECS Ansible phases refresh the site (31) as links become available.
 
 Legacy CDH_BASE expands to CM_TLS_KRB_LDAP + CDH_INSTALL. Legacy CDH_INSTALL token maps to CDH_INSTALL (CDH base cluster only).
 
@@ -27,13 +29,13 @@ VALIDATE — Jenkins stage "Validate Prerequisites": runs jenkins/scripts/valida
 
 TERRAFORM — Jenkins stage "Terraform — Provision EC2": runs jenkins/scripts/run-terraform.sh (plan/apply; DRY_RUN = plan/check only). Provisions VPC/SG/EC2/EIP per parameters; persists state under holautosa; writes ansible-playbooks/inventory.ini and SSH PEM.
 
-PREREQS — Ansible phase 1: OS prereqs playbooks 01–09 (no portal/monitoring).
+PREREQS — Ansible phase 1: OS prereqs playbooks 01–09.
 
-IDENTITY — Ansible phase 2: FreeIPA or AD.
+PORTAL — Bootstrap deployment portal (28): Docker, Caddy, index, pgAdmin shell; respects DEPLOYMENT_PORTAL_ENABLED.
 
-CM_INSTALL — Ansible phase 3: CM repos, Postgres, CM server, license.
+IDENTITY — Ansible phase 2: FreeIPA or AD; refreshes portal index when portal is enabled.
 
-PORTAL — Ansible portal bootstrap (28_setup_deployment_portal.yml); respects DEPLOYMENT_PORTAL_ENABLED.
+CM_INSTALL — Ansible phase 3: CM repos, Postgres, CM server, license; refreshes portal index.
 
 CM_TLS_KRB_LDAP — Auto-TLS, Kerberos, CMS, LDAP (22–25).
 
@@ -42,7 +44,7 @@ CDH_INSTALL — CDH base cluster (26_setup_base_cluster.yml).
 MONITORING — Grafana/Prometheus stack (29); respects MONITORING_STACK_ENABLED (needs PORTAL first).
 
 ECS_INSTALL — ECS cluster (27) and optional ECS data services when ECS_DATA_SERVICES_DEPLOY_ENABLED.''',
-      descriptionPropertyValue: '''VALIDATE: validate-prereqs.sh,TERRAFORM: run-terraform.sh,PREREQS: phase 1 prereqs,IDENTITY: phase 2 identity,CM_INSTALL: phase 3 CM,CM_TLS_KRB_LDAP: phase 4 TLS/Kerberos/LDAP,CDH_INSTALL: phase 5 CDH base,PORTAL: phase 6 portal,MONITORING: phase 7 monitoring,ECS_INSTALL: phase 8 ECS'''
+      descriptionPropertyValue: '''VALIDATE: validate-prereqs.sh,TERRAFORM: run-terraform.sh,PREREQS: phase 1 prereqs,PORTAL: phase 2 portal bootstrap,IDENTITY: phase 3 identity,CM_INSTALL: phase 4 CM,CM_TLS_KRB_LDAP: phase 5 TLS/LDAP,CDH_INSTALL: phase 6 CDH,MONITORING: phase 7 monitoring,ECS_INSTALL: phase 8 ECS'''
     )
     extendedChoice(
       name: 'VALIDATION_CHECKS',
@@ -165,7 +167,7 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
     booleanParam(
       name: 'DEPLOYMENT_PORTAL_ENABLED',
       defaultValue: true,
-      description: 'Run Ansible PORTAL stage (28_setup_deployment_portal.yml). Portal index is refreshed after CM, TLS, CDH, and ECS milestones.'
+      description: 'Bootstrap portal before CM (28). Index is refreshed incrementally after Identity, CM, TLS, CDH, monitoring, and ECS (31_refresh in each Ansible phase).'
     )
     booleanParam(
       name: 'ECS_DATA_SERVICES_DEPLOY_ENABLED',
@@ -348,25 +350,25 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
       when { expression { return shouldRunAnsibleStage('PREREQS') } }
       steps { script { runAnsibleDeployPhase('1') } }
     }
-    stage('Ansible 2 — Identity') {
+    stage('Ansible 2 — Deployment Portal (bootstrap)') {
+      when { expression { return shouldRunAnsibleStage('PORTAL') && portalDeployEnabled() } }
+      steps { script { runAnsibleDeployPhase('portal') } }
+    }
+    stage('Ansible 3 — Identity') {
       when { expression { return shouldRunAnsibleStage('IDENTITY') } }
       steps { script { runAnsibleDeployPhase('2') } }
     }
-    stage('Ansible 3 — CM Install') {
+    stage('Ansible 4 — CM Install') {
       when { expression { return shouldRunAnsibleStage('CM_INSTALL') } }
       steps { script { runAnsibleDeployPhase('3') } }
     }
-    stage('Ansible 4 — CM TLS / Kerberos / LDAP') {
+    stage('Ansible 5 — CM TLS / Kerberos / LDAP') {
       when { expression { return shouldRunAnsibleStage('CM_TLS_KRB_LDAP') } }
       steps { script { runAnsibleDeployPhase('cm_tls') } }
     }
-    stage('Ansible 5 — CDH Base Cluster') {
+    stage('Ansible 6 — CDH Base Cluster') {
       when { expression { return shouldRunAnsibleStage('CDH_INSTALL') } }
       steps { script { runAnsibleDeployPhase('cdh') } }
-    }
-    stage('Ansible 6 — Deployment Portal') {
-      when { expression { return shouldRunAnsibleStage('PORTAL') && portalDeployEnabled() } }
-      steps { script { runAnsibleDeployPhase('portal') } }
     }
     stage('Ansible 7 — Monitoring Stack') {
       when { expression { return shouldRunAnsibleStage('MONITORING') && monitoringStackEnabled() } }
@@ -546,22 +548,9 @@ def knownPipelineStages() {
 
 def orderedAnsibleStageIds() {
   return [
-    'PREREQS', 'IDENTITY', 'CM_INSTALL', 'CM_TLS_KRB_LDAP', 'CDH_INSTALL',
-    'PORTAL', 'MONITORING', 'ECS_INSTALL',
+    'PREREQS', 'PORTAL', 'IDENTITY', 'CM_INSTALL', 'CM_TLS_KRB_LDAP', 'CDH_INSTALL',
+    'MONITORING', 'ECS_INSTALL',
   ]
-}
-
-def portalAutoInsertAfterStage(List ansibleStageIds) {
-  if (ansibleStageIds.contains('CDH_INSTALL')) {
-    return 'CDH_INSTALL'
-  }
-  if (ansibleStageIds.contains('CM_TLS_KRB_LDAP')) {
-    return 'CM_TLS_KRB_LDAP'
-  }
-  if (ansibleStageIds.contains('CM_INSTALL')) {
-    return 'CM_INSTALL'
-  }
-  return null
 }
 
 def ansiblePhaseForStage(String stageId) {
@@ -646,17 +635,17 @@ def resolvePipelineStages(def stagesCsv, def validationCsv) {
   def stages = effectivePipelineStages(stagesCsv)
   def ansibleStageIds = orderedAnsibleStageIds().findAll { stages.contains(it) }
   if (portalDeployEnabled() && !ansibleStageIds.contains('PORTAL')) {
-    def needsPortal = ansibleStageIds.any { it in ['MONITORING', 'ECS_INSTALL'] }
-      || ansibleStageIds.contains('CDH_INSTALL')
+    def needsPortal = ansibleStageIds.any {
+      it in ['IDENTITY', 'CM_INSTALL', 'CM_TLS_KRB_LDAP', 'CDH_INSTALL', 'MONITORING', 'ECS_INSTALL']
+    }
     if (needsPortal) {
-      def anchor = portalAutoInsertAfterStage(ansibleStageIds)
-      if (anchor != null) {
-        def anchorIdx = ansibleStageIds.indexOf(anchor)
-        ansibleStageIds = ansibleStageIds[0..anchorIdx] + ['PORTAL'] + ansibleStageIds.drop(anchorIdx + 1)
+      def prereqIdx = ansibleStageIds.indexOf('PREREQS')
+      if (prereqIdx >= 0) {
+        ansibleStageIds = ansibleStageIds[0..prereqIdx] + ['PORTAL'] + ansibleStageIds.drop(prereqIdx + 1)
       } else {
         ansibleStageIds = ['PORTAL'] + ansibleStageIds
       }
-      echo "INFO: DEPLOYMENT_PORTAL_ENABLED — auto-including PORTAL after ${anchor ?: 'start'}."
+      echo 'INFO: DEPLOYMENT_PORTAL_ENABLED — auto-including PORTAL bootstrap before CM (incremental index refresh in later phases).'
     }
   }
   def ansiblePhases = ansibleStageIds.collect { ansiblePhaseForStage(it) }
