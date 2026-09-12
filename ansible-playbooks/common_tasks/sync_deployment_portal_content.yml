@@ -195,6 +195,20 @@
         src: monitoring_docker-compose.yml.j2
         dest: "{{ monitoring_config_dir }}/docker-compose.yml"
         mode: "0644"
+      register: monitoring_compose_render
+
+    - name: Force-recreate monitoring containers when compose changed or PORTAL stack recreate
+      ansible.builtin.command:
+        argv: >-
+          {{
+            deployment_portal_compose_argv
+            + ['-f', monitoring_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', '--remove-orphans']
+          }}
+      when:
+        - monitoring_compose_render is changed or (deployment_portal_stack_recreate | default(false) | bool)
+      register: monitoring_stack_force_recreate
+      failed_when: monitoring_stack_force_recreate.rc != 0
+      changed_when: true
 
     - name: Ensure monitoring stack is running
       ansible.builtin.command:
@@ -203,6 +217,10 @@
             deployment_portal_compose_argv
             + ['-f', monitoring_config_dir ~ '/docker-compose.yml', 'up', '-d', '--remove-orphans']
           }}
+      when: not (
+          monitoring_compose_render is changed
+          or (deployment_portal_stack_recreate | default(false) | bool)
+        )
       register: monitoring_compose_up
       changed_when: >-
         'Creating' in monitoring_compose_up.stdout
