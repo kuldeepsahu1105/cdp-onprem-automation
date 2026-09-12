@@ -1,9 +1,10 @@
 ---
+# systemctl is-active: 0=active, 3=inactive (not an error — we wait below). Fail only on unknown rc (e.g. 4).
 - name: Check if Cloudera Manager Server is already running
   ansible.builtin.command: systemctl is-active cloudera-scm-server
   register: cm_status
   changed_when: false
-  failed_when: cm_status.rc > 1
+  failed_when: cm_status.rc | int not in [0, 3]
   become: true
 
 - name: Print Cloudera SCM Server startup status - ALREADY RUNNING
@@ -13,8 +14,8 @@
 
 - name: Wait for Cloudera Manager Server port
   ansible.builtin.wait_for:
-    port: "{{ cm_api_port | default(cm_http_port) | default(7180) }}"
-    host: "{{ ansible_default_ipv4.address | default('127.0.0.1') }}"
+    port: "{{ cm_api_port | default(cm_https_port) | default(cm_http_port) | default(7180) }}"
+    host: "{{ cm_api_probe_host | default(ansible_default_ipv4.address) | default('127.0.0.1') }}"
     delay: 10
     timeout: 300
   when: cm_status.stdout != "active"
