@@ -14,6 +14,7 @@ Scan this before deep-diving playbooks/Jenkins. Details: `ansible-playbooks/docs
 - Hairpin from the same ops host is optional — warn, do not fail the pipeline on it alone.
 - **IPA** `reverse_proxy`: `header_up Host` = ipaserver FQDN. **CM** block: split HTTP vs HTTPS + `transport` per autotls mode. Post-CM: CM API **`frontend_url`** → Caddy CM vhost (`apply_cm_caddy_load_balancer.yml`); facts **`cm_caddy_public_url`**, **`ecs_caddy_console_url`** from `caddy_vhost_urls.j2`. Tier A / portal CM probe: **`probe_cm_manager_ui_http.yml`** when `127.0.0.1:7180` is closed.
 - **RHEL:** remove `podman-docker` before installing `docker-ce` (conflicts with Docker CE).
+- **Monitoring:** Grafana/Prometheus/Alertmanager are **not** published on host ports — only **Caddy :8088** (vhost `grafana.<dashed-ip>.pvc.cloudera-labs.com` or path `/grafana/`). Caddy upstreams: Compose service names `grafana` / `prometheus` / `alertmanager` on `deployment_portal`. **cAdvisor** direct **:8089**. PORTAL bootstrap forces `monitoring_stack_enabled=false`; run **32** / Jenkins **MONITORING** to deploy + wire Caddy. Milestone **`monitoring`** verifies `/grafana/login` and `/prometheus/-/healthy` on localhost.
 
 ## Ansible pitfalls
 
