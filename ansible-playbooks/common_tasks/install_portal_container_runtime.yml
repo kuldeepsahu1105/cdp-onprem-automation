@@ -15,8 +15,17 @@
     - ansible_os_family == 'RedHat'
     - portal_docker_use_ce | default(true) | bool
 
-- name: Install Docker CE engine and Compose plugin (RHEL family)
+# RHEL AppStream podman-docker provides a virtual "docker" package that conflicts with docker-ce.
+- name: Remove podman-docker shim before Docker CE install (RHEL family)
   ansible.builtin.package:
+    name: podman-docker
+    state: absent
+  when:
+    - ansible_os_family == 'RedHat'
+    - portal_docker_use_ce | default(true) | bool
+
+- name: Install Docker CE engine and Compose plugin (RHEL family)
+  ansible.builtin.dnf:
     name:
       - docker-ce
       - docker-ce-cli
@@ -24,6 +33,7 @@
       - docker-compose-plugin
     state: present
     disable_gpg_check: false
+    allowerasing: true
   when:
     - ansible_os_family == 'RedHat'
     - portal_docker_use_ce | default(true) | bool
@@ -75,8 +85,9 @@
     msg: >-
       Docker service is not available on {{ inventory_hostname }}.
       On RHEL, the 'docker' package is a Podman CLI shim without docker.service.
-      Keep portal_docker_use_ce: true (default) so Docker CE is installed from download.docker.com,
-      or install docker-ce manually and ensure egress to Docker's repository.
+      Keep portal_docker_use_ce: true (default) so Docker CE is installed from download.docker.com
+      (podman-docker is removed automatically when present), or install docker-ce manually
+      after `dnf remove podman-docker` and ensure egress to Docker's repository.
   when:
     - portal_docker_start is failed
     - "'Could not find the requested service docker' in (portal_docker_start.msg | default(''))"
