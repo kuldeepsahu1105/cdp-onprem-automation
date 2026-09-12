@@ -163,6 +163,7 @@ Jenkins `text` parameters render as a **multiline text area**. Only **Ansible-on
 - Merged at runtime via `ansible-playbooks/jenkins_override.yml` + `-e @file` (not committed; never under `group_vars/all/`).
 - Disallowed or unknown keys fail validation when Ansible stages are selected.
 - CM archive login: use `CM_REPO_USERNAME` / `CM_REPO_PASSWORD` (not the textarea).
+- **Caddy edge port:** default **`deployment_portal_http_port: 81`** in `group_vars/all.yml`. Do not paste legacy **`8088`** into the textarea — CM API Caddy probes and Tier **B** checks use this port. Jenkins `render-ansible-group-vars-override.py` rewrites **8088 → 81** and always injects **81** on the controller so stale overrides cannot probe `:8088` after Caddy moved to **81**. Open security group **81** from the Jenkins agent CIDR for CM/portal Tier **B**.
 
 ## License and CM archive credentials
 
