@@ -69,7 +69,6 @@
     validate_certs: no
     body_format: json
     body:
-      message: "Ansible — enable Kerberos integration"
       items: "{{ cm_krb_desired_items }}"
     status_code: [200, 204, 301, 303]
   register: cm_kerberos_api_result

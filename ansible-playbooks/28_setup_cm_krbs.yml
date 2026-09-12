@@ -79,7 +79,7 @@
               value: "{{ krb5_ad_delete_on_regenerate | default(true) | lower }}"
             - name: AD_KDC_DOMAIN
               value: "{{ krb5_ad_suffix }}"
-        status_code: [200, 204]
+        status_code: [200, 204, 301, 303]
       register: cm_kerberos_ad_config
       when:
         - identity_provider_effective == 'ad'
