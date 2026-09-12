@@ -169,12 +169,10 @@
 
     - name: Add ECS parcel repository to Cloudera Manager
       cloudera.cluster.cm_config:
-        host: "{{ cm_host }}"
-        port: "{{ cm_api_port }}"
+        url: "{{ cm_api_url }}"
         username: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
         verify_tls: false
-        force_tls: "{{ autotls_enabled | default(false) }}"
         parameters:
           REMOTE_PARCEL_REPO_URLS: "{{ cm_parcel_repo_urls | join(',') }}"
       when: ecs_parcel_repo_url | length > 0
@@ -250,12 +248,10 @@
 
     - name: Create and start ECS (Experience) cluster
       cloudera.cluster.cluster:
-        host: "{{ cm_host }}"
-        port: "{{ cm_api_port }}"
+        url: "{{ cm_api_url }}"
         username: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
         verify_tls: false
-        force_tls: "{{ autotls_enabled | default(false) }}"
         name: "{{ ecs_cluster_name }}"
         display_name: "{{ ecs_cluster_name }}"
         cluster_version: "{{ ecs_parcel_version_effective }}"
@@ -321,12 +317,10 @@
 
     - name: Start existing ECS cluster services
       cloudera.cluster.cluster:
-        host: "{{ cm_host }}"
-        port: "{{ cm_api_port }}"
+        url: "{{ cm_api_url }}"
         username: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
         verify_tls: false
-        force_tls: "{{ autotls_enabled | default(false) }}"
         name: "{{ ecs_cluster_name }}"
         state: started
       when: existing_ecs_cluster.status == 200
