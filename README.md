@@ -45,6 +45,7 @@ Both formats set the same variables and produce the same `TF_VARS` for Terraform
 | Section | Variables |
 |---|---|
 | General | `AWS_REGION`, `OWNER`, `ENVIRONMENT`, `TERRAFORM_VERSION` |
+| CPU architecture | `CPU_ARCHITECTURE` (`x86_64` \| `arm64`), `APPLY_GRAVITON_DEFAULTS`, `AUTO_RESOLVE_ARM64_AMI`, `ECS_DEPLOY_ON_ARM64` |
 | Cloudera | `CM_VERSION` |
 | AWS resources | `EXISTING_SG_NAME`, `EXISTING_KEYPAIR_NAME` |
 | AMI | `AMI_ID` (shared across instance groups) |
@@ -201,6 +202,26 @@ Spark is bundled in the CDH parcel for 7.3.1+ — a separate SPARK3 download is 
 - **CDH workers on RHEL**: use `el8` / `el9` (or `auto`). ARM64 workers use `el8.aarch64le` / `el9.aarch64le`.
 - **ECS (Data Services)**: see [ECS deployment](#ecs-data-services-deployment) for instance groups, variables, and `27_setup_ecs_cluster.yml`.
 - **Internal mirror**: Ubuntu cldr-mngr mirrors apt `.deb` packages and CDH parcels to its local web server (`16` + `17` playbooks).
+
+### ARM64 / AWS Graviton (optional)
+
+Set `CPU_ARCHITECTURE=arm64` in `.tfvars.env` or `.tfvars.yaml` to target Graviton instances:
+
+| Variable | Default | Description |
+|---|---|---|
+| `CPU_ARCHITECTURE` | `x86_64` | `x86_64` or `arm64` |
+| `APPLY_GRAVITON_DEFAULTS` | `true` | Remap `m5`/`r5` → `m7g`/`r7g` when `arm64` |
+| `AUTO_RESOLVE_ARM64_AMI` | `true` | Lookup latest RHEL 9 arm64 AMI in `AWS_REGION` |
+| `ECS_DEPLOY_ON_ARM64` | `false` | ECS on ARM64 is off by default (experimental) |
+
+```bash
+# .tfvars.env example — Graviton deployment
+CPU_ARCHITECTURE="arm64"
+# Optional: pin ARM AMI instead of auto-resolve
+# AMI_ID="ami-xxxxxxxx"
+```
+
+When `CPU_ARCHITECTURE=arm64`, ECS instance counts default to `0` unless `ECS_DEPLOY_ON_ARM64=true`. CDH parcel suffix auto-detection appends `.aarch64le` on RHEL and Ubuntu ARM workers.
 
 ## Nutanix Terraform
 

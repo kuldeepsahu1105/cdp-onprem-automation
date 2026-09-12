@@ -19,31 +19,33 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$REPO_ROOT/scripts/lib/portable.sh"
 # shellcheck source=../scripts/lib/ansible_env.sh
 source "$REPO_ROOT/scripts/lib/ansible_env.sh"
+# shellcheck source=../scripts/lib/ui.sh
+source "$REPO_ROOT/scripts/lib/ui.sh"
 
 ensure_bash
 
 DEPLOY_PHASE="${DEPLOY_PHASE:-1}"
 CONTROL_MODE="$(detect_control_mode "$SCRIPT_DIR/inventory.ini")"
 
+ARCH_ANSIBLE_ARGS=()
+if [[ "${CPU_ARCHITECTURE:-x86_64}" == "arm64" ]]; then
+  ARCH_ANSIBLE_ARGS+=(-e "target_cpu_architecture=arm64")
+  ARCH_ANSIBLE_ARGS+=(-e "ecs_deploy_on_arm64=${ECS_DEPLOY_ON_ARM64:-false}")
+fi
+
 print_banner() {
-  echo "================================================================="
-  echo "     CLOUDERA ON-PREMISE INSTALLATION (phase: $DEPLOY_PHASE)"
-  echo "     Control mode: $CONTROL_MODE | OS: $(uname -s)"
-  echo "================================================================="
+  ui_banner "Cloudera Private Cloud Deployment" "Phase: ${DEPLOY_PHASE} | Control: ${CONTROL_MODE} | CPU: ${CPU_ARCHITECTURE:-x86_64}"
 }
 
 print_message() {
-  echo ""
-  echo "-----------------------------------------------------------------"
-  echo ">> $1"
-  echo "-----------------------------------------------------------------"
+  ui_section "$1"
 }
 
 run_playbook() {
   local playbook="$1"
   shift || true
-  print_message "Running $playbook"
-  ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "$@"
+  ui_step "Running ${playbook}"
+  ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" "$@"
 }
 
 cd "$SCRIPT_DIR"
@@ -154,7 +156,4 @@ case "$DEPLOY_PHASE" in
     ;;
 esac
 
-echo ""
-echo "================================================================="
-echo " Phase $DEPLOY_PHASE completed successfully"
-echo "================================================================="
+ui_done "Phase ${DEPLOY_PHASE} completed successfully"

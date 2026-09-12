@@ -61,6 +61,30 @@
           ECS inventory groups '{{ ecs_cluster_master_group }}' and
           '{{ ecs_cluster_worker_group }}' must exist and contain hosts.
 
+    - name: Detect ARM64 on ECS nodes
+      ansible.builtin.set_fact:
+        ecs_arm64_detected: >-
+          {{
+            hostvars[groups[ecs_cluster_master_group][0]].ansible_architecture | default('x86_64')
+              in ['aarch64', 'arm64']
+            or (
+              groups[ecs_cluster_worker_group]
+              | map('extract', hostvars, 'ansible_architecture')
+              | select('in', ['aarch64', 'arm64'])
+              | list
+              | length > 0
+            )
+          }}
+
+    - name: Block ECS on ARM64 unless explicitly enabled
+      ansible.builtin.fail:
+        msg: >-
+          ECS on ARM64/Graviton is disabled by default (ecs_deploy_on_arm64: false).
+          Set ECS_DEPLOY_ON_ARM64=true in .tfvars or pass -e ecs_deploy_on_arm64=true.
+      when:
+        - ecs_arm64_detected | bool
+        - not (ecs_deploy_on_arm64 | default(false) | bool)
+
     - name: Verify base cluster exists before ECS install
       ansible.builtin.uri:
         url: "{{ cm_api_url }}/clusters/{{ cdh_basecluster_name }}"

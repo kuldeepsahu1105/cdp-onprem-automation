@@ -38,6 +38,9 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 | `cdh_parcel_os_suffix` | `auto` | Parcel filename suffix: `auto`, `el8`, `el9`, `jammy`, `noble`, `sles15`, `el8.aarch64le` |
 | `cdh_parcel_target_group` | `base-workers` | Inventory group used to auto-detect worker OS for parcel suffix |
 | `cdh_parcel_os_suffix_fallback` | `el8` | Fallback when auto-detect cannot read worker facts |
+| `target_cpu_architecture` | `auto` | `auto`, `x86_64`, or `arm64` — set by wrapper when `CPU_ARCHITECTURE=arm64` |
+| `ecs_deploy_on_arm64` | `false` | Allow ECS on ARM64/Graviton (experimental) |
+| `cdh_parcel_arm64_suffix` | `.aarch64le` | Appended to parcel suffix on ARM64 workers when `auto` |
 | `scm_csds` | `[]` | CSD JAR URLs (all OS); leave empty on Ubuntu |
 | `scm_csds_redhat` | list | CSD JAR URLs for RHEL-based CM (RPM archive paths) |
 | `cm_repo_username` | — | Required (archive credentials) |
