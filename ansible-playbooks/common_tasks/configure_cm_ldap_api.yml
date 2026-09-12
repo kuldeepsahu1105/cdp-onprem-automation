@@ -100,8 +100,12 @@
     status_code: [200, 204, 301, 303]
   register: cm_ldap_result
   when: cm_ldap_config_changed | bool
-  notify: Restart Cloudera Manager after configuration change
   changed_when: true
+
+- name: LDAP — mark Cloudera Manager restart required after config PUT
+  ansible.builtin.set_fact:
+    cm_restart_after_config_change: true
+  when: cm_ldap_config_changed | bool
 
 - name: LDAP — CM settings already match desired state
   ansible.builtin.debug:

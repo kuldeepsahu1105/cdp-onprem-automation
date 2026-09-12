@@ -1,0 +1,11 @@
+---
+# Run on localhost after CM config changes (replaces handler chain in 27/28).
+
+- name: Restart Cloudera Manager server and agent on CM host
+  ansible.builtin.import_tasks: restart_cm_services.yml
+
+- name: Refresh CM API URL after CM restart
+  ansible.builtin.import_tasks: set_cm_api_url.yml
+
+- name: Wait for Cloudera Manager API after restart
+  ansible.builtin.import_tasks: wait_for_cm_api.yml

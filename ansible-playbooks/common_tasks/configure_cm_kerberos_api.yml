@@ -78,8 +78,12 @@
     status_code: [200, 204, 301, 303]
   register: cm_kerberos_api_result
   when: cm_kerberos_config_changed | bool
-  notify: Restart Cloudera Manager after configuration change
   changed_when: true
+
+- name: Kerberos — mark Cloudera Manager restart required after config PUT
+  ansible.builtin.set_fact:
+    cm_restart_after_config_change: true
+  when: cm_kerberos_config_changed | bool
 
 - name: Kerberos — CM Kerberos settings already match desired state
   ansible.builtin.debug:
