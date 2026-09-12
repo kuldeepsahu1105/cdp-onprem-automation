@@ -1,0 +1,18 @@
+---
+# Resolve which inventory group hosts PostgreSQL (CM DB). Vars: postgres_inventory_group_resolved, etc.
+
+- name: Validate PostgreSQL inventory group
+  ansible.builtin.assert:
+    that:
+      - postgres_inventory_group_resolved in groups
+      - groups[postgres_inventory_group_resolved] | length > 0
+    fail_msg: >-
+      PostgreSQL install group '{{ postgres_inventory_group_resolved }}' is missing or empty.
+      Add [postgres] or [db] to inventory (or use cldr-mngr). Override with postgres_inventory_group.
+
+- name: Show resolved PostgreSQL host for CM
+  ansible.builtin.debug:
+    msg:
+      - "PostgreSQL inventory group: {{ postgres_inventory_group_resolved }}"
+      - "PostgreSQL inventory host: {{ postgres_inventory_host }}"
+      - "PostgreSQL FQDN (CM JDBC / Reports Manager): {{ postgres_host_fqdn }}"

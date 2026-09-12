@@ -79,9 +79,12 @@
         var: jdbc_ls_output.stdout_lines
 
 - name: Install and Configure PostgreSQL
-  hosts: cldr-mngr
+  hosts: "{{ postgres_inventory_group_resolved | default('cldr-mngr') }}"
   become: yes
   tasks:
+    - name: Resolve PostgreSQL install host from inventory
+      ansible.builtin.import_tasks: common_tasks/resolve_postgres_inventory.yml
+
     - name: Set OS-specific facts
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
@@ -182,7 +185,7 @@
 
 ##### TLS Setup for Postgres DB
 - name: Setup PostgreSQL with TLS/SSL for Cloudera Manager
-  hosts: cldr-mngr
+  hosts: "{{ postgres_inventory_group_resolved | default('cldr-mngr') }}"
   become: yes
   tasks:
     - name: Ensure PostgreSQL data directory exists
@@ -223,7 +226,7 @@
           openssl req -new -nodes -text
           -out {{ postgres_data_dir }}/server.csr
           -keyout {{ postgres_data_dir }}/server.key
-          -subj "/CN={{ ansible_fqdn }}"
+          -subj "/CN={{ postgres_host_fqdn }}"
       args:
         creates: "{{ postgres_data_dir }}/server.key"
 
@@ -269,8 +272,8 @@
       delegate_to: "{{ item }}"
       loop: "{{ groups['all'] }}"
 
-- name: Fetch root.crt from cldr-mngr
-  hosts: cldr-mngr
+- name: Fetch root.crt from PostgreSQL host
+  hosts: "{{ postgres_inventory_group_resolved | default('cldr-mngr') }}"
   gather_facts: false
   tasks:
     - name: Fetch {{ postgres_data_dir }}/root.crt to control node
@@ -294,7 +297,7 @@
 ##### ==================== VERIFICATION TASKS ====================
 ##### TLS Verify for Postgres DB
 - name: Verify the certificate files
-  hosts: cldr-mngr
+  hosts: "{{ postgres_inventory_group_resolved | default('cldr-mngr') }}"
   become: yes
   tasks:
     ##### Verify CRT
@@ -359,7 +362,7 @@
 
 ##### Restart and verify Postgres DB
 - name: Restart and verify Postgres DB is running fine
-  hosts: cldr-mngr
+  hosts: "{{ postgres_inventory_group_resolved | default('cldr-mngr') }}"
   become: yes
   tasks:
     - name: Restart PostgreSQL and wait for network listen
@@ -418,7 +421,7 @@
 
 ##### Verify PostgreSQL SSL Configuration (Post Start)
 - name: Verify PostgreSQL SSL Configuration (Post Start)
-  hosts: cldr-mngr
+  hosts: "{{ postgres_inventory_group_resolved | default('cldr-mngr') }}"
   become: true
   tasks:
     - name: Set OS-specific facts
@@ -482,7 +485,7 @@
 
 ##### Create databases, users for Cloudera-Manager
 - name: Initialize PostgreSQL Database
-  hosts: cldr-mngr
+  hosts: "{{ postgres_inventory_group_resolved | default('cldr-mngr') }}"
   become: true
   tasks:
     - name: Generate SQL script from template

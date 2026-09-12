@@ -321,7 +321,10 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 |---|---|---|
 | `deployment_portal_enabled` | `true` | Run `10_setup_deployment_portal.yml` |
 | `deployment_portal_host_group` | `auto` | `auto`, `ipaserver`, or `cldr-mngr` — where Caddy/pgAdmin/Grafana run |
-| `deployment_portal_postgres_host_group` | `cldr-mngr` | CM PostgreSQL host for pgAdmin |
+| `postgres_inventory_group` | `""` (auto) | Pin Postgres install group; else `[postgres]` → `[db]` → `cldr-mngr` |
+| `postgres_inventory_group_resolved` | (computed) | Effective inventory group for `23_setup_postgres.yml` |
+| `postgres_host_fqdn` | (computed) | CM JDBC / Reports Manager / pgAdmin DB host FQDN |
+| `deployment_portal_postgres_host_group` | `auto` | CM PostgreSQL host for pgAdmin (`auto` = same as `postgres_inventory_group_resolved`) |
 | `deployment_portal_http_port` | `81` | Caddy index + Grafana/Prometheus/Alertmanager paths |
 | `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI on ops host |
 | `monitoring_grafana_host_port` | `3000` | Grafana UI on ops host (docker `HOST:3000`) |

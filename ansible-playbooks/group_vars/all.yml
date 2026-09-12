@@ -290,10 +290,28 @@ krb5_kdc_admin_password: "{{ ad_kdc_admin_password if identity_provider_effectiv
 krb5_ad_suffix: "{{ ad_domain }}"
 krb5_ad_delete_on_regenerate: true
 
+# PostgreSQL server for Cloudera Manager (23_setup_postgres.yml) and CMS Reports Manager.
+# Auto-detect install target: [postgres] → [db] → cldr-mngr. Set postgres_inventory_group to pin a group name.
+postgres_inventory_group: ""
+postgres_inventory_group_resolved: >-
+  {%- set explicit = postgres_inventory_group | default('') | trim -%}
+  {%- if explicit | length > 0 -%}
+  {{- explicit -}}
+  {%- elif 'postgres' in groups and groups['postgres'] | length > 0 -%}
+  postgres
+  {%- elif 'db' in groups and groups['db'] | length > 0 -%}
+  db
+  {%- else -%}
+  cldr-mngr
+  {%- endif -%}
+postgres_inventory_host: "{{ groups[postgres_inventory_group_resolved][0] }}"
+postgres_host_fqdn: >-
+  {{ hostvars[postgres_inventory_host].cldr_hostname | default(postgres_inventory_host) }}.{{ cluster_domain }}
+
 # Cloudera Management Service (CMS) - NOT the CDP base cluster
-# CMS roles on cldr-mngr; Postgres for Reports Manager is only on cldr-mngr (23_setup_postgres.yml).
+# CMS roles on cldr-mngr; Reports Manager JDBC uses postgres_host_fqdn above.
 cm_manager_inventory_host: "{{ groups['cldr-mngr'][0] if ('cldr-mngr' in groups and groups['cldr-mngr'] | length > 0) else '' }}"
-cm_postgres_inventory_host: "{{ cm_manager_inventory_host }}"
+cm_postgres_inventory_host: "{{ postgres_inventory_host }}"
 cm_cms_hostname: "{{ hostvars[cm_manager_inventory_host].cldr_hostname | default(cm_manager_inventory_host) }}.{{ cluster_domain }}"
 cm_cms_servicemonitor_memory_bytes: 6442450944
 cm_cms_role_types:
@@ -306,8 +324,7 @@ cm_cms_health_role_types:
   - SERVICEMONITOR
   - HOSTMONITOR
   - REPORTSMANAGER
-cm_cms_reports_manager_db_host: >-
-  {{ hostvars[cm_postgres_inventory_host].cldr_hostname | default(cm_postgres_inventory_host) }}.{{ cluster_domain }}
+cm_cms_reports_manager_db_host: "{{ postgres_host_fqdn }}"
 cm_cms_reports_manager_db_name: rman
 cm_cms_reports_manager_db_user: rman
 cm_cms_reports_manager_db_password: rman
@@ -701,7 +718,8 @@ deployment_portal_enabled: true
 # Set by Jenkins PORTAL / pvc_setup bootstrap — fail instead of silent skip when Caddy gate is off.
 deployment_portal_install_required: false
 deployment_portal_host_group: auto
-deployment_portal_postgres_host_group: cldr-mngr
+# auto = same resolution as postgres_inventory_group_resolved ([postgres] → [db] → cldr-mngr)
+deployment_portal_postgres_host_group: auto
 # Caddy edge listener on ops (ipaserver): portal, pgAdmin, monitoring, and IPA vhosts share this TCP port.
 # Cloudera Manager and ECS use direct host ports (cldr-mngr :7180/:7183; ECS console/gateway URLs) — not Caddy.
 deployment_portal_http_port: 81
@@ -726,6 +744,8 @@ pgadmin_default_email: "admin@{{ caddy_vhost_public_base }}"
 pgadmin_default_password: "{{ postgres_password }}"
 deployment_portal_inventory_groups:
   - ipaserver
+  - postgres
+  - db
   - cldr-mngr
   - base-masters
   - base-workers
@@ -734,6 +754,8 @@ deployment_portal_inventory_groups:
 # Human-readable role labels for deployment portal host inventory table
 deployment_portal_inventory_group_labels:
   ipaserver: FreeIPA server
+  postgres: PostgreSQL (CM DB)
+  db: PostgreSQL (CM DB)
   cldr-mngr: Cloudera Manager
   base-masters: CDP Runtime master
   base-workers: CDP Runtime worker
