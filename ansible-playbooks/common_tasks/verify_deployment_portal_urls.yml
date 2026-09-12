@@ -133,7 +133,7 @@
       }}
   when:
     - deployment_portal_context is defined
-    - 'portal' in (_portal_verify_milestones_effective | default([]))
+    - _portal_verify_milestones_effective | default([]) | intersect(['portal']) | length > 0
 
 - name: Build access URL checks from deployment portal context
   ansible.builtin.set_fact:
@@ -163,7 +163,7 @@
       }}
   when:
     - deployment_portal_context is defined
-    - 'portal' in (_portal_verify_milestones_effective | default([]))
+    - _portal_verify_milestones_effective | default([]) | intersect(['portal']) | length > 0
 
 - name: Set required deployment portal access URL checks
   ansible.builtin.set_fact:
@@ -427,7 +427,7 @@
   delay: 5
   until: ipa_direct_host_header_check is succeeded
   when:
-    - 'ipa' in (_portal_verify_milestones_effective | default([]))
+    - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
     - deployment_portal_has_ipa | default(false) | bool
     - deployment_portal_ipa_fqdn | default('') | length > 0
     - inventory_hostname in groups.get('ipaserver', [])
@@ -440,7 +440,7 @@
       Caddy IPA vhost proxies with header_up Host {{ deployment_portal_ipa_fqdn }}; fix IPA HTTP/TLS first.
       Try on {{ inventory_hostname }}: curl -k -H "Host: {{ deployment_portal_ipa_fqdn }}" https://127.0.0.1/
   when:
-    - 'ipa' in (_portal_verify_milestones_effective | default([]))
+    - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
     - deployment_portal_has_ipa | default(false) | bool
     - deployment_portal_ipa_fqdn | default('') | length > 0
     - inventory_hostname in groups.get('ipaserver', [])

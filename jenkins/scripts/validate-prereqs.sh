@@ -99,6 +99,8 @@ if should_validate "${VALIDATE_ANSIBLE_SYNTAX:-true}" "ANSIBLE_SYNTAX"; then
     ansible-playbook --syntax-check "$pb" >/dev/null
     log "  syntax OK: $(basename "$pb")"
   done < <(find . -maxdepth 1 -name '[0-9]*.yml' -type f | sort)
+  # shellcheck disable=SC1091
+  source "$REPO_ROOT/jenkins/scripts/validate-ansible-yaml.sh" | tee -a "$LOG_FILE"
 else
   log "Skipping Ansible syntax check"
 fi
