@@ -325,6 +325,18 @@ _ansible_requirements_collections_present() {
       if ! ansible-galaxy collection list cloudera.cluster 2>/dev/null | grep -qE 'cloudera\.cluster'; then
         return 1
       fi
+      # requirements.yml pins cloudera.cluster v4.x — v5/devel must trigger reinstall
+      local cc_versions
+      cc_versions="$(ansible-galaxy collection list cloudera.cluster 2>/dev/null | awk '$1=="cloudera.cluster" {print $2}')"
+      if [[ -z "$cc_versions" ]]; then
+        return 1
+      fi
+      if grep -qE '^5\.' <<<"$cc_versions"; then
+        return 1
+      fi
+      if ! grep -qE '^4\.' <<<"$cc_versions"; then
+        return 1
+      fi
     elif ! ansible-galaxy collection list "$name" 2>/dev/null | grep -qF "$name"; then
       return 1
     fi
