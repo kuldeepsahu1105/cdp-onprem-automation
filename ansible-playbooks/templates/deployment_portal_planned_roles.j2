@@ -29,8 +29,8 @@
 {% set _ = _rows.items.append({'stack': 'Deployment portal stack', 'role': 'Caddy reverse proxy', 'placement': _ops, 'source': 'portal playbook'}) %}
 {% set _ = _rows.items.append({'stack': 'Deployment portal stack', 'role': 'pgAdmin (container)', 'placement': _ops, 'source': 'portal playbook'}) %}
 {% set _ = _rows.items.append({'stack': 'Deployment portal stack', 'role': 'Docker (portal stack)', 'placement': _ops, 'source': 'portal playbook'}) %}
-{% if _mon %}{% set _ = _rows.items.append({'stack': 'Monitoring (ops host)', 'role': 'Grafana (container)', 'placement': _ops, 'source': 'monitoring_stack / Caddy'}) %}{% endif %}
-{% if _mon %}{% set _ = _rows.items.append({'stack': 'Monitoring (ops host)', 'role': 'Prometheus (container)', 'placement': _ops, 'source': 'monitoring_stack / Caddy'}) %}{% endif %}
-{% if _mon %}{% set _ = _rows.items.append({'stack': 'Monitoring (ops host)', 'role': 'Alertmanager (container)', 'placement': _ops, 'source': 'monitoring_stack / Caddy'}) %}{% endif %}
+{% if _mon %}{% set _ = _rows.items.append({'stack': 'Monitoring (ops host)', 'role': 'Grafana (host :' ~ (monitoring_grafana_host_port | default(3000) | string) ~ ')', 'placement': _ops, 'source': 'monitoring_stack'}) %}{% endif %}
+{% if _mon %}{% set _ = _rows.items.append({'stack': 'Monitoring (ops host)', 'role': 'Prometheus (host :' ~ (monitoring_prometheus_host_port | default(9090) | string) ~ ')', 'placement': _ops, 'source': 'monitoring_stack'}) %}{% endif %}
+{% if _mon %}{% set _ = _rows.items.append({'stack': 'Monitoring (ops host)', 'role': 'Alertmanager (host :' ~ (monitoring_alertmanager_host_port | default(9093) | string) ~ ')', 'placement': _ops, 'source': 'monitoring_stack'}) %}{% endif %}
 {% if _mon %}{% set _ = _rows.items.append({'stack': 'Monitoring (ops host)', 'role': 'cAdvisor (host :' ~ (monitoring_cadvisor_host_port | default(8089) | string) ~ ')', 'placement': _ops, 'source': 'monitoring_stack'}) %}{% endif %}
 {{ _rows.items | to_json }}

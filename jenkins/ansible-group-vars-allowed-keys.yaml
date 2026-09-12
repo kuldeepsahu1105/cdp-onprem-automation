@@ -49,6 +49,10 @@ allowed_keys:
   - deployment_portal_postgres_host_group
   - deployment_portal_http_port
   - deployment_portal_pgadmin_host_port
+  - monitoring_grafana_host_port
+  - monitoring_prometheus_host_port
+  - monitoring_alertmanager_host_port
+  - monitoring_cadvisor_host_port
   - deployment_portal_access_profile
   - deployment_portal_prefer_fqdn_urls
   - deployment_portal_use_private_network_only

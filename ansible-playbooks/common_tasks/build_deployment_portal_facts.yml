@@ -479,6 +479,24 @@
         grafana_caddy_url: "{{ caddy_vhost_urls_external.grafana.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
         prometheus_caddy_url: "{{ caddy_vhost_urls_external.prometheus.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
         alertmanager_caddy_url: "{{ caddy_vhost_urls_external.alertmanager.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
+        grafana_url_direct: >-
+          {{
+            deployment_portal_access_urls.primary.grafana
+            if (deployment_portal_access_profile_effective == 'private')
+            else deployment_portal_access_urls.external.grafana
+          }}
+        prometheus_url_direct: >-
+          {{
+            deployment_portal_access_urls.primary.prometheus
+            if (deployment_portal_access_profile_effective == 'private')
+            else deployment_portal_access_urls.external.prometheus
+          }}
+        alertmanager_url_direct: >-
+          {{
+            deployment_portal_access_urls.primary.alertmanager
+            if (deployment_portal_access_profile_effective == 'private')
+            else deployment_portal_access_urls.external.alertmanager
+          }}
         grafana_url: >-
           {{
             (
@@ -495,6 +513,7 @@
               else deployment_portal_access_urls.external.grafana
             )
           }}
+        grafana_url_tier_b: "{{ deployment_portal_access_urls.external.grafana | default('') if (deployment_portal_access_profile_effective == 'cloud') else deployment_portal_access_urls.primary.grafana | default('') }}"
         prometheus_url: >-
           {{
             (
@@ -511,6 +530,7 @@
               else deployment_portal_access_urls.external.prometheus
             )
           }}
+        prometheus_url_tier_b: "{{ deployment_portal_access_urls.external.prometheus | default('') if (deployment_portal_access_profile_effective == 'cloud') else deployment_portal_access_urls.primary.prometheus | default('') }}"
         alertmanager_url: >-
           {{
             (
@@ -527,6 +547,7 @@
               else deployment_portal_access_urls.external.alertmanager
             )
           }}
+        alertmanager_url_tier_b: "{{ deployment_portal_access_urls.external.alertmanager | default('') if (deployment_portal_access_profile_effective == 'cloud') else deployment_portal_access_urls.primary.alertmanager | default('') }}"
         cadvisor_url: >-
           {{
             deployment_portal_access_urls.primary.cadvisor
