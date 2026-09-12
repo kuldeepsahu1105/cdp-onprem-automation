@@ -1,0 +1,67 @@
+---
+# Portal context only: is CM UI up on manager public IP (cloud) or private IP (in-VPC)? Ports 7180 / 7183.
+
+- name: Set CM manager addresses for portal CM-installed hint
+  ansible.builtin.set_fact:
+    _portal_cm_ui_host: >-
+      {{
+        hostvars[groups['cldr-mngr'][0]].ansible_host | default('') | trim
+        if (
+          deployment_portal_access_profile_effective | default('cloud') == 'cloud'
+          and ('cldr-mngr' in groups)
+          and (groups['cldr-mngr'] | default([]) | length > 0)
+        )
+        else (
+          hostvars[groups['cldr-mngr'][0]].private_ip | default('') | trim
+          if (
+            ('cldr-mngr' in groups)
+            and (groups['cldr-mngr'] | default([]) | length > 0)
+          )
+          else ''
+        )
+      }}
+
+- name: Probe Cloudera Manager UI HTTP on manager address
+  ansible.builtin.uri:
+    url: "http://{{ _portal_cm_ui_host }}:{{ cm_http_port | int }}/"
+    method: GET
+    status_code: "{{ deployment_service_url_verify_status_codes | default(deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308])) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 15
+  register: _portal_cm_ui_http
+  failed_when: false
+  when: _portal_cm_ui_host | length > 0
+
+- name: Probe Cloudera Manager UI HTTPS on manager address
+  ansible.builtin.uri:
+    url: "https://{{ _portal_cm_ui_host }}:{{ cm_https_port | int }}/"
+    method: GET
+    status_code: "{{ deployment_service_url_verify_status_codes | default(deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308])) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 15
+  register: _portal_cm_ui_https
+  failed_when: false
+  when:
+    - _portal_cm_ui_host | length > 0
+    - (_portal_cm_ui_http.status | default(0) | int) not in (deployment_service_url_verify_status_codes | default(deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308])))
+
+- name: Record CM installed hint for portal context
+  ansible.builtin.set_fact:
+    deployment_portal_cm_http_probe:
+      failed: >-
+        {{
+          not (
+            (
+              (_portal_cm_ui_http.status | default(0) | int)
+              in (deployment_service_url_verify_status_codes | default(deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308])))
+            )
+            or (
+              (_portal_cm_ui_https.status | default(0) | int)
+              in (deployment_service_url_verify_status_codes | default(deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308])))
+            )
+          )
+        }}
+    cm_manager_ui_probe_host_effective: "{{ _portal_cm_ui_host }}"
+  when: _portal_cm_ui_host | length > 0

@@ -246,8 +246,8 @@
       description: "{{ _cat.description | default('ECS data service') }}"
   when: _url | length > 0
 
-- name: Probe Cloudera Manager UI HTTP on cldr-mngr (portal context cm_installed hint)
-  ansible.builtin.import_tasks: probe_cm_manager_ui_http.yml
+- name: Probe Cloudera Manager UI on manager IP (portal context cm_installed hint)
+  ansible.builtin.import_tasks: probe_portal_cm_installed_hint.yml
   when:
     - "'cldr-mngr' in groups"
     - groups['cldr-mngr'] | default([]) | length > 0
@@ -564,5 +564,7 @@
       endpoints: "{{ deployment_portal_endpoints | default([]) }}"
       extra_links: "{{ deployment_portal_extra_links }}"
 
-- name: Collect deployment portal live stats snapshot (CM API + inventory)
+- name: Initialize portal live stats (inventory only; CM API snapshot runs after portal sync when CM is up)
   ansible.builtin.import_tasks: collect_deployment_portal_live_stats.yml
+  vars:
+    deployment_portal_live_stats_skip_cm_api: true

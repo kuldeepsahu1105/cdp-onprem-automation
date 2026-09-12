@@ -65,21 +65,23 @@
 - name: Verify pgAdmin container and local HTTP
   ansible.builtin.import_tasks: verify_deployment_portal_pgadmin.yml
 
-- name: Resolve control reachability for portal URL checks
-  ansible.builtin.import_tasks: detect_ansible_control_reachability.yml
-  vars:
-    ansible_control_reachability_skip_cm_probes: true
-    cm_host_public: >-
+- name: Set portal URL verify reachability from access profile (public vs private CM/ops IPs)
+  ansible.builtin.set_fact:
+    ansible_control_reachability_effective: >-
       {{
-        hostvars[groups['cldr-mngr'][0]].ansible_host | default('')
-        if ('cldr-mngr' in groups and groups['cldr-mngr'] | length > 0)
-        else ''
+        'public'
+        if (
+          hostvars['localhost'].deployment_portal_access_profile_effective
+          | default(deployment_portal_access_profile_effective | default('cloud'))
+        ) == 'cloud'
+        else 'private'
       }}
-    cm_host_private: >-
+    ansible_control_reach_public_only: >-
       {{
-        hostvars[groups['cldr-mngr'][0]].private_ip | default('')
-        if ('cldr-mngr' in groups and groups['cldr-mngr'] | length > 0)
-        else ''
+        (
+          hostvars['localhost'].deployment_portal_access_profile_effective
+          | default(deployment_portal_access_profile_effective | default('cloud'))
+        ) == 'cloud'
       }}
   delegate_to: localhost
   run_once: true

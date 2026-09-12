@@ -47,16 +47,19 @@
           'poll': _portal_live_poll_meta,
         }
       }}
-  when: not (deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool)
+  when: >-
+    not (deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool)
+    or (deployment_portal_live_stats_skip_cm_api | default(false) | bool)
 
 - name: Collect live portal stats from Cloudera Manager API
   when:
     - deployment_portal_context.cloudera_manager.cm_installed | default(false) | bool
+    - not (deployment_portal_live_stats_skip_cm_api | default(false) | bool)
     - "'cldr-mngr' in groups"
     - groups['cldr-mngr'] | default([]) | length > 0
   block:
     - name: Resolve Cloudera Manager API URL for live stats
-      ansible.builtin.import_tasks: set_cm_api_url.yml
+      ansible.builtin.import_tasks: resolve_portal_cm_api_url.yml
 
     - name: Fetch CM hosts (heartbeats / health summary)
       ansible.builtin.uri:
