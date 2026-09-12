@@ -2,6 +2,8 @@
 #
 # Active Directory realm join only (use 14_setup_identity_client.yml for auto-detect)
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Detect and validate Active Directory configuration
   hosts: localhost
   connection: local

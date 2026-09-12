@@ -3,6 +3,8 @@
 #   ipaserver_domain: cldrsetup.local
 
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Skip sysconfig network update on Debian family (DNS via netplan/resolv)
   hosts: all
   become: yes

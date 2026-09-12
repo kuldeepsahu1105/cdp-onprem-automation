@@ -10,6 +10,8 @@
 #   reverse_zones: "no"
 #   chrony_enabled: "yes"
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Skip FreeIPA server setup when Active Directory is detected
   hosts: localhost
   connection: local

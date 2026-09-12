@@ -3,6 +3,8 @@
 # Install Cloudera Data Services (ECS / Experience Cluster) on ecs-masters/ecs-workers.
 # Requires CDP base cluster (26_setup_base_cluster.yml) and CM agents on ECS nodes.
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Install cloudera.cluster collection on control node
   hosts: localhost
   connection: local

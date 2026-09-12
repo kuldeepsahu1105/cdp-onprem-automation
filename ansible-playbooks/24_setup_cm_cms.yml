@@ -5,6 +5,8 @@
 # Reports Manager — this is NOT the CDP base cluster (HDFS/YARN/ZK).
 # For base cluster install use 26_setup_base_cluster.yml
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Install cloudera.cluster collection on control node
   hosts: localhost
   connection: local

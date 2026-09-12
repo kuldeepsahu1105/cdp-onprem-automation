@@ -3,6 +3,8 @@
 #   ipaserver_domain: cldrsetup.local
 
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Generate and configure /etc/resolv.conf file based on existing values
   hosts: all
   become: yes

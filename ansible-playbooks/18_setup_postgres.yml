@@ -8,6 +8,8 @@
 #   postgres_db: "postgres"
 
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Configure cloudera-manager.repo on all hosts
   hosts: all
   become: yes

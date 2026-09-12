@@ -44,6 +44,8 @@
 #      -e cleanup_enabled=true -e cleanup_confirm=true -e cleanup_e2e=true
 #
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Validate cleanup request and print plan
   hosts: localhost
   connection: local

@@ -107,7 +107,9 @@ run_playbook() {
   else
     ui_step "Running ${playbook}" "📜"
   fi
-  ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" "$@"
+  # Collections ensured at script start; skip imported 00_ensure_collections in each playbook.
+  ansible-playbook "$playbook" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" \
+    --skip-tags collections "$@"
 }
 
 cd "$SCRIPT_DIR"
@@ -163,12 +165,13 @@ fi
 
 mapfile -t ANSIBLE_PLAYBOOK_ARGS < <(ansible_extra_args "$PRIVATE_KEY")
 
+# Same helper as 00_ensure_collections.yml / manual playbooks (no-op when already installed).
 if _ansible_requirements_collections_present "$SCRIPT_DIR/requirements.yml"; then
   ui_info "Ansible collections already installed — skipping galaxy (requirements.yml)"
 else
   ui_step "Install Ansible collections" "📦"
-  ansible_install_collections_if_needed "$SCRIPT_DIR/requirements.yml"
 fi
+ansible_install_collections_if_needed "$SCRIPT_DIR/requirements.yml"
 
 # SSH pre-reqs: include ipaserver when that group has hosts (FreeIPA); skip for AD-only inventory
 if grep -A30 '^\[ipaserver\]' "$SCRIPT_DIR/inventory.ini" | grep -qE '^[^#[:space:]]'; then
@@ -182,8 +185,7 @@ ui_step "Running 00_setup_ssh_preqs.yml" "📜"
 ansible-playbook 00_setup_ssh_preqs.yml "${ANSIBLE_PLAYBOOK_ARGS[@]}" --limit "$SSH_LIMIT"
 
 run_phase_1() {
-  # Galaxy runs at top of pvc_setup.sh; skip duplicate localhost play in 01 (manual 01 runs without --skip-tags).
-  run_playbook 01_install_collection.yml --skip-tags collections
+  run_playbook 01_install_collection.yml
   run_playbook 02_set_hostname.yml
   run_playbook 03_create_etc_hosts.yml
   run_playbook 05_disable_selinux.yml

@@ -4,6 +4,8 @@
 #   cm_repo_source=public   — point hosts at archive.cloudera.com/p/ (default)
 #   cm_repo_source=internal — mirror to cldr-mngr web server (RPM on RHEL, apt on Ubuntu/Debian)
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Validate CM repository configuration
   hosts: localhost
   connection: local

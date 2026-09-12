@@ -206,7 +206,8 @@ Run: `ansible-playbook -i inventory.ini <playbook>.yml`
 | Playbook | Description |
 |---|---|
 | `00_setup_ssh_preqs.yml` | SSH prerequisites |
-| `01_install_collection.yml` | Install Ansible collections on control node (`localhost`); system update on targets |
+| `00_ensure_collections.yml` | Galaxy install from `requirements.yml` (imported by every playbook; same logic as `pvc_setup.sh`) |
+| `01_install_collection.yml` | Imports `00_ensure_collections`; full system update on targets |
 | `02_set_hostname.yml` | Set FQDN hostnames |
 | `03_create_etc_hosts.yml` | Populate `/etc/hosts` |
 | `04_setup_autossh.yml` | Passwordless SSH |

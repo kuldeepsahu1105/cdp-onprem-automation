@@ -10,11 +10,13 @@ cd ansible-playbooks
 
 ## Prerequisites
 
-1. Install Ansible collections:
+1. **Ansible collections** — any of these (same `requirements.yml`, idempotent):
 
-```bash
-ansible-galaxy collection install -r requirements.yml
-```
+| How you run | Collections |
+|-------------|-------------|
+| **`./pvc_setup.sh`** or repo **`clone_and_run_pvc_automation.sh`** | Installed automatically at start |
+| **Jenkins** `run-ansible.sh` | Same as `pvc_setup.sh` per stage (skip when already installed) |
+| **Single playbook** | `./run-playbook.sh 28_setup_deployment_portal.yml` **or** `ansible-playbook …` (each playbook imports `00_ensure_collections.yml`) **or** once manually: `ansible-galaxy collection install -r requirements.yml` |
 
 2. Prepare `inventory.ini` with your hosts (see [REFERENCE.md](REFERENCE.md#inventory-groups)).
 3. Configure `group_vars/all.yml` (domain, passwords, AD vars if needed).

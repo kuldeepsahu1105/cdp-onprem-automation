@@ -341,6 +341,7 @@ ansible_install_collections_if_needed() {
   if _ansible_requirements_collections_present "$req"; then
     return 0
   fi
+  printf '%s\n' "Installing Ansible collections from requirements.yml"
   ansible-galaxy collection install -r "$req"
 }
 

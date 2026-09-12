@@ -4,6 +4,8 @@
 #   cm_repo_source=public   — configure archive.cloudera.com/p/ on all hosts (17 only)
 #   cm_repo_source=internal — web server (16) + mirror download (17)
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Set up internal web server (internal repo mode only)
   ansible.builtin.import_playbook: 16_setup_internal_repo.yml
 

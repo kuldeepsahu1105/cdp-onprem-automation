@@ -2,6 +2,8 @@
 #
 # Internal web server for CM/CDH mirror — only when cm_repo_source=internal
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Skip internal web server when using public Cloudera repos
   hosts: localhost
   connection: local

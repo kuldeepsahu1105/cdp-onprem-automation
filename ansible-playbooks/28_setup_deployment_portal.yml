@@ -3,6 +3,8 @@
 # Ops stack on ipaserver (auto) or cldr-mngr: Caddy index, pgAdmin, Prometheus, Grafana,
 # Alertmanager, cAdvisor. CM PostgreSQL remains on cldr-mngr (remote pgAdmin server entry).
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Build deployment portal facts
   hosts: localhost
   connection: local

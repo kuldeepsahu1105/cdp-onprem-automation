@@ -5,6 +5,8 @@
 #   ipaserver_domain: cldrsetup.local
 
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Skip FreeIPA DNS records when Active Directory is detected
   hosts: localhost
   connection: local

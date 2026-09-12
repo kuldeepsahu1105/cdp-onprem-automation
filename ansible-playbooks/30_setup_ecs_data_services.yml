@@ -10,6 +10,8 @@
 # Set ecs_data_services_deploy_enabled: true and ecs_data_services_install in group_vars.
 # Signed API calls use cdpcurl on the controller when ecs_data_services_use_cdpcurl: true.
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Deploy Cloudera Data Services on ECS (API-driven)
   hosts: localhost
   connection: local

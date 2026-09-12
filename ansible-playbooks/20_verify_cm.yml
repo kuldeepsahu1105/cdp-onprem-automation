@@ -5,6 +5,8 @@
 #   cm_admin_pass: "admin"
 
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Verify and perform sanity checks on cloudera-manager server
   hosts: localhost
   gather_facts: no

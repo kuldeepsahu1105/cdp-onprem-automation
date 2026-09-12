@@ -1,16 +1,7 @@
 ### ansible-playbook -i inventory.ini 01_install_collection.yml
 
 ---
-- name: Install Ansible collections on control node (manual / phase 1)
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  tags:
-    - collections
-    - galaxy
-  tasks:
-    - name: Ensure collections from requirements.yml
-      ansible.builtin.import_tasks: common_tasks/ensure_ansible_collections.yml
+- import_playbook: 00_ensure_collections.yml
 
 - name: Perform full system update on all hosts
   hosts: all

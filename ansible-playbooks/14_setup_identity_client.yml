@@ -2,6 +2,8 @@
 #
 # Identity client enrollment (auto-detected FreeIPA or Active Directory)
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Detect and validate identity provider
   hosts: localhost
   connection: local

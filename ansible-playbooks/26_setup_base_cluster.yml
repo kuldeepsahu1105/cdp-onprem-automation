@@ -3,6 +3,8 @@
 # Install CDP Base Cluster on base-masters/base-workers (services: see base_cluster_install_services).
 # This is separate from Cloudera Management Service (CMS) — see 24_setup_cm_cms.yml
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Install cloudera.cluster collection on control node
   hosts: localhost
   connection: local

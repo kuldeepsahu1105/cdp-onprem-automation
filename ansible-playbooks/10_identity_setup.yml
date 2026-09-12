@@ -5,6 +5,8 @@
 # FreeIPA ([ipaserver] in inventory): 10 -> 11 -> 12 -> 13 -> 14 -> 15
 # Active Directory (ad_kdc_host only): 11 -> 14  (10/12/15 skipped automatically)
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Detect identity provider
   ansible.builtin.import_playbook: 00_detect_identity.yml
 

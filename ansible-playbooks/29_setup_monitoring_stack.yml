@@ -2,6 +2,8 @@
 #
 # Prometheus, Grafana, Alertmanager, and cAdvisor (requires 28_setup_deployment_portal.yml first).
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Build deployment portal facts for monitoring URLs
   hosts: localhost
   connection: local

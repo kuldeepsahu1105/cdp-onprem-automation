@@ -1,12 +1,11 @@
 ---
-# Idempotent Galaxy install for manual playbook runs (pvc_setup.sh skips when already satisfied).
-- name: Install Ansible collections from requirements.yml
+# Single source of truth: scripts/lib/ansible_env.sh (pvc_setup, clone wrapper, Jenkins, manual playbooks).
+- name: Ensure Ansible collections (shared control-node helper)
   ansible.builtin.command:
-    cmd: ansible-galaxy collection install -r requirements.yml
+    cmd: >-
+      bash -lc 'source "{{ playbook_dir }}/../scripts/lib/ansible_env.sh"
+      && ansible_install_collections_if_needed "{{ playbook_dir }}/requirements.yml"'
     chdir: "{{ playbook_dir }}"
-  register: galaxy_requirements_install
-  changed_when: >-
-    'Installing' in (galaxy_requirements_install.stdout | default(''))
-    or 'Installed' in (galaxy_requirements_install.stdout | default(''))
-    or ' upgraded ' in (galaxy_requirements_install.stdout | default(''))
-  failed_when: galaxy_requirements_install.rc != 0
+  register: galaxy_ensure
+  changed_when: "'Installing Ansible collections' in (galaxy_ensure.stdout | default(''))"
+  failed_when: galaxy_ensure.rc != 0

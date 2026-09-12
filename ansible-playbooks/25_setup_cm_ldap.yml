@@ -1,5 +1,7 @@
 ### ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
 ---
+- import_playbook: 00_ensure_collections.yml
+
 - name: Install cloudera.cluster collection on control node
   hosts: localhost
   connection: local
