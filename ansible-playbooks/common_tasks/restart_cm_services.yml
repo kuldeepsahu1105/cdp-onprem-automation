@@ -1,0 +1,14 @@
+---
+# Restart CM server + agent on the CM host (used after Auto-TLS, Kerberos, etc.).
+# Callable from localhost plays via import_tasks; uses inventory host, not Jenkins-specific paths.
+
+- name: Restart Cloudera Manager server and agent on CM host
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: restarted
+    daemon_reload: true
+  loop:
+    - cloudera-scm-server
+    - cloudera-scm-agent
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true

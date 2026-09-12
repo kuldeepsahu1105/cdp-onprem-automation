@@ -116,14 +116,8 @@
       when: cm_kerberos_result is changed
 
     - name: Restart Cloudera Manager services after Kerberos setup
-      ansible.builtin.systemd:
-        name: "{{ item }}"
-        state: restarted
-      loop:
-        - cloudera-scm-server
-        - cloudera-scm-agent
+      ansible.builtin.import_tasks: common_tasks/restart_cm_services.yml
       when: cm_kerberos_result is changed or (cm_kerberos_ad_config is defined and cm_kerberos_ad_config is changed)
-      delegate_to: cldr-mngr
 
     - name: Refresh CM API URL after Kerberos changes
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml

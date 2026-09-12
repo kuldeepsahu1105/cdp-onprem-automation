@@ -4,6 +4,7 @@
   register: cm_status
   changed_when: false
   failed_when: cm_status.rc > 1
+  become: true
 
 - name: Print Cloudera SCM Server startup status - ALREADY RUNNING
   ansible.builtin.debug:
@@ -25,6 +26,7 @@
   retries: 30
   delay: 10
   changed_when: false
+  become: true
   when: cm_status.stdout != "active"
 
 - name: Print Cloudera SCM Server startup status - SUCCESS
