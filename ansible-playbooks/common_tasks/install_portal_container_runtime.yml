@@ -37,7 +37,7 @@
     path: /usr/local/lib/docker/cli-plugins
     state: directory
     mode: "0755"
-  when: portal_compose_plugin_pkg is failed or portal_compose_plugin_pkg.rc | default(0) != 0
+  when: portal_compose_plugin_pkg.failed | default(false) | bool
 
 - name: Set Docker Compose v2 binary architecture
   ansible.builtin.set_fact:
@@ -47,7 +47,7 @@
         if ansible_architecture | default('x86_64') in ['aarch64', 'arm64']
         else 'x86_64'
       }}
-  when: portal_compose_plugin_pkg is failed or portal_compose_plugin_pkg.rc | default(0) != 0
+  when: portal_compose_plugin_pkg.failed | default(false) | bool
 
 - name: Install Docker Compose v2 CLI plugin (binary fallback)
   ansible.builtin.get_url:
@@ -55,7 +55,13 @@
       https://github.com/docker/compose/releases/download/v{{ portal_docker_compose_version }}/docker-compose-linux-{{ portal_docker_compose_arch }}
     dest: /usr/local/lib/docker/cli-plugins/docker-compose
     mode: "0755"
-  when: portal_compose_plugin_pkg is failed or portal_compose_plugin_pkg.rc | default(0) != 0
+  when: portal_compose_plugin_pkg.failed | default(false) | bool
+
+- name: Enable and start Docker
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
 
 - name: Verify docker compose is available
   ansible.builtin.command:
@@ -63,9 +69,3 @@
   register: portal_docker_compose_verify
   changed_when: false
   failed_when: portal_docker_compose_verify.rc != 0
-
-- name: Enable and start Docker
-  ansible.builtin.systemd:
-    name: docker
-    state: started
-    enabled: true
