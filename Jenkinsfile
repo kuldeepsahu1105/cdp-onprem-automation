@@ -370,6 +370,8 @@ Kept for .tfvars.yaml / older docs — typical CM ports: 22 SSH, 80/443 HTTP(S),
               export MONITORING_STACK_ENABLED='${params.MONITORING_STACK_ENABLED}'
               export DEPLOYMENT_PORTAL_ENABLED='${params.DEPLOYMENT_PORTAL_ENABLED}'
               export ECS_DATA_SERVICES_DEPLOY_ENABLED='${params.ECS_DATA_SERVICES_DEPLOY_ENABLED}'
+              export ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID='${shellEscape(env.ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID ?: '')}'
+              export ECS_IAM_BOOTSTRAP_PRIVATE_KEY='${shellEscape(env.ECS_IAM_BOOTSTRAP_PRIVATE_KEY ?: '')}'
               export REQUIRE_INVENTORY=true
               export ANSIBLE_GROUP_VARS_FILE='${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml'
               export CM_REPO_USERNAME='${shellEscape(params.CM_REPO_USERNAME?.trim())}'

@@ -319,6 +319,18 @@
         state: started
       when: existing_ecs_cluster.status == 200
 
+    - name: Wait for ECS Management Console when auto-provisioning API keys
+      ansible.builtin.import_tasks: common_tasks/ecs_wait_control_plane_console.yml
+      when:
+        - ecs_deploy_effective | default(false) | bool
+        - ecs_auto_provision_api_access_key | default(true) | bool
+
+    - name: Provision ECS automation IAM access key after console is up
+      ansible.builtin.import_tasks: common_tasks/ecs_provision_iam_machine_access_key.yml
+      when:
+        - ecs_deploy_effective | default(false) | bool
+        - ecs_auto_provision_api_access_key | default(true) | bool
+
     - name: Print ECS cluster result
       ansible.builtin.debug:
         msg: "ECS cluster '{{ ecs_cluster_name }}' deployment complete or already exists"

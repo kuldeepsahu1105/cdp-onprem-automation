@@ -258,6 +258,8 @@ CMS (Management Service) and CDP base cluster are **separate**:
 | `28_setup_deployment_portal.yml` | Ops portal bootstrap | Caddy, pgAdmin, optional monitoring on ops host (`auto` → ipaserver else cldr-mngr); run early in phase 1 |
 | `29_setup_monitoring_stack.yml` | Monitoring only | Add monitoring after 28 (requires portal network) |
 | `30_setup_ecs_data_services.yml` | ECS data services | CDW/CDE/CAI via control plane API (credentials + `ecs_data_services_install`; stubs — extend API tasks) |
+
+**ECS API keys (automation):** IAM `createMachineUserAccessKey` requires a **signed** request. Password-only console login is not enough. After ECS is up, either set `ecs_api_access_key_id` / `ecs_api_private_key`, or set a **one-time** bootstrap admin key (`ecs_iam_bootstrap_*` or Jenkins `ECS_IAM_BOOTSTRAP_*` credentials) and enable `ecs_auto_provision_api_access_key` (default `true`) to create machine user `ecs_automation_machine_user` via CDP CLI; keys are cached at `ecs_api_credentials_cache_path`.
 | `31_refresh_deployment_portal.yml` | Portal refresh | Re-render index/Caddy after CM, base, ECS, or DS changes (no full reinstall) |
 
 Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-masters` / `ecs-workers` inventory groups. Skipped when `ecs_deploy_enabled: auto` and ECS groups are empty.

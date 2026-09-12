@@ -434,11 +434,20 @@ ecs_control_plane_embedded_db_storage_gb: 50
 ecs_control_plane_embedded_vault_storage_gb: 2
 
 # ECS Data Services (CDW, CDE, CAI) — 30_setup_ecs_data_services.yml
-# Create API access key in Management Console (User Management) before enabling.
+# IAM access keys are signed API credentials — automation can CREATE machine-user keys after ECS
+# is up only when a bootstrap admin key exists (one-time console key or ecs_iam_bootstrap_*).
 ecs_data_services_deploy_enabled: false
-ecs_control_plane_url: ""  # e.g. https://console.apps.{{ ecs_app_domain }}
+ecs_control_plane_url: ""  # blank = https://console.{{ ecs_app_domain }}
 ecs_api_access_key_id: ""
 ecs_api_private_key: ""
+ecs_auto_provision_api_access_key: true
+ecs_automation_machine_user: cldr-automation-sa
+ecs_automation_access_key_type: V2
+ecs_iam_bootstrap_access_key_id: ""
+ecs_iam_bootstrap_private_key: ""
+ecs_api_credentials_cache_path: "{{ lookup('env', 'WORKSPACE') | default('/tmp', true) }}/jenkins/artifacts/ecs-automation-api-credentials.yml"
+ecs_control_plane_wait_retries: 40
+ecs_control_plane_wait_delay: 15
 ecs_control_plane_validate_certs: false
 ecs_data_services_use_cdpcurl: true
 ecs_data_services_install: []  # e.g. [cdw, cde, cai] or [{name: cdw, enabled: true}, ...]

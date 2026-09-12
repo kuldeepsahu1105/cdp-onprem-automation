@@ -4,7 +4,8 @@
 # Prerequisites:
 #   1. ECS cluster installed (27_setup_ecs_cluster.yml).
 #   2. Management Console reachable at ecs_control_plane_url.
-#   3. Admin user API access key + private key created in the console (User Management).
+#   3. API keys: set ecs_api_* or enable ecs_auto_provision_api_access_key with a one-time
+#      bootstrap admin key (console or ecs_iam_bootstrap_* / ECS_IAM_BOOTSTRAP_* env).
 #
 # Set ecs_data_services_deploy_enabled: true and ecs_data_services_install in group_vars.
 # Signed API calls use cdpcurl on the controller when ecs_data_services_use_cdpcurl: true.
@@ -50,6 +51,12 @@
               | list
             )
           }}
+
+    - name: Wait for ECS Management Console after cluster install
+      ansible.builtin.import_tasks: common_tasks/ecs_wait_control_plane_console.yml
+
+    - name: Provision automation machine-user API access key when needed
+      ansible.builtin.import_tasks: common_tasks/ecs_provision_iam_machine_access_key.yml
 
     - name: Validate control plane credentials
       ansible.builtin.import_tasks: common_tasks/ecs_validate_control_plane_credentials.yml
