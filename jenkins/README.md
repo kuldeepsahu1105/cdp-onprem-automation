@@ -46,7 +46,7 @@ If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALI
 
 Select one or more stage checkboxes. Fixed run order (each Ansible step is its own Jenkins stage in the UI):
 
-`VALIDATE` → `TERRAFORM` → `PREREQS` → `IDENTITY` → `CM_INSTALL` → `PORTAL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL`
+`VALIDATE` → `TERRAFORM` → `PREREQS` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `PORTAL` → `MONITORING` → `ECS_INSTALL`
 
 | Checkbox | What runs |
 |---|---|
@@ -55,9 +55,9 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 (no portal/monitoring) |
 | `IDENTITY` | Ansible **phase 2** — FreeIPA or Active Directory (from inventory) |
 | `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
-| `PORTAL` | `28_setup_deployment_portal.yml` (when `DEPLOYMENT_PORTAL_ENABLED`) |
 | `CM_TLS_KRB_LDAP` | Auto-TLS, Kerberos, CMS, LDAP (22–25) |
 | `CDH_INSTALL` | CDH base cluster (`26_setup_base_cluster.yml`) |
+| `PORTAL` | `28_setup_deployment_portal.yml` (when `DEPLOYMENT_PORTAL_ENABLED`; after CM/CDH milestones) |
 | `MONITORING` | `29_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
 | `ECS_INSTALL` | ECS cluster (`27`); optional `30_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` |
 
@@ -72,7 +72,7 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | Prerequisites only | `VALIDATE`, `PREREQS` |
 | CM install only | `VALIDATE`, `CM_INSTALL` |
 | Terraform + CM | `VALIDATE`, `TERRAFORM`, `CM_INSTALL` |
-| CM + CDH base | `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `PORTAL`, `CM_TLS_KRB_LDAP`, `CDH_INSTALL` |
+| CM + CDH base | `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CM_TLS_KRB_LDAP`, `CDH_INSTALL`, `PORTAL` |
 | Full stack (through ECS) | All of the above + `MONITORING`, `ECS_INSTALL` |
 
 Ansible-only stages (no `TERRAFORM`) require existing `ansible-playbooks/inventory.ini`.
