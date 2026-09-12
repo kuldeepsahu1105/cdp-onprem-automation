@@ -1,16 +1,15 @@
 ---
-# Health check: GET /api/<cm_api_version>/version (discovered in set_cm_api_url.yml, else cm_api_version_default).
+# Refresh API slug from GET /api/version, then health-check GET /api/<slug>/version.
 
-- name: Resolve CM API version slug for health wait
-  ansible.builtin.set_fact:
-    _cm_api_version_effective: "{{ cm_api_version | default(cm_api_version_default) }}"
+- name: Fetch latest CM API version slug before health wait
+  ansible.builtin.import_tasks: fetch_cm_api_version_slug.yml
 
 - name: Wait for Cloudera Manager API to respond (delegated to CM host when play is on localhost)
   ansible.builtin.uri:
     url: >-
       {{
         cm_protocol ~ '://' ~ cm_api_probe_host ~ ':' ~ (cm_api_port | string)
-        ~ '/api/' ~ _cm_api_version_effective
+        ~ '/api/' ~ cm_api_version
         ~ '/version'
       }}
     method: GET
@@ -34,7 +33,7 @@
     url: >-
       {{
         cm_protocol ~ '://' ~ cm_api_client_host ~ ':' ~ (cm_api_port | string)
-        ~ '/api/' ~ _cm_api_version_effective
+        ~ '/api/' ~ cm_api_version
         ~ '/version'
       }}
     method: GET
