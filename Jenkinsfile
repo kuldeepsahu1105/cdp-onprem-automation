@@ -15,7 +15,7 @@ pipeline {
       multiSelectDelimiter: ',',
       visibleItemCount: 10,
       quoteValue: false,
-      description: 'Stages to run (fixed order). See PIPELINE_STAGES_REFERENCE below for full guide. Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. Run REFRESH_JENKINSFILE=YES after Jenkinsfile changes.'
+      description: 'Stages to run (fixed order). See PIPELINE_STAGES_REFERENCE below for full guide. Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. Run REFRESH_JENKINSFILE=YES after Jenkinsfile changes.',
       descriptionPropertyValue: '''VALIDATE: prereq checks (VALIDATION_CHECKS),TERRAFORM: EC2/VPC/SG/EIP + inventory,PREREQS: Ansible 01-09,PORTAL: portal bootstrap (28),IDENTITY: FreeIPA/AD phase 2,CM_INSTALL: CM server phase 3,CM_TLS_KRB_LDAP: TLS/Kerberos/LDAP 22-25,CDH_INSTALL: base cluster (26),MONITORING: Grafana/Prom (29),ECS_INSTALL: ECS cluster (27)'''
     )
     text(
