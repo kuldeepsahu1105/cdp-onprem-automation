@@ -75,13 +75,13 @@ The same three-tier model applies to **portal**, **Cloudera Manager**, **Grafana
 | **PORTAL** (`10_setup_deployment_portal.yml`) | `portal`, `ipa` | Portal index, portal + IPA vhosts (required when IPA in inventory); **no** pgAdmin or CM Caddy vhost probes | Portal (+ IPA when in list); **no** pgAdmin Tier **B** until milestone `pgadmin` |
 | **PORTAL pgAdmin hard gate** (optional refresh) | + `pgadmin` | + pgAdmin Caddy vhost required | + pgAdmin external |
 | **IDENTITY** (phase 2 refresh) | + `identity` | Same as PORTAL | + FreeIPA printed / Caddy IPA URLs |
-| **CM_INSTALL** (phase 3 refresh) | + `cm` | + CM Caddy vhost | + CM HTTP / public IP / Caddy CM |
-| **CM_TLS** (phase `cm_tls` refresh) | + `cm_tls` | (CM vhost still required when `cm` present) | + CM HTTPS FQDN |
+| **CM_INSTALL** | — | — | CM `frontend_url` via `26_setup_cm_license.yml` when Caddy enabled; **no** `35_refresh` |
+| **CM_TLS** (first `35_refresh` after CM) | + `cm`, `cm_tls` | + CM Caddy vhost | + CM HTTP / public IP / Caddy CM; + CM HTTPS FQDN |
 | **CDH** (phase `cdh` refresh) | + `cdh` | (index refresh; no extra vhosts) | (no new probes) |
 | **MONITORING** | + `monitoring` | + Grafana / Prometheus vhosts | + Grafana / Prometheus external |
 | **ECS** | + `ecs` | + ECS vhost | + ECS console / Caddy ECS |
 
-Set explicitly: `-e deployment_portal_verify_milestones=cm,cm_tls`. `pvc_setup.sh` passes the cumulative list on each `_run_deployment_portal_refresh`. Legacy `deployment_portal_verify_post_cm: true` on `35_refresh` implies **`portal`, `ipa`** when milestones are omitted (not `cm` — add `cm` via phase 3 refresh or `-e`).
+Set explicitly: `-e deployment_portal_verify_milestones=cm,cm_tls`. `pvc_setup.sh` passes the cumulative list on each `_run_deployment_portal_refresh` (Identity, CM_TLS, CDH, monitoring, ECS — not CM_INSTALL). Legacy `deployment_portal_verify_post_cm: true` on `35_refresh` implies **`portal`, `ipa`** when milestones are omitted (not `cm` — add `cm` via CM_TLS refresh or `-e`).
 
 Variables:
 
