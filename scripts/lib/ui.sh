@@ -128,7 +128,7 @@ ui_section() {
   UI_STEP_NUM=0
   ui_nl
   ui_rule "═"
-  printf '  %s  ' "$emoji"
+  printf '  %s  ' "$(ui_plain_emoji "$emoji" '*')"
   ui_c "1;34" "$title"
   ui_nl
   ui_rule "─"
@@ -138,7 +138,7 @@ ui_subsection() {
   local title="$1"
   local emoji="${2:-•}"
   ui_nl
-  printf '%s%s  ' "$UI_INDENT" "$emoji"
+  printf '%s%s  ' "$UI_INDENT" "$(ui_plain_emoji "$emoji" '-')"
   ui_c "1;35" "$title"
   ui_nl
 }
@@ -150,14 +150,14 @@ ui_step() {
   ui_nl
   printf '%s' "$UI_INDENT"
   ui_c "1;36" "Step ${UI_STEP_NUM}:"
-  printf ' %s  ' "$emoji"
+  printf ' %s  ' "$(ui_plain_emoji "$emoji" '>')"
   ui_c "1" "$msg"
   ui_nl
 }
 
 ui_ok() {
   printf '%s  ' "$UI_INDENT"
-  ui_c "32" '✅'
+  ui_c "32" "$(ui_plain_emoji '✅' 'OK')"
   printf '  '
   ui_c "32" "$*"
   ui_nl

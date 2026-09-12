@@ -11,6 +11,21 @@ INVENTORY="${INVENTORY:-$OUT_DIR/inventory.ini}"
 [[ -f "$INVENTORY" ]] || INVENTORY="${ANSIBLE_DIR}/inventory.ini"
 OUT_FILE="${OUT_DIR}/access-urls.txt"
 
+strip_ansi() {
+  sed -E \
+    -e 's/\x1B\[[0-9;]*[a-zA-Z]//g' \
+    -e 's/\x1B\][^\x07]*(\x07|\x1B\\)//g'
+}
+
+sanitize_url_line() {
+  local line="$1"
+  line="$(printf '%s' "$line" | strip_ansi)"
+  line="$(printf '%s' "$line" | tr -d '\r')"
+  # Trim trailing non-URL junk (ANSI leftovers, box-drawing) often copied from Jenkins console.
+  line="$(printf '%s' "$line" | sed -E 's/[^[:print:][:space:]]//g' | sed -E 's/[[:space:]]+$//')"
+  printf '%s' "$line"
+}
+
 read_group_var() {
   local key="$1" default="${2:-}"
   local val="" f line
@@ -90,26 +105,25 @@ url_with_port() {
 }
 
 extract_urls_from_ansible_logs() {
-  local merged=""
-  local f
+  local merged="" f latest=""
   for f in "$OUT_DIR"/ansible-*-phase*.log; do
     [[ -f "$f" ]] || continue
     if grep -q 'CDP_ACCESS_URLS_BEGIN' "$f" 2>/dev/null; then
-      merged="$(awk '/CDP_ACCESS_URLS_BEGIN/,/CDP_ACCESS_URLS_END/' "$f" | tail -n +1)"
-      if [[ -n "$merged" ]]; then
-        printf '%s\n' "$merged"
-        return 0
-      fi
+      latest="$f"
     fi
   done
-  return 1
+  [[ -n "$latest" ]] || return 1
+  merged="$(awk '/CDP_ACCESS_URLS_BEGIN/,/CDP_ACCESS_URLS_END/' "$latest" | strip_ansi)"
+  [[ -n "$merged" ]] || return 1
+  printf '%s\n' "$merged"
+  return 0
 }
 
 mkdir -p "$OUT_DIR"
 
 {
-  echo "CDP Deployment — Access URLs (portal, CM, Caddy, monitoring)"
-  echo "=========================================================="
+  echo "CDP Deployment - Access URLs (portal, CM, Caddy, monitoring)"
+  echo "=============================================================="
   echo "Build: ${JOB_NAME:-local} #${BUILD_NUMBER:-0}"
   echo "Time:  $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
   echo ""
@@ -212,9 +226,11 @@ mkdir -p "$OUT_DIR"
     portal_h="$(caddy_hostname portal "$slug" "$caddy_base" "$caddy_mode")"
     cm_h="$(caddy_hostname cm "$slug" "$caddy_base" "$caddy_mode")"
     pg_h="$(caddy_hostname pgadmin "$slug" "$caddy_base" "$caddy_mode")"
-    echo "  Portal:  $(url_with_port http "$portal_h" "$http_port" /)"
-    echo "  CM:      $(url_with_port http "$cm_h" "$http_port" /)"
-    echo "  pgAdmin: $(url_with_port http "$pg_h" "$pg_port" /)"
+    echo "  Portal (Caddy vhost): $(url_with_port http "$portal_h" "$http_port" /)"
+    echo "  Direct by public IP:  $(url_with_port http "$ops_pub" "$http_port" /)"
+    echo "  CM (Caddy vhost):     $(url_with_port http "$cm_h" "$http_port" /)"
+    echo "  pgAdmin (Caddy):      $(url_with_port http "$pg_h" "$http_port" /)"
+    echo "  pgAdmin (direct):     $(url_with_port http "$ops_pub" "$pg_port" /)"
     if [[ "$monitoring_on" == "true" || "$monitoring_on" == "1" ]]; then
       graf_h="$(caddy_hostname grafana "$slug" "$caddy_base" "$caddy_mode")"
       echo "  Grafana: $(url_with_port http "$graf_h" "$http_port" /)"
