@@ -10,3 +10,6 @@
     deployment_portal_ipa_fqdn: "{{ hostvars['localhost']['deployment_portal_ipa_fqdn'] | default('') }}"
     deployment_portal_has_ipa: "{{ hostvars['localhost']['deployment_portal_has_ipa'] | default(false) }}"
     deployment_portal_ecs_present: "{{ hostvars['localhost']['deployment_portal_ecs_present'] | default(false) }}"
+    cm_caddy_public_url: "{{ hostvars['localhost']['cm_caddy_public_url'] | default('') }}"
+    ecs_caddy_console_url: "{{ hostvars['localhost']['ecs_caddy_console_url'] | default('') }}"
+    cm_frontend_url_effective: "{{ hostvars['localhost']['cm_frontend_url_effective'] | default('') }}"

@@ -309,6 +309,10 @@ ansible_controller_outside_vpc: false
 # When play runs on localhost/Jenkins, run HTTP discovery on cldr-mngr via 127.0.0.1 (not VPC private IP)
 cm_api_delegate_probes_to_manager: true
 cm_api_private_reachability_timeout: 5
+# CM UI via Caddy vhost (portal): frontend_url + cm_host_name in CM (API). Override full URL here if needed.
+cm_external_url: ""
+# auto | true | false — auto when deployment_portal_enabled + caddy_vhost_enabled + Caddy CM URL exists
+cm_apply_caddy_frontend_url: auto
 # Portal verify: skip VPC-only URL checks when control profile is public-only (Jenkins default)
 deployment_portal_url_verify_skip_vpc: false
 # Milestone-scoped URL verify (portal, ipa, identity, cm, cm_tls, cdh, monitoring, ecs).

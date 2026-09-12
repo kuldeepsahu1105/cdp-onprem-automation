@@ -4,7 +4,7 @@ Scan this before deep-diving playbooks/Jenkins. Details: `ansible-playbooks/docs
 
 ## Architecture
 
-- **Jenkins outside VPC:** `detect_ansible_control_reachability` → `ansible_control_reachability: public`. Never `uri`/CM/portal checks via `172.31.x` from the controller; delegate CM API discovery to **cldr-mngr** (`select_cm_api_probe_host`: `127.0.0.1`, then FQDN/private — scm-server often skips localhost). VPN/bare-metal controller → `private`.
+- **Jenkins outside VPC:** `detect_ansible_control_reachability` → `ansible_control_reachability: public`. Never `uri`/CM/portal checks via `172.31.x` from the controller; delegate CM API discovery to **cldr-mngr** (`select_cm_api_probe_host`: `127.0.0.1`, then **ansible_host** (public), then FQDN; HTTP and HTTPS — Auto-TLS may answer only on `:7183`). Set `cm_api_url` client host from the discovered address for localhost plays. VPN/bare-metal controller → `private`.
 - **Pipeline order:** PREREQS → **PORTAL (10)** → identity → CM → TLS → CDH → monitoring → ECS. Numbered playbooks **10–35** per `ansible-playbooks/docs/RUN_ORDER.md`.
 - **Portal before CM:** Caddy CM vhost **502 is expected** until CM is up. URL verify is **milestone-scoped** (portal + IPA at bootstrap; CM after refresh / post-CM). **pgAdmin** Caddy vhost is **warn-only** at `portal`/`ipa` milestones; add milestone **`pgadmin`** to hard-fail on pgAdmin vhost.
 
@@ -12,7 +12,7 @@ Scan this before deep-diving playbooks/Jenkins. Details: `ansible-playbooks/docs
 
 - Listen **8088**; smoke: `http://<ops-public-ip>:8088/`. Vhost FQDN: `portal.<dashed-public-ip>.pvc.cloudera-labs.com` (dashes, not dots in IP segment).
 - Hairpin from the same ops host is optional — warn, do not fail the pipeline on it alone.
-- **IPA** `reverse_proxy`: `header_up Host` = ipaserver FQDN. **CM** block: split HTTP vs HTTPS + `transport` per autotls mode.
+- **IPA** `reverse_proxy`: `header_up Host` = ipaserver FQDN. **CM** block: split HTTP vs HTTPS + `transport` per autotls mode. Post-CM: CM API **`frontend_url`** → Caddy CM vhost (`apply_cm_caddy_load_balancer.yml`); facts **`cm_caddy_public_url`**, **`ecs_caddy_console_url`** from `caddy_vhost_urls.j2`. Tier A / portal CM probe: **`probe_cm_manager_ui_http.yml`** when `127.0.0.1:7180` is closed.
 - **RHEL:** remove `podman-docker` before installing `docker-ce` (conflicts with Docker CE).
 
 ## Ansible pitfalls

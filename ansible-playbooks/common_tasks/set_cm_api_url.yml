@@ -123,7 +123,7 @@
       {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }}).
       Client host for this play: {{ cm_api_client_host }}.
       Delegated probes tried: {{ cm_api_probe_host_candidates | default([cm_api_probe_host]) | join(', ') }}.
-      Jenkins/outside-VPC controllers use the CM public IP for uri from localhost; discovery runs on cldr-mngr (127.0.0.1, FQDN, private IP).
+      Jenkins/outside-VPC controllers use the CM public IP for uri from localhost; discovery runs on cldr-mngr (127.0.0.1, ansible_host, FQDN; HTTPS {{ cm_https_port }} OK without {{ cm_http_port }}).
       Set ansible_control_reachability: public (or legacy ansible_controller_outside_vpc: true / cm_api_prefer_private_ip: false).
   when:
     - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303])
@@ -164,11 +164,22 @@
   timeout: 30
   when: cm_api_probe_delegate_to | default('') | length == 0
 
+- name: Use discovered probe host for Jenkins/localhost CM API client URL
+  ansible.builtin.set_fact:
+    cm_api_client_host: "{{ cm_api_probe_host }}"
+  when:
+    - cm_api_controller_is_localhost | default(false) | bool
+    - cm_api_probe_delegate_to | default('') | length > 0
+    - cm_api_probe_host | default('') | length > 0
+    - cm_tls_probe_https is defined
+    - cm_tls_probe_https is succeeded
+    - cm_tls_probe_https.status | default(0) in [200, 301, 303]
+
 - name: Set base Cloudera Manager API URL
   ansible.builtin.set_fact:
     cm_api_version: "{{ cm_api_version_result.content | trim }}"
     cm_api_url: "{{ cm_protocol }}://{{ cm_api_client_host }}:{{ cm_api_port }}/api/{{ cm_api_version_result.content | trim }}"
-    cm_api_url_delegated: "{{ cm_protocol }}://127.0.0.1:{{ cm_api_port }}/api/{{ cm_api_version_result.content | trim }}"
+    cm_api_url_delegated: "{{ cm_protocol }}://{{ cm_api_probe_host }}:{{ cm_api_port }}/api/{{ cm_api_version_result.content | trim }}"
     cm_host: "{{ cm_api_client_host }}"
 
 - name: Print Cloudera Manager API URL

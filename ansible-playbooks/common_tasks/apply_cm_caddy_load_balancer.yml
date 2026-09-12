@@ -1,0 +1,71 @@
+---
+# Set Cloudera Manager frontend_url (and hostname override) to the Caddy CM vhost when portal fronts CM.
+
+- name: Decide whether to apply CM Caddy frontend URL
+  ansible.builtin.set_fact:
+    cm_apply_caddy_frontend_url_effective: >-
+      {{
+        false
+        if (cm_apply_caddy_frontend_url | default('auto') | lower | trim) == 'false'
+        else (
+          true
+          if (cm_apply_caddy_frontend_url | default('auto') | lower | trim) == 'true'
+          else (
+            (deployment_portal_enabled | default(true) | bool)
+            and (caddy_vhost_enabled | default(false) | bool)
+            and (cm_frontend_url_effective | default('') | length > 0)
+          )
+        )
+      }}
+
+- name: Skip CM frontend URL when not using Caddy public URL
+  ansible.builtin.debug:
+    msg: >-
+      Skipping CM frontend_url update
+      (cm_apply_caddy_frontend_url={{ cm_apply_caddy_frontend_url | default('auto') }},
+      cm_frontend_url_effective={{ cm_frontend_url_effective | default('') }}).
+  when: not (cm_apply_caddy_frontend_url_effective | default(false) | bool)
+
+- name: Parse CM frontend URL for cm_config
+  ansible.builtin.set_fact:
+    cm_frontend_url_for_api: "{{ cm_frontend_url_effective | regex_replace('/+$', '') }}"
+    cm_frontend_hostname_override: >-
+      {{
+        (
+          cm_frontend_url_effective
+          | regex_replace('^https?://', '')
+          | regex_replace('/.*$', '')
+          | regex_replace(':.*$', '')
+        )
+        | trim
+      }}
+  when:
+    - cm_apply_caddy_frontend_url_effective | default(false) | bool
+    - cm_frontend_url_effective | default('') | length > 0
+
+- name: Apply Cloudera Manager frontend URL for Caddy load balancer
+  cloudera.cluster.cm_config:
+    host: "{{ cm_host }}"
+    port: "{{ cm_api_port }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    force_tls: "{{ autotls_enabled | default(false) }}"
+    parameters:
+      frontend_url: "{{ cm_frontend_url_for_api }}"
+      cm_host_name: "{{ cm_frontend_hostname_override }}"
+  register: cm_caddy_frontend_result
+  when:
+    - cm_apply_caddy_frontend_url_effective | default(false) | bool
+    - cm_frontend_url_for_api is defined
+    - cm_frontend_url_for_api | length > 0
+
+- name: Print Cloudera Manager frontend URL applied via API
+  ansible.builtin.debug:
+    msg:
+      - "CM frontend_url set to {{ cm_frontend_url_for_api }} (Caddy vhost / cm_external_url override)"
+      - "CM cm_host_name override: {{ cm_frontend_hostname_override }}"
+      - "Restart CMS Event Server from CM UI if alert/email links still show the old URL."
+  when:
+    - cm_caddy_frontend_result is defined
+    - cm_caddy_frontend_result is changed
