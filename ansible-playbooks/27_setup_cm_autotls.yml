@@ -129,18 +129,28 @@
       ansible.builtin.import_tasks: common_tasks/restart_cm_services.yml
       when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
 
-    - name: Refresh CM API URL after service restart
+- name: Verify CM API after Auto-TLS restart (Ansible controller — public manager IP)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: End play when Auto-TLS was not applied this run
+      ansible.builtin.meta: end_play
+      when: not (autotls_applied_this_run | default(false) | bool)
+
+    - name: Refresh CM API URL after service restart (controller probes public IP)
+      ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
+
+    - name: Set up Cloudera Manager API URL after restart
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
-      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
 
     - name: Wait for Cloudera Manager API after restart
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
-      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
 
-    - name: Wait for Cloudera Manager Server active after restart
+    - name: Wait for Cloudera Manager Server to start on CM host
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
-      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
+      delegate_to: "{{ cm_manager_inventory_host }}"
+      become: true
 
     - name: Print Cloudera Manager Access URLs after Auto-TLS restart
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
-      when: hostvars['localhost']['autotls_applied_this_run'] | default(false) | bool
