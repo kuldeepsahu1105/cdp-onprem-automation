@@ -65,17 +65,21 @@ EMAIL_FORMAT — In Check Parameters: regex-validate NOTIFICATION_EMAIL when non
     choice(
       name: 'VPC_MODE',
       choices: ['USE_DEFAULT', 'CREATE_NEW'],
-      description: 'VPC: USE_DEFAULT = account default VPC (create_vpc=false). CREATE_NEW = new VPC — set VPC fields below.'
+      description: '''Terraform VPC (TERRAFORM stage). USE_DEFAULT: create_vpc=false — use account default VPC and its subnets (needs a default VPC in the region). CREATE_NEW: create_vpc=true — new VPC from VPC_NAME/CIDR/AZ/subnet fields below.
+
+Works with any SG_MODE. CREATE_NEW VPC + USE_EXISTING SG only if that SG already exists in that VPC (sg-id or name); greenfield = CREATE_NEW for both.'''
     )
     choice(
       name: 'SG_MODE',
       choices: ['USE_EXISTING', 'CREATE_NEW'],
-      description: '''USE_EXISTING: attach existing SG by sg-id or name (default {ENVIRONMENT}-pvc_cluster_sg); edit port/CIDR rules in AWS. CREATE_NEW: Terraform creates SG — ingress is all protocols/ports; use ALLOW_ALL + ALLOWED_CIDRS below (ALLOWED_PORTS does not limit TCP ports).'''
+      description: '''Terraform security group (TERRAFORM stage). USE_EXISTING: create_new_sg=false — attach SG by EXISTING_SG_NAME (sg-id or name in the target VPC; default {ENVIRONMENT}-pvc_cluster_sg); Terraform does not change its rules — edit in AWS. CREATE_NEW: create_new_sg=true — Terraform creates SG in the target VPC; ingress via ALLOW_ALL + ALLOWED_CIDRS (all protocols/ports).
+
+Target VPC = default VPC when VPC_MODE=USE_DEFAULT, or the new VPC when VPC_MODE=CREATE_NEW. Recommended pairs: USE_DEFAULT+USE_EXISTING | USE_DEFAULT+CREATE_NEW | CREATE_NEW+CREATE_NEW.'''
     )
     booleanParam(
       name: 'CREATE_EIP',
       defaultValue: true,
-      description: 'TERRAFORM: allocate Elastic IP for Cloudera Manager (cldr-mngr). Name tag from CLDR_EIP_NAME (empty = {ENVIRONMENT}-cldr-mngr-eip). Does not affect security group rules.'
+      description: 'TERRAFORM: create_eip=true — allocate Elastic IP and associate with cldr-mngr (independent of VPC_MODE/SG_MODE). Name tag: CLDR_EIP_NAME (empty = {ENVIRONMENT}-cldr-mngr-eip). Uncheck to use instance public IP only.'
     )
     string(name: 'VPC_NAME', defaultValue: '', description: 'CREATE_NEW VPC: name (empty = {ENVIRONMENT}-cldr-vpc)')
     string(name: 'VPC_CIDR_BLOCK', defaultValue: '172.16.0.0/16', description: 'CREATE_NEW VPC: CIDR block')
@@ -674,6 +678,12 @@ def validatePipelineInputs() {
       if (!cidr || !cidr.matches(/^\\d+\\.\\d+\\.\\d+\\.\\d+\\/\\d+$/)) {
         validationFail("VPC_CIDR_BLOCK '${cidr}' is invalid for VPC_MODE=CREATE_NEW (expected e.g. 172.16.0.0/16).")
       }
+      if (sgMode == 'USE_EXISTING') {
+        echo 'WARN: VPC_MODE=CREATE_NEW + SG_MODE=USE_EXISTING — EXISTING_SG_NAME must be a security group already in that new VPC (or use sg-id after VPC exists). First deploy in a new VPC: prefer SG_MODE=CREATE_NEW.'
+      }
+    }
+    if (vpcMode == 'USE_DEFAULT' && sgMode == 'USE_EXISTING') {
+      echo 'INFO: USE_DEFAULT + USE_EXISTING — SG name is resolved in the account default VPC; validation checks SG exists there when TFVARS/AWS pre-check runs.'
     }
   }
 

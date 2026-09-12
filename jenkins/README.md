@@ -67,7 +67,8 @@ Select one or more of the **seven** stage checkboxes: `VALIDATE`, `TERRAFORM`, `
 | Prerequisites only | `VALIDATE`, `PREREQS` |
 | CM install only | `VALIDATE`, `CM_INSTALL` |
 | Terraform + CM | `VALIDATE`, `TERRAFORM`, `CM_INSTALL` |
-| Full stack | All stages |
+| CM + CDH base | `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CDH_BASE` |
+| Full stack (through ECS) | `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CDH_BASE`, `ECS_INSTALL` |
 
 Ansible-only stages (no `TERRAFORM`) require existing `ansible-playbooks/inventory.ini`.
 

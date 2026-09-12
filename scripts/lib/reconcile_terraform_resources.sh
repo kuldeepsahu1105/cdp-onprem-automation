@@ -21,6 +21,23 @@ reconcile_default_vpc_id() {
     --output text 2>/dev/null | grep -E '^vpc-' || return 1
 }
 
+# VPC for SG name lookup during reconcile (default VPC vs Terraform-managed VPC).
+reconcile_vpc_id_for_sg() {
+  local tf_dir="${REPO_ROOT:-.}/terraform-code/cloudera-pvc-terraform"
+  local vpc_id
+
+  if reconcile_is_enabled "${CREATE_VPC:-false}"; then
+    vpc_id="$(cd "$tf_dir" && terraform output -raw vpc_id 2>/dev/null || true)"
+    if [[ "$vpc_id" =~ ^vpc- ]]; then
+      printf '%s' "$vpc_id"
+      return 0
+    fi
+    reconcile_log "CREATE_VPC=true but VPC not in Terraform state yet — skip SG import reconcile until after VPC apply"
+    return 1
+  fi
+  reconcile_default_vpc_id
+}
+
 reconcile_aws_keypair_exists() {
   local name="$1" region="${2:-${AWS_REGION:-ap-southeast-1}}"
   aws ec2 describe-key-pairs \
@@ -117,8 +134,8 @@ reconcile_security_group() {
     return 0
   fi
 
-  vpc_id="$(reconcile_default_vpc_id)" || {
-    reconcile_log "WARN: cannot resolve default VPC for SG reconcile"
+  vpc_id="$(reconcile_vpc_id_for_sg)" || {
+    reconcile_log "WARN: cannot resolve VPC for SG reconcile"
     return 0
   }
 
