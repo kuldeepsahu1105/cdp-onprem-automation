@@ -2,6 +2,41 @@
   admin off
 }
 
+{% if caddy_vhost_enabled | default(false) | bool %}
+{# nip.io-style vhosts — public IP slug (Jenkins / internet); optional private slug for in-VPC #}
+{% set caddy_vhost_urls = caddy_vhost_urls_external %}
+{% include 'deployment_portal_Caddyfile_vhosts.inc.j2' %}
+{% if caddy_vhost_register_private_ip | default(true) | bool and (caddy_vhost_urls_vpc is defined) and (caddy_vhost_urls_vpc | length > 0) %}
+{% set caddy_vhost_urls = caddy_vhost_urls_vpc %}
+{% include 'deployment_portal_Caddyfile_vhosts.inc.j2' %}
+{% endif %}
+
+{# Fallback: IP:port path routes #}
+http://:{{ deployment_portal_http_port }} {
+  root * /srv
+
+  @static not path /grafana* /prometheus* /alertmanager*
+  handle @static {
+    try_files {path} /index.html
+    file_server
+  }
+
+{% if monitoring_stack_enabled | default(false) | bool %}
+  handle_path /grafana/* {
+    reverse_proxy {{ monitoring_grafana_container }}:3000
+  }
+
+  handle_path /prometheus/* {
+    reverse_proxy {{ monitoring_prometheus_container }}:9090
+  }
+
+  handle_path /alertmanager/* {
+    reverse_proxy {{ monitoring_alertmanager_container }}:9093
+  }
+{% endif %}
+}
+
+{% else %}
 :{{ deployment_portal_http_port }} {
   root * /srv
 
@@ -25,3 +60,4 @@
   }
 {% endif %}
 }
+{% endif %}

@@ -153,6 +153,7 @@ ansible-playbook -i inventory.ini 19_start_cm.yml
 ansible-playbook -i inventory.ini 20_verify_cm.yml
 ansible-playbook -i inventory.ini 21_setup_cm_license.yml
 ansible-playbook -i inventory.ini 22_setup_cm_autotls.yml
+# CM API probes: VPC private_ip from Jenkins (not public EIP hairpin); 127.0.0.1 on cldr-mngr. SG must allow 7180/7183 from Jenkins to private IPs.
 ansible-playbook -i inventory.ini 23_setup_cm_krbs.yml
 ansible-playbook -i inventory.ini 25_setup_cm_ldap.yml
 ```
@@ -181,7 +182,11 @@ ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
 MONITORING_STACK_ENABLED=true ansible-playbook -i inventory.ini 29_setup_monitoring_stack.yml
 ```
 
-Open `http://<cldr-mngr-fqdn>:8088/` for the index (CM, IPA, ECS, PostgreSQL, pgAdmin, node table). pgAdmin: port `5050`.
+Ops stack runs on **ipaserver** when present (`deployment_portal_host_group: auto`), else **cldr-mngr**.
+
+**AWS (public IP):** Jenkins and browsers on the internet use `http://<ops-public-ip>:8088/`; hosts inside the VPC can use `http://<ops-private-ip>:8088/`. The generated index lists both.
+
+**Bare metal / private network (no public IP):** Set `deployment_environment: baremetal` (or `deployment_portal_access_profile: private`). The portal index shows only private-network URLs — typically `http://<ops-fqdn>:8088/` when `deployment_portal_prefer_fqdn_urls: true`, or `http://<management-ip>:8088/` otherwise. pgAdmin stays on port `5050` on the same ops host; database is **cldr-mngr** PostgreSQL. Caddy lab hostnames use the ops management IP (often `caddy_vhost_dns_mode: flat` with IPA/AD DNS).
 
 ---
 

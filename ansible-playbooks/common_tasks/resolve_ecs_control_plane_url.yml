@@ -1,0 +1,9 @@
+---
+- name: Set ECS control plane console URL from app domain when unset
+  ansible.builtin.set_fact:
+    ecs_control_plane_url_effective: >-
+      {{
+        ecs_control_plane_url
+        if (ecs_control_plane_url | default('') | length > 0)
+        else ('https://console.' + ecs_app_domain)
+      }}

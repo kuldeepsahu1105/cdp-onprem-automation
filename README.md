@@ -114,12 +114,27 @@ ansible-playbook -i inventory.ini 26_setup_base_cluster.yml \
 
 ## Deployment portal (Caddy index + pgAdmin)
 
-After cluster deploy, `28_setup_deployment_portal.yml` installs on **`cldr-mngr`** (by default):
+After cluster deploy, `28_setup_deployment_portal.yml` installs the **ops stack** on **`ipaserver`** when `[ipaserver]` exists, otherwise **`cldr-mngr`** (`deployment_portal_host_group: auto`):
 
-- **Caddy** on port `8088` — HTML index with CM, FreeIPA, PostgreSQL, ECS, pgAdmin, and inventory node links
-- **pgAdmin** on port `5050` — preconfigured server entry for CM PostgreSQL
+| Service | Port / path |
+|---------|-------------|
+| **Caddy deployment index** | `8088` on ops host **public IP** (Jenkins / browser); use **private IP** only from same VPC |
+| **pgAdmin** | `5050` (connects to CM PostgreSQL on `cldr-mngr`) |
+| **Grafana** | `8088/grafana/` |
+| **Prometheus** | `8088/prometheus/` |
+| **Alertmanager** | `8088/alertmanager/` |
+| **cAdvisor** | `8089` |
 
-Optional **monitoring** (Prometheus, Grafana, Alertmanager, cAdvisor): set `monitoring_stack_enabled: true` in `group_vars/all.yml`, or run with `MONITORING_STACK_ENABLED=true` (playbooks `28` + `29`). Extend links via `deployment_portal_extra_links` and `deployment_portal_data_service_links`.
+`monitoring_stack_enabled` defaults to **`true`** (Grafana included). Disable with `monitoring_stack_enabled: false` or run only `29` later. Extend the index via `deployment_portal_extra_links` and `deployment_portal_data_service_links`.
+
+### Caddy lab domain (`pvc.cloudera-labs.com`, nip.io-style)
+
+With `caddy_vhost_enabled: true`, Caddy serves **per-service hostnames** on the ops host (port `8088` by default), for example:
+
+`http://cm.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → Cloudera Manager  
+`http://grafana.<ops-ip-dashed>.pvc.cloudera-labs.com:8088` → Grafana  
+
+Set `caddy_vhost_dns_mode: classic_nipio` for **`*.nip.io`** names (no custom DNS). Set `flat` for `cm.pvc.cloudera-labs.com` when you point all A records at the ops IP.
 
 ```bash
 ansible-playbook -i inventory.ini 28_setup_deployment_portal.yml
@@ -316,7 +331,7 @@ DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
 
 Declarative **`Jenkinsfile`** with **checkbox stage selection**, input validation, and `REFRESH_JENKINSFILE=YES` to reload parameters after changes.
 
-**Stage checkboxes (`PIPELINE_STAGES`):** `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `CDH_BASE`, `ECS_INSTALL` — pick any combination.
+**Stage checkboxes (`PIPELINE_STAGES`):** `VALIDATE`, `TERRAFORM`, `PREREQS`, `IDENTITY`, `CM_INSTALL`, `PORTAL`, `CM_TLS_KRB_LDAP`, `CDH_INSTALL`, `MONITORING`, `ECS_INSTALL` — pick any combination (`CDH_BASE` legacy expands to TLS/LDAP + CDH install).
 
 **Validation checkboxes (`VALIDATION_CHECKS`):** `TOOLS`, `AWS_CREDS`, `TFVARS`, `ANSIBLE_SYNTAX`, `INVENTORY`, `EMAIL_FORMAT`.
 

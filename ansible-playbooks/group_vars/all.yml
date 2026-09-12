@@ -296,6 +296,11 @@ cm_cms_reports_manager_db_password: rman
 # Cloudera Manager API ports
 cm_https_port: 7183
 cm_http_port: 7180
+# API probes: use private_ip from inventory when Ansible runs off-host; 127.0.0.1 when play targets cldr-mngr
+cm_api_prefer_private_ip: true
+cm_api_connect_host: ""
+# Set true after 22_setup_cm_autotls.yml for Caddy CM reverse-proxy target port
+autotls_enabled: false
 
 ##### cm_server autotls variables:
 # SSH Authentication (Choose one)
@@ -428,18 +433,59 @@ ecs_control_plane_vault_mode: embedded
 ecs_control_plane_embedded_db_storage_gb: 50
 ecs_control_plane_embedded_vault_storage_gb: 2
 
+# ECS Data Services (CDW, CDE, CAI) — 30_setup_ecs_data_services.yml
+# IAM access keys are signed API credentials — automation can CREATE machine-user keys after ECS
+# is up only when a bootstrap admin key exists (one-time console key or ecs_iam_bootstrap_*).
+ecs_data_services_deploy_enabled: false
+ecs_control_plane_url: ""  # blank = https://console.{{ ecs_app_domain }}
+ecs_api_access_key_id: ""
+ecs_api_private_key: ""
+ecs_auto_provision_api_access_key: true
+ecs_automation_machine_user: cldr-automation-sa
+ecs_automation_access_key_type: V2
+ecs_iam_bootstrap_access_key_id: ""
+ecs_iam_bootstrap_private_key: ""
+ecs_api_credentials_cache_path: "{{ lookup('env', 'WORKSPACE') | default('/tmp', true) }}/jenkins/artifacts/ecs-automation-api-credentials.yml"
+ecs_control_plane_wait_retries: 40
+ecs_control_plane_wait_delay: 15
+ecs_control_plane_validate_certs: false
+ecs_data_services_use_cdpcurl: true
+ecs_data_services_install: []  # e.g. [cdw, cde, cai] or [{name: cdw, enabled: true}, ...]
+ecs_data_services_catalog:
+  cdw:
+    name: Cloudera Data Warehouse
+    description: CDW on ECS control plane
+    url: ""
+  cde:
+    name: Cloudera Data Engineering
+    description: CDE virtual clusters
+    url: ""
+  cai:
+    name: Cloudera AI
+    description: Cloudera AI workspaces
+    url: ""
+
 # ---------------------------------------------------------------------------
-# Deployment portal (Caddy index + pgAdmin) — 28_setup_deployment_portal.yml
-# Optional monitoring — monitoring_stack_enabled or 29_setup_monitoring_stack.yml
+# Deployment portal + ops UI — 28_setup_deployment_portal.yml
+# Caddy index, pgAdmin, Prometheus, Grafana, Alertmanager, cAdvisor on ops host.
+# auto = ipaserver when [ipaserver] exists, else cldr-mngr. pgAdmin targets CM PostgreSQL on cldr-mngr.
 # ---------------------------------------------------------------------------
 deployment_portal_enabled: true
-deployment_portal_host_group: cldr-mngr
+deployment_portal_host_group: auto
+deployment_portal_postgres_host_group: cldr-mngr
 deployment_portal_http_port: 8088
 deployment_portal_pgadmin_host_port: 5050
 deployment_portal_config_dir: /opt/cldr-deployment-portal
 deployment_portal_www_dir: /opt/cldr-deployment-portal/www
 deployment_portal_caddy_image: caddy:2-alpine
 deployment_portal_caddy_container: cldr-portal-caddy
+# RHEL 'docker' RPM is a Podman shim (no docker.service); install Docker CE for the portal stack.
+portal_docker_use_ce: true
+# When compose plugin is missing, install Compose v2 binary then pip v1
+portal_docker_compose_version: "2.29.2"
+portal_compose_pip_fallback: true
+# Command argv prefix for compose up/restart (set on host by install_portal_container_runtime)
+deployment_portal_compose_argv: ['docker', 'compose']
 deployment_portal_pgadmin_image: dpage/pgadmin4:8
 deployment_portal_pgadmin_container: cldr-portal-pgadmin
 pgadmin_default_email: "admin@{{ cluster_domain }}"
@@ -453,8 +499,33 @@ deployment_portal_inventory_groups:
   - ecs-workers
 deployment_portal_data_service_links: []
 deployment_portal_extra_links: []
+# Portal URL profile: auto | cloud (public + VPC) | private (bare metal / no public IP)
+deployment_portal_access_profile: auto
+# When profile is private, prefer cluster FQDN in links (set false to use management IP only)
+deployment_portal_prefer_fqdn_urls: true
+# Force private profile on cloud-style inventory (no public URLs in portal index)
+deployment_portal_use_private_network_only: false
 
-monitoring_stack_enabled: false
+# Caddy nip.io-style hostnames (all resolve to ops host IP; Caddy reverse-proxies to backends)
+# embedded_ip: cm.10-54-75-123.pvc.cloudera-labs.com  (wildcard DNS on base domain)
+# classic_nipio: cm.10-54-75-123.nip.io  (works without custom DNS)
+# flat: cm.pvc.cloudera-labs.com  (single A record for *.svc → ops IP)
+caddy_vhost_enabled: true
+caddy_vhost_public_base: pvc.cloudera-labs.com
+caddy_vhost_dns_mode: embedded_ip
+# Register nip.io-style vhosts for private IP as well (in-VPC browsers); public slug for Jenkins/internet
+caddy_vhost_register_private_ip: true
+caddy_vhost_service_names:
+  portal: portal
+  cm: cm
+  pgadmin: pgadmin
+  grafana: grafana
+  prometheus: prometheus
+  alertmanager: alertmanager
+  ipa: ipa
+  ecs: ecs
+
+monitoring_stack_enabled: true
 monitoring_config_dir: /opt/cldr-monitoring
 monitoring_prometheus_image: prom/prometheus:v2.54.1
 monitoring_prometheus_container: cldr-mon-prometheus

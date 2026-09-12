@@ -13,10 +13,17 @@ END $$;
 {% endfor %}
 
 {% for db in databases %}
--- Create database **outside** the function block
-CREATE DATABASE {{ db.name }} OWNER {{ db.user }} ENCODING 'UTF8'
-    TEMPLATE template0
-    LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8';
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ db.name }}') THEN
+        CREATE DATABASE {{ db.name }} OWNER {{ db.user }} ENCODING 'UTF8'
+            TEMPLATE template0
+            LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8';
+        RAISE NOTICE 'Database % created successfully.', '{{ db.name }}';
+    ELSE
+        RAISE NOTICE 'Database % already exists. Skipping.', '{{ db.name }}';
+    END IF;
+END $$;
 {% endfor %}
 
 /* Special Configuration */

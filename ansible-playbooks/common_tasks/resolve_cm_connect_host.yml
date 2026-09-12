@@ -1,0 +1,46 @@
+---
+# Pick a reachable address for CM API probes (avoids EC2 hairpin timeout to public IP on cldr-mngr).
+
+- name: Resolve Cloudera Manager API connection address
+  ansible.builtin.set_fact:
+    cm_manager_host_inv: "{{ cm_manager_inventory_host }}"
+    cm_host_public: "{{ hostvars[cm_manager_inventory_host].ansible_host | default(cm_manager_inventory_host) }}"
+    cm_host_private: >-
+      {{ hostvars[cm_manager_inventory_host].private_ip
+         | default(hostvars[cm_manager_inventory_host].ansible_host | default('')) }}
+    cm_host_fqdn: >-
+      {{ hostvars[cm_manager_inventory_host].cldr_hostname | default(cm_manager_inventory_host) }}.{{ cluster_domain }}
+
+- name: Set CM connect host for API probes
+  ansible.builtin.set_fact:
+    cm_connect_host: >-
+      {{
+        cm_api_connect_host
+        if (cm_api_connect_host | default('') | length > 0)
+        else (
+          '127.0.0.1'
+          if (
+            inventory_hostname is defined
+            and inventory_hostname == cm_manager_inventory_host
+          )
+          else (
+            cm_host_private
+            if (
+              (cm_api_prefer_private_ip | default(true) | bool)
+              and (cm_host_private | length > 0)
+            )
+            else cm_host_public
+          )
+        )
+      }}
+
+- name: Mirror CM connect host to cm_host for API tasks
+  ansible.builtin.set_fact:
+    cm_host: "{{ cm_connect_host }}"
+
+- name: Explain CM API connection target when it differs from browser URL
+  ansible.builtin.debug:
+    msg:
+      - "CM API probes use connect host: {{ cm_connect_host }} (inventory runner: {{ inventory_hostname | default('localhost') }})"
+      - "Browser/public CM URL may use: {{ cm_host_public }}:{{ cm_http_port }} (public IP often times out from the CM host itself on AWS)"
+      - "Override with cm_api_connect_host or cm_api_prefer_private_ip in group_vars if needed"

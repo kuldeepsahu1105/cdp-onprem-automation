@@ -5,8 +5,12 @@ services:
     restart: unless-stopped
     command:
       - --config.file=/etc/prometheus/prometheus.yml
-      - --web.external-url=http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/prometheus/
-      - --web.route-prefix=/prometheus
+      - --web.external-url={{
+          caddy_vhost_urls_external.prometheus.url
+          if (caddy_vhost_enabled | default(false) | bool)
+          else ('http://' + deployment_portal_anchor_fqdn + ':' + (deployment_portal_http_port | string) + '/prometheus/')
+        }}
+      - --web.route-prefix={{ '/' if (caddy_vhost_enabled | default(false) | bool) else '/prometheus' }}
     volumes:
       - {{ monitoring_config_dir }}/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     networks:
@@ -19,8 +23,12 @@ services:
     restart: unless-stopped
     command:
       - --config.file=/etc/alertmanager/alertmanager.yml
-      - --web.route-prefix=/alertmanager
-      - --web.external-url=http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/alertmanager/
+      - --web.external-url={{
+          caddy_vhost_urls_external.alertmanager.url
+          if (caddy_vhost_enabled | default(false) | bool)
+          else ('http://' + deployment_portal_anchor_fqdn + ':' + (deployment_portal_http_port | string) + '/alertmanager/')
+        }}
+      - --web.route-prefix={{ '/' if (caddy_vhost_enabled | default(false) | bool) else '/alertmanager' }}
     volumes:
       - {{ monitoring_config_dir }}/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     networks:
@@ -34,8 +42,13 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: "{{ monitoring_grafana_admin_user }}"
       GF_SECURITY_ADMIN_PASSWORD: "{{ monitoring_grafana_admin_password }}"
-      GF_SERVER_ROOT_URL: "http://{{ deployment_portal_anchor_fqdn }}:{{ deployment_portal_http_port }}/grafana/"
-      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SERVER_ROOT_URL: >-
+        {{
+          caddy_vhost_urls_external.grafana.url
+          if (caddy_vhost_enabled | default(false) | bool)
+          else ('http://' + deployment_portal_anchor_fqdn + ':' + (deployment_portal_http_port | string) + '/grafana/')
+        }}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "{{ 'false' if (caddy_vhost_enabled | default(false) | bool) else 'true' }}"
     networks:
       - deployment_portal
       - monitoring_internal

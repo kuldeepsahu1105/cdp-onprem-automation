@@ -255,8 +255,12 @@ CMS (Management Service) and CDP base cluster are **separate**:
 | `24_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. |
 | `26_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
 | `27_setup_ecs_cluster.yml` | ECS cluster | Cloudera Data Services (DOCKER + ECS), embedded control plane |
-| `28_setup_deployment_portal.yml` | Ops portal | Caddy deployment index, pgAdmin, optional monitoring when `monitoring_stack_enabled` |
-| `29_setup_monitoring_stack.yml` | Monitoring | Prometheus, Grafana, Alertmanager, cAdvisor (requires 28) |
+| `28_setup_deployment_portal.yml` | Ops portal bootstrap | Caddy, pgAdmin, optional monitoring on ops host (`auto` → ipaserver else cldr-mngr); run early in phase 1 |
+| `29_setup_monitoring_stack.yml` | Monitoring only | Add monitoring after 28 (requires portal network) |
+| `30_setup_ecs_data_services.yml` | ECS data services | CDW/CDE/CAI via control plane API (credentials + `ecs_data_services_install`; stubs — extend API tasks) |
+
+**ECS API keys (automation):** IAM `createMachineUserAccessKey` requires a **signed** request. Password-only console login is not enough. After ECS is up, either set `ecs_api_access_key_id` / `ecs_api_private_key`, or set a **one-time** bootstrap admin key (`ecs_iam_bootstrap_*` or Jenkins `ECS_IAM_BOOTSTRAP_*` credentials) and enable `ecs_auto_provision_api_access_key` (default `true`) to create machine user `ecs_automation_machine_user` via CDP CLI; keys are cached at `ecs_api_credentials_cache_path`.
+| `31_refresh_deployment_portal.yml` | Portal refresh | Re-render index/Caddy after CM, base, ECS, or DS changes (no full reinstall) |
 
 Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-masters` / `ecs-workers` inventory groups. Skipped when `ecs_deploy_enabled: auto` and ECS groups are empty.
 
@@ -265,11 +269,20 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | Variable | Default | Description |
 |---|---|---|
 | `deployment_portal_enabled` | `true` | Run `28_setup_deployment_portal.yml` |
-| `deployment_portal_http_port` | `8088` | Caddy index + monitoring reverse proxy port |
-| `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI port on CM host |
-| `monitoring_stack_enabled` | `false` | Embed monitoring in playbook 28 |
+| `deployment_portal_host_group` | `auto` | `auto`, `ipaserver`, or `cldr-mngr` — where Caddy/pgAdmin/Grafana run |
+| `deployment_portal_postgres_host_group` | `cldr-mngr` | CM PostgreSQL host for pgAdmin |
+| `deployment_portal_http_port` | `8088` | Caddy index + Grafana/Prometheus/Alertmanager paths |
+| `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI on ops host |
+| `deployment_portal_access_profile` | `auto` | `auto`, `cloud` (public + VPC URLs), or `private` (bare metal / no public IP) |
+| `deployment_portal_prefer_fqdn_urls` | `true` | In `private` profile, use ops FQDN in portal links instead of raw management IP |
+| `deployment_portal_use_private_network_only` | `false` | Force `private` profile even when inventory has distinct public/private IPs |
+| `monitoring_stack_enabled` | `true` | Prometheus + Grafana + Alertmanager + cAdvisor with playbook 28; Jenkins `MONITORING_STACK_ENABLED` checkbox sets this override |
 | `deployment_portal_extra_links` | `[]` | Add `{name, url}` entries to the index page |
 | `monitoring_prometheus_extra_targets` | `[]` | Extra Prometheus scrape jobs |
+| `caddy_vhost_enabled` | `true` | Host-based Caddy URLs (nip.io-style) |
+| `caddy_vhost_public_base` | `pvc.cloudera-labs.com` | Base domain for `svc.<ip-dashed>.<base>` |
+| `caddy_vhost_dns_mode` | `embedded_ip` | `embedded_ip`, `classic_nipio`, or `flat` |
+| `autotls_enabled` | `false` | CM HTTPS port for Caddy `cm.*` vhost backend |
 
 ---
 
@@ -381,5 +394,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/join_ad_realm.yml` | AD `realm join` |
 | `common_tasks/join_freeipa_client.yml` | IPA client enrollment |
 | `common_tasks/set_cm_api_url.yml` | CM API URL + Auto-TLS detection |
+| `cm_api_prefer_private_ip` | `true` | Use `private_ip` for CM API from controller (not public IP) |
+| `cm_api_connect_host` | `""` | Force CM API target (e.g. `127.0.0.1` or public IP) |
 | `common_tasks/install_cloudera_collection.yml` | Galaxy collection install |
 | `common_tasks/cleanup/` | Modular cleanup tasks |

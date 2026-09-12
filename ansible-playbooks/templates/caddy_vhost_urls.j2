@@ -1,0 +1,46 @@
+{# YAML facts for nip.io-style Caddy hostnames — rendered into deployment_portal_context #}
+{% set slug = caddy_vhost_ip_for_urls | replace('.', '-') %}
+{% set base = caddy_vhost_public_base %}
+{% set port = deployment_portal_http_port | int %}
+{% set pg_port = deployment_portal_pgadmin_host_port | int %}
+{% macro vhost(svc) -%}
+{%- if caddy_vhost_dns_mode == 'flat' -%}
+{{ svc }}.{{ base }}
+{%- elif caddy_vhost_dns_mode == 'classic_nipio' -%}
+{{ svc }}.{{ slug }}.nip.io
+{%- else -%}
+{{ svc }}.{{ slug }}.{{ base }}
+{%- endif -%}
+{%- endmacro %}
+{% macro url(host, path, use_port) -%}
+http://{{ host }}{% if use_port %}:{{ port }}{% endif %}{{ path }}
+{%- endmacro %}
+{% set use_port = (port != 80) %}
+nipio_style: {{ caddy_vhost_dns_mode }}
+public_base: {{ base }}
+ip_slug: {{ slug }}
+ops_ip: {{ caddy_vhost_ip_for_urls }}
+portal:
+  hostname: "{{ vhost(caddy_vhost_service_names.portal) }}"
+  url: "{{ url(vhost(caddy_vhost_service_names.portal), '/', use_port) }}"
+cm:
+  hostname: "{{ vhost(caddy_vhost_service_names.cm) }}"
+  url: "{{ url(vhost(caddy_vhost_service_names.cm), '/', use_port) }}"
+pgadmin:
+  hostname: "{{ vhost(caddy_vhost_service_names.pgadmin) }}"
+  url: "http://{{ vhost(caddy_vhost_service_names.pgadmin) }}{% if pg_port != 80 %}:{{ pg_port }}{% endif %}/"
+grafana:
+  hostname: "{{ vhost(caddy_vhost_service_names.grafana) }}"
+  url: "{{ url(vhost(caddy_vhost_service_names.grafana), '/', use_port) }}"
+prometheus:
+  hostname: "{{ vhost(caddy_vhost_service_names.prometheus) }}"
+  url: "{{ url(vhost(caddy_vhost_service_names.prometheus), '/', use_port) }}"
+alertmanager:
+  hostname: "{{ vhost(caddy_vhost_service_names.alertmanager) }}"
+  url: "{{ url(vhost(caddy_vhost_service_names.alertmanager), '/', use_port) }}"
+ipa:
+  hostname: "{{ vhost(caddy_vhost_service_names.ipa) }}"
+  url: "{{ url(vhost(caddy_vhost_service_names.ipa), '/', use_port) }}"
+ecs:
+  hostname: "{{ vhost(caddy_vhost_service_names.ecs) }}"
+  url: "{{ url(vhost(caddy_vhost_service_names.ecs), '/', use_port) }}"

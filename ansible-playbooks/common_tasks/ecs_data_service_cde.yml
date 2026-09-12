@@ -1,0 +1,14 @@
+---
+- name: CDE | Skip when not selected
+  ansible.builtin.debug:
+    msg: "CDE not in ecs_data_services_install list — skipped."
+  when: "'cde' not in (ecs_data_services_install_names | default([]))"
+
+- name: CDE | Placeholder for Control Plane / CDE API install
+  ansible.builtin.debug:
+    msg: >-
+      CDE install: create DE workload auth via POST .../api/v1/iam/generateWorkloadAuthToken
+      (workloadName DE) signed with access key, then use CDE service API. See Cloudera docs
+      cde-api-private-cloud-get-access-token. Configure ecs_data_services_catalog.cde.service_host
+      after the CDE endpoint is provisioned in the console.
+  when: "'cde' in (ecs_data_services_install_names | default([]))"

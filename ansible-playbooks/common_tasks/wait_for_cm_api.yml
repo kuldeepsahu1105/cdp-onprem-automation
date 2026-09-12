@@ -12,3 +12,4 @@
   until: cm_api_wait.status in [200, 301, 303]
   retries: 30
   delay: 10
+  timeout: 30

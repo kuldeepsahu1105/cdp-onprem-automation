@@ -7,11 +7,8 @@
   connection: local
   gather_facts: true
   tasks:
-    - name: Require deployment portal host
-      ansible.builtin.assert:
-        that:
-          - deployment_portal_host_group in groups
-          - groups[deployment_portal_host_group] | length > 0
+    - name: Resolve portal install host
+      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
 
     - name: Enable monitoring in portal context for this run
       ansible.builtin.set_fact:
@@ -21,7 +18,7 @@
       ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
 
 - name: Deploy monitoring stack
-  hosts: "{{ deployment_portal_host_group }}"
+  hosts: "{{ hostvars['localhost']['deployment_portal_host_group_effective'] }}"
   become: true
   gather_facts: true
   tasks:
@@ -33,6 +30,9 @@
       ansible.builtin.set_fact:
         deployment_portal_context: "{{ hostvars['localhost']['deployment_portal_context'] }}"
         deployment_portal_anchor_fqdn: "{{ hostvars['localhost']['deployment_portal_anchor_fqdn'] }}"
+        caddy_vhost_urls: "{{ hostvars['localhost']['caddy_vhost_urls'] | default({}) }}"
+        caddy_vhost_urls_external: "{{ hostvars['localhost']['caddy_vhost_urls_external'] | default({}) }}"
+        caddy_vhost_urls_vpc: "{{ hostvars['localhost']['caddy_vhost_urls_vpc'] | default({}) }}"
 
     - name: Ensure container runtime is available
       ansible.builtin.import_tasks: common_tasks/install_portal_container_runtime.yml
@@ -68,7 +68,11 @@
 
     - name: Start monitoring stack
       ansible.builtin.command:
-        cmd: docker compose -f {{ monitoring_config_dir }}/docker-compose.yml up -d --remove-orphans
+        argv: >-
+          {{
+            deployment_portal_compose_argv
+            + ['-f', monitoring_config_dir ~ '/docker-compose.yml', 'up', '-d', '--remove-orphans']
+          }}
 
     - name: Update Caddy routes for monitoring
       ansible.builtin.template:
@@ -79,7 +83,11 @@
 
     - name: Restart Caddy
       ansible.builtin.command:
-        cmd: docker compose -f {{ deployment_portal_config_dir }}/docker-compose.yml restart caddy
+        argv: >-
+          {{
+            deployment_portal_compose_argv
+            + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'restart', 'caddy']
+          }}
       when: caddyfile_updated is changed
 
     - name: Re-render and publish deployment index with monitoring section
