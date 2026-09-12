@@ -190,11 +190,11 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     LANG = 'C.UTF-8'
     LC_ALL = 'C.UTF-8'
     UI_ASCII = '1'
-    // Wrappers pipe to tee (no TTY): force_color prints literal [32m and corrupts copied URLs.
+    // Wrapper UI stays plain ASCII; Ansible colors go to console (ansiColor) — artifact logs strip ANSI.
     FORCE_COLOR = '0'
     UI_COLOR = '0'
-    ANSIBLE_FORCE_COLOR = 'auto'
-    PY_COLORS = 'auto'
+    ANSIBLE_FORCE_COLOR = '1'
+    PY_COLORS = '1'
     REPO_ROOT = "${WORKSPACE}"
     LOG_DIR = "${WORKSPACE}/jenkins/artifacts"
     HOL_AUTO_EXEC_DIR = "/home/holautosa/HOL_AUTO_EXEC_DIR"

@@ -8,12 +8,11 @@ mkdir -p "$LOG_DIR"
 
 cd "$REPO_ROOT"
 export PATH="${HOME}/.local/bin:${PATH}"
-# Plain ASCII in Jenkins logs (box-drawing / emoji mojibake) and no forced ANSI (piped to tee).
+# Plain ASCII wrapper labels; Ansible color is enabled via jenkins_log_pipe + ANSIBLE_FORCE_COLOR.
 export UI_ASCII=1
 export UI_COLOR=0
 export FORCE_COLOR=0
-export ANSIBLE_FORCE_COLOR="${ANSIBLE_FORCE_COLOR:-auto}"
-export PY_COLORS=0
+export ANSIBLE_FORCE_COLOR="${ANSIBLE_FORCE_COLOR:-1}"
 export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
 # shellcheck source=scripts/lib/holautosa_exec_dir.sh
 source "$REPO_ROOT/scripts/lib/holautosa_exec_dir.sh"

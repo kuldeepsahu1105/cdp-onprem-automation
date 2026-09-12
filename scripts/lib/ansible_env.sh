@@ -345,8 +345,12 @@ ansible_install_collections_if_needed() {
   ansible-galaxy collection install -r "$req"
 }
 
-# Ansible colors only when stdout is a TTY (interactive terminal).
-# Jenkins/terraform wrappers pipe to tee (| tee log); force_color there prints literal [32m in logs.
+# Ansible colors on an interactive TTY, or Jenkins console (ansiColor + jenkins_log_pipe).
+# Piped artifact logs strip ANSI in jenkins_log_pipe; console stdout keeps color codes.
+ansible_jenkins_ansi_console() {
+  [[ "${JENKINS_ANSI_CONSOLE:-}" == "1" ]] && [[ "${TERM:-}" != "dumb" ]]
+}
+
 ansible_configure_output() {
   case "${ANSIBLE_NOCOLOR:-${NO_COLOR:-}}" in
     1|true|yes|TRUE|YES|on|ON)
@@ -362,7 +366,7 @@ ansible_configure_output() {
       return 0
       ;;
     1|true|yes|on|force)
-      if [[ "${JENKINS_SCRIPT_TTY:-}" == "1" ]] || [[ -t 1 ]]; then
+      if [[ "${JENKINS_SCRIPT_TTY:-}" == "1" ]] || ansible_jenkins_ansi_console || [[ -t 1 ]]; then
         export ANSIBLE_FORCE_COLOR=1
         export PY_COLORS=1
       else
@@ -372,7 +376,8 @@ ansible_configure_output() {
       return 0
       ;;
     auto|*)
-      if [[ "${JENKINS_SCRIPT_TTY:-}" == "1" ]] || { [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]]; }; then
+      if [[ "${JENKINS_SCRIPT_TTY:-}" == "1" ]] || ansible_jenkins_ansi_console \
+        || { [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]]; }; then
         export ANSIBLE_FORCE_COLOR=1
         export PY_COLORS=1
       else

@@ -21,11 +21,16 @@ jenkins_log_pipe() {
   : >"$log_file"
 
   if [[ -n "${BUILD_NUMBER:-}${JENKINS_URL:-}" ]]; then
-    # Do not use `script`/pseudo-TTY: it forces ANSI into tee'd logs and breaks copy-paste URLs.
-    export ANSIBLE_FORCE_COLOR="${ANSIBLE_FORCE_COLOR:-auto}"
-    export FORCE_COLOR="${FORCE_COLOR:-0}"
-    export UI_COLOR="${UI_COLOR:-0}"
-    export PY_COLORS="${PY_COLORS:-0}"
+    # Console: Jenkins ansiColor interprets ANSI on stdout (piped, not a TTY).
+    # Artifact log: strip CSI/OSC so access-urls.txt and email stay plain ASCII.
+    export JENKINS_ANSI_CONSOLE=1
+    case "${ANSIBLE_FORCE_COLOR:-auto}" in
+      0|false|no|off) ;;
+      *)
+        export ANSIBLE_FORCE_COLOR=1
+        export PY_COLORS=1
+        ;;
+    esac
     "$@" 2>&1 | tee >(jenkins_strip_ansi_stream >>"$log_file")
     return "${PIPESTATUS[0]}"
   fi
