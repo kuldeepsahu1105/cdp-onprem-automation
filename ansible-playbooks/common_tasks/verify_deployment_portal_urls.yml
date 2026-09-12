@@ -321,8 +321,14 @@
               else []
             )
           + (
-              [{'name': 'Caddy vhost FreeIPA', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
-                'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false}]
+              [
+                {'name': 'Caddy vhost FreeIPA (root redirect)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
+                 'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false},
+                {'name': 'Caddy vhost FreeIPA modern UI', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/modern-ui/',
+                 'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false},
+                {'name': 'Caddy vhost FreeIPA legacy UI', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/ui',
+                 'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': false},
+              ]
               if (
                 'ipa' in (_portal_verify_milestones_effective | default([]))
                 and deployment_portal_has_ipa | default(false) | bool
@@ -463,10 +469,10 @@
       with Host: {{ item.item.host }}.
       HTTP status: {{ item.status | default('n/a') }} (expected {{ _portal_url_verify_codes_int | join('/') }}).
       {% if item.item.upstream_ipa_fqdn is defined and item.item.upstream_ipa_fqdn | length > 0 %}
-      FreeIPA upstream must receive Host: {{ item.item.upstream_ipa_fqdn }} and Referer https://{{ item.item.upstream_ipa_fqdn }}/ipa/ui
+      FreeIPA upstream must receive Host: {{ item.item.upstream_ipa_fqdn }} and Referer https://{{ item.item.upstream_ipa_fqdn }}<request-path>
       (see deployment_portal_Caddyfile_vhosts.inc.j2; cloudera-labs/openshift Caddy pattern).
-      GET / on the IPA vhost should 301 to /ipa/ui; redirect responses (301/302) are acceptable.
-      Confirm http://{{ item.item.upstream_ipa_fqdn }}/ipa/ui responds on the IPA server and IPA HTTPD is running.
+      GET / on the IPA vhost should 301 to /ipa/modern-ui/; /ipa/modern-ui/ and /ipa/ui should return 200 or redirect (301/302).
+      Confirm http://{{ item.item.upstream_ipa_fqdn }}/ipa/modern-ui/ and /ipa/ui respond on the IPA server and IPA HTTPD is running.
       {% elif 'CM' in item.item.name %}
       Confirm Cloudera Manager is up on {{ deployment_portal_cm_fqdn }} (ports {{ cm_http_port }}/{{ cm_https_port }}).
       Caddy proxies to {{ deployment_portal_cm_upstream_host | default(deployment_portal_cm_fqdn) }} with header_up Host {{ deployment_portal_cm_fqdn }}.
@@ -486,9 +492,31 @@
     - not (item.item.optional | default(false) | bool)
     - (item.status | default(0) | int not in _portal_url_verify_codes_int)
 
-- name: Verify FreeIPA HTTP responds with IPA FQDN Host header (direct upstream)
+- name: Verify FreeIPA modern UI path with IPA FQDN Host header (direct upstream)
   ansible.builtin.uri:
-    url: "http://127.0.0.1/"
+    url: "http://127.0.0.1/ipa/modern-ui/"
+    method: GET
+    headers:
+      Host: "{{ deployment_portal_ipa_fqdn }}"
+      Referer: "https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/"
+    status_code: "{{ _portal_url_verify_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 30
+  register: ipa_direct_modern_ui_check
+  retries: 3
+  delay: 5
+  until: ipa_direct_modern_ui_check is succeeded
+  when:
+    - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
+    - deployment_portal_has_ipa | default(false) | bool
+    - deployment_portal_ipa_fqdn | default('') | length > 0
+    - inventory_hostname in groups.get('ipaserver', [])
+  failed_when: false
+
+- name: Verify FreeIPA legacy UI path with IPA FQDN Host header (direct upstream)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1/ipa/ui"
     method: GET
     headers:
       Host: "{{ deployment_portal_ipa_fqdn }}"
@@ -497,10 +525,10 @@
     follow_redirects: none
     validate_certs: false
     timeout: 30
-  register: ipa_direct_host_header_check
+  register: ipa_direct_legacy_ui_check
   retries: 3
   delay: 5
-  until: ipa_direct_host_header_check is succeeded
+  until: ipa_direct_legacy_ui_check is succeeded
   when:
     - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
     - deployment_portal_has_ipa | default(false) | bool
@@ -508,18 +536,24 @@
     - inventory_hostname in groups.get('ipaserver', [])
   failed_when: false
 
-- name: Fail when FreeIPA does not accept its FQDN Host header locally
+- name: Fail when FreeIPA modern or legacy UI does not accept its FQDN Host header locally
   ansible.builtin.fail:
     msg: >-
-      FreeIPA UI did not respond on http://127.0.0.1/ with Host: {{ deployment_portal_ipa_fqdn }}.
-      Caddy IPA vhost proxies HTTP with header_up Host and Referer (cloudera-labs/openshift pattern); fix IPA HTTP first.
-      Try on {{ inventory_hostname }}: curl -sS -o /dev/null -w '%{http_code}' -H "Host: {{ deployment_portal_ipa_fqdn }}" -H "Referer: https://{{ deployment_portal_ipa_fqdn }}/ipa/ui" http://127.0.0.1/
+      FreeIPA modern or legacy UI did not respond on http://127.0.0.1/ with Host: {{ deployment_portal_ipa_fqdn }}.
+      Caddy IPA vhost proxies HTTP with header_up Host and path-matched Referer (cloudera-labs/openshift pattern); fix IPA HTTP first.
+      Modern UI: curl -sS -o /dev/null -w '%{http_code}' -H "Host: {{ deployment_portal_ipa_fqdn }}" -H "Referer: https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/" http://127.0.0.1/ipa/modern-ui/
+      Legacy UI: curl -sS -o /dev/null -w '%{http_code}' -H "Host: {{ deployment_portal_ipa_fqdn }}" -H "Referer: https://{{ deployment_portal_ipa_fqdn }}/ipa/ui" http://127.0.0.1/ipa/ui
+      HTTP status modern={{ ipa_direct_modern_ui_check.status | default('n/a') }} legacy={{ ipa_direct_legacy_ui_check.status | default('n/a') }}
+      (acceptable: {{ _portal_url_verify_codes_int | join('/') }}).
   when:
     - _portal_verify_milestones_effective | default([]) | intersect(['ipa']) | length > 0
     - deployment_portal_has_ipa | default(false) | bool
     - deployment_portal_ipa_fqdn | default('') | length > 0
     - inventory_hostname in groups.get('ipaserver', [])
-    - ipa_direct_host_header_check is defined
+    - ipa_direct_modern_ui_check is defined
+    - ipa_direct_legacy_ui_check is defined
     - >-
-      ipa_direct_host_header_check is failed
-      or (ipa_direct_host_header_check.status | default(0) | int not in _portal_url_verify_codes)
+      ipa_direct_modern_ui_check is failed
+      or (ipa_direct_modern_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)
+      or ipa_direct_legacy_ui_check is failed
+      or (ipa_direct_legacy_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)

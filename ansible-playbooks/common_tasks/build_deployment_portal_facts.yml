@@ -349,7 +349,33 @@
             )
             else ''
           }}
+        ipa_caddy_modern_url: >-
+          {{
+            (
+              caddy_vhost_urls_external.ipa.url | default('') | trim | regex_replace('/+$', '')
+              + '/ipa/modern-ui/'
+            )
+            if (
+              caddy_vhost_enabled | default(false) | bool
+              and deployment_portal_has_ipa | bool
+            )
+            else ''
+          }}
+        ipa_caddy_legacy_url: >-
+          {{
+            (
+              caddy_vhost_urls_external.ipa.url | default('') | trim | regex_replace('/+$', '')
+              + '/ipa/ui'
+            )
+            if (
+              caddy_vhost_enabled | default(false) | bool
+              and deployment_portal_has_ipa | bool
+            )
+            else ''
+          }}
         ipa_ui_label: "FreeIPA / IdM"
+        ipa_ui_modern_label: "FreeIPA (modern UI)"
+        ipa_ui_legacy_label: "FreeIPA (legacy UI)"
       cloudera_manager:
         host_fqdn: "{{ deployment_portal_cm_fqdn }}"
         cm_installed: "{{ not (deployment_portal_cm_http_probe.failed | default(true) | bool) }}"

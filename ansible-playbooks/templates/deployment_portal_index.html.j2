@@ -2,7 +2,9 @@
 {% set _cm_caddy = ctx.cloudera_manager.caddy_url | default('') | trim | regex_replace('/+$', '') %}
 {% set cm_tile_url = _cm_caddy if (_cm_caddy | length > 0) else ctx.cloudera_manager.ui_url_https %}
 {% set pgadmin_tile_url = ctx.portal.pgadmin_caddy_url | default('') if (ctx.portal.pgadmin_caddy_url | default('') | length > 0) else (ctx.portal.pgadmin_url_direct | default(ctx.portal.pgadmin_url | default(''))) %}
-{% set ipa_tile_url = ctx.identity.ipa_caddy_url | default('') if (ctx.identity.ipa_caddy_url | default('') | length > 0) else (ctx.identity.ipa_ui_url | default('')) %}
+{% set ipa_modern_url = ctx.identity.ipa_caddy_modern_url | default('') if (ctx.identity.ipa_caddy_modern_url | default('') | length > 0) else (ctx.identity.ipa_caddy_url | default('')) %}
+{% set ipa_legacy_caddy_url = ctx.identity.ipa_caddy_legacy_url | default('') %}
+{% set ipa_tile_url = ipa_modern_url if (ipa_modern_url | length > 0) else (ctx.identity.ipa_ui_url | default('')) %}
 {% set ecs_tile_url = (ctx.ecs.caddy_url | default('') if (ctx.ecs.caddy_url | default('') | length > 0) else (ctx.ecs.console_hint | default(''))) if ctx.ecs.deployed else '' %}
 <!DOCTYPE html>
 <html lang="en">
@@ -289,8 +291,19 @@
         {% endif %}
         {% if ipa_tile_url | length > 0 %}
         <a class="tile" href="{{ ipa_tile_url }}" target="_blank" rel="noopener noreferrer">
-          <span class="tile-label">{{ ctx.identity.ipa_ui_label }}</span>
-          <span class="tile-hint">Identity management</span>
+          <span class="tile-label">{{ ctx.identity.ipa_ui_modern_label | default(ctx.identity.ipa_ui_label) }}</span>
+          <span class="tile-hint">Identity management (default)</span>
+        </a>
+        {% endif %}
+        {% if ipa_legacy_caddy_url | length > 0 %}
+        <a class="tile" href="{{ ipa_legacy_caddy_url }}" target="_blank" rel="noopener noreferrer">
+          <span class="tile-label">{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (legacy UI)') }}</span>
+          <span class="tile-hint">Classic Web UI</span>
+        </a>
+        {% elif ctx.identity.ipa_ui_url | default('') | length > 0 and ipa_tile_url != ctx.identity.ipa_ui_url %}
+        <a class="tile" href="{{ ctx.identity.ipa_ui_url }}" target="_blank" rel="noopener noreferrer">
+          <span class="tile-label">{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (direct HTTPS)') }}</span>
+          <span class="tile-hint">{{ ctx.identity.ipa_ui_url }}</span>
         </a>
         {% endif %}
         {% if ecs_tile_url | length > 0 %}
@@ -387,6 +400,14 @@
           {% if ctx.caddy_vhosts.urls_vpc.portal is defined and ctx.caddy_vhosts.urls_vpc.portal.url | default('') | length > 0 %}
           <li><strong>Portal (VPC slug)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.caddy_vhosts.urls_vpc.portal.url }}">{{ ctx.caddy_vhosts.urls_vpc.portal.hostname }}</a></li>
           {% endif %}
+          {% if ctx.identity.ipa_caddy_modern_url | default('') | length > 0 %}
+          <li><strong>{{ ctx.identity.ipa_ui_modern_label | default('FreeIPA (modern UI)') }}</strong> — <a href="{{ ctx.identity.ipa_caddy_modern_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.ipa.hostname }}/ipa/modern-ui/</a></li>
+          {% endif %}
+          {% if ctx.identity.ipa_caddy_legacy_url | default('') | length > 0 %}
+          <li><strong>{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (legacy UI)') }}</strong> — <a href="{{ ctx.identity.ipa_caddy_legacy_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.ipa.hostname }}/ipa/ui</a></li>
+          {% elif ctx.identity.ipa_caddy_url | default('') | length > 0 %}
+          <li><strong>{{ ctx.identity.ipa_ui_label }}</strong> — <a href="{{ ctx.identity.ipa_caddy_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.ipa.hostname }}</a> (redirects to modern UI)</li>
+          {% endif %}
         </ul>
       </div>
     </details>
@@ -407,8 +428,14 @@
           <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.monitoring.grafana_url }}">{{ ctx.monitoring.grafana_url }}</a></li>
           <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.monitoring.prometheus_url }}">{{ ctx.monitoring.prometheus_url }}</a></li>
           {% endif %}
+          {% if ctx.identity.ipa_caddy_modern_url | default('') | length > 0 %}
+          <li><strong>{{ ctx.identity.ipa_ui_modern_label | default('FreeIPA (modern UI)') }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_caddy_modern_url }}">{{ ctx.identity.ipa_caddy_modern_url }}</a></li>
+          {% endif %}
+          {% if ctx.identity.ipa_caddy_legacy_url | default('') | length > 0 %}
+          <li><strong>{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (legacy UI)') }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_caddy_legacy_url }}">{{ ctx.identity.ipa_caddy_legacy_url }}</a></li>
+          {% endif %}
           {% if ctx.identity.ipa_ui_url %}
-          <li><strong>{{ ctx.identity.ipa_ui_label }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_ui_url }}">{{ ctx.identity.ipa_ui_url }}</a></li>
+          <li><strong>{{ ctx.identity.ipa_ui_label }} (HTTPS on ipaserver)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_ui_url }}">{{ ctx.identity.ipa_ui_url }}</a></li>
           {% endif %}
           <li><strong>Cloudera Manager (HTTP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_http }}">{{ ctx.cloudera_manager.ui_url_http }}</a></li>
           <li><strong>Cloudera Manager (HTTPS)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_https }}">{{ ctx.cloudera_manager.ui_url_https }}</a></li>
