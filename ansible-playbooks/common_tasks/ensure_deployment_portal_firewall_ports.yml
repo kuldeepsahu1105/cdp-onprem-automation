@@ -1,5 +1,5 @@
 ---
-# Open portal Caddy (8088), pgAdmin (5050), and cAdvisor (8089) when firewalld is active on the ops host.
+# Open portal Caddy (deployment_portal_http_port), pgAdmin (5050), and cAdvisor (8089) when firewalld is active on the ops host.
 # PREREQS normally disable firewalld; this is idempotent when an admin re-enables it.
 
 - name: Check firewalld service state on portal host

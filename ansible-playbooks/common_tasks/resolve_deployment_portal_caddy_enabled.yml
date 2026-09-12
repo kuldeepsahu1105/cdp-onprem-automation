@@ -1,0 +1,12 @@
+---
+# Caddy reverse proxy (portal index, cm/ipa/pgadmin vhosts, monitoring UIs) is optional.
+# When monitoring_stack_enabled is false, CM/CDH install uses direct :7180/:7183 only — no Caddy side effects.
+
+- name: Resolve whether deployment portal Caddy stack should run
+  ansible.builtin.set_fact:
+    deployment_portal_caddy_effective: >-
+      {{
+        (monitoring_stack_enabled | default(true) | bool)
+        and (deployment_portal_enabled | default(true) | bool)
+        and (caddy_vhost_enabled | default(true) | bool)
+      }}

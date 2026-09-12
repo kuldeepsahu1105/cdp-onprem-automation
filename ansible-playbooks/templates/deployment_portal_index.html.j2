@@ -420,15 +420,15 @@
         {% if mon_on %}
         <a class="tile" href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Grafana</span>
-          <span class="tile-hint">{% if ctx.monitoring.grafana_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.grafana_path_url | default('') | length > 0 %}Also :{{ deployment_portal_http_port | default(8088) }}/grafana/{% else %}Dashboards{% endif %}</span>
+          <span class="tile-hint">{% if ctx.monitoring.grafana_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.grafana_path_url | default('') | length > 0 %}Also :{{ deployment_portal_http_port | default(81) }}/grafana/{% else %}Dashboards{% endif %}</span>
         </a>
         <a class="tile" href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Prometheus</span>
-          <span class="tile-hint">{% if ctx.monitoring.prometheus_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.prometheus_path_url | default('') | length > 0 %}:{{ deployment_portal_http_port | default(8088) }}/prometheus/{% else %}Metrics{% endif %}</span>
+          <span class="tile-hint">{% if ctx.monitoring.prometheus_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.prometheus_path_url | default('') | length > 0 %}:{{ deployment_portal_http_port | default(81) }}/prometheus/{% else %}Metrics{% endif %}</span>
         </a>
         <a class="tile" href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Alertmanager</span>
-          <span class="tile-hint">{% if ctx.monitoring.alertmanager_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.alertmanager_path_url | default('') | length > 0 %}:{{ deployment_portal_http_port | default(8088) }}/alertmanager/{% else %}Alerts{% endif %}</span>
+          <span class="tile-hint">{% if ctx.monitoring.alertmanager_caddy_url | default('') | length > 0 %}Caddy vhost{% elif ctx.monitoring.alertmanager_path_url | default('') | length > 0 %}:{{ deployment_portal_http_port | default(81) }}/alertmanager/{% else %}Alerts{% endif %}</span>
         </a>
         <a class="tile" href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">cAdvisor</span>
@@ -561,7 +561,7 @@
     {% if ctx.endpoints | default([]) | length > 0 %}
     <section class="flat">
       <h2>Endpoints</h2>
-      <p class="sub"><strong>Service</strong> is the product or UI name. <strong>Hostname</strong> is the inventory FQDN of the backing host (or ECS console name). Links open in a new tab.{% if mon_on %} Monitoring rows prefer Caddy vhosts, then ops <code>:{{ deployment_portal_http_port | default(8088) }}</code> path routes; cAdvisor uses host port <code>{{ monitoring_cadvisor_host_port | default(8089) }}</code>.{% endif %}</p>
+      <p class="sub"><strong>Service</strong> is the product or UI name. <strong>Hostname</strong> is the inventory FQDN of the backing host (or ECS console name). Links open in a new tab.{% if mon_on %} Monitoring rows prefer Caddy vhosts, then ops <code>:{{ deployment_portal_http_port | default(81) }}</code> path routes; cAdvisor uses host port <code>{{ monitoring_cadvisor_host_port | default(8089) }}</code>.{% endif %}</p>
       <div class="table-scroll">
         <table>
           <thead>
@@ -655,7 +655,7 @@
         <ul class="clean">
           <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>
           <li><strong>pgAdmin</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.pgadmin.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.pgadmin.hostname }}</a></li>
-          <li><strong>CM (Caddy — use this in browser)</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.cm.url }}</a> <span class="badge">:8088 only; not :7183 on this hostname</span></li>
+          <li><strong>CM (Caddy — use this in browser)</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.cm.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.cm.url }}</a> <span class="badge">:{{ deployment_portal_http_port | default(81) }} only; not :7183 on this hostname</span></li>
           <li><strong>CM (HTTPS direct on manager)</strong> — <a href="{{ ctx.cloudera_manager.ui_url_https }}" target="_blank" rel="noopener noreferrer">{{ ctx.cloudera_manager.ui_url_https }}</a> <span class="badge">{{ ctx.cloudera_manager.host_fqdn }} — not the <code>cm.*</code> Caddy name</span></li>
           {% if mon_on %}
           <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.grafana.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.grafana.hostname }}{% else %}{{ grafana_tile_url }}{% endif %}</a></li>
@@ -752,7 +752,7 @@
     {% if mon_on %}
     <section class="flat">
       <h2>Monitoring stack (on ops host)</h2>
-      <p class="sub">Prefer Caddy lab vhosts when DNS is configured; otherwise use ops host <code>:{{ deployment_portal_http_port | default(8088) }}</code> path routes or cAdvisor on <code>:{{ monitoring_cadvisor_host_port | default(8089) }}</code>.</p>
+      <p class="sub">Prefer Caddy lab vhosts when DNS is configured; otherwise use ops host <code>:{{ deployment_portal_http_port | default(81) }}</code> path routes or cAdvisor on <code>:{{ monitoring_cadvisor_host_port | default(8089) }}</code>.</p>
       <ul class="clean">
         <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{{ grafana_tile_url }}</a> <span class="badge">Caddy vhost or /grafana/</span></li>
         <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{{ prometheus_tile_url }}</a> <span class="badge">Caddy vhost or /prometheus/</span></li>
