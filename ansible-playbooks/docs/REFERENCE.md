@@ -47,6 +47,15 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `cm_version` | `7.13.2.10000` | Cloudera Manager version |
 | `cdh_version` | `7.3.2.10000` | CDH parcel version |
 
+**`python_version` scope:** On targets, this drives `os_vars` package names (`python{{ python_version }}`, pip/devel or venv/dev packages), RHEL 8 `dnf module enable python<version>`, and on RedHat the `python{{ python_version }}` / `pip{{ python_version }}` executables used in **06_prereq_setup.yml** for install and pip upgrade. It does **not** fully align every Python path in the repo:
+
+| Area | Behavior |
+|---|---|
+| Ansible on targets | `ansible.cfg` sets `interpreter_python = /usr/bin/python3`; remote modules use that unless you set `ansible_python_interpreter` in inventory or host vars |
+| **06** / **23** psycopg2 | `psycopg2-binary` is installed with hardcoded `pip3` and verified with `/usr/bin/python3` (Ansible's default interpreter), not `python{{ python_version }}` |
+| Debian pip upgrade | `os_vars.Debian.pip_executable` is `pip3`; **06** pip upgrade uses it even when `python_version` changes |
+| `psycopg2_binary_version` | Pins the **library** on pip install (`psycopg2-binary==…` when set); does not select the Python minor version |
+
 ### Cluster names
 
 | Variable | Default |
