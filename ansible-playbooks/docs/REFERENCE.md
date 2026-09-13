@@ -357,6 +357,22 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `ec2_startstop_script_path` | *(derived)* | Full path to deployed start/stop script (playbooks **36** / **37**); override to pin a custom location |
 | `ec2_startstop_script_basename` | *(derived)* | Filename only, e.g. `development_cldr_ec2_strt_stp.sh` — used in template header and docs |
 
+### Lab default passwords (override before production)
+
+Literal defaults from `group_vars/all.yml`. The portal **Operator access** panel and `/downloads/operator-credentials.json` mirror these at sync time (not committed to git). Several services share **`postgres_password`** via Jinja.
+
+| Service / use | Ansible variable(s) | Default (lab) |
+|---------------|---------------------|-----------------|
+| FreeIPA | `ipaadmin_principal`, `ipaadmin_password` | `admin` / `PseTeam@123` (`common_password` aliases IPA password) |
+| PostgreSQL | `postgres_password` | `postgres` |
+| Portal `/downloads/*` HTTP basic auth | `deployment_portal_basic_auth_user`, `deployment_portal_basic_auth_password` | `portal` / **`postgres_password`** |
+| Cloudera Manager | `cm_admin_user`, `cm_admin_pass` | `admin` / `admin` (factory bootstrap `cm_admin_bootstrap_pass`: `admin`) |
+| pgAdmin | `pgadmin_default_email`, `pgadmin_default_password` | email pattern in table above / **`postgres_password`** |
+| Grafana (monitoring stack) | `monitoring_grafana_admin_user`, `monitoring_grafana_admin_password` | `admin` / **`postgres_password`** |
+| EC2 SSH | `ansible_user` / inventory | `ec2-user` (keys under `/downloads/ssh/` when `deployment_portal_expose_ssh_keys: true`) |
+
+**`operator-credentials.json`:** top-level `basic_auth_enabled`, `auth_username`, `downloads_path_prefix`; `sections[]` with `credentials[]` (`label`, `username`, `password`, `url`, `note`) — see `deployment_portal_operator_credentials.json.j2`.
+
 **Portal index attribution:** `build_deployment_portal_facts.yml` sets `deployment_portal_context.deployment` from the vars above. Wrapper/Jenkins load tfvars (`scripts/lib/parse_tfvars_yaml.py` maps `owner`→`OWNER`, `environment`→`ENVIRONMENT`); `pvc_setup.sh` / `jenkins/scripts/render-ansible-group-vars-override.py` pass `OWNER`/`ENVIRONMENT` into Ansible as `deployment_owner` / `deployment_name_prefix` via `jenkins_override.yml`. Empty values omit the deployment badges.
 
 **SSH key files (controller vs portal host):** Portal sync reads private keys only from the **Ansible controller** (Jenkins agent workspace or laptop): `ansible-playbooks/sshkey.pem` (Terraform/Jenkins copy), optional `ansible-playbooks/id_rsa`, `ANSIBLE_PRIVATE_KEY`, `~/.ssh/id_rsa`, and optional `deployment_portal_ssh_pem_path` / `deployment_portal_ssh_autotls_key_path` / `cm_private_key_path`. The ops host receives **copies** under the portal www tree at `/downloads/ssh/` (for example `cluster-access.pem` and `cluster-autotls-id_rsa` when both keys differ). Never commit keys to git.
