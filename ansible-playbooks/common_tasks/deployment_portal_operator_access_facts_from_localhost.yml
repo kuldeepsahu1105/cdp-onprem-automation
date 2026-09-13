@@ -1,6 +1,6 @@
 ---
 # Copy play-1 (localhost) facts onto the current play host for deployment_portal_operator_access.j2.
-# Required when template lookup runs on the ops host namespace (e.g. sync refresh with delegate_to localhost).
+# Required when template lookup runs with the ops host variable namespace (e.g. sync refresh).
 
 - name: Apply deployment portal operator-access facts from localhost
   ansible.builtin.set_fact:
