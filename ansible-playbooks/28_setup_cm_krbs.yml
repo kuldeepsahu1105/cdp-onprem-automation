@@ -143,16 +143,17 @@
         - not kerberos_already_configured | default(false)
         - kdc_import_result.json.id is defined
 
-    - name: Fail when importAdminCredentials did not return a command id
+    - name: Fail when importAdminCredentials did not return a command id (unexpected response)
       ansible.builtin.fail:
         msg: >-
           importAdminCredentials returned HTTP {{ kdc_import_result.status }} but no async command id.
           Response: {{ kdc_import_result.json | default({}) }}.
           Confirm KDC admin password for {{ cm_krb_kdc_admin_principal }} and that SECURITY_REALM/KDC_HOST
           were applied via REST before import (re-run this playbook).
+          If credentials were imported manually in the CM UI, restart Cloudera Manager Server and re-run this playbook.
       when:
         - not kerberos_already_configured | default(false)
-        - kdc_import_result.status | default(0) | int in [200, 201, 204, 303]
+        - kdc_import_result.status | default(0) | int in [200, 201]
         - kdc_import_result.json.id is not defined
 
     - name: Kerberos — CM restart required after KDC admin credential import

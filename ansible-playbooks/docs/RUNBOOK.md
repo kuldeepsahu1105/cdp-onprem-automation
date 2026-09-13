@@ -373,6 +373,42 @@ See repo root `.tfvars.yaml` for the full template.
 
 ---
 
+## E2E validation checklist (greenfield Jenkins)
+
+Use this after **DESTROY_STACK** (or a new `ENVIRONMENT` workspace) for a full regression of Kerberos, CMS, and agent heartbeat.
+
+### Tear down (fresh stack)
+
+| Step | Jenkins / CLI |
+|---|---|
+| 1 | `PIPELINE_STAGES` includes **`DESTROY_STACK`** (alone or last in the same build after other stages). |
+| 2 | Set **`DESTROY_STACK_CONFIRM=true`** (required unless `DRY_RUN=true` for destroy plan only). |
+| 3 | Optional: **`CLEANUP_BEFORE_DESTROY=true`** runs `99_cleanup.yml` with `cleanup_e2e=true` before `terraform destroy`. |
+| 4 | Match **`OWNER`** and **`ENVIRONMENT`** to the workspace you intend to wipe (same tfvars as deploy). |
+| 5 | CLI equivalent: `DESTROY_STACK_CONFIRM=true ./clone_and_run_terraform_destroy.sh` (see repo root / `jenkins/scripts/run-destroy-stack.sh`). |
+
+### Full deploy stage order (fixed)
+
+`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` (when `DEPLOYMENT_PORTAL_ENABLED`) → `IDENTITY` → `CM_INSTALL` → **`CM_TLS_KRB_LDAP`** → `CDH_INSTALL` → `MONITORING` (optional) → `ECS_INSTALL` (optional).
+
+**`CM_TLS_KRB_LDAP`** runs `pvc_setup.sh` phase **`cm_tls`** in Labs order: **`27` → `29` → `30` → `28`** (Auto-TLS, CMS, LDAP, Kerberos).
+
+Set **`ANSIBLE_GROUP_VARS_YAML`** (or `group_vars/all.yml`) so **`ipaadmin_password`** / **`common_password`** match the FreeIPA install; Jenkins maps **`OWNER`** → `deployment_owner` and **`ENVIRONMENT`** → `deployment_name_prefix`.
+
+### Post-deploy verification
+
+| Area | What to check |
+|---|---|
+| **Kerberos / KDC** | Playbook **28** ends with `verify_cm_kerberos_enabled.yml` (`GET /cm/kerberosInfo` → **`kerberized=true`**, realm matches `cluster_realm`). CM API Kerberos REST uses **HTTPS :7183** when Auto-TLS is on. On ipaserver: `ipactl status` → **`krb5kdc` RUNNING**. |
+| **CMS monitors** | CM → **Cloudera Management Service**: **Service Monitor**, **Host Monitor**, **Event Server** **RUNNING**; firehose port listening (playbook **29**). Host load/disk/memory columns populate when Host Monitor is healthy. |
+| **Agent heartbeat** | CM → **Hosts**: **Last Heartbeat** fresh (~minutes) on all commissioned hosts. If stale: re-run **27** (agent reconcile) or **`25_reconcile_cm_agents.yml`**; confirm SG **7182/7183** agent→manager and `use_tls` after **27**. |
+| **ZooKeeper** | Base cluster → **ZooKeeper** → at least one **Server** role on `base-workers` (playbook **31** fails if zero servers). Required before Stop Cluster / Deploy Client Config after KDC. |
+| **Portal / URLs** | `jenkins/artifacts/access-urls.txt` and deployment portal index (when enabled). |
+
+Re-run **`CM_TLS_KRB_LDAP`** only after **`CM_INSTALL`** (and **`IDENTITY`** for FreeIPA) if a mid-pipeline fix is needed; for KDC-only issues re-run **`28_setup_cm_krbs.yml`** from `ansible-playbooks/`.
+
+---
+
 ## Cleanup runbook
 
 Always requires explicit confirmation:

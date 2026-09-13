@@ -1,6 +1,7 @@
 ---
 # Quick reachability check before CM Kerberos REST (KDC port 88).
 # Required vars: kdc_host
+# Jenkins / public controllers cannot reach VPC-private KDC FQDNs — probe from cldr-mngr.
 
 - name: Kerberos preflight — require KDC host
   ansible.builtin.assert:
@@ -11,7 +12,36 @@
       kdc_host is empty. For FreeIPA use ipa_kdc_host (ipaserver FQDN). For AD set ad_kdc_host in group_vars/all.yml.
       Empty ad_kdc_host with no [ipaserver] inventory breaks identity auto-detect.
 
-- name: Kerberos preflight — wait for KDC krb5 port (TCP 88)
+- name: Kerberos preflight — resolve KDC probe delegate host
+  ansible.builtin.set_fact:
+    cm_krb_kdc_preflight_delegate: >-
+      {{
+        cm_manager_inventory_host
+        if (
+          (cm_manager_inventory_host | default('') | length) > 0
+          and ('cldr-mngr' in groups)
+          and (groups['cldr-mngr'] | default([]) | length > 0)
+        )
+        else (
+          groups['ipaserver'][0]
+          if (
+            ('ipaserver' in groups)
+            and (groups['ipaserver'] | default([]) | length > 0)
+          )
+          else ''
+        )
+      }}
+
+- name: Kerberos preflight — use CM host for KDC port check when controller is outside VPC
+  ansible.builtin.set_fact:
+    cm_krb_kdc_preflight_from_delegate: >-
+      {{
+        (ansible_controller_outside_vpc | default(false) | bool)
+        or ((ansible_control_reachability | default('auto') | lower) == 'public')
+        or ((ansible_control_reachability_effective | default('') | lower) == 'public')
+      }}
+
+- name: Kerberos preflight — wait for KDC krb5 port from Ansible controller (TCP 88)
   ansible.builtin.wait_for:
     host: "{{ kdc_host }}"
     port: 88
@@ -19,11 +49,39 @@
     connect_timeout: 5
   register: cm_krb_kdc_port_check
   failed_when: false
+  when: not (cm_krb_kdc_preflight_from_delegate | default(false) | bool)
+
+- name: Kerberos preflight — wait for KDC krb5 port from CM host (same path as CM Server)
+  ansible.builtin.wait_for:
+    host: "{{ kdc_host }}"
+    port: 88
+    timeout: "{{ cm_krb_kdc_preflight_timeout | default(60) }}"
+    connect_timeout: 5
+  delegate_to: "{{ cm_krb_kdc_preflight_delegate }}"
+  register: cm_krb_kdc_port_check
+  failed_when: false
+  when:
+    - cm_krb_kdc_preflight_from_delegate | default(false) | bool
+    - (cm_krb_kdc_preflight_delegate | default('') | length) > 0
+
+- name: Kerberos preflight — fail when delegate host missing for VPC KDC check
+  ansible.builtin.fail:
+    msg: >-
+      Cannot run KDC preflight from outside the VPC without [cldr-mngr] or [ipaserver] in inventory.
+      Add CM host to inventory or run from a controller inside the VPC (ansible_control_reachability: private).
+  when:
+    - cm_krb_kdc_preflight_from_delegate | default(false) | bool
+    - (cm_krb_kdc_preflight_delegate | default('') | length) == 0
 
 - name: Kerberos preflight — fail when KDC port is not reachable
   ansible.builtin.fail:
     msg: >-
       Cannot reach KDC at {{ kdc_host }}:88 (Kerberos).
+      Probe from: {{
+        cm_krb_kdc_preflight_delegate
+        if (cm_krb_kdc_preflight_from_delegate | default(false) | bool)
+        else 'Ansible controller'
+      }}.
       FreeIPA: re-run 12_setup_freeipa_server.yml and ensure ipaserver play in 28_setup_cm_krbs.yml completed.
-      AD: verify ad_kdc_host and network/firewall from the Jenkins/Ansible controller to the DC.
+      AD: verify ad_kdc_host and network/firewall from the CM host to the DC.
   when: cm_krb_kdc_port_check is failed
