@@ -372,11 +372,30 @@
         urls_public: "{{ caddy_vhost_urls_external | default({}) }}"
         urls_vpc: "{{ caddy_vhost_urls_vpc | default({}) }}"
       portal:
-        index_url: >-
+        index_url_direct: >-
           {{
             deployment_portal_access_urls.primary.portal
             if (deployment_portal_access_profile_effective == 'private')
             else deployment_portal_access_urls.external.portal
+          }}
+        index_caddy_url: >-
+          {{
+            caddy_vhost_urls_external.portal.url | default('')
+            if (caddy_vhost_enabled | default(false) | bool)
+            else ''
+          }}
+        index_url: >-
+          {{
+            caddy_vhost_urls_external.portal.url | default('')
+            if (
+              caddy_vhost_enabled | default(false) | bool
+              and (caddy_vhost_urls_external.portal.url | default('') | length > 0)
+            )
+            else (
+              deployment_portal_access_urls.primary.portal
+              if (deployment_portal_access_profile_effective == 'private')
+              else deployment_portal_access_urls.external.portal
+            )
           }}
         pgadmin_url_direct: >-
           {{
@@ -498,6 +517,12 @@
             if (deployment_portal_access_profile_effective == 'cloud')
             else ('http://' + deployment_portal_ops_client_host + ':' + (deployment_portal_http_port | string) + '/alertmanager/')
           }}
+        cadvisor_path_url: >-
+          {{
+            ('http://' + deployment_portal_ops_public_ip + ':' + (deployment_portal_http_port | string) + '/cadvisor/')
+            if (deployment_portal_access_profile_effective == 'cloud')
+            else ('http://' + deployment_portal_ops_client_host + ':' + (deployment_portal_http_port | string) + '/cadvisor/')
+          }}
         grafana_caddy_url: "{{ caddy_vhost_urls_external.grafana.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
         prometheus_caddy_url: "{{ caddy_vhost_urls_external.prometheus.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
         alertmanager_caddy_url: "{{ caddy_vhost_urls_external.alertmanager.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
@@ -518,6 +543,12 @@
             deployment_portal_access_urls.primary.alertmanager
             if (deployment_portal_access_profile_effective == 'private')
             else deployment_portal_access_urls.external.alertmanager
+          }}
+        cadvisor_url_direct: >-
+          {{
+            deployment_portal_access_urls.primary.cadvisor
+            if (deployment_portal_access_profile_effective == 'private')
+            else deployment_portal_access_urls.external.cadvisor
           }}
         grafana_url: >-
           {{
@@ -572,9 +603,17 @@
         alertmanager_url_tier_b: "{{ deployment_portal_access_urls.external.alertmanager | default('') if (deployment_portal_access_profile_effective == 'cloud') else deployment_portal_access_urls.primary.alertmanager | default('') }}"
         cadvisor_url: >-
           {{
-            deployment_portal_access_urls.primary.cadvisor
-            if (deployment_portal_access_profile_effective == 'private')
-            else deployment_portal_access_urls.external.cadvisor
+            (
+              ('http://' + deployment_portal_ops_public_ip + ':' + (deployment_portal_http_port | string) + '/cadvisor/')
+              if (deployment_portal_access_profile_effective == 'cloud')
+              else ('http://' + deployment_portal_ops_client_host + ':' + (deployment_portal_http_port | string) + '/cadvisor/')
+            )
+            if (deployment_portal_monitoring_routes_enabled | default(false) | bool)
+            else (
+              deployment_portal_access_urls.primary.cadvisor
+              if (deployment_portal_access_profile_effective == 'private')
+              else deployment_portal_access_urls.external.cadvisor
+            )
           }}
         grafana_url_vpc: "{{ deployment_portal_access_urls.vpc.grafana | default('') }}"
         prometheus_url_vpc: "{{ deployment_portal_access_urls.vpc.prometheus | default('') }}"

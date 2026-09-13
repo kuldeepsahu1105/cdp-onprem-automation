@@ -1,0 +1,48 @@
+{# YAML list for ansible.builtin.debug msg — PORTAL stage URL summary #}
+{% set ctx = deployment_portal_context %}
+{% set label_prefix = deployment_portal_urls_print_prefix | default('') %}
+{% set http_port = deployment_portal_http_port | default(81) | int %}
+{% set port_suffix = (':' ~ (http_port | string)) if http_port != 80 else '' %}
+{% set portal_caddy = ctx.portal.index_caddy_url | default('') | trim %}
+{% set portal_direct = ctx.portal.index_url_direct | default(ctx.portal.index_url) | trim %}
+{% set portal_preferred = ctx.portal.index_url | default(portal_direct) | trim %}
+{% set portal_public_host = deployment_portal_public_host | default(ctx.caddy_vhosts.urls_public.portal.hostname | default('')) | trim %}
+{% set mon = ctx.monitoring | default({}) %}
+{% set mon_on = mon.enabled | default(false) | bool %}
+{% set mon_routes = mon.routes_enabled | default(deployment_portal_monitoring_routes_enabled | default(false)) | bool %}
+{% macro path_on_host(host, path) -%}http://{{ host }}{{ port_suffix }}{{ path }}{%- endmacro %}
+- "{{ label_prefix }}Deployment index (preferred): {{ portal_preferred }}"
+{% if portal_caddy | length > 0 and portal_direct | length > 0 and portal_direct != portal_preferred %}
+- "{{ label_prefix }}Deployment index (direct :{{ http_port }}): {{ portal_direct }}"
+{% elif portal_caddy | length == 0 and portal_direct | length > 0 %}
+- "{{ label_prefix }}Deployment index (direct :{{ http_port }}): {{ portal_direct }}"
+{% endif %}
+- "{{ label_prefix }}pgAdmin (preferred): {{ ctx.portal.pgadmin_url }}"
+- "{{ label_prefix }}pgAdmin (direct :{{ deployment_portal_pgadmin_host_port }}): {{ ctx.portal.pgadmin_url_direct | default(ctx.portal.pgadmin_url) }}"
+{% if mon_on %}
+- "{{ label_prefix }}Monitoring install (extra-var): {{ monitoring_stack_enabled | default(false) }}"
+- "{{ label_prefix }}Monitoring routes/index: {{ mon_routes }}"
+{% if portal_public_host | length > 0 %}
+- "{{ label_prefix }}Grafana (Caddy path on {{ portal_public_host }}): {{ path_on_host(portal_public_host, '/grafana/') }}"
+- "{{ label_prefix }}Prometheus (Caddy path on {{ portal_public_host }}): {{ path_on_host(portal_public_host, '/prometheus/') }}"
+- "{{ label_prefix }}Alertmanager (Caddy path on {{ portal_public_host }}): {{ path_on_host(portal_public_host, '/alertmanager/') }}"
+- "{{ label_prefix }}cAdvisor (Caddy path on {{ portal_public_host }}): {{ path_on_host(portal_public_host, '/cadvisor/') }}"
+{% elif mon.grafana_path_url | default('') | length > 0 %}
+- "{{ label_prefix }}Grafana (Caddy path): {{ mon.grafana_path_url }}"
+- "{{ label_prefix }}Prometheus (Caddy path): {{ mon.prometheus_path_url }}"
+- "{{ label_prefix }}Alertmanager (Caddy path): {{ mon.alertmanager_path_url }}"
+- "{{ label_prefix }}cAdvisor (Caddy path): {{ mon.cadvisor_path_url }}"
+{% endif %}
+{% if mon.grafana_caddy_url | default('') | length > 0 %}
+- "{{ label_prefix }}Grafana (Caddy vhost): {{ mon.grafana_caddy_url }}"
+{% endif %}
+{% if mon.prometheus_caddy_url | default('') | length > 0 %}
+- "{{ label_prefix }}Prometheus (Caddy vhost): {{ mon.prometheus_caddy_url }}"
+{% endif %}
+{% if mon.alertmanager_caddy_url | default('') | length > 0 %}
+- "{{ label_prefix }}Alertmanager (Caddy vhost): {{ mon.alertmanager_caddy_url }}"
+{% endif %}
+{% else %}
+- "{{ label_prefix }}Monitoring install (extra-var): {{ monitoring_stack_enabled | default(false) }}"
+- "{{ label_prefix }}Monitoring routes/index: {{ deployment_portal_monitoring_routes_enabled | default(false) }}"
+{% endif %}

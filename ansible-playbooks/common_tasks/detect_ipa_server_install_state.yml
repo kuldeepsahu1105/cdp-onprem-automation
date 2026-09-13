@@ -1,0 +1,126 @@
+---
+# Classify FreeIPA server install state before ipa-server-install (idempotent, safe on re-runs).
+#
+# Outcomes (set_fact):
+#   ipa_server_has_default_conf   — /etc/ipa/default.conf present (configured server)
+#   ipa_server_has_partial_state  — leftover IPA/DS paths without default.conf (failed/partial install)
+#   ipa_server_services_healthy   — ipactl status OK and Directory Service + krb5kdc RUNNING
+#   ipa_server_install_clean_host — safe to run ipa-server-install (no config, no partial debris)
+#
+# Recovery for partial/broken: ipa-server-install --uninstall (see RUNBOOK.md troubleshooting).
+
+- name: Detect IPA — check for configured server (default.conf)
+  ansible.builtin.stat:
+    path: /etc/ipa/default.conf
+  register: ipa_detect_default_conf
+
+- name: Detect IPA — check common partial-install markers
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: ipa_detect_partial_markers
+  loop:
+    - /etc/ipa/ca.crt
+    - /var/lib/ipa
+  failed_when: false
+
+- name: Detect IPA — check for any Directory Server instance directory
+  ansible.builtin.find:
+    paths: /etc/dirsrv
+    patterns: "slapd-*"
+    file_type: directory
+  register: ipa_detect_dirsrv_instances
+  failed_when: false
+
+- name: Detect IPA — read ipactl status
+  ansible.builtin.command: ipactl status
+  register: ipa_detect_ipactl_status
+  changed_when: false
+  failed_when: false
+
+- name: Detect IPA — read ipa-server-status when available
+  ansible.builtin.command: ipa-server-status
+  register: ipa_detect_ipa_server_status
+  changed_when: false
+  failed_when: false
+
+- name: Detect IPA — check dirsrv systemd unit when present
+  ansible.builtin.shell: |
+    set -euo pipefail
+    unit="$(systemctl list-units --type=service --all 'dirsrv@*' --no-legend 2>/dev/null | awk '{print $1}' | head -1)"
+    if [ -z "${unit}" ]; then
+      echo "absent"
+      exit 0
+    fi
+    systemctl is-active "${unit}" 2>/dev/null || echo "inactive"
+  args:
+    executable: /bin/bash
+  register: ipa_detect_dirsrv_active
+  changed_when: false
+  failed_when: false
+
+- name: Detect IPA — count partial-install marker hits
+  ansible.builtin.set_fact:
+    ipa_detect_partial_marker_hits: >-
+      {{
+        ipa_detect_partial_markers.results | default([])
+        | selectattr('stat.exists', 'defined')
+        | selectattr('stat.exists')
+        | list
+        | length
+      }}
+
+- name: Detect IPA — derive configuration and health facts
+  ansible.builtin.set_fact:
+    ipa_server_has_default_conf: "{{ ipa_detect_default_conf.stat.exists | default(false) | bool }}"
+    ipa_server_has_partial_state: >-
+      {{
+        not (ipa_detect_default_conf.stat.exists | default(false) | bool)
+        and (
+          (ipa_detect_partial_marker_hits | int) > 0
+          or ((ipa_detect_dirsrv_instances.matched | default(0) | int) > 0)
+        )
+      }}
+    ipa_server_services_healthy: >-
+      {{
+        ipa_detect_ipactl_status.rc | default(1) == 0
+        and ipa_detect_ipactl_status.stdout is defined
+        and 'Directory Service: RUNNING' in ipa_detect_ipactl_status.stdout
+        and 'krb5kdc Service: RUNNING' in ipa_detect_ipactl_status.stdout
+      }}
+
+- name: Detect IPA — derive clean-host install eligibility
+  ansible.builtin.set_fact:
+    ipa_server_install_clean_host: >-
+      {{
+        not (ipa_server_has_default_conf | bool)
+        and not (ipa_server_has_partial_state | bool)
+      }}
+
+- name: Detect IPA — summarize install state for operators
+  ansible.builtin.debug:
+    msg:
+      - "IPA configured (default.conf): {{ ipa_server_has_default_conf }}"
+      - "IPA partial/broken debris detected: {{ ipa_server_has_partial_state }}"
+      - "IPA services healthy (ipactl): {{ ipa_server_services_healthy }}"
+      - "Safe for fresh ipa-server-install: {{ ipa_server_install_clean_host }}"
+      - "dirsrv unit activity: {{ ipa_detect_dirsrv_active.stdout | default('unknown') | trim }}"
+      - >-
+        ipa-server-status: {{
+          (ipa_detect_ipa_server_status.stdout_lines | default([]) | join(' '))
+          if ipa_detect_ipa_server_status.rc | default(1) == 0
+          else (ipa_detect_ipa_server_status.stderr | default('not available') | trim)
+        }}
+
+- name: Detect IPA — refuse ipa-server-install on partial or broken leftover state
+  ansible.builtin.fail:
+    msg: >-
+      FreeIPA on {{ inventory_hostname }} is in a partial or broken state
+      (for example /etc/ipa/ca.crt or Directory Server data without /etc/ipa/default.conf).
+      Do not re-run ipa-server-install on top of this host.
+      Recovery on ipaserver (as root):
+        1) ipa-server-install --uninstall --unattended
+           (or: ipa-server-install --uninstall and confirm prompts)
+        2) If uninstall fails, remove leftover paths under /etc/ipa, /var/lib/ipa, and /etc/dirsrv per vendor docs, then re-run playbook 12.
+      Then re-run: ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}
+      See ansible-playbooks/docs/RUNBOOK.md (FreeIPA partial install).
+  when: ipa_server_has_partial_state | bool

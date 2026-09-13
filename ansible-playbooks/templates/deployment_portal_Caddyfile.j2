@@ -20,7 +20,7 @@ http://:{{ deployment_portal_http_port }} {
 {% include 'deployment_portal_Caddyfile_downloads_auth.inc.j2' %}
   root * /srv
 
-  @static not path /grafana* /prometheus* /alertmanager* /downloads*
+  @static not path /grafana* /prometheus* /alertmanager* /cadvisor* /downloads*
   handle @static {
     try_files {path} /index.html
     file_server
@@ -37,6 +37,10 @@ http://:{{ deployment_portal_http_port }} {
 
   handle /alertmanager/* {
     reverse_proxy {{ monitoring_alertmanager_docker_service }}:9093
+  }
+
+  handle_path /cadvisor/* {
+    reverse_proxy {{ monitoring_cadvisor_docker_service }}:8080
   }
 {% endif %}
 }
@@ -46,7 +50,7 @@ http://:{{ deployment_portal_http_port }} {
 {% include 'deployment_portal_Caddyfile_downloads_auth.inc.j2' %}
   root * /srv
 
-  @static not path /grafana* /prometheus* /alertmanager* /downloads*
+  @static not path /grafana* /prometheus* /alertmanager* /cadvisor* /downloads*
   handle @static {
     try_files {path} /index.html
     file_server
@@ -63,6 +67,10 @@ http://:{{ deployment_portal_http_port }} {
 
   handle /alertmanager/* {
     reverse_proxy {{ monitoring_alertmanager_docker_service }}:9093
+  }
+
+  handle_path /cadvisor/* {
+    reverse_proxy {{ monitoring_cadvisor_docker_service }}:8080
   }
 {% endif %}
 }

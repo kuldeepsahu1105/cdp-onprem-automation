@@ -69,26 +69,23 @@
         msg: "IPA Server package is installed with version: {{ ipa_check.stdout }}"
       when: ipa_check.rc == 0
 
-    - name: Check if IPA Server is configured
-      ansible.builtin.stat:
-        path: /etc/ipa/default.conf
-      register: ipa_default_conf
+    - name: Detect FreeIPA server install state (configured / partial / clean)
+      ansible.builtin.import_tasks: common_tasks/detect_ipa_server_install_state.yml
 
-    - name: Check if ipa is installed and running
-      ansible.builtin.command: ipactl status
-      register: ipa_server_status
-      failed_when: false
-      changed_when: false
-
-    - name: Show IPA status if installed
+    - name: Note FreeIPA is configured but services are not healthy yet
       ansible.builtin.debug:
-        msg: "{{ ipa_server_status.stdout }}"
-      when: ipa_server_status.rc == 0
+        msg: >-
+          FreeIPA is configured on this host ({{ ansible_fqdn }}) but core services are not all RUNNING.
+          Skipping ipa-server-install; playbook will start services via ipactl.
+      when:
+        - ipa_server_has_default_conf | bool
+        - not ipa_server_services_healthy | bool
 
-    - name: Inform if IPA is not installed or not running
+    - name: Note fresh host — no FreeIPA configuration detected
       ansible.builtin.debug:
-        msg: "IPA is not installed or not running"
-      when: ipa_server_status.rc != 0
+        msg: >-
+          No FreeIPA server configuration found (no /etc/ipa/default.conf). Will run ipa-server-install on a clean host.
+      when: ipa_server_install_clean_host | bool
 
     - name: Run IPA server installation
       command: >
@@ -108,7 +105,7 @@
         {% if chrony_enabled == 'yes' %} --ntp-server=pool.ntp.org {% endif %}
       register: ipa_install_result
       changed_when: "'The ipa-server-install command was successful' in ipa_install_result.stderr"
-      when: not ipa_default_conf.stat.exists
+      when: ipa_server_install_clean_host | bool
 
     - name: Ensure FreeIPA KDC and IPA services are running
       ansible.builtin.import_tasks: common_tasks/ensure_ipa_kdc_services.yml
@@ -143,7 +140,7 @@
         - dns_forwarders == 'no'
         - effective_deployment_env | default('') == 'aws'
         - effective_vpc_dns_resolver | default('') | length > 0
-        - ipa_default_conf.stat.exists
+        - ipa_server_has_default_conf | bool
 
     - name: Print Current Kerberos Ticket
       command: klist -e

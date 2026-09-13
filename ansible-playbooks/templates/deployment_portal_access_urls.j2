@@ -28,6 +28,7 @@ primary:
   grafana_caddy_path: "http://{{ host_client }}{{ p() }}/grafana/"
   prometheus_caddy_path: "http://{{ host_client }}{{ p() }}/prometheus/"
   alertmanager_caddy_path: "http://{{ host_client }}{{ p() }}/alertmanager/"
+  cadvisor_caddy_path: "http://{{ host_client }}{{ p() }}/cadvisor/"
   cadvisor: "http://{{ host_priv }}:{{ monitoring_cadvisor_host_port }}/"
 external: {}
 vpc: {}
@@ -45,6 +46,7 @@ external:
   grafana_caddy_path: "http://{{ host_pub }}{{ p() }}/grafana/"
   prometheus_caddy_path: "http://{{ host_pub }}{{ p() }}/prometheus/"
   alertmanager_caddy_path: "http://{{ host_pub }}{{ p() }}/alertmanager/"
+  cadvisor_caddy_path: "http://{{ host_pub }}{{ p() }}/cadvisor/"
   cadvisor: "http://{{ host_pub }}:{{ monitoring_cadvisor_host_port }}/"
 vpc:
   audience: "Same VPC only (private IP)"
@@ -58,5 +60,6 @@ vpc:
   grafana_caddy_path: "http://{{ host_priv }}{{ p() }}/grafana/"
   prometheus_caddy_path: "http://{{ host_priv }}{{ p() }}/prometheus/"
   alertmanager_caddy_path: "http://{{ host_priv }}{{ p() }}/alertmanager/"
+  cadvisor_caddy_path: "http://{{ host_priv }}{{ p() }}/cadvisor/"
   cadvisor: "http://{{ host_priv }}:{{ monitoring_cadvisor_host_port }}/"
 {% endif %}

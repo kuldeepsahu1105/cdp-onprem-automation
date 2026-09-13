@@ -1045,7 +1045,8 @@
         {% if ctx.monitoring.grafana_path_url | default('') | length > 0 %}
         <li><strong>Caddy path fallbacks</strong> — Grafana <a href="{{ ctx.monitoring.grafana_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.grafana_path_url }}</a>;
           Prometheus <a href="{{ ctx.monitoring.prometheus_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.prometheus_path_url }}</a>;
-          Alertmanager <a href="{{ ctx.monitoring.alertmanager_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.alertmanager_path_url }}</a></li>
+          Alertmanager <a href="{{ ctx.monitoring.alertmanager_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.alertmanager_path_url }}</a>;
+          cAdvisor <a href="{{ ctx.monitoring.cadvisor_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.cadvisor_path_url }}</a></li>
         {% endif %}
       </ul>
     </section>
