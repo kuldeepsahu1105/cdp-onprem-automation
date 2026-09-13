@@ -17,6 +17,13 @@
     - /var/lib/ipa
     - /var/log/ipa
 
+- name: Preflight IPA install — ensure standard /etc/ipa subdirectories (IPA 4.13 paths)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ ipa_server_etc_ipa_subdirs }}"
+
 - name: Preflight IPA install — ensure standard /var/lib/ipa subdirectories (IPA 4.13 paths)
   ansible.builtin.file:
     path: "{{ item }}"

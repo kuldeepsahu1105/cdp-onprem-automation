@@ -90,6 +90,9 @@ ipa_server_preflight_rpm_packages:
   - 389-ds-base
   - bind-utils
   - openldap
+# Playbook 12 preflight — /etc/ipa children (ipaplatform; custodia.conf before install_check)
+ipa_server_etc_ipa_subdirs:
+  - /etc/ipa/custodia
 # Playbook 12 preflight — /var/lib/ipa children (ipaplatform paths; STATEFILE_DIR=sysupgrade)
 ipa_server_var_lib_subdirs:
   - /var/lib/ipa/sysupgrade
