@@ -492,6 +492,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/join_freeipa_client.yml` | IPA client enrollment |
 | `common_tasks/ensure_ipa_kdc_services.yml` | `ipactl start` + krb5kdc health on ipaserver |
 | `common_tasks/detect_ipa_server_install_state.yml` | `default.conf`, partial debris, `ipactl` / `ipa-server-status` before `ipa-server-install` |
+| `common_tasks/recover_ipa_server_install.yml` | `ipa-server-install --uninstall --unattended` when partial debris detected (playbook 12) |
 | `common_tasks/preflight_kdc_reachable.yml` | TCP :88 to `kdc_host` before CM Kerberos REST; from **cldr-mngr** when `ansible_control_reachability` is `public` (Jenkins) |
 | `common_tasks/verify_cm_kerberos_enabled.yml` | Bounded wait on `/cm/kerberosInfo` field `kerberized`; actionable fail (see `cm_krb_kerberized_wait_*` in `group_vars/all.yml`) |
 | `common_tasks/reconcile_cm_cms_after_autotls.yml` | MGMT TLS truststore + CMS restart after **27** when Labs `cm_service` already deployed |

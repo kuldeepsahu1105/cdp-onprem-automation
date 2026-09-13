@@ -162,16 +162,3 @@
           else (ipa_detect_ipa_server_status.stderr | default('not available') | trim)
         }}
 
-- name: Detect IPA — refuse ipa-server-install on partial or broken leftover state
-  ansible.builtin.fail:
-    msg: >-
-      FreeIPA on {{ inventory_hostname }} is in a partial or broken state
-      (for example /etc/ipa/ca.crt or Directory Server data without /etc/ipa/default.conf).
-      Do not re-run ipa-server-install on top of this host.
-      Recovery on ipaserver (as root):
-        1) ipa-server-install --uninstall --unattended
-           (or: ipa-server-install --uninstall and confirm prompts)
-        2) If uninstall fails, remove leftover paths under /etc/ipa, /var/lib/ipa, and /etc/dirsrv per vendor docs, then re-run playbook 12.
-      Then re-run: ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}
-      See ansible-playbooks/docs/RUNBOOK.md (FreeIPA partial install).
-  when: ipa_server_has_partial_state | bool

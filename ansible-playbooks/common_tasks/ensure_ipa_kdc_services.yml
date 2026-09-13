@@ -42,7 +42,8 @@
         ipa_kdc_ipactl_status.rc | default('?')
       }}: {{ ipa_kdc_status_text | trim | truncate(200, True, '') }}).
       Re-run: ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}
-      If uninstall is required: ipa-server-install --uninstall --unattended on ipaserver, then playbook 12.
+      If debris remains: on ipaserver as root run ipa-server-install --uninstall --unattended
+      (add --force if needed); see /var/log/ipaserver-uninstall.log, then playbook 12.
   when: ipa_kdc_ipactl_not_configured | bool
 
 - name: IPA KDC — detect whether core IPA services need a start
@@ -116,6 +117,7 @@
   ansible.builtin.fail:
     msg: >-
       FreeIPA on {{ inventory_hostname }} remains not configured after start attempts.
+      On ipaserver: ipa-server-install --uninstall --unattended; inspect /var/log/ipaserver-uninstall.log.
       Re-run: ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}
   when: ipa_kdc_ipactl_not_configured_after | bool
 
