@@ -1003,11 +1003,13 @@ os_vars:
     pkg_utils: "{{ 'dnf-utils' if ansible_facts.get('pkg_mgr', 'dnf') == 'dnf' else 'yum-utils' }}"
     reboot_check_command: needs-restarting
     reboot_check_flag: "-r"
+    ipa_install_dns_packages: bind-utils
     freeipa_server_packages:
       - ipa-server
       - bind
       - bind-dyndb-ldap
       - ipa-server-dns
+      - bind-utils
       - firewalld
     freeipa_client_packages:
       - freeipa-client
@@ -1090,11 +1092,13 @@ os_vars:
     pkg_utils: apt-transport-https
     reboot_check_command: ""
     reboot_check_flag: ""
+    ipa_install_dns_packages: dnsutils
     freeipa_server_packages:
       - freeipa-server
       - freeipa-server-dns
       - bind9
       - bind9-dyndb-ldap
+      - dnsutils
     freeipa_client_packages:
       - freeipa-client
       - ldap-utils

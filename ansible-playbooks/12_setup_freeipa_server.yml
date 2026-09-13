@@ -113,8 +113,12 @@
         - not (ipa_server_has_default_conf | bool)
         - ipa_detect_ipactl_not_configured | default(false) | bool
 
+    - name: Preflight hostname/DNS and dig before fresh ipa-server-install
+      ansible.builtin.import_tasks: common_tasks/preflight_ipa_server_install.yml
+      when: not (ipa_server_has_default_conf | bool)
+
     - name: Run IPA server installation
-      command: >
+      ansible.builtin.command: >
         ipa-server-install --setup-dns --unattended
         --hostname={{ ansible_fqdn }}
         --ip-address={{ ansible_default_ipv4.address }}
@@ -131,8 +135,32 @@
         {% if chrony_enabled == 'yes' %} --ntp-server=pool.ntp.org {% endif %}
       register: ipa_install_result
       changed_when: "'The ipa-server-install command was successful' in ipa_install_result.stderr"
+      failed_when: false
+      no_log: true
       # Install when ipactl/default.conf say not configured (see detect_ipa_server_install_state); partial debris fails there.
       when: not (ipa_server_has_default_conf | bool)
+
+    - name: Capture tail of ipaserver-install.log when install failed
+      ansible.builtin.shell: tail -n 50 /var/log/ipaserver-install.log 2>/dev/null || true
+      register: ipa_install_log_tail
+      changed_when: false
+      no_log: true
+      when:
+        - not (ipa_server_has_default_conf | bool)
+        - ipa_install_result is defined
+        - ipa_install_result.rc | default(0) != 0
+
+    - name: Fail with ipa-server-install diagnostics
+      ansible.builtin.fail:
+        msg: >-
+          ipa-server-install failed on {{ inventory_hostname }} (rc={{ ipa_install_result.rc }}).
+          stderr (truncated): {{ ipa_install_result.stderr | default('') | truncate(1500, True) }}
+          Last 50 lines of /var/log/ipaserver-install.log:
+          {{ ipa_install_log_tail.stdout | default('(log missing or empty)') }}
+      when:
+        - not (ipa_server_has_default_conf | bool)
+        - ipa_install_result is defined
+        - ipa_install_result.rc | default(0) != 0
 
     - name: Ensure FreeIPA KDC and IPA services are running
       ansible.builtin.import_tasks: common_tasks/ensure_ipa_kdc_services.yml
