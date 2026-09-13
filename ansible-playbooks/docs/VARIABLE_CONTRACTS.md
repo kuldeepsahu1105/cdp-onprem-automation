@@ -66,6 +66,7 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 | `cm_api_connect_host` | Optional override in `group_vars/all.yml` |
 | `cm_manager_inventory_host` | `group_vars/all.yml` (default `cldr-mngr` host) |
 | `cm_frontend_url_effective` | `resolve_caddy_service_public_urls.yml` — optional `cm_external_url` override only |
+| `deployment_portal_public_host` | `resolve_caddy_service_public_urls.yml` — Caddy lab hostname for the deployment index (`portal.<ops-ip-dashed>.<base>`) |
 | `pgadmin_caddy_public_url` | `resolve_caddy_service_public_urls.yml` — preferred browser URL for pgAdmin on Caddy port `deployment_portal_http_port` (default **81**) |
 | `ipa_caddy_public_url`, `ipa_caddy_modern_public_url`, `ipa_caddy_legacy_public_url` | `resolve_caddy_service_public_urls.yml` — FreeIPA Caddy vhost base, modern (`/ipa/modern-ui/`), and legacy (`/ipa/ui`) browser URLs |
 | `deployment_tier_b_url_checks` | `build_deployment_tier_b_url_checks.yml` on **localhost** — Tier B reads via `hostvars['localhost']` in `verify_service_urls_from_controller.yml` |
