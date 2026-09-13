@@ -14,18 +14,30 @@
   register: hypervisor_uuid
   failed_when: false
 
+- name: Probe EC2 instance metadata for AWS detection
+  ansible.builtin.uri:
+    url: http://169.254.169.254/latest/meta-data/instance-id
+    timeout: 2
+  register: ec2_instance_id_meta
+  failed_when: false
+  changed_when: false
+
 - name: Set effective deployment environment
   ansible.builtin.set_fact:
     effective_deployment_env: >-
       {{
-        deployment_environment
-        if deployment_environment in ['aws', 'baremetal']
+        (deployment_environment | default('auto'))
+        if (deployment_environment | default('auto')) in ['aws', 'baremetal']
         else (
           'aws' if (
-            is_aws_host | default(false)
+            is_aws_host | default(false) | bool
             or (
               hypervisor_uuid.content is defined
               and (hypervisor_uuid.content | b64decode | trim | lower).startswith('ec2')
+            )
+            or (
+              ec2_instance_id_meta.status | default(0) | int == 200
+              and (ec2_instance_id_meta.content | default('') | trim | length) > 0
             )
           ) else 'baremetal'
         )

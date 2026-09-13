@@ -71,17 +71,6 @@
       stdout={{ ipa_preflight_getent_fqdn.stdout | default('') | trim }}
       stderr={{ ipa_preflight_getent_fqdn.stderr | default('') | trim }}
 
-- name: Preflight IPA install — refuse leftover sysrestore when IPA is not configured
-  ansible.builtin.assert:
-    that:
-      - not (ipa_detect_sysrestore_present | default(false) | bool)
-    fail_msg: >-
-      /var/lib/ipa/sysrestore still present while ipactl reports IPA is not configured.
-      Remove partial state manually or set ipa_server_deep_recovery: true and re-run playbook 12.
-  when:
-    - ipa_server_deep_recovery | default(false) | bool
-    - ipa_detect_ipactl_not_configured | default(false) | bool
-
 - name: Preflight IPA install — ensure chronyd is running when NTP option is enabled
   ansible.builtin.service:
     name: "{{ os_vars[ansible_os_family].chrony_service }}"

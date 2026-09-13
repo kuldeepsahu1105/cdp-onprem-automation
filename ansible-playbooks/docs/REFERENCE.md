@@ -500,12 +500,13 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/detect_ipa_server_install_state.yml` | `default.conf`, partial debris, `ipactl` / `ipa-server-status` before `ipa-server-install` |
 | `common_tasks/recover_ipa_server_install.yml` | `ipa-server-install --uninstall --unattended` when partial debris detected (playbook 12) |
 | `common_tasks/sanitize_ipa_paths_before_fresh_install.yml` | Remove broken or incomplete `/var/lib/ipa` (missing or stale **sysrestore**), `/etc/ipa`, and `/etc/dirsrv/slapd-*` before fresh install when `ipactl` not configured (playbook 12) |
-| `common_tasks/preflight_ipa_server_install.yml` | Compact preflight for playbook 12: RHEL RPMs, `/etc/ipa` + `/var/lib/ipa` + `ipa_server_var_lib_subdirs`, openldap assert, `hostname -f`/`getent` asserts, optional sysrestore guard when `ipa_server_deep_recovery` |
+| `common_tasks/preflight_ipa_server_install.yml` | Compact preflight for playbook 12: RHEL RPMs, `/etc/ipa` + `/var/lib/ipa` + `ipa_server_var_lib_subdirs`, openldap assert, `hostname -f`/`getent` asserts |
+| `12b_ipa_deep_recovery.yml` | Optional detect / recover / sanitize before playbook 12 (set `ipa_server_deep_recovery: true`) |
 | `common_tasks/resolve_ipa_install_dns_forwarders.yml` | VPC vs `--no-forwarders` flags for `ipa-server-install` (playbook 12) |
 
 | `dns_forwarders` | `no` | Playbook **12**: AWS EC2 → VPC `--forwarder`; else `--no-forwarders`. See **`ipa_server_install_use_vpc_dns_forwarder`**. |
 | `ipa_server_install_use_vpc_dns_forwarder` | `true` | When **`dns_forwarders: no`**, use VPC resolver on AWS at install (and **`dnsconfig-mod`** when install skipped). |
-| `ipa_server_deep_recovery` | `false` | When **`true`**, playbook **12** runs detect/recover/sanitize imports (verbose; off by default). |
+| `ipa_server_deep_recovery` | `false` | When **`true`**, run playbook **`12b_ipa_deep_recovery.yml`** before **12** for automated detect/recover/sanitize. |
 | `common_tasks/preflight_kdc_reachable.yml` | TCP :88 to `kdc_host` before CM Kerberos REST; from **cldr-mngr** when `ansible_control_reachability` is `public` (Jenkins) |
 | `common_tasks/verify_cm_kerberos_enabled.yml` | Bounded wait on `/cm/kerberosInfo` field `kerberized`; actionable fail (see `cm_krb_kerberized_wait_*` in `group_vars/all.yml`) |
 | `common_tasks/reconcile_cm_cms_after_autotls.yml` | MGMT TLS truststore + CMS restart after **27** when Labs `cm_service` already deployed |

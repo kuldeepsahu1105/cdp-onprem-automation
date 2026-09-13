@@ -1,0 +1,106 @@
+### ansible-playbook -i inventory.ini 12b_ipa_deep_recovery.yml --limit ipaserver
+# Optional verbose detect / recover / sanitize before re-running playbook 12.
+# Not run by Jenkins IDENTITY by default (avoids ~100 skipped import_tasks in playbook 12 logs).
+# Set ipa_server_deep_recovery: true or pass -e ipa_server_deep_recovery=true
+---
+- import_playbook: 00_ensure_collections.yml
+
+- name: Skip when Active Directory is detected
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: End playbook for Active Directory deployments
+      ansible.builtin.meta: end_play
+      when: identity_provider_effective == 'ad'
+
+- name: FreeIPA server deep recovery (detect / recover / sanitize)
+  hosts: ipaserver
+  become: yes
+  vars_files:
+    - group_vars/all.yml
+
+  tasks:
+    - name: Require ipa_server_deep_recovery for automated path cleanup
+      ansible.builtin.assert:
+        that:
+          - ipa_server_deep_recovery | default(false) | bool
+        fail_msg: >-
+          Deep recovery is disabled. Set ipa_server_deep_recovery: true
+          (-e ipa_server_deep_recovery=true) or follow manual steps in docs/RUNBOOK.md,
+          then re-run 12_setup_freeipa_server.yml.
+
+    - name: Check if IPA Server is configured
+      ansible.builtin.stat:
+        path: /etc/ipa/default.conf
+      register: ipa_default_conf
+
+    - name: Check if IPA services respond (ipactl)
+      ansible.builtin.command: ipactl status
+      register: ipa_server_status
+      failed_when: false
+      changed_when: false
+
+    - name: IPA install gate — recovery only when install would run
+      ansible.builtin.set_fact:
+        ipa_server_should_run_install: >-
+          {{
+            (ipa_server_status.rc | default(1) | int) != 0
+            or not (ipa_default_conf.stat.exists | default(false) | bool)
+          }}
+
+    - name: Detect FreeIPA server install state (configured / partial / clean)
+      ansible.builtin.import_tasks: common_tasks/detect_ipa_server_install_state.yml
+      when: ipa_server_should_run_install | bool
+
+    - name: Recover partial FreeIPA install (unattended uninstall before fresh install)
+      ansible.builtin.import_tasks: common_tasks/recover_ipa_server_install.yml
+      when:
+        - ipa_server_should_run_install | bool
+        - ipa_server_has_partial_state | default(false) | bool
+
+    - name: Re-detect FreeIPA state after unattended uninstall recovery
+      ansible.builtin.import_tasks: common_tasks/detect_ipa_server_install_state.yml
+      when:
+        - ipa_server_should_run_install | bool
+        - ipa_server_has_partial_state | default(false) | bool
+
+    - name: Sanitize broken /var/lib/ipa, /etc/ipa, and dirsrv before fresh ipa-server-install
+      ansible.builtin.import_tasks: common_tasks/sanitize_ipa_paths_before_fresh_install.yml
+      when:
+        - ipa_server_should_run_install | bool
+        - ipa_detect_ipactl_not_configured | default(false) | bool
+        - not (ipa_server_has_default_conf | default(false) | bool)
+
+    - name: Re-detect FreeIPA state after path sanitization
+      ansible.builtin.import_tasks: common_tasks/detect_ipa_server_install_state.yml
+      when:
+        - ipa_server_should_run_install | bool
+        - ipa_detect_ipactl_not_configured | default(false) | bool
+        - not (ipa_server_has_default_conf | default(false) | bool)
+
+    - name: Refuse when critical debris remains after recovery
+      ansible.builtin.fail:
+        msg: >-
+          FreeIPA on {{ inventory_hostname }} still has partial install debris after
+          ipa-server-install --uninstall --unattended, automated path cleanup, and sanitization.
+          Inspect /var/log/ipaserver-uninstall.log on the host.
+          Manual recovery (as root): ipa-server-install --uninstall --unattended
+          (add --force on RHEL if prompted), then as root: rm -rf /var/lib/ipa /etc/ipa and remove /etc/dirsrv/slapd-* if needed.
+          Re-run: ansible-playbook -i inventory.ini 12b_ipa_deep_recovery.yml --limit {{ inventory_hostname }}
+          then 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}
+          See ansible-playbooks/docs/RUNBOOK.md (FreeIPA partial install).
+      when:
+        - ipa_server_should_run_install | bool
+        - ipa_server_has_partial_state | default(false) | bool
+
+    - name: Refuse leftover sysrestore when IPA is not configured
+      ansible.builtin.assert:
+        that:
+          - not (ipa_detect_sysrestore_present | default(false) | bool)
+        fail_msg: >-
+          /var/lib/ipa/sysrestore still present while ipactl reports IPA is not configured.
+          Re-run deep recovery or remove partial state manually per RUNBOOK.md.
+      when:
+        - ipa_server_should_run_install | bool
+        - ipa_detect_ipactl_not_configured | default(false) | bool
