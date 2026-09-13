@@ -14,7 +14,7 @@ Authoritative matrix: [Service Dependencies in Cloudera Manager](https://docs.cl
 | Hive | `hdfs_service`, `zookeeper_service`, `mapreduce_yarn_service`; optional `ranger_service`, `hbase_service`, `atlas_service` |
 | Hive on Tez | `hdfs_service`, `hms_connector`, `tez_service`, `mapreduce_yarn_service`, `zookeeper_service`; optional ranger/hbase/atlas |
 | HBase | `hdfs_service`, `zookeeper_service` |
-| Hue | `hdfs_service`, `hive_service`; optional hbase/impala/zookeeper when those services enabled |
+| Hue | `hdfs_service`; on CDP 7+ with Hive + Hive on Tez use `hms_service: hive` and `hive_service: hive_on_tez`; optional hbase/impala/zookeeper when those services enabled |
 | Impala | `hdfs_service`, `hive_service`; optional `hbase_service` |
 | Kafka | `zookeeper_service` |
 | Atlas | `hdfs_service`, `kafka_service`; optional `hbase_service`, `solr_service`, `ranger_service` |
