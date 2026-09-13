@@ -79,6 +79,8 @@ dns_forwarders: "no"
 ipa_server_install_use_vpc_dns_forwarder: true
 reverse_zones: "no"
 chrony_enabled: "yes"
+# Playbook 12 — automated detect / recover / sanitize (verbose; default off — lean install gate + preflight)
+ipa_server_deep_recovery: false
 # Playbook 12 preflight — explicit RPMs probed before ipa-server-install (RHEL; also in freeipa_server_packages)
 ipa_server_preflight_rpm_packages:
   - ipa-server
