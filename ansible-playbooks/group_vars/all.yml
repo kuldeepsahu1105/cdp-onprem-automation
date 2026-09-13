@@ -895,6 +895,7 @@ os_vars:
       - mod_ssl
       - createrepo_c
     web_server_service: httpd
+    web_server_conf_d_dir: /etc/httpd/conf.d
     web_server_conf_file: /etc/httpd/conf/httpd.conf
     web_server_ssl_key: /etc/pki/tls/private/httpd.key
     web_server_ssl_cert: /etc/pki/tls/certs/httpd.crt
@@ -976,6 +977,7 @@ os_vars:
       - apache2
       - ssl-cert
     web_server_service: apache2
+    web_server_conf_d_dir: /etc/apache2/conf.d
     web_server_conf_file: /etc/apache2/apache2.conf
     web_server_ssl_key: /etc/ssl/private/apache-selfsigned.key
     web_server_ssl_cert: /etc/ssl/certs/apache-selfsigned.crt
