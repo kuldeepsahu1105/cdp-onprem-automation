@@ -295,6 +295,12 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `deployment_portal_use_private_network_only` | `false` | Force `private` profile even when inventory has distinct public/private IPs |
 | `monitoring_stack_enabled` | `true` | Prometheus + Grafana + Alertmanager + cAdvisor with playbook 28; Jenkins `MONITORING_STACK_ENABLED` checkbox sets this override |
 | `deployment_portal_extra_links` | `[]` | Add `{name, url}` entries to the index page |
+| `deployment_portal_expose_credentials` | `true` | Render **Operator access** panel (CM, DB, IPA, Ranger/Knox/Hue, ECS, optional Jenkins) from group_vars at portal sync |
+| `deployment_portal_expose_ssh_keys` | `false` | Copy Ansible controller SSH private key to `/downloads/ssh/` on the ops host. Use `auto` to export only when `deployment_portal_basic_auth_enabled` is true |
+| `deployment_portal_basic_auth_enabled` | `false` | HTTP basic auth on Caddy path `/downloads/*` only (index and Tier A verify stay unauthenticated) |
+| `deployment_portal_basic_auth_user` | `portal` | Basic auth username for downloads |
+| `deployment_portal_basic_auth_password` | `postgres_password` | Basic auth password for downloads |
+| `deployment_portal_jenkins_url` | `""` | Optional Jenkins UI URL on the operator panel (passwords belong in Jenkins, not git) |
 | `monitoring_prometheus_extra_targets` | `[]` | Extra Prometheus scrape jobs |
 | `caddy_vhost_enabled` | `true` | Host-based Caddy URLs (nip.io-style) |
 | `caddy_vhost_public_base` | `pvc.cloudera-labs.com` | Base domain for `svc.<ip-dashed>.<base>` |

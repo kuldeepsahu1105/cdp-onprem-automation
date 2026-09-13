@@ -1,0 +1,35 @@
+---
+# Resolve Ansible controller SSH private key path for portal downloads (same candidates as Auto-TLS).
+
+- name: Resolve portal SSH private key on Ansible controller
+  ansible.builtin.set_fact:
+    deployment_portal_ssh_private_key_path: "{{ lookup('ansible.builtin.first_found', _portal_key_lookup, errors='ignore') | default('', true) }}"
+  vars:
+    _explicit: "{{ deployment_portal_ssh_private_key_path_override | default('', true) | trim }}"
+    _env_key: "{{ lookup('env', 'ANSIBLE_PRIVATE_KEY') | default('', true) | trim | expanduser }}"
+    _rel_keys:
+      - "{{ ansible_ssh_private_key_file | default('id_rsa') | regex_replace('^\\./', '') }}"
+      - "sshkey.pem"
+      - "id_rsa"
+    _file_candidates: >-
+      {{
+        ([_explicit] if (_explicit | length > 0) else [])
+        + ([_env_key] if (_env_key | length > 0) else [])
+        + _rel_keys
+      }}
+    _portal_key_lookup:
+      files: "{{ _file_candidates }}"
+      paths:
+        - "{{ playbook_dir }}"
+        - "{{ lookup('env', 'HOME') | default('/root', true) }}/.ssh"
+      skip: true
+
+- name: Derive portal SSH download basename from key path
+  ansible.builtin.set_fact:
+    deployment_portal_ssh_download_basename: >-
+      {{
+        'cluster-access.pem'
+        if (deployment_portal_ssh_private_key_path | default('') | basename | regex_search('\\.pem$'))
+        else 'cluster-access-id_rsa'
+      }}
+  when: deployment_portal_ssh_private_key_path | default('') | length > 0

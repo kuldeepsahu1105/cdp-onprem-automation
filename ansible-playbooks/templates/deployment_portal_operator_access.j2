@@ -1,0 +1,64 @@
+{# YAML dict: operator credentials and download links — deploy-time only, never committed with real secrets. #}
+{% set expose = deployment_portal_expose_credentials | default(true) | bool %}
+{% set ssh_on = deployment_portal_ssh_keys_expose_effective | default(false) | bool %}
+{% set auth_on = deployment_portal_basic_auth_enabled | default(false) | bool %}
+{% set dl_base = '/downloads' %}
+{% set ns = namespace(sections=[]) %}
+{% if expose %}
+{% if ssh_on and (deployment_portal_ssh_private_key_path | default('') | length > 0) %}
+{% set _bn = deployment_portal_ssh_download_basename | default('cluster-access.pem') %}
+{% set _ssh_dl = [{'label': 'SSH private key (' ~ _bn ~ ')', 'href': dl_base ~ '/ssh/' ~ _bn, 'filename': _bn, 'note': 'chmod 600 after download'}] %}
+{% set ns.sections = ns.sections + [{'id': 'ssh', 'title': 'SSH cluster access', 'intro': 'Private key for ' ~ (ansible_user | default('ec2-user')) ~ '@ cluster nodes (Ansible controller key at portal sync).', 'downloads': _ssh_dl, 'credentials': []}] %}
+{% elif ssh_on %}
+{% set ns.sections = ns.sections + [{'id': 'ssh', 'title': 'SSH cluster access', 'intro': 'Key export enabled but no private key found on the Ansible controller during portal sync.', 'downloads': [], 'credentials': []}] %}
+{% endif %}
+{% set ns.sections = ns.sections + [{'id': 'cm', 'title': 'Cloudera Manager', 'intro': 'CM admin UI/API credentials.', 'downloads': [], 'credentials': [{'label': 'Cloudera Manager', 'username': cm_admin_user, 'password': cm_admin_pass, 'url': 'https://' ~ deployment_portal_cm_fqdn ~ ':' ~ (cm_https_port | string), 'note': 'HTTP :' ~ (cm_http_port | string) ~ ' on ' ~ deployment_portal_cm_fqdn}]}] %}
+{% set ns.sections = ns.sections + [{'id': 'database', 'title': 'Database & pgAdmin', 'intro': 'CM PostgreSQL and portal pgAdmin.', 'downloads': [], 'credentials': [{'label': 'PostgreSQL (CM)', 'username': postgres_user | default('postgres'), 'password': postgres_password, 'url': '', 'note': deployment_portal_postgres_fqdn ~ ':' ~ (postgres_port | string) ~ ' scm/' ~ scm_db_user}, {'label': 'pgAdmin', 'username': pgadmin_default_email, 'password': pgadmin_default_password, 'url': '', 'note': 'Ops :' ~ (deployment_portal_pgadmin_host_port | string)}]}] %}
+{% if (monitoring_stack_enabled | default(false) | bool) or (deployment_portal_monitoring_deployed | default(false) | bool) %}
+{% set ns.sections = ns.sections + [{'id': 'monitoring', 'title': 'Monitoring (Grafana)', 'intro': 'Grafana admin when monitoring stack is installed.', 'downloads': [], 'credentials': [{'label': 'Grafana', 'username': monitoring_grafana_admin_user, 'password': monitoring_grafana_admin_password, 'url': '', 'note': 'Port ' ~ (monitoring_grafana_host_port | string)}]}] %}
+{% endif %}
+{% if deployment_portal_has_ipa | default(false) | bool %}
+{% set ns.sections = ns.sections + [{'id': 'ipa', 'title': 'FreeIPA / IdM', 'intro': 'IPA directory administrator.', 'downloads': [], 'credentials': [{'label': 'IPA admin', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': 'https://' ~ deployment_portal_ipa_fqdn, 'note': 'CM LDAP bind password often matches ipaadmin_password'}]}] %}
+{% endif %}
+{% if identity_provider_effective == 'ad' %}
+{% set ns.sections = ns.sections + [{'id': 'ad', 'title': 'Active Directory', 'intro': 'Domain join account.', 'downloads': [], 'credentials': [{'label': 'AD join', 'username': ad_join_user, 'password': ad_join_password, 'url': '', 'note': ad_kdc_host}]}] %}
+{% endif %}
+{% set svc_creds = [] %}
+{% if base_cluster_install_services.ranger | default(false) | bool %}
+{% set svc_creds = svc_creds + [{'label': 'Ranger Admin', 'username': 'rangeradmin', 'password': (databases | selectattr('name', 'equalto', 'ranger') | map(attribute='password') | first | default('rangeradmin')), 'url': 'http://' ~ deployment_portal_base_master_fqdn ~ ':6080', 'note': 'Base cluster'}] %}
+{% endif %}
+{% if base_cluster_install_services.knox | default(false) | bool %}
+{% set svc_creds = svc_creds + [{'label': 'Knox Gateway', 'username': 'knox', 'password': (databases | selectattr('name', 'equalto', 'knox') | map(attribute='password') | first | default('knox')), 'url': 'https://' ~ deployment_portal_base_master_fqdn ~ ':8443/gateway/homepage/home', 'note': 'Knox DB user'}] %}
+{% endif %}
+{% if base_cluster_install_services.hue | default(false) | bool %}
+{% set svc_creds = svc_creds + [{'label': 'Hue', 'username': 'hue', 'password': (databases | selectattr('name', 'equalto', 'hue') | map(attribute='password') | first | default('hue')), 'url': 'http://' ~ deployment_portal_base_master_fqdn ~ ':8888', 'note': 'Often LDAP after CM sync'}] %}
+{% endif %}
+{% if svc_creds | length > 0 %}
+{% set ns.sections = ns.sections + [{'id': 'cdp_services', 'title': 'CDP Runtime services', 'intro': 'External DB users from CM database setup (lab defaults).', 'downloads': [], 'credentials': svc_creds}] %}
+{% endif %}
+{% if deployment_portal_ecs_present | default(false) | bool %}
+{% set ecs_creds = [{'label': 'ECS Console', 'username': 'admin', 'password': ecs_console_admin_password, 'url': 'https://console.' ~ ecs_app_domain, 'note': 'UMS bootstrap'}, {'label': 'ECS K8s WebUI token', 'username': '(token)', 'password': ecs_k8s_webui_secret_admin_token, 'url': '', 'note': 'When dashboard enabled'}] %}
+{% if ecs_ldap_admin_user_enabled | default(false) | bool %}
+{% set ecs_creds = ecs_creds + [{'label': 'ECS LDAP admin', 'username': ecs_ldap_admin_username, 'password': ecs_ldap_admin_password, 'url': '', 'note': ''}] %}
+{% endif %}
+{% if ecs_api_access_key_id | default('') | length > 0 and ecs_api_private_key | default('') | length > 0 %}
+{% set ecs_creds = ecs_creds + [{'label': 'ECS API key', 'username': ecs_api_access_key_id, 'password': ecs_api_private_key, 'url': '', 'note': 'From group_vars'}] %}
+{% elif deployment_portal_ecs_api_cache | default({}) | length > 0 %}
+{% set _cache = deployment_portal_ecs_api_cache %}
+{% if _cache.access_key_id | default('') | length > 0 %}
+{% set ecs_creds = ecs_creds + [{'label': 'ECS API key', 'username': _cache.access_key_id, 'password': _cache.private_key | default(''), 'url': '', 'note': 'From ecs_api_credentials_cache_path'}] %}
+{% endif %}
+{% endif %}
+{% set ns.sections = ns.sections + [{'id': 'ecs', 'title': 'ECS / Data Services', 'intro': 'Control plane and automation API credentials when present.', 'downloads': [], 'credentials': ecs_creds}] %}
+{% endif %}
+{% if deployment_portal_jenkins_url | default('') | length > 0 %}
+{% set ns.sections = ns.sections + [{'id': 'jenkins', 'title': 'Jenkins', 'intro': 'Pipeline UI for this lab (optional).', 'downloads': [], 'credentials': [{'label': 'Jenkins', 'username': deployment_portal_jenkins_user | default('(Jenkins user)'), 'password': deployment_portal_jenkins_password | default('(stored in Jenkins)'), 'url': deployment_portal_jenkins_url, 'note': ''}]}] %}
+{% endif %}
+{% endif %}
+enabled: {{ expose | bool }}
+basic_auth_enabled: {{ auth_on | bool }}
+ssh_keys_exposed: {{ ssh_on | bool }}
+downloads_path_prefix: "{{ dl_base }}"
+ssh_user: "{{ ansible_user | default('ec2-user') }}"
+auth_username: "{{ deployment_portal_basic_auth_user | default('portal') }}"
+sections: {{ ns.sections | to_json }}

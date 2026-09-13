@@ -1,0 +1,10 @@
+{# Optional HTTP basic auth for /downloads (SSH keys, credentials JSON). #}
+{% if deployment_portal_basic_auth_enabled | default(false) | bool and (deployment_portal_basic_auth_hash | default('') | length > 0) %}
+  handle /downloads/* {
+    basicauth {
+      {{ deployment_portal_basic_auth_user }} {{ deployment_portal_basic_auth_hash }}
+    }
+    root * /srv
+    file_server
+  }
+{% endif %}

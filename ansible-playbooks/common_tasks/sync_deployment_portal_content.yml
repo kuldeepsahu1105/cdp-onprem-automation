@@ -18,6 +18,10 @@
     - "{{ deployment_portal_www_dir }}"
     - "{{ monitoring_config_dir }}"
 
+- name: Sync operator credentials and SSH downloads to portal www
+  ansible.builtin.import_tasks: sync_deployment_portal_operator_access.yml
+  when: deployment_portal_expose_credentials | default(true) | bool
+
 - name: Render deployment portal index page
   ansible.builtin.template:
     src: deployment_portal_index.html.j2

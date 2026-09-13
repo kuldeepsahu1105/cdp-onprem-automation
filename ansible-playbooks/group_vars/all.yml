@@ -659,6 +659,18 @@ deployment_portal_inventory_group_labels:
   ecs-workers: ECS worker
 deployment_portal_data_service_links: []
 deployment_portal_extra_links: []
+# Operator access hub on portal index (credentials table + optional SSH key downloads).
+deployment_portal_expose_credentials: true
+# false | true | auto — auto exports SSH keys only when deployment_portal_basic_auth_enabled is true.
+deployment_portal_expose_ssh_keys: false
+# HTTP basic auth for /downloads/* (SSH keys, operator-credentials.json). Index HTML stays unauthenticated so Ansible Tier A verify is unchanged.
+deployment_portal_basic_auth_enabled: false
+deployment_portal_basic_auth_user: portal
+deployment_portal_basic_auth_password: "{{ postgres_password }}"
+# Optional Jenkins block on portal (URL only — do not commit real Jenkins passwords to git).
+deployment_portal_jenkins_url: ""
+deployment_portal_jenkins_user: ""
+deployment_portal_jenkins_password: ""
 # Portal URL profile: auto | cloud (public + VPC) | private (bare metal / no public IP)
 deployment_portal_access_profile: auto
 # When profile is private, prefer cluster FQDN in links (set false to use management IP only)

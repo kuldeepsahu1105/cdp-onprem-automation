@@ -34,6 +34,7 @@
 {% set panel_chevron %}<span class="panel-chevron" aria-hidden="true"><svg class="chevron-icon" viewBox="0 0 16 16" width="14" height="14" focusable="false"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>{% endset %}
 {% set ls = ctx.live_stats | default({}) %}
 {% set ls_poll_prom = ls.poll.prometheus_query_path | default('') if ls.poll is defined else '' %}
+{% set oa = ctx.operator_access | default({}) %}
 {% set ns_ls = namespace(sgood=0, swarn=0, sbad=0) %}
 {% for cl in ls.clusters | default([]) %}
 {% set ns_ls.sgood = ns_ls.sgood + (cl.services_started_good | default(0) | int) %}
@@ -366,6 +367,20 @@
     .health-pill.concerning { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
     .health-pill.bad { background: rgba(248, 113, 113, 0.15); color: #f87171; }
     .health-pill.na { background: #243044; color: var(--muted); }
+    .cred-table td code.cred-secret {
+      font-size: 0.8rem;
+      user-select: all;
+    }
+    .cred-dl-list { margin: 0.5rem 0 0; padding-left: 1.15rem; }
+    .operator-warning {
+      font-size: 0.78rem;
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.35);
+      background: rgba(251, 191, 36, 0.08);
+      border-radius: 6px;
+      padding: 0.55rem 0.75rem;
+      margin: 0 0 0.75rem;
+    }
     @media (max-width: 480px) {
       .site-header { padding: 0.85rem 1rem; }
       h1 { font-size: 1.15rem; }
@@ -556,6 +571,61 @@
       </details>
       {% endif %}
     </section>
+
+    {% if oa.enabled | default(false) | bool and (oa.sections | default([]) | length > 0) %}
+    <details class="panel" open>
+      <summary><span class="summary-main"><h2 class="section-title">Operator access — credentials &amp; downloads</h2></span>{{ panel_chevron | safe }}</summary>
+      <div class="panel-body">
+        <p class="sub">Lab deployment secrets rendered at portal sync from Ansible group_vars (not stored in git). Use only on trusted networks.</p>
+        {% if oa.ssh_keys_exposed | default(false) | bool and not (oa.basic_auth_enabled | default(false) | bool) %}
+        <p class="operator-warning"><strong>SSH keys are downloadable without HTTP auth.</strong> Set <code>deployment_portal_basic_auth_enabled: true</code> or <code>deployment_portal_expose_ssh_keys: false</code>.</p>
+        {% endif %}
+        {% if oa.basic_auth_enabled | default(false) | bool %}
+        <p class="sub">Downloads under <code>{{ oa.downloads_path_prefix | default('/downloads') }}/</code> require HTTP basic auth user <code>{{ oa.auth_username | default('portal') }}</code> (password from <code>deployment_portal_basic_auth_password</code>).</p>
+        {% endif %}
+        <p class="sub">SSH user for instances: <code>{{ oa.ssh_user | default('ec2-user') }}</code>
+          — <a href="{{ oa.downloads_path_prefix | default('/downloads') }}/operator-credentials.json">operator-credentials.json</a> (machine-readable bundle; same auth as other downloads when basic auth is enabled)
+        </p>
+        {% for sec in oa.sections | default([]) %}
+        <h2 class="section-title" style="margin-top:1rem">{{ sec.title }}</h2>
+        {% if sec.intro | default('') | length > 0 %}<p class="sub">{{ sec.intro }}</p>{% endif %}
+        {% if sec.downloads | default([]) | length > 0 %}
+        <ul class="cred-dl-list">
+          {% for dl in sec.downloads %}
+          <li><a href="{{ dl.href }}" download="{{ dl.filename | default('') }}">{{ dl.label }}</a>{% if dl.note | default('') | length > 0 %} — <span class="badge">{{ dl.note }}</span>{% endif %}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if sec.credentials | default([]) | length > 0 %}
+        <div class="table-scroll">
+          <table class="cred-table">
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>Username</th>
+                <th>Password / secret</th>
+                <th>URL</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for cr in sec.credentials %}
+              <tr>
+                <td>{{ cr.label }}</td>
+                <td><code>{{ cr.username }}</code></td>
+                <td><code class="cred-secret">{{ cr.password }}</code></td>
+                <td>{% if cr.url | default('') | length > 0 %}<a href="{{ cr.url }}" target="_blank" rel="noopener noreferrer">{{ cr.url }}</a>{% else %}<span class="badge">—</span>{% endif %}</td>
+                <td>{{ cr.note | default('') }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </details>
+    {% endif %}
 
     {% if ctx.endpoints | default([]) | length > 0 %}
     <section class="flat">

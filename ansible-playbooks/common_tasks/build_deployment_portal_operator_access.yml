@@ -1,0 +1,63 @@
+---
+# Operator access facts for deployment portal (localhost). Passwords rendered at deploy time only.
+
+- name: Resolve deployment portal SSH key path on controller
+  ansible.builtin.import_tasks: resolve_deployment_portal_ssh_key.yml
+
+- name: Resolve effective SSH key export for portal
+  ansible.builtin.set_fact:
+    deployment_portal_ssh_keys_expose_effective: >-
+      {{
+        deployment_portal_expose_ssh_keys | default(false) | bool
+        if (deployment_portal_expose_ssh_keys | default(false) | string) not in ['auto', 'Auto', 'AUTO']
+        else (
+          deployment_portal_basic_auth_enabled | default(false) | bool
+        )
+      }}
+
+- name: Warn when SSH keys are exported without portal basic auth
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: deployment_portal_expose_ssh_keys is true but deployment_portal_basic_auth_enabled is false.
+      SSH private keys will be downloadable from the portal without HTTP authentication.
+      Enable deployment_portal_basic_auth_enabled or set deployment_portal_expose_ssh_keys: false.
+  when:
+    - deployment_portal_ssh_keys_expose_effective | bool
+    - not (deployment_portal_basic_auth_enabled | default(false) | bool)
+
+- name: Stat ECS API credentials cache on controller
+  ansible.builtin.stat:
+    path: "{{ ecs_api_credentials_cache_path }}"
+  register: _deployment_portal_ecs_api_cache_stat
+  when: ecs_api_credentials_cache_path | default('') | length > 0
+
+- name: Load ECS API credentials cache from controller when present
+  ansible.builtin.set_fact:
+    deployment_portal_ecs_api_cache: "{{ lookup('file', ecs_api_credentials_cache_path) | from_yaml | default({}, true) }}"
+  no_log: true
+  when:
+    - ecs_api_credentials_cache_path | default('') | length > 0
+    - _deployment_portal_ecs_api_cache_stat.stat.exists | default(false) | bool
+
+- name: Default empty ECS API cache when file missing
+  ansible.builtin.set_fact:
+    deployment_portal_ecs_api_cache: {}
+  when: deployment_portal_ecs_api_cache is not defined
+
+- name: Set Caddy bcrypt hash for portal downloads basic auth
+  ansible.builtin.set_fact:
+    deployment_portal_basic_auth_hash: "{{ deployment_portal_basic_auth_password | password_hash('bcrypt') }}"
+  no_log: true
+  when: deployment_portal_basic_auth_enabled | default(false) | bool
+
+- name: Clear portal basic auth hash when disabled
+  ansible.builtin.set_fact:
+    deployment_portal_basic_auth_hash: ""
+  when: not (deployment_portal_basic_auth_enabled | default(false) | bool)
+
+- name: Render deployment portal operator access structure
+  ansible.builtin.set_fact:
+    deployment_portal_operator_access: >-
+      {{
+        lookup('template', 'deployment_portal_operator_access.j2') | from_yaml | default({}, true)
+      }}

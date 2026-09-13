@@ -256,6 +256,9 @@
         lookup('template', 'deployment_portal_endpoints.j2') | from_yaml | default([], true)
       }}
 
+- name: Build deployment portal operator access (credentials and SSH download metadata)
+  ansible.builtin.import_tasks: build_deployment_portal_operator_access.yml
+
 - name: Prefer Caddy vhost URLs for monitoring in external access map
   ansible.builtin.set_fact:
     deployment_portal_access_urls: >-
@@ -551,6 +554,7 @@
       planned_roles: "{{ deployment_portal_planned_roles | default([]) }}"
       endpoints: "{{ deployment_portal_endpoints | default([]) }}"
       extra_links: "{{ deployment_portal_extra_links }}"
+      operator_access: "{{ deployment_portal_operator_access | default({}) }}"
 
 - name: Initialize portal live stats (inventory only)
   ansible.builtin.import_tasks: collect_deployment_portal_live_stats.yml

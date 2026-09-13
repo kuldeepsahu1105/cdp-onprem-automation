@@ -17,9 +17,10 @@
 
 {# Fallback: IP:port path routes #}
 http://:{{ deployment_portal_http_port }} {
+{% include 'deployment_portal_Caddyfile_downloads_auth.inc.j2' %}
   root * /srv
 
-  @static not path /grafana* /prometheus* /alertmanager*
+  @static not path /grafana* /prometheus* /alertmanager* /downloads*
   handle @static {
     try_files {path} /index.html
     file_server
@@ -42,9 +43,10 @@ http://:{{ deployment_portal_http_port }} {
 
 {% else %}
 :{{ deployment_portal_http_port }} {
+{% include 'deployment_portal_Caddyfile_downloads_auth.inc.j2' %}
   root * /srv
 
-  @static not path /grafana* /prometheus* /alertmanager*
+  @static not path /grafana* /prometheus* /alertmanager* /downloads*
   handle @static {
     try_files {path} /index.html
     file_server

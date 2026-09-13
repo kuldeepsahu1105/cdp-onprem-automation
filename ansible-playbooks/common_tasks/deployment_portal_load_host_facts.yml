@@ -26,3 +26,8 @@
         | default(hostvars['localhost']['deployment_portal_context'].monitoring.enabled | default(false))
         | bool
       }}
+    deployment_portal_operator_access: "{{ hostvars['localhost']['deployment_portal_operator_access'] | default({}) }}"
+    deployment_portal_ssh_private_key_path: "{{ hostvars['localhost']['deployment_portal_ssh_private_key_path'] | default('') }}"
+    deployment_portal_ssh_download_basename: "{{ hostvars['localhost']['deployment_portal_ssh_download_basename'] | default('cluster-access.pem') }}"
+    deployment_portal_ssh_keys_expose_effective: "{{ hostvars['localhost']['deployment_portal_ssh_keys_expose_effective'] | default(false) }}"
+    deployment_portal_basic_auth_hash: "{{ hostvars['localhost']['deployment_portal_basic_auth_hash'] | default('') }}"

@@ -1,9 +1,13 @@
 {# Included per IP slug (public + optional private). Variable: caddy_vhost_urls #}
 {% set _ipa_caddy_origin = 'http://{http.request.host}' ~ (':' ~ (deployment_portal_http_port | int) if (deployment_portal_http_port | int) != 80 else '') %}
 http://{{ caddy_vhost_urls.portal.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
-  root * /srv
-  try_files {path} /index.html
-  file_server
+{% include 'deployment_portal_Caddyfile_downloads_auth.inc.j2' %}
+  @portal_static not path /downloads*
+  handle @portal_static {
+    root * /srv
+    try_files {path} /index.html
+    file_server
+  }
 }
 
 http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
