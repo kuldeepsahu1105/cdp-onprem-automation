@@ -221,8 +221,9 @@ ansible-playbook -i inventory.ini 25_verify_cm.yml
 ansible-playbook -i inventory.ini 26_setup_cm_license.yml
 ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml
 # CM API probes: VPC private_ip from Jenkins (not same-host public EIP); manager IP/FQDN on cldr-mngr. SG must allow 7180/7183 from Jenkins to private IPs.
-ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
+ansible-playbook -i inventory.ini 29_setup_cm_cms.yml
 ansible-playbook -i inventory.ini 30_setup_cm_ldap.yml
+ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
 ```
 
 **Kerberos encryption types (AES):** Defaults use **AES only** (`krb5_enc_types`: `aes256-cts aes128-cts` in CM; FreeIPA KDC via `/etc/krb5.conf.d/cldr-permitted-enctypes.conf`). RC4 is omitted because Java 17+ and Cloudera recommend AES. Do **not** set `allow_weak_crypto=true` unless you explicitly opt in with `krb5_allow_weak_rc4: true` in group_vars.
@@ -333,8 +334,10 @@ ansible-playbook -i inventory.ini 11_identity_setup.yml
 ```bash
 ansible-playbook -i inventory.ini 24_start_cm.yml
 ansible-playbook -i inventory.ini 26_setup_cm_license.yml
-ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
+ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml
+ansible-playbook -i inventory.ini 29_setup_cm_cms.yml
 ansible-playbook -i inventory.ini 30_setup_cm_ldap.yml
+ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
 ```
 
 Continue with CMS and base cluster as in Scenario A step 7.

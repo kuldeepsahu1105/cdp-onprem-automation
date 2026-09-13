@@ -1,4 +1,5 @@
 ### ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
+# Run after 27_setup_cm_autotls.yml, 29_setup_cm_cms.yml, and 30_setup_cm_ldap.yml (pvc_setup cm_tls phase).
 ---
 - import_playbook: 00_ensure_collections.yml
 

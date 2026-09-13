@@ -314,6 +314,9 @@ cm_cms_reports_manager_db_password: rman
 # After 27_setup_cm_autotls.yml, point CMS Java clients (firehose/headlamp) at agent Auto-TLS truststore.
 cm_cms_configure_autotls_trust: true
 cm_cms_autotls_truststore_path: /var/lib/cloudera-scm-agent/agent-cert/cm-auto-global_truststore.jks
+# Labs cm_autotls: reconcile MGMT trust + restart CMS in 27 when CMS already exists; full CMS in 29.
+cm_cms_reconcile_trust_after_autotls: true
+cm_cms_restart_after_autotls: true
 # Bounded waits for CMS setup (max wall time ≈ retries × delay seconds).
 cm_api_command_poll_retries: 90
 cm_api_command_poll_delay: 10

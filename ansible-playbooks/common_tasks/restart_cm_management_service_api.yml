@@ -1,0 +1,39 @@
+---
+# POST /cm/service/commands/restart when the Cloudera Management Service is STARTED.
+# Requires: cm_krb_api_url, cm_admin_user, cm_admin_pass
+
+- name: CMS — read management service state before restart
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303, 404]
+  register: cms_service_state_for_restart
+  failed_when: false
+  changed_when: false
+
+- name: CMS — restart management service via CM API
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/commands/restart"
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 201, 204, 301, 303]
+  register: cms_restart_api_cmd
+  when:
+    - cms_service_state_for_restart.status | default(0) | int == 200
+    - cms_service_state_for_restart.json.serviceState | default('') == 'STARTED'
+
+- name: CMS — wait for management service restart command
+  ansible.builtin.import_tasks: wait_cm_api_command.yml
+  vars:
+    cm_api_command_id: "{{ cms_restart_api_cmd.json.id }}"
+  when:
+    - cms_restart_api_cmd is defined
+    - cms_restart_api_cmd is not skipped
+    - cms_restart_api_cmd.json.id is defined

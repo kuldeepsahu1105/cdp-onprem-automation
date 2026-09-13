@@ -77,7 +77,7 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | `PORTAL` | Bootstrap Caddy/pgAdmin/index (`10`); before CM when `DEPLOYMENT_PORTAL_ENABLED` |
 | `IDENTITY` | Ansible **phase 2** — FreeIPA or AD; refreshes portal index (`35`) |
 | `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
-| `CM_TLS_KRB_LDAP` | Auto-TLS, Kerberos, CMS, LDAP (27–30); portal refresh |
+| `CM_TLS_KRB_LDAP` | Auto-TLS, CMS, LDAP, Kerberos (27→29→30→28); portal refresh |
 | `CDH_INSTALL` | CDH base cluster (`31_setup_base_cluster.yml`); portal refresh |
 | `MONITORING` | `32_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
 | `ECS_INSTALL` | ECS cluster (`33`); optional `34_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` |

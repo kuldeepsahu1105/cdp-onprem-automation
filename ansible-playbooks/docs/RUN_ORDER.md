@@ -14,7 +14,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 4 | PORTAL | `portal` | `10_setup_deployment_portal` |
 | 5 | IDENTITY | `2` / `identity` | `00_detect_identity` → `11_identity_setup` |
 | 6 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
-| 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27`–`30` (requires `04_setup_autossh` from PREREQS) |
+| 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `29` → `30` → `28` (requires `04_setup_autossh` from PREREQS) |
 | 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` |
 | 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` (includes portal Caddy/index sync) |
 | 10 | ECS_INSTALL | `5` / `ecs` | `33_setup_ecs_cluster` → optional `34_setup_ecs_data_services` |
@@ -47,10 +47,10 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 25 | `25_verify_cm.yml` | Verify CM |
 | — | `25_reconcile_cm_agents.yml` | Optional agent reconcile (also at end of **27**) |
 | 26 | `26_setup_cm_license.yml` | License / trial |
-| 27 | `27_setup_cm_autotls.yml` | Auto-TLS |
-| 28 | `28_setup_cm_krbs.yml` | Kerberos |
-| 29 | `29_setup_cm_cms.yml` | CMS |
-| 30 | `30_setup_cm_ldap.yml` | LDAP |
+| 27 | `27_setup_cm_autotls.yml` | Auto-TLS (+ agent reconcile; CMS trust/restart when MGMT already exists) |
+| 29 | `29_setup_cm_cms.yml` | CMS (Cloudera Management Service) — **before LDAP/Kerberos** |
+| 30 | `30_setup_cm_ldap.yml` | LDAP (`external_auth` in Labs) |
+| 28 | `28_setup_cm_krbs.yml` | Kerberos — **last** in `cm_tls` phase |
 | 31 | `31_setup_base_cluster.yml` | CDH base cluster |
 | 32 | `32_setup_monitoring_stack.yml` | Grafana / Prometheus |
 | 33 | `33_setup_ecs_cluster.yml` | ECS cluster |

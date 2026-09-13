@@ -142,6 +142,24 @@
       ansible.builtin.import_tasks: common_tasks/reconcile_cm_agents.yml
       when: cm_agent_reconcile_after_autotls | default(true) | bool
 
+- name: Reconcile CMS TLS trust and restart after Auto-TLS (Cloudera Labs cm_autotls → cm_service)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Skip CMS after Auto-TLS reconcile when disabled
+      ansible.builtin.meta: end_play
+      when: not (cm_cms_reconcile_trust_after_autotls | default(true) | bool)
+
+    - name: Skip CMS after Auto-TLS when CM is not using TLS
+      ansible.builtin.meta: end_play
+      when:
+        - not (autotls_applied_this_run | default(false) | bool)
+        - not (cm_autotls_api_enabled | default(false) | bool)
+
+    - name: Reconcile MGMT truststore and restart CMS when already deployed
+      ansible.builtin.import_tasks: common_tasks/reconcile_cm_cms_after_autotls.yml
+
 - name: Verify CM API after Auto-TLS restart (Ansible controller — public manager IP)
   hosts: localhost
   connection: local

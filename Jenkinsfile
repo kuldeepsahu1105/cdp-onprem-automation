@@ -31,7 +31,7 @@ Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INS
 | PORTAL | Deployment portal bootstrap (10); before CM when portal enabled |
 | IDENTITY | Ansible phase 2 — FreeIPA or AD |
 | CM_INSTALL | Ansible phase 3 — CM repos, Postgres, CM server |
-| CM_TLS_KRB_LDAP | Auto-TLS, Kerberos, CMS, LDAP (27–30) |
+| CM_TLS_KRB_LDAP | Auto-TLS, CMS, LDAP, Kerberos (27→29→30→28) |
 | CDH_INSTALL | CDH base cluster (31_setup_base_cluster.yml) |
 | MONITORING | Monitoring stack (32); needs PORTAL; MONITORING_STACK_ENABLED |
 | ECS_INSTALL | ECS (33) + optional data services when ECS_DATA_SERVICES_DEPLOY_ENABLED |

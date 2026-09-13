@@ -1,4 +1,5 @@
 ### ansible-playbook -i inventory.ini 30_setup_cm_ldap.yml
+# Run after 27_setup_cm_autotls.yml and 29_setup_cm_cms.yml; before 28_setup_cm_krbs.yml (Labs external_auth).
 ---
 - import_playbook: 00_ensure_collections.yml
 

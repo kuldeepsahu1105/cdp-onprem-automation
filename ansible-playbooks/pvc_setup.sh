@@ -321,13 +321,14 @@ run_phase_3() {
 }
 
 run_phase_cm_tls() {
-  ui_phase_header "CM Auto-TLS, Kerberos, CMS, LDAP"
+  ui_phase_header "CM Auto-TLS, CMS, LDAP, Kerberos (Labs order)"
   # Root SSH mesh: playbook 04 runs in PREREQS (phase 1) only — required before CM Auto-TLS (27).
   # CM API health waits (fetch /api/version then /api/<slug>/version) run in 27+ — not portal refresh.
+  # Order matches Cloudera Labs: cm_autotls → cm_service (CMS) → external_auth (LDAP) → cm_kerberos.
   run_playbook 27_setup_cm_autotls.yml
-  run_playbook 28_setup_cm_krbs.yml
   run_playbook 29_setup_cm_cms.yml
   run_playbook 30_setup_cm_ldap.yml
+  run_playbook 28_setup_cm_krbs.yml
   _maybe_run_deployment_portal_refresh "portal,ipa,identity"
 }
 

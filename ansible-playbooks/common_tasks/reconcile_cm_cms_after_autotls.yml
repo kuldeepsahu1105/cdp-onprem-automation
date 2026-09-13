@@ -1,0 +1,43 @@
+---
+# Cloudera Labs cm_autotls playbook: after CM server/agent TLS, reconcile MGMT truststore and restart CMS when it already exists.
+# Greenfield installs create CMS in 29_setup_cm_cms.yml (after this play); re-runs and partial stacks benefit here.
+
+- name: CMS after Auto-TLS — set CM API URL
+  ansible.builtin.import_tasks: set_cm_api_url.yml
+
+- name: CMS after Auto-TLS — resolve HTTPS CM API URL
+  ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
+
+- name: CMS after Auto-TLS — read management service presence
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 404]
+  register: cms_after_autotls_status
+  failed_when: false
+  changed_when: false
+
+- name: CMS after Auto-TLS — skip when management service is not configured yet
+  ansible.builtin.debug:
+    msg: >-
+      Cloudera Management Service is not present (HTTP 404). Trust/restart after Auto-TLS will run in
+      29_setup_cm_cms.yml (Labs cm_service tag).
+  when: cms_after_autotls_status.status | default(0) | int == 404
+
+- name: CMS after Auto-TLS — configure MGMT TLS client truststore
+  ansible.builtin.import_tasks: configure_cm_cms_autotls_trust.yml
+  when: cms_after_autotls_status.status | default(0) | int == 200
+
+- name: CMS after Auto-TLS — restart management service when trust changed or Auto-TLS applied this run
+  ansible.builtin.import_tasks: restart_cm_management_service_api.yml
+  when:
+    - cms_after_autotls_status.status | default(0) | int == 200
+    - cm_cms_restart_after_autotls | default(true) | bool
+    - (
+        (cms_service_truststore_put is defined and cms_service_truststore_put is changed)
+        or (autotls_applied_this_run | default(false) | bool)
+      )

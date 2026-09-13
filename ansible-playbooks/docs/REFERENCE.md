@@ -4,6 +4,37 @@ Complete reference for playbooks, variables, inventory, identity detection, DNS,
 
 ---
 
+## Cloudera Labs CM stack alignment
+
+Reference playbooks in [cloudera-labs/cloudera.cluster](https://github.com/cloudera-labs/cloudera.cluster) (tags `cm_autotls`, `cm_service`, `external_auth`, `cm_kerberos`) assume: Auto-TLS on the CM host → CMS with Reports Manager on the `postgresql` inventory group → LDAP via `cm_config` → Kerberos via `cm_kerberos`, often with a **reverse proxy** on the ops host for CM `:7183`.
+
+This repo pins **`cloudera.cluster` v4.4.0** (see `requirements.yml`). That release includes `cm_service` and `cm_config` modules but **not** `cm_autotls` or `cm_kerberos` (those appear in newer collection branches). We keep **REST** for Auto-TLS, LDAP, Kerberos, and CMS lifecycle to avoid a collection upgrade and to match Jenkins/controller reachability patterns.
+
+### Run order (`pvc_setup.sh` / Jenkins `CM_TLS_KRB_LDAP`)
+
+| Step | This repo | Labs tag / role |
+|------|-----------|-----------------|
+| 1 | `27_setup_cm_autotls.yml` | `cm_autotls` — generateCmca, CM restart, agent reconcile, optional CMS trust + restart |
+| 2 | `29_setup_cm_cms.yml` | `cm_service` — roles on `cloudera_manager`, 6 GiB Service Monitor, Reports Manager DB |
+| 3 | `30_setup_cm_ldap.yml` | `external_auth` / `cm_config` LDAP keys |
+| 4 | `28_setup_cm_krbs.yml` | `cm_kerberos` — KDC import, bounded `kerberized` wait |
+
+### Labs vs this repo (behavior)
+
+| Area | Cloudera Labs reference | This repo | Notes |
+|------|-------------------------|-----------|--------|
+| **CMS** | `cloudera.cluster.cm_service` | REST in `configure_cm_cms_api.yml` | Same role types, `firehose_non_java_memory_bytes` (6 GB), Reports Manager PostgreSQL host = `cldr-mngr` FQDN (`cm_cms_reports_manager_db_host` → `postgresql` group equivalent) |
+| **Auto-TLS** | `cm_autotls` module + CA on CM host | REST `POST /cm/commands/generateCmca` in **27** | MGMT `ssl_client_truststore_*` via REST; CMS restart after Auto-TLS when MGMT exists (`reconcile_cm_cms_after_autotls.yml`) |
+| **LDAP** | `cm_config` + optional `external_user_mappings` | REST `PUT /cm/config` in `configure_cm_ldap_api.yml` | No separate mappings task unless you add `cm_ldap_external_user_mappings` later |
+| **Kerberos** | `cm_kerberos` module | REST in `configure_cm_kerberos_api.yml` + **28** import credentials | **AES-only** `krb5_enc_types` (Labs samples often include RC4) |
+| **CM HTTPS access** | Caddy/reverse_proxy on ops → `https://cm…:7183` | Direct `https://<cldr-mngr-fqdn>:7183` | Portal Caddy on **`ipaserver`** (or `cldr-mngr`) is portal/pgAdmin/monitoring/IPA only — not CM API proxy |
+| **Inventory** | `cloudera_manager`, `postgresql`, `reverse_proxy` groups | `cldr-mngr`, `ipaserver`, `deployment_portal_host_group` | Postgres for CM/CMS on `cldr-mngr`; FreeIPA on `ipaserver` |
+| **Agents** | Restart after Auto-TLS | `reconcile_cm_agents.yml` at end of **27** | Preserved — do not skip |
+
+Module migration (optional future): `cm_service` could replace CMS REST where `cloudera_manager_api_*` facts are set; not required for Labs parity because REST already mirrors role config groups and start/restart commands.
+
+---
+
 ## Configuration (`group_vars/all.yml`)
 
 ### Core versions
@@ -249,9 +280,10 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 | `25_verify_cm.yml` | Verify CM is running |
 | `25_reconcile_cm_agents.yml` | Reconcile CM agent `server_host` / `use_tls` and restart agents |
 | `26_setup_cm_license.yml` | Upload license or trial |
-| `27_setup_cm_autotls.yml` | Enable Auto-TLS |
+| `27_setup_cm_autotls.yml` | Enable Auto-TLS; agent reconcile; CMS trust/restart when MGMT already exists |
+| `29_setup_cm_cms.yml` | CMS — run **before** LDAP/Kerberos in `cm_tls` phase |
+| `30_setup_cm_ldap.yml` | LDAP auth (FreeIPA or AD) — run **before** **28** |
 | `28_setup_cm_krbs.yml` | Kerberos (FreeIPA or AD KDC); PUT `/cm/config`, `POST /cm/commands/importAdminCredentials` (query params), CM restart; bounded wait on `kerberosInfo.kerberized` |
-| `30_setup_cm_ldap.yml` | LDAP auth (FreeIPA or AD) |
 
 ### Phase 4 — CMS & base cluster
 
@@ -439,6 +471,8 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/ensure_ipa_kdc_services.yml` | `ipactl start` + krb5kdc health on ipaserver |
 | `common_tasks/preflight_kdc_reachable.yml` | TCP :88 reachability to `kdc_host` before CM Kerberos REST |
 | `common_tasks/verify_cm_kerberos_enabled.yml` | Bounded wait on `/cm/kerberosInfo` field `kerberized`; actionable fail (see `cm_krb_kerberized_wait_*` in `group_vars/all.yml`) |
+| `common_tasks/reconcile_cm_cms_after_autotls.yml` | MGMT TLS truststore + CMS restart after **27** when Labs `cm_service` already deployed |
+| `common_tasks/restart_cm_management_service_api.yml` | POST `/cm/service/commands/restart` + bounded command wait |
 | `common_tasks/set_cm_api_url.yml` | CM API URL + Auto-TLS detection |
 | `ansible_control_reachability` | `auto` | `auto`, `public` (Jenkins / no VPC route), or `private` (bare metal / VPN / `CONTROL_MODE=local`) |
 | `cm_api_prefer_private_ip` | `true` | Legacy: prefer `private_ip` for CM API when profile is not `public` |
