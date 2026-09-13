@@ -1,6 +1,6 @@
 ---
 # FreeIPA Apache tweaks when UI is reached via deployment portal Caddy vhost (HTTP upstream).
-# Complements Caddy header_up Host/Referer and handle_response Location rewrite in deployment_portal_Caddyfile_vhosts.inc.j2.
+# Complements Caddy header_up Host/Referer in deployment_portal_Caddyfile_vhosts.inc.j2.
 
 - name: Install FreeIPA HTTPD snippet for deployment portal Caddy proxy
   ansible.builtin.template:

@@ -243,7 +243,7 @@
             )
           + (
               [
-                {'name': 'IPA Caddy vhost GET / (expect 301 → /ipa/modern-ui/)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
+                {'name': 'IPA Caddy vhost GET / (expect redirect → /ipa/modern-ui/)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
                  'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
                 {'name': 'IPA Caddy vhost GET /ipa/modern-ui/ (200 or 301 OK)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/modern-ui/',
                  'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
