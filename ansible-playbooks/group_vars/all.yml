@@ -942,6 +942,9 @@ os_vars:
       - httpd
       - mod_ssl
       - createrepo_c
+    # FreeIPA Apache on ipaserver (configure_ipa_httpd_behind_caddy.yml) — not createrepo_c.
+    ipa_httpd_packages:
+      - httpd
     web_server_service: httpd
     web_server_conf_d_dir: /etc/httpd/conf.d
     web_server_conf_file: /etc/httpd/conf/httpd.conf
@@ -1024,6 +1027,8 @@ os_vars:
     web_server_packages:
       - apache2
       - ssl-cert
+    ipa_httpd_packages:
+      - apache2
     web_server_service: apache2
     web_server_conf_d_dir: /etc/apache2/conf.d
     web_server_conf_file: /etc/apache2/apache2.conf

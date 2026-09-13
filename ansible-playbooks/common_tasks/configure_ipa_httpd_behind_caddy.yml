@@ -1,6 +1,9 @@
 ---
 # FreeIPA Apache tweaks when UI is reached via deployment portal Caddy vhost (HTTP upstream).
 # Complements Caddy header_up Host/Referer in deployment_portal_Caddyfile_vhosts.inc.j2.
+# Tasks that touch ipaserver files or systemd must set delegate_to (play may run on cldr-mngr).
+# After conf.d / ipa-rewrite edits: on a configured IPA server (ipactl present), configtest + systemd reload
+# of the IPA-managed httpd unit — not ipactl restart (full stack) and not ipactl restart httpd (unsupported).
 
 - name: Resolve ipaserver OS family for delegated IPA HTTPD tasks
   ansible.builtin.set_fact:
@@ -15,6 +18,7 @@
   ansible.builtin.set_fact:
     ipa_httpd_conf_d_dir: "{{ os_vars[ipa_httpd_os_family].web_server_conf_d_dir }}"
     ipa_httpd_service_name: "{{ os_vars[ipa_httpd_os_family].web_server_service }}"
+    ipa_httpd_package_names: "{{ os_vars[ipa_httpd_os_family].ipa_httpd_packages }}"
 
 - name: Probe FreeIPA ipa-rewrite.conf location (RHEL httpd vs Debian apache2 layouts)
   ansible.builtin.stat:
@@ -24,6 +28,8 @@
     - /etc/httpd/conf.d
     - /etc/apache2/conf.d
   register: ipa_rewrite_conf_probe
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
   when:
     - deployment_portal_has_ipa | default(false) | bool
     - ipa_caddy_public_hostname | default('') | length > 0
@@ -51,28 +57,54 @@
   ansible.builtin.stat:
     path: /etc/ipa/default.conf
   register: ipa_server_configured
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
   when:
     - deployment_portal_has_ipa | default(false) | bool
     - ipa_caddy_public_hostname | default('') | length > 0
 
 - name: Ensure Apache/httpd package is present on ipaserver for Caddy proxy snippets
   ansible.builtin.package:
-    name: "{{ ipa_httpd_service_name }}"
+    name: "{{ ipa_httpd_package_names }}"
     state: present
+  register: ipa_httpd_package_install
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
   when:
     - deployment_portal_has_ipa | default(false) | bool
     - ipa_caddy_public_hostname | default('') | length > 0
     - ipa_server_configured is defined
     - ipa_server_configured.stat.exists | default(false) | bool
 
+- name: Ensure IPA web server is enabled after package install
+  ansible.builtin.service:
+    name: "{{ ipa_httpd_service_name }}"
+    state: started
+    enabled: true
+  register: ipa_httpd_service_start
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  failed_when: false
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
+    - ipa_httpd_package_install is defined
+    - not (ipa_httpd_package_install.skipped | default(false))
+
 - name: Ensure FreeIPA Apache conf.d directory exists on ipaserver
   ansible.builtin.file:
     path: "{{ ipa_httpd_conf_d_effective }}"
     state: directory
     mode: "0755"
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
   when:
     - deployment_portal_has_ipa | default(false) | bool
     - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
     - ipa_httpd_conf_d_effective is defined
     - ipa_httpd_conf_d_effective | length > 0
 
@@ -82,9 +114,13 @@
     dest: "{{ ipa_httpd_conf_d_effective }}/zz-ipa-caddy-proxy.conf"
     mode: "0644"
   register: ipa_httpd_caddy_proxy_conf
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
   when:
     - deployment_portal_has_ipa | default(false) | bool
     - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
     - ipa_httpd_conf_d_effective is defined
     - ipa_httpd_conf_d_effective | length > 0
 
@@ -92,6 +128,8 @@
   ansible.builtin.stat:
     path: "{{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
   register: ipa_rewrite_conf
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
   when:
     - deployment_portal_has_ipa | default(false) | bool
     - ipa_httpd_conf_d_effective is defined
@@ -102,6 +140,8 @@
   register: ipa_rewrite_caddy_marker
   changed_when: false
   failed_when: false
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
   when:
     - deployment_portal_has_ipa | default(false) | bool
     - ipa_rewrite_conf is defined
@@ -115,6 +155,8 @@
     regexp: '^RewriteCond %\{SERVER_PORT\}  !\^443\$'
     replace: '# ANSIBLE_CADDY_HTTP_UPSTREAM — keep /ipa on HTTP when proxied from Caddy\n# RewriteCond %{SERVER_PORT}  !^443$'
   register: ipa_rewrite_https_cond
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
   when:
     - deployment_portal_has_ipa | default(false) | bool
     - ipa_rewrite_conf is defined
@@ -130,21 +172,145 @@
     regexp: '^(RewriteCond %\{REQUEST_URI\}|RewriteRule \^/ipa/)'
     replace: '# \1'
   register: ipa_rewrite_https_block
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
   when:
     - deployment_portal_has_ipa | default(false) | bool
     - ipa_rewrite_conf is defined
     - ipa_rewrite_conf.stat.exists | default(false) | bool
     - ipa_rewrite_https_cond is defined
-    - ipa_rewrite_https_cond is changed
+    - ipa_rewrite_https_cond.changed | default(false) | bool
 
-- name: Reload Apache when FreeIPA Caddy proxy configuration changed
-  ansible.builtin.service:
-    name: "{{ ipa_httpd_service_name }}"
-    state: reloaded
+- name: Track whether IPA HTTPD Caddy proxy tasks changed configuration
+  ansible.builtin.set_fact:
+    ipa_httpd_config_changed: "{{ _ipa_httpd_config_tasks_changed | bool }}"
+  vars:
+    _ipa_httpd_config_tasks_changed: >-
+      {{
+        (
+          (ipa_httpd_caddy_proxy_conf is defined)
+          and (ipa_httpd_caddy_proxy_conf.changed | default(false))
+          and not (ipa_httpd_caddy_proxy_conf.skipped | default(false))
+        )
+        or (
+          (ipa_rewrite_https_cond is defined)
+          and (ipa_rewrite_https_cond.changed | default(false))
+          and not (ipa_rewrite_https_cond.skipped | default(false))
+        )
+        or (
+          (ipa_rewrite_https_block is defined)
+          and (ipa_rewrite_https_block.changed | default(false))
+          and not (ipa_rewrite_https_block.skipped | default(false))
+        )
+      }}
   when:
     - deployment_portal_has_ipa | default(false) | bool
-    - ipa_httpd_service_name is defined
-    - >-
-      (ipa_httpd_caddy_proxy_conf is defined and ipa_httpd_caddy_proxy_conf is changed)
-      or (ipa_rewrite_https_cond is defined and ipa_rewrite_https_cond is changed)
-      or (ipa_rewrite_https_block is defined and ipa_rewrite_https_block is changed)
+    - ipa_caddy_public_hostname | default('') | length > 0
+
+- name: Default IPA HTTPD config changed flag when snippet/rewrite tasks did not run
+  ansible.builtin.set_fact:
+    ipa_httpd_config_changed: false
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_httpd_config_changed is not defined
+
+- name: Probe ipactl on ipaserver (IPA owns httpd start order; no per-service ipactl reload)
+  ansible.builtin.stat:
+    path: /usr/sbin/ipactl
+  register: ipa_ipactl_bin
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+
+- name: Resolve whether to use IPA-managed HTTPD reload path (ipactl present and server configured)
+  ansible.builtin.set_fact:
+    ipa_httpd_reload_via_ipactl: >-
+      {{
+        (ipa_ipactl_bin.stat.exists | default(false))
+        and (ipa_server_configured is defined)
+        and (ipa_server_configured.stat.exists | default(false))
+      }}
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+    - ipa_ipactl_bin is defined
+
+- name: Gather service facts on ipaserver before IPA HTTPD reload
+  ansible.builtin.service_facts:
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  delegate_facts: true
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+
+- name: Resolve installed IPA web server systemd unit (httpd vs apache2)
+  ansible.builtin.set_fact:
+    ipa_httpd_reload_service_name: "{{ item }}"
+  loop: "{{ [ipa_httpd_service_name, 'httpd', 'apache2'] | unique }}"
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+    - ipa_httpd_reload_service_name is not defined
+    - (item ~ '.service') in (hostvars[ipa_httpd_delegate_host].ansible_facts.services | default({}))
+
+- name: Skip IPA HTTPD reload when web server unit is not present
+  ansible.builtin.debug:
+    msg: >-
+      Skipping IPA HTTPD reload on {{ ipa_httpd_delegate_host }}:
+      Apache/Caddy proxy configuration changed but no httpd or apache2 systemd unit is present.
+      Ensure FreeIPA (ipa-server) and the web server package are installed on ipaserver.
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+    - ipa_httpd_reload_service_name is not defined
+
+- name: Validate Apache configuration before IPA HTTPD reload (ipactl-managed ipaserver)
+  ansible.builtin.command:
+    cmd: "{{ 'apachectl' if ipa_httpd_os_family == 'RedHat' else 'apache2ctl' }} configtest"
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  register: ipa_httpd_configtest
+  changed_when: false
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+    - ipa_httpd_reload_via_ipactl | default(false) | bool
+    - ipa_httpd_reload_service_name is defined
+    - ipa_httpd_reload_service_name | length > 0
+
+- name: Reload IPA-managed Apache after Caddy proxy snippet or ipa-rewrite change
+  ansible.builtin.service:
+    name: "{{ ipa_httpd_reload_service_name }}"
+    state: reloaded
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  register: ipa_httpd_reload_result
+  changed_when: ipa_httpd_reload_result is succeeded
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+    - ipa_httpd_reload_via_ipactl | default(false) | bool
+    - ipa_httpd_reload_service_name is defined
+    - ipa_httpd_reload_service_name | length > 0
+    - ipa_httpd_configtest is not skipped
+    - ipa_httpd_configtest.rc | default(1) == 0
+
+- name: Reload Apache when ipactl is unavailable (httpd not IPA-managed on this host)
+  ansible.builtin.service:
+    name: "{{ ipa_httpd_reload_service_name }}"
+    state: reloaded
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  register: ipa_httpd_reload_fallback
+  failed_when: false
+  changed_when: ipa_httpd_reload_fallback is succeeded
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+    - not (ipa_httpd_reload_via_ipactl | default(false) | bool)
+    - ipa_httpd_reload_service_name is defined
+    - ipa_httpd_reload_service_name | length > 0
