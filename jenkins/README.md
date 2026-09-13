@@ -45,7 +45,9 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 
 | Parameter | Default |
 |---|---|
-| `PIPELINE_STAGES` | `VALIDATE,TERRAFORM` |
+| `PIPELINE_STAGES` | `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION` (not `CDH_INSTALL`, `MONITORING`, or `ECS_INSTALL`) |
+| `DEPLOYMENT_PORTAL_ENABLED` | `true` (bootstrap Caddy portal when `MONITORING_STACK_ENABLED` and **PORTAL** stage selected) |
+| `ECS_DATA_SERVICES_DEPLOY_ENABLED` | `false` (playbook 34 only when checked or an `ECS_DEPLOY_*` box is checked) |
 | `VALIDATION_CHECKS` | `TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY` |
 | `ENVIRONMENT` | `development` |
 | `OWNER` | `ksahu-ygulati` |
@@ -57,7 +59,7 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 | `USE_CREDENTIALS_USER_AWS` | `true` (checked — holautosa `~/.aws`; uncheck for EC2 IAM role via IMDS) |
 | Instance counts/types | Same as `.tfvars.yaml` instance_groups |
 
-If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALIDATE,TERRAFORM`.
+If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION`.
 
 **Legacy token:** Saved jobs may still submit **`CDH_BASE`** — it expands to `CM_TLS_KRB_LDAP` + `CDH_INSTALL`. Run **REFRESH_JENKINSFILE=YES** after Jenkinsfile changes to reload checkboxes.
 

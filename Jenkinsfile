@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-09-13.4 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-09-13.5 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -16,7 +16,7 @@ Plugin note: Extended Choice per-checkbox hints (descriptionPropertyValue) may o
       name: 'PIPELINE_STAGES',
       type: 'PT_CHECKBOX',
       value: 'VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,STARTSTOP_AUTOMATION,DESTROY_STACK',
-      defaultValue: 'VALIDATE,TERRAFORM',
+      defaultValue: 'VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION',
       multiSelectDelimiter: ',',
       visibleItemCount: 12,
       quoteValue: false,
@@ -58,10 +58,11 @@ Destroy safety:
 
 Legacy: CDH_BASE (old jobs) expands to CM_TLS_KRB_LDAP + CDH_INSTALL — check those two boxes instead.
 
-PORTAL auto-run: only when AUTO_INCLUDE_PORTAL_BOOTSTRAP=true and you select CM_INSTALL, CDH_INSTALL, MONITORING, or ECS without PORTAL (not CM_TLS-only or IDENTITY-only). Default: check PORTAL explicitly.
+PORTAL auto-run: only when AUTO_INCLUDE_PORTAL_BOOTSTRAP=true and you select CM_INSTALL, CDH_INSTALL, MONITORING, or ECS without PORTAL (not CM_TLS-only or IDENTITY-only). Default job checkboxes include PORTAL (and STARTSTOP_AUTOMATION).
 
 Examples:
-  Validate + provision only: VALIDATE,TERRAFORM
+  New job defaults: VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION (ECS_INSTALL and CDH_INSTALL unchecked; ECS_DATA_SERVICES_DEPLOY_ENABLED=false)
+  Validate + provision only: VALIDATE,TERRAFORM (uncheck PORTAL and STARTSTOP_AUTOMATION)
   Through CM (greenfield): VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL (+ PORTAL auto if portal enabled)
   Old PREREQS,IDENTITY,CM_INSTALL,CDH_BASE equivalent: PREREQS,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL (+ VALIDATE,TERRAFORM if you still provision VMs; + PORTAL auto when DEPLOYMENT_PORTAL_ENABLED)
 
@@ -617,7 +618,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
 }
 
 def defaultPipelineStages() {
-  return 'VALIDATE,TERRAFORM'
+  return 'VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION'
 }
 
 def defaultValidationChecks() {
