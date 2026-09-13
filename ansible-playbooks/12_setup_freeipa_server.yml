@@ -80,11 +80,11 @@
       ansible.builtin.import_tasks: common_tasks/detect_ipa_server_install_state.yml
       when: ipa_server_has_partial_state | bool
 
-    - name: Refuse ipa-server-install when partial debris remains after recovery
+    - name: Refuse ipa-server-install when critical debris remains after recovery
       ansible.builtin.fail:
         msg: >-
           FreeIPA on {{ inventory_hostname }} still has partial install debris after
-          ipa-server-install --uninstall --unattended.
+          ipa-server-install --uninstall --unattended and automated path cleanup.
           Inspect /var/log/ipaserver-uninstall.log on the host.
           Manual recovery (as root): ipa-server-install --uninstall --unattended
           (add --force on RHEL if prompted), then optional cleanup under /etc/ipa, /var/lib/ipa, /etc/dirsrv.
