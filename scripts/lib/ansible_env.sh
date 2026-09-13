@@ -452,7 +452,7 @@ jenkins_ci_detected() {
   [[ -n "${BUILD_NUMBER:-}" || -n "${JENKINS_URL:-}" || "${CI:-}" == "true" ]]
 }
 
-# Opt-in colored Jenkins console (requires AnsiColor plugin wrapping the stage). Default is plain logs.
+# Colored Jenkins console when JENKINS_ANSI_CONSOLE=1 (Jenkinsfile default). Plain when JENKINS_PLAIN_LOG=1.
 jenkins_ansi_console_opt_in() {
   case "${JENKINS_ANSI_CONSOLE:-}${ANSIBLE_CI_CONSOLE:-}" in
     *1*) return 0 ;;
