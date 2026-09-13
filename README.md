@@ -114,7 +114,7 @@ ansible-playbook -i inventory.ini 31_setup_base_cluster.yml \
 
 ## Deployment portal (Caddy index + pgAdmin)
 
-After cluster deploy, `10_setup_deployment_portal.yml` installs the **ops stack** on **`ipaserver`** when `[ipaserver]` exists, otherwise **`cldr-mngr`** (`deployment_portal_host_group: auto`):
+After cluster deploy, `10_setup_deployment_portal.yml` installs the **ops stack** on **`ipaserver`** when `[ipaserver]` exists, otherwise **`cldr-mngr`** (`deployment_portal_host_group: auto`). Ansible renders **`docker-compose.yml`** plus a companion **`.env`** under `/opt/cldr-deployment-portal` and `/opt/cldr-monitoring` (paths from `deployment_portal_config_dir` / `monitoring_config_dir`) so bind mounts, ports, and credentials stay out of the compose file — re-run **PORTAL** / **MONITORING** after changing `group_vars`.
 
 | Service | Port / path |
 |---------|-------------|
