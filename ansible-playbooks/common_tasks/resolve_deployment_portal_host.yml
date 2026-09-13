@@ -28,17 +28,25 @@
       Deployment portal host group '{{ deployment_portal_host_group_effective }}' is missing or empty.
       Set deployment_portal_host_group to a valid inventory group (or use auto).
 
+- name: Resolve PostgreSQL host group for pgAdmin (auto = postgres_inventory_group_resolved)
+  ansible.builtin.set_fact:
+    deployment_portal_postgres_host_group_effective: >-
+      {{
+        postgres_inventory_group_resolved
+        if (deployment_portal_postgres_host_group | default('auto')) == 'auto'
+        else deployment_portal_postgres_host_group
+      }}
+
 - name: Validate PostgreSQL host group for pgAdmin
   ansible.builtin.assert:
     that:
-      - deployment_portal_postgres_host_group in groups
-      - groups[deployment_portal_postgres_host_group] | length > 0
+      - deployment_portal_postgres_host_group_effective in groups
+      - groups[deployment_portal_postgres_host_group_effective] | length > 0
     fail_msg: >-
-      deployment_portal_postgres_host_group '{{ deployment_portal_postgres_host_group }}'
-      must exist (CM database host, usually cldr-mngr).
+      PostgreSQL host group '{{ deployment_portal_postgres_host_group_effective }}'
+      must exist (CM database host). Use [postgres], [db], or cldr-mngr; set deployment_portal_postgres_host_group=auto.
 
 - name: Set PostgreSQL FQDN for pgAdmin and portal links
   ansible.builtin.set_fact:
-    deployment_portal_postgres_fqdn: >-
-      {{ hostvars[groups[deployment_portal_postgres_host_group][0]].cldr_hostname }}.{{ cluster_domain }}
-    deployment_portal_postgres_inv: "{{ groups[deployment_portal_postgres_host_group][0] }}"
+    deployment_portal_postgres_fqdn: "{{ postgres_host_fqdn }}"
+    deployment_portal_postgres_inv: "{{ postgres_inventory_host }}"

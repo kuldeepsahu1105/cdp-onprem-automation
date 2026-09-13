@@ -49,6 +49,7 @@ allowed_keys:
   - deployment_portal_enabled
   - deployment_portal_host_group
   - deployment_portal_postgres_host_group
+  - postgres_inventory_group
   - deployment_portal_http_port
   - deployment_portal_pgadmin_host_port
   - monitoring_grafana_host_port

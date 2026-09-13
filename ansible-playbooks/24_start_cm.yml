@@ -21,8 +21,16 @@
   hosts: cldr-mngr
   become: yes
   tasks:
-    - name: Set OS-specific facts
+    - name: Resolve PostgreSQL host for CM database connection
+      ansible.builtin.import_tasks: common_tasks/resolve_postgres_inventory.yml
+
+    - name: Set OS-specific facts on Cloudera Manager host
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Set OS-specific facts on PostgreSQL host (paths for remote DB)
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+      delegate_to: "{{ postgres_inventory_host }}"
+      when: postgres_inventory_host != inventory_hostname
 
     - name: Install Cloudera Manager Server packages
       ansible.builtin.import_tasks: common_tasks/install_cm_packages.yml
@@ -37,11 +45,16 @@
         group: cloudera-scm
         mode: "0755"
 
-    - name: Copy PostgreSQL root certificate
+    - name: Read PostgreSQL root certificate from DB host
+      ansible.builtin.slurp:
+        src: "{{ hostvars[postgres_inventory_host].postgres_data_dir }}/root.crt"
+      delegate_to: "{{ postgres_inventory_host }}"
+      register: cm_pg_root_crt_slurp
+
+    - name: Install PostgreSQL root certificate for Cloudera Manager
       ansible.builtin.copy:
-        src: "{{ postgres_data_dir }}/root.crt"
+        content: "{{ cm_pg_root_crt_slurp.content | b64decode }}"
         dest: "{{ cm_db_root_crt }}"
-        remote_src: yes
         owner: cloudera-scm
         group: cloudera-scm
         mode: "0644"
@@ -76,8 +89,8 @@
     - name: Run scm_prepare_database.sh script
       ansible.builtin.command:
         cmd: >
-          /opt/cloudera/cm/schema/scm_prepare_database.sh -h{{ ansible_fqdn }}
-          --jdbc-url "jdbc:postgresql://{{ ansible_fqdn }}:{{ postgres_port }}/{{ scm_db_name }}?ssl=true&sslmode=verify-ca&sslrootcert={{ cm_db_root_crt }}"
+          /opt/cloudera/cm/schema/scm_prepare_database.sh -h{{ postgres_host_fqdn }}
+          --jdbc-url "jdbc:postgresql://{{ postgres_host_fqdn }}:{{ postgres_port }}/{{ scm_db_name }}?ssl=true&sslmode=verify-ca&sslrootcert={{ cm_db_root_crt }}"
           postgresql {{ scm_db_name }} {{ scm_db_user }} {{ scm_db_password }} --ssl
       register: scm_db_output
       changed_when: "'Successfully connected to database.' in scm_db_output.stdout"
