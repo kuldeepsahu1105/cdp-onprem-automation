@@ -35,6 +35,19 @@
 {% set ls = ctx.live_stats | default({}) %}
 {% set ls_poll_prom = ls.poll.prometheus_query_path | default('') if ls.poll is defined else '' %}
 {% set oa = ctx.operator_access | default({}) %}
+{% set _ssh_keys_ui_on = oa.ssh_keys_exposed | default(deployment_portal_ssh_keys_expose_effective | default(false)) | bool %}
+{% set _dl_prefix = oa.downloads_path_prefix | default('/downloads') %}
+{% set ns_ssh_dl = namespace(items=[]) %}
+{% for sec in oa.sections | default([]) %}
+{% if sec.id | default('') == 'ssh' %}
+{% set ns_ssh_dl.items = sec.downloads | default([]) %}
+{% endif %}
+{% endfor %}
+{% if _ssh_keys_ui_on and (ns_ssh_dl.items | length == 0) %}
+{% for ek in deployment_portal_ssh_export_keys | default([]) %}
+{% set ns_ssh_dl.items = ns_ssh_dl.items + [{'label': ek.label, 'href': _dl_prefix ~ '/ssh/' ~ ek.basename, 'filename': ek.basename, 'note': 'chmod 400 after download'}] %}
+{% endfor %}
+{% endif %}
 {% set ns_ls = namespace(sgood=0, swarn=0, sbad=0) %}
 {% for cl in ls.clusters | default([]) %}
 {% set ns_ls.sgood = ns_ls.sgood + (cl.services_started_good | default(0) | int) %}
@@ -308,6 +321,11 @@
       min-width: var(--table-min-w);
       table-layout: fixed;
     }
+    table.portal-table.inventory-table {
+      min-width: 0;
+      width: 100%;
+      table-layout: auto;
+    }
     th, td {
       text-align: left;
       padding: 0.45rem 0.55rem;
@@ -322,31 +340,99 @@
       max-width: 100%;
     }
     table.inventory-table th:nth-child(1),
-    table.inventory-table td:nth-child(1) { width: 13%; }
+    table.inventory-table td:nth-child(1) { width: 9rem; max-width: 11rem; }
     table.inventory-table th:nth-child(2),
-    table.inventory-table td:nth-child(2) { width: 26%; min-width: 14rem; }
+    table.inventory-table td:nth-child(2) { width: 12rem; max-width: 16rem; }
     table.inventory-table th:nth-child(3),
-    table.inventory-table td:nth-child(3) { width: 11%; }
+    table.inventory-table td:nth-child(3) { width: 7.5rem; }
     table.inventory-table th:nth-child(4),
-    table.inventory-table td:nth-child(4) { width: 11%; }
+    table.inventory-table td:nth-child(4) { width: 7.5rem; }
     table.inventory-table th:nth-child(5),
-    table.inventory-table td:nth-child(5) { width: 18%; }
+    table.inventory-table td:nth-child(5) { width: 10rem; max-width: 14rem; }
     table.inventory-table th:nth-child(6),
-    table.inventory-table td:nth-child(6) { width: 27%; }
+    table.inventory-table td:nth-child(6) { width: auto; min-width: 8rem; }
+    table.inventory-table th:nth-child(7),
+    table.inventory-table td:nth-child(7) { width: auto; min-width: 10rem; max-width: 22rem; }
+    table.inventory-table th:nth-child(8),
+    table.inventory-table td:nth-child(8) { width: 7rem; white-space: nowrap; vertical-align: middle; }
+    table.inventory-table td:nth-child(7) code.ssh-inline-cmd {
+      font-size: 0.72em;
+      line-height: 1.35;
+    }
+    table.inventory-table tbody {
+      height: auto;
+      min-height: 0;
+    }
     table.inventory-table td:nth-child(1),
-    table.inventory-table td:nth-child(2),
     table.inventory-table td:nth-child(3),
     table.inventory-table td:nth-child(4) {
       white-space: nowrap;
     }
     table.inventory-table td:nth-child(2) code {
-      word-break: keep-all;
-      white-space: nowrap;
-      overflow-wrap: normal;
+      display: inline-block;
+      max-width: 100%;
+      word-break: break-all;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      font-size: 0.78em;
+      line-height: 1.35;
     }
     table.inventory-table td:nth-child(3) code,
     table.inventory-table td:nth-child(4) code {
       word-break: keep-all;
+      white-space: nowrap;
+      font-size: 0.78em;
+    }
+    table.inventory-table td:nth-child(6) .role-badge {
+      white-space: normal;
+      max-width: 100%;
+    }
+    .inventory-section-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.65rem 1rem;
+      margin-bottom: 0.65rem;
+    }
+    .inventory-section-head h2 {
+      margin: 0;
+      font-size: 0.95rem;
+      color: var(--accent-soft);
+      font-weight: 600;
+    }
+    .inventory-dl-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.45rem;
+    }
+    a.dl-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text);
+      text-decoration: none;
+      background: rgba(249, 103, 2, 0.12);
+      border: 1px solid rgba(249, 103, 2, 0.45);
+      border-radius: 6px;
+      padding: 0.35rem 0.7rem;
+      white-space: nowrap;
+    }
+    a.dl-btn:hover {
+      background: rgba(249, 103, 2, 0.22);
+      text-decoration: none;
+    }
+    a.dl-btn svg { width: 0.95rem; height: 0.95rem; flex-shrink: 0; fill: currentColor; }
+    .inventory-dl-hint {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin: -0.35rem 0 0.65rem;
+    }
+    a.dl-link-inline {
+      font-weight: 600;
       white-space: nowrap;
     }
     table.cred-table th:nth-child(1) { width: 14%; }
@@ -1204,9 +1290,26 @@
     {% endif %}
 
     {% if ctx.inventory_hosts | default([]) | length > 0 %}
-    <section class="flat">
-      <h2>Host inventory</h2>
-      <p class="sub">One row per host: Ansible groups, addresses, inferred roles, and sample <code>ssh -i &lt;pem&gt;</code> commands (user <code>{{ oa.ssh_user | default('ec2-user') }}</code>, key file <code>{{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code>).</p>
+    <section class="flat inventory-section">
+      <div class="inventory-section-head">
+        <h2>Host inventory</h2>
+        {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %}
+        <div class="inventory-dl-actions" aria-label="SSH private key downloads">
+          {% for dl in ns_ssh_dl.items %}
+          <a class="dl-btn" href="{{ dl.href }}" download="{{ dl.filename | default('') }}" title="{% if dl.note | default('') | length > 0 %}{{ dl.note }}{% else %}Save PEM, then chmod 400{% endif %}">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8.5 1.5v8.793l2.146-2.147.707.708L8 12.207 4.646 8.854l.707-.708L7.5 10.293V1.5h1zM2 12.5v1h12v-1H2z"/></svg>
+            {{ dl.label }}
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      <p class="sub">One row per host: Ansible groups, addresses, inferred roles, and sample <code>ssh -i &lt;pem&gt;</code> commands (user <code>{{ oa.ssh_user | default('ec2-user') }}</code>, key file <code>{{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code>){% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %} — use the download button{% if ns_ssh_dl.items | length == 1 %} above{% else %}s above{% endif %} for the cluster PEM (same key for all hosts; works even when only the ops/ipaserver row is listed).{% endif %}</p>
+      {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) and oa.basic_auth_enabled | default(false) | bool %}
+      <p class="inventory-dl-hint">Downloads use the same HTTP basic auth as <code>{{ _dl_prefix }}/</code> (user <code>{{ oa.auth_username | default('portal') }}</code>).</p>
+      {% elif _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) and not (oa.basic_auth_enabled | default(false) | bool) %}
+      <p class="inventory-dl-hint">PEM files are served without HTTP auth — enable <code>deployment_portal_basic_auth_enabled</code> for production-like labs.</p>
+      {% endif %}
       <div class="table-scroll">
         <table class="portal-table inventory-table">
           <thead>
@@ -1215,9 +1318,12 @@
               <th>FQDN</th>
               <th>Private IP</th>
               <th>Public IP</th>
-              <th>Inventory groups</th>
-              <th>Roles installed</th>
+              <th>Groups</th>
+              <th>Roles</th>
               <th>SSH login</th>
+              {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %}
+              <th>PEM</th>
+              {% endif %}
             </tr>
           </thead>
           <tbody>
@@ -1238,6 +1344,13 @@
                 {% endfor %}
               </td>
               <td>{% if h.ssh_command | default('') | length > 0 %}<code class="ssh-inline-cmd">{{ h.ssh_command }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
+              {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %}
+              <td>
+                {% for dl in ns_ssh_dl.items %}
+                <a class="dl-link-inline" href="{{ dl.href }}" download="{{ dl.filename | default('') }}">{{ dl.label }}</a>{% if not loop.last %} · {% endif %}
+                {% endfor %}
+              </td>
+              {% endif %}
             </tr>
             {% endfor %}
           </tbody>
@@ -1256,7 +1369,7 @@
       <p class="sub"><strong>Health snapshot</strong> — Cloudera Manager service health from the last portal refresh (<code>35_refresh_deployment_portal.yml</code>); Prometheus target count may poll in-browser when path routes are enabled.</p>
       <p class="sub"><strong>Operator access</strong> — lab credentials and PEM downloads rendered at sync from Ansible group_vars (not stored in git). Expand <strong>Default lab credentials</strong> for a short summary; full per-service URLs are in the panel tables and <code>operator-credentials.json</code>. Treat as sensitive; restrict network access.</p>
       <p class="sub"><strong>Endpoints &amp; network access</strong> — consolidated URLs with inventory hostnames; private-lab vs public/VPC tiers match your access profile.</p>
-      <p class="sub"><strong>Host inventory &amp; planned roles</strong> — Ansible groups, addresses, and inferred CDP/monitoring placement.</p>
+      <p class="sub"><strong>Host inventory &amp; planned roles</strong> — Ansible groups, addresses, inferred CDP/monitoring placement; cluster SSH PEM downloads appear in the Host inventory header when key export is enabled.</p>
       <p class="sub"><strong>Downloads security</strong> — when <code>deployment_portal_basic_auth_enabled</code> is true, files under <code>/downloads</code> (including SSH keys) require HTTP basic auth. Prefer auth on before exposing PEMs.</p>
       <p class="sub"><strong>FreeIPA legacy UI</strong> — use the Caddy <code>ipa.*</code> vhost (<code>/ipa/ui</code>) so browsers do not need <code>/etc/hosts</code> for the ipaserver FQDN; direct <code>https://&lt;ipaserver-fqdn&gt;</code> still needs lab DNS.</p>
     </div>
