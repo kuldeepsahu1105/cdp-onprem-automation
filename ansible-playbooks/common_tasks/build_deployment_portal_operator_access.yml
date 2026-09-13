@@ -8,8 +8,8 @@
   ansible.builtin.set_fact:
     deployment_portal_ssh_keys_expose_effective: >-
       {{
-        deployment_portal_expose_ssh_keys | default(false) | bool
-        if (deployment_portal_expose_ssh_keys | default(false) | string) not in ['auto', 'Auto', 'AUTO']
+        deployment_portal_expose_ssh_keys | default(true) | bool
+        if (deployment_portal_expose_ssh_keys | default(true) | string) not in ['auto', 'Auto', 'AUTO']
         else (
           deployment_portal_basic_auth_enabled | default(false) | bool
         )

@@ -41,7 +41,8 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 | `caddy_vhost_urls` | `build_deployment_portal_facts.yml` | Required for Caddy vhost Tier A checks |
 | `ansible_control_reach_public_only` | `detect_ansible_control_reachability.yml` (delegate localhost) | Marks printed portal URLs optional on ops host / Jenkins public profile; read via `hostvars['localhost']` on ops host |
 | `deployment_portal_has_ipa`, `deployment_portal_ipa_fqdn`, `deployment_portal_cm_fqdn`, `deployment_portal_cm_upstream_host` | `build_deployment_portal_facts.yml` + load on ops | Index/link facts only; CM UI/API probes are not run from portal verify |
-| Group defaults | `group_vars/all.yml` | e.g. `deployment_portal_http_port`, `deployment_portal_url_verify_status_codes`, `caddy_vhost_enabled` |
+| Group defaults | `group_vars/all.yml` | e.g. `deployment_portal_http_port`, `deployment_portal_url_verify_status_codes`, `caddy_vhost_enabled`, `deployment_portal_expose_ssh_keys` (default `true`), `deployment_portal_basic_auth_enabled` (HTTP auth on `/downloads/*` when exposing keys) |
+| `deployment_portal_ssh_keys_expose_effective` | `build_deployment_portal_operator_access.yml` (+ sync refresh on localhost) | `true` when `deployment_portal_expose_ssh_keys` is `true`, or `auto` and basic auth is enabled |
 
 **Internal `_portal_*` facts:** defined in earlier tasks within `verify_deployment_portal_urls.yml` itself — do not combine dependent keys in a **single** `set_fact` task (Ansible key order is undefined). See comment at top of that file.
 
