@@ -60,6 +60,8 @@ allowed_keys:
   - deployment_portal_use_private_network_only
   - deployment_portal_expose_credentials
   - deployment_portal_expose_ssh_keys
+  - deployment_portal_ssh_pem_path
+  - deployment_portal_ssh_autotls_key_path
   - deployment_portal_basic_auth_enabled
   - deployment_portal_basic_auth_user
   - deployment_portal_basic_auth_password

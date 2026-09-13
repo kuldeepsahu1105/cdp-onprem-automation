@@ -13,17 +13,33 @@
     - "{{ deployment_portal_www_dir }}/downloads/ssh"
   when: deployment_portal_expose_credentials | default(true) | bool
 
-- name: Copy SSH private key into portal downloads
+- name: Reset portal SSH download directory before key sync
+  ansible.builtin.file:
+    path: "{{ deployment_portal_www_dir }}/downloads/ssh"
+    state: absent
+  when: deployment_portal_ssh_keys_expose_effective | default(false) | bool
+
+- name: Recreate portal SSH download directory
+  ansible.builtin.file:
+    path: "{{ deployment_portal_www_dir }}/downloads/ssh"
+    state: directory
+    mode: "0750"
+    owner: root
+    group: root
+  when: deployment_portal_ssh_keys_expose_effective | default(false) | bool
+
+- name: Copy SSH private keys into portal downloads
   ansible.builtin.copy:
-    src: "{{ hostvars['localhost']['deployment_portal_ssh_private_key_path'] }}"
-    dest: "{{ deployment_portal_www_dir }}/downloads/ssh/{{ deployment_portal_ssh_download_basename }}"
+    src: "{{ item.controller_path }}"
+    dest: "{{ deployment_portal_www_dir }}/downloads/ssh/{{ item.basename }}"
     mode: "0640"
     owner: root
     group: root
+  loop: "{{ hostvars['localhost']['deployment_portal_ssh_export_keys'] | default([]) }}"
   no_log: true
   when:
     - deployment_portal_ssh_keys_expose_effective | default(false) | bool
-    - deployment_portal_ssh_private_key_path | default('') | length > 0
+    - (hostvars['localhost']['deployment_portal_ssh_export_keys'] | default([]) | length) > 0
 
 - name: Remove stale SSH download when export disabled
   ansible.builtin.file:
@@ -45,4 +61,3 @@
     mode: "0640"
   when: deployment_portal_expose_credentials | default(true) | bool
   no_log: true
-

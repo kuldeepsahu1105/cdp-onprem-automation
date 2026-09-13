@@ -5,12 +5,15 @@
 {% set dl_base = '/downloads' %}
 {% set ns = namespace(sections=[]) %}
 {% if expose %}
-{% if ssh_on and (deployment_portal_ssh_private_key_path | default('') | length > 0) %}
-{% set _bn = deployment_portal_ssh_download_basename | default('cluster-access.pem') %}
-{% set _ssh_dl = [{'label': 'SSH private key (' ~ _bn ~ ')', 'href': dl_base ~ '/ssh/' ~ _bn, 'filename': _bn, 'note': 'chmod 600 after download'}] %}
-{% set ns.sections = ns.sections + [{'id': 'ssh', 'title': 'SSH cluster access', 'intro': 'Private key for ' ~ (ansible_user | default('ec2-user')) ~ '@ cluster nodes (Ansible controller key at portal sync).', 'downloads': _ssh_dl, 'credentials': []}] %}
+{% set _ssh_exports = deployment_portal_ssh_export_keys | default([]) %}
+{% if ssh_on and (_ssh_exports | length > 0) %}
+{% set _ssh_dl = [] %}
+{% for ek in _ssh_exports %}
+{% set _ssh_dl = _ssh_dl + [{'label': ek.label, 'href': dl_base ~ '/ssh/' ~ ek.basename, 'filename': ek.basename, 'note': ek.note | default('chmod 600 after download')}] %}
+{% endfor %}
+{% set ns.sections = ns.sections + [{'id': 'ssh', 'title': 'SSH cluster access', 'intro': 'Private keys copied from the Ansible controller at portal sync (EC2 PEM and/or Auto-TLS key when both exist).', 'downloads': _ssh_dl, 'credentials': []}] %}
 {% elif ssh_on %}
-{% set ns.sections = ns.sections + [{'id': 'ssh', 'title': 'SSH cluster access', 'intro': 'Key export enabled but no private key found on the Ansible controller during portal sync.', 'downloads': [], 'credentials': []}] %}
+{% set ns.sections = ns.sections + [{'id': 'ssh', 'title': 'SSH cluster access', 'intro': 'Key export enabled but no private keys found on the Ansible controller during portal sync.', 'downloads': [], 'credentials': []}] %}
 {% endif %}
 {% set ns.sections = ns.sections + [{'id': 'cm', 'title': 'Cloudera Manager', 'intro': 'CM admin UI/API credentials.', 'downloads': [], 'credentials': [{'label': 'Cloudera Manager', 'username': cm_admin_user, 'password': cm_admin_pass, 'url': 'https://' ~ deployment_portal_cm_fqdn ~ ':' ~ (cm_https_port | string), 'note': 'HTTP :' ~ (cm_http_port | string) ~ ' on ' ~ deployment_portal_cm_fqdn}]}] %}
 {% set ns.sections = ns.sections + [{'id': 'database', 'title': 'Database & pgAdmin', 'intro': 'CM PostgreSQL and portal pgAdmin.', 'downloads': [], 'credentials': [{'label': 'PostgreSQL (CM)', 'username': postgres_user | default('postgres'), 'password': postgres_password, 'url': '', 'note': deployment_portal_postgres_fqdn ~ ':' ~ (postgres_port | string) ~ ' scm/' ~ scm_db_user}, {'label': 'pgAdmin', 'username': pgadmin_default_email, 'password': pgadmin_default_password, 'url': '', 'note': 'Ops :' ~ (deployment_portal_pgadmin_host_port | string)}]}] %}

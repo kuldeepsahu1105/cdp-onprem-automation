@@ -296,7 +296,9 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `monitoring_stack_enabled` | `true` | Prometheus + Grafana + Alertmanager + cAdvisor with playbook 28; Jenkins `MONITORING_STACK_ENABLED` checkbox sets this override |
 | `deployment_portal_extra_links` | `[]` | Add `{name, url}` entries to the index page |
 | `deployment_portal_expose_credentials` | `true` | Render **Operator access** panel (CM, DB, IPA, Ranger/Knox/Hue, ECS, optional Jenkins) from group_vars at portal sync |
-| `deployment_portal_expose_ssh_keys` | `false` | Copy Ansible controller SSH private key to `/downloads/ssh/` on the ops host. Use `auto` to export only when `deployment_portal_basic_auth_enabled` is true |
+| `deployment_portal_expose_ssh_keys` | `false` | Copy Ansible controller SSH private keys to `/downloads/ssh/` on the ops host (EC2 PEM and/or distinct Auto-TLS key). Use `auto` to export only when `deployment_portal_basic_auth_enabled` is true |
+| `deployment_portal_ssh_pem_path` | `""` | Optional explicit path to the EC2/Ansible PEM on the controller (`sshkey.pem` auto-discovered when empty) |
+| `deployment_portal_ssh_autotls_key_path` | `""` | Optional explicit Auto-TLS private key on the controller; otherwise uses `cm_private_key_path` / `id_rsa` discovery (same order as playbook 27) |
 | `deployment_portal_basic_auth_enabled` | `false` | HTTP basic auth on Caddy path `/downloads/*` only (index and Tier A verify stay unauthenticated) |
 | `deployment_portal_basic_auth_user` | `portal` | Basic auth username for downloads |
 | `deployment_portal_basic_auth_password` | `postgres_password` | Basic auth password for downloads |
@@ -306,6 +308,8 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `caddy_vhost_public_base` | `pvc.cloudera-labs.com` | Base domain for `svc.<ip-dashed>.<base>` |
 | `caddy_vhost_dns_mode` | `embedded_ip` | `embedded_ip`, `classic_nipio`, or `flat` |
 | `autotls_enabled` | `false` | CM listens on `:7183` (direct; not via Caddy) |
+
+**SSH key files (controller vs portal host):** Portal sync reads private keys only from the **Ansible controller** (Jenkins agent workspace or laptop): `ansible-playbooks/sshkey.pem` (Terraform/Jenkins copy), optional `ansible-playbooks/id_rsa`, `ANSIBLE_PRIVATE_KEY`, `~/.ssh/id_rsa`, and optional `deployment_portal_ssh_pem_path` / `deployment_portal_ssh_autotls_key_path` / `cm_private_key_path`. The ops host receives **copies** under the portal www tree at `/downloads/ssh/` (for example `cluster-access.pem` and `cluster-autotls-id_rsa` when both keys differ). Never commit keys to git.
 
 ---
 
