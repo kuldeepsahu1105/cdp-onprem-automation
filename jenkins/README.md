@@ -137,9 +137,9 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | `EC2_STARTSTOP_DEPLOY_SCRIPT` | `true` | Ansible **36** — template `{prefix}_cldr_ec2_strt_stp.sh` to `/root/`, mode `0755` (+ awscli). Also runs after **PORTAL** (10) and at the start of **IDENTITY** (before IPA/AD). If missing on ipaserver, check **`ls /root/*_cldr_ec2_strt_stp.sh`** and that **PORTAL** or **IDENTITY** / **STARTSTOP_AUTOMATION** ran. |
 | `EC2_STARTSTOP_RUN_SCRIPT` | `false` | Ansible **37** — invoke deployed script with `EC2_STARTSTOP_OPERATION` / groups / environment (opt-in; default is deploy-only). Uncheck both deploy and run → validation error. |
 | `EC2_STARTSTOP_OPERATION` | `describe` | `describe` \| `start` \| `stop` |
-| `EC2_STARTSTOP_GROUPS` | *(empty)* | Comma-separated Terraform `instance_groups` keys → EC2 tag **`Group`**. Required for **start**/**stop** when run is enabled. |
+| `EC2_STARTSTOP_GROUPS` | *(empty)* | Comma-separated Terraform `instance_groups` keys → EC2 tag **`Group`**. Required for **start**/**stop** when run is enabled. **Do not include `ipa_server`** (FreeIPA host). Examples: `pvcbase_worker,pvcecs_worker`. |
 | `EC2_STARTSTOP_CONFIRM` | `false` | Required for **stop** from Jenkins (non-interactive). Manual **stop** on ipaserver still prompts `yes`. |
-| `ENVIRONMENT` | `development` | Maps to EC2 tag **`environment`** (same as `pvc_cluster_tags.environment` / `deployment_name_prefix`). |
+| `ENVIRONMENT` | `development` | Maps to EC2 tag **`environment`** (same as `pvc_cluster_tags.environment` / `deployment_name_prefix`). **Set this to your workspace name** (e.g. `ptgtyv1`); the Jenkins default is not your stack unless you deployed with `environment: development`. |
 
 **Jenkins vs manual on ipaserver:** Checking **`STARTSTOP_AUTOMATION`** runs the same script as SSH to ipaserver: `/root/<prefix>_cldr_ec2_strt_stp.sh <op> <environment> <group>…`. Jenkins sets `EC2_STARTSTOP_NON_INTERACTIVE=1` and `JENKINS_URL` so **stop** does not prompt; use **`EC2_STARTSTOP_CONFIRM=true`**. Manual runs use the ipaserver **instance IAM role** (Terraform-attached profile) — not Jenkins agent credentials.
 

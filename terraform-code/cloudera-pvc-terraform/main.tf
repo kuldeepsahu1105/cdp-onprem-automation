@@ -48,6 +48,7 @@ module "elastic-ip" {
 # EC2 Instances Module
 module "ec2_instances" {
   source                      = "./modules/ec2-instance"
+  aws_region                  = var.aws_region
   vpc_id                      = module.vpc.vpc_id
   subnet_id                   = module.vpc.subnet_ids[0] # or loop if needed
   security_group_id           = module.security_group.security_group_id

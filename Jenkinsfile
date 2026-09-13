@@ -1055,6 +1055,17 @@ def validatePipelineInputs() {
     if (runScript && op in ['start', 'stop'] && !groups) {
       validationFail('EC2_STARTSTOP_GROUPS is required for start/stop when EC2_STARTSTOP_RUN_SCRIPT is enabled (comma-separated Terraform instance_groups keys / EC2 tag Group).')
     }
+    if (runScript && op in ['start', 'stop'] && groups) {
+      def forbidden = ['ipa_server']
+      def picked = groups.split(',').collect { it.trim() }.findAll { it }
+      def blocked = picked.findAll { forbidden.contains(it) }
+      if (!blocked.isEmpty()) {
+        validationFail(
+          "EC2_STARTSTOP_GROUPS must not include ${blocked.join(', ')} for start/stop (FreeIPA/controller host). " +
+          'Use worker/manager groups (e.g. pvcbase_worker, pvcecs_worker). ENVIRONMENT must match EC2 tag environment (not the Jenkins default development unless that is your workspace).'
+        )
+      }
+    }
     if (op == 'stop' && runScript && !isParamEnabled(params.DRY_RUN) && !isParamEnabled(params.EC2_STARTSTOP_CONFIRM)) {
       validationFail(
         'STARTSTOP_AUTOMATION with EC2_STARTSTOP_OPERATION=stop requires EC2_STARTSTOP_CONFIRM=true ' +

@@ -1,5 +1,9 @@
 # IAM instance profile on ipaserver so /root/{prefix}_cldr_ec2_strt_stp.sh can call EC2 APIs via IMDS.
 # Tag scope matches the shell script filters: tag:environment + tag:Group (Terraform instance_groups keys).
+# After changing this file, instance_groups, or pvc_cluster_tags.environment: re-run Jenkins TERRAFORM (terraform apply)
+# so the ipa_server EC2 receives/updates the instance profile and policy.
+
+data "aws_region" "current" {}
 
 locals {
   ipaserver_startstop_environment = lookup(var.pvc_cluster_tags, "environment", "development")
@@ -59,7 +63,7 @@ resource "aws_iam_role_policy" "ipaserver_ec2_startstop" {
           "ec2:StartInstances",
           "ec2:StopInstances"
         ]
-        Resource = "arn:aws:ec2:${var.aws_region}:*:instance/*"
+        Resource = "arn:aws:ec2:${data.aws_region.current.name}:*:instance/*"
         Condition = {
           StringEquals = {
             "ec2:ResourceTag/environment" = local.ipaserver_startstop_environment

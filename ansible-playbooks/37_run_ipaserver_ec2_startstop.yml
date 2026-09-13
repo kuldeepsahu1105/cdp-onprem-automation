@@ -34,6 +34,7 @@
         else (ec2_startstop_groups | default('', true) | string).split(',')
       }}
     _ec2_startstop_groups_clean: "{{ _ec2_startstop_groups_list | map('trim') | reject('equalto', '') | list }}"
+    _ec2_startstop_forbidden: "{{ ec2_startstop_excluded_terraform_groups | default(['ipa_server']) }}"
     _ec2_startstop_env: "{{ ec2_startstop_environment | default(ec2_startstop_default_environment, true) | trim }}"
   tasks:
     - name: Validate operation
@@ -51,6 +52,17 @@
       when:
         - ec2_startstop_run_script | default(false) | bool
         - ec2_startstop_operation | lower != 'describe'
+
+    - name: Reject forbidden Group tags for start/stop (e.g. ipa_server)
+      ansible.builtin.assert:
+        that:
+          - (_ec2_startstop_groups_clean | intersect(_ec2_startstop_forbidden) | length) == 0
+        fail_msg: >-
+          ec2_startstop_groups must not include {{ _ec2_startstop_forbidden | join(', ') }}
+          for start/stop (FreeIPA/controller). Use worker/manager groups only.
+      when:
+        - ec2_startstop_run_script | default(false) | bool
+        - ec2_startstop_operation | lower in ['start', 'stop']
 
     - name: Build script argument list
       ansible.builtin.set_fact:
