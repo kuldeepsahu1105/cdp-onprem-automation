@@ -47,7 +47,7 @@ Signed calls use **`https://console-cdp.<ecs_app_domain>`** (`ecs_cdp_console_ap
 | `ecs_ldap_admin_user_prefix` | (group_vars) | Prefix before `admin` in the username |
 | `ecs_ldap_admin_password` | (group_vars) | FreeIPA password (default `common_password`) |
 
-LDAP admin IAM: assigns tenant roles matching `ecs_ldap_admin_tenant_role_name_regex` (or all tenant roles if `ecs_ldap_admin_assign_all_tenant_roles: true`) and assigns **all resource roles** on the ECS environment when `ecs_ldap_admin_assign_all_resource_roles_on_env: true` (default).
+LDAP admin IAM: by default assigns **all tenant IAM roles** (`ecs_ldap_admin_assign_all_tenant_roles: true`) and **all resource roles** on the ECS environment (`ecs_ldap_admin_assign_all_resource_roles_on_env: true`). Narrow with `ecs_ldap_admin_tenant_role_name_regex` / `ecs_ldap_admin_resource_role_name_regex` when those flags are false.
 
 Runs at the end of **`33_setup_ecs_cluster.yml`** when `ecs_ldap_*` is enabled, and in **`34_setup_ecs_data_services.yml`** (LDAP-only is allowed without CDW/CDE/CAI).
 

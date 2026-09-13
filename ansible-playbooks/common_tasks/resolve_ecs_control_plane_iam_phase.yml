@@ -1,9 +1,23 @@
 ---
+- name: Normalize ECS LDAP flags from environment
+  ansible.builtin.set_fact:
+    ecs_ldap_enabled: >-
+      {{
+        ecs_ldap_enabled | default(false) | bool
+        or (lookup('env', 'ECS_LDAP_ENABLED') | default('', true) | lower in ['1', 'true', 'yes'])
+      }}
+    ecs_ldap_admin_user_enabled: >-
+      {{
+        ecs_ldap_admin_user_enabled | default(false) | bool
+        or (lookup('env', 'ECS_LDAP_ADMIN_USER_ENABLED') | default('', true) | lower in ['1', 'true', 'yes'])
+      }}
+
 - name: Resolve ECS LDAP provider sync toggle
   ansible.builtin.set_fact:
     ecs_ldap_sync_effective: >-
       {{
         (ecs_ldap_enabled | default(false) | bool)
+        or (ecs_ldap_admin_user_enabled | default(false) | bool)
         or (
           ecs_data_services_configure_ldap | default(false) | bool
           and (ecs_data_services_install_names | default([]) | length > 0)

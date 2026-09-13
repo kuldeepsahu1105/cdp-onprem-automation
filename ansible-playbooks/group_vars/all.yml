@@ -541,7 +541,7 @@ ecs_ldap_admin_user_enabled: false
 ecs_ldap_admin_user_prefix: cldr
 ecs_ldap_admin_username: "{{ ecs_ldap_admin_user_prefix }}admin"
 ecs_ldap_admin_password: "{{ common_password }}"
-ecs_ldap_admin_assign_all_tenant_roles: false
+ecs_ldap_admin_assign_all_tenant_roles: true
 ecs_ldap_admin_assign_all_resource_roles_on_env: true
 ecs_ldap_admin_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|environment)'
 ecs_ldap_admin_resource_role_name_regex: '(?i)(admin|owner|power|environment|de|dw|ml|data)'
