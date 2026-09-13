@@ -42,6 +42,12 @@
 {% if mon.alertmanager_caddy_url | default('') | length > 0 %}
 - "{{ label_prefix }}Alertmanager (Caddy vhost): {{ mon.alertmanager_caddy_url }}"
 {% endif %}
+{% if mon.cadvisor_url | default('') | length > 0 %}
+- "{{ label_prefix }}cAdvisor (host :{{ monitoring_cadvisor_host_port | default(8089) }}): {{ mon.cadvisor_url }}"
+{% endif %}
+{% if mon.cadvisor_url_vpc | default('') | length > 0 %}
+- "{{ label_prefix }}cAdvisor (VPC host :{{ monitoring_cadvisor_host_port | default(8089) }}): {{ mon.cadvisor_url_vpc }}"
+{% endif %}
 {% else %}
 - "{{ label_prefix }}Monitoring install (extra-var): {{ monitoring_stack_enabled | default(false) }}"
 - "{{ label_prefix }}Monitoring routes/index: {{ deployment_portal_monitoring_routes_enabled | default(false) }}"
