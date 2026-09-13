@@ -69,10 +69,14 @@ ipadm_password: "{{ ipaadmin_password }}"
 # Shared lab password (ECS UMS bootstrap, Kerberos admin, ECS LDAP admin); override in Jenkins ANSIBLE_GROUP_VARS_YAML
 common_password: "{{ ipaadmin_password }}"
 ipaserver_setup_dns: yes
-# IPA BIND forwarders at ipa-server-install (playbook 12, original 10_setup_freeipa_server.yml logic):
-#   no (default) — passes --no-forwarders to ipa-server-install
-#   any other value — no --no-forwarders flag (add custom forwarder flags in playbook if needed)
+# IPA BIND forwarders at ipa-server-install (playbook 12):
+#   no (default) — on AWS EC2 uses VPC resolver (--forwarder=x.y.0.2); bare metal uses --no-forwarders
+#   no-forwarders — always --no-forwarders (also set ipa_server_install_use_vpc_dns_forwarder: false)
+#   aws / vpc — VPC resolver when on AWS
+#   other — passed as --forwarder=<value>
 dns_forwarders: "no"
+# When dns_forwarders is no, use AWS VPC DNS at ipa-server-install (default true on AWS)
+ipa_server_install_use_vpc_dns_forwarder: true
 reverse_zones: "no"
 chrony_enabled: "yes"
 

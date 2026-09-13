@@ -187,7 +187,7 @@ ipaserver ansible_host=<public_ip> private_ip=<private_ip> cldr_hostname=ipaserv
 
 Playbook **`12_setup_freeipa_server.yml`** (via **`11_identity_setup`**) uses the same **install gate** as the original **`10_setup_freeipa_server.yml`**: run **`ipa-server-install`** when **`ipactl status` rc ≠ 0** or **`/etc/ipa/default.conf`** is missing. Repeated **partial installs** or manual cleanup can leave **broken state** (`ipactl` rc=4, leftover **`/var/lib/ipa`** / **`/etc/dirsrv`**, stale **`default.conf`**); fix the host manually before re-running identity.
 
-**IPA DNS forwarders:** With the restored install logic, **`dns_forwarders: no`** (default in **`group_vars/all.yml`**) adds **`--no-forwarders`** to **`ipa-server-install`**. Set **`dns_forwarders`** to another value if you need forwarders without that flag.
+**IPA DNS forwarders:** Default **`dns_forwarders: no`** uses the **AWS VPC resolver** (`--forwarder=x.y.0.2` from the instance private IP) on EC2 when **`ipa_server_install_use_vpc_dns_forwarder: true`** (default). On bare metal, or when the VPC resolver cannot be computed, install falls back to **`--no-forwarders`**. Force **`--no-forwarders`**: set **`dns_forwarders: no-forwarders`** or **`ipa_server_install_use_vpc_dns_forwarder: false`**. Skipped installs (healthy **`ipactl`** + **`default.conf`**) get **`ipa dnsconfig-mod`** toward the VPC resolver when VPC mode applies.
 
 ### 3. Detect identity provider
 
@@ -515,7 +515,7 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 | PostgreSQL listens on 127.0.0.1 only | Re-run `23_setup_postgres.yml` (uses `pg_ctlcluster restart` on Ubuntu) or `pg_ctlcluster 18 main restart` |
 | SSH restart fails on Ubuntu | Fixed in `00_setup_ssh_preqs.yml` — uses `ssh` service instead of `sshd` |
 | AWS vs bare metal DNS wrong | Set `deployment_environment: aws` or `baremetal` explicitly |
-| IPA external DNS / forwarders wrong on AWS | Default **`dns_forwarders: no`** passes **`--no-forwarders`** at **`ipa-server-install`** (original **`10_setup_freeipa_server.yml`** behavior). Adjust **`dns_forwarders`** or run **`ipa dnsconfig-mod`** on an existing IPA server if you need VPC/public forwarders. |
+| IPA external DNS / forwarders wrong on AWS | Default **`dns_forwarders: no`** uses **VPC `--forwarder`** on fresh **`ipa-server-install`** (via **`set_dns_facts`** + **`resolve_ipa_install_dns_forwarders`**). Existing servers skip install but playbook **12** runs **`ipa dnsconfig-mod`** when VPC mode applies. Force **`--no-forwarders`**: **`dns_forwarders: no-forwarders`** or **`ipa_server_install_use_vpc_dns_forwarder: false`**. |
 | NetworkManager restart failed | Fixed in `03_create_etc_hosts.yml` — pull latest `main` |
 
 ---

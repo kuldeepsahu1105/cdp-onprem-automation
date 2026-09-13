@@ -6,7 +6,7 @@
 #   ipaadmin_password: "vmware123"
 #   ipadm_password: "{{ ipaadmin_password }}"
 #   ipaserver_setup_dns: yes
-#   dns_forwarders: "no"
+#   dns_forwarders: "no"   # AWS: VPC forwarder; bare metal: --no-forwarders (see resolve_ipa_install_dns_forwarders.yml)
 #   reverse_zones: "no"
 #   chrony_enabled: "yes"
 ---
@@ -55,6 +55,12 @@
       debug:
         msg: "Derived NetBIOS Name: {{ netbios_name }}"
 
+    - name: Resolve deployment DNS facts for IPA install
+      ansible.builtin.import_tasks: common_tasks/set_dns_facts.yml
+
+    - name: Resolve ipa-server-install DNS forwarder flags
+      ansible.builtin.import_tasks: common_tasks/resolve_ipa_install_dns_forwarders.yml
+
     - name: Check if IPA server package is installed
       command: ipa-server-install --version
       register: ipa_check
@@ -87,6 +93,38 @@
         msg: "IPA is not installed or not running"
       when: ipa_server_status.rc != 0
 
+    - name: IPA install gate — run ipa-server-install when ipactl unhealthy or no default.conf
+      ansible.builtin.set_fact:
+        ipa_server_should_run_install: >-
+          {{
+            (ipa_server_status.rc | default(1) | int) != 0
+            or not (ipa_default_conf.stat.exists | default(false) | bool)
+          }}
+
+    - name: IPA install gate — DNS forwarder mode for this run
+      ansible.builtin.debug:
+        msg: >-
+          ipa-server-install will run: {{ ipa_server_should_run_install | bool }}
+          (gate: ipactl rc != 0 or missing /etc/ipa/default.conf).
+          DNS: {{
+            'VPC forwarder ' ~ effective_vpc_dns_resolver
+            if (ipa_install_dns_use_vpc_forwarder | default(false) | bool)
+            else (
+              'custom forwarder ' ~ dns_forwarders
+              if (
+                not (ipa_install_dns_no_forwarders | default(false) | bool)
+                and ipa_dns_forwarders_norm | default('no') not in ['no', 'aws', 'vpc', 'no-forwarders', 'no_forwarders']
+                and dns_forwarders | default('') | length > 0
+              )
+              else '--no-forwarders'
+            )
+          }}
+      when: ipa_server_should_run_install | bool
+
+    - name: Preflight hostname/DNS and dig before fresh ipa-server-install
+      ansible.builtin.import_tasks: common_tasks/preflight_ipa_server_install.yml
+      when: ipa_server_should_run_install | bool
+
     - name: Run IPA server installation
       ansible.builtin.command: >
         ipa-server-install --setup-dns --unattended
@@ -98,12 +136,18 @@
         --admin-password={{ ipaadmin_password }}
         --no-dnssec-validation
         --netbios-name={{ netbios_name }}
-        {% if dns_forwarders == 'no' %} --no-forwarders {% endif %}
+        {% if ipa_install_dns_use_vpc_forwarder | default(false) | bool %}
+        --forwarder={{ effective_vpc_dns_resolver }}
+        {% elif ipa_install_dns_no_forwarders | default(false) | bool %}
+        --no-forwarders
+        {% elif dns_forwarders | default('') | length > 0 %}
+        --forwarder={{ dns_forwarders }}
+        {% endif %}
         {% if reverse_zones == 'no' %} --no-reverse {% endif %}
         {% if chrony_enabled == 'yes' %} --ntp-server=pool.ntp.org {% endif %}
       register: ipa_install_result
       changed_when: "'The ipa-server-install command was successful' in ipa_install_result.stderr"
-      when: ipa_server_status.rc != 0 or not ipa_default_conf.stat.exists
+      when: ipa_server_should_run_install | bool
 
     - name: Print IPA server installation output
       ansible.builtin.debug:
@@ -129,6 +173,16 @@
       register: kinit_result
       changed_when: false
       failed_when: kinit_result.rc != 0
+
+    - name: Ensure IPA DNS forwards to VPC resolver on AWS (existing installs)
+      ansible.builtin.command: >
+        ipa dnsconfig-mod --forwarder={{ effective_vpc_dns_resolver }} --forward-policy=first
+      register: ipa_vpc_forwarder
+      changed_when: ipa_vpc_forwarder.rc == 0
+      failed_when: false
+      when:
+        - ipa_install_dns_use_vpc_forwarder | default(false) | bool
+        - not (ipa_server_should_run_install | default(false) | bool)
 
     - name: Print Current Kerberos Ticket
       command: klist -e
