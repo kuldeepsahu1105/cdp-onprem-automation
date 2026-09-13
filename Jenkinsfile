@@ -285,7 +285,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     LC_ALL = 'C.UTF-8'
     TERM = 'xterm'
     UI_ASCII = '1'
-    // Plain console logs (no raw ANSI). Set JENKINS_ANSI_CONSOLE=1 to opt into AnsiColor + colored Ansible.
+    // Plain console logs (no raw ANSI). Set JENKINS_ANSI_CONSOLE=1 + JENKINS_PLAIN_LOG=0 for colored Ansible.
     FORCE_COLOR = '0'
     UI_COLOR = '0'
     JENKINS_PLAIN_LOG = '1'
@@ -293,6 +293,8 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     PY_COLORS = '0'
     NO_COLOR = '1'
     ANSIBLE_NOCOLOR = '1'
+    // One summarized ok line per task (jenkins_plain); set false to show only changed/failed/skipped.
+    ANSIBLE_DISPLAY_OK_HOSTS = 'true'
     REPO_ROOT = "${WORKSPACE}"
     LOG_DIR = "${WORKSPACE}/jenkins/artifacts"
     HOL_AUTO_EXEC_DIR = "/home/holautosa/HOL_AUTO_EXEC_DIR"

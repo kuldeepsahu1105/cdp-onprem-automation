@@ -484,6 +484,8 @@ jenkins_prepare_log_output() {
     export UI_COLOR=0
     export FORCE_COLOR=0
     export ANSIBLE_STDOUT_CALLBACK="${ANSIBLE_STDOUT_CALLBACK:-jenkins_plain}"
+    # jenkins_plain summarizes ok hosts per task; set ANSIBLE_DISPLAY_OK_HOSTS=false to hide ok lines entirely.
+    export ANSIBLE_DISPLAY_OK_HOSTS="${ANSIBLE_DISPLAY_OK_HOSTS:-true}"
     unset JENKINS_ANSI_CONSOLE ANSIBLE_CI_CONSOLE
     return 0
   fi
