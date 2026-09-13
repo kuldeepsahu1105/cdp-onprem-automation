@@ -181,6 +181,50 @@
     - ipa_rewrite_https_cond is defined
     - ipa_rewrite_https_cond.changed | default(false) | bool
 
+- name: Check whether FreeIPA ipa-rewrite HTTP_HOST redirect already patched for Caddy/TLS
+  ansible.builtin.command:
+    cmd: "grep -q 'ANSIBLE_CADDY_HTTP_HOST_REDIRECT' {{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+  register: ipa_rewrite_http_host_marker
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_rewrite_conf is defined
+    - ipa_rewrite_conf.stat.exists | default(false) | bool
+    - deployment_portal_ipa_fqdn | default('') | length > 0
+    - ipa_caddy_public_hostname | default('') | length > 0
+
+- name: Patch FreeIPA ipa-rewrite HTTP_HOST redirect (Caddy vhost + https Location on TLS)
+  ansible.builtin.replace:
+    path: "{{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+    after: '# Redirect to the fully-qualified hostname'
+    before: '# Redirect to the secure port'
+    regexp: >-
+      (?m)^RewriteCond %\{HTTP_HOST\}\s+!\^({{ deployment_portal_ipa_fqdn | regex_escape }})\$\s+\[NC\]\s*\nRewriteRule \^/ipa/\(\.\*\)\s+http://\1/ipa/\$1 \[L,R=301\]
+    replace: |-
+      # ANSIBLE_CADDY_HTTP_HOST_REDIRECT — allow Caddy vhost Host; https Location on :443 for /ipa/json clients
+      RewriteCond %{HTTP_HOST}    !^{{ deployment_portal_ipa_fqdn }}$ [NC]
+      RewriteCond %{HTTP_HOST}    !^{{ ipa_caddy_public_hostname }}$ [NC]
+      RewriteCond %{SERVER_PORT}  ^443$
+      RewriteRule ^/ipa/(.*)      https://{{ deployment_portal_ipa_fqdn }}/ipa/$1 [L,R=301]
+      RewriteCond %{HTTP_HOST}    !^{{ deployment_portal_ipa_fqdn }}$ [NC]
+      RewriteCond %{HTTP_HOST}    !^{{ ipa_caddy_public_hostname }}$ [NC]
+      RewriteCond %{SERVER_PORT}  !^443$
+      RewriteRule ^/ipa/(.*)      http://{{ deployment_portal_ipa_fqdn }}/ipa/$1 [L,R=301]
+  register: ipa_rewrite_http_host_block
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_rewrite_conf is defined
+    - ipa_rewrite_conf.stat.exists | default(false) | bool
+    - deployment_portal_ipa_fqdn | default('') | length > 0
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_rewrite_http_host_marker is defined
+    - ipa_rewrite_http_host_marker.rc != 0
+
 - name: Track whether IPA HTTPD Caddy proxy tasks changed configuration
   ansible.builtin.set_fact:
     ipa_httpd_config_changed: "{{ _ipa_httpd_config_tasks_changed | bool }}"
@@ -201,6 +245,11 @@
           (ipa_rewrite_https_block is defined)
           and (ipa_rewrite_https_block.changed | default(false))
           and not (ipa_rewrite_https_block.skipped | default(false))
+        )
+        or (
+          (ipa_rewrite_http_host_block is defined)
+          and (ipa_rewrite_http_host_block.changed | default(false))
+          and not (ipa_rewrite_http_host_block.skipped | default(false))
         )
       }}
   when:
