@@ -1043,32 +1043,34 @@
     {% endif %}
 
     {% if ctx.endpoints | default([]) | length > 0 %}
-    <section class="flat">
-      <h2>Endpoints</h2>
-      <p class="sub"><strong>Service</strong> is the product or UI name. <strong>Hostname</strong> is the inventory FQDN of the backing host (or ECS console name). Links open in a new tab.{% if mon_on %} Monitoring rows prefer Caddy vhosts when configured, else direct host ports (<code>{{ monitoring_grafana_host_port | default(3000) }}</code>, <code>{{ monitoring_prometheus_host_port | default(9090) }}</code>, <code>{{ monitoring_alertmanager_host_port | default(9093) }}</code>, <code>{{ monitoring_cadvisor_host_port | default(8089) }}</code>); Caddy path routes on <code>:{{ deployment_portal_http_port | default(81) }}</code> remain available.{% endif %}</p>
-      <div class="table-scroll">
-        <table class="portal-table">
-          <thead>
-            <tr>
-              <th>Service</th>
-              <th>URL</th>
-              <th>Hostname</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for ep in ctx.endpoints %}
-            <tr>
-              <td>{{ ep.name }}</td>
-              <td><a href="{{ ep.url }}" target="_blank" rel="noopener noreferrer">{{ ep.url }}</a></td>
-              <td>{% if ep.hostname | default('') | length > 0 %}<code>{{ ep.hostname }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
-              <td>{{ ep.note | default('') }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <details class="panel">
+      <summary><span class="summary-main"><h2 class="section-title">Endpoints</h2></span>{{ panel_chevron | safe }}</summary>
+      <div class="panel-body">
+        <p class="sub"><strong>Service</strong> is the product or UI name. <strong>Hostname</strong> is the inventory FQDN of the backing host (or ECS console name). Links open in a new tab.{% if mon_on %} Monitoring rows prefer Caddy vhosts when configured, else direct host ports (<code>{{ monitoring_grafana_host_port | default(3000) }}</code>, <code>{{ monitoring_prometheus_host_port | default(9090) }}</code>, <code>{{ monitoring_alertmanager_host_port | default(9093) }}</code>, <code>{{ monitoring_cadvisor_host_port | default(8089) }}</code>); Caddy path routes on <code>:{{ deployment_portal_http_port | default(81) }}</code> remain available.{% endif %}</p>
+        <div class="table-scroll">
+          <table class="portal-table">
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>URL</th>
+                <th>Hostname</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ep in ctx.endpoints %}
+              <tr>
+                <td>{{ ep.name }}</td>
+                <td><a href="{{ ep.url }}" target="_blank" rel="noopener noreferrer">{{ ep.url }}</a></td>
+                <td>{% if ep.hostname | default('') | length > 0 %}<code>{{ ep.hostname }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
+                <td>{{ ep.note | default('') }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </section>
+    </details>
     {% endif %}
 
     {% if ctx.access.profile == 'private' %}
@@ -1235,51 +1237,55 @@
     </details>
 
     {% if mon_on %}
-    <section class="flat">
-      <h2>Monitoring stack (on ops host)</h2>
-      <p class="sub">Prefer Caddy lab vhosts when DNS is configured; direct host ports <code>{{ monitoring_grafana_host_port | default(3000) }}</code>, <code>{{ monitoring_prometheus_host_port | default(9090) }}</code>, <code>{{ monitoring_alertmanager_host_port | default(9093) }}</code>, and cAdvisor <code>{{ monitoring_cadvisor_host_port | default(8089) }}</code> work without Caddy; path routes on <code>:{{ deployment_portal_http_port | default(81) }}</code> remain available.</p>
-      <ul class="clean">
-        <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{{ grafana_tile_url }}</a> <span class="badge">host :{{ monitoring_grafana_host_port | default(3000) }}</span></li>
-        <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{{ prometheus_tile_url }}</a> <span class="badge">host :{{ monitoring_prometheus_host_port | default(9090) }}</span></li>
-        <li><strong>Alertmanager</strong> — <a href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">{{ alertmanager_tile_url }}</a> <span class="badge">host :{{ monitoring_alertmanager_host_port | default(9093) }}</span></li>
-        <li><strong>cAdvisor</strong> — <a href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">{{ cadvisor_tile_url }}</a> <span class="badge">host port {{ monitoring_cadvisor_host_port | default(8089) }}</span></li>
-        {% if ctx.monitoring.grafana_path_url | default('') | length > 0 %}
-        <li><strong>Caddy path fallbacks</strong> — Grafana <a href="{{ ctx.monitoring.grafana_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.grafana_path_url }}</a>;
-          Prometheus <a href="{{ ctx.monitoring.prometheus_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.prometheus_path_url }}</a>;
-          Alertmanager <a href="{{ ctx.monitoring.alertmanager_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.alertmanager_path_url }}</a>;
-          cAdvisor <a href="{{ ctx.monitoring.cadvisor_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.cadvisor_path_url }}</a></li>
-        {% endif %}
-      </ul>
-    </section>
+    <details class="panel">
+      <summary><span class="summary-main"><h2 class="section-title">Monitoring stack (on ops host)</h2></span>{{ panel_chevron | safe }}</summary>
+      <div class="panel-body">
+        <p class="sub">Prefer Caddy lab vhosts when DNS is configured; direct host ports <code>{{ monitoring_grafana_host_port | default(3000) }}</code>, <code>{{ monitoring_prometheus_host_port | default(9090) }}</code>, <code>{{ monitoring_alertmanager_host_port | default(9093) }}</code>, and cAdvisor <code>{{ monitoring_cadvisor_host_port | default(8089) }}</code> work without Caddy; path routes on <code>:{{ deployment_portal_http_port | default(81) }}</code> remain available.</p>
+        <ul class="clean">
+          <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{{ grafana_tile_url }}</a> <span class="badge">host :{{ monitoring_grafana_host_port | default(3000) }}</span></li>
+          <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{{ prometheus_tile_url }}</a> <span class="badge">host :{{ monitoring_prometheus_host_port | default(9090) }}</span></li>
+          <li><strong>Alertmanager</strong> — <a href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">{{ alertmanager_tile_url }}</a> <span class="badge">host :{{ monitoring_alertmanager_host_port | default(9093) }}</span></li>
+          <li><strong>cAdvisor</strong> — <a href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">{{ cadvisor_tile_url }}</a> <span class="badge">host port {{ monitoring_cadvisor_host_port | default(8089) }}</span></li>
+          {% if ctx.monitoring.grafana_path_url | default('') | length > 0 %}
+          <li><strong>Caddy path fallbacks</strong> — Grafana <a href="{{ ctx.monitoring.grafana_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.grafana_path_url }}</a>;
+            Prometheus <a href="{{ ctx.monitoring.prometheus_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.prometheus_path_url }}</a>;
+            Alertmanager <a href="{{ ctx.monitoring.alertmanager_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.alertmanager_path_url }}</a>;
+            cAdvisor <a href="{{ ctx.monitoring.cadvisor_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.cadvisor_path_url }}</a></li>
+          {% endif %}
+        </ul>
+      </div>
+    </details>
     {% endif %}
 
     {% if ctx.planned_roles | default([]) | length > 0 %}
-    <section class="flat">
-      <h2>Planned / configured roles</h2>
-      <p class="sub">From Ansible inventory groups, <code>host_template</code> hostvars, <code>base_cluster_install_services</code>, and the monitoring portal stack on the ops host (<code>{{ ctx.ops_host.inventory_group | default('ipaserver') }}</code>).</p>
-      <div class="table-scroll">
-        <table class="portal-table">
-          <thead>
-            <tr>
-              <th>Stack</th>
-              <th>Role</th>
-              <th>Placement</th>
-              <th>Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in ctx.planned_roles %}
-            <tr>
-              <td>{{ row.stack }}</td>
-              <td>{{ row.role }}</td>
-              <td><code>{{ row.placement }}</code></td>
-              <td><span class="badge">{{ row.source }}</span></td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <details class="panel">
+      <summary><span class="summary-main"><h2 class="section-title">Planned / configured roles</h2></span>{{ panel_chevron | safe }}</summary>
+      <div class="panel-body">
+        <p class="sub">From Ansible inventory groups, <code>host_template</code> hostvars, <code>base_cluster_install_services</code>, and the monitoring portal stack on the ops host (<code>{{ ctx.ops_host.inventory_group | default('ipaserver') }}</code>).</p>
+        <div class="table-scroll">
+          <table class="portal-table">
+            <thead>
+              <tr>
+                <th>Stack</th>
+                <th>Role</th>
+                <th>Placement</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in ctx.planned_roles %}
+              <tr>
+                <td>{{ row.stack }}</td>
+                <td>{{ row.role }}</td>
+                <td><code>{{ row.placement }}</code></td>
+                <td><span class="badge">{{ row.source }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </section>
+    </details>
     {% endif %}
 
     {% if ls.clusters | default([]) | length > 0 %}
@@ -1319,75 +1325,82 @@
     {% endif %}
 
     {% if ctx.inventory_hosts | default([]) | length > 0 %}
-    <section class="flat inventory-section">
-      <div class="inventory-section-head">
-        <h2>Host inventory</h2>
-        {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %}
-        <div class="inventory-dl-actions" aria-label="SSH private key downloads">
-          {% for dl in ns_ssh_dl.items %}
-          <a class="dl-btn" href="{{ dl.href }}" download="{{ dl.filename | default('') }}" title="{% if dl.note | default('') | length > 0 %}{{ dl.note }}{% else %}Save PEM, then chmod 400{% endif %}">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8.5 1.5v8.793l2.146-2.147.707.708L8 12.207 4.646 8.854l.707-.708L7.5 10.293V1.5h1zM2 12.5v1h12v-1H2z"/></svg>
-            {{ dl.label }}
-          </a>
-          {% endfor %}
-        </div>
+    <details class="panel inventory-section">
+      <summary>
+        <span class="summary-main">
+          <div class="inventory-section-head">
+            <h2 class="section-title">Host inventory</h2>
+            {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %}
+            <div class="inventory-dl-actions" aria-label="SSH private key downloads" onclick="event.stopPropagation();">
+              {% for dl in ns_ssh_dl.items %}
+              <a class="dl-btn" href="{{ dl.href }}" download="{{ dl.filename | default('') }}" title="{% if dl.note | default('') | length > 0 %}{{ dl.note }}{% else %}Save PEM, then chmod 400{% endif %}">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8.5 1.5v8.793l2.146-2.147.707.708L8 12.207 4.646 8.854l.707-.708L7.5 10.293V1.5h1zM2 12.5v1h12v-1H2z"/></svg>
+                {{ dl.label }}
+              </a>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </span>
+        {{ panel_chevron | safe }}
+      </summary>
+      <div class="panel-body">
+        <p class="sub">One row per host: Ansible groups, addresses, inferred roles, and sample <code>ssh -i &lt;pem&gt;</code> commands (user <code>{{ oa.ssh_user | default('ec2-user') }}</code>, key file <code>{{ ssh_key_filename }}</code>){% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %} — use the download button{% if ns_ssh_dl.items | length == 1 %} in the header{% else %}s in the header{% endif %} for the cluster PEM (same key for all hosts; works even when only the ops/ipaserver row is listed).{% endif %}</p>
+        {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) and oa.basic_auth_enabled | default(false) | bool %}
+        <p class="inventory-dl-hint">Downloads use the same HTTP basic auth as <code>{{ _dl_prefix }}/</code> (user <code>{{ oa.auth_username | default('portal') }}</code>).</p>
+        {% elif _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) and not (oa.basic_auth_enabled | default(false) | bool) %}
+        <p class="inventory-dl-hint">PEM files are served without HTTP auth — enable <code>deployment_portal_basic_auth_enabled</code> for production-like labs.</p>
         {% endif %}
+        <div class="table-scroll">
+          <table class="portal-table inventory-table">
+            <thead>
+              <tr>
+                <th>Host</th>
+                <th>FQDN</th>
+                <th>Private IP</th>
+                <th>Public IP</th>
+                <th>Groups</th>
+                <th>Roles</th>
+                <th>SSH login</th>
+                {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %}
+                <th>PEM</th>
+                {% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for h in ctx.inventory_hosts %}
+              <tr>
+                <td><code>{{ h.hostname }}</code> <span class="badge">{{ h.inventory_name }}</span></td>
+                <td><code>{{ h.fqdn }}</code></td>
+                <td><code>{{ h.private_ip }}</code></td>
+                <td>{% if h.public_ip | default('') | length > 0 and ('{{' not in (h.public_ip | string)) %}<code>{{ h.public_ip }}</code>{% else %}<span class="badge">VPC only</span>{% endif %}</td>
+                <td>
+                  {% for gl in h.group_labels | default(h.groups | default([])) %}
+                  <span class="group-tag">{{ gl }}</span>
+                  {% endfor %}
+                </td>
+                <td>
+                  {% for role in h.role_labels | default([]) %}
+                  <span class="role-badge">{{ role }}</span>
+                  {% endfor %}
+                </td>
+                <td>{% if h.ssh_command | default('') | length > 0 %}<code class="ssh-inline-cmd">{{ h.ssh_command }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
+                {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %}
+                <td>
+                  <div class="inventory-pem-links">
+                  {% for dl in ns_ssh_dl.items %}
+                  <a class="dl-link-inline" href="{{ dl.href }}" download="{{ dl.filename | default('') }}" title="{{ dl.label }}">{{ dl.filename | default(dl.label) }}</a>
+                  {% endfor %}
+                  </div>
+                </td>
+                {% endif %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <p class="sub">One row per host: Ansible groups, addresses, inferred roles, and sample <code>ssh -i &lt;pem&gt;</code> commands (user <code>{{ oa.ssh_user | default('ec2-user') }}</code>, key file <code>{{ ssh_key_filename }}</code>){% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %} — use the download button{% if ns_ssh_dl.items | length == 1 %} above{% else %}s above{% endif %} for the cluster PEM (same key for all hosts; works even when only the ops/ipaserver row is listed).{% endif %}</p>
-      {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) and oa.basic_auth_enabled | default(false) | bool %}
-      <p class="inventory-dl-hint">Downloads use the same HTTP basic auth as <code>{{ _dl_prefix }}/</code> (user <code>{{ oa.auth_username | default('portal') }}</code>).</p>
-      {% elif _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) and not (oa.basic_auth_enabled | default(false) | bool) %}
-      <p class="inventory-dl-hint">PEM files are served without HTTP auth — enable <code>deployment_portal_basic_auth_enabled</code> for production-like labs.</p>
-      {% endif %}
-      <div class="table-scroll">
-        <table class="portal-table inventory-table">
-          <thead>
-            <tr>
-              <th>Host</th>
-              <th>FQDN</th>
-              <th>Private IP</th>
-              <th>Public IP</th>
-              <th>Groups</th>
-              <th>Roles</th>
-              <th>SSH login</th>
-              {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %}
-              <th>PEM</th>
-              {% endif %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for h in ctx.inventory_hosts %}
-            <tr>
-              <td><code>{{ h.hostname }}</code> <span class="badge">{{ h.inventory_name }}</span></td>
-              <td><code>{{ h.fqdn }}</code></td>
-              <td><code>{{ h.private_ip }}</code></td>
-              <td>{% if h.public_ip | default('') | length > 0 and ('{{' not in (h.public_ip | string)) %}<code>{{ h.public_ip }}</code>{% else %}<span class="badge">VPC only</span>{% endif %}</td>
-              <td>
-                {% for gl in h.group_labels | default(h.groups | default([])) %}
-                <span class="group-tag">{{ gl }}</span>
-                {% endfor %}
-              </td>
-              <td>
-                {% for role in h.role_labels | default([]) %}
-                <span class="role-badge">{{ role }}</span>
-                {% endfor %}
-              </td>
-              <td>{% if h.ssh_command | default('') | length > 0 %}<code class="ssh-inline-cmd">{{ h.ssh_command }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
-              {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %}
-              <td>
-                <div class="inventory-pem-links">
-                {% for dl in ns_ssh_dl.items %}
-                <a class="dl-link-inline" href="{{ dl.href }}" download="{{ dl.filename | default('') }}" title="{{ dl.label }}">{{ dl.filename | default(dl.label) }}</a>
-                {% endfor %}
-                </div>
-              </td>
-              {% endif %}
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    </details>
     {% endif %}
   </main>
   <dialog class="help-dialog" id="portal-help-dialog" aria-labelledby="portal-help-title">
