@@ -8,6 +8,25 @@
 {% set _portal_caddy_url = ctx.caddy_vhosts.urls_public.portal.url | default('') if (ctx.caddy_vhosts.enabled | default(false)) else '' %}
 {% set portal_tile_url = _portal_caddy_url if (_portal_caddy_url | length > 0) else ctx.portal.index_url | default('') %}
 {% set portal_tile_hint = ctx.caddy_vhosts.urls_public.portal.hostname if (_portal_caddy_url | length > 0) else 'Ops host Caddy index' %}
+{% set _caddy_vhosts_on = ctx.caddy_vhosts.enabled | default(false) | bool %}
+{% set _pgadmin_caddy_url = ctx.portal.pgadmin_caddy_url | default(ctx.caddy_vhosts.urls_public.pgadmin.url | default('')) | trim %}
+{% if ctx.access.profile == 'private' %}
+{% set net_portal_url = ctx.access.primary.portal | default(portal_tile_url) %}
+{% set net_portal_label = net_portal_url %}
+{% set net_pgadmin_url = ctx.access.primary.pgadmin | default(pgadmin_tile_url) %}
+{% set net_pgadmin_label = net_pgadmin_url %}
+{% else %}
+{% set net_portal_url = portal_tile_url %}
+{% set net_portal_label = ctx.caddy_vhosts.urls_public.portal.hostname | default('') if (_caddy_vhosts_on and (_portal_caddy_url | length > 0)) else net_portal_url %}
+{% set net_pgadmin_url = pgadmin_tile_url %}
+{% set net_pgadmin_label = ctx.caddy_vhosts.urls_public.pgadmin.hostname | default('') if (_caddy_vhosts_on and (_pgadmin_caddy_url | length > 0)) else net_pgadmin_url %}
+{% endif %}
+{% set _vpc_portal_caddy_url = ctx.caddy_vhosts.urls_vpc.portal.url | default('') | trim %}
+{% set net_vpc_portal_url = _vpc_portal_caddy_url if (_caddy_vhosts_on and (_vpc_portal_caddy_url | length > 0)) else ctx.access.vpc.portal %}
+{% set net_vpc_portal_label = ctx.caddy_vhosts.urls_vpc.portal.hostname | default('') if (_caddy_vhosts_on and (_vpc_portal_caddy_url | length > 0)) else net_vpc_portal_url %}
+{% set _vpc_pgadmin_caddy_url = ctx.caddy_vhosts.urls_vpc.pgadmin.url | default('') | trim %}
+{% set net_vpc_pgadmin_url = _vpc_pgadmin_caddy_url if (_caddy_vhosts_on and (_vpc_pgadmin_caddy_url | length > 0)) else ctx.access.vpc.pgadmin %}
+{% set net_vpc_pgadmin_label = ctx.caddy_vhosts.urls_vpc.pgadmin.hostname | default('') if (_caddy_vhosts_on and (_vpc_pgadmin_caddy_url | length > 0)) else net_vpc_pgadmin_url %}
 {% set mon_on = (
   (ctx.monitoring.enabled | default(false) | bool)
   or (ctx.monitoring.routes_enabled | default(false) | bool)
@@ -31,10 +50,31 @@
 {% if mon_on and (cadvisor_tile_url | length == 0) %}
 {% set cadvisor_tile_url = ctx.monitoring.cadvisor_path_url | default(ctx.access.external.cadvisor | default(ctx.access.primary.cadvisor | default(''))) %}
 {% endif %}
+{% set _vpc_vhosts = ctx.caddy_vhosts.urls_vpc | default({}) %}
+{% if ctx.access.profile == 'private' and _caddy_vhosts_on %}
+{% if _vpc_vhosts.grafana.url | default('') | length > 0 %}
+{% set grafana_tile_url = _vpc_vhosts.grafana.url %}
+{% endif %}
+{% if _vpc_vhosts.prometheus.url | default('') | length > 0 %}
+{% set prometheus_tile_url = _vpc_vhosts.prometheus.url %}
+{% endif %}
+{% if _vpc_vhosts.alertmanager.url | default('') | length > 0 %}
+{% set alertmanager_tile_url = _vpc_vhosts.alertmanager.url %}
+{% endif %}
+{% if _vpc_vhosts.cadvisor.url | default('') | length > 0 %}
+{% set cadvisor_tile_url = _vpc_vhosts.cadvisor.url %}
+{% endif %}
+{% endif %}
+{% set grafana_direct_url = ctx.monitoring.grafana_url_direct | default(ctx.access.primary.grafana | default('')) %}
+{% set prometheus_direct_url = ctx.monitoring.prometheus_url_direct | default(ctx.access.primary.prometheus | default('')) %}
+{% set alertmanager_direct_url = ctx.monitoring.alertmanager_url_direct | default(ctx.access.primary.alertmanager | default('')) %}
+{% set cadvisor_direct_url = ctx.monitoring.cadvisor_url_direct | default(ctx.access.primary.cadvisor | default('')) %}
 {% set panel_chevron %}<span class="panel-chevron" aria-hidden="true"><svg class="chevron-icon" viewBox="0 0 16 16" width="14" height="14" focusable="false"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>{% endset %}
 {% set ls = ctx.live_stats | default({}) %}
 {% set ls_poll_prom = ls.poll.prometheus_query_path | default('') if ls.poll is defined else '' %}
 {% set oa = ctx.operator_access | default({}) %}
+{% from 'deployment_portal_ssh_command.inc.j2' import portal_ssh_ec2_key_basename %}
+{% set ssh_key_filename = oa.ssh_connect_key_filename | default(portal_ssh_ec2_key_basename(), true) %}
 {% set _ssh_keys_ui_on = oa.ssh_keys_exposed | default(deployment_portal_ssh_keys_expose_effective | default(false)) | bool %}
 {% set _dl_prefix = oa.downloads_path_prefix | default('/downloads') %}
 {% set ns_ssh_dl = namespace(items=[]) %}
@@ -961,7 +1001,7 @@
           — <a href="{{ oa.downloads_path_prefix | default('/downloads') }}/operator-credentials.json">operator-credentials.json</a> (machine-readable bundle; same auth as other downloads when basic auth is enabled)
         </p>
         {% if oa.ssh_connect_command | default('') | length > 0 %}
-        <p class="sub"><strong>SSH quick start</strong>{% if oa.ssh_keys_exposed | default(false) | bool %} — download <code>{{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code> from <code>{{ oa.downloads_path_prefix | default('/downloads') }}/ssh/</code>, run <code>chmod 400 {{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code>,{% else %} — use your lab PEM (for example <code>{{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code> from Terraform/Jenkins),{% endif %} then connect using the host <strong>public IP</strong> (example <code>{{ oa.ssh_connect_host | default('') }}</code>):</p>
+        <p class="sub"><strong>SSH quick start</strong>{% if oa.ssh_keys_exposed | default(false) | bool %} — download <code>{{ ssh_key_filename }}</code> from <code>{{ oa.downloads_path_prefix | default('/downloads') }}/ssh/</code>, run <code>chmod 400 {{ ssh_key_filename }}</code>,{% else %} — use your lab PEM (for example <code>{{ ssh_key_filename }}</code> from Terraform/Jenkins),{% endif %} then connect using the host <strong>public IP</strong> (example <code>{{ oa.ssh_connect_host | default('') }}</code>):</p>
         <div class="ssh-command-box"><code>{{ oa.ssh_connect_command }}</code></div>
         {% endif %}
         {% if oa.ssh_host_examples | default([]) | length > 0 %}
@@ -1076,13 +1116,13 @@
           <li>Ops FQDN: <code>{{ ctx.access.primary.fqdn }}</code></li>
           <li>Management IP: <code>{{ ctx.access.primary.management_ip }}</code></li>
           <li>URL host in links: <code>{{ ctx.access.primary.host }}</code></li>
-          <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.portal }}">{{ ctx.access.primary.portal }}</a></li>
-          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.primary.pgadmin }}">{{ ctx.access.primary.pgadmin }}</a></li>
+          <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_portal_url }}">{{ net_portal_label }}</a></li>
+          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_pgadmin_url }}">{{ net_pgadmin_label }}</a></li>
           {% if mon_on %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ grafana_tile_url }}">{{ grafana_tile_url }}</a></li>
-          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ prometheus_tile_url }}">{{ prometheus_tile_url }}</a></li>
-          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ alertmanager_tile_url }}">{{ alertmanager_tile_url }}</a></li>
-          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a></li>
+          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ grafana_tile_url }}">{{ grafana_tile_url }}</a>{% if grafana_direct_url | length > 0 and grafana_direct_url != grafana_tile_url %} <span class="badge">({{ grafana_direct_url }})</span>{% endif %}</li>
+          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ prometheus_tile_url }}">{{ prometheus_tile_url }}</a>{% if prometheus_direct_url | length > 0 and prometheus_direct_url != prometheus_tile_url %} <span class="badge">({{ prometheus_direct_url }})</span>{% endif %}</li>
+          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ alertmanager_tile_url }}">{{ alertmanager_tile_url }}</a>{% if alertmanager_direct_url | length > 0 and alertmanager_direct_url != alertmanager_tile_url %} <span class="badge">({{ alertmanager_direct_url }})</span>{% endif %}</li>
+          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a>{% if cadvisor_direct_url | length > 0 and cadvisor_direct_url != cadvisor_tile_url %} <span class="badge">({{ cadvisor_direct_url }})</span>{% endif %}</li>
           {% endif %}
         </ul>
       </div>
@@ -1094,20 +1134,20 @@
         <p class="sub"><strong>Internet / external</strong> — {{ ctx.access.external.audience }}</p>
         <ul class="clean">
           <li>Ops public IP: <code>{{ ctx.access.external.ops_ip }}</code></li>
-          <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.portal }}">{{ ctx.access.external.portal }}</a></li>
-          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.external.pgadmin }}">{{ ctx.access.external.pgadmin }}</a></li>
+          <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_portal_url }}">{{ net_portal_label }}</a></li>
+          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_pgadmin_url }}">{{ net_pgadmin_label }}</a></li>
           {% if mon_on %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ grafana_tile_url }}">{{ grafana_tile_url }}</a></li>
-          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ prometheus_tile_url }}">{{ prometheus_tile_url }}</a></li>
-          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ alertmanager_tile_url }}">{{ alertmanager_tile_url }}</a></li>
-          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a></li>
+          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ grafana_tile_url }}">{{ grafana_tile_url }}</a>{% if grafana_direct_url | length > 0 and grafana_direct_url != grafana_tile_url %} <span class="badge">({{ grafana_direct_url }})</span>{% endif %}</li>
+          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ prometheus_tile_url }}">{{ prometheus_tile_url }}</a>{% if prometheus_direct_url | length > 0 and prometheus_direct_url != prometheus_tile_url %} <span class="badge">({{ prometheus_direct_url }})</span>{% endif %}</li>
+          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ alertmanager_tile_url }}">{{ alertmanager_tile_url }}</a>{% if alertmanager_direct_url | length > 0 and alertmanager_direct_url != alertmanager_tile_url %} <span class="badge">({{ alertmanager_direct_url }})</span>{% endif %}</li>
+          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a>{% if cadvisor_direct_url | length > 0 and cadvisor_direct_url != cadvisor_tile_url %} <span class="badge">({{ cadvisor_direct_url }})</span>{% endif %}</li>
           {% endif %}
         </ul>
         <p class="sub" style="margin-top:0.85rem"><strong>Same VPC (private IP)</strong> — {{ ctx.access.vpc.audience }}</p>
         <ul class="clean">
           <li>Ops private IP: <code>{{ ctx.access.vpc.ops_ip }}</code></li>
-          <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.portal }}">{{ ctx.access.vpc.portal }}</a></li>
-          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.access.vpc.pgadmin }}">{{ ctx.access.vpc.pgadmin }}</a></li>
+          <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_vpc_portal_url }}">{{ net_vpc_portal_label }}</a></li>
+          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_vpc_pgadmin_url }}">{{ net_vpc_pgadmin_label }}</a></li>
           {% if mon_on %}
           {% set _vpc_graf = ctx.monitoring.grafana_url_vpc | default(ctx.caddy_vhosts.urls_vpc.grafana.url | default(ctx.access.vpc.grafana)) %}
           {% set _vpc_prom = ctx.monitoring.prometheus_url_vpc | default(ctx.caddy_vhosts.urls_vpc.prometheus.url | default(ctx.access.vpc.prometheus)) %}
@@ -1333,7 +1373,7 @@
         </div>
         {% endif %}
       </div>
-      <p class="sub">One row per host: Ansible groups, addresses, inferred roles, and sample <code>ssh -i &lt;pem&gt;</code> commands (user <code>{{ oa.ssh_user | default('ec2-user') }}</code>, key file <code>{{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code>){% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %} — use the download button{% if ns_ssh_dl.items | length == 1 %} above{% else %}s above{% endif %} for the cluster PEM (same key for all hosts; works even when only the ops/ipaserver row is listed).{% endif %}</p>
+      <p class="sub">One row per host: Ansible groups, addresses, inferred roles, and sample <code>ssh -i &lt;pem&gt;</code> commands (user <code>{{ oa.ssh_user | default('ec2-user') }}</code>, key file <code>{{ ssh_key_filename }}</code>){% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %} — use the download button{% if ns_ssh_dl.items | length == 1 %} above{% else %}s above{% endif %} for the cluster PEM (same key for all hosts; works even when only the ops/ipaserver row is listed).{% endif %}</p>
       {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) and oa.basic_auth_enabled | default(false) | bool %}
       <p class="inventory-dl-hint">Downloads use the same HTTP basic auth as <code>{{ _dl_prefix }}/</code> (user <code>{{ oa.auth_username | default('portal') }}</code>).</p>
       {% elif _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) and not (oa.basic_auth_enabled | default(false) | bool) %}

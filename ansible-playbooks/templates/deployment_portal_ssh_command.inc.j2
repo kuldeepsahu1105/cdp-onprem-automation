@@ -11,6 +11,21 @@
 {{- _public if (_public | length > 0) else (_ah if (_ah | length > 0) else inv_name) -}}
 {%- endmacro %}
 
+{% macro portal_ssh_ec2_key_basename() -%}
+{%- set _resolved = deployment_portal_ssh_download_basename | default(deployment_portal_ssh_ec2_download_basename | default('')) | trim -%}
+{%- if _resolved | length > 0 -%}
+{{- _resolved -}}
+{%- else -%}
+{%- set _env_kp = lookup('env', 'KEYPAIR_NAME') | default('', true) | trim -%}
+{%- set _group_kp = terraform_ec2_keypair_name | default('', true) | trim -%}
+{%- set _prefix = deployment_name_prefix | default('', true) | trim -%}
+{%- set _suffix = terraform_ec2_keypair_name_suffix | default('pvc-new-keypair', true) | trim -%}
+{%- set _derived_kp = (_prefix ~ '-' ~ _suffix) if ((_prefix | length > 0) and ((_prefix | lower) != 'development')) else '' -%}
+{%- set _kp = _env_kp if (_env_kp | length > 0) else (_group_kp if (_group_kp | length > 0) else _derived_kp) -%}
+{{- (_kp ~ '.pem') if (_kp | length > 0) else 'cluster-access.pem' -}}
+{%- endif -%}
+{%- endmacro %}
+
 {% macro portal_ssh_command(user, key_basename, hv, inv_name, cluster_domain) -%}
 ssh -i {{ key_basename }} {{ user }}@{{ portal_ssh_connect_target(hv, inv_name, cluster_domain) }}
 {%- endmacro %}

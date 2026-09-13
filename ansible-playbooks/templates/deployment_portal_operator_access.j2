@@ -1,5 +1,5 @@
 {# YAML dict: operator credentials and download links — deploy-time only, never committed with real secrets. #}
-{% from 'deployment_portal_ssh_command.inc.j2' import portal_ssh_command, portal_ssh_connect_target %}
+{% from 'deployment_portal_ssh_command.inc.j2' import portal_ssh_command, portal_ssh_connect_target, portal_ssh_ec2_key_basename %}
 {% set expose = deployment_portal_expose_credentials | default(true) | bool %}
 {% set ssh_on = deployment_portal_ssh_keys_expose_effective | default(false) | bool %}
 {% set auth_on = deployment_portal_basic_auth_enabled | default(false) | bool %}
@@ -7,7 +7,7 @@
 {% set ns = namespace(sections=[]) %}
 {% set _ssh_exports = deployment_portal_ssh_export_keys | default([]) %}
 {% set _ssh_user = deployment_ssh_user | default(ansible_user | default('ec2-user')) %}
-{% set _ssh_key_basename = deployment_portal_ssh_download_basename | default(_ssh_exports[0].basename | default('cluster-access.pem') if (_ssh_exports | length > 0) else 'cluster-access.pem') %}
+{% set _ssh_key_basename = portal_ssh_ec2_key_basename() %}
 {% set _ssh_host = '' %}
 {% if deployment_portal_has_ipa | default(false) | bool and (ipaserver_inventory_host | default('') | length > 0) %}
 {% set _ipa_hv = hostvars[ipaserver_inventory_host] %}

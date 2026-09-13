@@ -12,6 +12,13 @@
     - name: Re-resolve deployment portal SSH private keys on controller
       ansible.builtin.import_tasks: resolve_deployment_portal_ssh_key.yml
 
+    - name: Re-render deployment portal inventory hosts after SSH key resolution
+      ansible.builtin.set_fact:
+        deployment_portal_inventory_hosts: >-
+          {{
+            lookup('template', 'deployment_portal_inventory_hosts.j2') | from_yaml | default([], true)
+          }}
+
     # Same as build_deployment_portal_operator_access: true/false bool; auto follows basic auth.
     - name: Recompute effective SSH key export flag on controller
       ansible.builtin.set_fact:
@@ -31,17 +38,40 @@
             lookup('template', 'deployment_portal_operator_access.j2') | from_yaml | default({}, true)
           }}
 
+    - name: Merge refreshed inventory hosts into deployment portal context on controller
+      ansible.builtin.set_fact:
+        deployment_portal_context: >-
+          {{
+            deployment_portal_context | default({})
+            | combine(
+                {
+                  'inventory_hosts': deployment_portal_inventory_hosts | default([]),
+                  'operator_access': deployment_portal_operator_access | default({}),
+                },
+                recursive=True
+              )
+          }}
+
 - name: Adopt refreshed SSH export facts from controller
   ansible.builtin.set_fact:
     deployment_portal_ssh_export_keys: "{{ hostvars['localhost']['deployment_portal_ssh_export_keys'] | default([]) }}"
     deployment_portal_ssh_keys_expose_effective: "{{ hostvars['localhost']['deployment_portal_ssh_keys_expose_effective'] | default(false) | bool }}"
     deployment_portal_ssh_private_key_path: "{{ hostvars['localhost']['deployment_portal_ssh_private_key_path'] | default('') }}"
     deployment_portal_ssh_download_basename: "{{ hostvars['localhost']['deployment_portal_ssh_download_basename'] | default('cluster-access.pem') }}"
+    deployment_portal_ssh_ec2_download_basename: "{{ hostvars['localhost']['deployment_portal_ssh_ec2_download_basename'] | default('') }}"
+    deployment_portal_terraform_keypair_name: "{{ hostvars['localhost']['deployment_portal_terraform_keypair_name'] | default('') }}"
+    deployment_portal_inventory_hosts: "{{ hostvars['localhost']['deployment_portal_inventory_hosts'] | default(deployment_portal_inventory_hosts | default([])) }}"
     deployment_portal_operator_access: "{{ hostvars['localhost']['deployment_portal_operator_access'] | default({}) }}"
     deployment_portal_context: >-
       {{
         deployment_portal_context | default({})
-        | combine({'operator_access': hostvars['localhost']['deployment_portal_operator_access'] | default({})}, recursive=True)
+        | combine(
+            {
+              'operator_access': hostvars['localhost']['deployment_portal_operator_access'] | default({}),
+              'inventory_hosts': hostvars['localhost']['deployment_portal_inventory_hosts'] | default(deployment_portal_context.inventory_hosts | default([])),
+            },
+            recursive=True
+          )
       }}
   when: hostvars['localhost'] is defined
 
