@@ -84,3 +84,31 @@
   delay: 5
   until: _monitoring_alertmanager_host_check is succeeded
   when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
+
+- name: Verify cAdvisor via Caddy path route on localhost
+  ansible.builtin.uri:
+    url: "{{ _monitoring_local_base }}/cadvisor/containers/"
+    method: GET
+    status_code: "{{ deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_cadvisor_path_check
+  retries: 5
+  delay: 5
+  until: _monitoring_cadvisor_path_check is succeeded
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
+
+- name: Verify cAdvisor on published host port (localhost)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ monitoring_cadvisor_host_port | int }}/containers/"
+    method: GET
+    status_code: "{{ deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_cadvisor_host_check
+  retries: 5
+  delay: 5
+  until: _monitoring_cadvisor_host_check is succeeded
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"

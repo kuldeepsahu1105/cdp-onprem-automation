@@ -30,6 +30,7 @@ external (internet) (ops public IP):
   Grafana (Caddy path):     {{ deployment_portal_context.monitoring.grafana_path_url }}
   Prometheus (Caddy path):  {{ deployment_portal_context.monitoring.prometheus_path_url }}
   Alertmanager (Caddy path):{{ deployment_portal_context.monitoring.alertmanager_path_url }}
+  cAdvisor (Caddy path):    {{ deployment_portal_context.monitoring.cadvisor_path_url }}
 {% endif %}
 {% endif %}
 Same VPC (ops private IP):

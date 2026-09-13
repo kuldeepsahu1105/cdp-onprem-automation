@@ -60,6 +60,7 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
     networks:
+      - deployment_portal
       - monitoring_internal
 
 networks:
