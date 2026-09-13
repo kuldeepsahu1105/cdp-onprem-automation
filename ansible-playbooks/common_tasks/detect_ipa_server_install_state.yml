@@ -2,7 +2,8 @@
 # Classify FreeIPA server install state before ipa-server-install (idempotent, safe on re-runs).
 #
 # Outcomes (set_fact):
-#   ipa_server_has_default_conf   — /etc/ipa/default.conf present (configured server)
+#   ipa_server_has_default_conf   — default.conf present and ipactl does not report "not configured"
+#   ipa_detect_ipactl_not_configured — ipactl rc=4 or "IPA is not configured" (stale/broken host)
 #   ipa_server_has_partial_state  — leftover IPA/DS paths without default.conf (failed/partial install)
 #   ipa_server_services_healthy   — ipactl status OK and Directory Service + krb5kdc RUNNING
 #   ipa_server_install_clean_host — safe to run ipa-server-install (no config, no partial debris)
@@ -69,21 +70,45 @@
         | length
       }}
 
-- name: Detect IPA — derive configuration and health facts
+- name: Detect IPA — combine ipactl stdout and stderr for parsing
   ansible.builtin.set_fact:
-    ipa_server_has_default_conf: "{{ ipa_detect_default_conf.stat.exists | default(false) | bool }}"
-    ipa_server_has_partial_state: >-
-      {{
-        not (ipa_detect_default_conf.stat.exists | default(false) | bool)
-        and (
-          (ipa_detect_partial_marker_hits | int) > 0
-          or ((ipa_detect_dirsrv_instances.matched | default(0) | int) > 0)
-        )
-      }}
     ipa_detect_status_text: >-
       {{
         (ipa_detect_ipactl_status.stdout | default(''))
         ~ (ipa_detect_ipactl_status.stderr | default(''))
+      }}
+
+- name: Detect IPA — detect ipactl not-configured (rc=4 or message)
+  ansible.builtin.set_fact:
+    ipa_detect_ipactl_not_configured: >-
+      {{
+        (ipa_detect_ipactl_status.rc | default(1) | int) == 4
+        or ipa_detect_status_text is search('IPA is not configured', ignorecase=True)
+      }}
+
+- name: Detect IPA — derive configuration and partial-install facts
+  ansible.builtin.set_fact:
+    ipa_server_has_partial_state: >-
+      {{
+        (
+          not (ipa_detect_default_conf.stat.exists | default(false) | bool)
+          and (
+            (ipa_detect_partial_marker_hits | int) > 0
+            or ((ipa_detect_dirsrv_instances.matched | default(0) | int) > 0)
+          )
+        )
+        or (
+          ipa_detect_ipactl_not_configured | bool
+          and (
+            (ipa_detect_partial_marker_hits | int) > 0
+            or ((ipa_detect_dirsrv_instances.matched | default(0) | int) > 0)
+          )
+        )
+      }}
+    ipa_server_has_default_conf: >-
+      {{
+        (ipa_detect_default_conf.stat.exists | default(false) | bool)
+        and not (ipa_detect_ipactl_not_configured | bool)
       }}
 
 - name: Detect IPA — derive service health from ipactl output
@@ -103,10 +128,29 @@
         and not (ipa_server_has_partial_state | bool)
       }}
 
+- name: Detect IPA — remove stale default.conf when ipactl reports not configured
+  ansible.builtin.file:
+    path: /etc/ipa/default.conf
+    state: absent
+  when:
+    - ipa_detect_ipactl_not_configured | bool
+    - ipa_detect_default_conf.stat.exists | default(false)
+    - not (ipa_server_has_partial_state | bool)
+
+- name: Detect IPA — mark host eligible for fresh install after stale config removal
+  ansible.builtin.set_fact:
+    ipa_server_has_default_conf: false
+    ipa_server_install_clean_host: true
+  when:
+    - ipa_detect_ipactl_not_configured | bool
+    - ipa_detect_default_conf.stat.exists | default(false)
+    - not (ipa_server_has_partial_state | bool)
+
 - name: Detect IPA — summarize install state for operators
   ansible.builtin.debug:
     msg:
-      - "IPA configured (default.conf): {{ ipa_server_has_default_conf }}"
+      - "IPA configured (default.conf + ipactl): {{ ipa_server_has_default_conf }}"
+      - "ipactl reports not configured: {{ ipa_detect_ipactl_not_configured }}"
       - "IPA partial/broken debris detected: {{ ipa_server_has_partial_state }}"
       - "IPA services healthy (ipactl): {{ ipa_server_services_healthy }}"
       - "Safe for fresh ipa-server-install: {{ ipa_server_install_clean_host }}"

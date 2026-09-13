@@ -78,6 +78,15 @@
           No FreeIPA server configuration found (no /etc/ipa/default.conf). Will run ipa-server-install on a clean host.
       when: ipa_server_install_clean_host | bool
 
+    - name: Note stale default.conf removed — will run ipa-server-install
+      ansible.builtin.debug:
+        msg: >-
+          ipactl reported IPA is not configured; removed stale /etc/ipa/default.conf if present.
+          Running ipa-server-install on this host.
+      when:
+        - ipa_detect_ipactl_not_configured | default(false) | bool
+        - ipa_server_install_clean_host | bool
+
     - name: Run IPA server installation
       command: >
         ipa-server-install --setup-dns --unattended
@@ -96,7 +105,7 @@
         {% if chrony_enabled == 'yes' %} --ntp-server=pool.ntp.org {% endif %}
       register: ipa_install_result
       changed_when: "'The ipa-server-install command was successful' in ipa_install_result.stderr"
-      # First-commit gate: install when not configured; partial debris fails in detect_ipa_server_install_state.
+      # Install when ipactl/default.conf say not configured (see detect_ipa_server_install_state); partial debris fails there.
       when: not (ipa_server_has_default_conf | bool)
 
     - name: Ensure FreeIPA KDC and IPA services are running
