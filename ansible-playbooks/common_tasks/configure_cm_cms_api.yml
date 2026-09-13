@@ -7,6 +7,9 @@
 - name: CMS — configure Auto-TLS client truststore for management roles
   ansible.builtin.import_tasks: configure_cm_cms_autotls_trust.yml
 
+- name: CMS — verify Reports Manager database connectivity
+  ansible.builtin.import_tasks: verify_cm_cms_reports_manager_db.yml
+
 - name: CMS — read management service
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/service"
@@ -422,7 +425,14 @@
          | selectattr('type', 'in', cms_health_role_types)
          | list }}.
       Reports Manager DB host is {{ cm_cms_reports_manager_db_host }} (Postgres on {{ cm_postgres_inventory_host }}).
-      Check firehose/headlamp and CM agent logs on {{ cms_target_hostname }}.
+      Triage on {{ cms_target_hostname }}:
+        Service Monitor: /var/log/cloudera-scm-firehose/ and
+        /var/run/cloudera-scm-agent/process/*-SERVICEMONITOR*/logs/
+        Host Monitor: /var/log/cloudera-scm-firehose/ (host monitor) or agent process logs
+        Reports Manager: /var/log/cloudera-scm-headlamp/
+        CM agent: /var/log/cloudera-scm-agent/cloudera-scm-agent.log
+        CM server (ImportCredentials): /var/log/cloudera-scm-server/cloudera-scm-server.log
+      Re-run 27_setup_cm_autotls.yml then 29_setup_cm_cms.yml when Auto-TLS truststore was missing.
   when: >
     (
       cms_roles_health_poll.json['items'] | default([])
@@ -431,6 +441,9 @@
       | list
       | length
     ) > 0
+
+- name: CMS — verify Service Monitor Avro port accepts connections
+  ansible.builtin.import_tasks: verify_cm_cms_servicemonitor_listen.yml
 
 - name: CMS — record result for playbook debug
   ansible.builtin.set_fact:

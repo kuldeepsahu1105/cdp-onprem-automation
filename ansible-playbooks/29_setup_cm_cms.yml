@@ -21,6 +21,7 @@
           - "CMS roles host: {{ cm_cms_hostname }}"
           - "Postgres (Reports Manager DB) host: {{ cm_cms_reports_manager_db_host }} (inventory: {{ cm_postgres_inventory_host }})"
           - "CMS role types: {{ cm_cms_role_types | join(', ') }}"
+          - "Prerequisite: run 27_setup_cm_autotls.yml before CMS when Auto-TLS is enabled (MGMT ssl_client_truststore_*)"
 
     - name: Check Cloudera Management Service status
       ansible.builtin.uri:

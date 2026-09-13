@@ -255,7 +255,16 @@ CMS (Management Service) and CDP base cluster are **separate**:
 
 | Playbook | Component | Deploys |
 |---|---|---|
-| `29_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. |
+| `29_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. Run **after** `27_setup_cm_autotls.yml` when Auto-TLS is on. |
+
+**CMS troubleshooting (Service Monitor / Avro `Connection refused`):**
+
+| Symptom | Likely cause | Operator checks |
+|---|---|---|
+| `AvroRuntimeException: Connection refused` in CM UI / debug bundles | Service Monitor (firehose) not listening — crashed, OOM, or still starting | `29_setup_cm_cms.yml` now waits on the firehose TCP port; on `cldr-mngr`: `/var/log/cloudera-scm-firehose/`, `/var/run/cloudera-scm-agent/process/*-SERVICEMONITOR*/logs/` |
+| JMX `smonStatusRequest` / `smonReportRequest` Count 0 | CM cannot reach Service Monitor Avro endpoint | Confirm role **RUNNING** in CM → Management Service; `ss -ltn` on loopback for firehose port from role config |
+| `ImportCredentials - Execution error` in `cloudera-scm-server.log` | TLS / credential store mismatch after Auto-TLS | Ensure MGMT `ssl_client_truststore_*` points at agent `cm-auto-global_truststore.jks` (automation in `configure_cm_cms_autotls_trust.yml`); re-run **27** then **29** |
+| Reports Manager won't start | Postgres `rman` DB unreachable | From CM host: `psql -h <postgres-fqdn> -U rman -d rman`; logs: `/var/log/cloudera-scm-headlamp/` |
 | `31_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
 | `33_setup_ecs_cluster.yml` | ECS cluster | Phased DOCKER + ECS + embedded control plane — see [CDP_ECS_INSTALL.md](CDP_ECS_INSTALL.md) |
 | `10_setup_deployment_portal.yml` | Ops portal bootstrap | Caddy, pgAdmin, optional monitoring on ops host (`auto` → ipaserver else cldr-mngr); run early in phase 1 |

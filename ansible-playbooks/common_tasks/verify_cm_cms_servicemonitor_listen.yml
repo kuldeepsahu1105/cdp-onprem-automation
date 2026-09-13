@@ -1,0 +1,138 @@
+---
+# CM → Service Monitor Avro RPC uses the firehose listen port on the CMS host.
+# Connection refused with roleState RUNNING usually means the process exited or is still binding.
+
+- name: CMS — skip Service Monitor listen probe when disabled
+  ansible.builtin.debug:
+    msg: Service Monitor Avro listen probe skipped (cm_cms_verify_servicemonitor_listen=false).
+  when: not (cm_cms_verify_servicemonitor_listen | default(true) | bool)
+
+- name: CMS — resolve Service Monitor role name from last health poll
+  ansible.builtin.set_fact:
+    cms_smon_role: >-
+      {{
+        (cms_roles_health_poll.json['items'] | default([])
+        | selectattr('type', 'equalto', 'SERVICEMONITOR')
+        | list
+        | first)
+        | default({}, true)
+      }}
+  when: cm_cms_verify_servicemonitor_listen | default(true) | bool
+
+- name: CMS — fail when Service Monitor role is missing from CM API
+  ansible.builtin.fail:
+    msg: >-
+      No SERVICEMONITOR role found in Cloudera Management Service after health wait.
+      Re-run 29_setup_cm_cms.yml or create the role in CM UI on {{ cms_target_hostname }}.
+  when:
+    - cm_cms_verify_servicemonitor_listen | default(true) | bool
+    - (cms_smon_role.name | default('') | trim) | length == 0
+
+- name: CMS — read Service Monitor role configuration (firehose listen port)
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/roles/{{ cms_smon_role.name }}/config"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cms_smon_role_config
+  when: cm_cms_verify_servicemonitor_listen | default(true) | bool
+
+- name: CMS — extract Service Monitor listen port from role config
+  ansible.builtin.set_fact:
+    cms_smon_listen_port: >-
+      {{
+        (
+          cms_smon_role_config.json['items'] | default([])
+          | selectattr('name', 'in', cm_cms_servicemonitor_port_config_names)
+          | map(attribute='value')
+          | first
+          | default('', true)
+          | trim
+        )
+      }}
+  when: cm_cms_verify_servicemonitor_listen | default(true) | bool
+
+- name: CMS — discover Service Monitor listen port from process directory when API omits it
+  ansible.builtin.shell: |
+    set -euo pipefail
+    for conf in /var/run/cloudera-scm-agent/process/*-SERVICEMONITOR*/firehose.conf; do
+      if [ -f "$conf" ]; then
+        awk -F= '/^listen_port=/{print $2; exit}' "$conf"
+        exit 0
+      fi
+    done
+    ss -ltnH 2>/dev/null | awk '/127\\.0\\.0\\.1:[0-9]+/ {print $4}' | sed 's/.*://' | head -1
+  args:
+    executable: /bin/bash
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true
+  register: cms_smon_port_shell
+  changed_when: false
+  failed_when: false
+  when:
+    - cm_cms_verify_servicemonitor_listen | default(true) | bool
+    - (cms_smon_listen_port | default('') | trim) | length == 0
+
+- name: CMS — normalize Service Monitor listen port
+  ansible.builtin.set_fact:
+    cms_smon_listen_port_effective: >-
+      {{
+        (cms_smon_listen_port | default('') | trim)
+        if (cms_smon_listen_port | default('') | trim) | length > 0
+        else (cms_smon_port_shell.stdout | default('') | trim)
+      }}
+  when: cm_cms_verify_servicemonitor_listen | default(true) | bool
+
+- name: CMS — wait for Service Monitor Avro port on loopback
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ cms_smon_listen_port_effective | int }}"
+    state: started
+    timeout: "{{ cm_cms_smon_listen_wait_timeout_seconds | default(120) }}"
+    connect_timeout: 5
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true
+  register: cms_smon_listen_wait
+  ignore_errors: true
+  when:
+    - cm_cms_verify_servicemonitor_listen | default(true) | bool
+    - (cms_smon_listen_port_effective | default('') | trim) | length > 0
+    - (cms_smon_listen_port_effective | int) > 0
+
+- name: CMS — fail when Service Monitor listen port could not be determined
+  ansible.builtin.fail:
+    msg: >-
+      Could not determine Service Monitor (firehose) listen port for role {{ cms_smon_role.name }}.
+      CM API config keys tried: {{ cm_cms_servicemonitor_port_config_names | join(', ') }}.
+      On {{ cms_target_hostname }}, inspect /var/run/cloudera-scm-agent/process/*-SERVICEMONITOR*/
+      and /var/log/cloudera-scm-firehose/.
+  when:
+    - cm_cms_verify_servicemonitor_listen | default(true) | bool
+    - (
+        (cms_smon_listen_port_effective | default('') | trim) | length == 0
+        or ((cms_smon_listen_port_effective | default('0') | int) < 1)
+      )
+
+- name: CMS — fail when Service Monitor Avro port is not accepting connections
+  ansible.builtin.fail:
+    msg: >-
+      Service Monitor role {{ cms_smon_role.name }} is RUNNING in CM API but nothing is listening on
+      127.0.0.1:{{ cms_smon_listen_port_effective }} (Avro RPC / firehose).
+      This matches CM UI errors such as AvroRuntimeException: Connection refused and JMX smonStatusRequest Count 0.
+      Typical causes: firehose OOM/crash, missing Auto-TLS client truststore to CM :7183 (re-run 27 then 29),
+      or Reports Manager/Postgres misconfiguration.
+      Logs on {{ cms_target_hostname }}:
+        /var/log/cloudera-scm-firehose/
+        /var/run/cloudera-scm-agent/process/*-SERVICEMONITOR*/logs/
+        /var/log/cloudera-scm-agent/cloudera-scm-agent.log
+      CM server (ImportCredentials / credential store):
+        /var/log/cloudera-scm-server/cloudera-scm-server.log
+      Re-run: ansible-playbook -i inventory.ini 29_setup_cm_cms.yml
+  when:
+    - cm_cms_verify_servicemonitor_listen | default(true) | bool
+    - cms_smon_listen_wait is defined
+    - cms_smon_listen_wait is not skipped
+    - cms_smon_listen_wait.failed | default(false) | bool

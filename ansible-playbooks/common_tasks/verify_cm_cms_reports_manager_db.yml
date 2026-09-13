@@ -1,0 +1,33 @@
+---
+# Fail fast when Reports Manager cannot reach Postgres (common cause of CMS role crash loops).
+
+- name: CMS — skip Reports Manager DB probe when disabled
+  ansible.builtin.debug:
+    msg: Reports Manager DB connectivity probe skipped (cm_cms_verify_reports_manager_db=false).
+  when: not (cm_cms_verify_reports_manager_db | default(true) | bool)
+
+- name: CMS — probe Reports Manager database from CM host
+  community.postgresql.postgresql_ping:
+    db: "{{ cm_cms_reports_manager_db_name }}"
+    login_host: "{{ cm_cms_reports_manager_db_host }}"
+    login_user: "{{ cm_cms_reports_manager_db_user }}"
+    login_password: "{{ cm_cms_reports_manager_db_password }}"
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true
+  become_user: postgres
+  register: cms_rman_db_ping
+  no_log: true
+  when: cm_cms_verify_reports_manager_db | default(true) | bool
+
+- name: CMS — fail when Reports Manager database is unreachable
+  ansible.builtin.fail:
+    msg: >-
+      Reports Manager database {{ cm_cms_reports_manager_db_name }} is not reachable at
+      {{ cm_cms_reports_manager_db_host }} from {{ cms_target_hostname | default(cm_manager_inventory_host) }}.
+      Re-run 23_setup_postgres.yml and confirm the rman database exists (group_vars databases list).
+      Test: sudo -u postgres psql -h {{ cm_cms_reports_manager_db_host }} -U {{ cm_cms_reports_manager_db_user }} -d {{ cm_cms_reports_manager_db_name }} -c 'SELECT 1'.
+  when:
+    - cm_cms_verify_reports_manager_db | default(true) | bool
+    - cms_rman_db_ping is defined
+    - cms_rman_db_ping.is_available is defined
+    - not (cms_rman_db_ping.is_available | bool)

@@ -317,6 +317,14 @@ cm_api_command_poll_delay: 10
 cm_cms_monitor_wait_retries: 30
 cm_cms_monitor_wait_delay: 20
 cm_cms_monitor_wait_timeout_seconds: "{{ (cm_cms_monitor_wait_retries | int) * (cm_cms_monitor_wait_delay | int) }}"
+# Post-CMS checks: Postgres for Reports Manager; TCP listen for Service Monitor Avro (firehose).
+cm_cms_verify_reports_manager_db: true
+cm_cms_verify_servicemonitor_listen: true
+cm_cms_servicemonitor_port_config_names:
+  - firehose_port
+  - firehose_listen_port
+  - listen_port
+cm_cms_smon_listen_wait_timeout_seconds: 120
 
 # Cloudera Manager API ports
 cm_https_port: 7183
