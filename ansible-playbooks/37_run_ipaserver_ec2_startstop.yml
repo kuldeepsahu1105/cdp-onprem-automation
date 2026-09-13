@@ -59,10 +59,18 @@
     - name: Run EC2 start/stop script on ipaserver
       ansible.builtin.command:
         argv: "{{ ec2_startstop_argv }}"
-      environment:
-        AWS_DEFAULT_REGION: "{{ aws_region | default('us-east-1') }}"
-        EC2_STARTSTOP_NON_INTERACTIVE: "{{ ec2_startstop_non_interactive | default('1') | string }}"
-        JENKINS_URL: "{{ lookup('env', 'JENKINS_URL') | default('', true) }}"
+      environment: >-
+        {{
+          {
+            'EC2_STARTSTOP_NON_INTERACTIVE': (ec2_startstop_non_interactive | default('1') | string),
+            'JENKINS_URL': (lookup('env', 'JENKINS_URL') | default('', true))
+          }
+          | combine(
+              {'AWS_DEFAULT_REGION': (aws_region | trim)}
+              if (aws_region | default('', true) | trim | length > 0)
+              else {}
+            )
+        }}
       register: ec2_startstop_run
       changed_when: ec2_startstop_operation | lower in ['start', 'stop']
 

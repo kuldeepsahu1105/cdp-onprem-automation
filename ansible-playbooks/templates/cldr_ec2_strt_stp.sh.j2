@@ -19,7 +19,7 @@ set -euo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
 DEFAULT_ENV="{{ ec2_startstop_default_environment | default('', true) | trim }}"
-AWS_REGION="${AWS_DEFAULT_REGION:-{{ aws_region | default('us-east-1') }}}"
+AWS_REGION_FALLBACK="{{ aws_region | default('us-east-1') }}"
 
 usage() {
   sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
@@ -35,10 +35,32 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage 0
 fi
 
-OPERATION="${1:-}"
-ENV_VALUE="${2:-}"
-shift 2 2>/dev/null || true
-GROUPS=("$@")
+resolve_aws_region() {
+  local imds_region=""
+  if imds_region="$(curl -sf -m 2 http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null)"; then
+    if [[ -n "$imds_region" ]]; then
+      printf '%s' "$imds_region"
+      return 0
+    fi
+  fi
+  if [[ -n "${AWS_REGION:-}" ]]; then
+    printf '%s' "$AWS_REGION"
+    return 0
+  fi
+  if [[ -n "${AWS_DEFAULT_REGION:-}" ]]; then
+    printf '%s' "$AWS_DEFAULT_REGION"
+    return 0
+  fi
+  printf '%s' "$AWS_REGION_FALLBACK"
+}
+
+AWS_REGION="$(resolve_aws_region)"
+export AWS_DEFAULT_REGION="$AWS_REGION"
+
+ARGS=("$@")
+OPERATION="${ARGS[0]:-}"
+ENV_VALUE="${ARGS[1]:-}"
+GROUPS=("${ARGS[@]:2}")
 
 if [[ -z "$OPERATION" ]]; then
   echo "ERROR: missing operation (start|stop|describe)" >&2
@@ -67,11 +89,10 @@ if [[ "$OPERATION" != "describe" && ${#GROUPS[@]} -eq 0 ]]; then
   usage 1
 fi
 
-export AWS_DEFAULT_REGION="$AWS_REGION"
-
 build_filters() {
   local -a filters=(
     "Name=tag:environment,Values=${ENV_VALUE}"
+    "Name=instance-state-name,Values=pending,running,stopping,stopped"
   )
   if ((${#GROUPS[@]} > 0)); then
     local group_csv
@@ -99,6 +120,16 @@ collect_instance_ids() {
     --output text
 }
 
+read_instance_ids() {
+  local -a ids=()
+  local id
+  while read -r id; do
+    [[ -z "$id" ]] && continue
+    ids+=("$id")
+  done < <(collect_instance_ids | tr '\t' '\n')
+  INSTANCE_IDS=("${ids[@]}")
+}
+
 confirm_stop() {
   if [[ "${EC2_STARTSTOP_NON_INTERACTIVE:-}" == "1" || -n "${JENKINS_URL:-}" ]]; then
     return 0
@@ -117,27 +148,57 @@ confirm_stop() {
   fi
 }
 
-INSTANCE_IDS="$(collect_instance_ids | xargs echo || true)"
-if [[ -z "${INSTANCE_IDS// }" ]]; then
-  echo "No instances found for environment='${ENV_VALUE}' groups='${GROUPS[*]:-all}'."
-  exit 0
-fi
+run_ec2_operation() {
+  local op="$1"
+  shift
+  local -a instance_ids=("$@")
+  # Use ${op}-instances (not $op-instances): bare $OPERATION-instances is parsed as variable OPERATION-instances.
+  aws ec2 "${op}-instances" \
+    --region "$AWS_REGION" \
+    --instance-ids "${instance_ids[@]}"
+}
+
+wait_for_instances() {
+  local desired_state="$1"
+  shift
+  local -a instance_ids=("$@")
+  case "$desired_state" in
+    running)
+      aws ec2 wait instance-running --region "$AWS_REGION" --instance-ids "${instance_ids[@]}" || true
+      ;;
+    stopped)
+      aws ec2 wait instance-stopped --region "$AWS_REGION" --instance-ids "${instance_ids[@]}" || true
+      ;;
+  esac
+}
 
 case "$OPERATION" in
   describe)
     describe_instances
+    exit 0
     ;;
+esac
+
+read_instance_ids
+if ((${#INSTANCE_IDS[@]} == 0)); then
+  echo "No instances found for environment='${ENV_VALUE}' groups='${GROUPS[*]:-all}'."
+  exit 2
+fi
+
+case "$OPERATION" in
   start)
-    echo "Starting: $INSTANCE_IDS"
-    aws ec2 start-instances --region "$AWS_REGION" --instance-ids $INSTANCE_IDS
-    aws ec2 wait instance-running --region "$AWS_REGION" --instance-ids $INSTANCE_IDS || true
+    echo "Starting: ${INSTANCE_IDS[*]}"
+    run_ec2_operation start "${INSTANCE_IDS[@]}"
+    wait_for_instances running "${INSTANCE_IDS[@]}"
     describe_instances
     ;;
   stop)
     confirm_stop
-    echo "Stopping: $INSTANCE_IDS"
-    aws ec2 stop-instances --region "$AWS_REGION" --instance-ids $INSTANCE_IDS
-    aws ec2 wait instance-stopped --region "$AWS_REGION" --instance-ids $INSTANCE_IDS || true
+    echo "Stopping: ${INSTANCE_IDS[*]}"
+    run_ec2_operation stop "${INSTANCE_IDS[@]}"
+    wait_for_instances stopped "${INSTANCE_IDS[@]}"
     describe_instances
     ;;
 esac
+
+exit 0

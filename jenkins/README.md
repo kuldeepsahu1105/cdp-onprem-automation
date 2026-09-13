@@ -81,7 +81,7 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | `CDH_INSTALL` | CDH base cluster (`31_setup_base_cluster.yml`); portal refresh |
 | `MONITORING` | `32_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
 | `ECS_INSTALL` | ECS cluster (`33`); optional `34_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` |
-| `STARTSTOP_AUTOMATION` | `run-ec2-startstop-automation.sh` — Ansible on **ipaserver** only; deploys/runs `/root/{ENVIRONMENT}_cldr_ec2_strt_stp.sh` (`EC2_STARTSTOP_OPERATION`, `EC2_STARTSTOP_GROUPS`, `ENVIRONMENT` → script prefix + tag **environment**) |
+| `STARTSTOP_AUTOMATION` | `run-ec2-startstop-automation.sh` — Ansible on **ipaserver** only; deploys/runs `ec2_startstop_script_path` (`/root/{prefix}_cldr_ec2_strt_stp.sh`, prefix = sanitized `deployment_name_prefix` / Jenkins `ENVIRONMENT`; override `ec2_startstop_script_name_prefix`) |
 | `DESTROY_STACK` | `run-destroy-stack.sh` — optional `99_cleanup.yml` (`CLEANUP_BEFORE_DESTROY`) then `terraform destroy` |
 
 **EC2 start/stop:** `STARTSTOP_AUTOMATION` uses EC2 tags **`environment`** and **`Group`** (Terraform `pvc_cluster_tags` + `instance_groups` keys). Jenkins runs **start** / **describe** non-interactively; **stop** requires **`EC2_STARTSTOP_CONFIRM=true`**. Manual stop on ipaserver prompts `yes`.

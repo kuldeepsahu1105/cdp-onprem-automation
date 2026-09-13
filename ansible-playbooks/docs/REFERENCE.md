@@ -352,6 +352,7 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `deployment_name_prefix` | `""` | **Prefix** badge — from `.tfvars.yaml` `environment`, Jenkins `ENVIRONMENT`, Terraform workspace + `{environment}-*` resource names |
 | `ec2_startstop_script_name_prefix` | `""` | Optional override for ipaserver script filename prefix; when empty uses sanitized `deployment_name_prefix` → `{prefix}_cldr_ec2_strt_stp.sh` under `ec2_startstop_script_dir` (`/root`) |
 | `ec2_startstop_script_path` | *(derived)* | Full path to deployed start/stop script (playbooks **36** / **37**); override to pin a custom location |
+| `ec2_startstop_script_basename` | *(derived)* | Filename only, e.g. `development_cldr_ec2_strt_stp.sh` — used in template header and docs |
 
 **Portal index attribution:** `build_deployment_portal_facts.yml` sets `deployment_portal_context.deployment` from the vars above. Wrapper/Jenkins load tfvars (`scripts/lib/parse_tfvars_yaml.py` maps `owner`→`OWNER`, `environment`→`ENVIRONMENT`); `pvc_setup.sh` / `jenkins/scripts/render-ansible-group-vars-override.py` pass `OWNER`/`ENVIRONMENT` into Ansible as `deployment_owner` / `deployment_name_prefix` via `jenkins_override.yml`. Empty values omit the deployment badges.
 

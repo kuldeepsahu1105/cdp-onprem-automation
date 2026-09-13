@@ -98,7 +98,7 @@ EMAIL_FORMAT — In Check Parameters: regex-validate NOTIFICATION_EMAIL when non
     choice(
       name: 'EC2_STARTSTOP_OPERATION',
       choices: ['describe', 'start', 'stop'],
-      description: '''Used when PIPELINE_STAGES includes STARTSTOP_AUTOMATION. Runs /root/{ENVIRONMENT}_cldr_ec2_strt_stp.sh on ipaserver via Ansible (ENVIRONMENT → deployment_name_prefix → script basename; tags tag:environment + tag:Group). Jenkins sets non-interactive mode; stop from Jenkins requires EC2_STARTSTOP_CONFIRM=true. Manual runs on ipaserver prompt "yes" for stop.'''
+      description: '''Used when PIPELINE_STAGES includes STARTSTOP_AUTOMATION. Runs ec2_startstop_script_path on ipaserver (/root/{prefix}_cldr_ec2_strt_stp.sh; prefix = sanitized ENVIRONMENT/deployment_name_prefix, optional ec2_startstop_script_name_prefix). EC2 filters: tag:environment + tag:Group. Jenkins sets non-interactive mode; stop from Jenkins requires EC2_STARTSTOP_CONFIRM=true. Manual runs on ipaserver prompt "yes" for stop.'''
     )
     string(
       name: 'EC2_STARTSTOP_GROUPS',

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Jenkins: deploy (if needed) and run EC2 start/stop/describe on ipaserver only.
-# Script on ipaserver: /root/{ENVIRONMENT}_cldr_ec2_strt_stp.sh (Ansible ec2_startstop_script_path from deployment_name_prefix).
+# Script on ipaserver: ec2_startstop_script_path (default /root/{sanitized ENVIRONMENT}_cldr_ec2_strt_stp.sh via deployment_name_prefix).
 set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"

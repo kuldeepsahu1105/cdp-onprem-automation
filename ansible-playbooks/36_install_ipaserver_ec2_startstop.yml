@@ -1,6 +1,6 @@
 ### ansible-playbook -i inventory.ini 36_install_ipaserver_ec2_startstop.yml
 # Deploy EC2 start/stop/describe helper on ipaserver (IAM role on instance performs API calls).
-# Script path: {{ ec2_startstop_script_dir }}/{{ prefix }}_cldr_ec2_strt_stp.sh (prefix from deployment_name_prefix; template cldr_ec2_strt_stp.sh.j2).
+# Script path: {{ ec2_startstop_script_path }} ({prefix}_cldr_ec2_strt_stp.sh from deployment_name_prefix / ec2_startstop_script_name_prefix).
 ---
 - import_playbook: 00_ensure_collections.yml
 
