@@ -30,6 +30,10 @@ Authoritative matrix: [Service Dependencies in Cloudera Manager](https://docs.cl
 
 Ranger depends on **HDFS + Solr** for default audit storage/search. Set `solr: true` with `ranger: true`, or configure Ranger for Solr-only audits per [CFM/CDP install guidance](https://docs.cloudera.com/cfm/4.12.0/deployment/topics/cfm-install-cdp.html).
 
+## Host templates (`base_cluster_cluster_spec.j2`)
+
+In `host_templates.role_groups`, the `service` key must be the Cloudera Manager **service type** (`HDFS`, `YARN`, …), not the cluster service **name** (`hdfs`, `yarn`). `cloudera.cluster.cluster` resolves base role config groups with `ApiService.type == service`.
+
 ## ECS (playbook 33)
 
-Experience cluster uses `cloudera.cluster.cluster` with `type: EXPERIENCE_CLUSTER`. Host template role groups must use **`service`** (not `service_type`) per collection v4.4.0.
+Experience cluster uses phased install; see `docs/CDP_ECS_INSTALL.md`.
