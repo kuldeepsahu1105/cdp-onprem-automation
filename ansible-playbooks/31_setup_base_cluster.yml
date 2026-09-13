@@ -32,6 +32,24 @@
           Base cluster inventory groups '{{ base_cluster_master_group }}' and
           '{{ base_cluster_worker_group }}' must exist and contain hosts.
 
+    - name: Validate Hue requires Hive metastore (CDP 7+)
+      ansible.builtin.assert:
+        that:
+          - base_cluster_install_services.hive | default(true) | bool
+        fail_msg: >-
+          Hue requires the Hive (HMS) service on CDP 7+. Enable base_cluster_install_services.hive
+          or disable hue.
+      when: base_cluster_install_services.hue | default(false) | bool
+
+    - name: Validate Hive on Tez requires Hive metastore service
+      ansible.builtin.assert:
+        that:
+          - base_cluster_install_services.hive | default(true) | bool
+        fail_msg: >-
+          Hive on Tez requires base_cluster_install_services.hive (hms_connector). Enable hive
+          or disable hive_on_tez.
+      when: base_cluster_install_services.hive_on_tez | default(false) | bool
+
     - name: Set base master FQDN
       ansible.builtin.set_fact:
         base_master_fqdn: "{{ hostvars[groups[base_cluster_master_group][0]].cldr_hostname }}.{{ cluster_domain }}"

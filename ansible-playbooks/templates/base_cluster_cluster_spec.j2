@@ -47,6 +47,9 @@ services:
     config:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+{% if svc.ranger | default(true) %}
+      ranger_service: ranger
+{% endif %}
     role_groups:
       - type: RESOURCEMANAGER
         config:
@@ -118,13 +121,26 @@ services:
     type: HUE
     display_name: Hue
     config:
-      hive_service: "{{ 'hive_on_tez' if svc.hive_on_tez | default(true) else ('hive' if svc.hive | default(true) else '') }}"
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+{% if svc.hive | default(true) and svc.hive_on_tez | default(true) %}
+      hms_service: hive
+      hive_service: hive_on_tez
+{% elif svc.hive | default(true) %}
+      hive_service: hive
+{% elif svc.hive_on_tez | default(true) %}
+      hive_service: hive_on_tez
+{% endif %}
 {% if svc.hbase | default(true) %}
       hbase_service: hbase
 {% endif %}
 {% if svc.impala | default(true) %}
       impala_service: impala
+{% endif %}
+{% if svc.solr | default(false) %}
+      solr_service: solr
+{% endif %}
+{% if svc.atlas | default(true) %}
+      atlas_service: atlas
 {% endif %}
 {% if svc.zookeeper | default(true) %}
       zookeeper_service: zookeeper
@@ -152,7 +168,15 @@ services:
     config:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
       hive_service: "{{ 'hive' if svc.hive | default(true) else '' }}"
-      hbase_service: "{{ 'hbase' if svc.hbase | default(true) else '' }}"
+{% if svc.hbase | default(true) %}
+      hbase_service: hbase
+{% endif %}
+{% if svc.ranger | default(true) %}
+      ranger_service: ranger
+{% endif %}
+{% if svc.atlas | default(true) %}
+      atlas_service: atlas
+{% endif %}
 {% endif %}
 {% if svc.kafka | default(true) %}
   - name: kafka
@@ -160,6 +184,12 @@ services:
     display_name: Kafka
     config:
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+{% if svc.hdfs | default(true) %}
+      hdfs_service: hdfs
+{% endif %}
+{% if svc.ranger | default(true) %}
+      ranger_service: ranger
+{% endif %}
 {% endif %}
 {% if svc.atlas | default(true) %}
   - name: atlas
@@ -193,7 +223,11 @@ services:
     type: NIFI
     display_name: NiFi
     config:
+      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+{% if svc.kafka | default(true) %}
+      kafka_service: kafka
+{% endif %}
 {% endif %}
 {% if svc.nifi_registry | default(false) %}
   - name: nifi_registry
