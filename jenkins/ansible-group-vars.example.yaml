@@ -18,4 +18,9 @@
 # psycopg2_binary_version: "2.9.9"
 # monitoring_stack_enabled: false  # prefer Jenkins MONITORING_STACK_ENABLED checkbox
 # deployment_portal_http_port: 81  # Caddy edge on ops; do not use legacy 8088 (Jenkins forces 81)
-# deployment_portal_expose_ssh_keys: false  # default true in group_vars; keep deployment_portal_basic_auth_enabled: true on /downloads/*
+# deployment_portal_basic_auth_enabled: true   # default — HTTP basic auth on /downloads/* only (PEM, operator-credentials.json)
+# deployment_portal_basic_auth_user: portal
+# deployment_portal_basic_auth_password: "SameAsPostgresOrOverride"  # default in group_vars: "{{ postgres_password }}"
+# deployment_portal_expose_ssh_keys: true   # default in group_vars — always export controller keys to /downloads/ssh/
+# deployment_portal_expose_ssh_keys: false  # disable SSH key downloads on the portal
+# deployment_portal_expose_ssh_keys: auto   # export only when deployment_portal_basic_auth_enabled: true (/downloads/*)
