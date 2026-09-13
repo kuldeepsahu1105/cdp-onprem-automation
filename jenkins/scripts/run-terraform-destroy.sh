@@ -10,7 +10,6 @@ cd "$REPO_ROOT"
 export UI_ASCII=1
 export UI_COLOR=0
 export FORCE_COLOR=0
-export ANSIBLE_FORCE_COLOR="${ANSIBLE_FORCE_COLOR:-1}"
 export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
 # shellcheck source=jenkins/scripts/aws-credential-check.sh
 source "$REPO_ROOT/jenkins/scripts/aws-credential-check.sh"

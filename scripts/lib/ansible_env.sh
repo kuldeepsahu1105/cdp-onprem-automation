@@ -447,11 +447,50 @@ ansible_install_collections_if_needed() {
   _ansible_ensure_pinned_cloudera_cluster "$req"
 }
 
-# Jenkins ansiColor + jenkins_log_pipe: stdout is piped (not a TTY) but the console renders ANSI.
-ci_ansi_console_enabled() {
-  [[ "${ANSIBLE_CI_CONSOLE:-${JENKINS_ANSI_CONSOLE:-}}" == "1" ]] && [[ "${TERM:-}" != "dumb" ]]
+# Jenkins / generic CI detection (Jenkins sets BUILD_NUMBER, JENKINS_URL, and usually CI=true).
+jenkins_ci_detected() {
+  [[ -n "${BUILD_NUMBER:-}" || -n "${JENKINS_URL:-}" || "${CI:-}" == "true" ]]
 }
 
+# Opt-in colored Jenkins console (requires AnsiColor plugin wrapping the stage). Default is plain logs.
+jenkins_ansi_console_opt_in() {
+  case "${JENKINS_ANSI_CONSOLE:-}${ANSIBLE_CI_CONSOLE:-}" in
+    *1*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+jenkins_plain_log_enabled() {
+  case "${JENKINS_PLAIN_LOG:-auto}" in
+    1|true|yes|on|ON) return 0 ;;
+    0|false|no|off|OFF) return 1 ;;
+    auto|*)
+      jenkins_ci_detected && ! jenkins_ansi_console_opt_in
+      ;;
+  esac
+}
+
+# Prepare stdout/stderr for Jenkins: plain text by default (no raw ESC in console). Artifact logs match console.
+jenkins_prepare_log_output() {
+  if ! jenkins_ci_detected; then
+    return 0
+  fi
+  if jenkins_plain_log_enabled; then
+    export JENKINS_PLAIN_LOG=1
+    export ANSIBLE_FORCE_COLOR=0
+    export PY_COLORS=0
+    export NO_COLOR=1
+    export ANSIBLE_NOCOLOR=1
+    export UI_COLOR=0
+    export FORCE_COLOR=0
+    export ANSIBLE_STDOUT_CALLBACK="${ANSIBLE_STDOUT_CALLBACK:-jenkins_plain}"
+    unset JENKINS_ANSI_CONSOLE ANSIBLE_CI_CONSOLE
+    return 0
+  fi
+  ci_ansi_prepare_jenkins_console
+}
+
+# Legacy name — callers should prefer jenkins_prepare_log_output.
 ci_ansi_prepare_jenkins_console() {
   [[ -n "${BUILD_NUMBER:-}${JENKINS_URL:-}" ]] || return 0
   case "${TERM:-}" in
@@ -461,12 +500,21 @@ ci_ansi_prepare_jenkins_console() {
   export ANSIBLE_CI_CONSOLE=1
 }
 
-# Ansible colors on an interactive TTY, or CI console with forced ANSI (piped log tee strips ANSI for artifacts).
+ci_ansi_console_enabled() {
+  jenkins_ansi_console_opt_in && [[ "${TERM:-}" != "dumb" ]]
+}
+
+# Ansible colors on an interactive TTY, or Jenkins with explicit ansiColor opt-in.
 ansible_ci_ansi_console() {
   ci_ansi_console_enabled
 }
 
 ansible_configure_output() {
+  if jenkins_plain_log_enabled; then
+    export ANSIBLE_FORCE_COLOR=0
+    export PY_COLORS=0
+    return 0
+  fi
   case "${ANSIBLE_NOCOLOR:-${NO_COLOR:-}}" in
     1|true|yes|TRUE|YES|on|ON)
       export ANSIBLE_FORCE_COLOR=0

@@ -47,9 +47,12 @@ ui_plain_emoji() {
   fi
 }
 
-# Colors only when stdout is a TTY. Jenkins stages pipe to tee (| tee log), so ANSI
-# would appear as literal [32m without a TTY even with ansiColor + FORCE_COLOR=1.
+# Colors only when stdout is a TTY. Jenkins uses jenkins_prepare_log_output (plain) unless
+# JENKINS_ANSI_CONSOLE=1 opt-in with the AnsiColor plugin.
 ui_color_enabled() {
+  if declare -F jenkins_plain_log_enabled >/dev/null 2>&1 && jenkins_plain_log_enabled; then
+    return 1
+  fi
   case "${UI_COLOR:-${FORCE_COLOR:-auto}}" in
     0|false|no|off|never)
       ui_ci_ansi_console && return 0
@@ -92,6 +95,9 @@ ui_ci_ansi_console() {
 # Phase/playbook log headers: ANSI in Jenkins console (jenkins_log_pipe + ansiColor) even when
 # UI_COLOR=0 keeps other wrapper labels plain ASCII (run-ansible.sh).
 ui_log_header_color_enabled() {
+  if declare -F jenkins_plain_log_enabled >/dev/null 2>&1 && jenkins_plain_log_enabled; then
+    return 1
+  fi
   case "${UI_COLOR:-${FORCE_COLOR:-auto}}" in
     0|false|no|off|never)
       ui_ci_ansi_console && return 0

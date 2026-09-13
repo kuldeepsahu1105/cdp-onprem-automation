@@ -24,10 +24,14 @@ jenkins_log_pipe() {
   unset JENKINS_SCRIPT_TTY
   : >"$log_file"
 
-  if [[ -n "${BUILD_NUMBER:-}${JENKINS_URL:-}" ]]; then
-    # Console: Jenkins ansiColor interprets ANSI on stdout (piped, not a TTY).
-    # Artifact log: strip CSI/OSC so access-urls.txt and email stay plain ASCII.
-    ci_ansi_prepare_jenkins_console
+  if jenkins_ci_detected; then
+    jenkins_prepare_log_output
+    if jenkins_plain_log_enabled; then
+      # Strip any stray ANSI from tools (Ansible, terraform, pip) so the console never shows [1;33m garbage.
+      "$@" 2>&1 | jenkins_strip_ansi_stream | tee -a "$log_file"
+      return "${PIPESTATUS[0]}"
+    fi
+    # Opt-in ansiColor: color on console; artifact log stays plain ASCII.
     case "${ANSIBLE_FORCE_COLOR:-auto}" in
       0|false|no|off) ;;
       *)

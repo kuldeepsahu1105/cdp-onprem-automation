@@ -77,7 +77,7 @@ EOF
 fi
 
 ensure_bash
-ci_ansi_prepare_jenkins_console
+jenkins_prepare_log_output
 ansible_configure_output
 
 DEPLOY_PHASE="${DEPLOY_PHASE:-1}"

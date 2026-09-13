@@ -285,11 +285,14 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     LC_ALL = 'C.UTF-8'
     TERM = 'xterm'
     UI_ASCII = '1'
-    // Wrapper UI stays plain ASCII; Ansible/phase headers color via jenkins_log_pipe (ANSI stripped in artifact logs).
+    // Plain console logs (no raw ANSI). Set JENKINS_ANSI_CONSOLE=1 to opt into AnsiColor + colored Ansible.
     FORCE_COLOR = '0'
     UI_COLOR = '0'
-    ANSIBLE_FORCE_COLOR = '1'
-    PY_COLORS = '1'
+    JENKINS_PLAIN_LOG = '1'
+    ANSIBLE_FORCE_COLOR = '0'
+    PY_COLORS = '0'
+    NO_COLOR = '1'
+    ANSIBLE_NOCOLOR = '1'
     REPO_ROOT = "${WORKSPACE}"
     LOG_DIR = "${WORKSPACE}/jenkins/artifacts"
     HOL_AUTO_EXEC_DIR = "/home/holautosa/HOL_AUTO_EXEC_DIR"

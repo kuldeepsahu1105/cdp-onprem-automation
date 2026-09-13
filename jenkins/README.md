@@ -11,16 +11,24 @@ Declarative pipeline with **checkbox stage selection**, **configurable validatio
 | [Email Extension](https://plugins.jenkins.io/email-ext/) | Success/failure notifications |
 | [AnsiColor](https://plugins.jenkins.io/ansi-color/) | Colored console (optional) |
 
-## Console colors (Ansible, phase headers, Terraform apply)
+## Console output (plain text by default)
 
-The pipeline uses `options { ansiColor('xterm') }` and `environment { TERM = 'xterm' }`. Stage wrappers (`run-ansible.sh`, `run-terraform.sh`) tee through `jenkins_log_pipe`, which sets `JENKINS_ANSI_CONSOLE=1` and `ANSIBLE_CI_CONSOLE=1`, upgrades `TERM` when the agent reports `dumb`, and strips ANSI only into artifact log files.
+Jenkins agents often show **raw ANSI** (`[1;33mPHASE:…`) when stdout is piped through `tee` without a working AnsiColor wrapper. The pipeline defaults to **plain logs**: no escape sequences on the console or in `jenkins/artifacts/*.log`.
+
+Stage wrappers (`run-ansible.sh`, `run-terraform.sh`) use `jenkins_log_pipe`, which calls `jenkins_prepare_log_output` when `BUILD_NUMBER`, `JENKINS_URL`, or `CI=true` is set. Plain mode runs output through an ANSI stripper and sets `ANSIBLE_STDOUT_CALLBACK=jenkins_plain`.
+
+Optional colored console (requires [AnsiColor](https://plugins.jenkins.io/ansi-color/) on the stage): set `JENKINS_ANSI_CONSOLE=1` and `JENKINS_PLAIN_LOG=0` in the Jenkinsfile `environment` block.
 
 | Variable | Typical Jenkins value | Role |
 |---|---|---|
-| `UI_COLOR` / `FORCE_COLOR` | `0` | Plain ASCII wrapper labels (`ui_kv`, banners); phase/playbook headers still color via `ui_log_c` when CI console flags are set |
-| `ANSIBLE_FORCE_COLOR` | `1` | Allow Ansible color when `ansible_configure_output` sees CI console or a TTY |
-| `JENKINS_ANSI_CONSOLE` / `ANSIBLE_CI_CONSOLE` | Set to `1` inside `jenkins_log_pipe` only | Force Ansible + highlighted phase headers while stdout is piped to `tee` |
-| `JENKINS_SCRIPT_TTY` | unset (do not set in Jenkinsfile) | Legacy opt-in for local/CI scripts without the log pipe |
+| `JENKINS_PLAIN_LOG` | `1` (or `auto`) | Plain console + artifact logs; `auto` = plain when Jenkins/CI detected unless ansi opt-in |
+| `UI_COLOR` / `FORCE_COLOR` | `0` | Plain wrapper labels (`ui_kv`, banners, `PHASE:` headers) |
+| `ANSIBLE_FORCE_COLOR` / `PY_COLORS` | `0` | Disable Ansible/Pygments ANSI |
+| `NO_COLOR` / `ANSIBLE_NOCOLOR` | `1` | Belt-and-suspenders for tools that honor standard no-color env vars |
+| `JENKINS_ANSI_CONSOLE` / `ANSIBLE_CI_CONSOLE` | unset (opt-in `1`) | Colored Ansible + phase headers when AnsiColor wraps the stage |
+| `JENKINS_SCRIPT_TTY` | unset | Legacy opt-in for local scripts without the log pipe |
+
+Jenkins also sets (automatically): `BUILD_NUMBER`, `BUILD_ID`, `BUILD_URL`, `JOB_NAME`, `WORKSPACE`, `JENKINS_URL`, `NODE_NAME`, `EXECUTOR_NUMBER`, `CI=true`, and `TERM` (pipeline sets `xterm`).
 
 Self-test: `jenkins/scripts/test-jenkins-ansi-pipe.sh`.
 

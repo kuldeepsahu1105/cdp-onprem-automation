@@ -62,7 +62,7 @@ Reference: cloudera-labs/openshift (cloudera.exe) Caddy + `cloudera.cluster` pla
 
 ## Jenkins UI
 
-- **Colors:** `ansiColor` + `JENKINS_ANSI_CONSOLE=1` for Ansible; strip ANSI only for **artifact** log files. `access-urls.txt` stays plain ASCII.
+- **Colors:** Jenkins defaults to `JENKINS_PLAIN_LOG=1` (no ANSI on console or artifact stage logs). Opt-in `JENKINS_ANSI_CONSOLE=1` only when AnsiColor wraps stages. `access-urls.txt` stays plain ASCII.
 - After **Jenkinsfile** edits: job param **`REFRESH_JENKINSFILE=YES`**. Stage help: text param **`PIPELINE_STAGES_REFERENCE`**.
 
 ## Validation gates (run before merge)
