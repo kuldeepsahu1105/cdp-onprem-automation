@@ -1,0 +1,44 @@
+---
+# Sets facts for ipa-server-install DNS forwarder flags (playbook 12).
+# dns_forwarders=no means no custom public forwarder list; on AWS with a known VPC
+# resolver, install uses --forwarder=<VPC> unless opted out (no-forwarders / ipa_server_install_no_forwarders).
+- name: Normalize dns_forwarders for IPA install
+  ansible.builtin.set_fact:
+    ipa_dns_forwarders_norm: "{{ dns_forwarders | default('no') | lower }}"
+
+- name: Resolve ipa-server-install DNS forwarder mode
+  ansible.builtin.set_fact:
+    ipa_install_dns_no_forwarders: >-
+      {{
+        ipa_server_install_no_forwarders | default(false) | bool
+        or ipa_dns_forwarders_norm in ['no-forwarders', 'no_forwarders']
+        or (
+          ipa_dns_forwarders_norm == 'no'
+          and (
+            effective_deployment_env | default('') != 'aws'
+            or effective_vpc_dns_resolver | default('') | length == 0
+            or not (ipa_server_install_use_vpc_dns_forwarder | default(true) | bool)
+          )
+        )
+        or (
+          ipa_dns_forwarders_norm in ['aws', 'vpc']
+          and (
+            effective_deployment_env | default('') != 'aws'
+            or effective_vpc_dns_resolver | default('') | length == 0
+          )
+        )
+      }}
+    ipa_install_dns_use_vpc_forwarder: >-
+      {{
+        ipa_dns_forwarders_norm not in ['no-forwarders', 'no_forwarders']
+        and not (ipa_server_install_no_forwarders | default(false) | bool)
+        and effective_deployment_env | default('') == 'aws'
+        and effective_vpc_dns_resolver | default('') | length > 0
+        and (
+          ipa_dns_forwarders_norm in ['aws', 'vpc']
+          or (
+            ipa_dns_forwarders_norm == 'no'
+            and (ipa_server_install_use_vpc_dns_forwarder | default(true) | bool)
+          )
+        )
+      }}
