@@ -357,6 +357,10 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `ec2_startstop_script_name_prefix` | `""` | Optional override for ipaserver script filename prefix; when empty uses sanitized `deployment_name_prefix` → `{prefix}_cldr_ec2_strt_stp.sh` under `ec2_startstop_script_dir` (`/root`) |
 | `ec2_startstop_script_path` | *(derived)* | Full path to deployed start/stop script (playbooks **36** / **37**); override to pin a custom location |
 | `ec2_startstop_script_basename` | *(derived)* | Filename only, e.g. `development_cldr_ec2_strt_stp.sh` — used in template header and docs |
+| `ec2_startstop_terraform_group_catalog` | `.tfvars.yaml` keys | Default Terraform `instance_groups` / EC2 tag `Group` values when inventory is empty at template time |
+| `ec2_startstop_ansible_to_terraform_group` | *(map)* | Ansible inventory group → EC2 tag `Group` (e.g. `base-masters` → `pvcbase_master`) |
+| `ec2_startstop_inventory_group_scan_order` | ordered list | Which Ansible groups to scan when building example argv (only non-empty groups are included) |
+| `deployment_portal_ec2_startstop` | *(derived at portal sync)* | Rendered from `ec2_startstop_portal_facts.j2` → `deployment_portal_context.ec2_startstop` (usage + example commands) |
 
 ### Lab default passwords (override before production)
 

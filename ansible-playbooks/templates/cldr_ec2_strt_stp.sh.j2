@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
+{% set _ec2r = ec2_startstop_rendered | default({}, true) %}
+{% set _ec2_usage = _ec2r.usage_generic | default(ec2_startstop_script_path ~ ' <start|stop|describe> <EnvironmentValue> <GroupValue1> [GroupValue2 ...]') %}
+{% set _ec2_env = _ec2r.environment_tag | default(ec2_startstop_default_environment | default('', true) | trim) %}
+{% set _ec2_start = _ec2r.example_start | default('') %}
 # {{ ec2_startstop_script_basename }} — Start, stop, or describe EC2 instances for this deployment.
 #
 # Usage:
-#   {{ ec2_startstop_script_path }} <start|stop|describe> <prefix> <hostgroup1> [hostgroup2 ...]
+#   {{ _ec2_usage }}
 #
-#   prefix     — EC2 tag:environment (Jenkins ENVIRONMENT / deployment_name_prefix, e.g. ptgtyv1)
+#   prefix     — EC2 tag:environment (Jenkins ENVIRONMENT / deployment_name_prefix, e.g. {{ _ec2_env or 'ptgtyv1' }})
 #   hostgroups — EC2 tag:Group values (Terraform instance_groups keys, e.g. cldr_mngr, pvcbase_worker)
+#
+# Example (this deployment):
+#   {{ _ec2_start }}
 #
 # Default prefix when omitted: {{ ec2_startstop_default_environment | default('') }}
 #
@@ -16,16 +23,22 @@ set -euo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
 DEFAULT_PREFIX="{{ ec2_startstop_default_environment | default('', true) | trim }}"
+EXAMPLE_PREFIX="{{ _ec2_env }}"
+EXAMPLE_GROUPS="{{ (_ec2r.terraform_groups | default([])) | join(' ') }}"
 AWS_REGION_FALLBACK="{{ aws_region | default('us-east-1') }}"
 
 {% raw %}
 usage() {
-  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
   echo ""
-  echo "Examples:"
-  echo "  $SCRIPT_NAME describe ptgtyv1 cldr_mngr pvcbase_worker"
-  echo "  $SCRIPT_NAME start ptgtyv1 pvcecs_worker"
-  echo "  $SCRIPT_NAME stop ptgtyv1 pvcbase_master pvcbase_worker"
+  echo "Examples (this deployment):"
+  if [[ -n "$EXAMPLE_PREFIX" && -n "$EXAMPLE_GROUPS" ]]; then
+    echo "  $SCRIPT_NAME describe $EXAMPLE_PREFIX $EXAMPLE_GROUPS"
+    echo "  $SCRIPT_NAME start $EXAMPLE_PREFIX $EXAMPLE_GROUPS"
+    echo "  $SCRIPT_NAME stop $EXAMPLE_PREFIX $EXAMPLE_GROUPS"
+  else
+    echo "  $SCRIPT_NAME describe <EnvironmentValue> <GroupValue1> ..."
+  fi
   exit "${1:-0}"
 }
 
