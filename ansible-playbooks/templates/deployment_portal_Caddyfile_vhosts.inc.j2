@@ -17,6 +17,15 @@ http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port 
 {# FreeIPA via Caddy: cloudera-labs/openshift pattern (HTTP upstream, Host + Referer). Default / → modern UI; legacy /ipa/ui uses Labs Referer. HTML host rewrites: ipa_httpd_caddy_proxy.conf.j2. Direct https://ipaserver needs IPA DNS (_ldap._tcp SRV or hosts), not required for Caddy vhost URLs. #}
 http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
   redir / /ipa/modern-ui/ permanent
+  {# JSON/XML-RPC: pass through without re-encoding; upstream may gzip — do not stack compressors. #}
+  @ipa_api path /ipa/json /ipa/json/* /ipa/session/* /ipa/xml*
+  handle @ipa_api {
+    reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
+      header_up Host {{ deployment_portal_ipa_fqdn }}
+      header_up Referer https://{{ deployment_portal_ipa_fqdn }}/ipa/ui
+      header_up Accept-Encoding identity
+    }
+  }
   @ipa_modern path /ipa/modern-ui /ipa/modern-ui/*
   handle @ipa_modern {
     reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {

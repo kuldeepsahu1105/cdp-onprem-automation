@@ -49,7 +49,8 @@
       {{ ipa_client_install_log_tail.stdout | default('(log missing or empty)') }}
       Common causes on scaled or new nodes: hostname/FQDN mismatch (re-run 02 and 03),
       stale /etc/hosts on peers, missing IPA PTR/A for this host (re-run 14_setup_dns_records.yml),
-      duplicate host entry in IPA, or clock skew (chronyd).
+      duplicate host entry in IPA, clock skew (chronyd), or corrupted gzip on https://{{ ipaserver }}/ipa/json
+      (check ipaserver zz-ipa-caddy-proxy.conf — mod_substitute must not cover /ipa/json; re-run PORTAL).
       Re-run enrollment for one host: ansible-playbook -i inventory.ini 16_setup_identity_client.yml
       --limit {{ inventory_hostname }} -e ansible_no_log=false with ANSIBLE_PRIVATE_KEY set.
       See ansible-playbooks/docs/RUNBOOK.md identity troubleshooting.
