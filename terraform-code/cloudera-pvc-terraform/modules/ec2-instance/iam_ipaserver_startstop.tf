@@ -68,7 +68,7 @@ resource "aws_iam_role_policy" "ipaserver_ec2_startstop" {
           StringEquals = {
             "ec2:ResourceTag/environment" = local.ipaserver_startstop_environment
           }
-          ForAnyValue:StringEquals = {
+          "ForAnyValue:StringEquals" = {
             "ec2:ResourceTag/Group" = local.ipaserver_startstop_group_keys
           }
         }
