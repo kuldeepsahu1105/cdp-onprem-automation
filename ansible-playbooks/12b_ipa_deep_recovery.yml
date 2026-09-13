@@ -41,12 +41,27 @@
       failed_when: false
       changed_when: false
 
+    - name: Derive ipactl not-configured from status (install gate)
+      ansible.builtin.set_fact:
+        ipa_ipactl_status_text: >-
+          {{
+            (ipa_server_status.stdout | default(''))
+            ~ (ipa_server_status.stderr | default(''))
+          }}
+        ipa_ipactl_not_configured: >-
+          {{
+            (ipa_server_status.rc | default(1) | int) == 4
+            or ipa_ipactl_status_text is search('IPA is not configured', ignorecase=True)
+          }}
+
     - name: IPA install gate — recovery only when install would run
       ansible.builtin.set_fact:
         ipa_server_should_run_install: >-
           {{
-            (ipa_server_status.rc | default(1) | int) != 0
-            or not (ipa_default_conf.stat.exists | default(false) | bool)
+            not (
+              (ipa_default_conf.stat.exists | default(false) | bool)
+              and not (ipa_ipactl_not_configured | bool)
+            )
           }}
 
     - name: Detect FreeIPA server install state (configured / partial / clean)

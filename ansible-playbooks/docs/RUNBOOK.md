@@ -224,6 +224,8 @@ For automated debris cleanup before install, run **`ansible-playbook -i inventor
 
 **IPA DNS forwarders:** Default **`dns_forwarders: no`** uses the **AWS VPC resolver** (`--forwarder=x.y.0.2` from the instance private IP) on EC2 when **`ipa_server_install_use_vpc_dns_forwarder: true`** (default). On bare metal, or when the VPC resolver cannot be computed, install falls back to **`--no-forwarders`**. Force **`--no-forwarders`**: set **`dns_forwarders: no-forwarders`** or **`ipa_server_install_use_vpc_dns_forwarder: false`**. Skipped installs (healthy **`ipactl`** + **`default.conf`**) get **`ipa dnsconfig-mod`** toward the VPC resolver when VPC mode applies.
 
+**Jenkins IDENTITY / playbook 12:** The **Assert AWS VPC DNS forwarder** task runs only when **`ipa_install_dns_use_vpc_forwarder`** is true (after **`resolve_ipa_install_dns_forwarders`**). If that assert is **skipped** on AWS, install is using **`--no-forwarders`** because the VPC resolver was empty or VPC mode was opted out — check the **Log IPA install DNS forwarder mode** debug line in the job log. **`ipa-server-install` failures** should print **`stderr`** and **`/var/log/ipaserver-install.log`** tail in the **Fail with ipa-server-install diagnostics** task (passwords are not logged; credentials are passed via environment variables).
+
 ### 3. Detect identity provider
 
 ```bash
