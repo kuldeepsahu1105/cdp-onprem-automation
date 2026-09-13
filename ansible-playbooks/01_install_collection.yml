@@ -16,6 +16,9 @@
         state: present
       when: ansible_os_family == "RedHat"
 
+    - name: Pin RHEL release before full package upgrade
+      ansible.builtin.import_tasks: common_tasks/pin_rhel_release_before_upgrade.yml
+
     - name: Update all packages (RHEL)
       ansible.builtin.package:
         name: "*"
