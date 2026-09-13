@@ -11,6 +11,10 @@
     path: /etc/ipa/default.conf
   register: ipa_client_config
 
+- name: Preflight hostname/DNS before ipa-client-install
+  ansible.builtin.import_tasks: preflight_ipa_client_install.yml
+  when: not ipa_client_config.stat.exists
+
 - name: Install and configure FreeIPA client
   ansible.builtin.command: >
     ipa-client-install --unattended --force-join --force
@@ -19,8 +23,40 @@
     --mkhomedir --enable-dns-updates --ntp-server=pool.ntp.org
   register: ipa_client_output
   changed_when: ipa_client_output.rc == 0 and not ipa_client_config.stat.exists
+  failed_when: false
   when: not ipa_client_config.stat.exists
   no_log: true
+
+- name: Capture tail of ipaclient-install.log when client install failed
+  ansible.builtin.shell: tail -n 50 /var/log/ipaclient-install.log 2>/dev/null || true
+  register: ipa_client_install_log_tail
+  changed_when: false
+  when:
+    - not ipa_client_config.stat.exists
+    - ipa_client_output is defined
+    - ipa_client_output.rc | default(0) != 0
+
+- name: Fail with ipa-client-install diagnostics
+  ansible.builtin.fail:
+    msg: >-
+      ipa-client-install failed on {{ inventory_hostname }} (rc={{ ipa_client_output.rc }}).
+      stderr (truncated, secrets redacted): {{
+        ipa_client_output.stderr | default('')
+        | replace(ipaadmin_password, '***')
+        | truncate(1500, True)
+      }}
+      Last 50 lines of /var/log/ipaclient-install.log:
+      {{ ipa_client_install_log_tail.stdout | default('(log missing or empty)') }}
+      Common causes on scaled or new nodes: hostname/FQDN mismatch (re-run 02 and 03),
+      stale /etc/hosts on peers, missing IPA PTR/A for this host (re-run 14_setup_dns_records.yml),
+      duplicate host entry in IPA, or clock skew (chronyd).
+      Re-run enrollment for one host: ansible-playbook -i inventory.ini 16_setup_identity_client.yml
+      --limit {{ inventory_hostname }} -e ansible_no_log=false with ANSIBLE_PRIVATE_KEY set.
+      See ansible-playbooks/docs/RUNBOOK.md identity troubleshooting.
+  when:
+    - not ipa_client_config.stat.exists
+    - ipa_client_output is defined
+    - ipa_client_output.rc | default(0) != 0
 
 - name: Print IPA client installation output
   ansible.builtin.debug:

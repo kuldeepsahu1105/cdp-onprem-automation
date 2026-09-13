@@ -496,7 +496,8 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/restart_postgresql.yml` | OS-aware PostgreSQL restart |
 | `common_tasks/disable_firewall.yml` | firewalld (RHEL) or ufw skip |
 | `common_tasks/join_ad_realm.yml` | AD `realm join` |
-| `common_tasks/join_freeipa_client.yml` | IPA client enrollment |
+| `common_tasks/join_freeipa_client.yml` | IPA client enrollment (preflight, `ipa-client-install`, fail diagnostics) |
+| `common_tasks/preflight_ipa_client_install.yml` | Hostname/DNS/`getent` checks before `ipa-client-install` on hosts without `/etc/ipa/default.conf` |
 | `common_tasks/ensure_ipa_kdc_services.yml` | `ipactl start` + krb5kdc health on ipaserver |
 | `common_tasks/detect_ipa_server_install_state.yml` | `default.conf`, partial debris, `ipactl` / `ipa-server-status` before `ipa-server-install` |
 | `common_tasks/recover_ipa_server_install.yml` | Deeper `ipa-server-install --uninstall` + path cleanup (playbook **`12b`**, not default **12**) |

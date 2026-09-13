@@ -1,0 +1,51 @@
+---
+# Checks before ipa-client-install (playbook 16 / join_freeipa_client.yml).
+
+- name: Preflight IPA client — read hostname -f for enrollment FQDN
+  ansible.builtin.command: hostname -f
+  register: ipa_client_preflight_hostname_f
+  changed_when: false
+
+- name: Preflight IPA client — assert hostname -f matches Ansible FQDN
+  ansible.builtin.assert:
+    that:
+      - (ipa_client_preflight_hostname_f.stdout | default('') | trim) == (ansible_fqdn | trim)
+    fail_msg: >-
+      hostname -f is "{{ ipa_client_preflight_hostname_f.stdout | default('') | trim }}" but
+      automation expects ansible_fqdn="{{ ansible_fqdn }}".
+      On new or scaled nodes re-run playbooks 02_set_hostname.yml and 03_create_etc_hosts.yml
+      (phase 1) before identity client enrollment.
+
+- name: Preflight IPA client — resolve enrollment FQDN via getent hosts
+  ansible.builtin.command: getent hosts {{ ansible_fqdn }}
+  register: ipa_client_preflight_getent_fqdn
+  changed_when: false
+  failed_when: false
+
+- name: Preflight IPA client — assert FQDN maps to this host primary IPv4
+  ansible.builtin.assert:
+    that:
+      - ipa_client_preflight_getent_fqdn.rc == 0
+      - ansible_default_ipv4.address in ipa_client_preflight_getent_fqdn.stdout
+    fail_msg: >-
+      {{ ansible_fqdn }} must resolve to {{ ansible_default_ipv4.address }} via /etc/hosts or DNS
+      before ipa-client-install. getent hosts: rc={{ ipa_client_preflight_getent_fqdn.rc }}
+      stdout={{ ipa_client_preflight_getent_fqdn.stdout | default('') | trim }}
+      stderr={{ ipa_client_preflight_getent_fqdn.stderr | default('') | trim }}
+      Re-run 03_create_etc_hosts.yml on all hosts and 14_setup_dns_records.yml when adding nodes.
+
+- name: Preflight IPA client — resolve IPA server FQDN via getent hosts
+  ansible.builtin.command: getent hosts {{ ipaserver }}
+  register: ipa_client_preflight_getent_ipaserver
+  changed_when: false
+  failed_when: false
+
+- name: Preflight IPA client — assert IPA server FQDN resolves
+  ansible.builtin.assert:
+    that:
+      - ipa_client_preflight_getent_ipaserver.rc == 0
+    fail_msg: >-
+      Cannot resolve IPA server {{ ipaserver }} on {{ inventory_hostname }}.
+      Check /etc/resolv.conf (playbook 13) and /etc/hosts (playbook 03).
+      getent hosts: rc={{ ipa_client_preflight_getent_ipaserver.rc }}
+      stdout={{ ipa_client_preflight_getent_ipaserver.stdout | default('') | trim }}
