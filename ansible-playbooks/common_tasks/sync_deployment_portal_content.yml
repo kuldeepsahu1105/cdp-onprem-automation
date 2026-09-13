@@ -69,6 +69,13 @@
   vars:
     _pgadmin_default_email: "{{ pgadmin_default_email | trim }}"
 
+- name: Render deployment portal Docker Compose environment file
+  ansible.builtin.template:
+    src: deployment_portal_docker-compose.env.j2
+    dest: "{{ deployment_portal_config_dir }}/.env"
+    mode: "0600"
+  register: portal_env_render
+
 - name: Render deployment portal Docker Compose file
   ansible.builtin.template:
     src: deployment_portal_docker-compose.yml.j2
@@ -135,7 +142,7 @@
         + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', 'caddy']
       }}
   when:
-    - portal_compose_render is changed
+    - portal_compose_render is changed or portal_env_render is changed
     - not (caddyfile_render is changed)
   register: caddy_recreate_compose
   failed_when: caddy_recreate_compose.rc != 0
@@ -147,7 +154,7 @@
         deployment_portal_compose_argv
         + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', 'pgadmin']
       }}
-  when: portal_compose_render is changed
+  when: portal_compose_render is changed or portal_env_render is changed
   register: pgadmin_recreate_compose
   failed_when: pgadmin_recreate_compose.rc != 0
 
@@ -161,6 +168,7 @@
   when:
     - pgadmin_servers_render is changed
     - not (portal_compose_render is changed)
+    - not (portal_env_render is changed)
   register: pgadmin_recreate_servers
   failed_when: pgadmin_recreate_servers.rc != 0
 
@@ -184,6 +192,13 @@
         mode: "0644"
       register: monitoring_alertmanager_render
 
+    - name: Render monitoring Docker Compose environment file
+      ansible.builtin.template:
+        src: monitoring_docker-compose.env.j2
+        dest: "{{ monitoring_config_dir }}/.env"
+        mode: "0600"
+      register: monitoring_env_render
+
     - name: Render monitoring Docker Compose file
       ansible.builtin.template:
         src: monitoring_docker-compose.yml.j2
@@ -200,6 +215,7 @@
           }}
       when: >-
         monitoring_compose_render is changed
+        or monitoring_env_render is changed
         or monitoring_prometheus_render is changed
         or monitoring_alertmanager_render is changed
       register: monitoring_stack_force_recreate
@@ -215,6 +231,7 @@
           }}
       when: >-
         not (monitoring_compose_render is changed)
+        and not (monitoring_env_render is changed)
         and not (monitoring_prometheus_render is changed)
         and not (monitoring_alertmanager_render is changed)
       register: monitoring_compose_up

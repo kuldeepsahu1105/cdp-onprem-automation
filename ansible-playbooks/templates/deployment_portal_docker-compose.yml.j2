@@ -1,37 +1,36 @@
-# Host publishes: Caddy edge (deployment_portal_http_port, default 81) and pgAdmin (deployment_portal_pgadmin_host_port, default 5050).
-# Grafana/Prometheus/Alertmanager are not published here — they join network deployment_portal via monitoring_docker-compose.yml.j2
-# and are reached at http://<ops>:<deployment_portal_http_port>/grafana|prometheus|alertmanager/ through Caddy.
-# After changing deployment_portal_http_port (legacy labs used 8088), re-run PORTAL or on the ops host:
-#   docker compose -f {{ deployment_portal_config_dir }}/docker-compose.yml up -d --force-recreate caddy
+# Host publishes: Caddy edge (DEPLOYMENT_PORTAL_HTTP_PORT, default 81) and pgAdmin (DEPLOYMENT_PORTAL_PGADMIN_HOST_PORT, default 5050).
+# Values live in {{ deployment_portal_config_dir }}/.env (Ansible template deployment_portal_docker-compose.env.j2).
+# Grafana/Prometheus/Alertmanager join network deployment_portal via monitoring compose under {{ monitoring_config_dir | default('/opt/cldr-monitoring') }}.
+# After changing ports, re-run PORTAL or: cd {{ deployment_portal_config_dir }} && docker compose up -d --force-recreate caddy
 services:
   caddy:
-    image: {{ deployment_portal_caddy_image }}
-    container_name: {{ deployment_portal_caddy_container }}
+    image: ${DEPLOYMENT_PORTAL_CADDY_IMAGE}
+    container_name: ${DEPLOYMENT_PORTAL_CADDY_CONTAINER}
     restart: unless-stopped
     depends_on:
       pgadmin:
         condition: service_healthy
     ports:
-      - "0.0.0.0:{{ deployment_portal_http_port }}:{{ deployment_portal_http_port }}/tcp"
+      - "0.0.0.0:${DEPLOYMENT_PORTAL_HTTP_PORT}:${DEPLOYMENT_PORTAL_HTTP_PORT}/tcp"
     volumes:
-      - {{ deployment_portal_config_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro,z
-      - {{ deployment_portal_www_dir }}:/srv:ro,z
+      - ${DEPLOYMENT_PORTAL_CONFIG_DIR}/Caddyfile:/etc/caddy/Caddyfile:ro,z
+      - ${DEPLOYMENT_PORTAL_WWW_DIR}:/srv:ro,z
     networks:
       - deployment_portal
 
   pgadmin:
-    image: {{ deployment_portal_pgadmin_image }}
-    container_name: {{ deployment_portal_pgadmin_container }}
+    image: ${DEPLOYMENT_PORTAL_PGADMIN_IMAGE}
+    container_name: ${DEPLOYMENT_PORTAL_PGADMIN_CONTAINER}
     restart: unless-stopped
     ports:
-      - "0.0.0.0:{{ deployment_portal_pgadmin_host_port }}:80/tcp"
+      - "0.0.0.0:${DEPLOYMENT_PORTAL_PGADMIN_HOST_PORT}:80/tcp"
     environment:
-      PGADMIN_DEFAULT_EMAIL: "{{ pgadmin_default_email | trim }}"
-      PGADMIN_DEFAULT_PASSWORD: "{{ pgadmin_default_password | trim }}"
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
       PGADMIN_CONFIG_SERVER_MODE: "False"
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     volumes:
-      - {{ deployment_portal_config_dir }}/pgadmin-servers.json:/pgadmin4/servers.json:ro,z
+      - ${DEPLOYMENT_PORTAL_CONFIG_DIR}/pgadmin-servers.json:/pgadmin4/servers.json:ro,z
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/misc/ping || exit 1"]
       interval: 15s
