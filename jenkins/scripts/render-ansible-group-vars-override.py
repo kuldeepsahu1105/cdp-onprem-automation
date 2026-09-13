@@ -22,6 +22,9 @@ ALLOWED_KEYS_FILE = REPO_ROOT / "jenkins" / "ansible-group-vars-allowed-keys.yam
 ENV_TO_VAR = [
     ("CM_REPO_USERNAME", "cm_repo_username"),
     ("CM_REPO_PASSWORD", "cm_repo_password"),
+    # Terraform/Jenkins tfvars (see scripts/lib/parse_tfvars_yaml.py owner→OWNER, environment→ENVIRONMENT)
+    ("OWNER", "deployment_owner"),
+    ("ENVIRONMENT", "deployment_name_prefix"),
 ]
 
 # Jenkins booleanParam values (applied after textarea; override all.yml and textarea).

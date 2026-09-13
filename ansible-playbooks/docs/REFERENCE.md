@@ -315,6 +315,11 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `caddy_vhost_public_base` | `pvc.cloudera-labs.com` | Base domain for `svc.<ip-dashed>.<base>` |
 | `caddy_vhost_dns_mode` | `embedded_ip` | `embedded_ip`, `classic_nipio`, or `flat` |
 | `autotls_enabled` | `false` | CM listens on `:7183` (direct; not via Caddy) |
+| `portal_automation_owner_display` | `Kuldeep Sahu` | **Portal** badge — automation/repo author (not the EC2 deployment owner) |
+| `deployment_owner` | `""` | **Deployment owner** badge — from `.tfvars.yaml` `owner`, Jenkins `OWNER`, Terraform `pvc_cluster_tags.owner` |
+| `deployment_name_prefix` | `""` | **Prefix** badge — from `.tfvars.yaml` `environment`, Jenkins `ENVIRONMENT`, Terraform workspace + `{environment}-*` resource names |
+
+**Portal index attribution:** `build_deployment_portal_facts.yml` sets `deployment_portal_context.deployment` from the vars above. Wrapper/Jenkins load tfvars (`scripts/lib/parse_tfvars_yaml.py` maps `owner`→`OWNER`, `environment`→`ENVIRONMENT`); `pvc_setup.sh` / `jenkins/scripts/render-ansible-group-vars-override.py` pass `OWNER`/`ENVIRONMENT` into Ansible as `deployment_owner` / `deployment_name_prefix` via `jenkins_override.yml`. Empty values omit the deployment badges.
 
 **SSH key files (controller vs portal host):** Portal sync reads private keys only from the **Ansible controller** (Jenkins agent workspace or laptop): `ansible-playbooks/sshkey.pem` (Terraform/Jenkins copy), optional `ansible-playbooks/id_rsa`, `ANSIBLE_PRIVATE_KEY`, `~/.ssh/id_rsa`, and optional `deployment_portal_ssh_pem_path` / `deployment_portal_ssh_autotls_key_path` / `cm_private_key_path`. The ops host receives **copies** under the portal www tree at `/downloads/ssh/` (for example `cluster-access.pem` and `cluster-autotls-id_rsa` when both keys differ). Never commit keys to git.
 

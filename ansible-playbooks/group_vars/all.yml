@@ -661,6 +661,12 @@ ecs_model_registry_ozone_service_id: o3service1
 # Caddy index, pgAdmin, Prometheus, Grafana, Alertmanager, cAdvisor on ops host.
 # auto = ipaserver when [ipaserver] exists, else cldr-mngr. pgAdmin targets CM PostgreSQL on cldr-mngr.
 # ---------------------------------------------------------------------------
+# Portal header attribution (index badges). Filled from tfvars/Jenkins when unset:
+#   owner → deployment_owner (Terraform pvc_cluster_tags.owner / Jenkins OWNER)
+#   environment → deployment_name_prefix (workspace + EC2 Name prefix / Jenkins ENVIRONMENT)
+portal_automation_owner_display: "Kuldeep Sahu"
+deployment_owner: ""
+deployment_name_prefix: ""
 # Portal + Caddy on ops host when deployment_portal_enabled + caddy_vhost_enabled (resolve_deployment_portal_caddy_enabled.yml). monitoring_stack_enabled gates monitoring install in sync only.
 deployment_portal_enabled: true
 # Set by Jenkins PORTAL / pvc_setup bootstrap — fail instead of silent skip when Caddy gate is off.

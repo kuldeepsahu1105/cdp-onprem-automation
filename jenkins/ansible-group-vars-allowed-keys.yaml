@@ -68,6 +68,9 @@ allowed_keys:
   - deployment_portal_jenkins_url
   - deployment_portal_jenkins_user
   - deployment_portal_jenkins_password
+  - portal_automation_owner_display
+  - deployment_owner
+  - deployment_name_prefix
   - deployment_environment
   - monitoring_stack_enabled
   - caddy_vhost_enabled

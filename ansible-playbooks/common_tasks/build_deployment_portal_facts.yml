@@ -317,6 +317,10 @@
   ansible.builtin.set_fact:
     deployment_portal_context:
       generated_at: "{{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ')) }}"
+      deployment:
+        owner: "{{ deployment_owner | default('', true) | trim }}"
+        name_prefix: "{{ deployment_name_prefix | default('', true) | trim }}"
+        portal_owner_display: "{{ portal_automation_owner_display | default('Kuldeep Sahu', true) | trim }}"
       cluster_domain: "{{ cluster_domain }}"
       cluster_realm: "{{ cluster_realm }}"
       identity_provider: "{{ identity_provider_effective }}"

@@ -142,6 +142,16 @@
       border: 1px solid rgba(91, 159, 212, 0.35);
       color: #b8d4f0;
     }
+    .label-badge-deployment {
+      background: rgba(46, 160, 120, 0.12);
+      border: 1px solid rgba(46, 160, 120, 0.35);
+      color: #a8e6c8;
+    }
+    .label-badge-prefix {
+      background: rgba(180, 150, 90, 0.12);
+      border: 1px solid rgba(180, 150, 90, 0.4);
+      color: #e8d4a8;
+    }
     .label-badge-beta {
       background: rgba(249, 103, 2, 0.15);
       border: 1px solid rgba(249, 103, 2, 0.45);
@@ -503,7 +513,13 @@
           <div class="brand-tag">Cloudera Data Platform</div>
           <h1>Deployment portal</h1>
           <div class="brand-subtitle" aria-label="Portal metadata">
-            <span class="label-badge label-badge-owner"><span class="label-badge-key">Owner</span> Kuldeep Sahu</span>
+            <span class="label-badge label-badge-owner"><span class="label-badge-key">Portal</span> {{ ctx.deployment.portal_owner_display | default('Kuldeep Sahu') }}</span>
+            {% if ctx.deployment.owner | default('') | length > 0 %}
+            <span class="label-badge label-badge-deployment"><span class="label-badge-key">Deployment owner</span> {{ ctx.deployment.owner }}</span>
+            {% endif %}
+            {% if ctx.deployment.name_prefix | default('') | length > 0 %}
+            <span class="label-badge label-badge-prefix" title="Terraform/Jenkins environment — resource name prefix"><span class="label-badge-key">Prefix</span> {{ ctx.deployment.name_prefix }}</span>
+            {% endif %}
             <span class="label-badge label-badge-beta"><span class="label-badge-key">Automation</span> beta version</span>
           </div>
         </div>
