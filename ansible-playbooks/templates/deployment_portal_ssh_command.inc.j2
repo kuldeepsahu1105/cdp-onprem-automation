@@ -1,9 +1,14 @@
-{# Build ssh -i <key> <user>@<host> using inventory FQDN, ansible_host, or inventory name. #}
+{# Build ssh -i <key> <user>@<public-ip> — cluster hostnames/FQDNs are not reachable off-VPC. #}
+{% from 'deployment_portal_resolve_public_ip.inc.j2' import resolve_deployment_portal_public_ip %}
 {% macro portal_ssh_connect_target(hv, inv_name, cluster_domain) -%}
-{%- set _hn = hv.cldr_hostname | default(inv_name) | trim -%}
-{%- set _fqdn = (_hn ~ '.' ~ cluster_domain) if (_hn | length > 0) else '' -%}
+{%- set _priv = hv.private_ip | default(hv.ansible_host | default('')) | trim -%}
 {%- set _ah = hv.ansible_host | default('') | trim -%}
-{{- _fqdn if (_fqdn | length > 0) else (_ah if (_ah | length > 0) else inv_name) -}}
+{%- set _anchor = '' -%}
+{%- if deployment_portal_host_group_effective is defined and groups is defined and (groups.get(deployment_portal_host_group_effective, []) | length > 0) -%}
+{%- set _anchor = groups[deployment_portal_host_group_effective][0] -%}
+{%- endif -%}
+{%- set _public = resolve_deployment_portal_public_ip(hv, _priv, _ah, inv_name, _anchor) -%}
+{{- _public if (_public | length > 0) else (_ah if (_ah | length > 0) else inv_name) -}}
 {%- endmacro %}
 
 {% macro portal_ssh_command(user, key_basename, hv, inv_name, cluster_domain) -%}

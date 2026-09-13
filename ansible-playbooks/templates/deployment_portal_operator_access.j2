@@ -9,13 +9,11 @@
 {% set _ssh_user = deployment_ssh_user | default(ansible_user | default('ec2-user')) %}
 {% set _ssh_key_basename = deployment_portal_ssh_download_basename | default(_ssh_exports[0].basename | default('cluster-access.pem') if (_ssh_exports | length > 0) else 'cluster-access.pem') %}
 {% set _ssh_host = '' %}
-{% if deployment_portal_has_ipa | default(false) | bool and (deployment_portal_ipa_fqdn | default('') | trim | length > 0) %}
-{% set _ssh_host = deployment_portal_ipa_fqdn | default('') | trim %}
-{% elif deployment_portal_has_ipa | default(false) | bool and (ipaserver_inventory_host | default('') | length > 0) %}
+{% if deployment_portal_has_ipa | default(false) | bool and (ipaserver_inventory_host | default('') | length > 0) %}
 {% set _ipa_hv = hostvars[ipaserver_inventory_host] %}
 {% set _ssh_host = portal_ssh_connect_target(_ipa_hv, ipaserver_inventory_host, cluster_domain) %}
-{% elif deployment_portal_anchor_fqdn | default('') | trim | length > 0 %}
-{% set _ssh_host = deployment_portal_anchor_fqdn | default('') | trim %}
+{% elif deployment_portal_ops_public_ip | default('') | trim | length > 0 %}
+{% set _ssh_host = deployment_portal_ops_public_ip | default('') | trim %}
 {% elif ('cldr-mngr' in groups) and (groups['cldr-mngr'] | default([]) | length > 0) %}
 {% set _cm_inv = groups['cldr-mngr'][0] %}
 {% set _ssh_host = portal_ssh_connect_target(hostvars[_cm_inv], _cm_inv, cluster_domain) %}
@@ -23,7 +21,7 @@
 {% set _ssh_examples = [] %}
 {% for row in deployment_portal_inventory_hosts | default([]) %}
 {% if row.ssh_command | default('') | length > 0 %}
-{% set _ssh_examples = _ssh_examples + [{'label': row.hostname | default(row.inventory_name), 'host': row.fqdn | default(row.inventory_name), 'command': row.ssh_command}] %}
+{% set _ssh_examples = _ssh_examples + [{'label': row.hostname | default(row.inventory_name), 'host': row.public_ip | default(row.ansible_host | default(row.inventory_name)), 'command': row.ssh_command}] %}
 {% endif %}
 {% endfor %}
 {% set _mon_on = (
