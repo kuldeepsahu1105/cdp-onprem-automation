@@ -971,7 +971,7 @@
         {% set ec2ss = ctx.ec2_startstop | default({}) %}
         {% if ec2ss.script_path | default('') | length > 0 %}
         <h2 class="section-title" style="margin-top:1rem">EC2 start / stop / describe (ipaserver)</h2>
-        <p class="sub">Run on the FreeIPA / ops host via the instance IAM role (Terraform <code>ipaserver_ec2_startstop_iam_enabled</code>). Filters: EC2 tag <code>environment</code> = Jenkins <code>ENVIRONMENT</code> / <code>deployment_name_prefix</code>; tag <code>Group</code> = Terraform <code>instance_groups</code> keys below (not Ansible inventory group names).</p>
+        <p class="sub">Run on the FreeIPA / ops host via the instance IAM role (Terraform <code>ipaserver_ec2_startstop_iam_enabled</code>; re-apply TERRAFORM after IAM changes). Filters: EC2 tag <code>environment</code> = Jenkins <code>ENVIRONMENT</code> / <code>deployment_name_prefix</code> (your workspace, e.g. <code>ptgtyv1</code>); tag <code>Group</code> = Terraform <code>instance_groups</code> keys below (not Ansible inventory names). <strong>Never start/stop <code>ipa_server</code></strong> — examples exclude the FreeIPA host.</p>
         <p class="sub"><strong>Syntax</strong></p>
         <div class="ssh-command-box"><code>{{ ec2ss.usage_generic | default('') }}</code></div>
         <p class="sub"><strong>Example for this stack</strong> (Group tags present in inventory: {% if ec2ss.terraform_groups | default([]) | length > 0 %}<code>{{ ec2ss.terraform_groups | join('</code>, <code>') }}</code>{% else %}<span class="badge">none detected — see catalog in group_vars</span>{% endif %})</p>

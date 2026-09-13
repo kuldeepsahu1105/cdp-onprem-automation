@@ -1,16 +1,18 @@
 {# YAML dict for deployment_portal_context.ec2_startstop and ec2_startstop_rendered (playbook 36). #}
+{% set _ec2ss_forbidden = ec2_startstop_excluded_terraform_groups | default(['ipa_server']) %}
 {% set _ec2ss_scan = ec2_startstop_inventory_group_scan_order | default([]) %}
 {% set _ec2ss_map = ec2_startstop_ansible_to_terraform_group | default({}) %}
 {% set _ec2ss_ns = namespace(out=[]) %}
 {% for _ec2ss_ag in _ec2ss_scan %}
 {% if (groups.get(_ec2ss_ag, []) | length > 0) and (_ec2ss_map.get(_ec2ss_ag, '') | default('', true) | trim | length > 0) %}
 {% set _ec2ss_tg = _ec2ss_map[_ec2ss_ag] | trim %}
-{% if _ec2ss_tg not in _ec2ss_ns.out %}
+{% if (_ec2ss_tg not in _ec2ss_forbidden) and (_ec2ss_tg not in _ec2ss_ns.out) %}
 {% set _ = _ec2ss_ns.out.append(_ec2ss_tg) %}
 {% endif %}
 {% endif %}
 {% endfor %}
-{% set _ec2ss_effective = _ec2ss_ns.out if (_ec2ss_ns.out | length > 0) else (ec2_startstop_terraform_group_catalog | default([])) %}
+{% set _ec2ss_catalog = (ec2_startstop_terraform_group_catalog | default([])) | difference(_ec2ss_forbidden) %}
+{% set _ec2ss_effective = _ec2ss_ns.out if (_ec2ss_ns.out | length > 0) else _ec2ss_catalog %}
 {% set _ec2ss_env = (
   ec2_startstop_default_environment
   | default(deployment_name_prefix | default('', true) | trim, true)

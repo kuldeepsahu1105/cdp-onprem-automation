@@ -101,6 +101,16 @@ if [[ "$OPERATION" != "describe" && ${#HOST_GROUPS[@]} -eq 0 ]]; then
   usage 1
 fi
 
+if [[ "$OPERATION" != "describe" ]]; then
+  for _g in "${HOST_GROUPS[@]}"; do
+    if [[ "$_g" == "ipa_server" ]]; then
+      echo "ERROR: start/stop must not target EC2 tag Group=ipa_server (FreeIPA/controller host)." >&2
+      echo "Use worker/manager groups only (e.g. pvcbase_worker, pvcecs_worker). describe may include ipa_server if needed." >&2
+      exit 1
+    fi
+  done
+fi
+
 build_filters() {
   local -a filters=(
     "Name=tag:environment,Values=${PREFIX}"

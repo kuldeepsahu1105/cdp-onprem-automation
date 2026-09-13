@@ -737,9 +737,11 @@ ec2_startstop_script_basename: >-
   }}
 ec2_startstop_script_path: "{{ ec2_startstop_script_dir }}/{{ ec2_startstop_script_basename }}"
 # Terraform instance_groups keys → EC2 tag:Group (see README, .tfvars.yaml, generate_inventory.sh). Used for script/Jenkins/portal examples.
+# Never start/stop these Group tags (FreeIPA/controller); describe may still list them when explicitly requested.
+ec2_startstop_excluded_terraform_groups:
+  - ipa_server
 ec2_startstop_terraform_group_catalog:
   - cldr_mngr
-  - ipa_server
   - pvcbase_master
   - pvcbase_worker
   - pvcecs_master
@@ -759,7 +761,6 @@ ec2_startstop_inventory_group_scan_order:
   - base-workers
   - ecs-masters
   - ecs-workers
-  - ipaserver
 # Portal + Caddy on ops host when deployment_portal_enabled + caddy_vhost_enabled (resolve_deployment_portal_caddy_enabled.yml). monitoring_stack_enabled gates monitoring install in sync only.
 deployment_portal_enabled: true
 # Set by Jenkins PORTAL / pvc_setup bootstrap — fail instead of silent skip when Caddy gate is off.
