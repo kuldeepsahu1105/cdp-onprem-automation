@@ -105,10 +105,22 @@ build_filters() {
 mapfile -t FILTERS < <(build_filters)
 
 describe_instances() {
+  local -a ids=()
+  local id
+  while read -r id; do
+    [[ -z "$id" ]] && continue
+    ids+=("$id")
+  done < <(collect_instance_ids | tr '\t' '\n')
+
+  if ((${#ids[@]} == 0)); then
+    echo "No instances found for environment='${ENV_VALUE}' groups='${GROUPS[*]:-all}'."
+    return 0
+  fi
+
   aws ec2 describe-instances \
     --region "$AWS_REGION" \
     --filters "${FILTERS[@]}" \
-    --query 'Reservations[].Instances[].{Id:InstanceId,State:State.Name,Name:Tags[?Key==`Name`].Value|[0],Group:Tags[?Key==`Group`].Value|[0],PrivateIp:PrivateIpAddress,PublicIp:PublicIpAddress}' \
+    --query 'Reservations[].Instances[].{InstanceId:InstanceId,Name:Tags[?Key==`Name`].Value|[0],Group:Tags[?Key==`Group`].Value|[0],State:State.Name,PrivateIp:PrivateIpAddress,PublicIp:PublicIpAddress}' \
     --output table
 }
 
