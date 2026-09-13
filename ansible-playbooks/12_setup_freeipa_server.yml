@@ -54,6 +54,13 @@
       failed_when: false
       changed_when: false
 
+    - name: Check IPA CLI version
+      ansible.builtin.command: ipa --version
+      register: ipa_cli_version
+      ignore_errors: true
+      failed_when: false
+      changed_when: false
+
     - name: Check ipactl status
       ansible.builtin.command: ipactl status
       register: ipa_server_status
@@ -72,6 +79,12 @@
             ipa_server_install_pkg_version.stdout | default('')
             | trim
             or ipa_server_install_pkg_version.stderr | default('') | trim
+          }}
+        ipa_cli_version_text: >-
+          {{
+            ipa_cli_version.stdout | default('')
+            | trim
+            or ipa_cli_version.stderr | default('') | trim
           }}
         ipa_ipactl_status_text: >-
           {{
@@ -143,6 +156,8 @@
           ({{ ipa_server_install_gate_reason | trim }}).
           ipa-server-install --version rc={{ ipa_server_install_pkg_version.rc | default('n/a') }}
           "{{ ipa_server_install_version_text | default('') }}".
+          ipa --version rc={{ ipa_cli_version.rc | default('n/a') }}
+          "{{ ipa_cli_version_text | default('') }}".
           default.conf present={{ ipa_server_default_conf_present | bool }},
           ipactl rc={{ ipa_server_status.rc | default('n/a') }},
           configured_healthy={{ ipa_server_configured_healthy | bool }}.
