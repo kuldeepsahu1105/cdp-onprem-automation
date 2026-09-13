@@ -28,6 +28,13 @@
       vars:
         ec2_startstop_awscli_package: "{{ 'awscli' if ansible_os_family == 'RedHat' else 'awscli' }}"
 
+    - name: Render EC2 start/stop example lines for this inventory
+      ansible.builtin.set_fact:
+        ec2_startstop_rendered: >-
+          {{
+            lookup('template', 'ec2_startstop_portal_facts.j2') | from_yaml | default({}, true)
+          }}
+
     - name: Deploy EC2 start/stop script on ipaserver
       ansible.builtin.template:
         src: templates/cldr_ec2_strt_stp.sh.j2
@@ -46,3 +53,9 @@
     - name: Show script path
       ansible.builtin.debug:
         msg: "EC2 start/stop script installed at {{ ec2_startstop_script_path }}"
+
+    - name: Show example EC2 start/stop commands for this deployment
+      ansible.builtin.debug:
+        msg:
+          - "Generic: {{ ec2_startstop_rendered.usage_generic | default('') }}"
+          - "Example: {{ ec2_startstop_rendered.example_start | default('') }}"

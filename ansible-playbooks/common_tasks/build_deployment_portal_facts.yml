@@ -33,6 +33,15 @@
         lookup('template', 'deployment_portal_inventory_hosts.j2') | from_yaml | default([], true)
       }}
 
+- name: Render EC2 start/stop helper facts for portal and docs
+  ansible.builtin.set_fact:
+    deployment_portal_ec2_startstop: >-
+      {{
+        lookup('template', 'ec2_startstop_portal_facts.j2') | from_yaml | default({}, true)
+      }}
+  vars:
+    ec2_startstop_default_environment: "{{ deployment_name_prefix | default('', true) | trim }}"
+
 - name: Render planned/configured role map for portal index
   ansible.builtin.set_fact:
     deployment_portal_planned_roles: >-
@@ -656,6 +665,7 @@
       endpoints: "{{ deployment_portal_endpoints | default([]) }}"
       extra_links: "{{ deployment_portal_extra_links }}"
       operator_access: "{{ deployment_portal_operator_access | default({}) }}"
+      ec2_startstop: "{{ deployment_portal_ec2_startstop | default({}) }}"
 
 - name: Initialize portal live stats (inventory only)
   ansible.builtin.import_tasks: collect_deployment_portal_live_stats.yml
