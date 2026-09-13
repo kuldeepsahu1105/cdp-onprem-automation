@@ -3,12 +3,37 @@
 
 - name: Resolve Terraform EC2 keypair name for portal SSH file naming
   ansible.builtin.set_fact:
+    _portal_kp_from_env: "{{ lookup('env', 'KEYPAIR_NAME') | default('', true) | trim }}"
+    _portal_kp_from_group: "{{ terraform_ec2_keypair_name | default('', true) | trim }}"
+    _portal_kp_prefix: "{{ deployment_name_prefix | default('', true) | trim }}"
+
+- name: Derive EC2 keypair name from deployment prefix when unset
+  ansible.builtin.set_fact:
+    _portal_kp_from_prefix: >-
+      {{
+        (
+          (_portal_kp_prefix | default('', true) | trim)
+          ~ '-'
+          ~ (terraform_ec2_keypair_name_suffix | default('pvc-new-keypair', true) | trim)
+        )
+        if (
+          (_portal_kp_prefix | default('', true) | trim | length > 0)
+          and ((_portal_kp_prefix | default('', true) | trim | lower) != 'development')
+        )
+        else ''
+      }}
+
+- name: Set portal Terraform keypair name for SSH download/commands
+  ansible.builtin.set_fact:
     deployment_portal_terraform_keypair_name: >-
       {{
-        lookup('env', 'KEYPAIR_NAME')
-        | default(terraform_ec2_keypair_name | default('', true), true)
-        | default('', true)
-        | trim
+        _portal_kp_from_env
+        if (_portal_kp_from_env | default('', true) | trim | length > 0)
+        else (
+          _portal_kp_from_group
+          if (_portal_kp_from_group | default('', true) | trim | length > 0)
+          else (_portal_kp_from_prefix | default('', true) | trim)
+        )
       }}
 
 - name: Resolve portal EC2 cluster SSH private key (PEM)
