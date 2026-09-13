@@ -790,6 +790,68 @@
         {% if oa.basic_auth_enabled | default(false) | bool %}
         <p class="sub">Downloads under <code>{{ oa.downloads_path_prefix | default('/downloads') }}/</code> require HTTP basic auth user <code>{{ oa.auth_username | default('portal') }}</code> (password from <code>deployment_portal_basic_auth_password</code>).</p>
         {% endif %}
+        {% if deployment_portal_expose_credentials | default(true) | bool %}
+        <details class="panel cred-defaults-summary" style="margin:0.5rem 0 1rem">
+          <summary><span class="summary-main"><strong>Default lab credentials</strong> — quick reference (same vars as tables below)</span>{{ panel_chevron | safe }}</summary>
+          <div class="panel-body">
+            <p class="sub">Rendered from Ansible <code>group_vars</code> at portal sync (not in git). Override in <code>group_vars/all.yml</code> or Jenkins <code>ANSIBLE_GROUP_VARS_YAML</code>, then re-run <code>35_refresh_deployment_portal.yml</code>. Full variable list: repo <code>ansible-playbooks/docs/REFERENCE.md</code> (Lab default passwords).</p>
+            <div class="table-scroll">
+              <table class="portal-table cred-table">
+                <thead>
+                  <tr>
+                    <th>Use</th>
+                    <th>Username</th>
+                    <th>Password / secret</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% if oa.basic_auth_enabled | default(false) | bool %}
+                  <tr>
+                    <td>Portal <code>/downloads/*</code> HTTP auth</td>
+                    <td><code>{{ oa.auth_username | default('portal') }}</code></td>
+                    <td><code class="cred-secret">{{ deployment_portal_basic_auth_password | default(postgres_password) }}</code></td>
+                  </tr>
+                  {% endif %}
+                  <tr>
+                    <td>Cloudera Manager</td>
+                    <td><code>{{ cm_admin_user }}</code></td>
+                    <td><code class="cred-secret">{{ cm_admin_pass }}</code></td>
+                  </tr>
+                  <tr>
+                    <td>PostgreSQL (CM)</td>
+                    <td><code>{{ postgres_user | default('postgres') }}</code></td>
+                    <td><code class="cred-secret">{{ postgres_password }}</code></td>
+                  </tr>
+                  <tr>
+                    <td>pgAdmin</td>
+                    <td><code>{{ pgadmin_default_email }}</code></td>
+                    <td><code class="cred-secret">{{ pgadmin_default_password }}</code></td>
+                  </tr>
+                  {% if deployment_portal_has_ipa | default(false) | bool %}
+                  <tr>
+                    <td>FreeIPA admin</td>
+                    <td><code>{{ ipaadmin_principal }}</code></td>
+                    <td><code class="cred-secret">{{ ipaadmin_password }}</code></td>
+                  </tr>
+                  {% endif %}
+                  {% if mon_on %}
+                  <tr>
+                    <td>Grafana</td>
+                    <td><code>{{ monitoring_grafana_admin_user }}</code></td>
+                    <td><code class="cred-secret">{{ monitoring_grafana_admin_password }}</code></td>
+                  </tr>
+                  {% endif %}
+                  <tr>
+                    <td>EC2 SSH</td>
+                    <td><code>{{ oa.ssh_user | default('ec2-user') }}</code></td>
+                    <td><span class="badge">PEM under {{ oa.downloads_path_prefix | default('/downloads') }}/ssh/</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+        {% endif %}
         <p class="sub">SSH user for instances: <code>{{ oa.ssh_user | default('ec2-user') }}</code>
           — <a href="{{ oa.downloads_path_prefix | default('/downloads') }}/operator-credentials.json">operator-credentials.json</a> (machine-readable bundle; same auth as other downloads when basic auth is enabled)
         </p>
@@ -1192,7 +1254,7 @@
     <div class="help-dialog-inner">
       <p class="sub"><strong>Quick open</strong> — tiles link to Cloudera Manager, pgAdmin, monitoring, FreeIPA (modern and legacy via Caddy when configured), ECS, and this portal.</p>
       <p class="sub"><strong>Health snapshot</strong> — Cloudera Manager service health from the last portal refresh (<code>35_refresh_deployment_portal.yml</code>); Prometheus target count may poll in-browser when path routes are enabled.</p>
-      <p class="sub"><strong>Operator access</strong> — lab credentials and PEM downloads rendered at sync from Ansible group_vars (not stored in git). Treat as sensitive; restrict network access.</p>
+      <p class="sub"><strong>Operator access</strong> — lab credentials and PEM downloads rendered at sync from Ansible group_vars (not stored in git). Expand <strong>Default lab credentials</strong> for a short summary; full per-service URLs are in the panel tables and <code>operator-credentials.json</code>. Treat as sensitive; restrict network access.</p>
       <p class="sub"><strong>Endpoints &amp; network access</strong> — consolidated URLs with inventory hostnames; private-lab vs public/VPC tiers match your access profile.</p>
       <p class="sub"><strong>Host inventory &amp; planned roles</strong> — Ansible groups, addresses, and inferred CDP/monitoring placement.</p>
       <p class="sub"><strong>Downloads security</strong> — when <code>deployment_portal_basic_auth_enabled</code> is true, files under <code>/downloads</code> (including SSH keys) require HTTP basic auth. Prefer auth on before exposing PEMs.</p>
