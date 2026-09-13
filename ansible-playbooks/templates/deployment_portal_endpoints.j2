@@ -46,16 +46,19 @@
 {% set _grafana_vhost = caddy_vhost_urls_external.grafana.url | default('') | trim %}
 {% set _prom_vhost = caddy_vhost_urls_external.prometheus.url | default('') | trim %}
 {% set _am_vhost = caddy_vhost_urls_external.alertmanager.url | default('') | trim %}
+{% set _cadv_vhost = caddy_vhost_urls_external.cadvisor.url | default('') | trim %}
 {% set _grafana_path = ('http://' ~ deployment_portal_ops_public_ip ~ ':' ~ (deployment_portal_http_port | string) ~ '/grafana/') if (deployment_portal_access_profile_effective == 'cloud') else ('http://' ~ deployment_portal_ops_client_host ~ ':' ~ (deployment_portal_http_port | string) ~ '/grafana/') %}
 {% set _prom_path = ('http://' ~ deployment_portal_ops_public_ip ~ ':' ~ (deployment_portal_http_port | string) ~ '/prometheus/') if (deployment_portal_access_profile_effective == 'cloud') else ('http://' ~ deployment_portal_ops_client_host ~ ':' ~ (deployment_portal_http_port | string) ~ '/prometheus/') %}
 {% set _am_path = ('http://' ~ deployment_portal_ops_public_ip ~ ':' ~ (deployment_portal_http_port | string) ~ '/alertmanager/') if (deployment_portal_access_profile_effective == 'cloud') else ('http://' ~ deployment_portal_ops_client_host ~ ':' ~ (deployment_portal_http_port | string) ~ '/alertmanager/') %}
-{% set _cadvisor = deployment_portal_access_urls.primary.cadvisor if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external.cadvisor %}
+{% set _cadv_path = ('http://' ~ deployment_portal_ops_public_ip ~ ':' ~ (deployment_portal_http_port | string) ~ '/cadvisor/') if (deployment_portal_access_profile_effective == 'cloud') else ('http://' ~ deployment_portal_ops_client_host ~ ':' ~ (deployment_portal_http_port | string) ~ '/cadvisor/') %}
+{% set _cadvisor_direct = ('http://' ~ deployment_portal_ops_private_ip ~ ':' ~ (monitoring_cadvisor_host_port | string) ~ '/') if (deployment_portal_access_profile_effective == 'private') else ('http://' ~ deployment_portal_ops_public_ip ~ ':' ~ (monitoring_cadvisor_host_port | string) ~ '/') %}
 {% set _grafana_direct = deployment_portal_access_urls.primary.grafana if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external.grafana %}
 {% set _prom_direct = deployment_portal_access_urls.primary.prometheus if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external.prometheus %}
 {% set _am_direct = deployment_portal_access_urls.primary.alertmanager if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external.alertmanager %}
 {% set _grafana_pick = _grafana_vhost if (_grafana_vhost | length > 0) else _grafana_direct %}
 {% set _prom_pick = _prom_vhost if (_prom_vhost | length > 0) else _prom_direct %}
 {% set _am_pick = _am_vhost if (_am_vhost | length > 0) else _am_direct %}
+{% set _cadv_pick = _cadv_vhost if (_cadv_vhost | length > 0) else (_cadv_path if (deployment_portal_monitoring_routes_enabled | default(false) | bool) else _cadvisor_direct) %}
 - name: "Grafana"
   url: "{{ _grafana_pick }}"
   hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
@@ -69,9 +72,9 @@
   hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
   note: "{% if _am_vhost | length > 0 %}Caddy vhost {{ caddy_vhost_urls_external.alertmanager.hostname | default('') }}; also host :{{ monitoring_alertmanager_host_port | default(9093) }}{% else %}Host :{{ monitoring_alertmanager_host_port | default(9093) }}; Caddy path {{ _am_path }}{% endif %}"
 - name: "cAdvisor"
-  url: "{{ _cadvisor | default('') | trim }}"
+  url: "{{ _cadv_pick | default('') | trim }}"
   hostname: "{{ deployment_portal_anchor_fqdn | default('') }}"
-  note: "Container metrics on ops host :{{ monitoring_cadvisor_host_port }}"
+  note: "{% if _cadv_vhost | length > 0 %}Caddy vhost {{ caddy_vhost_urls_external.cadvisor.hostname | default('') }}; also host :{{ monitoring_cadvisor_host_port | default(8089) }}{% elif deployment_portal_monitoring_routes_enabled | default(false) | bool %}Caddy path {{ _cadv_path }}; also host :{{ monitoring_cadvisor_host_port | default(8089) }}{% else %}Container metrics on ops host :{{ monitoring_cadvisor_host_port | default(8089) }}{% endif %}"
 {% endif %}
 {% if deployment_portal_ecs_present | bool %}
 {% set _ecs_master = groups[ecs_cluster_master_group][0] if (ecs_cluster_master_group in groups and groups[ecs_cluster_master_group] | default([]) | length > 0) else '' %}

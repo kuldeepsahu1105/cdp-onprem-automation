@@ -18,7 +18,7 @@
 {% set grafana_tile_url = ctx.monitoring.grafana_caddy_url | default('') if (ctx.monitoring.grafana_caddy_url | default('') | length > 0) else (ctx.monitoring.grafana_url | default(ctx.monitoring.grafana_path_url | default(''))) %}
 {% set prometheus_tile_url = ctx.monitoring.prometheus_caddy_url | default('') if (ctx.monitoring.prometheus_caddy_url | default('') | length > 0) else (ctx.monitoring.prometheus_url | default(ctx.monitoring.prometheus_path_url | default(''))) %}
 {% set alertmanager_tile_url = ctx.monitoring.alertmanager_caddy_url | default('') if (ctx.monitoring.alertmanager_caddy_url | default('') | length > 0) else (ctx.monitoring.alertmanager_url | default(ctx.monitoring.alertmanager_path_url | default(''))) %}
-{% set cadvisor_tile_url = ctx.monitoring.cadvisor_url | default('') %}
+{% set cadvisor_tile_url = ctx.monitoring.cadvisor_caddy_url | default('') if (ctx.monitoring.cadvisor_caddy_url | default('') | length > 0) else (ctx.monitoring.cadvisor_url | default(ctx.monitoring.cadvisor_path_url | default(''))) %}
 {% if mon_on and (grafana_tile_url | length == 0) %}
 {% set grafana_tile_url = ctx.monitoring.grafana_path_url | default(ctx.access.external.grafana | default(ctx.access.primary.grafana | default(''))) %}
 {% endif %}
@@ -29,7 +29,7 @@
 {% set alertmanager_tile_url = ctx.monitoring.alertmanager_path_url | default(ctx.access.external.alertmanager | default(ctx.access.primary.alertmanager | default(''))) %}
 {% endif %}
 {% if mon_on and (cadvisor_tile_url | length == 0) %}
-{% set cadvisor_tile_url = ctx.access.external.cadvisor | default(ctx.access.primary.cadvisor | default('')) %}
+{% set cadvisor_tile_url = ctx.monitoring.cadvisor_path_url | default(ctx.access.external.cadvisor | default(ctx.access.primary.cadvisor | default(''))) %}
 {% endif %}
 {% set panel_chevron %}<span class="panel-chevron" aria-hidden="true"><svg class="chevron-icon" viewBox="0 0 16 16" width="14" height="14" focusable="false"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>{% endset %}
 {% set ls = ctx.live_stats | default({}) %}

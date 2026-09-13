@@ -42,8 +42,11 @@
 {% if mon.alertmanager_caddy_url | default('') | length > 0 %}
 - "{{ label_prefix }}Alertmanager (Caddy vhost): {{ mon.alertmanager_caddy_url }}"
 {% endif %}
-{% if mon.cadvisor_url | default('') | length > 0 %}
-- "{{ label_prefix }}cAdvisor (host :{{ monitoring_cadvisor_host_port | default(8089) }}): {{ mon.cadvisor_url }}"
+{% if mon.cadvisor_caddy_url | default('') | length > 0 %}
+- "{{ label_prefix }}cAdvisor (Caddy vhost): {{ mon.cadvisor_caddy_url }}"
+{% endif %}
+{% if mon.cadvisor_url_direct | default('') | length > 0 %}
+- "{{ label_prefix }}cAdvisor (host :{{ monitoring_cadvisor_host_port | default(8089) }}): {{ mon.cadvisor_url_direct }}"
 {% endif %}
 {% if mon.cadvisor_url_vpc | default('') | length > 0 %}
 - "{{ label_prefix }}cAdvisor (VPC host :{{ monitoring_cadvisor_host_port | default(8089) }}): {{ mon.cadvisor_url_vpc }}"

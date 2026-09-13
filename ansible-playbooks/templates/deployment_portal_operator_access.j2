@@ -35,7 +35,13 @@
 {% set _graf_url = (caddy_vhost_urls_external.grafana.url | default('') | trim) if (caddy_vhost_enabled | default(false) | bool and (caddy_vhost_urls_external.grafana.url | default('') | length > 0)) else (_access_tier.grafana | default('') | trim) %}
 {% set _prom_url = (caddy_vhost_urls_external.prometheus.url | default('') | trim) if (caddy_vhost_enabled | default(false) | bool and (caddy_vhost_urls_external.prometheus.url | default('') | length > 0)) else (_access_tier.prometheus | default('') | trim) %}
 {% set _am_url = (caddy_vhost_urls_external.alertmanager.url | default('') | trim) if (caddy_vhost_enabled | default(false) | bool and (caddy_vhost_urls_external.alertmanager.url | default('') | length > 0)) else (_access_tier.alertmanager | default('') | trim) %}
+{% set _cadv_url = (caddy_vhost_urls_external.cadvisor.url | default('') | trim) if (caddy_vhost_enabled | default(false) | bool and (caddy_vhost_urls_external.cadvisor.url | default('') | length > 0)) else '' %}
+{% if _cadv_url | length == 0 and (deployment_portal_monitoring_routes_enabled | default(false) | bool) %}
+{% set _cadv_url = _access_tier.cadvisor_caddy_path | default('') | trim %}
+{% endif %}
+{% if _cadv_url | length == 0 %}
 {% set _cadv_url = _access_tier.cadvisor | default('') | trim %}
+{% endif %}
 {% if expose %}
 {% if ssh_on and (_ssh_exports | length > 0) %}
 {% set _ssh_dl = [] %}

@@ -268,7 +268,14 @@ mkdir -p "$OUT_DIR"
     echo "  pgAdmin (direct):     $(url_with_port http "$ops_pub" "$pg_port" /)"
     if [[ "$monitoring_on" == "true" || "$monitoring_on" == "1" ]]; then
       graf_h="$(caddy_hostname grafana "$slug" "$caddy_base" "$caddy_mode")"
-      echo "  Grafana: $(url_with_port http "$graf_h" "$http_port" /)"
+      prom_h="$(caddy_hostname prometheus "$slug" "$caddy_base" "$caddy_mode")"
+      am_h="$(caddy_hostname alertmanager "$slug" "$caddy_base" "$caddy_mode")"
+      cadv_h="$(caddy_hostname cadvisor "$slug" "$caddy_base" "$caddy_mode")"
+      echo "  Grafana:     $(url_with_port http "$graf_h" "$http_port" /)"
+      echo "  Prometheus:  $(url_with_port http "$prom_h" "$http_port" /)"
+      echo "  Alertmanager: $(url_with_port http "$am_h" "$http_port" /)"
+      echo "  cAdvisor:    $(url_with_port http "$cadv_h" "$http_port" /)"
+      echo "  cAdvisor (host :${cadvisor_port}): $(url_with_port http "$ops_pub" "$cadvisor_port" /)"
     fi
     if [[ "$private_profile" != "true" && "$ops_pub" != "$ops_priv" ]]; then
       slug_priv="${ops_priv//./-}"

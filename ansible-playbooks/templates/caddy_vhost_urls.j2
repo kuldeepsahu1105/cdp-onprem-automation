@@ -38,6 +38,9 @@ prometheus:
 alertmanager:
   hostname: "{{ vhost(caddy_vhost_service_names.alertmanager) }}"
   url: "{{ url(vhost(caddy_vhost_service_names.alertmanager), '', use_port) }}"
+cadvisor:
+  hostname: "{{ vhost(caddy_vhost_service_names.cadvisor) }}"
+  url: "{{ url(vhost(caddy_vhost_service_names.cadvisor), '', use_port) }}"
 ipa:
   hostname: "{{ vhost(caddy_vhost_service_names.ipa) }}"
   url: "{{ url(vhost(caddy_vhost_service_names.ipa), '', use_port) }}"

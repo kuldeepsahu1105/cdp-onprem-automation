@@ -272,6 +272,7 @@
                     'grafana': caddy_vhost_urls_external.grafana.url | default(''),
                     'prometheus': caddy_vhost_urls_external.prometheus.url | default(''),
                     'alertmanager': caddy_vhost_urls_external.alertmanager.url | default(''),
+                    'cadvisor': caddy_vhost_urls_external.cadvisor.url | default(''),
                   },
                   recursive=True
                 )
@@ -299,6 +300,7 @@
                     'grafana': caddy_vhost_urls_vpc.grafana.url | default(''),
                     'prometheus': caddy_vhost_urls_vpc.prometheus.url | default(''),
                     'alertmanager': caddy_vhost_urls_vpc.alertmanager.url | default(''),
+                    'cadvisor': caddy_vhost_urls_vpc.cadvisor.url | default(''),
                   },
                   recursive=True
                 )
@@ -326,6 +328,7 @@
                     'grafana': caddy_vhost_urls_external.grafana.url | default(''),
                     'prometheus': caddy_vhost_urls_external.prometheus.url | default(''),
                     'alertmanager': caddy_vhost_urls_external.alertmanager.url | default(''),
+                    'cadvisor': caddy_vhost_urls_external.cadvisor.url | default(''),
                   },
                   recursive=True
                 )
@@ -529,6 +532,7 @@
         grafana_caddy_url: "{{ caddy_vhost_urls_external.grafana.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
         prometheus_caddy_url: "{{ caddy_vhost_urls_external.prometheus.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
         alertmanager_caddy_url: "{{ caddy_vhost_urls_external.alertmanager.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
+        cadvisor_caddy_url: "{{ caddy_vhost_urls_external.cadvisor.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
         grafana_url_direct: >-
           {{
             deployment_portal_access_urls.primary.grafana
@@ -549,9 +553,9 @@
           }}
         cadvisor_url_direct: >-
           {{
-            deployment_portal_access_urls.primary.cadvisor
+            ('http://' + deployment_portal_ops_private_ip + ':' + (monitoring_cadvisor_host_port | string) + '/')
             if (deployment_portal_access_profile_effective == 'private')
-            else deployment_portal_access_urls.external.cadvisor
+            else ('http://' + deployment_portal_ops_public_ip + ':' + (monitoring_cadvisor_host_port | string) + '/')
           }}
         grafana_url: >-
           {{
@@ -606,11 +610,42 @@
         alertmanager_url_tier_b: "{{ deployment_portal_access_urls.external.alertmanager | default('') if (deployment_portal_access_profile_effective == 'cloud') else deployment_portal_access_urls.primary.alertmanager | default('') }}"
         cadvisor_url: >-
           {{
-            deployment_portal_access_urls.primary.cadvisor
-            if (deployment_portal_access_profile_effective == 'private')
-            else deployment_portal_access_urls.external.cadvisor
+            (
+              caddy_vhost_urls_external.cadvisor.url | default('')
+              if (
+                caddy_vhost_enabled | default(false) | bool
+                and (caddy_vhost_urls_external.cadvisor.url | default('') | length > 0)
+              )
+              else ''
+            )
+            or (
+              (
+                ('http://' + deployment_portal_ops_public_ip + ':' + (deployment_portal_http_port | string) + '/cadvisor/')
+                if (deployment_portal_access_profile_effective == 'cloud')
+                else ('http://' + deployment_portal_ops_client_host + ':' + (deployment_portal_http_port | string) + '/cadvisor/')
+              )
+              if (deployment_portal_monitoring_routes_enabled | default(false) | bool)
+              else ''
+            )
+            or (
+              deployment_portal_access_urls.primary.cadvisor
+              if (deployment_portal_access_profile_effective == 'private')
+              else deployment_portal_access_urls.external.cadvisor
+            )
           }}
-        cadvisor_url_tier_b: "{{ deployment_portal_access_urls.external.cadvisor | default('') if (deployment_portal_access_profile_effective == 'cloud') else deployment_portal_access_urls.primary.cadvisor | default('') }}"
+        cadvisor_url_tier_b: >-
+          {{
+            (
+              caddy_vhost_urls_external.cadvisor.url | default('')
+              if (
+                caddy_vhost_enabled | default(false) | bool
+                and (caddy_vhost_urls_external.cadvisor.url | default('') | length > 0)
+              )
+              else deployment_portal_access_urls.external.cadvisor | default('')
+            )
+            if (deployment_portal_access_profile_effective == 'cloud')
+            else deployment_portal_access_urls.primary.cadvisor | default('')
+          }}
         grafana_url_vpc: "{{ deployment_portal_access_urls.vpc.grafana | default('') }}"
         prometheus_url_vpc: "{{ deployment_portal_access_urls.vpc.prometheus | default('') }}"
         alertmanager_url_vpc: "{{ deployment_portal_access_urls.vpc.alertmanager | default('') }}"

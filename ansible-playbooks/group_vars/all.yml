@@ -818,7 +818,7 @@ deployment_portal_use_private_network_only: false
 # embedded_ip: portal.10-54-75-123.pvc.cloudera-labs.com  (wildcard DNS on base domain)
 # classic_nipio: portal.10-54-75-123.nip.io  (works without custom DNS)
 # flat: portal.pvc.cloudera-labs.com  (single A record for *.svc → ops IP)
-# Lab vhosts (portal/pgadmin/grafana/prometheus/alertmanager/ipa.<ops-ip-dashed>.pvc…) — deployment_portal_caddy_effective.
+# Lab vhosts (portal/pgadmin/grafana/prometheus/alertmanager/cadvisor/ipa.<ops-ip-dashed>.pvc…) — deployment_portal_caddy_effective.
 caddy_vhost_enabled: true
 caddy_vhost_public_base: pvc.cloudera-labs.com
 caddy_vhost_dns_mode: embedded_ip
@@ -830,6 +830,7 @@ caddy_vhost_service_names:
   grafana: grafana
   prometheus: prometheus
   alertmanager: alertmanager
+  cadvisor: cadvisor
   ipa: ipa
 
 monitoring_stack_enabled: true
