@@ -377,6 +377,15 @@ See repo root `.tfvars.yaml` for the full template.
 
 Use this after **DESTROY_STACK** (or a new `ENVIRONMENT` workspace) for a full regression of Kerberos, CMS, and agent heartbeat.
 
+### EC2 start / stop / describe (ipaserver)
+
+| Step | Jenkins / CLI |
+|---|---|
+| 1 | Identity phase installs the script: playbook **`36_install_ipaserver_ec2_startstop.yml`** (also at end of **`IDENTITY`** / `pvc_setup` phase 2). |
+| 2 | Jenkins: check **`STARTSTOP_AUTOMATION`**, set **`EC2_STARTSTOP_OPERATION`** (`describe` \| `start` \| `stop`), **`EC2_STARTSTOP_GROUPS`** (comma-separated Terraform `instance_groups` keys → EC2 tag **`Group`**), and **`ENVIRONMENT`** (→ tag **`environment`**). |
+| 3 | **`stop` from Jenkins:** set **`EC2_STARTSTOP_CONFIRM=true`**. Manual stop on ipaserver: `/root/ptgy_cldr_ec2_strt_stp.sh stop <environment> <group> …` prompts **`yes`**. |
+| 4 | Example on ipaserver: `ptgy_cldr_ec2_strt_stp.sh describe development pvcbase_worker pvcecs_worker` |
+
 ### Tear down (fresh stack)
 
 | Step | Jenkins / CLI |

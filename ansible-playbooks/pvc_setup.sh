@@ -293,6 +293,7 @@ run_phase_2() {
   ui_phase_header "2 — Identity (FreeIPA / AD)"
   run_playbook 00_detect_identity.yml
   run_playbook 11_identity_setup.yml
+  run_playbook 36_install_ipaserver_ec2_startstop.yml
   _maybe_run_deployment_portal_refresh "portal,ipa,identity"
 }
 

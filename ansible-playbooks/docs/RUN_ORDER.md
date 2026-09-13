@@ -18,7 +18,8 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` |
 | 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` (includes portal Caddy/index sync) |
 | 10 | ECS_INSTALL | `5` / `ecs` | `33_setup_ecs_cluster` → optional `34_setup_ecs_data_services` |
-| 11 | DESTROY_STACK | `destroy_stack` | optional `99_cleanup.yml` → `clone_and_run_terraform_destroy.sh` (`DESTROY_STACK_CONFIRM`) |
+| 11 | STARTSTOP_AUTOMATION | — | `37_run_ipaserver_ec2_startstop.yml` on ipaserver (script installed by `36` / IDENTITY phase) |
+| 12 | DESTROY_STACK | `destroy_stack` | optional `99_cleanup.yml` → `clone_and_run_terraform_destroy.sh` (`DESTROY_STACK_CONFIRM`) |
 | — | (manual) | `6` / `portal_refresh` | `35_refresh_deployment_portal` (milestone URL verify / index refresh) |
 
 **Full local flow:** `DEPLOY_PHASE=all ./pvc_setup.sh` = phases 1 → portal (`10`) → identity → CM → cm_tls → CDH → monitoring (if enabled) → ECS.
@@ -56,6 +57,8 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 33 | `33_setup_ecs_cluster.yml` | ECS cluster |
 | 34 | `34_setup_ecs_data_services.yml` | CDW / CDE / CAI (optional) |
 | 35 | `35_refresh_deployment_portal.yml` | Portal re-render only |
+| 36 | `36_install_ipaserver_ec2_startstop.yml` | EC2 start/stop script on ipaserver (end of IDENTITY / `pvc_setup` phase 2) |
+| 37 | `37_run_ipaserver_ec2_startstop.yml` | Run start/stop/describe via script (Jenkins `STARTSTOP_AUTOMATION`) |
 
 ## Prerequisites (01–09) and helpers
 

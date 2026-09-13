@@ -670,6 +670,8 @@ ecs_model_registry_ozone_service_id: o3service1
 portal_automation_owner_display: "Kuldeep Sahu"
 deployment_owner: ""
 deployment_name_prefix: ""
+# ipaserver EC2 start/stop helper (36/37, /root script; tags environment + Group from Terraform)
+ec2_startstop_script_path: /root/ptgy_cldr_ec2_strt_stp.sh
 # Portal + Caddy on ops host when deployment_portal_enabled + caddy_vhost_enabled (resolve_deployment_portal_caddy_enabled.yml). monitoring_stack_enabled gates monitoring install in sync only.
 deployment_portal_enabled: true
 # Set by Jenkins PORTAL / pvc_setup bootstrap — fail instead of silent skip when Caddy gate is off.

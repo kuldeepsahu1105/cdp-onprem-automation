@@ -1,0 +1,41 @@
+### ansible-playbook -i inventory.ini 36_install_ipaserver_ec2_startstop.yml
+# Deploy EC2 start/stop/describe helper on ipaserver (IAM role on instance performs API calls).
+---
+- import_playbook: 00_ensure_collections.yml
+
+- name: Skip when no ipaserver in inventory
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: End play when ipaserver group is empty
+      ansible.builtin.meta: end_play
+      when: groups['ipaserver'] | default([]) | length == 0
+
+- name: Install EC2 start/stop automation on ipaserver
+  hosts: ipaserver
+  become: true
+  vars_files:
+    - group_vars/all.yml
+  vars:
+    ec2_startstop_script_path: "{{ ec2_startstop_script_path | default('/root/ptgy_cldr_ec2_strt_stp.sh') }}"
+    ec2_startstop_default_environment: "{{ deployment_name_prefix | default('', true) | trim }}"
+  tasks:
+    - name: Install AWS CLI (EC2 start/stop/describe)
+      ansible.builtin.package:
+        name: "{{ ec2_startstop_awscli_package }}"
+        state: present
+      vars:
+        ec2_startstop_awscli_package: "{{ 'awscli' if ansible_os_family == 'RedHat' else 'awscli' }}"
+
+    - name: Deploy EC2 start/stop script on ipaserver
+      ansible.builtin.template:
+        src: templates/ptgy_cldr_ec2_strt_stp.sh.j2
+        dest: "{{ ec2_startstop_script_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Show script path
+      ansible.builtin.debug:
+        msg: "EC2 start/stop script installed at {{ ec2_startstop_script_path }}"

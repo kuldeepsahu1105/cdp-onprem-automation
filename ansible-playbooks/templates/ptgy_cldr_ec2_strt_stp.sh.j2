@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# ptgy_cldr_ec2_strt_stp.sh — Start, stop, or describe EC2 instances for this PVC deployment.
+#
+# Usage:
+#   {{ ec2_startstop_script_path }} <start|stop|describe> <EnvironmentValue> <GroupValue1> [GroupValue2 ...]
+#
+# Filters (AWS resource tags from Terraform pvc_cluster_tags + ec2-instance module):
+#   tag:environment = EnvironmentValue  (Terraform pvc_cluster_tags.environment / Jenkins ENVIRONMENT)
+#   tag:Group       = each GroupValue     (Terraform instance_groups key, e.g. cldr_mngr, ipa_server)
+#
+# Default environment when the second argument is omitted: {{ ec2_startstop_default_environment | default('') }}
+#
+# stop: prompts for interactive "yes" unless EC2_STARTSTOP_NON_INTERACTIVE=1 or JENKINS_URL is set.
+# describe: prints instance id, state, Name, Group, private/public IP.
+#
+# Requires: AWS CLI, instance IAM role on ipaserver (or valid credentials) with ec2:Describe/Start/Stop on tagged instances.
+
+set -euo pipefail
+
+SCRIPT_NAME="$(basename "$0")"
+DEFAULT_ENV="{{ ec2_startstop_default_environment | default('', true) | trim }}"
+AWS_REGION="${AWS_DEFAULT_REGION:-{{ aws_region | default('us-east-1') }}}"
+
+usage() {
+  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+  echo ""
+  echo "Example:"
+  echo "  $SCRIPT_NAME describe development cldr_mngr pvcbase_worker"
+  echo "  $SCRIPT_NAME start development pvcecs_worker"
+  echo "  $SCRIPT_NAME stop development pvcbase_master pvcbase_worker"
+  exit "${1:-0}"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage 0
+fi
+
+OPERATION="${1:-}"
+ENV_VALUE="${2:-}"
+shift 2 2>/dev/null || true
+GROUPS=("$@")
+
+if [[ -z "$OPERATION" ]]; then
+  echo "ERROR: missing operation (start|stop|describe)" >&2
+  usage 1
+fi
+
+case "$OPERATION" in
+  start|stop|describe) ;;
+  *)
+    echo "ERROR: invalid operation '$OPERATION' (use start, stop, or describe)" >&2
+    usage 1
+    ;;
+esac
+
+if [[ -z "$ENV_VALUE" && -n "$DEFAULT_ENV" ]]; then
+  ENV_VALUE="$DEFAULT_ENV"
+fi
+
+if [[ -z "$ENV_VALUE" ]]; then
+  echo "ERROR: missing EnvironmentValue (tag:environment)" >&2
+  usage 1
+fi
+
+if [[ "$OPERATION" != "describe" && ${#GROUPS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one GroupValue required for start/stop" >&2
+  usage 1
+fi
+
+export AWS_DEFAULT_REGION="$AWS_REGION"
+
+build_filters() {
+  local -a filters=(
+    "Name=tag:environment,Values=${ENV_VALUE}"
+  )
+  if ((${#GROUPS[@]} > 0)); then
+    local group_csv
+    group_csv=$(IFS=,; echo "${GROUPS[*]}")
+    filters+=("Name=tag:Group,Values=${group_csv}")
+  fi
+  printf '%s\n' "${filters[@]}"
+}
+
+mapfile -t FILTERS < <(build_filters)
+
+describe_instances() {
+  aws ec2 describe-instances \
+    --region "$AWS_REGION" \
+    --filters "${FILTERS[@]}" \
+    --query 'Reservations[].Instances[].{Id:InstanceId,State:State.Name,Name:Tags[?Key==`Name`].Value|[0],Group:Tags[?Key==`Group`].Value|[0],PrivateIp:PrivateIpAddress,PublicIp:PublicIpAddress}' \
+    --output table
+}
+
+collect_instance_ids() {
+  aws ec2 describe-instances \
+    --region "$AWS_REGION" \
+    --filters "${FILTERS[@]}" \
+    --query 'Reservations[].Instances[].InstanceId' \
+    --output text
+}
+
+confirm_stop() {
+  if [[ "${EC2_STARTSTOP_NON_INTERACTIVE:-}" == "1" || -n "${JENKINS_URL:-}" ]]; then
+    return 0
+  fi
+  echo "About to STOP instances matching:"
+  echo "  tag:environment = ${ENV_VALUE}"
+  if ((${#GROUPS[@]} > 0)); then
+    echo "  tag:Group       = ${GROUPS[*]}"
+  fi
+  describe_instances || true
+  echo ""
+  read -r -p 'Type yes to confirm stop: ' answer
+  if [[ "$answer" != "yes" ]]; then
+    echo "Aborted."
+    exit 1
+  fi
+}
+
+INSTANCE_IDS="$(collect_instance_ids | xargs echo || true)"
+if [[ -z "${INSTANCE_IDS// }" ]]; then
+  echo "No instances found for environment='${ENV_VALUE}' groups='${GROUPS[*]:-all}'."
+  exit 0
+fi
+
+case "$OPERATION" in
+  describe)
+    describe_instances
+    ;;
+  start)
+    echo "Starting: $INSTANCE_IDS"
+    aws ec2 start-instances --region "$AWS_REGION" --instance-ids $INSTANCE_IDS
+    aws ec2 wait instance-running --region "$AWS_REGION" --instance-ids $INSTANCE_IDS || true
+    describe_instances
+    ;;
+  stop)
+    confirm_stop
+    echo "Stopping: $INSTANCE_IDS"
+    aws ec2 stop-instances --region "$AWS_REGION" --instance-ids $INSTANCE_IDS
+    aws ec2 wait instance-stopped --region "$AWS_REGION" --instance-ids $INSTANCE_IDS || true
+    describe_instances
+    ;;
+esac
