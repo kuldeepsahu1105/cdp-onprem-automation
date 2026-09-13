@@ -1,7 +1,5 @@
 {# Included per IP slug (public + optional private). Variable: caddy_vhost_urls #}
 {% set _ipa_caddy_origin = 'http://{http.request.host}' ~ (':' ~ (deployment_portal_http_port | int) if (deployment_portal_http_port | int) != 80 else '') %}
-{% set _ipa_caddy_public_origin = 'http://' ~ caddy_vhost_urls.ipa.hostname ~ (':' ~ (deployment_portal_http_port | string) if (deployment_portal_http_port | int) != 80 else '') %}
-{% set _ipa_fqdn_re = deployment_portal_ipa_fqdn | replace('.', '\\.') %}
 http://{{ caddy_vhost_urls.portal.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
 {% include 'deployment_portal_Caddyfile_downloads_auth.inc.j2' %}
   @portal_static not path /downloads*
@@ -17,25 +15,17 @@ http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port 
 }
 
 {% if deployment_portal_has_ipa | default(false) | bool %}
-{# FreeIPA dual UI via Caddy: path-only root redirect; HTTP upstream + Host + Referer; rewrite upstream Location and legacy HTML asset hosts (openshift / ipa-rewrite pattern). See .cursor/LEARNINGS.md #}
+{# FreeIPA dual UI via Caddy: path-only root redirect; HTTP upstream + Host + Referer; rewrite upstream Location (openshift / ipa-rewrite pattern). Legacy /ipa/ui HTML host rewrites use Apache mod_substitute (ipa_httpd_caddy_proxy.conf.j2). See .cursor/LEARNINGS.md #}
 http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
   @ipa_legacy path /ipa/ui /ipa/ui/*
   handle @ipa_legacy {
     reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
       header_up Host {{ deployment_portal_ipa_fqdn }}
       header_up Referer https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}
-      header_up X-Forwarded-Host {http.request.host}
-      header_up X-Forwarded-Proto {http.request.scheme}
       @ipa_upstream_redirect header Location *
       handle_response @ipa_upstream_redirect {
         header >Location https://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
         header >Location http://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
-      }
-      @ipa_legacy_body status 200
-      handle_response @ipa_legacy_body {
-        replace {
-          re `https?://{{ _ipa_fqdn_re }}` `{{ _ipa_caddy_public_origin }}`
-        }
       }
     }
   }
@@ -45,8 +35,6 @@ http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | in
     reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
       header_up Host {{ deployment_portal_ipa_fqdn }}
       header_up Referer https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}
-      header_up X-Forwarded-Host {http.request.host}
-      header_up X-Forwarded-Proto {http.request.scheme}
       @ipa_upstream_redirect header Location *
       handle_response @ipa_upstream_redirect {
         header >Location https://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
