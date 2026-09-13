@@ -44,17 +44,13 @@ resource "aws_iam_role_policy" "ipaserver_ec2_startstop" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "DescribeInstancesByEnvironmentTag"
+        Sid    = "DescribeInstancesForStartStopWorkflow"
         Effect = "Allow"
         Action = [
-          "ec2:DescribeInstances"
+          "ec2:DescribeInstances",
+          "ec2:DescribeInstanceStatus"
         ]
         Resource = "*"
-        Condition = {
-          StringEquals = {
-            "ec2:ResourceTag/environment" = local.ipaserver_startstop_environment
-          }
-        }
       },
       {
         Sid    = "StartStopInstancesByEnvironmentAndGroupTags"

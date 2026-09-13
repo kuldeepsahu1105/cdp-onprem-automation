@@ -36,6 +36,13 @@
         group: root
         mode: "0755"
 
+    - name: Symlink EC2 start/stop script into PATH
+      ansible.builtin.file:
+        src: "{{ ec2_startstop_script_path }}"
+        dest: "/usr/local/bin/{{ ec2_startstop_script_basename }}"
+        state: link
+        force: true
+
     - name: Show script path
       ansible.builtin.debug:
         msg: "EC2 start/stop script installed at {{ ec2_startstop_script_path }}"

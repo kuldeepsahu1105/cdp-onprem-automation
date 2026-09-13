@@ -707,8 +707,8 @@ ecs_model_registry_ozone_service_id: o3service1
 portal_automation_owner_display: "Kuldeep Sahu"
 deployment_owner: ""
 deployment_name_prefix: ""
-# ipaserver EC2 start/stop helper (36/37; tags environment + Group from Terraform).
-# On-disk name: {prefix}_cldr_ec2_strt_stp.sh where prefix matches deployment_name_prefix (Jenkins ENVIRONMENT).
+# ipaserver EC2 start/stop helper (36/37). CLI: <op> <prefix> <hostgroup...> (tag:environment + tag:Group).
+# On-disk name: {prefix}_cldr_ec2_strt_stp.sh; symlink /usr/local/bin/{same}. prefix = deployment_name_prefix (Jenkins ENVIRONMENT).
 ec2_startstop_script_name_prefix: ""
 ec2_startstop_script_dir: /root
 ec2_startstop_script_prefix_effective: >-
