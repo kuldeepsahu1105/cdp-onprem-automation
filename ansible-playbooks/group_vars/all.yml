@@ -766,14 +766,14 @@ deployment_portal_extra_links: []
 # Operator access hub on portal index (credentials table + optional SSH key downloads).
 deployment_portal_expose_credentials: true
 # false | true | auto — auto exports SSH keys only when deployment_portal_basic_auth_enabled is true.
-deployment_portal_expose_ssh_keys: false
+deployment_portal_expose_ssh_keys: auto
 # Optional explicit paths on the Ansible controller (Jenkins/laptop), not on the portal host. Empty = auto-discovery.
 # EC2 PEM: sshkey.pem, ANSIBLE_PRIVATE_KEY when *.pem, deployment_portal_ssh_private_key_path_override (legacy).
 deployment_portal_ssh_pem_path: ""
 # Auto-TLS key: cm_private_key_path, autotls_private_key_path, id_rsa, or same PEM when only one key exists.
 deployment_portal_ssh_autotls_key_path: ""
 # HTTP basic auth for /downloads/* (SSH keys, operator-credentials.json). Index HTML stays unauthenticated so Ansible Tier A verify is unchanged.
-deployment_portal_basic_auth_enabled: false
+deployment_portal_basic_auth_enabled: true
 deployment_portal_basic_auth_user: portal
 deployment_portal_basic_auth_password: "{{ postgres_password }}"
 # Optional Jenkins block on portal (URL only — do not commit real Jenkins passwords to git).

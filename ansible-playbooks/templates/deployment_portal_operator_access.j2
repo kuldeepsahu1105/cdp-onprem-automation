@@ -104,7 +104,7 @@ ssh_keys_exposed: {{ ssh_on | bool }}
 downloads_path_prefix: "{{ dl_base }}"
 ssh_user: "{{ _ssh_user }}"
 ssh_connect_host: "{{ _ssh_host }}"
-ssh_connect_key_filename: "{{ _ssh_key_basename }}"
-ssh_connect_command: "ssh -i {{ _ssh_key_basename }} {{ _ssh_user }}@{{ _ssh_host }}"
+ssh_connect_key_filename: "{{ _ssh_key_basename if (ssh_on and (_ssh_exports | length > 0)) else '' }}"
+ssh_connect_command: "{{ ('ssh -i ' ~ _ssh_key_basename ~ ' ' ~ _ssh_user ~ '@' ~ _ssh_host) if (ssh_on and (_ssh_exports | length > 0)) else '' }}"
 auth_username: "{{ deployment_portal_basic_auth_user | default('portal') }}"
 sections: {{ ns.sections | to_json }}

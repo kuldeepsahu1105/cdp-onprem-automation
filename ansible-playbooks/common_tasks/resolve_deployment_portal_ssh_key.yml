@@ -17,18 +17,32 @@
     _env_pem: "{{ _env_key if (_env_key | length > 0 and (_env_key | basename | regex_search('(?i)\\.pem$'))) else '' }}"
     _ansible_key_rel: "{{ ansible_ssh_private_key_file | default('') | regex_replace('^\\./', '') | trim }}"
     _ansible_pem: "{{ _ansible_key_rel if (_ansible_key_rel | length > 0 and (_ansible_key_rel | basename | regex_search('(?i)\\.pem$'))) else '' }}"
+    _hol_ansible_state: "{{ lookup('env', 'HOL_ANSIBLE_STATE_DIR') | default('', true) | trim }}"
+    _search_paths: >-
+      {{
+        ([_hol_ansible_state] if (_hol_ansible_state | length > 0) else [])
+        + [playbook_dir, lookup('env', 'HOME') | default('/root', true) ~ '/.ssh']
+      }}
     _file_candidates: >-
       {{
         ([_pem_explicit] if (_pem_explicit | length > 0) else [])
         + ([_env_pem] if (_env_pem | length > 0) else [])
+        + ([_env_key] if (_env_key | length > 0 and (_env_pem | length == 0)) else [])
         + ['sshkey.pem']
         + ([_ansible_pem] if (_ansible_pem | length > 0) else [])
+        + (
+          [_ansible_key_rel]
+          if (
+            (_ansible_key_rel | length > 0)
+            and (_ansible_pem | length == 0)
+            and (_ansible_key_rel not in ['sshkey.pem', 'id_rsa'])
+          )
+          else []
+        )
       }}
     _ec2_key_lookup:
       files: "{{ _file_candidates }}"
-      paths:
-        - "{{ playbook_dir }}"
-        - "{{ lookup('env', 'HOME') | default('/root', true) }}/.ssh"
+      paths: "{{ _search_paths }}"
       skip: true
 
 - name: Resolve portal Auto-TLS / CM SSH private key on controller
@@ -49,6 +63,12 @@
       - "{{ ansible_ssh_private_key_file | default('id_rsa') | regex_replace('^\\./', '') }}"
       - "sshkey.pem"
       - "id_rsa"
+    _hol_ansible_state: "{{ lookup('env', 'HOL_ANSIBLE_STATE_DIR') | default('', true) | trim }}"
+    _search_paths: >-
+      {{
+        ([_hol_ansible_state] if (_hol_ansible_state | length > 0) else [])
+        + [playbook_dir, lookup('env', 'HOME') | default('/root', true) ~ '/.ssh']
+      }}
     _file_candidates: >-
       {{
         ([_autotls_explicit] if (_autotls_explicit | length > 0) else [])
@@ -57,9 +77,7 @@
       }}
     _autotls_key_lookup:
       files: "{{ _file_candidates }}"
-      paths:
-        - "{{ playbook_dir }}"
-        - "{{ lookup('env', 'HOME') | default('/root', true) }}/.ssh"
+      paths: "{{ _search_paths }}"
       skip: true
 
 - name: Derive portal EC2 SSH download basename
@@ -92,14 +110,14 @@
       {{
         ([{
           'controller_path': _ec2_path,
-          'basename': deployment_portal_ssh_ec2_download_basename,
-          'label': 'EC2 cluster SSH (' ~ deployment_portal_ssh_ec2_download_basename ~ ')',
+          'basename': deployment_portal_ssh_ec2_download_basename | default('cluster-access.pem', true),
+          'label': 'EC2 cluster SSH (' ~ (deployment_portal_ssh_ec2_download_basename | default('cluster-access.pem', true)) ~ ')',
           'note': 'chmod 600 after download; ' ~ (ansible_user | default('ec2-user')) ~ '@ cluster nodes'
         }] if (_ec2_path | length > 0) else [])
         + ([{
           'controller_path': _autotls_path,
-          'basename': deployment_portal_ssh_autotls_download_basename,
-          'label': 'Auto-TLS / CM key (' ~ deployment_portal_ssh_autotls_download_basename ~ ')',
+          'basename': deployment_portal_ssh_autotls_download_basename | default('cluster-autotls-id_rsa', true),
+          'label': 'Auto-TLS / CM key (' ~ (deployment_portal_ssh_autotls_download_basename | default('cluster-autotls-id_rsa', true)) ~ ')',
           'note': 'chmod 600 after download; CM Auto-TLS / root on CM when distinct from EC2 PEM'
         }] if (
           (_autotls_path | length > 0)

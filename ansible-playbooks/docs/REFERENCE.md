@@ -338,10 +338,10 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `monitoring_stack_enabled` | `true` | Prometheus + Grafana + Alertmanager + cAdvisor with playbook 28; Jenkins `MONITORING_STACK_ENABLED` checkbox sets this override |
 | `deployment_portal_extra_links` | `[]` | Add `{name, url}` entries to the index page |
 | `deployment_portal_expose_credentials` | `true` | Render **Operator access** panel (CM, DB, IPA, Ranger/Knox/Hue, ECS, optional Jenkins) from group_vars at portal sync |
-| `deployment_portal_expose_ssh_keys` | `false` | Copy Ansible controller SSH private keys to `/downloads/ssh/` on the ops host (EC2 PEM and/or distinct Auto-TLS key). Use `auto` to export only when `deployment_portal_basic_auth_enabled` is true |
+| `deployment_portal_expose_ssh_keys` | `auto` | Copy Ansible controller SSH private keys to `/downloads/ssh/` on the ops host (EC2 PEM and/or distinct Auto-TLS key). Use `auto` to export only when `deployment_portal_basic_auth_enabled` is true |
 | `deployment_portal_ssh_pem_path` | `""` | Optional explicit path to the EC2/Ansible PEM on the controller (`sshkey.pem` auto-discovered when empty) |
 | `deployment_portal_ssh_autotls_key_path` | `""` | Optional explicit Auto-TLS private key on the controller; otherwise uses `cm_private_key_path` / `id_rsa` discovery (same order as playbook 27) |
-| `deployment_portal_basic_auth_enabled` | `false` | HTTP basic auth on Caddy path `/downloads/*` only (index and Tier A verify stay unauthenticated) |
+| `deployment_portal_basic_auth_enabled` | `true` | HTTP basic auth on Caddy path `/downloads/*` only (index and Tier A verify stay unauthenticated) |
 | `deployment_portal_basic_auth_user` | `portal` | Basic auth username for downloads |
 | `deployment_portal_basic_auth_password` | `postgres_password` | Basic auth password for downloads |
 | `deployment_portal_jenkins_url` | `""` | Optional Jenkins UI URL on the operator panel (passwords belong in Jenkins, not git) |
