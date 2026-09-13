@@ -5,12 +5,15 @@
   RequestHeader edit Referer ^https?://{{ ipa_caddy_public_hostname | replace('.', '\\.') }}/ https://{{ deployment_portal_ipa_fqdn }}/
 </IfModule>
 
-{# Legacy Web UI embeds absolute https://<ipaserver-fqdn> links; rewrite to the Caddy vhost origin for browsers without lab DNS. #}
+{# Legacy Web UI and shared /ipa assets embed absolute https://<ipaserver-fqdn> links; rewrite to the Caddy vhost origin for browsers without lab DNS. #}
 {% set _ipa_caddy_http_origin = 'http://' ~ ipa_caddy_public_hostname ~ (':' ~ (deployment_portal_http_port | string) if (deployment_portal_http_port | int) != 80 else '') %}
-<Location /ipa/ui>
+<Location /ipa>
   <IfModule mod_substitute.c>
-    AddOutputFilterByType SUBSTITUTE text/html text/javascript application/javascript application/json
+    AddOutputFilterByType SUBSTITUTE text/html text/javascript application/javascript application/json text/css application/xml text/xml
     Substitute "s|https://{{ deployment_portal_ipa_fqdn }}|{{ _ipa_caddy_http_origin }}|ni"
     Substitute "s|http://{{ deployment_portal_ipa_fqdn }}|{{ _ipa_caddy_http_origin }}|ni"
+    Substitute "s|//{{ deployment_portal_ipa_fqdn }}|//{{ ipa_caddy_public_hostname }}{{ (':' ~ (deployment_portal_http_port | string)) if (deployment_portal_http_port | int) != 80 else '' }}|ni"
+    Substitute "s|\"{{ deployment_portal_ipa_fqdn }}\"|\"{{ ipa_caddy_public_hostname }}\"|ni"
+    Substitute "s|'{{ deployment_portal_ipa_fqdn }}'|'{{ ipa_caddy_public_hostname }}'|ni"
   </IfModule>
 </Location>

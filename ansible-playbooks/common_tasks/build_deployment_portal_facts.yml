@@ -256,9 +256,6 @@
         lookup('template', 'deployment_portal_endpoints.j2') | from_yaml | default([], true)
       }}
 
-- name: Build deployment portal operator access (credentials and SSH download metadata)
-  ansible.builtin.import_tasks: build_deployment_portal_operator_access.yml
-
 - name: Prefer Caddy vhost URLs for monitoring in external access map
   ansible.builtin.set_fact:
     deployment_portal_access_urls: >-
@@ -312,6 +309,36 @@
     - (monitoring_stack_enabled | default(false) | bool) or (deployment_portal_monitoring_deployed | default(false) | bool)
     - deployment_portal_access_profile_effective == 'cloud'
     - caddy_vhost_urls_vpc.grafana.url | default('') | length > 0
+
+- name: Prefer Caddy vhost URLs for monitoring in primary access map (private / bare metal)
+  ansible.builtin.set_fact:
+    deployment_portal_access_urls: >-
+      {{
+        deployment_portal_access_urls | combine(
+          {
+            'primary': (
+              deployment_portal_access_urls.primary | default({})
+              | combine(
+                  {
+                    'grafana': caddy_vhost_urls_external.grafana.url | default(''),
+                    'prometheus': caddy_vhost_urls_external.prometheus.url | default(''),
+                    'alertmanager': caddy_vhost_urls_external.alertmanager.url | default(''),
+                  },
+                  recursive=True
+                )
+            )
+          },
+          recursive=True
+        )
+      }}
+  when:
+    - caddy_vhost_enabled | default(false) | bool
+    - (monitoring_stack_enabled | default(false) | bool) or (deployment_portal_monitoring_deployed | default(false) | bool)
+    - deployment_portal_access_profile_effective == 'private'
+    - caddy_vhost_urls_external.grafana.url | default('') | length > 0
+
+- name: Build deployment portal operator access (credentials and SSH download metadata)
+  ansible.builtin.import_tasks: build_deployment_portal_operator_access.yml
 
 - name: Assemble deployment portal context
   ansible.builtin.set_fact:

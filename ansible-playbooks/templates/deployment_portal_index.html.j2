@@ -490,6 +490,76 @@
       margin-top: 0.45rem;
     }
     .site-footer .footer-links a { font-size: 0.8rem; }
+    .icon-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: var(--muted);
+      text-decoration: none;
+    }
+    .icon-link:hover { color: var(--text); text-decoration: none; }
+    .icon-link svg { width: 1rem; height: 1rem; flex-shrink: 0; fill: currentColor; }
+    .header-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .help-open-btn {
+      font: inherit;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 0.35rem 0.65rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .help-open-btn:hover { background: rgba(255, 255, 255, 0.1); }
+    dialog.help-dialog {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      color: var(--text);
+      max-width: 36rem;
+      width: calc(100% - 2rem);
+      padding: 0;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    }
+    dialog.help-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+    .help-dialog-inner { padding: 1rem 1.1rem 1.1rem; }
+    .help-dialog-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.85rem 1.1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .help-dialog-head h2 { margin: 0; font-size: 1rem; color: var(--accent-soft); }
+    .help-close-btn {
+      font: inherit;
+      cursor: pointer;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 4px;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.75rem;
+    }
+    .ssh-command-box {
+      background: #0b1018;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.55rem 0.75rem;
+      margin: 0.5rem 0 0.75rem;
+      font-size: 0.82rem;
+      overflow-x: auto;
+    }
+    .ssh-command-box code { background: transparent; padding: 0; word-break: normal; white-space: pre-wrap; }
+    .owner-social { display: inline-flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
     @media (max-width: 480px) {
       .site-header { padding: 0.85rem 1rem; }
       h1 { font-size: 1.15rem; }
@@ -513,15 +583,32 @@
           <div class="brand-tag">Cloudera Data Platform</div>
           <h1>Deployment portal</h1>
           <div class="brand-subtitle" aria-label="Portal metadata">
-            <span class="label-badge label-badge-owner"><span class="label-badge-key">Portal</span> {{ ctx.deployment.portal_owner_display | default('Kuldeep Sahu') }}</span>
+            <span class="label-badge label-badge-owner">
+              <span class="label-badge-key">Portal developed by:</span>
+              <span class="owner-social">
+                {{ ctx.deployment.portal_owner_display | default('Kuldeep Sahu') }}
+                <a class="icon-link" href="https://github.com/kuldeepsahu1105" target="_blank" rel="noopener noreferrer" title="GitHub — kuldeepsahu1105" aria-label="GitHub">
+                  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                </a>
+                <a class="icon-link" href="https://www.linkedin.com/in/kuldeep-sahu-0511" target="_blank" rel="noopener noreferrer" title="LinkedIn" aria-label="LinkedIn">
+                  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M0 1.146C0 .513.526 0 1.175 0h13.65C15.474 0 16 .513 16 1.146v13.708c0 .633-.526 1.146-1.175 1.146H1.175C.526 16 0 15.487 0 14.854V1.146zm4.943 12.248V6.169H2.542v7.225h2.401zm-1.2-8.212c.837 0 1.358-.554 1.358-1.248-.015-.709-.52-1.248-1.342-1.248-.822 0-1.359.54-1.359 1.248 0 .694.521 1.248 1.327 1.248h.016zm4.908 8.212V9.359c0-.216.016-.432.08-.586.173-.431.568-.878 1.232-.878.869 0 1.216.662 1.216 1.634v3.865h2.401V9.25c0-2.22-1.184-3.252-2.764-3.252-1.274 0-1.845.7-2.165 1.193v.025h-.016a5.54 5.54 0 00.016-.025V6.169h-2.4c.03.678 0 7.225 0 7.225h2.4z"/></svg>
+                </a>
+                <a class="icon-link" href="mailto:ksahu@cloudera.com" title="Email ksahu@cloudera.com" aria-label="Email">
+                  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M0 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H2a2 2 0 01-2-2V4zm2-1a1 1 0 00-1 1v.217l7 4.2 7-4.2V4a1 1 0 00-1-1H2zm13 2.383l-4.708 2.825L15 11.105V5.383zm-.034 6.876l-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 002 13h12a1 1 0 00.966-.741zM1 11.105l4.708-2.897L1 5.383v5.722z"/></svg>
+                </a>
+              </span>
+            </span>
             {% if ctx.deployment.owner | default('') | length > 0 %}
-            <span class="label-badge label-badge-deployment"><span class="label-badge-key">Deployment owner</span> {{ ctx.deployment.owner }}</span>
+            <span class="label-badge label-badge-deployment"><span class="label-badge-key">Deployment owner:</span> {{ ctx.deployment.owner }}</span>
             {% endif %}
             {% if ctx.deployment.name_prefix | default('') | length > 0 %}
-            <span class="label-badge label-badge-prefix" title="Terraform/Jenkins environment — resource name prefix"><span class="label-badge-key">Prefix</span> {{ ctx.deployment.name_prefix }}</span>
+            <span class="label-badge label-badge-prefix" title="Terraform/Jenkins environment — resource name prefix"><span class="label-badge-key">Deployment name (prefix):</span> {{ ctx.deployment.name_prefix }}</span>
             {% endif %}
             <span class="label-badge label-badge-beta"><span class="label-badge-key">Automation</span> beta version</span>
           </div>
+        </div>
+        <div class="header-actions">
+          <button type="button" class="help-open-btn" id="portal-help-open" aria-haspopup="dialog">Help</button>
         </div>
       </div>
       <div class="meta-row">
@@ -705,6 +792,10 @@
         <p class="sub">SSH user for instances: <code>{{ oa.ssh_user | default('ec2-user') }}</code>
           — <a href="{{ oa.downloads_path_prefix | default('/downloads') }}/operator-credentials.json">operator-credentials.json</a> (machine-readable bundle; same auth as other downloads when basic auth is enabled)
         </p>
+        {% if oa.ssh_keys_exposed | default(false) | bool and (oa.ssh_connect_command | default('') | length > 0) %}
+        <p class="sub"><strong>SSH quick start</strong> — download <code>{{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code> from <code>{{ oa.downloads_path_prefix | default('/downloads') }}/ssh/</code>, run <code>chmod 400 {{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code>, then connect (example uses {{ oa.ssh_connect_host | default('ipaserver') }}; use any inventory FQDN or IP):</p>
+        <div class="ssh-command-box"><code>{{ oa.ssh_connect_command }}</code></div>
+        {% endif %}
         {% for sec in oa.sections | default([]) %}
         <h2 class="section-title" style="margin-top:1rem">{{ sec.title }}</h2>
         {% if sec.intro | default('') | length > 0 %}<p class="sub">{{ sec.intro }}</p>{% endif %}
@@ -1066,16 +1157,42 @@
     </section>
     {% endif %}
   </main>
+  <dialog class="help-dialog" id="portal-help-dialog" aria-labelledby="portal-help-title">
+    <div class="help-dialog-head">
+      <h2 id="portal-help-title">Using this deployment portal</h2>
+      <button type="button" class="help-close-btn" id="portal-help-close" aria-label="Close help">Close</button>
+    </div>
+    <div class="help-dialog-inner">
+      <p class="sub"><strong>Quick open</strong> — tiles link to Cloudera Manager, pgAdmin, monitoring, FreeIPA (modern and legacy via Caddy when configured), ECS, and this portal.</p>
+      <p class="sub"><strong>Health snapshot</strong> — Cloudera Manager service health from the last portal refresh (<code>35_refresh_deployment_portal.yml</code>); Prometheus target count may poll in-browser when path routes are enabled.</p>
+      <p class="sub"><strong>Operator access</strong> — lab credentials and PEM downloads rendered at sync from Ansible group_vars (not stored in git). Treat as sensitive; restrict network access.</p>
+      <p class="sub"><strong>Endpoints &amp; network access</strong> — consolidated URLs with inventory hostnames; private-lab vs public/VPC tiers match your access profile.</p>
+      <p class="sub"><strong>Host inventory &amp; planned roles</strong> — Ansible groups, addresses, and inferred CDP/monitoring placement.</p>
+      <p class="sub"><strong>Downloads security</strong> — when <code>deployment_portal_basic_auth_enabled</code> is true, files under <code>/downloads</code> (including SSH keys) require HTTP basic auth. Prefer auth on before exposing PEMs.</p>
+      <p class="sub"><strong>FreeIPA legacy UI</strong> — use the Caddy <code>ipa.*</code> vhost (<code>/ipa/ui</code>) so browsers do not need <code>/etc/hosts</code> for the ipaserver FQDN; direct <code>https://&lt;ipaserver-fqdn&gt;</code> still needs lab DNS.</p>
+    </div>
+  </dialog>
   <footer class="site-footer">
-    <div>Developed by <strong>Kuldeep Sahu</strong></div>
+    <div>Portal developed by <strong>{{ ctx.deployment.portal_owner_display | default('Kuldeep Sahu') }}</strong></div>
     <div class="footer-links">
-      <a href="mailto:ksahu@cloudera.com">ksahu@cloudera.com</a>
-      <a href="mailto:sahukuldeep4321@gmail.com">sahukuldeep4321@gmail.com</a>
-      <a href="https://github.com/kuldeepsahu1105" target="_blank" rel="noopener noreferrer">GitHub — kuldeepsahu1105</a>
-      <a href="https://www.linkedin.com/in/kuldeep-sahu-0511" target="_blank" rel="noopener noreferrer">LinkedIn — kuldeep-sahu-0511</a>
+      <a class="icon-link" href="mailto:ksahu@cloudera.com"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M0 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H2a2 2 0 01-2-2V4zm2-1a1 1 0 00-1 1v.217l7 4.2 7-4.2V4a1 1 0 00-1-1H2zm13 2.383l-4.708 2.825L15 11.105V5.383zm-.034 6.876l-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 002 13h12a1 1 0 00.966-.741zM1 11.105l4.708-2.897L1 5.383v5.722z"/></svg> ksahu@cloudera.com</a>
+      <a class="icon-link" href="mailto:sahukuldeep4321@gmail.com"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M0 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H2a2 2 0 01-2-2V4zm2-1a1 1 0 00-1 1v.217l7 4.2 7-4.2V4a1 1 0 00-1-1H2zm13 2.383l-4.708 2.825L15 11.105V5.383zm-.034 6.876l-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 002 13h12a1 1 0 00.966-.741zM1 11.105l4.708-2.897L1 5.383v5.722z"/></svg> sahukuldeep4321@gmail.com</a>
+      <a class="icon-link" href="https://github.com/kuldeepsahu1105" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg> GitHub</a>
+      <a class="icon-link" href="https://www.linkedin.com/in/kuldeep-sahu-0511" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M0 1.146C0 .513.526 0 1.175 0h13.65C15.474 0 16 .513 16 1.146v13.708c0 .633-.526 1.146-1.175 1.146H1.175C.526 16 0 15.487 0 14.854V1.146zm4.943 12.248V6.169H2.542v7.225h2.401zm-1.2-8.212c.837 0 1.358-.554 1.358-1.248-.015-.709-.52-1.248-1.342-1.248-.822 0-1.359.54-1.359 1.248 0 .694.521 1.248 1.327 1.248h.016zm4.908 8.212V9.359c0-.216.016-.432.08-.586.173-.431.568-.878 1.232-.878.869 0 1.216.662 1.216 1.634v3.865h2.401V9.25c0-2.22-1.184-3.252-2.764-3.252-1.274 0-1.845.7-2.165 1.193v.025h-.016a5.54 5.54 0 00.016-.025V6.169h-2.4c.03.678 0 7.225 0 7.225h2.4z"/></svg> LinkedIn</a>
     </div>
   </footer>
   <script>
+  (function () {
+    var helpDlg = document.getElementById('portal-help-dialog');
+    var helpOpen = document.getElementById('portal-help-open');
+    var helpClose = document.getElementById('portal-help-close');
+    if (helpDlg && helpOpen) {
+      helpOpen.addEventListener('click', function () { if (helpDlg.showModal) helpDlg.showModal(); });
+    }
+    if (helpDlg && helpClose) {
+      helpClose.addEventListener('click', function () { helpDlg.close(); });
+    }
+  })();
   (function () {
     var POLL_MS = 60000;
     var initial = {{ ls | tojson }};

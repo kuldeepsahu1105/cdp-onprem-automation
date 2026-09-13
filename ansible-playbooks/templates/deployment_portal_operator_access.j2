@@ -4,14 +4,28 @@
 {% set auth_on = deployment_portal_basic_auth_enabled | default(false) | bool %}
 {% set dl_base = '/downloads' %}
 {% set ns = namespace(sections=[]) %}
-{% if expose %}
 {% set _ssh_exports = deployment_portal_ssh_export_keys | default([]) %}
+{% set _ssh_user = ansible_user | default('ec2-user') %}
+{% set _ssh_host = deployment_portal_ipa_fqdn | default('') | trim if (deployment_portal_has_ipa | default(false) | bool and (deployment_portal_ipa_fqdn | default('') | length > 0)) else (deployment_portal_anchor_fqdn | default('') | trim) %}
+{% set _ssh_key_basename = _ssh_exports[0].basename | default('cluster-access.pem') if (_ssh_exports | length > 0) else 'cluster-access.pem' %}
+{% set _mon_on = (
+  (monitoring_stack_enabled | default(false) | bool)
+  or (deployment_portal_monitoring_deployed | default(false) | bool)
+  or (deployment_portal_monitoring_routes_enabled | default(false) | bool)
+) %}
+{% set _access_tier = deployment_portal_access_urls.primary if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external %}
+{% set _graf_url = (caddy_vhost_urls_external.grafana.url | default('') | trim) if (caddy_vhost_enabled | default(false) | bool and (caddy_vhost_urls_external.grafana.url | default('') | length > 0)) else (_access_tier.grafana | default('') | trim) %}
+{% set _prom_url = (caddy_vhost_urls_external.prometheus.url | default('') | trim) if (caddy_vhost_enabled | default(false) | bool and (caddy_vhost_urls_external.prometheus.url | default('') | length > 0)) else (_access_tier.prometheus | default('') | trim) %}
+{% set _am_url = (caddy_vhost_urls_external.alertmanager.url | default('') | trim) if (caddy_vhost_enabled | default(false) | bool and (caddy_vhost_urls_external.alertmanager.url | default('') | length > 0)) else (_access_tier.alertmanager | default('') | trim) %}
+{% set _cadv_url = _access_tier.cadvisor | default('') | trim %}
+{% if expose %}
 {% if ssh_on and (_ssh_exports | length > 0) %}
 {% set _ssh_dl = [] %}
 {% for ek in _ssh_exports %}
-{% set _ssh_dl = _ssh_dl + [{'label': ek.label, 'href': dl_base ~ '/ssh/' ~ ek.basename, 'filename': ek.basename, 'note': ek.note | default('chmod 600 after download')}] %}
+{% set _ssh_dl = _ssh_dl + [{'label': ek.label, 'href': dl_base ~ '/ssh/' ~ ek.basename, 'filename': ek.basename, 'note': 'chmod 400 after download'}] %}
 {% endfor %}
-{% set ns.sections = ns.sections + [{'id': 'ssh', 'title': 'SSH cluster access', 'intro': 'Private keys copied from the Ansible controller at portal sync (EC2 PEM and/or Auto-TLS key when both exist).', 'downloads': _ssh_dl, 'credentials': []}] %}
+{% set _ssh_intro = 'Download a private key from the links below, run chmod 400 on the PEM, then use the sample SSH command. Keys are copied from the Ansible controller at portal sync (EC2 PEM and/or Auto-TLS key when both exist). Bastion/ops anchor: ' ~ (deployment_portal_anchor_fqdn | default('')) ~ '.' %}
+{% set ns.sections = ns.sections + [{'id': 'ssh', 'title': 'SSH cluster access', 'intro': _ssh_intro, 'downloads': _ssh_dl, 'credentials': []}] %}
 {% elif ssh_on %}
 {% set ns.sections = ns.sections + [{'id': 'ssh', 'title': 'SSH cluster access', 'intro': 'Key export enabled but no private keys found on the Ansible controller during portal sync.', 'downloads': [], 'credentials': []}] %}
 {% endif %}
@@ -21,8 +35,15 @@
 {% set _pgadmin_note = ('Caddy vhost ' ~ (caddy_vhost_urls_external.pgadmin.hostname | default('')) ~ '; CM DB on ' ~ deployment_portal_postgres_fqdn) if (pgadmin_caddy_public_url | default('') | length > 0) else ('Direct ops :' ~ (deployment_portal_pgadmin_host_port | string) ~ '; CM DB on ' ~ deployment_portal_postgres_fqdn) %}
 {% set _postgres_host_url = 'postgresql://' ~ deployment_portal_postgres_fqdn ~ ':' ~ (postgres_port | string) ~ '/scm' %}
 {% set ns.sections = ns.sections + [{'id': 'database', 'title': 'Database & pgAdmin', 'intro': 'CM PostgreSQL and portal pgAdmin.', 'downloads': [], 'credentials': [{'label': 'PostgreSQL (CM)', 'username': postgres_user | default('postgres'), 'password': postgres_password, 'url': _postgres_host_url, 'note': deployment_portal_postgres_fqdn ~ ':' ~ (postgres_port | string) ~ ' scm/' ~ scm_db_user}, {'label': 'pgAdmin', 'username': pgadmin_default_email, 'password': pgadmin_default_password, 'url': _pgadmin_url, 'note': _pgadmin_note}]}] %}
-{% if (monitoring_stack_enabled | default(false) | bool) or (deployment_portal_monitoring_deployed | default(false) | bool) %}
-{% set ns.sections = ns.sections + [{'id': 'monitoring', 'title': 'Monitoring (Grafana)', 'intro': 'Grafana admin when monitoring stack is installed.', 'downloads': [], 'credentials': [{'label': 'Grafana', 'username': monitoring_grafana_admin_user, 'password': monitoring_grafana_admin_password, 'url': '', 'note': 'Port ' ~ (monitoring_grafana_host_port | string)}]}] %}
+{% if _mon_on %}
+{% set _mon_intro = 'Monitoring UIs on the ops host (' ~ (deployment_portal_anchor_fqdn | default('')) ~ '). URLs prefer Caddy lab vhosts when enabled; otherwise direct host ports or Caddy path routes on :' ~ (deployment_portal_http_port | string) ~ '.' %}
+{% set _mon_creds = [
+  {'label': 'Grafana', 'username': monitoring_grafana_admin_user, 'password': monitoring_grafana_admin_password, 'url': _graf_url, 'note': 'Admin UI; host :' ~ (monitoring_grafana_host_port | string)},
+  {'label': 'Prometheus', 'username': '(none)', 'password': '—', 'url': _prom_url, 'note': 'Host :' ~ (monitoring_prometheus_host_port | string)},
+  {'label': 'Alertmanager', 'username': '(none)', 'password': '—', 'url': _am_url, 'note': 'Host :' ~ (monitoring_alertmanager_host_port | string)},
+  {'label': 'cAdvisor', 'username': '(none)', 'password': '—', 'url': _cadv_url, 'note': 'Container metrics; host :' ~ (monitoring_cadvisor_host_port | string)}
+] %}
+{% set ns.sections = ns.sections + [{'id': 'monitoring', 'title': 'Monitoring stack', 'intro': _mon_intro, 'downloads': [], 'credentials': _mon_creds}] %}
 {% endif %}
 {% if deployment_portal_has_ipa | default(false) | bool %}
 {% set _ipa_direct_url = 'https://' ~ deployment_portal_ipa_fqdn %}
@@ -81,6 +102,9 @@ enabled: {{ expose | bool }}
 basic_auth_enabled: {{ auth_on | bool }}
 ssh_keys_exposed: {{ ssh_on | bool }}
 downloads_path_prefix: "{{ dl_base }}"
-ssh_user: "{{ ansible_user | default('ec2-user') }}"
+ssh_user: "{{ _ssh_user }}"
+ssh_connect_host: "{{ _ssh_host }}"
+ssh_connect_key_filename: "{{ _ssh_key_basename }}"
+ssh_connect_command: "ssh -i {{ _ssh_key_basename }} {{ _ssh_user }}@{{ _ssh_host }}"
 auth_username: "{{ deployment_portal_basic_auth_user | default('portal') }}"
 sections: {{ ns.sections | to_json }}

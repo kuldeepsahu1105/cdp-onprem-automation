@@ -17,7 +17,7 @@ http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port 
 {% if deployment_portal_has_ipa | default(false) | bool %}
 {# FreeIPA dual UI via Caddy: path-only root redirect; HTTP upstream + Host + Referer; rewrite upstream Location (openshift / ipa-rewrite pattern). Legacy /ipa/ui HTML host rewrites use Apache mod_substitute (ipa_httpd_caddy_proxy.conf.j2). See .cursor/LEARNINGS.md #}
 http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
-  @ipa_legacy path /ipa/ui /ipa/ui/*
+  @ipa_legacy path /ipa/ui /ipa/ui/* /ipa/js /ipa/js/* /ipa/config /ipa/config/* /ipa/xml /ipa/xml/* /ipa/css /ipa/css/* /ipa/wsgi /ipa/wsgi/*
   handle @ipa_legacy {
     reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
       header_up Host {{ deployment_portal_ipa_fqdn }}
