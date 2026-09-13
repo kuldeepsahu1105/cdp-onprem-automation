@@ -1,0 +1,86 @@
+---
+# Classify FreeIPA client install state before ipa-client-install (playbook 16).
+#
+# Outcomes (set_fact):
+#   ipa_client_has_default_conf — /etc/ipa/default.conf present (enrolled; skip install)
+#   ipa_client_has_partial_state — leftover client paths without default.conf (failed install)
+#   ipa_client_install_clean_host — no default.conf and no partial debris (fresh install)
+
+- name: Detect IPA client — stat default.conf
+  ansible.builtin.stat:
+    path: /etc/ipa/default.conf
+  register: ipa_client_detect_default_conf
+
+- name: Detect IPA client — stat client CA marker
+  ansible.builtin.stat:
+    path: /etc/ipa/ca.crt
+  register: ipa_client_detect_ca_crt
+  failed_when: false
+
+- name: Detect IPA client — stat /var/lib/ipa-client
+  ansible.builtin.stat:
+    path: /var/lib/ipa-client
+  register: ipa_client_detect_var_lib_client
+  failed_when: false
+
+- name: Detect IPA client — stat sysrestore.state
+  ansible.builtin.stat:
+    path: /var/lib/ipa-client/sysrestore/sysrestore.state
+  register: ipa_client_detect_sysrestore_state
+  failed_when: false
+
+- name: Detect IPA client — stat sysrestore.index
+  ansible.builtin.stat:
+    path: /var/lib/ipa-client/sysrestore/sysrestore.index
+  register: ipa_client_detect_sysrestore_index
+  failed_when: false
+
+- name: Detect IPA client — list /etc/ipa when default.conf absent
+  ansible.builtin.find:
+    paths: /etc/ipa
+    file_type: any
+    depth: 5
+  register: ipa_client_detect_etc_ipa_contents
+  failed_when: false
+  when: not (ipa_client_detect_default_conf.stat.exists | default(false) | bool)
+
+- name: Detect IPA client — derive sysrestore marker
+  ansible.builtin.set_fact:
+    ipa_client_detect_sysrestore_present: >-
+      {{
+        (ipa_client_detect_sysrestore_state.stat.exists | default(false) | bool)
+        or (ipa_client_detect_sysrestore_index.stat.exists | default(false) | bool)
+      }}
+
+- name: Detect IPA client — derive critical install debris
+  ansible.builtin.set_fact:
+    ipa_client_detect_critical_debris: >-
+      {{
+        (ipa_client_detect_ca_crt.stat.exists | default(false) | bool)
+        or (ipa_client_detect_sysrestore_present | default(false) | bool)
+        or ((ipa_client_detect_etc_ipa_contents.matched | default(0) | int) > 0)
+      }}
+
+- name: Detect IPA client — derive configuration and partial-install facts
+  ansible.builtin.set_fact:
+    ipa_client_has_default_conf: >-
+      {{ ipa_client_detect_default_conf.stat.exists | default(false) | bool }}
+    ipa_client_has_partial_state: >-
+      {{
+        not (ipa_client_detect_default_conf.stat.exists | default(false) | bool)
+        and (ipa_client_detect_critical_debris | default(false) | bool)
+      }}
+    ipa_client_install_clean_host: >-
+      {{
+        not (ipa_client_detect_default_conf.stat.exists | default(false) | bool)
+        and not (ipa_client_detect_critical_debris | default(false) | bool)
+      }}
+
+- name: Detect IPA client — log partial state before cleanup
+  ansible.builtin.debug:
+    msg: >-
+      IPA client not enrolled on {{ inventory_hostname }} but partial install debris detected
+      (sysrestore.index/state={{ ipa_client_detect_sysrestore_present | default(false) }},
+      /etc/ipa entries={{ ipa_client_detect_etc_ipa_contents.matched | default(0) }}).
+      Will run ipa-client-install --uninstall --unattended before retry.
+  when: ipa_client_has_partial_state | bool
