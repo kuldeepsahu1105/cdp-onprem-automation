@@ -6,10 +6,10 @@
     deployment_portal_host_group_effective: >-
       {{
         (
-          'ipaserver'
+          ipaserver_inventory_group_resolved
           if (
             (deployment_portal_host_group | default('auto')) == 'auto'
-            and (groups.get('ipaserver', []) | length > 0)
+            and (ipa_server_in_inventory | default(false) | bool)
           )
           else (
             'cldr-mngr'

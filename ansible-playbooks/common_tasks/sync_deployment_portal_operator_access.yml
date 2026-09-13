@@ -1,6 +1,56 @@
 ---
 # Copy SSH keys and credentials bundle to portal www; optional Caddy basicauth for /downloads.
 
+- name: Refresh portal SSH key paths on Ansible controller before sync
+  delegate_to: localhost
+  run_once: true
+  become: false
+  block:
+    - name: Re-resolve deployment portal SSH private keys on controller
+      ansible.builtin.import_tasks: resolve_deployment_portal_ssh_key.yml
+
+    - name: Recompute effective SSH key export flag on controller
+      ansible.builtin.set_fact:
+        deployment_portal_ssh_keys_expose_effective: >-
+          {{
+            deployment_portal_expose_ssh_keys | default(false) | bool
+            if (deployment_portal_expose_ssh_keys | default(false) | string) not in ['auto', 'Auto', 'AUTO']
+            else (
+              deployment_portal_basic_auth_enabled | default(false) | bool
+            )
+          }}
+
+    - name: Refresh operator access metadata after SSH key resolution
+      ansible.builtin.set_fact:
+        deployment_portal_operator_access: >-
+          {{
+            lookup('template', 'deployment_portal_operator_access.j2') | from_yaml | default({}, true)
+          }}
+
+- name: Adopt refreshed SSH export facts from controller
+  ansible.builtin.set_fact:
+    deployment_portal_ssh_export_keys: "{{ hostvars['localhost']['deployment_portal_ssh_export_keys'] | default([]) }}"
+    deployment_portal_ssh_keys_expose_effective: "{{ hostvars['localhost']['deployment_portal_ssh_keys_expose_effective'] | default(false) | bool }}"
+    deployment_portal_ssh_private_key_path: "{{ hostvars['localhost']['deployment_portal_ssh_private_key_path'] | default('') }}"
+    deployment_portal_ssh_download_basename: "{{ hostvars['localhost']['deployment_portal_ssh_download_basename'] | default('cluster-access.pem') }}"
+    deployment_portal_operator_access: "{{ hostvars['localhost']['deployment_portal_operator_access'] | default({}) }}"
+    deployment_portal_context: >-
+      {{
+        deployment_portal_context | default({})
+        | combine({'operator_access': hostvars['localhost']['deployment_portal_operator_access'] | default({})}, recursive=True)
+      }}
+  when: hostvars['localhost'] is defined
+
+- name: Warn when SSH key export is enabled but no controller keys were found
+  ansible.builtin.debug:
+    msg: >-
+      deployment_portal_ssh_keys_expose_effective=true but no SSH private keys were found on the Ansible controller
+      (checked ANSIBLE_PRIVATE_KEY, ansible-playbooks/sshkey.pem, HOL_ANSIBLE_STATE_DIR, ~/.ssh).
+      Set deployment_portal_ssh_pem_path or ensure Terraform/Jenkins restored sshkey.pem before PORTAL.
+  when:
+    - deployment_portal_ssh_keys_expose_effective | default(false) | bool
+    - (deployment_portal_ssh_export_keys | default([]) | length) == 0
+
 - name: Ensure portal downloads directories exist
   ansible.builtin.file:
     path: "{{ item }}"
@@ -35,11 +85,15 @@
     mode: "0640"
     owner: root
     group: root
-  loop: "{{ hostvars['localhost']['deployment_portal_ssh_export_keys'] | default([]) }}"
+  loop: "{{ deployment_portal_ssh_export_keys | default([]) }}"
+  loop_control:
+    label: "{{ item.basename | default('ssh-key') }}"
   no_log: true
   when:
     - deployment_portal_ssh_keys_expose_effective | default(false) | bool
-    - (hostvars['localhost']['deployment_portal_ssh_export_keys'] | default([]) | length) > 0
+    - (deployment_portal_ssh_export_keys | default([]) | length) > 0
+    - item.controller_path | default('') | length > 0
+    - item.basename | default('') | length > 0
 
 - name: Remove stale SSH download when export disabled
   ansible.builtin.file:

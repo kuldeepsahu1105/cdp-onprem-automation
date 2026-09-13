@@ -559,6 +559,7 @@
       overflow-x: auto;
     }
     .ssh-command-box code { background: transparent; padding: 0; word-break: normal; white-space: pre-wrap; }
+    code.ssh-inline-cmd { display: block; white-space: pre-wrap; word-break: break-all; font-size: 0.8em; }
     .owner-social { display: inline-flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
     @media (max-width: 480px) {
       .site-header { padding: 0.85rem 1rem; }
@@ -792,9 +793,32 @@
         <p class="sub">SSH user for instances: <code>{{ oa.ssh_user | default('ec2-user') }}</code>
           — <a href="{{ oa.downloads_path_prefix | default('/downloads') }}/operator-credentials.json">operator-credentials.json</a> (machine-readable bundle; same auth as other downloads when basic auth is enabled)
         </p>
-        {% if oa.ssh_keys_exposed | default(false) | bool and (oa.ssh_connect_command | default('') | length > 0) %}
-        <p class="sub"><strong>SSH quick start</strong> — download <code>{{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code> from <code>{{ oa.downloads_path_prefix | default('/downloads') }}/ssh/</code>, run <code>chmod 400 {{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code>, then connect (example uses {{ oa.ssh_connect_host | default('ipaserver') }}; use any inventory FQDN or IP):</p>
+        {% if oa.ssh_connect_command | default('') | length > 0 %}
+        <p class="sub"><strong>SSH quick start</strong>{% if oa.ssh_keys_exposed | default(false) | bool %} — download <code>{{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code> from <code>{{ oa.downloads_path_prefix | default('/downloads') }}/ssh/</code>, run <code>chmod 400 {{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code>,{% else %} — use your lab PEM (for example <code>{{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code> from Terraform/Jenkins),{% endif %} then connect (example host <code>{{ oa.ssh_connect_host | default('ipaserver') }}</code>; FQDN or public IP from inventory also work):</p>
         <div class="ssh-command-box"><code>{{ oa.ssh_connect_command }}</code></div>
+        {% endif %}
+        {% if oa.ssh_host_examples | default([]) | length > 0 %}
+        <p class="sub"><strong>SSH sample commands (per host)</strong> — same user/key; paths are relative to where you saved the PEM.</p>
+        <div class="table-scroll">
+          <table class="portal-table">
+            <thead>
+              <tr>
+                <th>Host</th>
+                <th>FQDN</th>
+                <th>Command</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ex in oa.ssh_host_examples %}
+              <tr>
+                <td><code>{{ ex.label }}</code></td>
+                <td><code>{{ ex.host }}</code></td>
+                <td><code class="ssh-inline-cmd">{{ ex.command }}</code></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
         {% endif %}
         {% for sec in oa.sections | default([]) %}
         <h2 class="section-title" style="margin-top:1rem">{{ sec.title }}</h2>
@@ -1120,7 +1144,7 @@
     {% if ctx.inventory_hosts | default([]) | length > 0 %}
     <section class="flat">
       <h2>Host inventory</h2>
-      <p class="sub">One row per host: Ansible groups, addresses, and inferred roles from inventory groups, hostvars (e.g. <code>host_template</code>, Knox), and enabled base-cluster services.</p>
+      <p class="sub">One row per host: Ansible groups, addresses, inferred roles, and sample <code>ssh -i &lt;pem&gt;</code> commands (user <code>{{ oa.ssh_user | default('ec2-user') }}</code>, key file <code>{{ oa.ssh_connect_key_filename | default('cluster-access.pem') }}</code>).</p>
       <div class="table-scroll">
         <table class="portal-table inventory-table">
           <thead>
@@ -1131,6 +1155,7 @@
               <th>Public IP</th>
               <th>Inventory groups</th>
               <th>Roles installed</th>
+              <th>SSH login</th>
             </tr>
           </thead>
           <tbody>
@@ -1150,6 +1175,7 @@
                 <span class="role-badge">{{ role }}</span>
                 {% endfor %}
               </td>
+              <td>{% if h.ssh_command | default('') | length > 0 %}<code class="ssh-inline-cmd">{{ h.ssh_command }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
             </tr>
             {% endfor %}
           </tbody>

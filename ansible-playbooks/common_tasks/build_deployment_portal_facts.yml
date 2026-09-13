@@ -80,12 +80,15 @@
 
 - name: Detect FreeIPA server in inventory
   ansible.builtin.set_fact:
-    deployment_portal_has_ipa: "{{ groups.get('ipaserver', []) | length > 0 }}"
+    deployment_portal_has_ipa: "{{ ipa_server_in_inventory | default(false) | bool }}"
 
 - name: Set FreeIPA UI hostname
   ansible.builtin.set_fact:
     deployment_portal_ipa_fqdn: >-
-      {{ hostvars[groups['ipaserver'][0]].cldr_hostname }}.{{ cluster_domain }}
+      {{
+        hostvars[ipaserver_inventory_host].cldr_hostname
+        | default(ipaserver_inventory_host)
+      }}.{{ cluster_domain }}
   when: deployment_portal_has_ipa | bool
 
 - name: Clear FreeIPA hostname when not in inventory

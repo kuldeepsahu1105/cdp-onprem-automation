@@ -1,0 +1,11 @@
+{# Build ssh -i <key> <user>@<host> using inventory FQDN, ansible_host, or inventory name. #}
+{% macro portal_ssh_connect_target(hv, inv_name, cluster_domain) -%}
+{%- set _hn = hv.cldr_hostname | default(inv_name) | trim -%}
+{%- set _fqdn = (_hn ~ '.' ~ cluster_domain) if (_hn | length > 0) else '' -%}
+{%- set _ah = hv.ansible_host | default('') | trim -%}
+{{- _fqdn if (_fqdn | length > 0) else (_ah if (_ah | length > 0) else inv_name) -}}
+{%- endmacro %}
+
+{% macro portal_ssh_command(user, key_basename, hv, inv_name, cluster_domain) -%}
+ssh -i {{ key_basename }} {{ user }}@{{ portal_ssh_connect_target(hv, inv_name, cluster_domain) }}
+{%- endmacro %}

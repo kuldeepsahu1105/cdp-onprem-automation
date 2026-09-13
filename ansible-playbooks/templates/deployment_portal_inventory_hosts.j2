@@ -1,5 +1,8 @@
 {# YAML list: one row per inventory host (union of deployment_portal_inventory_groups) #}
 {% from 'deployment_portal_resolve_public_ip.inc.j2' import resolve_deployment_portal_public_ip %}
+{% from 'deployment_portal_ssh_command.inc.j2' import portal_ssh_command %}
+{% set _ssh_user = deployment_ssh_user | default(ansible_user | default('ec2-user')) %}
+{% set _ssh_key = deployment_portal_ssh_download_basename | default('cluster-access.pem') %}
 {% set _anchor_inv = groups[deployment_portal_host_group_effective][0] %}
 {% set _postgres_inv = deployment_portal_postgres_inv | default('') %}
 {% set _knox = base_cluster_install_services.knox | default(false) | bool %}
@@ -21,7 +24,7 @@
 {% endif %}
 {% endfor %}
 {% set _roles = [] %}
-{% if inv_host in groups.get('ipaserver', []) %}
+{% if inv_host in groups.get('ipaserver', []) or inv_host in groups.get('ipa_server', []) %}
 {% if 'FreeIPA server' not in _roles %}{% set _ = _roles.append('FreeIPA server') %}{% endif %}
 {% endif %}
 {% if inv_host == _anchor_inv %}
@@ -99,6 +102,8 @@
   groups: {{ _groups | to_json }}
   group_labels: {{ _group_labels | to_json }}
   role_labels: {{ _roles | to_json }}
+  ssh_user: "{{ _ssh_user }}"
+  ssh_command: "{{ portal_ssh_command(_ssh_user, _ssh_key, _hv, inv_host, cluster_domain) }}"
 {% endif %}
 {% endfor %}
 {% endfor %}

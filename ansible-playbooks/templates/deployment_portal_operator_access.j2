@@ -1,13 +1,31 @@
 {# YAML dict: operator credentials and download links — deploy-time only, never committed with real secrets. #}
+{% from 'deployment_portal_ssh_command.inc.j2' import portal_ssh_command, portal_ssh_connect_target %}
 {% set expose = deployment_portal_expose_credentials | default(true) | bool %}
 {% set ssh_on = deployment_portal_ssh_keys_expose_effective | default(false) | bool %}
 {% set auth_on = deployment_portal_basic_auth_enabled | default(false) | bool %}
 {% set dl_base = '/downloads' %}
 {% set ns = namespace(sections=[]) %}
 {% set _ssh_exports = deployment_portal_ssh_export_keys | default([]) %}
-{% set _ssh_user = ansible_user | default('ec2-user') %}
-{% set _ssh_host = deployment_portal_ipa_fqdn | default('') | trim if (deployment_portal_has_ipa | default(false) | bool and (deployment_portal_ipa_fqdn | default('') | length > 0)) else (deployment_portal_anchor_fqdn | default('') | trim) %}
-{% set _ssh_key_basename = _ssh_exports[0].basename | default('cluster-access.pem') if (_ssh_exports | length > 0) else 'cluster-access.pem' %}
+{% set _ssh_user = deployment_ssh_user | default(ansible_user | default('ec2-user')) %}
+{% set _ssh_key_basename = deployment_portal_ssh_download_basename | default(_ssh_exports[0].basename | default('cluster-access.pem') if (_ssh_exports | length > 0) else 'cluster-access.pem') %}
+{% set _ssh_host = '' %}
+{% if deployment_portal_has_ipa | default(false) | bool and (deployment_portal_ipa_fqdn | default('') | trim | length > 0) %}
+{% set _ssh_host = deployment_portal_ipa_fqdn | default('') | trim %}
+{% elif deployment_portal_has_ipa | default(false) | bool and (ipaserver_inventory_host | default('') | length > 0) %}
+{% set _ipa_hv = hostvars[ipaserver_inventory_host] %}
+{% set _ssh_host = portal_ssh_connect_target(_ipa_hv, ipaserver_inventory_host, cluster_domain) %}
+{% elif deployment_portal_anchor_fqdn | default('') | trim | length > 0 %}
+{% set _ssh_host = deployment_portal_anchor_fqdn | default('') | trim %}
+{% elif ('cldr-mngr' in groups) and (groups['cldr-mngr'] | default([]) | length > 0) %}
+{% set _cm_inv = groups['cldr-mngr'][0] %}
+{% set _ssh_host = portal_ssh_connect_target(hostvars[_cm_inv], _cm_inv, cluster_domain) %}
+{% endif %}
+{% set _ssh_examples = [] %}
+{% for row in deployment_portal_inventory_hosts | default([]) %}
+{% if row.ssh_command | default('') | length > 0 %}
+{% set _ssh_examples = _ssh_examples + [{'label': row.hostname | default(row.inventory_name), 'host': row.fqdn | default(row.inventory_name), 'command': row.ssh_command}] %}
+{% endif %}
+{% endfor %}
 {% set _mon_on = (
   (monitoring_stack_enabled | default(false) | bool)
   or (deployment_portal_monitoring_deployed | default(false) | bool)
@@ -112,6 +130,7 @@ downloads_path_prefix: "{{ dl_base }}"
 ssh_user: "{{ _ssh_user }}"
 ssh_connect_host: "{{ _ssh_host }}"
 ssh_connect_key_filename: "{{ _ssh_key_basename }}"
-ssh_connect_command: "ssh -i {{ _ssh_key_basename }} {{ _ssh_user }}@{{ _ssh_host }}"
+ssh_connect_command: "{{ ('ssh -i ' ~ _ssh_key_basename ~ ' ' ~ _ssh_user ~ '@' ~ _ssh_host) if (_ssh_host | length > 0) else '' }}"
+ssh_host_examples: {{ _ssh_examples | to_json }}
 auth_username: "{{ deployment_portal_basic_auth_user | default('portal') }}"
 sections: {{ ns.sections | to_json }}
