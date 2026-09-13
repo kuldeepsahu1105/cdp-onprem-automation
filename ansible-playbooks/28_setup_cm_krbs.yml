@@ -14,6 +14,9 @@
     - name: Ensure IPA KDC services are active
       ansible.builtin.import_tasks: common_tasks/ensure_ipa_kdc_services.yml
 
+    - name: Configure FreeIPA KDC encryption types (AES)
+      ansible.builtin.import_tasks: common_tasks/configure_ipa_krb_enc_types.yml
+
 - name: Enable Kerberos (KDC) integration in Cloudera Manager
   hosts: localhost
   connection: local
@@ -42,6 +45,7 @@
           - "Kerberos realm: {{ cluster_realm }}"
           - "KDC type: {{ krb5_kdc_type }}"
           - "KDC admin principal (import): {{ cm_krb_kdc_admin_principal }}"
+          - "CM KRB_ENC_TYPES: {{ krb5_enc_types }}"
 
     - name: Read CM Kerberos enabled state (kerberized)
       ansible.builtin.uri:
@@ -66,7 +70,6 @@
 
     - name: Configure Kerberos via Cloudera Manager REST API
       ansible.builtin.import_tasks: common_tasks/configure_cm_kerberos_api.yml
-      when: not kerberos_already_configured | default(false)
 
     - name: Configure Active Directory-specific Kerberos settings
       ansible.builtin.uri:
@@ -178,10 +181,11 @@
         - cm_kerberos_api_result is defined
         - cm_kerberos_api_result is changed
 
-    - name: Kerberos already configured (setup skipped)
+    - name: Kerberos already configured (credential import skipped)
       ansible.builtin.debug:
         msg: >-
-          Kerberos is already enabled in Cloudera Manager (kerberized=true); skipped KDC REST setup.
+          Kerberos is already enabled in Cloudera Manager (kerberized=true); skipped KDC credential import.
+          CM Kerberos settings (e.g. KRB_ENC_TYPES) were reconciled when drift was detected.
       when: kerberos_already_configured | default(false)
 
     - name: Verify Cloudera Manager KDC integration is enabled

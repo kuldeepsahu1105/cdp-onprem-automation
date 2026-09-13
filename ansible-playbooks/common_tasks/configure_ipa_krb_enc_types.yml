@@ -1,0 +1,21 @@
+---
+# FreeIPA KDC: prefer AES enctypes via krb5.conf.d (modern IPA derives KDC types from permitted_enctypes).
+
+- name: Kerberos — ensure krb5.conf.d exists on IPA server
+  ansible.builtin.file:
+    path: /etc/krb5.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Kerberos — deploy IPA KDC permitted enctypes snippet
+  ansible.builtin.template:
+    src: krb5_permitted_enctypes.conf.j2
+    dest: /etc/krb5.conf.d/cldr-permitted-enctypes.conf
+    mode: "0644"
+  register: ipa_krb5_enc_snippet
+
+- name: Kerberos — restart krb5kdc after enctype snippet change
+  ansible.builtin.systemd:
+    name: krb5kdc
+    state: restarted
+  when: ipa_krb5_enc_snippet is changed

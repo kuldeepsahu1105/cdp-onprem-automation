@@ -140,6 +140,9 @@ Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` 
 | `ipaadmin_principal` | IPA admin user |
 | `ipaadmin_password` | IPA admin password |
 | `ipa_kdc_host` | `ipaserver.<domain>` |
+| `krb5_enc_types` | Space-separated CM `KRB_ENC_TYPES` (default `aes256-cts aes128-cts`) |
+| `krb5_allow_weak_rc4` | `false` — set `true` only if legacy RC4 clients are required (not recommended; Java 17+ disables RC4) |
+| `krb5_ipa_default_enctypes` / `krb5_ipa_permitted_enctypes` | Long krb5 names for FreeIPA KDC `krb5.conf.d` snippet (`configure_ipa_krb_enc_types.yml`) |
 
 ### Active Directory variables
 

@@ -1,0 +1,6 @@
+# Managed by ansible-playbooks — AES Kerberos enctypes (Cloudera Manager / Java 17+).
+# Do not enable RC4 here unless krb5_allow_weak_rc4 is explicitly true in group_vars.
+[libdefaults]
+permitted_enctypes = {{ krb5_ipa_permitted_enctypes }}
+default_tkt_enctypes = {{ krb5_ipa_default_enctypes }}
+default_tgs_enctypes = {{ krb5_ipa_default_enctypes }}

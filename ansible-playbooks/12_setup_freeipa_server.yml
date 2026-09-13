@@ -113,6 +113,9 @@
     - name: Ensure FreeIPA KDC and IPA services are running
       ansible.builtin.import_tasks: common_tasks/ensure_ipa_kdc_services.yml
 
+    - name: Configure FreeIPA KDC encryption types (AES)
+      ansible.builtin.import_tasks: common_tasks/configure_ipa_krb_enc_types.yml
+
     - name: Print IPA server installation output
       ansible.builtin.debug:
         msg: "{{ ipa_install_result.stderr_lines }}"
