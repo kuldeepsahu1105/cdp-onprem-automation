@@ -73,7 +73,7 @@
         path: /etc/ipa/default.conf
       register: ipa_default_conf
 
-    - name: Derive IPA install gate text from ipa CLI, ipactl, and default.conf checks
+    - name: "Check if IPA is already installed — collect ipa CLI, ipactl, and default.conf text"
       ansible.builtin.set_fact:
         ipa_server_install_version_text: >-
           {{
@@ -92,7 +92,7 @@
             ~ (ipa_server_status.stderr | default(''))
           }}
 
-    - name: Derive IPA install gate booleans from check results
+    - name: "Check if IPA is already installed — evaluate health from check results"
       ansible.builtin.set_fact:
         ipa_cli_not_configured: >-
           {{
@@ -129,7 +129,7 @@
             and (ipa_ipactl_healthy | bool)
           }}
 
-    - name: IPA install gate — run install unless ipa --version, ipactl, and default.conf all healthy (or force)
+    - name: Decide whether to run ipa-server-install (skip when healthy unless forced)
       ansible.builtin.set_fact:
         ipa_server_should_run_install: >-
           {{
@@ -153,48 +153,48 @@
           IPA not healthy (install required)
           {%- endif %}
 
-    - name: Normalize IPA install gate reason as string
+    - name: Normalize IPA install skip/install reason as string
       ansible.builtin.set_fact:
         ipa_server_install_gate_reason: >-
           {{ ipa_server_install_gate_reason | default('') | string | trim }}
 
-    - name: Derive IPA install DNS mode summary for logging
-      ansible.builtin.set_fact:
-        ipa_install_dns_mode_summary: >-
-          {% if ipa_install_dns_use_vpc_forwarder | default(false) | bool -%}
-          VPC --forwarder={{ effective_vpc_dns_resolver }}
-          {%- elif ipa_install_dns_no_forwarders | default(false) | bool -%}
-          --no-forwarders
-          {%- elif (ipa_install_dns_custom_forwarder | default('', true) | string | trim | length) > 0 -%}
-          custom --forwarder={{ ipa_install_dns_custom_forwarder | string | trim }}
-          {%- else -%}
-          --no-forwarders (fallback)
-          {%- endif %}
-
-    - name: IPA install gate status — already installed and healthy
+    - name: "IPA status: already installed — skipping install"
       ansible.builtin.debug:
-        msg: >-
-          IPA is already installed and healthy (ipa --version, ipactl, default.conf OK).
-          Skipping ipa-server-install. Reason: {{ ipa_server_install_gate_reason }}.
+        msg: IPA already installed.
       when:
         - ipa_server_configured_healthy | bool
         - not (ipa_server_install_force | default(false) | bool)
 
-    - name: IPA install gate status — forced reinstall
+    - name: "IPA status: forced reinstall — proceeding to install IPA"
       ansible.builtin.debug:
-        msg: >-
-          ipa_server_install_force=true: re-running ipa-server-install even though health checks passed.
-          {{ ipa_server_install_gate_reason }}.
+        msg: Proceeding to install IPA (ipa_server_install_force=true).
       when: ipa_server_install_force | default(false) | bool
 
-    - name: IPA install gate status — install required
+    - name: "IPA status: not installed — running ipa-server-install"
       ansible.builtin.debug:
-        msg: >-
-          IPA is not installed or not healthy. Preparing directories and running ipa-server-install.
-          {{ ipa_server_install_gate_reason }}.
+        msg: IPA not installed. Proceeding to install IPA.
       when:
         - ipa_server_should_run_install | bool
         - not (ipa_server_install_force | default(false) | bool)
+
+    - name: Label IPA install DNS forwarder mode for logs
+      ansible.builtin.set_fact:
+        ipa_install_dns_mode_label: >-
+          {% if ipa_install_dns_use_vpc_forwarder | default(false) | bool -%}
+          VPC forwarder {{ effective_vpc_dns_resolver }}
+          {%- elif ipa_install_dns_no_forwarders | default(false) | bool -%}
+          --no-forwarders
+          {%- elif ipa_install_dns_has_custom_forwarder | default(false) | bool -%}
+          custom forwarder {{ ipa_install_dns_custom_forwarder }}
+          {%- else -%}
+          --no-forwarders (fallback)
+          {%- endif %}
+      when: ipa_server_should_run_install | bool
+
+    - name: IPA install DNS forwarder mode
+      ansible.builtin.debug:
+        msg: "DNS: {{ ipa_install_dns_mode_label | default('(unset)') | trim }}"
+      when: ipa_server_should_run_install | bool
 
     - name: Remove stale default.conf when ipactl reports not configured
       ansible.builtin.file:
@@ -203,21 +203,6 @@
       when:
         - ipa_ipactl_not_configured | bool
         - ipa_default_conf.stat.exists | default(false) | bool
-
-    - name: Summarize IPA install gate (ipa CLI, ipactl, default.conf, DNS forwarder mode)
-      ansible.builtin.debug:
-        msg: >-
-          IPA install will run: {{ ipa_server_should_run_install | bool }}
-          ({{ ipa_server_install_gate_reason | trim }}).
-          Gate uses ipa --version rc={{ ipa_cli_version.rc | default('n/a') }}
-          "{{ ipa_cli_version_text | default('') | trim }}" (installed/working CLI; not installer RPM).
-          default.conf present={{ ipa_server_default_conf_present | bool }},
-          ipactl rc={{ ipa_server_status.rc | default('n/a') }},
-          configured_healthy={{ ipa_server_configured_healthy | bool }}.
-          Debug: ipa-server-install --version rc={{ ipa_server_install_pkg_version.rc | default('n/a') }}
-          "{{ ipa_server_install_version_text | default('') }}" (installer package only).
-          DNS install mode: {{ ipa_install_dns_mode_summary | default('(unset)') | trim }}
-          (from resolve_ipa_install_dns_forwarders.yml).
 
     - name: Preflight hostname/DNS and tooling before fresh ipa-server-install
       ansible.builtin.import_tasks: common_tasks/preflight_ipa_server_install.yml
@@ -250,7 +235,7 @@
           --forwarder="{{ effective_vpc_dns_resolver }}" \
           {% elif ipa_install_dns_no_forwarders | default(false) | bool %}
           --no-forwarders \
-          {% elif (ipa_install_dns_custom_forwarder | default('', true) | string | trim | length) > 0 %}
+          {% elif ipa_install_dns_has_custom_forwarder | default(false) | bool %}
           --forwarder="{{ ipa_install_dns_custom_forwarder }}" \
           {% else %}
           --no-forwarders \

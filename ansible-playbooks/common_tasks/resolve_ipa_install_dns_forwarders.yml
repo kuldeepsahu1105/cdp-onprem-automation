@@ -5,7 +5,16 @@
 # Never pass literal dns_forwarders=no|aws|vpc to --forwarder= (invalid IP).
 - name: Normalize dns_forwarders for IPA install
   ansible.builtin.set_fact:
-    ipa_dns_forwarders_norm: "{{ dns_forwarders | default('no', true) | string | lower | trim }}"
+    ipa_dns_forwarders_norm: >-
+      {{
+        (
+          dns_forwarders | default('no', true) | string | lower | trim
+        )
+        if (
+          dns_forwarders | default('no', true) | string | lower | trim
+        ) not in ['', 'false', 'none', 'null']
+        else 'no'
+      }}
 
 - name: Resolve ipa-server-install DNS forwarder mode
   ansible.builtin.set_fact:
@@ -50,5 +59,19 @@
           ipa_dns_forwarders_norm in ['no', 'aws', 'vpc', 'no-forwarders', 'no_forwarders']
           or (dns_forwarders | default('', true) | string | trim | length) == 0
         )
-        else (dns_forwarders | string | trim)
+        else (dns_forwarders | default('', true) | string | trim)
+      }}
+
+- name: Coerce IPA custom DNS forwarder to string (avoid bool | length in templates)
+  ansible.builtin.set_fact:
+    ipa_install_dns_custom_forwarder_str: "{{ ipa_install_dns_custom_forwarder | default('', true) | string | trim }}"
+
+- name: Finalize IPA install DNS forwarder flags for playbook templates
+  ansible.builtin.set_fact:
+    ipa_install_dns_custom_forwarder: "{{ ipa_install_dns_custom_forwarder_str }}"
+    ipa_install_dns_has_custom_forwarder: >-
+      {{
+        (ipa_install_dns_custom_forwarder_str | default('') | length) > 0
+        and not (ipa_install_dns_use_vpc_forwarder | default(false) | bool)
+        and not (ipa_install_dns_no_forwarders | default(false) | bool)
       }}
