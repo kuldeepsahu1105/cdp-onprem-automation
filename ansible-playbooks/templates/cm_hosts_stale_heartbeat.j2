@@ -1,0 +1,24 @@
+{# YAML list of ApiHost entries with stale lastHeartbeat (commissioned only) #}
+{% set max_age = cm_host_heartbeat_max_age_seconds | default(300) | int %}
+{% set now_sec = ansible_date_time.epoch | default(lookup('pipe', 'date +%s')) | int %}
+{% set ns = namespace(items=[]) %}
+{% for h in (_cm_hosts_for_heartbeat | default([])) %}
+{%   if (h.commissionState | default('')) == 'COMMISSIONED' %}
+{%     set raw = h.lastHeartbeat | default('') %}
+{%     if raw | string | length == 0 %}
+{%       set _missing = ns.items.append(h | combine({'heartbeat_age_seconds': max_age + 1})) %}
+{%     elif raw | string | length > 0 %}
+{%       set raw_s = raw | string %}
+{%       if raw_s is match('^[0-9]+$') %}
+{%         set hb_sec = (raw | int) // 1000 if (raw | int) > 10000000000 else (raw | int) %}
+{%       else %}
+{%         set hb_sec = (raw_s | to_datetime('%Y-%m-%dT%H:%M:%S.%fZ')).timestamp() | int %}
+{%       endif %}
+{%       set age = now_sec - hb_sec %}
+{%       if age > max_age %}
+{%         set _x = ns.items.append(h | combine({'heartbeat_age_seconds': age})) %}
+{%       endif %}
+{%     endif %}
+{%   endif %}
+{% endfor %}
+{{ ns.items | to_yaml }}

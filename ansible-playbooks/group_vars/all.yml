@@ -334,6 +334,32 @@ cm_cms_servicemonitor_port_config_names:
   - listen_port
 cm_cms_smon_listen_wait_timeout_seconds: 120
 
+# CM agents — server_host / use_tls reconcile (24_start_cm, 25_reconcile_cm_agents, 27 after Auto-TLS)
+cm_agent_reconcile_after_autotls: true
+cm_agent_active_wait_retries: 12
+cm_agent_active_wait_delay: 5
+# When true, set use_tls=1 in config.ini (also set from CM API in 25/27 when Auto-TLS is on)
+cm_agent_use_tls: false
+
+# CM Hosts UI — optional tags (PUT /hosts/{fqdn}/tags); empty Tags column is normal until this runs
+cm_host_tags_enabled: true
+cm_host_tags_owner: "cdp-lab"
+cm_host_tags_env_value: "{{ cdh_basecluster_name }}"
+cm_host_tag_group_map:
+  cldr-mngr: cm
+  base-masters: base-master
+  base-workers: base-worker
+  ecs-masters: ecs-master
+  ecs-workers: ecs-worker
+
+# CM Hosts UI — Last Heartbeat (agent→CM); load/disk/memory columns need Host Monitor (29)
+cm_host_heartbeat_verify_enabled: true
+cm_host_heartbeat_verify_after_cms: true
+cm_host_heartbeat_verify_fail: true
+cm_host_heartbeat_max_age_seconds: 300
+cm_host_heartbeat_verify_retries: 6
+cm_host_heartbeat_verify_delay: 30
+
 # Cloudera Manager API ports
 cm_https_port: 7183
 cm_http_port: 7180

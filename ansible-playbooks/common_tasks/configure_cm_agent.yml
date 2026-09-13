@@ -14,6 +14,20 @@
     regexp: '^#?\s*server_host\s*=.*'
     line: "server_host={{ cm_server_fqdn }}"
 
+- name: Enable CM agent TLS when Cloudera Manager uses Auto-TLS
+  ansible.builtin.lineinfile:
+    path: /etc/cloudera-scm-agent/config.ini
+    regexp: '^#?\s*use_tls\s*=.*'
+    line: "use_tls=1"
+  when: cm_agent_use_tls | default(autotls_enabled | default(false) | bool) | bool
+
+- name: Disable CM agent TLS when Cloudera Manager is HTTP-only
+  ansible.builtin.lineinfile:
+    path: /etc/cloudera-scm-agent/config.ini
+    regexp: '^#?\s*use_tls\s*=.*'
+    line: "use_tls=0"
+  when: not (cm_agent_use_tls | default(autotls_enabled | default(false) | bool) | bool)
+
 - name: Verify CM agent server_host in config.ini
   ansible.builtin.command:
     cmd: grep -E '^server_host=' /etc/cloudera-scm-agent/config.ini

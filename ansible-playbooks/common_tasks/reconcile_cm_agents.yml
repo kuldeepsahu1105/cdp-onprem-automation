@@ -1,0 +1,35 @@
+---
+# Idempotent CM agent config (server_host, optional use_tls) and service restart.
+# Run after Auto-TLS (27), when heartbeats are stale, or via 25_reconcile_cm_agents.yml.
+
+- name: Resolve CM agent use_tls from localhost CM API probe when present
+  ansible.builtin.set_fact:
+    cm_agent_use_tls: >-
+      {{
+        hostvars['localhost'].cm_agent_use_tls
+        | default(cm_agent_use_tls | default(autotls_enabled | default(false) | bool))
+        | bool
+      }}
+
+- name: Reconcile CM agent configuration (server_host / use_tls)
+  ansible.builtin.import_tasks: configure_cm_agent.yml
+
+- name: Restart Cloudera Manager agent after config reconcile
+  ansible.builtin.systemd:
+    name: cloudera-scm-agent
+    enabled: true
+    state: restarted
+  register: cm_agent_restart
+
+- name: Require Cloudera Manager agent active after restart
+  ansible.builtin.command: systemctl is-active cloudera-scm-agent
+  register: cm_agent_active_check
+  changed_when: false
+  failed_when: cm_agent_active_check.rc | int != 0
+  retries: "{{ cm_agent_active_wait_retries | default(12) }}"
+  delay: "{{ cm_agent_active_wait_delay | default(5) }}"
+  until: cm_agent_active_check.rc | int == 0
+
+- name: Display CM agent active status
+  ansible.builtin.debug:
+    msg: "cloudera-scm-agent is {{ cm_agent_active_check.stdout }} on {{ inventory_hostname }}"

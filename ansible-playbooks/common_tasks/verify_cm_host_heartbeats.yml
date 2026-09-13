@@ -1,0 +1,52 @@
+---
+# Fail when commissioned CM hosts have stale agent heartbeats (agent→CM path).
+
+- name: CM host heartbeats — resolve HTTPS CM API URL
+  ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
+
+- name: CM host heartbeats — skip when disabled
+  ansible.builtin.debug:
+    msg: "CM host heartbeat verify disabled (cm_host_heartbeat_verify_enabled=false)."
+  when: not (cm_host_heartbeat_verify_enabled | default(true) | bool)
+
+- name: CM host heartbeats — prime stale count before poll loop
+  ansible.builtin.set_fact:
+    cm_hosts_heartbeat_stale_count: 999
+  when: cm_host_heartbeat_verify_enabled | default(true) | bool
+
+- name: CM host heartbeats — poll until fresh or max passes
+  ansible.builtin.include_tasks: verify_cm_host_heartbeats_poll_iteration.yml
+  loop: "{{ range(1, (cm_host_heartbeat_verify_retries | default(6) | int) + 1) | list }}"
+  loop_control:
+    loop_var: _heartbeat_poll_pass
+  when:
+    - cm_host_heartbeat_verify_enabled | default(true) | bool
+    - (_heartbeat_poll_pass | int) == 1 or (cm_hosts_heartbeat_stale_count | default(99) | int) > 0
+
+- name: CM host heartbeats — report fresh host count
+  ansible.builtin.debug:
+    msg: >-
+      CM hosts: {{ _cm_hosts_for_heartbeat | default([]) | length }} registered;
+      {{ (_cm_hosts_for_heartbeat | default([]) | length) - (cm_hosts_stale_heartbeat | default([]) | length) }}
+      within {{ cm_host_heartbeat_max_age_seconds | default(300) }}s heartbeat;
+      {{ cm_hosts_stale_heartbeat | default([]) | length }} stale.
+  when: cm_host_heartbeat_verify_enabled | default(true) | bool
+
+- name: CM host heartbeats — fail when any commissioned host is stale
+  ansible.builtin.fail:
+    msg: >-
+      {{ cm_hosts_stale_heartbeat | default([]) | length }} Cloudera Manager host(s) have stale heartbeats
+      (older than {{ cm_host_heartbeat_max_age_seconds | default(300) }}s). Examples:
+      {{ cm_hosts_stale_heartbeat | default([]) | map(attribute='hostname') | list | join(', ') }}.
+      Agent path: on each host verify `systemctl status cloudera-scm-agent`,
+      `grep ^server_host= /etc/cloudera-scm-agent/config.ini` (must be cldr-mngr FQDN),
+      and `/var/log/cloudera-scm-agent/cloudera-scm-agent.log` (TLS/connect errors after Auto-TLS).
+      Reconcile agents: ansible-playbook -i inventory.ini 25_reconcile_cm_agents.yml
+      Clock skew: re-run 07_prereq_setup_002.yml (chrony) on affected hosts.
+      UI metrics columns (load/disk/memory) come from Host Monitor — if heartbeats are fresh but columns are empty,
+      re-run 29_setup_cm_cms.yml (Service Monitor + Host Monitor RUNNING).
+      ZooKeeper "0 Servers" is a separate base-cluster role issue (31_setup_base_cluster.yml) and can block Stop Cluster.
+  when:
+    - cm_host_heartbeat_verify_enabled | default(true) | bool
+    - (cm_hosts_stale_heartbeat | default([]) | length) > 0
+    - cm_host_heartbeat_verify_fail | default(true) | bool

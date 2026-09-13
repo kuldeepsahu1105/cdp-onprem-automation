@@ -120,6 +120,28 @@
     - name: Print Cloudera Manager Access URLs
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
 
+    - name: Set CM agent TLS reconcile flag from CM API (for agent play)
+      ansible.builtin.set_fact:
+        cm_agent_use_tls: >-
+          {{
+            (
+              autotls_applied_this_run | default(false) | bool
+            )
+            or (cm_autotls_api_enabled | default(false) | bool)
+            or (autotls_enabled | default(false) | bool)
+          }}
+
+- name: Reconcile CM agents after Auto-TLS (server_host / use_tls / restart)
+  hosts: all:!ipaserver
+  become: true
+  tasks:
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Reconcile CM agent configuration and service
+      ansible.builtin.import_tasks: common_tasks/reconcile_cm_agents.yml
+      when: cm_agent_reconcile_after_autotls | default(true) | bool
+
 - name: Verify CM API after Auto-TLS restart (Ansible controller — public manager IP)
   hosts: localhost
   connection: local
