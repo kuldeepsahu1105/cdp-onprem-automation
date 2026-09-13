@@ -227,3 +227,26 @@
     - name: Print ECS cluster result
       ansible.builtin.debug:
         msg: "ECS cluster '{{ ecs_cluster_name }}' deployment complete or already exists"
+
+    - name: Optional ECS control plane LDAP and LDAP admin user
+      when:
+        - ecs_deploy_effective | default(false) | bool
+        - (ecs_ldap_enabled | default(false) | bool) or (ecs_ldap_admin_user_enabled | default(false) | bool)
+      block:
+        - name: Resolve ECS LDAP / IAM phase flags
+          ansible.builtin.import_tasks: common_tasks/resolve_ecs_control_plane_iam_phase.yml
+          vars:
+            ecs_data_services_install_names: []
+
+        - name: Install CDP CLI prerequisites for ECS IAM
+          ansible.builtin.import_tasks: common_tasks/install_cloudera_cloud_prereqs.yml
+
+        - name: Configure CDP CLI profile for ECS IAM
+          ansible.builtin.import_tasks: common_tasks/ecs_data_services_runtime.yml
+
+        - name: Build portal facts for IPA LDAP CA URL
+          ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
+          when: identity_provider_effective == 'freeipa'
+
+        - name: Configure ECS LDAP and admin user
+          ansible.builtin.import_tasks: common_tasks/ecs_control_plane_ldap_and_admin.yml

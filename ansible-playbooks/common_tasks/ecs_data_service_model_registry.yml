@@ -1,0 +1,102 @@
+---
+- name: Model Registry | Install on ECS
+  when: "'model_registry' in (ecs_data_services_install_names | default([]))"
+  block:
+    - name: Require SDX hosts for Ozone S3 credentials
+      ansible.builtin.assert:
+        that:
+          - groups.get(ecs_model_registry_sdx_group, []) | length > 0
+        fail_msg: >-
+          Model Registry needs Ozone S3 keys from SDX hosts (inventory group {{ ecs_model_registry_sdx_group }}).
+          Add SDX nodes or remove model_registry from ecs_data_services_install.
+
+    - name: Retrieve Ozone S3 credentials from SDX
+      ansible.builtin.import_tasks: ecs_model_registry_ozone_credentials.yml
+
+    - name: Set Model Registry S3 endpoint from SDX host when not overridden
+      ansible.builtin.set_fact:
+        ecs_model_registry_s3_endpoint_effective: >-
+          {{
+            ecs_model_registry_s3_endpoint | trim
+            if (ecs_model_registry_s3_endpoint | default('') | length > 0)
+            else (
+              'https://'
+              + hostvars[groups[ecs_model_registry_sdx_group][0]].cldr_hostname
+              + '.'
+              + cluster_domain
+              + ':9879'
+            )
+          }}
+
+    - name: Resolve ECS environment CRN
+      cloudera.cloud.env_info:
+        name: "{{ ecs_cdp_environment_name }}"
+        verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_mr_env_info
+
+    - name: Check if registry already exists
+      ansible.builtin.command:
+        argv:
+          - cdp
+          - --profile
+          - default
+          - ml
+          - list-model-registries
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_mr_list
+      changed_when: false
+      failed_when: false
+
+    - name: Set registry existence fact
+      ansible.builtin.set_fact:
+        ecs_mr_exists: >-
+          {{
+            ecs_mr_list.stdout is search(ecs_model_registry_service_name)
+            if ecs_mr_list.rc == 0
+            else false
+          }}
+
+    - name: Create Model Registry
+      ansible.builtin.command:
+        argv:
+          - cdp
+          - --profile
+          - default
+          - ml
+          - create-model-registry
+          - --environment-crn
+          - "{{ ecs_mr_env_info.environments | map(attribute='crn') | list | first }}"
+          - --environment-name
+          - "{{ ecs_cdp_environment_name }}"
+          - --model-registry-service-name
+          - "{{ ecs_model_registry_service_name }}"
+          - --model-registry-subdomain
+          - "{{ ecs_model_registry_subdomain }}"
+          - --s3-access-key
+          - "{{ hostvars[groups[ecs_model_registry_sdx_group][0]].ozone_s3_access_key }}"
+          - --s3-secret-key
+          - "{{ hostvars[groups[ecs_model_registry_sdx_group][0]].ozone_s3_secret_key }}"
+          - --s3-bucket
+          - "{{ ecs_model_registry_s3_bucket }}"
+          - --s3-endpoint
+          - "{{ ecs_model_registry_s3_endpoint_effective }}"
+      environment: "{{ ecs_cdp_cli_environment }}"
+      when: not ecs_mr_exists | bool
+      no_log: true
+
+    - name: Register Model Registry ingress for Caddy
+      ansible.builtin.set_fact:
+        ecs_caddy_data_service_routes: >-
+          {{
+            (ecs_caddy_data_service_routes | default([]))
+            + [
+              {
+                'id': 'model-registry',
+                'external_hostname': ecs_model_registry_subdomain + '.' + ecs_app_domain,
+                'backend_host': ecs_master_fqdn,
+                'backend_port': 443,
+                'backend_scheme': 'https'
+              }
+            ]
+          }}

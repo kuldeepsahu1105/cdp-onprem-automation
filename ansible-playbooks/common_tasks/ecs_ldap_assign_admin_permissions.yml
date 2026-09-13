@@ -1,0 +1,149 @@
+---
+# Grant ECS control plane IAM roles to the LDAP-backed admin user (ecs_ldap_admin_username).
+
+- name: ECS LDAP admin | Require username fact
+  ansible.builtin.assert:
+    that:
+      - ecs_ldap_admin_username | default('') | length > 0
+    fail_msg: Run ecs_ldap_freeipa_admin_user.yml or set ecs_ldap_admin_username.
+
+- name: ECS LDAP admin | Resolve ECS environment CRN
+  cloudera.cloud.env_info:
+    name: "{{ ecs_cdp_environment_name }}"
+    verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_ldap_admin_env_info
+
+- name: ECS LDAP admin | Set environment CRN fact
+  ansible.builtin.set_fact:
+    ecs_ldap_admin_environment_crn: "{{ ecs_ldap_admin_env_info.environments | map(attribute='crn') | list | first }}"
+
+- name: ECS LDAP admin | List tenant IAM roles
+  ansible.builtin.command:
+    argv:
+      - cdp
+      - --profile
+      - default
+      - iam
+      - list-roles
+      - --no-paginate
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_ldap_admin_list_roles
+  changed_when: false
+
+- name: ECS LDAP admin | Build tenant role assignment list
+  ansible.builtin.set_fact:
+    ecs_ldap_admin_tenant_roles: >-
+      {{
+        (
+          (ecs_ldap_admin_list_roles.stdout | from_json).roles | default([])
+          if ecs_ldap_admin_assign_all_tenant_roles | default(false) | bool
+          else (
+            (ecs_ldap_admin_list_roles.stdout | from_json).roles | default([])
+            | selectattr('roleName', 'match', ecs_ldap_admin_tenant_role_name_regex)
+            | list
+          )
+        )
+      }}
+  vars:
+    ecs_ldap_admin_tenant_role_name_regex: "{{ ecs_ldap_admin_tenant_role_name_regex }}"
+
+- name: ECS LDAP admin | Assign tenant roles to user
+  ansible.builtin.command:
+    argv:
+      - cdp
+      - --profile
+      - default
+      - iam
+      - assign-user-role
+      - --user
+      - "{{ ecs_ldap_admin_username }}"
+      - --role
+      - "{{ item.roleName }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  loop: "{{ ecs_ldap_admin_tenant_roles | default([]) }}"
+  loop_control:
+    label: "{{ item.roleName }}"
+  register: ecs_ldap_admin_assign_tenant
+  failed_when: false
+
+- name: ECS LDAP admin | Report tenant role assignment failures
+  ansible.builtin.fail:
+    msg: >-
+      assign-user-role failed for {{ item.item.roleName }}: {{ item.stderr | default(item.stdout) }}
+  loop: "{{ ecs_ldap_admin_assign_tenant.results | default([]) }}"
+  when:
+    - item.rc | default(0) != 0
+    - "'already' not in (item.stderr | default('') | lower)"
+  loop_control:
+    label: "{{ item.item.roleName | default('role') }}"
+
+- name: ECS LDAP admin | List resource IAM roles
+  ansible.builtin.command:
+    argv:
+      - cdp
+      - --profile
+      - default
+      - iam
+      - list-resource-roles
+      - --no-paginate
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_ldap_admin_list_resource_roles
+  changed_when: false
+
+- name: ECS LDAP admin | Build environment resource role assignment list
+  ansible.builtin.set_fact:
+    ecs_ldap_admin_resource_roles: >-
+      {{
+        (
+          (ecs_ldap_admin_list_resource_roles.stdout | from_json).resourceRoles | default([])
+          if ecs_ldap_admin_assign_all_resource_roles_on_env | default(true) | bool
+          else (
+            (ecs_ldap_admin_list_resource_roles.stdout | from_json).resourceRoles | default([])
+            | selectattr('crn', 'defined')
+            | selectattr('resourceRoleName', 'match', ecs_ldap_admin_resource_role_name_regex)
+            | list
+          )
+        )
+      }}
+  vars:
+    ecs_ldap_admin_resource_role_name_regex: "{{ ecs_ldap_admin_resource_role_name_regex }}"
+
+- name: ECS LDAP admin | Assign resource roles on ECS environment
+  ansible.builtin.command:
+    argv:
+      - cdp
+      - --profile
+      - default
+      - iam
+      - assign-user-resource-role
+      - --user
+      - "{{ ecs_ldap_admin_username }}"
+      - --resource-role-crn
+      - "{{ item.resourceRoleCrn | default(item.crn) }}"
+      - --resource-crn
+      - "{{ ecs_ldap_admin_environment_crn }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  loop: "{{ ecs_ldap_admin_resource_roles | default([]) }}"
+  loop_control:
+    label: "{{ item.resourceRoleName | default(item.crn) }}"
+  register: ecs_ldap_admin_assign_resource
+  failed_when: false
+
+- name: ECS LDAP admin | Report resource role assignment failures
+  ansible.builtin.fail:
+    msg: >-
+      assign-user-resource-role failed: {{ item.stderr | default(item.stdout) }}
+  loop: "{{ ecs_ldap_admin_assign_resource.results | default([]) }}"
+  when:
+    - item.rc | default(0) != 0
+    - "'already' not in (item.stderr | default('') | lower)"
+  loop_control:
+    label: "{{ item.item.resourceRoleName | default('resource-role') }}"
+
+- name: ECS LDAP admin | Print summary
+  ansible.builtin.debug:
+    msg:
+      - "ECS LDAP admin user: {{ ecs_ldap_admin_username }}"
+      - "Tenant roles assigned: {{ ecs_ldap_admin_tenant_roles | map(attribute='roleName') | list }}"
+      - "Resource roles on {{ ecs_cdp_environment_name }}: {{ ecs_ldap_admin_resource_roles | map(attribute='resourceRoleName') | list }}"

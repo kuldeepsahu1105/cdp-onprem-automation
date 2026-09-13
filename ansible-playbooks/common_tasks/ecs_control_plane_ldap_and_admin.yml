@@ -1,0 +1,14 @@
+---
+# Optional ECS control plane LDAP + LDAP admin user (controller + FreeIPA).
+
+- name: Sync LDAP provider to ECS control plane
+  ansible.builtin.import_tasks: ecs_data_services_ldap.yml
+  when: ecs_ldap_sync_effective | default(false) | bool
+
+- name: Create FreeIPA ECS admin user
+  ansible.builtin.import_tasks: ecs_ldap_freeipa_admin_user.yml
+  when: ecs_ldap_admin_user_effective | default(false) | bool
+
+- name: Assign ECS control plane admin IAM roles to LDAP user
+  ansible.builtin.import_tasks: ecs_ldap_assign_admin_permissions.yml
+  when: ecs_ldap_admin_user_effective | default(false) | bool

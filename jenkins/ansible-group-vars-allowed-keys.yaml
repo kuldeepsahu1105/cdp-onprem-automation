@@ -87,6 +87,15 @@ allowed_keys:
   - deployment_prometheus_external_url_verify
   - monitoring_grafana_admin_password
   - ecs_data_services_deploy_enabled
+  - ecs_deploy_cdw
+  - ecs_deploy_cde
+  - ecs_deploy_cai
+  - ecs_deploy_cai_registry
+  - ecs_ldap_enabled
+  - ecs_data_services_configure_ldap
+  - ecs_ldap_admin_user_enabled
+  - ecs_ldap_admin_user_prefix
+  - ecs_ldap_admin_password
   - ecs_control_plane_url
   - ecs_api_access_key_id
   - ecs_api_private_key
@@ -98,6 +107,14 @@ allowed_keys:
   - ecs_control_plane_validate_certs
   - ecs_data_services_install
   - ecs_data_services_catalog
+  - ecs_cdp_environment_name
+  - ecs_cdp_console_api_url
+  - ecs_data_services_verify_tls
+  - ecs_data_services_configure_ldap
+  - ecs_cdw_hive_vw_name
+  - ecs_cdw_impala_vw_name
+  - ecs_cde_service_name
+  - ecs_cai_workspace_name
 
   # OS / dependency versions
   - java_version

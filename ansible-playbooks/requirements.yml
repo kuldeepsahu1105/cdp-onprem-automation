@@ -1,7 +1,20 @@
+---
+# Ansible Galaxy collections for the PVC control node (Jenkins / pvc_setup / 00_ensure_collections.yml).
+# Install: ansible-galaxy collection install -r requirements.yml
+#
+# Controller Python (not Galaxy): cm_client, urllib3<2 (install_cm_client_python.yml);
+#   cdpy, cdpcli (install_cloudera_cloud_prereqs.yml) for cloudera.cloud + ECS LDAP IAM.
+
 collections:
   - name: community.general
   - name: community.postgresql
   - name: ansible.posix
   - name: community.crypto
   - name: freeipa.ansible_freeipa
+
+  # CM/CDP cluster API — 31_setup_base_cluster, 33_setup_ecs_cluster (cloudera.cluster.cluster)
   - name: git+https://github.com/cloudera-labs/cloudera.cluster.git,v4.4.0
+
+  # ECS control plane — CDW/CDE/CAI/Model Registry + LDAP IAM (env_info, dw_*, de, ml)
+  # Modules: env_info, dw_cluster, dw_database_catalog_info, dw_virtual_warehouse, de, ml
+  - name: git+https://github.com/cloudera-labs/cloudera.cloud.git,v2.5.1

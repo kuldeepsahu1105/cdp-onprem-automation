@@ -1,23 +1,29 @@
 ### ansible-playbook -i inventory.ini 34_setup_ecs_data_services.yml
 #
-# Cloudera Data Services on ECS (CDW, CDE, CAI, …) via Control Plane API.
+# Cloudera Data Services on ECS (CDW, CDE, CAI, Model Registry) via Control Plane API.
 # Prerequisites:
 #   1. ECS cluster installed (33_setup_ecs_cluster.yml).
-#   2. Management Console reachable at ecs_control_plane_url.
-#   3. API keys: set ecs_api_* or enable ecs_auto_provision_api_access_key with a one-time
-#      bootstrap admin key (console or ecs_iam_bootstrap_* / ECS_IAM_BOOTSTRAP_* env).
+#   2. Management Console reachable; wildcard DNS for *.{{ ecs_app_domain }} (19_setup_wildcard.yml).
+#   3. API keys: ecs_api_* or ecs_auto_provision_api_access_key with bootstrap IAM key.
 #
-# Set ecs_data_services_deploy_enabled: true and ecs_data_services_install in group_vars.
-# Signed API calls use cdpcurl on the controller when ecs_data_services_use_cdpcurl: true.
+# Enable with ecs_data_services_deploy_enabled: true and either:
+#   - ecs_deploy_cdw / ecs_deploy_cde / ecs_deploy_cai / ecs_deploy_cai_registry (or ECS_DEPLOY_* env), or
+#   - ecs_data_services_install: [cdw, cde, cai, model_registry]
 ---
 - import_playbook: 00_ensure_collections.yml
 
-- name: Deploy Cloudera Data Services on ECS (API-driven)
+- name: Prepare ECS data services on Ansible controller
   hosts: localhost
   connection: local
-  gather_facts: false
+  gather_facts: true
   tasks:
-    - name: Skip when ECS data services automation is disabled
+    - name: Resolve selected ECS data services (flags and/or install list)
+      ansible.builtin.import_tasks: common_tasks/resolve_ecs_data_services_install.yml
+
+    - name: Resolve optional ECS LDAP / IAM admin phase
+      ansible.builtin.import_tasks: common_tasks/resolve_ecs_control_plane_iam_phase.yml
+
+    - name: Skip when no ECS data services or control-plane IAM work is requested
       ansible.builtin.meta: end_play
       when: not (ecs_data_services_deploy_enabled | default(false) | bool)
 
@@ -29,30 +35,23 @@
           ECS masters group '{{ ecs_cluster_master_group }}' is empty.
           Run 33_setup_ecs_cluster.yml first.
 
-    - name: Normalize data services install list
+    - name: Initialize Caddy route list for data service ingress
       ansible.builtin.set_fact:
-        ecs_data_services_install_names: >-
-          {{
-            (
-              ecs_data_services_install
-              | default([])
-              | map('lower')
-              | list
-            )
-            if (
-              ecs_data_services_install | default([]) | length > 0
-              and (ecs_data_services_install | first) is string
-            )
-            else (
-              ecs_data_services_install
-              | default([])
-              | selectattr('enabled', 'defined')
-              | selectattr('enabled')
-              | map(attribute='name')
-              | map('lower')
-              | list
-            )
-          }}
+        ecs_caddy_data_service_routes: []
+
+    - name: Require at least one data service when data services phase is enabled
+      ansible.builtin.assert:
+        that:
+          - ecs_data_services_install_names | length > 0
+        fail_msg: >-
+          ECS data services phase is enabled but no service is selected.
+          Set ecs_deploy_cdw, ecs_deploy_cde, ecs_deploy_cai, and/or ecs_deploy_cai_registry (or
+          ECS_DEPLOY_CDW / ECS_DEPLOY_CDE / ECS_DEPLOY_CAI / ECS_DEPLOY_CAI_REGISTRY),
+          or ecs_data_services_install: [cdw, cde, cai, model_registry].
+      when:
+        - ecs_data_services_deploy_enabled | default(false) | bool
+        - ecs_data_services_install_names | default([]) | length == 0
+        - not (ecs_control_plane_iam_phase_enabled | default(false) | bool)
 
     - name: Wait for ECS Management Console after cluster install
       ansible.builtin.import_tasks: common_tasks/ecs_wait_control_plane_console.yml
@@ -63,7 +62,20 @@
     - name: Validate control plane credentials
       ansible.builtin.import_tasks: common_tasks/ecs_validate_control_plane_credentials.yml
 
-    - name: Install selected data services (stubs — extend with signed API calls)
+    - name: Install cloudera.cloud prerequisites (cdpy, cdpcli)
+      ansible.builtin.import_tasks: common_tasks/install_cloudera_cloud_prereqs.yml
+
+    - name: Configure CDP CLI profile for data services API calls
+      ansible.builtin.import_tasks: common_tasks/ecs_data_services_runtime.yml
+
+    - name: Build deployment portal facts for IPA Caddy URL (LDAP CA fetch)
+      ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
+      when: identity_provider_effective == 'freeipa'
+
+    - name: Optional ECS LDAP provider sync and LDAP admin user
+      ansible.builtin.import_tasks: common_tasks/ecs_control_plane_ldap_and_admin.yml
+
+    - name: Install CDW when selected
       ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw.yml
 
     - name: Install CDE when selected
@@ -71,3 +83,21 @@
 
     - name: Install CAI when selected
       ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai.yml
+
+    - name: Install Model Registry when selected
+      ansible.builtin.import_tasks: common_tasks/ecs_data_service_model_registry.yml
+
+    - name: Resolve deployment portal Caddy gate for ECS ingress sync
+      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_caddy_enabled.yml
+
+    - name: Resolve deployment portal target host group
+      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
+
+    - name: Sync ECS data service routes on deployment portal Caddy
+      ansible.builtin.import_tasks: common_tasks/ecs_data_services_sync_caddy.yml
+      delegate_to: "{{ groups[deployment_portal_host_group_effective][0] }}"
+      become: true
+      run_once: true
+      when:
+        - ecs_caddy_data_service_routes | default([]) | length > 0
+        - deployment_portal_caddy_effective | default(false) | bool

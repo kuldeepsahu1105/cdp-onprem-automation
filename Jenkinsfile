@@ -180,7 +180,37 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     booleanParam(
       name: 'ECS_DATA_SERVICES_DEPLOY_ENABLED',
       defaultValue: false,
-      description: 'Run 34_setup_ecs_data_services.yml after ECS phase 5 when checked. Requires ecs_control_plane_url and API access key in ANSIBLE_GROUP_VARS_YAML (create key in ECS console first).'
+      description: 'Run 34_setup_ecs_data_services.yml after ECS phase 5 when checked (or when any ECS_DEPLOY_* service box below is checked). Requires ECS API access key (console or ecs_iam_bootstrap_*).'
+    )
+    booleanParam(
+      name: 'ECS_DEPLOY_CDW',
+      defaultValue: false,
+      description: 'Playbook 34: install Cloudera Data Warehouse (CDW) on ECS.'
+    )
+    booleanParam(
+      name: 'ECS_DEPLOY_CDE',
+      defaultValue: false,
+      description: 'Playbook 34: install Cloudera Data Engineering (CDE) on ECS.'
+    )
+    booleanParam(
+      name: 'ECS_DEPLOY_CAI',
+      defaultValue: false,
+      description: 'Playbook 34: install Cloudera AI (CAI / ML workspace) on ECS.'
+    )
+    booleanParam(
+      name: 'ECS_DEPLOY_CAI_REGISTRY',
+      defaultValue: false,
+      description: 'Playbook 34: install CAI Model Registry (requires [sdx] inventory for Ozone S3).'
+    )
+    booleanParam(
+      name: 'ECS_LDAP_ENABLED',
+      defaultValue: false,
+      description: 'Sync FreeIPA/AD LDAP provider to ECS control plane (playbooks 33/34).'
+    )
+    booleanParam(
+      name: 'ECS_LDAP_ADMIN_USER_ENABLED',
+      defaultValue: false,
+      description: 'Create FreeIPA user <prefix>admin and assign ECS IAM admin roles (requires ECS_LDAP or LDAP sync).'
     )
   }
 
@@ -732,6 +762,12 @@ def runAnsibleDeployPhase(String phase) {
     export MONITORING_STACK_ENABLED='${params.MONITORING_STACK_ENABLED}'
     export DEPLOYMENT_PORTAL_ENABLED='${params.DEPLOYMENT_PORTAL_ENABLED}'
     export ECS_DATA_SERVICES_DEPLOY_ENABLED='${params.ECS_DATA_SERVICES_DEPLOY_ENABLED}'
+    export ECS_DEPLOY_CDW='${params.ECS_DEPLOY_CDW}'
+    export ECS_DEPLOY_CDE='${params.ECS_DEPLOY_CDE}'
+    export ECS_DEPLOY_CAI='${params.ECS_DEPLOY_CAI}'
+    export ECS_DEPLOY_CAI_REGISTRY='${params.ECS_DEPLOY_CAI_REGISTRY}'
+    export ECS_LDAP_ENABLED='${params.ECS_LDAP_ENABLED}'
+    export ECS_LDAP_ADMIN_USER_ENABLED='${params.ECS_LDAP_ADMIN_USER_ENABLED}'
     export ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID='${shellEscape(env.ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID ?: '')}'
     export ECS_IAM_BOOTSTRAP_PRIVATE_KEY='${shellEscape(env.ECS_IAM_BOOTSTRAP_PRIVATE_KEY ?: '')}'
     export REQUIRE_INVENTORY=true

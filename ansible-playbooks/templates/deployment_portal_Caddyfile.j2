@@ -11,6 +11,10 @@
 {% include 'deployment_portal_Caddyfile_vhosts.inc.j2' %}
 {% endif %}
 
+{% if ecs_caddy_data_service_routes is defined and (ecs_caddy_data_service_routes | length > 0) %}
+{% include 'deployment_portal_Caddyfile_ecs_data_services.inc.j2' %}
+{% endif %}
+
 {# Fallback: IP:port path routes #}
 http://:{{ deployment_portal_http_port }} {
   root * /srv

@@ -58,6 +58,8 @@ Environment:
   MONITORING_STACK_ENABLED  true|false (default true) — portal + Grafana/Prometheus bootstrap
   DEPLOYMENT_PORTAL_ENABLED true|false (default true)
   ECS_DATA_SERVICES_DEPLOY_ENABLED true|false — run 34_setup_ecs_data_services.yml (phase 5/7)
+  ECS_DEPLOY_CDW / ECS_DEPLOY_CDE / ECS_DEPLOY_CAI / ECS_DEPLOY_CAI_REGISTRY — select services for playbook 34
+  ECS_LDAP_ENABLED / ECS_LDAP_ADMIN_USER_ENABLED — optional ECS control plane LDAP + <prefix>admin IAM user
   DRY_RUN          true|false
   CONTROL_MODE     auto|local|remote
   ANSIBLE_PRIVATE_KEY  SSH key: .pem/id_rsa in ansible-playbooks/, ~/.ssh/id_rsa, or explicit path
@@ -376,11 +378,49 @@ _run_deployment_portal_refresh() {
   _run_deployment_portal_bootstrap
 }
 
+_is_true() {
+  case "${1:-}" in
+    true|TRUE|1|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 _run_ecs_data_services() {
-  if [[ "${ECS_DATA_SERVICES_DEPLOY_ENABLED:-false}" == "true" || "${ECS_DATA_SERVICES_DEPLOY_ENABLED:-false}" == "1" ]]; then
-    run_playbook 34_setup_ecs_data_services.yml -e ecs_data_services_deploy_enabled=true
-    _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
+  local ds_enabled=false
+  local ds_extra=()
+  if _is_true "${ECS_DATA_SERVICES_DEPLOY_ENABLED:-false}"; then
+    ds_enabled=true
   fi
+  if _is_true "${ECS_DEPLOY_CDW:-false}"; then
+    ds_enabled=true
+    ds_extra+=(-e ecs_deploy_cdw=true)
+  fi
+  if _is_true "${ECS_DEPLOY_CDE:-false}"; then
+    ds_enabled=true
+    ds_extra+=(-e ecs_deploy_cde=true)
+  fi
+  if _is_true "${ECS_DEPLOY_CAI:-false}"; then
+    ds_enabled=true
+    ds_extra+=(-e ecs_deploy_cai=true)
+  fi
+  if _is_true "${ECS_DEPLOY_CAI_REGISTRY:-false}"; then
+    ds_enabled=true
+    ds_extra+=(-e ecs_deploy_cai_registry=true)
+  fi
+  if _is_true "${ECS_LDAP_ENABLED:-false}"; then
+    ds_enabled=true
+    ds_extra+=(-e ecs_ldap_enabled=true)
+  fi
+  if _is_true "${ECS_LDAP_ADMIN_USER_ENABLED:-false}"; then
+    ds_enabled=true
+    ds_extra+=(-e ecs_ldap_admin_user_enabled=true)
+  fi
+  if ! $ds_enabled; then
+    return 0
+  fi
+  ds_extra+=(-e ecs_data_services_deploy_enabled=true)
+  run_playbook 34_setup_ecs_data_services.yml "${ds_extra[@]}"
+  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
 }
 
 run_phase_6() {

@@ -316,12 +316,23 @@ is_dry_run() {
 }
 
 # Collections named in ansible-playbooks/requirements.yml (used to skip redundant galaxy runs).
-_ansible_requirements_collections_present() {
-  local req="${1:?requirements.yml path}"
-  local name
-  while IFS= read -r name; do
-    [[ -n "$name" ]] || continue
-    if [[ "$name" == git+* ]]; then
+_ansible_cloudera_cloud_module_path() {
+  local p
+  for p in \
+    "${HOME}/.ansible/collections/ansible_collections/cloudera/cloud/plugins/modules/env_info.py" \
+    "/usr/share/ansible/collections/ansible_collections/cloudera/cloud/plugins/modules/env_info.py"; do
+    if [[ -f "$p" ]]; then
+      printf '%s\n' "$p"
+      return 0
+    fi
+  done
+  return 1
+}
+
+_ansible_requirements_git_collection_present() {
+  local name="${1:?git collection requirement line}"
+  case "$name" in
+    *cloudera.cluster.git*)
       if ! ansible-galaxy collection list cloudera.cluster 2>/dev/null | grep -qE 'cloudera\.cluster'; then
         return 1
       fi
@@ -338,15 +349,32 @@ _ansible_requirements_collections_present() {
         return 1
       fi
       # v4.0.0–v4.3.x lack plugins/modules/cluster.py (31/33 need cloudera.cluster.cluster).
-      local cc_ver cluster_mod
+      local cc_ver
       cc_ver="$(ansible-galaxy collection list cloudera.cluster 2>/dev/null | awk '$1=="cloudera.cluster" {print $2; exit}')"
       if [[ -z "$cc_ver" ]] || [[ "$(printf '%s\n' '4.4.0' "$cc_ver" | sort -V | head -1)" != "4.4.0" ]]; then
         return 1
       fi
-      cluster_mod="${HOME}/.ansible/collections/ansible_collections/cloudera/cluster/plugins/modules/cluster.py"
-      if [[ ! -f "$cluster_mod" ]] && [[ ! -f /usr/share/ansible/collections/ansible_collections/cloudera/cluster/plugins/modules/cluster.py ]]; then
+      _ansible_cloudera_cluster_module_path >/dev/null
+      ;;
+    *cloudera.cloud.git*)
+      if ! ansible-galaxy collection list cloudera.cloud 2>/dev/null | grep -qE 'cloudera\.cloud'; then
         return 1
       fi
+      _ansible_cloudera_cloud_module_path >/dev/null
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+_ansible_requirements_collections_present() {
+  local req="${1:?requirements.yml path}"
+  local name
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    if [[ "$name" == git+* ]]; then
+      _ansible_requirements_git_collection_present "$name" || return 1
     elif ! ansible-galaxy collection list "$name" 2>/dev/null | grep -qF "$name"; then
       return 1
     fi
