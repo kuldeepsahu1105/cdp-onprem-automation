@@ -360,6 +360,8 @@ Operators use the deployment portal index on the ops host (`http://<ops>:81/` by
 
 **Downloads HTTP basic auth** applies to **`/downloads/*` only** (not the index). Username: `deployment_portal_basic_auth_user` (default `portal`). Password: `deployment_portal_basic_auth_password` (default resolves to **`postgres_password`** — lab value `postgres`). Use the same user/password for browser downloads and `curl -u portal:<password> …`.
 
+**Portal header Login** (when basic auth is on) links to **`/downloads/auth.html`**, which is served under the same `/downloads/*` basic-auth realm as PEMs and `operator-credentials.json`. After sign-in, that page immediately redirects to the portal home **`/`** so operators confirm credentials without downloading JSON.
+
 **Operator access panel** mirrors Ansible at sync time: Cloudera Manager (`cm_admin_user` / `cm_admin_pass`), PostgreSQL and pgAdmin, FreeIPA or AD join when configured, Grafana/Prometheus paths when monitoring is enabled, optional Ranger/Knox/Hue/ECS/Jenkins rows from the same vars as playbooks. Nothing is stored in git; re-run `35_refresh_deployment_portal.yml` after changes.
 
 **`operator-credentials.json`** — machine-readable copy of the panel (`basic_auth_enabled`, `auth_username`, `downloads_path_prefix`, `sections[]` → `credentials[]` with `label`, `username`, `password`, `url`, `note`). Rendered to `/downloads/operator-credentials.json` from `deployment_portal_operator_credentials.json.j2`. Same HTTP basic auth as PEM downloads when enabled. Example:

@@ -175,3 +175,20 @@
     mode: "0640"
   when: deployment_portal_expose_credentials | default(true) | bool
   no_log: true
+
+- name: Install downloads auth redirect stub for portal Login button
+  ansible.builtin.template:
+    src: deployment_portal_downloads_auth_redirect.html
+    dest: "{{ deployment_portal_www_dir }}/downloads/auth.html"
+    mode: "0644"
+  when:
+    - deployment_portal_expose_credentials | default(true) | bool
+    - deployment_portal_basic_auth_enabled | default(false) | bool
+
+- name: Remove downloads auth redirect stub when basic auth disabled
+  ansible.builtin.file:
+    path: "{{ deployment_portal_www_dir }}/downloads/auth.html"
+    state: absent
+  when:
+    - deployment_portal_expose_credentials | default(true) | bool
+    - not (deployment_portal_basic_auth_enabled | default(false) | bool)
