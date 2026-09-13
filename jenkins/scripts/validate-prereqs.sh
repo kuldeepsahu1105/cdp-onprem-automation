@@ -35,7 +35,7 @@ if should_validate "${VALIDATE_TOOLS:-true}" "TOOLS"; then
   if is_enabled "${REQUIRE_TERRAFORM:-false}" || is_enabled "${RUN_DESTROY_STACK:-false}"; then
     tools+=(terraform)
   fi
-  if is_enabled "${REQUIRE_ANSIBLE:-false}" || should_validate "${VALIDATE_ANSIBLE_SYNTAX:-true}" "ANSIBLE_SYNTAX"; then
+  if is_enabled "${REQUIRE_ANSIBLE:-false}" || is_enabled "${RUN_STARTSTOP_AUTOMATION:-false}" || should_validate "${VALIDATE_ANSIBLE_SYNTAX:-true}" "ANSIBLE_SYNTAX"; then
     # shellcheck disable=SC1091
     source "$REPO_ROOT/jenkins/scripts/ensure-ansible.sh"
     export PATH="${HOME}/.local/bin:${PATH}"

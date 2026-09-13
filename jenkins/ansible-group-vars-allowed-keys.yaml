@@ -71,6 +71,9 @@ allowed_keys:
   - portal_automation_owner_display
   - deployment_owner
   - deployment_name_prefix
+  - ec2_startstop_script_name_prefix
+  - ec2_startstop_script_dir
+  - ec2_startstop_script_path
   - deployment_environment
   - monitoring_stack_enabled
   - caddy_vhost_enabled

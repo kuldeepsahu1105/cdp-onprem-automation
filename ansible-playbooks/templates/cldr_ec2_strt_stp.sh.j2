@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# {{ ec2_startstop_script_basename }} — Start, stop, or describe EC2 instances for this PVC deployment.
+#
+# Usage:
+#   {{ ec2_startstop_script_path }} <start|stop|describe> <EnvironmentValue> <GroupValue1> [GroupValue2 ...]
+#
+# Filters (AWS resource tags from Terraform pvc_cluster_tags + ec2-instance module):
+#   tag:environment = EnvironmentValue  (Terraform pvc_cluster_tags.environment / Jenkins ENVIRONMENT)
+#   tag:Group       = each GroupValue     (Terraform instance_groups key, e.g. cldr_mngr, ipa_server)
+#
+# Default environment when the second argument is omitted: {{ ec2_startstop_default_environment | default('') }}
+#
+# stop: prompts for interactive "yes" unless EC2_STARTSTOP_NON_INTERACTIVE=1 or JENKINS_URL is set.
+# describe: prints instance id, state, Name, Group, private/public IP.
+#
+# Requires: AWS CLI, instance IAM role on ipaserver (or valid credentials) with ec2:Describe/Start/Stop on tagged instances.
+
+set -euo pipefail
+
+SCRIPT_NAME="$(basename "$0")"
+DEFAULT_ENV="{{ ec2_startstop_default_environment | default('', true) | trim }}"
+AWS_REGION_FALLBACK="{{ aws_region | default('us-east-1') }}"
+
+usage() {
+  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+  echo ""
+  echo "Example:"
+  echo "  $SCRIPT_NAME describe development cldr_mngr pvcbase_worker"
+  echo "  $SCRIPT_NAME start development pvcecs_worker"
+  echo "  $SCRIPT_NAME stop development pvcbase_master pvcbase_worker"
+  exit "${1:-0}"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage 0
+fi
+
+resolve_aws_region() {
+  local imds_region=""
+  if imds_region="$(curl -sf -m 2 http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null)"; then
+    if [[ -n "$imds_region" ]]; then
+      printf '%s' "$imds_region"
+      return 0
+    fi
+  fi
+  if [[ -n "${AWS_REGION:-}" ]]; then
+    printf '%s' "$AWS_REGION"
+    return 0
+  fi
+  if [[ -n "${AWS_DEFAULT_REGION:-}" ]]; then
+    printf '%s' "$AWS_DEFAULT_REGION"
+    return 0
+  fi
+  printf '%s' "$AWS_REGION_FALLBACK"
+}
+
+AWS_REGION="$(resolve_aws_region)"
+export AWS_DEFAULT_REGION="$AWS_REGION"
+
+ARGS=("$@")
+OPERATION="${ARGS[0]:-}"
+ENV_VALUE="${ARGS[1]:-}"
+GROUPS=("${ARGS[@]:2}")
+
+if [[ -z "$OPERATION" ]]; then
+  echo "ERROR: missing operation (start|stop|describe)" >&2
+  usage 1
+fi
+
+case "$OPERATION" in
+  start|stop|describe) ;;
+  *)
+    echo "ERROR: invalid operation '$OPERATION' (use start, stop, or describe)" >&2
+    usage 1
+    ;;
+esac
+
+if [[ -z "$ENV_VALUE" && -n "$DEFAULT_ENV" ]]; then
+  ENV_VALUE="$DEFAULT_ENV"
+fi
+
+if [[ -z "$ENV_VALUE" ]]; then
+  echo "ERROR: missing EnvironmentValue (tag:environment)" >&2
+  usage 1
+fi
+
+if [[ "$OPERATION" != "describe" && ${#GROUPS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one GroupValue required for start/stop" >&2
+  usage 1
+fi
+
+build_filters() {
+  local -a filters=(
+    "Name=tag:environment,Values=${ENV_VALUE}"
+    "Name=instance-state-name,Values=pending,running,stopping,stopped"
+  )
+  if ((${#GROUPS[@]} > 0)); then
+    local group_csv
+    group_csv=$(IFS=,; echo "${GROUPS[*]}")
+    filters+=("Name=tag:Group,Values=${group_csv}")
+  fi
+  printf '%s\n' "${filters[@]}"
+}
+
+mapfile -t FILTERS < <(build_filters)
+
+describe_instances() {
+  local -a ids=()
+  local id
+  while read -r id; do
+    [[ -z "$id" ]] && continue
+    ids+=("$id")
+  done < <(collect_instance_ids | tr '\t' '\n')
+
+  if ((${#ids[@]} == 0)); then
+    echo "No instances found for environment='${ENV_VALUE}' groups='${GROUPS[*]:-all}'."
+    return 0
+  fi
+
+  aws ec2 describe-instances \
+    --region "$AWS_REGION" \
+    --filters "${FILTERS[@]}" \
+    --query 'Reservations[].Instances[].{InstanceId:InstanceId,Name:Tags[?Key==`Name`].Value|[0],Group:Tags[?Key==`Group`].Value|[0],State:State.Name,PrivateIp:PrivateIpAddress,PublicIp:PublicIpAddress}' \
+    --output table
+}
+
+collect_instance_ids() {
+  aws ec2 describe-instances \
+    --region "$AWS_REGION" \
+    --filters "${FILTERS[@]}" \
+    --query 'Reservations[].Instances[].InstanceId' \
+    --output text
+}
+
+read_instance_ids() {
+  local -a ids=()
+  local id
+  while read -r id; do
+    [[ -z "$id" ]] && continue
+    ids+=("$id")
+  done < <(collect_instance_ids | tr '\t' '\n')
+  INSTANCE_IDS=("${ids[@]}")
+}
+
+confirm_stop() {
+  if [[ "${EC2_STARTSTOP_NON_INTERACTIVE:-}" == "1" || -n "${JENKINS_URL:-}" ]]; then
+    return 0
+  fi
+  echo "About to STOP instances matching:"
+  echo "  tag:environment = ${ENV_VALUE}"
+  if ((${#GROUPS[@]} > 0)); then
+    echo "  tag:Group       = ${GROUPS[*]}"
+  fi
+  describe_instances || true
+  echo ""
+  read -r -p 'Type yes to confirm stop: ' answer
+  if [[ "$answer" != "yes" ]]; then
+    echo "Aborted."
+    exit 1
+  fi
+}
+
+run_ec2_operation() {
+  local op="$1"
+  shift
+  local -a instance_ids=("$@")
+  # Use ${op}-instances (not $op-instances): bare $OPERATION-instances is parsed as variable OPERATION-instances.
+  aws ec2 "${op}-instances" \
+    --region "$AWS_REGION" \
+    --instance-ids "${instance_ids[@]}"
+}
+
+wait_for_instances() {
+  local desired_state="$1"
+  shift
+  local -a instance_ids=("$@")
+  case "$desired_state" in
+    running)
+      aws ec2 wait instance-running --region "$AWS_REGION" --instance-ids "${instance_ids[@]}" || true
+      ;;
+    stopped)
+      aws ec2 wait instance-stopped --region "$AWS_REGION" --instance-ids "${instance_ids[@]}" || true
+      ;;
+  esac
+}
+
+case "$OPERATION" in
+  describe)
+    describe_instances
+    exit 0
+    ;;
+esac
+
+read_instance_ids
+if ((${#INSTANCE_IDS[@]} == 0)); then
+  echo "No instances found for environment='${ENV_VALUE}' groups='${GROUPS[*]:-all}'."
+  exit 2
+fi
+
+case "$OPERATION" in
+  start)
+    echo "Starting: ${INSTANCE_IDS[*]}"
+    run_ec2_operation start "${INSTANCE_IDS[@]}"
+    wait_for_instances running "${INSTANCE_IDS[@]}"
+    describe_instances
+    ;;
+  stop)
+    confirm_stop
+    echo "Stopping: ${INSTANCE_IDS[*]}"
+    run_ec2_operation stop "${INSTANCE_IDS[@]}"
+    wait_for_instances stopped "${INSTANCE_IDS[@]}"
+    describe_instances
+    ;;
+esac
+
+exit 0
