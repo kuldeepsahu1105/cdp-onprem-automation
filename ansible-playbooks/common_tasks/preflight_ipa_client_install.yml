@@ -16,8 +16,8 @@
       On new or scaled nodes re-run playbooks 02_set_hostname.yml and 03_create_etc_hosts.yml
       (phase 1) before identity client enrollment.
 
-- name: Preflight IPA client — resolve enrollment FQDN via getent hosts
-  ansible.builtin.command: getent hosts {{ ansible_fqdn }}
+- name: Preflight IPA client — resolve enrollment FQDN via getent ahostsv4 (IPv4 only)
+  ansible.builtin.command: getent ahostsv4 {{ ansible_fqdn }}
   register: ipa_client_preflight_getent_fqdn
   changed_when: false
   failed_when: false
@@ -28,10 +28,12 @@
       - ipa_client_preflight_getent_fqdn.rc == 0
       - ansible_default_ipv4.address in ipa_client_preflight_getent_fqdn.stdout
     fail_msg: >-
-      {{ ansible_fqdn }} must resolve to {{ ansible_default_ipv4.address }} via /etc/hosts or DNS
-      before ipa-client-install. getent hosts: rc={{ ipa_client_preflight_getent_fqdn.rc }}
+      {{ ansible_fqdn }} must resolve to {{ ansible_default_ipv4.address }} (IPv4) via /etc/hosts or DNS
+      before ipa-client-install. getent ahostsv4: rc={{ ipa_client_preflight_getent_fqdn.rc }}
       stdout={{ ipa_client_preflight_getent_fqdn.stdout | default('') | trim }}
       stderr={{ ipa_client_preflight_getent_fqdn.stderr | default('') | trim }}
+      (getent hosts may return link-local IPv6 first; on this host check /etc/hosts and
+      getent ahostsv4 {{ ansible_fqdn }}).
       Re-run 03_create_etc_hosts.yml on all hosts and 14_setup_dns_records.yml when adding nodes.
 
 - name: Preflight IPA client — resolve IPA server FQDN via getent hosts
