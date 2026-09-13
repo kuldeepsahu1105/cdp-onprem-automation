@@ -62,18 +62,7 @@
       tags:
         - always
 
-    - name: Check ipactl status
-      ansible.builtin.command: ipactl status
-      register: ipa_server_status
-      failed_when: false
-      changed_when: false
-
-    - name: Check default.conf
-      ansible.builtin.stat:
-        path: /etc/ipa/default.conf
-      register: ipa_default_conf
-
-    - name: "Check if IPA is already installed — collect ipa CLI, ipactl, and default.conf text"
+    - name: Record ipa-server-install package version text for logs
       ansible.builtin.set_fact:
         ipa_server_install_version_text: >-
           {{
@@ -81,27 +70,27 @@
             | trim
             or (ipa_server_install_pkg_version.stderr | default('')) | trim
           }}
+
+    - name: Detect FreeIPA server install state (configured / partial / clean)
+      ansible.builtin.import_tasks: common_tasks/detect_ipa_server_install_state.yml
+
+    - name: Evaluate IPA CLI for install skip gate
+      ansible.builtin.set_fact:
         ipa_cli_version_text: >-
           {{
             (ipa_cli_version.stdout | default('') if (ipa_cli_version is defined) else '')
             ~ (ipa_cli_version.stderr | default('') if (ipa_cli_version is defined) else '')
           }}
-        ipa_ipactl_status_text: >-
-          {{
-            (ipa_server_status.stdout | default(''))
-            ~ (ipa_server_status.stderr | default(''))
-          }}
 
-    - name: "Check if IPA is already installed — evaluate health from check results"
+    - name: Derive IPA CLI configured flag
       ansible.builtin.set_fact:
         ipa_cli_not_configured: >-
           {{
             (ipa_cli_version_text | default('')) is search('not configured', ignorecase=True)
           }}
-        ipa_ipactl_not_configured: >-
-          {{
-            (ipa_ipactl_status_text | default('')) is search('IPA is not configured', ignorecase=True)
-          }}
+
+    - name: Derive IPA CLI version OK for skip gate
+      ansible.builtin.set_fact:
         ipa_cli_version_ok: >-
           {{
             false
@@ -111,47 +100,40 @@
               and not ((ipa_cli_version_text | default('')) is search('not configured', ignorecase=True))
             )
           }}
-        ipa_server_default_conf_present: >-
-          {{
-            ipa_default_conf.stat.exists | default(false) | bool
-          }}
-        ipa_ipactl_healthy: >-
-          {{
-            (ipa_server_status.rc | default(1) | int) == 0
-            and not (
-              (ipa_ipactl_status_text | default('')) is search('IPA is not configured', ignorecase=True)
-            )
-          }}
-        ipa_ipactl_rc: "{{ ipa_server_status.rc | default(1) | int }}"
+
+    - name: Decide whether to run ipa-server-install (skip when configured unless forced)
+      ansible.builtin.set_fact:
         ipa_server_configured_healthy: >-
           {{
             (ipa_cli_version_ok | default(false) | bool)
-            and (ipa_server_default_conf_present | bool)
-            and (ipa_ipactl_healthy | bool)
+            and (ipa_server_has_default_conf | default(false) | bool)
+            and not (ipa_server_has_partial_state | default(false) | bool)
+            and not (ipa_detect_ipactl_not_configured | default(false) | bool)
           }}
 
-    - name: Decide whether to run ipa-server-install (skip when healthy unless forced)
+    - name: Set IPA install run flag and gate reason
       ansible.builtin.set_fact:
         ipa_server_should_run_install: >-
           {{
             (ipa_server_install_force | default(false) | bool)
             or not (ipa_server_configured_healthy | bool)
           }}
+        ipa_ipactl_rc: "{{ ipa_detect_ipactl_status.rc | default(1) | int }}"
         ipa_server_install_gate_reason: >-
           {% if ipa_server_install_force | default(false) | bool -%}
           ipa_server_install_force=true (re-run install even when healthy; rare)
           {%- elif ipa_server_configured_healthy | bool -%}
-          IPA configured and healthy (ipa --version, default.conf, ipactl)
+          IPA configured (ipa --version, default.conf, ipactl not "not configured", no partial debris)
+          {%- elif ipa_server_has_partial_state | default(false) | bool -%}
+          partial or broken IPA install debris detected
           {%- elif not (ipa_cli_version_ok | bool) -%}
           ipa --version rc={{ ipa_cli_version.rc | default('n/a') }}{% if ipa_cli_not_configured | bool %} (IPA not configured){% endif %}
-          {%- elif not (ipa_server_default_conf_present | bool) -%}
-          missing /etc/ipa/default.conf
-          {%- elif ipa_ipactl_not_configured | bool -%}
+          {%- elif ipa_detect_ipactl_not_configured | default(false) | bool -%}
           ipactl reports IPA is not configured
-          {%- elif (ipa_server_status.rc | default(1) | int) != 0 -%}
-          ipactl status rc={{ ipa_server_status.rc | default('n/a') }} (expected 0)
+          {%- elif not (ipa_server_has_default_conf | default(false) | bool) -%}
+          missing configured IPA (default.conf + ipactl)
           {%- else -%}
-          IPA not healthy (install required)
+          IPA not configured (install required)
           {%- endif %}
 
     - name: Normalize IPA install skip/install reason as string
@@ -159,13 +141,13 @@
         ipa_server_install_gate_reason: >-
           {{ ipa_server_install_gate_reason | default('') | string | trim }}
 
-    - name: Log IPA install gate decision (never skip install on ipa --version alone)
+    - name: Log IPA install gate decision
       ansible.builtin.debug:
         msg: >-
           ipa-server-install gate: run={{ ipa_server_should_run_install | bool }}
           reason={{ ipa_server_install_gate_reason | default('') | trim }}
-          (requires ipa --version OK, default.conf, and ipactl rc=0 — ipactl rc={{ ipa_ipactl_rc | default('n/a') }}
-          does not skip when IPA is not configured)
+          (skip when ipa --version OK, default.conf + ipactl configured, no partial debris;
+          ipactl rc={{ ipa_ipactl_rc | default('n/a') }} — stopped services alone do not trigger reinstall)
 
     - name: "IPA status: already installed — skipping install"
       ansible.builtin.debug:
@@ -193,8 +175,8 @@
           {{ (ipa_cli_version_text | default('') | trim) or (ipa_cli_version.stdout | default('(no output)')) }}
 
           ipactl status:
-          {{ ipa_server_status.stdout | default('') }}
-          {{ ipa_server_status.stderr | default('') }}
+          {{ ipa_detect_ipactl_status.stdout | default('') }}
+          {{ ipa_detect_ipactl_status.stderr | default('') }}
       when:
         - ipa_server_configured_healthy | bool
         - not (ipa_server_install_force | default(false) | bool)
@@ -204,9 +186,9 @@
         msg: |
           ipa-server-install --version: {{ ipa_server_install_version_text | default('n/a') | trim }}
           ipa --version: {{ (ipa_cli_version_text | default('') | trim) or 'not configured' }}
-          ipactl status (rc={{ ipa_server_status.rc | default('n/a') }}):
-          {{ ipa_server_status.stdout | default('') }}
-          {{ ipa_server_status.stderr | default('') }}
+          ipactl status (rc={{ ipa_detect_ipactl_status.rc | default('n/a') }}):
+          {{ ipa_detect_ipactl_status.stdout | default('') }}
+          {{ ipa_detect_ipactl_status.stderr | default('') }}
       when: ipa_server_should_run_install | bool
 
     - name: Label IPA install DNS forwarder mode for logs
@@ -228,20 +210,14 @@
         msg: "DNS: {{ ipa_install_dns_mode_label | default('(unset)') | trim }}"
       when: ipa_server_should_run_install | bool
 
-    - name: Remove stale default.conf when ipactl reports not configured
-      ansible.builtin.file:
-        path: /etc/ipa/default.conf
-        state: absent
-      when:
-        - ipa_ipactl_not_configured | bool
-        - ipa_default_conf.stat.exists | default(false) | bool
-
-    - name: Unattended ipa-server-install uninstall before fresh install (install path only)
+    - name: Unattended ipa-server-install uninstall before fresh install (broken/partial/force only)
       ansible.builtin.command: ipa-server-install --uninstall --unattended
       register: ipa_server_preflight_uninstall
       changed_when: ipa_server_preflight_uninstall.rc == 0
       failed_when: false
-      when: ipa_server_should_run_install | bool
+      when:
+        - ipa_server_should_run_install | bool
+        - (ipa_server_install_force | default(false) | bool) or not (ipa_server_configured_healthy | bool)
 
     - name: Log ipa-server-install uninstall result before preflight
       ansible.builtin.debug:
