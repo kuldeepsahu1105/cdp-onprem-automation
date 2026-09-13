@@ -357,7 +357,6 @@
   ansible.builtin.import_tasks: wait_cm_api_command.yml
   vars:
     cm_api_command_id: "{{ cms_restart_cmd.json.id }}"
-    cm_api_command_poll_retries: 90
   when:
     - cms_restart_cmd is defined
     - cms_restart_cmd is not skipped
@@ -381,7 +380,6 @@
   ansible.builtin.import_tasks: wait_cm_api_command.yml
   vars:
     cm_api_command_id: "{{ cms_start_cmd.json.id }}"
-    cm_api_command_poll_retries: 90
   when:
     - cms_start_cmd is defined
     - cms_start_cmd is not skipped
@@ -417,7 +415,9 @@
 - name: CMS — fail when critical CMS roles did not become healthy
   ansible.builtin.fail:
     msg: >-
-      Service Monitor, Host Monitor, or Reports Manager are not RUNNING after CMS start/restart:
+      Service Monitor, Host Monitor, or Reports Manager are not RUNNING after CMS start/restart
+      (waited up to {{ cm_cms_monitor_wait_timeout_seconds | default((cm_cms_monitor_wait_retries | default(30) | int) * (cm_cms_monitor_wait_delay | default(20) | int)) }}s,
+      {{ cm_cms_monitor_wait_retries | default(30) }} retries × {{ cm_cms_monitor_wait_delay | default(20) }}s delay):
       {{ cms_roles_health_poll.json['items'] | default([])
          | selectattr('type', 'in', cms_health_role_types)
          | list }}.

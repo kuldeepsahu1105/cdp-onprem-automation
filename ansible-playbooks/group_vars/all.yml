@@ -311,6 +311,12 @@ cm_cms_reports_manager_db_password: rman
 # After 27_setup_cm_autotls.yml, point CMS Java clients (firehose/headlamp) at agent Auto-TLS truststore.
 cm_cms_configure_autotls_trust: true
 cm_cms_autotls_truststore_path: /var/lib/cloudera-scm-agent/agent-cert/cm-auto-global_truststore.jks
+# Bounded waits for CMS setup (max wall time ≈ retries × delay seconds).
+cm_api_command_poll_retries: 90
+cm_api_command_poll_delay: 10
+cm_cms_monitor_wait_retries: 30
+cm_cms_monitor_wait_delay: 20
+cm_cms_monitor_wait_timeout_seconds: "{{ (cm_cms_monitor_wait_retries | int) * (cm_cms_monitor_wait_delay | int) }}"
 
 # Cloudera Manager API ports
 cm_https_port: 7183
