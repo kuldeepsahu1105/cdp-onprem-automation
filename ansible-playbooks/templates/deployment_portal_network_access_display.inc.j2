@@ -1,0 +1,59 @@
+{# Unified network-access href + label (Caddy vhost primary, optional direct host:port fallback). #}
+{% macro net_access_direct_url(service, tier, ctx) -%}
+{%- if tier == 'primary' -%}
+{%- set access = ctx.access.primary | default({}) -%}
+{%- elif tier == 'external' -%}
+{%- set access = ctx.access.external | default({}) -%}
+{%- else -%}
+{%- set access = ctx.access.vpc | default({}) -%}
+{%- endif -%}
+{%- if service in ['portal', 'pgadmin'] -%}
+{{- access[service] | default('') | trim -}}
+{%- else -%}
+{%- set ip = access.management_ip | default(access.ops_ip | default('')) | trim -%}
+{%- if service == 'grafana' -%}
+http://{{ ip }}:{{ monitoring_grafana_host_port | default(3000) }}/
+{%- elif service == 'prometheus' -%}
+http://{{ ip }}:{{ monitoring_prometheus_host_port | default(9090) }}/
+{%- elif service == 'alertmanager' -%}
+http://{{ ip }}:{{ monitoring_alertmanager_host_port | default(9093) }}/
+{%- elif service == 'cadvisor' -%}
+http://{{ ip }}:{{ monitoring_cadvisor_host_port | default(8089) }}/
+{%- endif -%}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro net_access_caddy_url(service, tier, ctx, caddy_on) -%}
+{%- if not (caddy_on | default(false) | bool) -%}
+{%- elif service in ['portal', 'pgadmin'] and tier in ['primary', 'vpc'] -%}
+{%- else -%}
+{%- if tier == 'vpc' -%}
+{%- set cmap = ctx.caddy_vhosts.urls_vpc | default({}) -%}
+{%- else -%}
+{%- set cmap = ctx.caddy_vhosts.urls_public | default({}) -%}
+{%- endif -%}
+{%- set entry = cmap[service] | default({}) -%}
+{{- entry.url | default('') | trim -}}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro net_access_href(service, tier, ctx, caddy_on) -%}
+{%- set direct = net_access_direct_url(service, tier, ctx) | trim -%}
+{%- set caddy = net_access_caddy_url(service, tier, ctx, caddy_on) | trim -%}
+{%- if caddy | length > 0 -%}
+{{- caddy -}}
+{%- else -%}
+{{- direct -}}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro net_access_label(service, tier, ctx, caddy_on) -%}
+{%- set direct = net_access_direct_url(service, tier, ctx) | trim -%}
+{%- set caddy = net_access_caddy_url(service, tier, ctx, caddy_on) | trim -%}
+{%- set href = net_access_href(service, tier, ctx, caddy_on) | trim -%}
+{%- if caddy | length > 0 and direct | length > 0 and caddy != direct -%}
+{{- caddy }} ({{ direct }})
+{%- else -%}
+{{- href -}}
+{%- endif -%}
+{%- endmacro %}

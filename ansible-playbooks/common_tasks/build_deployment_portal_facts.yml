@@ -547,27 +547,27 @@
         cadvisor_caddy_url: "{{ caddy_vhost_urls_external.cadvisor.url | default('') if (caddy_vhost_enabled | default(false) | bool) else '' }}"
         grafana_url_direct: >-
           {{
-            deployment_portal_access_urls.primary.grafana
+            deployment_portal_access_urls.primary.grafana_direct | default('')
             if (deployment_portal_access_profile_effective == 'private')
-            else deployment_portal_access_urls.external.grafana
+            else deployment_portal_access_urls.external.grafana_direct | default('')
           }}
         prometheus_url_direct: >-
           {{
-            deployment_portal_access_urls.primary.prometheus
+            deployment_portal_access_urls.primary.prometheus_direct | default('')
             if (deployment_portal_access_profile_effective == 'private')
-            else deployment_portal_access_urls.external.prometheus
+            else deployment_portal_access_urls.external.prometheus_direct | default('')
           }}
         alertmanager_url_direct: >-
           {{
-            deployment_portal_access_urls.primary.alertmanager
+            deployment_portal_access_urls.primary.alertmanager_direct | default('')
             if (deployment_portal_access_profile_effective == 'private')
-            else deployment_portal_access_urls.external.alertmanager
+            else deployment_portal_access_urls.external.alertmanager_direct | default('')
           }}
         cadvisor_url_direct: >-
           {{
-            ('http://' + deployment_portal_ops_private_ip + ':' + (monitoring_cadvisor_host_port | string) + '/')
+            deployment_portal_access_urls.primary.cadvisor_direct | default('')
             if (deployment_portal_access_profile_effective == 'private')
-            else ('http://' + deployment_portal_ops_public_ip + ':' + (monitoring_cadvisor_host_port | string) + '/')
+            else deployment_portal_access_urls.external.cadvisor_direct | default('')
           }}
         grafana_url: >-
           {{
