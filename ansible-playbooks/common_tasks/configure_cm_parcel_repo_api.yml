@@ -16,9 +16,9 @@
   register: cm_parcel_config_get
   changed_when: false
 
-- name: Parcel repo — build desired remote parcel repository URL list
+- name: Parcel repo — collect candidate remote parcel repository URLs
   ansible.builtin.set_fact:
-    cm_parcel_repo_urls_effective: >-
+    cm_parcel_repo_urls_candidates: >-
       {{
         (
           (
@@ -31,11 +31,28 @@
             | list
           )
           + ([parcel_repo | default('')] if (parcel_repo is defined) else [])
+          + ([ecs_parcel_repo_url] if (ecs_parcel_repo_url | default('') | length > 0) else [])
           + (cm_parcel_repo_extra_urls | default([]))
           | map('trim')
           | reject('equalto', '')
           | list
           | unique
+        )
+      }}
+
+# Drop CM UI placeholders and legacy archive paths (CDH + ECS PVC DS; see parcel_repo_public / ecs_parcel_repo_url).
+- name: Parcel repo — remove invalid or legacy remote parcel repository URLs
+  ansible.builtin.set_fact:
+    cm_parcel_repo_urls_effective: >-
+      {{
+        (
+          cm_parcel_repo_urls_candidates
+          | reject('search', 'latest_supported')
+          | reject('search', 'archive\\.cloudera\\.com/cdh7/')
+          | reject('search', 'cdp-pvc-ds/latest')
+          | reject('search', 'ecsversion-or-latest')
+          | reject('search', '<ecsversion')
+          | list
         )
         | join(',')
       }}
