@@ -48,16 +48,15 @@
     - name: Resolve ipa-server-install DNS forwarder flags
       ansible.builtin.import_tasks: common_tasks/resolve_ipa_install_dns_forwarders.yml
 
-    - name: Check IPA package version
+    - name: Check ipa-server-install package version (installer RPM only, not configured state)
       ansible.builtin.command: ipa-server-install --version
       register: ipa_server_install_pkg_version
       failed_when: false
       changed_when: false
 
-    - name: Check IPA CLI version
+    - name: Check IPA CLI version (installed)
       ansible.builtin.command: ipa --version
       register: ipa_cli_version
-      ignore_errors: true
       failed_when: false
       changed_when: false
 
@@ -72,7 +71,7 @@
         path: /etc/ipa/default.conf
       register: ipa_default_conf
 
-    - name: Derive IPA install gate from version, ipactl, and default.conf
+    - name: Derive IPA install gate from ipa CLI, ipactl, and default.conf
       ansible.builtin.set_fact:
         ipa_server_install_version_text: >-
           {{
@@ -82,9 +81,12 @@
           }}
         ipa_cli_version_text: >-
           {{
-            ipa_cli_version.stdout | default('')
-            | trim
-            or ipa_cli_version.stderr | default('') | trim
+            (ipa_cli_version.stdout | default(''))
+            ~ (ipa_cli_version.stderr | default(''))
+          }}
+        ipa_cli_not_configured: >-
+          {{
+            ipa_cli_version_text is search('not configured', ignorecase=True)
           }}
         ipa_ipactl_status_text: >-
           {{
@@ -95,9 +97,10 @@
           {{
             ipa_ipactl_status_text is search('IPA is not configured', ignorecase=True)
           }}
-        ipa_server_install_version_ok: >-
+        ipa_cli_version_ok: >-
           {{
-            (ipa_server_install_pkg_version.rc | default(1) | int) == 0
+            (ipa_cli_version.rc | default(1) | int) == 0
+            and not (ipa_cli_not_configured | bool)
           }}
         ipa_server_default_conf_present: >-
           {{
@@ -112,12 +115,12 @@
           }}
         ipa_server_configured_healthy: >-
           {{
-            (ipa_server_install_version_ok | bool)
+            (ipa_cli_version_ok | bool)
             and (ipa_server_default_conf_present | bool)
             and (ipa_ipactl_healthy | bool)
           }}
 
-    - name: IPA install gate — run install unless version, ipactl, and default.conf all healthy (or force)
+    - name: IPA install gate — run install unless ipa --version, ipactl, and default.conf all healthy (or force)
       ansible.builtin.set_fact:
         ipa_server_should_run_install: >-
           {{
@@ -128,9 +131,9 @@
           {% if ipa_server_install_force | default(false) | bool -%}
           ipa_server_install_force=true (re-run install even when healthy; rare)
           {%- elif ipa_server_configured_healthy | bool -%}
-          IPA configured and healthy (ipa-server-install --version, default.conf, ipactl)
-          {%- elif not (ipa_server_install_version_ok | bool) -%}
-          ipa-server-install --version rc={{ ipa_server_install_pkg_version.rc | default('n/a') }}
+          IPA configured and healthy (ipa --version, default.conf, ipactl)
+          {%- elif not (ipa_cli_version_ok | bool) -%}
+          ipa --version rc={{ ipa_cli_version.rc | default('n/a') }}{% if ipa_cli_not_configured | bool %} (IPA not configured){% endif %}
           {%- elif not (ipa_server_default_conf_present | bool) -%}
           missing /etc/ipa/default.conf
           {%- elif ipa_ipactl_not_configured | bool -%}
@@ -149,18 +152,18 @@
         - ipa_ipactl_not_configured | bool
         - ipa_default_conf.stat.exists | default(false) | bool
 
-    - name: Summarize IPA install gate (version, ipactl, default.conf, DNS forwarder mode)
+    - name: Summarize IPA install gate (ipa CLI, ipactl, default.conf, DNS forwarder mode)
       ansible.builtin.debug:
         msg: >-
           IPA install will run: {{ ipa_server_should_run_install | bool }}
           ({{ ipa_server_install_gate_reason | trim }}).
-          ipa-server-install --version rc={{ ipa_server_install_pkg_version.rc | default('n/a') }}
-          "{{ ipa_server_install_version_text | default('') }}".
-          ipa --version rc={{ ipa_cli_version.rc | default('n/a') }}
-          "{{ ipa_cli_version_text | default('') }}".
+          Gate uses ipa --version rc={{ ipa_cli_version.rc | default('n/a') }}
+          "{{ ipa_cli_version_text | default('') | trim }}" (installed/working CLI; not installer RPM).
           default.conf present={{ ipa_server_default_conf_present | bool }},
           ipactl rc={{ ipa_server_status.rc | default('n/a') }},
           configured_healthy={{ ipa_server_configured_healthy | bool }}.
+          Debug: ipa-server-install --version rc={{ ipa_server_install_pkg_version.rc | default('n/a') }}
+          "{{ ipa_server_install_version_text | default('') }}" (installer package only).
           DNS install mode: {{
             'VPC --forwarder=' ~ effective_vpc_dns_resolver
             if (ipa_install_dns_use_vpc_forwarder | default(false) | bool)
