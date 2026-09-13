@@ -46,6 +46,8 @@ ipaserver_realm: "{{ ipaserver_domain | upper }}"
 ipaadmin_principal: "admin"
 ipaadmin_password: "PseTeam@123"
 ipadm_password: "{{ ipaadmin_password }}"
+# Shared lab password (ECS UMS bootstrap, Kerberos admin, ECS LDAP admin); override in Jenkins ANSIBLE_GROUP_VARS_YAML
+common_password: "{{ ipaadmin_password }}"
 ipaserver_setup_dns: yes
 dns_forwarders: "no"
 reverse_zones: "no"
@@ -520,7 +522,7 @@ ecs_cp_prometheus_ingress_password: "{{ cm_admin_pass }}"
 ecs_infra_prometheus_ingress_user: "{{ cm_admin_user }}"
 ecs_infra_prometheus_ingress_password: "{{ cm_admin_pass }}"
 # ECS Management Console bootstrap admin (UMS); must meet CDP complexity rules
-ecs_console_admin_password: "{{ common_password }}"
+ecs_console_admin_password: "{{ common_password | default(ipaadmin_password, true) }}"
 ecs_control_plane_database_mode: embedded  # embedded | existing (existing needs full control_plane_config)
 ecs_control_plane_vault_mode: embedded
 ecs_control_plane_embedded_db_storage_gb: 50
@@ -574,7 +576,7 @@ ecs_ldap_provider_name: cm-ldap
 ecs_ldap_admin_user_enabled: false
 ecs_ldap_admin_user_prefix: cldr
 ecs_ldap_admin_username: "{{ ecs_ldap_admin_user_prefix }}admin"
-ecs_ldap_admin_password: "{{ common_password }}"
+ecs_ldap_admin_password: "{{ common_password | default(ipaadmin_password, true) }}"
 ecs_ldap_admin_assign_all_tenant_roles: true
 ecs_ldap_admin_assign_all_resource_roles_on_env: true
 ecs_ldap_admin_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|environment)'

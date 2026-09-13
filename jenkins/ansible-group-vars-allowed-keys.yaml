@@ -10,6 +10,7 @@ allowed_keys:
 
   # Passwords (ansible group_vars — not Jenkins/Terraform)
   - ipaadmin_password
+  - common_password
   - ad_join_password
   - ad_ldap_bind_password
   - cm_admin_user
