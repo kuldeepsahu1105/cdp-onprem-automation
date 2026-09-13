@@ -55,12 +55,6 @@
       debug:
         msg: "Derived NetBIOS Name: {{ netbios_name }}"
 
-    - name: Resolve deployment DNS facts for IPA install
-      ansible.builtin.import_tasks: common_tasks/set_dns_facts.yml
-
-    - name: Resolve ipa-server-install DNS forwarder flags
-      ansible.builtin.import_tasks: common_tasks/resolve_ipa_install_dns_forwarders.yml
-
     - name: Check if IPA server package is installed
       command: ipa-server-install --version
       register: ipa_check
@@ -72,100 +66,26 @@
         msg: "IPA Server package is installed with version: {{ ipa_check.stdout }}"
       when: ipa_check.rc == 0
 
-    - name: Detect FreeIPA server install state (configured / partial / clean)
-      ansible.builtin.import_tasks: common_tasks/detect_ipa_server_install_state.yml
-
-    - name: Recover partial FreeIPA install (unattended uninstall before fresh install)
-      ansible.builtin.import_tasks: common_tasks/recover_ipa_server_install.yml
-      when: ipa_server_has_partial_state | bool
-
-    - name: Recover partial FreeIPA install — mark recovery attempted
-      ansible.builtin.set_fact:
-        ipa_recovery_ran: true
-      when: ipa_server_has_partial_state | bool
-
-    - name: Re-detect FreeIPA state after unattended uninstall recovery
-      ansible.builtin.import_tasks: common_tasks/detect_ipa_server_install_state.yml
-      when: ipa_recovery_ran | default(false) | bool
-
-    - name: Refuse ipa-server-install when critical debris remains after recovery
-      ansible.builtin.fail:
-        msg: >-
-          FreeIPA on {{ inventory_hostname }} still has partial install debris after
-          ipa-server-install --uninstall --unattended and automated path cleanup.
-          Inspect /var/log/ipaserver-uninstall.log on the host.
-          Manual recovery (as root): ipa-server-install --uninstall --unattended
-          (add --force on RHEL if prompted), then as root: rm -rf /var/lib/ipa /etc/ipa and remove /etc/dirsrv/slapd-* if needed.
-          Re-run: ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}
-          See ansible-playbooks/docs/RUNBOOK.md (FreeIPA partial install).
-      when: ipa_server_has_partial_state | default(false) | bool
-
-    - name: Note fresh host — no FreeIPA configuration detected
-      ansible.builtin.debug:
-        msg: >-
-          No FreeIPA server configuration found (no /etc/ipa/default.conf). Will run ipa-server-install on a clean host.
-      when: ipa_server_install_clean_host | bool
-
-    - name: Note stale default.conf removed — will run ipa-server-install
-      ansible.builtin.debug:
-        msg: >-
-          ipactl reported IPA is not configured; removed stale /etc/ipa/default.conf if present.
-          Running ipa-server-install on this host.
-      when:
-        - ipa_detect_ipactl_not_configured | default(false) | bool
-        - ipa_server_install_clean_host | bool
-
-    - name: Sanitize broken /var/lib/ipa and /etc/ipa before fresh ipa-server-install
-      ansible.builtin.import_tasks: common_tasks/sanitize_ipa_paths_before_fresh_install.yml
-      when:
-        - not (ipa_server_has_default_conf | bool)
-        - ipa_detect_ipactl_not_configured | default(false) | bool
-
-    - name: IPA install gate — check default.conf after recovery/sanitize
+    - name: Check if IPA Server is configured
       ansible.builtin.stat:
         path: /etc/ipa/default.conf
-      register: ipa_install_gate_default_conf
+      register: ipa_default_conf
 
-    - name: IPA install gate — ipactl status (original 10_setup_freeipa_server.yml gate)
+    - name: Check if ipa is installed and running
       ansible.builtin.command: ipactl status
-      register: ipa_install_gate_ipactl
-      changed_when: false
+      register: ipa_server_status
       failed_when: false
+      changed_when: false
 
-    - name: IPA install gate — run ipa-server-install when ipactl unhealthy or no default.conf
-      ansible.builtin.set_fact:
-        ipa_server_should_run_install: >-
-          {{
-            (ipa_install_gate_ipactl.rc | default(1) | int) != 0
-            or not (ipa_install_gate_default_conf.stat.exists | default(false) | bool)
-          }}
-
-    - name: IPA install gate — summarize install decision
+    - name: Show IPA status if installed
       ansible.builtin.debug:
-        msg:
-          - >-
-            ipa-server-install will run: {{ ipa_server_should_run_install | bool }}
-            (original gate: ipactl rc != 0 or missing /etc/ipa/default.conf).
-          - "ipactl rc={{ ipa_install_gate_ipactl.rc | default('n/a') }}; default.conf present={{ ipa_install_gate_default_conf.stat.exists | default(false) }}"
-          - "detect facts: has_default_conf={{ ipa_server_has_default_conf | default(false) }}, ipactl_not_configured={{ ipa_detect_ipactl_not_configured | default(false) }}, partial_debris={{ ipa_server_has_partial_state | default(false) }}"
-          - >-
-            DNS install forwarders: {{
-              'VPC ' ~ effective_vpc_dns_resolver
-              if (ipa_install_dns_use_vpc_forwarder | default(false) | bool)
-              else (
-                'custom ' ~ dns_forwarders
-                if (
-                  not (ipa_install_dns_no_forwarders | default(false) | bool)
-                  and ipa_dns_forwarders_norm | default('no') not in ['no', 'aws', 'vpc', 'no-forwarders', 'no_forwarders']
-                  and dns_forwarders | default('') | length > 0
-                )
-                else '--no-forwarders'
-              )
-            }}
+        msg: "{{ ipa_server_status.stdout }}"
+      when: ipa_server_status.rc == 0
 
-    - name: Preflight hostname/DNS and dig before fresh ipa-server-install
-      ansible.builtin.import_tasks: common_tasks/preflight_ipa_server_install.yml
-      when: ipa_server_should_run_install | bool
+    - name: Inform if IPA is not installed or not running
+      ansible.builtin.debug:
+        msg: "IPA is not installed or not running"
+      when: ipa_server_status.rc != 0
 
     - name: Run IPA server installation
       ansible.builtin.command: >
@@ -178,50 +98,12 @@
         --admin-password={{ ipaadmin_password }}
         --no-dnssec-validation
         --netbios-name={{ netbios_name }}
-        {% if ipa_install_dns_use_vpc_forwarder | default(false) | bool %}
-        --forwarder={{ effective_vpc_dns_resolver }}
-        {% elif ipa_install_dns_no_forwarders | default(false) | bool %}
-        --no-forwarders
-        {% elif dns_forwarders | default('') | length > 0 %}
-        --forwarder={{ dns_forwarders }}
-        {% endif %}
+        {% if dns_forwarders == 'no' %} --no-forwarders {% endif %}
         {% if reverse_zones == 'no' %} --no-reverse {% endif %}
         {% if chrony_enabled == 'yes' %} --ntp-server=pool.ntp.org {% endif %}
       register: ipa_install_result
       changed_when: "'The ipa-server-install command was successful' in ipa_install_result.stderr"
-      failed_when: false
-      no_log: true
-      when: ipa_server_should_run_install | bool
-
-    - name: Capture tail of ipaserver-install.log when install failed
-      ansible.builtin.shell: tail -n 50 /var/log/ipaserver-install.log 2>/dev/null || true
-      register: ipa_install_log_tail
-      changed_when: false
-      no_log: true
-      when:
-        - ipa_server_should_run_install | bool
-        - ipa_install_result is defined
-        - ipa_install_result.rc | default(0) != 0
-
-    - name: Fail with ipa-server-install diagnostics
-      ansible.builtin.fail:
-        msg: >-
-          ipa-server-install failed on {{ inventory_hostname }} (rc={{ ipa_install_result.rc }}).
-          stderr (truncated): {{ ipa_install_result.stderr | default('') | truncate(1500, True) }}
-          Last 50 lines of /var/log/ipaserver-install.log:
-          {{ ipa_install_log_tail.stdout | default('(log missing or empty)') }}
-      when:
-        - ipa_server_should_run_install | bool
-        - ipa_install_result is defined
-        - ipa_install_result.rc | default(0) != 0
-
-    - name: Ensure FreeIPA KDC and IPA services are running
-      ansible.builtin.import_tasks: common_tasks/ensure_ipa_kdc_services.yml
-      vars:
-        ipa_kdc_skip_start_after_install: "{{ ipa_install_result is changed | default(false) }}"
-
-    - name: Configure FreeIPA KDC encryption types (AES)
-      ansible.builtin.import_tasks: common_tasks/configure_ipa_krb_enc_types.yml
+      when: ipa_server_status.rc != 0 or not ipa_default_conf.stat.exists
 
     - name: Print IPA server installation output
       ansible.builtin.debug:
@@ -234,21 +116,19 @@
       changed_when: false
       failed_when: "'The ipactl command was successful' not in ipa_status.stderr"
 
+    - name: Ensure FreeIPA KDC and IPA services are running
+      ansible.builtin.import_tasks: common_tasks/ensure_ipa_kdc_services.yml
+      vars:
+        ipa_kdc_skip_start_after_install: "{{ ipa_install_result is changed | default(false) }}"
+
+    - name: Configure FreeIPA KDC encryption types (AES)
+      ansible.builtin.import_tasks: common_tasks/configure_ipa_krb_enc_types.yml
+
     - name: Ensure Kerberos Ticket is Present
       shell: echo "{{ ipaadmin_password }}" | kinit {{ ipaadmin_principal }}
       register: kinit_result
       changed_when: false
       failed_when: kinit_result.rc != 0
-
-    - name: Ensure IPA DNS forwards to VPC resolver on AWS (existing installs)
-      ansible.builtin.command: >
-        ipa dnsconfig-mod --forwarder={{ effective_vpc_dns_resolver }} --forward-policy=first
-      register: ipa_vpc_forwarder
-      changed_when: ipa_vpc_forwarder.rc == 0
-      failed_when: false
-      when:
-        - ipa_install_dns_use_vpc_forwarder | default(false) | bool
-        - not (ipa_server_should_run_install | default(false) | bool)
 
     - name: Print Current Kerberos Ticket
       command: klist -e
