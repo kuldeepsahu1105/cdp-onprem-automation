@@ -116,3 +116,9 @@ variable "cldr_mngr_eip_allocation_id" {
   type        = string
   default     = null
 }
+
+variable "ipaserver_ec2_startstop_iam_enabled" {
+  description = "Attach an IAM instance profile to ipa_server EC2 for EC2 start/stop/describe (tag-scoped; matches cldr_ec2_strt_stp.sh filters)."
+  type        = bool
+  default     = true
+}

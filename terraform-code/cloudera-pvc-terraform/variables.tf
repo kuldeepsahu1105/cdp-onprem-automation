@@ -197,3 +197,15 @@ variable "instance_groups" {
     }
   }
 }
+
+variable "ipaserver_ec2_startstop_iam_enabled" {
+  description = "When true, Terraform attaches a tag-scoped IAM instance profile to ipa_server EC2 (ec2:Describe/Start/Stop on tag:environment + tag:Group)."
+  type        = bool
+  default     = true
+}
+
+variable "ipaserver_ec2_startstop_iam_enabled" {
+  description = "When true, Terraform attaches a tag-scoped IAM instance profile to ipa_server EC2 (ec2:Describe/Start/Stop on tag:environment + tag:Group)."
+  type        = bool
+  default     = true
+}

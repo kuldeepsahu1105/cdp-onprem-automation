@@ -72,3 +72,8 @@ output "eip_allocation_id" {
   description = "The EIP allocation ID of cldr-mngr-1"
 }
 
+output "ipaserver_ec2_startstop_instance_profile_name" {
+  value       = module.ec2_instances.ipaserver_ec2_startstop_instance_profile_name
+  description = "IAM instance profile on ipa_server for Jenkins/manual EC2 start/stop script (IMDS credentials)."
+}
+

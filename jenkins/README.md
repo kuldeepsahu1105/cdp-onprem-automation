@@ -93,10 +93,24 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | `CDH_INSTALL` | CDH base cluster (`31_setup_base_cluster.yml`); portal refresh |
 | `MONITORING` | `32_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
 | `ECS_INSTALL` | ECS cluster (`33`); optional `34_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` |
-| `STARTSTOP_AUTOMATION` | `run-ec2-startstop-automation.sh` — Ansible on **ipaserver** only; deploys/runs `ec2_startstop_script_path` (`/root/{prefix}_cldr_ec2_strt_stp.sh`, prefix = sanitized `deployment_name_prefix` / Jenkins `ENVIRONMENT`; override `ec2_startstop_script_name_prefix`) |
+| `STARTSTOP_AUTOMATION` | `run-ec2-startstop-automation.sh` — Ansible on **ipaserver** only; playbook **36** (deploy script) + **37** (run). See **EC2_STARTSTOP_*** params below. Requires Terraform **IAM instance profile** on ipaserver (`ipaserver_ec2_startstop_iam_enabled`, default true). |
 | `DESTROY_STACK` | `run-destroy-stack.sh` — optional `99_cleanup.yml` (`CLEANUP_BEFORE_DESTROY`) then `terraform destroy` |
 
-**EC2 start/stop:** `STARTSTOP_AUTOMATION` uses EC2 tags **`environment`** and **`Group`** (Terraform `pvc_cluster_tags` + `instance_groups` keys). Jenkins runs **start** / **describe** non-interactively; **stop** requires **`EC2_STARTSTOP_CONFIRM=true`**. Manual stop on ipaserver prompts `yes`.
+### STARTSTOP_AUTOMATION parameters
+
+| Parameter | Default | Purpose |
+|---|---|---|
+| `PIPELINE_STAGES` → **`STARTSTOP_AUTOMATION`** | checked in job defaults | Enables stage **EC2 Start/Stop Automation** (after Ansible stages). If the checkbox is missing, run **REFRESH_JENKINSFILE=YES** once. |
+| `EC2_STARTSTOP_DEPLOY_SCRIPT` | `true` | Ansible **36** — template `{prefix}_cldr_ec2_strt_stp.sh` to `/root/`, mode `0755` (+ awscli). Also runs at end of **IDENTITY** / `pvc_setup` phase 2. |
+| `EC2_STARTSTOP_RUN_SCRIPT` | `true` | Ansible **37** — invoke deployed script with `EC2_STARTSTOP_OPERATION` / groups / environment. Uncheck both deploy and run → validation error. |
+| `EC2_STARTSTOP_OPERATION` | `describe` | `describe` \| `start` \| `stop` |
+| `EC2_STARTSTOP_GROUPS` | *(empty)* | Comma-separated Terraform `instance_groups` keys → EC2 tag **`Group`**. Required for **start**/**stop** when run is enabled. |
+| `EC2_STARTSTOP_CONFIRM` | `false` | Required for **stop** from Jenkins (non-interactive). Manual **stop** on ipaserver still prompts `yes`. |
+| `ENVIRONMENT` | `development` | Maps to EC2 tag **`environment`** (same as `pvc_cluster_tags.environment` / `deployment_name_prefix`). |
+
+**Jenkins vs manual on ipaserver:** Checking **`STARTSTOP_AUTOMATION`** runs the same script as SSH to ipaserver: `/root/<prefix>_cldr_ec2_strt_stp.sh <op> <environment> <group>…`. Jenkins sets `EC2_STARTSTOP_NON_INTERACTIVE=1` and `JENKINS_URL` so **stop** does not prompt; use **`EC2_STARTSTOP_CONFIRM=true`**. Manual runs use the ipaserver **instance IAM role** (Terraform-attached profile) — not Jenkins agent credentials.
+
+**EC2 start/stop:** API calls filter **`tag:environment`** + optional **`tag:Group`** (matches Terraform tags on `module.ec2_instances`). Jenkins runs **start** / **describe** non-interactively; **stop** requires **`EC2_STARTSTOP_CONFIRM=true`**. Manual stop on ipaserver prompts `yes`.
 
 **Destroy:** `DESTROY_STACK` requires **`DESTROY_STACK_CONFIRM`** unless **`DRY_RUN=true`** (destroy plan only, no apply).
 
