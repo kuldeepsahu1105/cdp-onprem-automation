@@ -42,3 +42,11 @@
     - not (cm_api_command_poll.json.active | bool)
     - cm_api_command_poll.json.success is defined
     - not (cm_api_command_poll.json.success | bool)
+    - not (
+        cm_api_command_allow_already_exists | default(false) | bool
+        and 'already exists' in (
+          cm_api_command_poll.json.resultMessage
+          | default(cm_api_command_poll.json.result_message | default(''))
+          | lower
+        )
+      )

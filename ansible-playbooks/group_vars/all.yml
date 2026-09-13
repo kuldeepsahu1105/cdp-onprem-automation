@@ -320,6 +320,11 @@ cm_api_command_poll_delay: 10
 cm_cms_monitor_wait_retries: 30
 cm_cms_monitor_wait_delay: 20
 cm_cms_monitor_wait_timeout_seconds: "{{ (cm_cms_monitor_wait_retries | int) * (cm_cms_monitor_wait_delay | int) }}"
+# Bounded wait for CM kerberosInfo.kerberized after importAdminCredentials + CM restart (playbook 28).
+cm_krb_kerberized_wait_retries: 30
+cm_krb_kerberized_wait_delay: 10
+cm_krb_kerberized_wait_timeout_seconds: "{{ (cm_krb_kerberized_wait_retries | int) * (cm_krb_kerberized_wait_delay | int) }}"
+cm_krb_kdc_preflight_timeout: 60
 # Post-CMS checks: Postgres for Reports Manager; TCP listen for Service Monitor Avro (firehose).
 cm_cms_verify_reports_manager_db: true
 cm_cms_verify_servicemonitor_listen: true

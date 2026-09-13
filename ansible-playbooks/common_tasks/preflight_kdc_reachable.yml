@@ -1,0 +1,29 @@
+---
+# Quick reachability check before CM Kerberos REST (KDC port 88).
+# Required vars: kdc_host
+
+- name: Kerberos preflight — require KDC host
+  ansible.builtin.assert:
+    that:
+      - kdc_host is defined
+      - (kdc_host | string | trim) | length > 0
+    fail_msg: >-
+      kdc_host is empty. For FreeIPA use ipa_kdc_host (ipaserver FQDN). For AD set ad_kdc_host in group_vars/all.yml.
+      Empty ad_kdc_host with no [ipaserver] inventory breaks identity auto-detect.
+
+- name: Kerberos preflight — wait for KDC krb5 port (TCP 88)
+  ansible.builtin.wait_for:
+    host: "{{ kdc_host }}"
+    port: 88
+    timeout: "{{ cm_krb_kdc_preflight_timeout | default(60) }}"
+    connect_timeout: 5
+  register: cm_krb_kdc_port_check
+  failed_when: false
+
+- name: Kerberos preflight — fail when KDC port is not reachable
+  ansible.builtin.fail:
+    msg: >-
+      Cannot reach KDC at {{ kdc_host }}:88 (Kerberos).
+      FreeIPA: re-run 12_setup_freeipa_server.yml and ensure ipaserver play in 28_setup_cm_krbs.yml completed.
+      AD: verify ad_kdc_host and network/firewall from the Jenkins/Ansible controller to the DC.
+  when: cm_krb_kdc_port_check is failed

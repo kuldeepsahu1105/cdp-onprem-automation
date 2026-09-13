@@ -1,10 +1,11 @@
 ---
 # Assert Cloudera Manager reports Kerberos/KDC integration as enabled (kerberized).
+# Polls GET /cm/kerberosInfo until kerberized=true or bounded wait expires (see group_vars).
 
 - name: Kerberos — resolve HTTPS CM API URL
   ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
 
-- name: Kerberos — read CM Kerberos status (wait for kerberized after CM restart)
+- name: Kerberos — wait for CM kerberosInfo.kerberized after restart
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/kerberosInfo"
     method: GET
@@ -15,24 +16,52 @@
     status_code: [200, 301, 303]
   register: cm_krb_verify_info
   changed_when: false
-  retries: 18
-  delay: 10
   until: cm_krb_verify_info.json.kerberized | default(false) | bool
+  retries: "{{ cm_krb_kerberized_wait_retries | default(30) }}"
+  delay: "{{ cm_krb_kerberized_wait_delay | default(10) }}"
+  failed_when: false
+
+- name: Kerberos — fail when CM KDC integration did not become enabled
+  ansible.builtin.fail:
+    msg: >-
+      Cloudera Manager Kerberos (KDC) is not enabled (kerberized=false) after waiting up to
+      {{ cm_krb_kerberized_wait_timeout_seconds | default((cm_krb_kerberized_wait_retries | default(30) | int) * (cm_krb_kerberized_wait_delay | default(10) | int)) }}s
+      ({{ cm_krb_kerberized_wait_retries | default(30) }} retries × {{ cm_krb_kerberized_wait_delay | default(10) }}s delay).
+      CM API: {{ cm_krb_api_url }}/cm/kerberosInfo
+      kerberized={{ cm_krb_verify_info.json.kerberized | default(false) }},
+      kerberosRealm={{ cm_krb_verify_info.json.kerberosRealm | default(cm_krb_verify_info.json.securityRealm | default('unset')) }},
+      kdcHost={{ cm_krb_verify_info.json.kdcHost | default('unset') }},
+      kdcType={{ cm_krb_verify_info.json.kdcType | default('unset') }}.
+      Expected KDC host (group_vars): {{ kdc_host }}, realm: {{ cluster_realm }}, type: {{ krb5_kdc_type }}.
+      Triage:
+        FreeIPA: on ipaserver run ipactl status (krb5kdc must be RUNNING); re-run 12_setup_freeipa_server.yml.
+        AD: confirm ad_kdc_host / ad_domain in group_vars (ad_kdc_host must not be empty for AD).
+        CM: confirm importAdminCredentials succeeded and CM was restarted — see /var/log/cloudera-scm-server/cloudera-scm-server.log (ImportCredentials).
+        API URL: Kerberos REST must use HTTPS on port {{ cm_https_port | default(7183) }} when Auto-TLS is enabled (not HTTP :7180).
+      Re-run: ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
+      Manual CM UI (if API import keeps failing): Administration → Settings → Kerberos — set realm/KDC host/type,
+      import Account Manager credentials, Save, then restart Cloudera Manager Server (see RUNBOOK.md).
+  when: not (cm_krb_verify_info.json.kerberized | default(false) | bool)
 
 - name: Kerberos — assert CM KDC integration is enabled
   ansible.builtin.assert:
     that:
       - cm_krb_verify_info.json.kerberized | default(false) | bool
-      - (cm_krb_verify_info.json.securityRealm | default('') | length) > 0
+      - >
+        (
+          cm_krb_verify_info.json.kerberosRealm
+          | default(cm_krb_verify_info.json.securityRealm | default(''))
+          | default(cluster_realm, true)
+          | length
+        ) > 0
     fail_msg: >-
-      Cloudera Manager Kerberos (KDC) is not enabled (kerberized=false).
-      CM realm={{ cm_krb_verify_info.json.securityRealm | default('unset') }},
-      KDC host={{ kdc_host }}.
-      Re-run ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml after FreeIPA/AD KDC is reachable.
+      CM kerberosInfo is inconsistent after kerberized=true (missing realm).
+      Full response: {{ cm_krb_verify_info.json | default({}) }}
 
 - name: Kerberos — CM KDC integration verified
   ansible.builtin.debug:
     msg:
       - "CM kerberized: {{ cm_krb_verify_info.json.kerberized }}"
-      - "CM security realm: {{ cm_krb_verify_info.json.securityRealm | default('n/a') }}"
+      - "CM kerberos realm: {{ cm_krb_verify_info.json.kerberosRealm | default(cm_krb_verify_info.json.securityRealm | default('n/a')) }}"
+      - "CM kdcHost: {{ cm_krb_verify_info.json.kdcHost | default('n/a') }}"
       - "KDC host (group_vars): {{ kdc_host }}"

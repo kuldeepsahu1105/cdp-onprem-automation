@@ -246,7 +246,7 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 | `25_verify_cm.yml` | Verify CM is running |
 | `26_setup_cm_license.yml` | Upload license or trial |
 | `27_setup_cm_autotls.yml` | Enable Auto-TLS |
-| `28_setup_cm_krbs.yml` | Kerberos (FreeIPA or AD KDC); asserts `kerberized=true` via CM API |
+| `28_setup_cm_krbs.yml` | Kerberos (FreeIPA or AD KDC); PUT `/cm/config`, `POST /cm/commands/importAdminCredentials` (query params), CM restart; bounded wait on `kerberosInfo.kerberized` |
 | `30_setup_cm_ldap.yml` | LDAP auth (FreeIPA or AD) |
 
 ### Phase 4 — CMS & base cluster
@@ -422,7 +422,8 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/join_ad_realm.yml` | AD `realm join` |
 | `common_tasks/join_freeipa_client.yml` | IPA client enrollment |
 | `common_tasks/ensure_ipa_kdc_services.yml` | `ipactl start` + krb5kdc health on ipaserver |
-| `common_tasks/verify_cm_kerberos_enabled.yml` | Assert CM `/cm/kerberosInfo` reports `kerberized=true` |
+| `common_tasks/preflight_kdc_reachable.yml` | TCP :88 reachability to `kdc_host` before CM Kerberos REST |
+| `common_tasks/verify_cm_kerberos_enabled.yml` | Bounded wait on `/cm/kerberosInfo` field `kerberized`; actionable fail (see `cm_krb_kerberized_wait_*` in `group_vars/all.yml`) |
 | `common_tasks/set_cm_api_url.yml` | CM API URL + Auto-TLS detection |
 | `ansible_control_reachability` | `auto` | `auto`, `public` (Jenkins / no VPC route), or `private` (bare metal / VPN / `CONTROL_MODE=local`) |
 | `cm_api_prefer_private_ip` | `true` | Legacy: prefer `private_ip` for CM API when profile is not `public` |
