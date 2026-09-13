@@ -499,7 +499,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/ensure_ipa_kdc_services.yml` | `ipactl start` + krb5kdc health on ipaserver |
 | `common_tasks/detect_ipa_server_install_state.yml` | `default.conf`, partial debris, `ipactl` / `ipa-server-status` before `ipa-server-install` |
 | `common_tasks/recover_ipa_server_install.yml` | `ipa-server-install --uninstall --unattended` when partial debris detected (playbook 12) |
-| `common_tasks/sanitize_ipa_paths_before_fresh_install.yml` | Remove broken `/var/lib/ipa` (no `sysrestore.state`) and `/etc/ipa` before fresh install when `ipactl` not configured (playbook 12) |
+| `common_tasks/sanitize_ipa_paths_before_fresh_install.yml` | Remove broken or incomplete `/var/lib/ipa` (missing or stale **sysrestore**), `/etc/ipa`, and `/etc/dirsrv/slapd-*` before fresh install when `ipactl` not configured (playbook 12) |
 | `common_tasks/preflight_ipa_server_install.yml` | `bind-utils`/`dnsutils`, `getent hosts` + `dig` checks before `ipa-server-install` (playbook 12) |
 | `common_tasks/resolve_ipa_install_dns_forwarders.yml` | VPC vs `--no-forwarders` flags for `ipa-server-install` (playbook 12) |
 

@@ -740,6 +740,17 @@ ec2_startstop_script_basename: >-
     else 'cldr_ec2_strt_stp.sh'
   }}
 ec2_startstop_script_path: "{{ ec2_startstop_script_dir }}/{{ ec2_startstop_script_basename }}"
+# EC2 tag:environment for script/portal examples — deployment_name_prefix only (never Jenkins placeholder "development").
+ec2_startstop_example_environment: >-
+  {{
+    (deployment_name_prefix | default('', true) | trim)
+    if ((deployment_name_prefix | default('', true) | trim | lower) != 'development')
+    else (
+      (ec2_startstop_script_prefix_effective | default('', true) | trim)
+      if ((ec2_startstop_script_prefix_effective | default('', true) | trim | lower) != 'development')
+      else ''
+    )
+  }}
 # Terraform instance_groups keys → EC2 tag:Group (see README, .tfvars.yaml, generate_inventory.sh). Used for script/Jenkins/portal examples.
 # Never start/stop these Group tags (FreeIPA/controller); describe may still list them when explicitly requested.
 ec2_startstop_excluded_terraform_groups:

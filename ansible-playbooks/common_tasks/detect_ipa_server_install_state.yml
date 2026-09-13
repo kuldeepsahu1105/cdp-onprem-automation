@@ -33,6 +33,12 @@
   register: ipa_detect_sysrestore_state
   failed_when: false
 
+- name: Detect IPA — check for sysrestore.index under /var/lib/ipa
+  ansible.builtin.stat:
+    path: /var/lib/ipa/sysrestore/sysrestore.index
+  register: ipa_detect_sysrestore_index
+  failed_when: false
+
 - name: Detect IPA — check for leftover content under /var/lib/ipa
   ansible.builtin.find:
     paths: /var/lib/ipa
@@ -76,6 +82,14 @@
   changed_when: false
   failed_when: false
 
+- name: Detect IPA — derive sysrestore markers (index/state)
+  ansible.builtin.set_fact:
+    ipa_detect_sysrestore_present: >-
+      {{
+        (ipa_detect_sysrestore_state.stat.exists | default(false) | bool)
+        or (ipa_detect_sysrestore_index.stat.exists | default(false) | bool)
+      }}
+
 - name: Detect IPA — derive critical install debris (broken /var/lib/ipa without sysrestore)
   ansible.builtin.set_fact:
     ipa_detect_broken_var_lib_ipa: >-
@@ -118,6 +132,26 @@
       {{
         (ipa_detect_ipactl_status.rc | default(1) | int) == 4
         or ipa_detect_status_text is search('IPA is not configured', ignorecase=True)
+      }}
+
+- name: Detect IPA — incomplete install with sysrestore (install_check / ipaconf.newConf)
+  ansible.builtin.set_fact:
+    ipa_detect_incomplete_sysrestore_install: >-
+      {{
+        (ipa_detect_sysrestore_present | default(false) | bool)
+        and (ipa_detect_ipactl_not_configured | bool)
+        and not (
+          (ipa_detect_default_conf.stat.exists | default(false) | bool)
+          and (ipa_detect_ipactl_status.rc | default(1) | int) == 0
+        )
+      }}
+
+- name: Detect IPA — fold incomplete sysrestore into critical debris
+  ansible.builtin.set_fact:
+    ipa_detect_critical_debris: >-
+      {{
+        (ipa_detect_critical_debris | default(false) | bool)
+        or (ipa_detect_incomplete_sysrestore_install | default(false) | bool)
       }}
 
 - name: Detect IPA — derive configuration and partial-install facts
@@ -179,6 +213,8 @@
     msg:
       - "IPA configured (default.conf + ipactl): {{ ipa_server_has_default_conf }}"
       - "ipactl reports not configured: {{ ipa_detect_ipactl_not_configured }}"
+      - "IPA sysrestore present (index/state): {{ ipa_detect_sysrestore_present | default(false) }}"
+      - "IPA incomplete sysrestore install: {{ ipa_detect_incomplete_sysrestore_install | default(false) }}"
       - "IPA critical install debris: {{ ipa_detect_critical_debris | default(false) }}"
       - "IPA partial/broken debris detected: {{ ipa_server_has_partial_state }}"
       - "IPA services healthy (ipactl): {{ ipa_server_services_healthy }}"

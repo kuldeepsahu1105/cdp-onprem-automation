@@ -187,6 +187,36 @@ ipaserver ansible_host=<public_ip> private_ip=<private_ip> cldr_hostname=ipaserv
 
 Playbook **`12_setup_freeipa_server.yml`** (via **`11_identity_setup`**) uses the same **install gate** as the original **`10_setup_freeipa_server.yml`**: run **`ipa-server-install`** when **`ipactl status` rc ≠ 0** or **`/etc/ipa/default.conf`** is missing. Repeated **partial installs** or manual cleanup can leave **broken state** (`ipactl` rc=4, leftover **`/var/lib/ipa`** / **`/etc/dirsrv`**, stale **`default.conf`**); fix the host manually before re-running identity.
 
+**Manual `ipa-server-install` after a failed run (ipaserver, root):** When **`/var/log/ipaserver-install.log`** shows **`install_check`** / **`ipaconf.newConf`** / **`ipachangeconf`** with **`FileNotFoundError: [Errno 2]`** after loading **`/var/lib/ipa/sysrestore/sysrestore.index`** and **`sysrestore.state`**, IPA is **not** configured (`ipactl status` → **IPA is not configured** / rc=4) but **sysrestore** debris remains (partial install — not a full tree). **`bind-utils`** / **`dig`** are fine; do not retry install until paths are removed.
+
+```bash
+# 1) Confirm broken / partial state
+ipactl status
+test -f /etc/ipa/default.conf && echo "default.conf present" || echo "no default.conf"
+ls -la /var/lib/ipa/sysrestore/ 2>/dev/null || true
+tail -n 40 /var/log/ipaserver-install.log
+
+# 2) Unattended uninstall (interactive uninstall defaults to "no")
+ipa-server-install --uninstall --unattended || ipa-server-install --uninstall --unattended --force
+
+# 3) If ipactl still reports not configured, remove leftover trees
+ipactl status || true
+rm -rf /var/lib/ipa /etc/ipa
+rm -rf /etc/dirsrv/slapd-*
+
+# 4) Fresh install — replace passwords and FQDN/IP; AWS VPC forwarder often 172.31.0.2 (x.y.0.2 from private IP)
+FQDN="$(hostname -f)"
+IP="$(hostname -I | awk '{print $1}')"
+ipa-server-install --setup-dns --unattended \
+  --hostname="${FQDN}" --ip-address="${IP}" \
+  --domain=cldrsetup.local --realm=CLDRSETUP.LOCAL \
+  --ds-password='YOUR_DS_PASSWORD' --admin-password='YOUR_ADMIN_PASSWORD' \
+  --no-dnssec-validation --no-reverse \
+  --forwarder=172.31.0.2
+```
+
+Re-run **`ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml --limit ipaserver`** when automation should own install (vars supply passwords and forwarders).
+
 **IPA DNS forwarders:** Default **`dns_forwarders: no`** uses the **AWS VPC resolver** (`--forwarder=x.y.0.2` from the instance private IP) on EC2 when **`ipa_server_install_use_vpc_dns_forwarder: true`** (default). On bare metal, or when the VPC resolver cannot be computed, install falls back to **`--no-forwarders`**. Force **`--no-forwarders`**: set **`dns_forwarders: no-forwarders`** or **`ipa_server_install_use_vpc_dns_forwarder: false`**. Skipped installs (healthy **`ipactl`** + **`default.conf`**) get **`ipa dnsconfig-mod`** toward the VPC resolver when VPC mode applies.
 
 ### 3. Detect identity provider
@@ -500,7 +530,7 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 | Issue | Action |
 |---|---|
 | Wrong identity detected | Run `00_detect_identity.yml`; set `identity_provider: freeipa` or `ad` to override |
-| **FreeIPA partial install** (`ipactl status` → **IPA is not configured** / rc=4; `default.conf` missing but `/etc/ipa` fragments, **`/var/lib/ipa`** without a full tree (missing **`sysrestore/sysrestore.state`** — `ipa-server-install` fails in IDENTITY with `[Errno 2] ... sysrestore.state`), or `/etc/dirsrv/slapd-*` remains; interactive `ipa-server-install --uninstall` defaults to **no**) | On **ipaserver** as **root** (use `--unattended` — interactive uninstall prompts default to **no**):<br>`ipactl status`<br>`test -f /etc/ipa/default.conf; ls -la /etc/ipa /var/lib/ipa 2>/dev/null`<br>`ipa-server-install --uninstall --unattended`<br>If uninstall refuses or errors, retry with **`--force`** (required on some RHEL/FreeIPA versions):<br>`ipa-server-install --uninstall --unattended --force`<br>Inspect **`/var/log/ipaserver-uninstall.log`**. If uninstall is incomplete or **`ipactl`** still reports not configured, remove leftover trees: **`rm -rf /var/lib/ipa /etc/ipa`** and **`/etc/dirsrv/slapd-*`** as needed (automation does this in **`recover_ipa_server_install.yml`** and **`sanitize_ipa_paths_before_fresh_install.yml`**). Do **not** leave an empty or partial **`/var/lib/ipa`** before a fresh install.<br>Automation: **`12_setup_freeipa_server.yml`** runs unattended uninstall (auto **`--force`** retry when rc≠0 or debris remains), post-uninstall path cleanup, re-detect, path sanitization, then fresh **`ipa-server-install`**. Optional var: **`-e ipa_server_uninstall_force=true`** to force on the first attempt. |
+| **FreeIPA partial install** (`ipactl status` → **IPA is not configured** / rc=4; `default.conf` missing but **`/var/lib/ipa`** has **`sysrestore.index`** / **`sysrestore.state`** and install dies in **`install_check`** / **`ipaconf.newConf`** with **`FileNotFoundError` [Errno 2]** opening a config path; or empty **`/var/lib/ipa`** without **`sysrestore.state`**; or `/etc/dirsrv/slapd-*` remains; interactive `ipa-server-install --uninstall` defaults to **no**) | See **Manual `ipa-server-install` after a failed run** under Scenario A. On **ipaserver** as **root**: unattended uninstall, then **`rm -rf /var/lib/ipa /etc/ipa`** and **`/etc/dirsrv/slapd-*`** when **`ipactl`** is still not configured. Automation: **`12_setup_freeipa_server.yml`** → **`recover_ipa_server_install.yml`**, **`sanitize_ipa_paths_before_fresh_install.yml`** (removes incomplete **sysrestore** when **`ipactl`** not configured), re-detect, then fresh **`ipa-server-install`**. Optional: **`-e ipa_server_uninstall_force=true`**. |
 | Stale `default.conf` (`ipactl` rc=4 / "IPA is not configured", install was skipped) | Playbook **12** removes lone stale `/etc/ipa/default.conf` when no partial debris, then runs `ipa-server-install`. Manual: `rm -f /etc/ipa/default.conf` only if `ipactl status` shows not configured and there is no `/etc/ipa/ca.crt` / DS data; then re-run playbook **12**. |
 | FreeIPA configured but stopped (`default.conf` present, `ipactl` healthy, services not RUNNING) | Playbook **12** skips `ipa-server-install` and runs `ensure_ipa_kdc_services.yml` (`systemctl start ipa`, then `ipactl start` if needed). Manual: `systemctl start ipa` or `ipactl start` on ipaserver. |
 | CM Kerberos/KDC not enabled (`kerberized=false`) | Playbook **28** waits up to `cm_krb_kerberized_wait_retries × cm_krb_kerberized_wait_delay` (default 300s) then fails with `kerberosInfo` details. **FreeIPA:** on ipaserver `ipactl status` (krb5kdc RUNNING); re-run `12_setup_freeipa_server.yml` then `28_setup_cm_krbs.yml`. **AD:** set `ad_kdc_host` (not empty). **CM:** confirm `importAdminCredentials` in `cloudera-scm-server.log`; Kerberos REST must use HTTPS `:7183` when Auto-TLS is on. **Manual UI:** Administration → Settings → Kerberos — set realm, KDC type/host, import Account Manager principal/password, Save, restart CM Server. |
