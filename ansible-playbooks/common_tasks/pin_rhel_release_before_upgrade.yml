@@ -1,0 +1,46 @@
+---
+# Pin subscription-manager release to the installed RHEL minor before a full dnf upgrade.
+# Skips hosts without a working subscription-manager (e.g. some EC2/RHEL images).
+- name: Resolve installed RHEL minor release for subscription pin
+  ansible.builtin.command: rpm -E '%{rhel}.%{minor}'
+  register: rhel_release_pin_target
+  changed_when: false
+  when: ansible_os_family == "RedHat"
+
+- name: Query subscription-manager release (RHEL)
+  ansible.builtin.command: subscription-manager release --show
+  register: subscription_release_show
+  changed_when: false
+  failed_when: false
+  when: ansible_os_family == "RedHat"
+
+- name: Pin RHEL subscription release to installed minor (before dnf upgrade)
+  ansible.builtin.command: "subscription-manager release --set={{ rhel_release_pin_target.stdout | trim }}"
+  register: subscription_release_set
+  changed_when: subscription_release_set.rc == 0
+  failed_when: false
+  when:
+    - ansible_os_family == "RedHat"
+    - rhel_release_pin_target is defined
+    - rhel_release_pin_target.rc == 0
+    - rhel_release_pin_target.stdout | default('') | trim | length > 0
+    - subscription_release_show is defined
+    - subscription_release_show.rc == 0
+    - (subscription_release_show.stdout | regex_replace('(?i)^Release:\\s*', '') | trim)
+      != (rhel_release_pin_target.stdout | trim)
+
+- name: Verify RHEL subscription release pin
+  ansible.builtin.command: subscription-manager release --show
+  register: subscription_release_verify
+  changed_when: false
+  failed_when: >-
+    subscription_release_verify.rc != 0
+    or (
+      subscription_release_verify.stdout | regex_replace('(?i)^Release:\\s*', '') | trim
+    ) != (rhel_release_pin_target.stdout | trim)
+  when:
+    - ansible_os_family == "RedHat"
+    - subscription_release_set is defined
+    - subscription_release_set is changed
+    - subscription_release_set.rc == 0
+    - rhel_release_pin_target is defined
