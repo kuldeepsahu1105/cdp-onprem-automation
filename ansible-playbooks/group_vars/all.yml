@@ -271,8 +271,8 @@ cfm_nifi_registry_csd_jar: "NIFIREGISTRY-{{ cfm_nifi_app_version }}.{{ cfm_versi
 csd_redhat_repo: auto
 # When scm_csds / scm_csds_redhat are empty, build URLs from versions (RHEL CM only)
 csd_build_urls_enabled: true
-# Include a CSD only when matching base_cluster_install_services toggle (set false to install all three)
-csd_respect_service_toggles: true
+# CSD download is independent of base_cluster_install_services (cluster install toggles still apply in 31_setup_base_cluster.yml).
+csd_respect_service_toggles: false
 csd_install_dataviz: true
 csd_install_nifi: true
 csd_install_nifi_registry: true

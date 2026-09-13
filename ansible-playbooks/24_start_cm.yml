@@ -141,8 +141,7 @@
         mode: 0755
       # delegate_to: cldr-mngr
 
-    # Skipped when scm_csds_effective is empty (see set_os_facts.yml: explicit scm_csds/scm_csds_redhat,
-    # or auto-built scm_csds_urls.j2 on RHEL when csd_build_urls_enabled and service toggles allow CSDs).
+    # No-op when scm_csds_effective is empty; see group_vars and common_tasks/set_os_facts.yml.
     - name: Download CSDs
       ansible.builtin.get_url:
         url: "{{ item }}"
