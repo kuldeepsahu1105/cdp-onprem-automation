@@ -7,6 +7,11 @@
     caddy_vhost_urls_external: "{{ hostvars['localhost']['caddy_vhost_urls_external'] | default({}) }}"
     caddy_vhost_urls_vpc: "{{ hostvars['localhost']['caddy_vhost_urls_vpc'] | default({}) }}"
     deployment_portal_cm_fqdn: "{{ hostvars['localhost']['deployment_portal_cm_fqdn'] }}"
+    deployment_portal_postgres_fqdn: >-
+      {{
+        hostvars['localhost']['deployment_portal_postgres_fqdn']
+        | default(postgres_host_fqdn)
+      }}
     deployment_portal_cm_upstream_host: "{{ hostvars['localhost']['deployment_portal_cm_upstream_host'] | default('') }}"
     deployment_portal_ops_public_ip: "{{ hostvars['localhost']['deployment_portal_ops_public_ip'] | default('') }}"
     deployment_portal_ops_private_ip: "{{ hostvars['localhost']['deployment_portal_ops_private_ip'] | default('') }}"

@@ -27,6 +27,13 @@
           {{
             lookup('template', 'deployment_portal_operator_access.j2') | from_yaml | default({}, true)
           }}
+      vars:
+        # Template lookup uses the ops play host vars, not localhost facts (delegate_to does not merge set_fact names).
+        deployment_portal_postgres_fqdn: >-
+          {{
+            hostvars['localhost']['deployment_portal_postgres_fqdn']
+            | default(deployment_portal_postgres_fqdn | default(postgres_host_fqdn))
+          }}
 
 - name: Adopt refreshed SSH export facts from controller
   ansible.builtin.set_fact:
