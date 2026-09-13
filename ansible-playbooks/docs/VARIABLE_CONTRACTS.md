@@ -44,6 +44,9 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 | Group defaults | `group_vars/all.yml` | e.g. `deployment_portal_http_port`, `deployment_portal_url_verify_status_codes`, `caddy_vhost_enabled`, `deployment_portal_basic_auth_enabled` (HTTP auth on `/downloads/*`) |
 | `deployment_portal_expose_ssh_keys` | `group_vars/all.yml` | `true` (default): always copy controller SSH keys to `/downloads/ssh/`. `false`: disable. `auto`: export only when `deployment_portal_basic_auth_enabled` is `true` |
 | `deployment_portal_ssh_keys_expose_effective` | `build_deployment_portal_operator_access.yml` (+ sync refresh on localhost) | Resolved boolean: `true` when `deployment_portal_expose_ssh_keys` is `true`; when `auto`, matches `deployment_portal_basic_auth_enabled`; when `false`, `false` |
+| `deployment_portal_base_master_fqdn`, `deployment_portal_inventory_hosts`, `deployment_portal_ecs_api_cache`, `ipa_caddy_modern_public_url`, `ipa_caddy_legacy_public_url` | `build_deployment_portal_facts.yml` (localhost) → `deployment_portal_load_host_facts.yml` + `deployment_portal_operator_access_facts_from_localhost.yml` | Required by `deployment_portal_operator_access.j2` when play 2 re-renders operator access (sync delegates SSH refresh to localhost but Jinja lookup uses the ops play host namespace) |
+
+**Jenkins:** check out `main` at or after commit `691b943` (portal operator-access `deployment_portal_postgres_fqdn` fix) before running the PORTAL stage; later commits add the remaining operator-access localhost facts above.
 
 **Internal `_portal_*` facts:** defined in earlier tasks within `verify_deployment_portal_urls.yml` itself — do not combine dependent keys in a **single** `set_fact` task (Ansible key order is undefined). See comment at top of that file.
 

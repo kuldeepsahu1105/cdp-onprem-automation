@@ -54,7 +54,8 @@
 {% elif ssh_on %}
 {% set ns.sections = ns.sections + [{'id': 'ssh', 'title': 'SSH cluster access', 'intro': 'Key export enabled but no private keys found on the Ansible controller during portal sync.', 'downloads': [], 'credentials': []}] %}
 {% endif %}
-{% set ns.sections = ns.sections + [{'id': 'cm', 'title': 'Cloudera Manager', 'intro': 'CM admin UI/API credentials.', 'downloads': [], 'credentials': [{'label': 'Cloudera Manager', 'username': cm_admin_user, 'password': cm_admin_pass, 'url': 'https://' ~ deployment_portal_cm_fqdn ~ ':' ~ (cm_https_port | string), 'note': 'HTTP :' ~ (cm_http_port | string) ~ ' on ' ~ deployment_portal_cm_fqdn}]}] %}
+{% set _cm_fqdn = deployment_portal_cm_fqdn | default('') %}
+{% set ns.sections = ns.sections + [{'id': 'cm', 'title': 'Cloudera Manager', 'intro': 'CM admin UI/API credentials.', 'downloads': [], 'credentials': [{'label': 'Cloudera Manager', 'username': cm_admin_user, 'password': cm_admin_pass, 'url': 'https://' ~ _cm_fqdn ~ ':' ~ (cm_https_port | string), 'note': 'HTTP :' ~ (cm_http_port | string) ~ ' on ' ~ _cm_fqdn}]}] %}
 {% set _pgadmin_direct = deployment_portal_access_urls.primary.pgadmin if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external.pgadmin %}
 {% set _pgadmin_url = (pgadmin_caddy_public_url | default('') | trim) if (pgadmin_caddy_public_url | default('') | length > 0) else (_pgadmin_direct | default('') | trim) %}
 {% set _postgres_fqdn = deployment_portal_postgres_fqdn | default(postgres_host_fqdn | default('')) %}
@@ -92,15 +93,16 @@
 {% if identity_provider_effective == 'ad' %}
 {% set ns.sections = ns.sections + [{'id': 'ad', 'title': 'Active Directory', 'intro': 'Domain join account.', 'downloads': [], 'credentials': [{'label': 'AD join', 'username': ad_join_user, 'password': ad_join_password, 'url': '', 'note': ad_kdc_host}]}] %}
 {% endif %}
+{% set _base_master_fqdn = deployment_portal_base_master_fqdn | default('') | trim %}
 {% set svc_creds = [] %}
-{% if base_cluster_install_services.ranger | default(false) | bool %}
-{% set svc_creds = svc_creds + [{'label': 'Ranger Admin', 'username': 'rangeradmin', 'password': (databases | selectattr('name', 'equalto', 'ranger') | map(attribute='password') | first | default('rangeradmin')), 'url': 'http://' ~ deployment_portal_base_master_fqdn ~ ':6080', 'note': 'Base cluster'}] %}
+{% if base_cluster_install_services.ranger | default(false) | bool and (_base_master_fqdn | length > 0) %}
+{% set svc_creds = svc_creds + [{'label': 'Ranger Admin', 'username': 'rangeradmin', 'password': (databases | selectattr('name', 'equalto', 'ranger') | map(attribute='password') | first | default('rangeradmin')), 'url': 'http://' ~ _base_master_fqdn ~ ':6080', 'note': 'Base cluster'}] %}
 {% endif %}
-{% if base_cluster_install_services.knox | default(false) | bool %}
-{% set svc_creds = svc_creds + [{'label': 'Knox Gateway', 'username': 'knox', 'password': (databases | selectattr('name', 'equalto', 'knox') | map(attribute='password') | first | default('knox')), 'url': 'https://' ~ deployment_portal_base_master_fqdn ~ ':8443/gateway/homepage/home', 'note': 'Knox DB user'}] %}
+{% if base_cluster_install_services.knox | default(false) | bool and (_base_master_fqdn | length > 0) %}
+{% set svc_creds = svc_creds + [{'label': 'Knox Gateway', 'username': 'knox', 'password': (databases | selectattr('name', 'equalto', 'knox') | map(attribute='password') | first | default('knox')), 'url': 'https://' ~ _base_master_fqdn ~ ':8443/gateway/homepage/home', 'note': 'Knox DB user'}] %}
 {% endif %}
-{% if base_cluster_install_services.hue | default(false) | bool %}
-{% set svc_creds = svc_creds + [{'label': 'Hue', 'username': 'hue', 'password': (databases | selectattr('name', 'equalto', 'hue') | map(attribute='password') | first | default('hue')), 'url': 'http://' ~ deployment_portal_base_master_fqdn ~ ':8888', 'note': 'Often LDAP after CM sync'}] %}
+{% if base_cluster_install_services.hue | default(false) | bool and (_base_master_fqdn | length > 0) %}
+{% set svc_creds = svc_creds + [{'label': 'Hue', 'username': 'hue', 'password': (databases | selectattr('name', 'equalto', 'hue') | map(attribute='password') | first | default('hue')), 'url': 'http://' ~ _base_master_fqdn ~ ':8888', 'note': 'Often LDAP after CM sync'}] %}
 {% endif %}
 {% if svc_creds | length > 0 %}
 {% set ns.sections = ns.sections + [{'id': 'cdp_services', 'title': 'CDP Runtime services', 'intro': 'External DB users from CM database setup (lab defaults).', 'downloads': [], 'credentials': svc_creds}] %}
