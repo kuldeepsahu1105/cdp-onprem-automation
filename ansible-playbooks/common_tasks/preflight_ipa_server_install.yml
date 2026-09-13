@@ -1,17 +1,78 @@
 ---
-# Hostname/DNS and tooling checks before ipa-server-install on a clean or recovered host.
-# FreeIPA's installer shells out to dig; without bind-utils/dnsutils Python reports
-# [Errno 2] No such file or directory (no path) and warns about skipping DNS resolution.
+# Hostname/DNS, RPM deps, and tooling checks before ipa-server-install on a clean or recovered host.
+# FreeIPA's installer shells out to dig/host; without bind-utils Python reports
+# [Errno 2] No such file or directory (missing binary) and warns about skipping DNS resolution.
+# Early install_check/ipachangeconf/newConf FileNotFoundError often means leftover sysrestore
+# or missing Directory Server / openldap paths — see RUNBOOK.md troubleshooting.
 
-- name: Preflight IPA install — ensure DNS lookup tools (dig)
+- name: Preflight IPA install — ensure DNS lookup tools (dig, host)
   ansible.builtin.package:
     name: "{{ os_vars[ansible_os_family].ipa_install_dns_packages }}"
     state: present
+
+- name: Preflight IPA install — ensure IPA server RPM dependencies (RHEL family)
+  ansible.builtin.package:
+    name: "{{ ipa_server_preflight_rpm_packages }}"
+    state: present
+  when: ansible_os_family == 'RedHat'
 
 - name: Preflight IPA install — verify dig is on PATH
   ansible.builtin.command: dig -v
   register: ipa_preflight_dig_version
   changed_when: false
+
+- name: Preflight IPA install — verify host and ipa-server-install binaries on PATH
+  ansible.builtin.shell: |
+    set -euo pipefail
+    command -v host
+    command -v dig
+    command -v ipa-server-install
+  args:
+    executable: /bin/bash
+  register: ipa_preflight_binaries
+  changed_when: false
+
+- name: Preflight IPA install — stat openldap client config (install_check paths)
+  ansible.builtin.stat:
+    path: /etc/openldap/ldap.conf
+  register: ipa_preflight_openldap_conf
+  when: ansible_os_family == 'RedHat'
+
+- name: Preflight IPA install — assert openldap config directory exists on RHEL
+  ansible.builtin.assert:
+    that:
+      - ipa_preflight_openldap_conf.stat.exists | default(false) | bool
+    fail_msg: >-
+      /etc/openldap/ldap.conf is missing. Install openldap (dnf install -y openldap)
+      and re-run playbook 12.
+  when: ansible_os_family == 'RedHat'
+
+- name: Preflight IPA install — assert critical IPA RPMs are installed (RHEL)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    for pkg in {{ ipa_server_preflight_rpm_packages | join(' ') }}; do
+      rpm -q "${pkg}"
+    done
+  args:
+    executable: /bin/bash
+  register: ipa_preflight_rpm_query
+  changed_when: false
+  when: ansible_os_family == 'RedHat'
+
+- name: Preflight IPA install — read hostname -f for install FQDN comparison
+  ansible.builtin.command: hostname -f
+  register: ipa_preflight_hostname_f
+  changed_when: false
+
+- name: Preflight IPA install — assert hostname -f matches Ansible FQDN (--hostname)
+  ansible.builtin.assert:
+    that:
+      - (ipa_preflight_hostname_f.stdout | default('') | trim) == (ansible_fqdn | trim)
+    fail_msg: >-
+      hostname -f is "{{ ipa_preflight_hostname_f.stdout | default('') | trim }}" but
+      automation uses ansible_fqdn="{{ ansible_fqdn }}" for --hostname.
+      Re-run 02_set_hostname.yml and 03_create_etc_hosts.yml, or pass
+      --hostname={{ ipa_preflight_hostname_f.stdout | trim }} manually only after fixing inventory.
 
 - name: Preflight IPA install — resolve install FQDN via getent hosts
   ansible.builtin.command: getent hosts {{ ansible_fqdn }}
@@ -43,6 +104,42 @@
       dig +short {{ ansible_fqdn }} => {{ (ipa_preflight_dig_fqdn.stdout | default('') | trim) or '(empty)' }};
       install will use --ip-address={{ ansible_default_ipv4.address }} and local getent mapping.
   when: ansible_default_ipv4.address not in (ipa_preflight_dig_fqdn.stdout | default(''))
+
+- name: Preflight IPA install — refuse leftover sysrestore when IPA is not configured
+  ansible.builtin.assert:
+    that:
+      - not (ipa_detect_sysrestore_present | default(false) | bool)
+    fail_msg: >-
+      /var/lib/ipa/sysrestore still present while ipactl reports IPA is not configured.
+      Remove partial state: ipa-server-install --uninstall --unattended (add --force if prompted),
+      then rm -rf /var/lib/ipa /etc/ipa /etc/dirsrv/slapd-* and re-run playbook 12
+      (sanitize_ipa_paths_before_fresh_install.yml should have removed this — inspect the host).
+  when: ipa_detect_ipactl_not_configured | default(false) | bool
+
+- name: Preflight IPA install — optional ipa-server-install --check when supported
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ipa-server-install --help 2>&1 | grep -qE '(^|[[:space:]])--check([[:space:]]|,|$)'; then
+      ipa-server-install --check \
+        --hostname="{{ ansible_fqdn }}" \
+        --ip-address="{{ ansible_default_ipv4.address }}" \
+        --domain="{{ ipaserver_domain }}" \
+        --realm="{{ ipaserver_realm }}"
+    else
+      echo "preflight: ipa-server-install --check not supported on this IPA version; skipped"
+    fi
+  args:
+    executable: /bin/bash
+  register: ipa_preflight_install_check
+  changed_when: false
+  failed_when: false
+
+- name: Preflight IPA install — show --check output when run
+  ansible.builtin.debug:
+    var: ipa_preflight_install_check.stdout_lines
+  when:
+    - ipa_preflight_install_check.stdout is defined
+    - ipa_preflight_install_check.stdout | length > 0
 
 - name: Preflight IPA install — ensure chronyd is running when NTP option is enabled
   ansible.builtin.service:
