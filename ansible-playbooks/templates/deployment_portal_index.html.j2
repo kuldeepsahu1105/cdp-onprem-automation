@@ -58,7 +58,8 @@
       --accent-soft: #5b9fd4;
       --border: #2d3a4d;
       --tile-hover: #243044;
-      --max-w: 960px;
+      --max-w: 1120px;
+      --table-min-w: 1040px;
       --radius: 10px;
     }
     * { box-sizing: border-box; }
@@ -112,6 +113,39 @@
       letter-spacing: 0.08em;
       color: var(--accent);
       font-weight: 600;
+    }
+    .brand-subtitle {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.4rem;
+      margin-top: 0.35rem;
+    }
+    .label-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      vertical-align: middle;
+    }
+    .label-badge .label-badge-key {
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .label-badge-owner {
+      background: rgba(91, 159, 212, 0.12);
+      border: 1px solid rgba(91, 159, 212, 0.35);
+      color: #b8d4f0;
+    }
+    .label-badge-beta {
+      background: rgba(249, 103, 2, 0.15);
+      border: 1px solid rgba(249, 103, 2, 0.45);
+      color: #ffc89a;
     }
     .meta-row {
       display: flex;
@@ -259,13 +293,51 @@
       border-collapse: collapse;
       font-size: 0.82rem;
     }
+    table.portal-table {
+      width: 100%;
+      min-width: var(--table-min-w);
+      table-layout: fixed;
+    }
     th, td {
       text-align: left;
-      padding: 0.45rem 0.5rem;
+      padding: 0.45rem 0.55rem;
       border-bottom: 1px solid var(--border);
+      vertical-align: top;
     }
     th { color: var(--muted); font-weight: 600; }
-    .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      width: 100%;
+      max-width: 100%;
+    }
+    table.inventory-table th:nth-child(1),
+    table.inventory-table td:nth-child(1) { width: 13%; }
+    table.inventory-table th:nth-child(2),
+    table.inventory-table td:nth-child(2) { width: 20%; }
+    table.inventory-table th:nth-child(3),
+    table.inventory-table td:nth-child(3) { width: 11%; }
+    table.inventory-table th:nth-child(4),
+    table.inventory-table td:nth-child(4) { width: 11%; }
+    table.inventory-table th:nth-child(5),
+    table.inventory-table td:nth-child(5) { width: 18%; }
+    table.inventory-table th:nth-child(6),
+    table.inventory-table td:nth-child(6) { width: 27%; }
+    table.inventory-table td:nth-child(1),
+    table.inventory-table td:nth-child(2),
+    table.inventory-table td:nth-child(3),
+    table.inventory-table td:nth-child(4) {
+      white-space: nowrap;
+    }
+    table.cred-table th:nth-child(1) { width: 14%; }
+    table.cred-table th:nth-child(2) { width: 12%; }
+    table.cred-table th:nth-child(3) { width: 22%; }
+    table.cred-table th:nth-child(4) { width: 32%; }
+    table.cred-table th:nth-child(5) { width: 20%; }
+    table.cred-table td:nth-child(4) a,
+    table.cred-table td:nth-child(4) code {
+      word-break: break-all;
+    }
     .badge {
       display: inline-block;
       background: #243044;
@@ -381,6 +453,23 @@
       padding: 0.55rem 0.75rem;
       margin: 0 0 0.75rem;
     }
+    .site-footer {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 1.25rem 1rem 2rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .site-footer strong { color: var(--text); font-weight: 600; }
+    .site-footer .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      margin-top: 0.45rem;
+    }
+    .site-footer .footer-links a { font-size: 0.8rem; }
     @media (max-width: 480px) {
       .site-header { padding: 0.85rem 1rem; }
       h1 { font-size: 1.15rem; }
@@ -403,6 +492,10 @@
         <div>
           <div class="brand-tag">Cloudera Data Platform</div>
           <h1>Deployment portal</h1>
+          <div class="brand-subtitle" aria-label="Portal metadata">
+            <span class="label-badge label-badge-owner"><span class="label-badge-key">Owner</span> Kuldeep Sahu</span>
+            <span class="label-badge label-badge-beta"><span class="label-badge-key">Automation</span> beta version</span>
+          </div>
         </div>
       </div>
       <div class="meta-row">
@@ -539,7 +632,7 @@
         <summary><span class="summary-main"><h2 class="section-title">Service health (CM snapshot)</h2></span>{{ panel_chevron | safe }}</summary>
         <div class="panel-body">
           <div class="table-scroll">
-            <table id="live-stats-services-table">
+            <table id="live-stats-services-table" class="portal-table">
               <thead>
                 <tr>
                   <th>Cluster</th>
@@ -598,7 +691,7 @@
         {% endif %}
         {% if sec.credentials | default([]) | length > 0 %}
         <div class="table-scroll">
-          <table class="cred-table">
+          <table class="portal-table cred-table">
             <thead>
               <tr>
                 <th>Service</th>
@@ -632,7 +725,7 @@
       <h2>Endpoints</h2>
       <p class="sub"><strong>Service</strong> is the product or UI name. <strong>Hostname</strong> is the inventory FQDN of the backing host (or ECS console name). Links open in a new tab.{% if mon_on %} Monitoring rows prefer Caddy vhosts when configured, else direct host ports (<code>{{ monitoring_grafana_host_port | default(3000) }}</code>, <code>{{ monitoring_prometheus_host_port | default(9090) }}</code>, <code>{{ monitoring_alertmanager_host_port | default(9093) }}</code>, <code>{{ monitoring_cadvisor_host_port | default(8089) }}</code>); Caddy path routes on <code>:{{ deployment_portal_http_port | default(81) }}</code> remain available.{% endif %}</p>
       <div class="table-scroll">
-        <table>
+        <table class="portal-table">
           <thead>
             <tr>
               <th>Service</th>
@@ -846,7 +939,7 @@
       <h2>Planned / configured roles</h2>
       <p class="sub">From Ansible inventory groups, <code>host_template</code> hostvars, <code>base_cluster_install_services</code>, and the monitoring portal stack on the ops host (<code>{{ ctx.ops_host.inventory_group | default('ipaserver') }}</code>).</p>
       <div class="table-scroll">
-        <table>
+        <table class="portal-table">
           <thead>
             <tr>
               <th>Stack</th>
@@ -875,7 +968,7 @@
       <h2>CM services (live snapshot)</h2>
       <p class="sub">From Cloudera Manager API at portal refresh; same data as the health snapshot KPIs above.</p>
       <div class="table-scroll">
-        <table>
+        <table class="portal-table">
           <thead>
             <tr>
               <th>Cluster</th>
@@ -911,7 +1004,7 @@
       <h2>Host inventory</h2>
       <p class="sub">One row per host: Ansible groups, addresses, and inferred roles from inventory groups, hostvars (e.g. <code>host_template</code>, Knox), and enabled base-cluster services.</p>
       <div class="table-scroll">
-        <table>
+        <table class="portal-table inventory-table">
           <thead>
             <tr>
               <th>Host</th>
@@ -947,6 +1040,15 @@
     </section>
     {% endif %}
   </main>
+  <footer class="site-footer">
+    <div>Developed by <strong>Kuldeep Sahu</strong></div>
+    <div class="footer-links">
+      <a href="mailto:ksahu@cloudera.com">ksahu@cloudera.com</a>
+      <a href="mailto:sahukuldeep4321@gmail.com">sahukuldeep4321@gmail.com</a>
+      <a href="https://github.com/kuldeepsahu1105" target="_blank" rel="noopener noreferrer">GitHub — kuldeepsahu1105</a>
+      <a href="https://www.linkedin.com/in/kuldeep-sahu-0511" target="_blank" rel="noopener noreferrer">LinkedIn — kuldeep-sahu-0511</a>
+    </div>
+  </footer>
   <script>
   (function () {
     var POLL_MS = 60000;
