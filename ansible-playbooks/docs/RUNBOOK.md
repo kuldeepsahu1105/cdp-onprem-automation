@@ -283,7 +283,34 @@ Ops stack runs on **ipaserver** when present (`deployment_portal_host_group: aut
 
 **Bare metal / private network (no public IP):** Set `deployment_environment: baremetal` (or `deployment_portal_access_profile: private`). The portal index shows only private-network URLs — typically `http://<ops-fqdn>:81/` when `deployment_portal_prefer_fqdn_urls: true`, or `http://<management-ip>:81/` otherwise. pgAdmin stays on port `5050` on the same ops host; database is **cldr-mngr** PostgreSQL. Caddy lab hostnames use the ops management IP (often `caddy_vhost_dns_mode: flat` with IPA/AD DNS).
 
-**Operator access hub:** After `10_setup_deployment_portal.yml` or `35_refresh_deployment_portal.yml`, the index includes an **Operator access** panel with CM, database, IPA/AD, enabled CDP services (Ranger/Knox/Hue), ECS, and optional Jenkins URLs — values come from Ansible vars at render time (not committed secrets). `deployment_portal_expose_ssh_keys` controls SSH key downloads: **`true`** (default in `group_vars/all.yml`) always exports controller keys to `/downloads/ssh/`; **`false`** disables exports; **`auto`** exports only when `deployment_portal_basic_auth_enabled: true`. When the controller has both Terraform `sshkey.pem` and a distinct Auto-TLS key (for example `~/.ssh/id_rsa`), the portal exposes two labeled links; a single key exports once. `/downloads/*` (SSH keys and `operator-credentials.json`) is gated by HTTP basic auth when `deployment_portal_basic_auth_enabled: true` (default) — leave that enabled on untrusted networks, or Ansible logs a warning if keys are exposed without basic auth. Re-run portal refresh after password changes in group_vars or Jenkins `ANSIBLE_GROUP_VARS_YAML`.
+**Operator access hub:** After `10_setup_deployment_portal.yml` or `35_refresh_deployment_portal.yml`, the index includes an **Operator access — credentials & downloads** panel when `deployment_portal_expose_credentials: true` (default). See [Deployment portal default credentials](#deployment-portal-default-credentials) below for downloads auth, `operator-credentials.json`, lab defaults, and overrides.
+
+#### Deployment portal default credentials
+
+Operators use the deployment portal index on the ops host (`http://<ops>:81/` by default). The **index HTML stays unauthenticated** (Ansible Tier A verify). Secrets appear only in the **Operator access** panel and under **`/downloads/`**.
+
+| Surface | Path / UI | Authentication |
+|---------|-----------|----------------|
+| Portal index | `:81/` | None |
+| Operator access panel | Collapsible section on the index | None — lab/trusted networks only |
+| SSH PEMs, JSON bundle | `/downloads/ssh/*`, `/downloads/operator-credentials.json` | HTTP basic auth when `deployment_portal_basic_auth_enabled: true` (default) |
+
+**Downloads HTTP basic auth** applies to **`/downloads/*` only** (not the index). Username: `deployment_portal_basic_auth_user` (default `portal`). Password: `deployment_portal_basic_auth_password` (default resolves to **`postgres_password`** — lab value `postgres`). Use the same user/password for browser downloads and `curl -u portal:<password> …`.
+
+**Operator access panel** mirrors Ansible at sync time: Cloudera Manager (`cm_admin_user` / `cm_admin_pass`), PostgreSQL and pgAdmin, FreeIPA or AD join when configured, Grafana/Prometheus paths when monitoring is enabled, optional Ranger/Knox/Hue/ECS/Jenkins rows from the same vars as playbooks. Nothing is stored in git; re-run `35_refresh_deployment_portal.yml` after changes.
+
+**`operator-credentials.json`** — machine-readable copy of the panel (`basic_auth_enabled`, `auth_username`, `downloads_path_prefix`, `sections[]` → `credentials[]` with `label`, `username`, `password`, `url`, `note`). Rendered to `/downloads/operator-credentials.json` from `deployment_portal_operator_credentials.json.j2`. Same HTTP basic auth as PEM downloads when enabled. Example:
+
+```bash
+curl -fsS -u "${DEPLOYMENT_PORTAL_BASIC_AUTH_USER:-portal}:${DEPLOYMENT_PORTAL_BASIC_AUTH_PASSWORD}" \
+  "http://<ops-host>:81/downloads/operator-credentials.json" | jq .
+```
+
+**Lab default passwords (portal view):** In a fresh lab, CM is typically `admin` / `admin`, IPA admin `admin` / `PseTeam@123`, and pgAdmin, Grafana, and portal downloads auth often share **`postgres_password`** (`postgres`). EC2 SSH uses inventory user `ec2-user` with PEMs under `/downloads/ssh/` when `deployment_portal_expose_ssh_keys: true` (default). Full Ansible variable names and literals: [REFERENCE.md — Lab default passwords](REFERENCE.md#lab-default-passwords-override-before-production) — override there or below; do not paste production secrets into tickets.
+
+**Overrides:** Set passwords and portal toggles in `group_vars/all.yml` or Jenkins job parameter **`ANSIBLE_GROUP_VARS_YAML`** (allowed keys in `jenkins/ansible-group-vars-allowed-keys.yaml`, including `postgres_password`, `cm_admin_pass`, `ipaadmin_password`, `deployment_portal_basic_auth_*`, `deployment_portal_expose_credentials`, `deployment_portal_expose_ssh_keys`). Then run **`35_refresh_deployment_portal.yml`**.
+
+**SSH key downloads:** `deployment_portal_expose_ssh_keys` — **`true`** (default) exports controller keys to `/downloads/ssh/`; **`false`** disables; **`auto`** exports only when downloads basic auth is on. Two labeled PEMs when Terraform `sshkey.pem` and a distinct Auto-TLS key both exist on the controller. Keep `deployment_portal_basic_auth_enabled: true` on untrusted networks; Ansible warns when keys are exposed without basic auth.
 
 ---
 
