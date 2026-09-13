@@ -1,3 +1,4 @@
+// Jenkinsfile parameters v2026-09-13.3 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -5,7 +6,11 @@ pipeline {
     choice(
       name: 'REFRESH_JENKINSFILE',
       choices: ['NO', 'YES'],
-      description: 'YES = reload Jenkinsfile parameter UI and exit (no deployment). Run once after Jenkinsfile changes.'
+      description: '''YES = reload this job's parameter definitions from the Jenkinsfile and exit (no deployment). Required after Jenkinsfile/parameter changes so checkboxes and help text update.
+
+Steps: Build with Parameters → REFRESH_JENKINSFILE=YES → Run (build aborts by design) → open Build with Parameters again.
+
+Plugin note: Extended Choice per-checkbox hints (descriptionPropertyValue) may only appear in job Configure, not on Build with Parameters — use the PIPELINE_STAGES_REFERENCE text area below for the full stage table (including DESTROY_STACK, DRY_RUN, DESTROY_STACK_CONFIRM).'''
     )
     extendedChoice(
       name: 'PIPELINE_STAGES',
@@ -15,8 +20,16 @@ pipeline {
       multiSelectDelimiter: ',',
       visibleItemCount: 11,
       quoteValue: false,
-      description: 'Stages to run (fixed order). See PIPELINE_STAGES_REFERENCE below for full guide. Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. Run REFRESH_JENKINSFILE=YES after Jenkinsfile changes.',
-      descriptionPropertyValue: '''VALIDATE: prereq checks (VALIDATION_CHECKS),TERRAFORM: EC2/VPC/SG/EIP + inventory,PREREQS: Ansible 01-09,PORTAL: portal bootstrap (10),IDENTITY: FreeIPA/AD phase 2,CM_INSTALL: CM server phase 3,CM_TLS_KRB_LDAP: TLS/Kerberos/LDAP 27-30,CDH_INSTALL: base cluster (31),MONITORING: Grafana/Prom (32),ECS_INSTALL: ECS cluster (33),DESTROY_STACK: terraform destroy (+ optional 99_cleanup) — requires DESTROY_STACK_CONFIRM'''
+      description: '''Stages to run (fixed order; select one or more). Full table: PIPELINE_STAGES_REFERENCE text parameter below.
+
+Order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → DESTROY_STACK
+
+CM_TLS_KRB_LDAP = playbooks 27→29→30→28 (Auto-TLS, CMS, LDAP, Kerberos). Legacy CDH_BASE → check CM_TLS_KRB_LDAP + CDH_INSTALL.
+
+DESTROY_STACK = terraform destroy (optional 99_cleanup via CLEANUP_BEFORE_DESTROY). Requires DESTROY_STACK_CONFIRM=true unless DRY_RUN=true (destroy plan only).
+
+After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once, then re-run with your stage checkboxes.''',
+      descriptionPropertyValue: '''VALIDATE — prereq script (VALIDATION_CHECKS),TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→29→30→28 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — ECS cluster (33),DESTROY_STACK — terraform destroy; DESTROY_STACK_CONFIRM or DRY_RUN'''
     )
     text(
       name: 'PIPELINE_STAGES_REFERENCE',
@@ -35,7 +48,12 @@ Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INS
 | CDH_INSTALL | CDH base cluster (31_setup_base_cluster.yml) |
 | MONITORING | Monitoring stack (32); needs PORTAL; MONITORING_STACK_ENABLED |
 | ECS_INSTALL | ECS (33) + optional data services when ECS_DATA_SERVICES_DEPLOY_ENABLED |
-| DESTROY_STACK | run-destroy-stack.sh — optional 99_cleanup then terraform destroy (DESTROY_STACK_CONFIRM) |
+| DESTROY_STACK | run-destroy-stack.sh — optional 99_cleanup (CLEANUP_BEFORE_DESTROY) then terraform destroy |
+
+Destroy safety:
+  DESTROY_STACK_CONFIRM — required when DESTROY_STACK is checked (unless DRY_RUN=true).
+  DRY_RUN=true — terraform destroy plan only (no apply); DESTROY_STACK_CONFIRM not required.
+  CLEANUP_BEFORE_DESTROY — run ansible-playbooks/99_cleanup.yml before destroy when enabled.
 
 Legacy: CDH_BASE (old jobs) expands to CM_TLS_KRB_LDAP + CDH_INSTALL — check those two boxes instead.
 
@@ -48,7 +66,7 @@ Examples:
 
 Details: jenkins/README.md
 ''',
-      description: 'Read-only stage guide (shown on Build with Parameters). Leave default or copy from here; does not affect the pipeline unless you rely on it for notes.'
+      description: 'Stage guide (multiline text — always visible on Build with Parameters). Default documents all checkboxes including DESTROY_STACK; editing this field does not change what runs.'
     )
     extendedChoice(
       name: 'VALIDATION_CHECKS',
@@ -631,9 +649,9 @@ def orderedAnsibleStageIds() {
 def echoPipelineStagesQuickReference() {
   echo '''PIPELINE_STAGES quick reference (full table: Build parameter PIPELINE_STAGES_REFERENCE or jenkins/README.md):
   VALIDATE → prereqs script | TERRAFORM → EC2/inventory | PREREQS → Ansible 01-09 | PORTAL → bootstrap (10)
-  IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → TLS/LDAP | CDH_INSTALL → base cluster (31)
-  MONITORING → (32) | ECS_INSTALL → (33) | DESTROY_STACK → terraform destroy | Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL
-  PORTAL may auto-insert when DEPLOYMENT_PORTAL_ENABLED and CM/CDH/ECS stages are selected without PORTAL.'''
+  IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → 27→29→30→28 | CDH_INSTALL → base cluster (31)
+  MONITORING → (32) | ECS_INSTALL → (33) | DESTROY_STACK → destroy (DESTROY_STACK_CONFIRM or DRY_RUN plan)
+  Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. PORTAL may auto-insert when DEPLOYMENT_PORTAL_ENABLED and CM/CDH/ECS selected without PORTAL.'''
 }
 
 def ansiblePhaseForStage(String stageId) {
