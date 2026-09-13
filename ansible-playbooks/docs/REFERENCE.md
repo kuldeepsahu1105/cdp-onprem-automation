@@ -500,8 +500,13 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/recover_ipa_server_install.yml` | `ipa-server-install --uninstall --unattended` when partial debris detected (playbook 12) |
 | `common_tasks/sanitize_ipa_paths_before_fresh_install.yml` | Remove broken `/var/lib/ipa` (no `sysrestore.state`) and `/etc/ipa` before fresh install when `ipactl` not configured (playbook 12) |
 | `common_tasks/preflight_ipa_server_install.yml` | `bind-utils`/`dnsutils`, `getent hosts` + `dig` checks before `ipa-server-install` (playbook 12) |
+| `common_tasks/resolve_ipa_install_dns_forwarders.yml` | Maps `dns_forwarders` + AWS VPC facts to `ipa_install_dns_use_vpc_forwarder` / `ipa_install_dns_no_forwarders` for playbook 12 |
 
-| `dns_forwarders` | `no` | IPA install: `no` → `--no-forwarders` (legacy default); `aws` or `vpc` → VPC resolver from `set_dns_facts` on EC2; any other value → `--forwarder=<value>`. |
+| `dns_forwarders` | `no` | IPA install: on AWS (VPC resolver known) → `--forwarder=<VPC>`; on bare metal → `--no-forwarders`. Not the same as legacy paste — use `no-forwarders` or vars below to force `--no-forwarders` on AWS. |
+| `dns_forwarders` | `aws` / `vpc` | Always `--forwarder=<VPC resolver>` on EC2 when resolver is known. |
+| `dns_forwarders` | `no-forwarders` | Legacy `--no-forwarders` (original `10_setup_freeipa_server.yml`). |
+| `ipa_server_install_use_vpc_dns_forwarder` | `true` | When `dns_forwarders=no` on AWS, use VPC resolver at install (default). Set `false` for `--no-forwarders`. |
+| `ipa_server_install_no_forwarders` | `false` | Set `true` to force `--no-forwarders` regardless of cloud. |
 | `common_tasks/preflight_kdc_reachable.yml` | TCP :88 to `kdc_host` before CM Kerberos REST; from **cldr-mngr** when `ansible_control_reachability` is `public` (Jenkins) |
 | `common_tasks/verify_cm_kerberos_enabled.yml` | Bounded wait on `/cm/kerberosInfo` field `kerberized`; actionable fail (see `cm_krb_kerberized_wait_*` in `group_vars/all.yml`) |
 | `common_tasks/reconcile_cm_cms_after_autotls.yml` | MGMT TLS truststore + CMS restart after **27** when Labs `cm_service` already deployed |

@@ -185,7 +185,9 @@ ipaserver ansible_host=<public_ip> private_ip=<private_ip> cldr_hostname=ipaserv
 
 ### Why FreeIPA install fails after lab re-runs (playbook 12)
 
-The original **`10_setup_freeipa_server.yml`** assumed a **fresh VM** or a simple gate: run **`ipa-server-install`** when **`ipactl status` rc ≠ 0** or **`/etc/ipa/default.conf`** is missing, with **`dns_forwarders: no`** → **`--no-forwarders`** only (no implicit VPC **172.31.0.2** forwarder). Repeated **partial installs**, **`ipa-server-install --uninstall`**, and manual cleanup often leave **broken state** (`ipactl` rc=4, leftover **`/var/lib/ipa`** / **`/etc/dirsrv`**, stale **`default.conf`**). Playbook **12** (via **`11_identity_setup`**) runs **detect → recover → sanitize** only when partial debris is detected, then applies that same install gate after cleanup. **`bind-utils`** preflight (PR #114) fixes installer **`dig`** failures (`[Errno 2]`). On AWS, set **`dns_forwarders: aws`** (or **`vpc`**) in group_vars when IPA BIND should forward to the VPC resolver; leave **`no`** for legacy behavior.
+The original **`10_setup_freeipa_server.yml`** assumed a **fresh VM** or a simple gate: run **`ipa-server-install`** when **`ipactl status` rc ≠ 0** or **`/etc/ipa/default.conf`** is missing. Repeated **partial installs**, **`ipa-server-install --uninstall`**, and manual cleanup often leave **broken state** (`ipactl` rc=4, leftover **`/var/lib/ipa`** / **`/etc/dirsrv`**, stale **`default.conf`**). Playbook **12** (via **`11_identity_setup`**) runs **detect → recover → sanitize** only when partial debris is detected, then applies that same install gate after cleanup. **`bind-utils`** preflight (PR #114) fixes installer **`dig`** failures (`[Errno 2]`).
+
+**IPA DNS forwarders (AWS):** Default **`dns_forwarders: no`** does **not** mean **`--no-forwarders`** on EC2. It means “no custom public forwarder list”; when **`set_dns_facts`** detects AWS and a VPC resolver (**`x.y.0.2`**), **`ipa-server-install`** uses **`--forwarder=<VPC resolver>`** (same as explicit **`dns_forwarders: aws`** / **`vpc`**). **`12_setup_freeipa_server.yml`** also runs **`ipa dnsconfig-mod`** on **already-installed** IPA when the install step is skipped, so re-running **IDENTITY** / playbook **12** can fix forwarders without reinstall. To match the original paste (**`--no-forwarders`** only): set **`dns_forwarders: no-forwarders`**, or **`ipa_server_install_no_forwarders: true`**, or **`ipa_server_install_use_vpc_dns_forwarder: false`** with **`dns_forwarders: no`**. On bare metal, **`dns_forwarders: no`** still maps to **`--no-forwarders`**.
 
 ### 3. Detect identity provider
 
@@ -513,6 +515,7 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 | PostgreSQL listens on 127.0.0.1 only | Re-run `23_setup_postgres.yml` (uses `pg_ctlcluster restart` on Ubuntu) or `pg_ctlcluster 18 main restart` |
 | SSH restart fails on Ubuntu | Fixed in `00_setup_ssh_preqs.yml` — uses `ssh` service instead of `sshd` |
 | AWS vs bare metal DNS wrong | Set `deployment_environment: aws` or `baremetal` explicitly |
+| IPA external DNS / forwarders wrong on AWS | Default **`dns_forwarders: no`** forwards IPA BIND to the VPC resolver at install; re-run **IDENTITY** / **`12_setup_freeipa_server.yml`** to apply **`ipa dnsconfig-mod`** on existing IPA. Force legacy **`--no-forwarders`**: **`dns_forwarders: no-forwarders`** or **`ipa_server_install_no_forwarders: true`**. Explicit public forwarder: **`dns_forwarders: 8.8.8.8`** (or override **`aws_vpc_dns_resolver`**). |
 | NetworkManager restart failed | Fixed in `03_create_etc_hosts.yml` — pull latest `main` |
 
 ---
