@@ -4,6 +4,9 @@
 #
 # On some RHEL/FreeIPA versions, add --force if uninstall refuses:
 #   ipa-server-install --uninstall --unattended --force
+#
+# When uninstall succeeds but ipactl still reports not configured, leftover paths
+# (/etc/ipa/ca.crt, /var/lib/ipa, /etc/dirsrv/slapd-*) are removed before re-detect.
 
 - name: Recover IPA — report partial install state
   ansible.builtin.debug:
@@ -18,11 +21,12 @@
       - ipa-server-install
       - --uninstall
       - --unattended
+    ipa_recover_uninstall_used_force: "{{ ipa_server_uninstall_force | default(false) | bool }}"
 
 - name: Recover IPA — append --force when requested (some RHEL/FreeIPA versions)
   ansible.builtin.set_fact:
     ipa_recover_uninstall_argv: "{{ ipa_recover_uninstall_argv + ['--force'] }}"
-  when: ipa_server_uninstall_force | default(false) | bool
+  when: ipa_recover_uninstall_used_force | bool
 
 - name: Recover IPA — unattended uninstall of partial server
   ansible.builtin.command:
@@ -30,6 +34,60 @@
   register: ipa_recover_uninstall
   changed_when: ipa_recover_uninstall.rc == 0
   failed_when: false
+
+- name: Recover IPA — probe critical debris after first uninstall attempt
+  ansible.builtin.stat:
+    path: /etc/ipa/ca.crt
+  register: ipa_recover_probe_ca_crt
+  failed_when: false
+
+- name: Recover IPA — probe /var/lib/ipa content after first uninstall attempt
+  ansible.builtin.find:
+    paths: /var/lib/ipa
+    file_type: any
+    depth: 20
+  register: ipa_recover_probe_var_lib_ipa
+  failed_when: false
+
+- name: Recover IPA — probe Directory Server instances after first uninstall attempt
+  ansible.builtin.find:
+    paths: /etc/dirsrv
+    patterns: "slapd-*"
+    file_type: directory
+  register: ipa_recover_probe_dirsrv
+  failed_when: false
+
+- name: Recover IPA — decide whether to retry uninstall with --force
+  ansible.builtin.set_fact:
+    ipa_recover_uninstall_needs_force: >-
+      {{
+        not (ipa_recover_uninstall_used_force | bool)
+        and (
+          (ipa_recover_uninstall.rc | default(1) | int) != 0
+          or (ipa_recover_probe_ca_crt.stat.exists | default(false) | bool)
+          or ((ipa_recover_probe_var_lib_ipa.matched | default(0) | int) > 0)
+          or ((ipa_recover_probe_dirsrv.matched | default(0) | int) > 0)
+        )
+      }}
+
+- name: Recover IPA — retry unattended uninstall with --force
+  when: ipa_recover_uninstall_needs_force | bool
+  block:
+    - name: Recover IPA — build forced uninstall argv
+      ansible.builtin.set_fact:
+        ipa_recover_uninstall_argv:
+          - ipa-server-install
+          - --uninstall
+          - --unattended
+          - --force
+        ipa_recover_uninstall_used_force: true
+
+    - name: Recover IPA — forced uninstall of partial server
+      ansible.builtin.command:
+        argv: "{{ ipa_recover_uninstall_argv }}"
+      register: ipa_recover_uninstall
+      changed_when: ipa_recover_uninstall.rc == 0
+      failed_when: false
 
 - name: Recover IPA — fail with uninstall log when cleanup did not succeed
   ansible.builtin.fail:
@@ -43,3 +101,68 @@
       Then re-run playbook 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}.
       See ansible-playbooks/docs/RUNBOOK.md (FreeIPA partial install).
   when: ipa_recover_uninstall.rc | default(1) != 0
+
+- name: Recover IPA — read ipactl status after successful uninstall
+  ansible.builtin.command: ipactl status
+  register: ipa_recover_ipactl_after_uninstall
+  changed_when: false
+  failed_when: false
+  when: ipa_recover_uninstall.rc | default(1) == 0
+
+- name: Recover IPA — derive ipactl not-configured after uninstall
+  ansible.builtin.set_fact:
+    ipa_recover_ipactl_not_configured: >-
+      {{
+        (ipa_recover_ipactl_after_uninstall.rc | default(1) | int) == 4
+        or (
+          (ipa_recover_ipactl_after_uninstall.stdout | default(''))
+          ~ (ipa_recover_ipactl_after_uninstall.stderr | default(''))
+        ) is search('IPA is not configured', ignorecase=True)
+      }}
+  when: ipa_recover_uninstall.rc | default(1) == 0
+
+- name: Recover IPA — remove leftover paths when ipactl reports not configured
+  when:
+    - ipa_recover_uninstall.rc | default(1) == 0
+    - ipa_recover_ipactl_not_configured | default(false) | bool
+  block:
+    - name: Recover IPA — remove leftover /etc/ipa/ca.crt
+      ansible.builtin.file:
+        path: /etc/ipa/ca.crt
+        state: absent
+
+    - name: Recover IPA — find leftover files under /var/lib/ipa
+      ansible.builtin.find:
+        paths: /var/lib/ipa
+        file_type: any
+        depth: 20
+      register: ipa_recover_var_lib_leftover
+      failed_when: false
+
+    - name: Recover IPA — empty /var/lib/ipa
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ ipa_recover_var_lib_leftover.files | default([]) }}"
+      when: (ipa_recover_var_lib_leftover.matched | default(0) | int) > 0
+
+    - name: Recover IPA — find leftover Directory Server instance dirs
+      ansible.builtin.find:
+        paths: /etc/dirsrv
+        patterns: "slapd-*"
+        file_type: directory
+      register: ipa_recover_dirsrv_leftover
+      failed_when: false
+
+    - name: Recover IPA — remove leftover /etc/dirsrv/slapd-* directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ ipa_recover_dirsrv_leftover.files | default([]) }}"
+      when: (ipa_recover_dirsrv_leftover.matched | default(0) | int) > 0
+
+    - name: Recover IPA — note post-uninstall path cleanup
+      ansible.builtin.debug:
+        msg: >-
+          ipa-server-install --uninstall succeeded (rc=0) but ipactl is not configured;
+          removed leftover FreeIPA paths under /etc/ipa, /var/lib/ipa, and /etc/dirsrv when present.

@@ -15,13 +15,18 @@
     path: /etc/ipa/default.conf
   register: ipa_detect_default_conf
 
-- name: Detect IPA — check common partial-install markers
+- name: Detect IPA — check partial-install CA marker
   ansible.builtin.stat:
-    path: "{{ item }}"
-  register: ipa_detect_partial_markers
-  loop:
-    - /etc/ipa/ca.crt
-    - /var/lib/ipa
+    path: /etc/ipa/ca.crt
+  register: ipa_detect_ca_crt
+  failed_when: false
+
+- name: Detect IPA — check for leftover content under /var/lib/ipa
+  ansible.builtin.find:
+    paths: /var/lib/ipa
+    file_type: any
+    depth: 20
+  register: ipa_detect_var_lib_ipa_contents
   failed_when: false
 
 - name: Detect IPA — check for any Directory Server instance directory
@@ -59,15 +64,25 @@
   changed_when: false
   failed_when: false
 
-- name: Detect IPA — count partial-install marker hits
+- name: Detect IPA — derive critical install debris (ignore empty /var/lib/ipa)
   ansible.builtin.set_fact:
+    ipa_detect_critical_debris: >-
+      {{
+        (ipa_detect_ca_crt.stat.exists | default(false) | bool)
+        or ((ipa_detect_var_lib_ipa_contents.matched | default(0) | int) > 0)
+        or ((ipa_detect_dirsrv_instances.matched | default(0) | int) > 0)
+      }}
     ipa_detect_partial_marker_hits: >-
       {{
-        ipa_detect_partial_markers.results | default([])
-        | selectattr('stat.exists', 'defined')
-        | selectattr('stat.exists')
-        | list
-        | length
+        (
+          1 if (ipa_detect_ca_crt.stat.exists | default(false) | bool) else 0
+        )
+        + (
+          1 if ((ipa_detect_var_lib_ipa_contents.matched | default(0) | int) > 0) else 0
+        )
+        + (
+          (ipa_detect_dirsrv_instances.matched | default(0) | int)
+        )
       }}
 
 - name: Detect IPA — combine ipactl stdout and stderr for parsing
@@ -92,17 +107,11 @@
       {{
         (
           not (ipa_detect_default_conf.stat.exists | default(false) | bool)
-          and (
-            (ipa_detect_partial_marker_hits | int) > 0
-            or ((ipa_detect_dirsrv_instances.matched | default(0) | int) > 0)
-          )
+          and (ipa_detect_critical_debris | default(false) | bool)
         )
         or (
           ipa_detect_ipactl_not_configured | bool
-          and (
-            (ipa_detect_partial_marker_hits | int) > 0
-            or ((ipa_detect_dirsrv_instances.matched | default(0) | int) > 0)
-          )
+          and (ipa_detect_critical_debris | default(false) | bool)
         )
       }}
     ipa_server_has_default_conf: >-
@@ -151,6 +160,7 @@
     msg:
       - "IPA configured (default.conf + ipactl): {{ ipa_server_has_default_conf }}"
       - "ipactl reports not configured: {{ ipa_detect_ipactl_not_configured }}"
+      - "IPA critical install debris: {{ ipa_detect_critical_debris | default(false) }}"
       - "IPA partial/broken debris detected: {{ ipa_server_has_partial_state }}"
       - "IPA services healthy (ipactl): {{ ipa_server_services_healthy }}"
       - "Safe for fresh ipa-server-install: {{ ipa_server_install_clean_host }}"
