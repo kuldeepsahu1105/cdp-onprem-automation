@@ -76,9 +76,14 @@
       ansible.builtin.import_tasks: common_tasks/recover_ipa_server_install.yml
       when: ipa_server_has_partial_state | bool
 
+    - name: Recover partial FreeIPA install — mark recovery attempted
+      ansible.builtin.set_fact:
+        ipa_recovery_ran: true
+      when: ipa_server_has_partial_state | bool
+
     - name: Re-detect FreeIPA state after unattended uninstall recovery
       ansible.builtin.import_tasks: common_tasks/detect_ipa_server_install_state.yml
-      when: ipa_server_has_partial_state | bool
+      when: ipa_recovery_ran | default(false) | bool
 
     - name: Refuse ipa-server-install when critical debris remains after recovery
       ansible.builtin.fail:
@@ -90,7 +95,7 @@
           (add --force on RHEL if prompted), then as root: rm -rf /var/lib/ipa /etc/ipa and remove /etc/dirsrv/slapd-* if needed.
           Re-run: ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}
           See ansible-playbooks/docs/RUNBOOK.md (FreeIPA partial install).
-      when: ipa_server_has_partial_state | bool
+      when: ipa_server_has_partial_state | default(false) | bool
 
     - name: Note fresh host — no FreeIPA configuration detected
       ansible.builtin.debug:
@@ -144,12 +149,10 @@
             DNS install forwarders: {{
               'VPC ' ~ effective_vpc_dns_resolver
               if (
-                dns_forwarders == 'no'
-                and effective_deployment_env | default('') == 'aws'
+                (dns_forwarders | default('no') | lower) in ['aws', 'vpc']
                 and effective_vpc_dns_resolver | default('') | length > 0
-                and (ipa_server_install_use_vpc_dns_forwarder | default(true) | bool)
               )
-              else ('custom ' ~ dns_forwarders if dns_forwarders | default('') | length > 0 and dns_forwarders != 'no' else '--no-forwarders')
+              else ('custom ' ~ dns_forwarders if dns_forwarders | default('') | length > 0 and (dns_forwarders | lower) != 'no' else '--no-forwarders')
             }}
 
     - name: Preflight hostname/DNS and dig before fresh ipa-server-install
@@ -167,9 +170,9 @@
         --admin-password={{ ipaadmin_password }}
         --no-dnssec-validation
         --netbios-name={{ netbios_name }}
-        {% if dns_forwarders == 'no' and effective_deployment_env | default('') == 'aws' and effective_vpc_dns_resolver | default('') | length > 0 and (ipa_server_install_use_vpc_dns_forwarder | default(true) | bool) %}
+        {% if (dns_forwarders | default('no') | lower) in ['aws', 'vpc'] and effective_vpc_dns_resolver | default('') | length > 0 %}
         --forwarder={{ effective_vpc_dns_resolver }}
-        {% elif dns_forwarders == 'no' %} --no-forwarders {% elif dns_forwarders | default('') | length > 0 %} --forwarder={{ dns_forwarders }} {% endif %}
+        {% elif (dns_forwarders | default('no') | lower) == 'no' %} --no-forwarders {% elif dns_forwarders | default('') | length > 0 %} --forwarder={{ dns_forwarders }} {% endif %}
         {% if reverse_zones == 'no' %} --no-reverse {% endif %}
         {% if chrony_enabled == 'yes' %} --ntp-server=pool.ntp.org {% endif %}
       register: ipa_install_result
@@ -232,10 +235,9 @@
       changed_when: ipa_vpc_forwarder.rc == 0
       failed_when: false
       when:
-        - dns_forwarders == 'no'
+        - (dns_forwarders | default('no') | lower) in ['aws', 'vpc']
         - effective_deployment_env | default('') == 'aws'
         - effective_vpc_dns_resolver | default('') | length > 0
-        - ipa_server_install_use_vpc_dns_forwarder | default(true) | bool
         - not (ipa_server_should_run_install | default(false) | bool)
 
     - name: Print Current Kerberos Ticket
