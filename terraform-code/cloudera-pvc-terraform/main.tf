@@ -56,6 +56,7 @@ module "ec2_instances" {
   instance_groups             = var.instance_groups
   cldr_mngr_eip_enabled       = var.create_eip
   cldr_mngr_eip_allocation_id = module.elastic-ip.eip_allocation_id
+  ipaserver_ec2_startstop_iam_enabled = var.ipaserver_ec2_startstop_iam_enabled
   depends_on = [
     module.key-pair,
     module.security_group,

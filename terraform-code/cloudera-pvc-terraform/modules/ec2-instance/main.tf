@@ -33,6 +33,9 @@ resource "aws_instance" "group_instances" {
   vpc_security_group_ids      = [var.security_group_id]
   user_data                   = each.value.user_data
   associate_public_ip_address = true
+  iam_instance_profile = (
+    var.ipaserver_ec2_startstop_iam_enabled && each.value.group == "ipa_server"
+  ) ? aws_iam_instance_profile.ipaserver_ec2_startstop[0].name : null
 
   root_block_device {
     volume_size = each.value.volume_size

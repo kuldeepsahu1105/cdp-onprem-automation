@@ -41,7 +41,7 @@ fi
 LOG_FILE="$LOG_DIR/ec2-startstop-${BUILD_NUMBER:-local}.log"
 log() { printf '[ec2-startstop] %s\n' "$*" | tee -a "$LOG_FILE"; }
 
-log "operation=${OPERATION} environment=${ENVIRONMENT_TAG} groups=${GROUPS:-'(none)'} non_interactive=${NON_INTERACTIVE}"
+log "operation=${OPERATION} environment=${ENVIRONMENT_TAG} groups=${GROUPS:-'(none)'} non_interactive=${NON_INTERACTIVE} deploy=${EC2_STARTSTOP_DEPLOY_SCRIPT:-true} run=${EC2_STARTSTOP_RUN_SCRIPT:-true}"
 
 # shellcheck source=scripts/lib/jenkins_log_pipe.sh
 source "$REPO_ROOT/scripts/lib/jenkins_log_pipe.sh"
@@ -53,6 +53,9 @@ if [[ -z "$PRIVATE_KEY" ]]; then
   PRIVATE_KEY="$(resolve_private_key "$REPO_ROOT/ansible-playbooks")"
 fi
 
+DEPLOY_SCRIPT="${EC2_STARTSTOP_DEPLOY_SCRIPT:-true}"
+RUN_SCRIPT="${EC2_STARTSTOP_RUN_SCRIPT:-true}"
+
 set -o pipefail
 jenkins_log_pipe "$LOG_FILE" ansible-playbook \
   -i "$REPO_ROOT/ansible-playbooks/inventory.ini" \
@@ -62,6 +65,8 @@ jenkins_log_pipe "$LOG_FILE" ansible-playbook \
   -e "ec2_startstop_operation=${OPERATION}" \
   -e "ec2_startstop_groups=${GROUPS}" \
   -e "ec2_startstop_environment=${ENVIRONMENT_TAG}" \
-  -e "ec2_startstop_non_interactive=${NON_INTERACTIVE}"
+  -e "ec2_startstop_non_interactive=${NON_INTERACTIVE}" \
+  -e "ec2_startstop_deploy_script=${DEPLOY_SCRIPT}" \
+  -e "ec2_startstop_run_script=${RUN_SCRIPT}"
 
 log "EC2 start/stop automation completed"

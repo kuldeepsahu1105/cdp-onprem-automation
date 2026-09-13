@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-09-13.6 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-09-13.7 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -18,7 +18,7 @@ Plugin note: Extended Choice per-checkbox hints (descriptionPropertyValue) may o
       value: 'VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,STARTSTOP_AUTOMATION,DESTROY_STACK',
       defaultValue: 'VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION',
       multiSelectDelimiter: ',',
-      visibleItemCount: 12,
+      visibleItemCount: 13,
       quoteValue: false,
       description: '''Stages to run (fixed order; select one or more). Full table: PIPELINE_STAGES_REFERENCE text parameter below.
 
@@ -34,7 +34,7 @@ CM_TLS_KRB_LDAP = playbooks 27→29→30→28 (Auto-TLS, CMS, LDAP, Kerberos). L
 DESTROY_STACK = terraform destroy (optional 99_cleanup via CLEANUP_BEFORE_DESTROY). Requires DESTROY_STACK_CONFIRM=true unless DRY_RUN=true (destroy plan only).
 
 After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once, then re-run with your stage checkboxes.''',
-      descriptionPropertyValue: '''VALIDATE — prereq script (VALIDATION_CHECKS),TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→29→30→28 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — ECS cluster (33),STARTSTOP_AUTOMATION — EC2 start/stop/describe on ipaserver (EC2_STARTSTOP_* params),DESTROY_STACK — terraform destroy; DESTROY_STACK_CONFIRM or DRY_RUN'''
+      descriptionPropertyValue: '''VALIDATE — prereq script (VALIDATION_CHECKS),TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→29→30→28 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — ECS cluster (33),STARTSTOP_AUTOMATION — EC2 start/stop/describe on ipaserver (checkbox + EC2_STARTSTOP_*; deploy/run toggles),DESTROY_STACK — terraform destroy; DESTROY_STACK_CONFIRM or DRY_RUN'''
     )
     text(
       name: 'PIPELINE_STAGES_REFERENCE',
@@ -59,7 +59,7 @@ Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INS
 | CDH_INSTALL | CDH base cluster (31_setup_base_cluster.yml) |
 | MONITORING | Monitoring stack (32); needs PORTAL; MONITORING_STACK_ENABLED |
 | ECS_INSTALL | ECS (33) + optional data services when ECS_DATA_SERVICES_DEPLOY_ENABLED |
-| STARTSTOP_AUTOMATION | run-ec2-startstop-automation.sh — Ansible on ipaserver only (37 + script deploy); EC2_STARTSTOP_OPERATION / GROUPS |
+| STARTSTOP_AUTOMATION | run-ec2-startstop-automation.sh — Ansible on ipaserver (36 deploy + 37 run); EC2_STARTSTOP_* params; EC2_STARTSTOP_DEPLOY_SCRIPT / EC2_STARTSTOP_RUN_SCRIPT |
 | DESTROY_STACK | run-destroy-stack.sh — optional 99_cleanup (CLEANUP_BEFORE_DESTROY) then terraform destroy |
 
 Destroy safety:
@@ -121,6 +121,16 @@ EMAIL_FORMAT — In Check Parameters: regex-validate NOTIFICATION_EMAIL when non
       name: 'EC2_STARTSTOP_CONFIRM',
       defaultValue: false,
       description: 'Required when STARTSTOP_AUTOMATION + EC2_STARTSTOP_OPERATION=stop (Jenkins bypasses interactive yes on ipaserver).'
+    )
+    booleanParam(
+      name: 'EC2_STARTSTOP_DEPLOY_SCRIPT',
+      defaultValue: true,
+      description: 'When STARTSTOP_AUTOMATION is checked: run Ansible playbook 36 on ipaserver (install/update /root/{prefix}_cldr_ec2_strt_stp.sh, chmod 755). Uncheck if IDENTITY already deployed the script and you only want to run an operation.'
+    )
+    booleanParam(
+      name: 'EC2_STARTSTOP_RUN_SCRIPT',
+      defaultValue: true,
+      description: 'When STARTSTOP_AUTOMATION is checked: run the start/stop/describe script on ipaserver (playbook 37). Uncheck for deploy-only (refresh script template without calling AWS).'
     )
     booleanParam(name: 'USE_CREDENTIALS_USER_AWS', defaultValue: true, description: 'Use CREDENTIALS_USER ~/.aws credentials (default on — uncheck to use EC2 instance IAM role via IMDS)')
     string(name: 'CREDENTIALS_USER', defaultValue: 'holautosa', description: 'OS user whose ~/.aws and ~/.ssh credentials to use (read-only; files not modified)')
@@ -323,6 +333,8 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     EC2_STARTSTOP_OPERATION = "${params.EC2_STARTSTOP_OPERATION?.trim() ?: 'describe'}"
     EC2_STARTSTOP_GROUPS = "${params.EC2_STARTSTOP_GROUPS?.trim() ?: ''}"
     EC2_STARTSTOP_CONFIRM = "${params.EC2_STARTSTOP_CONFIRM}"
+    EC2_STARTSTOP_DEPLOY_SCRIPT = "${params.EC2_STARTSTOP_DEPLOY_SCRIPT}"
+    EC2_STARTSTOP_RUN_SCRIPT = "${params.EC2_STARTSTOP_RUN_SCRIPT}"
     CREDENTIALS_USER = "${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}"
     ANSIBLE_CONTROL_VIA_JENKINS = '1'
     CM_API_PREFER_PRIVATE_IP = 'false'
@@ -498,6 +510,8 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
           export EC2_STARTSTOP_GROUPS="${EC2_STARTSTOP_GROUPS:-}"
           export EC2_STARTSTOP_ENVIRONMENT="${JENKINS_ENVIRONMENT:-${ENVIRONMENT:-development}}"
           export EC2_STARTSTOP_NON_INTERACTIVE=1
+          export EC2_STARTSTOP_DEPLOY_SCRIPT="${EC2_STARTSTOP_DEPLOY_SCRIPT:-true}"
+          export EC2_STARTSTOP_RUN_SCRIPT="${EC2_STARTSTOP_RUN_SCRIPT:-true}"
           # shellcheck source=jenkins/scripts/aws-credential-check.sh
           source ./jenkins/scripts/aws-credential-check.sh
           aws_apply_instance_role_if_enabled
@@ -705,7 +719,7 @@ def echoPipelineStagesQuickReference() {
   Optional: STARTSTOP_AUTOMATION, DESTROY_STACK | Job defaults: VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION
   VALIDATE → prereqs script | TERRAFORM → EC2/inventory | PREREQS → Ansible 01-09 | PORTAL → bootstrap (10)
   IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → 27→29→30→28 | CDH_INSTALL → base cluster (31)
-  MONITORING → (32) | ECS_INSTALL → (33) | STARTSTOP_AUTOMATION → ipaserver EC2 script | DESTROY_STACK → destroy (DESTROY_STACK_CONFIRM or DRY_RUN plan)
+  MONITORING → (32) | ECS_INSTALL → (33) | STARTSTOP_AUTOMATION → ipaserver (EC2_STARTSTOP_DEPLOY_SCRIPT/ RUN_SCRIPT + OPERATION/GROUPS) | DESTROY_STACK → destroy (DESTROY_STACK_CONFIRM or DRY_RUN plan)
   Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. PORTAL may auto-insert when DEPLOYMENT_PORTAL_ENABLED and CM/CDH/ECS selected without PORTAL.'''
 }
 
@@ -1000,15 +1014,22 @@ def validatePipelineInputs() {
   }
 
   if (stages.contains('STARTSTOP_AUTOMATION')) {
+    def deployScript = isParamEnabled(params.EC2_STARTSTOP_DEPLOY_SCRIPT)
+    def runScript = isParamEnabled(params.EC2_STARTSTOP_RUN_SCRIPT)
+    if (!deployScript && !runScript) {
+      validationFail(
+        'STARTSTOP_AUTOMATION requires at least one of EC2_STARTSTOP_DEPLOY_SCRIPT or EC2_STARTSTOP_RUN_SCRIPT enabled.'
+      )
+    }
     def op = params.EC2_STARTSTOP_OPERATION?.trim()?.toLowerCase() ?: 'describe'
     if (!op in ['start', 'stop', 'describe']) {
       validationFail("EC2_STARTSTOP_OPERATION must be start, stop, or describe (got '${params.EC2_STARTSTOP_OPERATION}').")
     }
     def groups = params.EC2_STARTSTOP_GROUPS?.trim() ?: ''
-    if (op in ['start', 'stop'] && !groups) {
-      validationFail('EC2_STARTSTOP_GROUPS is required for start/stop (comma-separated Terraform instance_groups keys / EC2 tag Group).')
+    if (runScript && op in ['start', 'stop'] && !groups) {
+      validationFail('EC2_STARTSTOP_GROUPS is required for start/stop when EC2_STARTSTOP_RUN_SCRIPT is enabled (comma-separated Terraform instance_groups keys / EC2 tag Group).')
     }
-    if (op == 'stop' && !isParamEnabled(params.DRY_RUN) && !isParamEnabled(params.EC2_STARTSTOP_CONFIRM)) {
+    if (op == 'stop' && runScript && !isParamEnabled(params.DRY_RUN) && !isParamEnabled(params.EC2_STARTSTOP_CONFIRM)) {
       validationFail(
         'STARTSTOP_AUTOMATION with EC2_STARTSTOP_OPERATION=stop requires EC2_STARTSTOP_CONFIRM=true ' +
         '(manual stop on ipaserver still prompts interactively for yes).'
