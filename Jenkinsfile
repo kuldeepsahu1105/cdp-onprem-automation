@@ -59,7 +59,7 @@ Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INS
 | CDH_INSTALL | CDH base cluster (31_setup_base_cluster.yml) |
 | MONITORING | Monitoring stack (32); needs PORTAL; MONITORING_STACK_ENABLED |
 | ECS_INSTALL | ECS (33) + optional data services when ECS_DATA_SERVICES_DEPLOY_ENABLED |
-| STARTSTOP_AUTOMATION | run-ec2-startstop-automation.sh — Ansible on ipaserver (36 deploy + 37 run); EC2_STARTSTOP_* params; EC2_STARTSTOP_DEPLOY_SCRIPT / EC2_STARTSTOP_RUN_SCRIPT |
+| STARTSTOP_AUTOMATION | run-ec2-startstop-automation.sh — Ansible on ipaserver (36 deploy + 37 run); EC2_STARTSTOP_DEPLOY_SCRIPT default true, EC2_STARTSTOP_RUN_SCRIPT default false (opt-in describe/start/stop) |
 | DESTROY_STACK | run-destroy-stack.sh — optional 99_cleanup (CLEANUP_BEFORE_DESTROY) then terraform destroy |
 
 Destroy safety:
@@ -129,8 +129,8 @@ EMAIL_FORMAT — In Check Parameters: regex-validate NOTIFICATION_EMAIL when non
     )
     booleanParam(
       name: 'EC2_STARTSTOP_RUN_SCRIPT',
-      defaultValue: true,
-      description: 'When STARTSTOP_AUTOMATION is checked: run the start/stop/describe script on ipaserver (playbook 37). Uncheck for deploy-only (refresh script template without calling AWS).'
+      defaultValue: false,
+      description: 'When STARTSTOP_AUTOMATION is checked: run the start/stop/describe script on ipaserver (playbook 37). Default false (deploy-only); check to opt in to describe/start/stop.'
     )
     booleanParam(name: 'USE_CREDENTIALS_USER_AWS', defaultValue: true, description: 'Use CREDENTIALS_USER ~/.aws credentials (default on — uncheck to use EC2 instance IAM role via IMDS)')
     string(name: 'CREDENTIALS_USER', defaultValue: 'holautosa', description: 'OS user whose ~/.aws and ~/.ssh credentials to use (read-only; files not modified)')
@@ -514,7 +514,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
           export EC2_STARTSTOP_ENVIRONMENT="${JENKINS_ENVIRONMENT:-${ENVIRONMENT:-development}}"
           export EC2_STARTSTOP_NON_INTERACTIVE=1
           export EC2_STARTSTOP_DEPLOY_SCRIPT="${EC2_STARTSTOP_DEPLOY_SCRIPT:-true}"
-          export EC2_STARTSTOP_RUN_SCRIPT="${EC2_STARTSTOP_RUN_SCRIPT:-true}"
+          export EC2_STARTSTOP_RUN_SCRIPT="${EC2_STARTSTOP_RUN_SCRIPT:-false}"
           # shellcheck source=jenkins/scripts/aws-credential-check.sh
           source ./jenkins/scripts/aws-credential-check.sh
           aws_apply_instance_role_if_enabled

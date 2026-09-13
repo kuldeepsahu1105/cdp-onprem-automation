@@ -40,7 +40,7 @@
         that:
           - ec2_startstop_operation | default('') | lower in ['start', 'stop', 'describe']
         fail_msg: "Set ec2_startstop_operation to start, stop, or describe."
-      when: ec2_startstop_run_script | default(true) | bool
+      when: ec2_startstop_run_script | default(false) | bool
 
     - name: Validate groups for start/stop
       ansible.builtin.assert:
@@ -48,7 +48,7 @@
           - _ec2_startstop_groups_clean | length > 0
         fail_msg: "Set ec2_startstop_groups (comma-separated Terraform Group tag values) for start/stop."
       when:
-        - ec2_startstop_run_script | default(true) | bool
+        - ec2_startstop_run_script | default(false) | bool
         - ec2_startstop_operation | lower != 'describe'
 
     - name: Build script argument list
@@ -59,7 +59,7 @@
             + ([_ec2_startstop_env] if _ec2_startstop_env | length > 0 else [])
             + _ec2_startstop_groups_clean
           }}
-      when: ec2_startstop_run_script | default(true) | bool
+      when: ec2_startstop_run_script | default(false) | bool
 
     - name: Run EC2 start/stop script on ipaserver
       ansible.builtin.command:
@@ -78,14 +78,14 @@
         }}
       register: ec2_startstop_run
       changed_when: ec2_startstop_operation | lower in ['start', 'stop']
-      when: ec2_startstop_run_script | default(true) | bool
+      when: ec2_startstop_run_script | default(false) | bool
 
     - name: Show script output
       ansible.builtin.debug:
         msg: "{{ ec2_startstop_run.stdout_lines }}"
-      when: ec2_startstop_run_script | default(true) | bool
+      when: ec2_startstop_run_script | default(false) | bool
 
     - name: Deploy-only (run skipped)
       ansible.builtin.debug:
         msg: "ec2_startstop_run_script=false — script deploy finished; EC2 operation not executed."
-      when: not (ec2_startstop_run_script | default(true) | bool)
+      when: not (ec2_startstop_run_script | default(false) | bool)

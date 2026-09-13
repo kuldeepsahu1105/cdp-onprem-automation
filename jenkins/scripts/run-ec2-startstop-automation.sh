@@ -41,7 +41,7 @@ fi
 LOG_FILE="$LOG_DIR/ec2-startstop-${BUILD_NUMBER:-local}.log"
 log() { printf '[ec2-startstop] %s\n' "$*" | tee -a "$LOG_FILE"; }
 
-log "operation=${OPERATION} environment=${ENVIRONMENT_TAG} groups=${GROUPS:-'(none)'} non_interactive=${NON_INTERACTIVE} deploy=${EC2_STARTSTOP_DEPLOY_SCRIPT:-true} run=${EC2_STARTSTOP_RUN_SCRIPT:-true}"
+log "operation=${OPERATION} environment=${ENVIRONMENT_TAG} groups=${GROUPS:-'(none)'} non_interactive=${NON_INTERACTIVE} deploy=${EC2_STARTSTOP_DEPLOY_SCRIPT:-true} run=${EC2_STARTSTOP_RUN_SCRIPT:-false}"
 
 # shellcheck source=scripts/lib/jenkins_log_pipe.sh
 source "$REPO_ROOT/scripts/lib/jenkins_log_pipe.sh"
@@ -54,7 +54,7 @@ if [[ -z "$PRIVATE_KEY" ]]; then
 fi
 
 DEPLOY_SCRIPT="${EC2_STARTSTOP_DEPLOY_SCRIPT:-true}"
-RUN_SCRIPT="${EC2_STARTSTOP_RUN_SCRIPT:-true}"
+RUN_SCRIPT="${EC2_STARTSTOP_RUN_SCRIPT:-false}"
 
 set -o pipefail
 jenkins_log_pipe "$LOG_FILE" ansible-playbook \
