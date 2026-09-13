@@ -61,12 +61,9 @@
         deployment_portal_verify_post_cm: true
 
     - name: Print deployment portal URLs
-      ansible.builtin.debug:
-        msg:
-          - "Deployment index (refreshed): {{ deployment_portal_context.portal.index_url }}"
-          - "pgAdmin (preferred): {{ deployment_portal_context.portal.pgadmin_url }}"
-          - "pgAdmin (direct :{{ deployment_portal_pgadmin_host_port }}): {{ deployment_portal_context.portal.pgadmin_url_direct | default(deployment_portal_context.portal.pgadmin_url) }}"
-          - "Monitoring routes: {{ deployment_portal_monitoring_routes_enabled | default(false) }}"
+      ansible.builtin.import_tasks: common_tasks/print_deployment_portal_urls.yml
+      vars:
+        deployment_portal_urls_print_prefix: "(refreshed) "
 
     - name: Print full access URL report (pipeline log / email)
       ansible.builtin.import_tasks: common_tasks/print_deployment_access_urls.yml

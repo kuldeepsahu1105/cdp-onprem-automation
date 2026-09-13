@@ -4,18 +4,21 @@
 
 - name: Default empty Caddy service public URLs when vhosts disabled
   ansible.builtin.set_fact:
+    deployment_portal_public_host: ""
     pgadmin_caddy_public_url: ""
     ipa_caddy_public_url: ""
     ipa_caddy_modern_public_url: ""
     ipa_caddy_legacy_public_url: ""
   when: not (caddy_vhost_enabled | default(false) | bool)
 
-- name: Set pgAdmin Caddy public URL from vhost map
+- name: Set deployment portal public host and pgAdmin Caddy URL from vhost map
   ansible.builtin.set_fact:
+    deployment_portal_public_host: "{{ caddy_vhost_urls_external.portal.hostname | default('') | trim }}"
     pgadmin_caddy_public_url: "{{ caddy_vhost_urls_external.pgadmin.url | default('') | trim }}"
   when:
     - caddy_vhost_enabled | default(false) | bool
     - caddy_vhost_urls_external is defined
+    - caddy_vhost_urls_external.portal is defined
     - caddy_vhost_urls_external.pgadmin is defined
 
 - name: Set FreeIPA Caddy public URLs from vhost map

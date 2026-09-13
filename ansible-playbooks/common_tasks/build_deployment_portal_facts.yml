@@ -372,11 +372,30 @@
         urls_public: "{{ caddy_vhost_urls_external | default({}) }}"
         urls_vpc: "{{ caddy_vhost_urls_vpc | default({}) }}"
       portal:
-        index_url: >-
+        index_url_direct: >-
           {{
             deployment_portal_access_urls.primary.portal
             if (deployment_portal_access_profile_effective == 'private')
             else deployment_portal_access_urls.external.portal
+          }}
+        index_caddy_url: >-
+          {{
+            caddy_vhost_urls_external.portal.url | default('')
+            if (caddy_vhost_enabled | default(false) | bool)
+            else ''
+          }}
+        index_url: >-
+          {{
+            caddy_vhost_urls_external.portal.url | default('')
+            if (
+              caddy_vhost_enabled | default(false) | bool
+              and (caddy_vhost_urls_external.portal.url | default('') | length > 0)
+            )
+            else (
+              deployment_portal_access_urls.primary.portal
+              if (deployment_portal_access_profile_effective == 'private')
+              else deployment_portal_access_urls.external.portal
+            )
           }}
         pgadmin_url_direct: >-
           {{

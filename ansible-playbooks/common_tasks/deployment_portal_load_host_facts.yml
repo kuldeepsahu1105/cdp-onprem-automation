@@ -18,6 +18,7 @@
     deployment_portal_has_ipa: "{{ hostvars['localhost']['deployment_portal_has_ipa'] | default(false) }}"
     deployment_portal_ecs_present: "{{ hostvars['localhost']['deployment_portal_ecs_present'] | default(false) }}"
     pgadmin_caddy_public_url: "{{ hostvars['localhost']['pgadmin_caddy_public_url'] | default('') }}"
+    deployment_portal_public_host: "{{ hostvars['localhost']['deployment_portal_public_host'] | default('') }}"
     cm_frontend_url_effective: "{{ hostvars['localhost']['cm_frontend_url_effective'] | default('') }}"
     deployment_portal_monitoring_deployed: "{{ hostvars['localhost']['deployment_portal_monitoring_deployed'] | default(false) }}"
     deployment_portal_monitoring_routes_enabled: >-
