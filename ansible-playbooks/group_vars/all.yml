@@ -19,8 +19,28 @@ postgresql_version: 18
 # ---------------------------------------------------------------------------
 identity_provider: auto
 
-# True when inventory.ini has at least one host in [ipaserver]
-ipa_server_in_inventory: "{{ (groups.get('ipaserver', []) | default([]) | length) > 0 }}"
+# True when inventory.ini has at least one host in [ipaserver] or legacy [ipa_server]
+ipa_server_in_inventory: >-
+  {{
+    (groups.get('ipaserver', []) | default([]) | length > 0)
+    or (groups.get('ipa_server', []) | default([]) | length > 0)
+  }}
+
+# Effective FreeIPA server inventory group ([ipaserver] preferred; Terraform-style [ipa_server] supported).
+ipaserver_inventory_group_resolved: >-
+  {%- if groups.get('ipaserver', []) | default([]) | length > 0 -%}
+  ipaserver
+  {%- elif groups.get('ipa_server', []) | default([]) | length > 0 -%}
+  ipa_server
+  {%- else -%}
+  ipaserver
+  {%- endif -%}
+ipaserver_inventory_host: >-
+  {{
+    groups.get(ipaserver_inventory_group_resolved, [])[0]
+    if ipa_server_in_inventory | bool
+    else ''
+  }}
 
 identity_provider_effective: >-
   {%- if identity_provider in ['freeipa', 'ad'] -%}
@@ -744,6 +764,7 @@ pgadmin_default_email: "admin@{{ caddy_vhost_public_base }}"
 pgadmin_default_password: "{{ postgres_password }}"
 deployment_portal_inventory_groups:
   - ipaserver
+  - ipa_server
   - postgres
   - db
   - cldr-mngr
@@ -754,6 +775,7 @@ deployment_portal_inventory_groups:
 # Human-readable role labels for deployment portal host inventory table
 deployment_portal_inventory_group_labels:
   ipaserver: FreeIPA server
+  ipa_server: FreeIPA server
   postgres: PostgreSQL (CM DB)
   db: PostgreSQL (CM DB)
   cldr-mngr: Cloudera Manager
@@ -763,6 +785,8 @@ deployment_portal_inventory_group_labels:
   ecs-workers: ECS worker
 deployment_portal_data_service_links: []
 deployment_portal_extra_links: []
+# SSH user shown in portal sample commands (defaults to ansible_user / ec2-user).
+deployment_ssh_user: "{{ ansible_user | default('ec2-user') }}"
 # Operator access hub on portal index (credentials table + optional SSH key downloads).
 deployment_portal_expose_credentials: true
 # false | true | auto — auto exports SSH keys only when deployment_portal_basic_auth_enabled is true.
