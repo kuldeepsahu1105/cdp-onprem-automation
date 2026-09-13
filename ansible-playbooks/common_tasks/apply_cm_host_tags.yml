@@ -1,0 +1,48 @@
+---
+# Optional CM host tags (PUT /hosts/{hostname}/tags) for portal/ops clarity.
+
+- name: CM host tags — resolve HTTPS CM API URL
+  ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
+
+- name: CM host tags — skip when disabled
+  ansible.builtin.debug:
+    msg: "CM host tags disabled (cm_host_tags_enabled=false)."
+  when: not (cm_host_tags_enabled | default(true) | bool)
+
+- name: CM host tags — build apply list from inventory groups
+  ansible.builtin.set_fact:
+    cm_host_tag_apply_list: >-
+      {{
+        lookup('template', 'cm_host_tag_apply_list.j2') | from_yaml | default([], true)
+      }}
+  when: cm_host_tags_enabled | default(true) | bool
+
+- name: CM host tags — apply tags via CM API
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/hosts/{{ item.hostname | urlencode }}/tags"
+    method: PUT
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body: "{{ item.tags }}"
+    status_code: [200, 201, 204, 301, 303]
+  loop: "{{ cm_host_tag_apply_list | default([]) }}"
+  loop_control:
+    label: "{{ item.inventory_hostname | default(item.hostname) }}"
+  register: cm_host_tags_put
+  when:
+    - cm_host_tags_enabled | default(true) | bool
+    - (cm_host_tag_apply_list | default([]) | length) > 0
+
+- name: CM host tags — summarize API results
+  ansible.builtin.debug:
+    msg: >-
+      Applied tags on {{ (cm_host_tags_put.results | default([]) | selectattr('status', 'defined') | selectattr('status', 'in', [200, 201, 204]) | list | length) }}
+      of {{ cm_host_tag_apply_list | default([]) | length }} inventory hosts
+      (failures: {{ (cm_host_tags_put.results | default([]) | rejectattr('status', 'in', [200, 201, 204, 301, 303]) | list | length) }}).
+  when:
+    - cm_host_tags_enabled | default(true) | bool
+    - cm_host_tags_put is defined
+    - not (cm_host_tags_put.skipped | default(false))

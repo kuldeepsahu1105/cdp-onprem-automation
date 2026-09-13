@@ -44,6 +44,13 @@
     - name: Configure and start Cloudera Management Service (REST API)
       ansible.builtin.import_tasks: common_tasks/configure_cm_cms_api.yml
 
+    - name: Apply optional CM host tags from inventory (role, env, owner)
+      ansible.builtin.import_tasks: common_tasks/apply_cm_host_tags.yml
+
+    - name: Verify CM host agent heartbeats are fresh
+      ansible.builtin.import_tasks: common_tasks/verify_cm_host_heartbeats.yml
+      when: cm_host_heartbeat_verify_after_cms | default(true) | bool
+
     - name: Print CMS configuration result
       ansible.builtin.debug:
         msg: "Cloudera Management Service state: {{ cms_result.service_state | default('started') }}"

@@ -1,0 +1,26 @@
+---
+- name: CM host heartbeats — list registered hosts (single pass)
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/hosts"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_hosts_heartbeat_list
+
+- name: CM host heartbeats — compute stale host list (single pass)
+  ansible.builtin.set_fact:
+    _cm_hosts_for_heartbeat: "{{ cm_hosts_heartbeat_list.json['items'] | default([]) }}"
+
+- name: CM host heartbeats — evaluate lastHeartbeat ages (single pass)
+  ansible.builtin.set_fact:
+    cm_hosts_stale_heartbeat: >-
+      {{
+        lookup('template', 'cm_hosts_stale_heartbeat.j2') | from_yaml | default([], true)
+      }}
+
+- name: CM host heartbeats — expose stale count for poll loop
+  ansible.builtin.set_fact:
+    cm_hosts_heartbeat_stale_count: "{{ cm_hosts_stale_heartbeat | default([]) | length }}"

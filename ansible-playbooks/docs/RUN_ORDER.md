@@ -44,6 +44,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 23 | `23_setup_postgres.yml` | PostgreSQL for CM |
 | 24 | `24_start_cm.yml` | CM server + agents |
 | 25 | `25_verify_cm.yml` | Verify CM |
+| — | `25_reconcile_cm_agents.yml` | Optional agent reconcile (also at end of **27**) |
 | 26 | `26_setup_cm_license.yml` | License / trial |
 | 27 | `27_setup_cm_autotls.yml` | Auto-TLS |
 | 28 | `28_setup_cm_krbs.yml` | Kerberos |

@@ -247,6 +247,7 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 | `23_setup_postgres.yml` | PostgreSQL for CM |
 | `24_start_cm.yml` | Install/start CM server + agents |
 | `25_verify_cm.yml` | Verify CM is running |
+| `25_reconcile_cm_agents.yml` | Reconcile CM agent `server_host` / `use_tls` and restart agents |
 | `26_setup_cm_license.yml` | Upload license or trial |
 | `27_setup_cm_autotls.yml` | Enable Auto-TLS |
 | `28_setup_cm_krbs.yml` | Kerberos (FreeIPA or AD KDC); PUT `/cm/config`, `POST /cm/commands/importAdminCredentials` (query params), CM restart; bounded wait on `kerberosInfo.kerberized` |
@@ -268,6 +269,9 @@ CMS (Management Service) and CDP base cluster are **separate**:
 | JMX `smonStatusRequest` / `smonReportRequest` Count 0 | CM cannot reach Service Monitor Avro endpoint | Confirm role **RUNNING** in CM → Management Service; `ss -ltn` on loopback for firehose port from role config |
 | `ImportCredentials - Execution error` in `cloudera-scm-server.log` | TLS / credential store mismatch after Auto-TLS | Ensure MGMT `ssl_client_truststore_*` points at agent `cm-auto-global_truststore.jks` (automation in `configure_cm_cms_autotls_trust.yml`); re-run **27** then **29** |
 | Reports Manager won't start | Postgres `rman` DB unreachable | From CM host: `psql -h <postgres-fqdn> -U rman -d rman`; logs: `/var/log/cloudera-scm-headlamp/` |
+| **Hosts: Last Heartbeat ~minutes** (all commissioned) | **CM agent** not checking in to CM Server (not a browser refresh issue) | `systemctl status cloudera-scm-agent`; `grep ^server_host= /etc/cloudera-scm-agent/config.ini` (cldr-mngr FQDN); after Auto-TLS `use_tls=1` — re-run **27** or **`25_reconcile_cm_agents.yml`**; agent log `/var/log/cloudera-scm-agent/cloudera-scm-agent.log`; chrony via **07** |
+| **Hosts: load/disk/memory empty or stale** but heartbeat fresh | **Host Monitor** (CMS) not publishing host metrics | CM → Management Service: Host Monitor **RUNNING**; re-run **29_setup_cm_cms.yml** (after **27** when Auto-TLS on); firehose/agent logs on cldr-mngr |
+| **Hosts: Tags column empty** | Tags are optional; not set at agent install | Enable `cm_host_tags_enabled` (default true) — **29** applies inventory role/env/owner tags via API |
 | `31_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
 | `33_setup_ecs_cluster.yml` | ECS cluster | Phased DOCKER + ECS + embedded control plane — see [CDP_ECS_INSTALL.md](CDP_ECS_INSTALL.md) |
 | `10_setup_deployment_portal.yml` | Ops portal bootstrap | Caddy, pgAdmin, optional monitoring on ops host (`auto` → ipaserver else cldr-mngr); run early in phase 1 |
@@ -414,7 +418,10 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/configure_cm_repo.yml` | Public or internal CM repo setup |
 | `common_tasks/prepare_debian_cm_install.yml` | Ubuntu apt prep (needrestart, etc.) |
 | `common_tasks/install_cm_packages.yml` | OS-aware CM server/agent package install |
-| `common_tasks/configure_cm_agent.yml` | Set `server_host` in agent `config.ini` to cldr-mngr FQDN |
+| `common_tasks/configure_cm_agent.yml` | Set `server_host` (and `use_tls` when Auto-TLS) in agent `config.ini` |
+| `common_tasks/reconcile_cm_agents.yml` | Configure agent + restart + wait for `active` |
+| `common_tasks/apply_cm_host_tags.yml` | PUT `/hosts/{fqdn}/tags` from inventory groups |
+| `common_tasks/verify_cm_host_heartbeats.yml` | Fail when commissioned hosts exceed `cm_host_heartbeat_max_age_seconds` |
 | `common_tasks/set_cm_mirror_facts.yml` | Internal mirror URL facts |
 | `common_tasks/mirror_internal_cm_rhel.yml` | RPM mirror + createrepo |
 | `common_tasks/mirror_internal_cm_apt.yml` | apt `.deb` mirror + Packages index |

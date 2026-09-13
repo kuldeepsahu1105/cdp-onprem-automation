@@ -1,0 +1,10 @@
+---
+- name: CM host heartbeats — wait between poll passes
+  ansible.builtin.pause:
+    seconds: "{{ cm_host_heartbeat_verify_delay | default(30) }}"
+  when:
+    - (_heartbeat_poll_pass | default(1) | int) > 1
+    - (cm_hosts_heartbeat_stale_count | default(99) | int) > 0
+
+- name: CM host heartbeats — single poll pass
+  ansible.builtin.include_tasks: verify_cm_host_heartbeats_single_pass.yml
