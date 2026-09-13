@@ -14,7 +14,7 @@ Authoritative matrix: [Service Dependencies in Cloudera Manager](https://docs.cl
 | Hive | `hdfs_service`, `zookeeper_service`, `mapreduce_yarn_service`; optional `ranger_service`, `hbase_service`, `atlas_service` |
 | Hive on Tez | `hdfs_service`, `hms_connector`, `tez_service`, `mapreduce_yarn_service`, `zookeeper_service`; optional ranger/hbase/atlas |
 | HBase | `hdfs_service`, `zookeeper_service` |
-| Hue | `hdfs_service`, `hive_service`; optional hbase/impala/zookeeper when those services enabled |
+| Hue | `hdfs_service`; with Hive + Hive on Tez (CDP 7+): `hms_service: hive`, `hive_service: hive_on_tez`; optional hbase/impala/`solr_service`/atlas/zookeeper when those services enabled |
 | Impala | `hdfs_service`, `hive_service`; optional `hbase_service` |
 | Kafka | `zookeeper_service` |
 | Atlas | `hdfs_service`, `kafka_service`; optional `hbase_service`, `solr_service`, `ranger_service` |
@@ -28,7 +28,7 @@ Authoritative matrix: [Service Dependencies in Cloudera Manager](https://docs.cl
 
 ## Ranger + Solr
 
-Ranger depends on **HDFS + Solr** for default audit storage/search. Set `solr: true` with `ranger: true`, or configure Ranger for Solr-only audits per [CFM/CDP install guidance](https://docs.cloudera.com/cfm/4.12.0/deployment/topics/cfm-install-cdp.html).
+Ranger depends on **HDFS + Solr** for default audit storage/search. Default `group_vars/all.yml` sets `solr: true` with `ranger: true` (template sets `ranger.config.solr_service` and `hue.config.solr_service` when Solr is enabled). Set `solr: true` whenever `ranger: true`, or configure Ranger for Solr-only audits per [CFM/CDP install guidance](https://docs.cloudera.com/cfm/4.12.0/deployment/topics/cfm-install-cdp.html).
 
 ## Host templates (`base_cluster_cluster_spec.j2`)
 

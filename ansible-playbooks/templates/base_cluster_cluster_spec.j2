@@ -118,13 +118,26 @@ services:
     type: HUE
     display_name: Hue
     config:
-      hive_service: "{{ 'hive_on_tez' if svc.hive_on_tez | default(true) else ('hive' if svc.hive | default(true) else '') }}"
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+{% if svc.hive | default(true) and svc.hive_on_tez | default(true) %}
+      hms_service: hive
+      hive_service: hive_on_tez
+{% elif svc.hive | default(true) %}
+      hive_service: hive
+{% elif svc.hive_on_tez | default(true) %}
+      hive_service: hive_on_tez
+{% endif %}
 {% if svc.hbase | default(true) %}
       hbase_service: hbase
 {% endif %}
 {% if svc.impala | default(true) %}
       impala_service: impala
+{% endif %}
+{% if svc.solr | default(false) %}
+      solr_service: solr
+{% endif %}
+{% if svc.atlas | default(true) %}
+      atlas_service: atlas
 {% endif %}
 {% if svc.zookeeper | default(true) %}
       zookeeper_service: zookeeper
