@@ -25,7 +25,22 @@
 {% set ns.sections = ns.sections + [{'id': 'monitoring', 'title': 'Monitoring (Grafana)', 'intro': 'Grafana admin when monitoring stack is installed.', 'downloads': [], 'credentials': [{'label': 'Grafana', 'username': monitoring_grafana_admin_user, 'password': monitoring_grafana_admin_password, 'url': '', 'note': 'Port ' ~ (monitoring_grafana_host_port | string)}]}] %}
 {% endif %}
 {% if deployment_portal_has_ipa | default(false) | bool %}
-{% set ns.sections = ns.sections + [{'id': 'ipa', 'title': 'FreeIPA / IdM', 'intro': 'IPA directory administrator.', 'downloads': [], 'credentials': [{'label': 'IPA admin', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': 'https://' ~ deployment_portal_ipa_fqdn, 'note': 'CM LDAP bind password often matches ipaadmin_password'}]}] %}
+{% set _ipa_direct_url = 'https://' ~ deployment_portal_ipa_fqdn %}
+{% set _ipa_modern_url = ipa_caddy_modern_public_url | default('') | trim %}
+{% set _ipa_legacy_url = ipa_caddy_legacy_public_url | default('') | trim %}
+{% set _ipa_bind_note = 'CM LDAP bind password often matches ipaadmin_password' %}
+{% if (_ipa_modern_url | length > 0) %}
+{% set _ipa_legacy_note = ('Legacy UI via Caddy: ' ~ _ipa_legacy_url) if (_ipa_legacy_url | length > 0) else 'Legacy /ipa/ui on same Caddy vhost' %}
+{% set _ipa_creds = [
+  {'label': 'IPA admin (modern UI via Caddy)', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': _ipa_modern_url, 'note': (caddy_vhost_urls_external.ipa.hostname | default('')) ~ '; ' ~ _ipa_legacy_note},
+  {'label': 'IPA admin (direct HTTPS on ipaserver)', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': _ipa_direct_url, 'note': _ipa_bind_note}
+] %}
+{% set _ipa_intro = 'IPA directory administrator. Caddy URLs work without /etc/hosts; direct HTTPS requires resolving ' ~ deployment_portal_ipa_fqdn ~ '.' %}
+{% else %}
+{% set _ipa_creds = [{'label': 'IPA admin', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': _ipa_direct_url, 'note': _ipa_bind_note}] %}
+{% set _ipa_intro = 'IPA directory administrator.' %}
+{% endif %}
+{% set ns.sections = ns.sections + [{'id': 'ipa', 'title': 'FreeIPA / IdM', 'intro': _ipa_intro, 'downloads': [], 'credentials': _ipa_creds}] %}
 {% endif %}
 {% if identity_provider_effective == 'ad' %}
 {% set ns.sections = ns.sections + [{'id': 'ad', 'title': 'Active Directory', 'intro': 'Domain join account.', 'downloads': [], 'credentials': [{'label': 'AD join', 'username': ad_join_user, 'password': ad_join_password, 'url': '', 'note': ad_kdc_host}]}] %}
