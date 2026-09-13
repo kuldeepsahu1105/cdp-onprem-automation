@@ -5,7 +5,7 @@
 # Never pass literal dns_forwarders=no|aws|vpc to --forwarder= (invalid IP).
 - name: Normalize dns_forwarders for IPA install
   ansible.builtin.set_fact:
-    ipa_dns_forwarders_norm: "{{ dns_forwarders | default('no') | lower | trim }}"
+    ipa_dns_forwarders_norm: "{{ dns_forwarders | default('no', true) | string | lower | trim }}"
 
 - name: Resolve ipa-server-install DNS forwarder mode
   ansible.builtin.set_fact:
@@ -48,7 +48,7 @@
         ''
         if (
           ipa_dns_forwarders_norm in ['no', 'aws', 'vpc', 'no-forwarders', 'no_forwarders']
-          or (dns_forwarders | default('') | trim | length) == 0
+          or (dns_forwarders | default('', true) | string | trim | length) == 0
         )
-        else (dns_forwarders | trim)
+        else (dns_forwarders | string | trim)
       }}
