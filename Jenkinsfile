@@ -202,6 +202,16 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
       defaultValue: false,
       description: 'Playbook 34: install CAI Model Registry (requires [sdx] inventory for Ozone S3).'
     )
+    booleanParam(
+      name: 'ECS_LDAP_ENABLED',
+      defaultValue: false,
+      description: 'Sync FreeIPA/AD LDAP provider to ECS control plane (playbooks 33/34).'
+    )
+    booleanParam(
+      name: 'ECS_LDAP_ADMIN_USER_ENABLED',
+      defaultValue: false,
+      description: 'Create FreeIPA user <prefix>admin and assign ECS IAM admin roles (requires ECS_LDAP or LDAP sync).'
+    )
   }
 
   options {
@@ -756,6 +766,8 @@ def runAnsibleDeployPhase(String phase) {
     export ECS_DEPLOY_CDE='${params.ECS_DEPLOY_CDE}'
     export ECS_DEPLOY_CAI='${params.ECS_DEPLOY_CAI}'
     export ECS_DEPLOY_CAI_REGISTRY='${params.ECS_DEPLOY_CAI_REGISTRY}'
+    export ECS_LDAP_ENABLED='${params.ECS_LDAP_ENABLED}'
+    export ECS_LDAP_ADMIN_USER_ENABLED='${params.ECS_LDAP_ADMIN_USER_ENABLED}'
     export ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID='${shellEscape(env.ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID ?: '')}'
     export ECS_IAM_BOOTSTRAP_PRIVATE_KEY='${shellEscape(env.ECS_IAM_BOOTSTRAP_PRIVATE_KEY ?: '')}'
     export REQUIRE_INVENTORY=true

@@ -59,6 +59,7 @@ Environment:
   DEPLOYMENT_PORTAL_ENABLED true|false (default true)
   ECS_DATA_SERVICES_DEPLOY_ENABLED true|false — run 34_setup_ecs_data_services.yml (phase 5/7)
   ECS_DEPLOY_CDW / ECS_DEPLOY_CDE / ECS_DEPLOY_CAI / ECS_DEPLOY_CAI_REGISTRY — select services for playbook 34
+  ECS_LDAP_ENABLED / ECS_LDAP_ADMIN_USER_ENABLED — optional ECS control plane LDAP + <prefix>admin IAM user
   DRY_RUN          true|false
   CONTROL_MODE     auto|local|remote
   ANSIBLE_PRIVATE_KEY  SSH key: .pem/id_rsa in ansible-playbooks/, ~/.ssh/id_rsa, or explicit path
@@ -405,6 +406,14 @@ _run_ecs_data_services() {
   if _is_true "${ECS_DEPLOY_CAI_REGISTRY:-false}"; then
     ds_enabled=true
     ds_extra+=(-e ecs_deploy_cai_registry=true)
+  fi
+  if _is_true "${ECS_LDAP_ENABLED:-false}"; then
+    ds_enabled=true
+    ds_extra+=(-e ecs_ldap_enabled=true)
+  fi
+  if _is_true "${ECS_LDAP_ADMIN_USER_ENABLED:-false}"; then
+    ds_enabled=true
+    ds_extra+=(-e ecs_ldap_admin_user_enabled=true)
   fi
   if ! $ds_enabled; then
     return 0

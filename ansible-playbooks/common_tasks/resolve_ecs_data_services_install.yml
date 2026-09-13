@@ -54,9 +54,7 @@
         | list
       }}
 
-- name: Enable data services phase when any per-service deploy flag is set
+- name: Enable data services phase when at least one service is selected
   ansible.builtin.set_fact:
     ecs_data_services_deploy_enabled: true
-  when:
-    - not (ecs_data_services_deploy_enabled | default(false) | bool)
-    - ecs_data_services_install_names | length > 0
+  when: ecs_data_services_install_names | length > 0

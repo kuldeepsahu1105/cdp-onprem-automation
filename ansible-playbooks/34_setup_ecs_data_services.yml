@@ -17,7 +17,13 @@
   connection: local
   gather_facts: true
   tasks:
-    - name: Skip when ECS data services automation is disabled
+    - name: Resolve selected ECS data services (flags and/or install list)
+      ansible.builtin.import_tasks: common_tasks/resolve_ecs_data_services_install.yml
+
+    - name: Resolve optional ECS LDAP / IAM admin phase
+      ansible.builtin.import_tasks: common_tasks/resolve_ecs_control_plane_iam_phase.yml
+
+    - name: Skip when no ECS data services or control-plane IAM work is requested
       ansible.builtin.meta: end_play
       when: not (ecs_data_services_deploy_enabled | default(false) | bool)
 
@@ -29,14 +35,11 @@
           ECS masters group '{{ ecs_cluster_master_group }}' is empty.
           Run 33_setup_ecs_cluster.yml first.
 
-    - name: Resolve selected ECS data services (flags and/or install list)
-      ansible.builtin.import_tasks: common_tasks/resolve_ecs_data_services_install.yml
-
     - name: Initialize Caddy route list for data service ingress
       ansible.builtin.set_fact:
         ecs_caddy_data_service_routes: []
 
-    - name: Require at least one data service when enabled
+    - name: Require at least one data service when data services phase is enabled
       ansible.builtin.assert:
         that:
           - ecs_data_services_install_names | length > 0
@@ -45,6 +48,10 @@
           Set ecs_deploy_cdw, ecs_deploy_cde, ecs_deploy_cai, and/or ecs_deploy_cai_registry (or
           ECS_DEPLOY_CDW / ECS_DEPLOY_CDE / ECS_DEPLOY_CAI / ECS_DEPLOY_CAI_REGISTRY),
           or ecs_data_services_install: [cdw, cde, cai, model_registry].
+      when:
+        - ecs_data_services_deploy_enabled | default(false) | bool
+        - ecs_data_services_install_names | default([]) | length == 0
+        - not (ecs_control_plane_iam_phase_enabled | default(false) | bool)
 
     - name: Wait for ECS Management Console after cluster install
       ansible.builtin.import_tasks: common_tasks/ecs_wait_control_plane_console.yml
@@ -65,8 +72,8 @@
       ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
       when: identity_provider_effective == 'freeipa'
 
-    - name: Sync FreeIPA LDAP provider to ECS control plane
-      ansible.builtin.import_tasks: common_tasks/ecs_data_services_ldap.yml
+    - name: Optional ECS LDAP provider sync and LDAP admin user
+      ansible.builtin.import_tasks: common_tasks/ecs_control_plane_ldap_and_admin.yml
 
     - name: Install CDW when selected
       ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw.yml

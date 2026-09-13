@@ -532,8 +532,19 @@ ecs_data_services_catalog:
 ecs_cdp_environment_name: ecs
 ecs_cdp_console_api_url: ""  # default https://console-cdp.<ecs_app_domain>
 ecs_data_services_verify_tls: false
-ecs_data_services_configure_ldap: true
+# Optional ECS control plane LDAP (FreeIPA/AD) — playbook 33 end and/or 34
+ecs_ldap_enabled: false
+ecs_data_services_configure_ldap: false  # when true, sync LDAP before installing CDW/CDE/CAI in playbook 34
 ecs_ldap_provider_name: cm-ldap
+# LDAP admin user <prefix>admin in FreeIPA + IAM roles on ECS environment
+ecs_ldap_admin_user_enabled: false
+ecs_ldap_admin_user_prefix: cldr
+ecs_ldap_admin_username: "{{ ecs_ldap_admin_user_prefix }}admin"
+ecs_ldap_admin_password: "{{ common_password }}"
+ecs_ldap_admin_assign_all_tenant_roles: false
+ecs_ldap_admin_assign_all_resource_roles_on_env: true
+ecs_ldap_admin_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|environment)'
+ecs_ldap_admin_resource_role_name_regex: '(?i)(admin|owner|power|environment|de|dw|ml|data)'
 # CDW
 ecs_cdw_private_cloud_config: {}  # optional storage_class, db_client_certificate paths
 ecs_cdw_hive_vw_name: hive-vw
