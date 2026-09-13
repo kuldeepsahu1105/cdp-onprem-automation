@@ -22,6 +22,15 @@
     ipa_caddy_public_hostname: "{{ hostvars['localhost']['ipa_caddy_public_hostname'] | default('') }}"
     deployment_portal_has_ipa: "{{ hostvars['localhost']['deployment_portal_has_ipa'] | default(false) }}"
     deployment_portal_ecs_present: "{{ hostvars['localhost']['deployment_portal_ecs_present'] | default(false) }}"
+    deployment_portal_base_master_fqdn: >-
+      {{
+        hostvars['localhost']['deployment_portal_base_master_fqdn']
+        | default(deployment_portal_base_master_fqdn | default(''))
+      }}
+    deployment_portal_inventory_hosts: "{{ hostvars['localhost']['deployment_portal_inventory_hosts'] | default([]) }}"
+    deployment_portal_ecs_api_cache: "{{ hostvars['localhost']['deployment_portal_ecs_api_cache'] | default({}) }}"
+    ipa_caddy_modern_public_url: "{{ hostvars['localhost']['ipa_caddy_modern_public_url'] | default('') }}"
+    ipa_caddy_legacy_public_url: "{{ hostvars['localhost']['ipa_caddy_legacy_public_url'] | default('') }}"
     pgadmin_caddy_public_url: "{{ hostvars['localhost']['pgadmin_caddy_public_url'] | default('') }}"
     deployment_portal_public_host: "{{ hostvars['localhost']['deployment_portal_public_host'] | default('') }}"
     cm_frontend_url_effective: "{{ hostvars['localhost']['cm_frontend_url_effective'] | default('') }}"
