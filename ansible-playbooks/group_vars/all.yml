@@ -789,8 +789,8 @@ deployment_portal_extra_links: []
 deployment_ssh_user: "{{ ansible_user | default('ec2-user') }}"
 # Operator access hub on portal index (credentials table + optional SSH key downloads).
 deployment_portal_expose_credentials: true
-# false | true | auto — auto exports SSH keys only when deployment_portal_basic_auth_enabled is true.
-deployment_portal_expose_ssh_keys: auto
+# false | true | auto — default true exports PEM/Auto-TLS keys to /downloads/ssh/; auto only when deployment_portal_basic_auth_enabled is true.
+deployment_portal_expose_ssh_keys: true
 # Optional explicit paths on the Ansible controller (Jenkins/laptop), not on the portal host. Empty = auto-discovery.
 # EC2 PEM: sshkey.pem, ANSIBLE_PRIVATE_KEY when *.pem, deployment_portal_ssh_private_key_path_override (legacy).
 deployment_portal_ssh_pem_path: ""
