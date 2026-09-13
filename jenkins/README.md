@@ -37,6 +37,14 @@ Parameter help after **REFRESH_JENKINSFILE=YES**:
 - **`PIPELINE_STAGES`** — short checkbox help line + per-option hints via Extended Choice `descriptionPropertyValue` (plugin-dependent; some UIs only show these in job configuration).
 - Other parameters — `description` fields on boolean/string/choice params (security group, `ALLOWED_PORTS`, etc.).
 
+**Copy-paste `PIPELINE_STAGES` (full deploy through ECS):**
+
+```
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL
+```
+
+Optional tail stages (not in the line above): `STARTSTOP_AUTOMATION`, `DESTROY_STACK`. Default job checkboxes remain `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION` (see table below).
+
 Each run also prints a **quick reference** in the console at **Resolve Stages** (see `echoPipelineStagesQuickReference` in the Jenkinsfile).
 
 ## Default parameter values
@@ -70,6 +78,8 @@ If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALI
 Select one or more stage checkboxes. Fixed run order (each Ansible step is its own Jenkins stage in the UI):
 
 `VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL` → `STARTSTOP_AUTOMATION` → `DESTROY_STACK`
+
+**Copy-paste (matches Jenkinsfile checkbox names):** `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL` — also at the top of **Build with Parameters** → `PIPELINE_STAGES` description and `PIPELINE_STAGES_REFERENCE` default text. Append `STARTSTOP_AUTOMATION` or `DESTROY_STACK` when needed.
 
 | Checkbox | What runs |
 |---|---|
