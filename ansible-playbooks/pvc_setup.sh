@@ -236,7 +236,8 @@ else
 fi
 
 run_phase_destroy_stack() {
-  ui_phase_header "destroy_stack — teardown (optional Ansible 99, then terraform destroy)"
+  local _phase="destroy_stack — teardown (optional Ansible 99, then terraform destroy)"
+  ui_phase_header "$_phase"
   case "${CLEANUP_BEFORE_DESTROY:-false}" in
     1|true|yes|TRUE|YES|on|ON)
       ui_step "Ansible cleanup before destroy" "🧹"
@@ -254,6 +255,7 @@ run_phase_destroy_stack() {
     chmod +x "$REPO_ROOT/clone_and_run_terraform_destroy.sh" 2>/dev/null || true
   fi
   bash "$REPO_ROOT/clone_and_run_terraform_destroy.sh"
+  ui_phase_footer "$_phase"
 }
 
 if [[ "$DEPLOY_PHASE" == destroy_stack || "$DEPLOY_PHASE" == destroy || "$DEPLOY_PHASE" == terraform_destroy ]]; then
@@ -269,7 +271,8 @@ if [[ "$DEPLOY_PHASE" == destroy_stack || "$DEPLOY_PHASE" == destroy || "$DEPLOY
 fi
 
 run_phase_1() {
-  ui_phase_header "1 — OS prerequisites (playbooks 01–09)"
+  local _phase="1 — OS prerequisites (playbooks 01–09)"
+  ui_phase_header "$_phase"
   run_playbook 01_install_collection.yml
   run_playbook 02_set_hostname.yml
   run_playbook 03_create_etc_hosts.yml
@@ -279,26 +282,32 @@ run_phase_1() {
   run_playbook 07_prereq_setup_002.yml
   run_playbook 08_prereq_setup_003.yml
   run_playbook 09_verify_os_prereqs.yml
+  ui_phase_footer "$_phase"
 }
 
 run_phase_portal() {
-  ui_phase_header "deployment portal bootstrap (playbook 10)"
+  local _phase="deployment portal bootstrap (playbook 10)"
+  ui_phase_header "$_phase"
   if ! _portal_enabled; then
     ui_warn "DEPLOY_PHASE=portal will not install Caddy/pgAdmin (DEPLOYMENT_PORTAL_ENABLED is off)."
   fi
   _run_deployment_portal_bootstrap
+  ui_phase_footer "$_phase"
 }
 
 run_phase_2() {
-  ui_phase_header "2 — Identity (FreeIPA / AD)"
+  local _phase="2 — Identity (FreeIPA / AD)"
+  ui_phase_header "$_phase"
   run_playbook 00_detect_identity.yml
   run_playbook 11_identity_setup.yml
   run_playbook 36_install_ipaserver_ec2_startstop.yml
   _maybe_run_deployment_portal_refresh "portal,ipa,identity"
+  ui_phase_footer "$_phase"
 }
 
 run_phase_3() {
-  ui_phase_header "3 — Cloudera Manager install"
+  local _phase="3 — Cloudera Manager install"
+  ui_phase_header "$_phase"
   local cm_user="${CM_REPO_USERID:-${CM_REPO_USERNAME:-}}"
   local cm_pass="${CM_REPO_PASSWD:-${CM_REPO_PASSWORD:-}}"
   local cm_extra=()
@@ -319,10 +328,12 @@ run_phase_3() {
   run_playbook 24_start_cm.yml "${cm_extra[@]}"
   # CM URL/API verify runs here (25) — not in deployment portal refresh (35).
   run_playbook 25_verify_cm.yml 26_setup_cm_license.yml -e ansible_become=false
+  ui_phase_footer "$_phase"
 }
 
 run_phase_cm_tls() {
-  ui_phase_header "CM Auto-TLS, CMS, LDAP, Kerberos (Labs order)"
+  local _phase="CM Auto-TLS, CMS, LDAP, Kerberos (Labs order)"
+  ui_phase_header "$_phase"
   # Root SSH mesh: playbook 04 runs in PREREQS (phase 1) only — required before CM Auto-TLS (27).
   # CM API health waits (fetch /api/version then /api/<slug>/version) run in 27+ — not portal refresh.
   # Order matches Cloudera Labs: cm_autotls → cm_service (CMS) → external_auth (LDAP) → cm_kerberos.
@@ -331,12 +342,15 @@ run_phase_cm_tls() {
   run_playbook 30_setup_cm_ldap.yml
   run_playbook 28_setup_cm_krbs.yml
   _maybe_run_deployment_portal_refresh "portal,ipa,identity"
+  ui_phase_footer "$_phase"
 }
 
 run_phase_cdh() {
-  ui_phase_header "CDH base cluster"
+  local _phase="CDH base cluster"
+  ui_phase_header "$_phase"
   run_playbook 31_setup_base_cluster.yml
   _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh"
+  ui_phase_footer "$_phase"
 }
 
 run_phase_monitoring() {
@@ -344,10 +358,12 @@ run_phase_monitoring() {
     ui_info "MONITORING_STACK_ENABLED=false — skipping 32_setup_monitoring_stack.yml"
     return 0
   fi
-  ui_phase_header "Monitoring stack (Grafana / Prometheus)"
+  local _phase="Monitoring stack (Grafana / Prometheus)"
+  ui_phase_header "$_phase"
   # Playbook 32 syncs Caddy/index (sync_deployment_portal_content) — no separate 35_refresh here.
   run_playbook 32_setup_monitoring_stack.yml
   _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring"
+  ui_phase_footer "$_phase"
 }
 
 # Legacy name: phase 4 = CM security + CDH base (no ECS).
@@ -461,20 +477,26 @@ _run_ecs_data_services() {
 }
 
 run_phase_6() {
-  ui_phase_header "6 — Deployment portal refresh (playbook 35)"
+  local _phase="6 — Deployment portal refresh (playbook 35)"
+  ui_phase_header "$_phase"
   _run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
+  ui_phase_footer "$_phase"
 }
 
 run_phase_7() {
-  ui_phase_header "7 — ECS data services (playbook 34)"
+  local _phase="7 — ECS data services (playbook 34)"
+  ui_phase_header "$_phase"
   _run_ecs_data_services
+  ui_phase_footer "$_phase"
 }
 
 run_phase_5() {
-  ui_phase_header "5 — ECS cluster install"
+  local _phase="5 — ECS cluster install"
+  ui_phase_header "$_phase"
   run_playbook 33_setup_ecs_cluster.yml
   _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
   _run_ecs_data_services
+  ui_phase_footer "$_phase"
 }
 
 case "$DEPLOY_PHASE" in

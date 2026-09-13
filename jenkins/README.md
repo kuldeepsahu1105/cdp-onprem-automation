@@ -13,6 +13,26 @@ Declarative pipeline with **checkbox stage selection**, **configurable validatio
 
 ## Console output (plain text by default)
 
+### Operator guide: local terminal vs Jenkins
+
+| | **Local** (`./pvc_setup.sh`, wrappers on your laptop) | **Jenkins** (default `JENKINS_PLAIN_LOG=1`) |
+|---|---|---|
+| **Colors** | Full ANSI when stdout is a TTY (`ui.sh`, Ansible default callback) | No raw `[1;33m` escapes — output is stripped and/or plain callback |
+| **Phase / playbook framing** | Colored `PHASE:` / `PLAYBOOK:` lines with Unicode or ASCII rules (`ui_phase_header` / `ui_phase_footer`) | Same structure, ASCII rules (`=`, `-`), no color on wrapper labels (`UI_COLOR=0`) |
+| **Ansible task output** | Standard Ansible stdout (per-host unless you change callback) | `jenkins_plain`: `TASK` banners, `>> changed` / `** FAILED`, one summarized `ok` (and optional `skipped`) line per task |
+| **Artifact logs** | Whatever you tee locally | `jenkins/artifacts/*.log` matches console (plain ASCII) |
+
+**Opt-in colored Jenkins console** (AnsiColor must wrap the stage — the root `Jenkinsfile` already sets `ansiColor('xterm')`):
+
+1. In the `environment` block set `JENKINS_ANSI_CONSOLE=1` and `JENKINS_PLAIN_LOG=0`.
+2. Optionally set `UI_COLOR=1` / `ANSIBLE_FORCE_COLOR=1` if you want wrapper labels and Ansible to emit color (console only; artifact logs are still stripped to plain text).
+
+**Do not** set `JENKINS_PLAIN_LOG=0` without `JENKINS_ANSI_CONSOLE=1` — you may get raw escape sequences in the Blue Ocean / console log.
+
+Self-tests: `jenkins/scripts/test-jenkins-ansi-pipe.sh`, `jenkins/scripts/test-jenkins-plain-callback.sh`.
+
+---
+
 Jenkins agents often show **raw ANSI** (`[1;33mPHASE:…`) when stdout is piped through `tee` without a working AnsiColor wrapper. The pipeline defaults to **plain logs**: no escape sequences on the console or in `jenkins/artifacts/*.log`.
 
 Stage wrappers (`run-ansible.sh`, `run-terraform.sh`) use `jenkins_log_pipe`, which calls `jenkins_prepare_log_output` when `BUILD_NUMBER`, `JENKINS_URL`, or `CI=true` is set. Plain mode runs output through an ANSI stripper and sets `ANSIBLE_STDOUT_CALLBACK=jenkins_plain`.

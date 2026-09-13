@@ -293,8 +293,9 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     PY_COLORS = '0'
     NO_COLOR = '1'
     ANSIBLE_NOCOLOR = '1'
-    // One summarized ok line per task (jenkins_plain); set false to show only changed/failed/skipped.
+    // One summarized ok/skipped line per task (jenkins_plain); set false to hide those summaries.
     ANSIBLE_DISPLAY_OK_HOSTS = 'true'
+    ANSIBLE_DISPLAY_SKIPPED_HOSTS = 'true'
     REPO_ROOT = "${WORKSPACE}"
     LOG_DIR = "${WORKSPACE}/jenkins/artifacts"
     HOL_AUTO_EXEC_DIR = "/home/holautosa/HOL_AUTO_EXEC_DIR"

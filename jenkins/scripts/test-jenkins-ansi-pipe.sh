@@ -40,6 +40,14 @@ grep -q 'PHASE: deployment portal bootstrap' "$TMP/header-console.txt" \
   || fail "phase header text should appear on console"
 grep -q $'\033' "$TMP/header-console.txt" \
   && fail "phase header must be plain (no ANSI) in Jenkins default mode"
+
+BUILD_NUMBER=1 JENKINS_URL=http://jenkins/ TERM=dumb UI_COLOR=0 JENKINS_PLAIN_LOG=1 \
+  bash -c "source '$REPO_ROOT/scripts/lib/jenkins_log_pipe.sh'; jenkins_log_pipe '$TMP/footer.out' bash -c \"source '$REPO_ROOT/scripts/lib/ansible_env.sh'; source '$REPO_ROOT/scripts/lib/ui.sh'; ui_phase_header 'test'; ui_phase_footer 'test'\"" \
+  >"$TMP/footer-console.txt" 2>&1
+grep -q 'PHASE COMPLETE: test' "$TMP/footer-console.txt" \
+  || fail "phase footer text should appear on console"
+grep -q $'\033' "$TMP/footer-console.txt" \
+  && fail "phase footer must be plain in Jenkins default mode"
 ! grep -q $'\033' "$TMP/header.out" \
   || fail "phase header log artifact must stay plain"
 

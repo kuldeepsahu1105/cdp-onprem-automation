@@ -133,6 +133,17 @@ ui_phase_header() {
   ui_nl
 }
 
+ui_phase_footer() {
+  local phase="$1"
+  ui_nl
+  ui_rule "─"
+  printf '  '
+  ui_log_c "1;32" "PHASE COMPLETE: ${phase}"
+  ui_nl
+  ui_rule "═"
+  ui_nl
+}
+
 ui_playbook_header() {
   local playbook="$1"
   local kind="${2:-start}"
