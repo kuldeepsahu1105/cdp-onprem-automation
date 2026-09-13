@@ -354,7 +354,13 @@
     table.inventory-table th:nth-child(7),
     table.inventory-table td:nth-child(7) { width: auto; min-width: 10rem; max-width: 22rem; }
     table.inventory-table th:nth-child(8),
-    table.inventory-table td:nth-child(8) { width: 7rem; white-space: nowrap; vertical-align: middle; }
+    table.inventory-table td:nth-child(8) {
+      width: auto;
+      min-width: 9rem;
+      max-width: 14rem;
+      white-space: normal;
+      vertical-align: top;
+    }
     table.inventory-table td:nth-child(7) code.ssh-inline-cmd {
       font-size: 0.72em;
       line-height: 1.35;
@@ -403,9 +409,10 @@
     }
     .inventory-dl-actions {
       display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 0.45rem;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.4rem;
+      max-width: min(100%, 20rem);
     }
     a.dl-btn {
       display: inline-flex;
@@ -419,7 +426,9 @@
       border: 1px solid rgba(249, 103, 2, 0.45);
       border-radius: 6px;
       padding: 0.35rem 0.7rem;
-      white-space: nowrap;
+      white-space: normal;
+      text-align: left;
+      line-height: 1.3;
     }
     a.dl-btn:hover {
       background: rgba(249, 103, 2, 0.22);
@@ -433,7 +442,17 @@
     }
     a.dl-link-inline {
       font-weight: 600;
-      white-space: nowrap;
+      white-space: normal;
+      line-height: 1.35;
+      font-size: 0.78rem;
+    }
+    .inventory-pem-links {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.45rem;
+      min-width: 9rem;
+      max-width: 14rem;
     }
     table.cred-table th:nth-child(1) { width: 14%; }
     table.cred-table th:nth-child(2) { width: 12%; }
@@ -1356,9 +1375,11 @@
               <td>{% if h.ssh_command | default('') | length > 0 %}<code class="ssh-inline-cmd">{{ h.ssh_command }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
               {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %}
               <td>
+                <div class="inventory-pem-links">
                 {% for dl in ns_ssh_dl.items %}
-                <a class="dl-link-inline" href="{{ dl.href }}" download="{{ dl.filename | default('') }}">{{ dl.label }}</a>{% if not loop.last %} · {% endif %}
+                <a class="dl-link-inline" href="{{ dl.href }}" download="{{ dl.filename | default('') }}" title="{{ dl.label }}">{{ dl.filename | default(dl.label) }}</a>
                 {% endfor %}
+                </div>
               </td>
               {% endif %}
             </tr>
