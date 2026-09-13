@@ -220,7 +220,7 @@ Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` 
 
 | Environment | Search domains | Extra nameservers |
 |---|---|---|
-| AWS | cluster domain + `{region}.compute.internal` | VPC resolver `x.y.0.2` |
+| AWS (FreeIPA clients) | cluster domain + `{region}.compute.internal` | IPA server IP, then VPC resolver `x.y.0.2` |
 | Bare metal | cluster domain only | none (IPA/AD DNS only) |
 
 ---
