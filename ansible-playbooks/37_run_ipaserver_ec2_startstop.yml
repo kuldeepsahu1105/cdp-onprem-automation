@@ -3,6 +3,7 @@
 # Extra vars: ec2_startstop_operation (start|stop|describe), ec2_startstop_groups (list or CSV),
 #             ec2_startstop_environment (optional; default deployment_name_prefix),
 #             ec2_startstop_install_if_missing (default true)
+# Example argv is computed from ec2_startstop_portal_facts.j2 (same as portal Operator access panel).
 ---
 - import_playbook: 00_ensure_collections.yml
 

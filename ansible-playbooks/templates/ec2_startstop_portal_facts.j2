@@ -1,0 +1,30 @@
+{# YAML dict for deployment_portal_context.ec2_startstop and ec2_startstop_rendered (playbook 36). #}
+{% set _ec2ss_scan = ec2_startstop_inventory_group_scan_order | default([]) %}
+{% set _ec2ss_map = ec2_startstop_ansible_to_terraform_group | default({}) %}
+{% set _ec2ss_ns = namespace(out=[]) %}
+{% for _ec2ss_ag in _ec2ss_scan %}
+{% if (groups.get(_ec2ss_ag, []) | length > 0) and (_ec2ss_map.get(_ec2ss_ag, '') | default('', true) | trim | length > 0) %}
+{% set _ec2ss_tg = _ec2ss_map[_ec2ss_ag] | trim %}
+{% if _ec2ss_tg not in _ec2ss_ns.out %}
+{% set _ = _ec2ss_ns.out.append(_ec2ss_tg) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+{% set _ec2ss_effective = _ec2ss_ns.out if (_ec2ss_ns.out | length > 0) else (ec2_startstop_terraform_group_catalog | default([])) %}
+{% set _ec2ss_env = (
+  ec2_startstop_default_environment
+  | default(deployment_name_prefix | default('', true) | trim, true)
+  | default('', true)
+  | trim
+) %}
+{% set _ec2ss_argv = _ec2ss_effective | join(' ') %}
+{% set _ec2ss_generic = ec2_startstop_script_path ~ ' <start|stop|describe> <EnvironmentValue> <GroupValue1> [GroupValue2 ...]' %}
+script_path: "{{ ec2_startstop_script_path }}"
+script_basename: "{{ ec2_startstop_script_basename }}"
+environment_tag: "{{ _ec2ss_env }}"
+terraform_groups: {{ _ec2ss_effective | to_json }}
+usage_generic: "{{ _ec2ss_generic }}"
+example_describe: "{{ ec2_startstop_script_path ~ ' describe ' ~ _ec2ss_env ~ (' ' ~ _ec2ss_argv if (_ec2ss_argv | length > 0) else '') }}"
+example_start: "{{ ec2_startstop_script_path ~ ' start ' ~ _ec2ss_env ~ (' ' ~ _ec2ss_argv if (_ec2ss_argv | length > 0) else '') }}"
+example_stop: "{{ ec2_startstop_script_path ~ ' stop ' ~ _ec2ss_env ~ (' ' ~ _ec2ss_argv if (_ec2ss_argv | length > 0) else '') }}"
+jenkins_groups_csv: "{{ _ec2ss_effective | join(',') }}"
