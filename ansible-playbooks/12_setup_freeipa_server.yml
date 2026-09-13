@@ -177,6 +177,29 @@
         - ipa_server_should_run_install | bool
         - not (ipa_server_install_force | default(false) | bool)
 
+    - name: Print installed IPA version and ipactl status
+      ansible.builtin.debug:
+        msg: |
+          ipa --version:
+          {{ (ipa_cli_version_text | default('') | trim) or (ipa_cli_version.stdout | default('(no output)')) }}
+
+          ipactl status:
+          {{ ipa_server_status.stdout | default('') }}
+          {{ ipa_server_status.stderr | default('') }}
+      when:
+        - ipa_server_configured_healthy | bool
+        - not (ipa_server_install_force | default(false) | bool)
+
+    - name: Print IPA version context before install
+      ansible.builtin.debug:
+        msg: |
+          ipa-server-install --version: {{ ipa_server_install_version_text | default('n/a') | trim }}
+          ipa --version: {{ (ipa_cli_version_text | default('') | trim) or 'not configured' }}
+          ipactl status (rc={{ ipa_server_status.rc | default('n/a') }}):
+          {{ ipa_server_status.stdout | default('') }}
+          {{ ipa_server_status.stderr | default('') }}
+      when: ipa_server_should_run_install | bool
+
     - name: Label IPA install DNS forwarder mode for logs
       ansible.builtin.set_fact:
         ipa_install_dns_mode_label: >-
