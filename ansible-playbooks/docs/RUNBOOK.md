@@ -226,7 +226,25 @@ For automated debris cleanup before install, run **`ansible-playbook -i inventor
 
 **IPA DNS forwarders:** Default **`dns_forwarders: no`** uses the **AWS VPC resolver** (`--forwarder=x.y.0.2` from the instance private IP) on EC2 when **`ipa_server_install_use_vpc_dns_forwarder: true`** (default). On bare metal, or when the VPC resolver cannot be computed, install falls back to **`--no-forwarders`**. Force **`--no-forwarders`**: set **`dns_forwarders: no-forwarders`** or **`ipa_server_install_use_vpc_dns_forwarder: false`**. Skipped installs (healthy **`ipactl`** + **`default.conf`**) get **`ipa dnsconfig-mod`** toward the VPC resolver when VPC mode applies.
 
-**Jenkins IDENTITY / playbook 12:** The **Assert AWS VPC DNS forwarder** task runs only when **`ipa_install_dns_use_vpc_forwarder`** is true (after **`resolve_ipa_install_dns_forwarders`**). If that assert is **skipped** on AWS, install is using **`--no-forwarders`** because the VPC resolver was empty or VPC mode was opted out — check the **Log IPA install DNS forwarder mode** debug line in the job log. **`ipa-server-install` failures** should print **`stderr`** and **`/var/log/ipaserver-install.log`** tail in the **Fail with ipa-server-install diagnostics** task (passwords are not logged; credentials are passed via environment variables).
+**Jenkins IDENTITY / playbook 12:** The **Assert AWS VPC DNS forwarder** task runs only when **`ipa_install_dns_use_vpc_forwarder`** is true (after **`resolve_ipa_install_dns_forwarders`** finalize). On AWS with **`dns_forwarders: no`**, **`set_dns_facts`** should log **`Deployment environment: aws`** and a VPC resolver (for example **`172.31.0.2`**) in **`DNS nameservers`**; the **IPA install DNS forwarder mode** line should read **`VPC forwarder …`**, not **`--no-forwarders (fallback)`**. If VPC assert is skipped unexpectedly, check **`effective_deployment_env`** / **`effective_vpc_dns_resolver`** in the log and group vars **`ipa_server_install_use_vpc_dns_forwarder`**. **`ipa-server-install` failures** should print **`stderr`** and **`/var/log/ipaserver-install.log`** tail in the **Fail with ipa-server-install diagnostics** task (passwords are not logged; credentials are passed via environment variables).
+
+**Port 389 / 636 conflict (partial install, `ipactl` rc=4):** Playbook **12** preflight fails before **`ipa-server-install`** when **`ss`** shows **389** or **636** listening while **`ipactl`** reports **IPA is not configured** (leftover **389-ds** / **`dirsrv`** from a failed install). Automation: **`12b_ipa_deep_recovery.yml`** with **`ipa_server_deep_recovery: true`**, then re-run **12**. On **ipaserver as root**:
+
+```bash
+ipactl status || true
+ss -tlnp | grep -E ':389|:636' || true
+systemctl list-units 'dirsrv*' --all
+# Stop stale Directory Server instances (instance name from /etc/dirsrv/slapd-*)
+systemctl stop 'dirsrv@*' 2>/dev/null || true
+systemctl stop dirsrv.target 2>/dev/null || true
+pkill -u dirsrv ns-slapd 2>/dev/null || true
+ss -tlnp | grep -E ':389|:636' || echo "ports 389/636 free"
+# When ipactl still reports not configured, remove partial trees then re-run playbook 12
+rm -rf /var/lib/ipa /etc/ipa /etc/dirsrv/slapd-*
+mkdir -p /etc/ipa/custodia /var/log/ipa /var/lib/ipa/{sysupgrade,sysrestore,backup,dnssec}
+```
+
+If **`ipa-server-install`** fails with **port 389 already in use** in **`ipaserver-install.log`**, use the same steps before retrying.
 
 ### 3. Detect identity provider
 
@@ -556,6 +574,7 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 |---|---|
 | Wrong identity detected | Run `00_detect_identity.yml`; set `identity_provider: freeipa` or `ad` to override |
 | **FreeIPA partial install** (`ipactl status` → **IPA is not configured** / rc=4; `default.conf` missing but **`/var/lib/ipa`** has **`sysrestore.index`** / **`sysrestore.state`** or install dies with **`FileNotFoundError` [Errno 2]** on **`sysupgrade.state`**, **`/etc/ipa/custodia/custodia.conf`**, or other config paths; or empty **`/var/lib/ipa`** without **`sysrestore.state`**; or `/etc/dirsrv/slapd-*` remains; interactive `ipa-server-install --uninstall` defaults to **no**) | See **Manual `ipa-server-install` after a failed run** under Scenario A (one-liner **`mkdir -p /etc/ipa/custodia .../sysupgrade`** after **`rm -rf`**). On **ipaserver** as **root**: unattended uninstall, then **`rm -rf /var/lib/ipa /etc/ipa`** and **`/etc/dirsrv/slapd-*`** when **`ipactl`** is still not configured. Automation: **`12b_ipa_deep_recovery.yml`** with **`ipa_server_deep_recovery: true`**, then **`12_setup_freeipa_server.yml`** (preflight + **`ipa-server-install`**). Optional: **`-e ipa_server_uninstall_force=true`**. |
+| **LDAP port 389/636 in use** (`ipa-server-install`: port 389 already in use; playbook **12** preflight fails while **`ipactl`** not configured) | Leftover **`dirsrv`** / **`/etc/dirsrv/slapd-*`** from partial install. See **Port 389 / 636 conflict** under Scenario A (`ss -tlnp`, stop **`dirsrv@*`**, **`rm -rf /etc/dirsrv/slapd-*`** when not configured). Then **`12b`** + **`12`**. |
 | Stale `default.conf` (`ipactl` rc=4 / "IPA is not configured", install was skipped) | Playbook **12** removes lone stale `/etc/ipa/default.conf` when no partial debris, then runs `ipa-server-install`. Manual: `rm -f /etc/ipa/default.conf` only if `ipactl status` shows not configured and there is no `/etc/ipa/ca.crt` / DS data; then re-run playbook **12**. |
 | FreeIPA configured but stopped (`default.conf` present, `ipactl` healthy, services not RUNNING) | Playbook **12** skips `ipa-server-install` and runs `ensure_ipa_kdc_services.yml` (`systemctl start ipa`, then `ipactl start` if needed). Manual: `systemctl start ipa` or `ipactl start` on ipaserver. |
 | CM Kerberos/KDC not enabled (`kerberized=false`) | Playbook **28** waits up to `cm_krb_kerberized_wait_retries × cm_krb_kerberized_wait_delay` (default 300s) then fails with `kerberosInfo` details. **FreeIPA:** on ipaserver `ipactl status` (krb5kdc RUNNING); re-run `12_setup_freeipa_server.yml` then `28_setup_cm_krbs.yml`. **AD:** set `ad_kdc_host` (not empty). **CM:** confirm `importAdminCredentials` in `cloudera-scm-server.log`; Kerberos REST must use HTTPS `:7183` when Auto-TLS is on. **Manual UI:** Administration → Settings → Kerberos — set realm, KDC type/host, import Account Manager principal/password, Save, restart CM Server. |

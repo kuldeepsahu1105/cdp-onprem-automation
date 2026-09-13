@@ -501,7 +501,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/detect_ipa_server_install_state.yml` | `default.conf`, partial debris, `ipactl` / `ipa-server-status` before `ipa-server-install` |
 | `common_tasks/recover_ipa_server_install.yml` | Deeper `ipa-server-install --uninstall` + path cleanup (playbook **`12b`**, not default **12**) |
 | `common_tasks/sanitize_ipa_paths_before_fresh_install.yml` | Remove broken or incomplete `/var/lib/ipa` (missing or stale **sysrestore**), `/etc/ipa`, and `/etc/dirsrv/slapd-*` before fresh install when `ipactl` not configured (playbook 12) |
-| `common_tasks/preflight_ipa_server_install.yml` | Compact preflight for playbook 12: RHEL RPMs, `/etc/ipa` + `ipa_server_etc_ipa_subdirs`, `/var/lib/ipa` + `ipa_server_var_lib_subdirs`, openldap assert, `hostname -f`/`getent` asserts |
+| `common_tasks/preflight_ipa_server_install.yml` | Compact preflight for playbook 12: RHEL RPMs, `/etc/ipa` + `ipa_server_etc_ipa_subdirs`, `/var/lib/ipa` + `ipa_server_var_lib_subdirs`, openldap assert, `hostname -f`/`getent` asserts, **LDAP 389/636 listener check** when **`ipactl`** not configured |
 | `12b_ipa_deep_recovery.yml` | Optional detect / recover / sanitize before playbook 12 (set `ipa_server_deep_recovery: true`) |
 | `common_tasks/resolve_ipa_install_dns_forwarders.yml` | VPC vs `--no-forwarders` flags for `ipa-server-install` (playbook 12) |
 

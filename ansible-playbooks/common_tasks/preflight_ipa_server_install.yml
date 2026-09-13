@@ -84,3 +84,35 @@
     state: started
   when: chrony_enabled | default('yes') == 'yes'
   failed_when: false
+
+- name: Preflight IPA install — detect listeners on LDAP ports 389 and 636
+  ansible.builtin.shell: |
+    set -euo pipefail
+    out=""
+    if ss -tlnH 'sport = :389' 2>/dev/null | grep -q .; then out="${out}389 "; fi
+    if ss -tlnH 'sport = :636' 2>/dev/null | grep -q .; then out="${out}636 "; fi
+    printf '%s' "${out}" | sed 's/ $//'
+  args:
+    executable: /bin/bash
+  register: ipa_preflight_ldap_ports_in_use
+  changed_when: false
+
+- name: Preflight IPA install — capture ss listeners on 389/636 for diagnostics
+  ansible.builtin.shell: ss -tlnp 2>/dev/null | grep -E ':389|:636' || true
+  register: ipa_preflight_ldap_ss_lines
+  changed_when: false
+  when: ipa_preflight_ldap_ports_in_use.stdout | default('') | trim | length > 0
+
+- name: Preflight IPA install — fail when LDAP ports are in use but IPA is not configured
+  ansible.builtin.fail:
+    msg: >-
+      LDAP port(s) {{ ipa_preflight_ldap_ports_in_use.stdout | default('') | trim }} already in use on
+      {{ inventory_hostname }} (typical leftover 389-ds / slapd from a partial ipa-server-install) while
+      ipactl reports IPA is not configured. Free ipa-server-install port 389/636 before re-running playbook 12:
+      ss -tlnp | grep -E ':389|:636'
+      {{ ipa_preflight_ldap_ss_lines.stdout | default('(run ss -tlnp on ipaserver)') }}
+      On ipaserver as root: stop stale dirsrv units, remove /etc/dirsrv/slapd-* when ipactl is not configured,
+      or run 12b_ipa_deep_recovery.yml with ipa_server_deep_recovery: true (see RUNBOOK — port 389 conflict).
+  when:
+    - ipa_preflight_ldap_ports_in_use.stdout | default('') | trim | length > 0
+    - ipa_ipactl_not_configured | default(false) | bool

@@ -154,6 +154,11 @@
           IPA not healthy (install required)
           {%- endif %}
 
+    - name: Normalize IPA install skip/install reason as string
+      ansible.builtin.set_fact:
+        ipa_server_install_gate_reason: >-
+          {{ ipa_server_install_gate_reason | default('') | string | trim }}
+
     - name: Log IPA install gate decision (never skip install on ipa --version alone)
       ansible.builtin.debug:
         msg: >-

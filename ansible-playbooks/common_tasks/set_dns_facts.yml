@@ -26,21 +26,26 @@
   ansible.builtin.set_fact:
     effective_deployment_env: >-
       {{
-        (deployment_environment | default('auto'))
-        if (deployment_environment | default('auto')) in ['aws', 'baremetal']
-        else (
-          'aws' if (
-            is_aws_host | default(false) | bool
-            or (
-              hypervisor_uuid.content is defined
-              and (hypervisor_uuid.content | b64decode | trim | lower).startswith('ec2')
-            )
-            or (
-              ec2_instance_id_meta.status | default(0) | int == 200
-              and (ec2_instance_id_meta.content | default('') | trim | length) > 0
-            )
-          ) else 'baremetal'
+        (
+          (deployment_environment | default('auto'))
+          if (deployment_environment | default('auto') | string | trim | lower) in ['aws', 'baremetal']
+          else (
+            'aws' if (
+              is_aws_host | default(false) | bool
+              or (
+                hypervisor_uuid.content is defined
+                and (hypervisor_uuid.content | b64decode | trim | lower).startswith('ec2')
+              )
+              or (
+                ec2_instance_id_meta.status | default(0) | int == 200
+                and (ec2_instance_id_meta.content | default('') | trim | length) > 0
+              )
+            ) else 'baremetal'
+          )
         )
+        | string
+        | trim
+        | lower
       }}
 
 - name: Set host private IP for DNS resolver calculation
@@ -79,15 +84,19 @@
   ansible.builtin.set_fact:
     effective_vpc_dns_resolver: >-
       {{
-        aws_vpc_dns_resolver
-        if aws_vpc_dns_resolver | default('') | length > 0
-        else (
-          host_private_ip.split('.')[0] + '.' + host_private_ip.split('.')[1] + '.0.2'
-          if host_private_ip | default('') | length > 0
-          else ''
+        (
+          aws_vpc_dns_resolver
+          if aws_vpc_dns_resolver | default('') | length > 0
+          else (
+            host_private_ip.split('.')[0] + '.' + host_private_ip.split('.')[1] + '.0.2'
+            if host_private_ip | default('') | length > 0
+            else ''
+          )
         )
+        | string
+        | trim
       }}
-  when: effective_deployment_env == 'aws'
+  when: effective_deployment_env | default('') | string | trim | lower == 'aws'
 
 - name: Set IPA server DNS address
   ansible.builtin.set_fact:

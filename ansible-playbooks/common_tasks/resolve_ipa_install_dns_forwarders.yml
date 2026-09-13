@@ -25,16 +25,16 @@
         or (
           ipa_dns_forwarders_norm == 'no'
           and (
-            effective_deployment_env | default('') != 'aws'
-            or effective_vpc_dns_resolver | default('') | length == 0
+            effective_deployment_env | default('') | string | trim | lower != 'aws'
+            or effective_vpc_dns_resolver | default('') | string | trim | length == 0
             or not (ipa_server_install_use_vpc_dns_forwarder | default(true) | bool)
           )
         )
         or (
           ipa_dns_forwarders_norm in ['aws', 'vpc']
           and (
-            effective_deployment_env | default('') != 'aws'
-            or effective_vpc_dns_resolver | default('') | length == 0
+            effective_deployment_env | default('') | string | trim | lower != 'aws'
+            or effective_vpc_dns_resolver | default('') | string | trim | length == 0
           )
         )
       }}
@@ -42,8 +42,8 @@
       {{
         ipa_dns_forwarders_norm not in ['no-forwarders', 'no_forwarders']
         and not (ipa_server_install_no_forwarders | default(false) | bool)
-        and effective_deployment_env | default('') == 'aws'
-        and effective_vpc_dns_resolver | default('') | length > 0
+        and effective_deployment_env | default('') | string | trim | lower == 'aws'
+        and effective_vpc_dns_resolver | default('') | string | trim | length > 0
         and (
           ipa_dns_forwarders_norm in ['aws', 'vpc']
           or (
@@ -66,7 +66,56 @@
   ansible.builtin.set_fact:
     ipa_install_dns_custom_forwarder_str: "{{ ipa_install_dns_custom_forwarder | default('', true) | string | trim }}"
 
-- name: Finalize IPA install DNS forwarder flags for playbook templates
+- name: Backfill effective_vpc_dns_resolver from host private IP on AWS when unset
+  ansible.builtin.set_fact:
+    effective_vpc_dns_resolver: >-
+      {{
+        (
+          host_private_ip.split('.')[0] + '.' + host_private_ip.split('.')[1] + '.0.2'
+        )
+        | string
+        | trim
+      }}
+  when:
+    - effective_deployment_env | default('') | string | trim | lower == 'aws'
+    - effective_vpc_dns_resolver | default('') | string | trim | length == 0
+    - host_private_ip | default('') | string | trim | length > 0
+
+- name: Finalize IPA install DNS forwarder flags (AWS dns_forwarders=no → VPC forwarder)
+  ansible.builtin.set_fact:
+    ipa_install_dns_use_vpc_forwarder: >-
+      {{
+        (
+          ipa_install_dns_use_vpc_forwarder | default(false) | bool
+          or (
+            effective_deployment_env | default('') | string | trim | lower == 'aws'
+            and effective_vpc_dns_resolver | default('') | string | trim | length > 0
+            and ipa_dns_forwarders_norm == 'no'
+            and (ipa_server_install_use_vpc_dns_forwarder | default(true) | bool)
+            and not (ipa_server_install_no_forwarders | default(false) | bool)
+            and ipa_dns_forwarders_norm not in ['no-forwarders', 'no_forwarders']
+          )
+        )
+        | bool
+      }}
+    ipa_install_dns_no_forwarders: >-
+      {{
+        (
+          false
+          if (
+            effective_deployment_env | default('') | string | trim | lower == 'aws'
+            and effective_vpc_dns_resolver | default('') | string | trim | length > 0
+            and ipa_dns_forwarders_norm == 'no'
+            and (ipa_server_install_use_vpc_dns_forwarder | default(true) | bool)
+            and not (ipa_server_install_no_forwarders | default(false) | bool)
+            and ipa_dns_forwarders_norm not in ['no-forwarders', 'no_forwarders']
+          )
+          else (ipa_install_dns_no_forwarders | default(false) | bool)
+        )
+        | bool
+      }}
+
+- name: Finalize IPA install DNS custom forwarder flag for playbook templates
   ansible.builtin.set_fact:
     ipa_install_dns_custom_forwarder: "{{ ipa_install_dns_custom_forwarder_str }}"
     ipa_install_dns_has_custom_forwarder: >-
