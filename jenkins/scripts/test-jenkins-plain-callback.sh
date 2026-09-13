@@ -27,6 +27,24 @@ line = mod.format_ok_summary(long)
 assert line.startswith("  ok: 10 hosts — h0, h1, h2, h3,")
 assert "(+6 more)" in line
 print("OK: format_ok_summary")
+
+assert mod.format_skipped_summary(["x"]) == "  skipped: [x]"
+assert mod.format_skipped_summary(["x", "y"]) == "  skipped: 2 hosts — x, y"
+print("OK: format_skipped_summary")
+
+# _line must not pass invalid display colors (breaks when Ansible display is wired to logging).
+from unittest.mock import MagicMock
+
+class FakeDisplay:
+    def display(self, msg, color=None, **kwargs):
+        if color is not None and color not in ("red", "green", "yellow", "cyan", "blue", "magenta", "white", "bright red", "bright green"):
+            raise AssertionError(f"Invalid color supplied to display: {color}")
+
+cb = mod.CallbackModule()
+cb._display = FakeDisplay()
+cb._line("plain")
+cb._line("")
+print("OK: _line display color")
 PY
 
 echo "OK: jenkins_plain callback helpers"

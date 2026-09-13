@@ -25,6 +25,7 @@ Optional colored console (requires [AnsiColor](https://plugins.jenkins.io/ansi-c
 | `UI_COLOR` / `FORCE_COLOR` | `0` | Plain wrapper labels (`ui_kv`, banners, `PHASE:` headers) |
 | `ANSIBLE_FORCE_COLOR` / `PY_COLORS` | `0` | Disable Ansible/Pygments ANSI |
 | `ANSIBLE_DISPLAY_OK_HOSTS` | `true` | `jenkins_plain` callback: one summarized `ok` line per task; `false` hides ok lines |
+| `ANSIBLE_DISPLAY_SKIPPED_HOSTS` | `true` | Same for `skipped` hosts (one line per task, not per host); `false` hides skipped lines |
 | `NO_COLOR` / `ANSIBLE_NOCOLOR` | `1` | Belt-and-suspenders for tools that honor standard no-color env vars |
 | `JENKINS_ANSI_CONSOLE` / `ANSIBLE_CI_CONSOLE` | unset (opt-in `1`) | Colored Ansible + phase headers when AnsiColor wraps the stage |
 | `JENKINS_SCRIPT_TTY` | unset | Legacy opt-in for local scripts without the log pipe |
