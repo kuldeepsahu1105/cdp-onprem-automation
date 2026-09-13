@@ -48,6 +48,11 @@
     - name: Resolve ipa-server-install DNS forwarder flags
       ansible.builtin.import_tasks: common_tasks/resolve_ipa_install_dns_forwarders.yml
 
+    - name: Check if IPA Server default.conf exists
+      ansible.builtin.stat:
+        path: /etc/ipa/default.conf
+      register: ipa_default_conf
+
     - name: Check if IPA services respond (ipactl status)
       ansible.builtin.command: ipactl status
       register: ipa_server_status
@@ -61,7 +66,7 @@
       changed_when: false
       when: (ansible_verbosity | default(0) | int) >= 1
 
-    - name: Derive ipactl health and install gate from status
+    - name: Derive IPA present/healthy and install gate from default.conf and ipactl
       ansible.builtin.set_fact:
         ipa_ipactl_status_text: >-
           {{
@@ -74,27 +79,34 @@
           }}
         ipa_ipactl_healthy: >-
           {{
-            (ipa_server_status.rc | default(1) | int) == 0
+            (ipa_default_conf.stat.exists | default(false) | bool)
+            and (ipa_server_status.rc | default(1) | int) == 0
             and not (
               ipa_ipactl_status_text is search('IPA is not configured', ignorecase=True)
             )
-            and (
-              'The ipactl command was successful' in (ipa_server_status.stderr | default(''))
-              or (
-                (ipa_server_status.stdout | default('') | length > 0)
-                and ('RUNNING' in (ipa_server_status.stdout | default('')))
-              )
-            )
           }}
 
-    - name: IPA install gate — skip install when ipactl reports healthy IPA
+    - name: IPA install gate — run install unless IPA is present/healthy (or force)
       ansible.builtin.set_fact:
-        ipa_server_should_run_install: "{{ not (ipa_ipactl_healthy | bool) }}"
-
-    - name: Check if IPA Server default.conf exists (stale partial state)
-      ansible.builtin.stat:
-        path: /etc/ipa/default.conf
-      register: ipa_default_conf
+        ipa_server_should_run_install: >-
+          {{
+            (ipa_server_install_force | default(false) | bool)
+            or not (ipa_ipactl_healthy | bool)
+          }}
+        ipa_server_install_gate_reason: >-
+          {% if ipa_server_install_force | default(false) | bool -%}
+          ipa_server_install_force=true (re-run install even when healthy; rare)
+          {%- elif ipa_ipactl_healthy | bool -%}
+          IPA present and healthy (/etc/ipa/default.conf, ipactl rc=0, configured)
+          {%- elif not (ipa_default_conf.stat.exists | default(false) | bool) -%}
+          missing /etc/ipa/default.conf
+          {%- elif ipa_ipactl_not_configured | bool -%}
+          ipactl reports IPA is not configured
+          {%- elif (ipa_server_status.rc | default(1) | int) != 0 -%}
+          ipactl status rc={{ ipa_server_status.rc | default('n/a') }} (expected 0)
+          {%- else -%}
+          IPA not healthy (install required)
+          {%- endif %}
 
     - name: Remove stale default.conf when ipactl reports not configured
       ansible.builtin.file:
@@ -107,9 +119,11 @@
     - name: Log IPA install gate and DNS forwarder mode for operators
       ansible.builtin.debug:
         msg: >-
-          ipa-server-install will run: {{ ipa_server_should_run_install | bool }}
-          (gate: healthy ipactl status skips install; healthy={{ ipa_ipactl_healthy | bool }},
-          ipactl rc={{ ipa_server_status.rc | default('n/a') }}).
+          IPA install will run: {{ ipa_server_should_run_install | bool }}
+          (reason: {{ ipa_server_install_gate_reason | trim }}).
+          ipa_ipactl_healthy={{ ipa_ipactl_healthy | bool }},
+          default.conf={{ ipa_default_conf.stat.exists | default(false) }},
+          ipactl rc={{ ipa_server_status.rc | default('n/a') }}.
           {% if (ansible_verbosity | default(0) | int) >= 1 and ipa_server_install_pkg_version is defined %}
           ipa-server-install --version: {{
             ipa_server_install_pkg_version.stdout | default(ipa_server_install_pkg_version.stderr | default(''))
@@ -132,7 +146,6 @@
           VPC resolver assert runs only when ipa_install_dns_use_vpc_forwarder is true
           (skipped on bare metal, empty effective_vpc_dns_resolver, dns_forwarders=no-forwarders,
           or ipa_server_install_use_vpc_dns_forwarder=false — install may use --no-forwarders on AWS).
-      when: ipa_server_should_run_install | bool
 
     - name: Preflight hostname/DNS and tooling before fresh ipa-server-install
       ansible.builtin.import_tasks: common_tasks/preflight_ipa_server_install.yml

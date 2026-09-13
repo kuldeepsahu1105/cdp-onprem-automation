@@ -81,6 +81,8 @@ reverse_zones: "no"
 chrony_enabled: "yes"
 # Playbook 12b_ipa_deep_recovery.yml — detect / recover / sanitize (verbose; not in Jenkins IDENTITY by default)
 ipa_server_deep_recovery: false
+# Playbook 12 — when true, run ipa-server-install even if default.conf + healthy ipactl (re-install; rare)
+ipa_server_install_force: false
 # Playbook 12 preflight — explicit RPMs probed before ipa-server-install (RHEL; also in freeipa_server_packages)
 ipa_server_preflight_rpm_packages:
   - ipa-server
