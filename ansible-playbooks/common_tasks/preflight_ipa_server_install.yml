@@ -1,0 +1,52 @@
+---
+# Hostname/DNS and tooling checks before ipa-server-install on a clean or recovered host.
+# FreeIPA's installer shells out to dig; without bind-utils/dnsutils Python reports
+# [Errno 2] No such file or directory (no path) and warns about skipping DNS resolution.
+
+- name: Preflight IPA install — ensure DNS lookup tools (dig)
+  ansible.builtin.package:
+    name: "{{ os_vars[ansible_os_family].ipa_install_dns_packages }}"
+    state: present
+
+- name: Preflight IPA install — verify dig is on PATH
+  ansible.builtin.command: dig -v
+  register: ipa_preflight_dig_version
+  changed_when: false
+
+- name: Preflight IPA install — resolve install FQDN via getent hosts
+  ansible.builtin.command: getent hosts {{ ansible_fqdn }}
+  register: ipa_preflight_getent_fqdn
+  changed_when: false
+  failed_when: false
+
+- name: Preflight IPA install — assert FQDN maps to this host primary IPv4
+  ansible.builtin.assert:
+    that:
+      - ipa_preflight_getent_fqdn.rc == 0
+      - ansible_default_ipv4.address in ipa_preflight_getent_fqdn.stdout
+    fail_msg: >-
+      {{ ansible_fqdn }} must resolve to {{ ansible_default_ipv4.address }} via /etc/hosts or DNS
+      before ipa-server-install (re-run 02_set_hostname.yml and 03_create_etc_hosts.yml).
+      getent hosts: rc={{ ipa_preflight_getent_fqdn.rc }}
+      stdout={{ ipa_preflight_getent_fqdn.stdout | default('') | trim }}
+      stderr={{ ipa_preflight_getent_fqdn.stderr | default('') | trim }}
+
+- name: Preflight IPA install — dig short name for install FQDN (informational)
+  ansible.builtin.command: dig +short {{ ansible_fqdn }}
+  register: ipa_preflight_dig_fqdn
+  changed_when: false
+  failed_when: false
+
+- name: Preflight IPA install — note dig vs primary IPv4 when public DNS differs
+  ansible.builtin.debug:
+    msg: >-
+      dig +short {{ ansible_fqdn }} => {{ (ipa_preflight_dig_fqdn.stdout | default('') | trim) or '(empty)' }};
+      install will use --ip-address={{ ansible_default_ipv4.address }} and local getent mapping.
+  when: ansible_default_ipv4.address not in (ipa_preflight_dig_fqdn.stdout | default(''))
+
+- name: Preflight IPA install — ensure chronyd is running when NTP option is enabled
+  ansible.builtin.service:
+    name: "{{ os_vars[ansible_os_family].chrony_service }}"
+    state: started
+  when: chrony_enabled | default('yes') == 'yes'
+  failed_when: false
