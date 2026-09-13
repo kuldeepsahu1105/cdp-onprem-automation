@@ -373,10 +373,11 @@ When multiple `*.pem`, `*license*`, or `*info.txt` files exist in `ansible-playb
 |---|---|
 | `community.general` | General modules |
 | `community.postgresql` | PostgreSQL modules (Ubuntu) |
-| `ansible.posix` | POSIX helpers |
+| `ansible.posix` | POSIX helpers (`firewalld`) |
 | `community.crypto` | TLS/crypto |
-| `freeipa.ansible_freeipa` | FreeIPA server/client |
-| `cloudera.cluster` (devel) | CM/CDP API modules |
+| `freeipa.ansible_freeipa` | FreeIPA server/client, ECS LDAP admin user |
+| `cloudera.cluster` (git `v4.4.0`) | CM cluster API (`cloudera.cluster.cluster`) — playbooks 31, 33 |
+| `cloudera.cloud` (git `v2.5.1`) | ECS control plane — `env_info`, `dw_*`, `de`, `ml` — playbook 34, ECS LDAP IAM |
 
 Install: `ansible-galaxy collection install -r requirements.yml`
 

@@ -1,6 +1,6 @@
 # ECS data services (CDW, CDE, CAI, Model Registry)
 
-Playbook `34_setup_ecs_data_services.yml` enables Cloudera Data Services on an existing ECS private-cloud environment using **`cloudera.cloud`** (git `main`) and the **CDP CLI** (`cdpcli` / `cdpy`).
+Playbook `34_setup_ecs_data_services.yml` enables Cloudera Data Services on an existing ECS private-cloud environment using **`cloudera.cloud`** (see `requirements.yml`, git `v2.5.1`) and the **CDP CLI** (`cdpcli` / `cdpy`).
 
 ## Prerequisites
 

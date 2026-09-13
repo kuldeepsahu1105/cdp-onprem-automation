@@ -366,6 +366,8 @@ cm_autotls_force_run: false
 # cloudera.cluster devel/v5 expects cm_client ApiClient(configuration=); PyPI cm-client uses host=.
 # v4.0.0 dropped cluster/cm_config modules — pin v4.4.0 for 31/33 cloudera.cluster.cluster.
 cloudera_cluster_collection_git_ref: v4.4.0
+# ECS data services / LDAP IAM (cloudera.cloud.*); keep in sync with requirements.yml
+cloudera_cloud_collection_git_ref: v2.5.1
 
 ##### KDC integration for cldr-mngr:
 krb5_enc_types: "{{ 'aes256-cts aes128-cts' if identity_provider_effective == 'ad' else 'aes256-cts aes128-cts rc4-hmac' }}"
