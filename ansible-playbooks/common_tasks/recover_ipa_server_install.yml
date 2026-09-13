@@ -1,0 +1,45 @@
+---
+# Recover from partial / broken FreeIPA server install (no default.conf, leftover debris).
+# Runs unattended uninstall before a fresh ipa-server-install in playbook 12.
+#
+# On some RHEL/FreeIPA versions, add --force if uninstall refuses:
+#   ipa-server-install --uninstall --unattended --force
+
+- name: Recover IPA — report partial install state
+  ansible.builtin.debug:
+    msg: >-
+      FreeIPA is not configured (ipactl rc={{ ipa_detect_ipactl_status.rc | default('n/a') }})
+      but install debris remains on {{ inventory_hostname }}.
+      Running ipa-server-install --uninstall --unattended before fresh install.
+
+- name: Recover IPA — build unattended uninstall argv
+  ansible.builtin.set_fact:
+    ipa_recover_uninstall_argv:
+      - ipa-server-install
+      - --uninstall
+      - --unattended
+
+- name: Recover IPA — append --force when requested (some RHEL/FreeIPA versions)
+  ansible.builtin.set_fact:
+    ipa_recover_uninstall_argv: "{{ ipa_recover_uninstall_argv + ['--force'] }}"
+  when: ipa_server_uninstall_force | default(false) | bool
+
+- name: Recover IPA — unattended uninstall of partial server
+  ansible.builtin.command:
+    argv: "{{ ipa_recover_uninstall_argv }}"
+  register: ipa_recover_uninstall
+  changed_when: ipa_recover_uninstall.rc == 0
+  failed_when: false
+
+- name: Recover IPA — fail with uninstall log when cleanup did not succeed
+  ansible.builtin.fail:
+    msg: >-
+      ipa-server-install --uninstall --unattended failed on {{ inventory_hostname }}
+      (rc={{ ipa_recover_uninstall.rc | default('n/a') }}).
+      Inspect /var/log/ipaserver-uninstall.log on the host.
+      Try manually as root:
+        ipa-server-install --uninstall --unattended
+        ipa-server-install --uninstall --unattended --force
+      Then re-run playbook 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}.
+      See ansible-playbooks/docs/RUNBOOK.md (FreeIPA partial install).
+  when: ipa_recover_uninstall.rc | default(1) != 0

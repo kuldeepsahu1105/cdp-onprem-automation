@@ -72,6 +72,26 @@
     - name: Detect FreeIPA server install state (configured / partial / clean)
       ansible.builtin.import_tasks: common_tasks/detect_ipa_server_install_state.yml
 
+    - name: Recover partial FreeIPA install (unattended uninstall before fresh install)
+      ansible.builtin.import_tasks: common_tasks/recover_ipa_server_install.yml
+      when: ipa_server_has_partial_state | bool
+
+    - name: Re-detect FreeIPA state after unattended uninstall recovery
+      ansible.builtin.import_tasks: common_tasks/detect_ipa_server_install_state.yml
+      when: ipa_server_has_partial_state | bool
+
+    - name: Refuse ipa-server-install when partial debris remains after recovery
+      ansible.builtin.fail:
+        msg: >-
+          FreeIPA on {{ inventory_hostname }} still has partial install debris after
+          ipa-server-install --uninstall --unattended.
+          Inspect /var/log/ipaserver-uninstall.log on the host.
+          Manual recovery (as root): ipa-server-install --uninstall --unattended
+          (add --force on RHEL if prompted), then optional cleanup under /etc/ipa, /var/lib/ipa, /etc/dirsrv.
+          Re-run: ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}
+          See ansible-playbooks/docs/RUNBOOK.md (FreeIPA partial install).
+      when: ipa_server_has_partial_state | bool
+
     - name: Note fresh host — no FreeIPA configuration detected
       ansible.builtin.debug:
         msg: >-
