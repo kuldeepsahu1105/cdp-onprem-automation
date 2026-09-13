@@ -292,6 +292,7 @@ run_phase_portal() {
     ui_warn "DEPLOY_PHASE=portal will not install Caddy/pgAdmin (DEPLOYMENT_PORTAL_ENABLED is off)."
   fi
   _run_deployment_portal_bootstrap
+  _install_ipaserver_ec2_startstop
   ui_phase_footer "$_phase"
 }
 
@@ -299,8 +300,8 @@ run_phase_2() {
   local _phase="2 — Identity (FreeIPA / AD)"
   ui_phase_header "$_phase"
   run_playbook 00_detect_identity.yml
+  _install_ipaserver_ec2_startstop
   run_playbook 11_identity_setup.yml
-  run_playbook 36_install_ipaserver_ec2_startstop.yml
   _maybe_run_deployment_portal_refresh "portal,ipa,identity"
   ui_phase_footer "$_phase"
 }
@@ -399,6 +400,11 @@ _run_deployment_portal_bootstrap() {
   # Defer Grafana/Prometheus to playbook 32 when MONITORING_STACK_ENABLED=false; does not gate Caddy.
   portal_extra+=(-e deployment_portal_install_required=true)
   run_playbook 10_setup_deployment_portal.yml "${portal_extra[@]}"
+}
+
+# EC2 start/stop helper on ipaserver (playbook 36). Independent of FreeIPA success.
+_install_ipaserver_ec2_startstop() {
+  run_playbook 36_install_ipaserver_ec2_startstop.yml
 }
 
 _portal_refresh_explicitly_enabled() {

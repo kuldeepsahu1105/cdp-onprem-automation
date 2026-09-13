@@ -134,7 +134,7 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | Parameter | Default | Purpose |
 |---|---|---|
 | `PIPELINE_STAGES` → **`STARTSTOP_AUTOMATION`** | checked in job defaults | Enables stage **EC2 Start/Stop Automation** (after Ansible stages). If the checkbox is missing, run **REFRESH_JENKINSFILE=YES** once. |
-| `EC2_STARTSTOP_DEPLOY_SCRIPT` | `true` | Ansible **36** — template `{prefix}_cldr_ec2_strt_stp.sh` to `/root/`, mode `0755` (+ awscli). Also runs at end of **IDENTITY** / `pvc_setup` phase 2. |
+| `EC2_STARTSTOP_DEPLOY_SCRIPT` | `true` | Ansible **36** — template `{prefix}_cldr_ec2_strt_stp.sh` to `/root/`, mode `0755` (+ awscli). Also runs after **PORTAL** (10) and at the start of **IDENTITY** (before IPA/AD). If missing on ipaserver, check **`ls /root/*_cldr_ec2_strt_stp.sh`** and that **PORTAL** or **IDENTITY** / **STARTSTOP_AUTOMATION** ran. |
 | `EC2_STARTSTOP_RUN_SCRIPT` | `false` | Ansible **37** — invoke deployed script with `EC2_STARTSTOP_OPERATION` / groups / environment (opt-in; default is deploy-only). Uncheck both deploy and run → validation error. |
 | `EC2_STARTSTOP_OPERATION` | `describe` | `describe` \| `start` \| `stop` |
 | `EC2_STARTSTOP_GROUPS` | *(empty)* | Comma-separated Terraform `instance_groups` keys → EC2 tag **`Group`**. Required for **start**/**stop** when run is enabled. |
