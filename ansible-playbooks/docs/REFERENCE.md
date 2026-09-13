@@ -260,6 +260,7 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 | `00_detect_identity.yml` | Detect FreeIPA vs AD |
 | `11_identity_setup.yml` | Phase 2 router (all of 10–15) |
 | `12_setup_freeipa_server.yml` | FreeIPA server (skipped for AD) |
+| `12b_ipa_deep_recovery.yml` | Optional IPA detect/recover/sanitize before playbook 12 |
 | `13_update_resolv_conf.yml` | DNS (netplan or resolv.conf) |
 | `14_setup_dns_records.yml` | FreeIPA DNS records (skipped for AD) |
 | `15_update_syscfg_network.yml` | `/etc/sysconfig/network` (RHEL) |
