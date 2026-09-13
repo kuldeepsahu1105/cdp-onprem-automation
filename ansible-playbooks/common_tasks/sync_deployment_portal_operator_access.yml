@@ -12,6 +12,32 @@
     - name: Re-resolve deployment portal SSH private keys on controller
       ansible.builtin.import_tasks: resolve_deployment_portal_ssh_key.yml
 
+    # Template lookup uses the ops play host namespace; copy inventory-template facts onto controller too.
+    - name: Stage deployment portal inventory template facts on controller for re-render
+      ansible.builtin.set_fact:
+        deployment_portal_host_group_effective: >-
+          {{
+            hostvars[inventory_hostname]['deployment_portal_host_group_effective']
+            | default(hostvars['localhost']['deployment_portal_host_group_effective'] | default(''))
+          }}
+        deployment_portal_postgres_inv: >-
+          {{
+            hostvars[inventory_hostname]['deployment_portal_postgres_inv']
+            | default(hostvars['localhost']['deployment_portal_postgres_inv'] | default(postgres_inventory_host | default('')))
+          }}
+        deployment_portal_monitoring_deployed: >-
+          {{
+            hostvars[inventory_hostname]['deployment_portal_monitoring_deployed']
+            | default(hostvars['localhost']['deployment_portal_monitoring_deployed'] | default(false))
+            | bool
+          }}
+        deployment_portal_monitoring_routes_enabled: >-
+          {{
+            hostvars[inventory_hostname]['deployment_portal_monitoring_routes_enabled']
+            | default(hostvars['localhost']['deployment_portal_monitoring_routes_enabled'] | default(false))
+            | bool
+          }}
+
     - name: Re-render deployment portal inventory hosts after SSH key resolution
       ansible.builtin.set_fact:
         deployment_portal_inventory_hosts: >-
