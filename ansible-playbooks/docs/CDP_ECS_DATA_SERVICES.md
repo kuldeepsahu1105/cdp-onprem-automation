@@ -13,9 +13,22 @@ Playbook `34_setup_ecs_data_services.yml` enables Cloudera Data Services on an e
 
 ## Enable in Jenkins / group_vars
 
+**Per-service flags** (recommended):
+
+| Ansible | Jenkins parameter | Installs |
+|---------|-------------------|----------|
+| `ecs_deploy_cdw: true` | `ECS_DEPLOY_CDW` | CDW + Hive/Impala VWs |
+| `ecs_deploy_cde: true` | `ECS_DEPLOY_CDE` | CDE |
+| `ecs_deploy_cai: true` | `ECS_DEPLOY_CAI` | CAI (ML workspace) |
+| `ecs_deploy_cai_registry: true` | `ECS_DEPLOY_CAI_REGISTRY` | Model Registry (`[sdx]` required) |
+
+Turn on **`ecs_data_services_deploy_enabled`** (or **`ECS_DATA_SERVICES_DEPLOY_ENABLED`**) for the phase, or set any **`ECS_DEPLOY_*`** flag — playbook 34 runs when at least one service is selected.
+
+**List form** (unioned with flags):
+
 ```yaml
 ecs_data_services_deploy_enabled: true
-ecs_data_services_install: [cdw, cde, cai]  # optional: model_registry
+ecs_data_services_install: [cdw, cde, cai]  # model_registry for registry only
 ```
 
 `model_registry` requires an **`[sdx]`** inventory group with Ozone S3 access (Kerberos `admin` / `common_password`).

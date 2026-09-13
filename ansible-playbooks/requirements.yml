@@ -6,4 +6,5 @@ collections:
   - name: freeipa.ansible_freeipa
   - name: git+https://github.com/cloudera-labs/cloudera.cluster.git,v4.4.0
   # Private-cloud CDW/CDE/CAI modules (private_cloud, cpu_requests, ml resource_pool)
+  # Pin to collection version resolved from main (private_cloud / on-prem CDW APIs); re-resolve on galaxy install.
   - name: git+https://github.com/cloudera-labs/cloudera.cloud.git,main

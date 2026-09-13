@@ -509,7 +509,12 @@ ecs_control_plane_wait_retries: 40
 ecs_control_plane_wait_delay: 15
 ecs_control_plane_validate_certs: false
 ecs_data_services_use_cdpcurl: true
-ecs_data_services_install: []  # e.g. [cdw, cde, cai] or [{name: cdw, enabled: true}, ...]
+ecs_data_services_install: []  # optional list; unioned with per-service flags below
+# Per-service toggles (Jenkins: ECS_DEPLOY_CDW, ECS_DEPLOY_CDE, ECS_DEPLOY_CAI, ECS_DEPLOY_CAI_REGISTRY)
+ecs_deploy_cdw: false
+ecs_deploy_cde: false
+ecs_deploy_cai: false
+ecs_deploy_cai_registry: false  # Model Registry (requires [sdx]); install key model_registry
 ecs_data_services_catalog:
   cdw:
     name: Cloudera Data Warehouse

@@ -6,7 +6,9 @@
 #   2. Management Console reachable; wildcard DNS for *.{{ ecs_app_domain }} (19_setup_wildcard.yml).
 #   3. API keys: ecs_api_* or ecs_auto_provision_api_access_key with bootstrap IAM key.
 #
-# Set ecs_data_services_deploy_enabled: true and ecs_data_services_install, e.g. [cdw, cde, cai].
+# Enable with ecs_data_services_deploy_enabled: true and either:
+#   - ecs_deploy_cdw / ecs_deploy_cde / ecs_deploy_cai / ecs_deploy_cai_registry (or ECS_DEPLOY_* env), or
+#   - ecs_data_services_install: [cdw, cde, cai, model_registry]
 ---
 - import_playbook: 00_ensure_collections.yml
 
@@ -27,30 +29,11 @@
           ECS masters group '{{ ecs_cluster_master_group }}' is empty.
           Run 33_setup_ecs_cluster.yml first.
 
-    - name: Normalize data services install list
+    - name: Resolve selected ECS data services (flags and/or install list)
+      ansible.builtin.import_tasks: common_tasks/resolve_ecs_data_services_install.yml
+
+    - name: Initialize Caddy route list for data service ingress
       ansible.builtin.set_fact:
-        ecs_data_services_install_names: >-
-          {{
-            (
-              ecs_data_services_install
-              | default([])
-              | map('lower')
-              | list
-            )
-            if (
-              ecs_data_services_install | default([]) | length > 0
-              and (ecs_data_services_install | first) is string
-            )
-            else (
-              ecs_data_services_install
-              | default([])
-              | selectattr('enabled', 'defined')
-              | selectattr('enabled')
-              | map(attribute='name')
-              | map('lower')
-              | list
-            )
-          }}
         ecs_caddy_data_service_routes: []
 
     - name: Require at least one data service when enabled
@@ -58,8 +41,10 @@
         that:
           - ecs_data_services_install_names | length > 0
         fail_msg: >-
-          ecs_data_services_deploy_enabled is true but ecs_data_services_install is empty.
-          Example: ecs_data_services_install: [cdw, cde, cai]
+          ECS data services phase is enabled but no service is selected.
+          Set ecs_deploy_cdw, ecs_deploy_cde, ecs_deploy_cai, and/or ecs_deploy_cai_registry (or
+          ECS_DEPLOY_CDW / ECS_DEPLOY_CDE / ECS_DEPLOY_CAI / ECS_DEPLOY_CAI_REGISTRY),
+          or ecs_data_services_install: [cdw, cde, cai, model_registry].
 
     - name: Wait for ECS Management Console after cluster install
       ansible.builtin.import_tasks: common_tasks/ecs_wait_control_plane_console.yml

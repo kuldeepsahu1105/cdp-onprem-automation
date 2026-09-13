@@ -86,6 +86,10 @@ allowed_keys:
   - deployment_prometheus_external_url_verify
   - monitoring_grafana_admin_password
   - ecs_data_services_deploy_enabled
+  - ecs_deploy_cdw
+  - ecs_deploy_cde
+  - ecs_deploy_cai
+  - ecs_deploy_cai_registry
   - ecs_control_plane_url
   - ecs_api_access_key_id
   - ecs_api_private_key
