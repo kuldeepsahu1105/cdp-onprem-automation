@@ -59,6 +59,8 @@
       register: ipa_cli_version
       failed_when: false
       changed_when: false
+      tags:
+        - always
 
     - name: Check ipactl status
       ansible.builtin.command: ipactl status
@@ -71,36 +73,43 @@
         path: /etc/ipa/default.conf
       register: ipa_default_conf
 
-    - name: Derive IPA install gate from ipa CLI, ipactl, and default.conf
+    - name: Derive IPA install gate text from ipa CLI, ipactl, and default.conf checks
       ansible.builtin.set_fact:
         ipa_server_install_version_text: >-
           {{
-            ipa_server_install_pkg_version.stdout | default('')
+            (ipa_server_install_pkg_version.stdout | default(''))
             | trim
-            or ipa_server_install_pkg_version.stderr | default('') | trim
+            or (ipa_server_install_pkg_version.stderr | default('')) | trim
           }}
         ipa_cli_version_text: >-
           {{
-            (ipa_cli_version.stdout | default(''))
-            ~ (ipa_cli_version.stderr | default(''))
-          }}
-        ipa_cli_not_configured: >-
-          {{
-            ipa_cli_version_text is search('not configured', ignorecase=True)
+            (ipa_cli_version.stdout | default('') if (ipa_cli_version is defined) else '')
+            ~ (ipa_cli_version.stderr | default('') if (ipa_cli_version is defined) else '')
           }}
         ipa_ipactl_status_text: >-
           {{
             (ipa_server_status.stdout | default(''))
             ~ (ipa_server_status.stderr | default(''))
           }}
+
+    - name: Derive IPA install gate booleans from check results
+      ansible.builtin.set_fact:
+        ipa_cli_not_configured: >-
+          {{
+            (ipa_cli_version_text | default('')) is search('not configured', ignorecase=True)
+          }}
         ipa_ipactl_not_configured: >-
           {{
-            ipa_ipactl_status_text is search('IPA is not configured', ignorecase=True)
+            (ipa_ipactl_status_text | default('')) is search('IPA is not configured', ignorecase=True)
           }}
         ipa_cli_version_ok: >-
           {{
-            (ipa_cli_version.rc | default(1) | int) == 0
-            and not (ipa_cli_not_configured | bool)
+            false
+            if (ipa_cli_version is not defined)
+            else (
+              (ipa_cli_version.rc | default(1) | int) == 0
+              and not ((ipa_cli_version_text | default('')) is search('not configured', ignorecase=True))
+            )
           }}
         ipa_server_default_conf_present: >-
           {{
@@ -110,12 +119,12 @@
           {{
             (ipa_server_status.rc | default(1) | int) == 0
             and not (
-              ipa_ipactl_status_text is search('IPA is not configured', ignorecase=True)
+              (ipa_ipactl_status_text | default('')) is search('IPA is not configured', ignorecase=True)
             )
           }}
         ipa_server_configured_healthy: >-
           {{
-            (ipa_cli_version_ok | bool)
+            (ipa_cli_version_ok | default(false) | bool)
             and (ipa_server_default_conf_present | bool)
             and (ipa_ipactl_healthy | bool)
           }}
