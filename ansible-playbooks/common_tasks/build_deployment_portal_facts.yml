@@ -22,6 +22,9 @@
 - name: Resolve portal access profile (cloud vs private / bare metal)
   ansible.builtin.import_tasks: resolve_deployment_portal_access_profile.yml
 
+- name: Resolve deployment portal SSH key naming before inventory host samples
+  ansible.builtin.import_tasks: resolve_deployment_portal_ssh_key.yml
+
 - name: Render deployment portal node inventory
   ansible.builtin.set_fact:
     deployment_portal_nodes: "{{ lookup('template', 'deployment_portal_nodes.j2') | from_yaml | default([], true) }}"

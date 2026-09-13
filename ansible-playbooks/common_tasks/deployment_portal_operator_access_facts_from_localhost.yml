@@ -31,4 +31,9 @@
     pgadmin_caddy_public_url: "{{ hostvars['localhost']['pgadmin_caddy_public_url'] | default('') }}"
     ipa_caddy_modern_public_url: "{{ hostvars['localhost']['ipa_caddy_modern_public_url'] | default('') }}"
     ipa_caddy_legacy_public_url: "{{ hostvars['localhost']['ipa_caddy_legacy_public_url'] | default('') }}"
+    deployment_portal_ssh_download_basename: "{{ hostvars['localhost']['deployment_portal_ssh_download_basename'] | default('') }}"
+    deployment_portal_ssh_ec2_download_basename: "{{ hostvars['localhost']['deployment_portal_ssh_ec2_download_basename'] | default('') }}"
+    deployment_portal_terraform_keypair_name: "{{ hostvars['localhost']['deployment_portal_terraform_keypair_name'] | default('') }}"
+    deployment_portal_ssh_export_keys: "{{ hostvars['localhost']['deployment_portal_ssh_export_keys'] | default([]) }}"
+    deployment_portal_ssh_ec2_key_path: "{{ hostvars['localhost']['deployment_portal_ssh_ec2_key_path'] | default('') }}"
   when: hostvars['localhost'] is defined
