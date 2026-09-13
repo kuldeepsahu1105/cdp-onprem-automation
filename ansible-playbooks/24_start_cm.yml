@@ -86,6 +86,10 @@
       failed_when: false
       changed_when: false
 
+    - name: Ensure CM PostgreSQL databases exist before scm_prepare_database
+      ansible.builtin.import_tasks: common_tasks/ensure_cm_postgres_databases.yml
+      when: cm_db_prepared.rc != 0
+
     - name: Run scm_prepare_database.sh script
       ansible.builtin.command:
         cmd: >
@@ -94,7 +98,26 @@
           postgresql {{ scm_db_name }} {{ scm_db_user }} {{ scm_db_password }} --ssl
       register: scm_db_output
       changed_when: "'Successfully connected to database.' in scm_db_output.stdout"
+      failed_when: false
       when: cm_db_prepared.rc != 0
+
+    - name: Fail scm_prepare_database with remediation hint
+      ansible.builtin.fail:
+        msg: >-
+          scm_prepare_database.sh failed (rc={{ scm_db_output.rc | default('unknown') }}).
+          {% if scm_db_output.rc | default(0) | int == 7 or ('database "' + scm_db_name + '" does not exist') in (scm_db_output.stderr | default('') + scm_db_output.stdout | default('')) %}
+          PostgreSQL database "{{ scm_db_name }}" does not exist — often after playbook 23 failed with
+          "CREATE DATABASE cannot be executed from a function" (fixed on main in create_cm_dbs.sql.j2).
+          Re-run: ansible-playbook -i inventory.ini 23_setup_postgres.yml (play "Initialize PostgreSQL Database"),
+          or re-run this playbook (24); it applies the same init SQL when scm is absent.
+          {% else %}
+          Ensure playbook 23 completed and PostgreSQL has database "{{ scm_db_name }}" and user "{{ scm_db_user }}".
+          Re-run 23_setup_postgres.yml or 24_start_cm.yml if databases are missing.
+          {% endif %}
+          stderr: {{ scm_db_output.stderr | default('') | trim }}
+      when:
+        - cm_db_prepared.rc != 0
+        - scm_db_output.rc | default(0) | int != 0
 
     ##### Verify the Cloudera Manager Server updated configs
     - name: Print the updated db.properties file
