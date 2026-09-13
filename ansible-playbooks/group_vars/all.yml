@@ -79,6 +79,13 @@ dns_forwarders: "no"
 ipa_server_install_use_vpc_dns_forwarder: true
 reverse_zones: "no"
 chrony_enabled: "yes"
+# Playbook 12 preflight — explicit RPMs probed before ipa-server-install (RHEL; also in freeipa_server_packages)
+ipa_server_preflight_rpm_packages:
+  - ipa-server
+  - ipa-server-dns
+  - 389-ds-base
+  - bind-utils
+  - openldap
 
 # Active Directory (when identity_provider: ad)
 # Leave ad_kdc_host empty unless using AD; placeholder values break identity auto-detect.
@@ -1049,10 +1056,12 @@ os_vars:
     ipa_install_dns_packages: bind-utils
     freeipa_server_packages:
       - ipa-server
+      - ipa-server-dns
+      - 389-ds-base
       - bind
       - bind-dyndb-ldap
-      - ipa-server-dns
       - bind-utils
+      - openldap
       - firewalld
     freeipa_client_packages:
       - freeipa-client

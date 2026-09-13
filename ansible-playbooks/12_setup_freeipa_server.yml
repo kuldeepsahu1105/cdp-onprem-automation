@@ -230,6 +230,11 @@
           stderr (truncated): {{ ipa_install_result.stderr | default('') | truncate(1500, True) }}
           Last 50 lines of /var/log/ipaserver-install.log:
           {{ ipa_install_log_tail.stdout | default('(log missing or empty)') }}
+          If the log shows FileNotFoundError [Errno 2] in install_check/ipachangeconf/newConf,
+          remove partial state (rm -rf /var/lib/ipa /etc/ipa /etc/dirsrv/slapd-* when ipactl is not configured),
+          ensure bind-utils (host/dig), 389-ds-base, and openldap are installed, and use real passwords
+          (ipaadmin_password / ipadm_password — not YOUR_DS_PASSWORD placeholders).
+          See ansible-playbooks/docs/RUNBOOK.md troubleshooting diagnostic bundle.
       when:
         - ipa_server_should_run_install | bool
         - ipa_install_result is defined

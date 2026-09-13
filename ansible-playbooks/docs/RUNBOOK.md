@@ -187,7 +187,7 @@ ipaserver ansible_host=<public_ip> private_ip=<private_ip> cldr_hostname=ipaserv
 
 Playbook **`12_setup_freeipa_server.yml`** (via **`11_identity_setup`**) uses the same **install gate** as the original **`10_setup_freeipa_server.yml`**: run **`ipa-server-install`** when **`ipactl status` rc ≠ 0** or **`/etc/ipa/default.conf`** is missing. Repeated **partial installs** or manual cleanup can leave **broken state** (`ipactl` rc=4, leftover **`/var/lib/ipa`** / **`/etc/dirsrv`**, stale **`default.conf`**); fix the host manually before re-running identity.
 
-**Manual `ipa-server-install` after a failed run (ipaserver, root):** When **`/var/log/ipaserver-install.log`** shows **`install_check`** / **`ipaconf.newConf`** / **`ipachangeconf`** with **`FileNotFoundError: [Errno 2]`** after loading **`/var/lib/ipa/sysrestore/sysrestore.index`** and **`sysrestore.state`**, IPA is **not** configured (`ipactl status` → **IPA is not configured** / rc=4) but **sysrestore** debris remains (partial install — not a full tree). **`bind-utils`** / **`dig`** are fine; do not retry install until paths are removed.
+**Manual `ipa-server-install` after a failed run (ipaserver, root):** When **`/var/log/ipaserver-install.log`** shows **`install_check`** / **`ipaconf.newConf`** / **`ipachangeconf`** with **`FileNotFoundError: [Errno 2]`** after loading **`/var/lib/ipa/sysrestore/sysrestore.index`** and **`sysrestore.state`**, IPA is **not** configured (`ipactl status` → **IPA is not configured** / rc=4) but **sysrestore** debris remains (partial install — not a full tree). **`bind-utils`** / **`dig`** can work while install still fails — do not retry until paths are removed and you use **real** passwords (lab default **`PseTeam@123`**, same as Jenkins **`ipaadmin_password`** / **`common_password`**), not documentation placeholders like **`YOUR_DS_PASSWORD`** / **`YOUR_ADMIN_PASSWORD`**.
 
 ```bash
 # 1) Confirm broken / partial state
@@ -204,13 +204,16 @@ ipactl status || true
 rm -rf /var/lib/ipa /etc/ipa
 rm -rf /etc/dirsrv/slapd-*
 
-# 4) Fresh install — replace passwords and FQDN/IP; AWS VPC forwarder often 172.31.0.2 (x.y.0.2 from private IP)
-FQDN="$(hostname -f)"
+# 3b) install_check writes /etc/ipa/default.conf — parent dir must exist after rm -rf /etc/ipa
+mkdir -p /etc/ipa /var/lib/ipa /var/log/ipa
+
+# 4) Fresh install — use lab/Jenkins passwords (default admin + DS: PseTeam@123 unless rotated)
+FQDN="$(hostname -f)"   # must match inventory FQDN, e.g. ipaserver.cldrsetup.local
 IP="$(hostname -I | awk '{print $1}')"
 ipa-server-install --setup-dns --unattended \
   --hostname="${FQDN}" --ip-address="${IP}" \
   --domain=cldrsetup.local --realm=CLDRSETUP.LOCAL \
-  --ds-password='YOUR_DS_PASSWORD' --admin-password='YOUR_ADMIN_PASSWORD' \
+  --ds-password='PseTeam@123' --admin-password='PseTeam@123' \
   --no-dnssec-validation --no-reverse \
   --forwarder=172.31.0.2
 ```
@@ -526,6 +529,22 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 ---
 
 ## Troubleshooting
+
+**FreeIPA `ipa-server-install` `FileNotFoundError` [Errno 2] — diagnostic bundle (run on ipaserver as root, paste output):**
+
+```bash
+{
+  echo "=== $(date -Is) $(hostname -f) ==="
+  ipactl status || true
+  hostname -f; hostname -s; getent hosts "$(hostname -f)" || true
+  command -v host dig ipa-server-install || true
+  rpm -qa 'ipa*' '389-ds*' bind-utils openldap 2>/dev/null | sort
+  ls -la /etc/ipa /var/lib/ipa /var/lib/ipa/sysrestore 2>/dev/null || true
+  ls -la /etc/dirsrv/ /etc/openldap/ldap.conf 2>/dev/null || true
+  grep -nE 'FileNotFoundError|ipachangeconf|newConf|install_check' /var/log/ipaserver-install.log 2>/dev/null | tail -25
+  tail -n 60 /var/log/ipaserver-install.log 2>/dev/null || true
+} | tee /tmp/ipa-install-debug.txt
+```
 
 | Issue | Action |
 |---|---|
