@@ -59,13 +59,59 @@
       failed_when: false
       changed_when: false
 
-    - name: IPA install gate — run ipa-server-install when ipactl unhealthy or no default.conf
+    - name: Derive ipactl not-configured from status (install gate)
+      ansible.builtin.set_fact:
+        ipa_ipactl_status_text: >-
+          {{
+            (ipa_server_status.stdout | default(''))
+            ~ (ipa_server_status.stderr | default(''))
+          }}
+        ipa_ipactl_not_configured: >-
+          {{
+            (ipa_server_status.rc | default(1) | int) == 4
+            or ipa_ipactl_status_text is search('IPA is not configured', ignorecase=True)
+          }}
+
+    - name: IPA install gate — skip install when IPA is configured (default.conf and ipactl)
       ansible.builtin.set_fact:
         ipa_server_should_run_install: >-
           {{
-            (ipa_server_status.rc | default(1) | int) != 0
-            or not (ipa_default_conf.stat.exists | default(false) | bool)
+            not (
+              (ipa_default_conf.stat.exists | default(false) | bool)
+              and not (ipa_ipactl_not_configured | bool)
+            )
           }}
+
+    - name: Remove stale default.conf when ipactl reports not configured
+      ansible.builtin.file:
+        path: /etc/ipa/default.conf
+        state: absent
+      when:
+        - ipa_ipactl_not_configured | bool
+        - ipa_default_conf.stat.exists | default(false) | bool
+
+    - name: Log IPA install DNS forwarder mode for operators
+      ansible.builtin.debug:
+        msg: >-
+          ipa-server-install will run: {{ ipa_server_should_run_install | bool }}
+          (gate: missing /etc/ipa/default.conf or ipactl reports IPA not configured).
+          DNS flags: {{
+            'VPC forwarder ' ~ effective_vpc_dns_resolver
+            if (ipa_install_dns_use_vpc_forwarder | default(false) | bool)
+            else (
+              '--no-forwarders'
+              if (ipa_install_dns_no_forwarders | default(false) | bool)
+              else (
+                'custom forwarder ' ~ ipa_install_dns_custom_forwarder
+                if (ipa_install_dns_custom_forwarder | default('') | length > 0)
+                else '--no-forwarders (template fallback)'
+              )
+            )
+          }}.
+          VPC resolver assert runs only when ipa_install_dns_use_vpc_forwarder is true
+          (skipped on bare metal, empty effective_vpc_dns_resolver, dns_forwarders=no-forwarders,
+          or ipa_server_install_use_vpc_dns_forwarder=false — install may use --no-forwarders on AWS).
+      when: ipa_server_should_run_install | bool
 
     - name: Preflight hostname/DNS and tooling before fresh ipa-server-install
       ansible.builtin.import_tasks: common_tasks/preflight_ipa_server_install.yml
@@ -83,38 +129,43 @@
         - ipa_install_dns_use_vpc_forwarder | default(false) | bool
 
     - name: Run IPA server installation
-      ansible.builtin.command: >
-        ipa-server-install --setup-dns --unattended
-        --hostname={{ ansible_fqdn }}
-        --ip-address={{ ansible_default_ipv4.address }}
-        --domain={{ ipaserver_domain }}
-        --realm={{ ipaserver_realm }}
-        --ds-password={{ ipadm_password }}
-        --admin-password={{ ipaadmin_password }}
-        --no-dnssec-validation
-        --netbios-name={{ netbios_name }}
-        {% if ipa_install_dns_use_vpc_forwarder | default(false) | bool %}
-        --forwarder={{ effective_vpc_dns_resolver }}
-        {% elif ipa_install_dns_no_forwarders | default(false) | bool %}
-        --no-forwarders
-        {% elif ipa_install_dns_custom_forwarder | default('') | length > 0 %}
-        --forwarder={{ ipa_install_dns_custom_forwarder }}
-        {% else %}
-        --no-forwarders
-        {% endif %}
-        {% if reverse_zones == 'no' %} --no-reverse {% endif %}
-        {% if chrony_enabled == 'yes' %} --ntp-server=pool.ntp.org {% endif %}
+      ansible.builtin.shell: |
+        set -euo pipefail
+        exec ipa-server-install --setup-dns --unattended \
+          --hostname="{{ ansible_fqdn }}" \
+          --ip-address="{{ ansible_default_ipv4.address }}" \
+          --domain="{{ ipaserver_domain }}" \
+          --realm="{{ ipaserver_realm }}" \
+          --ds-password="${IPA_DS_PASSWORD}" \
+          --admin-password="${IPA_ADMIN_PASSWORD}" \
+          --no-dnssec-validation \
+          --netbios-name="{{ netbios_name }}" \
+          {% if ipa_install_dns_use_vpc_forwarder | default(false) | bool %}
+          --forwarder="{{ effective_vpc_dns_resolver }}" \
+          {% elif ipa_install_dns_no_forwarders | default(false) | bool %}
+          --no-forwarders \
+          {% elif ipa_install_dns_custom_forwarder | default('') | length > 0 %}
+          --forwarder="{{ ipa_install_dns_custom_forwarder }}" \
+          {% else %}
+          --no-forwarders \
+          {% endif %}
+          {% if reverse_zones == 'no' %}--no-reverse \
+          {% endif %}{% if chrony_enabled == 'yes' %}--ntp-server=pool.ntp.org \
+          {% endif %}
+      environment:
+        IPA_DS_PASSWORD: "{{ ipadm_password }}"
+        IPA_ADMIN_PASSWORD: "{{ ipaadmin_password }}"
+      args:
+        executable: /bin/bash
       register: ipa_install_result
-      changed_when: "'The ipa-server-install command was successful' in ipa_install_result.stderr"
+      changed_when: "'The ipa-server-install command was successful' in (ipa_install_result.stderr | default(''))"
       failed_when: false
-      no_log: true
       when: ipa_server_should_run_install | bool
 
     - name: Capture tail of ipaserver-install.log when install failed
       ansible.builtin.shell: tail -n 50 /var/log/ipaserver-install.log 2>/dev/null || true
       register: ipa_install_log_tail
       changed_when: false
-      no_log: true
       when:
         - ipa_server_should_run_install | bool
         - ipa_install_result is defined
@@ -124,13 +175,20 @@
       ansible.builtin.fail:
         msg: >-
           ipa-server-install failed on {{ inventory_hostname }} (rc={{ ipa_install_result.rc }}).
-          stderr (truncated): {{ ipa_install_result.stderr | default('') | truncate(1500, True) }}
+          stderr (truncated): {{
+            ipa_install_result.stderr | default('')
+            | replace(ipaadmin_password, '***')
+            | replace(ipadm_password, '***')
+            | truncate(1500, True)
+          }}
           Last 50 lines of /var/log/ipaserver-install.log:
           {{ ipa_install_log_tail.stdout | default('(log missing or empty)') }}
           If the log shows FileNotFoundError [Errno 2] in install_check/ipachangeconf/newConf,
           remove partial state (rm -rf /var/lib/ipa /etc/ipa /etc/dirsrv/slapd-* when ipactl is not configured),
           ensure bind-utils (host/dig), 389-ds-base, and openldap are installed, and use real passwords
           (ipaadmin_password / ipadm_password — not YOUR_DS_PASSWORD placeholders).
+          On AWS, if DNS used --no-forwarders unexpectedly, check effective_vpc_dns_resolver from set_dns_facts
+          and ipa_server_install_use_vpc_dns_forwarder / dns_forwarders in group vars.
           See ansible-playbooks/docs/RUNBOOK.md troubleshooting diagnostic bundle.
       when:
         - ipa_server_should_run_install | bool
