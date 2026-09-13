@@ -64,4 +64,17 @@ ansible_configure_output
 [[ "${ANSIBLE_FORCE_COLOR}" == "0" ]] \
   || fail "without TTY or Jenkins, forced color should stay off when piped"
 
+# FULL_COLORED path: console keeps ANSI; artifact log is stripped.
+BUILD_NUMBER=1 JENKINS_URL=http://jenkins/ TERM=xterm JENKINS_PLAIN_LOG=0 JENKINS_ANSI_CONSOLE=1 \
+  ANSIBLE_FORCE_COLOR=1 NO_COLOR=0 ANSIBLE_NOCOLOR=0 \
+  bash -c "source '$REPO_ROOT/scripts/lib/jenkins_log_pipe.sh'; jenkins_log_pipe '$TMP/colored.log' bash -c \"printf '\\\\033[32mgreen\\\\033[0m\\\\n'\"" \
+  >"$TMP/colored-console.txt" 2>&1
+grep -q $'\033' "$TMP/colored-console.txt" || fail "colored console should preserve ANSI when JENKINS_PLAIN_LOG=0"
+grep -q $'\033' "$TMP/colored.log" && fail "colored mode artifact log must strip ANSI"
+grep -q '^green$' "$TMP/colored.log" || fail "colored mode artifact log should contain plain text"
+
+BUILD_NUMBER=1 JENKINS_URL=http://jenkins/ JENKINS_PLAIN_LOG=0 JENKINS_ANSI_CONSOLE=1 \
+  bash -c "source '$REPO_ROOT/scripts/lib/ansible_env.sh'; jenkins_prepare_log_output; [[ -z \"\${ANSIBLE_STDOUT_CALLBACK:-}\" ]] || exit 1"
+echo "OK: colored mode unsets jenkins_plain callback"
+
 echo "OK: jenkins plain log pipe + ansible_configure_output"

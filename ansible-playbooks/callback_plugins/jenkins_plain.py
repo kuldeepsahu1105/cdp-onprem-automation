@@ -19,6 +19,11 @@ def _display_skipped_hosts() -> bool:
     return raw not in ("0", "false", "no", "off")
 
 
+def _verbose_per_host_output() -> bool:
+    raw = os.environ.get("JENKINS_ANSIBLE_VERBOSE_OUTPUT", "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
 def format_host_batch_summary(label: str, hosts: list[str], max_show: int = 4) -> str | None:
     n = len(hosts)
     if n == 0:
@@ -100,6 +105,9 @@ class CallbackModule(CallbackBase):
         if result._result.get("changed", False):
             self._flush_pending_hosts()
             self._line(f"  >> changed: [{host}]")
+        elif _verbose_per_host_output():
+            self._flush_pending_hosts()
+            self._line(f"  ok: [{host}]")
         else:
             self._ok_hosts.append(host)
 
@@ -120,7 +128,12 @@ class CallbackModule(CallbackBase):
     def v2_runner_on_skipped(self, result, **kwargs) -> None:
         if not _display_skipped_hosts():
             return
-        self._skipped_hosts.append(result._host.get_name())
+        host = result._host.get_name()
+        if _verbose_per_host_output():
+            self._flush_pending_hosts()
+            self._line(f"  skipped: [{host}]")
+        else:
+            self._skipped_hosts.append(host)
 
     def v2_playbook_on_stats(self, stats) -> None:
         self._flush_pending_hosts()

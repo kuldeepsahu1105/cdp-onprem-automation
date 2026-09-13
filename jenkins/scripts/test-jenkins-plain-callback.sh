@@ -32,6 +32,24 @@ assert mod.format_skipped_summary(["x"]) == "  skipped: [x]"
 assert mod.format_skipped_summary(["x", "y"]) == "  skipped: 2 hosts — x, y"
 print("OK: format_skipped_summary")
 
+import os
+
+os.environ["JENKINS_ANSIBLE_VERBOSE_OUTPUT"] = "1"
+cb2 = mod.CallbackModule()
+lines = []
+
+class CaptureDisplay:
+    def display(self, msg, color=None, **kwargs):
+        lines.append(msg)
+
+cb2._display = CaptureDisplay()
+host = type("H", (), {"get_name": lambda self: "worker1"})()
+result = type("R", (), {"_host": host, "_result": {"changed": False}})()
+cb2.v2_runner_on_ok(result)
+assert lines == ["  ok: [worker1]"]
+os.environ.pop("JENKINS_ANSIBLE_VERBOSE_OUTPUT", None)
+print("OK: verbose per-host ok")
+
 # _line must not pass invalid display colors (breaks when Ansible display is wired to logging).
 from unittest.mock import MagicMock
 

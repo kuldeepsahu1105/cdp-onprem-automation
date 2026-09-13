@@ -9,10 +9,14 @@ mkdir -p "$LOG_DIR"
 
 cd "$REPO_ROOT"
 export PATH="${HOME}/.local/bin:${PATH}"
-# Plain ASCII wrapper labels; jenkins_log_pipe applies jenkins_prepare_log_output (strip ANSI on Jenkins).
 export UI_ASCII=1
-export UI_COLOR=0
-export FORCE_COLOR=0
+# shellcheck source=scripts/lib/ansible_env.sh
+source "$REPO_ROOT/scripts/lib/ansible_env.sh"
+# Plain mode: ASCII labels and no color unless Jenkinsfile opts into FULL_COLORED.
+if jenkins_plain_log_enabled; then
+  export UI_COLOR="${UI_COLOR:-0}"
+  export FORCE_COLOR="${FORCE_COLOR:-0}"
+fi
 export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
 # shellcheck source=scripts/lib/holautosa_exec_dir.sh
 source "$REPO_ROOT/scripts/lib/holautosa_exec_dir.sh"

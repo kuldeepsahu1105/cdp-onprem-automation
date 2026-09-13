@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-09-13.7 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-09-13.8 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -271,6 +271,24 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
       defaultValue: false,
       description: 'Create FreeIPA user <prefix>admin and assign ECS IAM admin roles (requires ECS_LDAP or LDAP sync).'
     )
+    choice(
+      name: 'ANSIBLE_CONSOLE_OUTPUT',
+      choices: ['PLAIN_SUMMARY', 'FULL_COLORED'],
+      description: '''Ansible console style (jenkins/artifacts/*.log stay plain ASCII).
+
+PLAIN_SUMMARY (default): jenkins_plain callback — TASK banners, per-host changed/failed, one summarized ok/skipped line per task; no raw ANSI on console.
+
+FULL_COLORED: default Ansible stdout callback — classic per-host ok/changed lines with colors (requires AnsiColor; Jenkinsfile options.ansiColor). Set this instead of editing the environment block.
+
+Optional with PLAIN_SUMMARY only: check ANSIBLE_PLAIN_PER_HOST_LINES for per-host ok/skipped (still plain text).
+
+After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README.md'''
+    )
+    booleanParam(
+      name: 'ANSIBLE_PLAIN_PER_HOST_LINES',
+      defaultValue: false,
+      description: 'When ANSIBLE_CONSOLE_OUTPUT=PLAIN_SUMMARY: one ok:/skipped: line per host (jenkins_plain verbose). Ignored in FULL_COLORED mode.'
+    )
   }
 
   options {
@@ -285,15 +303,17 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     LC_ALL = 'C.UTF-8'
     TERM = 'xterm'
     UI_ASCII = '1'
-    // Plain console logs (no raw ANSI). Set JENKINS_ANSI_CONSOLE=1 + JENKINS_PLAIN_LOG=0 for colored Ansible.
-    FORCE_COLOR = '0'
-    UI_COLOR = '0'
-    JENKINS_PLAIN_LOG = '1'
-    ANSIBLE_FORCE_COLOR = '0'
-    PY_COLORS = '0'
-    NO_COLOR = '1'
-    ANSIBLE_NOCOLOR = '1'
-    // One summarized ok/skipped line per task (jenkins_plain); set false to hide those summaries.
+    // Ansible console: ANSIBLE_CONSOLE_OUTPUT param (PLAIN_SUMMARY vs FULL_COLORED).
+    JENKINS_PLAIN_LOG = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'PLAIN_SUMMARY') == 'FULL_COLORED' ? '0' : '1'}"
+    JENKINS_ANSI_CONSOLE = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'PLAIN_SUMMARY') == 'FULL_COLORED' ? '1' : '0'}"
+    FORCE_COLOR = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'PLAIN_SUMMARY') == 'FULL_COLORED' ? '1' : '0'}"
+    UI_COLOR = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'PLAIN_SUMMARY') == 'FULL_COLORED' ? '1' : '0'}"
+    ANSIBLE_FORCE_COLOR = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'PLAIN_SUMMARY') == 'FULL_COLORED' ? '1' : '0'}"
+    PY_COLORS = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'PLAIN_SUMMARY') == 'FULL_COLORED' ? '1' : '0'}"
+    NO_COLOR = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'PLAIN_SUMMARY') == 'FULL_COLORED' ? '0' : '1'}"
+    ANSIBLE_NOCOLOR = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'PLAIN_SUMMARY') == 'FULL_COLORED' ? '0' : '1'}"
+    JENKINS_ANSIBLE_VERBOSE_OUTPUT = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'PLAIN_SUMMARY') == 'PLAIN_SUMMARY' && params.ANSIBLE_PLAIN_PER_HOST_LINES ? '1' : '0'}"
+    // jenkins_plain: summarized ok/skipped per task unless JENKINS_ANSIBLE_VERBOSE_OUTPUT=1; set false to hide ok/skipped.
     ANSIBLE_DISPLAY_OK_HOSTS = 'true'
     ANSIBLE_DISPLAY_SKIPPED_HOSTS = 'true'
     REPO_ROOT = "${WORKSPACE}"

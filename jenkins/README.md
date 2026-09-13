@@ -15,19 +15,20 @@ Declarative pipeline with **checkbox stage selection**, **configurable validatio
 
 ### Operator guide: local terminal vs Jenkins
 
-| | **Local** (`./pvc_setup.sh`, wrappers on your laptop) | **Jenkins** (default `JENKINS_PLAIN_LOG=1`) |
-|---|---|---|
-| **Colors** | Full ANSI when stdout is a TTY (`ui.sh`, Ansible default callback) | No raw `[1;33m` escapes — output is stripped and/or plain callback |
-| **Phase / playbook framing** | Colored `PHASE:` / `PLAYBOOK:` lines with Unicode or ASCII rules (`ui_phase_header` / `ui_phase_footer`) | Same structure, ASCII rules (`=`, `-`), no color on wrapper labels (`UI_COLOR=0`) |
-| **Ansible task output** | Standard Ansible stdout (per-host unless you change callback) | `jenkins_plain`: `TASK` banners, `>> changed` / `** FAILED`, one summarized `ok` (and optional `skipped`) line per task |
-| **Artifact logs** | Whatever you tee locally | `jenkins/artifacts/*.log` matches console (plain ASCII) |
+| | **Local** (`./pvc_setup.sh`, wrappers on your laptop) | **Jenkins** default (`ANSIBLE_CONSOLE_OUTPUT=PLAIN_SUMMARY`) | **Jenkins** `ANSIBLE_CONSOLE_OUTPUT=FULL_COLORED` |
+|---|---|---|---|
+| **Colors** | Full ANSI when stdout is a TTY (`ui.sh`, Ansible default callback) | No raw `[1;33m` escapes — output is stripped and/or plain callback | Colored Ansible + phase headers via AnsiColor (`options.ansiColor`) |
+| **Phase / playbook framing** | Colored `PHASE:` / `PLAYBOOK:` lines with Unicode or ASCII rules | ASCII rules (`=`, `-`), plain wrapper labels | Colored `PHASE:` / `PLAYBOOK:` headers when `UI_COLOR=1` |
+| **Ansible task output** | Standard Ansible stdout (per-host) | `jenkins_plain`: summarized `ok`/`skipped` per task (or per-host with **ANSIBLE_PLAIN_PER_HOST_LINES**) | Default Ansible callback — classic per-host `ok` / `changed` lines |
+| **Artifact logs** | Whatever you tee locally | Plain ASCII (ANSI stripped) | Plain ASCII (ANSI stripped); console keeps color |
 
-**Opt-in colored Jenkins console** (AnsiColor must wrap the stage — the root `Jenkinsfile` already sets `ansiColor('xterm')`):
+**Build parameter (recommended):** **ANSIBLE_CONSOLE_OUTPUT** = `FULL_COLORED` for classic Ansible output with colors. Default `PLAIN_SUMMARY` keeps the summarized `jenkins_plain` style. Run **REFRESH_JENKINSFILE=YES** once after upgrading the Jenkinsfile.
 
-1. In the `environment` block set `JENKINS_ANSI_CONSOLE=1` and `JENKINS_PLAIN_LOG=0`.
-2. Optionally set `UI_COLOR=1` / `ANSIBLE_FORCE_COLOR=1` if you want wrapper labels and Ansible to emit color (console only; artifact logs are still stripped to plain text).
+**Plain but per-host (no color):** `PLAIN_SUMMARY` + **ANSIBLE_PLAIN_PER_HOST_LINES** = `true` (sets `JENKINS_ANSIBLE_VERBOSE_OUTPUT=1`).
 
-**Do not** set `JENKINS_PLAIN_LOG=0` without `JENKINS_ANSI_CONSOLE=1` — you may get raw escape sequences in the Blue Ocean / console log.
+**Manual override** (if you cannot refresh parameters yet): set `JENKINS_ANSI_CONSOLE=1`, `JENKINS_PLAIN_LOG=0`, `UI_COLOR=1`, `ANSIBLE_FORCE_COLOR=1`, and clear `NO_COLOR` / `ANSIBLE_NOCOLOR`.
+
+**Do not** set `JENKINS_PLAIN_LOG=0` without AnsiColor and `JENKINS_ANSI_CONSOLE=1` — you may get raw escape sequences in the Blue Ocean / console log.
 
 Self-tests: `jenkins/scripts/test-jenkins-ansi-pipe.sh`, `jenkins/scripts/test-jenkins-plain-callback.sh`.
 
@@ -37,11 +38,13 @@ Jenkins agents often show **raw ANSI** (`[1;33mPHASE:…`) when stdout is piped 
 
 Stage wrappers (`run-ansible.sh`, `run-terraform.sh`) use `jenkins_log_pipe`, which calls `jenkins_prepare_log_output` when `BUILD_NUMBER`, `JENKINS_URL`, or `CI=true` is set. Plain mode runs output through an ANSI stripper and sets `ANSIBLE_STDOUT_CALLBACK=jenkins_plain`.
 
-Optional colored console (requires [AnsiColor](https://plugins.jenkins.io/ansi-color/) on the stage): set `JENKINS_ANSI_CONSOLE=1` and `JENKINS_PLAIN_LOG=0` in the Jenkinsfile `environment` block.
+Colored console: set build parameter **ANSIBLE_CONSOLE_OUTPUT** to `FULL_COLORED` (or `JENKINS_ANSI_CONSOLE=1` + `JENKINS_PLAIN_LOG=0` in the environment block).
 
 | Variable | Typical Jenkins value | Role |
 |---|---|---|
+| `ANSIBLE_CONSOLE_OUTPUT` | `PLAIN_SUMMARY` | Job parameter: `FULL_COLORED` enables default Ansible callback + colors |
 | `JENKINS_PLAIN_LOG` | `1` (or `auto`) | Plain console + artifact logs; `auto` = plain when Jenkins/CI detected unless ansi opt-in |
+| `JENKINS_ANSIBLE_VERBOSE_OUTPUT` | `0` | With `jenkins_plain`: per-host `ok`/`skipped` when `1` (**ANSIBLE_PLAIN_PER_HOST_LINES**) |
 | `UI_COLOR` / `FORCE_COLOR` | `0` | Plain wrapper labels (`ui_kv`, banners, `PHASE:` headers) |
 | `ANSIBLE_FORCE_COLOR` / `PY_COLORS` | `0` | Disable Ansible/Pygments ANSI |
 | `ANSIBLE_DISPLAY_OK_HOSTS` | `true` | `jenkins_plain` callback: one summarized `ok` line per task; `false` hides ok lines |

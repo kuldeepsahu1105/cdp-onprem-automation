@@ -487,10 +487,12 @@ jenkins_prepare_log_output() {
     # jenkins_plain summarizes ok/skipped hosts per task; set ANSIBLE_DISPLAY_*_HOSTS=false to hide those lines.
     export ANSIBLE_DISPLAY_OK_HOSTS="${ANSIBLE_DISPLAY_OK_HOSTS:-true}"
     export ANSIBLE_DISPLAY_SKIPPED_HOSTS="${ANSIBLE_DISPLAY_SKIPPED_HOSTS:-true}"
+    export JENKINS_ANSIBLE_VERBOSE_OUTPUT="${JENKINS_ANSIBLE_VERBOSE_OUTPUT:-0}"
     unset JENKINS_ANSI_CONSOLE ANSIBLE_CI_CONSOLE
     return 0
   fi
   ci_ansi_prepare_jenkins_console
+  unset ANSIBLE_STDOUT_CALLBACK
 }
 
 # Legacy name — callers should prefer jenkins_prepare_log_output.
