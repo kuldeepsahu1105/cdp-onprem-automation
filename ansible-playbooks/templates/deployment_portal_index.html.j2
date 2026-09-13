@@ -718,6 +718,9 @@
           </div>
         </div>
         <div class="header-actions">
+          {% if oa.basic_auth_enabled | default(deployment_portal_basic_auth_enabled | default(false)) | bool %}
+          <a class="help-open-btn" href="{{ _dl_prefix }}/operator-credentials.json" target="_blank" rel="noopener noreferrer" title="HTTP basic auth for {{ _dl_prefix }}/ (PEM keys and operator-credentials.json)">Login</a>
+          {% endif %}
           <button type="button" class="help-open-btn" id="portal-help-open" aria-haspopup="dialog">Help</button>
         </div>
       </div>
