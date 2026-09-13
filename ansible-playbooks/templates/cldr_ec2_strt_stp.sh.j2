@@ -21,6 +21,7 @@ SCRIPT_NAME="$(basename "$0")"
 DEFAULT_ENV="{{ ec2_startstop_default_environment | default('', true) | trim }}"
 AWS_REGION_FALLBACK="{{ aws_region | default('us-east-1') }}"
 
+{% raw %}
 usage() {
   sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
   echo ""
@@ -214,3 +215,4 @@ case "$OPERATION" in
 esac
 
 exit 0
+{% endraw %}
