@@ -72,15 +72,6 @@
     - name: Detect FreeIPA server install state (configured / partial / clean)
       ansible.builtin.import_tasks: common_tasks/detect_ipa_server_install_state.yml
 
-    - name: Note FreeIPA is configured but services are not healthy yet
-      ansible.builtin.debug:
-        msg: >-
-          FreeIPA is configured on this host ({{ ansible_fqdn }}) but core services are not all RUNNING.
-          Skipping ipa-server-install; playbook will start services via ipactl.
-      when:
-        - ipa_server_has_default_conf | bool
-        - not ipa_server_services_healthy | bool
-
     - name: Note fresh host — no FreeIPA configuration detected
       ansible.builtin.debug:
         msg: >-
@@ -105,10 +96,13 @@
         {% if chrony_enabled == 'yes' %} --ntp-server=pool.ntp.org {% endif %}
       register: ipa_install_result
       changed_when: "'The ipa-server-install command was successful' in ipa_install_result.stderr"
-      when: ipa_server_install_clean_host | bool
+      # First-commit gate: install when not configured; partial debris fails in detect_ipa_server_install_state.
+      when: not (ipa_server_has_default_conf | bool)
 
     - name: Ensure FreeIPA KDC and IPA services are running
       ansible.builtin.import_tasks: common_tasks/ensure_ipa_kdc_services.yml
+      vars:
+        ipa_kdc_skip_start_after_install: "{{ ipa_install_result is changed | default(false) }}"
 
     - name: Configure FreeIPA KDC encryption types (AES)
       ansible.builtin.import_tasks: common_tasks/configure_ipa_krb_enc_types.yml
