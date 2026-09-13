@@ -32,7 +32,7 @@ fi
 
 if should_validate "${VALIDATE_TOOLS:-true}" "TOOLS"; then
   tools=(git jq aws python3)
-  if is_enabled "${REQUIRE_TERRAFORM:-false}"; then
+  if is_enabled "${REQUIRE_TERRAFORM:-false}" || is_enabled "${RUN_DESTROY_STACK:-false}"; then
     tools+=(terraform)
   fi
   if is_enabled "${REQUIRE_ANSIBLE:-false}" || should_validate "${VALIDATE_ANSIBLE_SYNTAX:-true}" "ANSIBLE_SYNTAX"; then
@@ -89,8 +89,15 @@ if is_enabled "${REQUIRE_INVENTORY:-false}" || should_validate "${VALIDATE_INVEN
   log "OK inventory: $INVENTORY"
 fi
 
+destroy_stack_only=false
+if is_enabled "${RUN_DESTROY_STACK:-false}" && ! is_enabled "${REQUIRE_TERRAFORM:-false}" && ! is_enabled "${REQUIRE_ANSIBLE:-false}"; then
+  destroy_stack_only=true
+fi
+
 # Fast PyYAML parse (no inventory/ansible); catches broken when: list items before syntax-check.
-if command -v python3 >/dev/null 2>&1; then
+if [[ "$destroy_stack_only" == true ]]; then
+  log "Skipping Ansible YAML/contract checks (DESTROY_STACK-only build)"
+elif command -v python3 >/dev/null 2>&1; then
   "$REPO_ROOT/jenkins/scripts/validate-ansible-yaml.sh" | tee -a "$LOG_FILE"
   "$REPO_ROOT/jenkins/scripts/validate-ansible-contracts.sh" 2>&1 | tee -a "$LOG_FILE"
 else

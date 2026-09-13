@@ -326,7 +326,8 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
           env.VALIDATION_CHECKS = cfg.validationChecks
           env.REQUIRE_ANSIBLE = cfg.runAnsible
           env.RUN_DESTROY_STACK = cfg.runDestroyStack
-          env.REQUIRE_TERRAFORM = (cfg.runTerraform == 'true' || cfg.runDestroyStack == 'true') ? 'true' : 'false'
+          // Terraform destroy needs the CLI + tfvars, not provision-time AWS keypair/SG pre-checks.
+          env.REQUIRE_TERRAFORM = cfg.runTerraform == 'true' ? 'true' : 'false'
           echo "Resolved stages: validate=${cfg.runValidate}, terraform=${cfg.runTerraform}, destroy=${cfg.runDestroyStack}, ansible=${cfg.runAnsible}, phases=${cfg.ansiblePhases}"
           echo "Ansible stage order: ${cfg.selectedAnsibleStages ?: '(none)'}"
           echoPipelineStagesQuickReference()
@@ -379,6 +380,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
           export VALIDATE_INVENTORY="${VALIDATE_INVENTORY:-false}"
           export REQUIRE_ANSIBLE="${REQUIRE_ANSIBLE:-false}"
           export REQUIRE_TERRAFORM="${REQUIRE_TERRAFORM:-false}"
+          export RUN_DESTROY_STACK="${RUN_DESTROY_STACK:-false}"
           export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-false}"
           export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
           ./jenkins/scripts/validate-prereqs.sh
@@ -441,9 +443,9 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
           set -euo pipefail
           export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-false}"
           export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
-          export DESTROY_STACK_CONFIRM='${params.DESTROY_STACK_CONFIRM}'
-          export CLEANUP_BEFORE_DESTROY='${params.CLEANUP_BEFORE_DESTROY}'
-          export DRY_RUN='${params.DRY_RUN}'
+          export DESTROY_STACK_CONFIRM="${DESTROY_STACK_CONFIRM:-false}"
+          export CLEANUP_BEFORE_DESTROY="${CLEANUP_BEFORE_DESTROY:-false}"
+          export DRY_RUN="${DRY_RUN:-false}"
           # shellcheck source=jenkins/scripts/aws-credential-check.sh
           source ./jenkins/scripts/aws-credential-check.sh
           aws_apply_instance_role_if_enabled
@@ -681,6 +683,16 @@ def monitoringStackEnabled() {
   return isParamEnabled(params.MONITORING_STACK_ENABLED)
 }
 
+def isDestroyStackOnly(List stages) {
+  if (!stages.contains('DESTROY_STACK')) {
+    return false
+  }
+  if (stages.contains('TERRAFORM')) {
+    return false
+  }
+  return !stages.any { it in orderedAnsibleStageIds() }
+}
+
 def shouldRunAnsibleStage(String stageId) {
   if (env.RUN_ANSIBLE != 'true') {
     return false
@@ -743,6 +755,17 @@ def resolvePipelineStages(def stagesCsv, def validationCsv) {
   def validationChecks = effectiveValidationChecks(validationCsv)
   if (requireInventory == 'true' && !validationChecks.contains('INVENTORY')) {
     validationChecks = "${validationChecks},INVENTORY"
+  }
+  if (isDestroyStackOnly(stages)) {
+    def tokens = validationChecks.split(',').collect { it.trim() }.findAll { it }
+    def trimmed = tokens.findAll { !(it in ['INVENTORY', 'ANSIBLE_SYNTAX']) }
+    if (trimmed.size() != tokens.size()) {
+      echo 'INFO: DESTROY_STACK-only — skipping INVENTORY and ANSIBLE_SYNTAX validation (not required for terraform destroy).'
+    }
+    if (trimmed.isEmpty()) {
+      trimmed = ['TOOLS', 'AWS_CREDS', 'TFVARS']
+    }
+    validationChecks = trimmed.join(',')
   }
   def summary = stages.isEmpty() ? 'none' : stages.join('+')
   return [
@@ -884,7 +907,10 @@ def validatePipelineInputs() {
 
   if (stages.contains('DESTROY_STACK')) {
     if (!isParamEnabled(params.DRY_RUN) && !isParamEnabled(params.DESTROY_STACK_CONFIRM)) {
-      validationFail('DESTROY_STACK requires DESTROY_STACK_CONFIRM=true (or DRY_RUN=true for terraform destroy plan only).')
+      validationFail(
+        'DESTROY_STACK is selected but DESTROY_STACK_CONFIRM is not enabled. ' +
+        'Check the DESTROY_STACK_CONFIRM parameter to apply terraform destroy, or enable DRY_RUN for a destroy plan only (no apply).'
+      )
     }
     if (stages.contains('TERRAFORM')) {
       echo 'WARN: PIPELINE_STAGES includes both TERRAFORM and DESTROY_STACK — provision runs first, destroy runs last in this build.'
