@@ -4,6 +4,8 @@
 - name: Resolve deployment portal SSH key path on controller
   ansible.builtin.import_tasks: resolve_deployment_portal_ssh_key.yml
 
+# deployment_portal_expose_ssh_keys: true | false | auto (default true in group_vars).
+# auto → expose only when deployment_portal_basic_auth_enabled is true.
 - name: Resolve effective SSH key export for portal
   ansible.builtin.set_fact:
     deployment_portal_ssh_keys_expose_effective: >-

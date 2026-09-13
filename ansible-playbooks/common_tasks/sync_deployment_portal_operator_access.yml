@@ -9,6 +9,7 @@
     - name: Re-resolve deployment portal SSH private keys on controller
       ansible.builtin.import_tasks: resolve_deployment_portal_ssh_key.yml
 
+    # Same as build_deployment_portal_operator_access: true/false bool; auto follows basic auth.
     - name: Recompute effective SSH key export flag on controller
       ansible.builtin.set_fact:
         deployment_portal_ssh_keys_expose_effective: >-
