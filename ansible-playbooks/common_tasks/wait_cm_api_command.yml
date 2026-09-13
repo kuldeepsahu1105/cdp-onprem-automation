@@ -1,0 +1,28 @@
+---
+# Poll a Cloudera Manager async command until it completes.
+# Required vars: cm_krb_api_url, cm_admin_user, cm_admin_pass, cm_api_command_id
+
+- name: Wait for CM API command {{ cm_api_command_id }}
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/commands/{{ cm_api_command_id }}"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_api_command_poll
+  until: >
+    cm_api_command_poll.json.active is defined
+    and not (cm_api_command_poll.json.active | bool)
+  retries: "{{ cm_api_command_poll_retries | default(60) }}"
+  delay: "{{ cm_api_command_poll_delay | default(10) }}"
+
+- name: Fail when CM API command did not succeed
+  ansible.builtin.fail:
+    msg: >-
+      CM API command {{ cm_api_command_id }} failed:
+      {{ cm_api_command_poll.json.resultMessage | default(cm_api_command_poll.json.result_message | default('unknown')) }}
+  when:
+    - cm_api_command_poll.json.success is defined
+    - not (cm_api_command_poll.json.success | bool)

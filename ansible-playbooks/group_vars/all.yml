@@ -288,11 +288,23 @@ krb5_ad_suffix: "{{ ad_domain }}"
 krb5_ad_delete_on_regenerate: true
 
 # Cloudera Management Service (CMS) - NOT the CDP base cluster
-# CMS roles: Service Monitor, Host Monitor, Event Server, Alert Publisher, Reports Manager
+# CMS roles on cldr-mngr; Postgres for Reports Manager is only on cldr-mngr (23_setup_postgres.yml).
 cm_manager_inventory_host: "{{ groups['cldr-mngr'][0] if ('cldr-mngr' in groups and groups['cldr-mngr'] | length > 0) else '' }}"
+cm_postgres_inventory_host: "{{ cm_manager_inventory_host }}"
 cm_cms_hostname: "{{ hostvars[cm_manager_inventory_host].cldr_hostname | default(cm_manager_inventory_host) }}.{{ cluster_domain }}"
 cm_cms_servicemonitor_memory_bytes: 6442450944
-cm_cms_reports_manager_db_host: "{{ cm_cms_hostname }}"
+cm_cms_role_types:
+  - SERVICEMONITOR
+  - HOSTMONITOR
+  - EVENTSERVER
+  - ALERTPUBLISHER
+  - REPORTSMANAGER
+cm_cms_health_role_types:
+  - SERVICEMONITOR
+  - HOSTMONITOR
+  - REPORTSMANAGER
+cm_cms_reports_manager_db_host: >-
+  {{ hostvars[cm_postgres_inventory_host].cldr_hostname | default(cm_postgres_inventory_host) }}.{{ cluster_domain }}
 cm_cms_reports_manager_db_name: rman
 cm_cms_reports_manager_db_user: rman
 cm_cms_reports_manager_db_password: rman

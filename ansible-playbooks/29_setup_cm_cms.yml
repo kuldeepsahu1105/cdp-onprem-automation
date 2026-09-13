@@ -18,8 +18,9 @@
     - name: Print CMS target host
       ansible.builtin.debug:
         msg:
-          - "CMS hostname: {{ cm_cms_hostname }}"
-          - "Reports Manager DB host: {{ cm_cms_reports_manager_db_host }}"
+          - "CMS roles host: {{ cm_cms_hostname }}"
+          - "Postgres (Reports Manager DB) host: {{ cm_cms_reports_manager_db_host }} (inventory: {{ cm_postgres_inventory_host }})"
+          - "CMS role types: {{ cm_cms_role_types | join(', ') }}"
 
     - name: Check Cloudera Management Service status
       ansible.builtin.uri:
