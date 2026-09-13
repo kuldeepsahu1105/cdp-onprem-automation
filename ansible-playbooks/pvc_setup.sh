@@ -52,7 +52,9 @@ Options:
   --help, -h       Show this help
 
 Environment:
-  DEPLOY_PHASE     1|2|3|cm_tls|cdh|portal|monitoring|ecs|6|7|4|5|all
+  DEPLOY_PHASE     1|2|3|cm_tls|cdh|portal|monitoring|ecs|6|7|4|5|all|destroy_stack
+  DESTROY_STACK_CONFIRM   true — required for terraform destroy (DRY_RUN=true = destroy plan only)
+  CLEANUP_BEFORE_DESTROY  true — run 99_cleanup.yml (cleanup_e2e) before terraform destroy
   ANSIBLE_RUN_SSH_PREQS   auto|true|false (default auto) — 00_setup_ssh_preqs on phase 1/all only
   DEPLOYMENT_PORTAL_REFRESH true|false (default false) — run 35_refresh from non-portal phases when true
   MONITORING_STACK_ENABLED  true|false (default true) — portal + Grafana/Prometheus bootstrap
@@ -231,6 +233,39 @@ if _should_run_ssh_preqs; then
   fi
 else
   ui_info "Skipping 00_setup_ssh_preqs.yml (DEPLOY_PHASE=${DEPLOY_PHASE}, ANSIBLE_RUN_SSH_PREQS=${ANSIBLE_RUN_SSH_PREQS:-auto})"
+fi
+
+run_phase_destroy_stack() {
+  ui_phase_header "destroy_stack — teardown (optional Ansible 99, then terraform destroy)"
+  case "${CLEANUP_BEFORE_DESTROY:-false}" in
+    1|true|yes|TRUE|YES|on|ON)
+      ui_step "Ansible cleanup before destroy" "🧹"
+      run_playbook 99_cleanup.yml \
+        -e cleanup_enabled=true \
+        -e cleanup_confirm=true \
+        -e cleanup_e2e=true
+      ;;
+    *)
+      ui_info "Skipping 99_cleanup.yml (set CLEANUP_BEFORE_DESTROY=true to run e2e cleanup first)"
+      ;;
+  esac
+  export DESTROY_STACK_CONFIRM="${DESTROY_STACK_CONFIRM:-false}"
+  if [[ ! -x "$REPO_ROOT/clone_and_run_terraform_destroy.sh" ]]; then
+    chmod +x "$REPO_ROOT/clone_and_run_terraform_destroy.sh" 2>/dev/null || true
+  fi
+  bash "$REPO_ROOT/clone_and_run_terraform_destroy.sh"
+}
+
+if [[ "$DEPLOY_PHASE" == destroy_stack || "$DEPLOY_PHASE" == destroy || "$DEPLOY_PHASE" == terraform_destroy ]]; then
+  run_phase_destroy_stack
+  if [[ "${PVC_SETUP_FROM_WRAPPER:-}" != "1" ]]; then
+    if is_dry_run; then
+      ui_done "Phase destroy_stack dry run completed (destroy plan only)"
+    else
+      ui_done "Phase destroy_stack completed"
+    fi
+  fi
+  exit 0
 fi
 
 run_phase_1() {
@@ -474,7 +509,7 @@ case "$DEPLOY_PHASE" in
     run_phase_5
     ;;
   *)
-    ui_err "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|cm_tls|cdh|portal|monitoring|ecs|all or prereq|identity|cm_install|…)"
+    ui_err "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|cm_tls|cdh|portal|monitoring|ecs|all|destroy_stack or prereq|identity|cm_install|…)"
     exit 1
     ;;
 esac

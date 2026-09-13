@@ -134,6 +134,30 @@ Verify version:
 EOF
 }
 
+wrapper_show_help_terraform_destroy() {
+  cat <<'EOF'
+Cloudera PVC Terraform destroy wrapper
+
+Usage:
+  DESTROY_STACK_CONFIRM=true ./clone_and_run_terraform_destroy.sh
+  DRY_RUN=true ./clone_and_run_terraform_destroy.sh
+
+Options:
+  --dry-run, -n    terraform destroy plan only (no destroy applied)
+  --help, -h       Show this help
+
+Environment:
+  DESTROY_STACK_CONFIRM  true|false — required for destroy apply (not needed when DRY_RUN=true)
+  DRY_RUN                true|false — same as --dry-run
+  TFVARS_FILE            Path to .tfvars.env or .tfvars.yaml (same as provision)
+
+Uses Terraform workspace ENVIRONMENT and holautosa-persisted state when configured.
+
+Verify version:
+  test -f scripts/lib/ui.sh && git rev-parse --short HEAD
+EOF
+}
+
 # If a nested git clone exists and this script is an older copy outside it, re-exec the repo script.
 wrapper_reexec_from_repo_if_needed() {
   local script_dir="$1"

@@ -10,19 +10,19 @@ pipeline {
     extendedChoice(
       name: 'PIPELINE_STAGES',
       type: 'PT_CHECKBOX',
-      value: 'VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL',
+      value: 'VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,DESTROY_STACK',
       defaultValue: 'VALIDATE,TERRAFORM',
       multiSelectDelimiter: ',',
-      visibleItemCount: 10,
+      visibleItemCount: 11,
       quoteValue: false,
       description: 'Stages to run (fixed order). See PIPELINE_STAGES_REFERENCE below for full guide. Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. Run REFRESH_JENKINSFILE=YES after Jenkinsfile changes.',
-      descriptionPropertyValue: '''VALIDATE: prereq checks (VALIDATION_CHECKS),TERRAFORM: EC2/VPC/SG/EIP + inventory,PREREQS: Ansible 01-09,PORTAL: portal bootstrap (10),IDENTITY: FreeIPA/AD phase 2,CM_INSTALL: CM server phase 3,CM_TLS_KRB_LDAP: TLS/Kerberos/LDAP 27-30,CDH_INSTALL: base cluster (31),MONITORING: Grafana/Prom (32),ECS_INSTALL: ECS cluster (33)'''
+      descriptionPropertyValue: '''VALIDATE: prereq checks (VALIDATION_CHECKS),TERRAFORM: EC2/VPC/SG/EIP + inventory,PREREQS: Ansible 01-09,PORTAL: portal bootstrap (10),IDENTITY: FreeIPA/AD phase 2,CM_INSTALL: CM server phase 3,CM_TLS_KRB_LDAP: TLS/Kerberos/LDAP 27-30,CDH_INSTALL: base cluster (31),MONITORING: Grafana/Prom (32),ECS_INSTALL: ECS cluster (33),DESTROY_STACK: terraform destroy (+ optional 99_cleanup) — requires DESTROY_STACK_CONFIRM'''
     )
     text(
       name: 'PIPELINE_STAGES_REFERENCE',
       defaultValue: '''PIPELINE_STAGES — reference (edit optional; default is documentation)
 
-Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL
+Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → DESTROY_STACK
 
 | Checkbox | What runs |
 | VALIDATE | validate-prereqs.sh — only VALIDATION_CHECKS you select |
@@ -35,6 +35,7 @@ Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INS
 | CDH_INSTALL | CDH base cluster (31_setup_base_cluster.yml) |
 | MONITORING | Monitoring stack (32); needs PORTAL; MONITORING_STACK_ENABLED |
 | ECS_INSTALL | ECS (33) + optional data services when ECS_DATA_SERVICES_DEPLOY_ENABLED |
+| DESTROY_STACK | run-destroy-stack.sh — optional 99_cleanup then terraform destroy (DESTROY_STACK_CONFIRM) |
 
 Legacy: CDH_BASE (old jobs) expands to CM_TLS_KRB_LDAP + CDH_INSTALL — check those two boxes instead.
 
@@ -72,7 +73,9 @@ INVENTORY — Fail if ansible-playbooks/inventory.ini missing (auto-enabled when
 EMAIL_FORMAT — In Check Parameters: regex-validate NOTIFICATION_EMAIL when non-empty (in addition to tfvars/email usage).''',
       descriptionPropertyValue: '''TOOLS: verify CLIs on agent; +terraform if TERRAFORM; +ansible-playbook if Ansible stages or ANSIBLE_SYNTAX,AWS_CREDS: aws sts get-caller-identity (holautosa ~/.aws or instance role),TFVARS: tfvars file + ENVIRONMENT/OWNER/REGION; AWS keypair/SG pre-check if TERRAFORM,ANSIBLE_SYNTAX: syntax-check all numbered ansible-playbooks/*.yml,INVENTORY: require ansible-playbooks/inventory.ini on disk,EMAIL_FORMAT: validate NOTIFICATION_EMAIL format in Check Parameters when set'''
     )
-    booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply)')
+    booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply). With DESTROY_STACK: terraform destroy plan only.')
+    booleanParam(name: 'DESTROY_STACK_CONFIRM', defaultValue: false, description: 'Required when PIPELINE_STAGES includes DESTROY_STACK (unless DRY_RUN=true). Confirms terraform destroy for this ENVIRONMENT workspace.')
+    booleanParam(name: 'CLEANUP_BEFORE_DESTROY', defaultValue: false, description: 'When DESTROY_STACK is selected: run ansible-playbooks/99_cleanup.yml (cleanup_e2e) before terraform destroy.')
     booleanParam(name: 'USE_CREDENTIALS_USER_AWS', defaultValue: true, description: 'Use CREDENTIALS_USER ~/.aws credentials (default on — uncheck to use EC2 instance IAM role via IMDS)')
     string(name: 'CREDENTIALS_USER', defaultValue: 'holautosa', description: 'OS user whose ~/.aws and ~/.ssh credentials to use (read-only; files not modified)')
     choice(
@@ -269,6 +272,8 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     JENKINS_CLDR_EIP_NAME = "${params.CLDR_EIP_NAME?.trim() ?: ''}"
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
+    DESTROY_STACK_CONFIRM = "${params.DESTROY_STACK_CONFIRM}"
+    CLEANUP_BEFORE_DESTROY = "${params.CLEANUP_BEFORE_DESTROY}"
     CREDENTIALS_USER = "${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}"
     ANSIBLE_CONTROL_VIA_JENKINS = '1'
     CM_API_PREFER_PRIVATE_IP = 'false'
@@ -320,11 +325,12 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
           env.PIPELINE_ACTION = cfg.summaryLabel
           env.VALIDATION_CHECKS = cfg.validationChecks
           env.REQUIRE_ANSIBLE = cfg.runAnsible
-          env.REQUIRE_TERRAFORM = cfg.runTerraform
-          echo "Resolved stages: validate=${cfg.runValidate}, terraform=${cfg.runTerraform}, ansible=${cfg.runAnsible}, phases=${cfg.ansiblePhases}"
+          env.RUN_DESTROY_STACK = cfg.runDestroyStack
+          env.REQUIRE_TERRAFORM = (cfg.runTerraform == 'true' || cfg.runDestroyStack == 'true') ? 'true' : 'false'
+          echo "Resolved stages: validate=${cfg.runValidate}, terraform=${cfg.runTerraform}, destroy=${cfg.runDestroyStack}, ansible=${cfg.runAnsible}, phases=${cfg.ansiblePhases}"
           echo "Ansible stage order: ${cfg.selectedAnsibleStages ?: '(none)'}"
           echoPipelineStagesQuickReference()
-          if (cfg.runValidate != 'true' && cfg.runTerraform != 'true' && cfg.runAnsible != 'true') {
+          if (cfg.runValidate != 'true' && cfg.runTerraform != 'true' && cfg.runAnsible != 'true' && cfg.runDestroyStack != 'true') {
             error("No pipeline work resolved from PIPELINE_STAGES='${params.PIPELINE_STAGES}'. Use valid checkboxes (e.g. CDH_BASE not CDH_INSTALL) or REFRESH_JENKINSFILE=YES.")
           }
           echo "Validation checks: ${cfg.validationChecks}"
@@ -350,7 +356,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
           extensions: [[$class: 'CleanBeforeCheckout']],
           userRemoteConfigs: scm.userRemoteConfigs
         ])
-        sh 'chmod +x jenkins/scripts/*.sh clone_and_run_terraform.sh clone_and_run_pvc_automation.sh generate_inventory.sh 2>/dev/null || true'
+        sh 'chmod +x jenkins/scripts/*.sh clone_and_run_terraform.sh clone_and_run_terraform_destroy.sh clone_and_run_pvc_automation.sh generate_inventory.sh 2>/dev/null || true'
         sh """
           set -euo pipefail
           export CREDENTIALS_USER='${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}'
@@ -426,6 +432,24 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     stage('Ansible 8 — ECS Cluster') {
       when { expression { return shouldRunAnsibleStage('ECS_INSTALL') } }
       steps { script { runAnsibleDeployPhase('ecs') } }
+    }
+
+    stage('Destroy Stack') {
+      when { expression { return env.RUN_DESTROY_STACK == 'true' } }
+      steps {
+        sh '''
+          set -euo pipefail
+          export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-false}"
+          export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
+          export DESTROY_STACK_CONFIRM='${params.DESTROY_STACK_CONFIRM}'
+          export CLEANUP_BEFORE_DESTROY='${params.CLEANUP_BEFORE_DESTROY}'
+          export DRY_RUN='${params.DRY_RUN}'
+          # shellcheck source=jenkins/scripts/aws-credential-check.sh
+          source ./jenkins/scripts/aws-credential-check.sh
+          aws_apply_instance_role_if_enabled
+          ./jenkins/scripts/run-destroy-stack.sh
+        '''
+      }
     }
 
     stage('Build Summary') {
@@ -591,7 +615,7 @@ def parseSelectedStages(def csv) {
 def knownPipelineStages() {
   return [
     'VALIDATE', 'TERRAFORM', 'PREREQS', 'IDENTITY', 'CM_INSTALL',
-    'CM_TLS_KRB_LDAP', 'CDH_INSTALL', 'PORTAL', 'MONITORING', 'ECS_INSTALL', 'CDH_BASE',
+    'CM_TLS_KRB_LDAP', 'CDH_INSTALL', 'PORTAL', 'MONITORING', 'ECS_INSTALL', 'CDH_BASE', 'DESTROY_STACK',
   ]
 }
 
@@ -606,7 +630,7 @@ def echoPipelineStagesQuickReference() {
   echo '''PIPELINE_STAGES quick reference (full table: Build parameter PIPELINE_STAGES_REFERENCE or jenkins/README.md):
   VALIDATE → prereqs script | TERRAFORM → EC2/inventory | PREREQS → Ansible 01-09 | PORTAL → bootstrap (10)
   IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → TLS/LDAP | CDH_INSTALL → base cluster (31)
-  MONITORING → (32) | ECS_INSTALL → (33) | Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL
+  MONITORING → (32) | ECS_INSTALL → (33) | DESTROY_STACK → terraform destroy | Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL
   PORTAL may auto-insert when DEPLOYMENT_PORTAL_ENABLED and CM/CDH/ECS stages are selected without PORTAL.'''
 }
 
@@ -712,6 +736,7 @@ def resolvePipelineStages(def stagesCsv, def validationCsv) {
   }
   def ansiblePhases = ansibleStageIds.collect { ansiblePhaseForStage(it) }
   def runTerraform = stages.contains('TERRAFORM') ? 'true' : 'false'
+  def runDestroyStack = stages.contains('DESTROY_STACK') ? 'true' : 'false'
   def runAnsible = ansiblePhases.isEmpty() ? 'false' : 'true'
   def runValidate = stages.contains('VALIDATE') ? 'true' : 'false'
   def requireInventory = (runAnsible == 'true' && runTerraform != 'true') ? 'true' : 'false'
@@ -723,6 +748,7 @@ def resolvePipelineStages(def stagesCsv, def validationCsv) {
   return [
     runValidate           : runValidate,
     runTerraform            : runTerraform,
+    runDestroyStack         : runDestroyStack,
     runAnsible              : runAnsible,
     ansiblePhases           : ansiblePhases.join(','),
     selectedAnsibleStages   : ansibleStageIds.join(','),
@@ -853,7 +879,16 @@ def validatePipelineInputs() {
   def known = knownPipelineStages()
   def unknown = stages.findAll { !known.contains(it) }
   if (!unknown.isEmpty()) {
-    validationFail("Unknown PIPELINE_STAGES value(s): ${unknown.join(', ')}. Valid checkboxes: ${orderedAnsibleStageIds().plus(['VALIDATE', 'TERRAFORM', 'CDH_BASE']).join(', ')} (use ECS_INSTALL not ECS-INSTALL). Run REFRESH_JENKINSFILE=YES after Jenkinsfile changes.")
+    validationFail("Unknown PIPELINE_STAGES value(s): ${unknown.join(', ')}. Valid checkboxes: ${orderedAnsibleStageIds().plus(['VALIDATE', 'TERRAFORM', 'DESTROY_STACK', 'CDH_BASE']).join(', ')} (use ECS_INSTALL not ECS-INSTALL). Run REFRESH_JENKINSFILE=YES after Jenkinsfile changes.")
+  }
+
+  if (stages.contains('DESTROY_STACK')) {
+    if (!isParamEnabled(params.DRY_RUN) && !isParamEnabled(params.DESTROY_STACK_CONFIRM)) {
+      validationFail('DESTROY_STACK requires DESTROY_STACK_CONFIRM=true (or DRY_RUN=true for terraform destroy plan only).')
+    }
+    if (stages.contains('TERRAFORM')) {
+      echo 'WARN: PIPELINE_STAGES includes both TERRAFORM and DESTROY_STACK — provision runs first, destroy runs last in this build.'
+    }
   }
 
   def rawStages = parseSelectedStages(params.PIPELINE_STAGES)
@@ -883,7 +918,7 @@ def validatePipelineInputs() {
     validationFail('OWNER must be 64 characters or fewer.')
   }
 
-  if (stages.contains('TERRAFORM') || stages.any { it in orderedAnsibleStageIds() }) {
+  if (stages.contains('TERRAFORM') || stages.contains('DESTROY_STACK') || stages.any { it in orderedAnsibleStageIds() }) {
     if (!owner) {
       echo 'WARN: OWNER not set in Jenkins UI — must be present in tfvars or validation will fail later.'
     }
