@@ -204,6 +204,9 @@ ipactl status || true
 rm -rf /var/lib/ipa /etc/ipa
 rm -rf /etc/dirsrv/slapd-*
 
+# 3b) install_check writes /etc/ipa/default.conf — parent dir must exist after rm -rf /etc/ipa
+mkdir -p /etc/ipa /var/lib/ipa /var/log/ipa
+
 # 4) Fresh install — use lab/Jenkins passwords (default admin + DS: PseTeam@123 unless rotated)
 FQDN="$(hostname -f)"   # must match inventory FQDN, e.g. ipaserver.cldrsetup.local
 IP="$(hostname -I | awk '{print $1}')"

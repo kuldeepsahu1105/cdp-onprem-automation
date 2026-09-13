@@ -32,6 +32,17 @@
   register: ipa_preflight_binaries
   changed_when: false
 
+# install_check writes paths.IPA_DEFAULT_CONF (/etc/ipa/default.conf); parent must exist after manual rm -rf /etc/ipa
+- name: Preflight IPA install — ensure IPA state directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /etc/ipa
+    - /var/lib/ipa
+    - /var/log/ipa
+
 - name: Preflight IPA install — stat openldap client config (install_check paths)
   ansible.builtin.stat:
     path: /etc/openldap/ldap.conf
