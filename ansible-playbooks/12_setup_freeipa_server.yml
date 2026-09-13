@@ -142,11 +142,25 @@
         - ipa_server_should_run_install | bool
         - ipa_server_has_partial_state | default(false) | bool
 
+    - name: Sanitize broken /var/lib/ipa, /etc/ipa, and dirsrv before fresh ipa-server-install
+      ansible.builtin.import_tasks: common_tasks/sanitize_ipa_paths_before_fresh_install.yml
+      when:
+        - ipa_server_should_run_install | bool
+        - ipa_detect_ipactl_not_configured | default(false) | bool
+        - not (ipa_server_has_default_conf | default(false) | bool)
+
+    - name: Re-detect FreeIPA state after path sanitization
+      ansible.builtin.import_tasks: common_tasks/detect_ipa_server_install_state.yml
+      when:
+        - ipa_server_should_run_install | bool
+        - ipa_detect_ipactl_not_configured | default(false) | bool
+        - not (ipa_server_has_default_conf | default(false) | bool)
+
     - name: Refuse ipa-server-install when critical debris remains after recovery
       ansible.builtin.fail:
         msg: >-
           FreeIPA on {{ inventory_hostname }} still has partial install debris after
-          ipa-server-install --uninstall --unattended and automated path cleanup.
+          ipa-server-install --uninstall --unattended, automated path cleanup, and sanitization.
           Inspect /var/log/ipaserver-uninstall.log on the host.
           Manual recovery (as root): ipa-server-install --uninstall --unattended
           (add --force on RHEL if prompted), then as root: rm -rf /var/lib/ipa /etc/ipa and remove /etc/dirsrv/slapd-* if needed.
@@ -155,13 +169,6 @@
       when:
         - ipa_server_should_run_install | bool
         - ipa_server_has_partial_state | default(false) | bool
-
-    - name: Sanitize broken /var/lib/ipa and /etc/ipa before fresh ipa-server-install
-      ansible.builtin.import_tasks: common_tasks/sanitize_ipa_paths_before_fresh_install.yml
-      when:
-        - ipa_server_should_run_install | bool
-        - ipa_detect_ipactl_not_configured | default(false) | bool
-        - not (ipa_server_has_default_conf | default(false) | bool)
 
     - name: Preflight hostname/DNS and dig before fresh ipa-server-install
       ansible.builtin.import_tasks: common_tasks/preflight_ipa_server_install.yml

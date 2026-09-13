@@ -14,11 +14,15 @@
 {% set _ec2ss_catalog = (ec2_startstop_terraform_group_catalog | default([])) | difference(_ec2ss_forbidden) %}
 {% set _ec2ss_effective = _ec2ss_ns.out if (_ec2ss_ns.out | length > 0) else _ec2ss_catalog %}
 {% set _ec2ss_env = (
-  ec2_startstop_default_environment
+  ec2_startstop_example_environment
+  | default(ec2_startstop_default_environment | default('', true) | trim, true)
   | default(deployment_name_prefix | default('', true) | trim, true)
   | default('', true)
   | trim
 ) %}
+{% if _ec2ss_env | lower == 'development' %}
+{% set _ec2ss_env = '' %}
+{% endif %}
 {% set _ec2ss_argv = _ec2ss_effective | join(' ') %}
 {% set _ec2ss_generic = ec2_startstop_script_path ~ ' <start|stop|describe> <EnvironmentValue> <GroupValue1> [GroupValue2 ...]' %}
 script_path: "{{ ec2_startstop_script_path }}"

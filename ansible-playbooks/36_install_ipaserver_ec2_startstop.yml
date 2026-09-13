@@ -20,6 +20,7 @@
     - group_vars/all.yml
   vars:
     ec2_startstop_default_environment: "{{ deployment_name_prefix | default('', true) | trim }}"
+    ec2_startstop_example_environment: "{{ ec2_startstop_example_environment | default(ec2_startstop_default_environment, true) | trim }}"
   tasks:
     - name: Install AWS CLI (EC2 start/stop/describe)
       ansible.builtin.package:
