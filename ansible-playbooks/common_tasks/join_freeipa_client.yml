@@ -93,23 +93,83 @@
   changed_when: false
   failed_when: false
 
-- name: Obtain Kerberos ticket if missing
-  ansible.builtin.shell: echo "{{ ipaadmin_password }}" | kinit {{ ipaadmin_principal }}
-  register: kinit_result
-  changed_when: kinit_result.rc == 0
+- name: Derive whether a Kerberos ticket is needed for IPA CLI
+  ansible.builtin.set_fact:
+    ipa_client_need_kerberos_ticket: >-
+      {{
+        ('No credentials cache found' in (klist_output.stderr | default('')))
+        or ('No credentials cache found' in (klist_output.stdout | default('')))
+        or (klist_output.rc | default(0) | int != 0)
+      }}
+
+- name: Obtain Kerberos ticket via host keytab (enrolled client)
+  ansible.builtin.command:
+    argv:
+      - kinit
+      - -k
+      - -t
+      - /etc/krb5.keytab
+      - "host/{{ ansible_fqdn }}@{{ ipaserver_realm }}"
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+  register: kinit_host_keytab_result
+  changed_when: false
+  failed_when: false
+  when:
+    - ipa_client_need_kerberos_ticket | bool
+    - ipa_client_has_default_conf | default(false) | bool
+
+- name: Obtain Kerberos ticket via IPA admin password
+  ansible.builtin.shell: kinit -c "FILE:{{ ipa_kerberos_ccache_path }}" "{{ ipaadmin_principal }}"
+  args:
+    stdin: "{{ ipaadmin_password }}"
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+  register: kinit_admin_result
+  changed_when: false
+  failed_when: false
   no_log: true
-  when: "'No credentials cache found' in klist_output.stderr or klist_output.rc != 0"
+  when:
+    - ipa_client_need_kerberos_ticket | bool
+    - not (kinit_host_keytab_result.rc | default(1) | int == 0)
+
+- name: Fail with Kerberos kinit diagnostics
+  ansible.builtin.fail:
+    msg: >-
+      Kerberos kinit failed on {{ inventory_hostname }} after IPA client enrollment
+      (install skipped={{ ipa_client_has_default_conf | default(false) }}).
+      Host keytab kinit rc={{ kinit_host_keytab_result.rc | default('skipped') }};
+      admin kinit rc={{ kinit_admin_result.rc | default('skipped') }}.
+      klist rc={{ klist_output.rc | default('n/a') }} stderr={{
+        (klist_output.stderr | default('') | truncate(300, True))
+      }}.
+      Check: test -f /etc/ipa/default.conf; test -f /etc/krb5.conf;
+      klist; kinit {{ ipaadmin_principal }} (password must match ipaadmin_password /
+      Jenkins ANSIBLE_GROUP_VARS_YAML — same as FreeIPA install on ipaserver);
+      chronyc tracking (clock skew); getent hosts ipaserver.{{ ipaserver_domain }};
+      on enrolled hosts: kinit -k -t /etc/krb5.keytab host/$(hostname -f)@{{ ipaserver_realm }}.
+      Re-run: ansible-playbook -i inventory.ini 16_setup_identity_client.yml
+      --limit {{ inventory_hostname }} -e ansible_no_log=false.
+      See ansible-playbooks/docs/RUNBOOK.md identity troubleshooting.
+  when:
+    - ipa_client_need_kerberos_ticket | bool
+    - not (kinit_host_keytab_result.rc | default(1) | int == 0)
+    - not (kinit_admin_result.rc | default(1) | int == 0)
 
 - name: Verify IPA domain enrollment
   ansible.builtin.command: ipa ping
   register: ipa_ping
   changed_when: false
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
   failed_when: "'did not receive Kerberos credentials' in ipa_ping.stderr"
 
 - name: List current Kerberos ticket
   ansible.builtin.command: klist -e
   register: kerberos_ticket
   changed_when: false
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
 
 - name: Print Kerberos ticket details
   ansible.builtin.debug:
