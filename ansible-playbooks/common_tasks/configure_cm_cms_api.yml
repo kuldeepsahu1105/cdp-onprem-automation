@@ -4,6 +4,9 @@
 - name: CMS — resolve HTTPS CM API URL
   ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
 
+- name: CMS — configure Auto-TLS client truststore for management roles
+  ansible.builtin.import_tasks: configure_cm_cms_autotls_trust.yml
+
 - name: CMS — read management service
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/service"
@@ -266,6 +269,7 @@
     cms_config_changed: >-
       {{
         (cms_setup is defined and cms_setup is changed)
+        or (cms_service_truststore_put is defined and cms_service_truststore_put is changed)
         or (cms_rcg_servicemonitor_put is defined and cms_rcg_servicemonitor_put is changed)
         or (cms_rcg_reportsmanager_put is defined and cms_rcg_reportsmanager_put is changed)
         or (

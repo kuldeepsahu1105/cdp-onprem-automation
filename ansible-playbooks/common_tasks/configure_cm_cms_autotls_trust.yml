@@ -1,0 +1,128 @@
+---
+# Service Monitor / Host Monitor need CM server cert trust when Auto-TLS enables HTTPS :7183.
+# See CDP docs: Cloudera Management Service → TLS/SSL Client Truststore (ssl_client_truststore_*).
+
+- name: CMS — read CM Auto-TLS state for truststore configuration
+  ansible.builtin.import_tasks: fetch_cm_autotls_api_state.yml
+
+- name: CMS — decide whether Auto-TLS client truststore is required
+  ansible.builtin.set_fact:
+    cms_autotls_trust_required: >-
+      {{
+        (cm_cms_configure_autotls_trust | default(true) | bool)
+        and (
+          (autotls_enabled | default(false) | bool)
+          or (cm_autotls_api_enabled | default(false) | bool)
+          or ((cm_protocol | default('http')) == 'https')
+        )
+      }}
+
+- name: CMS — skip truststore when CM is not using TLS
+  ansible.builtin.debug:
+    msg: >-
+      CMS Auto-TLS truststore configuration skipped (CM TLS not active;
+      autotls_enabled={{ autotls_enabled | default(false) }},
+      cm_autotls_api_enabled={{ cm_autotls_api_enabled | default(false) }},
+      cm_protocol={{ cm_protocol | default('http') }}).
+  when: not (cms_autotls_trust_required | default(false) | bool)
+
+- name: CMS — fetch Auto-TLS truststore password from CM cert API
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/certs/truststorePassword"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    return_content: yes
+    status_code: [200]
+  register: cms_truststore_password_api
+  no_log: true
+  when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — normalize Auto-TLS truststore password
+  ansible.builtin.set_fact:
+    cms_truststore_password: "{{ cms_truststore_password_api.content | default('') | trim }}"
+  no_log: true
+  when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — fail when truststore password is empty under Auto-TLS
+  ansible.builtin.fail:
+    msg: >-
+      CM Auto-TLS is active but GET {{ cm_krb_api_url }}/certs/truststorePassword returned no password.
+      Re-run 27_setup_cm_autotls.yml or verify agent-cert on {{ cm_cms_hostname }}.
+  when:
+    - cms_autotls_trust_required | default(false) | bool
+    - (cms_truststore_password | default('') | trim) | length == 0
+
+- name: CMS — read Cloudera Management Service configuration
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/config"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cms_service_config_get
+  when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — detect drift in MGMT TLS client truststore settings
+  ansible.builtin.set_fact:
+    cms_truststore_needs_update: >-
+      {{
+        (
+          (
+            cms_service_config_get.json['items'] | default([])
+            | selectattr('name', 'equalto', 'ssl_client_truststore_location')
+            | map(attribute='value')
+            | first
+            | default('', true)
+            | trim
+          )
+          != (cm_cms_autotls_truststore_path | default('') | trim)
+        )
+        or (
+          (
+            cms_service_config_get.json['items'] | default([])
+            | selectattr('name', 'equalto', 'ssl_client_truststore_password')
+            | map(attribute='value')
+            | first
+            | default('', true)
+            | trim
+          )
+          != (cms_truststore_password | default('') | trim)
+        )
+      }}
+  when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — configure MGMT service Auto-TLS client truststore for firehose/headlamp
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/config"
+    method: PUT
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body:
+      items:
+        - name: ssl_client_truststore_location
+          value: "{{ cm_cms_autotls_truststore_path }}"
+        - name: ssl_client_truststore_password
+          value: "{{ cms_truststore_password }}"
+    status_code: [200, 204, 301, 303]
+  register: cms_service_truststore_put
+  changed_when: cms_truststore_needs_update | default(true) | bool
+  when:
+    - cms_autotls_trust_required | default(false) | bool
+    - cms_truststore_needs_update | default(true) | bool
+
+- name: CMS — note MGMT truststore already matches Auto-TLS agent paths
+  ansible.builtin.debug:
+    msg: >-
+      CMS TLS client truststore already set to {{ cm_cms_autotls_truststore_path }}
+      (Service Monitor can trust CM HTTPS).
+  when:
+    - cms_autotls_trust_required | default(false) | bool
+    - not (cms_truststore_needs_update | default(true) | bool)
