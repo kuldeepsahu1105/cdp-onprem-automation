@@ -37,6 +37,14 @@ Parameter help after **REFRESH_JENKINSFILE=YES**:
 - **`PIPELINE_STAGES`** — short checkbox help line + per-option hints via Extended Choice `descriptionPropertyValue` (plugin-dependent; some UIs only show these in job configuration).
 - Other parameters — `description` fields on boolean/string/choice params (security group, `ALLOWED_PORTS`, etc.).
 
+**Copy-paste `PIPELINE_STAGES` (full deploy through ECS):**
+
+```
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL
+```
+
+Optional tail stages (not in the line above): `STARTSTOP_AUTOMATION`, `DESTROY_STACK`. Default job checkboxes remain `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION` (see table below).
+
 Each run also prints a **quick reference** in the console at **Resolve Stages** (see `echoPipelineStagesQuickReference` in the Jenkinsfile).
 
 ## Default parameter values
@@ -45,7 +53,9 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 
 | Parameter | Default |
 |---|---|
-| `PIPELINE_STAGES` | `VALIDATE,TERRAFORM` |
+| `PIPELINE_STAGES` | `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION` (not `CDH_INSTALL`, `MONITORING`, or `ECS_INSTALL`) |
+| `DEPLOYMENT_PORTAL_ENABLED` | `true` (bootstrap Caddy portal when `MONITORING_STACK_ENABLED` and **PORTAL** stage selected) |
+| `ECS_DATA_SERVICES_DEPLOY_ENABLED` | `false` (playbook 34 only when checked or an `ECS_DEPLOY_*` box is checked) |
 | `VALIDATION_CHECKS` | `TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY` |
 | `ENVIRONMENT` | `development` |
 | `OWNER` | `ksahu-ygulati` |
@@ -57,7 +67,7 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 | `USE_CREDENTIALS_USER_AWS` | `true` (checked — holautosa `~/.aws`; uncheck for EC2 IAM role via IMDS) |
 | Instance counts/types | Same as `.tfvars.yaml` instance_groups |
 
-If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALIDATE,TERRAFORM`.
+If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION`.
 
 **Legacy token:** Saved jobs may still submit **`CDH_BASE`** — it expands to `CM_TLS_KRB_LDAP` + `CDH_INSTALL`. Run **REFRESH_JENKINSFILE=YES** after Jenkinsfile changes to reload checkboxes.
 
@@ -68,6 +78,8 @@ If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALI
 Select one or more stage checkboxes. Fixed run order (each Ansible step is its own Jenkins stage in the UI):
 
 `VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL` → `STARTSTOP_AUTOMATION` → `DESTROY_STACK`
+
+**Copy-paste (matches Jenkinsfile checkbox names):** `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL` — also at the top of **Build with Parameters** → `PIPELINE_STAGES` description and `PIPELINE_STAGES_REFERENCE` default text. Append `STARTSTOP_AUTOMATION` or `DESTROY_STACK` when needed.
 
 | Checkbox | What runs |
 |---|---|

@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-09-13.4 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-09-13.6 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -16,11 +16,16 @@ Plugin note: Extended Choice per-checkbox hints (descriptionPropertyValue) may o
       name: 'PIPELINE_STAGES',
       type: 'PT_CHECKBOX',
       value: 'VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,STARTSTOP_AUTOMATION,DESTROY_STACK',
-      defaultValue: 'VALIDATE,TERRAFORM',
+      defaultValue: 'VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION',
       multiSelectDelimiter: ',',
       visibleItemCount: 12,
       quoteValue: false,
       description: '''Stages to run (fixed order; select one or more). Full table: PIPELINE_STAGES_REFERENCE text parameter below.
+
+Copy-paste (full deploy path, no STARTSTOP/DESTROY):
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL
+
+Optional tail stages (append when needed): STARTSTOP_AUTOMATION, DESTROY_STACK
 
 Order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → STARTSTOP_AUTOMATION → DESTROY_STACK
 
@@ -34,6 +39,12 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once, then re-run with your s
     text(
       name: 'PIPELINE_STAGES_REFERENCE',
       defaultValue: '''PIPELINE_STAGES — reference (edit optional; default is documentation)
+
+Copy-paste — full stack through ECS (comma-separated, matches checkboxes above):
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL
+
+Optional (not in line above): STARTSTOP_AUTOMATION, DESTROY_STACK
+Job defaults (lighter): VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION
 
 Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → STARTSTOP_AUTOMATION → DESTROY_STACK
 
@@ -58,16 +69,17 @@ Destroy safety:
 
 Legacy: CDH_BASE (old jobs) expands to CM_TLS_KRB_LDAP + CDH_INSTALL — check those two boxes instead.
 
-PORTAL auto-run: only when AUTO_INCLUDE_PORTAL_BOOTSTRAP=true and you select CM_INSTALL, CDH_INSTALL, MONITORING, or ECS without PORTAL (not CM_TLS-only or IDENTITY-only). Default: check PORTAL explicitly.
+PORTAL auto-run: only when AUTO_INCLUDE_PORTAL_BOOTSTRAP=true and you select CM_INSTALL, CDH_INSTALL, MONITORING, or ECS without PORTAL (not CM_TLS-only or IDENTITY-only). Default job checkboxes include PORTAL (and STARTSTOP_AUTOMATION).
 
 Examples:
-  Validate + provision only: VALIDATE,TERRAFORM
+  New job defaults: VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION (ECS_INSTALL and CDH_INSTALL unchecked; ECS_DATA_SERVICES_DEPLOY_ENABLED=false)
+  Validate + provision only: VALIDATE,TERRAFORM (uncheck PORTAL and STARTSTOP_AUTOMATION)
   Through CM (greenfield): VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL (+ PORTAL auto if portal enabled)
   Old PREREQS,IDENTITY,CM_INSTALL,CDH_BASE equivalent: PREREQS,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL (+ VALIDATE,TERRAFORM if you still provision VMs; + PORTAL auto when DEPLOYMENT_PORTAL_ENABLED)
 
 Details: jenkins/README.md
 ''',
-      description: 'Stage guide (multiline text — always visible on Build with Parameters). Default documents all checkboxes including DESTROY_STACK; editing this field does not change what runs.'
+      description: 'Stage guide (multiline text — always visible on Build with Parameters). Top line is copy-paste VALIDATE…ECS_INSTALL; optional STARTSTOP_AUTOMATION/DESTROY_STACK noted. Editing this field does not change what runs.'
     )
     extendedChoice(
       name: 'VALIDATION_CHECKS',
@@ -617,7 +629,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
 }
 
 def defaultPipelineStages() {
-  return 'VALIDATE,TERRAFORM'
+  return 'VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION'
 }
 
 def defaultValidationChecks() {
@@ -689,6 +701,8 @@ def orderedAnsibleStageIds() {
 
 def echoPipelineStagesQuickReference() {
   echo '''PIPELINE_STAGES quick reference (full table: Build parameter PIPELINE_STAGES_REFERENCE or jenkins/README.md):
+  Copy-paste full path: VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL
+  Optional: STARTSTOP_AUTOMATION, DESTROY_STACK | Job defaults: VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION
   VALIDATE → prereqs script | TERRAFORM → EC2/inventory | PREREQS → Ansible 01-09 | PORTAL → bootstrap (10)
   IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → 27→29→30→28 | CDH_INSTALL → base cluster (31)
   MONITORING → (32) | ECS_INSTALL → (33) | STARTSTOP_AUTOMATION → ipaserver EC2 script | DESTROY_STACK → destroy (DESTROY_STACK_CONFIRM or DRY_RUN plan)
