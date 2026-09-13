@@ -72,6 +72,9 @@ ipaserver_setup_dns: yes
 dns_forwarders: "no"
 reverse_zones: "no"
 chrony_enabled: "yes"
+# AWS: when dns_forwarders=no, ipa-server-install uses VPC resolver (set_dns_facts) by default.
+# Set false to use --no-forwarders only (legacy 10_setup_freeipa_server.yml behavior).
+ipa_server_install_use_vpc_dns_forwarder: true
 
 # Active Directory (when identity_provider: ad)
 # Leave ad_kdc_host empty unless using AD; placeholder values break identity auto-detect.

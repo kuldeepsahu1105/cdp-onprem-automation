@@ -183,6 +183,10 @@ This creates EC2 instances and generates `ansible_inventory.ini`. Copy or symlin
 ipaserver ansible_host=<public_ip> private_ip=<private_ip> cldr_hostname=ipaserver
 ```
 
+### Why FreeIPA install fails after lab re-runs (playbook 12)
+
+The original **`10_setup_freeipa_server.yml`** assumed a **fresh VM** or a simple gate: run **`ipa-server-install`** when **`ipactl status` rc ≠ 0** or **`/etc/ipa/default.conf`** is missing. Repeated **partial installs**, **`ipa-server-install --uninstall`**, and manual cleanup often leave **broken state** (`ipactl` rc=4, empty **`/var/lib/ipa`**, stale **`default.conf`**). Playbook **12** (via **`11_identity_setup`**) still runs **detect → recover → sanitize** before install, but the **install decision** again matches that original gate after cleanup. Other deltas vs the paste: **AWS VPC DNS forwarder** at install when `dns_forwarders=no` (override with **`ipa_server_install_use_vpc_dns_forwarder: false`** for legacy **`--no-forwarders`**), **`bind-utils`** preflight (PR #114), and stricter debris handling so a half-uninstalled host does not silently skip install.
+
 ### 3. Detect identity provider
 
 ```bash

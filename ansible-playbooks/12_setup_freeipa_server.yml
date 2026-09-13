@@ -113,9 +113,48 @@
         - not (ipa_server_has_default_conf | bool)
         - ipa_detect_ipactl_not_configured | default(false) | bool
 
+    - name: IPA install gate — check default.conf after recovery/sanitize
+      ansible.builtin.stat:
+        path: /etc/ipa/default.conf
+      register: ipa_install_gate_default_conf
+
+    - name: IPA install gate — ipactl status (original 10_setup_freeipa_server.yml gate)
+      ansible.builtin.command: ipactl status
+      register: ipa_install_gate_ipactl
+      changed_when: false
+      failed_when: false
+
+    - name: IPA install gate — run ipa-server-install when ipactl unhealthy or no default.conf
+      ansible.builtin.set_fact:
+        ipa_server_should_run_install: >-
+          {{
+            (ipa_install_gate_ipactl.rc | default(1) | int) != 0
+            or not (ipa_install_gate_default_conf.stat.exists | default(false) | bool)
+          }}
+
+    - name: IPA install gate — summarize install decision
+      ansible.builtin.debug:
+        msg:
+          - >-
+            ipa-server-install will run: {{ ipa_server_should_run_install | bool }}
+            (original gate: ipactl rc != 0 or missing /etc/ipa/default.conf).
+          - "ipactl rc={{ ipa_install_gate_ipactl.rc | default('n/a') }}; default.conf present={{ ipa_install_gate_default_conf.stat.exists | default(false) }}"
+          - "detect facts: has_default_conf={{ ipa_server_has_default_conf | default(false) }}, ipactl_not_configured={{ ipa_detect_ipactl_not_configured | default(false) }}, partial_debris={{ ipa_server_has_partial_state | default(false) }}"
+          - >-
+            DNS install forwarders: {{
+              'VPC ' ~ effective_vpc_dns_resolver
+              if (
+                dns_forwarders == 'no'
+                and effective_deployment_env | default('') == 'aws'
+                and effective_vpc_dns_resolver | default('') | length > 0
+                and (ipa_server_install_use_vpc_dns_forwarder | default(true) | bool)
+              )
+              else ('custom ' ~ dns_forwarders if dns_forwarders | default('') | length > 0 and dns_forwarders != 'no' else '--no-forwarders')
+            }}
+
     - name: Preflight hostname/DNS and dig before fresh ipa-server-install
       ansible.builtin.import_tasks: common_tasks/preflight_ipa_server_install.yml
-      when: not (ipa_server_has_default_conf | bool)
+      when: ipa_server_should_run_install | bool
 
     - name: Run IPA server installation
       ansible.builtin.command: >
@@ -128,7 +167,7 @@
         --admin-password={{ ipaadmin_password }}
         --no-dnssec-validation
         --netbios-name={{ netbios_name }}
-        {% if dns_forwarders == 'no' and effective_deployment_env | default('') == 'aws' and effective_vpc_dns_resolver | default('') | length > 0 %}
+        {% if dns_forwarders == 'no' and effective_deployment_env | default('') == 'aws' and effective_vpc_dns_resolver | default('') | length > 0 and (ipa_server_install_use_vpc_dns_forwarder | default(true) | bool) %}
         --forwarder={{ effective_vpc_dns_resolver }}
         {% elif dns_forwarders == 'no' %} --no-forwarders {% elif dns_forwarders | default('') | length > 0 %} --forwarder={{ dns_forwarders }} {% endif %}
         {% if reverse_zones == 'no' %} --no-reverse {% endif %}
@@ -137,8 +176,7 @@
       changed_when: "'The ipa-server-install command was successful' in ipa_install_result.stderr"
       failed_when: false
       no_log: true
-      # Install when ipactl/default.conf say not configured (see detect_ipa_server_install_state); partial debris fails there.
-      when: not (ipa_server_has_default_conf | bool)
+      when: ipa_server_should_run_install | bool
 
     - name: Capture tail of ipaserver-install.log when install failed
       ansible.builtin.shell: tail -n 50 /var/log/ipaserver-install.log 2>/dev/null || true
@@ -146,7 +184,7 @@
       changed_when: false
       no_log: true
       when:
-        - not (ipa_server_has_default_conf | bool)
+        - ipa_server_should_run_install | bool
         - ipa_install_result is defined
         - ipa_install_result.rc | default(0) != 0
 
@@ -158,7 +196,7 @@
           Last 50 lines of /var/log/ipaserver-install.log:
           {{ ipa_install_log_tail.stdout | default('(log missing or empty)') }}
       when:
-        - not (ipa_server_has_default_conf | bool)
+        - ipa_server_should_run_install | bool
         - ipa_install_result is defined
         - ipa_install_result.rc | default(0) != 0
 
@@ -197,7 +235,8 @@
         - dns_forwarders == 'no'
         - effective_deployment_env | default('') == 'aws'
         - effective_vpc_dns_resolver | default('') | length > 0
-        - ipa_server_has_default_conf | bool
+        - ipa_server_install_use_vpc_dns_forwarder | default(true) | bool
+        - not (ipa_server_should_run_install | default(false) | bool)
 
     - name: Print Current Kerberos Ticket
       command: klist -e
