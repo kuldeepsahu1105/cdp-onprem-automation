@@ -1,5 +1,6 @@
 ### ansible-playbook -i inventory.ini 36_install_ipaserver_ec2_startstop.yml
 # Deploy EC2 start/stop/describe helper on ipaserver (IAM role on instance performs API calls).
+# Script path: {{ ec2_startstop_script_dir }}/{{ prefix }}_cldr_ec2_strt_stp.sh (prefix from deployment_name_prefix; template cldr_ec2_strt_stp.sh.j2).
 ---
 - import_playbook: 00_ensure_collections.yml
 
@@ -18,7 +19,6 @@
   vars_files:
     - group_vars/all.yml
   vars:
-    ec2_startstop_script_path: "{{ ec2_startstop_script_path | default('/root/ptgy_cldr_ec2_strt_stp.sh') }}"
     ec2_startstop_default_environment: "{{ deployment_name_prefix | default('', true) | trim }}"
   tasks:
     - name: Install AWS CLI (EC2 start/stop/describe)
@@ -30,7 +30,7 @@
 
     - name: Deploy EC2 start/stop script on ipaserver
       ansible.builtin.template:
-        src: templates/ptgy_cldr_ec2_strt_stp.sh.j2
+        src: templates/cldr_ec2_strt_stp.sh.j2
         dest: "{{ ec2_startstop_script_path }}"
         owner: root
         group: root

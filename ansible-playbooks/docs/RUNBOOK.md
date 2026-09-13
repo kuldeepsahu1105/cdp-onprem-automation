@@ -383,8 +383,8 @@ Use this after **DESTROY_STACK** (or a new `ENVIRONMENT` workspace) for a full r
 |---|---|
 | 1 | Identity phase installs the script: playbook **`36_install_ipaserver_ec2_startstop.yml`** (also at end of **`IDENTITY`** / `pvc_setup` phase 2). |
 | 2 | Jenkins: check **`STARTSTOP_AUTOMATION`**, set **`EC2_STARTSTOP_OPERATION`** (`describe` \| `start` \| `stop`), **`EC2_STARTSTOP_GROUPS`** (comma-separated Terraform `instance_groups` keys → EC2 tag **`Group`**), and **`ENVIRONMENT`** (→ tag **`environment`**). |
-| 3 | **`stop` from Jenkins:** set **`EC2_STARTSTOP_CONFIRM=true`**. Manual stop on ipaserver: `/root/ptgy_cldr_ec2_strt_stp.sh stop <environment> <group> …` prompts **`yes`**. |
-| 4 | Example on ipaserver: `ptgy_cldr_ec2_strt_stp.sh describe development pvcbase_worker pvcecs_worker` |
+| 3 | **`stop` from Jenkins:** set **`EC2_STARTSTOP_CONFIRM=true`**. Manual stop on ipaserver: `/root/<prefix>_cldr_ec2_strt_stp.sh stop <environment> <group> …` prompts **`yes`** (`<prefix>` = sanitized **`deployment_name_prefix`** / Jenkins **`ENVIRONMENT`**; override with **`ec2_startstop_script_name_prefix`**). |
+| 4 | Example on ipaserver: `/root/development_cldr_ec2_strt_stp.sh describe development pvcbase_worker pvcecs_worker` |
 
 ### Tear down (fresh stack)
 

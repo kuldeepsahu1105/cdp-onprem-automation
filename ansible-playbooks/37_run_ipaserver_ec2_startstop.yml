@@ -24,7 +24,6 @@
   vars_files:
     - group_vars/all.yml
   vars:
-    ec2_startstop_script_path: "{{ ec2_startstop_script_path | default('/root/ptgy_cldr_ec2_strt_stp.sh') }}"
     ec2_startstop_default_environment: "{{ deployment_name_prefix | default('', true) | trim }}"
     _ec2_startstop_groups_list: >-
       {{

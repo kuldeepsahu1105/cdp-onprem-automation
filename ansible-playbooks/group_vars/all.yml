@@ -670,8 +670,32 @@ ecs_model_registry_ozone_service_id: o3service1
 portal_automation_owner_display: "Kuldeep Sahu"
 deployment_owner: ""
 deployment_name_prefix: ""
-# ipaserver EC2 start/stop helper (36/37, /root script; tags environment + Group from Terraform)
-ec2_startstop_script_path: /root/ptgy_cldr_ec2_strt_stp.sh
+# ipaserver EC2 start/stop helper (36/37; tags environment + Group from Terraform).
+# On-disk name: {prefix}_cldr_ec2_strt_stp.sh where prefix matches deployment_name_prefix (Jenkins ENVIRONMENT).
+ec2_startstop_script_name_prefix: ""
+ec2_startstop_script_dir: /root
+ec2_startstop_script_prefix_effective: >-
+  {{
+    (ec2_startstop_script_name_prefix | default('', true) | trim)
+    if (ec2_startstop_script_name_prefix | default('', true) | trim | length > 0)
+    else (deployment_name_prefix | default('', true) | trim)
+  }}
+ec2_startstop_script_prefix_sanitized: >-
+  {{
+    ec2_startstop_script_prefix_effective
+    | lower
+    | regex_replace('[^a-z0-9_]', '_')
+    | regex_replace('_+', '_')
+    | regex_replace('^_', '')
+    | regex_replace('_$', '')
+  }}
+ec2_startstop_script_basename: >-
+  {{
+    (ec2_startstop_script_prefix_sanitized ~ '_cldr_ec2_strt_stp.sh')
+    if (ec2_startstop_script_prefix_sanitized | length > 0)
+    else 'cldr_ec2_strt_stp.sh'
+  }}
+ec2_startstop_script_path: "{{ ec2_startstop_script_dir }}/{{ ec2_startstop_script_basename }}"
 # Portal + Caddy on ops host when deployment_portal_enabled + caddy_vhost_enabled (resolve_deployment_portal_caddy_enabled.yml). monitoring_stack_enabled gates monitoring install in sync only.
 deployment_portal_enabled: true
 # Set by Jenkins PORTAL / pvc_setup bootstrap — fail instead of silent skip when Caddy gate is off.
