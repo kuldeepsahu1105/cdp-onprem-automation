@@ -859,8 +859,10 @@ deployment_portal_expose_credentials: true
 #   false: do not expose SSH private keys on the portal.
 #   auto: expose keys only when deployment_portal_basic_auth_enabled is true (HTTP auth on /downloads/*).
 deployment_portal_expose_ssh_keys: true
+# Terraform EC2 key pair name (no .pem). Jenkins sets KEYPAIR_NAME; override here for standalone portal refresh.
+terraform_ec2_keypair_name: ""
 # Optional explicit paths on the Ansible controller (Jenkins/laptop), not on the portal host. Empty = auto-discovery.
-# EC2 PEM: sshkey.pem, ANSIBLE_PRIVATE_KEY when *.pem, deployment_portal_ssh_private_key_path_override (legacy).
+# EC2 PEM: prefer sshkey.pem + {terraform_ec2_keypair_name}.pem (Terraform copy), then ANSIBLE_PRIVATE_KEY.
 deployment_portal_ssh_pem_path: ""
 # Auto-TLS key: cm_private_key_path, autotls_private_key_path, id_rsa, or same PEM when only one key exists.
 deployment_portal_ssh_autotls_key_path: ""

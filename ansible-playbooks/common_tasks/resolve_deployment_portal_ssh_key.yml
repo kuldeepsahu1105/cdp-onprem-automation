@@ -1,10 +1,22 @@
 ---
 # Resolve EC2 (Ansible/Jenkins PEM) and optional distinct Auto-TLS key on the Ansible controller.
 
+- name: Resolve Terraform EC2 keypair name for portal SSH file naming
+  ansible.builtin.set_fact:
+    deployment_portal_terraform_keypair_name: >-
+      {{
+        lookup('env', 'KEYPAIR_NAME')
+        | default(terraform_ec2_keypair_name | default('', true), true)
+        | default('', true)
+        | trim
+      }}
+
 - name: Resolve portal EC2 cluster SSH private key (PEM)
   ansible.builtin.set_fact:
     deployment_portal_ssh_ec2_key_path: "{{ lookup('ansible.builtin.first_found', _ec2_key_lookup, errors='ignore') | default('', true) }}"
   vars:
+    _terraform_kp: "{{ deployment_portal_terraform_keypair_name | default('', true) | trim }}"
+    _terraform_kp_pem: "{{ (_terraform_kp ~ '.pem') if (_terraform_kp | length > 0) else '' }}"
     _pem_explicit: >-
       {{
         (
@@ -32,9 +44,11 @@
       {{
         ([_pem_explicit | basename] if (_pem_explicit | length > 0 and (_pem_explicit is search('/'))) else [])
         + ([_pem_explicit] if (_pem_explicit | length > 0 and not (_pem_explicit is search('/'))) else [])
+        + ([_terraform_kp_pem] if (_terraform_kp_pem | length > 0) else [])
+        + ['sshkey.pem']
         + ([_env_pem] if (_env_pem | length > 0) else [])
         + ([_env_key | basename] if (_env_key | length > 0 and (_env_pem | length == 0)) else [])
-        + ['sshkey.pem', 'id_rsa']
+        + ['id_rsa']
         + ([_ansible_pem] if (_ansible_pem | length > 0) else [])
         + (
           [_ansible_key_rel]
@@ -91,13 +105,24 @@
       paths: "{{ _search_paths }}"
       skip: true
 
-- name: Derive portal EC2 SSH download basename
+- name: Derive portal EC2 SSH download basename (match Terraform {keypair_name}.pem)
   ansible.builtin.set_fact:
-    deployment_portal_ssh_ec2_download_basename: >-
+    deployment_portal_ssh_ec2_download_basename: "{{ _portal_ec2_basename }}"
+  vars:
+    _kp: "{{ deployment_portal_terraform_keypair_name | default('', true) | trim }}"
+    _src_base: "{{ deployment_portal_ssh_ec2_key_path | basename }}"
+    _portal_ec2_basename: >-
       {{
-        'cluster-access.pem'
-        if (deployment_portal_ssh_ec2_key_path | basename | regex_search('(?i)\\.pem$'))
-        else ('cluster-access-' ~ (deployment_portal_ssh_ec2_key_path | basename))
+        (_kp ~ '.pem')
+        if (
+          (_kp | length > 0)
+          and (_src_base in ['sshkey.pem', _kp ~ '.pem'])
+        )
+        else (
+          _src_base
+          if (_src_base | regex_search('(?i)\\.pem$'))
+          else ('cluster-access-' ~ _src_base)
+        )
       }}
   when: deployment_portal_ssh_ec2_key_path | default('') | length > 0
 
@@ -123,7 +148,7 @@
           'controller_path': _ec2_path,
           'basename': deployment_portal_ssh_ec2_download_basename | default('cluster-access.pem', true),
           'label': 'EC2 cluster SSH (' ~ (deployment_portal_ssh_ec2_download_basename | default('cluster-access.pem', true)) ~ ')',
-          'note': 'chmod 600 after download; ' ~ (ansible_user | default('ec2-user')) ~ '@ cluster nodes'
+          'note': 'Terraform EC2 key pair PEM (same as ansible-playbooks/sshkey.pem); chmod 400 after download; ' ~ (ansible_user | default('ec2-user')) ~ '@ cluster nodes'
         }] if (_ec2_path | length > 0) else [])
         + ([{
           'controller_path': _autotls_path,
