@@ -1,0 +1,44 @@
+---
+# Idempotent CM PostgreSQL databases (roles + CREATE DATABASE). Same SQL as playbook 23.
+# Runs on postgres_inventory_host when scm database is missing (e.g. partial 23 init).
+
+- name: Check whether CM scm database exists in PostgreSQL
+  community.postgresql.postgresql_query:
+    login_host: "{{ ansible_fqdn }}"
+    login_port: "{{ postgres_port }}"
+    login_user: "{{ postgres_user }}"
+    login_password: "{{ postgres_password }}"
+    db: "{{ postgres_db }}"
+    query: "SELECT 1 AS exists FROM pg_database WHERE datname = %(dbname)s"
+    named_args:
+      dbname: "{{ scm_db_name }}"
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  become_user: postgres
+  register: cm_scm_database_check
+  changed_when: false
+
+- name: Create CM PostgreSQL databases and roles when scm database is missing
+  when: cm_scm_database_check.query_result | default([]) | length == 0
+  block:
+    - name: Generate CM database init SQL script from template
+      ansible.builtin.template:
+        src: templates/create_cm_dbs.sql.j2
+        dest: /tmp/init.sql
+        owner: postgres
+        group: postgres
+        mode: "0644"
+      delegate_to: "{{ postgres_inventory_host }}"
+
+    - name: Run CM database init SQL on PostgreSQL
+      ansible.builtin.shell: |
+        PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -f /tmp/init.sql
+      delegate_to: "{{ postgres_inventory_host }}"
+      register: cm_db_init_sql
+      changed_when: cm_db_init_sql.rc == 0
+      failed_when: cm_db_init_sql.rc != 0
+
+    - name: Display CM database init SQL output
+      ansible.builtin.debug:
+        msg: "{{ cm_db_init_sql.stdout | default('') | replace('\t', '    ') | split('\n') }}"
+      when: cm_db_init_sql.stdout is defined
