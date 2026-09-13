@@ -207,7 +207,7 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 |---|---|
 | `DRY_RUN` | Terraform plan only / Ansible `--check --diff` |
 | `TFVARS_FILE` | Relative config path (auto-detect if empty) |
-| `GIT_BRANCH` | Branch to checkout |
+| `GIT_BRANCH` | Branch to checkout — use **`main` at or after `691b943`** for PORTAL operator-access fixes (`deployment_portal_postgres_fqdn` and related localhost facts) |
 | `NOTIFICATION_EMAIL` | Email recipient |
 | `ANSIBLE_GROUP_VARS_YAML` | Ansible-only YAML overrides (allowed keys in `jenkins/ansible-group-vars-allowed-keys.yaml`) — not full `all.yml` |
 | `CM_REPO_USERNAME` | Optional archive.cloudera.com username (empty = skip; no early validation failure) |

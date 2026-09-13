@@ -1,0 +1,34 @@
+---
+# Copy play-1 (localhost) facts onto the current play host for deployment_portal_operator_access.j2.
+# Required when template lookup runs with the ops host variable namespace (e.g. sync refresh).
+
+- name: Apply deployment portal operator-access facts from localhost
+  ansible.builtin.set_fact:
+    deployment_portal_anchor_fqdn: "{{ hostvars['localhost']['deployment_portal_anchor_fqdn'] | default('') }}"
+    deployment_portal_has_ipa: "{{ hostvars['localhost']['deployment_portal_has_ipa'] | default(false) | bool }}"
+    deployment_portal_ipa_fqdn: "{{ hostvars['localhost']['deployment_portal_ipa_fqdn'] | default('') }}"
+    deployment_portal_inventory_hosts: "{{ hostvars['localhost']['deployment_portal_inventory_hosts'] | default([]) }}"
+    deployment_portal_monitoring_deployed: "{{ hostvars['localhost']['deployment_portal_monitoring_deployed'] | default(false) | bool }}"
+    deployment_portal_monitoring_routes_enabled: >-
+      {{
+        hostvars['localhost']['deployment_portal_monitoring_routes_enabled']
+        | default(hostvars['localhost']['deployment_portal_context'].monitoring.enabled | default(false))
+        | bool
+      }}
+    deployment_portal_access_urls: "{{ hostvars['localhost']['deployment_portal_access_urls'] | default({}) }}"
+    deployment_portal_access_profile_effective: "{{ hostvars['localhost']['deployment_portal_access_profile_effective'] | default('cloud') }}"
+    caddy_vhost_urls: "{{ hostvars['localhost']['caddy_vhost_urls'] | default({}) }}"
+    caddy_vhost_urls_external: "{{ hostvars['localhost']['caddy_vhost_urls_external'] | default({}) }}"
+    deployment_portal_cm_fqdn: "{{ hostvars['localhost']['deployment_portal_cm_fqdn'] | default('') }}"
+    deployment_portal_postgres_fqdn: >-
+      {{
+        hostvars['localhost']['deployment_portal_postgres_fqdn']
+        | default(postgres_host_fqdn | default(''))
+      }}
+    deployment_portal_base_master_fqdn: "{{ hostvars['localhost']['deployment_portal_base_master_fqdn'] | default('') }}"
+    deployment_portal_ecs_present: "{{ hostvars['localhost']['deployment_portal_ecs_present'] | default(false) | bool }}"
+    deployment_portal_ecs_api_cache: "{{ hostvars['localhost']['deployment_portal_ecs_api_cache'] | default({}) }}"
+    pgadmin_caddy_public_url: "{{ hostvars['localhost']['pgadmin_caddy_public_url'] | default('') }}"
+    ipa_caddy_modern_public_url: "{{ hostvars['localhost']['ipa_caddy_modern_public_url'] | default('') }}"
+    ipa_caddy_legacy_public_url: "{{ hostvars['localhost']['ipa_caddy_legacy_public_url'] | default('') }}"
+  when: hostvars['localhost'] is defined
