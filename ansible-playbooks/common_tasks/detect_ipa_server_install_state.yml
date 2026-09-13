@@ -21,6 +21,18 @@
   register: ipa_detect_ca_crt
   failed_when: false
 
+- name: Detect IPA — check for /var/lib/ipa directory
+  ansible.builtin.stat:
+    path: /var/lib/ipa
+  register: ipa_detect_var_lib_ipa_dir
+  failed_when: false
+
+- name: Detect IPA — check for sysrestore.state under /var/lib/ipa
+  ansible.builtin.stat:
+    path: /var/lib/ipa/sysrestore/sysrestore.state
+  register: ipa_detect_sysrestore_state
+  failed_when: false
+
 - name: Detect IPA — check for leftover content under /var/lib/ipa
   ansible.builtin.find:
     paths: /var/lib/ipa
@@ -64,11 +76,17 @@
   changed_when: false
   failed_when: false
 
-- name: Detect IPA — derive critical install debris (ignore empty /var/lib/ipa)
+- name: Detect IPA — derive critical install debris (broken /var/lib/ipa without sysrestore)
   ansible.builtin.set_fact:
+    ipa_detect_broken_var_lib_ipa: >-
+      {{
+        (ipa_detect_var_lib_ipa_dir.stat.exists | default(false) | bool)
+        and not (ipa_detect_sysrestore_state.stat.exists | default(false) | bool)
+      }}
     ipa_detect_critical_debris: >-
       {{
         (ipa_detect_ca_crt.stat.exists | default(false) | bool)
+        or (ipa_detect_broken_var_lib_ipa | default(false) | bool)
         or ((ipa_detect_var_lib_ipa_contents.matched | default(0) | int) > 0)
         or ((ipa_detect_dirsrv_instances.matched | default(0) | int) > 0)
       }}

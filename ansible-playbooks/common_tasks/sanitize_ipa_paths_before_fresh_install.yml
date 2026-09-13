@@ -1,0 +1,64 @@
+---
+# Remove broken FreeIPA path fragments before ipa-server-install when IPA is not configured.
+# Partial or empty /var/lib/ipa (missing sysrestore/sysrestore.state) causes IDENTITY phase failures
+# on RHEL 9 / FreeIPA 4.13: [Errno 2] ... '/var/lib/ipa/sysrestore/sysrestore.state'
+
+- name: Sanitize IPA paths — stat /var/lib/ipa
+  ansible.builtin.stat:
+    path: /var/lib/ipa
+  register: ipa_sanitize_var_lib_ipa
+  failed_when: false
+
+- name: Sanitize IPA paths — stat sysrestore.state
+  ansible.builtin.stat:
+    path: /var/lib/ipa/sysrestore/sysrestore.state
+  register: ipa_sanitize_sysrestore_state
+  failed_when: false
+
+- name: Sanitize IPA paths — stat /etc/ipa
+  ansible.builtin.stat:
+    path: /etc/ipa
+  register: ipa_sanitize_etc_ipa
+  failed_when: false
+
+- name: Sanitize IPA paths — decide /var/lib/ipa removal
+  ansible.builtin.set_fact:
+    ipa_sanitize_remove_var_lib_ipa: >-
+      {{
+        (ipa_sanitize_var_lib_ipa.stat.exists | default(false) | bool)
+        and not (ipa_sanitize_sysrestore_state.stat.exists | default(false) | bool)
+      }}
+
+- name: Sanitize IPA paths — remove broken or empty /var/lib/ipa
+  ansible.builtin.file:
+    path: /var/lib/ipa
+    state: absent
+  when: ipa_sanitize_remove_var_lib_ipa | bool
+
+- name: Sanitize IPA paths — remove leftover /etc/ipa when not configured
+  ansible.builtin.file:
+    path: /etc/ipa
+    state: absent
+  when:
+    - ipa_detect_ipactl_not_configured | default(false) | bool
+    - ipa_sanitize_etc_ipa.stat.exists | default(false) | bool
+
+- name: Sanitize IPA paths — note removals before fresh install
+  ansible.builtin.debug:
+    msg: >-
+      IPA is not configured on {{ inventory_hostname }}; removed {{
+        ' /var/lib/ipa (missing sysrestore.state),'
+        if (ipa_sanitize_remove_var_lib_ipa | bool) else ''
+      }}{{
+        ' /etc/ipa fragments,'
+        if (
+          (ipa_detect_ipactl_not_configured | default(false) | bool)
+          and (ipa_sanitize_etc_ipa.stat.exists | default(false) | bool)
+        ) else ''
+      }} preparing for ipa-server-install.
+  when:
+    - ipa_sanitize_remove_var_lib_ipa | bool
+      or (
+        (ipa_detect_ipactl_not_configured | default(false) | bool)
+        and (ipa_sanitize_etc_ipa.stat.exists | default(false) | bool)
+      )

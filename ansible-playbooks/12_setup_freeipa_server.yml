@@ -87,7 +87,7 @@
           ipa-server-install --uninstall --unattended and automated path cleanup.
           Inspect /var/log/ipaserver-uninstall.log on the host.
           Manual recovery (as root): ipa-server-install --uninstall --unattended
-          (add --force on RHEL if prompted), then optional cleanup under /etc/ipa, /var/lib/ipa, /etc/dirsrv.
+          (add --force on RHEL if prompted), then as root: rm -rf /var/lib/ipa /etc/ipa and remove /etc/dirsrv/slapd-* if needed.
           Re-run: ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}
           See ansible-playbooks/docs/RUNBOOK.md (FreeIPA partial install).
       when: ipa_server_has_partial_state | bool
@@ -106,6 +106,12 @@
       when:
         - ipa_detect_ipactl_not_configured | default(false) | bool
         - ipa_server_install_clean_host | bool
+
+    - name: Sanitize broken /var/lib/ipa and /etc/ipa before fresh ipa-server-install
+      ansible.builtin.import_tasks: common_tasks/sanitize_ipa_paths_before_fresh_install.yml
+      when:
+        - not (ipa_server_has_default_conf | bool)
+        - ipa_detect_ipactl_not_configured | default(false) | bool
 
     - name: Run IPA server installation
       command: >

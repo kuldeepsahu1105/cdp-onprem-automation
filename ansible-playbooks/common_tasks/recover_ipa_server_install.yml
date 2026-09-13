@@ -126,25 +126,15 @@
     - ipa_recover_uninstall.rc | default(1) == 0
     - ipa_recover_ipactl_not_configured | default(false) | bool
   block:
-    - name: Recover IPA — remove leftover /etc/ipa/ca.crt
+    - name: Recover IPA — remove leftover /etc/ipa tree
       ansible.builtin.file:
-        path: /etc/ipa/ca.crt
+        path: /etc/ipa
         state: absent
 
-    - name: Recover IPA — find leftover files under /var/lib/ipa
-      ansible.builtin.find:
-        paths: /var/lib/ipa
-        file_type: any
-        depth: 20
-      register: ipa_recover_var_lib_leftover
-      failed_when: false
-
-    - name: Recover IPA — empty /var/lib/ipa
+    - name: Recover IPA — remove leftover /var/lib/ipa tree
       ansible.builtin.file:
-        path: "{{ item.path }}"
+        path: /var/lib/ipa
         state: absent
-      loop: "{{ ipa_recover_var_lib_leftover.files | default([]) }}"
-      when: (ipa_recover_var_lib_leftover.matched | default(0) | int) > 0
 
     - name: Recover IPA — find leftover Directory Server instance dirs
       ansible.builtin.find:
@@ -165,4 +155,4 @@
       ansible.builtin.debug:
         msg: >-
           ipa-server-install --uninstall succeeded (rc=0) but ipactl is not configured;
-          removed leftover FreeIPA paths under /etc/ipa, /var/lib/ipa, and /etc/dirsrv when present.
+          removed leftover /etc/ipa, /var/lib/ipa, and /etc/dirsrv/slapd-* when present.
