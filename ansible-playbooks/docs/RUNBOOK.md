@@ -247,6 +247,15 @@ ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml
 
 `31_setup_base_cluster.yml` builds the cluster from `templates/base_cluster_cluster_spec.j2`. Toggle services with `base_cluster_install_services` in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`). Cluster **create** runs only when the cluster does not exist in CM; adding services to an existing cluster requires CM UI/API changes.
 
+**ZooKeeper placement:** When `base_cluster_install_services.zookeeper` is true (default), the **Worker** host template assigns **ZooKeeper Server** to every host in `base_cluster_worker_group` (`base-workers`). Masters use the **Master** template only. Labs typically run one or three ZK servers on workers; Cloudera Manager requires at least one Server role before Stop Cluster / Deploy Client Config (including after Kerberos/KDC is enabled manually or via playbook **28**).
+
+**Existing cluster missing ZK Server roles:** If CM shows **ZooKeeper has 0 Servers**, the cluster was usually created before host templates used CM service **types** (`ZOOKEEPER`, not `zookeeper`) or playbook **31** found the cluster already present and only started services (templates are not reapplied). Choose one:
+
+1. **CM UI (keep data):** Cluster → **ZooKeeper** → **Instances** → **Add Role Instances** → **Server** on each `base-workers` host (or at least one worker for a lab). Start the new roles, then retry Stop Cluster / Deploy Client Config.
+2. **Recreate cluster:** `99_cleanup.yml` with `cleanup_delete_base_cluster=true`, then re-run `31_setup_base_cluster.yml` on current `main` (Worker template must list `service: ZOOKEEPER`, `type: SERVER`).
+
+Playbook **31** validates the rendered Worker template and, after create or start, fails via the CM API if zero ZooKeeper Server roles remain.
+
 `33_setup_ecs_cluster.yml` is skipped automatically when `[ecs-masters]` / `[ecs-workers]` are empty (`ecs_deploy_enabled: auto`).
 
 ### 8. Deployment portal (optional)
@@ -407,6 +416,7 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 | Wrong identity detected | Run `00_detect_identity.yml`; set `identity_provider: freeipa` or `ad` to override |
 | CM Kerberos/KDC not enabled (`kerberized=false`) | Playbook **28** waits up to `cm_krb_kerberized_wait_retries × cm_krb_kerberized_wait_delay` (default 300s) then fails with `kerberosInfo` details. **FreeIPA:** on ipaserver `ipactl status` (krb5kdc RUNNING); re-run `12_setup_freeipa_server.yml` then `28_setup_cm_krbs.yml`. **AD:** set `ad_kdc_host` (not empty). **CM:** confirm `importAdminCredentials` in `cloudera-scm-server.log`; Kerberos REST must use HTTPS `:7183` when Auto-TLS is on. **Manual UI:** Administration → Settings → Kerberos — set realm, KDC type/host, import Account Manager principal/password, Save, restart CM Server. |
 | CM Kerberos UI warns on **rc4-hmac** / weak crypto | Set `krb5_enc_types` to `aes256-cts aes128-cts` (default). Re-run `12` + `28`; regenerate Kerberos credentials in CM. See **Kerberos encryption types (AES)** above. |
+| **ZooKeeper has 0 Servers** (Stop Cluster / Deploy Client Config after KDC) | ZK **service** exists but no **Server** roles — common on clusters created before host template `service: ZOOKEEPER` fix or when **31** skipped create. Add **Server** on `base-workers` in CM, or delete base cluster and re-run **31**. See **ZooKeeper placement** under step 7. Kerberos enablement (`28_setup_cm_krbs.yml` / manual KDC) is separate; fix ZK roles first. |
 | DNS not persisting on Ubuntu | DNS is applied via netplan — see [REFERENCE.md](REFERENCE.md#dns-configuration) |
 | CM install fails on Ubuntu | Set `cm_repo_username` / `cm_repo_password`; use `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr) |
 | CDH parcel download fails | Ensure worker facts exist (run phase 1 first). Set `cdh_parcel_os_suffix: noble` or `jammy` for Ubuntu workers, `el8`/`el9` for RHEL |

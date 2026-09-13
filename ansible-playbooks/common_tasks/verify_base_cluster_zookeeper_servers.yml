@@ -1,0 +1,53 @@
+---
+# Fail fast when ZooKeeper service has zero Server roles (Stop Cluster / Deploy Client Config break after Kerberos).
+# Requires cm_cluster_module_api_url and cdh_basecluster_name from 31_setup_base_cluster.yml.
+
+- name: Query ZooKeeper roles in base cluster (CM API)
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services/zookeeper/roles
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 404]
+  register: base_cluster_zk_roles_api
+  changed_when: false
+  when: base_cluster_install_services.zookeeper | default(true) | bool
+
+- name: Fail when ZooKeeper service is missing from the base cluster
+  ansible.builtin.fail:
+    msg: >-
+      base_cluster_install_services.zookeeper is enabled but CM has no zookeeper service on cluster
+      '{{ cdh_basecluster_name }}'. Add the service in CM or re-run 31_setup_base_cluster.yml on a
+      fresh cluster (see RUNBOOK — ZooKeeper has 0 Servers).
+  when:
+    - base_cluster_install_services.zookeeper | default(true) | bool
+    - base_cluster_zk_roles_api.status | default(0) | int == 404
+
+- name: Count ZooKeeper Server role instances
+  ansible.builtin.set_fact:
+    base_cluster_zk_server_count: >-
+      {{
+        base_cluster_zk_roles_api.json.items | default([])
+        | selectattr('type', 'defined')
+        | selectattr('type', 'equalto', 'SERVER')
+        | list
+        | length
+      }}
+  when: base_cluster_install_services.zookeeper | default(true) | bool
+
+- name: Require at least one ZooKeeper Server role
+  ansible.builtin.fail:
+    msg: >-
+      ZooKeeper has {{ base_cluster_zk_server_count | default(0) }} Server role(s) on cluster
+      '{{ cdh_basecluster_name }}' (CM requires at least 1). This often happens when the cluster was
+      created before host_templates used CM service types (ZOOKEEPER not zookeeper) or playbook 31
+      only started an existing cluster without applying templates. Fix: In CM, add ZooKeeper Server
+      roles to each base-worker host (Hosts → host → Role Instances), or delete the base cluster and
+      re-run ansible-playbook -i inventory.ini 31_setup_base_cluster.yml. See RUNBOOK troubleshooting
+      "ZooKeeper has 0 Servers".
+  when:
+    - base_cluster_install_services.zookeeper | default(true) | bool
+    - base_cluster_zk_server_count | default(0) | int < 1

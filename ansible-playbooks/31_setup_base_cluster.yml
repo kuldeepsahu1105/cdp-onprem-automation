@@ -88,6 +88,25 @@
           Services to install:
           {{ base_cluster_spec.services | map(attribute='name') | list | join(', ') }}
 
+    - name: Validate Worker host template includes ZooKeeper Server when ZooKeeper is enabled
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              base_cluster_spec.host_templates
+              | selectattr('name', 'equalto', 'Worker')
+              | first
+            ).role_groups
+            | selectattr('service', 'equalto', 'ZOOKEEPER')
+            | selectattr('type', 'equalto', 'SERVER')
+            | list
+            | length >= 1
+        fail_msg: >-
+          base_cluster_install_services.zookeeper is enabled but the Worker host template has no
+          ZOOKEEPER SERVER role group. In templates/base_cluster_cluster_spec.j2, role_groups[].service
+          must be the CM service type (ZOOKEEPER), not the service name (zookeeper).
+      when: base_cluster_install_services.zookeeper | default(true) | bool
+
     - name: Set remote parcel repository URL in Cloudera Manager (REST API)
       ansible.builtin.import_tasks: common_tasks/configure_cm_parcel_repo_api.yml
       when: parcel_repo is defined
@@ -140,6 +159,9 @@
         name: "{{ cdh_basecluster_name }}"
         state: started
       when: existing_cluster.status == 200
+
+    - name: Verify ZooKeeper has at least one Server role (CM API)
+      ansible.builtin.import_tasks: common_tasks/verify_base_cluster_zookeeper_servers.yml
 
     - name: Print base cluster result
       ansible.builtin.debug:
