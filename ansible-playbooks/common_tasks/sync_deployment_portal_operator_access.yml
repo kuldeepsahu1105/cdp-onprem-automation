@@ -30,22 +30,6 @@
           {{
             lookup('template', 'deployment_portal_operator_access.j2') | from_yaml | default({}, true)
           }}
-        deployment_portal_base_master_fqdn: >-
-          {{
-            hostvars['localhost']['deployment_portal_base_master_fqdn']
-            | default(deployment_portal_base_master_fqdn | default(''))
-          }}
-        deployment_portal_ssh_keys_expose_effective: >-
-          {{
-            hostvars['localhost']['deployment_portal_ssh_keys_expose_effective']
-            | default(deployment_portal_ssh_keys_expose_effective | default(false))
-            | bool
-          }}
-        deployment_portal_ecs_api_cache: >-
-          {{
-            hostvars['localhost']['deployment_portal_ecs_api_cache']
-            | default(deployment_portal_ecs_api_cache | default({}))
-          }}
 
 - name: Adopt refreshed SSH export facts from controller
   ansible.builtin.set_fact:
