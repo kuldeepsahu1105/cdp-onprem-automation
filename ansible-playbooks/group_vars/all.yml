@@ -86,6 +86,12 @@ ipa_server_preflight_rpm_packages:
   - 389-ds-base
   - bind-utils
   - openldap
+# Playbook 12 preflight — /var/lib/ipa children (ipaplatform paths; STATEFILE_DIR=sysupgrade)
+ipa_server_var_lib_subdirs:
+  - /var/lib/ipa/sysupgrade
+  - /var/lib/ipa/sysrestore
+  - /var/lib/ipa/backup
+  - /var/lib/ipa/dnssec
 
 # Active Directory (when identity_provider: ad)
 # Leave ad_kdc_host empty unless using AD; placeholder values break identity auto-detect.

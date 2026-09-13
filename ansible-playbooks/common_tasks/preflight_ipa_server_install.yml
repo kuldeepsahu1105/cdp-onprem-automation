@@ -3,7 +3,8 @@
 # FreeIPA's installer shells out to dig/host; without bind-utils Python reports
 # [Errno 2] No such file or directory (missing binary) and warns about skipping DNS resolution.
 # Early install_check/ipachangeconf/newConf FileNotFoundError often means leftover sysrestore
-# or missing Directory Server / openldap paths — see RUNBOOK.md troubleshooting.
+# (or missing sysupgrade/ after partial rm -rf under /var/lib/ipa), or missing DS / openldap paths.
+# See RUNBOOK.md troubleshooting.
 
 - name: Preflight IPA install — ensure DNS lookup tools (dig, host)
   ansible.builtin.package:
@@ -42,6 +43,14 @@
     - /etc/ipa
     - /var/lib/ipa
     - /var/log/ipa
+
+# install_check / sysupgrade.set_upgrade_state write paths.STATEFILE_DIR (/var/lib/ipa/sysupgrade/sysupgrade.state)
+- name: Preflight IPA install — ensure standard /var/lib/ipa subdirectories (IPA 4.13 paths)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ ipa_server_var_lib_subdirs }}"
 
 - name: Preflight IPA install — stat openldap client config (install_check paths)
   ansible.builtin.stat:

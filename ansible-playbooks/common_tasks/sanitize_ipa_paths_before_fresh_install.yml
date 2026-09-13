@@ -1,9 +1,10 @@
 ---
 # Remove broken FreeIPA path fragments before ipa-server-install when IPA is not configured.
 # Covers:
-#   - empty or partial /var/lib/ipa (missing sysrestore/sysrestore.state)
+#   - empty or partial /var/lib/ipa (missing sysrestore/sysrestore.state; stray sysupgrade/ only)
 #   - sysrestore.index/state present but install incomplete (ipactl not configured;
 #     manual install fails in install_check/ipaconf.newConf with FileNotFoundError errno 2)
+# After removal, preflight_ipa_server_install.yml recreates /var/lib/ipa and standard subdirs.
 #   - leftover /etc/ipa and /etc/dirsrv/slapd-* when ipactl reports not configured
 
 - name: Sanitize IPA paths — stat /var/lib/ipa
