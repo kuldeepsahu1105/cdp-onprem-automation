@@ -20,6 +20,8 @@
 - name: Configure wildcard DNS record
   hosts: ipaserver
   become: true
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
 
   tasks:
 
@@ -41,6 +43,9 @@
             record_type: "A"
             record_value: "{{ ecs_master_ip }}"
             state: present
+
+        - name: Ensure Kerberos ticket for IPA CLI verification
+          ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket.yml
 
         - name: Verify Created Wildcard DNS Records in FreeIPA
           shell: "ipa dnsrecord-find {{ ipaserver_domain }} --name=*.apps"

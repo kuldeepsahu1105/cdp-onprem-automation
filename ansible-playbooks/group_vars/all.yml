@@ -65,6 +65,8 @@ ipaserver_domain: cldrsetup.local
 ipaserver_realm: "{{ ipaserver_domain | upper }}"
 ipaadmin_principal: "admin"
 ipaadmin_password: "PseTeam@123"
+# FILE Kerberos ccache for IPA CLI tasks (Ansible runs each task in a new SSH session).
+ipa_kerberos_ccache_path: /root/.ansible-ipa-krb5cc
 ipadm_password: "{{ ipaadmin_password }}"
 # Shared lab password (ECS UMS bootstrap, Kerberos admin, ECS LDAP admin); override in Jenkins ANSIBLE_GROUP_VARS_YAML
 common_password: "{{ ipaadmin_password }}"
