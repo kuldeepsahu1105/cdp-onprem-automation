@@ -1,0 +1,45 @@
+# ECS data services (CDW, CDE, CAI, Model Registry)
+
+Playbook `34_setup_ecs_data_services.yml` enables Cloudera Data Services on an existing ECS private-cloud environment using **`cloudera.cloud`** (git `main`) and the **CDP CLI** (`cdpcli` / `cdpy`).
+
+## Prerequisites
+
+| Step | Playbook / action |
+|------|-------------------|
+| ECS experience cluster + control plane | `33_setup_ecs_cluster.yml` |
+| Wildcard DNS `*.apps.<domain>` → ECS master | `19_setup_wildcard.yml` (FreeIPA) |
+| Automation API access key | `ecs_auto_provision_api_access_key` + bootstrap key, or `ecs_api_*` |
+| Deployment portal Caddy (optional ingress) | `10_setup_deployment_portal.yml` |
+
+## Enable in Jenkins / group_vars
+
+```yaml
+ecs_data_services_deploy_enabled: true
+ecs_data_services_install: [cdw, cde, cai]  # optional: model_registry
+```
+
+`model_registry` requires an **`[sdx]`** inventory group with Ozone S3 access (Kerberos `admin` / `common_password`).
+
+## API endpoint
+
+Signed calls use **`https://console-cdp.<ecs_app_domain>`** (`ecs_cdp_console_api_url`). The UI may still be at `https://console.<ecs_app_domain>` (`ecs_control_plane_url_effective`).
+
+## LDAP
+
+When `identity_provider_effective: freeipa`, the playbook runs `cdp iam update-ldap-provider` (or create) for provider `cm-ldap`, matching the Cloudera Labs reference.
+
+## Caddy ingress
+
+Service UIs are proxied from the **deployment portal** host to the ECS master HTTPS ingress (`deployment_portal_Caddyfile_ecs_data_services.inc.j2`). Hostnames follow `*.{{ ecs_app_domain }}` (CDE/CAI service ids, `hue-<vw>.<ecs_app_domain>` for CDW).
+
+Re-run `35_refresh_deployment_portal.yml` after changing catalog URLs if you skip the Caddy play in `34`.
+
+## Variables
+
+See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_registry_*`, `ecs_cdp_environment_name`).
+
+## Not automated (Labs reference gaps)
+
+- FreeIPA wildcard TLS for per-service domains (CDE/CAI) — upstream TLS verify is disabled on Caddy → ECS master only.
+- CoreDNS / Prometheus ingress patches on ECS masters (reference `ecs_masters` plays).
+- CDE environment-role permissions for end users.

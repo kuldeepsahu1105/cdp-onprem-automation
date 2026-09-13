@@ -1,12 +1,60 @@
 ---
-- name: CAI | Skip when not selected
-  ansible.builtin.debug:
-    msg: "CAI not in ecs_data_services_install list — skipped."
-  when: "'cai' not in (ecs_data_services_install_names | default([]))"
-
-- name: CAI | Placeholder for Cloudera AI install
-  ansible.builtin.debug:
-    msg: >-
-      CAI (Cloudera AI) install: provision from Management Console or Control Plane API using the
-      same access key pair. Add service URL to ecs_data_services_catalog.cai when available.
+- name: CAI | Create ML workspace on ECS
   when: "'cai' in (ecs_data_services_install_names | default([]))"
+  block:
+    - name: Create ML workspace
+      cloudera.cloud.ml:
+        environment: "{{ ecs_cdp_environment_name }}"
+        name: "{{ ecs_cai_workspace_name }}"
+        governance: "{{ ecs_cai_enable_governance | default(true) | bool }}"
+        metrics: "{{ ecs_cai_enable_metrics | default(true) | bool }}"
+        enable_tls: "{{ ecs_cai_enable_tls | default(true) | bool }}"
+        monitoring: "{{ ecs_cai_enable_monitoring | default(true) | bool }}"
+        namespace: "{{ ecs_cai_k8s_namespace }}"
+        resource_pool: "{{ ecs_cai_resource_pool }}"
+        verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+        wait: true
+        state: present
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cai_workspace
+
+    - name: Derive workbench hostname token
+      ansible.builtin.set_fact:
+        ecs_cai_workbench_id: >-
+          {{
+            ecs_cai_workspace.workspace.instanceUrl
+            | regex_replace('^https://', '')
+            | regex_replace('(\\..*$)', '')
+          }}
+
+    - name: Register workbench ingress for Caddy
+      ansible.builtin.set_fact:
+        ecs_caddy_data_service_routes: >-
+          {{
+            (ecs_caddy_data_service_routes | default([]))
+            + [
+              {
+                'id': 'cai-' + ecs_cai_workspace_name,
+                'external_hostname': ecs_cai_workbench_id + '.' + ecs_app_domain,
+                'backend_host': ecs_master_fqdn,
+                'backend_port': 443,
+                'backend_scheme': 'https'
+              }
+            ]
+          }}
+
+    - name: Update portal catalog URL for CAI
+      ansible.builtin.set_fact:
+        ecs_data_services_catalog: >-
+          {{
+            ecs_data_services_catalog | combine(
+              {
+                'cai': ecs_data_services_catalog.cai | default({}) | combine(
+                  {
+                    'url': 'https://' + ecs_cai_workbench_id + '.' + ecs_app_domain
+                  }
+                )
+              },
+              recursive=True
+            )
+          }}

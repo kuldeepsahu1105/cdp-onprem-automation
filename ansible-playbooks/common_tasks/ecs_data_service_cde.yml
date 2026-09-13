@@ -1,14 +1,53 @@
 ---
-- name: CDE | Skip when not selected
-  ansible.builtin.debug:
-    msg: "CDE not in ecs_data_services_install list — skipped."
-  when: "'cde' not in (ecs_data_services_install_names | default([]))"
-
-- name: CDE | Placeholder for Control Plane / CDE API install
-  ansible.builtin.debug:
-    msg: >-
-      CDE install: create DE workload auth via POST .../api/v1/iam/generateWorkloadAuthToken
-      (workloadName DE) signed with access key, then use CDE service API. See Cloudera docs
-      cde-api-private-cloud-get-access-token. Configure ecs_data_services_catalog.cde.service_host
-      after the CDE endpoint is provisioned in the console.
+- name: CDE | Enable Data Engineering on ECS
   when: "'cde' in (ecs_data_services_install_names | default([]))"
+  block:
+    - name: Enable Data Engineering service
+      cloudera.cloud.de:
+        environment: "{{ ecs_cdp_environment_name }}"
+        name: "{{ ecs_cde_service_name }}"
+        instance_type: "{{ ecs_cde_instance_type }}"
+        cpu_requests: "{{ ecs_cde_cpu_requests }}"
+        memory_requests: "{{ ecs_cde_memory_requests }}"
+        resource_pool: "{{ ecs_cde_resource_pool }}"
+        verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+        wait: true
+        state: present
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cde_service
+
+    - name: Derive service id for ingress hostname
+      ansible.builtin.set_fact:
+        ecs_cde_service_id: "{{ ecs_cde_service.service.clusterFqdn | regex_replace('^service\\.', '') }}"
+
+    - name: Register CDE ingress for Caddy
+      ansible.builtin.set_fact:
+        ecs_caddy_data_service_routes: >-
+          {{
+            (ecs_caddy_data_service_routes | default([]))
+            + [
+              {
+                'id': 'cde-' + ecs_cde_service_name,
+                'external_hostname': ecs_cde_service_id + '.' + ecs_app_domain,
+                'backend_host': ecs_master_fqdn,
+                'backend_port': 443,
+                'backend_scheme': 'https'
+              }
+            ]
+          }}
+
+    - name: Update portal catalog URL for CDE
+      ansible.builtin.set_fact:
+        ecs_data_services_catalog: >-
+          {{
+            ecs_data_services_catalog | combine(
+              {
+                'cde': ecs_data_services_catalog.cde | default({}) | combine(
+                  {
+                    'url': 'https://' + ecs_cde_service_id + '.' + ecs_app_domain
+                  }
+                )
+              },
+              recursive=True
+            )
+          }}

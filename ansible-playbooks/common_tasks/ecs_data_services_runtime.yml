@@ -1,0 +1,59 @@
+---
+- name: Resolve ECS control plane URL
+  ansible.builtin.import_tasks: resolve_ecs_control_plane_url.yml
+
+- name: Set ECS CDP API base URL for signed CLI calls
+  ansible.builtin.set_fact:
+    ecs_cdp_console_api_url_effective: >-
+      {{
+        ecs_cdp_console_api_url | trim
+        if (ecs_cdp_console_api_url | default('') | length > 0)
+        else ('https://console-cdp.' + ecs_app_domain)
+      }}
+
+- name: Set ECS master FQDN for data service ingress backends
+  ansible.builtin.set_fact:
+    ecs_master_fqdn: "{{ hostvars[groups[ecs_cluster_master_group][0]].cldr_hostname }}.{{ cluster_domain }}"
+    ecs_master_ansible_host: "{{ hostvars[groups[ecs_cluster_master_group][0]].ansible_host }}"
+
+- name: Require ECS automation API credentials
+  ansible.builtin.assert:
+    that:
+      - ecs_api_access_key_id | default('') | length > 0
+      - ecs_api_private_key | default('') | length > 0
+    fail_msg: >-
+      ECS data services need signed API credentials (ecs_api_access_key_id / ecs_api_private_key).
+      Enable ecs_auto_provision_api_access_key with a bootstrap key, or set keys in group_vars.
+
+- name: Create temporary CDP profile for data services API calls
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: cdp_ecs_ds_
+  register: ecs_ds_cdp_profile_dir
+
+- name: Write CDP private cloud config for data services
+  ansible.builtin.copy:
+    dest: "{{ ecs_ds_cdp_profile_dir.path }}/config"
+    mode: "0600"
+    content: |
+      [default]
+      cdp_endpoint_url = {{ ecs_cdp_console_api_url_effective }}
+      form_factor = private
+
+- name: Write CDP credentials for data services automation user
+  ansible.builtin.copy:
+    dest: "{{ ecs_ds_cdp_profile_dir.path }}/credentials"
+    mode: "0600"
+    content: |
+      [default]
+      cdp_access_key_id = {{ ecs_api_access_key_id }}
+      cdp_private_key = {{ ecs_api_private_key | trim }}
+  no_log: true
+
+- name: Publish CDP CLI environment for controller tasks
+  ansible.builtin.set_fact:
+    ecs_cdp_cli_environment:
+      CDP_CONFIG_FILE: "{{ ecs_ds_cdp_profile_dir.path }}/config"
+      CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_ds_cdp_profile_dir.path }}/credentials"
+      HOME: "{{ ecs_ds_cdp_profile_dir.path }}"
+      PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME | default('/home/ubuntu') }}/.local/bin"

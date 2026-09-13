@@ -97,6 +97,14 @@ allowed_keys:
   - ecs_control_plane_validate_certs
   - ecs_data_services_install
   - ecs_data_services_catalog
+  - ecs_cdp_environment_name
+  - ecs_cdp_console_api_url
+  - ecs_data_services_verify_tls
+  - ecs_data_services_configure_ldap
+  - ecs_cdw_hive_vw_name
+  - ecs_cdw_impala_vw_name
+  - ecs_cde_service_name
+  - ecs_cai_workspace_name
 
   # OS / dependency versions
   - java_version

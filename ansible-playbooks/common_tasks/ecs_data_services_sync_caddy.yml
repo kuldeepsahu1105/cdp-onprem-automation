@@ -1,0 +1,18 @@
+---
+- name: Caddy | Re-render deployment portal Caddyfile with ECS data service routes
+  ansible.builtin.template:
+    src: deployment_portal_Caddyfile.j2
+    dest: "{{ deployment_portal_config_dir }}/Caddyfile"
+    mode: "0644"
+  register: ecs_ds_caddyfile_render
+
+- name: Caddy | Recreate portal Caddy container when routes changed
+  ansible.builtin.command:
+    argv: >-
+      {{
+        deployment_portal_compose_argv
+        + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', 'caddy']
+      }}
+  when: ecs_ds_caddyfile_render is changed
+  register: ecs_ds_caddy_recreate
+  failed_when: ecs_ds_caddy_recreate.rc != 0

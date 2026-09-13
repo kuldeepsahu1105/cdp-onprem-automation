@@ -1,0 +1,10 @@
+{# Reverse-proxy ECS data service UIs to the ECS master ingress (TLS verify skipped on upstream). #}
+{% for route in ecs_caddy_data_service_routes | default([]) %}
+http://{{ route.external_hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
+  reverse_proxy {{ route.backend_scheme }}://{{ route.backend_host }}:{{ route.backend_port }} {
+    transport http {
+      tls_insecure_skip_verify
+    }
+  }
+}
+{% endfor %}

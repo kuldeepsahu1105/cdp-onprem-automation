@@ -523,6 +523,42 @@ ecs_data_services_catalog:
     name: Cloudera AI
     description: Cloudera AI workspaces
     url: ""
+# CDP environment name on private cloud (must match ECS control plane environment)
+ecs_cdp_environment_name: ecs
+ecs_cdp_console_api_url: ""  # default https://console-cdp.<ecs_app_domain>
+ecs_data_services_verify_tls: false
+ecs_data_services_configure_ldap: true
+ecs_ldap_provider_name: cm-ldap
+# CDW
+ecs_cdw_private_cloud_config: {}  # optional storage_class, db_client_certificate paths
+ecs_cdw_hive_vw_name: hive-vw
+ecs_cdw_impala_vw_name: impala-vw
+ecs_cdw_vw_tshirt_size: xsmall
+ecs_cdw_dbc_wait_retries: 10
+ecs_cdw_dbc_wait_delay: 30
+# CDE
+ecs_cde_service_name: "{{ ecs_cluster_name | regex_replace('[^a-zA-Z0-9]+', '-') | lower }}-de"
+ecs_cde_instance_type: private
+ecs_cde_cpu_requests: "24"
+ecs_cde_memory_requests: 64Gi
+ecs_cde_resource_pool: "root.{{ ecs_cdp_environment_name }}.cde"
+# CAI / CML workspace
+ecs_cai_workspace_name: "{{ ecs_cluster_name | regex_replace('[^a-zA-Z0-9]+', '-') | lower }}-ml"
+ecs_cai_k8s_namespace: cml
+ecs_cai_resource_pool:
+  cpu: "50"
+  memory: "46 Gi"
+ecs_cai_enable_governance: true
+ecs_cai_enable_metrics: true
+ecs_cai_enable_tls: true
+ecs_cai_enable_monitoring: true
+# Model Registry (requires [sdx] inventory + Ozone)
+ecs_model_registry_sdx_group: sdx
+ecs_model_registry_service_name: "{{ ecs_cluster_name | regex_replace('[^a-zA-Z0-9]+', '-') | lower }}-registry"
+ecs_model_registry_subdomain: model-registry
+ecs_model_registry_s3_bucket: "{{ cdh_basecluster_name | lower }}-registry"
+ecs_model_registry_s3_endpoint: ""  # default https://<first-sdx-fqdn>:9879 when model_registry is selected
+ecs_model_registry_ozone_service_id: o3service1
 
 # ---------------------------------------------------------------------------
 # Deployment portal + ops UI — 10_setup_deployment_portal.yml
