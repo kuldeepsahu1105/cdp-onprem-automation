@@ -20,12 +20,11 @@
   hosts: ipaserver
   gather_facts: yes
   become: yes
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
   tasks:
-    - name: Ensure Kerberos Ticket is Present
-      shell: echo "{{ ipaadmin_password }}" | kinit {{ ipaadmin_principal }}
-      register: kinit_result
-      changed_when: false
-      failed_when: kinit_result.rc != 0
+    - name: Ensure Kerberos ticket for IPA CLI
+      ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket.yml
 
     - name: Validate IPA Services
       command: ipactl status
@@ -76,6 +75,9 @@
         record_value: "{{ hostvars[item]['cldr_hostname'] }}.{{ ipaserver_domain }}."
         state: present
       loop: "{{ groups['all'] }}"
+
+    - name: Refresh Kerberos ticket before IPA DNS verification
+      ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket.yml
 
     - name: Verify Created DNS Records in FreeIPA
       command: ipa dnsrecord-find {{ reverse_dns_zone }}

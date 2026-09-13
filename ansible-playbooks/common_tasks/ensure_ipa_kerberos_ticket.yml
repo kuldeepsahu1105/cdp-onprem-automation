@@ -1,0 +1,16 @@
+---
+# Kerberos ticket for `ipa` CLI on ipaserver. Modules may use ipaadmin_password; CLI needs KRB5CCNAME.
+# FILE ccache survives separate Ansible task/SSH sessions (KEYRING/default cache often does not).
+- name: Obtain Kerberos ticket for IPA CLI
+  ansible.builtin.shell: kinit -c "FILE:{{ ipa_kerberos_ccache_path }}" "{{ _ipa_kerberos_principal }}"
+  args:
+    stdin: "{{ _ipa_kerberos_password }}"
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+  vars:
+    _ipa_kerberos_principal: "{{ ipa_kerberos_principal | default(ipaadmin_principal, true) }}"
+    _ipa_kerberos_password: "{{ ipa_kerberos_password | default(ipaadmin_password, true) }}"
+  register: _ensure_ipa_kerberos_ticket
+  changed_when: false
+  failed_when: _ensure_ipa_kerberos_ticket.rc != 0
+  no_log: true
