@@ -407,7 +407,20 @@ cloudera_cluster_collection_git_ref: v4.4.0
 cloudera_cloud_collection_git_ref: v2.5.1
 
 ##### KDC integration for cldr-mngr:
-krb5_enc_types: "{{ 'aes256-cts aes128-cts' if identity_provider_effective == 'ad' else 'aes256-cts aes128-cts rc4-hmac' }}"
+# Cloudera Manager KRB_ENC_TYPES (short names). AES only — Java 17+ disables RC4.
+krb5_allow_weak_rc4: false
+krb5_enc_types: >-
+  {{
+    'aes256-cts aes128-cts' + (' rc4-hmac' if krb5_allow_weak_rc4 | bool else '')
+  }}
+# FreeIPA KDC krb5 permitted_enctypes (long krb5 names; see templates/krb5_permitted_enctypes.conf.j2)
+krb5_ipa_default_enctypes: "aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96"
+krb5_ipa_permitted_enctypes: >-
+  {{
+    krb5_ipa_default_enctypes
+    + ' aes256-cts-hmac-sha384-192 aes128-cts-hmac-sha256-128'
+    + (' arcfour-hmac' if krb5_allow_weak_rc4 | bool else '')
+  }}
 ipa_kdc_host: "ipaserver.{{ ipaserver_domain }}"
 
 # Cloudera Manager LDAP integration (FreeIPA or Active Directory)

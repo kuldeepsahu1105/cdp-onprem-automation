@@ -225,6 +225,14 @@ ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
 ansible-playbook -i inventory.ini 30_setup_cm_ldap.yml
 ```
 
+**Kerberos encryption types (AES):** Defaults use **AES only** (`krb5_enc_types`: `aes256-cts aes128-cts` in CM; FreeIPA KDC via `/etc/krb5.conf.d/cldr-permitted-enctypes.conf`). RC4 is omitted because Java 17+ and Cloudera recommend AES. Do **not** set `allow_weak_crypto=true` unless you explicitly opt in with `krb5_allow_weak_rc4: true` in group_vars.
+
+**Existing deployments** that already show `rc4-hmac` in the CM Kerberos wizard:
+
+1. Re-run `12_setup_freeipa_server.yml` (or at least the ipaserver play in `28_setup_cm_krbs.yml`) to apply the IPA KDC snippet and restart `krb5kdc`.
+2. Re-run `28_setup_cm_krbs.yml` — it reconciles `KRB_ENC_TYPES` via the CM API even when `kerberized=true` (may restart Cloudera Manager).
+3. In CM, **regenerate** cluster/service keytabs/principals so new keys use AES (CM Kerberos wizard or cluster Kerberos enablement flow). Principals created under RC4-default KDC settings may retain RC4 long-term keys until regenerated.
+
 If `cm_admin_pass` is not the factory password (`cm_admin_bootstrap_pass`, default `admin`), `25_verify_cm.yml` and later playbooks reset the CM `admin` user to `cm_admin_pass` via the API on first successful connection.
 
 CSD JARs for DataViz / NiFi / NiFi Registry are built from `cdv_version`, `cfm_version`, and related vars during `24_start_cm.yml` (RHEL CM). Set e.g. `cdv_version: "8.1.5"` and update `cdv_dataviz_csd_jar` to match the archive jar name, or pass explicit `scm_csds` URLs.
@@ -398,6 +406,7 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 |---|---|
 | Wrong identity detected | Run `00_detect_identity.yml`; set `identity_provider: freeipa` or `ad` to override |
 | CM Kerberos/KDC not enabled (`kerberized=false`) | Playbook **28** waits up to `cm_krb_kerberized_wait_retries × cm_krb_kerberized_wait_delay` (default 300s) then fails with `kerberosInfo` details. **FreeIPA:** on ipaserver `ipactl status` (krb5kdc RUNNING); re-run `12_setup_freeipa_server.yml` then `28_setup_cm_krbs.yml`. **AD:** set `ad_kdc_host` (not empty). **CM:** confirm `importAdminCredentials` in `cloudera-scm-server.log`; Kerberos REST must use HTTPS `:7183` when Auto-TLS is on. **Manual UI:** Administration → Settings → Kerberos — set realm, KDC type/host, import Account Manager principal/password, Save, restart CM Server. |
+| CM Kerberos UI warns on **rc4-hmac** / weak crypto | Set `krb5_enc_types` to `aes256-cts aes128-cts` (default). Re-run `12` + `28`; regenerate Kerberos credentials in CM. See **Kerberos encryption types (AES)** above. |
 | DNS not persisting on Ubuntu | DNS is applied via netplan — see [REFERENCE.md](REFERENCE.md#dns-configuration) |
 | CM install fails on Ubuntu | Set `cm_repo_username` / `cm_repo_password`; use `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr) |
 | CDH parcel download fails | Ensure worker facts exist (run phase 1 first). Set `cdh_parcel_os_suffix: noble` or `jammy` for Ubuntu workers, `el8`/`el9` for RHEL |
