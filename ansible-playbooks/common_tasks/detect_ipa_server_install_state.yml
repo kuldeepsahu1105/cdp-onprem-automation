@@ -80,12 +80,19 @@
           or ((ipa_detect_dirsrv_instances.matched | default(0) | int) > 0)
         )
       }}
+    ipa_detect_status_text: >-
+      {{
+        (ipa_detect_ipactl_status.stdout | default(''))
+        ~ (ipa_detect_ipactl_status.stderr | default(''))
+      }}
+
+- name: Detect IPA — derive service health from ipactl output
+  ansible.builtin.set_fact:
     ipa_server_services_healthy: >-
       {{
         ipa_detect_ipactl_status.rc | default(1) == 0
-        and ipa_detect_ipactl_status.stdout is defined
-        and 'Directory Service: RUNNING' in ipa_detect_ipactl_status.stdout
-        and 'krb5kdc Service: RUNNING' in ipa_detect_ipactl_status.stdout
+        and ipa_detect_status_text is search('Directory Service.*RUNNING')
+        and ipa_detect_status_text is search('krb5kdc.*RUNNING')
       }}
 
 - name: Detect IPA — derive clean-host install eligibility
