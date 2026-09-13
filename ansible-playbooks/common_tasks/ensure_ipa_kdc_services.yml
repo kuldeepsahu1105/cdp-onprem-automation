@@ -1,0 +1,59 @@
+---
+# Ensure FreeIPA KDC (and core IPA) services are running before CM Kerberos integration.
+# Pattern: ipactl start + verify (aligned with freeipa.ansible_freeipa / Labs identity phase).
+
+- name: IPA KDC — check whether FreeIPA server is configured
+  ansible.builtin.stat:
+    path: /etc/ipa/default.conf
+  register: ipa_kdc_default_conf
+
+- name: IPA KDC — skip when FreeIPA server is not installed
+  ansible.builtin.meta: end_host
+  when: not ipa_kdc_default_conf.stat.exists
+
+- name: IPA KDC — read IPA service status
+  ansible.builtin.command: ipactl status
+  register: ipa_kdc_ipactl_status
+  changed_when: false
+  failed_when: false
+
+- name: IPA KDC — start IPA when services are not all running
+  ansible.builtin.command: ipactl start
+  register: ipa_kdc_ipactl_start
+  changed_when: ipa_kdc_ipactl_start.rc == 0
+  when: >
+    ipa_kdc_ipactl_status.rc != 0
+    or (
+      ipa_kdc_ipactl_status.stdout is defined
+      and (
+        'STOPPED' in ipa_kdc_ipactl_status.stdout
+        or 'krb5kdc Service: RUNNING' not in ipa_kdc_ipactl_status.stdout
+      )
+    )
+
+- name: IPA KDC — wait for krb5kdc systemd unit (FreeIPA KDC)
+  ansible.builtin.systemd:
+    name: krb5kdc
+    state: started
+    enabled: true
+  register: ipa_kdc_krb5kdc_unit
+  failed_when: false
+
+- name: IPA KDC — re-check IPA service status after start
+  ansible.builtin.command: ipactl status
+  register: ipa_kdc_ipactl_status_after
+  changed_when: false
+  retries: 12
+  delay: 10
+  until: ipa_kdc_ipactl_status_after.rc == 0
+
+- name: IPA KDC — assert KDC and core IPA services are running
+  ansible.builtin.assert:
+    that:
+      - ipa_kdc_ipactl_status_after.rc == 0
+      - ipa_kdc_ipactl_status_after.stdout is search('Directory Service.*RUNNING')
+      - ipa_kdc_ipactl_status_after.stdout is search('krb5kdc.*RUNNING')
+    fail_msg: >-
+      FreeIPA KDC is not running on {{ inventory_hostname }}.
+      Inspect: ipactl status; systemctl status krb5kdc.
+      Re-run 12_setup_freeipa_server.yml or start services with: ipactl start

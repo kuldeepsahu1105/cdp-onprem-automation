@@ -108,7 +108,10 @@
         {% if chrony_enabled == 'yes' %} --ntp-server=pool.ntp.org {% endif %}
       register: ipa_install_result
       changed_when: "'The ipa-server-install command was successful' in ipa_install_result.stderr"
-      when: ipa_server_status.rc != 0 or not ipa_default_conf.stat.exists
+      when: not ipa_default_conf.stat.exists
+
+    - name: Ensure FreeIPA KDC and IPA services are running
+      ansible.builtin.import_tasks: common_tasks/ensure_ipa_kdc_services.yml
 
     - name: Print IPA server installation output
       ansible.builtin.debug:

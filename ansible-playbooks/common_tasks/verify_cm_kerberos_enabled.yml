@@ -1,0 +1,38 @@
+---
+# Assert Cloudera Manager reports Kerberos/KDC integration as enabled (kerberized).
+
+- name: Kerberos — resolve HTTPS CM API URL
+  ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
+
+- name: Kerberos — read CM Kerberos status (wait for kerberized after CM restart)
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/kerberosInfo"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_krb_verify_info
+  changed_when: false
+  retries: 18
+  delay: 10
+  until: cm_krb_verify_info.json.kerberized | default(false) | bool
+
+- name: Kerberos — assert CM KDC integration is enabled
+  ansible.builtin.assert:
+    that:
+      - cm_krb_verify_info.json.kerberized | default(false) | bool
+      - (cm_krb_verify_info.json.securityRealm | default('') | length) > 0
+    fail_msg: >-
+      Cloudera Manager Kerberos (KDC) is not enabled (kerberized=false).
+      CM realm={{ cm_krb_verify_info.json.securityRealm | default('unset') }},
+      KDC host={{ kdc_host }}.
+      Re-run ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml after FreeIPA/AD KDC is reachable.
+
+- name: Kerberos — CM KDC integration verified
+  ansible.builtin.debug:
+    msg:
+      - "CM kerberized: {{ cm_krb_verify_info.json.kerberized }}"
+      - "CM security realm: {{ cm_krb_verify_info.json.securityRealm | default('n/a') }}"
+      - "KDC host (group_vars): {{ kdc_host }}"

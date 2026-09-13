@@ -397,6 +397,7 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 | Issue | Action |
 |---|---|
 | Wrong identity detected | Run `00_detect_identity.yml`; set `identity_provider: freeipa` or `ad` to override |
+| CM Kerberos/KDC not enabled (`kerberized=false`) | On ipaserver: `ipactl status` (KDC must be RUNNING). Re-run `12_setup_freeipa_server.yml` then `28_setup_cm_krbs.yml` |
 | DNS not persisting on Ubuntu | DNS is applied via netplan — see [REFERENCE.md](REFERENCE.md#dns-configuration) |
 | CM install fails on Ubuntu | Set `cm_repo_username` / `cm_repo_password`; use `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr) |
 | CDH parcel download fails | Ensure worker facts exist (run phase 1 first). Set `cdh_parcel_os_suffix: noble` or `jammy` for Ubuntu workers, `el8`/`el9` for RHEL |

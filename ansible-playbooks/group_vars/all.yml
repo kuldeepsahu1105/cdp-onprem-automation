@@ -52,9 +52,10 @@ reverse_zones: "no"
 chrony_enabled: "yes"
 
 # Active Directory (when identity_provider: ad)
+# Leave ad_kdc_host empty unless using AD; placeholder values break identity auto-detect.
 ad_domain: corp.example.com
 ad_realm: "{{ ad_domain | upper }}"
-ad_kdc_host: "dc01.{{ ad_domain }}"
+ad_kdc_host: ""
 ad_dns_servers:
   - "{{ ad_kdc_host }}"
 ad_join_user: "svc-cloudera-join"

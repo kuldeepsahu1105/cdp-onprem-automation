@@ -127,7 +127,7 @@ Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` 
 | Condition | Effective provider | Flow |
 |---|---|---|
 | `[ipaserver]` has hosts | `freeipa` | Full: 10→15 |
-| No ipaserver + `ad_kdc_host` set | `ad` | Dependent: 11, 14, 23, 25 |
+| No ipaserver + non-empty `ad_kdc_host` | `ad` | Dependent: 11, 14, 23, 25 |
 | `identity_provider: freeipa` | `freeipa` | Forced |
 | `identity_provider: ad` | `ad` | Forced |
 
@@ -146,7 +146,7 @@ Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` 
 | Variable | Description |
 |---|---|
 | `ad_domain` | AD DNS domain |
-| `ad_kdc_host` | AD DC IP or hostname |
+| `ad_kdc_host` | AD DC IP or hostname (default empty — set for AD; placeholders break `auto`) |
 | `ad_dns_servers` | List of DNS servers (usually DC IP) |
 | `ad_join_user` | Account for `realm join` |
 | `ad_join_password` | Password for join account |
@@ -246,7 +246,7 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 | `25_verify_cm.yml` | Verify CM is running |
 | `26_setup_cm_license.yml` | Upload license or trial |
 | `27_setup_cm_autotls.yml` | Enable Auto-TLS |
-| `28_setup_cm_krbs.yml` | Kerberos (FreeIPA or AD KDC) |
+| `28_setup_cm_krbs.yml` | Kerberos (FreeIPA or AD KDC); asserts `kerberized=true` via CM API |
 | `30_setup_cm_ldap.yml` | LDAP auth (FreeIPA or AD) |
 
 ### Phase 4 — CMS & base cluster
@@ -417,6 +417,8 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/disable_firewall.yml` | firewalld (RHEL) or ufw skip |
 | `common_tasks/join_ad_realm.yml` | AD `realm join` |
 | `common_tasks/join_freeipa_client.yml` | IPA client enrollment |
+| `common_tasks/ensure_ipa_kdc_services.yml` | `ipactl start` + krb5kdc health on ipaserver |
+| `common_tasks/verify_cm_kerberos_enabled.yml` | Assert CM `/cm/kerberosInfo` reports `kerberized=true` |
 | `common_tasks/set_cm_api_url.yml` | CM API URL + Auto-TLS detection |
 | `ansible_control_reachability` | `auto` | `auto`, `public` (Jenkins / no VPC route), or `private` (bare metal / VPN / `CONTROL_MODE=local`) |
 | `cm_api_prefer_private_ip` | `true` | Legacy: prefer `private_ip` for CM API when profile is not `public` |
