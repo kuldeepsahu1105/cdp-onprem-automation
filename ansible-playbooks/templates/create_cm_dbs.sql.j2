@@ -14,10 +14,9 @@ END $$;
 
 {# CREATE DATABASE cannot run inside PL/pgSQL (DO/function) — use top-level IF NOT EXISTS (PG 15+, default PG 18). #}
 {% for db in databases %}
-CREATE DATABASE {{ db.name }} OWNER {{ db.user }} ENCODING 'UTF8'
+CREATE DATABASE {{ db.name }} IF NOT EXISTS OWNER {{ db.user }} ENCODING 'UTF8'
     TEMPLATE template0
-    LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8'
-    IF NOT EXISTS;
+    LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8';
 {% endfor %}
 
 /* Special Configuration */

@@ -32,11 +32,13 @@
 
     - name: Run CM database init SQL on PostgreSQL
       ansible.builtin.shell: |
-        PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -f /tmp/init.sql
+        PGPASSWORD={{ postgres_password }} psql -v ON_ERROR_STOP=1 -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -f /tmp/init.sql
       delegate_to: "{{ postgres_inventory_host }}"
       register: cm_db_init_sql
       changed_when: cm_db_init_sql.rc == 0
-      failed_when: cm_db_init_sql.rc != 0
+      failed_when: >
+        (cm_db_init_sql.rc | default(1) | int != 0) or
+        ('ERROR' in (cm_db_init_sql.stderr | default('')))
 
     - name: Display CM database init SQL output
       ansible.builtin.debug:

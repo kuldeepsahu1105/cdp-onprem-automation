@@ -498,10 +498,12 @@
 
     - name: Run SQL script on PostgreSQL
       ansible.builtin.shell: |
-        PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -f /tmp/init.sql
+        PGPASSWORD={{ postgres_password }} psql -v ON_ERROR_STOP=1 -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -f /tmp/init.sql
       register: sql_output
       changed_when: false
-      failed_when: sql_output.rc != 0
+      failed_when: >
+        (sql_output.rc | default(1) | int != 0) or
+        ('ERROR' in (sql_output.stderr | default('')))
 
     - name: Display SQL Execution Output
       ansible.builtin.debug:
