@@ -69,12 +69,10 @@ ipadm_password: "{{ ipaadmin_password }}"
 # Shared lab password (ECS UMS bootstrap, Kerberos admin, ECS LDAP admin); override in Jenkins ANSIBLE_GROUP_VARS_YAML
 common_password: "{{ ipaadmin_password }}"
 ipaserver_setup_dns: yes
+# IPA BIND forwarders at install: "no" (--no-forwarders, legacy default), "aws"/"vpc" (VPC resolver on EC2), or an IP.
 dns_forwarders: "no"
 reverse_zones: "no"
 chrony_enabled: "yes"
-# AWS: when dns_forwarders=no, ipa-server-install uses VPC resolver (set_dns_facts) by default.
-# Set false to use --no-forwarders only (legacy 10_setup_freeipa_server.yml behavior).
-ipa_server_install_use_vpc_dns_forwarder: true
 
 # Active Directory (when identity_provider: ad)
 # Leave ad_kdc_host empty unless using AD; placeholder values break identity auto-detect.

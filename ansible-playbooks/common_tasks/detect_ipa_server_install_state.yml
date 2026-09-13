@@ -82,6 +82,7 @@
       {{
         (ipa_detect_var_lib_ipa_dir.stat.exists | default(false) | bool)
         and not (ipa_detect_sysrestore_state.stat.exists | default(false) | bool)
+        and ((ipa_detect_var_lib_ipa_contents.matched | default(0) | int) > 0)
       }}
     ipa_detect_critical_debris: >-
       {{

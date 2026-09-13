@@ -497,7 +497,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/sanitize_ipa_paths_before_fresh_install.yml` | Remove broken `/var/lib/ipa` (no `sysrestore.state`) and `/etc/ipa` before fresh install when `ipactl` not configured (playbook 12) |
 | `common_tasks/preflight_ipa_server_install.yml` | `bind-utils`/`dnsutils`, `getent hosts` + `dig` checks before `ipa-server-install` (playbook 12) |
 
-| `ipa_server_install_use_vpc_dns_forwarder` | `true` (default) | When `dns_forwarders=no` on AWS, `12_setup_freeipa_server.yml` passes `--forwarder=<VPC resolver>` at install; set `false` for `--no-forwarders` only (legacy behavior). |
+| `dns_forwarders` | `no` | IPA install: `no` → `--no-forwarders` (legacy default); `aws` or `vpc` → VPC resolver from `set_dns_facts` on EC2; any other value → `--forwarder=<value>`. |
 | `common_tasks/preflight_kdc_reachable.yml` | TCP :88 to `kdc_host` before CM Kerberos REST; from **cldr-mngr** when `ansible_control_reachability` is `public` (Jenkins) |
 | `common_tasks/verify_cm_kerberos_enabled.yml` | Bounded wait on `/cm/kerberosInfo` field `kerberized`; actionable fail (see `cm_krb_kerberized_wait_*` in `group_vars/all.yml`) |
 | `common_tasks/reconcile_cm_cms_after_autotls.yml` | MGMT TLS truststore + CMS restart after **27** when Labs `cm_service` already deployed |
