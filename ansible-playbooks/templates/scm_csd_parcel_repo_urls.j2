@@ -4,11 +4,12 @@
 {% set svc = base_cluster_install_services | default({}) %}
 {% set use_svc_toggles = cm_parcel_csd_respect_service_toggles | default(false) %}
 {% set include_latest = cm_parcel_repo_include_latest | default(true) %}
+{% set latest_segment = cm_parcel_repo_latest_segment | default('{latest}') %}
 {% set csd_parcel_repo_urls = [] %}
 {% if (cm_parcel_repo_include_cdv_parcel | default(true)) and csd_install_dataviz | default(true) and ((not use_svc_toggles) or (svc.dataviz | default(false))) %}
 {% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cdv/' ~ cdv_version ~ '/parcels/'] %}
 {% if include_latest %}
-{% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cdv/latest/parcels/'] %}
+{% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cdv/' ~ latest_segment ~ '/parcels/'] %}
 {% endif %}
 {% endif %}
 {% set cfm_enabled = (
@@ -21,7 +22,7 @@
 {% if cfm_enabled %}
 {% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cfm2/' ~ cfm_version ~ '/parcels/'] %}
 {% if include_latest %}
-{% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cfm2/latest/parcels/'] %}
+{% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cfm2/' ~ latest_segment ~ '/parcels/'] %}
 {% endif %}
 {% endif %}
 {% for url in csd_parcel_repo_urls | unique %}

@@ -113,6 +113,7 @@
       }}
 
 # Drop CM UI placeholders and legacy archive paths (CDH + ECS PVC DS; see parcel_repo_public / ecs_parcel_repo_url).
+# Literal /latest/parcels/ archive paths are scrubbed when merging wizard defaults; Ansible publishes {latest} segment URLs.
 - name: Parcel repo — remove invalid or legacy remote parcel repository URLs
   ansible.builtin.set_fact:
     cm_parcel_repo_urls_effective: >-
@@ -125,6 +126,10 @@
           | reject('search', 'archive\\.cloudera\\.com/cdh5/')
           | reject('search', '/p/spark3/')
           | reject('search', 'archive\\.cloudera\\.com/spark3/')
+          | reject('search', '/cdh7/latest/parcels')
+          | reject('search', '/cdp-pvc-ds/latest/parcels')
+          | reject('search', '/cdv/latest/parcels')
+          | reject('search', '/cfm2/latest/parcels')
           | reject('search', 'ecsversion-or-latest')
           | reject('search', '<ecsversion')
           | reject('search', '\\.jar($|[?#])')
