@@ -544,7 +544,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/preflight_ipa_client_install.yml` | Hostname/DNS/`getent` and HTTPS `/ipa/json` probe (fails early on HTML login/404) before `ipa-client-install` on hosts without `/etc/ipa/default.conf` |
 | `common_tasks/ensure_ipa_kdc_services.yml` | `ipactl start` + krb5kdc health on ipaserver |
 | `common_tasks/detect_ipa_server_install_state.yml` | `default.conf`, partial debris, `ipactl` / `ipa-server-status` before `ipa-server-install` |
-| `common_tasks/recover_ipa_server_install.yml` | Deeper `ipa-server-install --uninstall` + path cleanup (playbook **`12b`**, not default **12**) |
+| `common_tasks/recover_ipa_server_install.yml` | Deeper `ipa-server-install --uninstall` + path cleanup (via `ipa_deep_recovery.yml`, not default playbook **12**) |
 | `common_tasks/sanitize_ipa_paths_before_fresh_install.yml` | Remove broken or incomplete `/var/lib/ipa` (missing or stale **sysrestore**), `/etc/ipa`, and `/etc/dirsrv/slapd-*` before fresh install when `ipactl` not configured (playbook 12) |
 | `common_tasks/preflight_ipa_server_install.yml` | Compact preflight for playbook 12: RHEL RPMs, `/etc/ipa` + `ipa_server_etc_ipa_subdirs`, `/var/lib/ipa` + `ipa_server_var_lib_subdirs`, openldap assert, `hostname -f`/`getent` asserts, **LDAP 389/636 listener check** when **`ipactl`** not configured |
 | `ipa_deep_recovery.yml` | Optional detect / recover / sanitize before playbook 12 (set `ipa_server_deep_recovery: true`) |
