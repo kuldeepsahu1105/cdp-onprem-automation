@@ -258,6 +258,27 @@
     - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
     - cm_api_probe_https_discovery is defined or cm_api_probe_host_discovery is defined
 
+- name: CM API — try /api/version (HTTPS) on cldr-mngr
+  ansible.builtin.uri:
+    url: "https://{{ item }}:{{ cm_https_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303, 401, 403]
+    timeout: 15
+  loop: "{{ cm_api_probe_host_candidates }}"
+  register: cm_api_probe_https_discovery
+  failed_when: false
+  delegate_to: "{{ cm_api_probe_delegate_to }}"
+  when:
+    - cm_api_probe_delegate_to | default('') | length > 0
+    - not (cm_api_manager_https_fallback | default(false) | bool)
+    - cm_api_probe_host_candidates is defined
+    - cm_api_probe_host_candidates | length > 0
+
 - name: CM API — try /api/version (HTTP) on cldr-mngr
   ansible.builtin.uri:
     url: "http://{{ item }}:{{ cm_http_port }}/api/version"
@@ -276,10 +297,19 @@
   delegate_to: "{{ cm_api_probe_delegate_to }}"
   when:
     - cm_api_probe_delegate_to | default('') | length > 0
+    - not (cm_api_manager_https_fallback | default(false) | bool)
     - cm_api_probe_host_candidates is defined
     - cm_api_probe_host_candidates | length > 0
+    - cm_api_probe_https_discovery is defined
+    - (
+        cm_api_probe_https_discovery.results | default([])
+        | selectattr('status', 'defined')
+        | selectattr('status', 'in', [200, 301, 303, 401, 403])
+        | list
+        | length
+      ) == 0
 
-- name: CM API — try /api/version (HTTPS) on cldr-mngr
+- name: CM API — try /api/version (HTTPS) on cldr-mngr (local play)
   ansible.builtin.uri:
     url: "https://{{ item }}:{{ cm_https_port }}/api/version"
     method: GET
@@ -293,9 +323,9 @@
   loop: "{{ cm_api_probe_host_candidates }}"
   register: cm_api_probe_https_discovery
   failed_when: false
-  delegate_to: "{{ cm_api_probe_delegate_to }}"
   when:
-    - cm_api_probe_delegate_to | default('') | length > 0
+    - cm_api_probe_on_manager_local | default(false) | bool
+    - cm_api_probe_delegate_to | default('') | length == 0
     - cm_api_probe_host_candidates is defined
     - cm_api_probe_host_candidates | length > 0
 
@@ -319,33 +349,21 @@
     - cm_api_probe_delegate_to | default('') | length == 0
     - cm_api_probe_host_candidates is defined
     - cm_api_probe_host_candidates | length > 0
+    - cm_api_probe_https_discovery is defined
+    - (
+        cm_api_probe_https_discovery.results | default([])
+        | selectattr('status', 'defined')
+        | selectattr('status', 'in', [200, 301, 303, 401, 403])
+        | list
+        | length
+      ) == 0
 
-- name: CM API — try /api/version (HTTPS) on cldr-mngr (local play)
-  ansible.builtin.uri:
-    url: "https://{{ item }}:{{ cm_https_port }}/api/version"
-    method: GET
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: yes
-    return_content: no
-    validate_certs: no
-    status_code: [200, 301, 303, 401, 403]
-    timeout: 15
-  loop: "{{ cm_api_probe_host_candidates }}"
-  register: cm_api_probe_https_discovery
-  failed_when: false
-  when:
-    - cm_api_probe_on_manager_local | default(false) | bool
-    - cm_api_probe_delegate_to | default('') | length == 0
-    - cm_api_probe_host_candidates is defined
-    - cm_api_probe_host_candidates | length > 0
-
-- name: CM API — pick working address on cldr-mngr (HTTP, then HTTPS)
+- name: CM API — pick working address on cldr-mngr (HTTPS, then HTTP)
   ansible.builtin.set_fact:
     cm_api_probe_host: >-
       {{
         (
-          cm_api_probe_host_discovery.results
+          cm_api_probe_https_discovery.results
           | default([])
           | selectattr('status', 'defined')
           | selectattr('status', 'in', [200, 301, 303, 401, 403])
@@ -355,7 +373,7 @@
         )
         | default(
           (
-            cm_api_probe_https_discovery.results
+            cm_api_probe_host_discovery.results
             | default([])
             | selectattr('status', 'defined')
             | selectattr('status', 'in', [200, 301, 303, 401, 403])
@@ -448,3 +466,143 @@
     - cm_api_probe_delegate_to | default('') | length > 0
     - cm_api_probe_host | default('') | length > 0
     - cm_api_probe_host != '127.0.0.1'
+
+- name: CM API — record whether Ansible controller reached HTTPS :7183
+  ansible.builtin.set_fact:
+    cm_api_controller_https_reachable: >-
+      {{
+        (
+          cm_api_probe_https_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length
+        ) > 0
+      }}
+  when:
+    - cm_api_probe_from_controller_public | default(false) | bool
+    - cm_api_probe_delegate_to | default('') | length == 0
+    - cm_api_probe_https_discovery is defined
+
+- name: CM API — delegate HTTPS probe to cldr-mngr when controller cannot reach :7183
+  ansible.builtin.set_fact:
+    cm_api_probe_delegate_to: "{{ cm_manager_inventory_host }}"
+    cm_api_manager_https_fallback: true
+  when:
+    - cm_api_probe_from_controller_public | default(false) | bool
+    - cm_api_delegate_probes_to_manager | default(true) | bool
+    - cm_api_probe_delegate_to | default('') | length == 0
+    - not (cm_api_controller_https_reachable | default(false) | bool)
+
+- name: Build CM API address list on cldr-mngr (HTTPS fallback from controller)
+  ansible.builtin.set_fact:
+    cm_api_probe_host_candidates: >-
+      {{
+        (
+          ['127.0.0.1']
+          + (
+            [cm_host_private]
+            if (
+              (cm_host_private | default('') | length > 0)
+              and (cm_host_private != '127.0.0.1')
+            )
+            else []
+          )
+          + ([cm_host_fqdn] if (cm_host_fqdn | default('') | length > 0) else [])
+          + (
+            [hostvars[cm_manager_inventory_host].ansible_fqdn | default('')]
+            if (hostvars[cm_manager_inventory_host].ansible_fqdn | default('') | length > 0)
+            else []
+          )
+          + (
+            [hostvars[cm_manager_inventory_host].ansible_hostname | default('')]
+            if (hostvars[cm_manager_inventory_host].ansible_hostname | default('') | length > 0)
+            else []
+          )
+          + (
+            [hostvars[cm_manager_inventory_host].ansible_host | default('')]
+            if (
+              (hostvars[cm_manager_inventory_host].ansible_host | default('') | length > 0)
+              and (hostvars[cm_manager_inventory_host].ansible_host | default('') not in ['127.0.0.1', 'localhost'])
+              and (
+                hostvars[cm_manager_inventory_host].ansible_host is match('^10\\.')
+                or hostvars[cm_manager_inventory_host].ansible_host is match('^192\\.168\\.')
+                or hostvars[cm_manager_inventory_host].ansible_host is match('^172\\.(1[6-9]|2[0-9]|3[0-1])\\.')
+              )
+            )
+            else []
+          )
+        )
+        | unique
+        | reject('equalto', '')
+        | reject('match', '^cm\\.')
+        | list
+      }}
+  when: cm_api_manager_https_fallback | default(false) | bool
+
+- name: CM API — try /api/version (HTTPS) on cldr-mngr (controller :7183 fallback)
+  ansible.builtin.uri:
+    url: "https://{{ item }}:{{ cm_https_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303, 401, 403]
+    timeout: 15
+  loop: "{{ cm_api_probe_host_candidates }}"
+  register: cm_api_probe_https_discovery
+  failed_when: false
+  delegate_to: "{{ cm_api_probe_delegate_to }}"
+  when:
+    - cm_api_manager_https_fallback | default(false) | bool
+    - cm_api_probe_host_candidates is defined
+    - cm_api_probe_host_candidates | length > 0
+
+- name: CM API — pick HTTPS bind on cldr-mngr after controller :7183 fallback
+  ansible.builtin.set_fact:
+    cm_api_probe_host: >-
+      {{
+        (
+          cm_api_probe_https_discovery.results
+          | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | map(attribute='item')
+          | list
+          | first
+        )
+        | default(cm_api_probe_host, true)
+      }}
+    cm_api_discovery_succeeded: >-
+      {{
+        (
+          cm_api_probe_https_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length
+        ) > 0
+      }}
+    cm_api_delegate_discovery_succeeded: >-
+      {{
+        (
+          cm_api_probe_https_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length
+        ) > 0
+      }}
+  when:
+    - cm_api_manager_https_fallback | default(false) | bool
+    - cm_api_probe_https_discovery is defined
+
+- name: CM API — route CM API calls via cldr-mngr after manager HTTPS fallback
+  ansible.builtin.set_fact:
+    cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
+  when:
+    - cm_api_manager_https_fallback | default(false) | bool
+    - cm_api_delegate_discovery_succeeded | default(false) | bool
+    - cm_api_probe_host | default('') | length > 0
