@@ -83,6 +83,8 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 
 **Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml`. Deployment portal playbooks (**10**, **35**) do **not** call CM API or CM UI probes — index links use inventory FQDNs only; live-stats JSON is inventory-only.
 
+**SSH target vs CM API target are separate facts — do not conflate them.** `ansible_control_reachability_effective` / `cm_connect_host` / `cm_api_client_host` only pick the address used for CM API `uri`/`wait_for` probes (delegated to localhost or `cldr-mngr`); they never touch the real Ansible connection variable `ansible_host` used for SSH. `common_tasks/validate_ansible_ssh_reachability.yml` is a separate, independent guard: it probes the target group's `ansible_host` values and fails fast when one looks VPC-private (`10.x`/`172.16-31.x`/`192.168.x`) and is unreachable from the controller, instead of letting the remote play hang on an SSH connection timeout. Imported on the localhost pre-play in **00** (default `ansible_ssh_reachability_check_group: all` — every inventory host, before any play connects), and in **10**, **32**, **35** (scoped to `deployment_portal_host_group_effective`) after `resolve_deployment_portal_host.yml`. See `docs/RUNBOOK.md` "Running from any controller" and "Control-plane reachability" for the escape hatch (`ansible_ssh_reachability_skip`) and the ProxyJump/`ansible_ssh_common_args` option for bare-metal-style inventories accessed from outside their network.
+
 ---
 
 ## Editing checklist

@@ -1,0 +1,106 @@
+---
+# Fail fast when this playbook's SSH target (ansible_host) is a VPC-private address that the
+# Ansible controller cannot reach — instead of silently hanging on an SSH connection timeout
+# (the exact "cldr-mngr UNREACHABLE via private IP ... SSH timeout" symptom from Jenkins/laptop
+# runs against a bare-metal-style inventory where ansible_host == private_ip; see docs/RUNBOOK.md
+# "Scenario B — Bare metal", which intentionally uses the same address for both).
+#
+# Runs entirely delegate_to localhost (safe to import from a localhost play before the real
+# hosts: play connects). Uses the same reachability-probe pattern as the "auto" profile in
+# detect_ansible_control_reachability.yml (wait_for against the target address) — it does NOT
+# read/write ansible_control_reachability_effective, cm_connect_host, or cm_api_client_host, so
+# it never changes CM API "prefer private when reachable" behaviour (resolve_cm_connect_host.yml).
+#
+# Vars:
+#   ansible_ssh_reachability_check_group    — inventory group to check (default 'all')
+#   ansible_ssh_reachability_probe_port     — TCP port to probe (default 22)
+#   ansible_ssh_reachability_probe_timeout  — probe timeout seconds (default 5)
+#   ansible_ssh_reachability_skip           — true bypasses this check (bare metal / VPN
+#                                              controller with real routing to the private network,
+#                                              or when using an SSH ProxyJump/bastion via
+#                                              ANSIBLE_SSH_COMMON_ARGS — see docs/RUNBOOK.md)
+
+- name: Resolve SSH reachability check group
+  ansible.builtin.set_fact:
+    _assr_check_group: "{{ ansible_ssh_reachability_check_group | default('all') }}"
+  delegate_to: localhost
+
+- name: Reset SSH reachability check accumulator
+  ansible.builtin.set_fact:
+    _assr_private_looking_hosts: []
+  delegate_to: localhost
+  when: not (ansible_ssh_reachability_skip | default(false) | bool)
+
+- name: Build list of inventory hosts with a VPC-private-looking ansible_host
+  ansible.builtin.set_fact:
+    _assr_private_looking_hosts: >-
+      {{
+        _assr_private_looking_hosts
+        + [{'inventory_hostname': item, 'ansible_host': hostvars[item].ansible_host}]
+      }}
+  loop: "{{ groups[_assr_check_group] | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  delegate_to: localhost
+  when:
+    - not (ansible_ssh_reachability_skip | default(false) | bool)
+    - _assr_check_group in groups
+    - hostvars[item].ansible_host is defined
+    - hostvars[item].ansible_host | default('') | length > 0
+    - >-
+      hostvars[item].ansible_host is match('^10\\.')
+      or hostvars[item].ansible_host is match('^192\\.168\\.')
+      or hostvars[item].ansible_host is match('^172\\.(1[6-9]|2[0-9]|3[0-1])\\.')
+
+- name: Probe VPC-private-looking ansible_host addresses from the Ansible controller
+  ansible.builtin.wait_for:
+    host: "{{ item.ansible_host }}"
+    port: "{{ ansible_ssh_reachability_probe_port | default(22) | int }}"
+    timeout: "{{ ansible_ssh_reachability_probe_timeout | default(5) | int }}"
+    state: started
+  register: _assr_probe_results
+  ignore_errors: true
+  loop: "{{ _assr_private_looking_hosts | default([]) }}"
+  loop_control:
+    label: "{{ item.inventory_hostname }}"
+  delegate_to: localhost
+  when:
+    - not (ansible_ssh_reachability_skip | default(false) | bool)
+    - _assr_private_looking_hosts | default([]) | length > 0
+
+- name: Identify hosts whose private-looking ansible_host is unreachable from the controller
+  ansible.builtin.set_fact:
+    _assr_unreachable_hosts: >-
+      {{
+        (_assr_probe_results.results | default([]))
+        | selectattr('failed', 'equalto', true)
+        | map(attribute='item')
+        | list
+      }}
+  delegate_to: localhost
+  when:
+    - not (ansible_ssh_reachability_skip | default(false) | bool)
+    - _assr_private_looking_hosts | default([]) | length > 0
+
+- name: Fail fast — SSH target(s) resolve to an unreachable VPC-private ansible_host
+  ansible.builtin.fail:
+    msg: >-
+      SSH target(s) in inventory group '{{ _assr_check_group }}' have ansible_host set to a
+      VPC-private address the Ansible controller cannot reach on port
+      {{ ansible_ssh_reachability_probe_port | default(22) }}:
+      {{ _assr_unreachable_hosts | map(attribute='inventory_hostname') | list }}
+      ({{ _assr_unreachable_hosts | map(attribute='ansible_host') | list }}).
+      Failing fast here instead of hanging on an SSH connection timeout later in this play.
+      This is expected on a documented bare-metal controller with real private routing
+      (docs/RUNBOOK.md "Scenario B") — set ansible_ssh_reachability_skip=true to bypass when that
+      applies here. Otherwise, from Jenkins/laptop/pipeline outside this network: regenerate
+      ansible-playbooks/inventory.ini with a public ansible_host via
+      jenkins/scripts/regenerate-inventory-from-terraform.sh (or generate_inventory.sh) so
+      ansible_host holds the public IP/EIP — private_ip is untouched and still preferred for CM
+      API checks when reachable (resolve_cm_connect_host.yml). If there is genuinely no public
+      address for this host, run from an in-VPC/bare-metal control node
+      (CONTROL_MODE=local ./pvc_setup.sh) or add an SSH bastion ProxyJump via
+      ansible_ssh_common_args / ANSIBLE_SSH_COMMON_ARGS in group_vars/all.yml.
+  when:
+    - not (ansible_ssh_reachability_skip | default(false) | bool)
+    - _assr_unreachable_hosts | default([]) | length > 0

@@ -229,6 +229,12 @@ Private-IP URLs on the index work only inside the VPC. Ensure SG allows **81** (
 
 **Control-plane reachability (Jenkins vs VPN / bare metal):** The Jenkins agent has **no route** to VPC `10.x` / `172.31.x` addresses. `run-ansible.sh` exports `ANSIBLE_CONTROL_VIA_JENKINS=1`; `jenkins_override.yml` sets `ansible_control_reachability: public` so CM API and portal verify never treat inventory `private_ip` as the controller target (probes delegate to `cldr-mngr` at manager IP/FQDN where needed). For **bare metal** or **in-VPC/VPN** automation runners, use default `auto` or `ansible_control_reachability: private` in `ANSIBLE_GROUP_VARS_YAML` — Tier **B** is skipped when the effective profile is not `public`.
 
+**SSH reachability guard (separate from the above):** `ansible_control_reachability` only affects CM API / portal-verify probing, never the real SSH connection (`ansible_host`). `common_tasks/validate_ansible_ssh_reachability.yml` (imported in `00_setup_ssh_preqs.yml`, `10_setup_deployment_portal.yml`, `32_setup_monitoring_stack.yml`, `35_refresh_deployment_portal.yml`) fails fast with an actionable message when `ansible_host` looks VPC-private and the controller cannot reach it, instead of hanging on an SSH timeout — see `ansible-playbooks/docs/RUNBOOK.md` "Running from any controller". Jenkins normally never hits this because `regenerate-inventory-from-terraform.sh` always writes public `ansible_host`; if a bare-metal/VPN Jenkins agent legitimately has private routing and the automatic probe still misfires, bypass it per-run via `ANSIBLE_EXTRA_VARS` (space-separated `key=value` pairs consumed by `scripts/lib/ansible_env.sh` → `ansible_extra_args()`, appended as `-e` to every `ansible-playbook` call for that run):
+
+```bash
+export ANSIBLE_EXTRA_VARS='ansible_ssh_reachability_skip=true'
+```
+
 With **`caddy_vhost_enabled`**, the FreeIPA links use a lab hostname (`ipa.<ops-ip-dashed>.<base>`): default **`/ipa/modern-ui/`** plus legacy **`/ipa/ui`**. Caddy redirects `/` to modern UI and proxies **HTTP** to `<ipaserver-fqdn>` with **`Host`** and path-matched **`Referer`** upstream (cloudera-labs/openshift pattern). Playbook **10** (PORTAL stage) verifies tiers after sync; Tier **A** failures include Caddy log hints in the Ansible output.
 
 ## Ansible group_vars override (`ANSIBLE_GROUP_VARS_YAML`)
