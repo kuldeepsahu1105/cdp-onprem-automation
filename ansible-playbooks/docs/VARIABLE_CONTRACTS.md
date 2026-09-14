@@ -64,6 +64,8 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 
 **`27_setup_cm_autotls.yml` generateCmca gate:** captures **`cm_autotls_setup_intent`** from inventory **`autotls_enabled`** (default **`true`** in `group_vars/all.yml`) before **`set_cm_api_url.yml`** (HTTPS probes may also set runtime `autotls_enabled`). Skips **`generateCmca`** when **`cm_autotls_api_enabled`** and agent truststore exist, or when manual HTTPS on **`cm_https_port`** with **`autotls_enabled` explicitly `false`** (post-#169 HTTPS-only skip). Sets **`cm_autotls_generate_cmca_skip`** / **`cm_api_https_on_cm_port`** helpers.
 
+**`29_setup_cm_cms.yml` / `configure_cm_cms_autotls_trust.yml`:** same **`cm_autotls_setup_intent`** capture before **`set_cm_api_url.yml`**. **`cms_autotls_trust_required`** is true when **`cm_cms_configure_autotls_trust`** and (**`cm_autotls_api_enabled`** from CM config **or** setup intent with agent **`cm-auto-global_truststore.jks`** on the CM host). Manual TLS (`autotls_enabled: false` in inventory) stays skipped when CM reports HTTPS without Auto-TLS and no agent truststore.
+
 **CM UI:** Cloudera Manager **`frontend_url`** is not set via Caddy. Portal index and Jenkins list **direct** `https://cldr-mngr.<domain>:7183` (or `:7180`). Optional `cm_external_url` in `group_vars` sets `cm_frontend_url_effective` only when you need a custom published URL.
 
 | Fact | Set by |

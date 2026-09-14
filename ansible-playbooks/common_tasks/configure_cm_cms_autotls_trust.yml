@@ -6,26 +6,45 @@
 - name: CMS — read CM Auto-TLS state for truststore configuration
   ansible.builtin.import_tasks: fetch_cm_autotls_api_state.yml
 
+- name: CMS — check agent truststore on CM host (intent path when CM config omits Auto-TLS flags)
+  ansible.builtin.stat:
+    path: "{{ cm_cms_autotls_truststore_path }}"
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true
+  register: cm_autotls_truststore_precheck
+
 - name: CMS — decide whether Auto-TLS client truststore is required
   ansible.builtin.set_fact:
     cms_autotls_trust_required: >-
       {{
         (cm_cms_configure_autotls_trust | default(true) | bool)
-        and (cm_autotls_api_enabled | default(false) | bool)
+        and (
+          (cm_autotls_api_enabled | default(false) | bool)
+          or (
+            (cm_autotls_setup_intent | default(autotls_enabled | default(true) | bool) | bool)
+            and (cm_autotls_truststore_precheck.stat.exists | default(false) | bool)
+          )
+        )
       }}
 
 - name: CMS — skip truststore when CM HTTPS is active without Auto-TLS agent certs
   ansible.builtin.debug:
     msg: >-
-      CMS truststore skipped (CM HTTPS without Auto-TLS in CM config).
+      CMS truststore skipped (CM HTTPS without Auto-TLS in CM config and no agent truststore under setup intent).
       cm_api_https_active={{ cm_api_https_active | default(false) }},
       cm_autotls_api_enabled={{ cm_autotls_api_enabled | default(false) }},
+      cm_autotls_setup_intent={{ cm_autotls_setup_intent | default(autotls_enabled | default(true) | bool) }},
+      agent_truststore_present={{ cm_autotls_truststore_precheck.stat.exists | default(false) }},
       cm_tls_mode={{ cm_tls_mode | default('http') }}.
       Configure MGMT TLS client trust manually in CM UI if Service Monitor cannot reach CM :7183.
   when:
     - not (cms_autotls_trust_required | default(false) | bool)
     - cm_api_https_active | default(false) | bool
     - not (cm_autotls_api_enabled | default(false) | bool)
+    - not (
+        (cm_autotls_setup_intent | default(autotls_enabled | default(true) | bool) | bool)
+        and (cm_autotls_truststore_precheck.stat.exists | default(false) | bool)
+      )
 
 - name: CMS — skip truststore when CM is not using TLS
   ansible.builtin.debug:
