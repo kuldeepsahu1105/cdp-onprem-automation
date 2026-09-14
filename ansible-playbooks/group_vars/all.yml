@@ -11,6 +11,11 @@ ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
 java_version: "17"
 python_version: "3.11"
 postgresql_version: 18
+# Amazon Linux native-repo psql client caps (ensure_cm_postgres_databases on DB host only; server may stay postgresql_version).
+postgres_amazon_linux_2023_native_client_version_cap: 17
+postgres_amazon_linux_2_native_client_version_cap: 15
+postgres_amazon_linux_2023_native_client_version: "{{ [postgresql_version | int, postgres_amazon_linux_2023_native_client_version_cap | int] | min }}"
+postgres_amazon_linux_2_native_client_version: "{{ [postgresql_version | int, postgres_amazon_linux_2_native_client_version_cap | int] | min }}"
 
 # ---------------------------------------------------------------------------
 # Identity provider: auto | freeipa | ad
