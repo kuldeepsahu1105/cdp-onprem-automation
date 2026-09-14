@@ -24,6 +24,17 @@
     - name: Build deployment portal context from inventory
       ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
 
+- name: Install and enroll node_exporter on cluster hosts
+  hosts: "{{ monitoring_node_exporter_host_groups | join(':') }}"
+  become: true
+  gather_facts: true
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: Install node_exporter (host metrics for Prometheus)
+      ansible.builtin.import_tasks: common_tasks/install_node_exporter.yml
+      when: monitoring_node_exporter_enabled | default(true) | bool
+
 - name: Deploy monitoring stack and update Caddy routes
   hosts: "{{ hostvars['localhost']['deployment_portal_host_group_effective'] }}"
   become: true
