@@ -1,0 +1,20 @@
+{# YAML list of process_exporter Prometheus scrape targets, one entry per unique inventory host in
+   monitoring_process_exporter_host_groups. Always uses private_ip: the Prometheus container reaches
+   cluster hosts over the VPC/private network from the ops host, not via the (possibly unreachable
+   from inside the VPC) public IP. Consumed by build_deployment_portal_facts.yml → monitoring_prometheus.yml.j2. #}
+{% set _seen = namespace(hosts=[]) %}
+{% for group_name in monitoring_process_exporter_host_groups | default([]) %}
+{% for inv_host in groups.get(group_name, []) %}
+{% if inv_host not in _seen.hosts %}
+{% set _ = _seen.hosts.append(inv_host) %}
+{% set _hv = hostvars[inv_host] %}
+{% set _priv = _hv.private_ip | default(_hv.ansible_host | default('')) %}
+{% if _priv | length > 0 %}
+- target: "{{ _priv }}:{{ monitoring_process_exporter_port }}"
+  instance: "{{ _hv.cldr_hostname | default(inv_host) }}"
+  labels:
+    inventory_group: "{{ group_name }}"
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endfor %}

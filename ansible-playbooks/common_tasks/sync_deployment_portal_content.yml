@@ -190,6 +190,17 @@
 - name: Sync monitoring stack configuration
   when: deployment_portal_monitoring_routes_enabled | default(false) | bool
   block:
+    - name: Create monitoring config subdirectories (rules, Grafana provisioning/dashboards)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ monitoring_config_dir }}/rules"
+        - "{{ monitoring_config_dir }}/grafana/provisioning/datasources"
+        - "{{ monitoring_config_dir }}/grafana/provisioning/dashboards"
+        - "{{ monitoring_config_dir }}/grafana/dashboards"
+
     - name: Render Prometheus configuration
       ansible.builtin.template:
         src: monitoring_prometheus.yml.j2
@@ -197,12 +208,52 @@
         mode: "0644"
       register: monitoring_prometheus_render
 
+    - name: Render Prometheus alerting rules
+      ansible.builtin.template:
+        src: monitoring_alert_rules.yml.j2
+        dest: "{{ monitoring_config_dir }}/rules/alerts.yml"
+        mode: "0644"
+      register: monitoring_alert_rules_render
+      when: monitoring_alert_rules_enabled | default(true) | bool
+
+    - name: Remove rendered alerting rules when disabled
+      ansible.builtin.file:
+        path: "{{ monitoring_config_dir }}/rules/alerts.yml"
+        state: absent
+      when: not (monitoring_alert_rules_enabled | default(true) | bool)
+
     - name: Render Alertmanager configuration
       ansible.builtin.template:
         src: monitoring_alertmanager.yml.j2
         dest: "{{ monitoring_config_dir }}/alertmanager.yml"
         mode: "0644"
       register: monitoring_alertmanager_render
+
+    - name: Render Grafana datasources provisioning (Prometheus + Alertmanager)
+      ansible.builtin.template:
+        src: grafana_datasources.yml.j2
+        dest: "{{ monitoring_config_dir }}/grafana/provisioning/datasources/datasources.yml"
+        mode: "0644"
+      register: monitoring_grafana_datasources_render
+      when: monitoring_grafana_provisioning_enabled | default(true) | bool
+
+    - name: Render Grafana dashboard provider provisioning
+      ansible.builtin.template:
+        src: grafana_dashboard_provider.yml.j2
+        dest: "{{ monitoring_config_dir }}/grafana/provisioning/dashboards/dashboards.yml"
+        mode: "0644"
+      register: monitoring_grafana_dashboard_provider_render
+      when: monitoring_grafana_provisioning_enabled | default(true) | bool
+
+    - name: Copy prepopulated Grafana dashboard JSON
+      ansible.builtin.copy:
+        src: "grafana_dashboards/{{ item }}"
+        dest: "{{ monitoring_config_dir }}/grafana/dashboards/{{ item }}"
+        mode: "0644"
+      loop:
+        - cm_cluster_overview.json
+      register: monitoring_grafana_dashboards_copy
+      when: monitoring_grafana_provisioning_enabled | default(true) | bool
 
     - name: Render monitoring Docker Compose environment file
       ansible.builtin.template:
@@ -230,6 +281,10 @@
         or monitoring_env_render is changed
         or monitoring_prometheus_render is changed
         or monitoring_alertmanager_render is changed
+        or (monitoring_alert_rules_render is defined and monitoring_alert_rules_render is changed)
+        or (monitoring_grafana_datasources_render is defined and monitoring_grafana_datasources_render is changed)
+        or (monitoring_grafana_dashboard_provider_render is defined and monitoring_grafana_dashboard_provider_render is changed)
+        or (monitoring_grafana_dashboards_copy is defined and monitoring_grafana_dashboards_copy is changed)
       register: monitoring_stack_force_recreate
       failed_when: monitoring_stack_force_recreate.rc != 0
       changed_when: true
@@ -246,6 +301,10 @@
         and not (monitoring_env_render is changed)
         and not (monitoring_prometheus_render is changed)
         and not (monitoring_alertmanager_render is changed)
+        and not (monitoring_alert_rules_render is defined and monitoring_alert_rules_render is changed)
+        and not (monitoring_grafana_datasources_render is defined and monitoring_grafana_datasources_render is changed)
+        and not (monitoring_grafana_dashboard_provider_render is defined and monitoring_grafana_dashboard_provider_render is changed)
+        and not (monitoring_grafana_dashboards_copy is defined and monitoring_grafana_dashboards_copy is changed)
       register: monitoring_compose_up
       changed_when: >-
         'Creating' in monitoring_compose_up.stdout

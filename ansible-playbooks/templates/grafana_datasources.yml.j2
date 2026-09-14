@@ -1,0 +1,28 @@
+# Ansible-managed Grafana provisioning — datasources (see
+# https://grafana.com/docs/grafana/latest/administration/provisioning/#datasources).
+# Fixed uids (prometheus/alertmanager) let provisioned dashboard JSON reference datasources by uid
+# without a Grafana-generated random id, so dashboards stay valid offline / across re-provisioning.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://{{ monitoring_prometheus_container }}:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      manageAlerts: true
+      alertmanagerUid: alertmanager
+
+  - name: Alertmanager
+    uid: alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://{{ monitoring_alertmanager_container }}:9093
+    editable: false
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: false

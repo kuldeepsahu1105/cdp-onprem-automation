@@ -349,7 +349,7 @@ CMS (Management Service) and CDP base cluster are **separate**:
 | `31_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
 | `33_setup_ecs_cluster.yml` | ECS cluster | Phased DOCKER + ECS + embedded control plane — see [CDP_ECS_INSTALL.md](CDP_ECS_INSTALL.md) |
 | `10_setup_deployment_portal.yml` | Ops portal bootstrap | Caddy, pgAdmin, optional monitoring on ops host (`auto` → ipaserver else cldr-mngr); run early in phase 1 |
-| `32_setup_monitoring_stack.yml` | Monitoring only | Add monitoring after 28 (requires portal network) |
+| `32_setup_monitoring_stack.yml` | Monitoring only | Add monitoring after 28 (requires portal network): Prometheus/Grafana/Alertmanager/cAdvisor stack + node_exporter/process_exporter on cluster hosts + Grafana provisioning + Prometheus alert rules |
 | `34_setup_ecs_data_services.yml` | ECS data services | CDW/CDE/CAI/Model Registry via `cloudera.cloud` + Caddy — see [CDP_ECS_DATA_SERVICES.md](CDP_ECS_DATA_SERVICES.md) |
 
 **ECS API keys (automation):** IAM `createMachineUserAccessKey` requires a **signed** request. Password-only console login is not enough. After ECS is up, either set `ecs_api_access_key_id` / `ecs_api_private_key`, or set a **one-time** bootstrap admin key (`ecs_iam_bootstrap_*` or Jenkins `ECS_IAM_BOOTSTRAP_*` credentials) and enable `ecs_auto_provision_api_access_key` (default `true`) to create machine user `ecs_automation_machine_user` via CDP CLI; keys are cached at `ecs_api_credentials_cache_path`.
@@ -397,6 +397,22 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `monitoring_node_exporter_user` / `monitoring_node_exporter_group` | `node_exporter` | Dedicated system user/group running the systemd service (no login shell) |
 | `monitoring_node_exporter_download_base_url` | GitHub releases URL | Override for an internal mirror when GitHub egress is restricted |
 | `monitoring_node_exporter_host_groups` | `[ipaserver, cldr-mngr, base-masters, base-workers, ecs-masters, ecs-workers]` | Inventory groups that get node_exporter + a scrape target; targets always use `private_ip` (Prometheus container reaches cluster hosts over the VPC/private network) |
+| `monitoring_process_exporter_enabled` | `true` | Install process_exporter (systemd) on `monitoring_process_exporter_host_groups` and add a `process_exporter` Prometheus job (playbook **32**) — per-process CPU/memory metrics |
+| `monitoring_process_exporter_version` | `0.8.7` | Pinned process_exporter release (linux amd64/arm64 tarball from GitHub releases) |
+| `monitoring_process_exporter_port` | `9256` | process_exporter `--web.listen-address` port; opened in firewalld on each target host when active |
+| `monitoring_process_exporter_bin_dir` | `/usr/local/bin` | Install path for the `process-exporter` binary |
+| `monitoring_process_exporter_user` / `monitoring_process_exporter_group` | `process_exporter` | Dedicated system user/group running the systemd service (no login shell) |
+| `monitoring_process_exporter_config_dir` | `/etc/process_exporter` | Rendered `config.yml` (process_names matchers) on each target host |
+| `monitoring_process_exporter_host_groups` | `{{ monitoring_node_exporter_host_groups }}` | Inventory groups that get process_exporter + a scrape target; override to narrow scope independently of node_exporter |
+| `monitoring_process_exporter_process_names` | see `group_vars/all.yml` | Named cmdline-regex matchers (`cloudera-scm-server`, `postgres`, `java`, `docker`, …) grouping per-process metrics; first match wins |
+| `monitoring_process_exporter_catch_all` | `true` | Append a `{{.Comm}}` matcher grouping every other process by executable name |
+| `monitoring_grafana_provisioning_enabled` | `true` | Render Grafana datasource + dashboard provisioning YAML and copy the prepopulated dashboard JSON under `{{ monitoring_config_dir }}/grafana/` (playbook **32** / portal sync) |
+| `monitoring_alert_rules_enabled` | `true` | Render Prometheus alerting rules (`InstanceDown`, `HostHighCpuLoad`, `HostHighMemoryUsage`) to `{{ monitoring_config_dir }}/rules/alerts.yml` |
+| `monitoring_alert_instance_down_for` | `2m` | `for:` duration before `InstanceDown` fires |
+| `monitoring_alert_high_cpu_threshold` / `monitoring_alert_high_cpu_for` | `85` / `10m` | CPU busy % threshold and duration for `HostHighCpuLoad` |
+| `monitoring_alert_high_mem_threshold` / `monitoring_alert_high_mem_for` | `90` / `10m` | Memory used % threshold and duration for `HostHighMemoryUsage` |
+| `monitoring_alertmanager_group_by` | `[alertname, severity]` | Alertmanager `route.group_by` |
+| `monitoring_alertmanager_receiver_webhook_url` | `""` | Optional webhook URL added to the `default` Alertmanager receiver (empty = no external notification integration, alerts still visible in the UI) |
 | `caddy_vhost_enabled` | `true` | Host-based Caddy URLs (nip.io-style) |
 | `caddy_vhost_public_base` | `pvc.cloudera-labs.com` | Base domain for `svc.<ip-dashed>.<base>` |
 | `caddy_vhost_dns_mode` | `embedded_ip` | `embedded_ip`, `classic_nipio`, or `flat` |
