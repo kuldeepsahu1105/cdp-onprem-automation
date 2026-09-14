@@ -44,7 +44,143 @@
           {{ hostvars[postgres_inventory_host].ansible_distribution_major_version | string | trim }}
       when:
         - hostvars[postgres_inventory_host].ansible_os_family | default('') == 'RedHat'
+        - hostvars[postgres_inventory_host].ansible_distribution | default('') in
+          ['RedHat', 'CentOS', 'Rocky', 'AlmaLinux', 'OracleLinux', 'Oracle Linux']
         - hostvars[postgres_inventory_host].ansible_distribution_major_version | default('') | string | trim in ['8', '9']
+
+    - name: Record PostgreSQL DB host EL major for Amazon Linux 2 (PGDG EL-8)
+      ansible.builtin.set_fact:
+        postgres_db_host_el_major: '8'
+        postgres_db_host_el_major_pgdg_note: >-
+          Amazon Linux 2 (distribution major
+          {{ hostvars[postgres_inventory_host].ansible_distribution_major_version | default('unknown') }})
+          mapped to PGDG EL-8
+      when:
+        - postgres_db_host_el_major | default('') not in ['8', '9']
+        - hostvars[postgres_inventory_host].ansible_os_family | default('') == 'RedHat'
+        - hostvars[postgres_inventory_host].ansible_distribution | default('') == 'Amazon'
+        - >-
+          {{
+            hostvars[postgres_inventory_host].ansible_distribution_major_version | default('') | string | trim
+            in ['2']
+            or hostvars[postgres_inventory_host].ansible_distribution_version | default('') | string | trim
+            is match('^2([.].*)?$')
+          }}
+
+    - name: Record PostgreSQL DB host EL major for Amazon Linux 2023 (PGDG EL-9)
+      ansible.builtin.set_fact:
+        postgres_db_host_el_major: '9'
+        postgres_db_host_el_major_pgdg_note: >-
+          Amazon Linux 2023 (distribution major
+          {{ hostvars[postgres_inventory_host].ansible_distribution_major_version | default('unknown') }})
+          mapped to PGDG EL-9
+      when:
+        - postgres_db_host_el_major | default('') not in ['8', '9']
+        - hostvars[postgres_inventory_host].ansible_os_family | default('') == 'RedHat'
+        - hostvars[postgres_inventory_host].ansible_distribution | default('') == 'Amazon'
+        - >-
+          {{
+            hostvars[postgres_inventory_host].ansible_distribution_major_version | default('') | string | trim
+            in ['2023']
+            or hostvars[postgres_inventory_host].ansible_distribution_version | default('') | string | trim
+            is match('^2023([.].*)?$')
+          }}
+
+    - name: Read VERSION_ID from PostgreSQL DB host os-release for PGDG EL major
+      ansible.builtin.shell: |
+        set -euo pipefail
+        . /etc/os-release
+        printf '%s' "${VERSION_ID:-}"
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+      register: postgres_db_host_os_release_version_id
+      changed_when: false
+      when:
+        - postgres_db_host_el_major | default('') not in ['8', '9']
+        - hostvars[postgres_inventory_host].ansible_os_family | default('') == 'RedHat'
+        - hostvars[postgres_inventory_host].ansible_distribution | default('') == 'Amazon'
+
+    - name: Record PostgreSQL DB host EL major 9 for Amazon Linux from os-release VERSION_ID 2023
+      ansible.builtin.set_fact:
+        postgres_db_host_el_major: '9'
+        postgres_db_host_el_major_pgdg_note: >-
+          Amazon Linux VERSION_ID {{ postgres_db_host_os_release_version_id.stdout | trim }}
+          mapped to PGDG EL-9
+      when:
+        - postgres_db_host_el_major | default('') not in ['8', '9']
+        - hostvars[postgres_inventory_host].ansible_distribution | default('') == 'Amazon'
+        - (postgres_db_host_os_release_version_id.stdout | default('') | trim | length) > 0
+        - >-
+          {{
+            (postgres_db_host_os_release_version_id.stdout | default('') | trim | regex_replace('^"|"$', ''))
+            is match('^2023([.].*)?$')
+          }}
+
+    - name: Record PostgreSQL DB host EL major 8 for Amazon Linux from os-release VERSION_ID 2
+      ansible.builtin.set_fact:
+        postgres_db_host_el_major: '8'
+        postgres_db_host_el_major_pgdg_note: >-
+          Amazon Linux VERSION_ID {{ postgres_db_host_os_release_version_id.stdout | trim }}
+          mapped to PGDG EL-8
+      when:
+        - postgres_db_host_el_major | default('') not in ['8', '9']
+        - hostvars[postgres_inventory_host].ansible_distribution | default('') == 'Amazon'
+        - (postgres_db_host_os_release_version_id.stdout | default('') | trim | length) > 0
+        - >-
+          {{
+            (postgres_db_host_os_release_version_id.stdout | default('') | trim | regex_replace('^"|"$', ''))
+            is match('^2([.].*)?$')
+          }}
+
+    - name: Read system-release on PostgreSQL DB host for Amazon PGDG EL major
+      ansible.builtin.command:
+        argv:
+          - cat
+          - /etc/system-release
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+      register: postgres_db_host_system_release
+      changed_when: false
+      when:
+        - postgres_db_host_el_major | default('') not in ['8', '9']
+        - hostvars[postgres_inventory_host].ansible_os_family | default('') == 'RedHat'
+        - hostvars[postgres_inventory_host].ansible_distribution | default('') == 'Amazon'
+
+    - name: Record PostgreSQL DB host EL major 9 for Amazon Linux 2023 from system-release
+      ansible.builtin.set_fact:
+        postgres_db_host_el_major: '9'
+        postgres_db_host_el_major_pgdg_note: >-
+          {{ postgres_db_host_system_release.stdout | trim }} mapped to PGDG EL-9
+      when:
+        - postgres_db_host_el_major | default('') not in ['8', '9']
+        - hostvars[postgres_inventory_host].ansible_distribution | default('') == 'Amazon'
+        - (postgres_db_host_system_release.stdout | default('') | trim | length) > 0
+        - >-
+          {{
+            'Amazon Linux 2023' in (postgres_db_host_system_release.stdout | default(''))
+          }}
+
+    - name: Record PostgreSQL DB host EL major 8 for Amazon Linux 2 from system-release
+      ansible.builtin.set_fact:
+        postgres_db_host_el_major: '8'
+        postgres_db_host_el_major_pgdg_note: >-
+          {{ postgres_db_host_system_release.stdout | trim }} mapped to PGDG EL-8
+      when:
+        - postgres_db_host_el_major | default('') not in ['8', '9']
+        - hostvars[postgres_inventory_host].ansible_distribution | default('') == 'Amazon'
+        - (postgres_db_host_system_release.stdout | default('') | trim | length) > 0
+        - >-
+          {{
+            'Amazon Linux release 2' in (postgres_db_host_system_release.stdout | default(''))
+            or 'Amazon Linux 2' in (postgres_db_host_system_release.stdout | default(''))
+          }}
+
+    - name: Note PGDG EL major mapping for Amazon Linux on DB host
+      ansible.builtin.debug:
+        msg: "{{ postgres_db_host_el_major_pgdg_note }} — installing pgdg-redhat-repo for EL-{{ postgres_db_host_el_major }}"
+      when: postgres_db_host_el_major_pgdg_note is defined
 
     - name: Query RHEL major on PostgreSQL DB host for PGDG (rpm macro fallback)
       ansible.builtin.shell: rpm --eval '%{rhel}'
@@ -74,6 +210,9 @@
           major={{ hostvars[postgres_inventory_host].ansible_distribution_major_version | default('unknown') }},
           rpm --eval %%{rhel}={{ postgres_db_host_el_major_rpm.stdout | default('not run') | trim }}).
           PGDG reporpms URLs use EL-8 or EL-9 only.
+          Amazon Linux 2 and Amazon Linux 2023 map to PGDG EL-8 and EL-9 respectively
+          (not ansible_distribution_major_version 2 or 2023).
+          {{ postgres_db_host_el_major_pgdg_note | default('') }}
 
     - name: Download PostgreSQL PGDG repository RPM on DB host
       ansible.builtin.get_url:
