@@ -337,7 +337,10 @@
     _cm_api_url_host: >-
       {{
         cm_api_probe_host
-        if (cm_api_uri_delegate_to | default('') | length > 0)
+        if (
+          (cm_api_uri_delegate_to | default('') | length > 0)
+          and not (cm_api_controller_probe_succeeded | default(false) | bool)
+        )
         else (
           _cm_api_url_host_prefer_public
           if (_cm_api_url_host_prefer_public is defined)

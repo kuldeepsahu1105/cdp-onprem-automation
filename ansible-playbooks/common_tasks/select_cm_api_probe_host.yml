@@ -252,11 +252,54 @@
         )
         | default(cm_api_client_host, true)
       }}
+    cm_api_controller_probe_succeeded: >-
+      {{
+        (
+          cm_api_probe_https_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length > 0
+        )
+        or (
+          cm_api_probe_host_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length > 0
+        )
+      }}
+    cm_api_discovery_succeeded: >-
+      {{
+        (
+          cm_api_probe_https_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length > 0
+        )
+        or (
+          cm_api_probe_host_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length > 0
+        )
+      }}
   when:
     - cm_api_probe_delegate_to | default('') | length == 0
     - cm_api_probe_from_controller_public | default(false) | bool
     - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
     - cm_api_probe_https_discovery is defined or cm_api_probe_host_discovery is defined
+
+- name: CM API — keep API calls on Ansible controller after public address scan
+  ansible.builtin.set_fact:
+    cm_api_uri_delegate_to: ""
+    cm_api_probe_delegate_to: ""
+    cm_api_manager_https_fallback: false
+  when:
+    - cm_api_probe_from_controller_public | default(false) | bool
+    - cm_api_controller_probe_succeeded | default(false) | bool
 
 - name: CM API — try /api/version (HTTPS) on cldr-mngr
   ansible.builtin.uri:
@@ -493,6 +536,7 @@
     - cm_api_delegate_probes_to_manager | default(true) | bool
     - cm_api_probe_delegate_to | default('') | length == 0
     - not (cm_api_controller_https_reachable | default(false) | bool)
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
 
 - name: Build CM API address list on cldr-mngr (HTTPS fallback from controller)
   ansible.builtin.set_fact:
@@ -606,3 +650,4 @@
     - cm_api_manager_https_fallback | default(false) | bool
     - cm_api_delegate_discovery_succeeded | default(false) | bool
     - cm_api_probe_host | default('') | length > 0
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
