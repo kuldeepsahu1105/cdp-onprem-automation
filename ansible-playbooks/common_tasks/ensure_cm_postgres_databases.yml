@@ -30,31 +30,56 @@
 - name: PostgreSQL PGDG repo on DB host when psql is missing
   when: not (pgsql_client_psql_stat.stat.exists | default(false) | bool)
   block:
-    - name: Query RHEL major on PostgreSQL DB host for PGDG (rpm macro)
-      ansible.builtin.command:
-        argv:
-          - rpm
-          - -E
-          - '%{rhel}'
+    - name: Gather distribution facts on PostgreSQL DB host for PGDG EL major
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - distribution
+      delegate_to: "{{ postgres_inventory_host }}"
+      delegate_facts: true
+
+    - name: Record PostgreSQL DB host EL major from Ansible distribution facts
+      ansible.builtin.set_fact:
+        postgres_db_host_el_major: >-
+          {{ hostvars[postgres_inventory_host].ansible_distribution_major_version | string | trim }}
+      when:
+        - hostvars[postgres_inventory_host].ansible_os_family | default('') == 'RedHat'
+        - hostvars[postgres_inventory_host].ansible_distribution_major_version | default('') | string | trim in ['8', '9']
+
+    - name: Query RHEL major on PostgreSQL DB host for PGDG (rpm macro fallback)
+      ansible.builtin.shell: rpm --eval '%{rhel}'
+      args:
+        executable: /bin/bash
       delegate_to: "{{ postgres_inventory_host }}"
       become: true
-      register: rhel_major_cmd
+      register: postgres_db_host_el_major_rpm
       changed_when: false
+      when: postgres_db_host_el_major | default('') not in ['8', '9']
+
+    - name: Record PostgreSQL DB host EL major from rpm macro fallback
+      ansible.builtin.set_fact:
+        postgres_db_host_el_major: "{{ postgres_db_host_el_major_rpm.stdout | trim }}"
+      when:
+        - postgres_db_host_el_major | default('') not in ['8', '9']
+        - postgres_db_host_el_major_rpm.stdout | default('') | trim in ['8', '9']
 
     - name: Require supported RHEL major version for PGDG repository RPM URL
       ansible.builtin.assert:
         that:
-          - rhel_major_cmd.stdout | default('') | trim in ['8', '9']
+          - postgres_db_host_el_major | default('') in ['8', '9']
         fail_msg: >-
-          PostgreSQL DB host {{ postgres_inventory_host }} resolved EL major
-          '{{ rhel_major_cmd.stdout | default('') | trim }}' from rpm -E %%{rhel}
-          (expected 8 or 9). PGDG reporpms URLs use EL-8 or EL-9 only.
+          PostgreSQL DB host {{ postgres_inventory_host }} could not resolve EL major 8 or 9
+          (facts: os_family={{ hostvars[postgres_inventory_host].ansible_os_family | default('unknown') }},
+          distribution={{ hostvars[postgres_inventory_host].ansible_distribution | default('unknown') }},
+          major={{ hostvars[postgres_inventory_host].ansible_distribution_major_version | default('unknown') }},
+          rpm --eval %%{rhel}={{ postgres_db_host_el_major_rpm.stdout | default('not run') | trim }}).
+          PGDG reporpms URLs use EL-8 or EL-9 only.
 
     - name: Download PostgreSQL PGDG repository RPM on DB host
       ansible.builtin.get_url:
         url: >-
           https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{
-            rhel_major_cmd.stdout | trim
+            postgres_db_host_el_major | trim
           }}-x86_64/pgdg-redhat-repo-latest.noarch.rpm
         dest: /tmp/pgdg-redhat-repo-latest.noarch.rpm
         mode: "0644"
