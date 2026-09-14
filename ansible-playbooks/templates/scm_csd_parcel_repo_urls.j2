@@ -1,0 +1,25 @@
+{# Remote parcel repository directory URLs for CSDs (REMOTE_PARCEL_REPO_URLS), not JAR download URLs. #}
+{% if csd_redhat_repo | default('auto') == 'auto' %}
+{% set rh_yum = 'redhat' ~ (ansible_distribution_major_version | default('8') | string) %}
+{% else %}
+{% set rh_yum = csd_redhat_repo %}
+{% endif %}
+{% set archive = cm_repo_public_base_url | default('https://archive.cloudera.com/p') %}
+{% set cdv_repo = cdv_redhat_yum_repo | default('auto') %}
+{% if cdv_repo == 'auto' %}
+{% set cdv_rh_yum = 'redhat8' if rh_yum == 'redhat9' else rh_yum %}
+{% else %}
+{% set cdv_rh_yum = cdv_repo %}
+{% endif %}
+{% set svc = base_cluster_install_services | default({}) %}
+{% set use_svc_toggles = csd_respect_service_toggles | default(true) %}
+{% if csd_install_dataviz | default(true) and ((not use_svc_toggles) or (svc.dataviz | default(false))) %}
+- {{ archive }}/cdv/{{ cdv_version }}/{{ cdv_rh_yum }}/yum
+{% endif %}
+{% set cfm_enabled = (
+  (csd_install_nifi | default(true) and ((not use_svc_toggles) or (svc.nifi | default(false))))
+  or (csd_install_nifi_registry | default(true) and ((not use_svc_toggles) or (svc.nifi_registry | default(false))))
+) %}
+{% if cfm_enabled %}
+- {{ archive }}/cfm2/{{ cfm_version }}/{{ rh_yum }}/yum/tars/parcel
+{% endif %}

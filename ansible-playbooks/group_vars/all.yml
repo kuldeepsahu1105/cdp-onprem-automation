@@ -217,6 +217,23 @@ parcel_repo_public: "{{ cm_repo_public_base_url }}/{{ cdh_repo_product }}/{{ cdh
 parcel_repo_internal: "http://{{ cm_repo_mirror_host }}/cloudera-repos/{{ cdh_repo_product }}/{{ cdh_version }}/"
 parcel_repo: "{{ parcel_repo_internal if cm_repo_source == 'internal' else parcel_repo_public }}"
 
+# Cloudera Manager REMOTE_PARCEL_REPO_URLS (configure_cm_parcel_repo_api.yml + scm.j2 legacy template)
+cm_remote_parcel_repo_intel_mkl_url: "https://parcels.repos.intel.com/mkl/latest"
+cm_parcel_repo_include_intel_mkl: true
+cm_parcel_repo_include_ecs_parcel: true
+# When false, replace CM installation-wizard defaults instead of merging (scrub still applies when true).
+cm_parcel_repo_merge_existing_cm_urls: false
+# Stop CM from re-injecting CSD/spark/cdh6 wizard URLs on scm-server restart (explicit CSD dirs are added below).
+cm_parcel_install_csd_repo_urls: false
+cm_remote_parcel_csd_repo_urls: []  # non-empty overrides scm_csd_parcel_repo_urls.j2 auto-build
+cm_parcel_repo_include_csd_archive_dirs: true
+scm_parcel_repositories: >-
+  {{
+    [parcel_repo]
+    + ([ecs_parcel_repo_url] if (cm_parcel_repo_include_ecs_parcel | default(true) | bool) else [])
+    + ([cm_remote_parcel_repo_intel_mkl_url] if (cm_parcel_repo_include_intel_mkl | default(true) | bool) else [])
+  }}
+
 # CDH parcel file suffix — auto-detects from worker OS when set to "auto".
 # Archive publishes: el8, el9, jammy (Ubuntu 22.04), noble (Ubuntu 24.04), sles15, *.aarch64le
 # Examples: cdh_parcel_os_suffix: noble | jammy | el8 | el9 | el8.aarch64le

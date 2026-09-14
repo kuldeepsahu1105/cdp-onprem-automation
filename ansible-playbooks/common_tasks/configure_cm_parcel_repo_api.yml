@@ -16,22 +16,74 @@
   register: cm_parcel_config_get
   changed_when: false
 
+- name: Parcel repo — build CSD archive directory URLs for remote parcel repos
+  ansible.builtin.set_fact:
+    cm_remote_parcel_csd_repo_urls_effective: >-
+      {{
+        cm_remote_parcel_csd_repo_urls
+        if (cm_remote_parcel_csd_repo_urls | default([]) | length > 0)
+        else (
+          lookup('template', playbook_dir + '/templates/scm_csd_parcel_repo_urls.j2')
+          | from_yaml
+          | default([], true)
+        )
+      }}
+  vars:
+    ansible_os_family: RedHat
+    ansible_distribution_major_version: >-
+      {{
+        hostvars[groups['cldr-mngr'][0]].ansible_distribution_major_version | default('8')
+        if (
+          groups.get('cldr-mngr', []) | length > 0
+          and hostvars[groups['cldr-mngr'][0]].ansible_distribution_major_version is defined
+        )
+        else '8'
+      }}
+  when:
+    - cm_parcel_repo_include_csd_archive_dirs | default(true) | bool
+    - groups.get('cldr-mngr', []) | length > 0
+
+- name: Parcel repo — default empty CSD archive directory URL list
+  ansible.builtin.set_fact:
+    cm_remote_parcel_csd_repo_urls_effective: []
+  when: cm_remote_parcel_csd_repo_urls_effective is not defined
+
 - name: Parcel repo — collect candidate remote parcel repository URLs
   ansible.builtin.set_fact:
     cm_parcel_repo_urls_candidates: >-
       {{
         (
           (
-            (cm_parcel_config_get.json['items'] | default([])
-             | selectattr('name', 'equalto', 'REMOTE_PARCEL_REPO_URLS')
-             | map(attribute='value') | first | default(''))
-            .split(',')
-            | map('trim')
-            | reject('equalto', '')
-            | list
+            (
+              (cm_parcel_config_get.json['items'] | default([])
+               | selectattr('name', 'equalto', 'REMOTE_PARCEL_REPO_URLS')
+               | map(attribute='value') | first | default(''))
+              .split(',')
+              | map('trim')
+              | reject('equalto', '')
+              | list
+            )
+            if (cm_parcel_repo_merge_existing_cm_urls | default(false) | bool)
+            else []
           )
           + ([parcel_repo | default('')] if (parcel_repo is defined) else [])
-          + ([ecs_parcel_repo_url] if (ecs_parcel_repo_url | default('') | length > 0) else [])
+          + (
+            [ecs_parcel_repo_url]
+            if (
+              (cm_parcel_repo_include_ecs_parcel | default(true) | bool)
+              and (ecs_parcel_repo_url | default('') | length > 0)
+            )
+            else []
+          )
+          + (
+            [cm_remote_parcel_repo_intel_mkl_url]
+            if (
+              (cm_parcel_repo_include_intel_mkl | default(true) | bool)
+              and (cm_remote_parcel_repo_intel_mkl_url | default('') | length > 0)
+            )
+            else []
+          )
+          + (cm_remote_parcel_csd_repo_urls_effective | default([]))
           + (cm_parcel_repo_extra_urls | default([]))
           | map('trim')
           | reject('equalto', '')
@@ -49,6 +101,10 @@
           cm_parcel_repo_urls_candidates
           | reject('search', 'latest_supported')
           | reject('search', 'archive\\.cloudera\\.com/cdh7/')
+          | reject('search', 'archive\\.cloudera\\.com/cdh6/')
+          | reject('search', 'archive\\.cloudera\\.com/cdh5/')
+          | reject('search', '/p/spark3/')
+          | reject('search', 'archive\\.cloudera\\.com/spark3/')
           | reject('search', 'cdp-pvc-ds/latest')
           | reject('search', 'ecsversion-or-latest')
           | reject('search', '<ecsversion')
@@ -69,6 +125,19 @@
         ) != (cm_parcel_repo_urls_effective | string)
       }}
 
+- name: Parcel repo — detect PARCEL_INSTALL_CSD_REPO_URLS drift
+  ansible.builtin.set_fact:
+    cm_parcel_install_csd_repo_config_changed: >-
+      {{
+        (
+          (cm_parcel_config_get.json['items'] | default([])
+           | selectattr('name', 'equalto', 'PARCEL_INSTALL_CSD_REPO_URLS')
+           | map(attribute='value') | first | default('true'))
+          | string
+        )
+        != ((cm_parcel_install_csd_repo_urls | default(false) | string | lower))
+      }}
+
 - name: Parcel repo — apply REMOTE_PARCEL_REPO_URLS in Cloudera Manager
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/config"
@@ -82,10 +151,12 @@
       items:
         - name: REMOTE_PARCEL_REPO_URLS
           value: "{{ cm_parcel_repo_urls_effective }}"
+        - name: PARCEL_INSTALL_CSD_REPO_URLS
+          value: "{{ cm_parcel_install_csd_repo_urls | default(false) | string | lower }}"
     status_code: [200, 204, 301, 303]
   when:
     - cm_parcel_repo_urls_effective | length > 0
-    - cm_parcel_repo_config_changed | bool
+    - (cm_parcel_repo_config_changed | bool) or (cm_parcel_install_csd_repo_config_changed | bool)
 
 - name: Parcel repo — refresh Cloudera Manager parcel repositories
   ansible.builtin.uri:
@@ -98,6 +169,6 @@
     status_code: [200, 201, 202, 204, 301, 303]
   when:
     - cm_parcel_repo_urls_effective | length > 0
-    - cm_parcel_repo_config_changed | bool
+    - (cm_parcel_repo_config_changed | bool) or (cm_parcel_install_csd_repo_config_changed | bool)
   register: cm_parcel_refresh
   failed_when: false

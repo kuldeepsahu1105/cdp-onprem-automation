@@ -77,7 +77,14 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/ direct; `internal` = mirror on cldr-mngr |
 | `cm_repo_public_base_url` | `https://archive.cloudera.com/p` | Public archive base URL |
 | `cm_repo_mirror_host` | cldr-mngr IP | Internal mirror HTTP host |
-| `parcel_repo` | computed | Public or internal parcel URL based on `cm_repo_source` |
+| `parcel_repo` | computed | Public or internal CDH parcel URL (`…/p/cdh7/<cdh_version>/parcels/`) |
+| `ecs_parcel_repo_url` | computed | `…/p/cdp-pvc-ds/<ecs_pvc_ds_version>/parcels/` (see `ecs_pvc_ds_version` in ECS table above) |
+| `cm_remote_parcel_repo_intel_mkl_url` | Intel MKL parcels | Optional third-party parcel repo (left enabled by default) |
+| `cm_parcel_repo_merge_existing_cm_urls` | `false` | When false, CM wizard defaults are not merged (only Ansible URLs + scrub) |
+| `cm_parcel_install_csd_repo_urls` | `false` | Maps to CM `PARCEL_INSTALL_CSD_REPO_URLS` (blocks auto spark/cdh6 URLs on restart) |
+| `cm_remote_parcel_csd_repo_urls` | `[]` | Explicit CSD archive dirs; empty = build from `scm_csd_parcel_repo_urls.j2` |
+| `cm_parcel_repo_include_csd_archive_dirs` | `true` | Add CDV/CFM archive paths to `REMOTE_PARCEL_REPO_URLS` |
+| `scm_parcel_repositories` | computed | Legacy `scm.j2` list: CDH + ECS + Intel MKL |
 | `cdh_parcel_os_suffix` | `auto` | Parcel filename suffix: `auto`, `el8`, `el9`, `jammy`, `noble`, `sles15`, `el8.aarch64le` |
 | `cdh_parcel_target_group` | `base-workers` | Inventory group used to auto-detect worker OS for parcel suffix |
 | `cdh_parcel_os_suffix_fallback` | `el8` | Fallback when auto-detect cannot read worker facts |

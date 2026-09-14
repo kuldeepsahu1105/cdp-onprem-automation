@@ -43,6 +43,10 @@
       ansible.builtin.debug:
         msg: "Cloudera Manager Version: {{ cm_version.json.version }}, Build Timestamp: {{ cm_version.json.buildTimestamp }}"
 
+    - name: Apply remote parcel repository URLs in Cloudera Manager (scrub wizard defaults)
+      ansible.builtin.import_tasks: common_tasks/configure_cm_parcel_repo_api.yml
+      when: parcel_repo is defined
+
     - name: Require Cloudera SCM Server active on cldr-mngr (systemctl exit code 0 only)
       ansible.builtin.command: systemctl is-active cloudera-scm-server
       register: scm_server_status

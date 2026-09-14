@@ -129,11 +129,9 @@
           - "ECS master: {{ ecs_master_fqdn }}"
           - "ECS workers: {{ ecs_worker_fqdns }}"
 
-    - name: Add ECS parcel repository to Cloudera Manager (REST API)
+    - name: Refresh remote parcel repository URLs in Cloudera Manager (includes ECS PVC DS)
       ansible.builtin.import_tasks: common_tasks/configure_cm_parcel_repo_api.yml
-      vars:
-        cm_parcel_repo_extra_urls: "{{ [ecs_parcel_repo_url] if (ecs_parcel_repo_url | default('') | length > 0) else [] }}"
-      when: ecs_parcel_repo_url | default('') | length > 0
+      when: parcel_repo is defined
 
     - name: Discover available ECS parcel versions
       ansible.builtin.uri:
