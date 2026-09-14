@@ -75,99 +75,97 @@
       ({{ postgres_db_host_psql_cmd }}) — skipping PGDG repo and client install
   when: postgres_db_host_psql_present | bool
 
-- name: Gather minimal facts on PostgreSQL inventory host when OS family unknown
-  ansible.builtin.setup:
-    gather_subset:
-      - min
-  delegate_to: "{{ postgres_inventory_host }}"
-  delegate_facts: true
-  when:
-    - postgres_db_host_os_family is not defined
-    - hostvars[postgres_inventory_host]['ansible_os_family'] is not defined
-    - ansible_os_family is not defined or inventory_hostname != postgres_inventory_host
-
-- name: Query RHEL macro on PostgreSQL DB host to detect RedHat OS family
-  ansible.builtin.command:
-    cmd: rpm -E '%{rhel}'
-  delegate_to: "{{ postgres_inventory_host }}"
-  become: true
-  register: postgres_db_host_rhel_macro_detect
-  changed_when: false
-  failed_when: false
-  when: postgres_db_host_os_family is not defined
-
-- name: Record PostgreSQL DB host OS family as RedHat from rpm RHEL macro
-  ansible.builtin.set_fact:
-    postgres_db_host_os_family: RedHat
-  when:
-    - postgres_db_host_os_family is not defined
-    - postgres_db_host_rhel_macro_detect.stdout | default('') | trim in ['8', '9']
-
-- name: Record PostgreSQL DB host OS family from DB host RedHat distribution facts
-  ansible.builtin.set_fact:
-    postgres_db_host_os_family: RedHat
-  when:
-    - postgres_db_host_os_family is not defined
-    - hostvars[postgres_inventory_host]['ansible_distribution'] | default('') == 'RedHat'
-
-- name: Record PostgreSQL DB host OS family from DB host Debian-family distribution facts
-  ansible.builtin.set_fact:
-    postgres_db_host_os_family: Debian
-  when:
-    - postgres_db_host_os_family is not defined
-    - hostvars[postgres_inventory_host]['ansible_distribution'] | default('') in ['Debian', 'Ubuntu']
-
-- name: Record PostgreSQL DB host OS family from play host when play runs on DB host
-  ansible.builtin.set_fact:
-    postgres_db_host_os_family: "{{ ansible_os_family }}"
-  when:
-    - postgres_db_host_os_family is not defined
-    - inventory_hostname == postgres_inventory_host
-    - ansible_os_family is defined
-    - ansible_os_family in ['RedHat', 'Debian']
-
-- name: Record PostgreSQL DB host OS family from DB host hostvars as last resort
-  ansible.builtin.set_fact:
-    postgres_db_host_os_family: >-
-      {{ hostvars[postgres_inventory_host]['ansible_os_family'] | default('') }}
-  when:
-    - postgres_db_host_os_family is not defined
-    - hostvars[postgres_inventory_host]['ansible_os_family'] | default('') in ['RedHat', 'Debian']
-
-- name: Require PostgreSQL DB host OS family for client package install
-  ansible.builtin.assert:
-    that:
-      - postgres_db_host_os_family in ['RedHat', 'Debian']
-    fail_msg: >-
-      Could not determine OS family for PostgreSQL host {{ postgres_inventory_host }}.
-      Ensure the host is reachable and facts can be gathered, or set postgres_db_host_os_family.
-
-- name: Default PostgreSQL DB host psql command when client install will provide PATH
-  ansible.builtin.set_fact:
-    postgres_db_host_psql_cmd: psql
-  when:
-    - postgres_db_host_psql_cmd is not defined
-    - not (postgres_db_host_psql_present | bool)
-
-- name: Install PostgreSQL client and PGDG repo on DB host when psql is missing
+- name: PostgreSQL client and PGDG on DB host when psql is missing
   when: not (postgres_db_host_psql_present | bool)
   block:
-    - name: Query RHEL major on PostgreSQL DB host for PGDG (rpm macro)
+    - name: Gather minimal facts on PostgreSQL inventory host when OS family unknown
+      ansible.builtin.setup:
+        gather_subset:
+          - min
+      delegate_to: "{{ postgres_inventory_host }}"
+      delegate_facts: true
+      when:
+        - postgres_db_host_os_family is not defined
+        - hostvars[postgres_inventory_host]['ansible_os_family'] is not defined
+        - ansible_os_family is not defined or inventory_hostname != postgres_inventory_host
+
+    - name: Query RHEL macro on PostgreSQL DB host to detect RedHat OS family
       ansible.builtin.command:
-        cmd: rpm -E '%{rhel}'
+        cmd: [rpm, -E, '%{rhel}']
       delegate_to: "{{ postgres_inventory_host }}"
       become: true
-      register: postgres_db_host_rhel_el_rpm
+      register: postgres_db_host_rhel_macro_detect
+      changed_when: false
+      failed_when: false
+      when: postgres_db_host_os_family is not defined
+
+    - name: Record PostgreSQL DB host OS family as RedHat from rpm RHEL macro
+      ansible.builtin.set_fact:
+        postgres_db_host_os_family: RedHat
+      when:
+        - postgres_db_host_os_family is not defined
+        - postgres_db_host_rhel_macro_detect.stdout | default('') | trim in ['8', '9']
+
+    - name: Record PostgreSQL DB host OS family from DB host RedHat distribution facts
+      ansible.builtin.set_fact:
+        postgres_db_host_os_family: RedHat
+      when:
+        - postgres_db_host_os_family is not defined
+        - hostvars[postgres_inventory_host]['ansible_distribution'] | default('') == 'RedHat'
+
+    - name: Record PostgreSQL DB host OS family from DB host Debian-family distribution facts
+      ansible.builtin.set_fact:
+        postgres_db_host_os_family: Debian
+      when:
+        - postgres_db_host_os_family is not defined
+        - hostvars[postgres_inventory_host]['ansible_distribution'] | default('') in ['Debian', 'Ubuntu']
+
+    - name: Record PostgreSQL DB host OS family from play host when play runs on DB host
+      ansible.builtin.set_fact:
+        postgres_db_host_os_family: "{{ ansible_os_family }}"
+      when:
+        - postgres_db_host_os_family is not defined
+        - inventory_hostname == postgres_inventory_host
+        - ansible_os_family is defined
+        - ansible_os_family in ['RedHat', 'Debian']
+
+    - name: Record PostgreSQL DB host OS family from DB host hostvars as last resort
+      ansible.builtin.set_fact:
+        postgres_db_host_os_family: >-
+          {{ hostvars[postgres_inventory_host]['ansible_os_family'] | default('') }}
+      when:
+        - postgres_db_host_os_family is not defined
+        - hostvars[postgres_inventory_host]['ansible_os_family'] | default('') in ['RedHat', 'Debian']
+
+    - name: Require PostgreSQL DB host OS family for client package install
+      ansible.builtin.assert:
+        that:
+          - postgres_db_host_os_family in ['RedHat', 'Debian']
+        fail_msg: >-
+          Could not determine OS family for PostgreSQL host {{ postgres_inventory_host }}.
+          Ensure the host is reachable and facts can be gathered, or set postgres_db_host_os_family.
+
+    - name: Default PostgreSQL DB host psql command when client install will provide PATH
+      ansible.builtin.set_fact:
+        postgres_db_host_psql_cmd: psql
+      when: postgres_db_host_psql_cmd is not defined
+
+    - name: Query RHEL major on PostgreSQL DB host for PGDG (rpm macro)
+      ansible.builtin.command:
+        cmd: [rpm, -E, '%{rhel}']
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+      register: rhel_major_cmd
       changed_when: false
       when: postgres_db_host_os_family == 'RedHat'
 
     - name: Record PostgreSQL DB host EL major from rpm on DB host
       ansible.builtin.set_fact:
-        postgres_db_host_el_major: "{{ postgres_db_host_rhel_el_rpm.stdout | trim }}"
+        postgres_db_host_el_major: "{{ rhel_major_cmd.stdout | trim }}"
       when:
         - postgres_db_host_os_family == 'RedHat'
         - postgres_db_host_el_major is not defined
-        - (postgres_db_host_rhel_el_rpm.stdout | default('') | trim) | length > 0
+        - rhel_major_cmd.stdout | default('') | trim in ['8', '9']
 
     - name: Record PostgreSQL DB host EL major from RedHat distribution facts on DB host
       ansible.builtin.set_fact:
