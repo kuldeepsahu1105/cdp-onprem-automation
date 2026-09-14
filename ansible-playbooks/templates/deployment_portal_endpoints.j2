@@ -11,9 +11,19 @@
   note: "{{ _portal_note }}"
 {% endif %}
 {% if deployment_portal_cm_fqdn | default('') | length > 0 %}
+- name: "Cloudera Manager (HTTP direct)"
+  url: "http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}"
+  hostname: "{{ deployment_portal_cm_fqdn }}"
+  public_ip: "{{ deployment_portal_cm_public_ip | default('') }}"
+  port: "{{ cm_http_port }}"
+  scheme: http
+  note: "Direct HTTP on cldr-mngr :{{ cm_http_port }} (before or after Auto-TLS redirect)"
 - name: "Cloudera Manager (HTTPS direct)"
   url: "https://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port }}"
   hostname: "{{ deployment_portal_cm_fqdn }}"
+  public_ip: "{{ deployment_portal_cm_public_ip | default('') }}"
+  port: "{{ cm_https_port }}"
+  scheme: https
   note: "Direct TLS on cldr-mngr :{{ cm_https_port }}"
 {% endif %}
 {% if pgadmin_caddy_public_url | default('') | length > 0 %}
@@ -37,9 +47,16 @@
   hostname: "{{ deployment_portal_ipa_fqdn | default('') }}"
   note: "Caddy vhost {{ caddy_vhost_urls_external.ipa.hostname | default('') }}"
 {% elif deployment_portal_ipa_fqdn | default('') | length > 0 %}
+{% set _ipa_inv = groups['ipaserver'][0] if ('ipaserver' in groups and groups['ipaserver'] | default([]) | length > 0) else (groups['ipa_server'][0] if ('ipa_server' in groups and groups['ipa_server'] | default([]) | length > 0) else '') %}
+{% set _ipa_priv = hostvars[_ipa_inv].private_ip | default('') if (_ipa_inv | length > 0) else '' %}
+{% set _ipa_ah = hostvars[_ipa_inv].ansible_host | default('') if (_ipa_inv | length > 0) else '' %}
+{% set _ipa_pub = _ipa_ah if ((_ipa_priv | length > 0) and (_ipa_ah | length > 0) and (_ipa_priv != _ipa_ah)) else '' %}
 - name: "FreeIPA"
   url: "https://{{ deployment_portal_ipa_fqdn }}"
   hostname: "{{ deployment_portal_ipa_fqdn }}"
+  public_ip: "{{ _ipa_pub }}"
+  port: "443"
+  scheme: https
   note: "Direct HTTPS on ipaserver"
 {% endif %}
 {% if _mon %}
@@ -82,5 +99,8 @@
 - name: "ECS console"
   url: "https://console.{{ ecs_app_domain }}"
   hostname: "console.{{ ecs_app_domain }}"
-  note: "Typical ECS console URL{% if _ecs_master_ip | length > 0 %}; ECS master IP {{ _ecs_master_ip }}{% endif %}"
+  public_ip: "{{ _ecs_master_ip }}"
+  port: "443"
+  scheme: https
+  note: "Typical ECS console URL{% if _ecs_master_ip | length > 0 %}; ECS master public IP {{ _ecs_master_ip }}{% endif %}"
 {% endif %}

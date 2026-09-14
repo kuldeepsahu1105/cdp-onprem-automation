@@ -186,7 +186,7 @@
              )
              and (_tier_b_ctx.cloudera_manager.ui_url_https | default('') | length > 0)
              else [])
-          + ([{'name': 'CM UI HTTP (public IP)', 'url': 'http://' ~ _tier_b_ctx.anchor.public_ip ~ ':' ~ (cm_http_port | string) ~ '/',
+          + ([{'name': 'CM UI HTTP (public IP)', 'url': 'http://' ~ (_tier_b_ctx.cloudera_manager.public_ip | default('')) ~ ':' ~ (cm_http_port | string) ~ '/',
               'service': 'cm'}]
              if (
                (
@@ -199,7 +199,7 @@
                )
              )
              and (_tier_b_ctx.access.profile | default('') != 'private')
-             and (_tier_b_ctx.anchor.public_ip | default('') | length > 0)
+             and (_tier_b_ctx.cloudera_manager.public_ip | default('') | length > 0)
              else [])
           + ([{'name': 'FreeIPA UI (cluster FQDN)', 'url': _tier_b_ctx.identity.ipa_ui_url | default(''),
               'service': 'ipa', 'ipa_direct_fqdn': true}]
