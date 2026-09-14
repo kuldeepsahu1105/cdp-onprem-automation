@@ -390,6 +390,13 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `deployment_portal_basic_auth_password` | `postgres_password` | Basic auth password for downloads |
 | `deployment_portal_jenkins_url` | `""` | Optional Jenkins UI URL on the operator panel (passwords belong in Jenkins, not git) |
 | `monitoring_prometheus_extra_targets` | `[]` | Extra Prometheus scrape jobs |
+| `monitoring_node_exporter_enabled` | `true` | Install node_exporter (systemd) on `monitoring_node_exporter_host_groups` and add a `node_exporter` Prometheus job (playbook **32**) |
+| `monitoring_node_exporter_version` | `1.8.2` | Pinned node_exporter release (linux amd64/arm64 tarball from GitHub releases) |
+| `monitoring_node_exporter_port` | `9100` | node_exporter `--web.listen-address` port; opened in firewalld on each target host when active |
+| `monitoring_node_exporter_bin_dir` | `/usr/local/bin` | Install path for the `node_exporter` binary |
+| `monitoring_node_exporter_user` / `monitoring_node_exporter_group` | `node_exporter` | Dedicated system user/group running the systemd service (no login shell) |
+| `monitoring_node_exporter_download_base_url` | GitHub releases URL | Override for an internal mirror when GitHub egress is restricted |
+| `monitoring_node_exporter_host_groups` | `[ipaserver, cldr-mngr, base-masters, base-workers, ecs-masters, ecs-workers]` | Inventory groups that get node_exporter + a scrape target; targets always use `private_ip` (Prometheus container reaches cluster hosts over the VPC/private network) |
 | `caddy_vhost_enabled` | `true` | Host-based Caddy URLs (nip.io-style) |
 | `caddy_vhost_public_base` | `pvc.cloudera-labs.com` | Base domain for `svc.<ip-dashed>.<base>` |
 | `caddy_vhost_dns_mode` | `embedded_ip` | `embedded_ip`, `classic_nipio`, or `flat` |
