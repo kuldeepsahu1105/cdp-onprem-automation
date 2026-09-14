@@ -10,6 +10,7 @@
         | default(cm_agent_use_tls | default(autotls_enabled | default(false) | bool))
         | bool
       }}
+  changed_when: false
 
 - name: Reconcile CM agent configuration (server_host / use_tls)
   ansible.builtin.import_tasks: configure_cm_agent.yml

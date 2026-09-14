@@ -94,6 +94,7 @@
             validate_certs: no
           when: use_password
           register: auto_tls_response
+          changed_when: false
 
         - name: Resolve controller SSH key for Auto-TLS (Key-based)
           ansible.builtin.import_tasks: common_tasks/resolve_cm_autotls_private_key.yml
@@ -124,14 +125,23 @@
             validate_certs: no
           when: not use_password
           register: auto_tls_response
+          changed_when: false
 
-        - name: Mark Auto-TLS applied this run
+        - name: Mark Auto-TLS applied this run (generateCmca POST succeeded)
           ansible.builtin.set_fact:
             autotls_applied_this_run: true
           when:
             - auto_tls_response is defined
+            - not (auto_tls_response.skipped | default(false))
             - auto_tls_response is succeeded
-            - auto_tls_response is changed
+            - (auto_tls_response.status | default(0) | int) in [200, 301, 303]
+
+    - name: Skip CM server/agent systemctl restart (generateCmca not applied this run)
+      ansible.builtin.debug:
+        msg: >-
+          Skipping Cloudera Manager server and agent restart on {{ cm_manager_inventory_host | default('cldr-mngr') }}
+          — generateCmca was not run successfully this play (already configured or skipped).
+      when: not (autotls_applied_this_run | default(false) | bool)
 
     - name: Restart Cloudera Manager after Auto-TLS when generateCmca applied
       ansible.builtin.import_tasks: common_tasks/apply_cm_restart_after_config.yml
