@@ -5,6 +5,7 @@
 # ipaserver_domain: cldrsetup.local
 # ipaadmin_password: "ChangeMe@123"
 # cm_version: "7.13.2.10000"
+# autotls_enabled: true   # default in group_vars — Cloudera Auto-TLS (playbook 27, CM HTTPS :7183); false = manual TLS only
 # cdh_version: "7.3.2.10000"
 # cdv_version: "8.1.5"
 # cdv_dataviz_csd_jar: "DATAVIZ-8.1.5-b66.p1.81473462.jar"

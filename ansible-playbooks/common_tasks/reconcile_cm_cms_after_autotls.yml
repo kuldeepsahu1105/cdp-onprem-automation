@@ -39,5 +39,6 @@
     - cm_cms_restart_after_autotls | default(true) | bool
     - (
         (cms_service_truststore_put is defined and cms_service_truststore_put is changed)
+        or (cm_restart_after_autotls_this_run | default(false) | bool)
         or (autotls_applied_this_run | default(false) | bool)
       )

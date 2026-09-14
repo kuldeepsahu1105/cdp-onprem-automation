@@ -8,9 +8,11 @@
   connection: local
   gather_facts: no
   tasks:
-    - name: Clear Auto-TLS applied flag for this run
+    - name: Clear Auto-TLS applied / restart flags for this run
       ansible.builtin.set_fact:
         autotls_applied_this_run: false
+        cm_restart_after_autotls_this_run: false
+        cm_autotls_generate_cmca_ran: false
 
     - name: Capture Auto-TLS setup intent from inventory (before HTTPS probes may set autotls_enabled)
       ansible.builtin.set_fact:
@@ -68,6 +70,10 @@
         (cm_autotls_force_run | default(false) | bool)
         or not (cm_autotls_generate_cmca_skip | default(false) | bool)
       block:
+        - name: Auto-TLS — mark generateCmca block entered this run
+          ansible.builtin.set_fact:
+            cm_autotls_generate_cmca_ran: true
+
         - name: Auto-TLS — running generateCmca (creating or updating CM TLS)
           ansible.builtin.debug:
             msg: >-
@@ -155,8 +161,21 @@
           when:
             - auto_tls_response is defined
             - not (auto_tls_response.skipped | default(false))
-            - not (auto_tls_response.failed | default(true) | bool)
+            - auto_tls_response is succeeded
             - (auto_tls_response.status | default(0) | int) in [200, 301, 303]
+
+    - name: Auto-TLS — require CM server and cluster agent restart after generateCmca
+      ansible.builtin.set_fact:
+        cm_restart_after_autotls_this_run: true
+      when:
+        - autotls_applied_this_run | default(false) | bool
+          or (
+            (cm_autotls_generate_cmca_ran | default(false) | bool)
+            and (auto_tls_response is defined)
+            and not (auto_tls_response.skipped | default(false))
+            and (auto_tls_response is succeeded)
+            and ((auto_tls_response.status | default(0) | int) in [200, 301, 303])
+          )
 
     - name: Auto-TLS — skip generateCmca / CM restart (see TLS summary above)
       ansible.builtin.debug:
@@ -177,26 +196,26 @@
           }}
       when:
         - not (cm_autotls_force_run | default(false) | bool)
-        - not (autotls_applied_this_run | default(false) | bool)
+        - not (cm_restart_after_autotls_this_run | default(false) | bool)
         - cm_autotls_generate_cmca_skip | default(false) | bool
 
     - name: Restart Cloudera Manager after Auto-TLS when generateCmca applied
       ansible.builtin.import_tasks: common_tasks/apply_cm_restart_after_config.yml
-      when: autotls_applied_this_run | default(false) | bool
+      when: cm_restart_after_autotls_this_run | default(false) | bool
 
     - name: Refresh CM API URL after Auto-TLS changes
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
-      when: not (autotls_applied_this_run | default(false))
+      when: not (cm_restart_after_autotls_this_run | default(false))
 
     - name: Wait for Cloudera Manager API to become available
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
-      when: not (autotls_applied_this_run | default(false))
+      when: not (cm_restart_after_autotls_this_run | default(false))
 
     - name: Wait for Cloudera Manager Server to start (on CM host, not the Ansible controller)
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
       delegate_to: "{{ cm_manager_inventory_host }}"
       become: true
-      when: not (autotls_applied_this_run | default(false))
+      when: not (cm_restart_after_autotls_this_run | default(false))
 
     - name: Print Cloudera Manager Access URLs
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
@@ -205,7 +224,8 @@
       ansible.builtin.set_fact:
         cm_agent_use_tls: >-
           {{
-            (autotls_applied_this_run | default(false) | bool)
+            (cm_restart_after_autotls_this_run | default(false) | bool)
+            or (autotls_applied_this_run | default(false) | bool)
             or (cm_agent_use_tls | default(false) | bool)
           }}
 
@@ -244,6 +264,7 @@
     - name: Skip CMS after Auto-TLS when CM is not using TLS
       ansible.builtin.meta: end_play
       when:
+        - not (cm_restart_after_autotls_this_run | default(false) | bool)
         - not (autotls_applied_this_run | default(false) | bool)
         - not (cm_autotls_api_enabled | default(false) | bool)
 
@@ -257,7 +278,7 @@
   tasks:
     - name: End play when Auto-TLS was not applied this run
       ansible.builtin.meta: end_play
-      when: not (autotls_applied_this_run | default(false) | bool)
+      when: not (cm_restart_after_autotls_this_run | default(false) | bool)
 
     - name: CM API — allow probe context refresh after Auto-TLS restart
       ansible.builtin.set_fact:

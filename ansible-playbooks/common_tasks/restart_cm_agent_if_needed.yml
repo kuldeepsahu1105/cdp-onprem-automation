@@ -26,10 +26,14 @@
       }}
   changed_when: false
 
-- name: CM agent — derive whether Auto-TLS applied this run (from localhost play 27)
+- name: CM agent — derive whether Auto-TLS requires agent restart (from localhost play 27)
   ansible.builtin.set_fact:
     cm_agent_restart_after_autotls: >-
-      {{ hostvars['localhost'].autotls_applied_this_run | default(false) | bool }}
+      {{
+        hostvars['localhost'].cm_restart_after_autotls_this_run
+        | default(hostvars['localhost'].autotls_applied_this_run | default(false))
+        | bool
+      }}
   changed_when: false
 
 - name: CM agent — skip restart (already active, config unchanged)
