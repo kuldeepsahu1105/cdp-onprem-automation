@@ -1,6 +1,29 @@
 ---
 # Pick a reachable address for CM API calls (avoids same-host public-EIP timeout on cldr-mngr).
 
+- name: Gather CM manager network facts when missing (localhost play without fact cache)
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - network
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  delegate_facts: true
+  when:
+    - cm_manager_inventory_host | default('') | length > 0
+    - hostvars[cm_manager_inventory_host].ansible_default_ipv4 is not defined
+
+- name: Resolve CM manager IPv4 from gathered facts (not group_vars public_ip Jinja)
+  ansible.builtin.set_fact:
+    _cm_mgr_fact_public_ip: >-
+      {{
+        hostvars[cm_manager_inventory_host].ansible_default_ipv4.address | default('') | trim
+        if (
+          hostvars[cm_manager_inventory_host].ansible_default_ipv4 is defined
+          and hostvars[cm_manager_inventory_host].ansible_default_ipv4.address is defined
+        )
+        else ''
+      }}
+
 - name: Resolve Cloudera Manager API connection address
   ansible.builtin.set_fact:
     cm_manager_host_inv: "{{ cm_manager_inventory_host }}"
@@ -9,13 +32,13 @@
         cm_api_connect_host
         if (cm_api_connect_host | default('') | length > 0)
         else (
-          hostvars[cm_manager_inventory_host].public_ip | default('')
+          _cm_mgr_fact_public_ip
           if (
-            (hostvars[cm_manager_inventory_host].public_ip | default('') | length > 0)
+            (_cm_mgr_fact_public_ip | default('') | length > 0)
             and not (
-              hostvars[cm_manager_inventory_host].public_ip is match('^10\\.')
-              or hostvars[cm_manager_inventory_host].public_ip is match('^192\\.168\\.')
-              or hostvars[cm_manager_inventory_host].public_ip is match('^172\\.(1[6-9]|2[0-9]|3[0-1])\\.')
+              _cm_mgr_fact_public_ip is match('^10\\.')
+              or _cm_mgr_fact_public_ip is match('^192\\.168\\.')
+              or _cm_mgr_fact_public_ip is match('^172\\.(1[6-9]|2[0-9]|3[0-1])\\.')
             )
           )
           else (
@@ -33,9 +56,17 @@
           )
         )
       }}
-    cm_host_private: "{{ hostvars[cm_manager_inventory_host].private_ip | default('') }}"
+    cm_host_private: "{{ hostvars[cm_manager_inventory_host].private_ip | default('') | trim }}"
     cm_host_fqdn: >-
       {{ hostvars[cm_manager_inventory_host].cldr_hostname | default(cm_manager_inventory_host) }}.{{ cluster_domain }}
+
+- name: Record whether CM private and public addresses differ
+  ansible.builtin.set_fact:
+    cm_host_private_differs_from_public: >-
+      {{
+        (cm_host_private | default('') | trim)
+        != (cm_host_public | default('') | trim)
+      }}
 
 - name: Detect Ansible control reachability profile (public vs VPC-private)
   ansible.builtin.import_tasks: detect_ansible_control_reachability.yml
@@ -99,7 +130,7 @@
           (cm_api_controller_is_localhost | bool)
           and (cm_host_private_is_rfc1918 | bool)
           and (cm_host_private | length > 0)
-          and (cm_host_private != cm_host_public)
+          and (cm_host_private_differs_from_public | default(false) | bool)
         )
       }}
 
@@ -150,7 +181,7 @@
     - not (cm_api_avoid_private_ip | bool)
     - cm_api_prefer_private_ip | default(true) | bool
     - cm_host_private | length > 0
-    - cm_host_private != cm_host_public
+    - cm_host_private_differs_from_public | default(false) | bool
 
 - name: Set CM API client host (URL base for uri tasks on this play host)
   ansible.builtin.set_fact:
@@ -179,7 +210,7 @@
                 (cm_api_prefer_private_ip | default(true) | bool)
                 and (cm_host_private | length > 0)
                 and (
-                  cm_host_private == cm_host_public
+                  not (cm_host_private_differs_from_public | default(false) | bool)
                   or (cm_private_reach_test is defined and cm_private_reach_test is succeeded)
                 )
               )

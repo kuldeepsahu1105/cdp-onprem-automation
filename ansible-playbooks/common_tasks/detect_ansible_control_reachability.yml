@@ -43,7 +43,7 @@
     - cm_host_private is defined
     - cm_host_private | default('') | length > 0
     - cm_host_public is defined
-    - cm_host_private != cm_host_public
+    - cm_host_private_differs_from_public | default(false) | bool
 
 - name: Test CM public IP reachability from controller (auto profile)
   ansible.builtin.wait_for:
@@ -64,7 +64,7 @@
     - cm_host_public | default('') | length > 0
     - cm_host_private is defined
     - cm_host_private | default('') | length > 0
-    - cm_host_private != cm_host_public
+    - cm_host_private_differs_from_public | default(false) | bool
 
 - name: Resolve effective Ansible control reachability profile
   ansible.builtin.set_fact:
@@ -101,7 +101,7 @@
                     cm_host_private is not defined
                     or (cm_host_private | default('') | length == 0)
                     or (
-                      cm_host_private != cm_host_public
+                      cm_host_private_differs_from_public | default(false) | bool
                       and not (
                         cm_host_public is match('^10\\.')
                         or cm_host_public is match('^192\\.168\\.')
