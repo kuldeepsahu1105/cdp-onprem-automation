@@ -3,6 +3,8 @@
 # Delegates to postgres_inventory_host when scm or Reports Manager (rman) database is missing
 # (e.g. partial 23 init after CREATE DATABASE failed inside PL/pgSQL, or scm created via scm_prepare only).
 # Use postgres_host_fqdn (not ansible_fqdn): imported from localhost plays (29) without gather_facts.
+# TCP login_user/login_password on the delegated host (become root only); do not become_user postgres
+# (RHEL targets often lack ACL support for Ansible's unprivileged temp-file chmod).
 
 - name: Check whether CM scm database exists in PostgreSQL
   community.postgresql.postgresql_query:
@@ -16,7 +18,6 @@
       dbname: "{{ scm_db_name }}"
   delegate_to: "{{ postgres_inventory_host }}"
   become: true
-  become_user: postgres
   register: cm_scm_database_check
   changed_when: false
 
@@ -32,7 +33,6 @@
       dbname: "{{ cm_cms_reports_manager_db_name }}"
   delegate_to: "{{ postgres_inventory_host }}"
   become: true
-  become_user: postgres
   register: cm_rman_database_check
   changed_when: false
 
