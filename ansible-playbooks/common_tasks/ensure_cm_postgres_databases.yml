@@ -99,23 +99,53 @@
 - name: Install PostgreSQL client and PGDG repo on DB host when psql is missing
   when: not (postgres_db_host_psql_present | bool)
   block:
+    - name: Gather PostgreSQL DB host distribution facts for PGDG RPM URL
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - "!min"
+          - distribution
+          - hardware
+      delegate_to: "{{ postgres_inventory_host }}"
+      delegate_facts: true
+      when:
+        - postgres_db_host_os_family == 'RedHat'
+        - >-
+          hostvars[postgres_inventory_host]['ansible_distribution_major_version'] is not defined
+          or hostvars[postgres_inventory_host]['ansible_architecture'] is not defined
+
     - name: Record PostgreSQL DB host EL major on play host for PGDG RPM URL
       ansible.builtin.set_fact:
         postgres_db_host_el_major: >-
-          {{
-            hostvars[postgres_inventory_host]['ansible_distribution_major_version']
-            | default(ansible_distribution_major_version | default(''))
-          }}
-      when: postgres_db_host_el_major is not defined
+          {{ hostvars[postgres_inventory_host]['ansible_distribution_major_version'] | string }}
+      when:
+        - postgres_db_host_os_family == 'RedHat'
+        - postgres_db_host_el_major is not defined
 
     - name: Record PostgreSQL DB host architecture on play host for PGDG RPM URL
       ansible.builtin.set_fact:
         postgres_db_host_architecture: >-
           {{
-            hostvars[postgres_inventory_host]['ansible_architecture']
-            | default(ansible_architecture | default(''))
+            'aarch64'
+            if hostvars[postgres_inventory_host]['ansible_architecture'] in ['aarch64', 'arm64']
+            else 'x86_64'
+            if hostvars[postgres_inventory_host]['ansible_architecture'] in ['x86_64', 'amd64']
+            else hostvars[postgres_inventory_host]['ansible_architecture'] | default('') | string
           }}
-      when: postgres_db_host_architecture is not defined
+      when:
+        - postgres_db_host_os_family == 'RedHat'
+        - postgres_db_host_architecture is not defined
+
+    - name: Require supported RHEL major version for PGDG repository RPM URL
+      ansible.builtin.assert:
+        that:
+          - postgres_db_host_el_major | string in ['8', '9']
+        fail_msg: >-
+          PostgreSQL DB host {{ postgres_inventory_host }} has
+          ansible_distribution_major_version '{{ postgres_db_host_el_major }}'.
+          PGDG reporpms URLs use EL-8 or EL-9 only (from the DB host, not the Ansible controller).
+          Do not fall back to controller facts (e.g. Amazon Linux 2023 reports major 2023).
+      when: postgres_db_host_os_family == 'RedHat'
 
     - name: Download PostgreSQL PGDG repository RPM on DB host (RedHat family)
       ansible.builtin.get_url:
