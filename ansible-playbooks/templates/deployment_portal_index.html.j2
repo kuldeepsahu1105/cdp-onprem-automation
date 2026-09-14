@@ -10,7 +10,9 @@
 {% set portal_tile_hint = ctx.caddy_vhosts.urls_public.portal.hostname if (_portal_caddy_url | length > 0) else 'Ops host Caddy index' %}
 {% set _caddy_vhosts_on = ctx.caddy_vhosts.enabled | default(false) | bool %}
 {% from 'deployment_portal_network_access_display.inc.j2' import net_access_href, net_access_label %}
-{% from 'deployment_portal_url_fqdn_pubip.inc.j2' import portal_url_fqdn_pubip, portal_url_fqdn_pubip_for_endpoint, portal_url_fqdn_pubip_cm, inventory_public_ip_for_fqdn, inventory_private_ip_for_fqdn %}
+{% from 'deployment_portal_url_fqdn_pubip.inc.j2' import portal_url_fqdn_pubip, portal_url_fqdn_pubip_for_endpoint, portal_url_fqdn_pubip_cm, inventory_public_ip_for_fqdn, inventory_private_ip_for_fqdn with context %}
+{% set _portal_cluster_domain = ctx.cluster_domain | default(cluster_domain | default('')) | string | trim %}
+{% set _portal_caddy_public_base = ctx.caddy_vhosts.public_base | default(caddy_vhost_public_base | default('pvc.cloudera-labs.com')) | string | trim %}
 {% set mon_on = (
   (ctx.monitoring.enabled | default(false) | bool)
   or (ctx.monitoring.routes_enabled | default(false) | bool)
@@ -1208,7 +1210,7 @@
           {% set _ipa_fqdn = deployment_portal_ipa_fqdn | default(ctx.identity.ipa_ui_url | regex_replace('^https?://', '') | regex_replace('/.*', '')) %}
           {% set _ipa_pub = inventory_public_ip_for_fqdn(ctx, _ipa_fqdn) %}
           {% set _ipa_priv = inventory_private_ip_for_fqdn(ctx, _ipa_fqdn) %}
-          <li><strong>{{ ctx.identity.ipa_ui_label }} (HTTPS on ipaserver)</strong> — {{ portal_url_fqdn_pubip(ctx.identity.ipa_ui_url, _ipa_pub, '443', 'https', _ipa_priv) }}</li>
+          <li><strong>{{ ctx.identity.ipa_ui_label }} (HTTPS on ipaserver)</strong> — {{ portal_url_fqdn_pubip(ctx.identity.ipa_ui_url, _ipa_pub, '443', 'https', _ipa_priv, _portal_cluster_domain, _portal_caddy_public_base) }}</li>
           {% endif %}
         </ul>
         <h2 class="section-title" style="margin-top:1rem">PostgreSQL</h2>
@@ -1240,7 +1242,7 @@
           {% set _link_priv = inventory_private_ip_for_fqdn(ctx, _link_host) %}
           {% set _link_scheme = link.url.split('://')[0] if '://' in link.url else 'http' %}
           {% set _link_port = link.url.split(':')[-1] | regex_replace('/.*', '') if '://' in link.url else '' %}
-          <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — {{ portal_url_fqdn_pubip(link.url, _link_pub, _link_port, _link_scheme, _link_priv) }}</li>
+          <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — {{ portal_url_fqdn_pubip(link.url, _link_pub, _link_port, _link_scheme, _link_priv, _portal_cluster_domain, _portal_caddy_public_base) }}</li>
           {% endfor %}
         </ul>
         {% endif %}
