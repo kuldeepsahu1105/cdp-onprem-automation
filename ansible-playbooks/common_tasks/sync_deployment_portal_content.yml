@@ -22,6 +22,18 @@
   ansible.builtin.import_tasks: sync_deployment_portal_operator_access.yml
   when: deployment_portal_expose_credentials | default(true) | bool
 
+- name: Sync deployment portal static icons (favicon, apple-touch-icon)
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ deployment_portal_www_dir }}/{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - { src: deployment_portal/static/favicon.ico, dest: favicon.ico }
+    - { src: deployment_portal/static/favicon-16x16.png, dest: favicon-16x16.png }
+    - { src: deployment_portal/static/favicon-32x32.png, dest: favicon-32x32.png }
+    - { src: deployment_portal/static/apple-touch-icon.png, dest: apple-touch-icon.png }
+    - { src: deployment_portal/static/android-chrome-192x192.png, dest: android-chrome-192x192.png }
+
 - name: Render deployment portal index page
   ansible.builtin.template:
     src: deployment_portal_index.html.j2
