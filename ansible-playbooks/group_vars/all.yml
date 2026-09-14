@@ -589,6 +589,8 @@ cm_srvr_sudo_user: "root" # Set the default SSH user for key-based/password-base
 use_freeipa_for_crt_mgmt: false # Set to true if FreeIPA is used for certificate management
 # Run generateCmca even when CM API reports Auto-TLS already configured (repair / re-apply)
 cm_autotls_force_run: false
+# After Auto-TLS CM restart in 27: agent reconcile batch size ("100%" = all hosts, "25%" or "1" = serial waves).
+cm_agent_reconcile_serial: "100%"
 # 27_setup_cm_autotls / resolve_cm_connect_host: skip multi-line "connection target" when probe context already resolved
 cm_autotls_skip_verbose_probe_logs: true
 

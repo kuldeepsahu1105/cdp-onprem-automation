@@ -569,6 +569,12 @@ ansible_extra_args() {
   if [[ -n "${ANSIBLE_GROUP_VARS_OVERRIDE_FILE:-}" && -f "${ANSIBLE_GROUP_VARS_OVERRIDE_FILE}" ]]; then
     args+=(-e "@${ANSIBLE_GROUP_VARS_OVERRIDE_FILE}")
   fi
+  if [[ -n "${ANSIBLE_EXTRA_VARS:-}" ]]; then
+    local pair
+    for pair in ${ANSIBLE_EXTRA_VARS}; do
+      args+=(-e "$pair")
+    done
+  fi
   if is_dry_run; then
     args+=(--check)
     if [[ "${ANSIBLE_DIFF:-true}" != "false" ]]; then
