@@ -18,14 +18,6 @@
     - name: CM API — read Auto-TLS state from CM configuration
       ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
 
-    - name: Set CM agent TLS reconcile flag from CM API
-      ansible.builtin.set_fact:
-        cm_agent_use_tls: >-
-          {{
-            cm_autotls_api_enabled | default(autotls_enabled | default(false) | bool)
-            | bool
-          }}
-
 - name: Reconcile Cloudera Manager agents on cluster hosts
   hosts: all:!ipaserver
   become: true

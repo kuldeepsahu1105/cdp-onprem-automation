@@ -370,4 +370,7 @@
   ansible.builtin.debug:
     msg:
       - "cm_api_url: {{ cm_api_url }}"
-      - "Auto-TLS enabled: {{ autotls_enabled | default(false) }}"
+      - >-
+        CM API reachability: {{ cm_protocol | default('http') }} port {{ cm_api_port | default('?') }}
+        (HTTPS/TLS active={{ (cm_protocol | default('http')) == 'https' or (autotls_enabled | default(false) | bool) }};
+        autotls_enabled probe hint={{ autotls_enabled | default(false) }} — import fetch_cm_autotls_api_state.yml for Auto-TLS vs manual TLS).
