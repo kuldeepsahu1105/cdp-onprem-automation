@@ -12,7 +12,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 2 | TERRAFORM | — | inventory generation |
 | 3 | PREREQS | `1` / `prereq` | SSH: `00_setup_ssh_preqs` → `01`–`09` (`00` only on PREREQS / `all`; override with `ANSIBLE_RUN_SSH_PREQS`) |
 | 4 | PORTAL | `portal` | `10_setup_deployment_portal` |
-| 5 | IDENTITY | `2` / `identity` | `00_detect_identity` → `11_identity_setup` |
+| 5 | IDENTITY | `2` / `identity` | `detect_identity.yml` → `11_identity_setup` |
 | 6 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
 | 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `29` → `30` → `28` (requires `04_setup_autossh` from PREREQS) |
 | 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` |
@@ -33,7 +33,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 10 | `10_setup_deployment_portal.yml` | Ops portal bootstrap (Caddy edge `deployment_portal_http_port`, default **81** — portal, pgAdmin, monitoring, IPA; not CM/ECS) |
 | 11 | `11_identity_setup.yml` | Identity **router** |
 | 12 | `12_setup_freeipa_server.yml` | FreeIPA server (skipped for AD) |
-| 12b | `12b_ipa_deep_recovery.yml` | Optional IPA detect/recover/sanitize (`ipa_server_deep_recovery: true`) |
+| 12b | `ipa_deep_recovery.yml` | Optional IPA detect/recover/sanitize (`ipa_server_deep_recovery: true`) |
 | 13 | `13_update_resolv_conf.yml` | resolv.conf / netplan |
 | 14 | `14_setup_dns_records.yml` | FreeIPA DNS (skipped for AD) |
 | 15 | `15_update_syscfg_network.yml` | RHEL network sysconfig |
@@ -47,7 +47,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 23 | `23_setup_postgres.yml` | PostgreSQL for CM |
 | 24 | `24_start_cm.yml` | CM server + agents |
 | 25 | `25_verify_cm.yml` | Verify CM |
-| — | `25_reconcile_cm_agents.yml` | Optional agent reconcile (also at end of **27**) |
+| — | `reconcile_cm_agents.yml` | Optional agent reconcile (also at end of **27**) |
 | 26 | `26_setup_cm_license.yml` | License / trial |
 | 27 | `27_setup_cm_autotls.yml` | Auto-TLS (+ agent reconcile; CMS trust/restart when MGMT already exists) |
 | 29 | `29_setup_cm_cms.yml` | CMS (Cloudera Management Service) — **before LDAP/Kerberos** |
@@ -66,8 +66,8 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | Playbook | Notes |
 |----------|--------|
 | `00_setup_ssh_preqs.yml` | First in wrapper |
-| `00_ensure_collections.yml` | Imported by numbered playbooks |
-| `00_detect_identity.yml` | Before `11_identity_setup` |
+| `ensure_collections.yml` | Imported by numbered playbooks |
+| `detect_identity.yml` | Before `11_identity_setup` |
 | `01`–`09` | OS prerequisites (`04_setup_autossh.yml` in phase 1 after `03_create_etc_hosts`) |
 | `99_cleanup.yml` | Teardown |
 | `unused_legacy_cm_service_enable.yml` | Unused; prefer `29_setup_cm_cms.yml` |

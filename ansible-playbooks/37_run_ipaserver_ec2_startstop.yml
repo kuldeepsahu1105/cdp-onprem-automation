@@ -5,7 +5,7 @@
 #             ec2_startstop_install_if_missing (default true)
 # Example argv is computed from ec2_startstop_portal_facts.j2 (same as portal Operator access panel).
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Skip when no ipaserver in inventory
   hosts: localhost

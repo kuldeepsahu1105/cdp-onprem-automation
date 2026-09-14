@@ -7,7 +7,7 @@
 #   authorized_keys_path: "{{ ssh_dir }}/authorized_keys"
 
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Generate SSH key on ipaserver
   hosts: ipaserver

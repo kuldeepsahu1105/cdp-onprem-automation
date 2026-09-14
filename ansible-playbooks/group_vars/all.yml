@@ -86,7 +86,7 @@ dns_forwarders: "no"
 ipa_server_install_use_vpc_dns_forwarder: true
 reverse_zones: "no"
 chrony_enabled: "yes"
-# Playbook 12b_ipa_deep_recovery.yml — detect / recover / sanitize (verbose; not in Jenkins IDENTITY by default)
+# Playbook ipa_deep_recovery.yml — detect / recover / sanitize (verbose; not in Jenkins IDENTITY by default)
 ipa_server_deep_recovery: false
 # Playbook 12 — when true, run ipa-server-install even if default.conf + healthy ipactl (re-install; rare)
 ipa_server_install_force: false

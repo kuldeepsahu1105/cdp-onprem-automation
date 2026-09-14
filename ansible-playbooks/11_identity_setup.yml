@@ -1,14 +1,14 @@
 ### ansible-playbook -i inventory.ini 11_identity_setup.yml
 #
-# Phase 2 identity router (auto-detects FreeIPA vs AD via 00_detect_identity.yml)
+# Phase 2 identity router (auto-detects FreeIPA vs AD via detect_identity.yml)
 #
 # FreeIPA ([ipaserver] in inventory): 12 -> 13 -> 14 -> 15 -> 16 -> 19
 # Active Directory (ad_kdc_host only): 13 -> 16  (12/14/19 skipped automatically)
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Detect identity provider
-  ansible.builtin.import_playbook: 00_detect_identity.yml
+  ansible.builtin.import_playbook: detect_identity.yml
 
 - name: FreeIPA server install
   ansible.builtin.import_playbook: 12_setup_freeipa_server.yml

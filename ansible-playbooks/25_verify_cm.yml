@@ -7,7 +7,7 @@
 # (see common_tasks/set_cm_api_url.yml and .cursor/LEARNINGS.md).
 
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Verify and perform sanity checks on cloudera-manager server
   hosts: localhost

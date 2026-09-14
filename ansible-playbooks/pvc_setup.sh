@@ -186,7 +186,7 @@ fi
 
 mapfile -t ANSIBLE_PLAYBOOK_ARGS < <(ansible_extra_args "$PRIVATE_KEY")
 
-# Same helper as 00_ensure_collections.yml / manual playbooks (no-op when already installed).
+# Same helper as ensure_collections.yml / manual playbooks (no-op when already installed).
 if _ansible_requirements_collections_present "$SCRIPT_DIR/requirements.yml"; then
   ui_info "Ansible collections already installed — skipping galaxy (requirements.yml)"
 else
@@ -299,7 +299,7 @@ run_phase_portal() {
 run_phase_2() {
   local _phase="2 — Identity (FreeIPA / AD)"
   ui_phase_header "$_phase"
-  run_playbook 00_detect_identity.yml
+  run_playbook detect_identity.yml
   _install_ipaserver_ec2_startstop
   run_playbook 11_identity_setup.yml
   _maybe_run_deployment_portal_refresh "portal,ipa,identity"

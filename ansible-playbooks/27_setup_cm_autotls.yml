@@ -1,7 +1,7 @@
 ### ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml
 # Standalone (no wrapper): cd ansible-playbooks && ANSIBLE_PRIVATE_KEY=/path/to/key ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Enable Auto-TLS in Cloudera Manager
   hosts: localhost

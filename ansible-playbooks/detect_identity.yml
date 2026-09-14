@@ -1,10 +1,10 @@
-### ansible-playbook -i inventory.ini 00_detect_identity.yml
+### ansible-playbook -i inventory.ini detect_identity.yml
 #
 # Detect FreeIPA vs Active Directory from inventory and group_vars.
 #   [ipaserver] has hosts  -> FreeIPA full flow
 #   [ipaserver] empty + ad_kdc_host set -> AD dependent flow only
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Detect identity provider (FreeIPA vs Active Directory)
   hosts: localhost

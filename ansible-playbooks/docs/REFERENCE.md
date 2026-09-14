@@ -280,8 +280,8 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 | Playbook | Description |
 |---|---|
 | `00_setup_ssh_preqs.yml` | SSH prerequisites |
-| `00_ensure_collections.yml` | Galaxy install from `requirements.yml` (imported by every playbook; same logic as `pvc_setup.sh`) |
-| `01_install_collection.yml` | Imports `00_ensure_collections`; pins RHEL subscription release to installed minor (`common_tasks/pin_rhel_release_before_upgrade.yml`) then full system update on targets |
+| `ensure_collections.yml` | Galaxy install from `requirements.yml` (imported by every playbook; same logic as `pvc_setup.sh`) |
+| `01_install_collection.yml` | Imports `ensure_collections.yml`; pins RHEL subscription release to installed minor (`common_tasks/pin_rhel_release_before_upgrade.yml`) then full system update on targets |
 | `02_set_hostname.yml` | Set FQDN hostnames |
 | `03_create_etc_hosts.yml` | Populate `/etc/hosts` |
 | `04_setup_autossh.yml` | Passwordless SSH |
@@ -295,10 +295,10 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 
 | Playbook | Description |
 |---|---|
-| `00_detect_identity.yml` | Detect FreeIPA vs AD |
+| `detect_identity.yml` | Detect FreeIPA vs AD |
 | `11_identity_setup.yml` | Phase 2 router (all of 10–15) |
 | `12_setup_freeipa_server.yml` | FreeIPA server (skipped for AD) |
-| `12b_ipa_deep_recovery.yml` | Optional IPA detect/recover/sanitize before playbook 12 |
+| `ipa_deep_recovery.yml` | Optional IPA detect/recover/sanitize before playbook 12 |
 | `13_update_resolv_conf.yml` | DNS (netplan or resolv.conf) |
 | `14_setup_dns_records.yml` | FreeIPA DNS records (skipped for AD) |
 | `15_update_syscfg_network.yml` | `/etc/sysconfig/network` (RHEL) |
@@ -319,7 +319,7 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 | `23_setup_postgres.yml` | PostgreSQL for CM |
 | `24_start_cm.yml` | Install/start CM server + agents |
 | `25_verify_cm.yml` | Verify CM is running |
-| `25_reconcile_cm_agents.yml` | Reconcile CM agent `server_host` / `use_tls` and restart agents |
+| `reconcile_cm_agents.yml` | Reconcile CM agent `server_host` / `use_tls` and restart agents |
 | CM API on **HTTP :7180** (Auto-TLS off) | Agents must use **`use_tls=0`** | **27** / **25** set `use_tls=0` in `config.ini` when CM reports Auto-TLS disabled — agents cannot speak TLS to an HTTP-only CM server. CMS TLS trust reconcile in **27** is skipped when Auto-TLS is off. |
 | `26_setup_cm_license.yml` | Upload license or trial |
 | `27_setup_cm_autotls.yml` | Enable Auto-TLS; agent reconcile; CMS trust/restart when MGMT already exists |
@@ -343,7 +343,7 @@ CMS (Management Service) and CDP base cluster are **separate**:
 | JMX `smonStatusRequest` / `smonReportRequest` Count 0 | CM cannot reach Service Monitor Avro endpoint | Confirm role **RUNNING** in CM → Management Service; `ss -ltn` on loopback for firehose port from role config |
 | `ImportCredentials - Execution error` in `cloudera-scm-server.log` | TLS / credential store mismatch after Auto-TLS | Ensure MGMT `ssl_client_truststore_*` points at agent `cm-auto-global_truststore.jks` (automation in `configure_cm_cms_autotls_trust.yml`); re-run **27** then **29** |
 | Reports Manager won't start / **29** fails RM DB probe | Postgres `rman` DB missing (partial **23** init) or TCP auth from CM host | **29** runs `ensure_cm_postgres_databases` before probe; re-run **23** or **29**. From CM host: `psql -h <postgres-fqdn> -U rman -d rman`; logs: `/var/log/cloudera-scm-headlamp/` |
-| **Hosts: Last Heartbeat ~minutes** (all commissioned) | **CM agent** not checking in to CM Server (not a browser refresh issue) | `systemctl status cloudera-scm-agent`; `grep ^server_host= /etc/cloudera-scm-agent/config.ini` (cldr-mngr FQDN); after Auto-TLS `use_tls=1` — re-run **27** or **`25_reconcile_cm_agents.yml`**; agent log `/var/log/cloudera-scm-agent/cloudera-scm-agent.log`; chrony via **07** |
+| **Hosts: Last Heartbeat ~minutes** (all commissioned) | **CM agent** not checking in to CM Server (not a browser refresh issue) | `systemctl status cloudera-scm-agent`; `grep ^server_host= /etc/cloudera-scm-agent/config.ini` (cldr-mngr FQDN); after Auto-TLS `use_tls=1` — re-run **27** or **`reconcile_cm_agents.yml`**; agent log `/var/log/cloudera-scm-agent/cloudera-scm-agent.log`; chrony via **07** |
 | **Hosts: load/disk/memory empty or stale** but heartbeat fresh | **Host Monitor** (CMS) not publishing host metrics | CM → Management Service: Host Monitor **RUNNING**; re-run **29_setup_cm_cms.yml** (after **27** when Auto-TLS on); firehose/agent logs on cldr-mngr |
 | **Hosts: Tags column empty** | Tags are optional; not set at agent install | Enable `cm_host_tags_enabled` (default true) — **29** applies inventory role/env/owner tags via API |
 | `31_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
@@ -472,7 +472,7 @@ Requires:
 | `DEPLOY_PHASE` | Alias | Playbooks |
 |---|---|---|
 | `1` | `prereq` | `00`–`09` |
-| `2` | `identity` | `00_detect_identity`, `11_identity_setup` |
+| `2` | `identity` | `detect_identity.yml`, `11_identity_setup` |
 | `3` | `cm` | `20`–`26` |
 | `4` | `cluster` | `22`–`27` (ECS skipped if no ecs inventory) |
 | `5` | `ecs` | `33_setup_ecs_cluster.yml` |
@@ -547,14 +547,14 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/recover_ipa_server_install.yml` | Deeper `ipa-server-install --uninstall` + path cleanup (playbook **`12b`**, not default **12**) |
 | `common_tasks/sanitize_ipa_paths_before_fresh_install.yml` | Remove broken or incomplete `/var/lib/ipa` (missing or stale **sysrestore**), `/etc/ipa`, and `/etc/dirsrv/slapd-*` before fresh install when `ipactl` not configured (playbook 12) |
 | `common_tasks/preflight_ipa_server_install.yml` | Compact preflight for playbook 12: RHEL RPMs, `/etc/ipa` + `ipa_server_etc_ipa_subdirs`, `/var/lib/ipa` + `ipa_server_var_lib_subdirs`, openldap assert, `hostname -f`/`getent` asserts, **LDAP 389/636 listener check** when **`ipactl`** not configured |
-| `12b_ipa_deep_recovery.yml` | Optional detect / recover / sanitize before playbook 12 (set `ipa_server_deep_recovery: true`) |
+| `ipa_deep_recovery.yml` | Optional detect / recover / sanitize before playbook 12 (set `ipa_server_deep_recovery: true`) |
 | `common_tasks/resolve_ipa_install_dns_forwarders.yml` | VPC vs `--no-forwarders` flags for `ipa-server-install` (playbook 12) |
 
 Playbook **`12_setup_freeipa_server.yml`** imports **`detect_ipa_server_install_state.yml`** and skips **`ipa-server-install`** when **`ipa --version`** is OK, **`ipa_server_has_default_conf`** is true, **`ipactl`** does not report **IPA is not configured**, and there is no partial install debris (**`ipa_server_has_partial_state`**). A non-zero **`ipactl`** rc from stopped services alone does **not** trigger reinstall; **`ensure_ipa_kdc_services.yml`** runs after the play. Install (and best-effort **`ipa-server-install --uninstall`**) runs when the host is not configured, partial/broken, or **`ipa_server_install_force: true`**. DNS forwarder argv comes from **`resolve_ipa_install_dns_forwarders.yml`**.
 
 | `dns_forwarders` | `no` | Playbook **12**: AWS EC2 → VPC `--forwarder`; else `--no-forwarders`. See **`ipa_server_install_use_vpc_dns_forwarder`**. |
 | `ipa_server_install_use_vpc_dns_forwarder` | `true` | When **`dns_forwarders: no`**, use VPC resolver on AWS at install (and **`dnsconfig-mod`** when install skipped). |
-| `ipa_server_deep_recovery` | `false` | When **`true`**, run playbook **`12b_ipa_deep_recovery.yml`** before **12** for automated detect/recover/sanitize. |
+| `ipa_server_deep_recovery` | `false` | When **`true`**, run playbook **`ipa_deep_recovery.yml`** before **12** for automated detect/recover/sanitize. |
 | `common_tasks/preflight_kdc_reachable.yml` | TCP :88 to `kdc_host` before CM Kerberos REST; from **cldr-mngr** when `ansible_control_reachability` is `public` (Jenkins) |
 | `common_tasks/verify_cm_kerberos_enabled.yml` | Bounded wait on `/cm/kerberosInfo` field `kerberized`; actionable fail (see `cm_krb_kerberized_wait_*` in `group_vars/all.yml`) |
 | `common_tasks/reconcile_cm_cms_after_autotls.yml` | MGMT TLS truststore + CMS restart after **27** when Labs `cm_service` already deployed |

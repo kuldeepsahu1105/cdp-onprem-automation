@@ -1,8 +1,8 @@
-### ansible-playbook -i inventory.ini 25_reconcile_cm_agents.yml
+### ansible-playbook -i inventory.ini reconcile_cm_agents.yml
 # Re-point CM agents at cldr-mngr (server_host / use_tls) and restart cloudera-scm-agent.
 # Use after Auto-TLS, CM server moves, or when CM Hosts show stale Last Heartbeat.
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Detect Cloudera Manager Auto-TLS for agent use_tls
   hosts: localhost

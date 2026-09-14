@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 00_ensure_collections.yml
+### ansible-playbook -i inventory.ini ensure_collections.yml
 # Control-node Galaxy install (same logic as pvc_setup.sh / CI). Imported by other playbooks.
 ---
 - name: Ensure Ansible Galaxy collections on control node

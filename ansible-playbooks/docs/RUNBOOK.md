@@ -16,7 +16,7 @@ cd ansible-playbooks
 |-------------|-------------|
 | **`./pvc_setup.sh`** or repo **`clone_and_run_pvc_automation.sh`** | Installed automatically at start |
 | **Jenkins** `run-ansible.sh` | Same as `pvc_setup.sh` per stage (skip when already installed) |
-| **Single playbook** | `./run-playbook.sh 10_setup_deployment_portal.yml` **or** `ansible-playbook …` (each playbook imports `00_ensure_collections.yml`) **or** once manually: `ansible-galaxy collection install -r requirements.yml` |
+| **Single playbook** | `./run-playbook.sh 10_setup_deployment_portal.yml` **or** `ansible-playbook …` (each playbook imports `ensure_collections.yml`) **or** once manually: `ansible-galaxy collection install -r requirements.yml` |
 
 2. Prepare `inventory.ini` with your hosts (see [REFERENCE.md](REFERENCE.md#inventory-groups)).
 3. Configure `group_vars/all.yml` (domain, passwords, AD vars if needed).
@@ -226,7 +226,7 @@ ipaserver ansible_host=<public_ip> private_ip=<private_ip> cldr_hostname=ipaserv
 
 ### Why FreeIPA install fails after lab re-runs (playbook 12)
 
-Playbook **`12_setup_freeipa_server.yml`** (via **`11_identity_setup`**) probes **`ipa --version`** and **`detect_ipa_server_install_state.yml`** (**`default.conf`**, partial debris, **`ipactl`** not configured). It skips uninstall and **`ipa-server-install`** when IPA is already configured (**`ipa --version`** rc=0 without **not configured**, **`default.conf`**, no partial debris, **`ipactl`** not reporting **IPA is not configured** — **`ipactl`** rc≠0 from stopped services alone does not reinstall). If the host is not configured, partial/broken, or **`ipa_server_install_force: true`**, it runs **`ipa-server-install --uninstall --unattended`** when needed (best-effort, non-fatal), then preflight (**`mkdir`** under **`/etc/ipa`** + **`ipa_server_etc_ipa_subdirs`** (e.g. **`/etc/ipa/custodia`**), **`/var/lib/ipa`** + **`ipa_server_var_lib_subdirs`**, **`/var/log/ipa`**, plus hostname/DNS asserts), then **`ipa-server-install --unattended`** with VPC **`--forwarder=`** or **`--no-forwarders`** per **`resolve_ipa_install_dns_forwarders.yml`**. Repeated partial installs can still leave debris; use **`12b_ipa_deep_recovery.yml`** or manual cleanup when uninstall alone is not enough.
+Playbook **`12_setup_freeipa_server.yml`** (via **`11_identity_setup`**) probes **`ipa --version`** and **`detect_ipa_server_install_state.yml`** (**`default.conf`**, partial debris, **`ipactl`** not configured). It skips uninstall and **`ipa-server-install`** when IPA is already configured (**`ipa --version`** rc=0 without **not configured**, **`default.conf`**, no partial debris, **`ipactl`** not reporting **IPA is not configured** — **`ipactl`** rc≠0 from stopped services alone does not reinstall). If the host is not configured, partial/broken, or **`ipa_server_install_force: true`**, it runs **`ipa-server-install --uninstall --unattended`** when needed (best-effort, non-fatal), then preflight (**`mkdir`** under **`/etc/ipa`** + **`ipa_server_etc_ipa_subdirs`** (e.g. **`/etc/ipa/custodia`**), **`/var/lib/ipa`** + **`ipa_server_var_lib_subdirs`**, **`/var/log/ipa`**, plus hostname/DNS asserts), then **`ipa-server-install --unattended`** with VPC **`--forwarder=`** or **`--no-forwarders`** per **`resolve_ipa_install_dns_forwarders.yml`**. Repeated partial installs can still leave debris; use **`ipa_deep_recovery.yml`** or manual cleanup when uninstall alone is not enough.
 
 **Manual `ipa-server-install` after a failed run (ipaserver, root):** When **`/var/log/ipaserver-install.log`** shows **`install_check`** / **`ipaconf.newConf`** / **`ipachangeconf`** with **`FileNotFoundError: [Errno 2]`** on **`/var/lib/ipa/sysrestore/...`**, **`/var/lib/ipa/sysupgrade/sysupgrade.state`**, **`/etc/ipa/default.conf`**, or **`/etc/ipa/custodia/custodia.conf`** (parent **`/etc/ipa/custodia`** missing), IPA is **not** configured (`ipactl status` → **IPA is not configured** / rc=4). Common causes: **sysrestore** debris after a partial install, or **`rm -rf`** under **`/var/lib/ipa`** / **`/etc/ipa`** that left parents without **`sysupgrade/`** / **`sysrestore/`** / **`custodia/`**. **`bind-utils`** / **`dig`** can work while install still fails — do not retry until paths are cleaned and you use **real** passwords (lab default **`PseTeam@123`**, same as Jenkins **`ipaadmin_password`** / **`common_password`**), not documentation placeholders like **`YOUR_DS_PASSWORD`** / **`YOUR_ADMIN_PASSWORD`**.
 
@@ -263,13 +263,13 @@ ipa-server-install --setup-dns --unattended \
   --forwarder=172.31.0.2
 ```
 
-For automated debris cleanup before install, run **`ansible-playbook -i inventory.ini 12b_ipa_deep_recovery.yml -e ipa_server_deep_recovery=true --limit ipaserver`**, then re-run **`ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml --limit ipaserver`** (vars supply passwords and forwarders).
+For automated debris cleanup before install, run **`ansible-playbook -i inventory.ini ipa_deep_recovery.yml -e ipa_server_deep_recovery=true --limit ipaserver`**, then re-run **`ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml --limit ipaserver`** (vars supply passwords and forwarders).
 
 **IPA DNS forwarders:** Default **`dns_forwarders: no`** uses the **AWS VPC resolver** (`--forwarder=x.y.0.2` from the instance private IP) on EC2 when **`ipa_server_install_use_vpc_dns_forwarder: true`** (default). On bare metal, or when the VPC resolver cannot be computed, install falls back to **`--no-forwarders`**. Force **`--no-forwarders`**: set **`dns_forwarders: no-forwarders`** or **`ipa_server_install_use_vpc_dns_forwarder: false`**. Skipped installs (healthy **`ipactl`** + **`default.conf`**) get **`ipa dnsconfig-mod`** toward the VPC resolver when VPC mode applies.
 
 **Jenkins IDENTITY / playbook 12:** The **Assert AWS VPC DNS forwarder** task runs only when **`ipa_install_dns_use_vpc_forwarder`** is true (after **`resolve_ipa_install_dns_forwarders`** finalize). On AWS with **`dns_forwarders: no`**, **`set_dns_facts`** should log **`Deployment environment: aws`** and a VPC resolver (for example **`172.31.0.2`**) in **`DNS nameservers`**; the **IPA install DNS forwarder mode** line should read **`VPC forwarder …`**, not **`--no-forwarders (fallback)`**. If VPC assert is skipped unexpectedly, check **`effective_deployment_env`** / **`effective_vpc_dns_resolver`** in the log and group vars **`ipa_server_install_use_vpc_dns_forwarder`**. **`ipa-server-install` failures** should print **`stderr`** and **`/var/log/ipaserver-install.log`** tail in the **Fail with ipa-server-install diagnostics** task (passwords are not logged; credentials are passed via environment variables).
 
-**Port 389 / 636 conflict (partial install, `ipactl` rc=4):** Playbook **12** preflight fails before **`ipa-server-install`** when **`ss`** shows **389** or **636** listening while **`ipactl`** reports **IPA is not configured** (leftover **389-ds** / **`dirsrv`** from a failed install). Automation: **`12b_ipa_deep_recovery.yml`** with **`ipa_server_deep_recovery: true`**, then re-run **12**. On **ipaserver as root**:
+**Port 389 / 636 conflict (partial install, `ipactl` rc=4):** Playbook **12** preflight fails before **`ipa-server-install`** when **`ss`** shows **389** or **636** listening while **`ipactl`** reports **IPA is not configured** (leftover **389-ds** / **`dirsrv`** from a failed install). Automation: **`ipa_deep_recovery.yml`** with **`ipa_server_deep_recovery: true`**, then re-run **12**. On **ipaserver as root**:
 
 ```bash
 ipactl status || true
@@ -290,7 +290,7 @@ If **`ipa-server-install`** fails with **port 389 already in use** in **`ipaserv
 ### 3. Detect identity provider
 
 ```bash
-ansible-playbook -i inventory.ini 00_detect_identity.yml
+ansible-playbook -i inventory.ini detect_identity.yml
 ```
 
 Expected: `effective identity provider: freeipa`
@@ -477,7 +477,7 @@ ad_join_password: "ChangeMe@123"
 ### 3. Detect and verify
 
 ```bash
-ansible-playbook -i inventory.ini 00_detect_identity.yml
+ansible-playbook -i inventory.ini detect_identity.yml
 ```
 
 Expected: `effective identity provider: ad`
@@ -575,7 +575,7 @@ Set **`ANSIBLE_GROUP_VARS_YAML`** (or `group_vars/all.yml`) so **`ipaadmin_passw
 |---|---|
 | **Kerberos / KDC** | Playbook **28** ends with `verify_cm_kerberos_enabled.yml` (`GET /cm/kerberosInfo` → **`kerberized=true`**, realm matches `cluster_realm`). CM API Kerberos REST uses **HTTPS :7183** when Auto-TLS is on. On ipaserver: `ipactl status` → **`krb5kdc` RUNNING**. |
 | **CMS monitors** | CM → **Cloudera Management Service**: **Service Monitor**, **Host Monitor**, **Event Server** **RUNNING**; firehose port listening (playbook **29**). Host load/disk/memory columns populate when Host Monitor is healthy. |
-| **Agent heartbeat** | CM → **Hosts**: **Last Heartbeat** fresh (~minutes) on all commissioned hosts. If stale: re-run **27** (agent reconcile) or **`25_reconcile_cm_agents.yml`**; confirm SG **7182/7183** agent→manager and `use_tls` after **27**. |
+| **Agent heartbeat** | CM → **Hosts**: **Last Heartbeat** fresh (~minutes) on all commissioned hosts. If stale: re-run **27** (agent reconcile) or **`reconcile_cm_agents.yml`**; confirm SG **7182/7183** agent→manager and `use_tls` after **27**. |
 | **ZooKeeper** | Base cluster → **ZooKeeper** → at least one **Server** role on `base-workers` (playbook **31** fails if zero servers). Required before Stop Cluster / Deploy Client Config after KDC. |
 | **Portal / URLs** | `jenkins/artifacts/access-urls.txt` and deployment portal index (when enabled). |
 
@@ -603,7 +603,7 @@ ansible -i inventory.ini 'all:!ipaserver' -b -m systemd \
   -a 'name=cloudera-scm-agent state=restarted enabled=yes'
 ```
 
-Or re-run **`25_reconcile_cm_agents.yml`** / **`27_setup_cm_autotls.yml`** once `/cm/version` is healthy. Playbook **27** restarts CM Server before mass agent reconcile and **fails** if the API is still down (avoids restarting every agent while CM is offline).
+Or re-run **`reconcile_cm_agents.yml`** / **`27_setup_cm_autotls.yml`** once `/cm/version` is healthy. Playbook **27** restarts CM Server before mass agent reconcile and **fails** if the API is still down (avoids restarting every agent while CM is offline).
 
 Jenkins: set **`cm_autotls_force_run: true`** in **`ANSIBLE_GROUP_VARS_YAML`** and re-run **`CM_TLS_KRB_LDAP`** when you need generateCmca despite CM already reporting Auto-TLS (see `jenkins/README.md`).
 
@@ -682,8 +682,8 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 
 | Issue | Action |
 |---|---|
-| Wrong identity detected | Run `00_detect_identity.yml`; set `identity_provider: freeipa` or `ad` to override |
-| **FreeIPA partial install** (`ipactl status` → **IPA is not configured** / rc=4; `default.conf` missing but **`/var/lib/ipa`** has **`sysrestore.index`** / **`sysrestore.state`** or install dies with **`FileNotFoundError` [Errno 2]** on **`sysupgrade.state`**, **`/etc/ipa/custodia/custodia.conf`**, or other config paths; or empty **`/var/lib/ipa`** without **`sysrestore.state`**; or `/etc/dirsrv/slapd-*` remains; interactive `ipa-server-install --uninstall` defaults to **no**) | See **Manual `ipa-server-install` after a failed run** under Scenario A (one-liner **`mkdir -p /etc/ipa/custodia .../sysupgrade`** after **`rm -rf`**). On **ipaserver** as **root**: unattended uninstall, then **`rm -rf /var/lib/ipa /etc/ipa`** and **`/etc/dirsrv/slapd-*`** when **`ipactl`** is still not configured. Automation: **`12b_ipa_deep_recovery.yml`** with **`ipa_server_deep_recovery: true`**, then **`12_setup_freeipa_server.yml`** (preflight + **`ipa-server-install`**). Optional: **`-e ipa_server_uninstall_force=true`**. |
+| Wrong identity detected | Run `detect_identity.yml`; set `identity_provider: freeipa` or `ad` to override |
+| **FreeIPA partial install** (`ipactl status` → **IPA is not configured** / rc=4; `default.conf` missing but **`/var/lib/ipa`** has **`sysrestore.index`** / **`sysrestore.state`** or install dies with **`FileNotFoundError` [Errno 2]** on **`sysupgrade.state`**, **`/etc/ipa/custodia/custodia.conf`**, or other config paths; or empty **`/var/lib/ipa`** without **`sysrestore.state`**; or `/etc/dirsrv/slapd-*` remains; interactive `ipa-server-install --uninstall` defaults to **no**) | See **Manual `ipa-server-install` after a failed run** under Scenario A (one-liner **`mkdir -p /etc/ipa/custodia .../sysupgrade`** after **`rm -rf`**). On **ipaserver** as **root**: unattended uninstall, then **`rm -rf /var/lib/ipa /etc/ipa`** and **`/etc/dirsrv/slapd-*`** when **`ipactl`** is still not configured. Automation: **`ipa_deep_recovery.yml`** with **`ipa_server_deep_recovery: true`**, then **`12_setup_freeipa_server.yml`** (preflight + **`ipa-server-install`**). Optional: **`-e ipa_server_uninstall_force=true`**. |
 | **LDAP port 389/636 in use** (`ipa-server-install`: port 389 already in use; playbook **12** preflight fails while **`ipactl`** not configured) | Leftover **`dirsrv`** / **`/etc/dirsrv/slapd-*`** from partial install. See **Port 389 / 636 conflict** under Scenario A (`ss -tlnp`, stop **`dirsrv@*`**, **`rm -rf /etc/dirsrv/slapd-*`** when not configured). Then **`12b`** + **`12`**. |
 | **`ipa-client-install` failed** on one host (Jenkins **IDENTITY** / playbook **16**; task censored by `no_log`; `changed: false`) | Host lacks `/etc/ipa/default.conf` while peers skip (already enrolled). Typical on **new ECS/base workers**: re-run phase **1** (`02_set_hostname.yml`, `03_create_etc_hosts.yml` on **all** hosts), then **`14_setup_dns_records.yml`**, then **`16_setup_identity_client.yml`** (or `--limit pvcecs-workerN`). On the host: `hostname -f`, `getent hosts $(hostname -f)`, `getent hosts ipaserver.<domain>`, `tail -50 /var/log/ipaclient-install.log`. Playbook **16** fails with redacted stderr + log tail when install rc≠0; partial debris triggers **`ipa-client-install --uninstall --unattended`** before retry (see recovery steps under **`zlib.error`**). |
 | **`Obtain Kerberos ticket if missing` / kinit failed** on one host (Jenkins **IDENTITY**; `no_log`; `changed: false`; peers skip kinit — already have tickets) | Install was **skipped** (`/etc/ipa/default.conf` present) or finished earlier in the play; **`kinit` returned rc≠0** (not a silent skip). On the worker as **root**: `klist`; `test -f /etc/ipa/default.conf`; `test -f /etc/krb5.conf`; `getent hosts ipaserver.<domain>`; `chronyc tracking`; `kinit admin` (password must match **`ipaadmin_password`** / Jenkins **`ANSIBLE_GROUP_VARS_YAML`** — same as playbook **12** on ipaserver); enrolled: `kinit -k -t /etc/krb5.keytab host/$(hostname -f)@<REALM>`; then `ipa ping`. Re-run **`16_setup_identity_client.yml --limit <host>`** — playbook tries host keytab first when enrolled, then admin password, and fails with an explicit diagnostic message. |
@@ -694,7 +694,7 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 | CM Kerberos/KDC not enabled (`kerberized=false`) | Playbook **28** waits up to `cm_krb_kerberized_wait_retries × cm_krb_kerberized_wait_delay` (default 300s) then fails with `kerberosInfo` details. **FreeIPA:** on ipaserver `ipactl status` (krb5kdc RUNNING); re-run `12_setup_freeipa_server.yml` then `28_setup_cm_krbs.yml`. **AD:** set `ad_kdc_host` (not empty). **CM:** confirm `importAdminCredentials` in `cloudera-scm-server.log`; Kerberos REST must use HTTPS `:7183` when Auto-TLS is on. **Manual UI:** Administration → Settings → Kerberos — set realm, KDC type/host, import Account Manager principal/password, Save, restart CM Server. |
 | CM Kerberos UI warns on **rc4-hmac** / weak crypto | Set `krb5_enc_types` to `aes256-cts aes128-cts` (default). Re-run `12` + `28`; regenerate Kerberos credentials in CM. See **Kerberos encryption types (AES)** above. |
 | **ZooKeeper has 0 Servers** (Stop Cluster / Deploy Client Config after KDC) | ZK **service** exists but no **Server** roles — common on clusters created before host template `service: ZOOKEEPER` fix or when **31** skipped create. Add **Server** on `base-workers` in CM, or delete base cluster and re-run **31**. See **ZooKeeper placement** under step 7. Kerberos enablement (`28_setup_cm_krbs.yml` / manual KDC) is separate; fix ZK roles first. **Stop Cluster** can remain blocked until ZK has at least one Server role. |
-| CM **Hosts** — **Last Heartbeat** stale (~minutes), all **Commissioned** | **Agent → CM Server** path (heartbeat is not Host Monitor). Check `cloudera-scm-agent`, `server_host` FQDN, `use_tls` after **27**, SG **7182/7183** agent→manager. Re-run **`25_reconcile_cm_agents.yml`** or **27** (agent reconcile play). Chrony: **07_prereq_setup_002.yml**. |
+| CM **Hosts** — **Last Heartbeat** stale (~minutes), all **Commissioned** | **Agent → CM Server** path (heartbeat is not Host Monitor). Check `cloudera-scm-agent`, `server_host` FQDN, `use_tls` after **27**, SG **7182/7183** agent→manager. Re-run **`reconcile_cm_agents.yml`** or **27** (agent reconcile play). Chrony: **07_prereq_setup_002.yml**. |
 | CM **Hosts** — **Tags** empty | Expected until tags are set (automation: **29** with `cm_host_tags_enabled`, or CM UI). |
 | CM **Hosts** — load/disk/memory sparse | **Host Monitor** (CMS). Re-run **29** when Service Monitor / Host Monitor unhealthy; see REFERENCE CMS troubleshooting. |
 | DNS not persisting on Ubuntu | DNS is applied via netplan — see [REFERENCE.md](REFERENCE.md#dns-configuration) |
