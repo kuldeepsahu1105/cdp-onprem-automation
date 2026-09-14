@@ -17,17 +17,44 @@
   ansible.builtin.set_fact:
     _cm_autotls_config_flag_hits: >-
       {{
-        _cm_config_items
-        | selectattr('name', 'defined')
-        | selectattr('name', 'in', _cm_autotls_config_flag_names)
-        | selectattr('value', 'defined')
-        | selectattr('value', 'in', [true, 'true', 'True', 'TRUE', 'yes', 'Yes', '1'])
-        | map(attribute='name')
-        | list
+        (
+          _cm_config_items
+          | selectattr('name', 'defined')
+          | selectattr('name', 'in', _cm_autotls_config_flag_names)
+          | selectattr('value', 'defined')
+          | selectattr('value', 'in', [true, 'true', 'True', 'TRUE', 'yes', 'Yes', '1'])
+          | map(attribute='name')
+          | list
+        )
+        + (
+          _cm_config_items
+          | selectattr('name', 'defined')
+          | selectattr('name', 'match', '(?i).*auto[_-]?tls.*')
+          | selectattr('value', 'defined')
+          | selectattr('value', 'in', [true, 'true', 'True', 'TRUE', 'yes', 'Yes', '1', 'enabled', 'ENABLED'])
+          | map(attribute='name')
+          | list
+        )
+        | unique
       }}
     _cm_autotls_ca_cert_value: >-
       {{
         (
+          _cm_config_items
+          | selectattr('name', 'defined')
+          | selectattr('name', 'match', '(?i).*auto[_-]?tls.*ca.*cert.*')
+          | map(attribute='value')
+          | first
+          | default('', true)
+        )
+        if (
+          _cm_config_items
+          | selectattr('name', 'defined')
+          | selectattr('name', 'match', '(?i).*auto[_-]?tls.*ca.*cert.*')
+          | list
+          | length > 0
+        )
+        else (
           _cm_config_items
           | selectattr('name', 'defined')
           | selectattr('name', 'in', ['auto_tls_ca_cert', 'AUTO_TLS_CA_CERT'])
@@ -52,8 +79,45 @@
         or ((_cm_autotls_ca_cert_value | default('') | trim | length) > 0)
       }}
 
-- name: CM API — print Auto-TLS state from CM API configuration
+- name: CM API — set TLS mode from CM config and working API protocol
+  ansible.builtin.set_fact:
+    cm_api_https_active: >-
+      {{
+        (cm_protocol | default('http')) == 'https'
+        or (autotls_enabled | default(false) | bool)
+        or ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+      }}
+    cm_tls_mode: >-
+      {{
+        'auto_tls'
+        if (cm_autotls_api_enabled | default(false) | bool)
+        else (
+          'https'
+          if (
+            (cm_protocol | default('http')) == 'https'
+            or (autotls_enabled | default(false) | bool)
+            or ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+          )
+          else 'http'
+        )
+      }}
+
+- name: CM API — set agent use_tls from working HTTPS API (not Auto-TLS flags alone)
+  ansible.builtin.set_fact:
+    cm_agent_use_tls: >-
+      {{
+        (cm_api_https_active | default(false) | bool)
+        or (cm_autotls_api_enabled | default(false) | bool)
+        or (autotls_enabled | default(false) | bool)
+      }}
+
+- name: CM API — print TLS / Auto-TLS state from CM API configuration
   ansible.builtin.debug:
     msg: >-
-      CM API Auto-TLS configured: {{ cm_autotls_api_enabled | default(false) | bool }}
-      (HTTPS probe autotls_enabled={{ autotls_enabled | default(false) }} — probes alone do not skip generateCmca).
+      CM TLS mode={{ cm_tls_mode | default('unknown') }}
+      (HTTPS API active={{ cm_api_https_active | default(false) | bool }},
+      protocol={{ cm_protocol | default('unset') }}:{{ cm_api_port | default('?') }},
+      Auto-TLS in CM config={{ cm_autotls_api_enabled | default(false) | bool }},
+      probe autotls_enabled={{ autotls_enabled | default(false) | bool }}).
+      Agents should use use_tls={{ cm_agent_use_tls | default(false) | bool }}.
+      Auto-TLS generateCmca skip uses CM config flags / CA cert, not HTTPS UI alone.

@@ -27,8 +27,11 @@
     - name: Skip Auto-TLS enable and CM restart (already configured in CM)
       ansible.builtin.debug:
         msg: >-
-          Cloudera Manager Auto-TLS is already configured (cm_autotls_api_enabled=true).
+          Cloudera Manager Auto-TLS is already configured in CM API config
+          (cm_tls_mode={{ cm_tls_mode | default('auto_tls') }}, cm_autotls_api_enabled=true).
           Skipping generateCmca. Set -e cm_autotls_force_run=true to run generateCmca anyway.
+          If the UI uses HTTPS but this still runs generateCmca, CM may use manual TLS only
+          (cm_tls_mode=https) — that is expected.
       when:
         - cm_autotls_api_enabled | default(false) | bool
         - not (cm_autotls_force_run | default(false) | bool)
@@ -124,11 +127,8 @@
       ansible.builtin.set_fact:
         cm_agent_use_tls: >-
           {{
-            (
-              autotls_applied_this_run | default(false) | bool
-            )
-            or (cm_autotls_api_enabled | default(false) | bool)
-            or (autotls_enabled | default(false) | bool)
+            (autotls_applied_this_run | default(false) | bool)
+            or (cm_agent_use_tls | default(false) | bool)
           }}
 
 - name: Reconcile CM agents after Auto-TLS (server_host / use_tls / restart)
