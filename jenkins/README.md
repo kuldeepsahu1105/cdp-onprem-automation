@@ -459,6 +459,8 @@ sudo rm -rf /home/holautosa/HOL_AUTO_EXEC_DIR/cdp-onprem-automation/ptgty/terraf
 sudo rm -rf /var/lib/jenkins/workspace/cdp-onprem-automation-deploy/terraform-code/cloudera-pvc-terraform/.terraform
 ```
 
+If **Checkout** fails on `ansible-playbooks/callback_plugins/__pycache__` (Permission denied during `git clean`), on the Jenkins agent run: `sudo rm -rf "$WORKSPACE/ansible-playbooks/callback_plugins/__pycache__"` (or the job workspace path shown in the build log).
+
 **Required sudoers** (same as AWS creds):
 
 ```
