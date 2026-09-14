@@ -145,5 +145,9 @@
         or (cm_autotls_api_enabled | default(false) | bool)
       }}
 
+- name: CM API — mark Auto-TLS config fetched for this play
+  ansible.builtin.set_fact:
+    cm_autotls_config_fetched_this_play: true
+
 - name: CM API — print TLS / Auto-TLS summary (single line)
   ansible.builtin.import_tasks: print_cm_tls_status.yml

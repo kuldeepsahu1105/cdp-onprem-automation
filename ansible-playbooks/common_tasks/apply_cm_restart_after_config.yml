@@ -1,6 +1,11 @@
 ---
 # Run on localhost after CM config changes (replaces handler chain in 27/28).
 
+- name: CM API — invalidate cached URL and Auto-TLS facts before post-restart probe
+  ansible.builtin.set_fact:
+    cm_api_url_force_refresh: true
+    cm_autotls_config_fetched_this_play: false
+
 - name: Restart Cloudera Manager server and agent on CM host
   ansible.builtin.import_tasks: restart_cm_services.yml
 

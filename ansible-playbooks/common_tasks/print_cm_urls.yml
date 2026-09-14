@@ -39,6 +39,7 @@
 
 - name: CM API — read Auto-TLS state from CM configuration for accurate TLS messaging
   ansible.builtin.import_tasks: fetch_cm_autotls_api_state.yml
+  when: not (cm_autotls_config_fetched_this_play | default(false) | bool)
 
 - name: Set Cloudera Manager TLS display flags for access URLs
   ansible.builtin.set_fact:

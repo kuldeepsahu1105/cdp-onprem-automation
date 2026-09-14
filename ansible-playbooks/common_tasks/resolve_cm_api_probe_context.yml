@@ -2,35 +2,32 @@
 # CM install/verify: inventory + reachability + probe host selection (no password changes, no /api/version probes).
 # Import before ensure_cm_admin_password.yml or set_cm_api_url.yml.
 
-- name: Validate CM manager inventory group
-  ansible.builtin.import_tasks: validate_inventory_groups.yml
-  vars:
-    required_inventory_group: cldr-mngr
+- name: CM API — resolve probe context (inventory, reachability, bind address)
   when: not (cm_api_context_resolved_this_play | default(false) | bool)
+  block:
+    - name: Validate CM manager inventory group
+      ansible.builtin.import_tasks: validate_inventory_groups.yml
+      vars:
+        required_inventory_group: cldr-mngr
 
-- name: Resolve reachable CM API host (manager IP/FQDN; loopback only when on cldr-mngr)
-  ansible.builtin.import_tasks: resolve_cm_connect_host.yml
-  when: not (cm_api_context_resolved_this_play | default(false) | bool)
+    - name: Resolve reachable CM API host (manager IP/FQDN; loopback only when on cldr-mngr)
+      ansible.builtin.import_tasks: resolve_cm_connect_host.yml
 
-- name: Find working CM API bind address (controller public IP/FQDN or cldr-mngr)
-  ansible.builtin.import_tasks: select_cm_api_probe_host.yml
-  when:
-    - not (cm_api_context_resolved_this_play | default(false) | bool)
-    - not (
-        (cm_api_discovery_succeeded | default(false) | bool)
-        and (cm_api_controller_probe_succeeded | default(false) | bool)
-        and (cm_api_probe_host | default('') | length > 0)
-      )
+    - name: Find working CM API bind address (controller public IP/FQDN or cldr-mngr)
+      ansible.builtin.import_tasks: select_cm_api_probe_host.yml
+      when:
+        - not (
+            (cm_api_discovery_succeeded | default(false) | bool)
+            and (cm_api_controller_probe_succeeded | default(false) | bool)
+            and (cm_api_probe_host | default('') | length > 0)
+          )
 
-- name: CM API — use manager public IP for connection context
-  ansible.builtin.set_fact:
-    cm_host: "{{ cm_api_client_host }}"
-    cm_api_probe_host: "{{ cm_api_client_host }}"
-  when:
-    - cm_api_probe_from_controller_public | default(false) | bool
-    - not (cm_api_context_resolved_this_play | default(false) | bool)
+    - name: CM API — use manager public IP for connection context
+      ansible.builtin.set_fact:
+        cm_host: "{{ cm_api_client_host }}"
+        cm_api_probe_host: "{{ cm_api_client_host }}"
+      when: cm_api_probe_from_controller_public | default(false) | bool
 
-- name: CM API — mark probe context resolved for this play
-  ansible.builtin.set_fact:
-    cm_api_context_resolved_this_play: true
-  when: not (cm_api_context_resolved_this_play | default(false) | bool)
+    - name: CM API — mark probe context resolved for this play
+      ansible.builtin.set_fact:
+        cm_api_context_resolved_this_play: true
