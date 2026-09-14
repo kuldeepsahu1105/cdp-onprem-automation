@@ -1,16 +1,16 @@
 ---
 # Gate cluster-wide agent restarts on a live CM API (/cm/version). Used after Auto-TLS CM server restart.
 
-- name: CM API — clear health flag before pre-agent-reconcile probe
+- name: CM API — skip duplicate probe when post-restart health wait already succeeded
+  ansible.builtin.meta: end_host
+  when: cm_api_health_ok | default(false) | bool
+
+- name: CM API — clear health flag before pre-agent-reconcile wait
   ansible.builtin.set_fact:
     cm_api_health_ok: false
-    cm_api_url_force_refresh: true
 
-- name: CM API — refresh URL before agent reconcile health check
-  ansible.builtin.import_tasks: set_cm_api_url.yml
-
-- name: CM API — wait for /cm/version before cluster-wide agent restart
-  ansible.builtin.import_tasks: wait_for_cm_api.yml
+- name: CM API — realign URL if needed and wait for /cm/version before cluster-wide agent restart
+  ansible.builtin.import_tasks: realign_cm_api_url_after_autotls_restart.yml
 
 - name: Fail when CM API is not healthy (skip mass agent restart)
   ansible.builtin.fail:

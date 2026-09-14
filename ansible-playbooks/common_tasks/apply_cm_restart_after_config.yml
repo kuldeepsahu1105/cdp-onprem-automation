@@ -5,19 +5,11 @@
   ansible.builtin.set_fact:
     cm_api_health_ok: false
 
-- name: CM API — invalidate cached URL and Auto-TLS facts before post-restart probe
-  ansible.builtin.set_fact:
-    cm_api_url_force_refresh: true
-    cm_autotls_config_fetched_this_play: false
-
 - name: Restart Cloudera Manager server on CM host (before any agent restart)
   ansible.builtin.import_tasks: restart_cm_scm_server.yml
 
-- name: Refresh CM API URL after CM server restart
-  ansible.builtin.import_tasks: set_cm_api_url.yml
-
-- name: Wait for Cloudera Manager API after server restart
-  ansible.builtin.import_tasks: wait_for_cm_api.yml
+- name: CM API — realign URL if needed and wait for /cm/version after server restart
+  ansible.builtin.import_tasks: realign_cm_api_url_after_autotls_restart.yml
 
 - name: Abort when CM API is not healthy after server restart
   ansible.builtin.fail:
