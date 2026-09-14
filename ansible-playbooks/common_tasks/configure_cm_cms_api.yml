@@ -1,8 +1,8 @@
 ---
 # Cloudera Management Service (CMS) via REST — aligned with Cloudera Labs cm_service settings.
 
-- name: CMS — resolve HTTPS CM API URL
-  ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
+- name: CMS — use CM API URL from play (no second full API probe)
+  ansible.builtin.import_tasks: resolve_cm_krb_api_url_from_facts.yml
 
 - name: CMS — configure Auto-TLS client truststore for management roles
   ansible.builtin.import_tasks: configure_cm_cms_autotls_trust.yml

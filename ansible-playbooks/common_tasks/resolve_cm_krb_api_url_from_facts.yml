@@ -1,0 +1,23 @@
+---
+# Set cm_krb_api_url from facts already established by set_cm_api_url.yml (no API re-probe).
+
+- name: Kerberos — use HTTPS API base when CM redirects HTTP to TLS
+  ansible.builtin.set_fact:
+    cm_krb_api_url: >-
+      {{
+        'https://'
+        ~ (_cm_api_url_host | default(cm_host_public | default(cm_api_client_host)))
+        ~ ':'
+        ~ (cm_https_port | default(7183) | string)
+        ~ '/api/'
+        ~ cm_api_version
+      }}
+  when:
+    - (cm_protocol | default('http')) == 'http'
+    - (autotls_enabled | default(false) | bool)
+      or (':' ~ (cm_http_port | default(7180) | string) ~ '/' in (cm_api_url | default('')))
+
+- name: Kerberos — use discovered CM API URL for REST calls
+  ansible.builtin.set_fact:
+    cm_krb_api_url: "{{ cm_api_url }}"
+  when: cm_krb_api_url is not defined

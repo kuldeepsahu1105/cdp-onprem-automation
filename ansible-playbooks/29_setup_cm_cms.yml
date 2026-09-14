@@ -12,6 +12,9 @@
   connection: local
   gather_facts: no
   tasks:
+    - name: CM API — set connection context (once per play)
+      ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
+
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
 
