@@ -26,6 +26,7 @@ allowed_keys:
   - cdh_numeric_version
   - cdv_version
   - cdv_dataviz_csd_jar
+  - cdv_redhat_yum_repo
   - cfm_version
   - cfm_nifi_app_version
   - cfm_nifi_csd_jar

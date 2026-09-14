@@ -5,10 +5,17 @@
 {% set rh_yum = csd_redhat_repo %}
 {% endif %}
 {% set archive = cm_repo_public_base_url | default('https://archive.cloudera.com/p') %}
+{% set cdv_repo = cdv_redhat_yum_repo | default('auto') %}
+{% if cdv_repo == 'auto' %}
+{# CDV CSD jars for some releases (e.g. 8.0.7) are under redhat8/yum even on RHEL 9 CM hosts. #}
+{% set cdv_rh_yum = 'redhat8' if rh_yum == 'redhat9' else rh_yum %}
+{% else %}
+{% set cdv_rh_yum = cdv_repo %}
+{% endif %}
 {% set svc = base_cluster_install_services | default({}) %}
-{% set use_svc_toggles = csd_respect_service_toggles | default(false) %}
+{% set use_svc_toggles = csd_respect_service_toggles | default(true) %}
 {% if csd_install_dataviz | default(true) and ((not use_svc_toggles) or (svc.dataviz | default(false))) %}
-- {{ archive }}/cdv/{{ cdv_version }}/{{ rh_yum }}/yum/{{ cdv_dataviz_csd_jar }}
+- {{ archive }}/cdv/{{ cdv_version }}/{{ cdv_rh_yum }}/yum/{{ cdv_dataviz_csd_jar }}
 {% endif %}
 {% if csd_install_nifi_registry | default(true) and ((not use_svc_toggles) or (svc.nifi_registry | default(false))) %}
 - {{ archive }}/cfm2/{{ cfm_version }}/{{ rh_yum }}/yum/tars/parcel/{{ cfm_nifi_registry_csd_jar }}
