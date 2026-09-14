@@ -283,6 +283,7 @@ ansible-playbook -i inventory.ini 20_setup_cm_repos.yml \
   -e cm_repo_username="<user>" -e cm_repo_password="<pass>"
 
 ansible-playbook -i inventory.ini 23_setup_postgres.yml
+# Amazon Linux 2023 on cldr-mngr: `ensure_cm_postgres_databases` installs native `postgresql17` client (no PGDG); PostgreSQL server may still be 18 on that host or elsewhere.
 ansible-playbook -i inventory.ini 24_start_cm.yml
 ansible-playbook -i inventory.ini 25_verify_cm.yml
 ansible-playbook -i inventory.ini 26_setup_cm_license.yml

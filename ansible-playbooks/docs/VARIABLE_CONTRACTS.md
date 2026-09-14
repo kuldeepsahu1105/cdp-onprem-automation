@@ -104,6 +104,6 @@ See also: `docs/RUNBOOK.md` (URL verification tiers), `docs/REFERENCE.md` (group
 | `postgres_inventory_host` | `group_vars/all.yml` | `groups[postgres_inventory_group_resolved][0]` — `ensure_cm_postgres_databases.yml` delegates all `psql` here (play **24** on `cldr-mngr`, play **29** on `localhost`) |
 | `postgres_host_fqdn` | `group_vars/all.yml` | CM/CMS JDBC and Reports Manager probe host |
 | `postgres_ensure_cm_db_psql_host` | `group_vars/all.yml` | TCP target for delegated `psql` on the inventory host (`127.0.0.1` when the server is on that VM) |
-| `postgres_db_host_psql_cmd` | `ensure_cm_postgres_databases.yml` | `/usr/pgsql-<ver>/bin/psql` on `postgres_inventory_host` — set when delegated `stat` (`pgsql_client_psql_stat`) finds the binary, or after PGDG repo + `postgresql<ver>` package install when missing. |
+| `postgres_db_host_psql_cmd` | `ensure_cm_postgres_databases.yml` | `psql` path on `postgres_inventory_host` — from versioned `/usr/pgsql-<ver>/bin/psql`, `/usr/bin/psql`, or `which psql` after stat; Amazon Linux uses native `postgresql<cap>` (no PGDG); RHEL 8/9 uses PGDG + `postgresql<postgresql_version>`. |
 
 Optional inventory: add a dedicated group (e.g. `[postgresql]` with one host) and `cldr_hostname` in host vars; leave `postgres_inventory_group` empty for auto-detect, or set `postgres_inventory_group: postgresql` to pin.
