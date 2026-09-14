@@ -1,31 +1,31 @@
 ---
 # After CM server restart (Auto-TLS): wait on /cm/version without re-running the full set_cm_api_url probe chain.
 
-- name: CM API — full URL discovery when base URL or version slug missing
+- name: CM API — decide whether stored API URL is usable (realign)
+  ansible.builtin.set_fact:
+    _cm_api_url_stored_valid: >-
+      {{
+        (cm_api_url | default('') | length > 0)
+        and ('/api/v' in (cm_api_url | default('')))
+        and (
+          cm_api_url | default('')
+          | regex_replace('^https?://', '')
+          | split('/') | first | default('')
+          | split(':') | first | default('')
+          | length > 0
+        )
+      }}
+
+- name: CM API — full URL discovery when base URL or version slug missing or invalid
   ansible.builtin.import_tasks: set_cm_api_url.yml
   when: >-
     (cm_api_url | default('') | length == 0)
     or (cm_api_version | default('') | length == 0)
+    or not (_cm_api_url_stored_valid | default(false) | bool)
 
-- name: CM API — derive API host from existing cm_api_url
-  ansible.builtin.set_fact:
-    _cm_api_url_host_after_restart: >-
-      {{
-        (
-          cm_api_url
-          | regex_search('^https?://([^:/]+)', '\\1')
-          | default([], true)
-          | first
-          | default('', true)
-        )
-        if (cm_api_url | default('') | length > 0)
-        else (
-          cm_api_client_host
-          | default(cm_host | default(''))
-        )
-      }}
+- name: CM API — resolve API host for HTTPS realign after restart
+  ansible.builtin.import_tasks: resolve_cm_api_url_host.yml
   when:
-    - cm_api_url | default('') | length > 0
     - cm_api_version | default('') | length > 0
 
 - name: CM API — point URL at HTTPS manager port after Auto-TLS restart (no /api/version probe chain)
@@ -36,16 +36,15 @@
     cm_api_url: >-
       {{
         'https://'
-        ~ _cm_api_url_host_after_restart
+        ~ _cm_api_url_host_resolved
         ~ ':'
         ~ (cm_https_port | default(7183) | string)
         ~ '/api/'
         ~ cm_api_version
       }}
   when:
-    - cm_api_url | default('') | length > 0
     - cm_api_version | default('') | length > 0
-    - _cm_api_url_host_after_restart | default('') | length > 0
+    - _cm_api_url_host_resolved | default('') | length > 0
 
 - name: CM API — wait for /cm/version after CM server restart
   ansible.builtin.import_tasks: wait_for_cm_api.yml

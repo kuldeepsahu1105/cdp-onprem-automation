@@ -11,6 +11,30 @@
         or not (cm_api_discovery_succeeded | default(false) | bool)
       }}
 
+- name: CM API — decide whether stored API URL is usable
+  ansible.builtin.set_fact:
+    _cm_api_url_stored_valid: >-
+      {{
+        (cm_api_url | default('') | length > 0)
+        and ('/api/v' in (cm_api_url | default('')))
+        and (
+          cm_api_url | default('')
+          | regex_replace('^https?://', '')
+          | split('/') | first | default('')
+          | split(':') | first | default('')
+          | length > 0
+        )
+      }}
+
+- name: CM API — decide whether URL assembly is required
+  ansible.builtin.set_fact:
+    _cm_api_url_assembly_required: >-
+      {{
+        (cm_api_url | default('') | length == 0)
+        or (cm_api_version | default('') | length == 0)
+        or not (_cm_api_url_stored_valid | default(false) | bool)
+      }}
+
 - name: CM API — set connection context when missing
   ansible.builtin.import_tasks: resolve_cm_api_probe_context.yml
   when:
@@ -355,81 +379,11 @@
         - cm_tls_probe_http is not defined or cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
         - cm_tls_probe_https is not defined or cm_tls_probe_https is failed or (cm_tls_probe_https.status | default(0) not in [200, 301, 303, 401, 403])
 
-    - name: CM API — read API version from /api/version
-      ansible.builtin.import_tasks: fetch_cm_api_version_slug.yml
-
-    - name: CM API — use manager public IP for API URL on Ansible controller
-      ansible.builtin.set_fact:
-        _cm_api_url_host_prefer_public: >-
-          {{
-            cm_api_connect_host
-            if (cm_api_connect_host | default('') | length > 0)
-            else cm_host_public
-          }}
-      when:
-        - cm_api_controller_is_localhost | default(false) | bool
-        - not (cm_api_runner_is_manager | default(false) | bool)
-        - cm_api_uri_delegate_to | default('') | length == 0
-        - (
-            (cm_api_client_host | default('') in ['127.0.0.1', 'localhost', ''])
-            or (cm_api_probe_host | default('') in ['127.0.0.1', 'localhost'])
-          )
-        - (
-            (cm_api_connect_host | default('') | length > 0)
-            or (cm_host_public | default('') | length > 0)
-          )
-
-    - name: CM API — set host for API URL on this play
-      ansible.builtin.set_fact:
-        _cm_api_url_host: >-
-          {{
-            cm_api_probe_host
-            if (
-              (cm_api_uri_delegate_to | default('') | length > 0)
-              and not (cm_api_controller_probe_succeeded | default(false) | bool)
-            )
-            else (
-              _cm_api_url_host_prefer_public
-              if (_cm_api_url_host_prefer_public is defined)
-              else (
-                cm_api_connect_host
-                if (
-                  (cm_api_connect_host | default('') | length > 0)
-                  and (cm_api_controller_is_localhost | default(false) | bool)
-                  and not (cm_api_runner_is_manager | default(false) | bool)
-                )
-                else (
-                  cm_host_public
-                  if (
-                    (cm_api_controller_is_localhost | default(false) | bool)
-                    and not (cm_api_runner_is_manager | default(false) | bool)
-                    and (cm_api_client_host | default('') in ['127.0.0.1', 'localhost', ''])
-                    and (cm_host_public | default('') | length > 0)
-                  )
-                  else cm_api_client_host
-                )
-              )
-            )
-          }}
-
-    - name: CM API — prefer HTTPS :7183 for API URL when probes show TLS active
-      ansible.builtin.set_fact:
-        cm_protocol: https
-        cm_api_port: "{{ cm_https_port }}"
-        cm_api_https_active: true
-      when:
-        - (cm_api_controller_https_reachable | default(false) | bool)
-          or (cm_api_https_active | default(false) | bool)
-
-    - name: CM API — set base API URL
-      ansible.builtin.set_fact:
-        cm_api_url: >-
-          {{
-            cm_protocol + '://' + _cm_api_url_host + ':' + (cm_api_port | string) + '/api/' + cm_api_version
-          }}
-        cm_api_url_delegated: "{{ cm_protocol }}://{{ cm_api_probe_host }}:{{ cm_api_port }}/api/{{ cm_api_version }}"
-        cm_host: "{{ cm_api_client_host }}"
-      when: cm_api_version | default('') | length > 0
+- name: CM API — assemble URL from probe/discovery facts
+  ansible.builtin.import_tasks: assemble_cm_api_url.yml
+  when: >-
+    (_cm_api_url_full_probe_required | default(false) | bool)
+    or (_cm_api_url_assembly_required | default(true) | bool)
 
 - name: CM API — print API URL
   ansible.builtin.debug:
