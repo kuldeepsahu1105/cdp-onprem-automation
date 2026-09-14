@@ -45,9 +45,13 @@
         (
           'HTTPS :' + (cm_https_port | default(7183) | string) + ' enabled — ' + (cm_api_url | default('unset'))
           + (
-            ' ; Auto-TLS in CM config=' + (cm_autotls_api_enabled | default(false) | string)
-            if (cm_autotls_api_enabled is defined)
-            else ''
+            ' ; Auto-TLS applied this run (generateCmca); CM config flags not reported'
+            if (cm_autotls_config_flags_unreported | default(false) | bool)
+            else (
+              ' ; Auto-TLS in CM config=' + (cm_autotls_api_enabled | default(false) | string)
+              if (cm_autotls_api_enabled is defined)
+              else ''
+            )
           )
         )
         if (cm_api_https_active | default(false) | bool)
@@ -55,9 +59,13 @@
           'CM API ' + (cm_protocol | default('http')) + ':' + (cm_api_port | default(cm_http_port | default(7180)) | string)
           + ' — ' + (cm_api_url | default('unset'))
           + (
-            ' ; Auto-TLS in CM config=' + (cm_autotls_api_enabled | default(false) | string)
-            if (cm_autotls_api_enabled is defined)
-            else ''
+            ' ; Auto-TLS applied this run (generateCmca); CM config flags not reported'
+            if (cm_autotls_config_flags_unreported | default(false) | bool)
+            else (
+              ' ; Auto-TLS in CM config=' + (cm_autotls_api_enabled | default(false) | string)
+              if (cm_autotls_api_enabled is defined)
+              else ''
+            )
           )
         )
       }}

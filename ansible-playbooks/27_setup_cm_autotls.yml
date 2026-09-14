@@ -237,6 +237,19 @@
             - not (cm_restart_after_autotls_this_run | default(false) | bool)
             - autotls_applied_this_run | default(false) | bool
 
+    - name: CM API — allow fresh /cm/config read after generateCmca and CM health wait
+      ansible.builtin.set_fact:
+        cm_autotls_config_fetched_this_play: false
+      when: >-
+        (autotls_applied_this_run | default(false) | bool)
+        or (cm_restart_after_autotls_this_run | default(false) | bool)
+
+    - name: CM API — refresh Auto-TLS state after generateCmca / CM restart (before access URLs)
+      ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
+      when: >-
+        (autotls_applied_this_run | default(false) | bool)
+        or (cm_restart_after_autotls_this_run | default(false) | bool)
+
     - name: Print Cloudera Manager Access URLs
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
 

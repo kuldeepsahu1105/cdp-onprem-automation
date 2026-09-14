@@ -112,6 +112,54 @@
         (_cm_autotls_config_flag_hits | default([]) | length > 0)
         or ((_cm_autotls_ca_cert_value | default('') | trim | length) > 0)
       }}
+    cm_autotls_config_flags_unreported: false
+    cm_autotls_parsed_from_cm_config: >-
+      {{
+        (_cm_autotls_config_flag_hits | default([]) | length > 0)
+        or ((_cm_autotls_ca_cert_value | default('') | trim | length) > 0)
+      }}
+
+- name: CM API — debug sample /cm/config item names when Auto-TLS flags missing after generateCmca
+  ansible.builtin.debug:
+    msg: >-
+      CM /cm/config did not report Auto-TLS flags after successful generateCmca this run.
+      Sample config item names:
+      {{ _cm_autotls_config_name_sample | join(', ') }}
+  vars:
+    _cm_autotls_config_name_sample: >-
+      {{
+        (
+          _cm_autotls_config_api.json['items'] | default([])
+          | selectattr('name', 'defined')
+          | map(attribute='name')
+          | list
+        )[:20]
+      }}
+  when:
+    - autotls_applied_this_run | default(false) | bool
+    - not (cm_autotls_parsed_from_cm_config | default(false) | bool)
+  run_once: true
+
+- name: CM API — check agent truststore when generateCmca applied but CM config omits Auto-TLS flags
+  ansible.builtin.stat:
+    path: "{{ cm_cms_autotls_truststore_path }}"
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true
+  register: _cm_autotls_truststore_post_generate
+  when:
+    - autotls_applied_this_run | default(false) | bool
+    - not (cm_autotls_parsed_from_cm_config | default(false) | bool)
+    - cm_manager_inventory_host | default('') | length > 0
+
+- name: CM API — treat Auto-TLS as enabled when generateCmca succeeded and truststore exists (not HTTPS alone)
+  ansible.builtin.set_fact:
+    cm_autotls_api_enabled: true
+    cm_autotls_config_flags_unreported: true
+  when:
+    - autotls_applied_this_run | default(false) | bool
+    - not (cm_autotls_parsed_from_cm_config | default(false) | bool)
+    - _cm_autotls_truststore_post_generate is defined
+    - _cm_autotls_truststore_post_generate.stat.exists | default(false) | bool
 
 - name: CM API — set HTTPS active from probes and CM config fetch
   ansible.builtin.set_fact:
