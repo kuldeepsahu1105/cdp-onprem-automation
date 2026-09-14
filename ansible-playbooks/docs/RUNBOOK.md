@@ -56,6 +56,17 @@ Ansible must pick **public** vs **VPC-private** addresses for CM API `uri` probe
 
 Override in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML`: `ansible_control_reachability: public|private|auto`. Legacy keys `ansible_controller_outside_vpc` and `cm_api_prefer_private_ip` remain supported.
 
+**`ansible_control_reachability` only picks the CM API / portal-verify address — it never changes SSH.** SSH always connects to inventory `ansible_host` (`common_tasks/resolve_cm_connect_host.yml` and `detect_ansible_control_reachability.yml` set separate facts — `cm_connect_host`, `cm_api_client_host` — used only for `uri`/`wait_for` CM checks). `ansible_host` must itself be an address the control node can reach:
+
+- **Cloud / Terraform inventory** (`generate_inventory.sh` / `jenkins/scripts/regenerate-inventory-from-terraform.sh`): `ansible_host` is always the **public IP/EIP**; `private_ip` is separate. Works from Jenkins, laptop, or an in-VPC runner.
+- **Scenario B — bare metal** (below): `ansible_host` and `private_ip` are intentionally the **same** private address, because the control node is expected to be co-located on that network (`CONTROL_MODE=local` on `cldr-mngr`, or a VPN/bastion runner with real routing to `10.x`/`172.16-31.x`/`192.168.x`). Running this style of inventory from Jenkins or a laptop **outside** that network cannot work — there is no public address recorded to fall back to.
+
+`10_setup_deployment_portal.yml`, `32_setup_monitoring_stack.yml`, and `35_refresh_deployment_portal.yml` import `common_tasks/validate_ansible_ssh_reachability.yml` on the localhost pre-play (after `resolve_deployment_portal_host.yml`) to catch this fast: it probes any VPC-private-looking `ansible_host` in the target group and fails with an actionable message when the controller cannot reach it, instead of hanging on an SSH connection timeout. Options:
+
+- `ansible_ssh_reachability_skip: true` — bypass the check on a controller with genuine private routing (bare metal / VPN / `CONTROL_MODE=local`).
+- Add an SSH bastion/ProxyJump instead of exposing a public IP: set `ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o ProxyCommand='ssh -W %h:%p -q bastion-user@<bastion-host>'"` (or `ANSIBLE_SSH_COMMON_ARGS` env var) in `group_vars/all.yml` — the existing `ansible_ssh_common_args` key (see top of that file) already carries `-o StrictHostKeyChecking=no`; append `ProxyCommand`/`ProxyJump` there rather than introducing a new variable.
+- Regenerate a Cloud/Terraform-style inventory (public `ansible_host`) when you need Jenkins/laptop access to a deployment that currently only has private addresses recorded.
+
 ### Service URL verification (portal stack + Cloudera Manager)
 
 Printed URLs live in `CDP_ACCESS_URLS_*` / `jenkins/artifacts/access-urls.txt`.
