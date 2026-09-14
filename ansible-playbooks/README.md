@@ -6,7 +6,7 @@ Automation for deploying and cleaning up Cloudera Private Cloud on **RHEL** and 
 
 ```bash
 cd ansible-playbooks
-./run-playbook.sh detect_identity.yml    # or: ansible-playbook … (imports 00_ensure_collections)
+./run-playbook.sh detect_identity.yml    # or: ansible-playbook … (imports ensure_collections.yml)
 DEPLOY_PHASE=all ./pvc_setup.sh             # or repo clone_and_run_pvc_automation.sh
 ```
 

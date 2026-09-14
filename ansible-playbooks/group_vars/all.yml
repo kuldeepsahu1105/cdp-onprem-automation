@@ -499,7 +499,7 @@ cm_cms_servicemonitor_port_config_names:
   - listen_port
 cm_cms_smon_listen_wait_timeout_seconds: 120
 
-# CM agents — server_host / use_tls reconcile (24_start_cm, 25_reconcile_cm_agents, 27 after Auto-TLS)
+# CM agents — server_host / use_tls reconcile (24_start_cm, reconcile_cm_agents.yml, 27 after Auto-TLS)
 cm_agent_reconcile_after_autotls: true
 cm_agent_active_wait_retries: 12
 cm_agent_active_wait_delay: 5

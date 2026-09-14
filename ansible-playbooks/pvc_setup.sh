@@ -122,7 +122,7 @@ run_playbook() {
   if is_dry_run; then
     ui_info "Dry-run — Ansible --check --diff (no changes applied)"
   fi
-  # Collections ensured at script start; skip imported 00_ensure_collections in each playbook.
+  # Collections ensured at script start; skip imported ensure_collections.yml in each playbook.
   if ansible-playbook "${playbooks[@]}" "${ANSIBLE_PLAYBOOK_ARGS[@]}" "${ARCH_ANSIBLE_ARGS[@]}" \
     --skip-tags collections "$@"; then
     ui_playbook_header "$label" end
