@@ -78,13 +78,21 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `cm_repo_public_base_url` | `https://archive.cloudera.com/p` | Public archive base URL |
 | `cm_repo_mirror_host` | cldr-mngr IP | Internal mirror HTTP host |
 | `parcel_repo` | computed | Public or internal CDH parcel URL (`…/p/cdh7/<cdh_version>/parcels/`) |
+| `parcel_repo_latest_public` | computed | `…/p/cdh7/latest/parcels/` when `cm_parcel_repo_include_latest` and `cm_repo_source: public` |
 | `ecs_parcel_repo_url` | computed | `…/p/cdp-pvc-ds/<ecs_pvc_ds_version>/parcels/` (see `ecs_pvc_ds_version` in ECS table above) |
+| `ecs_parcel_repo_latest_url` | computed | `…/p/cdp-pvc-ds/latest/parcels/` (public archive; same include rules as CDH latest) |
+| `cm_parcel_repo_include_latest` | `true` | Add `latest` symlink parcel dirs for CDH, ECS, CDV, and CFM2 |
+| `cdv_parcel_repo_url` / `cdv_parcel_repo_latest_url` | computed | DATAVIZ parcels under `…/p/cdv/<cdv_version>/parcels/` and `…/latest/parcels/` |
+| `cfm_parcel_repo_url` / `cfm_parcel_repo_latest_url` | computed | NiFi / Registry parcels under `…/p/cfm2/<cfm_version>/parcels/` and `…/latest/parcels/` |
+| `cm_parcel_repo_include_cdv_parcel` | `true` | Include CDV parcel repo URLs in CM config |
+| `cm_parcel_repo_include_cfm_parcel` | `true` | Include CFM2 parcel repo URLs (NiFi + NiFi Registry) |
+| `cm_parcel_csd_respect_service_toggles` | `false` | When false, CDV/CFM parcel URLs are set even if `base_cluster_install_services` keys are off |
 | `cm_remote_parcel_repo_intel_mkl_url` | Intel MKL parcels | Optional third-party parcel repo (left enabled by default) |
 | `cm_parcel_repo_merge_existing_cm_urls` | `false` | When false, CM wizard defaults are not merged (only Ansible URLs + scrub) |
 | `cm_parcel_install_csd_repo_urls` | `false` | Maps to CM `PARCEL_INSTALL_CSD_REPO_URLS` (blocks auto spark/cdh6 URLs on restart) |
 | `cm_remote_parcel_csd_repo_urls` | `[]` | Explicit CSD archive dirs; empty = build from `scm_csd_parcel_repo_urls.j2` |
 | `cm_parcel_repo_include_csd_archive_dirs` | `true` | Add CDV/CFM archive paths to `REMOTE_PARCEL_REPO_URLS` |
-| `scm_parcel_repositories` | computed | Legacy `scm.j2` list: CDH + ECS + Intel MKL |
+| `scm_parcel_repositories` | computed | Legacy `scm.j2` list: pinned + latest CDH/ECS, CDV/CFM parcels, Intel MKL |
 | `cdh_parcel_os_suffix` | `auto` | Parcel filename suffix: `auto`, `el8`, `el9`, `jammy`, `noble`, `sles15`, `el8.aarch64le` |
 | `cdh_parcel_target_group` | `base-workers` | Inventory group used to auto-detect worker OS for parcel suffix |
 | `cdh_parcel_os_suffix_fallback` | `el8` | Fallback when auto-detect cannot read worker facts |
@@ -111,8 +119,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 |---|---|---|
 | CSD JAR `get_url` | `scm_csds_urls.j2`, `cdv_dataviz_csd_jar`, `cfm_nifi_csd_jar`, `cfm_nifi_registry_csd_jar` | `…/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar` |
 | CSD JAR `get_url` (NiFi / Registry) | same | `…/p/cfm2/2.1.7.3004/redhat8/yum/tars/parcel/NIFI-1.28.1.2.1.7.3004-1.jar` (two jars when both services enabled) |
-| CM remote parcel repo dir | `scm_csd_parcel_repo_urls.j2`, `cm_remote_parcel_csd_repo_urls` | `…/p/cdv/8.0.7/redhat8/yum` (no `.jar` suffix) |
-| CM remote parcel repo dir (CFM) | same | `…/p/cfm2/2.1.7.3004/redhat8/yum/tars/parcel` (once when NiFi and/or Registry enabled) |
+| CM remote parcel repo dir (DATAVIZ) | `scm_csd_parcel_repo_urls.j2`, `cdv_parcel_repo_url` | `…/p/cdv/8.0.7/parcels/` and `…/p/cdv/latest/parcels/` |
+| CM remote parcel repo dir (CFM / NiFi) | same, `cfm_parcel_repo_url` | `…/p/cfm2/2.1.7.3004/parcels/` and `…/p/cfm2/latest/parcels/` |
 
 On RHEL 9 CM hosts, CDV JAR paths may still use `redhat8/yum` (`cdv_redhat_yum_repo: auto`); CFM uses `redhat9/yum/…` from `csd_redhat_repo: auto`. Parcel repo scrub in `configure_cm_parcel_repo_api.yml` drops any candidate URL matching `\.jar`.
 

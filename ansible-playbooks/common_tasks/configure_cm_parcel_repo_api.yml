@@ -69,10 +69,29 @@
           )
           + ([parcel_repo | default('')] if (parcel_repo is defined) else [])
           + (
+            [parcel_repo_latest_public]
+            if (
+              (cm_parcel_repo_include_latest | default(true) | bool)
+              and (cm_repo_source | default('public')) == 'public'
+              and (parcel_repo_latest_public | default('') | length > 0)
+            )
+            else []
+          )
+          + (
             [ecs_parcel_repo_url]
             if (
               (cm_parcel_repo_include_ecs_parcel | default(true) | bool)
               and (ecs_parcel_repo_url | default('') | length > 0)
+            )
+            else []
+          )
+          + (
+            [ecs_parcel_repo_latest_url]
+            if (
+              (cm_parcel_repo_include_latest | default(true) | bool)
+              and (cm_parcel_repo_include_ecs_parcel | default(true) | bool)
+              and (cm_repo_source | default('public')) == 'public'
+              and (ecs_parcel_repo_latest_url | default('') | length > 0)
             )
             else []
           )
@@ -106,7 +125,6 @@
           | reject('search', 'archive\\.cloudera\\.com/cdh5/')
           | reject('search', '/p/spark3/')
           | reject('search', 'archive\\.cloudera\\.com/spark3/')
-          | reject('search', 'cdp-pvc-ds/latest')
           | reject('search', 'ecsversion-or-latest')
           | reject('search', '<ecsversion')
           | reject('search', '\\.jar($|[?#])')
