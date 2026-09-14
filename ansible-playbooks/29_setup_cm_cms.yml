@@ -15,6 +15,10 @@
     - name: CM API — set connection context (once per play)
       ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
 
+    - name: Capture Auto-TLS setup intent from inventory (before HTTPS probes may set autotls_enabled)
+      ansible.builtin.set_fact:
+        cm_autotls_setup_intent: "{{ autotls_enabled | default(true) | bool }}"
+
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
 
