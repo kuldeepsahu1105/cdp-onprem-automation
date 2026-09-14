@@ -7,39 +7,29 @@
 # (RHEL targets often lack ACL support for Ansible's unprivileged temp-file chmod).
 
 - name: Check whether CM scm database exists in PostgreSQL
-  community.postgresql.postgresql_query:
-    login_host: "{{ postgres_host_fqdn }}"
-    login_port: "{{ postgres_port }}"
-    login_user: "{{ postgres_user }}"
-    login_password: "{{ postgres_password }}"
-    db: "{{ postgres_db }}"
-    query: "SELECT 1 AS exists FROM pg_database WHERE datname = %(dbname)s"
-    named_args:
-      dbname: "{{ scm_db_name }}"
+  ansible.builtin.shell: |
+    PGPASSWORD={{ postgres_password }} psql -h {{ postgres_host_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -tAc "SELECT 1 FROM pg_database WHERE datname='{{ scm_db_name }}'"
   delegate_to: "{{ postgres_inventory_host }}"
   become: true
   register: cm_scm_database_check
   changed_when: false
+  failed_when: cm_scm_database_check.rc | default(1) | int != 0
+  no_log: true
 
 - name: Check whether Reports Manager database exists in PostgreSQL
-  community.postgresql.postgresql_query:
-    login_host: "{{ postgres_host_fqdn }}"
-    login_port: "{{ postgres_port }}"
-    login_user: "{{ postgres_user }}"
-    login_password: "{{ postgres_password }}"
-    db: "{{ postgres_db }}"
-    query: "SELECT 1 AS exists FROM pg_database WHERE datname = %(dbname)s"
-    named_args:
-      dbname: "{{ cm_cms_reports_manager_db_name }}"
+  ansible.builtin.shell: |
+    PGPASSWORD={{ postgres_password }} psql -h {{ postgres_host_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -tAc "SELECT 1 FROM pg_database WHERE datname='{{ cm_cms_reports_manager_db_name }}'"
   delegate_to: "{{ postgres_inventory_host }}"
   become: true
   register: cm_rman_database_check
   changed_when: false
+  failed_when: cm_rman_database_check.rc | default(1) | int != 0
+  no_log: true
 
 - name: Create CM PostgreSQL databases and roles when scm or Reports Manager database is missing
   when: >
-    (cm_scm_database_check.query_result | default([]) | length == 0)
-    or (cm_rman_database_check.query_result | default([]) | length == 0)
+    (cm_scm_database_check.stdout | default('') | trim != '1')
+    or (cm_rman_database_check.stdout | default('') | trim != '1')
   block:
     - name: Generate CM database init SQL script from template
       ansible.builtin.template:
