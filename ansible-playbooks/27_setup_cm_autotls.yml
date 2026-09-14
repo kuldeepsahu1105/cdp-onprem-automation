@@ -155,7 +155,7 @@
           when:
             - auto_tls_response is defined
             - not (auto_tls_response.skipped | default(false))
-            - auto_tls_response is succeeded
+            - not (auto_tls_response.failed | default(true) | bool)
             - (auto_tls_response.status | default(0) | int) in [200, 301, 303]
 
     - name: Auto-TLS — skip generateCmca / CM restart (see TLS summary above)

@@ -1,6 +1,10 @@
 ---
 # Run on localhost after CM config changes (replaces handler chain in 27/28).
 
+- name: CM API — clear stale health flag before systemctl restart (HTTPS may already be up)
+  ansible.builtin.set_fact:
+    cm_api_health_ok: false
+
 - name: CM API — invalidate cached URL and Auto-TLS facts before post-restart probe
   ansible.builtin.set_fact:
     cm_api_url_force_refresh: true

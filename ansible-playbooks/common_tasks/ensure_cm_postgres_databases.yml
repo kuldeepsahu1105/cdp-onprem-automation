@@ -91,7 +91,10 @@
 
     - name: Query RHEL macro on PostgreSQL DB host to detect RedHat OS family
       ansible.builtin.command:
-        cmd: [rpm, -E, '%{rhel}']
+        argv:
+          - rpm
+          - -E
+          - '%{rhel}'
       delegate_to: "{{ postgres_inventory_host }}"
       become: true
       register: postgres_db_host_rhel_macro_detect
@@ -152,7 +155,10 @@
 
     - name: Query RHEL major on PostgreSQL DB host for PGDG (rpm macro)
       ansible.builtin.command:
-        cmd: [rpm, -E, '%{rhel}']
+        argv:
+          - rpm
+          - -E
+          - '%{rhel}'
       delegate_to: "{{ postgres_inventory_host }}"
       become: true
       register: rhel_major_cmd
