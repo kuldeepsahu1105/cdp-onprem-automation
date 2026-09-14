@@ -112,7 +112,7 @@
       ss -tlnp | grep -E ':389|:636'
       {{ ipa_preflight_ldap_ss_lines.stdout | default('(run ss -tlnp on ipaserver)') }}
       On ipaserver as root: stop stale dirsrv units, remove /etc/dirsrv/slapd-* when ipactl is not configured,
-      or run 12b_ipa_deep_recovery.yml with ipa_server_deep_recovery: true (see RUNBOOK — port 389 conflict).
+      or run ipa_deep_recovery.yml with ipa_server_deep_recovery: true (see RUNBOOK — port 389 conflict).
   when:
     - ipa_preflight_ldap_ports_in_use.stdout | default('') | trim | length > 0
     - ipa_ipactl_not_configured | default(false) | bool

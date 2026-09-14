@@ -41,7 +41,7 @@
       Agent path: on each host verify `systemctl status cloudera-scm-agent`,
       `grep ^server_host= /etc/cloudera-scm-agent/config.ini` (must be cldr-mngr FQDN),
       and `/var/log/cloudera-scm-agent/cloudera-scm-agent.log` (TLS/connect errors after Auto-TLS).
-      Reconcile agents: ansible-playbook -i inventory.ini 25_reconcile_cm_agents.yml
+      Reconcile agents: ansible-playbook -i inventory.ini reconcile_cm_agents.yml
       Clock skew: re-run 07_prereq_setup_002.yml (chrony) on affected hosts.
       UI metrics columns (load/disk/memory) come from Host Monitor — if heartbeats are fresh but columns are empty,
       re-run 29_setup_cm_cms.yml (Service Monitor + Host Monitor RUNNING).

@@ -1,6 +1,6 @@
 ---
 # Idempotent CM agent config (server_host, optional use_tls) and service restart.
-# Run after Auto-TLS (27), when heartbeats are stale, or via 25_reconcile_cm_agents.yml.
+# Run after Auto-TLS (27), when heartbeats are stale, or via reconcile_cm_agents.yml.
 
 - name: Resolve CM agent use_tls from localhost CM API probe when present
   ansible.builtin.set_fact:

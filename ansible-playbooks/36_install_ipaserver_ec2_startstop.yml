@@ -2,7 +2,7 @@
 # Deploy EC2 start/stop/describe helper on ipaserver (IAM role on instance performs API calls).
 # Script path: {{ ec2_startstop_script_path }} ({prefix}_cldr_ec2_strt_stp.sh from deployment_name_prefix / ec2_startstop_script_name_prefix).
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Skip when no ipaserver in inventory
   hosts: localhost

@@ -86,7 +86,7 @@ dns_forwarders: "no"
 ipa_server_install_use_vpc_dns_forwarder: true
 reverse_zones: "no"
 chrony_enabled: "yes"
-# Playbook 12b_ipa_deep_recovery.yml — detect / recover / sanitize (verbose; not in Jenkins IDENTITY by default)
+# Playbook ipa_deep_recovery.yml — detect / recover / sanitize (verbose; not in Jenkins IDENTITY by default)
 ipa_server_deep_recovery: false
 # Playbook 12 — when true, run ipa-server-install even if default.conf + healthy ipactl (re-install; rare)
 ipa_server_install_force: false
@@ -499,7 +499,7 @@ cm_cms_servicemonitor_port_config_names:
   - listen_port
 cm_cms_smon_listen_wait_timeout_seconds: 120
 
-# CM agents — server_host / use_tls reconcile (24_start_cm, 25_reconcile_cm_agents, 27 after Auto-TLS)
+# CM agents — server_host / use_tls reconcile (24_start_cm, reconcile_cm_agents.yml, 27 after Auto-TLS)
 cm_agent_reconcile_after_autotls: true
 cm_agent_active_wait_retries: 12
 cm_agent_active_wait_delay: 5

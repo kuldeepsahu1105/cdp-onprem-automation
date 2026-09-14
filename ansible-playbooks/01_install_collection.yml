@@ -1,7 +1,7 @@
 ### ansible-playbook -i inventory.ini 01_install_collection.yml
 
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Perform full system update on all hosts
   hosts: all

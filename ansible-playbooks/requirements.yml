@@ -1,5 +1,5 @@
 ---
-# Ansible Galaxy collections for the PVC control node (Jenkins / pvc_setup / 00_ensure_collections.yml).
+# Ansible Galaxy collections for the PVC control node (Jenkins / pvc_setup / ensure_collections.yml).
 # Install: ansible-galaxy collection install -r requirements.yml
 #
 # Controller Python (not Galaxy): cm_client, urllib3<2 (install_cm_client_python.yml);

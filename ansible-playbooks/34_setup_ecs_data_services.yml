@@ -10,7 +10,7 @@
 #   - ecs_deploy_cdw / ecs_deploy_cde / ecs_deploy_cai / ecs_deploy_cai_registry (or ECS_DEPLOY_* env), or
 #   - ecs_data_services_install: [cdw, cde, cai, model_registry]
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Prepare ECS data services on Ansible controller
   hosts: localhost

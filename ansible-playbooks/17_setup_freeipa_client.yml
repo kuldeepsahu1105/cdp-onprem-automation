@@ -6,7 +6,7 @@
 #   ipaadmin_password: "vmware123"
 
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Update /etc/resolv.conf on all hosts
   hosts: all

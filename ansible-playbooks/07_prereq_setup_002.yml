@@ -2,7 +2,7 @@
 # vars:
 #
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Verify rsyslog service
   hosts: all

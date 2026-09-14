@@ -1,9 +1,9 @@
-### ansible-playbook -i inventory.ini 12b_ipa_deep_recovery.yml --limit ipaserver
+### ansible-playbook -i inventory.ini ipa_deep_recovery.yml --limit ipaserver
 # Optional verbose detect / recover / sanitize before re-running playbook 12.
 # Not run by Jenkins IDENTITY by default (avoids ~100 skipped import_tasks in playbook 12 logs).
 # Set ipa_server_deep_recovery: true or pass -e ipa_server_deep_recovery=true
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Skip when Active Directory is detected
   hosts: localhost
@@ -102,7 +102,7 @@
           Inspect /var/log/ipaserver-uninstall.log on the host.
           Manual recovery (as root): ipa-server-install --uninstall --unattended
           (add --force on RHEL if prompted), then as root: rm -rf /var/lib/ipa /etc/ipa and remove /etc/dirsrv/slapd-* if needed.
-          Re-run: ansible-playbook -i inventory.ini 12b_ipa_deep_recovery.yml --limit {{ inventory_hostname }}
+          Re-run: ansible-playbook -i inventory.ini ipa_deep_recovery.yml --limit {{ inventory_hostname }}
           then 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}
           See ansible-playbooks/docs/RUNBOOK.md (FreeIPA partial install).
       when:

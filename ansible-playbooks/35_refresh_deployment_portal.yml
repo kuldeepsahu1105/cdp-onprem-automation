@@ -2,7 +2,7 @@
 # Update Caddy index/pgAdmin/monitoring URLs after CM, base cluster, ECS, or data services change.
 # Run 28 once (PORTAL deploy phase, before CM). Re-run after CM/TLS/CDH/ECS to update the index.
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Rebuild deployment portal facts
   hosts: localhost

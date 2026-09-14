@@ -312,7 +312,7 @@ cdp-onprem-automation/
 ```bash
 cd ansible-playbooks
 ansible-galaxy collection install -r requirements.yml
-ansible-playbook -i inventory.ini 00_detect_identity.yml
+ansible-playbook -i inventory.ini detect_identity.yml
 DEPLOY_PHASE=all ./pvc_setup.sh
 
 # Dry run (preview changes, no apply)

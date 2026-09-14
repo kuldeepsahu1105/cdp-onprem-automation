@@ -15,7 +15,7 @@
 #       - cloudera-manager-daemons
 
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Install and Configure Cloudera Manager Server
   hosts: cldr-mngr

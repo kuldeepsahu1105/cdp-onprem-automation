@@ -1,6 +1,6 @@
 # Playbook run order
 
-Numbered playbooks **10–35** follow **deployment work order** (same sequence as `pvc_setup.sh` and Jenkins). Each number is unique; router playbooks import sub-playbooks with higher numbers in the same phase (for example `11_identity_setup.yml` imports `12`–`19`).
+Numbered playbooks **10–35** follow **deployment work order** (same sequence as `pvc_setup.sh` and Jenkins). Each number is unique — no two playbooks share a numeric prefix; router playbooks import sub-playbooks with higher numbers in the same phase (for example `11_identity_setup.yml` imports `12`–`19`). Playbooks with no fixed position of their own (always-imported libraries, optional/manual troubleshooting helpers) are **unnumbered**: `ensure_collections.yml`, `detect_identity.yml`, `ipa_deep_recovery.yml`, `reconcile_cm_agents.yml` — see [Migration: renumbering duplicate prefixes](#migration-renumbering-duplicate-prefixes-2026-09) below.
 
 Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 
@@ -12,7 +12,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 2 | TERRAFORM | — | inventory generation |
 | 3 | PREREQS | `1` / `prereq` | SSH: `00_setup_ssh_preqs` → `01`–`09` (`00` only on PREREQS / `all`; override with `ANSIBLE_RUN_SSH_PREQS`) |
 | 4 | PORTAL | `portal` | `10_setup_deployment_portal` |
-| 5 | IDENTITY | `2` / `identity` | `00_detect_identity` → `11_identity_setup` |
+| 5 | IDENTITY | `2` / `identity` | `detect_identity.yml` → `11_identity_setup` |
 | 6 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
 | 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `29` → `30` → `28` (requires `04_setup_autossh` from PREREQS) |
 | 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` |
@@ -33,7 +33,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 10 | `10_setup_deployment_portal.yml` | Ops portal bootstrap (Caddy edge `deployment_portal_http_port`, default **81** — portal, pgAdmin, monitoring, IPA; not CM/ECS) |
 | 11 | `11_identity_setup.yml` | Identity **router** |
 | 12 | `12_setup_freeipa_server.yml` | FreeIPA server (skipped for AD) |
-| 12b | `12b_ipa_deep_recovery.yml` | Optional IPA detect/recover/sanitize (`ipa_server_deep_recovery: true`) |
+| — | `ipa_deep_recovery.yml` | Optional IPA detect/recover/sanitize before **12** (`ipa_server_deep_recovery: true`) |
 | 13 | `13_update_resolv_conf.yml` | resolv.conf / netplan |
 | 14 | `14_setup_dns_records.yml` | FreeIPA DNS (skipped for AD) |
 | 15 | `15_update_syscfg_network.yml` | RHEL network sysconfig |
@@ -47,7 +47,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 23 | `23_setup_postgres.yml` | PostgreSQL for CM |
 | 24 | `24_start_cm.yml` | CM server + agents |
 | 25 | `25_verify_cm.yml` | Verify CM |
-| — | `25_reconcile_cm_agents.yml` | Optional agent reconcile (also at end of **27**) |
+| — | `reconcile_cm_agents.yml` | Optional agent reconcile (also at end of **27**) |
 | 26 | `26_setup_cm_license.yml` | License / trial |
 | 27 | `27_setup_cm_autotls.yml` | Auto-TLS (+ agent reconcile; CMS trust/restart when MGMT already exists) |
 | 29 | `29_setup_cm_cms.yml` | CMS (Cloudera Management Service) — **before LDAP/Kerberos** |
@@ -65,12 +65,25 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 
 | Playbook | Notes |
 |----------|--------|
-| `00_setup_ssh_preqs.yml` | First in wrapper |
-| `00_ensure_collections.yml` | Imported by numbered playbooks |
-| `00_detect_identity.yml` | Before `11_identity_setup` |
+| `00_setup_ssh_preqs.yml` | First in wrapper — the only playbook that still uses prefix `00` |
+| `ensure_collections.yml` | Unnumbered — imported by every numbered playbook; no fixed position in the sequence |
+| `detect_identity.yml` | Unnumbered — always run immediately before `11_identity_setup.yml` (no free number between `10` and `11`) |
 | `01`–`09` | OS prerequisites (`04_setup_autossh.yml` in phase 1 after `03_create_etc_hosts`) |
 | `99_cleanup.yml` | Teardown |
 | `unused_legacy_cm_service_enable.yml` | Unused; prefer `29_setup_cm_cms.yml` |
+
+## Migration: renumbering duplicate prefixes (2026-09)
+
+Four playbooks previously duplicated a numeric prefix with another, unrelated playbook (`00_*` had three files, `25_*` had two, and `12_*`/`12b_*` used a letter suffix that **sorts before** its own `12_` file under common UTF-8 locales — `ls` in `en_US.UTF-8` prints `12b_ipa_deep_recovery.yml` before `12_setup_freeipa_server.yml`, inverting the intended order). None of the four own a distinct mainline `pvc_setup.sh` sequence slot (they are either always-imported libraries or optional/manual helpers), so they were **de-numbered** rather than assigned a new colliding or ambiguous number. This is a **rename only** — no task/behavior changes, no cascading renumber of any other playbook.
+
+| Old | New | Why |
+|-----|-----|-----|
+| `00_ensure_collections.yml` | `ensure_collections.yml` | Always-imported Galaxy-collection helper, not a distinct sequence position — duplicated prefix `00` with two unrelated playbooks |
+| `00_detect_identity.yml` | `detect_identity.yml` | Identity-phase preamble run immediately before `11_identity_setup.yml`; no free number exists between `10` (portal) and `11` (identity router) — duplicated prefix `00` |
+| `12b_ipa_deep_recovery.yml` | `ipa_deep_recovery.yml` | Optional/manual IPA recovery helper, not run by `pvc_setup.sh`/Jenkins by default; letter suffix collided with `12_setup_freeipa_server.yml` and sorted before it in most locales |
+| `25_reconcile_cm_agents.yml` | `reconcile_cm_agents.yml` | Optional/manual CM agent reconcile helper, not run by `pvc_setup.sh`/Jenkins by default; duplicated prefix `25` with `25_verify_cm.yml` (the actual mainline step) |
+
+**Compatibility:** All references were updated repo-wide in the same change (`pvc_setup.sh`, docs, `common_tasks/*`, `group_vars/all.yml`). Run `git log --follow -- ansible-playbooks/<new-name>.yml` to see history under the old name. No wrapper stubs were left behind — these four files were never invoked by numeric position from Jenkins or `pvc_setup.sh` argument parsing (only by literal filename), so if you have a fork or downstream script invoking an old filename directly, update it to the new filename above.
 
 ## Old → new filename map
 
@@ -102,3 +115,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | `27_setup_ecs_cluster.yml` | `33_setup_ecs_cluster.yml` |
 | `30_setup_ecs_data_services.yml` | `34_setup_ecs_data_services.yml` |
 | `31_refresh_deployment_portal.yml` | `35_refresh_deployment_portal.yml` |
+| `00_ensure_collections.yml` | `ensure_collections.yml` (2026-09 — see [Migration: renumbering duplicate prefixes](#migration-renumbering-duplicate-prefixes-2026-09)) |
+| `00_detect_identity.yml` | `detect_identity.yml` (2026-09) |
+| `12b_ipa_deep_recovery.yml` | `ipa_deep_recovery.yml` (2026-09) |
+| `25_reconcile_cm_agents.yml` | `reconcile_cm_agents.yml` (2026-09) |

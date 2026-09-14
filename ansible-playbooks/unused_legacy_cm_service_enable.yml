@@ -8,7 +8,7 @@
 #   license_file_name: "license.txt"
 
 ---
-- import_playbook: 00_ensure_collections.yml
+- import_playbook: ensure_collections.yml
 
 - name: Setup Cloudera Manager License
   hosts: localhost
