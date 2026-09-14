@@ -1,13 +1,47 @@
 ---
-# Idempotent CM DBs (scm + Reports Manager rman). Root + PGPASSWORD + TCP to 127.0.0.1 only — no become_user postgres.
+# Idempotent CM DBs (scm + Reports Manager rman) on postgres_inventory_host (e.g. cldr-mngr).
+# Ansible controller may be Mac, Ubuntu, or RHEL — irrelevant: every list/create task delegates to the
+# DB host only (no psql, postgresql modules, or RHEL-specific DB paths on localhost/controller).
+# Root + PGPASSWORD + TCP to 127.0.0.1 only — no become_user postgres.
 # When both databases exist: one debug line and no further tasks in this import.
 
-- name: List CM scm and Reports Manager databases on PostgreSQL (install psql if missing)
-  ansible.builtin.shell: |
-    set -euo pipefail
-    command -v psql >/dev/null || dnf install -y postgresql
-    psql -h 127.0.0.1 -p "{{ postgres_port }}" -U "{{ postgres_user }}" -d "{{ postgres_db }}" -tAc \
-      "SELECT datname FROM pg_database WHERE datname IN ('{{ scm_db_name }}','{{ cm_cms_reports_manager_db_name }}')"
+- name: Gather minimal facts on PostgreSQL inventory host when OS family unknown
+  ansible.builtin.setup:
+    gather_subset:
+      - min
+  delegate_to: "{{ postgres_inventory_host }}"
+  when: hostvars[postgres_inventory_host].ansible_os_family is not defined
+
+- name: Ensure PostgreSQL client on DB host (RedHat family)
+  ansible.builtin.package:
+    name: "{{ os_vars.RedHat.postgres_client_packages }}"
+    state: present
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  when: hostvars[postgres_inventory_host].ansible_os_family == 'RedHat'
+
+- name: Ensure PostgreSQL client on DB host (Debian family)
+  ansible.builtin.package:
+    name: "{{ os_vars.Debian.postgres_client_packages }}"
+    state: present
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  when: hostvars[postgres_inventory_host].ansible_os_family == 'Debian'
+
+- name: List CM scm and Reports Manager databases on PostgreSQL
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -h
+      - 127.0.0.1
+      - -p
+      - "{{ postgres_port | string }}"
+      - -U
+      - "{{ postgres_user }}"
+      - -d
+      - "{{ postgres_db }}"
+      - -tAc
+      - "SELECT datname FROM pg_database WHERE datname IN ('{{ scm_db_name }}','{{ cm_cms_reports_manager_db_name }}')"
   environment:
     PGPASSWORD: "{{ postgres_password }}"
   delegate_to: "{{ postgres_inventory_host }}"
