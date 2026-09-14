@@ -105,6 +105,17 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `cm_repo_username` | — | Required (archive credentials) |
 | `cm_repo_password` | — | Required (archive credentials) |
 
+**CSD JAR downloads vs CM remote parcel repo directories:** Do not reuse the same URL for both. JARs are downloaded in **24_start_cm.yml** (`get_url` → `/opt/cloudera/csd`) from `scm_csds_effective`, built by `scm_csds_urls.j2` when `scm_csds` / `scm_csds_redhat` are empty. CM **REMOTE_PARCEL_REPO_URLS** (playbooks **25** / **31** / **33** via `configure_cm_parcel_repo_api.yml`) must list **archive directory** URLs only, from `scm_csd_parcel_repo_urls.j2` unless `cm_remote_parcel_csd_repo_urls` is set. NiFi and NiFi Registry share one CFM parcel directory; the parcel template dedupes with Jinja `unique` when both services are enabled.
+
+| Purpose | Template / vars | Example (public archive, RHEL 8 CM) |
+|---|---|---|
+| CSD JAR `get_url` | `scm_csds_urls.j2`, `cdv_dataviz_csd_jar`, `cfm_nifi_csd_jar`, `cfm_nifi_registry_csd_jar` | `…/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar` |
+| CSD JAR `get_url` (NiFi / Registry) | same | `…/p/cfm2/2.1.7.3004/redhat8/yum/tars/parcel/NIFI-1.28.1.2.1.7.3004-1.jar` (two jars when both services enabled) |
+| CM remote parcel repo dir | `scm_csd_parcel_repo_urls.j2`, `cm_remote_parcel_csd_repo_urls` | `…/p/cdv/8.0.7/redhat8/yum` (no `.jar` suffix) |
+| CM remote parcel repo dir (CFM) | same | `…/p/cfm2/2.1.7.3004/redhat8/yum/tars/parcel` (once when NiFi and/or Registry enabled) |
+
+On RHEL 9 CM hosts, CDV JAR paths may still use `redhat8/yum` (`cdv_redhat_yum_repo: auto`); CFM uses `redhat9/yum/…` from `csd_redhat_repo: auto`. Parcel repo scrub in `configure_cm_parcel_repo_api.yml` drops any candidate URL matching `\.jar`.
+
 **Spark parcel:** For CDH `>= 7.3.1`, Spark is bundled in the CDH parcel — a separate SPARK3 download is skipped automatically (`cdh_spark_bundled_min_version`). Set `spark_version` only for older CDH releases that need a standalone Spark parcel.
 
 ```yaml

@@ -16,6 +16,7 @@
   register: cm_parcel_config_get
   changed_when: false
 
+# Directory URLs only (scm_csd_parcel_repo_urls.j2). JAR get_url list is scm_csds_urls.j2 in 24_start_cm.yml.
 - name: Parcel repo — build CSD archive directory URLs for remote parcel repos
   ansible.builtin.set_fact:
     cm_remote_parcel_csd_repo_urls_effective: >-
@@ -108,6 +109,7 @@
           | reject('search', 'cdp-pvc-ds/latest')
           | reject('search', 'ecsversion-or-latest')
           | reject('search', '<ecsversion')
+          | reject('search', '\\.jar($|[?#])')
           | list
         )
         | join(',')

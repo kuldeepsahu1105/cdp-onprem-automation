@@ -1,4 +1,5 @@
-{# Remote parcel repository directory URLs for CSDs (REMOTE_PARCEL_REPO_URLS), not JAR download URLs. #}
+{# Remote parcel repository directory URLs for CSDs (REMOTE_PARCEL_REPO_URLS), not JAR download URLs.
+   JAR get_url paths: templates/scm_csds_urls.j2 (24_start_cm.yml via scm_csds_effective). #}
 {% if csd_redhat_repo | default('auto') == 'auto' %}
 {% set rh_yum = 'redhat' ~ (ansible_distribution_major_version | default('8') | string) %}
 {% else %}
@@ -13,13 +14,17 @@
 {% endif %}
 {% set svc = base_cluster_install_services | default({}) %}
 {% set use_svc_toggles = csd_respect_service_toggles | default(true) %}
+{% set csd_parcel_repo_urls = [] %}
 {% if csd_install_dataviz | default(true) and ((not use_svc_toggles) or (svc.dataviz | default(false))) %}
-- {{ archive }}/cdv/{{ cdv_version }}/{{ cdv_rh_yum }}/yum
+{% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cdv/' ~ cdv_version ~ '/' ~ cdv_rh_yum ~ '/yum'] %}
 {% endif %}
-{% set cfm_enabled = (
-  (csd_install_nifi | default(true) and ((not use_svc_toggles) or (svc.nifi | default(false))))
-  or (csd_install_nifi_registry | default(true) and ((not use_svc_toggles) or (svc.nifi_registry | default(false))))
-) %}
-{% if cfm_enabled %}
-- {{ archive }}/cfm2/{{ cfm_version }}/{{ rh_yum }}/yum/tars/parcel
+{% set cfm_parcel_dir = archive ~ '/cfm2/' ~ cfm_version ~ '/' ~ rh_yum ~ '/yum/tars/parcel' %}
+{% if csd_install_nifi | default(true) and ((not use_svc_toggles) or (svc.nifi | default(false))) %}
+{% set csd_parcel_repo_urls = csd_parcel_repo_urls + [cfm_parcel_dir] %}
 {% endif %}
+{% if csd_install_nifi_registry | default(true) and ((not use_svc_toggles) or (svc.nifi_registry | default(false))) %}
+{% set csd_parcel_repo_urls = csd_parcel_repo_urls + [cfm_parcel_dir] %}
+{% endif %}
+{% for url in csd_parcel_repo_urls | unique %}
+- {{ url }}
+{% endfor %}
