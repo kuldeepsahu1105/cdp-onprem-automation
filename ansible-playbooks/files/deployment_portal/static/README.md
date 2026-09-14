@@ -2,20 +2,16 @@
 
 Static icons served from the portal www root (`/favicon.ico`, `/apple-touch-icon.png`, etc.).
 
-## Replacing with the reference Cloudera thumbnail
+## Source
 
-The intended reference is the Cloudera logo thumbnail PNG shared at:
+Cloudera logo thumbnail from [StickPNG — Cloudera logo thumbnail](https://www.stickpng.com/img/icons-logos-emojis/tech-companies/cloudera-logo-thumbnail) (400×400 PNG: `https://assets.stickpng.com/images/62a37ac16209494ec2b1707e.png`). Personal-use license per StickPNG; bundled here for portal tab/bookmark icons only.
 
-`https://share.google/7WQExFL2iWrIcGqbY`
+Checked-in sizes were resized from that PNG:
 
-That link redirects to StickPNG (`cloudera-logo-thumbnail`); automated download from CI/agents is blocked by Cloudflare (HTTP 403 challenge), so the checked-in PNGs are **placeholders** derived from the portal header mark (orange arc + blue dot on dark rounded square).
-
-To use the official thumbnail instead, download the PNG locally and overwrite these files (keep filenames):
-
-- `favicon.ico`
+- `favicon.ico` (16/32/48)
 - `favicon-16x16.png`
 - `favicon-32x32.png`
-- `apple-touch-icon.png` (180×180 recommended)
+- `apple-touch-icon.png` (180×180)
 - `android-chrome-192x192.png`
 
-Then re-run the **PORTAL** Ansible phase or `sync_deployment_portal_content` so Caddy serves the updated files from `deployment_portal_www_dir`.
+Ansible copies these via `sync_deployment_portal_content.yml` into `deployment_portal_www_dir`. Re-run **PORTAL** or `35_refresh_deployment_portal.yml` after updating files.
