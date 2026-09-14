@@ -1,12 +1,13 @@
 {# Portal link display: Caddy lab hostnames stand alone; cluster FQDN URLs pair reach IP:port. #}
+{# Imported macros do not inherit caller template context — pass cluster_domain / caddy base explicitly. #}
 {% macro portal_url_host_from_url(url) -%}
 {%- set _u = url | default('') | trim -%}
 {{- _u | regex_replace('^https?://', '') | regex_replace('/.*', '') | regex_replace(':.*', '') | lower -}}
 {%- endmacro %}
 
-{% macro portal_url_is_caddy_lab(url) -%}
+{% macro portal_url_is_caddy_lab(url, caddy_public_base='') -%}
 {%- set _host = portal_url_host_from_url(url) -%}
-{%- set _base = (caddy_vhost_public_base | default('pvc.cloudera-labs.com') | string) | trim | lower -%}
+{%- set _base = (caddy_public_base | default('pvc.cloudera-labs.com') | string) | trim | lower -%}
 {%- if _host | length == 0 -%}
 false
 {%- elif _base | length > 0 and (_host == _base or _host.endswith('.' ~ _base)) -%}
@@ -41,14 +42,32 @@ false
 {%- endif -%}
 {%- endmacro %}
 
-{% macro portal_url_fqdn_pubip(url, public_ip, port, scheme='https', private_ip='') -%}
+{% macro portal_url_resolve_port(url, explicit_port, scheme) -%}
+{%- set _port = explicit_port | default('') | string | trim -%}
+{%- if _port | length > 0 -%}
+{{- _port -}}
+{%- else -%}
+{%- set _u = url | default('') | trim -%}
+{%- if '://' not in _u -%}
+{%- elif (':' in (_u.split('://', 1)[1].split('/')[0])) -%}
+{{- _u.split('://', 1)[1].split('/')[0].split(':', 1)[1] -}}
+{%- elif (scheme | default('https') | trim | lower) == 'https' -%}
+443
+{%- elif (scheme | default('https') | trim | lower) == 'http' -%}
+80
+{%- endif -%}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro portal_url_fqdn_pubip(url, public_ip, port, scheme='https', private_ip='', cluster_domain='', caddy_public_base='') -%}
 {%- set _url = url | default('') | trim -%}
-{%- set _port = port | default('') | string | trim -%}
 {%- set _scheme = scheme | default('https') | trim -%}
-{%- set _dom = cluster_domain | default('') -%}
+{%- set _port %}{{ portal_url_resolve_port(_url, port, _scheme) }}{% endset -%}
+{%- set _port = _port | trim -%}
+{%- set _dom = cluster_domain | default('') | string | trim -%}
 {%- if _url | length == 0 -%}
 {%- else -%}
-{%- set _is_caddy %}{{ portal_url_is_caddy_lab(_url) }}{% endset -%}
+{%- set _is_caddy %}{{ portal_url_is_caddy_lab(_url, caddy_public_base) }}{% endset -%}
 {%- set _is_caddy = _is_caddy | trim -%}
 {%- set _is_cluster %}{{ portal_url_is_cluster_fqdn(_url, _dom) }}{% endset -%}
 {%- set _is_cluster = _is_cluster | trim -%}
@@ -92,20 +111,26 @@ false
 
 {% macro portal_url_fqdn_pubip_for_endpoint(ep, ctx) -%}
 {%- set _url = ep.url | default('') | trim -%}
+{%- set _cluster_dom = ctx.cluster_domain | default('') | string | trim -%}
+{%- set _caddy_base = ctx.caddy_vhosts.public_base | default('pvc.cloudera-labs.com') | string | trim -%}
 {%- if _url | length == 0 -%}
 {%- else -%}
-{%- set _is_caddy_ep %}{{ portal_url_is_caddy_lab(_url) }}{% endset -%}
+{%- set _is_caddy_ep %}{{ portal_url_is_caddy_lab(_url, _caddy_base) }}{% endset -%}
 {%- set _is_caddy_ep = _is_caddy_ep | trim -%}
 {%- if _is_caddy_ep == 'true' -%}
 <a href="{{ _url }}" target="_blank" rel="noopener noreferrer">{{ _url }}</a>
 {%- else -%}
 {%- set _pub = ep.public_ip | default('') | trim -%}
 {%- set _priv = ep.private_ip | default('') | trim -%}
-{%- if _pub | length == 0 and _priv | length == 0 and ep.hostname | default('') | length > 0 -%}
+{%- if ep.hostname | default('') | length > 0 -%}
+{%- if _pub | length == 0 -%}
 {%- set _pub %}{{ inventory_public_ip_for_fqdn(ctx, ep.hostname) }}{% endset -%}
 {%- set _pub = _pub | trim -%}
+{%- endif -%}
+{%- if _priv | length == 0 -%}
 {%- set _priv %}{{ inventory_private_ip_for_fqdn(ctx, ep.hostname) }}{% endset -%}
 {%- set _priv = _priv | trim -%}
+{%- endif -%}
 {%- endif -%}
 {%- set _scheme = ep.scheme | default('') | trim -%}
 {%- if _scheme | length == 0 and '://' in _url -%}
@@ -115,20 +140,21 @@ false
 {%- set _scheme = 'https' -%}
 {%- endif -%}
 {%- set _port = ep.port | default('') | string | trim -%}
-{%- if _port | length == 0 and '://' in _url -%}
-{%- set _port = _url.split(':')[-1] | regex_replace('/.*', '') -%}
-{%- endif -%}
-{{ portal_url_fqdn_pubip(_url, _pub, _port, _scheme, _priv) }}
+{{ portal_url_fqdn_pubip(_url, _pub, _port, _scheme, _priv, _cluster_dom, _caddy_base) }}
 {%- endif -%}
 {%- endif -%}
 {%- endmacro %}
 
 {% macro portal_url_fqdn_pubip_cm(ctx, url, port, scheme) -%}
+{%- set _cluster_dom = ctx.cluster_domain | default('') | string | trim -%}
+{%- set _caddy_base = ctx.caddy_vhosts.public_base | default('pvc.cloudera-labs.com') | string | trim -%}
 {{ portal_url_fqdn_pubip(
   url,
   ctx.cloudera_manager.public_ip | default(''),
   port,
   scheme,
-  ctx.cloudera_manager.private_ip | default('')
+  ctx.cloudera_manager.private_ip | default(''),
+  _cluster_dom,
+  _caddy_base
 ) }}
 {%- endmacro %}
