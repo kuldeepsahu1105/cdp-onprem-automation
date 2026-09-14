@@ -1,11 +1,12 @@
 ---
 # Idempotent CM PostgreSQL databases (roles + CREATE DATABASE). Same SQL as playbook 23.
-# Runs on postgres_inventory_host when scm or Reports Manager (rman) database is missing
+# Delegates to postgres_inventory_host when scm or Reports Manager (rman) database is missing
 # (e.g. partial 23 init after CREATE DATABASE failed inside PL/pgSQL, or scm created via scm_prepare only).
+# Use postgres_host_fqdn (not ansible_fqdn): imported from localhost plays (29) without gather_facts.
 
 - name: Check whether CM scm database exists in PostgreSQL
   community.postgresql.postgresql_query:
-    login_host: "{{ ansible_fqdn }}"
+    login_host: "{{ postgres_host_fqdn }}"
     login_port: "{{ postgres_port }}"
     login_user: "{{ postgres_user }}"
     login_password: "{{ postgres_password }}"
@@ -21,7 +22,7 @@
 
 - name: Check whether Reports Manager database exists in PostgreSQL
   community.postgresql.postgresql_query:
-    login_host: "{{ ansible_fqdn }}"
+    login_host: "{{ postgres_host_fqdn }}"
     login_port: "{{ postgres_port }}"
     login_user: "{{ postgres_user }}"
     login_password: "{{ postgres_password }}"
@@ -51,7 +52,7 @@
 
     - name: Run CM database init SQL on PostgreSQL
       ansible.builtin.shell: |
-        PGPASSWORD={{ postgres_password }} psql -v ON_ERROR_STOP=1 -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -f /tmp/init.sql
+        PGPASSWORD={{ postgres_password }} psql -v ON_ERROR_STOP=1 -h {{ postgres_host_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -f /tmp/init.sql
       delegate_to: "{{ postgres_inventory_host }}"
       register: cm_db_init_sql
       changed_when: cm_db_init_sql.rc == 0
