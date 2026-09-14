@@ -13,7 +13,28 @@
     gather_subset:
       - min
   delegate_to: "{{ postgres_inventory_host }}"
-  when: hostvars[postgres_inventory_host].ansible_os_family is not defined
+  delegate_facts: true
+  when:
+    - postgres_db_host_os_family is not defined
+    - hostvars[postgres_inventory_host]['ansible_os_family'] is not defined
+    - ansible_os_family is not defined or inventory_hostname != postgres_inventory_host
+
+- name: Record PostgreSQL DB host OS family on play host for delegated package tasks
+  ansible.builtin.set_fact:
+    postgres_db_host_os_family: >-
+      {{
+        hostvars[postgres_inventory_host]['ansible_os_family']
+        | default(ansible_os_family | default(''))
+      }}
+  when: postgres_db_host_os_family is not defined
+
+- name: Require PostgreSQL DB host OS family for client package install
+  ansible.builtin.assert:
+    that:
+      - postgres_db_host_os_family in ['RedHat', 'Debian']
+    fail_msg: >-
+      Could not determine OS family for PostgreSQL host {{ postgres_inventory_host }}.
+      Ensure the host is reachable and facts can be gathered, or set postgres_db_host_os_family.
 
 - name: Ensure PostgreSQL client on DB host (RedHat family)
   ansible.builtin.package:
@@ -21,7 +42,7 @@
     state: present
   delegate_to: "{{ postgres_inventory_host }}"
   become: true
-  when: hostvars[postgres_inventory_host].ansible_os_family == 'RedHat'
+  when: postgres_db_host_os_family == 'RedHat'
 
 - name: Ensure PostgreSQL client on DB host (Debian family)
   ansible.builtin.package:
@@ -29,7 +50,7 @@
     state: present
   delegate_to: "{{ postgres_inventory_host }}"
   become: true
-  when: hostvars[postgres_inventory_host].ansible_os_family == 'Debian'
+  when: postgres_db_host_os_family == 'Debian'
 
 - name: List CM scm and Reports Manager databases on PostgreSQL
   ansible.builtin.command:
