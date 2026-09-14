@@ -59,28 +59,46 @@
         msg: "{{ ipa_client_output.stderr_lines }}"
       when: ipa_client_output is defined and not ipa_client_config.stat.exists
 
-    - name: Ensure Kerberos ticket is available
+    - name: Ensure Kerberos ticket is available (Ansible FILE ccache)
       ansible.builtin.command: klist
       register: klist_output
       changed_when: false
       failed_when: false
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
 
     - name: Obtain Kerberos ticket if missing
-      ansible.builtin.shell: echo "{{ ipaadmin_password }}" | kinit {{ ipaadmin_principal }}
+      ansible.builtin.shell: kinit -c "FILE:{{ ipa_kerberos_ccache_path }}" "{{ ipaadmin_principal }}"
+      args:
+        stdin: "{{ ipaadmin_password }}"
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
       register: kinit_result
       changed_when: kinit_result.rc == 0
-      when: "'No credentials cache found' in klist_output.stderr or klist_output.rc != 0"
+      failed_when: false
+      no_log: true
+      when: >-
+        ('No credentials cache found' in (klist_output.stderr | default('')))
+        or ('No credentials cache found' in (klist_output.stdout | default('')))
+        or (klist_output.rc | default(0) | int != 0)
 
     - name: Verify IPA domain enrollment
       ansible.builtin.command: ipa ping
       register: ipa_ping
       changed_when: false
-      failed_when: "'did not receive Kerberos credentials' in ipa_ping.stderr"
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+      failed_when: >-
+        'did not receive Kerberos credentials' in (
+          (ipa_ping.stderr | default('')) ~ (ipa_ping.stdout | default(''))
+        )
 
     - name: List Current Kerberos Ticket
       ansible.builtin.command: klist -e
       register: kerberos_ticket
       changed_when: false
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
 
     - name: Print Kerberos Ticket Details
       debug:
