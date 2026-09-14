@@ -1,0 +1,50 @@
+---
+# Controller-aware psql -h for ensure_cm_postgres_databases / ensure_postgresql_running.
+# All psql and wait_for tasks delegate to postgres_inventory_host; this picks the TCP target
+# on that host. Reuses ansible_control_reach_public_only from detect_ansible_control_reachability
+# (same external vs in-VPC profile as CM API / portal verify — see docs/RUNBOOK.md).
+#
+# Override: -e postgres_ensure_cm_db_psql_host=<host> (in-VPC: private IP or FQDN matching CM JDBC;
+# external controllers should leave auto or use 127.0.0.1 — private VPC IPs are not reachable from
+# the controller, but delegated psql still runs on the DB host).
+
+- name: Gather Ansible control reachability when not already resolved (localhost)
+  ansible.builtin.import_tasks: detect_ansible_control_reachability.yml
+  when: hostvars['localhost'].ansible_control_reachability_effective is not defined
+
+- name: Record explicit postgres CM DB psql host override
+  ansible.builtin.set_fact:
+    _pg_cm_db_psql_host_override: "{{ postgres_ensure_cm_db_psql_host | default('') | trim }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Resolve effective postgres psql host for delegated CM database tasks
+  ansible.builtin.set_fact:
+    postgres_ensure_cm_db_psql_host_effective: >-
+      {{
+        _pg_cm_db_psql_host_override
+        if (_pg_cm_db_psql_host_override | length > 0)
+        else (
+          '127.0.0.1'
+          if (hostvars['localhost'].ansible_control_reach_public_only | default(false) | bool)
+          else postgres_host_fqdn
+        )
+      }}
+  delegate_to: localhost
+  run_once: true
+
+- name: Explain delegated CM database psql connect host
+  ansible.builtin.debug:
+    msg:
+      - >-
+        CM DB psql -h={{ postgres_ensure_cm_db_psql_host_effective }}
+        (delegate {{ postgres_inventory_host }};
+        control profile={{ hostvars['localhost'].ansible_control_reachability_effective | default('unknown') }};
+        override={{ (_pg_cm_db_psql_host_override | length > 0) | ternary(_pg_cm_db_psql_host_override, 'auto') }})
+      - >-
+        CM JDBC / Reports Manager still use postgres_host_fqdn={{ postgres_host_fqdn }}.
+        External controller: leave postgres_ensure_cm_db_psql_host unset (loopback on DB host)
+        or set a host reachable from postgres_inventory_host — not a VPC-private IP meant for the controller.
+  when: ansible_verbosity | default(0) | int >= 1
+  delegate_to: localhost
+  run_once: true
