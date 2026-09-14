@@ -68,6 +68,13 @@
     - (postgres_db_host_which_psql.rc | default(1) | int) == 0
     - (postgres_db_host_which_psql.stdout | default('') | trim) | length > 0
 
+- name: PostgreSQL client on DB host — skipping PGDG install
+  ansible.builtin.debug:
+    msg: >-
+      psql already present on {{ postgres_inventory_host }}
+      ({{ postgres_db_host_psql_cmd }}) — skipping PGDG repo and client install
+  when: postgres_db_host_psql_present | bool
+
 - name: Gather minimal facts on PostgreSQL inventory host when OS family unknown
   ansible.builtin.setup:
     gather_subset:
