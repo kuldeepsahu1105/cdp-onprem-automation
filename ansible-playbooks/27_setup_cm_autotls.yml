@@ -39,6 +39,12 @@
     - name: Perform Auto-TLS setup when CM reports Auto-TLS off or cm_autotls_force_run
       when: not (cm_autotls_api_enabled | default(false) | bool) or (cm_autotls_force_run | default(false) | bool)
       block:
+        - name: Auto-TLS — running generateCmca (creating or updating CM TLS)
+          ansible.builtin.debug:
+            msg: >-
+              CM Auto-TLS is not configured in CM API config (or cm_autotls_force_run=true).
+              Running generateCmca to create/update Auto-TLS (changed when API accepts command).
+
         - name: Check if password authentication is used
           ansible.builtin.set_fact:
             use_password: "{{ cm_node_sudo_password is defined and cm_node_sudo_password | trim | length > 0 }}"

@@ -47,6 +47,15 @@
 
       when: cm_license_info.status != 404
 
+    - name: License already installed — skipping upload and trial activation
+      ansible.builtin.debug:
+        msg: >-
+          Cloudera Manager license is already installed (HTTP {{ cm_license_info.status }}).
+          Skipping license file upload and trial activation (idempotent).
+          Owner={{ cm_license_info.json.owner | default('?') }},
+          UUID={{ cm_license_info.json.uuid | default('?') }}.
+      when: cm_license_info.status != 404
+
     - name: Check if Cloudera Manager license file exists (on local)
       ansible.builtin.stat:
         path: "{{ license_file_name }}"
@@ -58,6 +67,13 @@
         msg: "License file '{{ license_file_name }}' exists = {{ license_file_status.stat.exists }}"
         # verbosity: 1
       when: cm_license_info.status == 404 # Upload only if license is missing
+
+    - name: License missing — will upload file or start trial
+      ansible.builtin.debug:
+        msg: >-
+          No CM license installed (HTTP 404). Will POST license file when
+          '{{ license_file_name }}' exists on the controller, otherwise begin trial license.
+      when: cm_license_info.status == 404
 
     - name: Upload license file to Cloudera Manager (if license is not already uploaded)
       ansible.builtin.uri:

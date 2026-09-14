@@ -57,7 +57,7 @@
   delay: 5
   until: cm_tier_a_https_result is succeeded
   when:
-    - autotls_enabled | default(false) | bool
+    - cm_api_https_active | default(autotls_enabled | default(false) | bool) | bool
     - _cm_tier_a_https is defined
   delegate_to: cldr-mngr
   run_once: true
@@ -77,7 +77,7 @@
     msg: >-
       Cloudera Manager UI did not respond at {{ _cm_tier_a_https }} on cldr-mngr (Auto-TLS).
   when:
-    - autotls_enabled | default(false) | bool
+    - cm_api_https_active | default(autotls_enabled | default(false) | bool) | bool
     - cm_tier_a_https_result is defined
     - cm_tier_a_https_result is failed or (cm_tier_a_https_result.status | default(0) | int not in _cm_url_verify_codes)
 

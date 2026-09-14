@@ -427,6 +427,8 @@ cm_cms_smon_listen_wait_timeout_seconds: 120
 cm_agent_reconcile_after_autotls: true
 cm_agent_active_wait_retries: 12
 cm_agent_active_wait_delay: 5
+# 25_verify_cm.yml — skip verbose systemctl status when CM API /cm/version already succeeded
+cm_verify_skip_redundant_systemd_details: true
 # When true, set use_tls=1 in config.ini (also set from CM API in 25/27 when Auto-TLS is on)
 cm_agent_use_tls: false
 

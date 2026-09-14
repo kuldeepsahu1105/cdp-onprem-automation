@@ -14,22 +14,6 @@
 - name: Reconcile CM agent configuration (server_host / use_tls)
   ansible.builtin.import_tasks: configure_cm_agent.yml
 
-- name: Restart Cloudera Manager agent after config reconcile
-  ansible.builtin.systemd:
-    name: cloudera-scm-agent
-    enabled: true
-    state: restarted
-  register: cm_agent_restart
+- name: Restart CM agent when config changed or agent not active
+  ansible.builtin.import_tasks: restart_cm_agent_if_needed.yml
 
-- name: Require Cloudera Manager agent active after restart
-  ansible.builtin.command: systemctl is-active cloudera-scm-agent
-  register: cm_agent_active_check
-  changed_when: false
-  failed_when: cm_agent_active_check.rc | int != 0
-  retries: "{{ cm_agent_active_wait_retries | default(12) }}"
-  delay: "{{ cm_agent_active_wait_delay | default(5) }}"
-  until: cm_agent_active_check.rc | int == 0
-
-- name: Display CM agent active status
-  ansible.builtin.debug:
-    msg: "cloudera-scm-agent is {{ cm_agent_active_check.stdout }} on {{ inventory_hostname }}"

@@ -1,0 +1,53 @@
+---
+# Unified CM TLS / Auto-TLS console line (after set_cm_api_url.yml; optional fetch_cm_autotls_api_state.yml).
+# Sets cm_tls_mode / cm_api_https_active / cm_autotls_api_enabled when fetch was not imported.
+
+- name: CM API — derive TLS mode for display when fetch did not run
+  ansible.builtin.set_fact:
+    cm_api_https_active: >-
+      {{
+        cm_api_https_active | default(
+          (
+            (cm_protocol | default('http')) == 'https'
+            or (autotls_enabled | default(false) | bool)
+            or ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+          ),
+          true
+        ) | bool
+      }}
+  when: cm_api_https_active is not defined
+
+- name: CM API — derive cm_tls_mode for display when fetch did not run
+  ansible.builtin.set_fact:
+    cm_tls_mode: >-
+      {{
+        cm_tls_mode | default(
+          (
+            'auto_tls'
+            if (cm_autotls_api_enabled | default(false) | bool)
+            else (
+              'https'
+              if (
+                (cm_protocol | default('http')) == 'https'
+                or (autotls_enabled | default(false) | bool)
+                or ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+              )
+              else 'http'
+            )
+          ),
+          true
+        )
+      }}
+  when: cm_tls_mode is not defined
+
+- name: CM API — print Auto-TLS status
+  ansible.builtin.debug:
+    msg: >-
+      CM TLS: {{ cm_tls_mode | default('unknown') }}
+      ({% if cm_api_https_active | default(false) | bool -%}
+      {{ cm_protocol | default('https') }} {{ cm_api_port | default(cm_https_port | default(7183)) }} active
+      {%- else -%}
+      http {{ cm_api_port | default(cm_http_port | default(7180)) }}
+      {%- endif %}).
+      Auto-TLS configured in CM: {{ cm_autotls_api_enabled | default('unknown (import fetch_cm_autotls_api_state.yml)') }}.
+      Working API: {{ cm_protocol | default('?') }}:{{ cm_api_port | default('?') }}.
