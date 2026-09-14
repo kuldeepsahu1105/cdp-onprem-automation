@@ -77,7 +77,14 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/ direct; `internal` = mirror on cldr-mngr |
 | `cm_repo_public_base_url` | `https://archive.cloudera.com/p` | Public archive base URL |
 | `cm_repo_mirror_host` | cldr-mngr IP | Internal mirror HTTP host |
-| `parcel_repo` | computed | Public or internal parcel URL based on `cm_repo_source` |
+| `parcel_repo` | computed | Public or internal CDH parcel URL (`…/p/cdh7/<cdh_version>/parcels/`) |
+| `ecs_parcel_repo_url` | computed | `…/p/cdp-pvc-ds/<ecs_pvc_ds_version>/parcels/` (see `ecs_pvc_ds_version` in ECS table above) |
+| `cm_remote_parcel_repo_intel_mkl_url` | Intel MKL parcels | Optional third-party parcel repo (left enabled by default) |
+| `cm_parcel_repo_merge_existing_cm_urls` | `false` | When false, CM wizard defaults are not merged (only Ansible URLs + scrub) |
+| `cm_parcel_install_csd_repo_urls` | `false` | Maps to CM `PARCEL_INSTALL_CSD_REPO_URLS` (blocks auto spark/cdh6 URLs on restart) |
+| `cm_remote_parcel_csd_repo_urls` | `[]` | Explicit CSD archive dirs; empty = build from `scm_csd_parcel_repo_urls.j2` |
+| `cm_parcel_repo_include_csd_archive_dirs` | `true` | Add CDV/CFM archive paths to `REMOTE_PARCEL_REPO_URLS` |
+| `scm_parcel_repositories` | computed | Legacy `scm.j2` list: CDH + ECS + Intel MKL |
 | `cdh_parcel_os_suffix` | `auto` | Parcel filename suffix: `auto`, `el8`, `el9`, `jammy`, `noble`, `sles15`, `el8.aarch64le` |
 | `cdh_parcel_target_group` | `base-workers` | Inventory group used to auto-detect worker OS for parcel suffix |
 | `cdh_parcel_os_suffix_fallback` | `el8` | Fallback when auto-detect cannot read worker facts |
@@ -97,6 +104,17 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `csd_respect_service_toggles` | `true` | Only include CSDs for enabled `base_cluster_install_services` keys |
 | `cm_repo_username` | — | Required (archive credentials) |
 | `cm_repo_password` | — | Required (archive credentials) |
+
+**CSD JAR downloads vs CM remote parcel repo directories:** Do not reuse the same URL for both. JARs are downloaded in **24_start_cm.yml** (`get_url` → `/opt/cloudera/csd`) from `scm_csds_effective`, built by `scm_csds_urls.j2` when `scm_csds` / `scm_csds_redhat` are empty. CM **REMOTE_PARCEL_REPO_URLS** (playbooks **25** / **31** / **33** via `configure_cm_parcel_repo_api.yml`) must list **archive directory** URLs only, from `scm_csd_parcel_repo_urls.j2` unless `cm_remote_parcel_csd_repo_urls` is set. NiFi and NiFi Registry share one CFM parcel directory; the parcel template dedupes with Jinja `unique` when both services are enabled.
+
+| Purpose | Template / vars | Example (public archive, RHEL 8 CM) |
+|---|---|---|
+| CSD JAR `get_url` | `scm_csds_urls.j2`, `cdv_dataviz_csd_jar`, `cfm_nifi_csd_jar`, `cfm_nifi_registry_csd_jar` | `…/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar` |
+| CSD JAR `get_url` (NiFi / Registry) | same | `…/p/cfm2/2.1.7.3004/redhat8/yum/tars/parcel/NIFI-1.28.1.2.1.7.3004-1.jar` (two jars when both services enabled) |
+| CM remote parcel repo dir | `scm_csd_parcel_repo_urls.j2`, `cm_remote_parcel_csd_repo_urls` | `…/p/cdv/8.0.7/redhat8/yum` (no `.jar` suffix) |
+| CM remote parcel repo dir (CFM) | same | `…/p/cfm2/2.1.7.3004/redhat8/yum/tars/parcel` (once when NiFi and/or Registry enabled) |
+
+On RHEL 9 CM hosts, CDV JAR paths may still use `redhat8/yum` (`cdv_redhat_yum_repo: auto`); CFM uses `redhat9/yum/…` from `csd_redhat_repo: auto`. Parcel repo scrub in `configure_cm_parcel_repo_api.yml` drops any candidate URL matching `\.jar`.
 
 **Spark parcel:** For CDH `>= 7.3.1`, Spark is bundled in the CDH parcel — a separate SPARK3 download is skipped automatically (`cdh_spark_bundled_min_version`). Set `spark_version` only for older CDH releases that need a standalone Spark parcel.
 
