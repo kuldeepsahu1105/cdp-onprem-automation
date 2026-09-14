@@ -290,6 +290,7 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 | `24_start_cm.yml` | Install/start CM server + agents |
 | `25_verify_cm.yml` | Verify CM is running |
 | `25_reconcile_cm_agents.yml` | Reconcile CM agent `server_host` / `use_tls` and restart agents |
+| CM API on **HTTP :7180** (Auto-TLS off) | Agents must use **`use_tls=0`** | **27** / **25** set `use_tls=0` in `config.ini` when CM reports Auto-TLS disabled — agents cannot speak TLS to an HTTP-only CM server. CMS TLS trust reconcile in **27** is skipped when Auto-TLS is off. |
 | `26_setup_cm_license.yml` | Upload license or trial |
 | `27_setup_cm_autotls.yml` | Enable Auto-TLS; agent reconcile; CMS trust/restart when MGMT already exists |
 | `29_setup_cm_cms.yml` | CMS — run **before** LDAP/Kerberos in `cm_tls` phase |
@@ -311,7 +312,7 @@ CMS (Management Service) and CDP base cluster are **separate**:
 | `AvroRuntimeException: Connection refused` in CM UI / debug bundles | Service Monitor (firehose) not listening — crashed, OOM, or still starting | `29_setup_cm_cms.yml` now waits on the firehose TCP port; on `cldr-mngr`: `/var/log/cloudera-scm-firehose/`, `/var/run/cloudera-scm-agent/process/*-SERVICEMONITOR*/logs/` |
 | JMX `smonStatusRequest` / `smonReportRequest` Count 0 | CM cannot reach Service Monitor Avro endpoint | Confirm role **RUNNING** in CM → Management Service; `ss -ltn` on loopback for firehose port from role config |
 | `ImportCredentials - Execution error` in `cloudera-scm-server.log` | TLS / credential store mismatch after Auto-TLS | Ensure MGMT `ssl_client_truststore_*` points at agent `cm-auto-global_truststore.jks` (automation in `configure_cm_cms_autotls_trust.yml`); re-run **27** then **29** |
-| Reports Manager won't start | Postgres `rman` DB unreachable | From CM host: `psql -h <postgres-fqdn> -U rman -d rman`; logs: `/var/log/cloudera-scm-headlamp/` |
+| Reports Manager won't start / **29** fails RM DB probe | Postgres `rman` DB missing (partial **23** init) or TCP auth from CM host | **29** runs `ensure_cm_postgres_databases` before probe; re-run **23** or **29**. From CM host: `psql -h <postgres-fqdn> -U rman -d rman`; logs: `/var/log/cloudera-scm-headlamp/` |
 | **Hosts: Last Heartbeat ~minutes** (all commissioned) | **CM agent** not checking in to CM Server (not a browser refresh issue) | `systemctl status cloudera-scm-agent`; `grep ^server_host= /etc/cloudera-scm-agent/config.ini` (cldr-mngr FQDN); after Auto-TLS `use_tls=1` — re-run **27** or **`25_reconcile_cm_agents.yml`**; agent log `/var/log/cloudera-scm-agent/cloudera-scm-agent.log`; chrony via **07** |
 | **Hosts: load/disk/memory empty or stale** but heartbeat fresh | **Host Monitor** (CMS) not publishing host metrics | CM → Management Service: Host Monitor **RUNNING**; re-run **29_setup_cm_cms.yml** (after **27** when Auto-TLS on); firehose/agent logs on cldr-mngr |
 | **Hosts: Tags column empty** | Tags are optional; not set at agent install | Enable `cm_host_tags_enabled` (default true) — **29** applies inventory role/env/owner tags via API |

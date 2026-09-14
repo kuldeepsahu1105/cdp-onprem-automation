@@ -1,6 +1,7 @@
 ---
 # Idempotent CM PostgreSQL databases (roles + CREATE DATABASE). Same SQL as playbook 23.
-# Runs on postgres_inventory_host when scm database is missing (e.g. partial 23 init).
+# Runs on postgres_inventory_host when scm or Reports Manager (rman) database is missing
+# (e.g. partial 23 init after CREATE DATABASE failed inside PL/pgSQL, or scm created via scm_prepare only).
 
 - name: Check whether CM scm database exists in PostgreSQL
   community.postgresql.postgresql_query:
@@ -18,8 +19,26 @@
   register: cm_scm_database_check
   changed_when: false
 
-- name: Create CM PostgreSQL databases and roles when scm database is missing
-  when: cm_scm_database_check.query_result | default([]) | length == 0
+- name: Check whether Reports Manager database exists in PostgreSQL
+  community.postgresql.postgresql_query:
+    login_host: "{{ ansible_fqdn }}"
+    login_port: "{{ postgres_port }}"
+    login_user: "{{ postgres_user }}"
+    login_password: "{{ postgres_password }}"
+    db: "{{ postgres_db }}"
+    query: "SELECT 1 AS exists FROM pg_database WHERE datname = %(dbname)s"
+    named_args:
+      dbname: "{{ cm_cms_reports_manager_db_name }}"
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  become_user: postgres
+  register: cm_rman_database_check
+  changed_when: false
+
+- name: Create CM PostgreSQL databases and roles when scm or Reports Manager database is missing
+  when: >
+    (cm_scm_database_check.query_result | default([]) | length == 0)
+    or (cm_rman_database_check.query_result | default([]) | length == 0)
   block:
     - name: Generate CM database init SQL script from template
       ansible.builtin.template:
