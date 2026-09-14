@@ -10,7 +10,7 @@
 {% set portal_tile_hint = ctx.caddy_vhosts.urls_public.portal.hostname if (_portal_caddy_url | length > 0) else 'Ops host Caddy index' %}
 {% set _caddy_vhosts_on = ctx.caddy_vhosts.enabled | default(false) | bool %}
 {% from 'deployment_portal_network_access_display.inc.j2' import net_access_href, net_access_label %}
-{% from 'deployment_portal_url_fqdn_pubip.inc.j2' import portal_url_fqdn_pubip, inventory_public_ip_for_fqdn %}
+{% from 'deployment_portal_url_fqdn_pubip.inc.j2' import portal_url_fqdn_pubip, portal_url_fqdn_pubip_for_endpoint, portal_url_fqdn_pubip_cm, inventory_public_ip_for_fqdn, inventory_private_ip_for_fqdn %}
 {% set mon_on = (
   (ctx.monitoring.enabled | default(false) | bool)
   or (ctx.monitoring.routes_enabled | default(false) | bool)
@@ -1070,20 +1070,7 @@
               <tr>
                 <td>{{ ep.name }}</td>
                 <td>
-                  {% if ep.public_ip | default('') | length > 0 and ep.port | default('') | length > 0 %}
-                  {{ portal_url_fqdn_pubip(ep.url, ep.public_ip, ep.port, ep.scheme | default('https')) }}
-                  {% elif ep.hostname | default('') | length > 0 %}
-                  {% set _ep_pub = inventory_public_ip_for_fqdn(ctx, ep.hostname) %}
-                  {% if _ep_pub | length > 0 and '://' in ep.url %}
-                  {% set _ep_scheme = ep.url.split('://')[0] %}
-                  {% set _ep_port = ep.url.split(':')[-1] | regex_replace('/.*', '') %}
-                  {{ portal_url_fqdn_pubip(ep.url, _ep_pub, _ep_port, _ep_scheme) }}
-                  {% else %}
-                  <a href="{{ ep.url }}" target="_blank" rel="noopener noreferrer">{{ ep.url }}</a>
-                  {% endif %}
-                  {% else %}
-                  <a href="{{ ep.url }}" target="_blank" rel="noopener noreferrer">{{ ep.url }}</a>
-                  {% endif %}
+                  {{ portal_url_fqdn_pubip_for_endpoint(ep, ctx) }}
                 </td>
                 <td>{% if ep.hostname | default('') | length > 0 %}<code>{{ ep.hostname }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
                 <td>{{ ep.note | default('') }}</td>
@@ -1160,8 +1147,8 @@
         <ul class="clean">
           <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>
           <li><strong>pgAdmin</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.pgadmin.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.pgadmin.hostname }}</a></li>
-          <li><strong>Cloudera Manager (direct HTTP)</strong> — {{ portal_url_fqdn_pubip(ctx.cloudera_manager.ui_url_http, ctx.cloudera_manager.public_ip, cm_http_port, 'http') }}</li>
-          <li><strong>Cloudera Manager (direct HTTPS)</strong> — {{ portal_url_fqdn_pubip(ctx.cloudera_manager.ui_url_https, ctx.cloudera_manager.public_ip, cm_https_port, 'https') }} <span class="badge">{{ ctx.cloudera_manager.host_fqdn }}</span></li>
+          <li><strong>Cloudera Manager (direct HTTP)</strong> — {{ portal_url_fqdn_pubip_cm(ctx, ctx.cloudera_manager.ui_url_http, cm_http_port, 'http') }}</li>
+          <li><strong>Cloudera Manager (direct HTTPS)</strong> — {{ portal_url_fqdn_pubip_cm(ctx, ctx.cloudera_manager.ui_url_https, cm_https_port, 'https') }} <span class="badge">{{ ctx.cloudera_manager.host_fqdn }}</span></li>
           {% if mon_on %}
           <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.grafana.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.grafana.hostname }}{% else %}{{ grafana_tile_url }}{% endif %}</a></li>
           <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.prometheus.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.prometheus.hostname }}{% else %}{{ prometheus_tile_url }}{% endif %}</a></li>
@@ -1209,8 +1196,8 @@
           {% endif %}
           <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a> <span class="badge">:{{ monitoring_cadvisor_host_port | default(8089) }}</span></li>
           {% endif %}
-          <li><strong>Cloudera Manager (direct HTTP)</strong> — {{ portal_url_fqdn_pubip(ctx.cloudera_manager.ui_url_http, ctx.cloudera_manager.public_ip, cm_http_port, 'http') }} <span class="badge">VPC / admin</span></li>
-          <li><strong>Cloudera Manager (direct HTTPS)</strong> — {{ portal_url_fqdn_pubip(ctx.cloudera_manager.ui_url_https, ctx.cloudera_manager.public_ip, cm_https_port, 'https') }} <span class="badge">:7183 when Auto-TLS on</span></li>
+          <li><strong>Cloudera Manager (direct HTTP)</strong> — {{ portal_url_fqdn_pubip_cm(ctx, ctx.cloudera_manager.ui_url_http, cm_http_port, 'http') }} <span class="badge">VPC / admin</span></li>
+          <li><strong>Cloudera Manager (direct HTTPS)</strong> — {{ portal_url_fqdn_pubip_cm(ctx, ctx.cloudera_manager.ui_url_https, cm_https_port, 'https') }} <span class="badge">:7183 when Auto-TLS on</span></li>
           {% if ctx.identity.ipa_caddy_modern_url | default('') | length > 0 %}
           <li><strong>{{ ctx.identity.ipa_ui_modern_label | default('FreeIPA (modern UI)') }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_caddy_modern_url }}">{{ ctx.identity.ipa_caddy_modern_url }}</a></li>
           {% endif %}
@@ -1218,8 +1205,10 @@
           <li><strong>{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (legacy UI)') }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_caddy_legacy_url }}">{{ ctx.identity.ipa_caddy_legacy_url }}</a></li>
           {% endif %}
           {% if ctx.identity.ipa_ui_url %}
-          {% set _ipa_pub = inventory_public_ip_for_fqdn(ctx, deployment_portal_ipa_fqdn | default(ctx.identity.ipa_ui_url | regex_replace('^https?://', '') | regex_replace('/.*', ''))) %}
-          <li><strong>{{ ctx.identity.ipa_ui_label }} (HTTPS on ipaserver)</strong> — {{ portal_url_fqdn_pubip(ctx.identity.ipa_ui_url, _ipa_pub, '443', 'https') }}</li>
+          {% set _ipa_fqdn = deployment_portal_ipa_fqdn | default(ctx.identity.ipa_ui_url | regex_replace('^https?://', '') | regex_replace('/.*', '')) %}
+          {% set _ipa_pub = inventory_public_ip_for_fqdn(ctx, _ipa_fqdn) %}
+          {% set _ipa_priv = inventory_private_ip_for_fqdn(ctx, _ipa_fqdn) %}
+          <li><strong>{{ ctx.identity.ipa_ui_label }} (HTTPS on ipaserver)</strong> — {{ portal_url_fqdn_pubip(ctx.identity.ipa_ui_url, _ipa_pub, '443', 'https', _ipa_priv) }}</li>
           {% endif %}
         </ul>
         <h2 class="section-title" style="margin-top:1rem">PostgreSQL</h2>
@@ -1246,7 +1235,12 @@
         <h2 class="section-title" style="margin-top:1rem">Data services &amp; related URLs</h2>
         <ul class="clean">
           {% for link in ctx.data_services.links %}
-          <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — <a target="_blank" rel="noopener noreferrer" href="{{ link.url }}">{{ link.url }}</a></li>
+          {% set _link_host = link.url | default('') | regex_replace('^https?://', '') | regex_replace('/.*', '') | regex_replace(':.*', '') %}
+          {% set _link_pub = inventory_public_ip_for_fqdn(ctx, _link_host) %}
+          {% set _link_priv = inventory_private_ip_for_fqdn(ctx, _link_host) %}
+          {% set _link_scheme = link.url.split('://')[0] if '://' in link.url else 'http' %}
+          {% set _link_port = link.url.split(':')[-1] | regex_replace('/.*', '') if '://' in link.url else '' %}
+          <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — {{ portal_url_fqdn_pubip(link.url, _link_pub, _link_port, _link_scheme, _link_priv) }}</li>
           {% endfor %}
         </ul>
         {% endif %}

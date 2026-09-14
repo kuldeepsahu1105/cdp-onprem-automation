@@ -51,8 +51,8 @@ http://{{ ip }}:{{ monitoring_cadvisor_host_port | default(8089) }}/
 {%- set direct = net_access_direct_url(service, tier, ctx) | trim -%}
 {%- set caddy = net_access_caddy_url(service, tier, ctx, caddy_on) | trim -%}
 {%- set href = net_access_href(service, tier, ctx, caddy_on) | trim -%}
-{%- if caddy | length > 0 and direct | length > 0 and caddy != direct -%}
-{{- caddy }} ({{ direct }})
+{%- if caddy | length > 0 -%}
+{{- caddy -}}
 {%- else -%}
 {{- href -}}
 {%- endif -%}

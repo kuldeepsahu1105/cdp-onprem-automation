@@ -15,6 +15,7 @@
   url: "http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}"
   hostname: "{{ deployment_portal_cm_fqdn }}"
   public_ip: "{{ deployment_portal_cm_public_ip | default('') }}"
+  private_ip: "{{ deployment_portal_cm_private_ip | default('') }}"
   port: "{{ cm_http_port }}"
   scheme: http
   note: "Direct HTTP on cldr-mngr :{{ cm_http_port }} (before or after Auto-TLS redirect)"
@@ -22,6 +23,7 @@
   url: "https://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port }}"
   hostname: "{{ deployment_portal_cm_fqdn }}"
   public_ip: "{{ deployment_portal_cm_public_ip | default('') }}"
+  private_ip: "{{ deployment_portal_cm_private_ip | default('') }}"
   port: "{{ cm_https_port }}"
   scheme: https
   note: "Direct TLS on cldr-mngr :{{ cm_https_port }}"
@@ -55,6 +57,7 @@
   url: "https://{{ deployment_portal_ipa_fqdn }}"
   hostname: "{{ deployment_portal_ipa_fqdn }}"
   public_ip: "{{ _ipa_pub }}"
+  private_ip: "{{ _ipa_priv }}"
   port: "443"
   scheme: https
   note: "Direct HTTPS on ipaserver"
