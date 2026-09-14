@@ -5,6 +5,46 @@
 - name: Kerberos — resolve HTTPS CM API URL
   ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
 
+- name: Kerberos — read CM kerberosInfo before bounded wait
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/kerberosInfo"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: cm_krb_verify_preflight
+  changed_when: false
+
+- name: Kerberos — fail fast when CM never received Kerberos settings (skip long wait)
+  ansible.builtin.fail:
+    msg: >-
+      Cloudera Manager Kerberos is not enabled and kerberosInfo has no realm/KDC after playbook 28
+      configure/import/restart steps (fail-fast before {{ cm_krb_kerberized_wait_retries | default(30) }}×{{ cm_krb_kerberized_wait_delay | default(10) }}s wait).
+      CM API: {{ cm_krb_api_url }}/cm/kerberosInfo
+      kerberized={{ cm_krb_verify_preflight.json.kerberized | default(false) }},
+      kerberosRealm={{ cm_krb_verify_preflight.json.kerberosRealm | default(cm_krb_verify_preflight.json.securityRealm | default('unset')) }},
+      kdcHost={{ cm_krb_verify_preflight.json.kdcHost | default('unset') }}.
+      Expected kdc_host={{ kdc_host }}, realm={{ cluster_realm }}.
+      Likely causes: importAdminCredentials failed or was never applied; CM not restarted after PUT /cm/config;
+      wrong KDC admin password for {{ cm_krb_kdc_admin_principal | default('krb5_kdc_admin_user') }}; or Kerberos REST used HTTP :7180 (303) instead of HTTPS :7183.
+      Check cloudera-scm-server.log (ImportCredentials) on cldr-mngr and re-run 28_setup_cm_krbs.yml.
+  when:
+    - not (cm_krb_verify_preflight.json.kerberized | default(false) | bool)
+    - >
+      (
+        cm_krb_verify_preflight.json.kerberosRealm
+        | default(cm_krb_verify_preflight.json.securityRealm | default(''))
+        | trim
+      ) | length == 0
+    - >
+      (
+        cm_krb_verify_preflight.json.kdcHost
+        | default('')
+        | trim
+      ) | length == 0
+
 - name: Kerberos — wait for CM kerberosInfo.kerberized after restart
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/kerberosInfo"
