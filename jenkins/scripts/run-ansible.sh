@@ -9,6 +9,7 @@ mkdir -p "$LOG_DIR"
 
 cd "$REPO_ROOT"
 export PATH="${HOME}/.local/bin:${PATH}"
+export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
 export UI_ASCII=1
 # shellcheck source=scripts/lib/ansible_env.sh
 source "$REPO_ROOT/scripts/lib/ansible_env.sh"

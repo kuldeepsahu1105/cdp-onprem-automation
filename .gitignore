@@ -19,6 +19,8 @@ license.txt
 **/kuldeep*sahu*
 
 # Ansible runtime
+**/__pycache__/
+*.py[cod]
 **/logs/*
 !ansible-playbooks/logs/.gitkeep
 ansible-playbooks/jenkins_override.yml

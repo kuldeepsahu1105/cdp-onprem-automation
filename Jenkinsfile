@@ -437,6 +437,23 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
       }
     }
 
+    stage('Prepare Workspace') {
+      steps {
+        sh '''
+          set -euo pipefail
+          chmod +x jenkins/scripts/clean-workspace-pycache.sh 2>/dev/null || true
+          if [[ -x jenkins/scripts/clean-workspace-pycache.sh ]]; then
+            ./jenkins/scripts/clean-workspace-pycache.sh
+          elif [[ -d ansible-playbooks ]]; then
+            find ansible-playbooks -type d -name __pycache__ -print0 2>/dev/null | while IFS= read -r -d '' d; do
+              chmod -R u+w "$d" 2>/dev/null || true
+              rm -rf "$d" 2>/dev/null || sudo -n rm -rf "$d" 2>/dev/null || true
+            done
+          fi
+        '''
+      }
+    }
+
     stage('Checkout') {
       steps {
         checkout([
@@ -446,7 +463,7 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
           extensions: [[$class: 'CleanBeforeCheckout']],
           userRemoteConfigs: scm.userRemoteConfigs
         ])
-        sh 'chmod +x jenkins/scripts/*.sh clone_and_run_terraform.sh clone_and_run_terraform_destroy.sh clone_and_run_pvc_automation.sh generate_inventory.sh 2>/dev/null || true'
+        sh 'chmod +x jenkins/scripts/*.sh clone_and_run_terraform.sh clone_and_run_terraform_destroy.sh clone_and_run_pvc_automation.sh generate_inventory.sh jenkins/scripts/clean-workspace-pycache.sh 2>/dev/null || true'
         sh """
           set -euo pipefail
           export CREDENTIALS_USER='${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}'
