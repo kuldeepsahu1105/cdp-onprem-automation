@@ -122,7 +122,7 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | `PORTAL` | Bootstrap Caddy/pgAdmin/index (`10`); before CM when `DEPLOYMENT_PORTAL_ENABLED` |
 | `IDENTITY` | Ansible **phase 2** — FreeIPA or AD (`11_identity_setup.yml` → `12_setup_freeipa_server.yml` with DNS preflight + VPC forwarder); refreshes portal index (`35`). **Checkout `GIT_BRANCH=main` at commit `e30c2de` or newer** — older trees used `dns_forwarders: no` → `--no-forwarders` on AWS and skipped dig preflight (IDENTITY failures: `[Errno 2]`, ~10 playbook tasks). |
 | `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
-| `CM_TLS_KRB_LDAP` | Auto-TLS, CMS, LDAP, Kerberos (27→29→30→28); portal refresh |
+| `CM_TLS_KRB_LDAP` | Auto-TLS, CMS, LDAP, Kerberos (27→29→30→28); portal refresh. **Checkout `GIT_BRANCH=main` at commit `b03af5a` or newer** — older trees fail in `realign_cm_api_url_after_autotls_restart.yml` with task *CM API — derive API host from existing cm_api_url* (`NoneType` `.group` when `cm_api_url` has no hostname match). |
 | `CDH_INSTALL` | CDH base cluster (`31_setup_base_cluster.yml`); portal refresh |
 | `MONITORING` | `32_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
 | `ECS_INSTALL` | ECS cluster (`33`); optional `34_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` |
@@ -210,7 +210,7 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 |---|---|
 | `DRY_RUN` | Terraform plan only / Ansible `--check --diff` |
 | `TFVARS_FILE` | Relative config path (auto-detect if empty) |
-| `GIT_BRANCH` | Branch to checkout — use **`main` at or after `691b943`** for PORTAL operator-access fixes (`deployment_portal_postgres_fqdn` and related localhost facts) |
+| `GIT_BRANCH` | Branch to checkout — use **`main` at or after `691b943`** for PORTAL operator-access fixes; **`main` at or after `b03af5a`** for CM Auto-TLS API URL realign (PR #188). Saved job parameters that pin a feature branch will run old Ansible even when `main` is fixed — set **`GIT_BRANCH=main`** and confirm **Checkout** logs `b03af5a` or later. |
 | `NOTIFICATION_EMAIL` | Email recipient |
 | `ANSIBLE_GROUP_VARS_YAML` | Ansible-only YAML overrides (allowed keys in `jenkins/ansible-group-vars-allowed-keys.yaml`) — not full `all.yml` |
 | `CM_REPO_USERNAME` | Optional archive.cloudera.com username (empty = skip; no early validation failure) |

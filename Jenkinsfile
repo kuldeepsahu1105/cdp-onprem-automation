@@ -201,7 +201,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     string(name: 'PVCECS_WORKER_COUNT', defaultValue: '7', description: 'ECS worker count override')
     string(name: 'PVCECS_WORKER_INSTANCE_TYPE', defaultValue: 'r5a.4xlarge', description: 'ECS worker instance type override')
     string(name: 'TFVARS_FILE', defaultValue: '.tfvars.yaml', description: 'Config file path relative to repo root (empty = auto-detect)')
-    string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to checkout (no spaces or ..)')
+    string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to checkout (no spaces or ..). CM_TLS_KRB_LDAP Auto-TLS realign needs main at b03af5a+ (PR #188 — removes regex .group on cm_api_url). Saved jobs: confirm this is main, not a stale feature branch.')
     string(name: 'NOTIFICATION_EMAIL', defaultValue: '', description: 'Email recipient (defaults to BUILD_USER_EMAIL; validated when set)')
     text(
       name: 'ANSIBLE_GROUP_VARS_YAML',
@@ -353,6 +353,7 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
     JENKINS_ALLOWED_CIDRS = "${params.ALLOWED_CIDRS?.trim() ?: ''}"
     JENKINS_ALLOWED_PORTS = "${params.ALLOWED_PORTS?.trim() ?: ''}"
     JENKINS_CLDR_EIP_NAME = "${params.CLDR_EIP_NAME?.trim() ?: ''}"
+    GIT_BRANCH = "${params.GIT_BRANCH?.trim() ?: 'main'}"
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
     DESTROY_STACK_CONFIRM = "${params.DESTROY_STACK_CONFIRM}"
@@ -463,6 +464,12 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
           extensions: [[$class: 'CleanBeforeCheckout']],
           userRemoteConfigs: scm.userRemoteConfigs
         ])
+        sh """
+          set -euo pipefail
+          echo "Checked out branch: ${shellEscape(params.GIT_BRANCH?.trim() ?: 'main')}"
+          git rev-parse HEAD
+          git log -1 --oneline
+        """
         sh 'chmod +x jenkins/scripts/*.sh clone_and_run_terraform.sh clone_and_run_terraform_destroy.sh clone_and_run_pvc_automation.sh generate_inventory.sh jenkins/scripts/clean-workspace-pycache.sh 2>/dev/null || true'
         sh """
           set -euo pipefail
