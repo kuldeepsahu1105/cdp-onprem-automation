@@ -8,6 +8,66 @@
 - name: Resolve PostgreSQL inventory host for CM databases
   ansible.builtin.import_tasks: resolve_postgres_inventory.yml
 
+- name: Stat versioned psql on PostgreSQL DB host (RHEL PGDG path, before OS family / PGDG)
+  ansible.builtin.stat:
+    path: "/usr/pgsql-{{ postgresql_version }}/bin/psql"
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  register: postgres_db_host_psql_rhel_stat
+
+- name: Stat versioned psql on PostgreSQL DB host (Debian path)
+  ansible.builtin.stat:
+    path: "/usr/lib/postgresql/{{ postgresql_version }}/bin/psql"
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  register: postgres_db_host_psql_debian_stat
+
+- name: Resolve psql in PATH on PostgreSQL DB host when versioned binaries missing
+  ansible.builtin.command:
+    cmd: which psql
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  register: postgres_db_host_which_psql
+  changed_when: false
+  failed_when: false
+  when:
+    - not (postgres_db_host_psql_rhel_stat.stat.exists | default(false))
+    - not (postgres_db_host_psql_debian_stat.stat.exists | default(false))
+
+- name: Record whether PostgreSQL client is already on DB host
+  ansible.builtin.set_fact:
+    postgres_db_host_psql_present: >-
+      {{
+        (postgres_db_host_psql_rhel_stat.stat.exists | default(false))
+        or (postgres_db_host_psql_debian_stat.stat.exists | default(false))
+        or (
+          (postgres_db_host_which_psql.rc | default(1) | int) == 0
+          and (postgres_db_host_which_psql.stdout | default('') | trim) | length > 0
+        )
+      }}
+
+- name: Record PostgreSQL DB host psql path from RHEL versioned install
+  ansible.builtin.set_fact:
+    postgres_db_host_psql_cmd: "/usr/pgsql-{{ postgresql_version }}/bin/psql"
+  when:
+    - postgres_db_host_psql_cmd is not defined
+    - postgres_db_host_psql_rhel_stat.stat.exists | default(false)
+
+- name: Record PostgreSQL DB host psql path from Debian versioned install
+  ansible.builtin.set_fact:
+    postgres_db_host_psql_cmd: "/usr/lib/postgresql/{{ postgresql_version }}/bin/psql"
+  when:
+    - postgres_db_host_psql_cmd is not defined
+    - postgres_db_host_psql_debian_stat.stat.exists | default(false)
+
+- name: Record PostgreSQL DB host psql path from PATH
+  ansible.builtin.set_fact:
+    postgres_db_host_psql_cmd: "{{ postgres_db_host_which_psql.stdout | trim }}"
+  when:
+    - postgres_db_host_psql_cmd is not defined
+    - (postgres_db_host_which_psql.rc | default(1) | int) == 0
+    - (postgres_db_host_which_psql.stdout | default('') | trim) | length > 0
+
 - name: Gather minimal facts on PostgreSQL inventory host when OS family unknown
   ansible.builtin.setup:
     gather_subset:
@@ -19,14 +79,53 @@
     - hostvars[postgres_inventory_host]['ansible_os_family'] is not defined
     - ansible_os_family is not defined or inventory_hostname != postgres_inventory_host
 
-- name: Record PostgreSQL DB host OS family on play host for delegated package tasks
+- name: Query RHEL macro on PostgreSQL DB host to detect RedHat OS family
+  ansible.builtin.command:
+    cmd: rpm -E '%{rhel}'
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  register: postgres_db_host_rhel_macro_detect
+  changed_when: false
+  failed_when: false
+  when: postgres_db_host_os_family is not defined
+
+- name: Record PostgreSQL DB host OS family as RedHat from rpm RHEL macro
+  ansible.builtin.set_fact:
+    postgres_db_host_os_family: RedHat
+  when:
+    - postgres_db_host_os_family is not defined
+    - postgres_db_host_rhel_macro_detect.stdout | default('') | trim in ['8', '9']
+
+- name: Record PostgreSQL DB host OS family from DB host RedHat distribution facts
+  ansible.builtin.set_fact:
+    postgres_db_host_os_family: RedHat
+  when:
+    - postgres_db_host_os_family is not defined
+    - hostvars[postgres_inventory_host]['ansible_distribution'] | default('') == 'RedHat'
+
+- name: Record PostgreSQL DB host OS family from DB host Debian-family distribution facts
+  ansible.builtin.set_fact:
+    postgres_db_host_os_family: Debian
+  when:
+    - postgres_db_host_os_family is not defined
+    - hostvars[postgres_inventory_host]['ansible_distribution'] | default('') in ['Debian', 'Ubuntu']
+
+- name: Record PostgreSQL DB host OS family from play host when play runs on DB host
+  ansible.builtin.set_fact:
+    postgres_db_host_os_family: "{{ ansible_os_family }}"
+  when:
+    - postgres_db_host_os_family is not defined
+    - inventory_hostname == postgres_inventory_host
+    - ansible_os_family is defined
+    - ansible_os_family in ['RedHat', 'Debian']
+
+- name: Record PostgreSQL DB host OS family from DB host hostvars as last resort
   ansible.builtin.set_fact:
     postgres_db_host_os_family: >-
-      {{
-        hostvars[postgres_inventory_host]['ansible_os_family']
-        | default(ansible_os_family | default(''))
-      }}
-  when: postgres_db_host_os_family is not defined
+      {{ hostvars[postgres_inventory_host]['ansible_os_family'] | default('') }}
+  when:
+    - postgres_db_host_os_family is not defined
+    - hostvars[postgres_inventory_host]['ansible_os_family'] | default('') in ['RedHat', 'Debian']
 
 - name: Require PostgreSQL DB host OS family for client package install
   ansible.builtin.assert:
@@ -35,59 +134,6 @@
     fail_msg: >-
       Could not determine OS family for PostgreSQL host {{ postgres_inventory_host }}.
       Ensure the host is reachable and facts can be gathered, or set postgres_db_host_os_family.
-
-- name: Stat versioned psql binary on PostgreSQL DB host
-  ansible.builtin.stat:
-    path: >-
-      {{
-        '/usr/pgsql-' ~ (postgresql_version | string) ~ '/bin/psql'
-        if postgres_db_host_os_family == 'RedHat'
-        else '/usr/lib/postgresql/' ~ (postgresql_version | string) ~ '/bin/psql'
-      }}
-  delegate_to: "{{ postgres_inventory_host }}"
-  become: true
-  register: postgres_db_host_psql_versioned_stat
-
-- name: Resolve psql in PATH on PostgreSQL DB host when versioned binary missing
-  ansible.builtin.command:
-    cmd: which psql
-  delegate_to: "{{ postgres_inventory_host }}"
-  become: true
-  register: postgres_db_host_which_psql
-  changed_when: false
-  failed_when: false
-  when: not (postgres_db_host_psql_versioned_stat.stat.exists | default(false))
-
-- name: Record whether PostgreSQL client is already on DB host
-  ansible.builtin.set_fact:
-    postgres_db_host_psql_present: >-
-      {{
-        (postgres_db_host_psql_versioned_stat.stat.exists | default(false))
-        or (
-          (postgres_db_host_which_psql.rc | default(1) | int) == 0
-          and (postgres_db_host_which_psql.stdout | default('') | trim) | length > 0
-        )
-      }}
-
-- name: Record PostgreSQL DB host psql path from versioned install
-  ansible.builtin.set_fact:
-    postgres_db_host_psql_cmd: >-
-      {{
-        '/usr/pgsql-' ~ (postgresql_version | string) ~ '/bin/psql'
-        if postgres_db_host_os_family == 'RedHat'
-        else '/usr/lib/postgresql/' ~ (postgresql_version | string) ~ '/bin/psql'
-      }}
-  when:
-    - postgres_db_host_psql_cmd is not defined
-    - postgres_db_host_psql_versioned_stat.stat.exists | default(false)
-
-- name: Record PostgreSQL DB host psql path from PATH
-  ansible.builtin.set_fact:
-    postgres_db_host_psql_cmd: "{{ postgres_db_host_which_psql.stdout | trim }}"
-  when:
-    - postgres_db_host_psql_cmd is not defined
-    - (postgres_db_host_which_psql.rc | default(1) | int) == 0
-    - (postgres_db_host_which_psql.stdout | default('') | trim) | length > 0
 
 - name: Default PostgreSQL DB host psql command when client install will provide PATH
   ansible.builtin.set_fact:
@@ -99,30 +145,85 @@
 - name: Install PostgreSQL client and PGDG repo on DB host when psql is missing
   when: not (postgres_db_host_psql_present | bool)
   block:
-    - name: Gather PostgreSQL DB host distribution facts for PGDG RPM URL
-      ansible.builtin.setup:
-        gather_subset:
-          - "!all"
-          - "!min"
-          - distribution
-          - hardware
+    - name: Query RHEL major on PostgreSQL DB host for PGDG (rpm macro)
+      ansible.builtin.command:
+        cmd: rpm -E '%{rhel}'
       delegate_to: "{{ postgres_inventory_host }}"
-      delegate_facts: true
+      become: true
+      register: postgres_db_host_rhel_el_rpm
+      changed_when: false
+      when: postgres_db_host_os_family == 'RedHat'
+
+    - name: Record PostgreSQL DB host EL major from rpm on DB host
+      ansible.builtin.set_fact:
+        postgres_db_host_el_major: "{{ postgres_db_host_rhel_el_rpm.stdout | trim }}"
       when:
         - postgres_db_host_os_family == 'RedHat'
-        - >-
-          hostvars[postgres_inventory_host]['ansible_distribution_major_version'] is not defined
-          or hostvars[postgres_inventory_host]['ansible_architecture'] is not defined
+        - postgres_db_host_el_major is not defined
+        - (postgres_db_host_rhel_el_rpm.stdout | default('') | trim) | length > 0
 
-    - name: Record PostgreSQL DB host EL major on play host for PGDG RPM URL
+    - name: Record PostgreSQL DB host EL major from RedHat distribution facts on DB host
       ansible.builtin.set_fact:
         postgres_db_host_el_major: >-
           {{ hostvars[postgres_inventory_host]['ansible_distribution_major_version'] | string }}
       when:
         - postgres_db_host_os_family == 'RedHat'
         - postgres_db_host_el_major is not defined
+        - hostvars[postgres_inventory_host]['ansible_distribution'] | default('') == 'RedHat'
 
-    - name: Record PostgreSQL DB host architecture on play host for PGDG RPM URL
+    - name: Read PostgreSQL DB host redhat-release when EL major still unknown
+      ansible.builtin.command:
+        cmd: cat /etc/redhat-release
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+      register: postgres_db_host_redhat_release
+      changed_when: false
+      when:
+        - postgres_db_host_os_family == 'RedHat'
+        - postgres_db_host_el_major is not defined
+
+    - name: Record PostgreSQL DB host EL major from redhat-release text
+      ansible.builtin.set_fact:
+        postgres_db_host_el_major: >-
+          {{
+            '9'
+            if ' 9' in (postgres_db_host_redhat_release.stdout | default(''))
+            else '8'
+            if ' 8' in (postgres_db_host_redhat_release.stdout | default(''))
+            else ''
+          }}
+      when:
+        - postgres_db_host_os_family == 'RedHat'
+        - postgres_db_host_el_major is not defined
+        - (postgres_db_host_redhat_release.stdout | default('') | trim) | length > 0
+
+    - name: Query machine hardware name on PostgreSQL DB host for PGDG RPM URL
+      ansible.builtin.command:
+        cmd: uname -m
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+      register: postgres_db_host_uname_m
+      changed_when: false
+      when:
+        - postgres_db_host_os_family == 'RedHat'
+        - postgres_db_host_architecture is not defined
+
+    - name: Record PostgreSQL DB host architecture from uname on DB host
+      ansible.builtin.set_fact:
+        postgres_db_host_architecture: >-
+          {{
+            'aarch64'
+            if postgres_db_host_uname_m.stdout | trim in ['aarch64', 'arm64']
+            else 'x86_64'
+            if postgres_db_host_uname_m.stdout | trim in ['x86_64', 'amd64']
+            else postgres_db_host_uname_m.stdout | trim
+          }}
+      when:
+        - postgres_db_host_os_family == 'RedHat'
+        - postgres_db_host_architecture is not defined
+        - (postgres_db_host_uname_m.stdout | default('') | trim) | length > 0
+
+    - name: Record PostgreSQL DB host architecture from RedHat host facts when uname missing
       ansible.builtin.set_fact:
         postgres_db_host_architecture: >-
           {{
@@ -135,16 +236,17 @@
       when:
         - postgres_db_host_os_family == 'RedHat'
         - postgres_db_host_architecture is not defined
+        - hostvars[postgres_inventory_host]['ansible_distribution'] | default('') == 'RedHat'
 
     - name: Require supported RHEL major version for PGDG repository RPM URL
       ansible.builtin.assert:
         that:
           - postgres_db_host_el_major | string in ['8', '9']
         fail_msg: >-
-          PostgreSQL DB host {{ postgres_inventory_host }} has
-          ansible_distribution_major_version '{{ postgres_db_host_el_major }}'.
-          PGDG reporpms URLs use EL-8 or EL-9 only (from the DB host, not the Ansible controller).
-          Do not fall back to controller facts (e.g. Amazon Linux 2023 reports major 2023).
+          PostgreSQL DB host {{ postgres_inventory_host }} resolved EL major
+          '{{ postgres_db_host_el_major }}' (expected rpm -E %%{rhel} on the DB host; ignore
+          polluted hostvars such as Amazon Linux 2023 major 2023).
+          PGDG reporpms URLs use EL-8 or EL-9 only.
       when: postgres_db_host_os_family == 'RedHat'
 
     - name: Download PostgreSQL PGDG repository RPM on DB host (RedHat family)
