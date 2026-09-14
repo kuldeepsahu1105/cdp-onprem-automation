@@ -38,7 +38,7 @@
 
 - name: Ensure PostgreSQL client on DB host (RedHat family)
   ansible.builtin.package:
-    name: "{{ os_vars.RedHat.postgres_client_packages }}"
+    name: "postgresql{{ postgresql_version }}"
     state: present
   delegate_to: "{{ postgres_inventory_host }}"
   become: true
@@ -46,7 +46,7 @@
 
 - name: Ensure PostgreSQL client on DB host (Debian family)
   ansible.builtin.package:
-    name: "{{ os_vars.Debian.postgres_client_packages }}"
+    name: "postgresql-client-{{ postgresql_version }}"
     state: present
   delegate_to: "{{ postgres_inventory_host }}"
   become: true
