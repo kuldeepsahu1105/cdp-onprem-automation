@@ -16,6 +16,11 @@
     - name: Resolve deployment portal install host group (play hosts line when Caddy skipped)
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
 
+    - name: Validate SSH reachability of portal target host before connecting
+      ansible.builtin.import_tasks: common_tasks/validate_ansible_ssh_reachability.yml
+      vars:
+        ansible_ssh_reachability_check_group: "{{ deployment_portal_host_group_effective }}"
+
     - name: "SKIPPED PORTAL — Caddy stack disabled (see Report deployment portal Caddy gate above)"
       ansible.builtin.debug:
         msg: >-

@@ -56,6 +56,45 @@ Ansible must pick **public** vs **VPC-private** addresses for CM API `uri` probe
 
 Override in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML`: `ansible_control_reachability: public|private|auto`. Legacy keys `ansible_controller_outside_vpc` and `cm_api_prefer_private_ip` remain supported.
 
+**`ansible_control_reachability` only picks the CM API / portal-verify address — it never changes SSH.** SSH always connects to inventory `ansible_host` (`common_tasks/resolve_cm_connect_host.yml` and `detect_ansible_control_reachability.yml` set separate facts — `cm_connect_host`, `cm_api_client_host` — used only for `uri`/`wait_for` CM checks). `ansible_host` must itself be an address the control node can reach:
+
+- **Cloud / Terraform inventory** (`generate_inventory.sh` / `jenkins/scripts/regenerate-inventory-from-terraform.sh`): `ansible_host` is always the **public IP/EIP**; `private_ip` is separate. Works from Jenkins, laptop, or an in-VPC runner.
+- **Scenario B — bare metal** (below): `ansible_host` and `private_ip` are intentionally the **same** private address, because the control node is expected to be co-located on that network (`CONTROL_MODE=local` on `cldr-mngr`, or a VPN/bastion runner with real routing to `10.x`/`172.16-31.x`/`192.168.x`). Running this style of inventory from Jenkins or a laptop **outside** that network cannot work — there is no public address recorded to fall back to.
+
+`00_setup_ssh_preqs.yml` (first play of every phase that touches real hosts) and `10_setup_deployment_portal.yml`, `32_setup_monitoring_stack.yml`, `35_refresh_deployment_portal.yml` (localhost pre-play, after `resolve_deployment_portal_host.yml`) import `common_tasks/validate_ansible_ssh_reachability.yml` to catch this fast: it probes any VPC-private-looking `ansible_host` in the target group and fails with an actionable message when the controller cannot reach it, instead of hanging on an SSH connection timeout. Options:
+
+- `ansible_ssh_reachability_skip: true` — bypass the check on a controller with genuine private routing (bare metal / VPN / `CONTROL_MODE=local`).
+- Add an SSH bastion/ProxyJump instead of exposing a public IP: set `ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o ProxyCommand='ssh -W %h:%p -q bastion-user@<bastion-host>'"` (or `ANSIBLE_SSH_COMMON_ARGS` env var) in `group_vars/all.yml` — the existing `ansible_ssh_common_args` key (see top of that file) already carries `-o StrictHostKeyChecking=no`; append `ProxyCommand`/`ProxyJump` there rather than introducing a new variable.
+- Regenerate a Cloud/Terraform-style inventory (public `ansible_host`) when you need Jenkins/laptop access to a deployment that currently only has private addresses recorded.
+
+### Running from any controller (Jenkins, EC2, bare metal, laptop)
+
+This repo's Ansible layer is controller-agnostic by design (`AGENTS.md` "Standalone-first changes") — the same playbooks run unmodified from Jenkins, a standalone EC2 box, an on-prem bare-metal box, or a laptop. What changes between controllers is **which vars/env you set**, not the playbooks. Use this matrix to pick the right settings before running against RHEL or Ubuntu targets:
+
+| Controller | Route to target `10.x`/`172.16-31.x`/`192.168.x`? | `ansible_host` in inventory | `ansible_control_reachability` | Notes |
+|---|---|---|---|---|
+| **Jenkins agent** (this repo's pipeline) | No (typical) | Public IP/EIP (auto via `regenerate-inventory-from-terraform.sh`) | `public` (automatic — `run-ansible.sh` sets `ANSIBLE_CONTROL_VIA_JENKINS=1`) | Nothing to configure; wrapper handles inventory regen, `ANSIBLE_CONTROLLER_OUTSIDE_VPC`, and SSH key resolution. |
+| **External EC2** (separate box in/out of the target VPC, no Jenkins) | Depends on VPC peering / same VPC | Public IP if outside the VPC; private IP only if it has real routing (same VPC/subnet or VPC peering + SG) | `auto` (probes both) or set explicitly | Export `ANSIBLE_CONTROL_REMOTE=1` if `auto` misdetects (no `BUILD_NUMBER`/`CI` env hints present) and the box is genuinely outside the VPC. |
+| **Bare metal** (on-prem box with real private routing to targets) | Yes | Private IP (matches `private_ip`, per Scenario B) | `private` or `auto` | Set `deployment_environment: baremetal`. If bare metal box is *not* co-located (separate private network, no route), use ProxyJump/bastion instead of trying to reach `10.x` directly. |
+| **Mac laptop** | No (typical home/office network) | Public IP/EIP | `public` (or `auto`) | `brew install ansible jq`; run from repo root or `ansible-playbooks/`. See Scenario C below. |
+| **Windows laptop** | No (typical) | Public IP/EIP | `public` (or `auto`) | Wrappers use `#!/usr/bin/env bash` — run them from **WSL2** (Ubuntu app from Microsoft Store), not native `cmd`/PowerShell. Inside WSL2: `sudo apt update && sudo apt install -y ansible jq openssh-client`, then treat it exactly like an Ubuntu laptop controller. Keep the SSH private key inside the WSL2 filesystem (or `chmod 600` a Windows-mounted copy) — Windows ACLs on `/mnt/c/...` often make `ssh`/Ansible reject the key's permissions. |
+| **RHEL/Ubuntu laptop or workstation** | No (typical) | Public IP/EIP | `public` (or `auto`) | Install `ansible`, `jq` via the distro package manager; run `./clone_and_run_pvc_automation.sh` or `cd ansible-playbooks && ./pvc_setup.sh`. |
+| **`CONTROL_MODE=local` on `cldr-mngr`** | Yes (is the target) | Private IP (loopback-reachable) | `private` (CM API stays `127.0.0.1` on-manager) | `CONTROL_MODE=local DEPLOY_PHASE=all ./pvc_setup.sh` from `ansible-playbooks/`; uses `~/.ssh/id_rsa` if no PEM in cwd. |
+
+**When to set what:**
+
+- **Inventory `ansible_host` rule:** if the controller has no real network route to the target's private subnet, `ansible_host` must be the target's **public** address (or a bastion/ProxyJump must be configured). This is independent of `ansible_control_reachability`, which only affects CM API/portal-verify probing — see the callout above. Regenerate with `generate_inventory.sh` / `regenerate-inventory-from-terraform.sh` for public-IP inventories; hand-edit only for bare metal (Scenario B) where `ansible_host == private_ip` is intentional.
+- **`ANSIBLE_PRIVATE_KEY`:** set before any standalone run so `ansible-playbook --private-key` and Ansible facts resolve the same key: `export ANSIBLE_PRIVATE_KEY=/path/to/key.pem` (or drop `*.pem`/`id_rsa` into `ansible-playbooks/`, or rely on `~/.ssh/id_rsa`). Wrappers (`pvc_setup.sh`, `clone_and_run_pvc_automation.sh`, Jenkins `run-ansible.sh`) resolve the same env var — see `jenkins/scripts/resolve-ansible-ssh-key.sh`.
+- **`ansible_ssh_reachability_skip`:** set `true` only when the controller has genuine private routing to the target subnet that the automatic probe cannot detect (rare — most bare-metal/VPN cases are handled by the `auto`/`private` control-mode heuristics already). From Jenkins, pass it via `ANSIBLE_EXTRA_VARS='ansible_ssh_reachability_skip=true'` (see below) rather than editing `group_vars/all.yml`, so it stays a per-run override.
+- **Windows/Mac notes (WSL):** both need a POSIX shell (`bash`) — macOS ships one; Windows needs WSL2. Docker/container-based portal steps run inside the ops **target host** (Linux EC2/bare metal), not the controller, so Windows/Mac controllers only need `ansible`, `jq`, `ssh`, and (for Terraform flows) the AWS CLI — no Docker required locally.
+- **Jenkins `ANSIBLE_EXTRA_VARS` for reachability overrides:** `run-ansible.sh` → `scripts/lib/ansible_env.sh` (`ansible_extra_args()`) turns space-separated `key=value` pairs into `-e key=value` flags appended to every `ansible-playbook` invocation for that Jenkins run. Example, when a bare-metal/VPN Jenkins agent has real routing and the probe still misfires:
+
+  ```bash
+  export ANSIBLE_EXTRA_VARS='ansible_ssh_reachability_skip=true'
+  ```
+
+  Combine multiple overrides space-separated: `ANSIBLE_EXTRA_VARS='ansible_ssh_reachability_skip=true ansible_control_reachability=private'`.
+
 ### Service URL verification (portal stack + Cloudera Manager)
 
 Printed URLs live in `CDP_ACCESS_URLS_*` / `jenkins/artifacts/access-urls.txt`.

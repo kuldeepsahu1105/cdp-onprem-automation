@@ -3,6 +3,14 @@
 ---
 - import_playbook: 00_ensure_collections.yml
 
+- name: Validate SSH reachability before connecting to any inventory host
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Validate SSH reachability of all inventory hosts before this run's first connection
+      ansible.builtin.import_tasks: common_tasks/validate_ansible_ssh_reachability.yml
+
 - name: Ensure SSH allows password authentication and root login
   hosts: all:!ipaserver
   become: yes

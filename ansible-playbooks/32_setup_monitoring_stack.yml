@@ -12,6 +12,11 @@
     - name: Resolve portal install host
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
 
+    - name: Validate SSH reachability of monitoring/Caddy target host before connecting
+      ansible.builtin.import_tasks: common_tasks/validate_ansible_ssh_reachability.yml
+      vars:
+        ansible_ssh_reachability_check_group: "{{ deployment_portal_host_group_effective }}"
+
     - name: Enable monitoring in portal context for this run
       ansible.builtin.set_fact:
         monitoring_stack_enabled: true
