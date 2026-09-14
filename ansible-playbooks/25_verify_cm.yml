@@ -23,6 +23,9 @@
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
       become: false
 
+    - name: CM API — read TLS / Auto-TLS state (aligned status messaging)
+      ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
+
     - name: Authenticate with Cloudera Manager API
       ansible.builtin.uri:
         url: "{{ cm_api_url }}/cm/version"
@@ -64,10 +67,21 @@
       delegate_to: cldr-mngr
       register: cm_status_output
       changed_when: false
+      when: not (cm_verify_skip_redundant_systemd_details | default(true) | bool)
+
+    - name: Skip verbose systemctl status (CM API /cm/version already healthy)
+      ansible.builtin.debug:
+        msg: >-
+          Skipping systemctl status dump on cldr-mngr — CM API /cm/version succeeded
+          (set cm_verify_skip_redundant_systemd_details=false to print full systemctl status).
+      when: cm_verify_skip_redundant_systemd_details | default(true) | bool
 
     - name: Display Cloudera Manager Service status
       ansible.builtin.debug:
         msg: "{{ cm_status_output.stdout }}"
+      when:
+        - not (cm_verify_skip_redundant_systemd_details | default(true) | bool)
+        - cm_status_output is defined
 
     - name: Check Cloudera Management Services Status
       ansible.builtin.uri:

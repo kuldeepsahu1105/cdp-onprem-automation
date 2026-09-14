@@ -62,7 +62,9 @@ Printed URLs live in `CDP_ACCESS_URLS_*` / `jenkins/artifacts/access-urls.txt`.
 
 **Cloudera Manager (`25_verify_cm.yml`):**
 
-- **Required (manager-local):** HTTP/HTTPS UI on `cldr-mngr` via `probe_cm_manager_ui_http.yml` (private IP / `ansible_host` / FQDN, then loopback) and Auto-TLS HTTPS on the same bind address — **fails** the play if CM is down. CM API setup (`set_cm_api_url.yml`) prints `cm_api_url` and probes from Jenkins with delegation per `#57`.
+- **TLS status line:** After `set_cm_api_url.yml`, the play imports `fetch_cm_autotls_api_state.yml` → `print_cm_tls_status.yml` (same as `27_setup_cm_autotls.yml` / `print_cm_urls.yml`). Console shows `CM TLS: https|http|auto_tls (7183 active|http 7180)` and **Auto-TLS configured in CM** from `/cm/config` — not the old `Auto-TLS is enabled: False (API http:7180)` probe-only message when HTTPS UI works.
+- **Redundant checks:** Playbooks **24** / **27** / **29** may already wait on CM API or systemd; **`25_verify_cm.yml`** is the single gate for `/cm/version`, CMS summary, clusters list, and `verify_cm_tiered_urls.yml`. Set `cm_verify_skip_redundant_systemd_details: false` to restore full `systemctl status` dump; default **true** skips it when API auth succeeded.
+- **Required (manager-local):** HTTP/HTTPS UI on `cldr-mngr` via `probe_cm_manager_ui_http.yml` (private IP / `ansible_host` / FQDN, then loopback) and HTTPS UI when `cm_api_https_active` — **fails** the play if CM is down. CM API setup (`set_cm_api_url.yml`) prints `cm_api_url` and probes from Jenkins with delegation per `#57`.
 - **External from controller:** Only when `deployment_portal_enabled: false` **and** `deployment_portal_verify_tier_b_enabled: true` (default **false**). With the portal stack enabled, Tier **B** from `10_setup` / `35_refresh` covers portal/monitoring/IPA/ECS milestones only — **not** CM (CM external checks run in `25_verify_cm.yml` when enabled there).
 
 **Portal / monitoring / IPA / ECS** use the tier labels below on the ops host and Ansible controller:

@@ -112,12 +112,11 @@
       }}
 
 - name: CM API — print TLS / Auto-TLS state from CM API configuration
+  ansible.builtin.import_tasks: print_cm_tls_status.yml
+
+- name: CM API — print agent TLS reconcile hint after TLS state
   ansible.builtin.debug:
     msg: >-
-      CM TLS mode={{ cm_tls_mode | default('unknown') }}
-      (HTTPS API active={{ cm_api_https_active | default(false) | bool }},
-      protocol={{ cm_protocol | default('unset') }}:{{ cm_api_port | default('?') }},
-      Auto-TLS in CM config={{ cm_autotls_api_enabled | default(false) | bool }},
-      probe autotls_enabled={{ autotls_enabled | default(false) | bool }}).
-      Agents should use use_tls={{ cm_agent_use_tls | default(false) | bool }}.
-      Auto-TLS generateCmca skip uses CM config flags / CA cert, not HTTPS UI alone.
+      CM agents should use use_tls={{ cm_agent_use_tls | default(false) | bool }}.
+      generateCmca skip uses CM config Auto-TLS flags / CA cert, not HTTPS UI alone
+      (probe autotls_enabled={{ autotls_enabled | default(false) | bool }}).

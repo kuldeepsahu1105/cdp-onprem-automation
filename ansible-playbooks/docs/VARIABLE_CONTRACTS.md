@@ -60,7 +60,7 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 
 **Probe context:** `resolve_cm_api_probe_context.yml` → `resolve_cm_connect_host.yml` + `select_cm_api_probe_host.yml`.
 
-**`set_cm_api_url.yml`:** HTTP/HTTPS `/api/version` probes → `cm_protocol`, `cm_api_port`, **`cm_api_version`**, **`cm_api_url`** (imports probe context only when `cm_api_probe_host` is unset). **`fetch_cm_api_version_slug.yml`:** `GET /api/version` → **`cm_api_version`** slug (`v58`, `v59`, …). Used by **`set_cm_api_url.yml`** and **`wait_for_cm_api.yml`** (re-fetches before each health wait). **`wait_for_cm_api.yml`** then checks `GET {{ cm_api_url }}/cm/version` (same as `25_verify_cm.yml`).
+**`set_cm_api_url.yml`:** HTTP/HTTPS `/api/version` probes → `cm_protocol`, `cm_api_port`, **`cm_api_version`**, **`cm_api_url`** (imports probe context only when `cm_api_probe_host` is unset). **`fetch_cm_api_version_slug.yml`:** `GET /api/version` → **`cm_api_version`** slug (`v58`, `v59`, …). Used by **`set_cm_api_url.yml`** and **`wait_for_cm_api.yml`** (re-fetches before each health wait). **`wait_for_cm_api.yml`** then checks `GET {{ cm_api_url }}/cm/version` (same as `25_verify_cm.yml`). **`fetch_cm_autotls_api_state.yml`** → **`cm_tls_mode`**, **`cm_api_https_active`**, **`cm_autotls_api_enabled`**, **`cm_agent_use_tls`**; prints via **`print_cm_tls_status.yml`** (used from **25**, **27** / `print_cm_urls.yml`, agent reconcile).
 
 **CM UI:** Cloudera Manager **`frontend_url`** is not set via Caddy. Portal index and Jenkins list **direct** `https://cldr-mngr.<domain>:7183` (or `:7180`). Optional `cm_external_url` in `group_vars` sets `cm_frontend_url_effective` only when you need a custom published URL.
 

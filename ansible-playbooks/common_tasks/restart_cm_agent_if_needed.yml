@@ -1,0 +1,61 @@
+---
+# Skip agent restart when config is unchanged and cloudera-scm-agent is already active (IPA-style idempotent skip).
+
+- name: CM agent — check systemd state before restart
+  ansible.builtin.command: systemctl is-active cloudera-scm-agent
+  register: cm_agent_pre_active
+  changed_when: false
+  failed_when: false
+
+- name: CM agent — derive whether agent config tasks changed ini
+  ansible.builtin.set_fact:
+    cm_agent_config_changed: >-
+      {{
+        (cm_agent_config_server_host is changed)
+        or (
+          cm_agent_config_use_tls_enable is defined
+          and (cm_agent_config_use_tls_enable is changed)
+        )
+        or (
+          cm_agent_config_use_tls_disable is defined
+          and (cm_agent_config_use_tls_disable is changed)
+        )
+      }}
+
+- name: CM agent — skip restart (already active, config unchanged)
+  ansible.builtin.debug:
+    msg: >-
+      cloudera-scm-agent is already active on {{ inventory_hostname }} and config.ini
+      (server_host / use_tls) is unchanged — skipping agent restart.
+  when:
+    - cm_agent_pre_active.rc | int == 0
+    - not (cm_agent_config_changed | default(false) | bool)
+
+- name: Restart Cloudera Manager agent after config reconcile
+  ansible.builtin.systemd:
+    name: cloudera-scm-agent
+    enabled: true
+    state: restarted
+  register: cm_agent_restart
+  when: (cm_agent_pre_active.rc | int != 0) or (cm_agent_config_changed | default(false) | bool)
+
+- name: CM agent — skip post-restart wait (no restart performed)
+  ansible.builtin.debug:
+    msg: CM agent health check skipped (no restart this host).
+  when:
+    - cm_agent_pre_active.rc | int == 0
+    - not (cm_agent_config_changed | default(false) | bool)
+
+- name: Require Cloudera Manager agent active after restart
+  ansible.builtin.command: systemctl is-active cloudera-scm-agent
+  register: cm_agent_active_check
+  changed_when: false
+  failed_when: cm_agent_active_check.rc | int != 0
+  retries: "{{ cm_agent_active_wait_retries | default(12) }}"
+  delay: "{{ cm_agent_active_wait_delay | default(5) }}"
+  until: cm_agent_active_check.rc | int == 0
+  when: (cm_agent_pre_active.rc | int != 0) or (cm_agent_config_changed | default(false) | bool)
+
+- name: Display CM agent active status
+  ansible.builtin.debug:
+    msg: "cloudera-scm-agent is {{ cm_agent_active_check.stdout | default(cm_agent_pre_active.stdout) }} on {{ inventory_hostname }}"
