@@ -351,9 +351,11 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 |---|---|---|
 | `deployment_portal_enabled` | `true` | Run `10_setup_deployment_portal.yml` |
 | `deployment_portal_host_group` | `auto` | `auto`, `ipaserver`, or `cldr-mngr` — where Caddy/pgAdmin/Grafana run |
-| `postgres_inventory_group` | `""` (auto) | Pin Postgres install group; else `[postgres]` → `[db]` → `cldr-mngr` |
+| `postgres_inventory_group` | `""` (auto) | Pin Postgres install group; else `[postgres]` → `[postgresql]` → `[db]` → `cldr-mngr` |
 | `postgres_inventory_group_resolved` | (computed) | Effective inventory group for `23_setup_postgres.yml` |
+| `postgres_inventory_host` | (computed) | First host in resolved group — CM DB tasks delegate here (`ensure_cm_postgres_databases.yml`) |
 | `postgres_host_fqdn` | (computed) | CM JDBC / Reports Manager / pgAdmin DB host FQDN |
+| `postgres_ensure_cm_db_psql_host` | (computed) | `psql -h` on `postgres_inventory_host` (`127.0.0.1` when Postgres runs on that host, else `postgres_host_fqdn`) |
 | `deployment_portal_postgres_host_group` | `auto` | CM PostgreSQL host for pgAdmin (`auto` = same as `postgres_inventory_group_resolved`) |
 | `deployment_portal_http_port` | `81` | Caddy index + Grafana/Prometheus/Alertmanager paths |
 | `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI on ops host |

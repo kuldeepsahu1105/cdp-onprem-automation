@@ -2,8 +2,11 @@
 # Idempotent CM DBs (scm + Reports Manager rman) on postgres_inventory_host (e.g. cldr-mngr).
 # Ansible controller may be Mac, Ubuntu, or RHEL — irrelevant: every list/create task delegates to the
 # DB host only (no psql, postgresql modules, or RHEL-specific DB paths on localhost/controller).
-# Root + PGPASSWORD + TCP to 127.0.0.1 only — no become_user postgres.
+# Root + PGPASSWORD + TCP (postgres_ensure_cm_db_psql_host) — no become_user postgres.
 # When both databases exist: one debug line and no further tasks in this import.
+
+- name: Resolve PostgreSQL inventory host for CM databases
+  ansible.builtin.import_tasks: resolve_postgres_inventory.yml
 
 - name: Gather minimal facts on PostgreSQL inventory host when OS family unknown
   ansible.builtin.setup:
@@ -33,7 +36,7 @@
     argv:
       - psql
       - -h
-      - 127.0.0.1
+      - "{{ postgres_ensure_cm_db_psql_host }}"
       - -p
       - "{{ postgres_port | string }}"
       - -U
@@ -76,7 +79,7 @@
           - -v
           - ON_ERROR_STOP=1
           - -h
-          - 127.0.0.1
+          - "{{ postgres_ensure_cm_db_psql_host }}"
           - -p
           - "{{ postgres_port | string }}"
           - -U

@@ -8,7 +8,7 @@
       - groups[postgres_inventory_group_resolved] | length > 0
     fail_msg: >-
       PostgreSQL install group '{{ postgres_inventory_group_resolved }}' is missing or empty.
-      Add [postgres] or [db] to inventory (or use cldr-mngr). Override with postgres_inventory_group.
+      Add [postgres], [postgresql], or [db] to inventory (or use cldr-mngr). Override with postgres_inventory_group.
 
 - name: Show resolved PostgreSQL host for CM
   ansible.builtin.debug:

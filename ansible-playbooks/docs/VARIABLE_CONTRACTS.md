@@ -89,3 +89,16 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 4. After logic changes, run `ansible-playbook --syntax-check` on affected numbered playbooks (Jenkins `ANSIBLE_SYNTAX`).
 
 See also: `docs/RUNBOOK.md` (URL verification tiers), `docs/REFERENCE.md` (group_vars tables).
+
+---
+
+## PostgreSQL / CM database (standalone host)
+
+| Fact | Set by | Notes |
+|------|--------|-------|
+| `postgres_inventory_group_resolved` | `group_vars/all.yml` | Auto: `[postgres]` → `[postgresql]` → `[db]` → `cldr-mngr`; pin with `postgres_inventory_group` |
+| `postgres_inventory_host` | `group_vars/all.yml` | `groups[postgres_inventory_group_resolved][0]` — `ensure_cm_postgres_databases.yml` delegates all `psql` here (play **24** on `cldr-mngr`, play **29** on `localhost`) |
+| `postgres_host_fqdn` | `group_vars/all.yml` | CM/CMS JDBC and Reports Manager probe host |
+| `postgres_ensure_cm_db_psql_host` | `group_vars/all.yml` | TCP target for delegated `psql` on the inventory host (`127.0.0.1` when the server is on that VM) |
+
+Optional inventory: add a dedicated group (e.g. `[postgresql]` with one host) and `cldr_hostname` in host vars; leave `postgres_inventory_group` empty for auto-detect, or set `postgres_inventory_group: postgresql` to pin.

@@ -44,7 +44,7 @@
       - groups[deployment_portal_postgres_host_group_effective] | length > 0
     fail_msg: >-
       PostgreSQL host group '{{ deployment_portal_postgres_host_group_effective }}'
-      must exist (CM database host). Use [postgres], [db], or cldr-mngr; set deployment_portal_postgres_host_group=auto.
+      must exist (CM database host). Use [postgres], [postgresql], [db], or cldr-mngr; set deployment_portal_postgres_host_group=auto.
 
 - name: Set PostgreSQL FQDN for pgAdmin and portal links
   ansible.builtin.set_fact:
