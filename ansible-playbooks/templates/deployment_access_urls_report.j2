@@ -1,4 +1,6 @@
 ========== CDP_ACCESS_URLS_BEGIN ==========
+{% set _cm = deployment_portal_context.cloudera_manager %}
+{% set _cm_reach_ip = _cm.public_ip | default('') | trim if (_cm.public_ip | default('') | trim | length > 0) else (_cm.private_ip | default('') | trim) %}
 Deployment portal access profile: {{ deployment_portal_context.access.profile }} ({{ deployment_portal_context.access.environment }})
 Ops host FQDN: {{ deployment_portal_context.ops_host.fqdn }} ({{ deployment_portal_context.ops_host.inventory_group }})
 
@@ -45,9 +47,9 @@ Same VPC (ops private IP):
 {% endif %}
 
 --- Cloudera Manager (direct, no Caddy) ---
-  HTTP (FQDN):  {{ deployment_portal_context.cloudera_manager.ui_url_http }}{% if deployment_portal_context.cloudera_manager.public_ip | default('') | length > 0 %} ({{ deployment_portal_context.cloudera_manager.public_ip }}:{{ cm_http_port }}){% endif %}
+  HTTP (FQDN):  {{ _cm.ui_url_http }}{% if _cm_reach_ip | length > 0 %} ({{ _cm_reach_ip }}:{{ cm_http_port }}){% endif %}
 
-  HTTPS (FQDN): {{ deployment_portal_context.cloudera_manager.ui_url_https }}{% if deployment_portal_context.cloudera_manager.ui_url_https_public | default('') | length > 0 %} ({{ deployment_portal_context.cloudera_manager.public_ip }}:{{ cm_https_port }}){% endif %}
+  HTTPS (FQDN): {{ _cm.ui_url_https }}{% if _cm_reach_ip | length > 0 %} ({{ _cm_reach_ip }}:{{ cm_https_port }}){% endif %}
 
   FQDN:  {{ deployment_portal_context.cloudera_manager.host_fqdn }}
 {% if deployment_portal_context.cloudera_manager.public_ip | default('') | length > 0 %}
