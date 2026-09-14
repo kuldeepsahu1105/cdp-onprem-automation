@@ -23,6 +23,31 @@
   register: pgsql_client_usr_bin_psql_stat
   when: not (pgsql_client_psql_stat.stat.exists | default(false) | bool)
 
+- name: Stat Amazon Linux native versioned psql paths on DB host (cap may differ from postgresql_version)
+  ansible.builtin.stat:
+    path: "/usr/pgsql-{{ item }}/bin/psql"
+  loop: "{{ postgres_db_host_psql_probe_versions | default([]) | unique | list }}"
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  register: pgsql_client_probe_versioned_psql_stat
+  when:
+    - not (pgsql_client_psql_stat.stat.exists | default(false) | bool)
+    - not (
+        pgsql_client_usr_bin_psql_stat is defined
+        and (pgsql_client_usr_bin_psql_stat.stat.exists | default(false) | bool)
+      )
+
+- name: Record PostgreSQL DB host psql path from probed versioned install
+  ansible.builtin.set_fact:
+    postgres_db_host_psql_cmd: "/usr/pgsql-{{ item.item }}/bin/psql"
+  loop: "{{ pgsql_client_probe_versioned_psql_stat.results | default([]) }}"
+  when:
+    - postgres_db_host_psql_cmd is not defined
+    - item.stat is defined
+    - item.stat.exists | default(false) | bool
+  loop_control:
+    label: "{{ item.item | default('unknown') }}"
+
 - name: Record PostgreSQL DB host psql path from configured versioned install
   ansible.builtin.set_fact:
     postgres_db_host_psql_cmd: "/usr/pgsql-{{ postgresql_version }}/bin/psql"
