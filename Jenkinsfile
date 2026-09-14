@@ -470,13 +470,17 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
           git rev-parse HEAD
           git log -1 --oneline
         """
-        sh 'chmod +x jenkins/scripts/*.sh clone_and_run_terraform.sh clone_and_run_terraform_destroy.sh clone_and_run_pvc_automation.sh generate_inventory.sh jenkins/scripts/clean-workspace-pycache.sh 2>/dev/null || true'
+        sh '''
+          set -euo pipefail
+          find jenkins/scripts -maxdepth 1 -name '*.sh' -exec chmod +x {} +
+          chmod +x clone_and_run_terraform.sh clone_and_run_terraform_destroy.sh clone_and_run_pvc_automation.sh generate_inventory.sh 2>/dev/null || true
+        '''
         sh """
           set -euo pipefail
           export CREDENTIALS_USER='${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}'
           export ENVIRONMENT='${params.ENVIRONMENT?.trim() ?: 'development'}'
           export HOL_AUTO_EXEC_DIR='${env.HOL_AUTO_EXEC_DIR}'
-          ./jenkins/scripts/setup-holautosa-workdir.sh
+          bash jenkins/scripts/setup-holautosa-workdir.sh
         """
       }
     }
