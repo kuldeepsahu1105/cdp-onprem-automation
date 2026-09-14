@@ -1,108 +1,32 @@
 ---
-# Idempotent CM PostgreSQL databases (roles + CREATE DATABASE). Same SQL as playbook 23.
-# Delegates to postgres_inventory_host when scm or Reports Manager (rman) database is missing.
-# Existence checks: become root only — TCP psql with PGPASSWORD on 127.0.0.1 (not become_user postgres;
-# RHEL targets often lack ACL support for Ansible's unprivileged temp-file chmod).
-# When scm and rman already exist, one debug line and no create/psql-client probe.
+# Idempotent CM DBs (scm + Reports Manager rman). Root + PGPASSWORD + TCP to 127.0.0.1 only — no become_user postgres.
+# When both databases exist: one debug line and no further tasks in this import.
 
-- name: Check whether CM scm database exists in PostgreSQL
-  ansible.builtin.command:
-    argv:
-      - psql
-      - -h
-      - "127.0.0.1"
-      - -p
-      - "{{ postgres_port | string }}"
-      - -U
-      - "{{ postgres_user }}"
-      - -d
-      - "{{ postgres_db }}"
-      - -tAc
-      - "SELECT 1 FROM pg_database WHERE datname='{{ scm_db_name }}'"
+- name: List CM scm and Reports Manager databases on PostgreSQL (install psql if missing)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    command -v psql >/dev/null || dnf install -y postgresql
+    psql -h 127.0.0.1 -p "{{ postgres_port }}" -U "{{ postgres_user }}" -d "{{ postgres_db }}" -tAc \
+      "SELECT datname FROM pg_database WHERE datname IN ('{{ scm_db_name }}','{{ cm_cms_reports_manager_db_name }}')"
   environment:
     PGPASSWORD: "{{ postgres_password }}"
   delegate_to: "{{ postgres_inventory_host }}"
   become: true
-  register: cm_scm_database_check
+  register: cm_db_list
   changed_when: false
-  failed_when: false
-  no_log: true
 
-- name: Check whether Reports Manager database exists in PostgreSQL
-  ansible.builtin.command:
-    argv:
-      - psql
-      - -h
-      - "127.0.0.1"
-      - -p
-      - "{{ postgres_port | string }}"
-      - -U
-      - "{{ postgres_user }}"
-      - -d
-      - "{{ postgres_db }}"
-      - -tAc
-      - "SELECT 1 FROM pg_database WHERE datname='{{ cm_cms_reports_manager_db_name }}'"
-  environment:
-    PGPASSWORD: "{{ postgres_password }}"
-  delegate_to: "{{ postgres_inventory_host }}"
-  become: true
-  register: cm_rman_database_check
-  changed_when: false
-  failed_when: false
-  no_log: true
-
-- name: CM DBs scm+rman present — skipping init
+- name: CM DBs present — skipping
   ansible.builtin.debug:
-    msg: CM DBs scm+rman present — skipping init
+    msg: CM DBs present — skipping
   when:
-    - cm_scm_database_check.stdout | default('') | trim == '1'
-    - cm_rman_database_check.stdout | default('') | trim == '1'
+    - scm_db_name in (cm_db_list.stdout_lines | map('trim') | list)
+    - cm_cms_reports_manager_db_name in (cm_db_list.stdout_lines | map('trim') | list)
 
-- name: Fail when CM database existence checks could not run
-  ansible.builtin.fail:
-    msg: >-
-      Could not query PostgreSQL for CM databases scm/rman on {{ postgres_inventory_host }}
-      (host={{ postgres_host_fqdn }}, port={{ postgres_port }}, db={{ postgres_db }}, user={{ postgres_user }}).
-      scm check rc={{ cm_scm_database_check.rc | default('?') }}, stdout={{ cm_scm_database_check.stdout | default('') | trim }}.
-      rman check rc={{ cm_rman_database_check.rc | default('?') }}, stdout={{ cm_rman_database_check.stdout | default('') | trim }}.
-      stderr (redacted)={{ (cm_scm_database_check.stderr | default('') ~ cm_rman_database_check.stderr | default(''))
-        | trim
-        | regex_replace(postgres_password | default(''), '***')
-        | regex_replace('PGPASSWORD=\\S+', 'PGPASSWORD=***') }}.
-      Ensure playbook 23 completed on {{ postgres_inventory_host }} and postgres_password matches
-      group_vars / Jenkins ANSIBLE_GROUP_VARS_YAML.
-  when:
-    - (cm_scm_database_check.rc | default(1) | int != 0) or (cm_rman_database_check.rc | default(1) | int != 0)
-    - not (
-        (cm_scm_database_check.stdout | default('') | trim == '1')
-        and (cm_rman_database_check.stdout | default('') | trim == '1')
-      )
-
-- name: Create CM PostgreSQL databases and roles when scm or Reports Manager database is missing
+- name: Create CM PostgreSQL databases when scm or Reports Manager database is missing
   when: >
-    (cm_scm_database_check.stdout | default('') | trim != '1')
-    or (cm_rman_database_check.stdout | default('') | trim != '1')
+    scm_db_name not in (cm_db_list.stdout_lines | map('trim') | list)
+    or cm_cms_reports_manager_db_name not in (cm_db_list.stdout_lines | map('trim') | list)
   block:
-    - name: Confirm psql client is available on PostgreSQL inventory host
-      ansible.builtin.command:
-        argv:
-          - bash
-          - -lc
-          - command -v psql
-      delegate_to: "{{ postgres_inventory_host }}"
-      become: true
-      register: cm_postgres_psql_path
-      changed_when: false
-      failed_when: false
-
-    - name: Fail when psql is required to create CM databases but is not installed
-      ansible.builtin.fail:
-        msg: >-
-          psql is not available on {{ postgres_inventory_host }} but CM database
-          "{{ scm_db_name }}" or "{{ cm_cms_reports_manager_db_name }}" appears missing.
-          Complete playbook 23_setup_postgres.yml on the PostgreSQL host.
-      when: cm_postgres_psql_path.rc | default(1) | int != 0
-
     - name: Generate CM database init SQL script from template
       ansible.builtin.template:
         src: templates/create_cm_dbs.sql.j2
@@ -114,11 +38,11 @@
     - name: Run CM database init SQL on PostgreSQL
       ansible.builtin.command:
         argv:
-          - "{{ cm_postgres_psql_path.stdout | trim }}"
+          - psql
           - -v
           - ON_ERROR_STOP=1
           - -h
-          - "127.0.0.1"
+          - 127.0.0.1
           - -p
           - "{{ postgres_port | string }}"
           - -U
@@ -133,14 +57,4 @@
       become: true
       register: cm_db_init_sql
       changed_when: cm_db_init_sql.rc == 0
-      failed_when: >
-        (cm_db_init_sql.rc | default(1) | int != 0) or
-        ('ERROR' in (cm_db_init_sql.stderr | default('')))
-      no_log: true
-
-    - name: Display CM database init SQL output
-      ansible.builtin.debug:
-        msg: "{{ cm_db_init_sql.stdout | default('') | replace('\t', '    ') | split('\n') }}"
-      when:
-        - cm_db_init_sql.stdout is defined
-        - (cm_db_init_sql.stdout | default('') | trim) | length > 0
+      failed_when: cm_db_init_sql.rc | default(1) | int != 0
