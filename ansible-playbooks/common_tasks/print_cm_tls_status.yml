@@ -9,7 +9,6 @@
         cm_api_https_active | default(
           (
             (cm_protocol | default('http')) == 'https'
-            or (autotls_enabled | default(false) | bool)
             or ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
           ),
           true
@@ -29,7 +28,6 @@
               'https'
               if (
                 (cm_protocol | default('http')) == 'https'
-                or (autotls_enabled | default(false) | bool)
                 or ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
               )
               else 'http'

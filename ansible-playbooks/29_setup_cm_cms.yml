@@ -15,6 +15,9 @@
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
 
+    - name: CM API — read TLS / Auto-TLS state for CMS messaging
+      ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
+
     - name: Print CMS target host
       ansible.builtin.debug:
         msg:

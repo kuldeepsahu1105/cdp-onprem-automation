@@ -1,9 +1,9 @@
 ---
-# Ask Cloudera Manager whether Auto-TLS is configured (do not infer only from :7183 probes).
+# Ask Cloudera Manager whether Auto-TLS is configured (GET /cm/config; do not infer Auto-TLS from :7183 alone).
 
 - name: CM API — GET CM global configuration
   ansible.builtin.uri:
-    url: "{{ cm_api_url }}/cm/config"
+    url: "{{ cm_api_url }}/cm/config?view=full"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -12,6 +12,40 @@
     status_code: [200, 301, 303]
   register: _cm_autotls_config_api
   delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
+
+- name: CM API — GET CM global configuration over HTTPS when HTTP config failed
+  ansible.builtin.uri:
+    url: >-
+      {{
+        'https://' + (
+          cm_api_probe_host
+          if (cm_api_uri_delegate_to | default('') | length > 0)
+          else cm_api_client_host
+        ) + ':' + (cm_https_port | string) + '/api/' + cm_api_version + '/cm/config?view=full'
+      }}
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: _cm_autotls_config_api_https_retry
+  delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
+  when:
+    - _cm_autotls_config_api is failed or (_cm_autotls_config_api.status | default(0) not in [200, 301, 303])
+    - cm_api_version | default('') | length > 0
+    - (cm_protocol | default('http')) != 'https'
+
+- name: CM API — adopt HTTPS config response when HTTP config was unreachable
+  ansible.builtin.set_fact:
+    _cm_autotls_config_api: "{{ _cm_autotls_config_api_https_retry }}"
+    cm_protocol: https
+    cm_api_port: "{{ cm_https_port }}"
+    cm_api_https_active: true
+  when:
+    - _cm_autotls_config_api_https_retry is defined
+    - _cm_autotls_config_api_https_retry is succeeded
+    - _cm_autotls_config_api_https_retry.status | default(0) in [200, 301, 303]
 
 - name: CM API — parse Auto-TLS flags from CM configuration
   ansible.builtin.set_fact:
@@ -79,25 +113,26 @@
         or ((_cm_autotls_ca_cert_value | default('') | trim | length) > 0)
       }}
 
-- name: CM API — set TLS mode from CM config and working API protocol
+- name: CM API — set HTTPS active from probes and CM config fetch
   ansible.builtin.set_fact:
     cm_api_https_active: >-
       {{
-        (cm_protocol | default('http')) == 'https'
-        or (autotls_enabled | default(false) | bool)
+        cm_api_https_active | default(false) | bool
+        or (cm_protocol | default('http')) == 'https'
         or ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+        or (_cm_autotls_config_api is succeeded and (_cm_autotls_config_api.status | default(0) in [200, 301, 303])
+            and (cm_protocol | default('http')) == 'https')
       }}
+
+- name: CM API — set TLS mode from CM config and working API protocol
+  ansible.builtin.set_fact:
     cm_tls_mode: >-
       {{
         'auto_tls'
         if (cm_autotls_api_enabled | default(false) | bool)
         else (
           'https'
-          if (
-            (cm_protocol | default('http')) == 'https'
-            or (autotls_enabled | default(false) | bool)
-            or ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
-          )
+          if (cm_api_https_active | default(false) | bool)
           else 'http'
         )
       }}
@@ -108,7 +143,6 @@
       {{
         (cm_api_https_active | default(false) | bool)
         or (cm_autotls_api_enabled | default(false) | bool)
-        or (autotls_enabled | default(false) | bool)
       }}
 
 - name: CM API — print TLS / Auto-TLS state from CM API configuration
@@ -119,4 +153,5 @@
     msg: >-
       CM agents should use use_tls={{ cm_agent_use_tls | default(false) | bool }}.
       generateCmca skip uses CM config Auto-TLS flags / CA cert, not HTTPS UI alone
-      (probe autotls_enabled={{ autotls_enabled | default(false) | bool }}).
+      (API HTTPS active={{ cm_api_https_active | default(false) | bool }},
+      enable_auto_tls / CA in config={{ cm_autotls_api_enabled | default(false) | bool }}).
