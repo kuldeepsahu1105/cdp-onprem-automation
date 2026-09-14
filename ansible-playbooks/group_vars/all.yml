@@ -586,7 +586,14 @@ cm_priv_key_passphrase: "" # If private key is encrypted, provide cm_priv_key_pa
 cm_srvr_sudo_user: "root" # Set the default SSH user for key-based/password-based authentication
 
 # Cloudera Manager Auto-TLS
-use_freeipa_for_crt_mgmt: false # Set to true if FreeIPA is used for certificate management
+# Trust the FreeIPA CA (/etc/ipa/ca.crt) inside the Auto-TLS-generated CM truststore — cloudera-labs
+# cm_autotls reference passes trustedCaCerts=/etc/ipa/ca.crt to generateCmca when FreeIPA issues certs.
+# Auto-derived from identity_provider so FreeIPA deployments get IPA CA trust (LDAPS bind, Auto-TLS
+# clients trusting IPA-issued certs elsewhere) without an extra toggle. Set explicitly (true/false) to
+# override — e.g. false to skip IPA CA trust even on FreeIPA, or true to force it under AD.
+# resolve_cm_autotls_trusted_ca.yml re-checks /etc/ipa/ca.crt exists on the CM host before generateCmca
+# and falls back to false (with a warning) rather than sending a path CM cannot read.
+use_freeipa_for_crt_mgmt: "{{ (identity_provider_effective == 'freeipa') | bool }}"
 # Run generateCmca even when CM API reports Auto-TLS already configured (repair / re-apply)
 cm_autotls_force_run: false
 # After Auto-TLS CM restart in 27: agent reconcile batch size ("100%" = all hosts, "25%" or "1" = serial waves).
