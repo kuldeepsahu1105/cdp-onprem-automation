@@ -18,7 +18,7 @@
 
 - name: Wait for PostgreSQL on CM database psql target
   ansible.builtin.wait_for:
-    host: "{{ postgres_ensure_cm_db_psql_host }}"
+    host: "{{ postgres_ensure_cm_db_psql_host_effective }}"
     port: "{{ postgres_port }}"
     delay: 2
     timeout: 120

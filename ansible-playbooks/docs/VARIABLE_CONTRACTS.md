@@ -105,7 +105,8 @@ See also: `docs/RUNBOOK.md` (URL verification tiers), `docs/REFERENCE.md` (group
 | `postgres_inventory_group_resolved` | `group_vars/all.yml` | Auto: `[postgres]` → `[postgresql]` → `[db]` → `cldr-mngr`; pin with `postgres_inventory_group` |
 | `postgres_inventory_host` | `group_vars/all.yml` | `groups[postgres_inventory_group_resolved][0]` — `ensure_cm_postgres_databases.yml` delegates all `psql` here (play **24** on `cldr-mngr`, play **29** on `localhost`) |
 | `postgres_host_fqdn` | `group_vars/all.yml` | CM/CMS JDBC and Reports Manager probe host |
-| `postgres_ensure_cm_db_psql_host` | `group_vars/all.yml` | Alias of `postgres_host_fqdn` — TCP target for delegated `psql` on `postgres_inventory_host` (matches CM JDBC; avoids loopback when Postgres binds the host FQDN/IP) |
+| `postgres_ensure_cm_db_psql_host` | `group_vars/all.yml` | Optional override (`""` = auto). When set via `-e`, used as `psql -h` on `postgres_inventory_host`. Private VPC IPs only make sense when the controller is in the VPC; external controllers should leave unset or use a host reachable from the DB node. |
+| `postgres_ensure_cm_db_psql_host_effective` | `resolve_postgres_ensure_cm_db_psql_host.yml` (localhost) | Auto: `postgres_host_fqdn` when `ansible_control_reach_public_only` is false (in-VPC/private profile); `127.0.0.1` when public/external. Imports `detect_ansible_control_reachability.yml` when reachability facts are missing. |
 | `postgres_db_host_psql_cmd` | `ensure_cm_postgres_databases.yml` | `psql` path on `postgres_inventory_host` — from versioned `/usr/pgsql-<ver>/bin/psql`, `/usr/bin/psql`, or `which psql` after stat; Amazon Linux uses native `postgresql<cap>` (no PGDG); RHEL 8/9 uses PGDG + `postgresql<postgresql_version>`. |
 
 Optional inventory: add a dedicated group (e.g. `[postgresql]` with one host) and `cldr_hostname` in host vars; leave `postgres_inventory_group` empty for auto-detect, or set `postgres_inventory_group: postgresql` to pin.

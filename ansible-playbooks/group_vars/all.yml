@@ -452,8 +452,10 @@ postgres_inventory_group_resolved: >-
 postgres_inventory_host: "{{ groups[postgres_inventory_group_resolved][0] }}"
 postgres_host_fqdn: >-
   {{ hostvars[postgres_inventory_host].cldr_hostname | default(postgres_inventory_host) }}.{{ cluster_domain }}
-# psql -h for ensure_cm_postgres_databases.yml (delegated on postgres_inventory_host): CM JDBC FQDN (Postgres listens on host IP/FQDN, not loopback).
-postgres_ensure_cm_db_psql_host: "{{ postgres_host_fqdn }}"
+# psql -h for ensure_cm_postgres_databases.yml (delegated on postgres_inventory_host). Empty = auto:
+# in-VPC/private controller profile → postgres_host_fqdn (same as CM JDBC); external/public → 127.0.0.1 on DB host.
+# Override: -e postgres_ensure_cm_db_psql_host=<host> (private IP only when the controller is in the VPC).
+postgres_ensure_cm_db_psql_host: ""
 
 # Cloudera Management Service (CMS) - NOT the CDP base cluster
 # CMS roles on cldr-mngr; Reports Manager JDBC uses postgres_host_fqdn above.
