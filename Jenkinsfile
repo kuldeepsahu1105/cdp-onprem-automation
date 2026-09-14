@@ -443,13 +443,23 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
         sh '''
           set -euo pipefail
           chmod +x jenkins/scripts/clean-workspace-pycache.sh 2>/dev/null || true
+          pycache_sudo=0
           if [[ -x jenkins/scripts/clean-workspace-pycache.sh ]]; then
-            ./jenkins/scripts/clean-workspace-pycache.sh
+            bash jenkins/scripts/clean-workspace-pycache.sh
           elif [[ -d ansible-playbooks ]]; then
-            find ansible-playbooks -type d -name __pycache__ -print0 2>/dev/null | while IFS= read -r -d '' d; do
+            while IFS= read -r -d '' d; do
               chmod -R u+w "$d" 2>/dev/null || true
-              rm -rf "$d" 2>/dev/null || sudo -n rm -rf "$d" 2>/dev/null || true
-            done
+              if rm -rf "$d" 2>/dev/null; then
+                continue
+              fi
+              if sudo -n rm -rf "$d" 2>/dev/null; then
+                pycache_sudo=1
+              fi
+            done < <(find ansible-playbooks -type d -name __pycache__ -print0 2>/dev/null || true)
+          fi
+          ws="${WORKSPACE:-$PWD}"
+          if [[ "$pycache_sudo" == 1 ]] || { [[ -d "$ws/.git/objects" ]] && ! [[ -w "$ws/.git/objects" ]]; }; then
+            bash jenkins/scripts/clean-workspace-pycache.sh --restore-workspace-owner
           fi
         '''
       }
