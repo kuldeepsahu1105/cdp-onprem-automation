@@ -308,6 +308,8 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 
 ### Phase 3 — Cloudera Manager
 
+**Auto-TLS default:** `autotls_enabled` defaults to **`true`** in `group_vars/all.yml` (override with Jenkins `ANSIBLE_GROUP_VARS_YAML` or `-e autotls_enabled=false` for manual TLS only). Playbook **`27_setup_cm_autotls.yml`** is **not** part of **`CM_INSTALL`** / `DEPLOY_PHASE=3` — it runs in the next stage (**`CM_TLS_KRB_LDAP`** / `cm_tls`, legacy phase 4) after CM is up on HTTP `:7180`. With the default, **27** calls **`POST /cm/commands/generateCmca`**, restarts CM, and reconciles agents so the **CM UI is HTTPS on `:7183`** (Cloudera Auto-TLS, not a hand-installed cert). Jenkins **`CM_INSTALL` alone** leaves CM on `:7180` until **`CM_TLS_KRB_LDAP`** (or `DEPLOY_PHASE=all`).
+
 | Playbook | Description |
 |---|---|
 | `20_setup_cm_repos.yml` | **Repo router** — internal web + mirror or public archive config |
