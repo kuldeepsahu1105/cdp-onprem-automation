@@ -1035,6 +1035,86 @@ monitoring_grafana_admin_user: admin
 monitoring_grafana_admin_password: "{{ postgres_password }}"
 monitoring_prometheus_extra_targets: []
 
+# node_exporter — host-level metrics (CPU/mem/disk/net) on cluster hosts, scraped by the
+# Prometheus container on the ops host (32_setup_monitoring_stack.yml / install_node_exporter.yml).
+# Runs as a systemd service outside Docker so it reports the real host, not the container namespace.
+monitoring_node_exporter_enabled: true
+monitoring_node_exporter_version: "1.8.2"
+monitoring_node_exporter_port: 9100
+monitoring_node_exporter_bin_dir: /usr/local/bin
+monitoring_node_exporter_user: node_exporter
+monitoring_node_exporter_group: node_exporter
+monitoring_node_exporter_download_base_url: https://github.com/prometheus/node_exporter/releases/download
+# Inventory groups that receive node_exporter + a Prometheus scrape job. Override to narrow scope
+# (e.g. exclude ecs-workers on very large clusters). Scrape targets always use private_ip — the
+# Prometheus container reaches these hosts over the VPC/private network, not the public IP.
+monitoring_node_exporter_host_groups:
+  - ipaserver
+  - cldr-mngr
+  - base-masters
+  - base-workers
+  - ecs-masters
+  - ecs-workers
+
+# process_exporter — per-process CPU/memory/IO ("process advisor" style host process metrics),
+# scraped by the same Prometheus container. Runs as a pinned systemd binary (same pattern as
+# node_exporter, not a container) so process accounting reflects the real host process tree.
+monitoring_process_exporter_enabled: true
+monitoring_process_exporter_version: "0.8.7"
+monitoring_process_exporter_port: 9256
+monitoring_process_exporter_bin_dir: /usr/local/bin
+monitoring_process_exporter_user: process_exporter
+monitoring_process_exporter_group: process_exporter
+monitoring_process_exporter_download_base_url: https://github.com/ncabatoff/process-exporter/releases/download
+monitoring_process_exporter_config_dir: /etc/process_exporter
+# Inventory groups that receive process_exporter + a Prometheus scrape job. Defaults to the same
+# scope as node_exporter; narrow (e.g. drop ecs-workers) on very large clusters to limit cardinality.
+monitoring_process_exporter_host_groups: "{{ monitoring_node_exporter_host_groups }}"
+# process-exporter -config.path process_names matchers (grouped by cmdline regex; first match wins).
+# One Prometheus series per named group instead of one per PID. Override/extend to track more processes.
+monitoring_process_exporter_process_names:
+  - name: "cloudera-scm-server"
+    cmdline: ['cloudera-scm-server']
+  - name: "cloudera-scm-agent"
+    cmdline: ['cloudera-scm-agent']
+  - name: "postgres"
+    cmdline: ['postgres']
+  - name: "java"
+    cmdline: ['.*\.jar', 'java']
+  - name: "docker"
+    cmdline: ['dockerd', 'containerd', 'containerd-shim.*']
+  - name: "sshd"
+    cmdline: ['sshd']
+  - name: "chronyd"
+    cmdline: ['chronyd']
+  - name: "node_exporter"
+    cmdline: ['node_exporter']
+  - name: "process_exporter"
+    cmdline: ['process_exporter']
+# When true, append a catch-all matcher grouping every other process by executable name (comm).
+monitoring_process_exporter_catch_all: true
+
+# Grafana provisioning (datasources + dashboards) rendered under {{ monitoring_config_dir }}/grafana/…
+# and bind-mounted read-only into the Grafana container (see monitoring_docker-compose.yml.j2).
+# Gated by deployment_portal_monitoring_routes_enabled — same as the rest of the monitoring stack.
+monitoring_grafana_provisioning_enabled: true
+
+# Prometheus alerting rules (InstanceDown, high CPU/mem) rendered to {{ monitoring_config_dir }}/rules/
+# and loaded via rule_files in prometheus.yml. Alertmanager route/receiver stays minimal (a
+# webhook placeholder) so labs work without any external notification integration configured.
+monitoring_alert_rules_enabled: true
+monitoring_alert_instance_down_for: "2m"
+monitoring_alert_high_cpu_threshold: 85
+monitoring_alert_high_cpu_for: "10m"
+monitoring_alert_high_mem_threshold: 90
+monitoring_alert_high_mem_for: "10m"
+# Alertmanager route grouping and optional webhook receiver (empty = accept/ack alerts, no external
+# notification integration; set to a real endpoint, e.g. Slack/Opsgenie webhook relay, to notify out).
+monitoring_alertmanager_group_by:
+  - alertname
+  - severity
+monitoring_alertmanager_receiver_webhook_url: ""
+
 # Service users/groups removed during E2E cleanup
 cleanup_service_users:
   - hdfs

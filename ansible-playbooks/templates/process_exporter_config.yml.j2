@@ -1,0 +1,17 @@
+# Ansible-managed process-exporter -config.path (see common_tasks/install_process_exporter.yml).
+# Groups processes by cmdline regex so Prometheus gets one series per named group instead of one
+# per PID (namedprocess_namegroup_*). First matching entry wins; keep specific matchers before the
+# catch-all. Override monitoring_process_exporter_process_names in group_vars to track more services.
+process_names:
+{% for entry in monitoring_process_exporter_process_names %}
+  - name: "{{ entry.name }}"
+    cmdline:
+{% for pattern in entry.cmdline %}
+      - '{{ pattern }}'
+{% endfor %}
+{% endfor %}
+{% if monitoring_process_exporter_catch_all | default(true) | bool %}
+  - name: "{% raw %}{{.Comm}}{% endraw %}"
+    cmdline:
+      - '.+'
+{% endif %}

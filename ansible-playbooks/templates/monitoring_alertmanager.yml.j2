@@ -1,8 +1,14 @@
 route:
   receiver: default
+  group_by: {{ monitoring_alertmanager_group_by | default(['alertname']) | to_json }}
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
 
 receivers:
   - name: default
+{% if monitoring_alertmanager_receiver_webhook_url | default('') | length > 0 %}
+    webhook_configs:
+      - url: {{ monitoring_alertmanager_receiver_webhook_url }}
+        send_resolved: true
+{% endif %}

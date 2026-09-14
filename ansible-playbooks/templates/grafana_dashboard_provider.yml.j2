@@ -1,0 +1,17 @@
+# Ansible-managed Grafana provisioning — dashboard provider (see
+# https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards).
+# Loads static JSON files copied to /var/lib/grafana/dashboards (see templates/grafana_dashboards/
+# and common_tasks/sync_deployment_portal_content.yml).
+apiVersion: 1
+
+providers:
+  - name: cldr-default
+    orgId: 1
+    folder: "Cloudera Monitoring"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

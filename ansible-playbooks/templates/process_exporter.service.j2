@@ -1,0 +1,24 @@
+[Unit]
+Description=Prometheus Process Exporter
+Documentation=https://github.com/ncabatoff/process-exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User={{ monitoring_process_exporter_user }}
+Group={{ monitoring_process_exporter_group }}
+ExecStart={{ monitoring_process_exporter_bin_dir }}/process-exporter \
+  --config.path={{ monitoring_process_exporter_config_dir }}/config.yml \
+  --web.listen-address=0.0.0.0:{{ monitoring_process_exporter_port }}
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+# Read /proc for processes owned by other users (CM/Postgres/Java service accounts).
+AmbientCapabilities=CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
+CapabilityBoundingSet=CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
+
+[Install]
+WantedBy=multi-user.target

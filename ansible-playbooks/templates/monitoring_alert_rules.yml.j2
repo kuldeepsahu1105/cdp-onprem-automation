@@ -1,0 +1,32 @@
+# Ansible-managed Prometheus alerting rules (see common_tasks/sync_deployment_portal_content.yml).
+# Minimal, conservative baseline: instance reachability + basic CPU/memory thresholds against
+# node_exporter metrics. Extend with more groups/rules as the cluster's alerting needs grow.
+groups:
+  - name: cldr-cluster-basic-alerts
+    rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: {{ monitoring_alert_instance_down_for | default('2m') }}
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {% raw %}{{ $labels.instance }}{% endraw %} down"
+          description: "Job {% raw %}{{ $labels.job }}{% endraw %} on {% raw %}{{ $labels.instance }}{% endraw %} has been unreachable for more than {{ monitoring_alert_instance_down_for | default('2m') }}."
+
+      - alert: HostHighCpuLoad
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > {{ monitoring_alert_high_cpu_threshold | default(85) }}
+        for: {{ monitoring_alert_high_cpu_for | default('10m') }}
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU load on {% raw %}{{ $labels.instance }}{% endraw %}"
+          description: "CPU load on {% raw %}{{ $labels.instance }}{% endraw %} is above {{ monitoring_alert_high_cpu_threshold | default(85) }}% for more than {{ monitoring_alert_high_cpu_for | default('10m') }}."
+
+      - alert: HostHighMemoryUsage
+        expr: 100 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100) > {{ monitoring_alert_high_mem_threshold | default(90) }}
+        for: {{ monitoring_alert_high_mem_for | default('10m') }}
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {% raw %}{{ $labels.instance }}{% endraw %}"
+          description: "Memory usage on {% raw %}{{ $labels.instance }}{% endraw %} is above {{ monitoring_alert_high_mem_threshold | default(90) }}% for more than {{ monitoring_alert_high_mem_for | default('10m') }}."

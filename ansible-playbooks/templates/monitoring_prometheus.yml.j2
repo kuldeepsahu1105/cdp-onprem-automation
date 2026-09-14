@@ -8,6 +8,11 @@ alerting:
         - targets:
             - {{ monitoring_alertmanager_container }}:9093
 
+{% if monitoring_alert_rules_enabled | default(true) | bool %}
+rule_files:
+  - /etc/prometheus/rules/*.yml
+{% endif %}
+
 scrape_configs:
   - job_name: prometheus
     static_configs:
@@ -18,6 +23,34 @@ scrape_configs:
     static_configs:
       - targets:
           - {{ monitoring_cadvisor_container }}:8080
+
+{% if monitoring_node_exporter_enabled | default(true) | bool and (deployment_portal_node_exporter_targets | default([]) | length > 0) %}
+  - job_name: node_exporter
+    static_configs:
+{% for node_target in deployment_portal_node_exporter_targets %}
+      - targets:
+          - {{ node_target.target }}
+        labels:
+          instance: {{ node_target.instance }}
+{% for label_key, label_val in (node_target.labels | default({})).items() %}
+          {{ label_key }}: {{ label_val }}
+{% endfor %}
+{% endfor %}
+{% endif %}
+
+{% if monitoring_process_exporter_enabled | default(true) | bool and (deployment_portal_process_exporter_targets | default([]) | length > 0) %}
+  - job_name: process_exporter
+    static_configs:
+{% for proc_target in deployment_portal_process_exporter_targets %}
+      - targets:
+          - {{ proc_target.target }}
+        labels:
+          instance: {{ proc_target.instance }}
+{% for label_key, label_val in (proc_target.labels | default({})).items() %}
+          {{ label_key }}: {{ label_val }}
+{% endfor %}
+{% endfor %}
+{% endif %}
 
 {% for target in monitoring_prometheus_extra_targets | default([]) %}
   - job_name: {{ target.job_name }}
