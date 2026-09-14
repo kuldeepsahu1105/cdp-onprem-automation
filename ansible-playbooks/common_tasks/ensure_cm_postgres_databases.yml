@@ -92,41 +92,77 @@
 - name: Default PostgreSQL DB host psql command when client install will provide PATH
   ansible.builtin.set_fact:
     postgres_db_host_psql_cmd: psql
-  when: postgres_db_host_psql_cmd is not defined
-
-- name: Install PostgreSQL PGDG repository on DB host (RedHat family)
-  ansible.builtin.package:
-    name: >-
-      https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{
-        hostvars[postgres_inventory_host].ansible_distribution_major_version
-      }}-{{ hostvars[postgres_inventory_host].ansible_architecture }}/pgdg-redhat-repo-latest.noarch.rpm
-    state: present
-    disable_gpg_check: true
-  delegate_to: "{{ postgres_inventory_host }}"
-  become: true
   when:
+    - postgres_db_host_psql_cmd is not defined
     - not (postgres_db_host_psql_present | bool)
-    - postgres_db_host_os_family == 'RedHat'
 
-- name: Ensure PostgreSQL client on DB host (RedHat family)
-  ansible.builtin.package:
-    name: "postgresql{{ postgresql_version }}"
-    state: present
-  delegate_to: "{{ postgres_inventory_host }}"
-  become: true
-  when:
-    - not (postgres_db_host_psql_present | bool)
-    - postgres_db_host_os_family == 'RedHat'
+- name: Install PostgreSQL client and PGDG repo on DB host when psql is missing
+  when: not (postgres_db_host_psql_present | bool)
+  block:
+    - name: Record PostgreSQL DB host EL major on play host for PGDG RPM URL
+      ansible.builtin.set_fact:
+        postgres_db_host_el_major: >-
+          {{
+            hostvars[postgres_inventory_host]['ansible_distribution_major_version']
+            | default(ansible_distribution_major_version | default(''))
+          }}
+      when: postgres_db_host_el_major is not defined
 
-- name: Ensure PostgreSQL client on DB host (Debian family)
-  ansible.builtin.package:
-    name: "postgresql-client-{{ postgresql_version }}"
-    state: present
-  delegate_to: "{{ postgres_inventory_host }}"
-  become: true
-  when:
-    - not (postgres_db_host_psql_present | bool)
-    - postgres_db_host_os_family == 'Debian'
+    - name: Record PostgreSQL DB host architecture on play host for PGDG RPM URL
+      ansible.builtin.set_fact:
+        postgres_db_host_architecture: >-
+          {{
+            hostvars[postgres_inventory_host]['ansible_architecture']
+            | default(ansible_architecture | default(''))
+          }}
+      when: postgres_db_host_architecture is not defined
+
+    - name: Download PostgreSQL PGDG repository RPM on DB host (RedHat family)
+      ansible.builtin.get_url:
+        url: >-
+          https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{
+            postgres_db_host_el_major
+          }}-{{ postgres_db_host_architecture }}/pgdg-redhat-repo-latest.noarch.rpm
+        dest: /tmp/pgdg-redhat-repo-latest.noarch.rpm
+        mode: "0644"
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+      when: postgres_db_host_os_family == 'RedHat'
+
+    - name: Stat PostgreSQL PGDG repository RPM on DB host (RedHat family)
+      ansible.builtin.stat:
+        path: /tmp/pgdg-redhat-repo-latest.noarch.rpm
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+      register: postgres_db_host_pgdg_rpm_stat
+      when: postgres_db_host_os_family == 'RedHat'
+
+    - name: Install PostgreSQL PGDG repository from local RPM on DB host (RedHat family)
+      ansible.builtin.dnf:
+        name: /tmp/pgdg-redhat-repo-latest.noarch.rpm
+        state: present
+        disable_gpg_check: true
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+      when:
+        - postgres_db_host_os_family == 'RedHat'
+        - postgres_db_host_pgdg_rpm_stat.stat.exists | default(false)
+
+    - name: Ensure PostgreSQL client on DB host (RedHat family)
+      ansible.builtin.package:
+        name: "postgresql{{ postgresql_version }}"
+        state: present
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+      when: postgres_db_host_os_family == 'RedHat'
+
+    - name: Ensure PostgreSQL client on DB host (Debian family)
+      ansible.builtin.package:
+        name: "postgresql-client-{{ postgresql_version }}"
+        state: present
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+      when: postgres_db_host_os_family == 'Debian'
 
 - name: List CM scm and Reports Manager databases on PostgreSQL
   ansible.builtin.command:
