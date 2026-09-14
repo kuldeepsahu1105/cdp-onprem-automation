@@ -126,6 +126,9 @@
               ansible.builtin.set_fact:
                 use_password: "{{ cm_node_sudo_password is defined and cm_node_sudo_password | trim | length > 0 }}"
 
+            - name: Auto-TLS — resolve trusted CA bundle for generateCmca (Cloudera Labs cm_autotls trustedCaCerts)
+              ansible.builtin.import_tasks: common_tasks/resolve_cm_autotls_trusted_ca.yml
+
             - name: Create Auto-TLS JSON file (Password-based)
               ansible.builtin.template:
                 src: auto-tls.json.j2

@@ -1,0 +1,37 @@
+---
+# Cloudera Labs cm_autotls reference: trust the FreeIPA CA bundle on the CM host before generateCmca
+# (auto-tls*.json.j2 → trustedCaCerts=/etc/ipa/ca.crt). use_freeipa_for_crt_mgmt defaults to true when
+# identity_provider_effective == freeipa (group_vars/all.yml) but the file must actually exist on the
+# CM host — verify it here instead of trusting the toggle blindly, so a not-yet-joined/broken FreeIPA
+# client host does not send generateCmca a trustedCaCerts path CM cannot read.
+
+- name: Auto-TLS trusted CA — default effective flag from configured intent
+  ansible.builtin.set_fact:
+    cm_autotls_trust_freeipa_ca_effective: "{{ use_freeipa_for_crt_mgmt | default(false) | bool }}"
+
+- name: Auto-TLS trusted CA — verify FreeIPA CA bundle exists on CM host
+  ansible.builtin.stat:
+    path: "{{ cm_autotls_freeipa_ca_cert_path | default('/etc/ipa/ca.crt') }}"
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true
+  register: cm_autotls_freeipa_ca_stat
+  when: cm_autotls_trust_freeipa_ca_effective | bool
+
+- name: Auto-TLS trusted CA — disable trustedCaCerts when FreeIPA CA bundle is missing on CM host
+  ansible.builtin.set_fact:
+    cm_autotls_trust_freeipa_ca_effective: false
+  when:
+    - cm_autotls_trust_freeipa_ca_effective | bool
+    - not (cm_autotls_freeipa_ca_stat.stat.exists | default(false) | bool)
+
+- name: Auto-TLS trusted CA — warn when FreeIPA CA bundle is missing on CM host
+  ansible.builtin.debug:
+    msg: >-
+      use_freeipa_for_crt_mgmt is true (identity_provider_effective=freeipa) but
+      {{ cm_autotls_freeipa_ca_cert_path | default('/etc/ipa/ca.crt') }} is missing on
+      {{ cm_manager_inventory_host | default('cldr-mngr') }} — generateCmca will run WITHOUT trustedCaCerts
+      this time. Confirm the CM host is an enrolled FreeIPA client (16_setup_identity_client.yml) and
+      re-run 27_setup_cm_autotls.yml (or -e cm_autotls_force_run=true) to add IPA CA trust afterwards.
+  when:
+    - use_freeipa_for_crt_mgmt | default(false) | bool
+    - not (cm_autotls_trust_freeipa_ca_effective | bool)
