@@ -148,6 +148,26 @@
 - name: CM API — print TLS / Auto-TLS state from CM API configuration
   ansible.builtin.import_tasks: print_cm_tls_status.yml
 
+- name: CM API — consolidated TLS / API summary
+  ansible.builtin.debug:
+    msg:
+      - >-
+        Controller HTTPS :{{ cm_https_port | default(7183) }} probe:
+        {{ 'ok' if (cm_api_controller_https_reachable | default(false) | bool) else 'not used/failed' }}
+        (controller_probe_succeeded={{ cm_api_controller_probe_succeeded | default(false) | bool }})
+      - "cm_api_url: {{ cm_api_url | default('unset') }}"
+      - >-
+        CM /cm/config Auto-TLS flags:
+        {{ _cm_autotls_config_flag_hits | default([]) | join(', ')
+        if (_cm_autotls_config_flag_hits | default([]) | length > 0)
+        else 'none' }}
+        ; CA cert in config={{ 'yes' if ((_cm_autotls_ca_cert_value | default('') | trim | length) > 0) else 'no' }}
+      - >-
+        cm_tls_mode={{ cm_tls_mode | default('?') }},
+        cm_api_https_active={{ cm_api_https_active | default(false) | bool }},
+        cm_autotls_api_enabled={{ cm_autotls_api_enabled | default(false) | bool }}
+      - "CM agents: recommended use_tls={{ cm_agent_use_tls | default(false) | bool }}"
+
 - name: CM API — print agent TLS reconcile hint after TLS state
   ansible.builtin.debug:
     msg: >-

@@ -24,17 +24,14 @@
 #   ansible.builtin.debug:
 #     msg: "✏️  Cloudera Manager Private IP: {{ cm_private_ip }}"
 
-- name: Get Public IP of CM server (if available)
-  ansible.builtin.uri:
-    url: "https://api.ipify.org/"
-    return_content: yes
-  register: public_ip_result
-  delegate_to: "{{ groups['cldr-mngr'][0] }}"
-  ignore_errors: yes
-
-- name: Set Public IP (if available)
+- name: Set public access IP from cldr-mngr inventory ansible_host
   ansible.builtin.set_fact:
-    cm_public_ip: "{{ public_ip_result.content | default('N/A') }}"
+    cm_public_ip: >-
+      {{
+        cm_public_inventory_ip
+        if (cm_public_inventory_ip | default('') | length > 0)
+        else 'N/A'
+      }}
 
 # - name: Print Public IP
 #   ansible.builtin.debug:

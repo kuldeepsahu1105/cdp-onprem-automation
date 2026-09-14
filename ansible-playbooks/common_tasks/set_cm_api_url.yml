@@ -3,7 +3,13 @@
 
 - name: CM API — set connection context when missing
   ansible.builtin.import_tasks: resolve_cm_api_probe_context.yml
-  when: cm_api_probe_host | default('') | length == 0
+  when:
+    - cm_api_probe_host | default('') | length == 0
+    - not (
+        (cm_api_discovery_succeeded | default(false) | bool)
+        and (cm_api_controller_probe_succeeded | default(false) | bool)
+        and (cm_api_client_host | default('') | length > 0)
+      )
 
 - name: CM API — use manager public IP on Ansible controller
   ansible.builtin.set_fact:
@@ -226,6 +232,21 @@
   when:
     - cm_api_discovery_succeeded | default(false) | bool
     - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+    - not (
+        (cm_api_controller_probe_succeeded | default(false) | bool)
+        and (cm_api_controller_https_reachable | default(false) | bool)
+      )
+
+- name: CM API — keep HTTPS protocol from controller address scan
+  ansible.builtin.set_fact:
+    cm_protocol: https
+    cm_api_port: "{{ cm_https_port }}"
+    cm_api_https_active: true
+    cm_tls_mode: https
+  when:
+    - (cm_api_controller_probe_succeeded | default(false) | bool)
+    - (cm_api_controller_https_reachable | default(false) | bool)
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
 
 - name: CM API — set protocol and port from /api/version results
   ansible.builtin.set_fact:
@@ -268,19 +289,30 @@
           ) else cm_http_port
         )
       }}
-  when: not (cm_api_discovery_succeeded | default(false) | bool)
+  when:
+    - not (cm_api_discovery_succeeded | default(false) | bool)
+    - not (
+        (cm_api_controller_probe_succeeded | default(false) | bool)
+        and (cm_api_controller_https_reachable | default(false) | bool)
+      )
 
 - name: CM API — set HTTPS active from working /api/version probe
   ansible.builtin.set_fact:
     cm_api_https_active: >-
       {{
-        (cm_protocol | default('http')) == 'https'
-        and ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+        (cm_api_https_active | default(false) | bool)
+        or (
+          (cm_protocol | default('http')) == 'https'
+          and ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+        )
       }}
     autotls_enabled: >-
       {{
-        (cm_protocol | default('http')) == 'https'
-        and ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+        (autotls_enabled | default(false) | bool)
+        or (
+          (cm_protocol | default('http')) == 'https'
+          and ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+        )
       }}
 
 - name: Fail when CM API HTTP and HTTPS checks did not succeed
