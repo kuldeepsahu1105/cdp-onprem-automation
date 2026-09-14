@@ -1035,6 +1035,27 @@ monitoring_grafana_admin_user: admin
 monitoring_grafana_admin_password: "{{ postgres_password }}"
 monitoring_prometheus_extra_targets: []
 
+# node_exporter — host-level metrics (CPU/mem/disk/net) on cluster hosts, scraped by the
+# Prometheus container on the ops host (32_setup_monitoring_stack.yml / install_node_exporter.yml).
+# Runs as a systemd service outside Docker so it reports the real host, not the container namespace.
+monitoring_node_exporter_enabled: true
+monitoring_node_exporter_version: "1.8.2"
+monitoring_node_exporter_port: 9100
+monitoring_node_exporter_bin_dir: /usr/local/bin
+monitoring_node_exporter_user: node_exporter
+monitoring_node_exporter_group: node_exporter
+monitoring_node_exporter_download_base_url: https://github.com/prometheus/node_exporter/releases/download
+# Inventory groups that receive node_exporter + a Prometheus scrape job. Override to narrow scope
+# (e.g. exclude ecs-workers on very large clusters). Scrape targets always use private_ip — the
+# Prometheus container reaches these hosts over the VPC/private network, not the public IP.
+monitoring_node_exporter_host_groups:
+  - ipaserver
+  - cldr-mngr
+  - base-masters
+  - base-workers
+  - ecs-masters
+  - ecs-workers
+
 # Service users/groups removed during E2E cleanup
 cleanup_service_users:
   - hdfs
