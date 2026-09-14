@@ -1,5 +1,6 @@
 ---
-# Skip agent restart when config is unchanged and cloudera-scm-agent is already active (IPA-style idempotent skip).
+# Idempotent CM agent service: systemctl restart only when config.ini changed or one-shot Auto-TLS;
+# start (not restart) when agent was inactive but config unchanged.
 
 - name: CM agent — check systemd state before restart
   ansible.builtin.command: systemctl is-active cloudera-scm-agent
@@ -26,25 +27,59 @@
       }}
   changed_when: false
 
-- name: CM agent — derive whether Auto-TLS requires agent restart (from localhost play 27)
+- name: CM agent — derive whether Auto-TLS still requires one cluster agent restart this run
   ansible.builtin.set_fact:
-    cm_agent_restart_after_autotls: >-
+    cm_agent_autotls_restart_pending: >-
       {{
-        hostvars['localhost'].cm_restart_after_autotls_this_run
-        | default(hostvars['localhost'].autotls_applied_this_run | default(false))
+        (
+          hostvars['localhost'].cm_restart_after_autotls_this_run
+          | default(false)
+          | bool
+        )
+        or (
+          hostvars['localhost'].autotls_applied_this_run
+          | default(false)
+          | bool
+        )
+      }}
+      and not (
+        hostvars['localhost'].cm_agents_restarted_after_autotls_this_run
+        | default(false)
         | bool
+      )
+  changed_when: false
+
+- name: CM agent — derive whether config or Auto-TLS requires systemctl restart (not merely start)
+  ansible.builtin.set_fact:
+    cm_agent_systemd_restart: >-
+      {{
+        (cm_agent_config_changed | default(false) | bool)
+        or (cm_agent_autotls_restart_pending | default(false) | bool)
       }}
   changed_when: false
 
-- name: CM agent — skip restart (already active, config unchanged)
+- name: CM agent — decide if agent service action is required
+  ansible.builtin.set_fact:
+    cm_agent_restart_needed: >-
+      {{
+        (cm_agent_pre_active.rc | int != 0)
+        or (cm_agent_config_changed | default(false) | bool)
+        or (cm_agent_autotls_restart_pending | default(false) | bool)
+      }}
+  changed_when: false
+
+- name: CM agent — restart / start decision (summary)
   ansible.builtin.debug:
     msg: >-
-      cloudera-scm-agent is already active on {{ inventory_hostname }} and config.ini
-      (server_host / use_tls) is unchanged — skipping agent restart.
-  when:
-    - cm_agent_pre_active.rc | int == 0
-    - not (cm_agent_config_changed | default(false) | bool)
-    - not (cm_agent_restart_after_autotls | default(false) | bool)
+      CM agent service gate: batch size {{ ansible_play_batch | length }}.
+      Sample host {{ inventory_hostname }}:
+      active={{ (cm_agent_pre_active.rc | int == 0) }},
+      config_changed={{ cm_agent_config_changed | default(false) | bool }},
+      autotls_one_shot_pending={{ cm_agent_autotls_restart_pending | default(false) | bool }},
+      action={{ 'none' if not (cm_agent_restart_needed | default(false) | bool) else ('restart' if (cm_agent_systemd_restart | default(false) | bool) else 'start') }}.
+      Per-host: no systemctl when already active and config unchanged (and no pending Auto-TLS restart).
+  run_once: true
+  changed_when: false
 
 - name: Restart Cloudera Manager agent after config reconcile
   ansible.builtin.systemd:
@@ -52,20 +87,21 @@
     enabled: true
     state: restarted
   register: cm_agent_restart
-  when: >-
-    (cm_agent_pre_active.rc | int != 0)
-    or (cm_agent_config_changed | default(false) | bool)
-    or (cm_agent_restart_after_autotls | default(false) | bool)
-
-- name: CM agent — skip post-restart wait (no restart performed)
-  ansible.builtin.debug:
-    msg: CM agent health check skipped (no restart this host).
   when:
-    - cm_agent_pre_active.rc | int == 0
-    - not (cm_agent_config_changed | default(false) | bool)
-    - not (cm_agent_restart_after_autotls | default(false) | bool)
+    - cm_agent_restart_needed | default(false) | bool
+    - cm_agent_systemd_restart | default(false) | bool
 
-- name: Require Cloudera Manager agent active after restart
+- name: Start Cloudera Manager agent when inactive and config unchanged
+  ansible.builtin.systemd:
+    name: cloudera-scm-agent
+    enabled: true
+    state: started
+  register: cm_agent_restart
+  when:
+    - cm_agent_restart_needed | default(false) | bool
+    - not (cm_agent_systemd_restart | default(false) | bool)
+
+- name: Require Cloudera Manager agent active after service action
   ansible.builtin.command: systemctl is-active cloudera-scm-agent
   register: cm_agent_active_check
   changed_when: false
@@ -73,11 +109,4 @@
   retries: "{{ cm_agent_active_wait_retries | default(12) }}"
   delay: "{{ cm_agent_active_wait_delay | default(5) }}"
   until: cm_agent_active_check.rc | int == 0
-  when: >-
-    (cm_agent_pre_active.rc | int != 0)
-    or (cm_agent_config_changed | default(false) | bool)
-    or (cm_agent_restart_after_autotls | default(false) | bool)
-
-- name: Display CM agent active status
-  ansible.builtin.debug:
-    msg: "cloudera-scm-agent is {{ cm_agent_active_check.stdout | default(cm_agent_pre_active.stdout) }} on {{ inventory_hostname }}"
+  when: cm_agent_restart_needed | default(false) | bool

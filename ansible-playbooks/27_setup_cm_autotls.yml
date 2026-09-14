@@ -13,6 +13,7 @@
         autotls_applied_this_run: false
         cm_restart_after_autotls_this_run: false
         cm_autotls_generate_cmca_ran: false
+        cm_agents_restarted_after_autotls_this_run: false
 
     - name: Capture Auto-TLS setup intent from inventory (before HTTPS probes may set autotls_enabled)
       ansible.builtin.set_fact:
@@ -280,6 +281,27 @@
     - name: Reconcile CM agent configuration and service
       ansible.builtin.import_tasks: common_tasks/reconcile_cm_agents.yml
       when: cm_agent_reconcile_after_autotls | default(true) | bool
+
+- name: Record CM agent Auto-TLS restart wave completed (once per playbook run)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Skip agent restart marker when Auto-TLS unchanged this run
+      ansible.builtin.meta: end_play
+      when: cm_autotls_noop_this_run | default(false) | bool
+
+    - name: Skip agent restart marker when no Auto-TLS agent restart was required
+      ansible.builtin.meta: end_play
+      when: >-
+        not (
+          (cm_restart_after_autotls_this_run | default(false) | bool)
+          or (autotls_applied_this_run | default(false) | bool)
+        )
+
+    - name: Mark cluster CM agents restarted after Auto-TLS for this run
+      ansible.builtin.set_fact:
+        cm_agents_restarted_after_autotls_this_run: true
 
 - name: Ensure Auto-TLS agent truststore on CM host after agent reconcile
   hosts: localhost
