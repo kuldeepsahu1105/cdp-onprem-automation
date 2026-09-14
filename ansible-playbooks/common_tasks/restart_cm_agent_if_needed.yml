@@ -11,16 +11,20 @@
   ansible.builtin.set_fact:
     cm_agent_config_changed: >-
       {{
-        (cm_agent_config_server_host is changed)
-        or (
-          cm_agent_config_use_tls_enable is defined
-          and (cm_agent_config_use_tls_enable is changed)
+        (
+          not (cm_agent_config_server_host.skipped | default(false))
+          and (cm_agent_config_server_host.changed | default(false))
         )
         or (
-          cm_agent_config_use_tls_disable is defined
-          and (cm_agent_config_use_tls_disable is changed)
+          not (cm_agent_config_use_tls_enable.skipped | default(false))
+          and (cm_agent_config_use_tls_enable.changed | default(false))
+        )
+        or (
+          not (cm_agent_config_use_tls_disable.skipped | default(false))
+          and (cm_agent_config_use_tls_disable.changed | default(false))
         )
       }}
+  changed_when: false
 
 - name: CM agent — skip restart (already active, config unchanged)
   ansible.builtin.debug:

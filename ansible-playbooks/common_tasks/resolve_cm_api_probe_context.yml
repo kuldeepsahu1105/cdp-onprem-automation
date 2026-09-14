@@ -33,3 +33,4 @@
 - name: CM API — mark probe context resolved for this play
   ansible.builtin.set_fact:
     cm_api_context_resolved_this_play: true
+  when: not (cm_api_context_resolved_this_play | default(false) | bool)

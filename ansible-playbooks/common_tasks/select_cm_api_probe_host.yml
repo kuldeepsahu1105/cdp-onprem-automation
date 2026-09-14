@@ -332,6 +332,16 @@
         )
         else 'http'
       }}
+    cm_api_controller_https_reachable: >-
+      {{
+        (
+          cm_api_probe_https_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length
+        ) > 0
+      }}
   when:
     - cm_api_probe_delegate_to | default('') | length == 0
     - cm_api_probe_from_controller_public | default(false) | bool
@@ -509,6 +519,52 @@
           | list
           | length > 0
         )
+      }}
+    cm_protocol: >-
+      {{
+        'https'
+        if (
+          cm_api_probe_https_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length > 0
+        )
+        else 'http'
+      }}
+    cm_api_port: >-
+      {{
+        cm_https_port
+        if (
+          cm_api_probe_https_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length > 0
+        )
+        else cm_http_port
+      }}
+    cm_api_https_active: >-
+      {{
+        (
+          cm_api_probe_https_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length > 0
+        )
+      }}
+    cm_tls_mode: >-
+      {{
+        'https'
+        if (
+          cm_api_probe_https_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length > 0
+        )
+        else 'http'
       }}
   when:
     - cm_api_probe_host_discovery is defined or cm_api_probe_https_discovery is defined

@@ -205,29 +205,8 @@
     - name: Configure CM agent server_host to cldr-mngr FQDN
       ansible.builtin.import_tasks: common_tasks/configure_cm_agent.yml
 
-    - name: Check Cloudera Manager agent systemd state before start
-      ansible.builtin.command: systemctl is-active cloudera-scm-agent
-      register: cm_agent_pre_active
-      changed_when: false
-      failed_when: false
-
-    - name: Skip CM agent start — already active
-      ansible.builtin.debug:
-        msg: >-
-          cloudera-scm-agent is already active on {{ inventory_hostname }} — skipping systemd start.
-      when: cm_agent_pre_active.rc | int == 0
-
-    - name: Ensure Cloudera Manager agent is enabled
-      ansible.builtin.systemd:
-        name: cloudera-scm-agent
-        enabled: yes
-
-    - name: Start Cloudera Manager agent when not active
-      ansible.builtin.systemd:
-        name: cloudera-scm-agent
-        state: started
-      register: cm_services_status
-      when: cm_agent_pre_active.rc | int != 0
+    - name: Start or restart CM agent only when config.ini changed or agent not active
+      ansible.builtin.import_tasks: common_tasks/restart_cm_agent_if_needed.yml
 
 # CM API probe, password alignment, and verify: playbook 25_verify_cm.yml (once per CM install phase).
 
