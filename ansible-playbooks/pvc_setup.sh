@@ -299,7 +299,8 @@ run_phase_portal() {
 run_phase_2() {
   local _phase="2 — Identity (FreeIPA / AD)"
   ui_phase_header "$_phase"
-  run_playbook detect_identity.yml
+  # 11_identity_setup.yml imports detect_identity.yml as its own first play — do not
+  # run detect_identity.yml here too (was a duplicate assert+debug on every identity run).
   _install_ipaserver_ec2_startstop
   run_playbook 11_identity_setup.yml
   _maybe_run_deployment_portal_refresh "portal,ipa,identity"

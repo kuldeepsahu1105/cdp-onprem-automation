@@ -1,5 +1,9 @@
 ---
 # Single source of truth: scripts/lib/ansible_env.sh (pvc_setup, clone wrapper, CI runners, manual playbooks).
+# Router playbooks (11/20/37) import 00_ensure_collections.yml directly *and* import sub-playbooks
+# that each import it again — guard so the ansible-galaxy check runs once per ansible-playbook
+# process instead of once per imported file when run standalone (pvc_setup.sh already dedupes
+# across separate processes via `--skip-tags collections`; this dedupes within one process).
 - name: Ensure Ansible collections (shared control-node helper)
   ansible.builtin.command:
     cmd: >-
@@ -9,3 +13,8 @@
   register: galaxy_ensure
   changed_when: "'Installing Ansible collections' in (galaxy_ensure.stdout | default(''))"
   failed_when: galaxy_ensure.rc != 0
+  when: not (ansible_collections_ensured_this_run | default(false) | bool)
+
+- name: Mark Ansible collections ensured for this run (skip nested duplicate imports)
+  ansible.builtin.set_fact:
+    ansible_collections_ensured_this_run: true
