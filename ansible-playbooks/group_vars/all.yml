@@ -570,9 +570,9 @@ deployment_portal_external_url_verify: warn
 # Or map: deployment_service_external_url_verify: { cm: warn, grafana: skip }
 # Tier B direct https://ipaserver.<domain> from controller: auto skips on public remote when Caddy IPA vhosts exist
 deployment_ipa_direct_fqdn_external_url_verify: auto
-# Set true before cm_tls / 27_setup_cm_autotls.yml when Cloudera Auto-TLS (generateCmca) is desired.
-# Leave false for manual-TLS-only CM (:7183 HTTPS without Auto-TLS in CM config) — playbook 27 skips generateCmca then.
-autotls_enabled: false
+# Cloudera Auto-TLS (generateCmca) in 27_setup_cm_autotls.yml — default on.
+# Set false for manual-TLS-only CM (:7183 HTTPS without Auto-TLS in CM config); playbook 27 skips generateCmca then.
+autotls_enabled: true
 
 ##### cm_server autotls variables:
 # SSH Authentication (Choose one)

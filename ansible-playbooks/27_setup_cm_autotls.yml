@@ -14,7 +14,7 @@
 
     - name: Capture Auto-TLS setup intent from inventory (before HTTPS probes may set autotls_enabled)
       ansible.builtin.set_fact:
-        cm_autotls_setup_intent: "{{ autotls_enabled | default(false) | bool }}"
+        cm_autotls_setup_intent: "{{ autotls_enabled | default(true) | bool }}"
 
     - name: CM API — set connection context
       ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml

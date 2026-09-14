@@ -391,7 +391,7 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `caddy_vhost_public_base` | `pvc.cloudera-labs.com` | Base domain for `svc.<ip-dashed>.<base>` |
 | `caddy_vhost_dns_mode` | `embedded_ip` | `embedded_ip`, `classic_nipio`, or `flat` |
 | `caddy_vhost_service_names.cadvisor` | `cadvisor` | Hostname prefix for cAdvisor lab vhost (`cadvisor.<ip-dashed>.<base>:81` → container **8080**) |
-| `autotls_enabled` | `false` | CM listens on `:7183` (direct; not via Caddy) |
+| `autotls_enabled` | `true` | Cloudera Auto-TLS (generateCmca); set `false` for manual TLS on `:7183` only |
 | `portal_automation_owner_display` | `Kuldeep Sahu` | **Portal** badge — automation/repo author (not the EC2 deployment owner) |
 | `deployment_owner` | `""` | **Deployment owner** badge — from `.tfvars.yaml` `owner`, Jenkins `OWNER`, Terraform `pvc_cluster_tags.owner` |
 | `deployment_name_prefix` | `""` | **Prefix** badge — from `.tfvars.yaml` `environment`, Jenkins `ENVIRONMENT`, Terraform workspace + `{environment}-*` resource names |
