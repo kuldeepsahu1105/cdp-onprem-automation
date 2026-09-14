@@ -36,13 +36,87 @@
       Could not determine OS family for PostgreSQL host {{ postgres_inventory_host }}.
       Ensure the host is reachable and facts can be gathered, or set postgres_db_host_os_family.
 
+- name: Stat versioned psql binary on PostgreSQL DB host
+  ansible.builtin.stat:
+    path: >-
+      {{
+        '/usr/pgsql-' ~ (postgresql_version | string) ~ '/bin/psql'
+        if postgres_db_host_os_family == 'RedHat'
+        else '/usr/lib/postgresql/' ~ (postgresql_version | string) ~ '/bin/psql'
+      }}
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  register: postgres_db_host_psql_versioned_stat
+
+- name: Resolve psql in PATH on PostgreSQL DB host when versioned binary missing
+  ansible.builtin.command:
+    cmd: which psql
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  register: postgres_db_host_which_psql
+  changed_when: false
+  failed_when: false
+  when: not (postgres_db_host_psql_versioned_stat.stat.exists | default(false))
+
+- name: Record whether PostgreSQL client is already on DB host
+  ansible.builtin.set_fact:
+    postgres_db_host_psql_present: >-
+      {{
+        (postgres_db_host_psql_versioned_stat.stat.exists | default(false))
+        or (
+          (postgres_db_host_which_psql.rc | default(1) | int) == 0
+          and (postgres_db_host_which_psql.stdout | default('') | trim) | length > 0
+        )
+      }}
+
+- name: Record PostgreSQL DB host psql path from versioned install
+  ansible.builtin.set_fact:
+    postgres_db_host_psql_cmd: >-
+      {{
+        '/usr/pgsql-' ~ (postgresql_version | string) ~ '/bin/psql'
+        if postgres_db_host_os_family == 'RedHat'
+        else '/usr/lib/postgresql/' ~ (postgresql_version | string) ~ '/bin/psql'
+      }}
+  when:
+    - postgres_db_host_psql_cmd is not defined
+    - postgres_db_host_psql_versioned_stat.stat.exists | default(false)
+
+- name: Record PostgreSQL DB host psql path from PATH
+  ansible.builtin.set_fact:
+    postgres_db_host_psql_cmd: "{{ postgres_db_host_which_psql.stdout | trim }}"
+  when:
+    - postgres_db_host_psql_cmd is not defined
+    - (postgres_db_host_which_psql.rc | default(1) | int) == 0
+    - (postgres_db_host_which_psql.stdout | default('') | trim) | length > 0
+
+- name: Default PostgreSQL DB host psql command when client install will provide PATH
+  ansible.builtin.set_fact:
+    postgres_db_host_psql_cmd: psql
+  when: postgres_db_host_psql_cmd is not defined
+
+- name: Install PostgreSQL PGDG repository on DB host (RedHat family)
+  ansible.builtin.package:
+    name: >-
+      https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{
+        hostvars[postgres_inventory_host].ansible_distribution_major_version
+      }}-{{ hostvars[postgres_inventory_host].ansible_architecture }}/pgdg-redhat-repo-latest.noarch.rpm
+    state: present
+    disable_gpg_check: true
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  when:
+    - not (postgres_db_host_psql_present | bool)
+    - postgres_db_host_os_family == 'RedHat'
+
 - name: Ensure PostgreSQL client on DB host (RedHat family)
   ansible.builtin.package:
     name: "postgresql{{ postgresql_version }}"
     state: present
   delegate_to: "{{ postgres_inventory_host }}"
   become: true
-  when: postgres_db_host_os_family == 'RedHat'
+  when:
+    - not (postgres_db_host_psql_present | bool)
+    - postgres_db_host_os_family == 'RedHat'
 
 - name: Ensure PostgreSQL client on DB host (Debian family)
   ansible.builtin.package:
@@ -50,12 +124,14 @@
     state: present
   delegate_to: "{{ postgres_inventory_host }}"
   become: true
-  when: postgres_db_host_os_family == 'Debian'
+  when:
+    - not (postgres_db_host_psql_present | bool)
+    - postgres_db_host_os_family == 'Debian'
 
 - name: List CM scm and Reports Manager databases on PostgreSQL
   ansible.builtin.command:
     argv:
-      - psql
+      - "{{ postgres_db_host_psql_cmd }}"
       - -h
       - "{{ postgres_ensure_cm_db_psql_host }}"
       - -p
@@ -96,7 +172,7 @@
     - name: Run CM database init SQL on PostgreSQL
       ansible.builtin.command:
         argv:
-          - psql
+          - "{{ postgres_db_host_psql_cmd }}"
           - -v
           - ON_ERROR_STOP=1
           - -h
