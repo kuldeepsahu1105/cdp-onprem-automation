@@ -6,43 +6,31 @@
 - name: CMS — read CM Auto-TLS state for truststore configuration
   ansible.builtin.import_tasks: fetch_cm_autotls_api_state.yml
 
-- name: CMS — verify Auto-TLS truststore file on CM host (agent-cert path)
-  ansible.builtin.stat:
-    path: "{{ cm_cms_autotls_truststore_path }}"
-  delegate_to: "{{ cm_manager_inventory_host }}"
-  become: true
-  register: cms_truststore_file_stat
-
 - name: CMS — decide whether Auto-TLS client truststore is required
   ansible.builtin.set_fact:
     cms_autotls_trust_required: >-
       {{
         (cm_cms_configure_autotls_trust | default(true) | bool)
-        and (
-          (autotls_enabled | default(false) | bool)
-          or (cm_autotls_api_enabled | default(false) | bool)
-          or (cms_truststore_file_stat.stat.exists | default(false) | bool)
-        )
+        and (cm_autotls_api_enabled | default(false) | bool)
       }}
 
 - name: CMS — skip truststore when CM HTTPS is active without Auto-TLS agent certs
   ansible.builtin.debug:
     msg: >-
-      CMS truststore skipped (CM HTTPS without Auto-TLS agent certs).
+      CMS truststore skipped (CM HTTPS without Auto-TLS in CM config).
       cm_api_https_active={{ cm_api_https_active | default(false) }},
       cm_autotls_api_enabled={{ cm_autotls_api_enabled | default(false) }},
-      autotls_enabled={{ autotls_enabled | default(false) }},
       cm_tls_mode={{ cm_tls_mode | default('http') }}.
       Configure MGMT TLS client trust manually in CM UI if Service Monitor cannot reach CM :7183.
   when:
     - not (cms_autotls_trust_required | default(false) | bool)
     - cm_api_https_active | default(false) | bool
+    - not (cm_autotls_api_enabled | default(false) | bool)
 
 - name: CMS — skip truststore when CM is not using TLS
   ansible.builtin.debug:
     msg: >-
       CMS Auto-TLS truststore configuration skipped (CM TLS not active;
-      autotls_enabled={{ autotls_enabled | default(false) }},
       cm_autotls_api_enabled={{ cm_autotls_api_enabled | default(false) }},
       cm_protocol={{ cm_protocol | default('http') }}).
   when:
@@ -80,22 +68,9 @@
     - cms_autotls_trust_required | default(false) | bool
     - (cms_truststore_password | default('') | trim) | length == 0
 
-- name: CMS — fail when Auto-TLS truststore file is missing on CM host
-  ansible.builtin.fail:
-    msg: >-
-      CM Auto-TLS is enabled in CM configuration but truststore {{ cm_cms_autotls_truststore_path }} is missing on
-      {{ cm_cms_hostname }} (inventory {{ cm_manager_inventory_host }}).
-      The file is created on hosts running the CM agent during Auto-TLS (typically the CM host, not worker-only agents).
-      Service Monitor cannot trust CM HTTPS until agent-cert material exists.
-      Re-run 27_setup_cm_autotls.yml (Auto-TLS / generateCmca) and confirm the file exists before 29_setup_cm_cms.yml.
-  when:
-    - cms_autotls_trust_required | default(false) | bool
-    - cms_truststore_file_stat is defined
-    - not (cms_truststore_file_stat.stat.exists | default(false) | bool)
-    - (
-        (cm_autotls_api_enabled | default(false) | bool)
-        or (autotls_enabled | default(false) | bool)
-      )
+- name: CMS — ensure agent truststore on CM host before MGMT ssl_client_truststore_* update
+  ansible.builtin.import_tasks: ensure_cm_autotls_agent_truststore.yml
+  when: cms_autotls_trust_required | default(false) | bool
 
 - name: CMS — read Cloudera Management Service configuration
   ansible.builtin.uri:

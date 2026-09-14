@@ -412,6 +412,9 @@ cm_cms_reports_manager_db_password: rman
 # After 27_setup_cm_autotls.yml, point CMS Java clients (firehose/headlamp) at agent Auto-TLS truststore.
 cm_cms_configure_autotls_trust: true
 cm_cms_autotls_truststore_path: /var/lib/cloudera-scm-agent/agent-cert/cm-auto-global_truststore.jks
+# ensure_cm_autotls_agent_truststore.yml: wait after manager agent restart when JKS missing under Auto-TLS
+cm_autotls_truststore_wait_retries: 12
+cm_autotls_truststore_wait_delay: 10
 # Labs cm_autotls: reconcile MGMT trust + restart CMS in 27 when CMS already exists; full CMS in 29.
 cm_cms_reconcile_trust_after_autotls: true
 cm_cms_restart_after_autotls: true

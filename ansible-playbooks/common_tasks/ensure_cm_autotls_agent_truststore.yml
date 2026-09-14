@@ -1,0 +1,60 @@
+---
+# CM Auto-TLS deploys agent-cert material (including cm-auto-global_truststore.jks) via cloudera-scm-agent
+# on hosts running the agent — typically cldr-mngr. Ansible does not create the JKS; generateCmca + agent restart does.
+# Idempotent: stat; restart manager agent and wait when CM reports Auto-TLS on but file is absent.
+
+- name: Auto-TLS — verify agent truststore file exists on CM host
+  ansible.builtin.stat:
+    path: "{{ cm_cms_autotls_truststore_path }}"
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true
+  register: cm_autotls_truststore_stat
+
+- name: Auto-TLS — restart CM agent on manager when truststore missing under Auto-TLS
+  ansible.builtin.systemd:
+    name: cloudera-scm-agent
+    enabled: true
+    state: restarted
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true
+  register: cm_autotls_truststore_agent_restart
+  when:
+    - cm_autotls_ensure_truststore | default(true) | bool
+    - cm_autotls_api_enabled | default(false) | bool
+    - not (cm_autotls_truststore_stat.stat.exists | default(false) | bool)
+
+- name: Auto-TLS — wait for agent truststore file after manager agent restart
+  ansible.builtin.stat:
+    path: "{{ cm_cms_autotls_truststore_path }}"
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true
+  register: cm_autotls_truststore_stat
+  until: cm_autotls_truststore_stat.stat.exists | default(false) | bool
+  retries: "{{ cm_autotls_truststore_wait_retries | default(12) }}"
+  delay: "{{ cm_autotls_truststore_wait_delay | default(10) }}"
+  when:
+    - cm_autotls_ensure_truststore | default(true) | bool
+    - cm_autotls_api_enabled | default(false) | bool
+    - cm_autotls_truststore_agent_restart is defined
+    - not (cm_autotls_truststore_agent_restart.skipped | default(false))
+
+- name: Auto-TLS — record agent truststore presence for downstream CMS tasks
+  ansible.builtin.set_fact:
+    cm_autotls_truststore_ready: "{{ cm_autotls_truststore_stat.stat.exists | bool }}"
+  when:
+    - cm_autotls_truststore_stat is defined
+    - cm_autotls_truststore_stat is succeeded
+
+- name: Auto-TLS — fail when agent truststore still missing (re-run generateCmca / 27)
+  ansible.builtin.fail:
+    msg: >-
+      Cloudera Manager Auto-TLS is enabled in CM configuration (cm_autotls_api_enabled=true) but
+      {{ cm_cms_autotls_truststore_path }} is missing on {{ cm_manager_inventory_host | default('cldr-mngr') }}.
+      The JKS is created by the CM agent after generateCmca — not by CMS setup alone.
+      Re-run 27_setup_cm_autotls.yml (or -e cm_autotls_force_run=true if CM already reports Auto-TLS),
+      confirm cloudera-scm-agent is active on the manager, then run 29_setup_cm_cms.yml.
+  when:
+    - cm_autotls_truststore_fail_if_missing | default(true) | bool
+    - cm_autotls_api_enabled | default(false) | bool
+    - cm_autotls_truststore_ready is defined
+    - not (cm_autotls_truststore_ready | bool)
