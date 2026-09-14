@@ -19,6 +19,20 @@ scrape_configs:
       - targets:
           - {{ monitoring_cadvisor_container }}:8080
 
+{% if monitoring_node_exporter_enabled | default(true) | bool and (deployment_portal_node_exporter_targets | default([]) | length > 0) %}
+  - job_name: node_exporter
+    static_configs:
+{% for node_target in deployment_portal_node_exporter_targets %}
+      - targets:
+          - {{ node_target.target }}
+        labels:
+          instance: {{ node_target.instance }}
+{% for label_key, label_val in (node_target.labels | default({})).items() %}
+          {{ label_key }}: {{ label_val }}
+{% endfor %}
+{% endfor %}
+{% endif %}
+
 {% for target in monitoring_prometheus_extra_targets | default([]) %}
   - job_name: {{ target.job_name }}
     static_configs:

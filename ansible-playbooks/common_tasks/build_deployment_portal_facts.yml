@@ -36,6 +36,19 @@
         lookup('template', 'deployment_portal_inventory_hosts.j2') | from_yaml | default([], true)
       }}
 
+- name: Render node_exporter Prometheus scrape targets from inventory
+  ansible.builtin.set_fact:
+    deployment_portal_node_exporter_targets: >-
+      {{
+        lookup('template', 'monitoring_node_exporter_targets.j2') | from_yaml | default([], true)
+      }}
+  when: monitoring_node_exporter_enabled | default(true) | bool
+
+- name: Default empty node_exporter scrape targets when disabled
+  ansible.builtin.set_fact:
+    deployment_portal_node_exporter_targets: []
+  when: not (monitoring_node_exporter_enabled | default(true) | bool)
+
 - name: Render EC2 start/stop helper facts for portal and docs
   ansible.builtin.set_fact:
     deployment_portal_ec2_startstop: >-
