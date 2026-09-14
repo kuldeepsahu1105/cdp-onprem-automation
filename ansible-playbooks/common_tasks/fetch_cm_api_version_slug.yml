@@ -15,11 +15,12 @@
   until: cm_api_version_on_probe_delegate is succeeded
   retries: 10
   delay: 6
-  timeout: 30
+  timeout: "{{ cm_api_uri_timeout | default(60) | int }}"
   delegate_to: "{{ cm_api_probe_delegate_to }}"
   when:
     - cm_api_probe_delegate_to | default('') | length > 0
     - cm_api_uri_delegate_to | default('') | length == 0
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
 
 - name: CM API — GET /api/version on cldr-mngr (API calls via manager)
   ansible.builtin.uri:
@@ -33,11 +34,13 @@
     validate_certs: no
   register: cm_api_version_on_uri_delegate
   until: cm_api_version_on_uri_delegate is succeeded
-  retries: 10
-  delay: 6
-  timeout: 30
+  retries: 3
+  delay: 3
+  timeout: "{{ cm_api_uri_timeout | default(60) | int }}"
   delegate_to: "{{ cm_api_uri_delegate_to }}"
-  when: cm_api_uri_delegate_to | default('') | length > 0
+  when:
+    - cm_api_uri_delegate_to | default('') | length > 0
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
 
 - name: CM API — GET /api/version on this play host
   ansible.builtin.uri:
@@ -53,10 +56,11 @@
   until: cm_api_version_on_play_host is succeeded
   retries: 10
   delay: 6
-  timeout: 30
+  timeout: "{{ cm_api_uri_timeout | default(60) | int }}"
   when:
-    - cm_api_probe_delegate_to | default('') | length == 0
     - cm_api_uri_delegate_to | default('') | length == 0
+    - cm_api_probe_delegate_to | default('') | length == 0
+      or (cm_api_controller_probe_succeeded | default(false) | bool)
 
 - name: CM API — parse version string from /api/version
   ansible.builtin.set_fact:
@@ -93,8 +97,13 @@
   ansible.builtin.fail:
     msg: >-
       Cloudera Manager /api/version did not return a version string
-      (host={{ cm_api_probe_host | default(cm_api_client_host) }},
-      checked from={{ cm_api_probe_delegate_to | default(inventory_hostname) }}).
+      (url={{ cm_protocol | default('http') }}://{{ cm_api_probe_host | default(cm_api_client_host) }}:{{ cm_api_port | default('?') }}/api/version,
+      checked from={{ cm_api_uri_delegate_to | default(cm_api_probe_delegate_to | default(inventory_hostname)) }}).
+      {% if cm_api_probe_from_controller_public | default(false) | bool and not (cm_api_controller_probe_succeeded | default(false) | bool) %}
+      Jenkins/public controller: confirm security groups allow :7180/:7183 to the manager public IP (cm_api_connect_host / ansible_host).
+      {% elif cm_api_uri_delegate_to | default('') | length > 0 %}
+      Delegated API calls use bind address {{ cm_api_probe_host }} on {{ cm_api_uri_delegate_to }} — if the controller already reached CM on {{ cm_api_client_host }}, fix cm_api_uri_delegate_to (see select_cm_api_probe_host.yml).
+      {% endif %}
   when: _cm_api_version_content | default('') | length == 0
 
 - name: CM API — set version slug for URL paths
