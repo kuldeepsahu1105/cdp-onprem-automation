@@ -255,3 +255,8 @@
       - "CM /api/version checks: {{ cm_api_probe_host }} on {{ cm_api_probe_delegate_to if (cm_api_probe_delegate_to | default('') | length > 0) else inventory_hostname | default('localhost') }}"
       - "Control reachability: {{ ansible_control_reachability_effective | default('unknown') }} (public controller={{ cm_api_probe_from_controller_public | default(false) }})"
       - "Override with cm_api_connect_host or cm_api_prefer_private_ip in group_vars if needed"
+  when:
+    - not (
+        (cm_autotls_skip_verbose_probe_logs | default(true) | bool)
+        and (cm_api_context_resolved_this_play | default(false) | bool)
+      )

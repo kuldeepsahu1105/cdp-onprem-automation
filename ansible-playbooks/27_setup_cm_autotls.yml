@@ -36,18 +36,19 @@
         - cm_autotls_api_enabled | default(false) | bool
         - not (cm_autotls_force_run | default(false) | bool)
 
-    - name: Skip generateCmca when HTTPS API on 7183 is already active
+    - name: Skip generateCmca when HTTPS CM API on :7183 is already active
       ansible.builtin.debug:
         msg: >-
-          HTTPS API on {{ cm_https_port | default(7183) }} already active
-          (cm_api_url={{ cm_api_url | default('unset') }},
-          cm_api_https_active=true). Skipping generateCmca.
-          Set -e cm_autotls_force_run=true to run generateCmca anyway.
+          HTTPS CM API already active at https://{{ cm_api_client_host | default(cm_host_public | default(cm_api_connect_host | default('?'))) }}:{{ cm_https_port | default(7183) }}
+          — skipping generateCmca. Set -e cm_autotls_force_run=true to run generateCmca anyway.
       when:
         - not (cm_autotls_api_enabled | default(false) | bool)
         - not (cm_autotls_force_run | default(false) | bool)
-        - cm_api_https_active | default(false) | bool
-        - (cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int)
+        - (
+            (cm_api_https_active | default(false) | bool)
+            or (cm_api_controller_https_reachable | default(false) | bool)
+          )
+        - (cm_api_port | default(cm_https_port | default(7183)) | int) == (cm_https_port | default(7183) | int)
 
     - name: Perform Auto-TLS setup when CM reports Auto-TLS off or cm_autotls_force_run
       when: >-
@@ -55,8 +56,11 @@
         or (
           not (cm_autotls_api_enabled | default(false) | bool)
           and not (
-            (cm_api_https_active | default(false) | bool)
-            and ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+            (
+              (cm_api_https_active | default(false) | bool)
+              or (cm_api_controller_https_reachable | default(false) | bool)
+            )
+            and ((cm_api_port | default(cm_https_port | default(7183)) | int) == (cm_https_port | default(7183) | int))
           )
         )
       block:
@@ -196,8 +200,13 @@
       ansible.builtin.meta: end_play
       when: not (autotls_applied_this_run | default(false) | bool)
 
+    - name: CM API — allow probe context refresh after Auto-TLS restart
+      ansible.builtin.set_fact:
+        cm_api_context_resolved_this_play: false
+
     - name: CM API — refresh API URL after restart (public manager IP)
       ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
+      when: not (cm_api_context_resolved_this_play | default(false) | bool)
 
     - name: Set up Cloudera Manager API URL after restart
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml

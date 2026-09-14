@@ -1,6 +1,6 @@
 ---
 # Unified CM TLS / Auto-TLS console line (after set_cm_api_url.yml; optional fetch_cm_autotls_api_state.yml).
-# Sets cm_tls_mode / cm_api_https_active / cm_autotls_api_enabled when fetch was not imported.
+# Sets cm_tls_mode / cm_api_https_active / cm_autotls_api_enabled when fetch did not run.
 
 - name: CM API — derive TLS mode for display when fetch did not run
   ansible.builtin.set_fact:
@@ -38,29 +38,26 @@
       }}
   when: cm_tls_mode is not defined
 
-- name: CM API — print Auto-TLS status
+- name: CM API — print TLS / Auto-TLS summary
   ansible.builtin.debug:
-    msg:
-      - >-
-        CM TLS mode: {{ cm_tls_mode | default('unknown') }}
-        ({% if cm_api_https_active | default(false) | bool -%}
-        {{ cm_protocol | default('https') }} port {{ cm_api_port | default(cm_https_port | default(7183)) }} active
-        {%- else -%}
-        http port {{ cm_api_port | default(cm_http_port | default(7180)) }}
-        {%- endif %})
-      - >-
-        Controller HTTPS :{{ cm_https_port | default(7183) }} scan:
-        {{ 'reachable' if (cm_api_controller_https_reachable | default(false) | bool) else 'not reachable' }}
-        (controller_probe_succeeded={{ cm_api_controller_probe_succeeded | default(false) | bool }},
-        discovery_succeeded={{ cm_api_discovery_succeeded | default(false) | bool }})
-      - >-
-        Manager /api/version probes:
-        HTTPS={{ cm_tls_probe_https.status | default('n/a')
-        if (cm_tls_probe_https is defined and not (cm_tls_probe_https.skipped | default(false) | bool))
-        else 'not run' }},
-        HTTP={{ cm_tls_probe_http.status | default('n/a')
-        if (cm_tls_probe_http is defined and not (cm_tls_probe_http.skipped | default(false) | bool))
-        else 'not run' }}
-      - >-
-        Auto-TLS in CM config: {{ cm_autotls_api_enabled | default('unknown (import fetch_cm_autotls_api_state.yml)') }}
-      - "Working API URL: {{ cm_api_url | default(cm_protocol | default('?') ~ '://?') }}"
+    msg: >-
+      {{
+        (
+          'HTTPS :' + (cm_https_port | default(7183) | string) + ' enabled — ' + (cm_api_url | default('unset'))
+          + (
+            ' ; Auto-TLS in CM config=' + (cm_autotls_api_enabled | default(false) | string)
+            if (cm_autotls_api_enabled is defined)
+            else ''
+          )
+        )
+        if (cm_api_https_active | default(false) | bool)
+        else (
+          'CM API ' + (cm_protocol | default('http')) + ':' + (cm_api_port | default(cm_http_port | default(7180)) | string)
+          + ' — ' + (cm_api_url | default('unset'))
+          + (
+            ' ; Auto-TLS in CM config=' + (cm_autotls_api_enabled | default(false) | string)
+            if (cm_autotls_api_enabled is defined)
+            else ''
+          )
+        )
+      }}

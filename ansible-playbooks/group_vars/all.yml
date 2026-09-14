@@ -516,6 +516,8 @@ cm_srvr_sudo_user: "root" # Set the default SSH user for key-based/password-base
 use_freeipa_for_crt_mgmt: false # Set to true if FreeIPA is used for certificate management
 # Run generateCmca even when CM API reports Auto-TLS already configured (repair / re-apply)
 cm_autotls_force_run: false
+# 27_setup_cm_autotls / resolve_cm_connect_host: skip multi-line "connection target" when probe context already resolved
+cm_autotls_skip_verbose_probe_logs: true
 
 # cloudera.cluster devel/v5 expects cm_client ApiClient(configuration=); PyPI cm-client uses host=.
 # v4.0.0 dropped cluster/cm_config modules — pin v4.4.0 for 31/33 cloudera.cluster.cluster.

@@ -4,6 +4,7 @@
 - name: CM API — set connection context when missing
   ansible.builtin.import_tasks: resolve_cm_api_probe_context.yml
   when:
+    - not (cm_api_context_resolved_this_play | default(false) | bool)
     - cm_api_probe_host | default('') | length == 0
     - not (
         (cm_api_discovery_succeeded | default(false) | bool)
@@ -397,6 +398,15 @@
         )
       }}
 
+- name: CM API — prefer HTTPS :7183 for API URL when probes show TLS active
+  ansible.builtin.set_fact:
+    cm_protocol: https
+    cm_api_port: "{{ cm_https_port }}"
+    cm_api_https_active: true
+  when:
+    - (cm_api_controller_https_reachable | default(false) | bool)
+      or (cm_api_https_active | default(false) | bool)
+
 - name: CM API — set base API URL
   ansible.builtin.set_fact:
     cm_api_url: >-
@@ -409,8 +419,4 @@
 
 - name: CM API — print API URL
   ansible.builtin.debug:
-    msg:
-      - "cm_api_url: {{ cm_api_url }}"
-      - >-
-        CM API reachability: {{ cm_protocol | default('http') }}:{{ cm_api_port | default('?') }}
-        (import fetch_cm_autotls_api_state.yml in the same play for CM TLS mode / Auto-TLS in CM config).
+    msg: "cm_api_url: {{ cm_api_url }}"
