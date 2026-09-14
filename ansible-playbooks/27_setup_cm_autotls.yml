@@ -14,6 +14,7 @@
         cm_restart_after_autotls_this_run: false
         cm_autotls_generate_cmca_ran: false
         cm_agents_restarted_after_autotls_this_run: false
+        cm_agent_mandatory_restart_after_autotls_this_run: false
 
     - name: Capture Auto-TLS setup intent from inventory (before HTTPS probes may set autotls_enabled)
       ansible.builtin.set_fact:
@@ -265,19 +266,24 @@
             or (cm_agent_use_tls | default(false) | bool)
           }}
 
+    - name: Require mandatory cluster CM agent restart after Auto-TLS mutating work
+      ansible.builtin.set_fact:
+        cm_agent_mandatory_restart_after_autotls_this_run: >-
+          {{
+            (cm_restart_after_autotls_this_run | default(false) | bool)
+            or (autotls_applied_this_run | default(false) | bool)
+          }}
+
 - name: Require healthy CM API before cluster-wide agent reconcile after Auto-TLS
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Skip CM API gate when Auto-TLS did not require CM restart this run
+    - name: Skip CM API gate when Auto-TLS did not require agent restart this run
       ansible.builtin.meta: end_play
       when: >-
         cm_autotls_noop_this_run | default(false) | bool
-        or not (
-          (cm_restart_after_autotls_this_run | default(false) | bool)
-          or (autotls_applied_this_run | default(false) | bool)
-        )
+        or not (cm_agent_mandatory_restart_after_autotls_this_run | default(false) | bool)
 
     - name: CM API — must be healthy before mass agent restart
       ansible.builtin.import_tasks: common_tasks/assert_cm_api_healthy_for_agent_reconcile.yml
@@ -298,6 +304,25 @@
       ansible.builtin.import_tasks: common_tasks/reconcile_cm_agents.yml
       when: cm_agent_reconcile_after_autotls | default(true) | bool
 
+- name: Mandatory Cloudera SCM agent restart after Auto-TLS (all cluster agents)
+  hosts: all:!ipaserver
+  become: true
+  serial: "{{ cm_agent_reconcile_serial | default('100%') }}"
+  tasks:
+    - name: Skip mandatory agent restart when Auto-TLS unchanged this run
+      ansible.builtin.meta: end_play
+      when: cm_autotls_noop_this_run | default(false) | bool
+
+    - name: Skip mandatory agent restart when no Auto-TLS mutating work this run
+      ansible.builtin.meta: end_play
+      when: not (cm_agent_mandatory_restart_after_autotls_this_run | default(false) | bool)
+
+    - name: Set OS-specific facts
+      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+    - name: Mandatory restart Cloudera Manager agent after Auto-TLS
+      ansible.builtin.import_tasks: common_tasks/mandatory_restart_cm_agent_after_autotls.yml
+
 - name: Record CM agent Auto-TLS restart wave completed (once per playbook run)
   hosts: localhost
   connection: local
@@ -307,13 +332,9 @@
       ansible.builtin.meta: end_play
       when: cm_autotls_noop_this_run | default(false) | bool
 
-    - name: Skip agent restart marker when no Auto-TLS agent restart was required
+    - name: Skip agent restart marker when mandatory Auto-TLS agent restart did not run
       ansible.builtin.meta: end_play
-      when: >-
-        not (
-          (cm_restart_after_autotls_this_run | default(false) | bool)
-          or (autotls_applied_this_run | default(false) | bool)
-        )
+      when: not (cm_agent_mandatory_restart_after_autotls_this_run | default(false) | bool)
 
     - name: Mark cluster CM agents restarted after Auto-TLS for this run
       ansible.builtin.set_fact:
