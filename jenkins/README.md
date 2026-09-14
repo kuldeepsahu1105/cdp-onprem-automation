@@ -465,7 +465,7 @@ sudo rm -rf /home/holautosa/HOL_AUTO_EXEC_DIR/cdp-onprem-automation/ptgty/terraf
 sudo rm -rf /var/lib/jenkins/workspace/cdp-onprem-automation-deploy/terraform-code/cloudera-pvc-terraform/.terraform
 ```
 
-If **Checkout** fails on `ansible-playbooks/callback_plugins/__pycache__` (Permission denied during `git clean`), on the Jenkins agent run: `sudo rm -rf "$WORKSPACE/ansible-playbooks/callback_plugins/__pycache__"` (or the job workspace path shown in the build log).
+If **Checkout** fails on `ansible-playbooks/callback_plugins/__pycache__` (Permission denied during `git clean`), the **Prepare Workspace** stage runs `jenkins/scripts/clean-workspace-pycache.sh` (sudo when needed, then `chown` the workspace back to the Jenkins user so `.git/objects` stays writable). One-time agent fix if a prior build left root-owned objects: `sudo chown -R jenkins:jenkins "$WORKSPACE"` then re-run the job.
 
 **Required sudoers** (same as AWS creds):
 
