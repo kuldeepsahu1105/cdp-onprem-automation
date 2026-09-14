@@ -711,12 +711,34 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 ## Quick reference — playbook order
 
 ```
-00-09  Prerequisites
-11_identity_setup  Identity + DNS (auto FreeIPA or AD)
-16-21  CM install + license
-22     Auto-TLS
-23-25  Kerberos + LDAP
-24     CMS (Management Service)
-26     Base cluster (HDFS/YARN/ZK)
-99     Cleanup (destructive)
+00        SSH prerequisites (00_setup_ssh_preqs.yml)
+01-09     OS prerequisites
+10        Deployment portal bootstrap
+11        Identity router (FreeIPA or AD, auto-detected)
+12-19     FreeIPA/AD server, DNS, network, client, wildcard
+20-24     CM repos/install + PostgreSQL + CM server/agents
+25        Verify CM
+26        CM license
+27-30     Auto-TLS, CMS, LDAP, Kerberos
+31        Base cluster (HDFS/YARN/ZK)
+32        Monitoring stack
+33-34     ECS cluster + data services
+35        Portal refresh
+36-37     EC2 start/stop automation (ipaserver)
+99        Cleanup (destructive)
 ```
+
+See [`RUN_ORDER.md`](RUN_ORDER.md) for the full sequential index and Jenkins stage mapping.
+
+### Migration: renumbered/de-numbered playbooks (2026-09)
+
+Four playbooks that duplicated another playbook's numeric prefix (`00_*` had three files, `25_*` had two, and `12_*`/`12b_*` collided/sorted unpredictably) were renamed. None of them own a distinct mainline `pvc_setup.sh` sequence slot — they are either always-imported helpers or optional/manual tools — so they were de-numbered instead of assigned a new number. This is a rename only; no task logic changed.
+
+| Old filename | New filename | Notes |
+|---|---|---|
+| `00_ensure_collections.yml` | `ensure_collections.yml` | Imported by every numbered playbook; still runnable standalone |
+| `00_detect_identity.yml` | `detect_identity.yml` | Still runs immediately before `11_identity_setup.yml` in `pvc_setup.sh` phase 2 |
+| `12b_ipa_deep_recovery.yml` | `ipa_deep_recovery.yml` | Optional recovery helper before playbook **12**; unchanged behavior/vars (`ipa_server_deep_recovery`) |
+| `25_reconcile_cm_agents.yml` | `reconcile_cm_agents.yml` | Optional agent reconcile helper; unchanged behavior/vars |
+
+If you have scripts, cron jobs, or forks that invoke any of the old filenames directly (`ansible-playbook -i inventory.ini 00_detect_identity.yml`, etc.), update them to the new filename — `pvc_setup.sh`, Jenkins, and every in-repo doc/reference were updated in the same commit. See [`RUN_ORDER.md` → Migration: renumbering duplicate prefixes](RUN_ORDER.md#migration-renumbering-duplicate-prefixes-2026-09) for the full rationale.
