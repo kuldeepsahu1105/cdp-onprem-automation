@@ -87,11 +87,18 @@
     msg: "{{ ipa_client_output.stderr_lines }}"
   when: ipa_client_output is changed
 
-- name: Ensure Kerberos ticket is available
+- name: Stat IPA client default.conf before Kerberos verify
+  ansible.builtin.stat:
+    path: /etc/ipa/default.conf
+  register: ipa_client_default_conf_now
+
+- name: Ensure Kerberos ticket is available (Ansible FILE ccache)
   ansible.builtin.command: klist
   register: klist_output
   changed_when: false
   failed_when: false
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
 
 - name: Derive whether a Kerberos ticket is needed for IPA CLI
   ansible.builtin.set_fact:
@@ -106,6 +113,8 @@
   ansible.builtin.command:
     argv:
       - kinit
+      - -c
+      - "FILE:{{ ipa_kerberos_ccache_path }}"
       - -k
       - -t
       - /etc/krb5.keytab
@@ -117,7 +126,7 @@
   failed_when: false
   when:
     - ipa_client_need_kerberos_ticket | bool
-    - ipa_client_has_default_conf | default(false) | bool
+    - ipa_client_default_conf_now.stat.exists | default(false) | bool
 
 - name: Obtain Kerberos ticket via IPA admin password
   ansible.builtin.shell: kinit -c "FILE:{{ ipa_kerberos_ccache_path }}" "{{ ipaadmin_principal }}"
@@ -162,7 +171,10 @@
   changed_when: false
   environment:
     KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
-  failed_when: "'did not receive Kerberos credentials' in ipa_ping.stderr"
+  failed_when: >-
+    'did not receive Kerberos credentials' in (
+      (ipa_ping.stderr | default('')) ~ (ipa_ping.stdout | default(''))
+    )
 
 - name: List current Kerberos ticket
   ansible.builtin.command: klist -e
