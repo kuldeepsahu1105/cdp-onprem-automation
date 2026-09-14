@@ -36,8 +36,29 @@
         - cm_autotls_api_enabled | default(false) | bool
         - not (cm_autotls_force_run | default(false) | bool)
 
+    - name: Skip generateCmca when HTTPS API on 7183 is already active
+      ansible.builtin.debug:
+        msg: >-
+          HTTPS API on {{ cm_https_port | default(7183) }} already active
+          (cm_api_url={{ cm_api_url | default('unset') }},
+          cm_api_https_active=true). Skipping generateCmca.
+          Set -e cm_autotls_force_run=true to run generateCmca anyway.
+      when:
+        - not (cm_autotls_api_enabled | default(false) | bool)
+        - not (cm_autotls_force_run | default(false) | bool)
+        - cm_api_https_active | default(false) | bool
+        - (cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int)
+
     - name: Perform Auto-TLS setup when CM reports Auto-TLS off or cm_autotls_force_run
-      when: not (cm_autotls_api_enabled | default(false) | bool) or (cm_autotls_force_run | default(false) | bool)
+      when: >-
+        (cm_autotls_force_run | default(false) | bool)
+        or (
+          not (cm_autotls_api_enabled | default(false) | bool)
+          and not (
+            (cm_api_https_active | default(false) | bool)
+            and ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+          )
+        )
       block:
         - name: Auto-TLS — running generateCmca (creating or updating CM TLS)
           ansible.builtin.debug:
