@@ -8,6 +8,9 @@
 - name: Resolve PostgreSQL inventory host for CM databases
   ansible.builtin.import_tasks: resolve_postgres_inventory.yml
 
+- name: Ensure PostgreSQL server is running before CM database psql
+  ansible.builtin.import_tasks: ensure_postgresql_running.yml
+
 - name: Stat versioned psql on PostgreSQL DB host (configured PostgreSQL version)
   ansible.builtin.stat:
     path: "/usr/pgsql-{{ postgresql_version }}/bin/psql"

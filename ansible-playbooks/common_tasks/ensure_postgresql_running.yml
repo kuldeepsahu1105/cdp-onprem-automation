@@ -1,0 +1,25 @@
+---
+# Start PostgreSQL on postgres_inventory_host and wait for the TCP target used by ensure_cm_postgres_databases.
+# Does not restart PostgreSQL or Cloudera Manager (unlike restart_postgresql.yml).
+
+- name: Set OS-specific facts on PostgreSQL DB host
+  ansible.builtin.import_tasks: set_os_facts.yml
+  delegate_to: "{{ postgres_inventory_host }}"
+  delegate_facts: true
+
+- name: Ensure PostgreSQL service is started on DB host
+  ansible.builtin.systemd:
+    name: "{{ hostvars[postgres_inventory_host].os.postgres_service }}"
+    state: started
+    enabled: true
+    daemon_reload: true
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+
+- name: Wait for PostgreSQL on CM database psql target
+  ansible.builtin.wait_for:
+    host: "{{ postgres_ensure_cm_db_psql_host }}"
+    port: "{{ postgres_port }}"
+    delay: 2
+    timeout: 120
+  delegate_to: "{{ postgres_inventory_host }}"
