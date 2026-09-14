@@ -101,5 +101,7 @@ See also: `docs/RUNBOOK.md` (URL verification tiers), `docs/REFERENCE.md` (group
 | `postgres_host_fqdn` | `group_vars/all.yml` | CM/CMS JDBC and Reports Manager probe host |
 | `postgres_ensure_cm_db_psql_host` | `group_vars/all.yml` | TCP target for delegated `psql` on the inventory host (`127.0.0.1` when the server is on that VM) |
 | `postgres_db_host_os_family` | `ensure_cm_postgres_databases.yml` | `RedHat` or `Debian` — copied onto the **play host** (`localhost` in **29**, `cldr-mngr` in **24**) after delegated `setup` (`delegate_facts: true`) or from play `ansible_os_family` when the play host is the DB host. Used in `when:` for client packages; do not reference `hostvars[postgres_inventory_host].ansible_os_family` directly (HostVarsVars attribute errors on localhost plays). |
+| `postgres_db_host_psql_present` | `ensure_cm_postgres_databases.yml` | `true` when `/usr/pgsql-<ver>/bin/psql` (RHEL) or Debian versioned path exists, or `which psql` succeeds on `postgres_inventory_host` — skips PGDG/client package install. |
+| `postgres_db_host_psql_cmd` | `ensure_cm_postgres_databases.yml` | Delegated `psql` argv[0] (versioned path, `which` result, or `psql` after package install). |
 
 Optional inventory: add a dedicated group (e.g. `[postgresql]` with one host) and `cldr_hostname` in host vars; leave `postgres_inventory_group` empty for auto-detect, or set `postgres_inventory_group: postgresql` to pin.
