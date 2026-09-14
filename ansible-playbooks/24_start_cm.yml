@@ -141,6 +141,9 @@
         mode: 0755
       # delegate_to: cldr-mngr
 
+    - name: Download and install DATAVIZ CSD (CDV yum jar with parcel fallback)
+      ansible.builtin.import_tasks: common_tasks/download_cdv_dataviz_csd.yml
+
     # No-op when scm_csds_effective is empty; see group_vars and common_tasks/set_os_facts.yml.
     - name: Download CSDs
       ansible.builtin.get_url:

@@ -342,6 +342,10 @@ scm_csds_redhat: []
 cdv_version: "8.0.7"
 # Basename from cdv/<version>/release_manifest.json (version b50, gbn 71299628).
 cdv_dataviz_csd_jar: "DATAVIZ-{{ cdv_version }}-b50.p1.71299628.jar"
+# Parcel under cdv/<version>/parcels/ (e.g. …-el9.parcel); used when yum CSD jar is absent.
+cdv_dataviz_parcel_build: "DATAVIZ-{{ cdv_version }}-b50.p1.71299628"
+# Leave empty to derive …-el<rhel-major>.parcel on the CM host; or set full filename explicitly.
+cdv_dataviz_parcel_file: ""
 # auto: use redhat8 yum path for CDV on RHEL 9 CM when redhat9 CSD is absent; redhat8 | redhat9 to override.
 cdv_redhat_yum_repo: auto
 cfm_version: "2.1.7.3004"
