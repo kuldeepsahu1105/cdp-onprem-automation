@@ -6,8 +6,16 @@
 
 - name: Extract API version from cm_api_url when not already set
   ansible.builtin.set_fact:
-    cm_api_version: "{{ cm_api_url | regex_search('/api/(v[0-9]+)', '\\1') | first }}"
-  when: cm_api_version | default('') | length == 0
+    cm_api_version: >-
+      {{
+        (cm_api_url | default('') | regex_search('/api/(v[0-9]+)'))
+        if (cm_api_url | default('') | length > 0)
+        else ''
+      }}
+  when:
+    - cm_api_version | default('') | length == 0
+    - cm_api_url | default('') | length > 0
+    - (cm_api_url | default('') | regex_search('/api/(v[0-9]+)')) | default('') | length > 0
 
 # - name: Print extracted API version
 #   ansible.builtin.debug:

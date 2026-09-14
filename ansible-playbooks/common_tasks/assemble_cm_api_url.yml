@@ -1,0 +1,43 @@
+---
+# Build cm_api_url from probe/discovery facts (runs with or without the full /api/version probe block).
+
+- name: CM API — read API version from /api/version when slug missing
+  ansible.builtin.import_tasks: fetch_cm_api_version_slug.yml
+  when: cm_api_version | default('') | length == 0
+
+- name: CM API — resolve hostname for API URL
+  ansible.builtin.import_tasks: resolve_cm_api_url_host.yml
+
+- name: CM API — prefer HTTPS :7183 for API URL when probes show TLS active
+  ansible.builtin.set_fact:
+    cm_protocol: https
+    cm_api_port: "{{ cm_https_port }}"
+    cm_api_https_active: true
+  when:
+    - (cm_api_controller_https_reachable | default(false) | bool)
+      or (cm_api_https_active | default(false) | bool)
+
+- name: CM API — set base API URL
+  ansible.builtin.set_fact:
+    cm_api_url: >-
+      {{
+        cm_protocol + '://' + _cm_api_url_host_resolved + ':' + (cm_api_port | string) + '/api/' + cm_api_version
+      }}
+    cm_api_url_delegated: "{{ cm_protocol }}://{{ cm_api_probe_host }}:{{ cm_api_port }}/api/{{ cm_api_version }}"
+    cm_host: "{{ cm_api_client_host }}"
+  when:
+    - cm_api_version | default('') | length > 0
+    - _cm_api_url_host_resolved | default('') | length > 0
+
+- name: CM API — fail when API URL could not be assembled
+  ansible.builtin.fail:
+    msg: >-
+      Cloudera Manager API URL could not be built (missing host and/or /api/version slug).
+      cm_api_client_host={{ cm_api_client_host | default('unset') }},
+      cm_api_connect_host={{ cm_api_connect_host | default('unset') }},
+      cm_api_version={{ cm_api_version | default('unset') }}.
+      Re-run after CM is listening on :{{ cm_http_port | default(7180) }} or :{{ cm_https_port | default(7183) }},
+      or set -e cm_api_connect_host=<reachable-manager-ip>.
+  when:
+    - (cm_api_verify_mode | default('fail') | lower) != 'warn'
+    - cm_api_url | default('') | length == 0

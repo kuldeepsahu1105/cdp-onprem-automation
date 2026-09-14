@@ -1,0 +1,103 @@
+---
+# Resolve CM API hostname for URL assembly (no regex capture groups — safe on empty/malformed cm_api_url).
+
+- name: CM API — prefer host from prior URL assembly on this play
+  ansible.builtin.set_fact:
+    _cm_api_url_host_resolved: "{{ _cm_api_url_host }}"
+  when: _cm_api_url_host | default('') | length > 0
+
+- name: CM API — parse host from existing cm_api_url when present
+  ansible.builtin.set_fact:
+    _cm_api_url_host_resolved: >-
+      {{
+        cm_api_url | default('')
+        | regex_replace('^https?://', '')
+        | split('/') | first | default('')
+        | split(':') | first | default('')
+      }}
+  when:
+    - _cm_api_url_host_resolved | default('') | length == 0
+    - cm_api_url | default('') | length > 0
+    - (
+        cm_api_url | default('')
+        | regex_replace('^https?://', '')
+        | split('/') | first | default('')
+        | split(':') | first | default('')
+        | length > 0
+      )
+
+- name: CM API — use manager public IP for API URL on Ansible controller
+  ansible.builtin.set_fact:
+    _cm_api_url_host_prefer_public: >-
+      {{
+        cm_api_connect_host
+        if (cm_api_connect_host | default('') | length > 0)
+        else cm_host_public
+      }}
+  when:
+    - _cm_api_url_host_resolved | default('') | length == 0
+    - cm_api_controller_is_localhost | default(false) | bool
+    - not (cm_api_runner_is_manager | default(false) | bool)
+    - cm_api_uri_delegate_to | default('') | length == 0
+    - (
+        (cm_api_client_host | default('') in ['127.0.0.1', 'localhost', ''])
+        or (cm_api_probe_host | default('') in ['127.0.0.1', 'localhost'])
+      )
+    - (
+        (cm_api_connect_host | default('') | length > 0)
+        or (cm_host_public | default('') | length > 0)
+      )
+
+- name: CM API — fall back to probe / connect facts for API URL host
+  ansible.builtin.set_fact:
+    _cm_api_url_host_resolved: >-
+      {{
+        cm_api_probe_host
+        if (
+          (_cm_api_url_host_resolved | default('') | length == 0)
+          and (cm_api_uri_delegate_to | default('') | length > 0)
+          and not (cm_api_controller_probe_succeeded | default(false) | bool)
+          and (cm_api_probe_host | default('') | length > 0)
+        )
+        else (
+          _cm_api_url_host_prefer_public
+          if (
+            (_cm_api_url_host_resolved | default('') | length == 0)
+            and (_cm_api_url_host_prefer_public is defined)
+            and (_cm_api_url_host_prefer_public | default('') | length > 0)
+          )
+          else (
+            cm_api_connect_host
+            if (
+              (_cm_api_url_host_resolved | default('') | length == 0)
+              and (cm_api_connect_host | default('') | length > 0)
+              and (cm_api_controller_is_localhost | default(false) | bool)
+              and not (cm_api_runner_is_manager | default(false) | bool)
+            )
+            else (
+              cm_host_public
+              if (
+                (_cm_api_url_host_resolved | default('') | length == 0)
+                and (cm_api_controller_is_localhost | default(false) | bool)
+                and not (cm_api_runner_is_manager | default(false) | bool)
+                and (cm_api_client_host | default('') in ['127.0.0.1', 'localhost', ''])
+                and (cm_host_public | default('') | length > 0)
+              )
+              else (
+                cm_api_client_host
+                if (
+                  (_cm_api_url_host_resolved | default('') | length == 0)
+                  and (cm_api_client_host | default('') | length > 0)
+                )
+                else (_cm_api_url_host_resolved | default(''))
+              )
+            )
+          )
+        )
+      }}
+  when: _cm_api_url_host_resolved | default('') | length == 0
+
+- name: CM API — mirror resolved host for downstream Kerberos / module facts
+  ansible.builtin.set_fact:
+    _cm_api_url_host: "{{ _cm_api_url_host_resolved }}"
+  when: _cm_api_url_host_resolved | default('') | length > 0
