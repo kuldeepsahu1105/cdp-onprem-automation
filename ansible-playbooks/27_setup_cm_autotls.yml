@@ -229,9 +229,26 @@
             or (cm_agent_use_tls | default(false) | bool)
           }}
 
+- name: Require healthy CM API before cluster-wide agent reconcile after Auto-TLS
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Skip CM API gate when Auto-TLS did not require CM restart this run
+      ansible.builtin.meta: end_play
+      when: >-
+        not (
+          (cm_restart_after_autotls_this_run | default(false) | bool)
+          or (autotls_applied_this_run | default(false) | bool)
+        )
+
+    - name: CM API — must be healthy before mass agent restart
+      ansible.builtin.import_tasks: common_tasks/assert_cm_api_healthy_for_agent_reconcile.yml
+
 - name: Reconcile CM agents after Auto-TLS (server_host / use_tls / restart)
   hosts: all:!ipaserver
   become: true
+  serial: "{{ cm_agent_reconcile_serial | default('100%') }}"
   tasks:
     - name: Set OS-specific facts
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml

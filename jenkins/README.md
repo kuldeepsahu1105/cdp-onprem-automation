@@ -242,6 +242,32 @@ Jenkins `text` parameters render as a **multiline text area**. Only **Ansible-on
 - CM archive login: use `CM_REPO_USERNAME` / `CM_REPO_PASSWORD` (not the textarea).
 - **Caddy edge port:** default **`deployment_portal_http_port: 81`** in `group_vars/all.yml` (portal/pgAdmin/monitoring/IPA vhosts). Do not paste legacy **`8088`** into the textarea. Jenkins `render-ansible-group-vars-override.py` rewrites **8088 → 81**. Open security group **81** from the Jenkins agent CIDR for portal Tier **B**; CM uses **7180**/**7183** on `cldr-mngr` (not Caddy).
 
+### Auto-TLS force re-run (`CM_TLS_KRB_LDAP` / playbook **27**)
+
+There is **no** dedicated Jenkins checkbox for `cm_autotls_force_run`. Use one of:
+
+1. **`ANSIBLE_GROUP_VARS_YAML`** (recommended) — merged into `ansible-playbooks/jenkins_override.yml` via `apply-ansible-group-vars.sh` before `run-ansible.sh`:
+
+   ```yaml
+   cm_autotls_force_run: true
+   ```
+
+   Allowed key (see `jenkins/ansible-group-vars-allowed-keys.yaml`). Re-run **`CM_TLS_KRB_LDAP`** (or full pipeline with that stage checked).
+
+2. **Extra `-e` on the agent** — for custom wrappers or local `pvc_setup.sh`, export space-separated `key=value` pairs (appended after `jenkins_override.yml`):
+
+   ```bash
+   export ANSIBLE_EXTRA_VARS='cm_autotls_force_run=true'
+   ```
+
+   `scripts/lib/ansible_env.sh` → `ansible_extra_args()` passes each token as `-e`.
+
+Standalone from `ansible-playbooks/`:
+
+```bash
+ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml -e cm_autotls_force_run=true
+```
+
 ## License and CM archive credentials
 
 For **CM_INSTALL** and later, Ansible resolves archive credentials from (first match wins):

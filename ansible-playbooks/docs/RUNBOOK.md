@@ -541,6 +541,32 @@ Set **`ANSIBLE_GROUP_VARS_YAML`** (or `group_vars/all.yml`) so **`ipaadmin_passw
 
 Re-run **`CM_TLS_KRB_LDAP`** only after **`CM_INSTALL`** (and **`IDENTITY`** for FreeIPA) if a mid-pipeline fix is needed; for KDC-only issues re-run **`28_setup_cm_krbs.yml`** from `ansible-playbooks/`.
 
+### CM agent heartbeat recovery (after Auto-TLS / stale heartbeats)
+
+When **all** CM hosts show stale **Last Heartbeat** after playbook **27** or a failed CM restart, bring **CM Server** up first, then restart agents.
+
+**On `cldr-mngr` (SSH):**
+
+```bash
+sudo systemctl restart cloudera-scm-server
+# Wait until HTTPS API responds (Auto-TLS default port 7183):
+curl -sk -u admin:'<cm_admin_pass>' 'https://<cldr-mngr-fqdn>:7183/api/version'
+curl -sk -u admin:'<cm_admin_pass>' 'https://<cldr-mngr-fqdn>:7183/api/v59/cm/version'
+```
+
+**Cluster-wide agents (Ansible ad-hoc or playbook):**
+
+```bash
+cd ansible-playbooks
+export ANSIBLE_PRIVATE_KEY=/path/to/sshkey.pem
+ansible -i inventory.ini 'all:!ipaserver' -b -m systemd \
+  -a 'name=cloudera-scm-agent state=restarted enabled=yes'
+```
+
+Or re-run **`25_reconcile_cm_agents.yml`** / **`27_setup_cm_autotls.yml`** once `/cm/version` is healthy. Playbook **27** restarts CM Server before mass agent reconcile and **fails** if the API is still down (avoids restarting every agent while CM is offline).
+
+Jenkins: set **`cm_autotls_force_run: true`** in **`ANSIBLE_GROUP_VARS_YAML`** and re-run **`CM_TLS_KRB_LDAP`** when you need generateCmca despite CM already reporting Auto-TLS (see `jenkins/README.md`).
+
 ---
 
 ## Cleanup runbook
