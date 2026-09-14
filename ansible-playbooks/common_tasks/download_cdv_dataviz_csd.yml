@@ -1,0 +1,103 @@
+---
+# DATAVIZ CSD: jar under cdv/<version>/redhat8/yum/ (even on RHEL 9 CM). Fall back to the
+# release parcel under cdv/<version>/parcels/ when the yum jar is missing (some 8.0.7 builds).
+- name: Evaluate DATAVIZ CSD install gate
+  ansible.builtin.set_fact:
+    cdv_dataviz_csd_install: >-
+      {{
+        (csd_install_dataviz | default(true) | bool)
+        and (
+          (not (csd_respect_service_toggles | default(true) | bool))
+          or (base_cluster_install_services.dataviz | default(false) | bool)
+        )
+      }}
+
+- name: Install DATAVIZ CSD when enabled
+  when: cdv_dataviz_csd_install | bool
+  block:
+    - name: Resolve CDV yum repo directory for DATAVIZ CSD jar URL
+      ansible.builtin.set_fact:
+        cdv_dataviz_csd_rh_yum: >-
+          {{
+            'redhat8' if (
+              (cdv_redhat_yum_repo | default('auto')) == 'auto'
+              and (ansible_distribution_major_version | default('8') | string) == '9'
+            ) else (
+              cdv_redhat_yum_repo
+              if (cdv_redhat_yum_repo | default('auto')) != 'auto'
+              else ('redhat' ~ (ansible_distribution_major_version | default('8') | string))
+            )
+          }}
+
+    - name: Resolve DATAVIZ parcel filename
+      ansible.builtin.set_fact:
+        cdv_dataviz_parcel_file_effective: >-
+          {{
+            cdv_dataviz_parcel_file
+            if (cdv_dataviz_parcel_file | default('') | length > 0)
+            else (
+              cdv_dataviz_parcel_build ~ '-el' ~ (ansible_distribution_major_version | default('8') | string) ~ '.parcel'
+            )
+          }}
+
+    - name: Build DATAVIZ CSD and parcel download URLs
+      ansible.builtin.set_fact:
+        cdv_dataviz_csd_download_url: >-
+          {{ cm_repo_public_base_url | default('https://archive.cloudera.com/p') }}/cdv/{{ cdv_version }}/{{ cdv_dataviz_csd_rh_yum }}/yum/{{ cdv_dataviz_csd_jar }}
+        cdv_dataviz_parcel_download_url: >-
+          {{ cm_repo_public_base_url | default('https://archive.cloudera.com/p') }}/cdv/{{ cdv_version }}/parcels/{{ cdv_dataviz_parcel_file_effective }}
+
+    - name: Download DATAVIZ CSD jar from CDV yum repository
+      ansible.builtin.get_url:
+        url: "{{ cdv_dataviz_csd_download_url }}"
+        dest: "/opt/cloudera/csd/{{ cdv_dataviz_csd_jar }}"
+        mode: "0644"
+        owner: cloudera-scm
+        group: cloudera-scm
+        url_username: "{{ cm_repo_username }}"
+        url_password: "{{ cm_repo_password }}"
+        force_basic_auth: true
+      register: cdv_dataviz_csd_jar_result
+      ignore_errors: true
+
+    - name: Install DATAVIZ CSD from parcel when yum jar is unavailable
+      when: cdv_dataviz_csd_jar_result is failed
+      block:
+        - name: Download DATAVIZ parcel from CDV parcels repository
+          ansible.builtin.get_url:
+            url: "{{ cdv_dataviz_parcel_download_url }}"
+            dest: "/tmp/{{ cdv_dataviz_parcel_file_effective }}"
+            mode: "0644"
+            url_username: "{{ cm_repo_username }}"
+            url_password: "{{ cm_repo_password }}"
+            force_basic_auth: true
+
+        - name: Extract DATAVIZ parcel to locate CSD jar
+          ansible.builtin.unarchive:
+            src: "/tmp/{{ cdv_dataviz_parcel_file_effective }}"
+            dest: /tmp/cdv-dataviz-csd-extract
+            remote_src: true
+
+        - name: Locate DATAVIZ CSD jar inside extracted parcel
+          ansible.builtin.find:
+            paths: /tmp/cdv-dataviz-csd-extract
+            patterns: "{{ cdv_dataviz_csd_jar }}"
+            recurse: true
+          register: cdv_dataviz_csd_found
+
+        - name: Fail when DATAVIZ CSD jar is not present in parcel
+          ansible.builtin.fail:
+            msg: >-
+              DATAVIZ CSD jar {{ cdv_dataviz_csd_jar }} was not found after extracting
+              {{ cdv_dataviz_parcel_file_effective }} from {{ cdv_dataviz_parcel_download_url }}.
+              Set scm_csds to an explicit jar URL or update cdv_dataviz_csd_jar / cdv_dataviz_parcel_file.
+          when: cdv_dataviz_csd_found.matched | int == 0
+
+        - name: Copy DATAVIZ CSD jar into Cloudera Manager CSD directory
+          ansible.builtin.copy:
+            src: "{{ cdv_dataviz_csd_found.files[0].path }}"
+            dest: "/opt/cloudera/csd/{{ cdv_dataviz_csd_jar }}"
+            mode: "0644"
+            owner: cloudera-scm
+            group: cloudera-scm
+            remote_src: true

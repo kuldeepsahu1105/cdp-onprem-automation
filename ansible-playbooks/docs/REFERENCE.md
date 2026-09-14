@@ -105,6 +105,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `scm_csds_redhat` | `[]` | Optional explicit RHEL CSD URL list (overrides auto-build) |
 | `cdv_version` | `8.0.7` | Cloudera Data Visualization (CDV) CSD path version, e.g. `8.1.5` |
 | `cdv_dataviz_csd_jar` | `DATAVIZ-{{ cdv_version }}-…` | DATAVIZ CSD jar basename under `cdv/<version>/<redhat8\|9>/yum/` |
+| `cdv_dataviz_parcel_build` / `cdv_dataviz_parcel_file` | build + optional full name | CDV parcel under `cdv/<version>/parcels/` when yum CSD jar is missing |
 | `cdv_redhat_yum_repo` | `auto` | CDV yum repo dir: `auto` uses `redhat8` on RHEL 9 CM when needed, or `redhat8` / `redhat9` |
 | `cfm_version` | `2.1.7.3004` | Cloudera Flow Management (NiFi) CSD path version |
 | `cfm_nifi_app_version` | `1.28.1` | NiFi app version segment in `NIFI-*.jar` / `NIFIREGISTRY-*.jar` |

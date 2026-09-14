@@ -11,11 +11,20 @@ ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
 java_version: "17"
 python_version: "3.11"
 postgresql_version: 18
-# Amazon Linux native-repo psql client caps (ensure_cm_postgres_databases on DB host only; server may stay postgresql_version).
+# Amazon Linux: distro ships postgresql15–17 only (no PGDG / no 18). CM DB client install uses native packages;
+# set postgresql_version: 17 on AL2023 if the server is 17, or keep 18 and rely on cap vars below.
 postgres_amazon_linux_2023_native_client_version_cap: 17
 postgres_amazon_linux_2_native_client_version_cap: 15
 postgres_amazon_linux_2023_native_client_version: "{{ [postgresql_version | int, postgres_amazon_linux_2023_native_client_version_cap | int] | min }}"
 postgres_amazon_linux_2_native_client_version: "{{ [postgresql_version | int, postgres_amazon_linux_2_native_client_version_cap | int] | min }}"
+postgres_db_host_psql_probe_versions: >-
+  {{
+    [
+      postgresql_version | int,
+      postgres_amazon_linux_2023_native_client_version | int,
+      postgres_amazon_linux_2_native_client_version | int,
+    ] | unique | list
+  }}
 
 # ---------------------------------------------------------------------------
 # Identity provider: auto | freeipa | ad
@@ -342,6 +351,10 @@ scm_csds_redhat: []
 cdv_version: "8.0.7"
 # Basename from cdv/<version>/release_manifest.json (version b50, gbn 71299628).
 cdv_dataviz_csd_jar: "DATAVIZ-{{ cdv_version }}-b50.p1.71299628.jar"
+# Parcel under cdv/<version>/parcels/ (e.g. …-el9.parcel); used when yum CSD jar is absent.
+cdv_dataviz_parcel_build: "DATAVIZ-{{ cdv_version }}-b50.p1.71299628"
+# Leave empty to derive …-el<rhel-major>.parcel on the CM host; or set full filename explicitly.
+cdv_dataviz_parcel_file: ""
 # auto: use redhat8 yum path for CDV on RHEL 9 CM when redhat9 CSD is absent; redhat8 | redhat9 to override.
 cdv_redhat_yum_repo: auto
 cfm_version: "2.1.7.3004"
