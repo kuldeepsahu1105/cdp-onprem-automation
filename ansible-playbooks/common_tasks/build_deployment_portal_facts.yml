@@ -61,6 +61,38 @@
         else deployment_portal_anchor_fqdn
       }}
 
+- name: Set CM manager public and private IPs for portal and Tier B URLs
+  ansible.builtin.set_fact:
+    deployment_portal_cm_private_ip: >-
+      {{
+        hostvars[groups['cldr-mngr'][0]].private_ip
+        | default(hostvars[groups['cldr-mngr'][0]].ansible_host | default(''))
+        if ('cldr-mngr' in groups and groups['cldr-mngr'] | default([]) | length > 0)
+        else ''
+      }}
+    deployment_portal_cm_public_ip: >-
+      {{
+        hostvars[groups['cldr-mngr'][0]].ansible_host | default('') | trim
+        if (
+          'cldr-mngr' in groups
+          and groups['cldr-mngr'] | default([]) | length > 0
+          and (
+            hostvars[groups['cldr-mngr'][0]].private_ip | default('')
+            != hostvars[groups['cldr-mngr'][0]].ansible_host | default('')
+          )
+        )
+        else ''
+      }}
+  when:
+    - "'cldr-mngr' in groups"
+    - groups['cldr-mngr'] | default([]) | length > 0
+
+- name: Clear CM manager reachability IPs when cldr-mngr absent
+  ansible.builtin.set_fact:
+    deployment_portal_cm_public_ip: ""
+    deployment_portal_cm_private_ip: ""
+  when: not (('cldr-mngr' in groups) and (groups['cldr-mngr'] | default([]) | length > 0))
+
 - name: Set CM upstream address for Caddy reverse_proxy on ops host
   ansible.builtin.set_fact:
     deployment_portal_cm_upstream_host: >-
@@ -474,6 +506,8 @@
         ipa_ui_legacy_label: "FreeIPA (legacy UI)"
       cloudera_manager:
         host_fqdn: "{{ deployment_portal_cm_fqdn }}"
+        public_ip: "{{ deployment_portal_cm_public_ip | default('') }}"
+        private_ip: "{{ deployment_portal_cm_private_ip | default('') }}"
         cm_installed: false
         caddy_public_url: ""
         frontend_url: "{{ cm_frontend_url_effective | default('') }}"
@@ -481,8 +515,24 @@
         ui_url_https: "https://{{ deployment_portal_cm_fqdn }}:{{ cm_https_port }}"
         caddy_url: ""
         caddy_url_vpc: ""
-        ui_url_public: "http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}"
-        ui_url_vpc: "http://{{ deployment_portal_cm_fqdn }}:{{ cm_http_port }}"
+        ui_url_public: >-
+          {{
+            ('http://' + deployment_portal_cm_public_ip + ':' + (cm_http_port | string))
+            if (deployment_portal_cm_public_ip | default('') | length > 0)
+            else ('http://' + deployment_portal_cm_fqdn + ':' + (cm_http_port | string))
+          }}
+        ui_url_https_public: >-
+          {{
+            ('https://' + deployment_portal_cm_public_ip + ':' + (cm_https_port | string))
+            if (deployment_portal_cm_public_ip | default('') | length > 0)
+            else ''
+          }}
+        ui_url_vpc: >-
+          {{
+            ('http://' + deployment_portal_cm_private_ip + ':' + (cm_http_port | string))
+            if (deployment_portal_cm_private_ip | default('') | length > 0)
+            else ('http://' + deployment_portal_cm_fqdn + ':' + (cm_http_port | string))
+          }}
         cluster_name: "{{ cdh_basecluster_name }}"
       postgresql:
         host_fqdn: "{{ deployment_portal_postgres_fqdn }}"

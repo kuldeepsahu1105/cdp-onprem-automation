@@ -1,0 +1,23 @@
+{# Primary FQDN (or canonical) URL with optional public-IP :port variant in parentheses. #}
+{% macro portal_url_fqdn_pubip(url, public_ip, port, scheme='https') -%}
+{%- set _url = url | default('') | trim -%}
+{%- set _ip = public_ip | default('') | trim -%}
+{%- set _port = port | default('') | string | trim -%}
+{%- if _url | length == 0 -%}
+{%- elif _ip | length > 0 and _port | length > 0 and ('{{' not in _ip) -%}
+<a href="{{ _url }}" target="_blank" rel="noopener noreferrer">{{ _url }}</a> (<a href="{{ scheme }}://{{ _ip }}:{{ _port }}" target="_blank" rel="noopener noreferrer">{{ _ip }}:{{ _port }}</a>)
+{%- else -%}
+<a href="{{ _url }}" target="_blank" rel="noopener noreferrer">{{ _url }}</a>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro inventory_public_ip_for_fqdn(ctx, fqdn) -%}
+{%- set _fqdn = fqdn | default('') | trim -%}
+{%- set _out = namespace(ip='') -%}
+{%- for h in ctx.inventory_hosts | default([]) -%}
+{%- if _out.ip | length == 0 and (_fqdn | length > 0) and (h.fqdn | default('') == _fqdn) -%}
+{%- set _out.ip = h.public_ip | default('') | trim -%}
+{%- endif -%}
+{%- endfor -%}
+{{- _out.ip -}}
+{%- endmacro %}
