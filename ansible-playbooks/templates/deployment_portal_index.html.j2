@@ -1,5 +1,5 @@
 {% set ctx = deployment_portal_context %}
-{% set cm_tile_url = ctx.cloudera_manager.ui_url_https %}
+{% set cm_tile_url = ctx.cloudera_manager.ui_url_public if (ctx.cloudera_manager.public_ip | default('') | length > 0) else ctx.cloudera_manager.ui_url_https %}
 {% set pgadmin_tile_url = ctx.portal.pgadmin_caddy_url | default('') if (ctx.portal.pgadmin_caddy_url | default('') | length > 0) else (ctx.portal.pgadmin_url_direct | default(ctx.portal.pgadmin_url | default(''))) %}
 {% set ipa_modern_url = ctx.identity.ipa_caddy_modern_url | default('') if (ctx.identity.ipa_caddy_modern_url | default('') | length > 0) else (ctx.identity.ipa_caddy_url | default('')) %}
 {% set ipa_legacy_caddy_url = ctx.identity.ipa_caddy_legacy_url | default('') %}
@@ -1188,8 +1188,17 @@
           {% endif %}
           <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a> <span class="badge">:{{ monitoring_cadvisor_host_port | default(8089) }}</span></li>
           {% endif %}
-          <li><strong>Cloudera Manager (direct HTTP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_http }}">{{ ctx.cloudera_manager.ui_url_http }}</a> <span class="badge">VPC / admin</span></li>
-          <li><strong>Cloudera Manager (direct HTTPS)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_https }}">{{ ctx.cloudera_manager.ui_url_https }}</a> <span class="badge">:7183 on {{ ctx.cloudera_manager.host_fqdn }}</span></li>
+          <li><strong>Cloudera Manager (direct HTTP, FQDN)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_http }}">{{ ctx.cloudera_manager.ui_url_http }}</a> <span class="badge">needs cluster DNS</span></li>
+          {% if ctx.cloudera_manager.public_ip | default('') | length > 0 %}
+          <li><strong>Cloudera Manager (HTTP, public IP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_public }}">{{ ctx.cloudera_manager.ui_url_public }}</a> <span class="badge">internet / Jenkins</span></li>
+          {% if ctx.cloudera_manager.ui_url_https_public | default('') | length > 0 %}
+          <li><strong>Cloudera Manager (HTTPS, public IP)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_https_public }}">{{ ctx.cloudera_manager.ui_url_https_public }}</a> <span class="badge">after Auto-TLS (:7183)</span></li>
+          {% endif %}
+          {% endif %}
+          {% if ctx.cloudera_manager.private_ip | default('') | length > 0 %}
+          <li><strong>Cloudera Manager (HTTP, VPC private)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_vpc }}">{{ ctx.cloudera_manager.ui_url_vpc }}</a></li>
+          {% endif %}
+          <li><strong>Cloudera Manager (direct HTTPS, FQDN)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.cloudera_manager.ui_url_https }}">{{ ctx.cloudera_manager.ui_url_https }}</a> <span class="badge">:7183 when Auto-TLS on</span></li>
           {% if ctx.identity.ipa_caddy_modern_url | default('') | length > 0 %}
           <li><strong>{{ ctx.identity.ipa_ui_modern_label | default('FreeIPA (modern UI)') }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_caddy_modern_url }}">{{ ctx.identity.ipa_caddy_modern_url }}</a></li>
           {% endif %}

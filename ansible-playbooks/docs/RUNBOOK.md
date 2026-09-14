@@ -366,6 +366,38 @@ On **ipaserver**, confirm **`/etc/httpd/conf.d/zz-ipa-caddy-proxy.conf`** limits
 
 **Cloudera Manager (not via Caddy):** Use direct **`https://<cldr-mngr-fqdn>:7183`** (or `:7180` before Auto-TLS) from browsers and Jenkins Tier **B**. Caddy on the ops host serves portal, pgAdmin, monitoring, and IPA only. Optional `cm_external_url` sets a custom published CM URL in portal facts; it does not configure Caddy.
 
+#### Cloudera Manager UI not reachable in a browser
+
+Symptoms: Jenkins/Ansible reports CM API OK on **`http://<ip>:7180/api/v58`**, but your laptop browser times out or **connection refused** on HTTPS **:7183**.
+
+| Check | What to do |
+|--------|------------|
+| **Wrong host** | CM runs on **`cldr-mngr`**, not the ops/FreeIPA host. Portal/Caddy on **ipaserver** uses a **different** public IP. Use **`terraform output cldr_mngr_public_ip`** or inventory **`[cldr-mngr]` `ansible_host=`** — not the ops anchor IP. |
+| **Stale inventory** | If logs show two public IPs (e.g. probe **`54.169.x.x`** vs printed **`54.254.x.x`**), regenerate inventory: **`jenkins/scripts/regenerate-inventory-from-terraform.sh`** (or **`generate_inventory.sh`** in the Terraform dir), commit/sync **`ansible-playbooks/inventory.ini`**, re-run **`35_refresh_deployment_portal.yml`**. |
+| **HTTP vs HTTPS** | Before playbook **27** (Auto-TLS), CM is **HTTP only on :7180**. **:7183 refused** is expected until Auto-TLS is enabled. Use **`http://<cldr-mngr-public-ip>:7180/`** from the internet (or **`http://172.31.x.x:7180/`** inside the VPC). |
+| **Not Caddy** | **`http://cm.<dashed-ip>.pvc.cloudera-labs.com:81/`** does **not** proxy CM in this repo. Do not use portal port **81** for CM. |
+| **FQDN in browser** | Links like **`http://cldr-mngr.<domain>:7180`** require DNS (FreeIPA/AD) pointing at a reachable address. From the public internet, prefer **`http://<cldr-mngr ansible_host>:7180`**. |
+| **Security group** | Terraform **`allow_all: true`** or **`allowed_cidrs`** must include your source for **7180** (and **7183** after Auto-TLS). Default new SG allows all ingress when **`allow_all`** is true. |
+| **Service down** | On **`cldr-mngr` as root:** `systemctl status cloudera-scm-server`; `ss -lntp \| grep 7180`; `curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7180/api/version` (401/200 = listening). If down: `journalctl -u cloudera-scm-server -n 80`, re-run **`24_start_cm.yml`**. |
+| **Firewall** | PREREQS disables **firewalld** on cluster hosts; if re-enabled manually, allow **7180/7183**. |
+
+**Quick verification on cldr-mngr (SSH):**
+
+```bash
+sudo systemctl is-active cloudera-scm-server
+sudo ss -lntp | grep -E ':7180|:7183'
+curl -sS -o /dev/null -w 'localhost:7180 HTTP %{http_code}\n' http://127.0.0.1:7180/
+curl -sS -u admin:admin -o /dev/null -w 'API %{http_code}\n' http://127.0.0.1:7180/api/version
+PUBLIC=$(curl -sS http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || true)
+echo "IMDS public IPv4: ${PUBLIC:-n/a} (compare to inventory ansible_host)"
+```
+
+From your workstation (replace IP and use **http** until Auto-TLS):
+
+```bash
+curl -sS -o /dev/null -w 'CM UI %{http_code}\n' "http://<cldr-mngr-public-ip>:7180/"
+```
+
 **ECS console (not via Caddy):** Published console URL is **`https://console.<ecs_app_domain>`** (`ecs_control_plane_url_effective`). Override with `ecs_control_plane_url` when needed. Internal ECS **`ApplicationDomain`** stays `ecs_app_domain`.
 
 **Bare metal / private network (no public IP):** Set `deployment_environment: baremetal` (or `deployment_portal_access_profile: private`). The portal index shows only private-network URLs — typically `http://<ops-fqdn>:81/` when `deployment_portal_prefer_fqdn_urls: true`, or `http://<management-ip>:81/` otherwise. pgAdmin stays on port `5050` on the same ops host; database is **cldr-mngr** PostgreSQL. Caddy lab hostnames use the ops management IP (often `caddy_vhost_dns_mode: flat` with IPA/AD DNS).

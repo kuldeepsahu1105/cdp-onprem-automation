@@ -45,9 +45,19 @@ Same VPC (ops private IP):
 {% endif %}
 
 --- Cloudera Manager (direct, no Caddy) ---
-  HTTP:  {{ deployment_portal_context.cloudera_manager.ui_url_http }}
-  HTTPS: {{ deployment_portal_context.cloudera_manager.ui_url_https }}
+  HTTP (cluster FQDN — needs DNS):  {{ deployment_portal_context.cloudera_manager.ui_url_http }}
+  HTTPS (cluster FQDN — needs DNS): {{ deployment_portal_context.cloudera_manager.ui_url_https }}
+{% if deployment_portal_context.cloudera_manager.public_ip | default('') | length > 0 %}
+  HTTP (cldr-mngr public IP — use from internet):  {{ deployment_portal_context.cloudera_manager.ui_url_public }}
+{% if deployment_portal_context.cloudera_manager.ui_url_https_public | default('') | length > 0 %}
+  HTTPS (cldr-mngr public IP, after Auto-TLS):   {{ deployment_portal_context.cloudera_manager.ui_url_https_public }}
+{% endif %}
+{% endif %}
+{% if deployment_portal_context.cloudera_manager.private_ip | default('') | length > 0 %}
+  HTTP (VPC private IP): {{ deployment_portal_context.cloudera_manager.ui_url_vpc }}
+{% endif %}
   FQDN:  {{ deployment_portal_context.cloudera_manager.host_fqdn }}
+  Note: CM is not on Caddy :{{ deployment_portal_http_port | default(81) }}; ops host public IP is not cldr-mngr.
 
 {% if deployment_portal_context.caddy_vhosts.enabled %}
 --- Caddy lab hostnames (reverse proxy on port {{ deployment_portal_http_port | default(81) }}) ---
