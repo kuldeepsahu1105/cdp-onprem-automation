@@ -132,6 +132,6 @@
     msg:
       - "Control reachability: requested={{ _acr_requested }}, effective={{ ansible_control_reachability_effective }}"
       - "Remote-controller hints: remote_runner={{ _acr_remote_controller }}, control_mode={{ _acr_control_mode }}"
-      - "CM reachability probes (auto): private={{ cm_private_reach_auto is succeeded if cm_private_reach_auto is defined else 'n/a' }}, public={{ cm_public_reach_auto is succeeded if cm_public_reach_auto is defined else 'n/a' }}"
+      - "CM reachability probes (auto): private={{ (cm_private_reach_auto is succeeded) if (cm_private_reach_auto is defined) else 'n/a' }}, public={{ (cm_public_reach_auto is succeeded) if (cm_public_reach_auto is defined) else 'n/a' }}"
   when: ansible_verbosity | default(0) | int >= 1
   delegate_to: localhost
