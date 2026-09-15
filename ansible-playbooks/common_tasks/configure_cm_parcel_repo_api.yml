@@ -87,7 +87,7 @@
           + (
             [parcel_repo_latest_public]
             if (
-              (cm_parcel_repo_include_latest | default(true) | bool)
+              (cm_parcel_repo_include_latest | default(false) | bool)
               and (cm_repo_source | default('public')) == 'public'
               and (parcel_repo_latest_public | default('') | length > 0)
             )
@@ -104,7 +104,7 @@
           + (
             [ecs_parcel_repo_latest_url]
             if (
-              (cm_parcel_repo_include_latest | default(true) | bool)
+              (cm_parcel_repo_include_latest | default(false) | bool)
               and (cm_parcel_repo_include_ecs_parcel | default(true) | bool)
               and (cm_repo_source | default('public')) == 'public'
               and (ecs_parcel_repo_latest_url | default('') | length > 0)
@@ -120,6 +120,40 @@
             else []
           )
           + (cm_remote_parcel_csd_repo_urls_effective | default([]))
+          + (
+            [cdv_parcel_yum_repo_url]
+            if (
+              (cm_parcel_repo_include_cdv_parcel | default(true) | bool)
+              and (cdv_parcel_yum_repo_url | default('') | length > 0)
+              and (csd_install_dataviz | default(true) | bool)
+            )
+            else []
+          )
+          + (
+            [cdv_parcel_repo_url]
+            if (
+              (cm_parcel_repo_include_cdv_parcel | default(true) | bool)
+              and (cdv_parcel_repo_url | default('') | length > 0)
+              and (csd_install_dataviz | default(true) | bool)
+            )
+            else []
+          )
+          + (
+            [cfm_parcel_yum_tars_repo_url]
+            if (
+              (cm_parcel_repo_include_cfm_parcel | default(true) | bool)
+              and (cfm_parcel_yum_tars_repo_url | default('') | length > 0)
+            )
+            else []
+          )
+          + (
+            [cfm_parcel_repo_url]
+            if (
+              (cm_parcel_repo_include_cfm_parcel | default(true) | bool)
+              and (cfm_parcel_repo_url | default('') | length > 0)
+            )
+            else []
+          )
           + (cm_parcel_repo_extra_urls | default([]))
           | map('trim')
           | reject('equalto', '')
@@ -141,11 +175,8 @@
           | reject('search', 'archive\\.cloudera\\.com/cdh5/')
           | reject('search', '/p/spark3/')
           | reject('search', 'archive\\.cloudera\\.com/spark3/')
-          | reject('search', '/cdh7/latest/parcels')
-          | reject('search', '/cdp-pvc-ds/latest/parcels')
-          | reject('search', '/cdv/latest/parcels')
-          | reject('search', '/cfm2/latest/parcels')
           | reject('search', '/\\{latest\\}/')
+          | reject('search', '/%7Blatest%7D/')
           | reject('search', '[{}]')
           | reject('search', 'https?://[^,]*https?://')
           | reject('search', '7180/cmf')

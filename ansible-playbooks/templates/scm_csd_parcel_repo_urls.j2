@@ -14,8 +14,8 @@
 {% endif %}
 {% set svc = base_cluster_install_services | default({}) %}
 {% set use_svc_toggles = cm_parcel_csd_respect_service_toggles | default(false) %}
-{% set include_latest = cm_parcel_repo_include_latest | default(true) %}
-{% set latest_segment = cm_parcel_repo_latest_segment | default('{latest}') %}
+{% set include_latest = cm_parcel_repo_include_latest | default(false) %}
+{% set latest_segment = cm_parcel_repo_latest_segment | default('latest') %}
 {% set csd_parcel_repo_urls = [] %}
 {% if (cm_parcel_repo_include_cdv_parcel | default(true)) and csd_install_dataviz | default(true) and ((not use_svc_toggles) or (svc.dataviz | default(false))) %}
 {% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cdv/' ~ cdv_version ~ '/' ~ cdv_rh_yum ~ '/yum'] %}
