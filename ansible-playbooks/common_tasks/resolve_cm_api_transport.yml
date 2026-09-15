@@ -9,11 +9,6 @@
         (cm_api_use_https | default(false) | bool)
         or (cm_autotls_complete | default(false) | bool)
         or (hostvars.get('localhost', {}).get('cm_autotls_complete', false) | bool)
-        or (
-          (cm_autotls_api_enabled | default(false) | bool)
-          and (cm_autotls_truststore_precheck is defined)
-          and (cm_autotls_truststore_precheck.stat.exists | default(false) | bool)
-        )
       }}
 
 - name: CM API — apply transport facts for probes and URL assembly

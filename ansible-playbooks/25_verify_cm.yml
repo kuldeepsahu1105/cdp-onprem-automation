@@ -16,15 +16,15 @@
     - name: CM API — set connection context
       ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
 
-    - name: CM API — wait for scm-server HTTPS port before REST checks
-      ansible.builtin.import_tasks: common_tasks/wait_for_cm_scm_https_listen.yml
-
     - name: Align Cloudera Manager admin password with group_vars after CM server start
       ansible.builtin.import_tasks: common_tasks/ensure_cm_admin_password.yml
 
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
       become: false
+
+    - name: CM API — wait for scm-server HTTPS port when TLS transport is selected
+      ansible.builtin.import_tasks: common_tasks/wait_for_cm_scm_https_listen.yml
 
     - name: CM API — read TLS / Auto-TLS state (aligned status messaging)
       ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
