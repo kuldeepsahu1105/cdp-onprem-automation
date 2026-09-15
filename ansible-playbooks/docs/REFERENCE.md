@@ -566,11 +566,12 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/join_ad_realm.yml` | AD `realm join` |
 | `common_tasks/join_freeipa_client.yml` | IPA client enrollment (detect partial state, optional uninstall, preflight, `ipa-client-install`, fail diagnostics) |
 | `common_tasks/detect_ipa_client_install_state.yml` | `default.conf` vs partial client debris (`/var/lib/ipa-client/sysrestore`, `/etc/ipa` fragments) before enroll |
-| `common_tasks/ensure_krb5_ansible_ccache_note.yml` | Comment-only **`/etc/krb5.conf.d/ansible-ccache-note.conf`** on ipaserver and **`identity_client_hosts`** (play **16**) and via **`configure_ipa_krb_enc_types.yml`** (play **12**) |
 | `common_tasks/preflight_ipa_client_install.yml` | Optional hostname/DNS/`getent` asserts before `ipa-client-install` when **`ipa_client_preflight_enabled: true`** (default **`false`**) on hosts without `/etc/ipa/default.conf` |
-| `common_tasks/ensure_krb5_ansible_ccache_note.yml` | Comment-only **`/etc/krb5.conf.d/ansible-ccache-note.conf`** on ipaserver (play **12**) and enrolled clients (**`join_freeipa_client.yml`**) |
-| `common_tasks/preflight_ipa_json_on_ipaserver.yml` | POST **`/ipa/json`** on ipaserver — fail on HTML; after optional HTTPD Caddy proxy apply |
-| `common_tasks/configure_ipa_httpd_behind_caddy.yml` | **Opt-in** (`deployment_portal_ipa_httpd_proxy_enabled`, default **false**): **`zz-ipa-caddy-proxy.conf`**, **`ipa-rewrite.conf`**, **`systemctl reload httpd`** (Jenkins **PORTAL** only) |
+| `common_tasks/ensure_krb5_ansible_ccache_note.yml` | Comment-only **`/etc/krb5.conf.d/ansible-ccache-note.conf`** on ipaserver and **`identity_client_hosts`** (play **16**) and via **`configure_ipa_krb_enc_types.yml`** (play **12**) |
+| `common_tasks/ensure_ipa_httpd_behind_caddy_before_client.yml` | Playbook **16** localhost play: resolve Caddy gate and **`build_deployment_portal_facts.yml`** before client enroll |
+| `common_tasks/apply_ipa_httpd_behind_caddy_on_ipaserver.yml` | Playbook **16** **`[ipaserver]`** play: load portal facts, **`configure_ipa_httpd_behind_caddy.yml`**, **`preflight_ipa_json_on_ipaserver.yml`** |
+| `common_tasks/preflight_ipa_json_on_ipaserver.yml` | POST **`/ipa/json`** on ipaserver (canonical FQDN) — fail on HTML before worker enroll when httpd Caddy proxy applies |
+| `common_tasks/configure_ipa_httpd_behind_caddy.yml` | **`zz-ipa-caddy-proxy.conf`** (template checksum + legacy **`<Location /ipa>`** guard), **`ipa-rewrite.conf`** Caddy patches, **`apachectl configtest`**, **`systemctl reload httpd`** on ipaserver (via PORTAL sync or play **16**) |
 | `common_tasks/ensure_ipa_kdc_services.yml` | `ipactl start` + krb5kdc health on ipaserver |
 | `common_tasks/detect_ipa_server_install_state.yml` | `default.conf`, partial debris, `ipactl` / `ipa-server-status` before `ipa-server-install` |
 | `common_tasks/recover_ipa_server_install.yml` | Deeper `ipa-server-install --uninstall` + path cleanup (via `ipa_deep_recovery.yml`, not default playbook **12**) |

@@ -1,7 +1,7 @@
 ---
-# Re-apply zz-ipa-caddy-proxy.conf on ipaserver before ipa-client-install (playbook 16).
-# Full PORTAL sync (10_setup_deployment_portal) also runs configure_ipa_httpd_behind_caddy.yml;
-# this path fixes stale Apache snippets when identity client runs without a prior PORTAL rerun.
+# Playbook 16 (localhost play): resolve Caddy gate and build portal facts for IPA HTTPD on ipaserver.
+# Apply snippets on ipaserver via apply_ipa_httpd_behind_caddy_on_ipaserver.yml (dedicated play hosts: ipaserver).
+# Full PORTAL sync (10_setup_deployment_portal) also runs configure_ipa_httpd_behind_caddy.yml.
 
 - name: Resolve deployment portal Caddy gate for IPA HTTPD snippet
   ansible.builtin.import_tasks: resolve_deployment_portal_caddy_enabled.yml
@@ -11,13 +11,6 @@
   when:
     - deployment_portal_caddy_effective | default(false) | bool
     - groups.get('ipaserver', []) | length > 0
-
-- name: Configure FreeIPA HTTPD on ipaserver for deployment portal Caddy proxy
-  ansible.builtin.import_tasks: configure_ipa_httpd_behind_caddy.yml
-  when:
-    - deployment_portal_caddy_effective | default(false) | bool
-    - deployment_portal_has_ipa | default(false) | bool
-    - ipa_caddy_public_hostname | default('') | length > 0
 
 - name: Note when IPA HTTPD Caddy proxy was skipped (run PORTAL or enable Caddy vhosts)
   ansible.builtin.debug:

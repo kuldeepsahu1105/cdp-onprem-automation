@@ -1,0 +1,28 @@
+---
+# Run on [ipaserver] after localhost built deployment portal facts (build_deployment_portal_facts.yml).
+# Installs zz-ipa-caddy-proxy.conf, patches ipa-rewrite, reloads httpd, probes /ipa/json locally.
+
+- name: Load deployment portal IPA facts from localhost for ipaserver HTTPD tasks
+  ansible.builtin.import_tasks: deployment_portal_load_host_facts.yml
+
+- name: Skip IPA HTTPD Caddy apply when portal Caddy gate is off
+  ansible.builtin.meta: end_host
+  when: not (hostvars['localhost']['deployment_portal_caddy_effective'] | default(false) | bool)
+
+- name: Skip IPA HTTPD Caddy apply when IPA Caddy vhost hostname is unset
+  ansible.builtin.meta: end_host
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | trim | length == 0
+
+- name: Configure FreeIPA HTTPD on ipaserver for deployment portal Caddy proxy
+  ansible.builtin.import_tasks: configure_ipa_httpd_behind_caddy.yml
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+
+- name: Preflight /ipa/json JSON-RPC from ipaserver before worker ipa-client-install
+  ansible.builtin.import_tasks: preflight_ipa_json_on_ipaserver.yml
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - deployment_portal_ipa_fqdn | default('') | length > 0
