@@ -1,13 +1,13 @@
 # Jenkins Pipeline — CDP On-Prem Automation
 
-Declarative pipeline with **checkbox stage selection**, **configurable validation checks**, and **REFRESH_JENKINSFILE** support.
+Declarative pipeline with **checkbox stage selection**, standard prerequisite validation, and **REFRESH_JENKINSFILE** support.
 
 ## Required Jenkins plugins
 
 | Plugin | Purpose |
 |---|---|
 | Pipeline | Declarative pipeline |
-| [Extended Choice Parameter](https://plugins.jenkins.io/extended-choice-parameter/) | `PIPELINE_STAGES` and `VALIDATION_CHECKS` checkboxes |
+| [Extended Choice Parameter](https://plugins.jenkins.io/extended-choice-parameter/) | `PIPELINE_STAGES` checkboxes |
 | [Email Extension](https://plugins.jenkins.io/email-ext/) | Success/failure notifications |
 | [AnsiColor](https://plugins.jenkins.io/ansi-color/) | Colored Ansible console (default) |
 
@@ -15,18 +15,14 @@ Declarative pipeline with **checkbox stage selection**, **configurable validatio
 
 ### Operator guide: local terminal vs Jenkins
 
-| | **Local** (`./pvc_setup.sh`, wrappers on your laptop) | **Jenkins** default (`ANSIBLE_CONSOLE_OUTPUT=FULL_COLORED`) | **Jenkins** opt-in `ANSIBLE_CONSOLE_OUTPUT=PLAIN_SUMMARY` |
-|---|---|---|---|
-| **Colors** | Full ANSI when stdout is a TTY (`ui.sh`, Ansible default callback) | Colored Ansible + phase headers via AnsiColor (`options.ansiColor`) | No raw `[1;33m` escapes — output is stripped and/or plain callback |
-| **Phase / playbook framing** | Colored `PHASE:` / `PLAYBOOK:` lines with Unicode or ASCII rules | Colored `PHASE:` / `PLAYBOOK:` headers when `UI_COLOR=1` | ASCII rules (`=`, `-`), plain wrapper labels |
-| **Ansible task output** | Standard Ansible stdout (per-host) | Default Ansible callback — classic per-host `ok` / `changed` lines | `jenkins_plain`: summarized `ok`/`skipped` per task (or per-host with **ANSIBLE_PLAIN_PER_HOST_LINES**) |
-| **Artifact logs** | Whatever you tee locally | Plain ASCII (ANSI stripped); console keeps color | Plain ASCII (ANSI stripped) |
+| | **Local** (`./pvc_setup.sh`, wrappers on your laptop) | **Jenkins** |
+|---|---|---|
+| **Colors** | Full ANSI when stdout is a TTY (`ui.sh`, Ansible default callback) | Colored Ansible + phase headers via AnsiColor (`options.ansiColor`) |
+| **Phase / playbook framing** | Colored `PHASE:` / `PLAYBOOK:` lines with Unicode or ASCII rules | Colored `PHASE:` / `PLAYBOOK:` headers |
+| **Ansible task output** | Standard Ansible stdout (per-host) | Default Ansible callback with classic per-host `ok` / `changed` lines |
+| **Artifact logs** | Whatever you tee locally | Plain ASCII (ANSI stripped); console keeps color |
 
-**Build parameter:** **ANSIBLE_CONSOLE_OUTPUT** defaults to `FULL_COLORED` (classic Ansible with colors). Choose `PLAIN_SUMMARY` for summarized `jenkins_plain` output. Run **REFRESH_JENKINSFILE=YES** once after upgrading the Jenkinsfile.
-
-**Plain but per-host (no color):** `PLAIN_SUMMARY` + **ANSIBLE_PLAIN_PER_HOST_LINES** = `true` (sets `JENKINS_ANSIBLE_VERBOSE_OUTPUT=1`).
-
-**Manual override** (if you cannot refresh parameters yet): default colored mode uses `JENKINS_ANSI_CONSOLE=1`, `JENKINS_PLAIN_LOG=0`, `UI_COLOR=1`, `ANSIBLE_FORCE_COLOR=1`, and clears `NO_COLOR` / `ANSIBLE_NOCOLOR`.
+Jenkins uses full colored console output with per-host Ansible lines. The former console-format controls are internal defaults and are no longer shown on **Build with Parameters**.
 
 **Do not** set `JENKINS_PLAIN_LOG=0` without AnsiColor and `JENKINS_ANSI_CONSOLE=1` — you may get raw escape sequences in the Blue Ocean / console log.
 
@@ -38,19 +34,16 @@ Jenkins agents often show **raw ANSI** (`[1;33mPHASE:…`) when stdout is piped 
 
 Stage wrappers (`run-ansible.sh`, `run-terraform.sh`) use `jenkins_log_pipe`, which calls `jenkins_prepare_log_output` when `BUILD_NUMBER`, `JENKINS_URL`, or `CI=true` is set. Colored mode leaves console ANSI intact; plain mode (`PLAIN_SUMMARY`) runs output through an ANSI stripper and sets `ANSIBLE_STDOUT_CALLBACK=jenkins_plain`.
 
-Summarized plain console: set build parameter **ANSIBLE_CONSOLE_OUTPUT** to `PLAIN_SUMMARY`.
-
 | Variable | Typical Jenkins value | Role |
 |---|---|---|
-| `ANSIBLE_CONSOLE_OUTPUT` | `FULL_COLORED` | Job parameter: `PLAIN_SUMMARY` enables `jenkins_plain` + stripped console |
-| `JENKINS_PLAIN_LOG` | `0` (default) | `1` with `PLAIN_SUMMARY`: plain console; artifact logs always stripped |
-| `JENKINS_ANSIBLE_VERBOSE_OUTPUT` | `0` | With `jenkins_plain`: per-host `ok`/`skipped` when `1` (**ANSIBLE_PLAIN_PER_HOST_LINES**) |
-| `UI_COLOR` / `FORCE_COLOR` | `1` (default colored) | Wrapper labels (`ui_kv`, banners, `PHASE:` headers); `0` in plain mode |
-| `ANSIBLE_FORCE_COLOR` / `PY_COLORS` | `1` (default colored) | Ansible/Pygments ANSI on console |
+| `JENKINS_PLAIN_LOG` | `0` | Colored console; artifact logs remain stripped |
+| `JENKINS_ANSIBLE_VERBOSE_OUTPUT` | `0` | Internal plain-callback verbosity setting |
+| `UI_COLOR` / `FORCE_COLOR` | `1` | Wrapper labels (`ui_kv`, banners, `PHASE:` headers) |
+| `ANSIBLE_FORCE_COLOR` / `PY_COLORS` | `1` | Ansible/Pygments ANSI on console |
 | `ANSIBLE_DISPLAY_OK_HOSTS` | `true` | `jenkins_plain` callback: one summarized `ok` line per task; `false` hides ok lines |
 | `ANSIBLE_DISPLAY_SKIPPED_HOSTS` | `true` | Same for `skipped` hosts (one line per task, not per host); `false` hides skipped lines |
-| `NO_COLOR` / `ANSIBLE_NOCOLOR` | `0` (default colored) | Set `1` in `PLAIN_SUMMARY` mode |
-| `JENKINS_ANSI_CONSOLE` / `ANSIBLE_CI_CONSOLE` | `1` (default) | Colored Ansible + phase headers when AnsiColor wraps the stage |
+| `NO_COLOR` / `ANSIBLE_NOCOLOR` | `0` | Keep colored console output enabled |
+| `JENKINS_ANSI_CONSOLE` / `ANSIBLE_CI_CONSOLE` | `1` | Colored Ansible + phase headers when AnsiColor wraps the stage |
 | `JENKINS_SCRIPT_TTY` | unset | Legacy opt-in for local scripts without the log pipe |
 
 Jenkins also sets (automatically): `BUILD_NUMBER`, `BUILD_ID`, `BUILD_URL`, `JOB_NAME`, `WORKSPACE`, `JENKINS_URL`, `NODE_NAME`, `EXECUTOR_NUMBER`, `CI=true`, and `TERM` (pipeline sets `xterm`).
@@ -89,7 +82,7 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 | `PIPELINE_STAGES` | `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION` (not `CDH_INSTALL`, `MONITORING`, or `ECS_INSTALL`) |
 | `DEPLOYMENT_PORTAL_ENABLED` | `true` (bootstrap Caddy portal when `MONITORING_STACK_ENABLED` and **PORTAL** stage selected) |
 | `ECS_DATA_SERVICES_DEPLOY_ENABLED` | `false` (playbook 34 only when checked or an `ECS_DEPLOY_*` box is checked) |
-| `VALIDATION_CHECKS` | `TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY` |
+| Internal validation checks | `TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY` |
 | `ENVIRONMENT` | `development` |
 | `OWNER` | `ksahu-ygulati` |
 | `AWS_REGION` | `ap-southeast-1` |
@@ -104,7 +97,7 @@ If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALI
 
 **Legacy token:** Saved jobs may still submit **`CDH_BASE`** — it expands to `CM_TLS_KRB_LDAP` + `CDH_INSTALL`. Run **REFRESH_JENKINSFILE=YES** after Jenkinsfile changes to reload checkboxes.
 
-**Migrate old `PREREQS,IDENTITY,CM_INSTALL,CDH_BASE`:** check **`PREREQS,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL`**. Add **`VALIDATE,TERRAFORM`** if you still provision EC2 (old string omitted them). **`PORTAL`** is auto-inserted when **`DEPLOYMENT_PORTAL_ENABLED=true`** (default) and you select identity/CM/CDH stages without checking PORTAL.
+**Migrate old `PREREQS,IDENTITY,CM_INSTALL,CDH_BASE`:** check **`PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL`**. Add **`VALIDATE,TERRAFORM`** if you still provision EC2 (old string omitted them). Select **`PORTAL`** explicitly when portal bootstrap is required.
 
 ## Stage checkboxes (`PIPELINE_STAGES`)
 
@@ -116,7 +109,7 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 
 | Checkbox | What runs |
 |---|---|
-| `VALIDATE` | `validate-prereqs.sh` — only checks selected in `VALIDATION_CHECKS` (no deploy) |
+| `VALIDATE` | `validate-prereqs.sh` — standard tool, AWS, tfvars, Ansible syntax, and inventory checks (no deploy) |
 | `TERRAFORM` | EC2/VPC/SG/EIP via Terraform; `inventory.ini` + `.pem` key |
 | `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 |
 | `PORTAL` | Bootstrap Caddy/pgAdmin/index (`10`); before CM when `DEPLOYMENT_PORTAL_ENABLED` |
@@ -126,24 +119,18 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | `CDH_INSTALL` | CDH base cluster (`31_setup_base_cluster.yml`); portal refresh |
 | `MONITORING` | `32_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
 | `ECS_INSTALL` | ECS cluster (`33`); optional `34_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` |
-| `STARTSTOP_AUTOMATION` | `run-ec2-startstop-automation.sh` — Ansible on **ipaserver** only; playbook **36** (deploy script) + **37** (run). See **EC2_STARTSTOP_*** params below. Requires Terraform **IAM instance profile** on ipaserver (`ipaserver_ec2_startstop_iam_enabled`, default true). |
+| `STARTSTOP_AUTOMATION` | `run-ec2-startstop-automation.sh` — Ansible playbook **36** deploys/updates the helper on **ipaserver**. Running operations from Jenkins is disabled. |
 | `DESTROY_STACK` | `run-destroy-stack.sh` — optional `99_cleanup.yml` (`CLEANUP_BEFORE_DESTROY`) then `terraform destroy` |
 
-### STARTSTOP_AUTOMATION parameters
+### STARTSTOP_AUTOMATION
 
 | Parameter | Default | Purpose |
 |---|---|---|
 | `PIPELINE_STAGES` → **`STARTSTOP_AUTOMATION`** | checked in job defaults | Enables stage **EC2 Start/Stop Automation** (after Ansible stages). If the checkbox is missing, run **REFRESH_JENKINSFILE=YES** once. |
 | `EC2_STARTSTOP_DEPLOY_SCRIPT` | `true` | Ansible **36** — template `{prefix}_cldr_ec2_strt_stp.sh` to `/root/`, mode `0755` (+ awscli). Also runs after **PORTAL** (10) and at the start of **IDENTITY** (before IPA/AD). If missing on ipaserver, check **`ls /root/*_cldr_ec2_strt_stp.sh`** and that **PORTAL** or **IDENTITY** / **STARTSTOP_AUTOMATION** ran. |
-| `EC2_STARTSTOP_RUN_SCRIPT` | `false` | Ansible **37** — invoke deployed script with `EC2_STARTSTOP_OPERATION` / groups / environment (opt-in; default is deploy-only). Uncheck both deploy and run → validation error. |
-| `EC2_STARTSTOP_OPERATION` | `describe` | `describe` \| `start` \| `stop` |
-| `EC2_STARTSTOP_GROUPS` | *(empty)* | Comma-separated Terraform `instance_groups` keys → EC2 tag **`Group`**. Required for **start**/**stop** when run is enabled. **Do not include `ipa_server`** (FreeIPA host). Examples: `pvcbase_worker,pvcecs_worker`. |
-| `EC2_STARTSTOP_CONFIRM` | `false` | Required for **stop** from Jenkins (non-interactive). Manual **stop** on ipaserver still prompts `yes`. |
 | `ENVIRONMENT` | `development` | Maps to EC2 tag **`environment`** (same as `pvc_cluster_tags.environment` / `deployment_name_prefix`). **Set this to your workspace name** (e.g. `ptgtyv1`); the Jenkins default is not your stack unless you deployed with `environment: development`. |
 
-**Jenkins vs manual on ipaserver:** Checking **`STARTSTOP_AUTOMATION`** runs the same script as SSH to ipaserver: `/root/<prefix>_cldr_ec2_strt_stp.sh <op> <environment> <group>…`. Jenkins sets `EC2_STARTSTOP_NON_INTERACTIVE=1` and `JENKINS_URL` so **stop** does not prompt; use **`EC2_STARTSTOP_CONFIRM=true`**. Manual runs use the ipaserver **instance IAM role** (Terraform-attached profile) — not Jenkins agent credentials.
-
-**EC2 start/stop:** API calls filter **`tag:environment`** + optional **`tag:Group`** (matches Terraform tags on `module.ec2_instances`). Jenkins runs **start** / **describe** non-interactively; **stop** requires **`EC2_STARTSTOP_CONFIRM=true`**. Manual stop on ipaserver prompts `yes`.
+**EC2 start/stop:** Jenkins deploys the helper but does not invoke it. Run `/root/<prefix>_cldr_ec2_strt_stp.sh <op> <environment> <group>…` manually on ipaserver; manual **stop** prompts for `yes`. The script uses the ipaserver instance IAM role and filters by `tag:environment` plus optional `tag:Group`.
 
 ### DESTROY_STACK parameters
 
@@ -174,9 +161,9 @@ Ansible-only stages (no `TERRAFORM`) require existing `ansible-playbooks/invento
 
 Multiple Ansible checkboxes run **sequentially** (e.g. `PREREQS` + `CM_INSTALL` runs phase 1 then phase 3).
 
-## Validation checkboxes (`VALIDATION_CHECKS`)
+## Validation checks
 
-Used only when `PIPELINE_STAGES` includes **`VALIDATE`**. Example: `TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY,EMAIL_FORMAT`.
+The **VALIDATE** stage runs the fixed internal set `TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY`; individual validation checkboxes are no longer shown in Jenkins.
 
 | Checkbox | Check |
 |---|---|
@@ -185,8 +172,6 @@ Used only when `PIPELINE_STAGES` includes **`VALIDATE`**. Example: `TOOLS,AWS_CR
 | `TFVARS` | Tfvars file exists; `ENVIRONMENT`, `OWNER`, `AWS_REGION` load; AWS keypair/SG checks if `TERRAFORM` is also selected |
 | `ANSIBLE_SYNTAX` | `ansible-playbook --syntax-check` on all numbered playbooks |
 | `INVENTORY` | `ansible-playbooks/inventory.ini` present (required for Ansible-only runs; auto-enabled if you skip `TERRAFORM` but select Ansible stages) |
-| `EMAIL_FORMAT` | `NOTIFICATION_EMAIL` is a valid address when non-empty |
-
 `INVENTORY` is auto-added to validation when Ansible stages run without `TERRAFORM`.
 
 ## Input validation (Groovy — before checkout)
@@ -197,7 +182,6 @@ Fails fast with clear errors for:
 - Invalid `AWS_REGION`, `ENVIRONMENT`, `AMI_ID`, instance types
 - Non-integer or zero counts/volume sizes
 - Invalid `GIT_BRANCH`, `TFVARS_FILE` path traversal
-- Invalid `NOTIFICATION_EMAIL` (when `EMAIL_FORMAT` check selected)
 
 Warnings (non-blocking): ECS without CDH, CM without prereqs.
 

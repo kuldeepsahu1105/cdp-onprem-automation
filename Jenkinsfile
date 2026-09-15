@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-09-15.1 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-09-15.2 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -6,11 +6,7 @@ pipeline {
     choice(
       name: 'REFRESH_JENKINSFILE',
       choices: ['NO', 'YES'],
-      description: '''YES = reload this job's parameter definitions from the Jenkinsfile and exit (no deployment). Required after Jenkinsfile/parameter changes so checkboxes and help text update.
-
-Steps: Build with Parameters → REFRESH_JENKINSFILE=YES → Run (build aborts by design) → open Build with Parameters again.
-
-Plugin note: Extended Choice per-checkbox hints (descriptionPropertyValue) may only appear in job Configure, not on Build with Parameters — use the PIPELINE_STAGES_REFERENCE text area below for the full stage table (including DESTROY_STACK, DRY_RUN, DESTROY_STACK_CONFIRM).'''
+      description: 'Reload parameters from this Jenkinsfile and exit. Use once after parameter changes, then reopen Build with Parameters.'
     )
     extendedChoice(
       name: 'PIPELINE_STAGES',
@@ -34,8 +30,9 @@ CM_TLS_KRB_LDAP = playbooks 27→29→30→28 (Auto-TLS, CMS, LDAP, Kerberos). L
 DESTROY_STACK = terraform destroy (optional 99_cleanup via CLEANUP_BEFORE_DESTROY). Requires DESTROY_STACK_CONFIRM=true unless DRY_RUN=true (destroy plan only).
 
 After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once, then re-run with your stage checkboxes.''',
-      descriptionPropertyValue: '''VALIDATE — prereq script (VALIDATION_CHECKS),TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→29→30→28 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — ECS cluster (33),STARTSTOP_AUTOMATION — EC2 start/stop/describe on ipaserver (checkbox + EC2_STARTSTOP_*; deploy/run toggles),DESTROY_STACK — terraform destroy; DESTROY_STACK_CONFIRM or DRY_RUN'''
+      descriptionPropertyValue: '''VALIDATE — standard prerequisite checks,TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→29→30→28 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — ECS cluster (33),STARTSTOP_AUTOMATION — deploy EC2 start/stop helper on ipaserver,DESTROY_STACK — terraform destroy; DESTROY_STACK_CONFIRM or DRY_RUN'''
     )
+    string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Deployment name prefix + Terraform workspace (overrides tfvars when set)')
     text(
       name: 'PIPELINE_STAGES_REFERENCE',
       defaultValue: '''PIPELINE_STAGES — reference (edit optional; default is documentation)
@@ -54,7 +51,7 @@ Teardown — check PIPELINE_STAGES checkbox DESTROY_STACK, then:
 Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → STARTSTOP_AUTOMATION → DESTROY_STACK
 
 | Checkbox | What runs |
-| VALIDATE | validate-prereqs.sh — only VALIDATION_CHECKS you select |
+| VALIDATE | validate-prereqs.sh — standard tool, AWS, tfvars, Ansible syntax, and inventory checks |
 | TERRAFORM | run-terraform.sh — plan/apply; writes inventory.ini + PEM |
 | PREREQS | Ansible phase 1 (playbooks 01–09) |
 | PORTAL | Deployment portal bootstrap (10); before CM when portal enabled |
@@ -64,7 +61,7 @@ Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INS
 | CDH_INSTALL | CDH base cluster (31_setup_base_cluster.yml) |
 | MONITORING | Monitoring stack (32); needs PORTAL; MONITORING_STACK_ENABLED |
 | ECS_INSTALL | ECS (33) + optional data services when ECS_DATA_SERVICES_DEPLOY_ENABLED |
-| STARTSTOP_AUTOMATION | run-ec2-startstop-automation.sh — Ansible on ipaserver (36 deploy + 37 run); EC2_STARTSTOP_DEPLOY_SCRIPT default true, EC2_STARTSTOP_RUN_SCRIPT default false (opt-in describe/start/stop) |
+| STARTSTOP_AUTOMATION | run-ec2-startstop-automation.sh — deploy/update the helper on ipaserver (36); running operations remains disabled in this job |
 | DESTROY_STACK | run-destroy-stack.sh — optional 99_cleanup (CLEANUP_BEFORE_DESTROY) then terraform destroy for this ENVIRONMENT workspace. Must enable DESTROY_STACK_CONFIRM (unless DRY_RUN=true). |
 
 Destroy safety (boolean parameters on Build with Parameters):
@@ -74,68 +71,25 @@ Destroy safety (boolean parameters on Build with Parameters):
 
 Legacy: CDH_BASE (old jobs) expands to CM_TLS_KRB_LDAP + CDH_INSTALL — check those two boxes instead.
 
-PORTAL auto-run: only when AUTO_INCLUDE_PORTAL_BOOTSTRAP=true and you select CM_INSTALL, CDH_INSTALL, MONITORING, or ECS without PORTAL (not CM_TLS-only or IDENTITY-only). Default job checkboxes include PORTAL (and STARTSTOP_AUTOMATION).
-
 Examples:
   New job defaults: VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION (ECS_INSTALL and CDH_INSTALL unchecked; ECS_DATA_SERVICES_DEPLOY_ENABLED=false)
   Validate + provision only: VALIDATE,TERRAFORM (uncheck PORTAL and STARTSTOP_AUTOMATION)
-  Through CM (greenfield): VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL (+ PORTAL auto if portal enabled)
-  Old PREREQS,IDENTITY,CM_INSTALL,CDH_BASE equivalent: PREREQS,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL (+ VALIDATE,TERRAFORM if you still provision VMs; + PORTAL auto when DEPLOYMENT_PORTAL_ENABLED)
+  Through CM (greenfield): VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL
+  Old PREREQS,IDENTITY,CM_INSTALL,CDH_BASE equivalent: PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL (+ VALIDATE,TERRAFORM if you still provision VMs)
 
 Details: jenkins/README.md
 ''',
       description: 'Stage guide (multiline text — always visible on Build with Parameters). Includes DESTROY_STACK and DESTROY_STACK_CONFIRM teardown steps. Editing this field does not change what runs; use PIPELINE_STAGES checkboxes + DESTROY_STACK_CONFIRM boolean.'
     )
-    extendedChoice(
-      name: 'VALIDATION_CHECKS',
-      type: 'PT_CHECKBOX',
-      value: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY,EMAIL_FORMAT',
-      defaultValue: 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY',
-      multiSelectDelimiter: ',',
-      visibleItemCount: 6,
-      quoteValue: false,
-      description: '''Used only when PIPELINE_STAGES includes VALIDATE (validate-prereqs.sh + Check Parameters). Example: TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY,EMAIL_FORMAT. Uncheck any box to skip that check.
-
-TOOLS — On Jenkins agent: which git jq aws python3; adds terraform if TERRAFORM stage selected; adds ansible-playbook if any Ansible stage selected or ANSIBLE_SYNTAX checked.
-
-AWS_CREDS — aws_cred_diagnose + aws sts get-caller-identity (CREDENTIALS_USER ~/.aws when USE_CREDENTIALS_USER_AWS=true else instance IAM role).
-
-TFVARS — Resolve TFVARS_FILE; load ENVIRONMENT OWNER AWS_REGION from config; if TERRAFORM also selected runs validate-aws-resources.sh (keypair + security group exist or creatable).
-
-ANSIBLE_SYNTAX — ansible-playbook --syntax-check on each numbered playbook under ansible-playbooks/ (installs local ansible if needed).
-
-INVENTORY — Fail if ansible-playbooks/inventory.ini missing (auto-enabled when you select Ansible stages without TERRAFORM).
-
-EMAIL_FORMAT — In Check Parameters: regex-validate NOTIFICATION_EMAIL when non-empty (in addition to tfvars/email usage).''',
-      descriptionPropertyValue: '''TOOLS: verify CLIs on agent; +terraform if TERRAFORM; +ansible-playbook if Ansible stages or ANSIBLE_SYNTAX,AWS_CREDS: aws sts get-caller-identity (holautosa ~/.aws or instance role),TFVARS: tfvars file + ENVIRONMENT/OWNER/REGION; AWS keypair/SG pre-check if TERRAFORM,ANSIBLE_SYNTAX: syntax-check all numbered ansible-playbooks/*.yml,INVENTORY: require ansible-playbooks/inventory.ini on disk,EMAIL_FORMAT: validate NOTIFICATION_EMAIL format in Check Parameters when set'''
-    )
+    // Hidden advanced input: VALIDATION_CHECKS uses defaultValidationChecks().
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply). With DESTROY_STACK: terraform destroy plan only.')
     booleanParam(name: 'DESTROY_STACK_CONFIRM', defaultValue: false, description: 'Required when PIPELINE_STAGES includes DESTROY_STACK (unless DRY_RUN=true). Confirms terraform destroy for this ENVIRONMENT workspace.')
     booleanParam(name: 'CLEANUP_BEFORE_DESTROY', defaultValue: false, description: 'When DESTROY_STACK is selected: run ansible-playbooks/99_cleanup.yml (cleanup_e2e) before terraform destroy.')
-    choice(
-      name: 'EC2_STARTSTOP_OPERATION',
-      choices: ['describe', 'start', 'stop'],
-      description: '''Used when PIPELINE_STAGES includes STARTSTOP_AUTOMATION. Runs ec2_startstop_script_path on ipaserver (/root/{prefix}_cldr_ec2_strt_stp.sh; prefix = sanitized ENVIRONMENT/deployment_name_prefix, optional ec2_startstop_script_name_prefix). EC2 filters: tag:environment + tag:Group. Jenkins sets non-interactive mode; stop from Jenkins requires EC2_STARTSTOP_CONFIRM=true. Manual runs on ipaserver prompt "yes" for stop.'''
-    )
-    string(
-      name: 'EC2_STARTSTOP_GROUPS',
-      defaultValue: '',
-      description: 'Comma-separated Terraform instance_groups keys (EC2 tag Group), e.g. pvcbase_worker,pvcecs_worker. Required for start/stop; optional for describe (environment-only listing when empty).'
-    )
-    booleanParam(
-      name: 'EC2_STARTSTOP_CONFIRM',
-      defaultValue: false,
-      description: 'Required when STARTSTOP_AUTOMATION + EC2_STARTSTOP_OPERATION=stop (Jenkins bypasses interactive yes on ipaserver).'
-    )
+    // Hidden advanced inputs: operation=describe, groups empty, confirmation=false, run-script=false.
     booleanParam(
       name: 'EC2_STARTSTOP_DEPLOY_SCRIPT',
       defaultValue: true,
-      description: 'When STARTSTOP_AUTOMATION is checked: run Ansible playbook 36 on ipaserver (install/update /root/{prefix}_cldr_ec2_strt_stp.sh, chmod 755). Uncheck if IDENTITY already deployed the script and you only want to run an operation.'
-    )
-    booleanParam(
-      name: 'EC2_STARTSTOP_RUN_SCRIPT',
-      defaultValue: false,
-      description: 'When STARTSTOP_AUTOMATION is checked: run the start/stop/describe script on ipaserver (playbook 37). Default false (deploy-only); check to opt in to describe/start/stop.'
+      description: 'STARTSTOP_AUTOMATION: install/update /root/{prefix}_cldr_ec2_strt_stp.sh on ipaserver. Running start/stop operations from this job is disabled.'
     )
     booleanParam(name: 'USE_CREDENTIALS_USER_AWS', defaultValue: true, description: 'Use CREDENTIALS_USER ~/.aws credentials (default on — uncheck to use EC2 instance IAM role via IMDS)')
     string(name: 'CREDENTIALS_USER', defaultValue: 'holautosa', description: 'OS user whose ~/.aws and ~/.ssh credentials to use (read-only; files not modified)')
@@ -190,7 +144,6 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
       defaultValue: '',
       description: '''When CREATE_EIP=true (TERRAFORM): AWS Name tag for the Elastic IP attached to the Cloudera Manager host (cldr-mngr). Empty = {ENVIRONMENT}-cldr-mngr-eip. Does not control security group ports — use ALLOW_ALL + ALLOWED_CIDRS for ingress.'''
     )
-    string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Name prefix + Terraform workspace (overrides tfvars when set)')
     string(name: 'OWNER', defaultValue: 'ksahu-ygulati', description: 'Owner tag — required for Terraform/Ansible if not set in tfvars')
     string(name: 'AWS_REGION', defaultValue: 'ap-southeast-1', description: 'AWS region override (e.g. ap-southeast-1)')
     string(name: 'AMI_ID', defaultValue: 'ami-030a276b398df7eb7', description: 'AMI override for all instance groups in ap-southeast-1 (empty = use tfvars)')
@@ -237,11 +190,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
       defaultValue: true,
       description: 'Bootstrap Caddy portal on ops host (10) when MONITORING_STACK_ENABLED=true. Without monitoring, no Caddy/portal — CM stays direct :7180/:7183. CM Caddy vhost uses edge port deployment_portal_http_port (81) proxying to cldr-mngr:7180/7183.'
     )
-    booleanParam(
-      name: 'AUTO_INCLUDE_PORTAL_BOOTSTRAP',
-      defaultValue: false,
-      description: 'When true and DEPLOYMENT_PORTAL_ENABLED: if you select CM_INSTALL, CDH_INSTALL, MONITORING, or ECS without PORTAL, Jenkins inserts the PORTAL stage after PREREQS. When false (default), run PORTAL only when you check the PORTAL box.'
-    )
+    // Hidden advanced input: AUTO_INCLUDE_PORTAL_BOOTSTRAP=false; select PORTAL explicitly.
     booleanParam(
       name: 'ECS_DATA_SERVICES_DEPLOY_ENABLED',
       defaultValue: false,
@@ -277,24 +226,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
       defaultValue: false,
       description: 'Create FreeIPA user <prefix>admin and assign ECS IAM admin roles (requires ECS_LDAP or LDAP sync).'
     )
-    choice(
-      name: 'ANSIBLE_CONSOLE_OUTPUT',
-      choices: ['FULL_COLORED', 'PLAIN_SUMMARY'],
-      description: '''Ansible console style (jenkins/artifacts/*.log stay plain ASCII).
-
-FULL_COLORED (default): default Ansible stdout callback — classic per-host ok/changed lines with colors (requires AnsiColor; Jenkinsfile options.ansiColor).
-
-PLAIN_SUMMARY (opt-in): jenkins_plain callback — TASK banners, per-host changed/failed, one summarized ok/skipped line per task; no raw ANSI on console.
-
-Optional with PLAIN_SUMMARY only: check ANSIBLE_PLAIN_PER_HOST_LINES for per-host ok/skipped (still plain text).
-
-After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README.md'''
-    )
-    booleanParam(
-      name: 'ANSIBLE_PLAIN_PER_HOST_LINES',
-      defaultValue: false,
-      description: 'When ANSIBLE_CONSOLE_OUTPUT=PLAIN_SUMMARY: one ok:/skipped: line per host (jenkins_plain verbose). Ignored in FULL_COLORED mode.'
-    )
+    // Hidden advanced inputs: full colored Ansible output; plain per-host lines disabled.
   }
 
   options {
@@ -309,17 +241,16 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
     LC_ALL = 'C.UTF-8'
     TERM = 'xterm'
     UI_ASCII = '1'
-    // Ansible console: default FULL_COLORED; PLAIN_SUMMARY opts into jenkins_plain.
-    JENKINS_PLAIN_LOG = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'FULL_COLORED') == 'FULL_COLORED' ? '0' : '1'}"
-    JENKINS_ANSI_CONSOLE = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'FULL_COLORED') == 'FULL_COLORED' ? '1' : '0'}"
-    FORCE_COLOR = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'FULL_COLORED') == 'FULL_COLORED' ? '1' : '0'}"
-    UI_COLOR = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'FULL_COLORED') == 'FULL_COLORED' ? '1' : '0'}"
-    ANSIBLE_FORCE_COLOR = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'FULL_COLORED') == 'FULL_COLORED' ? '1' : '0'}"
-    PY_COLORS = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'FULL_COLORED') == 'FULL_COLORED' ? '1' : '0'}"
-    NO_COLOR = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'FULL_COLORED') == 'FULL_COLORED' ? '0' : '1'}"
-    ANSIBLE_NOCOLOR = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'FULL_COLORED') == 'FULL_COLORED' ? '0' : '1'}"
-    JENKINS_ANSIBLE_VERBOSE_OUTPUT = "${(params.ANSIBLE_CONSOLE_OUTPUT ?: 'FULL_COLORED') == 'PLAIN_SUMMARY' && params.ANSIBLE_PLAIN_PER_HOST_LINES ? '1' : '0'}"
-    // jenkins_plain: summarized ok/skipped per task unless JENKINS_ANSIBLE_VERBOSE_OUTPUT=1; set false to hide ok/skipped.
+    // Hidden console controls use FULL_COLORED with plain per-host lines disabled.
+    JENKINS_PLAIN_LOG = '0'
+    JENKINS_ANSI_CONSOLE = '1'
+    FORCE_COLOR = '1'
+    UI_COLOR = '1'
+    ANSIBLE_FORCE_COLOR = '1'
+    PY_COLORS = '1'
+    NO_COLOR = '0'
+    ANSIBLE_NOCOLOR = '0'
+    JENKINS_ANSIBLE_VERBOSE_OUTPUT = '0'
     ANSIBLE_DISPLAY_OK_HOSTS = 'true'
     ANSIBLE_DISPLAY_SKIPPED_HOSTS = 'true'
     REPO_ROOT = "${WORKSPACE}"
@@ -363,18 +294,18 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
     DRY_RUN = "${params.DRY_RUN}"
     DESTROY_STACK_CONFIRM = "${params.DESTROY_STACK_CONFIRM}"
     CLEANUP_BEFORE_DESTROY = "${params.CLEANUP_BEFORE_DESTROY}"
-    EC2_STARTSTOP_OPERATION = "${params.EC2_STARTSTOP_OPERATION?.trim() ?: 'describe'}"
-    EC2_STARTSTOP_GROUPS = "${params.EC2_STARTSTOP_GROUPS?.trim() ?: ''}"
-    EC2_STARTSTOP_CONFIRM = "${params.EC2_STARTSTOP_CONFIRM}"
+    EC2_STARTSTOP_OPERATION = 'describe'
+    EC2_STARTSTOP_GROUPS = ''
+    EC2_STARTSTOP_CONFIRM = 'false'
     EC2_STARTSTOP_DEPLOY_SCRIPT = "${params.EC2_STARTSTOP_DEPLOY_SCRIPT}"
-    EC2_STARTSTOP_RUN_SCRIPT = "${params.EC2_STARTSTOP_RUN_SCRIPT}"
+    EC2_STARTSTOP_RUN_SCRIPT = 'false'
     CREDENTIALS_USER = "${params.CREDENTIALS_USER?.trim() ?: 'holautosa'}"
     ANSIBLE_CONTROL_VIA_JENKINS = '1'
     CM_API_PREFER_PRIVATE_IP = 'false'
     ANSIBLE_CONTROLLER_OUTSIDE_VPC = 'true'
     DEPLOYMENT_PORTAL_URL_VERIFY_SKIP_VPC = 'true'
     PIPELINE_STAGES = "${params.PIPELINE_STAGES?.trim() ?: ''}"
-    VALIDATION_CHECKS = "${params.VALIDATION_CHECKS?.trim() ?: ''}"
+    VALIDATION_CHECKS = 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY'
     BUILD_RESULT = 'IN_PROGRESS'
     MAIL_TO = "${params.NOTIFICATION_EMAIL?.trim() ?: env.BUILD_USER_EMAIL ?: ''}"
   }
@@ -385,6 +316,8 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
         script {
           def stages = effectivePipelineStages(params.PIPELINE_STAGES)
           def label = "#${BUILD_NUMBER} — ${stages.join('+')}"
+          def deploymentPrefix = params.ENVIRONMENT?.trim()
+          if (deploymentPrefix) { label += " — ${deploymentPrefix}" }
           if (params.DRY_RUN == true || "${params.DRY_RUN}" == 'true') { label += ' (dry-run)' }
           currentBuild.displayName = label
         }
@@ -408,7 +341,7 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
         script {
           env.USE_CREDENTIALS_USER_AWS = credentialsUserAwsEnabled() ? 'true' : 'false'
           env.AWS_USE_INSTANCE_ROLE = credentialsUserAwsEnabled() ? 'false' : 'true'
-          def cfg = resolvePipelineStages(params.PIPELINE_STAGES, params.VALIDATION_CHECKS)
+          def cfg = resolvePipelineStages(params.PIPELINE_STAGES, env.VALIDATION_CHECKS)
           env.RUN_VALIDATE = cfg.runValidate
           env.RUN_TERRAFORM = cfg.runTerraform
           env.RUN_ANSIBLE = cfg.runAnsible
@@ -912,20 +845,6 @@ def effectiveValidationChecks(def csv) {
 def resolvePipelineStages(def stagesCsv, def validationCsv) {
   def stages = effectivePipelineStages(stagesCsv)
   def ansibleStageIds = orderedAnsibleStageIds().findAll { stages.contains(it) }
-  if (portalDeployEnabled() && isParamEnabled(params.AUTO_INCLUDE_PORTAL_BOOTSTRAP) && !ansibleStageIds.contains('PORTAL')) {
-    def needsPortal = ansibleStageIds.any {
-      it in ['CM_INSTALL', 'CDH_INSTALL', 'MONITORING', 'ECS_INSTALL']
-    }
-    if (needsPortal) {
-      def prereqIdx = ansibleStageIds.indexOf('PREREQS')
-      if (prereqIdx >= 0) {
-        ansibleStageIds = ansibleStageIds[0..prereqIdx] + ['PORTAL'] + ansibleStageIds.drop(prereqIdx + 1)
-      } else {
-        ansibleStageIds = ['PORTAL'] + ansibleStageIds
-      }
-      echo 'INFO: AUTO_INCLUDE_PORTAL_BOOTSTRAP — inserted PORTAL bootstrap (uncheck AUTO_INCLUDE_PORTAL_BOOTSTRAP or check PORTAL yourself to control this).'
-    }
-  }
   def ansiblePhases = ansibleStageIds.collect { ansiblePhaseForStage(it) }
   def runTerraform = stages.contains('TERRAFORM') ? 'true' : 'false'
   def runDestroyStack = stages.contains('DESTROY_STACK') ? 'true' : 'false'
@@ -1098,17 +1017,17 @@ def validatePipelineInputs() {
 
   if (stages.contains('STARTSTOP_AUTOMATION')) {
     def deployScript = isParamEnabled(params.EC2_STARTSTOP_DEPLOY_SCRIPT)
-    def runScript = isParamEnabled(params.EC2_STARTSTOP_RUN_SCRIPT)
+    def runScript = isParamEnabled(env.EC2_STARTSTOP_RUN_SCRIPT)
     if (!deployScript && !runScript) {
       validationFail(
-        'STARTSTOP_AUTOMATION requires at least one of EC2_STARTSTOP_DEPLOY_SCRIPT or EC2_STARTSTOP_RUN_SCRIPT enabled.'
+        'STARTSTOP_AUTOMATION requires EC2_STARTSTOP_DEPLOY_SCRIPT to be enabled.'
       )
     }
-    def op = params.EC2_STARTSTOP_OPERATION?.trim()?.toLowerCase() ?: 'describe'
+    def op = env.EC2_STARTSTOP_OPERATION?.trim()?.toLowerCase() ?: 'describe'
     if (!op in ['start', 'stop', 'describe']) {
-      validationFail("EC2_STARTSTOP_OPERATION must be start, stop, or describe (got '${params.EC2_STARTSTOP_OPERATION}').")
+      validationFail("Internal EC2_STARTSTOP_OPERATION must be start, stop, or describe (got '${env.EC2_STARTSTOP_OPERATION}').")
     }
-    def groups = params.EC2_STARTSTOP_GROUPS?.trim() ?: ''
+    def groups = env.EC2_STARTSTOP_GROUPS?.trim() ?: ''
     if (runScript && op in ['start', 'stop'] && !groups) {
       validationFail('EC2_STARTSTOP_GROUPS is required for start/stop when EC2_STARTSTOP_RUN_SCRIPT is enabled (comma-separated Terraform instance_groups keys / EC2 tag Group).')
     }
@@ -1123,7 +1042,7 @@ def validatePipelineInputs() {
         )
       }
     }
-    if (op == 'stop' && runScript && !isParamEnabled(params.DRY_RUN) && !isParamEnabled(params.EC2_STARTSTOP_CONFIRM)) {
+    if (op == 'stop' && runScript && !isParamEnabled(params.DRY_RUN) && !isParamEnabled(env.EC2_STARTSTOP_CONFIRM)) {
       validationFail(
         'STARTSTOP_AUTOMATION with EC2_STARTSTOP_OPERATION=stop requires EC2_STARTSTOP_CONFIRM=true ' +
         '(manual stop on ipaserver still prompts interactively for yes).'
@@ -1241,7 +1160,7 @@ def validatePipelineInputs() {
   }
 
   def email = params.NOTIFICATION_EMAIL?.trim()
-  def checks = params.VALIDATION_CHECKS?.toString() ?: ''
+  def checks = env.VALIDATION_CHECKS?.toString() ?: defaultValidationChecks()
   if (email && checks.contains('EMAIL_FORMAT') && !email.matches(emailRegex)) {
     validationFail("NOTIFICATION_EMAIL '${email}' is not a valid email address.")
   }
