@@ -57,7 +57,7 @@ http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | in
     }
   }
   @ipa_session_no_referer path /ipa/session /ipa/session/* not header Referer *
-  header @ipa_session_no_referer Referer "https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/"
+  request_header @ipa_session_no_referer Referer "https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/"
   @ipa_session path /ipa/session /ipa/session/*
   handle @ipa_session {
     reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
