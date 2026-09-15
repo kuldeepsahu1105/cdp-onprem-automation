@@ -1,6 +1,4 @@
 {# Included per IP slug (public + optional private). Variable: caddy_vhost_urls #}
-{% set _ipa_caddy_origin = 'http://{http.request.host}' ~ (':' ~ (deployment_portal_http_port | int) if (deployment_portal_http_port | int) != 80 else '') %}
-{% set _ipa_caddy_vhost_host = caddy_vhost_urls.ipa.hostname %}
 http://{{ caddy_vhost_urls.portal.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
 {% include 'deployment_portal_Caddyfile_downloads_auth.inc.j2' %}
   @portal_static not path /downloads*
@@ -19,17 +17,37 @@ http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port 
 {# FreeIPA via Caddy: connect to the inventory IP over HTTPS, but present the IPA FQDN in TLS, Host, and Referer.
    HTTPS avoids a loop where IPA redirects its HTTP listener to HTTPS and Caddy rewrites that redirect back to the public HTTP vhost.
    Legacy /ipa/ui loads static assets under /ipa/js, /ipa/css, /ipa/config, /ipa/wsgi — not only /ipa/ui/*.
-   Browsers use ipa.<slug> host; upstream expects ipaserver FQDN Referer and issues Set-Cookie for that FQDN — rewrite both or session/login 401.
+   Browsers use ipa.<slug> host; upstream expects ipaserver FQDN Referer. Rewrite response redirects/cookies and
+   remove the upstream cookie's Secure attribute because this Caddy listener is HTTP, or password login succeeds
+   but the browser drops ipa_session and the next /ipa/session/json request returns 401.
    Optional ipaserver HTML rewrites: deployment_portal_ipa_httpd_proxy_enabled + ipa_httpd_caddy_proxy.conf.j2.
    Test on ops (PORT={{ deployment_portal_http_port }}, slug host {{ caddy_vhost_urls.ipa.hostname }}, upstream {{ deployment_portal_ipa_upstream_host }}, Host {{ deployment_portal_ipa_fqdn }}):
      curl -sS -o /dev/null -w '%{http_code}\n' -H "Host: {{ caddy_vhost_urls.ipa.hostname }}" "http://127.0.0.1:{{ deployment_portal_http_port }}/ipa/ui"
      curl -sS -o /dev/null -w '%{http_code}\n' -H "Host: {{ caddy_vhost_urls.ipa.hostname }}" "http://127.0.0.1:{{ deployment_portal_http_port }}/ipa/js/util.js"
      curl -ksS -o /dev/null -w '%{http_code}\n' --resolve "{{ deployment_portal_ipa_fqdn }}:443:{{ deployment_portal_ipa_upstream_host }}" "https://{{ deployment_portal_ipa_fqdn }}/ipa/ui/"
 #}
+{% if deployment_portal_ipa_https_enabled | default(true) | bool %}
+http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
+  redir https://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_ipa_https_port | int != 443 %}:{{ deployment_portal_ipa_https_port }}{% endif %}{uri} permanent
+}
+
+{% set _ipa_caddy_origin = 'https://' ~ caddy_vhost_urls.ipa.hostname ~ ((':' ~ (deployment_portal_ipa_https_port | string)) if (deployment_portal_ipa_https_port | int) != 443 else '') %}
+{% set _ipa_caddy_vhost_host = caddy_vhost_urls.ipa.hostname %}
+{% set _ipa_caddy_strip_secure_cookie = false %}
+https://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_ipa_https_port | int != 443 %}:{{ deployment_portal_ipa_https_port }}{% endif %} {
+  tls internal
+  redir / /ipa/modern-ui/ permanent
+{% include 'deployment_portal_Caddyfile_ipa_proxy.inc.j2' %}
+}
+{% else %}
+{% set _ipa_caddy_origin = 'http://' ~ caddy_vhost_urls.ipa.hostname ~ ((':' ~ (deployment_portal_http_port | string)) if (deployment_portal_http_port | int) != 80 else '') %}
+{% set _ipa_caddy_vhost_host = caddy_vhost_urls.ipa.hostname %}
+{% set _ipa_caddy_strip_secure_cookie = true %}
 http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
   redir / /ipa/modern-ui/ permanent
 {% include 'deployment_portal_Caddyfile_ipa_proxy.inc.j2' %}
 }
+{% endif %}
 {% endif %}
 
 {% if deployment_portal_monitoring_routes_enabled | default(false) | bool %}

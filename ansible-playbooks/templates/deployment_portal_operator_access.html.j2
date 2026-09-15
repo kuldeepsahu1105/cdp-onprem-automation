@@ -1,0 +1,90 @@
+{% set ctx = deployment_portal_context %}
+{% set oa = ctx.operator_access | default({}) %}
+{% from 'deployment_portal_url_fqdn_pubip.inc.j2' import portal_jdbc_for_context, portal_url_bundle, portal_url_for_context with context %}
+{% set ssh_key_filename = oa.ssh_connect_key_filename | default('cluster-access.pem', true) %}
+<div class="operator-protected">
+  <p class="sub">Authenticated operator view. Credentials are rendered from Ansible variables at portal sync; use only on trusted networks.</p>
+  <p class="sub">
+    SSH user: <code>{{ oa.ssh_user | default('ec2-user') }}</code>
+    — <a href="{{ oa.downloads_path_prefix | default('/downloads') }}/operator-credentials.json">Download operator-credentials.json</a>
+    {% if deployment_portal_ipa_https_enabled | default(true) | bool %}
+    — <a href="{{ oa.downloads_path_prefix | default('/downloads') }}/caddy-root-ca.crt" download="caddy-root-ca.crt">Download Caddy root CA</a>
+    {% endif %}
+  </p>
+
+  {% if oa.ssh_connect_command | default('') | length > 0 %}
+  <h2 class="section-title">SSH quick start</h2>
+  <p class="sub">{% if oa.ssh_keys_exposed | default(false) | bool %}Download <code>{{ ssh_key_filename }}</code>, run <code>chmod 400 {{ ssh_key_filename }}</code>, then connect:{% else %}Use the cluster PEM, then connect:{% endif %}</p>
+  <div class="ssh-command-box"><code>{{ oa.ssh_connect_command }}</code></div>
+  {% endif %}
+
+  {% if oa.ssh_host_examples | default([]) | length > 0 %}
+  <div class="table-scroll">
+    <table class="portal-table">
+      <thead><tr><th>Host</th><th>Address</th><th>Command</th></tr></thead>
+      <tbody>
+        {% for ex in oa.ssh_host_examples %}
+        <tr>
+          <td><code>{{ ex.label }}</code></td>
+          <td><code>{{ ex.host }}</code></td>
+          <td><code class="ssh-inline-cmd">{{ ex.command }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% set ec2ss = ctx.ec2_startstop | default({}) %}
+  {% if ec2ss.script_path | default('') | length > 0 %}
+  <h2 class="section-title" style="margin-top:1rem">EC2 start / stop / describe</h2>
+  <p class="sub">Run on the FreeIPA/ops host through its instance IAM role. Never start or stop the <code>ipa_server</code> group.</p>
+  <div class="ssh-command-box"><code>{{ ec2ss.usage_generic | default('') }}</code></div>
+  <div class="ssh-command-box"><code>{{ ec2ss.example_start | default('') }}</code></div>
+  {% if ec2ss.example_describe | default('') | length > 0 %}
+  <div class="ssh-command-box"><code>{{ ec2ss.example_describe }}</code></div>
+  {% endif %}
+  {% endif %}
+
+  {% for sec in oa.sections | default([]) %}
+  <h2 class="section-title" style="margin-top:1rem">{{ sec.title }}</h2>
+  {% if sec.intro | default('') | length > 0 %}<p class="sub">{{ sec.intro }}</p>{% endif %}
+  {% if sec.downloads | default([]) | length > 0 %}
+  <ul class="cred-dl-list">
+    {% for dl in sec.downloads %}
+    <li><a href="{{ dl.href }}" download="{{ dl.filename | default('') }}">{{ dl.label }}</a>{% if dl.note | default('') | length > 0 %} — <span class="badge">{{ dl.note }}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if sec.credentials | default([]) | length > 0 %}
+  <div class="table-scroll">
+    <table class="portal-table cred-table">
+      <thead>
+        <tr><th>Service</th><th>Username</th><th>Password / secret</th><th>Access URLs</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        {% for cr in sec.credentials %}
+        <tr>
+          <td>{{ cr.label }}</td>
+          <td><code>{{ cr.username }}</code></td>
+          <td><code class="cred-secret">{{ cr.password }}</code></td>
+          <td{% if sec.id | default('') == 'monitoring' %} class="monitoring-url"{% endif %}>
+            {% if cr.url | default('') | string | lower | regex_search('^jdbc:') %}
+            {{ portal_jdbc_for_context(cr.url, ctx) }}
+            {% elif cr.public_url | default('') | length > 0 or cr.private_url | default('') | length > 0 %}
+            {{ portal_url_bundle(cr.url | default(''), cr.public_url | default(''), cr.private_url | default('')) }}
+            {% elif cr.url | default('') | length > 0 %}
+            {{ portal_url_for_context(cr.url, ctx) }}
+            {% else %}
+            <span class="badge">—</span>
+            {% endif %}
+          </td>
+          <td>{{ cr.note | default('') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>

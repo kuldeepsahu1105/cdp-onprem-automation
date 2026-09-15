@@ -119,6 +119,10 @@
       color: var(--muted);
       margin-left: 0.2rem;
     }
+    .monitoring-url .url-alternative {
+      display: block;
+      margin: 0.22rem 0 0;
+    }
     .site-header {
       background: linear-gradient(135deg, #1a2332 0%, #0f1419 55%, #1a1208 100%);
       border-bottom: 1px solid var(--border);
@@ -268,7 +272,7 @@
       display: flex;
       flex-wrap: wrap;
       gap: 0.45rem;
-      margin: -0.5rem 0 1.25rem;
+      margin: 0 0 1.25rem;
     }
     .version-strip .chip:nth-child(1) {
       background: rgba(249, 103, 2, 0.09);
@@ -675,6 +679,20 @@
       padding: 0.55rem 0.75rem;
       margin: 0 0 0.75rem;
     }
+    .auth-gate {
+      border: 1px solid rgba(91, 159, 212, 0.35);
+      background: rgba(91, 159, 212, 0.08);
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    .auth-gate p { margin: 0 0 0.7rem; }
+    .auth-gate .help-open-btn {
+      display: inline-flex;
+      text-decoration: none;
+      background: rgba(91, 159, 212, 0.14);
+      border-color: rgba(91, 159, 212, 0.45);
+    }
+    .operator-protected > .section-title:first-of-type { margin-top: 0.75rem; }
     .site-footer {
       max-width: var(--max-w);
       margin: 0 auto;
@@ -814,16 +832,46 @@
       font-size: 0.75rem;
     }
     .ssh-command-box {
+      position: relative;
       background: #0b1018;
       border: 1px solid var(--border);
       border-radius: 6px;
-      padding: 0.55rem 0.75rem;
+      padding: 0.55rem 3.8rem 0.55rem 0.75rem;
       margin: 0.5rem 0 0.75rem;
       font-size: 0.82rem;
       overflow-x: auto;
     }
     .ssh-command-box code { background: transparent; padding: 0; word-break: normal; white-space: pre-wrap; }
     code.ssh-inline-cmd { display: block; white-space: pre-wrap; word-break: break-all; font-size: 0.8em; }
+    .copy-command-wrap {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.4rem;
+    }
+    .copy-command-wrap code { flex: 1; min-width: 0; }
+    .copy-command-btn {
+      flex-shrink: 0;
+      border: 1px solid rgba(66, 199, 199, 0.38);
+      border-radius: 5px;
+      background: rgba(66, 199, 199, 0.1);
+      color: #a8eeee;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.68rem;
+      font-weight: 650;
+      padding: 0.22rem 0.45rem;
+    }
+    .ssh-command-box > .copy-command-btn {
+      position: absolute;
+      right: 0.45rem;
+      top: 0.42rem;
+    }
+    .copy-command-btn:hover { background: rgba(66, 199, 199, 0.2); }
+    .copy-command-btn.is-copied {
+      color: #b7f7d4;
+      border-color: rgba(69, 201, 138, 0.5);
+      background: rgba(69, 201, 138, 0.14);
+    }
     .owner-social { display: inline-flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
     @media (max-width: 480px) {
       .site-header { padding: 0.85rem 1rem; }
@@ -965,12 +1013,6 @@
       </div>
       <p class="filter-empty" id="service-filter-empty" role="status" hidden>No matching services.</p>
     </nav>
-    <div class="version-strip" aria-label="Platform versions">
-      <span class="chip"><strong>CM</strong> {{ ctx.versions.cm }}</span>
-      <span class="chip"><strong>CDP Runtime</strong> {{ ctx.versions.cdh }}</span>
-      <span class="chip"><strong>CDS</strong> {{ ctx.versions.ecs_cds }}</span>
-    </div>
-
     <section class="live-stats" id="live-stats" aria-label="Cluster health snapshot">
       <div class="live-stats-head">
         <h2>Health snapshot</h2>
@@ -1047,7 +1089,7 @@
                   <td>{{ svc.name }}</td>
                   <td>{{ svc.type }}</td>
                   <td>{{ svc.service_state }}</td>
-                  <td>
+                  <td{% if sec.id | default('') == 'monitoring' %} class="monitoring-url"{% endif %}>
                     {% set _h = svc.health | default('') | upper %}
                     <span class="health-pill {% if _h == 'GOOD' %}good{% elif _h == 'CONCERNING' %}concerning{% elif _h == 'BAD' %}bad{% else %}na{% endif %}">{{ svc.health }}</span>
                   </td>
@@ -1062,6 +1104,12 @@
       {% endif %}
     </section>
 
+    <div class="version-strip" aria-label="Platform versions">
+      <span class="chip"><strong>CM</strong> {{ ctx.versions.cm }}</span>
+      <span class="chip"><strong>CDP Runtime</strong> {{ ctx.versions.cdh }}</span>
+      <span class="chip"><strong>CDS</strong> {{ ctx.versions.ecs_cds }}</span>
+    </div>
+
     <div class="section-tools" aria-label="Section display controls">
       <button class="section-tool-btn" type="button" id="sections-expand" aria-pressed="false">Expand all</button>
       <button class="section-tool-btn" type="button" id="sections-collapse" aria-pressed="false">Collapse all</button>
@@ -1071,6 +1119,13 @@
     <details class="panel" open>
       <summary><span class="summary-main"><h2 class="section-title">Operator access — credentials &amp; downloads</h2></span>{{ panel_chevron | safe }}</summary>
       <div class="panel-body">
+        {% if oa.basic_auth_enabled | default(false) | bool %}
+        <div class="auth-gate" id="operator-auth-gate" data-content-url="{{ _dl_prefix }}/operator-access.html">
+          <p id="operator-auth-message"><strong>Login required.</strong> Sign in to view operator credentials and download private keys.</p>
+          <a class="help-open-btn" href="{{ _dl_prefix }}/auth.html">Login to Operator access</a>
+        </div>
+        <div id="operator-protected-content" aria-live="polite" hidden></div>
+        {% else %}
         <p class="sub">Lab deployment secrets rendered at portal sync from Ansible group_vars (not stored in git). Use only on trusted networks.</p>
         {% if oa.ssh_keys_exposed | default(false) | bool and not (oa.basic_auth_enabled | default(false) | bool) %}
         <p class="operator-warning"><strong>SSH keys are downloadable without HTTP auth.</strong> Set <code>deployment_portal_basic_auth_enabled: true</code> or <code>deployment_portal_expose_ssh_keys: false</code>.</p>
@@ -1227,6 +1282,7 @@
         </div>
         {% endif %}
         {% endfor %}
+        {% endif %}
       </div>
     </details>
     {% endif %}
@@ -1346,7 +1402,7 @@
               {% set private_url = ctx.access.vpc[service ~ '_direct'] | default(ctx.access.primary[service ~ '_direct'] | default('')) %}
               <tr>
                 <td><strong>{{ 'cAdvisor' if service == 'cadvisor' else service | capitalize }}</strong></td>
-                <td>{{ portal_url_bundle(caddy_url, public_url, private_url) }}</td>
+                <td class="monitoring-url">{{ portal_url_bundle(caddy_url, public_url, private_url) }}</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -1430,7 +1486,7 @@
           <div class="inventory-section-head">
             <h2 class="section-title">Host inventory</h2>
             {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %}
-            <div class="inventory-dl-actions" aria-label="SSH private key downloads" onclick="event.stopPropagation();">
+            <div class="inventory-dl-actions{% if oa.basic_auth_enabled | default(false) | bool %} auth-protected-download{% endif %}"{% if oa.basic_auth_enabled | default(false) | bool %} hidden{% endif %} aria-label="SSH private key downloads" onclick="event.stopPropagation();">
               {% for dl in ns_ssh_dl.items %}
               <a class="dl-btn" href="{{ dl.href }}" download="{{ dl.filename | default('') }}" title="{% if dl.note | default('') | length > 0 %}{{ dl.note }}{% else %}Save PEM, then chmod 400{% endif %}">
                 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8.5 1.5v8.793l2.146-2.147.707.708L8 12.207 4.646 8.854l.707-.708L7.5 10.293V1.5h1zM2 12.5v1h12v-1H2z"/></svg>
@@ -1438,6 +1494,9 @@
               </a>
               {% endfor %}
             </div>
+            {% if oa.basic_auth_enabled | default(false) | bool %}
+            <a class="dl-btn auth-download-login" href="{{ _dl_prefix }}/auth.html" onclick="event.stopPropagation();">Login to download key</a>
+            {% endif %}
             {% endif %}
           </div>
         </span>
@@ -1534,27 +1593,120 @@
   <script>
   (function () {
     var authAction = document.getElementById('portal-auth-action');
-    if (authAction) {
-      var authenticated = document.cookie.split(';').some(function (cookie) {
-        return cookie.trim() === 'portal_authenticated=1';
+    var authGate = document.getElementById('operator-auth-gate');
+    var protectedContent = document.getElementById('operator-protected-content');
+    var authMessage = document.getElementById('operator-auth-message');
+    var loggedOut = new URLSearchParams(window.location.search).has('logged_out');
+    if (loggedOut) {
+      document.cookie = 'portal_authenticated=; Path=/; Max-Age=0; SameSite=Lax';
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+      if (authMessage) authMessage.innerHTML = '<strong>Logged out.</strong> Sign in again to view operator credentials and download private keys.';
+    }
+    var authenticated = !loggedOut && document.cookie.split(';').some(function (cookie) {
+      return cookie.trim() === 'portal_authenticated=1';
+    });
+
+    function setAuthenticatedUi(isAuthenticated) {
+      document.querySelectorAll('.auth-protected-download').forEach(function (element) {
+        element.hidden = !isAuthenticated;
       });
-      if (authenticated) {
-        authAction.textContent = 'Logout';
-        authAction.title = 'Clear portal download authentication';
-        authAction.href = '#logout';
-        authAction.addEventListener('click', function (event) {
-          event.preventDefault();
-          document.cookie = 'portal_authenticated=; Path=/; Max-Age=0; SameSite=Lax';
-          fetch(authAction.dataset.loginUrl, {
-            cache: 'no-store',
-            headers: { Authorization: 'Basic ' + btoa('logout:logout') }
-          }).catch(function (error) {
-            console.debug('Portal logout request could not be completed', error);
-          }).finally(function () {
-            window.location.reload();
+      document.querySelectorAll('.auth-download-login').forEach(function (element) {
+        element.hidden = isAuthenticated;
+      });
+      if (authAction) {
+        authAction.textContent = isAuthenticated ? 'Logout' : 'Login';
+        authAction.title = isAuthenticated ? 'Sign out of protected operator access' : 'Sign in to protected operator access';
+        authAction.href = isAuthenticated ? '/logout' : authAction.dataset.loginUrl;
+        if (isAuthenticated) {
+          authAction.addEventListener('click', function () {
+            document.cookie = 'portal_authenticated=; Path=/; Max-Age=0; SameSite=Lax';
+          }, { once: true });
+        }
+      }
+    }
+
+    function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+      return new Promise(function (resolve, reject) {
+        var input = document.createElement('textarea');
+        input.value = text;
+        input.setAttribute('readonly', '');
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        try {
+          if (!document.execCommand('copy')) throw new Error('copy command failed');
+          resolve();
+        } catch (error) {
+          reject(error);
+        } finally {
+          input.remove();
+        }
+      });
+    }
+
+    function enhanceCopyButtons(root) {
+      (root || document).querySelectorAll('.ssh-command-box > code, code.ssh-inline-cmd').forEach(function (code) {
+        if (code.dataset.copyReady === 'true') return;
+        code.dataset.copyReady = 'true';
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'copy-command-btn';
+        button.textContent = 'Copy';
+        button.setAttribute('aria-label', 'Copy command');
+        button.addEventListener('click', function () {
+          copyText(code.textContent.trim()).then(function () {
+            button.textContent = 'Copied';
+            button.classList.add('is-copied');
+            window.setTimeout(function () {
+              button.textContent = 'Copy';
+              button.classList.remove('is-copied');
+            }, 1600);
+          }).catch(function () {
+            button.textContent = 'Select';
+            var range = document.createRange();
+            range.selectNodeContents(code);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
           });
         });
-      }
+        if (code.parentElement.classList.contains('ssh-command-box')) {
+          code.parentElement.appendChild(button);
+        } else {
+          var wrap = document.createElement('span');
+          wrap.className = 'copy-command-wrap';
+          code.parentNode.insertBefore(wrap, code);
+          wrap.appendChild(code);
+          wrap.appendChild(button);
+        }
+      });
+    }
+
+    setAuthenticatedUi(authenticated);
+    enhanceCopyButtons(document);
+    if (authAction) {
+      authAction.dataset.loginUrl = authAction.dataset.loginUrl || '{{ _dl_prefix }}/auth.html';
+    }
+    if (authenticated && authGate && protectedContent) {
+      if (authMessage) authMessage.textContent = 'Loading authenticated Operator access...';
+      fetch(authGate.dataset.contentUrl, { cache: 'no-store', credentials: 'same-origin' })
+        .then(function (response) {
+          if (!response.ok) throw new Error('Operator access returned HTTP ' + response.status);
+          return response.text();
+        })
+        .then(function (html) {
+          protectedContent.innerHTML = html;
+          protectedContent.hidden = false;
+          authGate.hidden = true;
+          enhanceCopyButtons(protectedContent);
+        })
+        .catch(function () {
+          document.cookie = 'portal_authenticated=; Path=/; Max-Age=0; SameSite=Lax';
+          authenticated = false;
+          setAuthenticatedUi(false);
+          if (authMessage) authMessage.innerHTML = '<strong>Login required.</strong> Your session is no longer valid. Sign in to view credentials and private keys.';
+        });
     }
 
     var jumpTop = document.getElementById('page-jump-top');

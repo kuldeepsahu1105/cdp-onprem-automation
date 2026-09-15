@@ -5,6 +5,21 @@
 - name: Detect monitoring stack on portal ops host before Caddy/index render
   ansible.builtin.import_tasks: detect_deployment_portal_monitoring_on_host.yml
 
+- name: Validate deployment portal listener ports
+  ansible.builtin.assert:
+    that:
+      - deployment_portal_ipa_https_port | int != deployment_portal_http_port | int
+      - deployment_portal_ipa_https_port | int != deployment_portal_pgadmin_host_port | int
+      - deployment_portal_ipa_https_port | int not in [
+          monitoring_grafana_host_port | int,
+          monitoring_prometheus_host_port | int,
+          monitoring_alertmanager_host_port | int,
+          monitoring_cadvisor_host_port | int
+        ]
+    fail_msg: >-
+      deployment_portal_ipa_https_port={{ deployment_portal_ipa_https_port }} must be unique on the portal host.
+  when: deployment_portal_ipa_https_enabled | default(true) | bool
+
 - name: Refresh portal context monitoring flags and endpoints after ops-host probe
   ansible.builtin.import_tasks: refresh_deployment_portal_monitoring_context.yml
 
@@ -196,6 +211,38 @@
     - not (portal_env_render is changed)
   register: pgadmin_recreate_servers
   failed_when: pgadmin_recreate_servers.rc != 0
+
+- name: Wait for Caddy internal root CA
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - "{{ deployment_portal_caddy_container }}"
+      - test
+      - -f
+      - /data/caddy/pki/authorities/local/root.crt
+  register: deployment_portal_caddy_ca_ready
+  changed_when: false
+  retries: 10
+  delay: 2
+  until: deployment_portal_caddy_ca_ready.rc == 0
+  when: deployment_portal_ipa_https_enabled | default(true) | bool
+
+- name: Export Caddy root CA for operator browsers
+  ansible.builtin.command:
+    argv:
+      - docker
+      - cp
+      - "{{ deployment_portal_caddy_container }}:/data/caddy/pki/authorities/local/root.crt"
+      - "{{ deployment_portal_www_dir }}/downloads/caddy-root-ca.crt"
+  changed_when: true
+  when: deployment_portal_ipa_https_enabled | default(true) | bool
+
+- name: Set exported Caddy root CA permissions
+  ansible.builtin.file:
+    path: "{{ deployment_portal_www_dir }}/downloads/caddy-root-ca.crt"
+    mode: "0644"
+  when: deployment_portal_ipa_https_enabled | default(true) | bool
 
 - name: Ensure portal and monitoring ports are allowed when firewalld is active
   ansible.builtin.import_tasks: ensure_deployment_portal_firewall_ports.yml

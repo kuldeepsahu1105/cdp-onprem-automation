@@ -134,7 +134,7 @@ With `caddy_vhost_enabled: true`, Caddy serves **per-service hostnames** on the 
 `http://portal.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → deployment portal index  
 `http://pgadmin.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → pgAdmin  
 `http://grafana.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → Grafana  
-`http://ipa.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → FreeIPA (**`redir /` → `/ipa/modern-ui/`**; also **`/ipa/ui`** legacy; Caddy connects to ipaserver over **HTTPS** using its inventory IP for transport and its FQDN for TLS SNI, **`Host`**, and path-matched **`Referer`**)
+`https://ipa.<ops-ip-dashed>.pvc.cloudera-labs.com:8443` → FreeIPA (**self-signed Caddy internal CA**; `http://...:81` redirects here; **`redir /` → `/ipa/modern-ui/`**; also **`/ipa/ui`** legacy; Caddy connects to ipaserver over HTTPS using its inventory IP for transport and its FQDN for TLS SNI, `Host`, and path-matched `Referer`)
 
 Cloudera Manager and ECS console use **direct** URLs on `cldr-mngr` (`:7180`/`:7183`) and `https://console.<ecs_app_domain>` — not Caddy.
 
