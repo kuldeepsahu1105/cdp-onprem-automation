@@ -1,4 +1,4 @@
-{# Portal link display: Caddy lab hostnames stand alone; cluster FQDN URLs pair reach IP:port. #}
+{# Portal endpoint display: primary URL followed by distinct public/private alternatives. #}
 {# Imported macros do not inherit caller template context — pass cluster_domain / caddy base explicitly. #}
 {% macro portal_url_host_from_url(url) -%}
 {%- set _u = url | default('') | trim -%}
@@ -28,17 +28,6 @@ false
 true
 {%- else -%}
 false
-{%- endif -%}
-{%- endmacro %}
-
-{% macro portal_url_reach_ip(public_ip, private_ip) -%}
-{%- set _pub = public_ip | default('') | trim -%}
-{%- set _priv = private_ip | default('') | trim -%}
-{%- if _pub | length > 0 and ('{{' not in _pub) -%}
-{{- _pub -}}
-{%- elif _priv | length > 0 and ('{{' not in _priv) -%}
-{{- _priv -}}
-{%- else -%}
 {%- endif -%}
 {%- endmacro %}
 
@@ -74,19 +63,40 @@ false
 {%- if _is_caddy == 'true' -%}
 <a href="{{ _url }}" target="_blank" rel="noopener noreferrer">{{ _url }}</a>
 {%- elif _is_cluster == 'true' -%}
-{%- set _ip %}{{ portal_url_reach_ip(public_ip, private_ip) }}{% endset -%}
-{%- set _ip = _ip | trim -%}
-{%- if _ip | length > 0 and _port | length > 0 -%}
 {%- set _authority_and_path = _url.split('://', 1)[1] if '://' in _url else '' -%}
 {%- set _path = '/' ~ _authority_and_path.split('/', 1)[1] if '/' in _authority_and_path else '' -%}
-{%- set _ip_url = _scheme ~ '://' ~ _ip ~ ':' ~ _port ~ _path -%}
-<a href="{{ _url }}" target="_blank" rel="noopener noreferrer">{{ _url }}</a> (<a href="{{ _ip_url }}" target="_blank" rel="noopener noreferrer">{{ _ip_url }}</a>)
-{%- else -%}
 <a href="{{ _url }}" target="_blank" rel="noopener noreferrer">{{ _url }}</a>
+{%- set _pub = public_ip | default('') | trim -%}
+{%- set _priv = private_ip | default('') | trim -%}
+{%- if _pub | length > 0 and ('{{' not in _pub) and _port | length > 0 -%}
+{%- set _public_url = _scheme ~ '://' ~ _pub ~ ':' ~ _port ~ _path -%}
+ <span class="url-alternative">(public: <a href="{{ _public_url }}" target="_blank" rel="noopener noreferrer">{{ _public_url }}</a>)</span>
+{%- endif -%}
+{%- if _priv | length > 0 and ('{{' not in _priv) and _priv != _pub and _port | length > 0 -%}
+{%- set _private_url = _scheme ~ '://' ~ _priv ~ ':' ~ _port ~ _path -%}
+ <span class="url-alternative">(private: <a href="{{ _private_url }}" target="_blank" rel="noopener noreferrer">{{ _private_url }}</a>)</span>
 {%- endif -%}
 {%- else -%}
 <a href="{{ _url }}" target="_blank" rel="noopener noreferrer">{{ _url }}</a>
 {%- endif -%}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro portal_url_bundle(primary_url, public_url='', private_url='') -%}
+{%- set _primary = primary_url | default('') | trim -%}
+{%- set _public = public_url | default('') | trim -%}
+{%- set _private = private_url | default('') | trim -%}
+{%- if _primary | length > 0 -%}
+<a href="{{ _primary }}" target="_blank" rel="noopener noreferrer">{{ _primary }}</a>
+{%- endif -%}
+{%- if _public | length > 0 and _public != _primary -%}
+ <span class="url-alternative">(public: <a href="{{ _public }}" target="_blank" rel="noopener noreferrer">{{ _public }}</a>)</span>
+{%- endif -%}
+{%- if _private | length > 0 and _private != _primary and _private != _public -%}
+ <span class="url-alternative">(private: <a href="{{ _private }}" target="_blank" rel="noopener noreferrer">{{ _private }}</a>)</span>
+{%- endif -%}
+{%- if _primary | length == 0 and _public | length == 0 and _private | length == 0 -%}
+<span class="badge">—</span>
 {%- endif -%}
 {%- endmacro %}
 
@@ -127,6 +137,23 @@ false
   ctx.cluster_domain | default(''),
   ctx.caddy_vhosts.public_base | default('pvc.cloudera-labs.com')
 ) }}
+{%- endmacro %}
+
+{% macro portal_jdbc_for_context(url, ctx) -%}
+{%- set _url = url | default('') | trim -%}
+{%- set _without_scheme = _url | regex_replace('^jdbc:[^:]+://', '') -%}
+{%- set _host = _without_scheme.split('/', 1)[0].split(':', 1)[0] | lower -%}
+{%- set _pub = inventory_public_ip_for_fqdn(ctx, _host) | trim -%}
+{%- set _priv = inventory_private_ip_for_fqdn(ctx, _host) | trim -%}
+{%- if _url | length > 0 -%}
+<code>{{ _url }}</code>
+{%- if _pub | length > 0 and ('{{' not in _pub) -%}
+ <span class="url-alternative">(public: <code>{{ _url | replace(_host, _pub, 1) }}</code>)</span>
+{%- endif -%}
+{%- if _priv | length > 0 and ('{{' not in _priv) and _priv != _pub -%}
+ <span class="url-alternative">(private: <code>{{ _url | replace(_host, _priv, 1) }}</code>)</span>
+{%- endif -%}
+{%- endif -%}
 {%- endmacro %}
 
 {% macro portal_url_fqdn_pubip_cm(ctx, url, port, scheme) -%}
