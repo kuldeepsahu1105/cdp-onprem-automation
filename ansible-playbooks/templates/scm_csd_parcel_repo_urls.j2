@@ -1,12 +1,24 @@
-{# Remote parcel repository directory URLs for CSDs (REMOTE_PARCEL_REPO_URLS), not JAR download URLs.
+{# Remote parcel repository directory URLs for CSDs (REMOTE_PARCEL_REPO_URLS), not JAR file URLs.
    JAR get_url paths: templates/scm_csds_urls.j2 (24_start_cm.yml via scm_csds_effective). #}
+{% if csd_redhat_repo | default('auto') == 'auto' %}
+{% set rh_yum = 'redhat' ~ (ansible_distribution_major_version | default('8') | string) %}
+{% else %}
+{% set rh_yum = csd_redhat_repo %}
+{% endif %}
 {% set archive = cm_repo_public_base_url | default('https://archive.cloudera.com/p') %}
+{% set cdv_repo = cdv_redhat_yum_repo | default('auto') %}
+{% if cdv_repo == 'auto' %}
+{% set cdv_rh_yum = 'redhat8' if rh_yum == 'redhat9' else rh_yum %}
+{% else %}
+{% set cdv_rh_yum = cdv_repo %}
+{% endif %}
 {% set svc = base_cluster_install_services | default({}) %}
 {% set use_svc_toggles = cm_parcel_csd_respect_service_toggles | default(false) %}
 {% set include_latest = cm_parcel_repo_include_latest | default(true) %}
 {% set latest_segment = cm_parcel_repo_latest_segment | default('{latest}') %}
 {% set csd_parcel_repo_urls = [] %}
 {% if (cm_parcel_repo_include_cdv_parcel | default(true)) and csd_install_dataviz | default(true) and ((not use_svc_toggles) or (svc.dataviz | default(false))) %}
+{% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cdv/' ~ cdv_version ~ '/' ~ cdv_rh_yum ~ '/yum'] %}
 {% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cdv/' ~ cdv_version ~ '/parcels/'] %}
 {% if include_latest %}
 {% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cdv/' ~ latest_segment ~ '/parcels/'] %}
@@ -20,6 +32,7 @@
   )
 ) %}
 {% if cfm_enabled %}
+{% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cfm2/' ~ cfm_version ~ '/' ~ rh_yum ~ '/yum/tars/parcel'] %}
 {% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cfm2/' ~ cfm_version ~ '/parcels/'] %}
 {% if include_latest %}
 {% set csd_parcel_repo_urls = csd_parcel_repo_urls + [archive ~ '/cfm2/' ~ latest_segment ~ '/parcels/'] %}

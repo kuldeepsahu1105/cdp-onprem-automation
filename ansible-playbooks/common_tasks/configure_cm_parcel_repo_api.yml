@@ -40,9 +40,7 @@
         )
         else '8'
       }}
-  when:
-    - cm_parcel_repo_include_csd_archive_dirs | default(true) | bool
-    - groups.get('cldr-mngr', []) | length > 0
+  when: cm_parcel_repo_include_csd_archive_dirs | default(true) | bool
 
 - name: Parcel repo — default empty CSD archive directory URL list
   ansible.builtin.set_fact:

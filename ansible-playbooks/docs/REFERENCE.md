@@ -122,8 +122,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 |---|---|---|
 | CSD JAR `get_url` | `scm_csds_urls.j2`, `cdv_dataviz_csd_jar`, `cfm_nifi_csd_jar`, `cfm_nifi_registry_csd_jar` | `…/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar` |
 | CSD JAR `get_url` (NiFi / Registry) | same | `…/p/cfm2/2.1.7.3004/redhat8/yum/tars/parcel/NIFI-1.28.1.2.1.7.3004-1.jar` (two jars when both services enabled) |
-| CM remote parcel repo dir (DATAVIZ) | `scm_csd_parcel_repo_urls.j2`, `cdv_parcel_repo_url` | `…/p/cdv/8.0.7/parcels/` and `…/p/cdv/{latest}/parcels/` |
-| CM remote parcel repo dir (CFM / NiFi) | same, `cfm_parcel_repo_url` | `…/p/cfm2/2.1.7.3004/parcels/` and `…/p/cfm2/{latest}/parcels/` |
+| CM remote parcel repo dir (DATAVIZ) | `scm_csd_parcel_repo_urls.j2`, `cdv_parcel_repo_url` | `…/p/cdv/8.0.7/redhat8/yum`, `…/p/cdv/8.0.7/parcels/`, `…/p/cdv/{latest}/parcels/` |
+| CM remote parcel repo dir (CFM / NiFi) | same, `cfm_parcel_repo_url` | `…/p/cfm2/2.1.7.3004/redhat8/yum/tars/parcel`, `…/p/cfm2/2.1.7.3004/parcels/`, `…/p/cfm2/{latest}/parcels/` |
 
 On RHEL 9 CM hosts, CDV JAR paths may still use `redhat8/yum` (`cdv_redhat_yum_repo: auto`); CFM uses `redhat9/yum/…` from `csd_redhat_repo: auto`. Parcel repo scrub in `configure_cm_parcel_repo_api.yml` drops any candidate URL matching `\.jar`.
 
