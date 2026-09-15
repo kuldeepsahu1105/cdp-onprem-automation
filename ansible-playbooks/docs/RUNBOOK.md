@@ -603,6 +603,23 @@ Set **`ANSIBLE_GROUP_VARS_YAML`** (or `group_vars/all.yml`) so **`ipaadmin_passw
 
 Re-run **`CM_TLS_KRB_LDAP`** only after **`CM_INSTALL`** (and **`IDENTITY`** for FreeIPA) if a mid-pipeline fix is needed; for KDC-only issues re-run **`28_setup_cm_krbs.yml`** from `ansible-playbooks/`.
 
+### When to restart `cloudera-scm-server` / `cloudera-scm-agent` (automation gates)
+
+Cloudera requires a **CM Server restart** after mutating `/cm/config` (Kerberos, LDAP, Auto-TLS `generateCmca`, JDBC-related server files). **Agents** must restart after **Auto-TLS** (new agent certs / `use_tls`) or when **`config.ini`** (`server_host`, `use_tls`) changes; they do **not** need restart for idempotent package install, **`ensure_cm_postgres_databases`** (play **29** DB ensure only), or CMS API start when roles are already healthy.
+
+| Trigger | `cloudera-scm-server` | `cloudera-scm-agent` | Playbook / task |
+|--------|------------------------|----------------------|-----------------|
+| Auto-TLS `generateCmca` applied | **Required** | **Required** (cluster-wide; reconcile + one-shot gate in **27**) | `apply_cm_restart_after_config.yml`, `reconcile_cm_agents.yml`, `mandatory_restart_cm_agent_after_autotls.yml` (mandatory wave only when `cm_agent_reconcile_after_autotls: false`) |
+| Auto-TLS already complete (API + truststore present) | Skip | Skip | **27** `cm_autotls_noop_this_run` |
+| Kerberos `/cm/config` PUT or `importAdminCredentials` | **Required** | Optional (manager agent skipped when `cm_scm_server_restart_manager_agent: auto`) | **28** `apply_cm_restart_after_config.yml` when `cm_restart_after_config_change` |
+| LDAP settings changed | **Required** (+ manager agent in `restart_cm_services.yml`) | Same play as server | **30** when `cm_restart_after_config_change` |
+| PostgreSQL server restart while CM was up | **Required** (refresh JDBC pools) | No | `restart_postgresql.yml` |
+| CM package install / `db.properties` already present | Start if inactive only | `restart_cm_agent_if_needed.yml` (config or inactive) | **24** |
+| CMS MGMT truststore PUT after Auto-TLS | No (CMS service restart via API) | No | **27** `reconcile_cm_cms_after_autotls.yml` only when truststore PUT **changed** |
+| CMS play **29** (psql ensure, REST configure) | **No** | No | `configure_cm_cms_api.yml` restarts CMS only when monitors unhealthy or config drift |
+
+Override: **`cm_scm_server_restart_manager_agent`**: `auto` (default), `always`, or `never` on manager agent restart after scm-server restart in `apply_cm_restart_after_config.yml`.
+
 ### CM agent heartbeat recovery (after Auto-TLS / stale heartbeats)
 
 When **all** CM hosts show stale **Last Heartbeat** after playbook **27** or a failed CM restart, bring **CM Server** up first, then restart agents.
