@@ -933,6 +933,8 @@ deployment_portal_postgres_host_group: auto
 # Caddy edge listener on ops (ipaserver): portal, pgAdmin, monitoring, and IPA vhosts share this TCP port.
 # Cloudera Manager and ECS use direct host ports (cldr-mngr :7180/:7183; ECS console/gateway URLs) — not Caddy.
 deployment_portal_http_port: 81
+# Optional ipaserver httpd mutations (zz-ipa-caddy-proxy.conf, ipa-rewrite). Default false: IPA UI via ops Caddy only.
+deployment_portal_ipa_httpd_proxy_enabled: false
 deployment_portal_pgadmin_host_port: 5050
 deployment_portal_config_dir: /opt/cldr-deployment-portal
 deployment_portal_www_dir: /opt/cldr-deployment-portal/www

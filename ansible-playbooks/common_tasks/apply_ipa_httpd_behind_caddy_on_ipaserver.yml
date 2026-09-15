@@ -18,6 +18,7 @@
 - name: Configure FreeIPA HTTPD on ipaserver for deployment portal Caddy proxy
   ansible.builtin.import_tasks: configure_ipa_httpd_behind_caddy.yml
   when:
+    - deployment_portal_ipa_httpd_proxy_enabled | default(false) | bool
     - deployment_portal_has_ipa | default(false) | bool
     - ipa_caddy_public_hostname | default('') | length > 0
 

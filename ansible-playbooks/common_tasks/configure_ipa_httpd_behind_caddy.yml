@@ -1,9 +1,13 @@
 ---
-# FreeIPA Apache tweaks when UI is reached via deployment portal Caddy vhost (HTTP upstream).
-# Complements Caddy header_up Host/Referer in deployment_portal_Caddyfile_vhosts.inc.j2.
+# Optional ipaserver httpd tweaks when deployment_portal_ipa_httpd_proxy_enabled (default false).
+# Default IPA UI path uses ops Caddy only (header_up Host/Referer). Enable for mod_substitute HTML rewrites + ipa-rewrite patches.
 # Tasks that touch ipaserver files or systemd must set delegate_to (play may run on cldr-mngr).
 # After conf.d / ipa-rewrite edits: on a configured IPA server (ipactl present), configtest + systemd reload
 # of the IPA-managed httpd unit — not ipactl restart (full stack) and not ipactl restart httpd (unsupported).
+
+- name: Skip IPA HTTPD Caddy proxy mutations when disabled (Caddy-only UI path)
+  ansible.builtin.meta: end_host
+  when: not (deployment_portal_ipa_httpd_proxy_enabled | default(false) | bool)
 
 - name: Resolve ipaserver OS family for delegated IPA HTTPD tasks
   ansible.builtin.set_fact:
@@ -482,3 +486,8 @@
     - not (ipa_httpd_reload_via_ipactl | default(false) | bool)
     - ipa_httpd_reload_service_name is defined
     - ipa_httpd_reload_service_name | length > 0
+
+- name: Preflight /ipa/json JSON-RPC from ipaserver after HTTPD Caddy proxy apply
+  ansible.builtin.import_tasks: preflight_ipa_json_on_ipaserver.yml
+  when:
+    - deployment_portal_ipa_fqdn | default('') | length > 0
