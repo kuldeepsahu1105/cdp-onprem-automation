@@ -1,12 +1,8 @@
 ---
 # FreeIPA KDC: prefer AES enctypes via krb5.conf.d (modern IPA derives KDC types from permitted_enctypes).
-# Ansible FILE ccache for ipa CLI is documented in templates/krb5_permitted_enctypes.conf.j2 (not default_ccache_name).
 
-- name: Kerberos — ensure krb5.conf.d exists on IPA server
-  ansible.builtin.file:
-    path: /etc/krb5.conf.d
-    state: directory
-    mode: "0755"
+- name: Kerberos — document Ansible FILE ccache in krb5.conf.d on IPA server
+  ansible.builtin.import_tasks: ensure_krb5_ansible_ccache_note.yml
 
 - name: Kerberos — deploy IPA KDC permitted enctypes snippet
   ansible.builtin.template:

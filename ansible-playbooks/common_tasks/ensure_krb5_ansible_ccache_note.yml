@@ -1,0 +1,14 @@
+---
+# Comment-only krb5.conf.d drop-in on enrolled FreeIPA hosts and ipaserver (no default_ccache_name mutation).
+
+- name: Kerberos — ensure krb5.conf.d exists for Ansible ccache documentation
+  ansible.builtin.file:
+    path: /etc/krb5.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Kerberos — install Ansible FILE ccache documentation drop-in
+  ansible.builtin.template:
+    src: krb5_ansible_ccache_note.conf.j2
+    dest: /etc/krb5.conf.d/ansible-ccache-note.conf
+    mode: "0644"

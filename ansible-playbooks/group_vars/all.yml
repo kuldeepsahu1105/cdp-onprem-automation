@@ -80,7 +80,7 @@ ipaserver_realm: "{{ ipaserver_domain | upper }}"
 ipaadmin_principal: "admin"
 ipaadmin_password: "PseTeam@123"
 # FILE Kerberos ccache for IPA CLI tasks (Ansible runs each task in a new SSH session).
-# Not written into krb5.conf / krb5.conf.d — playbooks set KRB5CCNAME=FILE:<path> per task (see krb5_permitted_enctypes.conf.j2).
+# Not set as default_ccache_name — playbooks use KRB5CCNAME=FILE:<path>; documented in krb5.conf.d/ansible-ccache-note.conf.
 ipa_kerberos_ccache_path: /root/.ansible-ipa-krb5cc
 ipadm_password: "{{ ipaadmin_password }}"
 # Shared lab password (ECS UMS bootstrap, Kerberos admin, ECS LDAP admin); override in Jenkins ANSIBLE_GROUP_VARS_YAML

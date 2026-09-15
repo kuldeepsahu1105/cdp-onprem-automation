@@ -1,4 +1,7 @@
 ---
+- name: Kerberos — document Ansible FILE ccache in krb5.conf.d on enrolled host
+  ansible.builtin.import_tasks: ensure_krb5_ansible_ccache_note.yml
+
 - name: Set OS-specific facts
   ansible.builtin.import_tasks: set_os_facts.yml
 
