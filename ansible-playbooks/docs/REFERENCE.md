@@ -371,9 +371,8 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `postgres_host_fqdn` | (computed) | CM JDBC / Reports Manager / pgAdmin DB host FQDN |
 | `postgres_ensure_cm_db_psql_host` | `""` (auto) | Optional `-e` override for delegated `psql -h` on `postgres_inventory_host` |
 | `postgres_ensure_cm_db_psql_host_effective` | (computed) | Auto from `resolve_postgres_ensure_cm_db_psql_host.yml`: `postgres_host_fqdn`, else DB `private_ip`, else `ansible_host` (delegated on DB host) |
-| `atlas_db_name` / `atlas_db_user` / `atlas_db_password` | `atlas` / `atlas` / `atlas` | Atlas JDBC when using external PostgreSQL; created in **23** (`databases` list) and re-ensured in **31** when `base_cluster_install_services.atlas` is true |
-| `clo_db_name` / `clo_db_user` / `clo_db_password` | `clo` / `clo` / `clo` | **Cloudera Lakehouse Optimizer** (CLO/DLM) shared metadata DB; created in **23** and re-ensured in **31** when `base_cluster_install_services.clo` is true |
-| `base_cluster_install_services.clo` | `false` | Enable CLO on the base cluster and Atlas/CLO PostgreSQL ensure before **31** |
+| `atlas_db_name` / `atlas_db_user` / `atlas_db_password` | `atlas` / `atlas` / `atlas` | Atlas JDBC when using external PostgreSQL; created in **23** via `databases` / `create_cm_dbs.sql.j2` |
+| `clo_db_name` / `clo_db_user` / `clo_db_password` | `clo` / `clo` / `clo` | **Cloudera Lakehouse Optimizer** (CLO/DLM) metadata DB; created in **23** via `databases` |
 | `deployment_portal_postgres_host_group` | `auto` | CM PostgreSQL host for pgAdmin (`auto` = same as `postgres_inventory_group_resolved`) |
 | `deployment_portal_http_port` | `81` | Caddy index + Grafana/Prometheus/Alertmanager paths |
 | `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI on ops host |
