@@ -1,6 +1,16 @@
 ---
 # Start PostgreSQL on postgres_inventory_host and wait for the TCP target used by ensure_cm_postgres_databases.
 # Does not restart PostgreSQL or Cloudera Manager (unlike restart_postgresql.yml).
+# Play 29 (localhost, gather_facts: no) delegates here — gather distribution on the DB host first
+# so set_os_facts can resolve os_vars (postgres_repo_url, scm_csds_urls.j2) on that host.
+
+- name: Gather distribution facts on PostgreSQL DB host
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - distribution
+  delegate_to: "{{ postgres_inventory_host }}"
+  delegate_facts: true
 
 - name: Set OS-specific facts on PostgreSQL DB host
   ansible.builtin.import_tasks: set_os_facts.yml
