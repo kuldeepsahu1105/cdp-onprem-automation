@@ -21,3 +21,12 @@
 
 - name: Restart Cloudera Manager agent on CM host after API is healthy
   ansible.builtin.import_tasks: restart_cm_scm_agent_on_manager.yml
+  when: >-
+    (cm_scm_server_restart_manager_agent | default('auto')) == 'always'
+    or (
+      (cm_scm_server_restart_manager_agent | default('auto')) == 'auto'
+      and (
+        hostvars['localhost'].cm_restart_after_autotls_this_run | default(false) | bool
+        or hostvars['localhost'].autotls_applied_this_run | default(false) | bool
+      )
+    )

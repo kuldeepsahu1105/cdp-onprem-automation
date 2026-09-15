@@ -317,6 +317,10 @@
       ansible.builtin.meta: end_play
       when: not (cm_agent_mandatory_restart_after_autotls_this_run | default(false) | bool)
 
+    - name: Skip mandatory agent restart when reconcile play already restarts agents
+      ansible.builtin.meta: end_play
+      when: cm_agent_reconcile_after_autotls | default(true) | bool
+
     - name: Set OS-specific facts
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 

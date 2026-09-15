@@ -32,13 +32,10 @@
   ansible.builtin.import_tasks: configure_cm_cms_autotls_trust.yml
   when: cms_after_autotls_status.status | default(0) | int == 200
 
-- name: CMS after Auto-TLS — restart management service when trust changed or Auto-TLS applied this run
+- name: CMS after Auto-TLS — restart management service when MGMT truststore settings changed
   ansible.builtin.import_tasks: restart_cm_management_service_api.yml
   when:
     - cms_after_autotls_status.status | default(0) | int == 200
     - cm_cms_restart_after_autotls | default(true) | bool
-    - (
-        (cms_service_truststore_put is defined and cms_service_truststore_put is changed)
-        or (cm_restart_after_autotls_this_run | default(false) | bool)
-        or (autotls_applied_this_run | default(false) | bool)
-      )
+    - cms_service_truststore_put is defined
+    - cms_service_truststore_put is changed
