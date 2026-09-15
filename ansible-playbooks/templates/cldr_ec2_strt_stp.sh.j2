@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 {% set _ec2r = ec2_startstop_rendered | default({}, true) %}
-{% set _ec2_usage = _ec2r.usage_generic | default(ec2_startstop_script_path ~ ' <start|stop|describe> <EnvironmentValue> <GroupValue1> [GroupValue2 ...]') %}
+{% set _ec2_invoke = './' ~ ec2_startstop_script_basename %}
+{% set _ec2_usage = _ec2r.usage_generic | default(_ec2_invoke ~ ' <start|stop|describe> <EnvironmentValue> <GroupValue1> [GroupValue2 ...]') %}
 {% set _ec2_env = _ec2r.environment_tag | default(ec2_startstop_example_environment | default(ec2_startstop_default_environment | default('', true) | trim, true) | trim) %}
 {% if _ec2_env | lower == 'development' %}
 {% set _ec2_env = '' %}
@@ -36,11 +37,11 @@ usage() {
   echo ""
   echo "Examples (this deployment):"
   if [[ -n "$EXAMPLE_PREFIX" && -n "$EXAMPLE_GROUPS" ]]; then
-    echo "  $SCRIPT_NAME describe $EXAMPLE_PREFIX $EXAMPLE_GROUPS"
-    echo "  $SCRIPT_NAME start $EXAMPLE_PREFIX $EXAMPLE_GROUPS"
-    echo "  $SCRIPT_NAME stop $EXAMPLE_PREFIX $EXAMPLE_GROUPS"
+    echo "  ./$SCRIPT_NAME describe $EXAMPLE_PREFIX $EXAMPLE_GROUPS"
+    echo "  ./$SCRIPT_NAME start $EXAMPLE_PREFIX $EXAMPLE_GROUPS"
+    echo "  ./$SCRIPT_NAME stop $EXAMPLE_PREFIX $EXAMPLE_GROUPS"
   else
-    echo "  $SCRIPT_NAME describe <EnvironmentValue> <GroupValue1> ..."
+    echo "  ./$SCRIPT_NAME describe <EnvironmentValue> <GroupValue1> ..."
   fi
   exit "${1:-0}"
 }

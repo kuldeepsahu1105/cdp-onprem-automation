@@ -24,13 +24,14 @@
 {% set _ec2ss_env = '' %}
 {% endif %}
 {% set _ec2ss_argv = _ec2ss_effective | join(' ') %}
-{% set _ec2ss_generic = ec2_startstop_script_path ~ ' <start|stop|describe> <EnvironmentValue> <GroupValue1> [GroupValue2 ...]' %}
+{% set _ec2ss_invoke = './' ~ ec2_startstop_script_basename %}
+{% set _ec2ss_generic = _ec2ss_invoke ~ ' <start|stop|describe> <EnvironmentValue> <GroupValue1> [GroupValue2 ...]' %}
 script_path: "{{ ec2_startstop_script_path }}"
 script_basename: "{{ ec2_startstop_script_basename }}"
 environment_tag: "{{ _ec2ss_env }}"
 terraform_groups: {{ _ec2ss_effective | to_json }}
 usage_generic: "{{ _ec2ss_generic }}"
-example_describe: "{{ ec2_startstop_script_path ~ ' describe ' ~ _ec2ss_env ~ (' ' ~ _ec2ss_argv if (_ec2ss_argv | length > 0) else '') }}"
-example_start: "{{ ec2_startstop_script_path ~ ' start ' ~ _ec2ss_env ~ (' ' ~ _ec2ss_argv if (_ec2ss_argv | length > 0) else '') }}"
-example_stop: "{{ ec2_startstop_script_path ~ ' stop ' ~ _ec2ss_env ~ (' ' ~ _ec2ss_argv if (_ec2ss_argv | length > 0) else '') }}"
+example_describe: "{{ _ec2ss_invoke ~ ' describe ' ~ _ec2ss_env ~ (' ' ~ _ec2ss_argv if (_ec2ss_argv | length > 0) else '') }}"
+example_start: "{{ _ec2ss_invoke ~ ' start ' ~ _ec2ss_env ~ (' ' ~ _ec2ss_argv if (_ec2ss_argv | length > 0) else '') }}"
+example_stop: "{{ _ec2ss_invoke ~ ' stop ' ~ _ec2ss_env ~ (' ' ~ _ec2ss_argv if (_ec2ss_argv | length > 0) else '') }}"
 jenkins_groups_csv: "{{ _ec2ss_effective | join(',') }}"
