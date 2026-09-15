@@ -11,34 +11,20 @@
   ansible.builtin.set_fact:
     _postgres_cm_db_tcp_probe_hosts: >-
       {{
-        (
-          [_pg_cm_db_psql_host_primary]
-          + (
-            _pg_cm_db_psql_host_fallbacks
-            if (_pg_cm_db_psql_host_primary == '127.0.0.1')
-            else []
-          )
-        )
+        [
+          postgres_ensure_cm_db_psql_host_effective | default(''),
+          postgres_host_fqdn | default(''),
+          _pg_db_hostvars.private_ip | default(''),
+          _pg_db_hostvars.ansible_host | default(''),
+          '127.0.0.1'
+        ]
         | map('trim')
         | reject('equalto', '')
         | unique
         | list
       }}
   vars:
-    _pg_cm_db_psql_host_primary: "{{ postgres_ensure_cm_db_psql_host_effective | default('') | trim }}"
     _pg_db_hostvars: "{{ hostvars[postgres_inventory_host] }}"
-    _pg_cm_db_psql_host_fallbacks: >-
-      {{
-        [
-          postgres_host_fqdn | default(''),
-          _pg_db_hostvars.private_ip | default(''),
-          _pg_db_hostvars.ansible_host | default('')
-        ]
-        | map('trim')
-        | reject('equalto', '')
-        | reject('equalto', '127.0.0.1')
-        | list
-      }}
   delegate_to: localhost
   run_once: true
 

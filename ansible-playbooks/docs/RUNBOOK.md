@@ -88,11 +88,11 @@ This repo's Ansible layer is controller-agnostic by design (`AGENTS.md` "Standal
 - **`ansible_ssh_reachability_skip`:** set `true` only when the controller has genuine private routing to the target subnet that the automatic probe cannot detect (rare — most bare-metal/VPN cases are handled by the `auto`/`private` control-mode heuristics already). From Jenkins, pass it via `ANSIBLE_EXTRA_VARS='ansible_ssh_reachability_skip=true'` (see below) rather than editing `group_vars/all.yml`, so it stays a per-run override.
 - **CM Postgres `psql` host (`postgres_ensure_cm_db_psql_host`):** plays **24** / **29** run all `psql` / `wait_for` on `postgres_inventory_host` (never on the controller). Auto resolution is in `resolve_postgres_ensure_cm_db_psql_host.yml` (`postgres_ensure_cm_db_psql_host_effective`):
 
-| Controller profile | `ansible_control_reach_public_only` | Auto `psql -h` on DB host | When to pass `-e postgres_ensure_cm_db_psql_host=…` |
-|---|---|---|---|
-| **External** (Jenkins, laptop, no VPC route) | `true` | `127.0.0.1` | Usually **omit** (default `""` in `group_vars`). Only set if auto fails and you know a TCP target reachable **from the DB host** (not a VPC-private IP meant for the controller). |
-| **In-VPC / VPN / bare metal** (`private` or `auto` → private) | `false` | `postgres_host_fqdn` (same as CM JDBC) | Optional `-e postgres_ensure_cm_db_psql_host=<private-ip>` to mirror JDBC when FQDN DNS is not ready yet. |
-| **Any** | any | Uses your override when non-empty | `-e postgres_ensure_cm_db_psql_host=<host>` wins over auto. |
+| Controller profile | Auto `psql -h` on DB host | When to pass `-e postgres_ensure_cm_db_psql_host=…` |
+|---|---|---|
+| **Any** (external Jenkins, in-VPC, laptop) | `postgres_host_fqdn`, else DB `private_ip`, else `ansible_host` — same as CM JDBC | Optional override when auto pick is wrong (e.g. DNS not ready: `-e postgres_ensure_cm_db_psql_host=<private-ip>`). |
+
+**Why not `127.0.0.1`:** an earlier auto path used loopback when `ansible_control_reach_public_only` was true (external controller). That assumed PostgreSQL listens on localhost; many deployments set `listen_addresses` to the VPC IP or FQDN only (e.g. `172.31.x.x`), so delegated `psql -h 127.0.0.1` failed even though CM JDBC to `postgres_host_fqdn` worked. Controller reachability affects SSH and CM API probing only — delegated `psql` always runs on the DB host and must use an address Postgres actually binds.
 
 CM JDBC and Reports Manager probes still use `postgres_host_fqdn` regardless of this delegated `psql` target.
 - **Windows/Mac notes (WSL):** both need a POSIX shell (`bash`) — macOS ships one; Windows needs WSL2. Docker/container-based portal steps run inside the ops **target host** (Linux EC2/bare metal), not the controller, so Windows/Mac controllers only need `ansible`, `jq`, `ssh`, and (for Terraform flows) the AWS CLI — no Docker required locally.
@@ -351,7 +351,7 @@ ansible-playbook -i inventory.ini 20_setup_cm_repos.yml \
 
 ansible-playbook -i inventory.ini 23_setup_postgres.yml
 # Amazon Linux 2023 on cldr-mngr: `ensure_cm_postgres_databases` installs native `postgresql17` client (no PGDG); PostgreSQL server may still be 18 on that host or elsewhere.
-# `ensure_cm_postgres_databases` delegates `psql` to `postgres_inventory_host`. Auto `psql -h` is `127.0.0.1` when the controller profile is public/external (Jenkins, laptop) and `postgres_host_fqdn` when in-VPC (`ansible_control_reach_public_only` false). Override: `-e postgres_ensure_cm_db_psql_host=<host>` — use private IP/FQDN only from an in-VPC controller; CM JDBC still uses `postgres_host_fqdn` (play 23 / `restart_postgresql.yml`).
+# `ensure_cm_postgres_databases` delegates `psql` to `postgres_inventory_host`. Auto `psql -h` is `postgres_host_fqdn`, else DB private_ip, else ansible_host (not loopback — see RUNBOOK CM Postgres psql host). Override: `-e postgres_ensure_cm_db_psql_host=<host>`.
 ansible-playbook -i inventory.ini 24_start_cm.yml
 ansible-playbook -i inventory.ini 25_verify_cm.yml
 ansible-playbook -i inventory.ini 26_setup_cm_license.yml

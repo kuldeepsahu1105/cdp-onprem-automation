@@ -369,7 +369,7 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `postgres_inventory_host` | (computed) | First host in resolved group — CM DB tasks delegate here (`ensure_cm_postgres_databases.yml`) |
 | `postgres_host_fqdn` | (computed) | CM JDBC / Reports Manager / pgAdmin DB host FQDN |
 | `postgres_ensure_cm_db_psql_host` | `""` (auto) | Optional `-e` override for delegated `psql -h` on `postgres_inventory_host` |
-| `postgres_ensure_cm_db_psql_host_effective` | (computed) | Auto from `resolve_postgres_ensure_cm_db_psql_host.yml`: FQDN in-VPC, `127.0.0.1` on DB host when controller profile is public |
+| `postgres_ensure_cm_db_psql_host_effective` | (computed) | Auto from `resolve_postgres_ensure_cm_db_psql_host.yml`: `postgres_host_fqdn`, else DB `private_ip`, else `ansible_host` (delegated on DB host) |
 | `deployment_portal_postgres_host_group` | `auto` | CM PostgreSQL host for pgAdmin (`auto` = same as `postgres_inventory_group_resolved`) |
 | `deployment_portal_http_port` | `81` | Caddy index + Grafana/Prometheus/Alertmanager paths |
 | `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI on ops host |

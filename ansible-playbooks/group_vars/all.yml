@@ -453,8 +453,8 @@ postgres_inventory_host: "{{ groups[postgres_inventory_group_resolved][0] }}"
 postgres_host_fqdn: >-
   {{ hostvars[postgres_inventory_host].cldr_hostname | default(postgres_inventory_host) }}.{{ cluster_domain }}
 # psql -h for ensure_cm_postgres_databases.yml (delegated on postgres_inventory_host). Empty = auto:
-# in-VPC/private controller profile → postgres_host_fqdn (same as CM JDBC); external/public → 127.0.0.1 on DB host.
-# Override: -e postgres_ensure_cm_db_psql_host=<host> (private IP only when the controller is in the VPC).
+# postgres_host_fqdn, then DB private_ip, then ansible_host (same as CM JDBC; not loopback).
+# Override: -e postgres_ensure_cm_db_psql_host=<host>
 postgres_ensure_cm_db_psql_host: ""
 
 # Cloudera Management Service (CMS) - NOT the CDP base cluster
