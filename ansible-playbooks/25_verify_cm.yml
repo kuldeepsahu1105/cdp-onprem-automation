@@ -16,9 +16,6 @@
     - name: CM API — set connection context
       ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
 
-    - name: CM API — wait for scm-server HTTPS port before REST checks
-      ansible.builtin.import_tasks: common_tasks/wait_for_cm_scm_https_listen.yml
-
     - name: Align Cloudera Manager admin password with group_vars after CM server start
       ansible.builtin.import_tasks: common_tasks/ensure_cm_admin_password.yml
 

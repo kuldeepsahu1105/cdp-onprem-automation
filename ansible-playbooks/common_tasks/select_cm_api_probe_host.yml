@@ -149,28 +149,6 @@
     - cm_api_probe_on_manager_local | default(false) | bool
     - cm_api_probe_delegate_to | default('') | length == 0
 
-- name: CM API — try /api/version (HTTPS) from Ansible controller
-  ansible.builtin.uri:
-    url: "https://{{ item }}:{{ cm_https_port }}/api/version"
-    method: GET
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: yes
-    return_content: no
-    validate_certs: no
-    status_code: [200, 301, 303, 401, 403]
-    timeout: 15
-  loop: "{{ cm_api_probe_host_candidates }}"
-  register: cm_api_probe_https_discovery
-  failed_when: false
-  when:
-    - cm_api_use_https | default(false) | bool
-    - cm_api_probe_delegate_to | default('') | length == 0
-    - cm_api_probe_from_controller_public | default(false) | bool
-    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
-    - cm_api_probe_host_candidates is defined
-    - cm_api_probe_host_candidates | length > 0
-
 - name: CM API — try /api/version (HTTP) from Ansible controller
   ansible.builtin.uri:
     url: "http://{{ item }}:{{ cm_http_port }}/api/version"
@@ -192,7 +170,8 @@
     - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
     - cm_api_probe_host_candidates is defined
     - cm_api_probe_host_candidates | length > 0
-    - not (cm_api_use_https | default(false) | bool)
+    - not (cm_api_probe_https_first | default(false) | bool)
+      or not (cm_api_use_https | default(false) | bool)
       or (
         cm_api_probe_https_discovery is defined
         and (
@@ -204,21 +183,76 @@
         ) == 0
       )
 
-- name: CM API — pick working address on Ansible controller (HTTPS, then HTTP)
+- name: CM API — try /api/version (HTTPS) from Ansible controller
+  ansible.builtin.uri:
+    url: "https://{{ item }}:{{ cm_https_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303, 401, 403]
+    timeout: 15
+  loop: "{{ cm_api_probe_host_candidates }}"
+  register: cm_api_probe_https_discovery
+  failed_when: false
+  when:
+    - cm_api_probe_delegate_to | default('') | length == 0
+    - cm_api_probe_from_controller_public | default(false) | bool
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+    - cm_api_probe_host_candidates is defined
+    - cm_api_probe_host_candidates | length > 0
+    - (cm_api_probe_https_first | default(false) | bool) and (cm_api_use_https | default(false) | bool)
+      or (
+        not (cm_api_probe_https_first | default(false) | bool)
+        and cm_api_probe_host_discovery is defined
+        and (
+          cm_api_probe_host_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length
+        ) == 0
+      )
+
+- name: CM API — pick working address on Ansible controller (HTTP, then HTTPS)
   ansible.builtin.set_fact:
     cm_api_probe_host: >-
       {{
         (
-          cm_api_probe_https_discovery.results
-          | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | map(attribute='item')
-          | list
-          | first
+          (
+            cm_api_probe_host_discovery.results
+            | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | map(attribute='item')
+            | list
+            | first
+          )
+          if not (cm_api_probe_https_first | default(false) | bool)
+          else (
+            cm_api_probe_https_discovery.results
+            | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | map(attribute='item')
+            | list
+            | first
+          )
         )
         | default(
           (
+            cm_api_probe_https_discovery.results
+            | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | map(attribute='item')
+            | list
+            | first
+          )
+          if not (cm_api_probe_https_first | default(false) | bool)
+          else (
             cm_api_probe_host_discovery.results
             | default([])
             | selectattr('status', 'defined')
@@ -234,16 +268,38 @@
     cm_api_client_host: >-
       {{
         (
-          cm_api_probe_https_discovery.results
-          | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | map(attribute='item')
-          | list
-          | first
+          (
+            cm_api_probe_host_discovery.results
+            | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | map(attribute='item')
+            | list
+            | first
+          )
+          if not (cm_api_probe_https_first | default(false) | bool)
+          else (
+            cm_api_probe_https_discovery.results
+            | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | map(attribute='item')
+            | list
+            | first
+          )
         )
         | default(
           (
+            cm_api_probe_https_discovery.results
+            | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | map(attribute='item')
+            | list
+            | first
+          )
+          if not (cm_api_probe_https_first | default(false) | bool)
+          else (
             cm_api_probe_host_discovery.results
             | default([])
             | selectattr('status', 'defined')
@@ -292,50 +348,85 @@
       }}
     cm_protocol: >-
       {{
-        'https'
+        'http'
         if (
-          cm_api_probe_https_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length > 0
+          not (cm_api_probe_https_first | default(false) | bool)
+          and (
+            cm_api_probe_host_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
         )
-        else 'http'
+        else (
+          'https'
+          if (
+            cm_api_probe_https_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
+          else 'http'
+        )
       }}
     cm_api_port: >-
       {{
-        cm_https_port
+        cm_http_port
         if (
-          cm_api_probe_https_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length > 0
+          not (cm_api_probe_https_first | default(false) | bool)
+          and (
+            cm_api_probe_host_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
         )
-        else cm_http_port
+        else (
+          cm_https_port
+          if (
+            cm_api_probe_https_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
+          else cm_http_port
+        )
       }}
     cm_api_https_active: >-
       {{
         (
-          cm_api_probe_https_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length > 0
+          (cm_api_probe_https_first | default(false) | bool)
+          and (
+            cm_api_probe_https_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
+        )
+        or (
+          not (cm_api_probe_https_first | default(false) | bool)
+          and not (
+            cm_api_probe_host_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
+          and (
+            cm_api_probe_https_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
         )
       }}
-    cm_tls_mode: >-
-      {{
-        'https'
-        if (
-          cm_api_probe_https_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length > 0
-        )
-        else 'http'
-      }}
+    cm_tls_mode: "{{ cm_protocol }}"
     cm_api_controller_https_reachable: >-
       {{
         (
@@ -361,29 +452,6 @@
     - cm_api_probe_from_controller_public | default(false) | bool
     - cm_api_controller_probe_succeeded | default(false) | bool
 
-- name: CM API — try /api/version (HTTPS) on cldr-mngr
-  ansible.builtin.uri:
-    url: "https://{{ item }}:{{ cm_https_port }}/api/version"
-    method: GET
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: yes
-    return_content: no
-    validate_certs: no
-    status_code: [200, 301, 303, 401, 403]
-    timeout: 15
-  loop: "{{ cm_api_probe_host_candidates }}"
-  register: cm_api_probe_https_discovery
-  failed_when: false
-  delegate_to: "{{ cm_api_probe_delegate_to }}"
-  when:
-    - cm_api_use_https | default(false) | bool
-    - cm_api_probe_delegate_to | default('') | length > 0
-    - not (cm_api_manager_https_fallback | default(false) | bool)
-    - not (cm_api_controller_probe_succeeded | default(false) | bool)
-    - cm_api_probe_host_candidates is defined
-    - cm_api_probe_host_candidates | length > 0
-
 - name: CM API — try /api/version (HTTP) on cldr-mngr
   ansible.builtin.uri:
     url: "http://{{ item }}:{{ cm_http_port }}/api/version"
@@ -406,7 +474,75 @@
     - not (cm_api_controller_probe_succeeded | default(false) | bool)
     - cm_api_probe_host_candidates is defined
     - cm_api_probe_host_candidates | length > 0
-    - not (cm_api_use_https | default(false) | bool)
+    - not (cm_api_probe_https_first | default(false) | bool)
+      or not (cm_api_use_https | default(false) | bool)
+      or (
+        cm_api_probe_https_discovery is defined
+        and (
+          cm_api_probe_https_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length
+        ) == 0
+      )
+
+- name: CM API — try /api/version (HTTPS) on cldr-mngr
+  ansible.builtin.uri:
+    url: "https://{{ item }}:{{ cm_https_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303, 401, 403]
+    timeout: 15
+  loop: "{{ cm_api_probe_host_candidates }}"
+  register: cm_api_probe_https_discovery
+  failed_when: false
+  delegate_to: "{{ cm_api_probe_delegate_to }}"
+  when:
+    - cm_api_probe_delegate_to | default('') | length > 0
+    - not (cm_api_manager_https_fallback | default(false) | bool)
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
+    - cm_api_probe_host_candidates is defined
+    - cm_api_probe_host_candidates | length > 0
+    - (cm_api_probe_https_first | default(false) | bool) and (cm_api_use_https | default(false) | bool)
+      or (
+        not (cm_api_probe_https_first | default(false) | bool)
+        and cm_api_probe_host_discovery is defined
+        and (
+          cm_api_probe_host_discovery.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', [200, 301, 303, 401, 403])
+          | list
+          | length
+        ) == 0
+      )
+
+- name: CM API — try /api/version (HTTP) on cldr-mngr (local play)
+  ansible.builtin.uri:
+    url: "http://{{ item }}:{{ cm_http_port }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    follow_redirects: none
+    return_content: no
+    validate_certs: no
+    status_code: [200, 301, 303, 401, 403]
+    timeout: 15
+  loop: "{{ cm_api_probe_host_candidates }}"
+  register: cm_api_probe_host_discovery
+  failed_when: false
+  when:
+    - cm_api_probe_on_manager_local | default(false) | bool
+    - cm_api_probe_delegate_to | default('') | length == 0
+    - cm_api_probe_host_candidates is defined
+    - cm_api_probe_host_candidates | length > 0
+    - not (cm_api_probe_https_first | default(false) | bool)
+      or not (cm_api_use_https | default(false) | bool)
       or (
         cm_api_probe_https_discovery is defined
         and (
@@ -433,37 +569,16 @@
   register: cm_api_probe_https_discovery
   failed_when: false
   when:
-    - cm_api_use_https | default(false) | bool
     - cm_api_probe_on_manager_local | default(false) | bool
     - cm_api_probe_delegate_to | default('') | length == 0
     - cm_api_probe_host_candidates is defined
     - cm_api_probe_host_candidates | length > 0
-
-- name: CM API — try /api/version (HTTP) on cldr-mngr (local play)
-  ansible.builtin.uri:
-    url: "http://{{ item }}:{{ cm_http_port }}/api/version"
-    method: GET
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: yes
-    follow_redirects: none
-    return_content: no
-    validate_certs: no
-    status_code: [200, 301, 303, 401, 403]
-    timeout: 15
-  loop: "{{ cm_api_probe_host_candidates }}"
-  register: cm_api_probe_host_discovery
-  failed_when: false
-  when:
-    - cm_api_probe_on_manager_local | default(false) | bool
-    - cm_api_probe_delegate_to | default('') | length == 0
-    - cm_api_probe_host_candidates is defined
-    - cm_api_probe_host_candidates | length > 0
-    - not (cm_api_use_https | default(false) | bool)
+    - (cm_api_probe_https_first | default(false) | bool) and (cm_api_use_https | default(false) | bool)
       or (
-        cm_api_probe_https_discovery is defined
+        not (cm_api_probe_https_first | default(false) | bool)
+        and cm_api_probe_host_discovery is defined
         and (
-          cm_api_probe_https_discovery.results | default([])
+          cm_api_probe_host_discovery.results | default([])
           | selectattr('status', 'defined')
           | selectattr('status', 'in', [200, 301, 303, 401, 403])
           | list
@@ -471,21 +586,43 @@
         ) == 0
       )
 
-- name: CM API — pick working address on cldr-mngr (HTTPS, then HTTP)
+- name: CM API — pick working address on cldr-mngr (HTTP, then HTTPS)
   ansible.builtin.set_fact:
     cm_api_probe_host: >-
       {{
         (
-          cm_api_probe_https_discovery.results
-          | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | map(attribute='item')
-          | list
-          | first
+          (
+            cm_api_probe_host_discovery.results
+            | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | map(attribute='item')
+            | list
+            | first
+          )
+          if not (cm_api_probe_https_first | default(false) | bool)
+          else (
+            cm_api_probe_https_discovery.results
+            | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | map(attribute='item')
+            | list
+            | first
+          )
         )
         | default(
           (
+            cm_api_probe_https_discovery.results
+            | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | map(attribute='item')
+            | list
+            | first
+          )
+          if not (cm_api_probe_https_first | default(false) | bool)
+          else (
             cm_api_probe_host_discovery.results
             | default([])
             | selectattr('status', 'defined')
@@ -534,50 +671,85 @@
       }}
     cm_protocol: >-
       {{
-        'https'
+        'http'
         if (
-          cm_api_probe_https_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length > 0
+          not (cm_api_probe_https_first | default(false) | bool)
+          and (
+            cm_api_probe_host_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
         )
-        else 'http'
+        else (
+          'https'
+          if (
+            cm_api_probe_https_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
+          else 'http'
+        )
       }}
     cm_api_port: >-
       {{
-        cm_https_port
+        cm_http_port
         if (
-          cm_api_probe_https_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length > 0
+          not (cm_api_probe_https_first | default(false) | bool)
+          and (
+            cm_api_probe_host_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
         )
-        else cm_http_port
+        else (
+          cm_https_port
+          if (
+            cm_api_probe_https_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
+          else cm_http_port
+        )
       }}
     cm_api_https_active: >-
       {{
         (
-          cm_api_probe_https_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length > 0
+          (cm_api_probe_https_first | default(false) | bool)
+          and (
+            cm_api_probe_https_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
+        )
+        or (
+          not (cm_api_probe_https_first | default(false) | bool)
+          and not (
+            cm_api_probe_host_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
+          and (
+            cm_api_probe_https_discovery.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', [200, 301, 303, 401, 403])
+            | list
+            | length > 0
+          )
         )
       }}
-    cm_tls_mode: >-
-      {{
-        'https'
-        if (
-          cm_api_probe_https_discovery.results | default([])
-          | selectattr('status', 'defined')
-          | selectattr('status', 'in', [200, 301, 303, 401, 403])
-          | list
-          | length > 0
-        )
-        else 'http'
-      }}
+    cm_tls_mode: "{{ cm_protocol }}"
   when:
     - cm_api_probe_host_discovery is defined or cm_api_probe_https_discovery is defined
     - (cm_api_probe_delegate_to | default('') | length > 0) or (cm_api_probe_on_manager_local | default(false) | bool)

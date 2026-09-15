@@ -1,23 +1,35 @@
 ---
-# Optional wait for scm-server :7183 before CM HTTPS REST. Runs after set_cm_api_url when TLS is expected.
+# Optional wait for scm-server :7183 (manual / post–Auto-TLS re-verify only).
+# Not used by play 25 — set_cm_api_url.yml probes /api/version on the selected transport (HTTP :7180 before play 27).
 
 - name: CM API — skip scm-server HTTPS port wait when API health already passed
   ansible.builtin.debug:
     msg: Skipping wait for CM HTTPS port — cm_api_health_ok is already true.
   when: cm_api_health_ok | default(false) | bool
 
-- name: CM API — skip scm-server HTTPS port wait when CM API is HTTP-only
+- name: CM API — skip scm-server HTTPS port wait when feature disabled
   ansible.builtin.debug:
     msg: >-
       Skipping wait for CM HTTPS :{{ cm_https_port | default(7183) }} —
-      CM API probes use {{ cm_protocol | default('http') }}:{{ cm_api_port | default(cm_http_port | default(7180)) }}
-      (Auto-TLS / :7183 comes from playbook 27).
+      cm_verify_wait_scm_https_port is false (default). Enable only for post–Auto-TLS HTTPS re-checks.
+  when:
+    - not (cm_api_health_ok | default(false) | bool)
+    - not (cm_verify_wait_scm_https_port | default(false) | bool)
+
+- name: CM API — skip scm-server HTTPS port wait before Auto-TLS / HTTP REST phase
+  ansible.builtin.debug:
+    msg: >-
+      Skipping wait for CM HTTPS :{{ cm_https_port | default(7183) }} —
+      CM REST uses {{ cm_protocol | default('http') }}:{{ cm_api_port | default(cm_http_port | default(7180)) }}
+      until Auto-TLS completes (play 27). cm_autotls_api_enabled in CM config does not require :7183 here.
   when:
     - not (cm_api_health_ok | default(false) | bool)
     - cm_verify_wait_scm_https_port | default(false) | bool
-    - not (cm_api_https_active | default(false) | bool)
-    - (cm_protocol | default('http')) != 'https'
-    - not (cm_autotls_api_enabled | default(false) | bool)
+    - not (cm_autotls_complete | default(false) | bool)
+    - not (
+        (cm_api_use_https | default(false) | bool)
+        and ((cm_protocol | default('http')) == 'https')
+      )
 
 - name: CM API — resolve host for scm-server HTTPS port wait
   ansible.builtin.set_fact:
@@ -34,10 +46,10 @@
   when:
     - not (cm_api_health_ok | default(false) | bool)
     - cm_verify_wait_scm_https_port | default(false) | bool
-    - (
-        (cm_api_https_active | default(false) | bool)
-        or ((cm_protocol | default('http')) == 'https')
-        or (cm_autotls_api_enabled | default(false) | bool)
+    - cm_autotls_complete | default(false) | bool
+      or (
+        (cm_api_use_https | default(false) | bool)
+        and ((cm_protocol | default('http')) == 'https')
       )
 
 - name: CM API — wait for Cloudera Manager HTTPS API port (:7183)
@@ -56,8 +68,8 @@
     - cm_verify_wait_scm_https_port | default(false) | bool
     - _cm_scm_https_wait_host | default('') | length > 0
     - _cm_scm_https_wait_host not in ['127.0.0.1', 'localhost']
-    - (
-        (cm_api_https_active | default(false) | bool)
-        or ((cm_protocol | default('http')) == 'https')
-        or (cm_autotls_api_enabled | default(false) | bool)
+    - cm_autotls_complete | default(false) | bool
+      or (
+        (cm_api_use_https | default(false) | bool)
+        and ((cm_protocol | default('http')) == 'https')
       )
