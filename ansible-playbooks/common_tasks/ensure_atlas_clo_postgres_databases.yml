@@ -1,0 +1,35 @@
+---
+# Ensure Atlas and CLO PostgreSQL roles/databases on postgres_inventory_host (cldr-mngr).
+# Respects base_cluster_install_services.atlas / .clo toggles.
+
+- name: Build PostgreSQL ensure entry list for Atlas when enabled
+  ansible.builtin.set_fact:
+    _postgres_atlas_clo_ensure_entries: >-
+      {{
+        (_postgres_atlas_clo_ensure_entries | default([]))
+        + [postgres_ensure_atlas_database_entry]
+      }}
+  when: base_cluster_install_services.atlas | default(true) | bool
+
+- name: Build PostgreSQL ensure entry list for CLO when enabled
+  ansible.builtin.set_fact:
+    _postgres_atlas_clo_ensure_entries: >-
+      {{
+        (_postgres_atlas_clo_ensure_entries | default([]))
+        + [postgres_ensure_clo_database_entry]
+      }}
+  when: base_cluster_install_services.clo | default(false) | bool
+
+- name: Atlas/CLO PostgreSQL ensure — no services enabled
+  ansible.builtin.debug:
+    msg: >-
+      Skipping Atlas/CLO PostgreSQL ensure (base_cluster_install_services.atlas={{
+        base_cluster_install_services.atlas | default(true)
+      }}, clo={{ base_cluster_install_services.clo | default(false) }}).
+  when: (_postgres_atlas_clo_ensure_entries | default([]) | length) == 0
+
+- name: Ensure Atlas and CLO PostgreSQL databases
+  ansible.builtin.import_tasks: ensure_cm_postgres_databases.yml
+  vars:
+    postgres_ensure_database_entries: "{{ _postgres_atlas_clo_ensure_entries }}"
+  when: (_postgres_atlas_clo_ensure_entries | default([]) | length) > 0

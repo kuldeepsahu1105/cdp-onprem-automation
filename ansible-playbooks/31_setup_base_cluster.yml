@@ -88,6 +88,9 @@
           Services to install:
           {{ base_cluster_spec.services | map(attribute='name') | list | join(', ') }}
 
+    - name: Ensure Atlas and CLO PostgreSQL databases on cldr-mngr
+      ansible.builtin.import_tasks: common_tasks/ensure_atlas_clo_postgres_databases.yml
+
     - name: Validate Worker host template includes ZooKeeper Server when ZooKeeper is enabled
       ansible.builtin.assert:
         that:
