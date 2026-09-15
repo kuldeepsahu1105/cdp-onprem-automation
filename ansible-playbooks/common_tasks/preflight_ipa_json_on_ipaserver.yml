@@ -51,8 +51,8 @@
         (ipa_server_preflight_ipa_json.content | default('') | string)[:200]
         | replace('\n', ' ')
       }}.
-      Re-run Jenkins PORTAL or playbook 16 (removes zz-ipa-caddy-proxy.conf and ipa-rewrite Caddy markers by default),
-      or set deployment_portal_ipa_httpd_proxy_enabled: true only if you need managed HTML rewrites.
+      This probe runs only when deployment_portal_ipa_httpd_proxy_enabled is true (after httpd HTML rewrites).
+      Re-run Jenkins PORTAL or playbook 16, or set the flag false for Caddy-only UI (no mod_substitute on /ipa/json).
       Then apachectl configtest && systemctl reload httpd.
       See ansible-playbooks/docs/RUNBOOK.md.
   when: not (ipa_server_preflight_ipa_json_ok | default(false) | bool)
