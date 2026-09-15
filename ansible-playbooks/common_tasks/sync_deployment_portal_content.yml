@@ -75,7 +75,7 @@
       - _pgadmin_default_email is match('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
       - not (_pgadmin_default_email is search('\\.local$'))
     fail_msg: >-
-      pgadmin_default_email '{{ pgadmin_default_email }}' is not accepted by pgAdmin 8 (PGADMIN_DEFAULT_EMAIL).
+      pgadmin_default_email '{{ pgadmin_default_email }}' is not accepted by pgAdmin (PGADMIN_DEFAULT_EMAIL).
       Use a lab address with a real TLD (default admin@{{ caddy_vhost_public_base }}), not admin@<cluster_domain> when the domain is .local.
   vars:
     _pgadmin_default_email: "{{ pgadmin_default_email | trim }}"
@@ -119,6 +119,20 @@
       Check caddy_vhost facts (ops public/private IP) and monitoring routes.
       {{ caddy_validate_pre_up.stderr | default('') | trim }}
   when: caddy_validate_pre_up.rc != 0
+
+- name: Pull pgAdmin image before portal compose up
+  ansible.builtin.command:
+    argv: >-
+      {{
+        deployment_portal_compose_argv
+        + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'pull', 'pgadmin']
+      }}
+  register: portal_pgadmin_pull
+  changed_when: >-
+    'Downloaded' in (portal_pgadmin_pull.stdout | default('') ~ portal_pgadmin_pull.stderr | default(''))
+    or 'Pull complete' in (portal_pgadmin_pull.stdout | default('') ~ portal_pgadmin_pull.stderr | default(''))
+  failed_when: portal_pgadmin_pull.rc != 0
+  when: deployment_portal_pgadmin_pull_on_sync | default(true) | bool
 
 - name: Ensure deployment portal stack is running
   ansible.builtin.command:
@@ -165,7 +179,7 @@
         deployment_portal_compose_argv
         + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', 'pgadmin']
       }}
-  when: portal_compose_render is changed or portal_env_render is changed
+  when: portal_compose_render is changed or portal_env_render is changed or (portal_pgadmin_pull is defined and portal_pgadmin_pull is changed)
   register: pgadmin_recreate_compose
   failed_when: pgadmin_recreate_compose.rc != 0
 
