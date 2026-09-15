@@ -7,15 +7,88 @@
 # even after delegate_facts setup on the DB host. Resolve the systemd unit via hostvars[...].os.postgres_service
 # (set by play 23 on the DB host), service_facts on the DB host, and version/distro candidate names.
 
-- name: Check if PostgreSQL already accepts TCP on CM database psql target
+- name: Build delegated PostgreSQL CM DB TCP probe host list
+  ansible.builtin.set_fact:
+    _postgres_cm_db_tcp_probe_hosts: >-
+      {{
+        (
+          [_pg_cm_db_psql_host_primary]
+          + (
+            _pg_cm_db_psql_host_fallbacks
+            if (_pg_cm_db_psql_host_primary == '127.0.0.1')
+            else []
+          )
+        )
+        | map('trim')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+  vars:
+    _pg_cm_db_psql_host_primary: "{{ postgres_ensure_cm_db_psql_host_effective | default('') | trim }}"
+    _pg_db_hostvars: "{{ hostvars[postgres_inventory_host] }}"
+    _pg_cm_db_psql_host_fallbacks: >-
+      {{
+        [
+          postgres_host_fqdn | default(''),
+          _pg_db_hostvars.private_ip | default(''),
+          _pg_db_hostvars.ansible_host | default('')
+        ]
+        | map('trim')
+        | reject('equalto', '')
+        | reject('equalto', '127.0.0.1')
+        | list
+      }}
+  delegate_to: localhost
+  run_once: true
+
+- name: Probe PostgreSQL TCP on CM database psql candidate hosts
   ansible.builtin.wait_for:
-    host: "{{ postgres_ensure_cm_db_psql_host_effective }}"
+    host: "{{ item }}"
     port: "{{ postgres_port }}"
     timeout: 3
     connect_timeout: 3
   delegate_to: "{{ postgres_inventory_host }}"
-  register: _postgres_port_already_listening
+  loop: "{{ _postgres_cm_db_tcp_probe_hosts }}"
+  register: _postgres_tcp_probe_results
   failed_when: false
+
+- name: Record PostgreSQL TCP probe reachability
+  ansible.builtin.set_fact:
+    _postgres_port_already_listening: >-
+      {{
+        (
+          _postgres_tcp_probe_results.results | default([])
+          | selectattr('state', 'defined')
+          | selectattr('state', 'equalto', 'started')
+          | list
+          | length
+        ) > 0
+      }}
+    _postgres_cm_db_tcp_host_reachable: >-
+      {{
+        (
+          _postgres_tcp_probe_results.results | default([])
+          | selectattr('state', 'defined')
+          | selectattr('state', 'equalto', 'started')
+          | map(attribute='item')
+          | list
+          | first
+          | default('')
+        )
+      }}
+  delegate_to: localhost
+  run_once: true
+
+- name: Align CM database psql host with reachable TCP probe target
+  ansible.builtin.set_fact:
+    postgres_ensure_cm_db_psql_host_effective: "{{ _postgres_cm_db_tcp_host_reachable }}"
+  delegate_to: localhost
+  run_once: true
+  when:
+    - _postgres_port_already_listening | bool
+    - _postgres_cm_db_tcp_host_reachable | length > 0
+    - _postgres_cm_db_tcp_host_reachable != postgres_ensure_cm_db_psql_host_effective
 
 - name: Gather distribution facts on PostgreSQL DB host
   ansible.builtin.setup:
@@ -24,14 +97,14 @@
       - distribution
   delegate_to: "{{ postgres_inventory_host }}"
   delegate_facts: true
-  when: _postgres_port_already_listening is failed
+  when: not (_postgres_port_already_listening | bool)
 
 - name: Gather service facts on PostgreSQL DB host
   ansible.builtin.service_facts:
   delegate_to: "{{ postgres_inventory_host }}"
   delegate_facts: true
   become: true
-  when: _postgres_port_already_listening is failed
+  when: not (_postgres_port_already_listening | bool)
 
 - name: Build PostgreSQL systemd unit candidate list
   vars:
@@ -66,14 +139,14 @@
       }}
   ansible.builtin.set_fact:
     _postgres_systemd_unit_candidates: "{{ _postgres_systemd_unit_candidates }}"
-  when: _postgres_port_already_listening is failed
+  when: not (_postgres_port_already_listening | bool)
 
 - name: Resolve installed PostgreSQL systemd unit on DB host
   ansible.builtin.set_fact:
     _postgres_systemd_unit: "{{ item }}"
   loop: "{{ _postgres_systemd_unit_candidates | default([]) }}"
   when:
-    - _postgres_port_already_listening is failed
+    - not (_postgres_port_already_listening | bool)
     - _postgres_systemd_unit is not defined
     - (item ~ '.service') in (hostvars[postgres_inventory_host].ansible_facts.services | default({}))
 
@@ -84,7 +157,7 @@
       Tried: {{ _postgres_systemd_unit_candidates | default([]) | join(', ') }}.
       Re-run play 23_setup_postgres.yml on the DB host or set postgres_service on that host.
   when:
-    - _postgres_port_already_listening is failed
+    - not (_postgres_port_already_listening | bool)
     - _postgres_systemd_unit is not defined
 
 - name: Ensure PostgreSQL service is started on DB host
@@ -95,12 +168,70 @@
     daemon_reload: true
   delegate_to: "{{ postgres_inventory_host }}"
   become: true
-  when: _postgres_port_already_listening is failed
+  when: not (_postgres_port_already_listening | bool)
 
-- name: Wait for PostgreSQL on CM database psql target
+- name: Wait for PostgreSQL on primary CM database psql target
   ansible.builtin.wait_for:
     host: "{{ postgres_ensure_cm_db_psql_host_effective }}"
     port: "{{ postgres_port }}"
     delay: 2
     timeout: 120
   delegate_to: "{{ postgres_inventory_host }}"
+  register: _postgres_wait_primary
+  failed_when: false
+
+- name: Wait for PostgreSQL on alternate CM database psql targets
+  ansible.builtin.wait_for:
+    host: "{{ item }}"
+    port: "{{ postgres_port }}"
+    delay: 2
+    timeout: 60
+  delegate_to: "{{ postgres_inventory_host }}"
+  loop: >-
+    {{
+      _postgres_cm_db_tcp_probe_hosts
+      | reject('equalto', postgres_ensure_cm_db_psql_host_effective)
+      | list
+    }}
+  register: _postgres_wait_alternate_results
+  failed_when: false
+  when: (_postgres_wait_primary.state | default('')) != 'started'
+
+- name: Record PostgreSQL TCP host after post-start wait
+  ansible.builtin.set_fact:
+    _postgres_cm_db_tcp_host_reachable: >-
+      {{
+        postgres_ensure_cm_db_psql_host_effective
+        if ((_postgres_wait_primary.state | default('')) == 'started')
+        else (
+          (
+            _postgres_wait_alternate_results.results | default([])
+            | selectattr('state', 'defined')
+            | selectattr('state', 'equalto', 'started')
+            | map(attribute='item')
+            | list
+            | first
+            | default('')
+          )
+        )
+      }}
+  delegate_to: localhost
+  run_once: true
+
+- name: Align CM database psql host after post-start wait
+  ansible.builtin.set_fact:
+    postgres_ensure_cm_db_psql_host_effective: "{{ _postgres_cm_db_tcp_host_reachable }}"
+  delegate_to: localhost
+  run_once: true
+  when:
+    - _postgres_cm_db_tcp_host_reachable | length > 0
+    - _postgres_cm_db_tcp_host_reachable != postgres_ensure_cm_db_psql_host_effective
+
+- name: Fail when PostgreSQL did not accept TCP on any CM database psql target
+  ansible.builtin.fail:
+    msg: >-
+      Timed out waiting for PostgreSQL on {{ postgres_inventory_host }}:{{ postgres_port }}.
+      Probed hosts: {{ _postgres_cm_db_tcp_probe_hosts | join(', ') }}.
+      Check play 23 listen_addresses (expected '*' or an address matching CM JDBC
+      {{ postgres_host_fqdn }}), systemd status, and logs on the DB host.
+  when: _postgres_cm_db_tcp_host_reachable | default('') | length == 0

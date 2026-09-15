@@ -6,7 +6,9 @@
 #
 # Override: -e postgres_ensure_cm_db_psql_host=<host> (in-VPC: private IP or FQDN matching CM JDBC;
 # external controllers should leave auto or use 127.0.0.1 — private VPC IPs are not reachable from
-# the controller, but delegated psql still runs on the DB host).
+# the controller, but delegated psql still runs on the DB host). When auto picks 127.0.0.1,
+# ensure_postgresql_running.yml also probes postgres_host_fqdn / DB private_ip and may realign
+# postgres_ensure_cm_db_psql_host_effective if PostgreSQL listens only on those addresses.
 
 - name: Gather Ansible control reachability when not already resolved (localhost)
   ansible.builtin.import_tasks: detect_ansible_control_reachability.yml
