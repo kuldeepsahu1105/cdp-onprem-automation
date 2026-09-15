@@ -1,4 +1,4 @@
-# Host publishes: Caddy edge (DEPLOYMENT_PORTAL_HTTP_PORT, default 81) and pgAdmin (DEPLOYMENT_PORTAL_PGADMIN_HOST_PORT, default 5050).
+# Host publishes: Caddy HTTP edge (default 81), IPA HTTPS edge (default 8443), and pgAdmin (default 5050).
 # Values live in {{ deployment_portal_config_dir }}/.env (Ansible template deployment_portal_docker-compose.env.j2).
 # Grafana/Prometheus/Alertmanager join network deployment_portal via monitoring compose under {{ monitoring_config_dir | default('/opt/cldr-monitoring') }}.
 # After changing ports, re-run PORTAL or: cd {{ deployment_portal_config_dir }} && docker compose up -d --force-recreate caddy
@@ -12,9 +12,16 @@ services:
         condition: service_healthy
     ports:
       - "0.0.0.0:${DEPLOYMENT_PORTAL_HTTP_PORT}:${DEPLOYMENT_PORTAL_HTTP_PORT}/tcp"
+{% if deployment_portal_ipa_https_enabled | default(true) | bool %}
+      - "0.0.0.0:${DEPLOYMENT_PORTAL_IPA_HTTPS_PORT}:${DEPLOYMENT_PORTAL_IPA_HTTPS_PORT}/tcp"
+{% endif %}
     volumes:
       - ${DEPLOYMENT_PORTAL_CONFIG_DIR}/Caddyfile:/etc/caddy/Caddyfile:ro,z
       - ${DEPLOYMENT_PORTAL_WWW_DIR}:/srv:ro,z
+{% if deployment_portal_ipa_https_enabled | default(true) | bool %}
+      - caddy_data:/data
+      - caddy_config:/config
+{% endif %}
     networks:
       - deployment_portal
 
@@ -43,3 +50,11 @@ services:
 networks:
   deployment_portal:
     name: deployment_portal
+{% if deployment_portal_ipa_https_enabled | default(true) | bool %}
+
+volumes:
+  caddy_data:
+    name: cldr_portal_caddy_data
+  caddy_config:
+    name: cldr_portal_caddy_config
+{% endif %}

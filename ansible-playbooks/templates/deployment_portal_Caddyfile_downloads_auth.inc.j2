@@ -1,11 +1,22 @@
-{# Optional HTTP basic auth for /downloads (SSH keys, credentials JSON). #}
-{% if deployment_portal_basic_auth_enabled | default(false) | bool and (deployment_portal_basic_auth_hash | default('') | length > 0) %}
-  handle /downloads/* {
-    basic_auth {
-      {{ deployment_portal_basic_auth_user }} {{ deployment_portal_basic_auth_hash }}
-    }
-    header Set-Cookie "portal_authenticated=1; Path=/; SameSite=Lax"
+{# Protected operator files plus a logout endpoint that clears portal browser state. #}
+  handle /logout {
+    header Set-Cookie "portal_authenticated=; Path=/; Max-Age=0; SameSite=Lax"
+    header Clear-Site-Data "\"cache\", \"cookies\", \"storage\""
+    rewrite * /downloads/logout.html
     root * /srv
     file_server
   }
+
+  handle /downloads/* {
+    route {
+{% if deployment_portal_basic_auth_enabled | default(false) | bool and (deployment_portal_basic_auth_hash | default('') | length > 0) %}
+      basic_auth {
+        {{ deployment_portal_basic_auth_user }} {{ deployment_portal_basic_auth_hash }}
+      }
+      header Set-Cookie "portal_authenticated=1; Path=/; SameSite=Lax"
 {% endif %}
+      root * /srv
+      file_server
+    }
+  }
+{{ '\n' }}

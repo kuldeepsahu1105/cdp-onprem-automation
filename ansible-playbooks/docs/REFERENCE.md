@@ -376,7 +376,10 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `atlas_db_name` / `atlas_db_user` / `atlas_db_password` | `atlas` / `atlas` / `atlas` | Atlas JDBC when using external PostgreSQL; created in **23** via `databases` / `create_cm_dbs.sql.j2` |
 | `clo_db_name` / `clo_db_user` / `clo_db_password` | `clo` / `clo` / `clo` | **Cloudera Lakehouse Optimizer** (CLO/DLM) metadata DB; created in **23** via `databases` |
 | `deployment_portal_postgres_host_group` | `auto` | CM PostgreSQL host for pgAdmin (`auto` = same as `postgres_inventory_group_resolved`) |
-| `deployment_portal_http_port` | `81` | Caddy index + Grafana/Prometheus/Alertmanager paths |
+| `deployment_portal_runs_on_ipaserver` | computed | True when `deployment_portal_host_group` explicitly selects IPA or `auto` selects an available IPA group |
+| `deployment_portal_http_port` | `81` on IPA; `80` otherwise | Caddy index + Grafana/Prometheus/Alertmanager paths; explicit overrides win |
+| `deployment_portal_ipa_https_enabled` | `true` | Serve the FreeIPA Caddy vhost over self-signed HTTPS and redirect its HTTP vhost to HTTPS |
+| `deployment_portal_ipa_https_port` | `8443` on IPA; `443` otherwise | Caddy FreeIPA HTTPS listener; avoids IPA Apache when colocated and uses the standard port on a dedicated proxy; explicit overrides win |
 | `deployment_portal_pgadmin_host_port` | `5050` | pgAdmin UI on ops host |
 | `monitoring_grafana_host_port` | `3000` | Grafana UI on ops host (docker `HOST:3000`) |
 | `monitoring_prometheus_host_port` | `9090` | Prometheus UI on ops host |

@@ -19,6 +19,7 @@
 {# Direct IP:port fallback; explicit HTTP avoids automatic local HTTPS. #}
 {% set _ipa_caddy_origin = 'http://{http.request.host}' ~ (':' ~ (deployment_portal_http_port | int) if (deployment_portal_http_port | int) != 80 else '') %}
 {% set _ipa_caddy_vhost_host = '{http.request.host}' %}
+{% set _ipa_caddy_strip_secure_cookie = true %}
 http://:{{ deployment_portal_http_port }} {
 {% include 'deployment_portal_Caddyfile_downloads_auth.inc.j2' %}
   root * /srv

@@ -1,5 +1,5 @@
 ---
-# Open portal Caddy (deployment_portal_http_port), pgAdmin (5050), monitoring UIs, and cAdvisor when firewalld is active on the ops host.
+# Open portal Caddy HTTP/IPA HTTPS, pgAdmin, monitoring UIs, and cAdvisor when firewalld is active on the ops host.
 # PREREQS normally disable firewalld; this is idempotent when an admin re-enables it.
 
 - name: Check firewalld service state on portal host
@@ -24,7 +24,13 @@
         monitoring_prometheus_host_port | int,
         monitoring_alertmanager_host_port | int,
         monitoring_cadvisor_host_port | int,
-      ] | unique
+      ]
+      + (
+          [deployment_portal_ipa_https_port | default(8443) | int]
+          if (deployment_portal_ipa_https_enabled | default(true) | bool)
+          else []
+        )
+      | unique
     }}
   when:
     - _portal_firewalld_svc is succeeded

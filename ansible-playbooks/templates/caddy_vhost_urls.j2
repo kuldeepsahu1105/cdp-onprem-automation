@@ -6,6 +6,7 @@
 {% set slug = _ops_ip | replace('.', '-') %}
 {% set base = caddy_vhost_public_base %}
 {% set port = deployment_portal_http_port | int %}
+{% set ipa_https_port = deployment_portal_ipa_https_port | default(8443) | int %}
 {% macro vhost(svc) -%}
 {%- if caddy_vhost_dns_mode == 'flat' -%}
 {{ svc }}.{{ base }}
@@ -17,6 +18,13 @@
 {%- endmacro %}
 {% macro url(host, path, use_port) -%}
 http://{{ host }}{% if use_port %}:{{ port }}{% endif %}{{ path }}
+{%- endmacro %}
+{% macro ipa_url(host) -%}
+{%- if deployment_portal_ipa_https_enabled | default(true) | bool -%}
+https://{{ host }}{% if ipa_https_port != 443 %}:{{ ipa_https_port }}{% endif %}
+{%- else -%}
+{{ url(host, '', use_port) }}
+{%- endif -%}
 {%- endmacro %}
 {% set use_port = (port != 80) %}
 nipio_style: {{ caddy_vhost_dns_mode }}
@@ -43,4 +51,4 @@ cadvisor:
   url: "{{ url(vhost(caddy_vhost_service_names.cadvisor), '', use_port) }}"
 ipa:
   hostname: "{{ vhost(caddy_vhost_service_names.ipa) }}"
-  url: "{{ url(vhost(caddy_vhost_service_names.ipa), '', use_port) }}"
+  url: "{{ ipa_url(vhost(caddy_vhost_service_names.ipa)) }}"

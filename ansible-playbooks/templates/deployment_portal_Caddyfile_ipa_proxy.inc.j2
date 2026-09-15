@@ -19,4 +19,9 @@
     header_up Host {{ deployment_portal_ipa_fqdn }}
     header_down Location "^https?://{{ deployment_portal_ipa_fqdn | replace('.', '\\.') }}" "{{ _ipa_caddy_origin }}"
     header_down Set-Cookie "{{ deployment_portal_ipa_fqdn }}" "{{ _ipa_caddy_vhost_host }}"
+{% if _ipa_caddy_strip_secure_cookie | default(false) | bool %}
+    {# IPA marks ipa_session Secure; remove it only for the direct HTTP fallback listener. #}
+    header_down Set-Cookie "(?i);[ ]*secure" ""
+{% endif %}
   }
+{{ '\n' }}
