@@ -12,3 +12,10 @@
     src: krb5_ansible_ccache_note.conf.j2
     dest: /etc/krb5.conf.d/ansible-ccache-note.conf
     mode: "0644"
+  register: krb5_ansible_ccache_note_template
+
+- name: Kerberos — restart SSSD on clients after krb5.conf.d drop-in change
+  ansible.builtin.import_tasks: restart_sssd_after_krb5_ccache_note.yml
+  when:
+    - krb5_ansible_ccache_note_template is changed
+    - inventory_hostname not in groups.get('ipaserver', [])

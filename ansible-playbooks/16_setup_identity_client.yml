@@ -34,28 +34,6 @@
       ansible.builtin.import_tasks: common_tasks/ensure_krb5_ansible_ccache_note.yml
       when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'
 
-- name: Build deployment portal facts for IPA HTTPD Caddy proxy (localhost)
-  hosts: localhost
-  connection: local
-  gather_facts: true
-  vars_files:
-    - group_vars/all.yml
-  tasks:
-    - name: Resolve portal facts before IPA client enrollment
-      ansible.builtin.import_tasks: common_tasks/ensure_ipa_httpd_behind_caddy_before_client.yml
-      when: identity_provider_effective == 'freeipa'
-
-- name: Apply FreeIPA Apache Caddy proxy on ipaserver before client enrollment
-  hosts: ipaserver
-  gather_facts: true
-  become: true
-  vars_files:
-    - group_vars/all.yml
-  tasks:
-    - name: Install zz-ipa-caddy-proxy.conf and reload httpd on ipaserver
-      ansible.builtin.import_tasks: common_tasks/apply_ipa_httpd_behind_caddy_on_ipaserver.yml
-      when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'
-
 - name: Update DNS for identity provider
   hosts: all
   become: yes
