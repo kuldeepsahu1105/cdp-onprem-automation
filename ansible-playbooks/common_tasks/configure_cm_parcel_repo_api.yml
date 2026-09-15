@@ -124,8 +124,8 @@
             [cdv_parcel_yum_repo_url]
             if (
               (cm_parcel_repo_include_cdv_parcel | default(true) | bool)
+              and (cm_repo_source | default('public')) == 'public'
               and (cdv_parcel_yum_repo_url | default('') | length > 0)
-              and (csd_install_dataviz | default(true) | bool)
             )
             else []
           )
@@ -133,8 +133,8 @@
             [cdv_parcel_repo_url]
             if (
               (cm_parcel_repo_include_cdv_parcel | default(true) | bool)
+              and (cm_repo_source | default('public')) == 'public'
               and (cdv_parcel_repo_url | default('') | length > 0)
-              and (csd_install_dataviz | default(true) | bool)
             )
             else []
           )
@@ -142,6 +142,7 @@
             [cfm_parcel_yum_tars_repo_url]
             if (
               (cm_parcel_repo_include_cfm_parcel | default(true) | bool)
+              and (cm_repo_source | default('public')) == 'public'
               and (cfm_parcel_yum_tars_repo_url | default('') | length > 0)
             )
             else []
@@ -150,6 +151,7 @@
             [cfm_parcel_repo_url]
             if (
               (cm_parcel_repo_include_cfm_parcel | default(true) | bool)
+              and (cm_repo_source | default('public')) == 'public'
               and (cfm_parcel_repo_url | default('') | length > 0)
             )
             else []

@@ -289,10 +289,10 @@ scm_parcel_repositories: >-
       else []
     )
     + (
-      [cdv_parcel_repo_url]
+      [cdv_parcel_yum_repo_url, cdv_parcel_repo_url]
       + (
         [cdv_parcel_repo_latest_url]
-        if (cm_parcel_repo_include_latest | default(true) | bool)
+        if (cm_parcel_repo_include_latest | default(false) | bool)
         else []
       )
       if (
@@ -302,10 +302,10 @@ scm_parcel_repositories: >-
       else []
     )
     + (
-      [cfm_parcel_repo_url]
+      [cfm_parcel_yum_tars_repo_url, cfm_parcel_repo_url]
       + (
         [cfm_parcel_repo_latest_url]
-        if (cm_parcel_repo_include_latest | default(true) | bool)
+        if (cm_parcel_repo_include_latest | default(false) | bool)
         else []
       )
       if (
