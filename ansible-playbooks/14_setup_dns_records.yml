@@ -23,8 +23,8 @@
   environment:
     KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
   tasks:
-    - name: Ensure Kerberos ticket for IPA CLI
-      ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket.yml
+    - name: Ensure Kerberos ticket and show klist for IPA CLI
+      ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket_with_klist.yml
 
     - name: Validate IPA Services
       ansible.builtin.command: ipactl status
@@ -33,17 +33,6 @@
       failed_when: "'The ipactl command was successful' not in ipa_status.stderr"
       environment:
         KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
-
-    - name: Print Current Kerberos Ticket
-      ansible.builtin.command: klist -e
-      register: kerberos_ticket
-      changed_when: false
-      environment:
-        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
-
-    - name: Debug Kerberos Ticket Details
-      debug:
-        msg: "{{ kerberos_ticket.stdout.replace('\t', '    ').split('\n') }}"
 
     - name: Extract Reverse DNS Zone from IP Address
       set_fact:
