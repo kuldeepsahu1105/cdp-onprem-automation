@@ -1,9 +1,10 @@
 {# Optional HTTP basic auth for /downloads (SSH keys, credentials JSON). #}
 {% if deployment_portal_basic_auth_enabled | default(false) | bool and (deployment_portal_basic_auth_hash | default('') | length > 0) %}
   handle /downloads/* {
-    basicauth {
+    basic_auth {
       {{ deployment_portal_basic_auth_user }} {{ deployment_portal_basic_auth_hash }}
     }
+    header Set-Cookie "portal_authenticated=1; Path=/; SameSite=Lax"
     root * /srv
     file_server
   }

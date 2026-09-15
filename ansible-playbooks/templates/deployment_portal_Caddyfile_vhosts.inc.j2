@@ -1,21 +1,6 @@
 {# Included per IP slug (public + optional private). Variable: caddy_vhost_urls #}
 {% set _ipa_caddy_origin = 'http://{http.request.host}' ~ (':' ~ (deployment_portal_http_port | int) if (deployment_portal_http_port | int) != 80 else '') %}
 {% set _ipa_caddy_vhost_host = caddy_vhost_urls.ipa.hostname %}
-{% set _ipa_caddy_vhost_regex = _ipa_caddy_vhost_host | replace('.', '\\.') %}
-{% macro ipa_caddy_upstream_response_rewrite(matcher_suffix) %}
-  @ipa_upstream_location_{{ matcher_suffix }} header Location *
-  handle_response @ipa_upstream_location_{{ matcher_suffix }} {
-        header >Location https://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
-        header >Location http://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
-  }
-  @ipa_upstream_cookie_{{ matcher_suffix }} header Set-Cookie *
-  handle_response @ipa_upstream_cookie_{{ matcher_suffix }} {
-        header >Set-Cookie {{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_vhost_host }}
-      }
-{% endmacro %}
-{% macro ipa_caddy_referer_rewrite_upstream() %}
-      header_up Referer "^https?://{{ _ipa_caddy_vhost_regex }}(?::{{ deployment_portal_http_port | int }})?/" "https://{{ deployment_portal_ipa_fqdn }}/"
-{% endmacro %}
 http://{{ caddy_vhost_urls.portal.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
 {% include 'deployment_portal_Caddyfile_downloads_auth.inc.j2' %}
   @portal_static not path /downloads*
@@ -31,75 +16,35 @@ http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port 
 }
 
 {% if deployment_portal_has_ipa | default(false) | bool %}
-{# FreeIPA via Caddy (cloudera-labs/openshift + Adelton proxy notes): HTTP upstream, Host + Referer rewrite, Set-Cookie domain rewrite.
+{# FreeIPA via Caddy (cloudera-labs/openshift + Adelton proxy notes): route to the inventory IP, but present the IPA FQDN in Host and Referer.
    Legacy /ipa/ui loads static assets under /ipa/js, /ipa/css, /ipa/config, /ipa/wsgi — not only /ipa/ui/*.
    Browsers use ipa.<slug> host; upstream expects ipaserver FQDN Referer and issues Set-Cookie for that FQDN — rewrite both or session/login 401.
-   @ipa_json_rpc before @ipa_session and @ipa_legacy so JSON-RPC keeps Accept-Encoding identity (no gzip stack).
    Optional ipaserver HTML rewrites: deployment_portal_ipa_httpd_proxy_enabled + ipa_httpd_caddy_proxy.conf.j2.
-   Test on ops (PORT={{ deployment_portal_http_port }}, slug host {{ caddy_vhost_urls.ipa.hostname }}, upstream {{ deployment_portal_ipa_fqdn }}):
+   Test on ops (PORT={{ deployment_portal_http_port }}, slug host {{ caddy_vhost_urls.ipa.hostname }}, upstream {{ deployment_portal_ipa_upstream_host }}, Host {{ deployment_portal_ipa_fqdn }}):
      curl -sS -o /dev/null -w '%{http_code}\n' -H "Host: {{ caddy_vhost_urls.ipa.hostname }}" "http://127.0.0.1:{{ deployment_portal_http_port }}/ipa/ui"
      curl -sS -o /dev/null -w '%{http_code}\n' -H "Host: {{ caddy_vhost_urls.ipa.hostname }}" "http://127.0.0.1:{{ deployment_portal_http_port }}/ipa/js/util.js"
      curl -sS -o /dev/null -w '%{http_code}\n' -H "Host: {{ deployment_portal_ipa_fqdn }}" -H "Referer: https://{{ deployment_portal_ipa_fqdn }}/ipa/ui" "http://127.0.0.1/ipa/ui"
 #}
 http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
   redir / /ipa/modern-ui/ permanent
-  {# JSON/XML-RPC only — not /ipa/session (modern UI session needs Referer from browser path). #}
+
   @ipa_json_rpc path /ipa/json /ipa/json/* /ipa/xml*
-  handle @ipa_json_rpc {
-    reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
-      header_up Host {{ deployment_portal_ipa_fqdn }}
-      header_up -Authorization
-      header_up -Proxy-Authorization
-      header_down -WWW-Authenticate
-      header_up Referer https://{{ deployment_portal_ipa_fqdn }}/ipa
-      header_up Accept-Encoding identity
-{{ ipa_caddy_upstream_response_rewrite('json') }}
-    }
-  }
-  @ipa_session_no_referer path /ipa/session /ipa/session/* not header Referer *
-  request_header @ipa_session_no_referer Referer "https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/"
   @ipa_session path /ipa/session /ipa/session/*
-  handle @ipa_session {
-    reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
-      header_up Host {{ deployment_portal_ipa_fqdn }}
-      header_up -Authorization
-      header_up -Proxy-Authorization
-      header_down -WWW-Authenticate
-{{ ipa_caddy_referer_rewrite_upstream() }}
-{{ ipa_caddy_upstream_response_rewrite('session') }}
-    }
-  }
-  @ipa_modern path /ipa/modern-ui /ipa/modern-ui/*
-  handle @ipa_modern {
-    reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
-      header_up Host {{ deployment_portal_ipa_fqdn }}
-      header_up -Authorization
-      header_up -Proxy-Authorization
-      header_down -WWW-Authenticate
-      header_up Referer https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}
-{{ ipa_caddy_upstream_response_rewrite('modern') }}
-    }
-  }
-  @ipa_legacy path /ipa/ui /ipa/ui/* /ipa/js /ipa/js/* /ipa/config /ipa/config/* /ipa/css /ipa/css/* /ipa/wsgi /ipa/wsgi/*
-  handle @ipa_legacy {
-    reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
-      header_up Host {{ deployment_portal_ipa_fqdn }}
-      header_up -Authorization
-      header_up -Proxy-Authorization
-      header_down -WWW-Authenticate
-      header_up Referer https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}
-{{ ipa_caddy_upstream_response_rewrite('legacy') }}
-    }
-  }
-  handle {
-    reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
-      header_up Host {{ deployment_portal_ipa_fqdn }}
-      header_up -Authorization
-      header_up -Proxy-Authorization
-      header_down -WWW-Authenticate
-      header_up Referer https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}
-{{ ipa_caddy_upstream_response_rewrite('fallback') }}
-    }
+  @ipa_ui not path /ipa/json /ipa/json/* /ipa/xml* /ipa/session /ipa/session/*
+
+  request_header @ipa_json_rpc Referer "https://{{ deployment_portal_ipa_fqdn }}/ipa"
+  request_header @ipa_json_rpc Accept-Encoding identity
+  request_header @ipa_session Referer "https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/"
+  request_header @ipa_ui Referer "https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}"
+
+  request_header -Authorization
+  request_header -Proxy-Authorization
+  header -WWW-Authenticate
+
+  reverse_proxy http://{{ deployment_portal_ipa_upstream_host }} {
+    header_up Host {{ deployment_portal_ipa_fqdn }}
+    header_down Location "^https?://{{ deployment_portal_ipa_fqdn | replace('.', '\\.') }}" "{{ _ipa_caddy_origin }}"
+    header_down Set-Cookie "{{ deployment_portal_ipa_fqdn }}" "{{ _ipa_caddy_vhost_host }}"
   }
 }
 {% endif %}

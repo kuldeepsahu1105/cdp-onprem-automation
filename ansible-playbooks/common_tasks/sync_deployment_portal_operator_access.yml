@@ -1,5 +1,5 @@
 ---
-# Copy SSH keys and credentials bundle to portal www; optional Caddy basicauth for /downloads.
+# Copy SSH keys and credentials bundle to portal www; optional Caddy Basic Auth for /downloads.
 
 - name: Stage localhost facts on play host for operator access template
   ansible.builtin.import_tasks: deployment_portal_operator_access_facts_from_localhost.yml

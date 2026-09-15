@@ -19,6 +19,7 @@
     deployment_portal_access_profile_effective: "{{ hostvars['localhost']['deployment_portal_access_profile_effective'] | default('cloud') }}"
     deployment_portal_access_urls: "{{ hostvars['localhost']['deployment_portal_access_urls'] | default({}) }}"
     deployment_portal_ipa_fqdn: "{{ hostvars['localhost']['deployment_portal_ipa_fqdn'] | default('') }}"
+    deployment_portal_ipa_upstream_host: "{{ hostvars['localhost']['deployment_portal_ipa_upstream_host'] | default('') }}"
     ipa_caddy_public_hostname: "{{ hostvars['localhost']['ipa_caddy_public_hostname'] | default('') }}"
     deployment_portal_has_ipa: "{{ hostvars['localhost']['deployment_portal_has_ipa'] | default(false) }}"
     deployment_portal_ecs_present: "{{ hostvars['localhost']['deployment_portal_ecs_present'] | default(false) }}"

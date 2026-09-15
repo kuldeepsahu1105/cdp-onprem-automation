@@ -193,15 +193,19 @@
   register: _portal_ssh_export_key_stats
   when: deployment_portal_ssh_export_keys | default([]) | length > 0
 
-- name: Drop missing SSH export keys and use absolute controller paths
+- name: Drop missing and duplicate SSH export keys
   ansible.builtin.set_fact:
     deployment_portal_ssh_export_keys: "{{ _validated_exports }}"
   vars:
     _validated_exports: >-
-      {%- set ns = namespace(keys=[]) -%}
+      {%- set ns = namespace(keys=[], checksums=[]) -%}
       {%- for r in _portal_ssh_export_key_stats.results | default([]) -%}
       {%- if r.stat is defined and r.stat.exists | default(false) and r.stat.isreg | default(false) -%}
+      {%- set identity = r.stat.checksum | default(r.stat.path) -%}
+      {%- if identity not in ns.checksums -%}
       {%- set _ = ns.keys.append(r.item | combine({'controller_path': r.stat.path})) -%}
+      {%- set _ = ns.checksums.append(identity) -%}
+      {%- endif -%}
       {%- endif -%}
       {%- endfor -%}
       {{ ns.keys }}
