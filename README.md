@@ -114,7 +114,7 @@ ansible-playbook -i inventory.ini 31_setup_base_cluster.yml \
 
 ## Deployment portal (Caddy index + pgAdmin)
 
-After cluster deploy, `10_setup_deployment_portal.yml` installs the **ops stack** on **`ipaserver`** when `[ipaserver]` exists, otherwise **`cldr-mngr`** (`deployment_portal_host_group: auto`). Ansible renders **`docker-compose.yml`** plus a companion **`.env`** under `/opt/cldr-deployment-portal` and `/opt/cldr-monitoring` (paths from `deployment_portal_config_dir` / `monitoring_config_dir`) so bind mounts, ports, and credentials stay out of the compose file — re-run **PORTAL** / **MONITORING** after changing `group_vars`.
+`10_setup_deployment_portal.yml` installs the **ops stack** on **`ipaserver`** when `[ipaserver]` exists, otherwise **`cldr-mngr`** (`deployment_portal_host_group: auto`). It can also run independently against another inventory and custom portal/database groups; see [Run the deployment portal independently with another inventory](ansible-playbooks/docs/RUNBOOK.md#run-the-deployment-portal-independently-with-another-inventory). Ansible renders **`docker-compose.yml`** plus a companion **`.env`** under `/opt/cldr-deployment-portal` and `/opt/cldr-monitoring` (paths from `deployment_portal_config_dir` / `monitoring_config_dir`) so bind mounts, ports, and credentials stay out of the compose file — re-run **PORTAL** / **MONITORING** after changing `group_vars`.
 
 | Service | Port / path |
 |---------|-------------|
@@ -134,7 +134,7 @@ With `caddy_vhost_enabled: true`, Caddy serves **per-service hostnames** on the 
 `http://portal.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → deployment portal index  
 `http://pgadmin.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → pgAdmin  
 `http://grafana.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → Grafana  
-`http://ipa.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → FreeIPA (**`redir /` → `/ipa/modern-ui/`**; also **`/ipa/ui`** legacy; Caddy **`reverse_proxy` HTTP** to ipaserver with **`Host`** + path-matched **`Referer`** — [cloudera-labs/openshift](https://github.com/cloudera-labs/openshift) pattern)
+`http://ipa.<ops-ip-dashed>.pvc.cloudera-labs.com:81` → FreeIPA (**`redir /` → `/ipa/modern-ui/`**; also **`/ipa/ui`** legacy; Caddy connects to ipaserver over **HTTPS** using its inventory IP for transport and its FQDN for TLS SNI, **`Host`**, and path-matched **`Referer`**)
 
 Cloudera Manager and ECS console use **direct** URLs on `cldr-mngr` (`:7180`/`:7183`) and `https://console.<ecs_app_domain>` — not Caddy.
 

@@ -17,15 +17,23 @@
 {% endif %}
 
 {# Direct IP:port fallback; explicit HTTP avoids automatic local HTTPS. #}
+{% set _ipa_caddy_origin = 'http://{http.request.host}' ~ (':' ~ (deployment_portal_http_port | int) if (deployment_portal_http_port | int) != 80 else '') %}
+{% set _ipa_caddy_vhost_host = '{http.request.host}' %}
 http://:{{ deployment_portal_http_port }} {
 {% include 'deployment_portal_Caddyfile_downloads_auth.inc.j2' %}
   root * /srv
 
-  @static not path /grafana* /prometheus* /alertmanager* /cadvisor* /downloads*
+  @static not path /grafana* /prometheus* /alertmanager* /cadvisor* /ipa* /downloads*
   handle @static {
     try_files {path} /index.html
     file_server
   }
+
+{% if deployment_portal_has_ipa | default(false) | bool %}
+  handle /ipa* {
+{% include 'deployment_portal_Caddyfile_ipa_proxy.inc.j2' %}
+  }
+{% endif %}
 
 {% if deployment_portal_monitoring_routes_enabled | default(false) | bool %}
   handle /grafana/* {
