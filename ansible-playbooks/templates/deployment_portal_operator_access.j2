@@ -88,7 +88,7 @@
   {'label': 'IPA admin (modern UI via Caddy)', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': _ipa_modern_url, 'note': (caddy_vhost_urls_external.ipa.hostname | default('')) ~ '; ' ~ _ipa_legacy_note},
   {'label': 'IPA admin (direct HTTPS on ipaserver)', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': _ipa_direct_url, 'note': _ipa_bind_note}
 ] %}
-{% set _ipa_intro = 'IPA directory administrator. Caddy URLs work without /etc/hosts; direct HTTPS requires resolving ' ~ deployment_portal_ipa_fqdn ~ '.' %}
+{% set _ipa_intro = 'IPA directory administrator. Caddy URLs work without /etc/hosts (use password login on modern UI — browser Kerberos SSO needs https://' ~ deployment_portal_ipa_fqdn ~ '). Direct HTTPS requires resolving that FQDN.' %}
 {% else %}
 {% set _ipa_creds = [{'label': 'IPA admin', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': _ipa_direct_url, 'note': _ipa_bind_note}] %}
 {% set _ipa_intro = 'IPA directory administrator.' %}

@@ -23,7 +23,7 @@
       ansible.builtin.import_tasks: common_tasks/ensure_krb5_ansible_ccache_note.yml
       when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'
 
-    - name: Keep KEYRING default_ccache_name commented in krb5.conf on ipaserver
+    - name: Restore KEYRING default_ccache_name on ipaserver (clients stay commented in later plays)
       ansible.builtin.import_tasks: common_tasks/ensure_krb5_default_ccache_commented.yml
       when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'
 
