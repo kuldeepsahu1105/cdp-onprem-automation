@@ -2,11 +2,14 @@
 {% set _ipa_caddy_origin = 'http://{http.request.host}' ~ (':' ~ (deployment_portal_http_port | int) if (deployment_portal_http_port | int) != 80 else '') %}
 {% set _ipa_caddy_vhost_host = caddy_vhost_urls.ipa.hostname %}
 {% set _ipa_caddy_vhost_regex = _ipa_caddy_vhost_host | replace('.', '\\.') %}
-{% macro ipa_caddy_upstream_response_rewrite() %}
-      @ipa_upstream_response header Location * Set-Cookie *
-      handle_response @ipa_upstream_response {
+{% macro ipa_caddy_upstream_response_rewrite(matcher_suffix) %}
+  @ipa_upstream_location_{{ matcher_suffix }} header Location *
+  handle_response @ipa_upstream_location_{{ matcher_suffix }} {
         header >Location https://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
         header >Location http://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
+  }
+  @ipa_upstream_cookie_{{ matcher_suffix }} header Set-Cookie *
+  handle_response @ipa_upstream_cookie_{{ matcher_suffix }} {
         header >Set-Cookie {{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_vhost_host }}
       }
 {% endmacro %}
@@ -47,7 +50,7 @@ http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | in
       header_up Host {{ deployment_portal_ipa_fqdn }}
       header_up Referer https://{{ deployment_portal_ipa_fqdn }}/ipa
       header_up Accept-Encoding identity
-{{ ipa_caddy_upstream_response_rewrite() }}
+{{ ipa_caddy_upstream_response_rewrite('json') }}
     }
   }
   @ipa_session_no_referer path /ipa/session /ipa/session/* not header Referer *
@@ -57,7 +60,7 @@ http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | in
     reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
       header_up Host {{ deployment_portal_ipa_fqdn }}
 {{ ipa_caddy_referer_rewrite_upstream() }}
-{{ ipa_caddy_upstream_response_rewrite() }}
+{{ ipa_caddy_upstream_response_rewrite('session') }}
     }
   }
   @ipa_modern path /ipa/modern-ui /ipa/modern-ui/*
@@ -65,7 +68,7 @@ http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | in
     reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
       header_up Host {{ deployment_portal_ipa_fqdn }}
       header_up Referer https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}
-{{ ipa_caddy_upstream_response_rewrite() }}
+{{ ipa_caddy_upstream_response_rewrite('modern') }}
     }
   }
   @ipa_legacy path /ipa/ui /ipa/ui/* /ipa/js /ipa/js/* /ipa/config /ipa/config/* /ipa/css /ipa/css/* /ipa/wsgi /ipa/wsgi/*
@@ -73,14 +76,14 @@ http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | in
     reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
       header_up Host {{ deployment_portal_ipa_fqdn }}
       header_up Referer https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}
-{{ ipa_caddy_upstream_response_rewrite() }}
+{{ ipa_caddy_upstream_response_rewrite('legacy') }}
     }
   }
   handle {
     reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
       header_up Host {{ deployment_portal_ipa_fqdn }}
       header_up Referer https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}
-{{ ipa_caddy_upstream_response_rewrite() }}
+{{ ipa_caddy_upstream_response_rewrite('fallback') }}
     }
   }
 }
