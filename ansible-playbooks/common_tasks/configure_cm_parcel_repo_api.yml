@@ -5,16 +5,34 @@
   ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
 
 - name: Parcel repo — read current CM configuration
-  ansible.builtin.uri:
-    url: "{{ cm_krb_api_url }}/cm/config"
-    method: GET
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: yes
-    validate_certs: no
-    status_code: [200, 301, 303]
-  register: cm_parcel_config_get
-  changed_when: false
+  block:
+    - name: Parcel repo — GET /cm/config
+      ansible.builtin.uri:
+        url: "{{ cm_krb_api_url }}/cm/config"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 301, 303]
+        timeout: 60
+      register: cm_parcel_config_get
+      changed_when: false
+      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
+  rescue:
+    - name: Parcel repo — fail with scm-server and security group guidance
+      ansible.builtin.fail:
+        msg: >-
+          Cloudera Manager parcel repo API unreachable at {{ cm_krb_api_url }}/cm/config
+          (called from {{ inventory_hostname | default('localhost') }}
+          {% if cm_api_uri_delegate_to | default('') | length > 0 %}
+          via {{ cm_api_uri_delegate_to }} at bind {{ cm_api_probe_host | default('unknown') }}
+          {% endif %}).
+          Connection refused usually means scm-server is not listening yet or the target IP is wrong for this controller.
+          On cldr-mngr: systemctl status cloudera-scm-server and journalctl -u cloudera-scm-server -n 80.
+          From the Ansible controller, confirm TCP to a reachable manager address on :{{ cm_https_port | default(7183) }}
+          (in-VPC Jenkins: private IP or FQDN; outside VPC: manager public IP with security group ingress on :7180/:7183).
+          Override with -e cm_api_connect_host=<reachable-ip> or ansible_control_reachability: private in group_vars when Jenkins runs in-VPC.
 
 # Directory URLs only (scm_csd_parcel_repo_urls.j2). JAR get_url list is scm_csds_urls.j2 in 24_start_cm.yml.
 - name: Parcel repo — build CSD archive directory URLs for remote parcel repos
@@ -177,9 +195,11 @@
         - name: PARCEL_INSTALL_CSD_REPO_URLS
           value: "{{ cm_parcel_install_csd_repo_urls | default(false) | string | lower }}"
     status_code: [200, 204, 301, 303]
+    timeout: 60
   when:
     - cm_parcel_repo_urls_effective | length > 0
     - (cm_parcel_repo_config_changed | bool) or (cm_parcel_install_csd_repo_config_changed | bool)
+  delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
 
 - name: Parcel repo — refresh Cloudera Manager parcel repositories
   ansible.builtin.uri:
@@ -190,8 +210,10 @@
     force_basic_auth: yes
     validate_certs: no
     status_code: [200, 201, 202, 204, 301, 303]
+    timeout: 60
   when:
     - cm_parcel_repo_urls_effective | length > 0
     - (cm_parcel_repo_config_changed | bool) or (cm_parcel_install_csd_repo_config_changed | bool)
   register: cm_parcel_refresh
   failed_when: false
+  delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"

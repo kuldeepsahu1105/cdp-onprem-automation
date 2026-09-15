@@ -1,0 +1,40 @@
+---
+# Optional wait for scm-server :7183 before CM HTTPS REST (play 25). Uses probe context facts.
+
+- name: CM API — skip scm-server HTTPS port wait when API health already passed
+  ansible.builtin.debug:
+    msg: Skipping wait for CM HTTPS port — cm_api_health_ok is already true.
+  when: cm_api_health_ok | default(false) | bool
+
+- name: CM API — resolve host for scm-server HTTPS port wait
+  ansible.builtin.set_fact:
+    _cm_scm_https_wait_host: >-
+      {{
+        cm_api_probe_host
+        if (
+          (cm_api_uri_delegate_to | default('') | length > 0)
+          and (cm_api_probe_host | default('') | length > 0)
+          and (cm_api_probe_host not in ['127.0.0.1', 'localhost'])
+        )
+        else cm_api_client_host
+      }}
+  when:
+    - not (cm_api_health_ok | default(false) | bool)
+    - cm_verify_wait_scm_https_port | default(true) | bool
+
+- name: CM API — wait for Cloudera Manager HTTPS API port (:7183)
+  ansible.builtin.wait_for:
+    host: "{{ _cm_scm_https_wait_host }}"
+    port: "{{ cm_https_port | default(7183) }}"
+    timeout: "{{ cm_verify_scm_https_port_timeout | default(30) | int }}"
+    delay: 3
+  register: _cm_scm_https_port_ready
+  until: _cm_scm_https_port_ready is succeeded
+  retries: "{{ cm_verify_scm_https_port_retries | default(6) | int }}"
+  delay: 10
+  delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
+  when:
+    - not (cm_api_health_ok | default(false) | bool)
+    - cm_verify_wait_scm_https_port | default(true) | bool
+    - _cm_scm_https_wait_host | default('') | length > 0
+    - _cm_scm_https_wait_host not in ['127.0.0.1', 'localhost']

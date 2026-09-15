@@ -26,6 +26,18 @@
         | length > 0
       )
 
+- name: CM API — prefer probe-discovered client host over stale URL public IP
+  ansible.builtin.set_fact:
+    _cm_api_url_host_resolved: "{{ cm_api_client_host }}"
+  when:
+    - cm_api_discovery_succeeded | default(false) | bool
+    - cm_api_client_host | default('') | length > 0
+    - cm_api_client_host not in ['127.0.0.1', 'localhost']
+    - (
+        _cm_api_url_host_resolved | default('') | length == 0
+        or (_cm_api_url_host_resolved | default('') != cm_api_client_host)
+      )
+
 - name: CM API — use manager public IP for API URL on Ansible controller
   ansible.builtin.set_fact:
     _cm_api_url_host_prefer_public: >-
@@ -39,6 +51,8 @@
     - cm_api_controller_is_localhost | default(false) | bool
     - not (cm_api_runner_is_manager | default(false) | bool)
     - cm_api_uri_delegate_to | default('') | length == 0
+    - not (cm_api_discovery_succeeded | default(false) | bool)
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
     - (
         (cm_api_client_host | default('') in ['127.0.0.1', 'localhost', ''])
         or (cm_api_probe_host | default('') in ['127.0.0.1', 'localhost'])
