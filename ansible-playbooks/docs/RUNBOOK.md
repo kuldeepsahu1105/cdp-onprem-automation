@@ -366,7 +366,7 @@ ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
 
 **Existing deployments** that already show `rc4-hmac` in the CM Kerberos wizard:
 
-1. Re-run `12_setup_freeipa_server.yml` (or at least the ipaserver play in `28_setup_cm_krbs.yml`) to apply the IPA KDC snippet and restart `krb5kdc`.
+1. Re-run `12_setup_freeipa_server.yml` (or at least the ipaserver play in `28_setup_cm_krbs.yml`) to apply the IPA KDC snippet and restart IPA (`ipactl restart` when configured, else `krb5kdc`).
 2. Re-run `28_setup_cm_krbs.yml` — it reconciles `KRB_ENC_TYPES` via the CM API even when `kerberized=true` (may restart Cloudera Manager).
 3. In CM, **regenerate** cluster/service keytabs/principals so new keys use AES (CM Kerberos wizard or cluster Kerberos enablement flow). Principals created under RC4-default KDC settings may retain RC4 long-term keys until regenerated.
 
