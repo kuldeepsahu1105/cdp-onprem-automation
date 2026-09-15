@@ -413,7 +413,7 @@ Ops stack runs on **ipaserver** when present (`deployment_portal_host_group: aut
 
 **Caddy FreeIPA vhost:** When `[ipaserver]` is present, `http://ipa.<ops-ip-dashed>.<base>:81/` **`redir / /ipa/modern-ui/ permanent`** (Labs legacy-only setups use `/ipa/ui`) and reverse-proxies **HTTP** to `<ipaserver-fqdn>` with **`header_up Host`** and fixed **`header_up Referer`** (`/ipa/modern-ui/` or `/ipa/ui` per path — cloudera-labs/openshift pattern). **`/ipa/json`** (and related API paths) use **`header_up Accept-Encoding identity`** so Caddy does not stack compressors on gzip JSON-RPC. Tier A checks accept **301/308** on `/` and **200/301** on both UI paths; on `ipaserver`, Ansible verifies `/ipa/modern-ui/` and `/ipa/ui` with matching Referer headers. **Default:** no ipaserver httpd edits — Caddy alone fronts the UI. Optional **`deployment_portal_ipa_httpd_proxy_enabled: true`** applies Apache **`mod_substitute`** on **`/ipa/ui`** and **`/ipa/modern-ui`** only (not **`/ipa/json`**) for embedded FQDN link rewrites.
 
-**IPA Apache behind Caddy (ipaserver, opt-in):** When **`deployment_portal_ipa_httpd_proxy_enabled`** is **true**, Jenkins **PORTAL** runs `configure_ipa_httpd_behind_caddy.yml` on ipaserver: `zz-ipa-caddy-proxy.conf`, optional **`ipa-rewrite.conf`** patches (`ANSIBLE_CADDY_HTTP_UPSTREAM`, `ANSIBLE_CADDY_HTTP_HOST_REDIRECT`), **`apachectl configtest`**, then **`systemctl reload httpd`** (not **`ipactl restart`** — full stack). Manual check: `apachectl configtest && systemctl reload httpd`.
+**IPA Apache behind Caddy (ipaserver, opt-in):** When **`deployment_portal_ipa_httpd_proxy_enabled`** is **true**, Jenkins **PORTAL** and playbook **16** (ipaserver play) run `configure_ipa_httpd_behind_caddy.yml` on ipaserver: `zz-ipa-caddy-proxy.conf`, optional **`ipa-rewrite.conf`** patches (`ANSIBLE_CADDY_HTTP_UPSTREAM`, `ANSIBLE_CADDY_HTTP_HOST_REDIRECT`), **`apachectl configtest`**, then **`systemctl reload httpd`** (not **`ipactl restart`** — full stack). Manual check: `apachectl configtest && systemctl reload httpd`.
 
 ### Jenkins **PORTAL** and **IDENTITY** rerun — config and automatic restarts
 
@@ -439,7 +439,7 @@ curl -v -H 'Host: ipa.<ops-ip-dashed>.pvc.cloudera-labs.com' -H 'Accept-Encoding
   "http://<ops-ip>:81/ipa/json" -o /tmp/ipa-via-caddy.gz
 ```
 
-On **ipaserver**, remove or fix a stale **`zz-ipa-caddy-proxy.conf`** (SUBSTITUTE only on **`/ipa/ui`** and **`/ipa/modern-ui`**, not **`/ipa/json`**); **`apachectl configtest && systemctl reload httpd`**. To apply the managed snippet, set **`deployment_portal_ipa_httpd_proxy_enabled: true`** and re-run Jenkins **PORTAL**. Playbook **16** does not mutate ipaserver httpd — re-run **`16_setup_identity_client.yml --limit <host>`** after ipaserver is healthy.
+On **ipaserver**, remove or fix a stale **`zz-ipa-caddy-proxy.conf`** (SUBSTITUTE only on **`/ipa/ui`** and **`/ipa/modern-ui`**, not **`/ipa/json`**); **`apachectl configtest && systemctl reload httpd`**. To apply the managed snippet, set **`deployment_portal_ipa_httpd_proxy_enabled: true`** and re-run Jenkins **PORTAL** or playbook **16**. Play **16** probes **`/ipa/json`** on ipaserver before worker enroll. Re-run **`16_setup_identity_client.yml --limit <host>`** after ipaserver is healthy.
 
 **Recovery after a failed client enroll (e.g. pvcecs-worker4, gzip fixed on ipaserver):**
 
