@@ -5,7 +5,7 @@
 # set_fact os: "{{ os_vars[ansible_os_family] }}" templates the whole os_vars branch (e.g.
 # postgres_repo_url uses ansible_distribution_major_version) in the play host scope (localhost),
 # even after delegate_facts setup on the DB host. Only postgres_service is needed — resolve it
-# via hostvars[postgres_inventory_host].ansible_os_family (same pattern as ensure_cm_postgres_databases PGDG block).
+# via hostvars[postgres_inventory_host].ansible_os_family only (inline unit names — do not index os_vars).
 
 - name: Gather distribution facts on PostgreSQL DB host
   ansible.builtin.setup:
@@ -15,9 +15,13 @@
   delegate_to: "{{ postgres_inventory_host }}"
   delegate_facts: true
 
+- name: Resolve PostgreSQL systemd unit from DB host OS family
+  ansible.builtin.set_fact:
+    _postgres_systemd_unit: "{{ 'postgresql-' ~ postgresql_version if hostvars[postgres_inventory_host].ansible_os_family == 'RedHat' else 'postgresql@' ~ postgresql_version ~ '-main' }}"
+
 - name: Ensure PostgreSQL service is started on DB host
   ansible.builtin.systemd:
-    name: "{{ os_vars[hostvars[postgres_inventory_host].ansible_os_family].postgres_service }}"
+    name: "{{ _postgres_systemd_unit }}"
     state: started
     enabled: true
     daemon_reload: true
