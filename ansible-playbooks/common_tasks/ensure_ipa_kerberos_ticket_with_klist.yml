@@ -1,7 +1,7 @@
 ---
 # Admin kinit into FILE ccache (see ensure_ipa_kerberos_ticket.yml) then klist for Jenkins diagnostics.
 - name: Ensure Kerberos ticket for IPA CLI
-  ansible.builtin.import_tasks: ensure_ipa_kerberos_ticket.yml
+  ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket.yml
 
 - name: List Kerberos ticket for IPA CLI (FILE ccache)
   ansible.builtin.command: klist -e

@@ -1,0 +1,33 @@
+---
+# Probe `ipa` CLI with the same FILE ccache as kinit/klist (playbooks 14/19 verify).
+- name: Verify IPA CLI with Kerberos FILE ccache
+  ansible.builtin.command:
+    argv:
+      - ipa
+      - --version
+  register: _ipa_cli_krb5_ccache_probe
+  changed_when: false
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+  failed_when: >-
+    (_ipa_cli_krb5_ccache_probe.rc | default(1) | int != 0)
+    or ('Credential cache is empty' in (
+      (_ipa_cli_krb5_ccache_probe.stderr | default(''))
+      ~ (_ipa_cli_krb5_ccache_probe.stdout | default(''))
+    ))
+    or ('did not receive Kerberos credentials' in (
+      (_ipa_cli_krb5_ccache_probe.stderr | default(''))
+      ~ (_ipa_cli_krb5_ccache_probe.stdout | default(''))
+    ))
+    or ('Unauthorized' in (
+      (_ipa_cli_krb5_ccache_probe.stderr | default(''))
+      ~ (_ipa_cli_krb5_ccache_probe.stdout | default(''))
+    ))
+
+- name: Show IPA CLI version probe for debugging
+  ansible.builtin.debug:
+    msg: >-
+      ipa --version (KRB5CCNAME=FILE:{{ ipa_kerberos_ccache_path }}):
+      rc={{ _ipa_cli_krb5_ccache_probe.rc | default('n/a') }}
+      {{ (_ipa_cli_krb5_ccache_probe.stdout | default('') | trim)
+         or (_ipa_cli_krb5_ccache_probe.stderr | default('') | trim) }}

@@ -47,6 +47,9 @@
         - name: Ensure Kerberos ticket and show klist before IPA DNS verification
           ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket_with_klist.yml
 
+        - name: Probe IPA CLI with Kerberos FILE ccache before DNS verification
+          ansible.builtin.import_tasks: common_tasks/verify_ipa_cli_krb5_ccache.yml
+
         - name: Verify Created Wildcard DNS Records in FreeIPA
           ansible.builtin.command:
             argv:
@@ -60,8 +63,13 @@
             KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
           failed_when: >-
             (ipa_dns_records.rc | default(1) | int != 0)
-            or ('Credential cache is empty' in (ipa_dns_records.stderr | default('')))
+            or ('Credential cache is empty' in (
+              (ipa_dns_records.stderr | default('')) ~ (ipa_dns_records.stdout | default(''))
+            ))
             or ('did not receive Kerberos credentials' in (
+              (ipa_dns_records.stderr | default('')) ~ (ipa_dns_records.stdout | default(''))
+            ))
+            or ('Unauthorized' in (
               (ipa_dns_records.stderr | default('')) ~ (ipa_dns_records.stdout | default(''))
             ))
 
