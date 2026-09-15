@@ -569,7 +569,9 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/preflight_ipa_client_install.yml` | Optional hostname/DNS/`getent` asserts before `ipa-client-install` when **`ipa_client_preflight_enabled: true`** (default **`false`**) on hosts without `/etc/ipa/default.conf` |
 | `common_tasks/ensure_krb5_ansible_ccache_note.yml` | Comment-only **`/etc/krb5.conf.d/ansible-ccache-note.conf`**; play **12** / **16**; **SSSD restart** on clients when drop-in changes and SSSD is active |
 | `common_tasks/restart_sssd_after_krb5_ccache_note.yml` | Helper for **`ensure_krb5_ansible_ccache_note.yml`** |
-| `common_tasks/configure_ipa_httpd_behind_caddy.yml` | **Opt-in** (`deployment_portal_ipa_httpd_proxy_enabled`, default **false**): **`zz-ipa-caddy-proxy.conf`**, **`ipa-rewrite.conf`**, **`systemctl reload httpd`** on ipaserver (Jenkins **PORTAL** only) |
+| `common_tasks/apply_ipa_httpd_behind_caddy_on_ipaserver.yml` | Optional **`[ipaserver]`** helper: portal facts; **`configure_ipa_httpd_behind_caddy.yml`** when **`deployment_portal_ipa_httpd_proxy_enabled`**; **`preflight_ipa_json_on_ipaserver.yml`** (playbook **16** does not import by default) |
+| `common_tasks/preflight_ipa_json_on_ipaserver.yml` | POST **`/ipa/json`** on ipaserver FQDN — fail on HTML; after opt-in HTTPD apply or manual **`apply_ipa_httpd_behind_caddy_on_ipaserver.yml`** |
+| `common_tasks/configure_ipa_httpd_behind_caddy.yml` | **Opt-in** (`deployment_portal_ipa_httpd_proxy_enabled`, default **false**): **`zz-ipa-caddy-proxy.conf`**, **`ipa-rewrite.conf`**, **`systemctl reload httpd`** on ipaserver (Jenkins **PORTAL** when flag **true**; **`meta: end_host`** when **false**) |
 | `common_tasks/ensure_ipa_kdc_services.yml` | `ipactl start` + krb5kdc health on ipaserver |
 | `common_tasks/detect_ipa_server_install_state.yml` | `default.conf`, partial debris, `ipactl` / `ipa-server-status` before `ipa-server-install` |
 | `common_tasks/recover_ipa_server_install.yml` | Deeper `ipa-server-install --uninstall` + path cleanup (via `ipa_deep_recovery.yml`, not default playbook **12**) |
