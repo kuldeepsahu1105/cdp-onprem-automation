@@ -1,5 +1,6 @@
 ---
-# Checks before ipa-client-install (playbook 16 / join_freeipa_client.yml).
+# Hostname/DNS checks before ipa-client-install (playbook 16 / join_freeipa_client.yml).
+# Imported only when ipa_client_preflight_enabled is true (default false in group_vars/all.yml).
 
 - name: Preflight IPA client — read hostname -f for enrollment FQDN
   ansible.builtin.command: hostname -f
@@ -51,60 +52,3 @@
       Check /etc/resolv.conf (playbook 13) and /etc/hosts (playbook 03).
       getent hosts: rc={{ ipa_client_preflight_getent_ipaserver.rc }}
       stdout={{ ipa_client_preflight_getent_ipaserver.stdout | default('') | trim }}
-
-- name: Preflight IPA client — probe IPA JSON-RPC on HTTPS (same path as ipa-client-install)
-  ansible.builtin.uri:
-    url: "https://{{ ipaserver }}/ipa/json"
-    method: POST
-    body_format: json
-    body:
-      method: ping
-      params: [[], {}]
-      id: 0
-    headers:
-      Content-Type: application/json
-      Accept-Encoding: gzip
-    validate_certs: false
-    return_content: true
-    status_code: [200, 401, 403, 500]
-    timeout: 30
-  register: ipa_client_preflight_ipa_json
-  failed_when: false
-
-- name: Preflight IPA client — derive whether /ipa/json looks like JSON-RPC (not HTML login)
-  ansible.builtin.set_fact:
-    ipa_client_preflight_ipa_json_body_prefix: >-
-      {{ (ipa_client_preflight_ipa_json.content | default('') | string | trim)[:1] }}
-    ipa_client_preflight_ipa_json_content_type: >-
-      {{ ipa_client_preflight_ipa_json.content_type | default('') | lower }}
-
-- name: Preflight IPA client — set JSON-RPC probe success (401 with gzip JSON is normal for unauthenticated ping)
-  ansible.builtin.set_fact:
-    ipa_client_preflight_ipa_json_ok: >-
-      {{
-        (ipa_client_preflight_ipa_json.status | default(0) | int) > 0
-        and (
-          'json' in ipa_client_preflight_ipa_json_content_type
-          or ipa_client_preflight_ipa_json_body_prefix in ['{', '[']
-        )
-        and 'html' not in ipa_client_preflight_ipa_json_content_type
-        and ipa_client_preflight_ipa_json_body_prefix != '<'
-      }}
-
-- name: Preflight IPA client — fail when /ipa/json returns HTML instead of JSON-RPC
-  ansible.builtin.fail:
-    msg: >-
-      https://{{ ipaserver }}/ipa/json returned HTML (or non-JSON), not gzip JSON-RPC — ipa-client-install will fail with BadGzipFile/zlib.error.
-      HTTP {{ ipa_client_preflight_ipa_json.status | default('n/a') }};
-      Content-Type: {{ ipa_client_preflight_ipa_json.content_type | default('n/a') }}.
-      Body preview (first 200 chars): {{
-        (ipa_client_preflight_ipa_json.content | default('') | string)[:200]
-        | replace('\n', ' ')
-        | replace('\r', ' ')
-      }}.
-      On ipaserver: confirm /etc/httpd/conf.d/zz-ipa-caddy-proxy.conf limits mod_substitute to /ipa/ui and /ipa/modern-ui only (not /ipa/json);
-      apachectl configtest && systemctl reload httpd; compare snippet to ansible-playbooks/templates/ipa_httpd_caddy_proxy.conf.j2.
-      Playbook 16 re-applies that snippet on ipaserver when portal Caddy is enabled; otherwise re-run Jenkins PORTAL
-      (sync_deployment_portal_content → configure_ipa_httpd_behind_caddy.yml) then 16_setup_identity_client.yml --limit {{ inventory_hostname }}.
-      See ansible-playbooks/docs/RUNBOOK.md (zlib.error on /ipa/json).
-  when: not (ipa_client_preflight_ipa_json_ok | default(false) | bool)

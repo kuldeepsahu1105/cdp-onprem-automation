@@ -98,6 +98,15 @@ See also: `docs/RUNBOOK.md` (URL verification tiers), `docs/REFERENCE.md` (group
 
 ---
 
+## FreeIPA client enrollment (playbook 16)
+
+| Fact | Set by | Notes |
+|------|--------|-------|
+| `ipa_client_preflight_enabled` | `group_vars/all.yml` (default **`false`**) | When **`true`**, `join_freeipa_client.yml` imports **`preflight_ipa_client_install.yml`** on hosts without **`/etc/ipa/default.conf`** (hostname **`hostname -f`**, FQDN **`getent ahostsv4`**, **`ipaserver`** **`getent hosts`**). No HTTPS **`/ipa/json`** probe — use RUNBOOK **`zlib.error`** **`curl`** checks on ipaserver misconfig. |
+| `ipa_client_has_default_conf`, `ipa_client_has_partial_state` | `detect_ipa_client_install_state.yml` | Gates install, optional uninstall, and preflight import |
+
+---
+
 ## PostgreSQL / CM database (standalone host)
 
 | Fact | Set by | Notes |

@@ -100,6 +100,8 @@ chrony_enabled: "yes"
 ipa_server_deep_recovery: false
 # Playbook 12 — when true, run ipa-server-install even if default.conf + healthy ipactl (re-install; rare)
 ipa_server_install_force: false
+# Playbook 16 — hostname/DNS asserts before ipa-client-install (see RUNBOOK identity troubleshooting)
+ipa_client_preflight_enabled: false
 # Playbook 12 preflight — explicit RPMs probed before ipa-server-install (RHEL; also in freeipa_server_packages)
 ipa_server_preflight_rpm_packages:
   - ipa-server

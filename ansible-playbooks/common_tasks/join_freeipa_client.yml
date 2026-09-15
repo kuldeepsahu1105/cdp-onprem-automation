@@ -31,7 +31,9 @@
 
 - name: Preflight hostname/DNS before ipa-client-install
   ansible.builtin.import_tasks: preflight_ipa_client_install.yml
-  when: not (ipa_client_has_default_conf | default(false) | bool)
+  when:
+    - not (ipa_client_has_default_conf | default(false) | bool)
+    - ipa_client_preflight_enabled | default(false) | bool
 
 - name: Install and configure FreeIPA client
   ansible.builtin.command: >
