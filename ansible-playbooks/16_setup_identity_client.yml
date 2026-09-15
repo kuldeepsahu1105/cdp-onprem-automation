@@ -12,16 +12,27 @@
     - name: Detect identity provider
       ansible.builtin.import_tasks: common_tasks/detect_identity_provider.yml
 
-- name: Ensure FreeIPA Apache Caddy proxy on ipaserver before client enrollment
-  hosts: localhost
-  connection: local
-  gather_facts: true
+- name: Kerberos — Ansible FILE ccache documentation on FreeIPA server
+  hosts: ipaserver
+  become: true
+  gather_facts: false
   vars_files:
     - group_vars/all.yml
   tasks:
-    - name: Apply IPA HTTPD zz-ipa-caddy-proxy.conf when FreeIPA and portal Caddy are enabled
-      ansible.builtin.import_tasks: common_tasks/ensure_ipa_httpd_behind_caddy_before_client.yml
-      when: identity_provider_effective == 'freeipa'
+    - name: Install krb5.conf.d ansible-ccache-note.conf on ipaserver
+      ansible.builtin.import_tasks: common_tasks/ensure_krb5_ansible_ccache_note.yml
+      when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'
+
+- name: Kerberos — Ansible FILE ccache documentation on identity client hosts
+  hosts: "{{ identity_client_hosts }}"
+  become: true
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: Install krb5.conf.d ansible-ccache-note.conf on enrolled or enrolling hosts
+      ansible.builtin.import_tasks: common_tasks/ensure_krb5_ansible_ccache_note.yml
+      when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'
 
 - name: Update DNS for identity provider
   hosts: all
