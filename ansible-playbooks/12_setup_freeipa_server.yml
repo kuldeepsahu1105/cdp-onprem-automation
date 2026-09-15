@@ -324,11 +324,8 @@
     - name: Configure FreeIPA KDC encryption types (AES)
       ansible.builtin.import_tasks: common_tasks/configure_ipa_krb_enc_types.yml
 
-    - name: Ensure Kerberos Ticket is Present
-      ansible.builtin.shell: echo "{{ ipaadmin_password }}" | kinit {{ ipaadmin_principal }}
-      register: kinit_result
-      changed_when: false
-      failed_when: kinit_result.rc != 0
+    - name: Ensure Kerberos ticket and show klist for IPA CLI on ipaserver
+      ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket_with_klist.yml
 
     - name: Ensure IPA DNS forwards to VPC resolver on AWS (existing installs)
       ansible.builtin.command: >
@@ -336,6 +333,8 @@
       register: ipa_vpc_forwarder
       changed_when: ipa_vpc_forwarder.rc == 0
       failed_when: false
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
       when:
         - ipa_install_dns_use_vpc_forwarder | default(false) | bool
         - not (ipa_server_should_run_install | default(false) | bool)
