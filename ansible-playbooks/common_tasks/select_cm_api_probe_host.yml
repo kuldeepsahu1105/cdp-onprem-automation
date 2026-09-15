@@ -426,7 +426,6 @@
           )
         )
       }}
-    cm_tls_mode: "{{ cm_protocol }}"
     cm_api_controller_https_reachable: >-
       {{
         (
@@ -749,11 +748,16 @@
           )
         )
       }}
-    cm_tls_mode: "{{ cm_protocol }}"
   when:
     - cm_api_probe_host_discovery is defined or cm_api_probe_https_discovery is defined
     - (cm_api_probe_delegate_to | default('') | length > 0) or (cm_api_probe_on_manager_local | default(false) | bool)
     - not (cm_api_controller_probe_succeeded | default(false) | bool)
+
+- name: CM API — mirror cm_tls_mode from cm_protocol after bind pick
+  ansible.builtin.set_fact:
+    cm_tls_mode: "{{ cm_protocol }}"
+  when:
+    - cm_protocol is defined
 
 - name: CM API — set client host on cldr-mngr after address scan
   ansible.builtin.set_fact:
