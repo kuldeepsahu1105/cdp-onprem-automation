@@ -538,6 +538,11 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
     stage('Ansible 2 — Deployment Portal (bootstrap)') {
       when { expression { return shouldRunAnsibleStage('PORTAL') && portalDeployEnabled() } }
       steps { script { runAnsibleDeployPhase('portal') } }
+      post {
+        always {
+          sh './jenkins/scripts/build-access-urls.sh || true'
+        }
+      }
     }
     stage('Ansible 3 — Identity') {
       when { expression { return shouldRunAnsibleStage('IDENTITY') } }
@@ -639,7 +644,7 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
         '''
         archivePipelineArtifacts()
         try {
-          sendPipelineEmail(true)
+          sendPipelineEmail('SUCCESS')
         } catch (Exception e) {
           echo "WARN: success email failed: ${e.message}"
         }
@@ -676,7 +681,7 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
         '''
         archivePipelineArtifacts()
         try {
-          sendPipelineEmail(false)
+          sendPipelineEmail('FAILURE')
         } catch (Exception e) {
           echo "WARN: failure email failed: ${e.message}"
         }
@@ -686,9 +691,17 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once. Details: jenkins/README
     unstable {
       script {
         env.BUILD_RESULT = 'UNSTABLE'
+        sh '''
+          set -eo pipefail
+          export BUILD_RESULT=UNSTABLE
+          export PIPELINE_ACTION="${PIPELINE_ACTION:-n/a}"
+          export PIPELINE_STAGES="${PIPELINE_STAGES:-}"
+          ./jenkins/scripts/collect-artifacts.sh || true
+          ./jenkins/scripts/build-summary.sh || true
+        '''
         archivePipelineArtifacts()
         try {
-          sendPipelineEmail(false)
+          sendPipelineEmail('UNSTABLE')
         } catch (Exception e) {
           echo "WARN: unstable email failed: ${e.message}"
         }
@@ -1274,17 +1287,25 @@ def archivePipelineArtifacts() {
   archiveArtifacts artifacts: patterns, allowEmptyArchive: true, fingerprint: true
 }
 
-def sendPipelineEmail(boolean success) {
+def sendPipelineEmail(String buildResult) {
   if (!env.MAIL_TO?.trim()) {
     echo 'No NOTIFICATION_EMAIL or BUILD_USER_EMAIL — skipping email.'
     return
   }
 
-  def statusIcon = success ? '✅' : '❌'
-  def statusText = success ? 'Completed Successfully' : 'Failed'
-  def color = success ? '#4CAF50' : '#E53935'
+  def result = (buildResult ?: env.BUILD_RESULT ?: 'FAILURE').trim().toUpperCase()
+  def success = result == 'SUCCESS'
+  def unstable = result == 'UNSTABLE'
+  def statusIcon = success ? '✅' : (unstable ? '⚠️' : '❌')
+  def statusText = success ? 'Completed Successfully' : (unstable ? 'Completed (Unstable)' : 'Failed')
+  def color = success ? '#4CAF50' : (unstable ? '#FB8C00' : '#E53935')
+
+  sh '''
+    ./jenkins/scripts/build-access-urls.sh || true
+  '''
+
   def errorBlock = ''
-  if (!success) {
+  if (result == 'FAILURE') {
     def err = (currentBuild.description ?: env.ERROR_MESSAGE ?: 'See attached logs.').replace('\n', '<br/>')
     errorBlock = """
       <h4 style="color:${color};">Error Summary</h4>
@@ -1354,9 +1375,17 @@ def sendPipelineEmail(boolean success) {
       .replace('<', '&lt;')
       .replace('>', '&gt;')
     accessUrlsHtml = """
-    <h4 style="color:#2E7D32;">Portal, CM, Caddy &amp; Monitoring URLs</h4>
+    <h4 style="color:#2E7D32;">Portal, IPA (Caddy), CM &amp; Monitoring URLs</h4>
     <pre style="background:#e8f5e9;padding:12px;border:1px solid #a5d6a7;white-space:pre-wrap;font-size:13px;">${urlText}</pre>
     """
+  } else {
+    accessUrlsHtml = '''
+    <h4 style="color:#2E7D32;">Portal, IPA (Caddy), CM &amp; Monitoring URLs</h4>
+    <p style="background:#fff8e1;padding:12px;border:1px solid #ffe082;font-size:13px;">
+      URLs were not generated (no inventory yet or PORTAL/TERRAFORM did not run).
+      After deploy, see <code>jenkins/artifacts/access-urls.txt</code> or grep Ansible logs for <code>CDP_ACCESS_URLS_BEGIN</code>.
+    </p>
+    '''
   }
 
   emailext(

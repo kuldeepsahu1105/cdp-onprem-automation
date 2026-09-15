@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Portal, CM, Caddy, and monitoring URLs for Jenkins console + email (jenkins/artifacts/access-urls.txt).
-set -euo pipefail
+# Portal, CM, Caddy, IPA, and monitoring URLs for Jenkins console + email (jenkins/artifacts/access-urls.txt).
+# Mirrors ansible deployment_access_urls_report.j2 when CDP_ACCESS_URLS_* is not in phase logs.
+set -uo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 OUT_DIR="${OUT_DIR:-$REPO_ROOT/jenkins/artifacts}"
@@ -49,7 +50,7 @@ inventory_group_has_hosts() {
   awk -v g="$group" '
     $0 == "[" g "]" { in_g=1; next }
     /^\[/ { in_g=0 }
-    in_g && /^[^#[:space:]]/ { found=1; exit }
+    in_g && /^[^#;[:space:]]/ { found=1; exit }
     END { exit !found }
   ' "$INVENTORY"
 }
@@ -60,7 +61,7 @@ inventory_first_host_fields() {
   awk -v g="$group" '
     $0 == "[" g "]" { in_g=1; next }
     /^\[/ { in_g=0 }
-    in_g && /^[^#[:space:]]/ {
+    in_g && /^[^#;[:space:]]/ {
       print $0
       exit
     }
@@ -80,8 +81,12 @@ parse_host_line() {
       cldr_hostname=*) HOST_SHORT="${tok#cldr_hostname=}" ;;
     esac
   done
-  [[ -z "$HOST_PRIV" ]] && HOST_PRIV="$HOST_PUB"
-  [[ -z "$HOST_SHORT" ]] && HOST_SHORT="$HOST_NAME"
+  if [[ -z "$HOST_PRIV" ]]; then
+    HOST_PRIV="$HOST_PUB"
+  fi
+  if [[ -z "$HOST_SHORT" ]]; then
+    HOST_SHORT="$HOST_NAME"
+  fi
 }
 
 caddy_hostname() {
@@ -121,7 +126,7 @@ extract_urls_from_ansible_logs() {
 
 mkdir -p "$OUT_DIR"
 
-{
+render_access_urls_body() {
   echo "CDP Deployment - Access URLs (portal, CM, Caddy, monitoring)"
   echo "=============================================================="
   echo "Build: ${JOB_NAME:-local} #${BUILD_NUMBER:-0}"
@@ -135,9 +140,11 @@ mkdir -p "$OUT_DIR"
   fi
 
   portal_enabled="$(read_group_var deployment_portal_enabled true)"
+  portal_on="true"
   if [[ "$portal_enabled" != "true" && "$portal_enabled" != "1" ]]; then
-    echo "Deployment portal disabled (deployment_portal_enabled=false)."
-    exit 0
+    portal_on="false"
+    echo "Note: deployment_portal_enabled=false — CM/direct URLs only (no Caddy portal block)."
+    echo ""
   fi
 
   http_port="$(read_group_var deployment_portal_http_port 81)"
@@ -163,11 +170,14 @@ mkdir -p "$OUT_DIR"
 
   ops_line="$(inventory_first_host_fields "$ops_group" || true)"
   cm_line="$(inventory_first_host_fields cldr-mngr || true)"
+  ipa_line="$(inventory_first_host_fields ipaserver || true)"
 
-  if [[ -z "$ops_line" ]]; then
-    echo "Ops host not found in inventory (expected [ipaserver] or [cldr-mngr])."
-    exit 0
+  if [[ -z "$ops_line" && -z "$cm_line" ]]; then
+    echo "URLs unavailable: no [ipaserver] or [cldr-mngr] host in inventory yet."
+    echo "Re-run after TERRAFORM or grep Ansible logs for CDP_ACCESS_URLS_BEGIN."
+    return 0
   fi
+  [[ -z "$ops_line" ]] && ops_line="${cm_line:-}"
 
   parse_host_line "$ops_line"
   ops_pub="$HOST_PUB"
@@ -189,6 +199,24 @@ mkdir -p "$OUT_DIR"
   echo "Computed from inventory + group_vars (use when portal playbooks did not run):"
   echo "Ops host group: $ops_group"
   echo ""
+
+  if [[ "$portal_on" != "true" ]]; then
+    echo "--- Cloudera Manager (direct) ---"
+    echo "  HTTP:  $(url_with_port http "$cm_fqdn" "$cm_http" /)"
+    echo "  HTTPS: $(url_with_port https "$cm_fqdn" "$cm_https" /)"
+    if [[ -n "$cm_pub" ]]; then
+      echo "  By public IP: http://${cm_pub}:${cm_http}/"
+    fi
+    if [[ -n "$cm_priv" ]]; then
+      echo "  By private IP: http://${cm_priv}:${cm_http}/"
+    fi
+    if [[ -n "$ecs_app_domain" && "$ecs_app_domain" != *'{{'* ]]; then
+      echo ""
+      echo "--- ECS control plane ---"
+      echo "  Console (typical): https://console.${ecs_app_domain}/"
+    fi
+    return 0
+  fi
 
   echo "--- Direct URLs (no Caddy) ---"
   if [[ "$private_profile" == "true" ]]; then
@@ -282,11 +310,28 @@ mkdir -p "$OUT_DIR"
       portal_vpc="$(caddy_hostname portal "$slug_priv" "$caddy_base" "$caddy_mode")"
       echo "  Portal (VPC slug): $(url_with_port http "$portal_vpc" "$http_port" /)"
     fi
+    if [[ -n "$ipa_line" ]]; then
+      ipa_h="$(caddy_hostname ipa "$slug" "$caddy_base" "$caddy_mode")"
+      parse_host_line "$ipa_line"
+      ipa_fqdn="${HOST_SHORT}.${cluster_domain}"
+      echo ""
+      echo "--- Identity (FreeIPA via Caddy) ---"
+      echo "  IPA UI (Caddy vhost): $(url_with_port http "$ipa_h" "$http_port" /ipa/modern-ui/)"
+      echo "  IPA UI (legacy path): $(url_with_port http "$ipa_h" "$http_port" /ipa/ui)"
+      echo "  IPA direct (ipaserver): https://${ipa_fqdn}/ipa/modern-ui/"
+    fi
   else
     echo "--- Caddy: disabled (use direct URLs above) ---"
+    if [[ -n "$ipa_line" ]]; then
+      parse_host_line "$ipa_line"
+      ipa_fqdn="${HOST_SHORT}.${cluster_domain}"
+      echo ""
+      echo "--- Identity (FreeIPA direct) ---"
+      echo "  IPA UI: https://${ipa_fqdn}/ipa/modern-ui/"
+    fi
   fi
 
-  if [[ -n "$ecs_app_domain" ]]; then
+  if [[ -n "$ecs_app_domain" && "$ecs_app_domain" != *'{{'* ]]; then
     echo ""
     echo "--- ECS control plane ---"
     echo "  Console (typical): https://console.${ecs_app_domain}/"
@@ -299,6 +344,18 @@ mkdir -p "$OUT_DIR"
   echo ""
   echo "Vars: deployment_external_url_verify (global), deployment_cm_external_url_verify (per-service)."
   echo "Grep Ansible logs: CDP_ACCESS_URLS_BEGIN  or  Tier B (external)"
-} > "$OUT_FILE"
+}
+
+if ! render_access_urls_body > "$OUT_FILE" 2>"${OUT_FILE}.log"; then
+  {
+    echo "CDP Deployment - Access URLs"
+    echo "=============================="
+    echo "URLs could not be computed (see ${OUT_FILE}.log)."
+    echo "Grep Ansible phase logs for CDP_ACCESS_URLS_BEGIN when PORTAL ran."
+  } > "$OUT_FILE"
+fi
+if [[ ! -s "$OUT_FILE" ]]; then
+  echo "URLs unavailable — inventory or portal facts not ready." > "$OUT_FILE"
+fi
 
 printf '[access-urls] Wrote %s\n' "$OUT_FILE"
