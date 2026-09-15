@@ -44,13 +44,26 @@
             record_value: "{{ ecs_master_ip }}"
             state: present
 
-        - name: Ensure Kerberos ticket for IPA CLI verification
-          ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket.yml
+        - name: Ensure Kerberos ticket and show klist before IPA DNS verification
+          ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket_with_klist.yml
 
         - name: Verify Created Wildcard DNS Records in FreeIPA
-          shell: "ipa dnsrecord-find {{ ipaserver_domain }} --name=*.apps"
+          ansible.builtin.command:
+            argv:
+              - ipa
+              - dnsrecord-find
+              - "{{ ipaserver_domain }}"
+              - "--name=*.apps"
           register: ipa_dns_records
           changed_when: false
+          environment:
+            KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+          failed_when: >-
+            (ipa_dns_records.rc | default(1) | int != 0)
+            or ('Credential cache is empty' in (ipa_dns_records.stderr | default('')))
+            or ('did not receive Kerberos credentials' in (
+              (ipa_dns_records.stderr | default('')) ~ (ipa_dns_records.stdout | default(''))
+            ))
 
         - name: Print Wildcard FreeIPA DNS Records
           debug:

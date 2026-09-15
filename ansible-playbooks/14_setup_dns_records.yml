@@ -27,15 +27,19 @@
       ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket.yml
 
     - name: Validate IPA Services
-      command: ipactl status
+      ansible.builtin.command: ipactl status
       register: ipa_status
       changed_when: false
       failed_when: "'The ipactl command was successful' not in ipa_status.stderr"
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
 
     - name: Print Current Kerberos Ticket
-      command: klist -e
+      ansible.builtin.command: klist -e
       register: kerberos_ticket
       changed_when: false
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
 
     - name: Debug Kerberos Ticket Details
       debug:
@@ -76,13 +80,25 @@
         state: present
       loop: "{{ groups['all'] }}"
 
-    - name: Refresh Kerberos ticket before IPA DNS verification
-      ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket.yml
+    - name: Refresh Kerberos ticket and show klist before IPA DNS verification
+      ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket_with_klist.yml
 
     - name: Verify Created DNS Records in FreeIPA
-      command: ipa dnsrecord-find {{ reverse_dns_zone }}
+      ansible.builtin.command:
+        argv:
+          - ipa
+          - dnsrecord-find
+          - "{{ reverse_dns_zone }}"
       register: ipa_dns_records
       changed_when: false
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+      failed_when: >-
+        (ipa_dns_records.rc | default(1) | int != 0)
+        or ('Credential cache is empty' in (ipa_dns_records.stderr | default('')))
+        or ('did not receive Kerberos credentials' in (
+          (ipa_dns_records.stderr | default('')) ~ (ipa_dns_records.stdout | default(''))
+        ))
 
     - name: Debug FreeIPA DNS Records
       debug:

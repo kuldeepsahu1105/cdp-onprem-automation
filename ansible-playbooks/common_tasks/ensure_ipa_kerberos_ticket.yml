@@ -1,7 +1,49 @@
 ---
 # Kerberos ticket for `ipa` CLI on ipaserver. Modules may use ipaadmin_password; CLI needs KRB5CCNAME.
 # FILE ccache survives separate Ansible task/SSH sessions (KEYRING/default cache often does not).
-- name: Obtain Kerberos ticket for IPA CLI
+- name: Check Kerberos ticket in Ansible FILE ccache for IPA CLI
+  ansible.builtin.command: klist
+  register: _ipa_kerberos_klist
+  changed_when: false
+  failed_when: false
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+
+- name: Derive whether Kerberos ticket is needed for IPA CLI
+  ansible.builtin.set_fact:
+    _ipa_kerberos_need_ticket: >-
+      {{
+        ('No credentials cache found' in (_ipa_kerberos_klist.stderr | default('')))
+        or ('No credentials cache found' in (_ipa_kerberos_klist.stdout | default('')))
+        or (_ipa_kerberos_klist.rc | default(0) | int != 0)
+      }}
+
+- name: Stat IPA default.conf before host keytab kinit
+  ansible.builtin.stat:
+    path: /etc/ipa/default.conf
+  register: _ipa_kerberos_default_conf
+  when: _ipa_kerberos_need_ticket | bool
+
+- name: Obtain Kerberos ticket via host keytab for IPA CLI
+  ansible.builtin.command:
+    argv:
+      - kinit
+      - -c
+      - "FILE:{{ ipa_kerberos_ccache_path }}"
+      - -k
+      - -t
+      - /etc/krb5.keytab
+      - "host/{{ ansible_fqdn }}@{{ ipaserver_realm }}"
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+  register: _ipa_kerberos_kinit_keytab
+  changed_when: false
+  failed_when: false
+  when:
+    - _ipa_kerberos_need_ticket | bool
+    - _ipa_kerberos_default_conf.stat.exists | default(false) | bool
+
+- name: Obtain Kerberos ticket via IPA admin password for IPA CLI
   ansible.builtin.shell: kinit -c "FILE:{{ ipa_kerberos_ccache_path }}" "{{ _ipa_kerberos_principal }}"
   args:
     stdin: "{{ _ipa_kerberos_password }}"
@@ -10,7 +52,34 @@
   vars:
     _ipa_kerberos_principal: "{{ ipa_kerberos_principal | default(ipaadmin_principal, true) }}"
     _ipa_kerberos_password: "{{ ipa_kerberos_password | default(ipaadmin_password, true) }}"
-  register: _ensure_ipa_kerberos_ticket
+  register: _ipa_kerberos_kinit_admin
   changed_when: false
-  failed_when: _ensure_ipa_kerberos_ticket.rc != 0
+  failed_when: false
   no_log: true
+  when:
+    - _ipa_kerberos_need_ticket | bool
+    - not (_ipa_kerberos_kinit_keytab.rc | default(1) | int == 0)
+
+- name: Re-check Kerberos ticket after kinit for IPA CLI
+  ansible.builtin.command: klist
+  register: _ipa_kerberos_klist_after
+  changed_when: false
+  failed_when: false
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+  when: _ipa_kerberos_need_ticket | bool
+
+- name: Fail when Kerberos ticket still missing for IPA CLI
+  ansible.builtin.fail:
+    msg: >-
+      Kerberos ticket missing for ipa CLI on {{ inventory_hostname }}
+      (KRB5CCNAME=FILE:{{ ipa_kerberos_ccache_path }}).
+      Host keytab kinit rc={{ _ipa_kerberos_kinit_keytab.rc | default('skipped') }};
+      admin kinit rc={{ _ipa_kerberos_kinit_admin.rc | default('skipped') }}.
+      klist before rc={{ _ipa_kerberos_klist.rc | default('n/a') }};
+      klist after rc={{ _ipa_kerberos_klist_after.rc | default('skipped') }}.
+      Check ipaadmin_password, clock skew (chronyc tracking), and manual
+      kinit {{ ipaadmin_principal }} on ipaserver.
+  when:
+    - _ipa_kerberos_need_ticket | bool
+    - _ipa_kerberos_klist_after.rc | default(1) | int != 0
