@@ -1,5 +1,6 @@
 ---
-# Same JSON-RPC probe as preflight_ipa_client_install.yml, run on ipaserver before workers enroll.
+# Opt-in only (deployment_portal_ipa_httpd_proxy_enabled): after httpd Caddy proxy snippets apply.
+# Stock IPA returns 401 text/html for unauthenticated /ipa/json — enroll uses Kerberos (ipa-client-install), not this probe.
 
 - name: Preflight IPA server — probe /ipa/json on canonical HTTPS (loopback)
   ansible.builtin.uri:

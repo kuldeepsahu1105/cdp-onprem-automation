@@ -568,13 +568,14 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/detect_ipa_client_install_state.yml` | `default.conf` vs partial client debris (`/var/lib/ipa-client/sysrestore`, `/etc/ipa` fragments) before enroll |
 | `common_tasks/preflight_ipa_client_install.yml` | Optional hostname/DNS/`getent` asserts before `ipa-client-install` when **`ipa_client_preflight_enabled: true`** (default **`false`**) on hosts without `/etc/ipa/default.conf` |
 | `common_tasks/ensure_krb5_ansible_ccache_note.yml` | Comment-only **`/etc/krb5.conf.d/ansible-ccache-note.conf`**; play **12** / **16**; **SSSD restart** on clients when drop-in changes and SSSD is active |
-| `common_tasks/restart_sssd_after_krb5_ccache_note.yml` | Helper for **`ensure_krb5_ansible_ccache_note.yml`** |
+| `common_tasks/ensure_krb5_default_ccache_commented.yml` | **`/etc/krb5.conf` [libdefaults]:** keep **`default_ccache_name = KEYRING:persistent:%{uid}`** commented (`krb5_libdefaults_default_ccache_commented_line`); play **12** / **16** (ipaserver) / **`join_freeipa_client`**; **`ipactl restart`** or **SSSD restart** only when krb5.conf changes |
+| `common_tasks/restart_sssd_after_krb5_ccache_note.yml` | Helper for krb5.conf.d / main krb5.conf client adjustments |
 | `common_tasks/ensure_ipa_httpd_behind_caddy_before_client.yml` | Playbook **16** localhost play: resolve Caddy gate and **`build_deployment_portal_facts.yml`** before client enroll |
-| `common_tasks/sync_ipa_httpd_caddy_proxy_state_on_ipaserver.yml` | Playbook **16** **`[ipaserver]`** play: load portal facts; **`manage_ipa_httpd_caddy_proxy_on_ipaserver.yml`**; **`preflight_ipa_json_on_ipaserver.yml`** |
+| `common_tasks/sync_ipa_httpd_caddy_proxy_state_on_ipaserver.yml` | Playbook **16** **`[ipaserver]`** play: load portal facts; **`manage_ipa_httpd_caddy_proxy_on_ipaserver.yml`** (cleanup by default; apply + **`preflight_ipa_json_on_ipaserver.yml`** only when **`deployment_portal_ipa_httpd_proxy_enabled`**) |
 | `common_tasks/manage_ipa_httpd_caddy_proxy_on_ipaserver.yml` | **`configure_ipa_httpd_behind_caddy.yml`** when **`deployment_portal_ipa_httpd_proxy_enabled`**; else **`remove_ipa_httpd_caddy_proxy_on_ipaserver.yml`** (PORTAL sync + play **16**) |
 | `common_tasks/remove_ipa_httpd_caddy_proxy_on_ipaserver.yml` | Default: absent **`zz-ipa-caddy-proxy.conf`**, revert **`ipa-rewrite`** Caddy markers, httpd reload |
 | `common_tasks/apply_ipa_httpd_behind_caddy_on_ipaserver.yml` | Deprecated alias → **`sync_ipa_httpd_caddy_proxy_state_on_ipaserver.yml`** |
-| `common_tasks/preflight_ipa_json_on_ipaserver.yml` | POST **`/ipa/json`** on ipaserver (canonical FQDN) — fail on HTML before worker enrollment (play **16**) |
+| `common_tasks/preflight_ipa_json_on_ipaserver.yml` | POST **`/ipa/json`** on ipaserver after opt-in httpd apply — fail on HTML (not run on default Caddy-only play **16** path) |
 | `common_tasks/configure_ipa_httpd_behind_caddy.yml` | **Opt-in** only: **`zz-ipa-caddy-proxy.conf`**, **`ipa-rewrite.conf`**, httpd reload (via **manage** when flag **true**) |
 | `common_tasks/ensure_ipa_kdc_services.yml` | `ipactl start` + krb5kdc health on ipaserver |
 | `common_tasks/detect_ipa_server_install_state.yml` | `default.conf`, partial debris, `ipactl` / `ipa-server-status` before `ipa-server-install` |

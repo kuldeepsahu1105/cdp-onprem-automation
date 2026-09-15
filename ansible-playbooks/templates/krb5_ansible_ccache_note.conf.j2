@@ -1,7 +1,9 @@
 # Managed by ansible-playbooks — Kerberos credential cache (ccache) for automation.
 #
 # This snippet does NOT set default_ccache_name in krb5.conf.
-# FreeIPA-managed /etc/krb5.conf on ipaserver and enrolled clients keeps the normal system default.
+# Fleet policy: /etc/krb5.conf [libdefaults] keeps FreeIPA's KEYRING line commented
+#   {{ krb5_libdefaults_default_ccache_commented_line }}
+# (see common_tasks/ensure_krb5_default_ccache_commented.yml). Interactive tools use the OS default ccache type.
 # Ansible identity playbooks (11–19) use a dedicated FILE cache for ipa/kinit/klist in automation only:
 #   KRB5CCNAME=FILE:{{ ipa_kerberos_ccache_path }}
 # (override via group_vars ipa_kerberos_ccache_path; see common_tasks/run_ipa_cli.yml.)

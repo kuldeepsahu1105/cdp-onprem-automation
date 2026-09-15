@@ -1,5 +1,7 @@
 ---
-# Playbook 16 [ipaserver]: sync HTTPD Caddy proxy state (apply or cleanup) and preflight /ipa/json.
+# Playbook 16 [ipaserver]: sync HTTPD Caddy proxy state (apply or cleanup).
+# Unauthenticated POST /ipa/json often returns 401 HTML on stock IPA — not a mod_substitute signal.
+# JSON-RPC HTML preflight runs only when deployment_portal_ipa_httpd_proxy_enabled (configure_ipa_httpd_behind_caddy.yml).
 
 - name: Load deployment portal IPA facts from localhost for ipaserver HTTPD tasks
   ansible.builtin.import_tasks: deployment_portal_load_host_facts.yml
@@ -9,9 +11,3 @@
   when:
     - deployment_portal_has_ipa | default(false) | bool
     - groups.get('ipaserver', []) | length > 0
-
-- name: Preflight /ipa/json JSON-RPC from ipaserver before worker ipa-client-install
-  ansible.builtin.import_tasks: preflight_ipa_json_on_ipaserver.yml
-  when:
-    - deployment_portal_has_ipa | default(false) | bool
-    - deployment_portal_ipa_fqdn | default('') | length > 0

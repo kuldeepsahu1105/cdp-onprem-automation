@@ -1,0 +1,72 @@
+---
+# Keep FreeIPA's KEYRING persistent default_ccache_name commented in /etc/krb5.conf [libdefaults].
+# Active KEYRING breaks Ansible ipa/kinit across SSH sessions; automation uses KRB5CCNAME=FILE:… only.
+# ipa-client-install may enable the line — re-apply after enroll (join_freeipa_client.yml).
+
+- name: Kerberos — stat main krb5.conf before default_ccache_name adjustment
+  ansible.builtin.stat:
+    path: /etc/krb5.conf
+  register: krb5_main_conf_stat
+
+- name: Kerberos — comment active default_ccache_name in krb5.conf [libdefaults]
+  ansible.builtin.replace:
+    path: /etc/krb5.conf
+    regexp: '^(\s*)(?!#)default_ccache_name\s*=.*$'
+    replace: "{{ krb5_libdefaults_default_ccache_commented_line }}"
+    backup: true
+  register: krb5_default_ccache_comment_active
+  when: krb5_main_conf_stat.stat.exists | default(false)
+
+- name: Kerberos — probe krb5.conf for any default_ccache_name line
+  ansible.builtin.command:
+    argv:
+      - grep
+      - -E
+      - '^[[:space:]]*#?[[:space:]]*default_ccache_name'
+      - /etc/krb5.conf
+  register: krb5_default_ccache_grep
+  changed_when: false
+  failed_when: false
+  when: krb5_main_conf_stat.stat.exists | default(false)
+
+- name: Kerberos — add commented default_ccache_name under [libdefaults] when absent
+  ansible.builtin.lineinfile:
+    path: /etc/krb5.conf
+    insertafter: '^\[libdefaults\]'
+    line: "{{ krb5_libdefaults_default_ccache_commented_line }}"
+    state: present
+  register: krb5_default_ccache_line_added
+  when:
+    - krb5_main_conf_stat.stat.exists | default(false)
+    - krb5_default_ccache_grep.rc | default(1) | int != 0
+
+- name: Kerberos — normalize commented default_ccache_name to fleet standard form
+  ansible.builtin.replace:
+    path: /etc/krb5.conf
+    regexp: '^(\s*)#\s*default_ccache_name\s*=.*$'
+    replace: "{{ krb5_libdefaults_default_ccache_commented_line }}"
+    backup: true
+  register: krb5_default_ccache_normalize_comment
+  when: krb5_main_conf_stat.stat.exists | default(false)
+
+- name: Kerberos — record krb5.conf default_ccache_name adjustment
+  ansible.builtin.set_fact:
+    krb5_conf_default_ccache_adjusted: >-
+      {{
+        (krb5_default_ccache_comment_active is changed)
+        or (krb5_default_ccache_line_added is changed)
+        or (krb5_default_ccache_normalize_comment is changed)
+      }}
+  when: krb5_main_conf_stat.stat.exists | default(false)
+
+- name: Kerberos — restart IPA after krb5.conf default_ccache_name change (ipaserver)
+  ansible.builtin.import_tasks: restart_ipa_after_krb5_conf_change.yml
+  when:
+    - krb5_conf_default_ccache_adjusted | default(false) | bool
+    - inventory_hostname in groups.get('ipaserver', [])
+
+- name: Kerberos — restart SSSD after krb5.conf default_ccache_name change (clients)
+  ansible.builtin.import_tasks: restart_sssd_after_krb5_ccache_note.yml
+  when:
+    - krb5_conf_default_ccache_adjusted | default(false) | bool
+    - inventory_hostname not in groups.get('ipaserver', [])

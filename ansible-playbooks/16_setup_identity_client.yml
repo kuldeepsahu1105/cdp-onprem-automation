@@ -23,6 +23,10 @@
       ansible.builtin.import_tasks: common_tasks/ensure_krb5_ansible_ccache_note.yml
       when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'
 
+    - name: Keep KEYRING default_ccache_name commented in krb5.conf on ipaserver
+      ansible.builtin.import_tasks: common_tasks/ensure_krb5_default_ccache_commented.yml
+      when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'
+
 - name: Kerberos — Ansible FILE ccache documentation on identity client hosts
   hosts: "{{ identity_client_hosts }}"
   become: true
@@ -45,7 +49,7 @@
       ansible.builtin.import_tasks: common_tasks/ensure_ipa_httpd_behind_caddy_before_client.yml
       when: identity_provider_effective == 'freeipa'
 
-- name: Sync ipaserver HTTPD Caddy proxy state and preflight /ipa/json before client enrollment
+- name: Sync ipaserver HTTPD Caddy proxy state before client enrollment
   hosts: ipaserver
   gather_facts: true
   become: true

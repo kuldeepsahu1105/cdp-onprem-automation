@@ -82,6 +82,8 @@ ipaadmin_password: "PseTeam@123"
 # FILE Kerberos ccache for IPA CLI tasks (Ansible runs each task in a new SSH session).
 # Not set as default_ccache_name — playbooks use KRB5CCNAME=FILE:<path>; documented in krb5.conf.d/ansible-ccache-note.conf.
 ipa_kerberos_ccache_path: /root/.ansible-ipa-krb5cc
+# FreeIPA often ships an active KEYRING line in /etc/krb5.conf; fleet keeps it commented (ensure_krb5_default_ccache_commented.yml).
+krb5_libdefaults_default_ccache_commented_line: "#default_ccache_name = KEYRING:persistent:%{uid}"
 ipadm_password: "{{ ipaadmin_password }}"
 # Shared lab password (ECS UMS bootstrap, Kerberos admin, ECS LDAP admin); override in Jenkins ANSIBLE_GROUP_VARS_YAML
 common_password: "{{ ipaadmin_password }}"

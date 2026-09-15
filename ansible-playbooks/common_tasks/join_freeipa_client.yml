@@ -94,6 +94,10 @@
     path: /etc/ipa/default.conf
   register: ipa_client_default_conf_now
 
+- name: Keep KEYRING default_ccache_name commented in krb5.conf after IPA client enroll
+  ansible.builtin.import_tasks: ensure_krb5_default_ccache_commented.yml
+  when: ipa_client_default_conf_now.stat.exists | default(false)
+
 - name: Ensure Kerberos ticket is available (Ansible FILE ccache)
   ansible.builtin.command: klist
   register: klist_output
