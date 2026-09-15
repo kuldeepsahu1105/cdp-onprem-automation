@@ -12,6 +12,17 @@
     - name: Detect identity provider
       ansible.builtin.import_tasks: common_tasks/detect_identity_provider.yml
 
+- name: Ensure FreeIPA Apache Caddy proxy on ipaserver before client enrollment
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: Apply IPA HTTPD zz-ipa-caddy-proxy.conf when FreeIPA and portal Caddy are enabled
+      ansible.builtin.import_tasks: common_tasks/ensure_ipa_httpd_behind_caddy_before_client.yml
+      when: identity_provider_effective == 'freeipa'
+
 - name: Update DNS for identity provider
   hosts: all
   become: yes

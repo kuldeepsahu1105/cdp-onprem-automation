@@ -71,6 +71,26 @@
   register: ipa_client_preflight_ipa_json
   failed_when: false
 
+- name: Preflight IPA client — derive whether /ipa/json looks like JSON-RPC (not HTML login)
+  ansible.builtin.set_fact:
+    ipa_client_preflight_ipa_json_body_prefix: >-
+      {{ (ipa_client_preflight_ipa_json.content | default('') | string | trim)[:1] }}
+    ipa_client_preflight_ipa_json_content_type: >-
+      {{ ipa_client_preflight_ipa_json.content_type | default('') | lower }}
+
+- name: Preflight IPA client — set JSON-RPC probe success (401 with gzip JSON is normal for unauthenticated ping)
+  ansible.builtin.set_fact:
+    ipa_client_preflight_ipa_json_ok: >-
+      {{
+        (ipa_client_preflight_ipa_json.status | default(0) | int) > 0
+        and (
+          'json' in ipa_client_preflight_ipa_json_content_type
+          or ipa_client_preflight_ipa_json_body_prefix in ['{', '[']
+        )
+        and 'html' not in ipa_client_preflight_ipa_json_content_type
+        and ipa_client_preflight_ipa_json_body_prefix != '<'
+      }}
+
 - name: Preflight IPA client — fail when /ipa/json returns HTML instead of JSON-RPC
   ansible.builtin.fail:
     msg: >-
@@ -84,9 +104,7 @@
       }}.
       On ipaserver: confirm /etc/httpd/conf.d/zz-ipa-caddy-proxy.conf limits mod_substitute to /ipa/ui and /ipa/modern-ui only (not /ipa/json);
       apachectl configtest && systemctl reload httpd; compare snippet to ansible-playbooks/templates/ipa_httpd_caddy_proxy.conf.j2.
-      Re-run Jenkins PORTAL (sync_deployment_portal_content → configure_ipa_httpd_behind_caddy.yml) then 16_setup_identity_client.yml --limit {{ inventory_hostname }}.
+      Playbook 16 re-applies that snippet on ipaserver when portal Caddy is enabled; otherwise re-run Jenkins PORTAL
+      (sync_deployment_portal_content → configure_ipa_httpd_behind_caddy.yml) then 16_setup_identity_client.yml --limit {{ inventory_hostname }}.
       See ansible-playbooks/docs/RUNBOOK.md (zlib.error on /ipa/json).
-  when:
-    - ipa_client_preflight_ipa_json.status is not defined
-      or (ipa_client_preflight_ipa_json.status | default(0) | int) == 0
-      or (ipa_client_preflight_ipa_json.content | default('') | string | trim)[:1] == '<'
+  when: not (ipa_client_preflight_ipa_json_ok | default(false) | bool)

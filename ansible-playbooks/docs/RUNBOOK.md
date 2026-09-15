@@ -430,7 +430,7 @@ curl -v -H 'Host: ipa.<ops-ip-dashed>.pvc.cloudera-labs.com' -H 'Accept-Encoding
   "http://<ops-ip>:81/ipa/json" -o /tmp/ipa-via-caddy.gz
 ```
 
-On **ipaserver**, confirm **`/etc/httpd/conf.d/zz-ipa-caddy-proxy.conf`** limits SUBSTITUTE to **`/ipa/ui`** and **`/ipa/modern-ui`** only; then **`apachectl configtest && systemctl reload httpd`**. Re-run Jenkins **PORTAL** to apply the Ansible template, then **`16_setup_identity_client.yml --limit <host>`**.
+On **ipaserver**, confirm **`/etc/httpd/conf.d/zz-ipa-caddy-proxy.conf`** limits SUBSTITUTE to **`/ipa/ui`** and **`/ipa/modern-ui`** only; then **`apachectl configtest && systemctl reload httpd`**. Re-run Jenkins **PORTAL** to apply the Ansible template, or re-run **`16_setup_identity_client.yml`** (it applies **`ensure_ipa_httpd_behind_caddy_before_client.yml`** on localhost when FreeIPA and portal Caddy are enabled), then **`16_setup_identity_client.yml --limit <host>`**.
 
 **Recovery after a failed client enroll (e.g. pvcecs-worker4, gzip fixed on ipaserver):**
 
