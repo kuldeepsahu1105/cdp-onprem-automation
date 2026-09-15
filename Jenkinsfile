@@ -1368,12 +1368,22 @@ def sendPipelineEmail(String buildResult) {
   def accessUrlsFile = "${env.WORKSPACE}/jenkins/artifacts/access-urls.txt"
   def accessUrlsHtml = ''
   if (fileExists(accessUrlsFile)) {
+    sh """
+      set +e
+      urls='${accessUrlsFile}'
+      if grep -qE '(\\\\n|"msg"[[:space:]]*:)' "\$urls" 2>/dev/null; then
+        python3 '${env.WORKSPACE}/jenkins/scripts/extract-ansible-access-urls.py' --normalize "\$urls" > "\${urls}.clean" \\
+          && mv "\${urls}.clean" "\$urls"
+      fi
+      set -e
+    """
     def urlText = readFile(accessUrlsFile).take(6000)
       .replaceAll('\u001B\\[[0-9;]*[a-zA-Z]', '')
       .replaceAll('\u001B\\][^\u0007]*(\u0007|\u001B\\\\)', '')
       .replace('&', '&amp;')
       .replace('<', '&lt;')
       .replace('>', '&gt;')
+      .replace('\\n', '\n')
     accessUrlsHtml = """
     <h4 style="color:#2E7D32;">Portal, IPA (Caddy), CM &amp; Monitoring URLs</h4>
     <pre style="background:#e8f5e9;padding:12px;border:1px solid #a5d6a7;white-space:pre-wrap;font-size:13px;">${urlText}</pre>

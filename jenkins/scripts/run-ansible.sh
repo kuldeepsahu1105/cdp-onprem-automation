@@ -3,6 +3,7 @@
 set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+export REPO_ROOT
 LOG_DIR="${LOG_DIR:-$REPO_ROOT/jenkins/artifacts}"
 export CDP_ARTIFACTS_DIR="${CDP_ARTIFACTS_DIR:-$LOG_DIR}"
 mkdir -p "$LOG_DIR"

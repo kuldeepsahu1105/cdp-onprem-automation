@@ -1,7 +1,27 @@
 ---
-# Emit access URLs to Ansible logs (grep CDP_ACCESS_URLS in phase logs).
+# Emit access URLs to Ansible logs (grep CDP_ACCESS_URLS in phase logs) and optional Jenkins artifact file.
+
+- name: Render CDP access URLs report
+  ansible.builtin.set_fact:
+    deployment_access_urls_report: "{{ lookup('template', 'deployment_access_urls_report.j2') }}"
+  changed_when: false
 
 - name: Print CDP access URLs for pipeline log and email collectors
   ansible.builtin.debug:
-    msg: "{{ lookup('template', 'deployment_access_urls_report.j2') }}"
+    msg: "{{ deployment_access_urls_report }}"
+  changed_when: false
+
+- name: Write CDP access URLs plain-text file for Jenkins email (when CDP_ARTIFACTS_DIR is set)
+  ansible.builtin.copy:
+    content: |
+      CDP Deployment - Access URLs (portal, CM, Caddy, monitoring)
+      ==============================================================
+      (Source: Ansible deployment_access_urls_report)
+
+      {{ deployment_access_urls_report }}
+    dest: "{{ lookup('env', 'CDP_ARTIFACTS_DIR') | default('', true) | trim }}/access-urls-ansible.txt"
+    mode: "0644"
+  when: (lookup('env', 'CDP_ARTIFACTS_DIR') | default('', true) | trim) | length > 0
+  delegate_to: localhost
+  become: false
   changed_when: false

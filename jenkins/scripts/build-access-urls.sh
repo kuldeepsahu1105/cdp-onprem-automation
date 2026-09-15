@@ -4,6 +4,7 @@
 set -uo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+EXTRACT_PY="${REPO_ROOT}/jenkins/scripts/extract-ansible-access-urls.py"
 OUT_DIR="${OUT_DIR:-$REPO_ROOT/jenkins/artifacts}"
 ANSIBLE_DIR="${REPO_ROOT}/ansible-playbooks"
 ALL_YML="${ANSIBLE_DIR}/group_vars/all.yml"
@@ -11,6 +12,7 @@ OVERRIDE_YML="${ANSIBLE_DIR}/jenkins_override.yml"
 INVENTORY="${INVENTORY:-$OUT_DIR/inventory.ini}"
 [[ -f "$INVENTORY" ]] || INVENTORY="${ANSIBLE_DIR}/inventory.ini"
 OUT_FILE="${OUT_DIR}/access-urls.txt"
+ANSIBLE_URLS_FILE="${OUT_DIR}/access-urls-ansible.txt"
 
 strip_ansi() {
   sed -E \
@@ -109,8 +111,8 @@ url_with_port() {
   fi
 }
 
-extract_urls_from_ansible_logs() {
-  local merged="" f latest=""
+latest_ansible_phase_log_with_urls() {
+  local f latest=""
   for f in "$OUT_DIR"/ansible-*-phase*.log; do
     [[ -f "$f" ]] || continue
     if grep -q 'CDP_ACCESS_URLS_BEGIN' "$f" 2>/dev/null; then
@@ -118,27 +120,50 @@ extract_urls_from_ansible_logs() {
     fi
   done
   [[ -n "$latest" ]] || return 1
-  merged="$(awk '/CDP_ACCESS_URLS_BEGIN/,/CDP_ACCESS_URLS_END/' "$latest" | strip_ansi)"
-  [[ -n "$merged" ]] || return 1
-  printf '%s\n' "$merged"
+  printf '%s' "$latest"
+}
+
+extract_urls_from_ansible_logs() {
+  local latest="" block=""
+  latest="$(latest_ansible_phase_log_with_urls)" || return 1
+  if [[ -f "$EXTRACT_PY" ]]; then
+    block="$(python3 "$EXTRACT_PY" "$latest" 2>/dev/null || true)"
+  fi
+  if [[ -z "$block" ]]; then
+    block="$(awk '/CDP_ACCESS_URLS_BEGIN/,/CDP_ACCESS_URLS_END/' "$latest" | strip_ansi)"
+    block="$(printf '%s' "$block" | sed 's/\\n/\n/g')"
+  fi
+  if printf '%s' "$block" | grep -q '"msg"'; then
+    block="$(printf '%s' "$block" | python3 "$EXTRACT_PY" --normalize 2>/dev/null || true)"
+  fi
+  [[ -n "$block" ]] || return 1
+  printf '%s\n' "$block"
   return 0
 }
 
 mkdir -p "$OUT_DIR"
 
-render_access_urls_body() {
+render_access_urls_header() {
   echo "CDP Deployment - Access URLs (portal, CM, Caddy, monitoring)"
   echo "=============================================================="
   echo "Build: ${JOB_NAME:-local} #${BUILD_NUMBER:-0}"
   echo "Time:  $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
   echo ""
+}
 
-  if extract_urls_from_ansible_logs; then
-    echo ""
-    echo "(Above block copied from latest Ansible CDP_ACCESS_URLS report in phase logs.)"
-    echo ""
+copy_ansible_urls_artifact() {
+  local body=""
+  [[ -f "$ANSIBLE_URLS_FILE" ]] || return 1
+  body="$(<"$ANSIBLE_URLS_FILE")"
+  [[ -n "$body" ]] || return 1
+  if printf '%s' "$body" | grep -q 'CDP_ACCESS_URLS_BEGIN'; then
+    printf '%s\n' "$body"
+    return 0
   fi
+  return 1
+}
 
+render_access_urls_from_inventory() {
   portal_enabled="$(read_group_var deployment_portal_enabled true)"
   portal_on="true"
   if [[ "$portal_enabled" != "true" && "$portal_enabled" != "1" ]]; then
@@ -346,6 +371,19 @@ render_access_urls_body() {
   echo "Grep Ansible logs: CDP_ACCESS_URLS_BEGIN  or  Tier B (external)"
 }
 
+render_access_urls_body() {
+  render_access_urls_header
+  if copy_ansible_urls_artifact; then
+    return 0
+  fi
+  if extract_urls_from_ansible_logs; then
+    echo ""
+    echo "(Source: Ansible deployment_access_urls_report in latest phase log.)"
+    return 0
+  fi
+  render_access_urls_from_inventory
+}
+
 if ! render_access_urls_body > "$OUT_FILE" 2>"${OUT_FILE}.log"; then
   {
     echo "CDP Deployment - Access URLs"
@@ -356,6 +394,16 @@ if ! render_access_urls_body > "$OUT_FILE" 2>"${OUT_FILE}.log"; then
 fi
 if [[ ! -s "$OUT_FILE" ]]; then
   echo "URLs unavailable — inventory or portal facts not ready." > "$OUT_FILE"
+fi
+
+if grep -qE '(\\n|"msg"[[:space:]]*:)' "$OUT_FILE" 2>/dev/null; then
+  if [[ -f "$EXTRACT_PY" ]] && python3 "$EXTRACT_PY" --normalize "$OUT_FILE" > "${OUT_FILE}.clean" 2>/dev/null; then
+    if [[ -s "${OUT_FILE}.clean" ]]; then
+      mv "${OUT_FILE}.clean" "$OUT_FILE"
+    else
+      rm -f "${OUT_FILE}.clean"
+    fi
+  fi
 fi
 
 printf '[access-urls] Wrote %s\n' "$OUT_FILE"
