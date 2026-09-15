@@ -20,6 +20,44 @@
       deployment_portal_ipa_https_port={{ deployment_portal_ipa_https_port }} must be unique on the portal host.
   when: deployment_portal_ipa_https_enabled | default(true) | bool
 
+- name: Check listeners on the requested IPA HTTPS port
+  ansible.builtin.command:
+    argv:
+      - ss
+      - -H
+      - -ltn
+      - "sport = :{{ deployment_portal_ipa_https_port }}"
+  register: _portal_ipa_https_listeners
+  changed_when: false
+  when: deployment_portal_ipa_https_enabled | default(true) | bool
+
+- name: Check whether portal Caddy already publishes the IPA HTTPS port
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --quiet
+      - --filter
+      - "name={{ deployment_portal_caddy_container }}"
+      - --filter
+      - "publish={{ deployment_portal_ipa_https_port }}"
+  register: _portal_caddy_ipa_https_owner
+  changed_when: false
+  when: deployment_portal_ipa_https_enabled | default(true) | bool
+
+- name: Fail before Compose when the IPA HTTPS port is occupied
+  ansible.builtin.assert:
+    that:
+      - >-
+        (_portal_ipa_https_listeners.stdout | default('') | trim | length == 0)
+        or (_portal_caddy_ipa_https_owner.stdout | default('') | trim | length > 0)
+    fail_msg: >-
+      Cannot start portal Caddy: deployment_portal_ipa_https_port={{ deployment_portal_ipa_https_port }}
+      is already in use on {{ inventory_hostname }} by another service.
+      FreeIPA commonly reserves 8443-8445 for Dogtag PKI; use the default 9443 or set an available
+      deployment_portal_ipa_https_port.
+  when: deployment_portal_ipa_https_enabled | default(true) | bool
+
 - name: Refresh portal context monitoring flags and endpoints after ops-host probe
   ansible.builtin.import_tasks: refresh_deployment_portal_monitoring_context.yml
 

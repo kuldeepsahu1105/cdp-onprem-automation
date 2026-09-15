@@ -26,7 +26,7 @@
         monitoring_cadvisor_host_port | int,
       ]
       + (
-          [deployment_portal_ipa_https_port | default(8443) | int]
+          [deployment_portal_ipa_https_port | default(9443) | int]
           if (deployment_portal_ipa_https_enabled | default(true) | bool)
           else []
         )

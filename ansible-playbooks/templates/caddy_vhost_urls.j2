@@ -6,7 +6,7 @@
 {% set slug = _ops_ip | replace('.', '-') %}
 {% set base = caddy_vhost_public_base %}
 {% set port = deployment_portal_http_port | int %}
-{% set ipa_https_port = deployment_portal_ipa_https_port | default(8443) | int %}
+{% set ipa_https_port = deployment_portal_ipa_https_port | default(9443) | int %}
 {% macro vhost(svc) -%}
 {%- if caddy_vhost_dns_mode == 'flat' -%}
 {{ svc }}.{{ base }}
