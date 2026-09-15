@@ -63,7 +63,7 @@
   ansible.builtin.fail:
     msg: >-
       pgAdmin did not respond on http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/ on {{ inventory_hostname }}.
-      Check image arch (dpage/pgadmin4:8), PGADMIN_DEFAULT_EMAIL/PASSWORD, and port conflicts on :{{ deployment_portal_pgadmin_host_port }}.
+      Check image arch ({{ deployment_portal_pgadmin_image }}), PGADMIN_DEFAULT_EMAIL/PASSWORD, and port conflicts on :{{ deployment_portal_pgadmin_host_port }}.
       Recent logs:
       {{ pgadmin_logs_http_fail.stdout | default('(no logs captured)') }}
   when: pgadmin_local_http is failed

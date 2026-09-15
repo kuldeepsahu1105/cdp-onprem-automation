@@ -959,11 +959,11 @@ portal_docker_compose_version: "2.29.2"
 portal_compose_pip_fallback: true
 # Command argv prefix for compose up/restart (set on host by install_portal_container_runtime)
 deployment_portal_compose_argv: ['docker', 'compose']
-deployment_portal_pgadmin_image: dpage/pgadmin4:8
+deployment_portal_pgadmin_image: dpage/pgadmin4:9.17
 deployment_portal_pgadmin_container: cldr-portal-pgadmin
 # When true, print docker logs for pgAdmin after successful PORTAL sync (troubleshooting).
 deployment_portal_pgadmin_debug_logs: false
-# pgAdmin 8 validates PGADMIN_DEFAULT_EMAIL; IPA/cluster .local domains (e.g. cldrsetup.local) fail at container start.
+# pgAdmin validates PGADMIN_DEFAULT_EMAIL; IPA/cluster .local domains (e.g. cldrsetup.local) fail at container start.
 pgadmin_default_email: "admin@{{ caddy_vhost_public_base }}"
 pgadmin_default_password: "{{ postgres_password }}"
 deployment_portal_inventory_groups:
