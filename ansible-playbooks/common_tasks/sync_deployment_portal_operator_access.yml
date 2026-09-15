@@ -216,7 +216,7 @@
     - not (deployment_portal_basic_auth_enabled | default(false) | bool)
 
 - name: Install portal logout page
-  ansible.builtin.copy:
+  ansible.builtin.template:
     src: deployment_portal_logout.html
     dest: "{{ deployment_portal_www_dir }}/downloads/logout.html"
     mode: "0644"
