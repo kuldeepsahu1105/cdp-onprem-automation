@@ -4,8 +4,18 @@
 # Play 29 (localhost, gather_facts: no) delegates here. Do not import set_os_facts on a delegate:
 # set_fact os: "{{ os_vars[ansible_os_family] }}" templates the whole os_vars branch (e.g.
 # postgres_repo_url uses ansible_distribution_major_version) in the play host scope (localhost),
-# even after delegate_facts setup on the DB host. Only postgres_service is needed — resolve it
-# via hostvars[postgres_inventory_host].ansible_os_family only (inline unit names — do not index os_vars).
+# even after delegate_facts setup on the DB host. Resolve the systemd unit via hostvars[...].os.postgres_service
+# (set by play 23 on the DB host), service_facts on the DB host, and version/distro candidate names.
+
+- name: Check if PostgreSQL already accepts TCP on CM database psql target
+  ansible.builtin.wait_for:
+    host: "{{ postgres_ensure_cm_db_psql_host_effective }}"
+    port: "{{ postgres_port }}"
+    timeout: 3
+    connect_timeout: 3
+  delegate_to: "{{ postgres_inventory_host }}"
+  register: _postgres_port_already_listening
+  failed_when: false
 
 - name: Gather distribution facts on PostgreSQL DB host
   ansible.builtin.setup:
@@ -14,10 +24,68 @@
       - distribution
   delegate_to: "{{ postgres_inventory_host }}"
   delegate_facts: true
+  when: _postgres_port_already_listening is failed
 
-- name: Resolve PostgreSQL systemd unit from DB host OS family
+- name: Gather service facts on PostgreSQL DB host
+  ansible.builtin.service_facts:
+  delegate_to: "{{ postgres_inventory_host }}"
+  delegate_facts: true
+  become: true
+  when: _postgres_port_already_listening is failed
+
+- name: Build PostgreSQL systemd unit candidate list
+  vars:
+    _pg_db_host: "{{ hostvars[postgres_inventory_host] }}"
+    _pg_os_family: "{{ _pg_db_host.ansible_os_family | default('RedHat') }}"
+    _pg_probe_versions: "{{ postgres_db_host_psql_probe_versions | map('int') | list }}"
+    _pg_versioned_redhat_units: >-
+      {{
+        (
+          _pg_probe_versions
+          | map('string')
+          | map('regex_replace', '^', 'postgresql-')
+          | list
+        )
+        + (
+          _pg_probe_versions
+          | map('string')
+          | map('regex_replace', '^', 'postgresql')
+          | list
+        )
+      }}
+    _postgres_systemd_unit_candidates: >-
+      {{
+        (
+          [_pg_db_host.os.postgres_service | default('')]
+          + (
+            _pg_versioned_redhat_units + ['postgresql']
+            if _pg_os_family == 'RedHat'
+            else ['postgresql@' ~ (postgresql_version | string) ~ '-main', 'postgresql']
+          )
+        ) | reject('equalto', '') | unique | list
+      }}
   ansible.builtin.set_fact:
-    _postgres_systemd_unit: "{{ 'postgresql-' ~ postgresql_version if hostvars[postgres_inventory_host].ansible_os_family == 'RedHat' else 'postgresql@' ~ postgresql_version ~ '-main' }}"
+    _postgres_systemd_unit_candidates: "{{ _postgres_systemd_unit_candidates }}"
+  when: _postgres_port_already_listening is failed
+
+- name: Resolve installed PostgreSQL systemd unit on DB host
+  ansible.builtin.set_fact:
+    _postgres_systemd_unit: "{{ item }}"
+  loop: "{{ _postgres_systemd_unit_candidates | default([]) }}"
+  when:
+    - _postgres_port_already_listening is failed
+    - _postgres_systemd_unit is not defined
+    - (item ~ '.service') in (hostvars[postgres_inventory_host].ansible_facts.services | default({}))
+
+- name: Fail when PostgreSQL systemd unit cannot be resolved on DB host
+  ansible.builtin.fail:
+    msg: >-
+      Could not find a PostgreSQL systemd unit on {{ postgres_inventory_host }}.
+      Tried: {{ _postgres_systemd_unit_candidates | default([]) | join(', ') }}.
+      Re-run play 23_setup_postgres.yml on the DB host or set postgres_service on that host.
+  when:
+    - _postgres_port_already_listening is failed
+    - _postgres_systemd_unit is not defined
 
 - name: Ensure PostgreSQL service is started on DB host
   ansible.builtin.systemd:
@@ -27,6 +95,7 @@
     daemon_reload: true
   delegate_to: "{{ postgres_inventory_host }}"
   become: true
+  when: _postgres_port_already_listening is failed
 
 - name: Wait for PostgreSQL on CM database psql target
   ansible.builtin.wait_for:
