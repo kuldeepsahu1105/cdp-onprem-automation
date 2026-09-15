@@ -1077,9 +1077,15 @@ monitoring_process_exporter_user: process_exporter
 monitoring_process_exporter_group: process_exporter
 monitoring_process_exporter_download_base_url: https://github.com/ncabatoff/process-exporter/releases/download
 monitoring_process_exporter_config_dir: /etc/process_exporter
-# Inventory groups that receive process_exporter + a Prometheus scrape job. Defaults to the same
-# scope as node_exporter; narrow (e.g. drop ecs-workers) on very large clusters to limit cardinality.
-monitoring_process_exporter_host_groups: "{{ monitoring_node_exporter_host_groups }}"
+# Inventory groups that receive process_exporter + a Prometheus scrape job. Keep in sync with
+# monitoring_node_exporter_host_groups unless narrowing scope (e.g. drop ecs-workers on large clusters).
+monitoring_process_exporter_host_groups:
+  - ipaserver
+  - cldr-mngr
+  - base-masters
+  - base-workers
+  - ecs-masters
+  - ecs-workers
 # process-exporter -config.path process_names matchers (grouped by cmdline regex; first match wins).
 # One Prometheus series per named group instead of one per PID. Override/extend to track more processes.
 monitoring_process_exporter_process_names:

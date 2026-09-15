@@ -405,7 +405,7 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `monitoring_process_exporter_bin_dir` | `/usr/local/bin` | Install path for the `process-exporter` binary |
 | `monitoring_process_exporter_user` / `monitoring_process_exporter_group` | `process_exporter` | Dedicated system user/group running the systemd service (no login shell) |
 | `monitoring_process_exporter_config_dir` | `/etc/process_exporter` | Rendered `config.yml` (process_names matchers) on each target host |
-| `monitoring_process_exporter_host_groups` | `{{ monitoring_node_exporter_host_groups }}` | Inventory groups that get process_exporter + a scrape target; override to narrow scope independently of node_exporter |
+| `monitoring_process_exporter_host_groups` | same six groups as `monitoring_node_exporter_host_groups` | Inventory groups that get process_exporter + a scrape target; override to narrow scope independently of node_exporter |
 | `monitoring_process_exporter_process_names` | see `group_vars/all.yml` | Named cmdline-regex matchers (`cloudera-scm-server`, `postgres`, `java`, `docker`, …) grouping per-process metrics; first match wins |
 | `monitoring_process_exporter_catch_all` | `true` | Append a `{{.Comm}}` matcher grouping every other process by executable name |
 | `monitoring_grafana_provisioning_enabled` | `true` | Render Grafana datasource + dashboard provisioning YAML and copy the prepopulated dashboard JSON under `{{ monitoring_config_dir }}/grafana/` (playbook **32** / portal sync) |

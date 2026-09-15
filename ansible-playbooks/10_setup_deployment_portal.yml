@@ -37,6 +37,9 @@
     - name: Build deployment portal context from inventory
       ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
 
+- import_playbook: enroll_monitoring_exporters.yml
+  when: monitoring_stack_enabled | default(false) | bool
+
 - name: Install deployment portal and monitoring (Caddy, pgAdmin, Grafana, Prometheus, …)
   hosts: "{{ hostvars['localhost']['deployment_portal_host_group_effective'] }}"
   become: true

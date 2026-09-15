@@ -1,0 +1,25 @@
+---
+# Install node_exporter and process_exporter on cluster hosts (systemd).
+# Imported from 10 (when monitoring_stack_enabled), 32 (MONITORING phase), and 35 (when
+# monitoring routes are active) so Prometheus scrape targets are not published before listeners exist.
+- name: Install and enroll node_exporter on cluster hosts
+  hosts: "{{ monitoring_node_exporter_host_groups | join(':') }}"
+  become: true
+  gather_facts: true
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: Install node_exporter (host metrics for Prometheus)
+      ansible.builtin.import_tasks: common_tasks/install_node_exporter.yml
+      when: monitoring_node_exporter_enabled | default(true) | bool
+
+- name: Install and enroll process_exporter on cluster hosts
+  hosts: "{{ monitoring_process_exporter_host_groups | join(':') }}"
+  become: true
+  gather_facts: true
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: Install process_exporter (per-process metrics for Prometheus)
+      ansible.builtin.import_tasks: common_tasks/install_process_exporter.yml
+      when: monitoring_process_exporter_enabled | default(true) | bool
