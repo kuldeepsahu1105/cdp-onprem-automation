@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-09-13.9 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-09-15.1 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -43,8 +43,13 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once, then re-run with your s
 Copy-paste — full stack through ECS (comma-separated, matches checkboxes above):
 VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL
 
-Optional (not in line above): STARTSTOP_AUTOMATION, DESTROY_STACK
+Optional tail stages (append when needed): STARTSTOP_AUTOMATION, DESTROY_STACK
 Job defaults (lighter): VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION
+
+Teardown — check PIPELINE_STAGES checkbox DESTROY_STACK, then:
+  Apply destroy:  DESTROY_STACK  +  boolean DESTROY_STACK_CONFIRM=true  (required; build fails if unchecked)
+  Destroy plan only (no apply):  DESTROY_STACK  +  DRY_RUN=true  (DESTROY_STACK_CONFIRM not required)
+  Optional: CLEANUP_BEFORE_DESTROY=true runs ansible-playbooks/99_cleanup.yml before terraform destroy
 
 Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → STARTSTOP_AUTOMATION → DESTROY_STACK
 
@@ -60,10 +65,10 @@ Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INS
 | MONITORING | Monitoring stack (32); needs PORTAL; MONITORING_STACK_ENABLED |
 | ECS_INSTALL | ECS (33) + optional data services when ECS_DATA_SERVICES_DEPLOY_ENABLED |
 | STARTSTOP_AUTOMATION | run-ec2-startstop-automation.sh — Ansible on ipaserver (36 deploy + 37 run); EC2_STARTSTOP_DEPLOY_SCRIPT default true, EC2_STARTSTOP_RUN_SCRIPT default false (opt-in describe/start/stop) |
-| DESTROY_STACK | run-destroy-stack.sh — optional 99_cleanup (CLEANUP_BEFORE_DESTROY) then terraform destroy |
+| DESTROY_STACK | run-destroy-stack.sh — optional 99_cleanup (CLEANUP_BEFORE_DESTROY) then terraform destroy for this ENVIRONMENT workspace. Must enable DESTROY_STACK_CONFIRM (unless DRY_RUN=true). |
 
-Destroy safety:
-  DESTROY_STACK_CONFIRM — required when DESTROY_STACK is checked (unless DRY_RUN=true).
+Destroy safety (boolean parameters on Build with Parameters):
+  DESTROY_STACK_CONFIRM — check this when DESTROY_STACK stage is selected and you intend to apply terraform destroy.
   DRY_RUN=true — terraform destroy plan only (no apply); DESTROY_STACK_CONFIRM not required.
   CLEANUP_BEFORE_DESTROY — run ansible-playbooks/99_cleanup.yml before destroy when enabled.
 
@@ -79,7 +84,7 @@ Examples:
 
 Details: jenkins/README.md
 ''',
-      description: 'Stage guide (multiline text — always visible on Build with Parameters). Top line is copy-paste VALIDATE…ECS_INSTALL; optional STARTSTOP_AUTOMATION/DESTROY_STACK noted. Editing this field does not change what runs.'
+      description: 'Stage guide (multiline text — always visible on Build with Parameters). Includes DESTROY_STACK and DESTROY_STACK_CONFIRM teardown steps. Editing this field does not change what runs; use PIPELINE_STAGES checkboxes + DESTROY_STACK_CONFIRM boolean.'
     )
     extendedChoice(
       name: 'VALIDATION_CHECKS',
