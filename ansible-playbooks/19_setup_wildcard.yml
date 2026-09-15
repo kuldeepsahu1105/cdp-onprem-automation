@@ -51,31 +51,17 @@
           ansible.builtin.import_tasks: common_tasks/verify_ipa_cli_krb5_ccache.yml
 
         - name: Verify Created Wildcard DNS Records in FreeIPA
-          ansible.builtin.command:
-            argv:
-              - ipa
+          ansible.builtin.include_tasks: common_tasks/run_ipa_cli.yml
+          vars:
+            ipa_cli_task_name: Verify Created Wildcard DNS Records in FreeIPA
+            ipa_cli_argv:
               - dnsrecord-find
               - "{{ ipaserver_domain }}"
               - "--name=*.apps"
-          register: ipa_dns_records
-          changed_when: false
-          environment:
-            KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
-          failed_when: >-
-            (ipa_dns_records.rc | default(1) | int != 0)
-            or ('Credential cache is empty' in (
-              (ipa_dns_records.stderr | default('')) ~ (ipa_dns_records.stdout | default(''))
-            ))
-            or ('did not receive Kerberos credentials' in (
-              (ipa_dns_records.stderr | default('')) ~ (ipa_dns_records.stdout | default(''))
-            ))
-            or ('Unauthorized' in (
-              (ipa_dns_records.stderr | default('')) ~ (ipa_dns_records.stdout | default(''))
-            ))
 
         - name: Print Wildcard FreeIPA DNS Records
           debug:
-            msg: "{{ ipa_dns_records.stdout_lines }}"
+            msg: "{{ ipa_cli_run.stdout_lines }}"
 
         - name: Validate Wildcard DNS resolution using nslookup
           command: "nslookup console-cdp.apps.{{ ipaserver_domain }}"
