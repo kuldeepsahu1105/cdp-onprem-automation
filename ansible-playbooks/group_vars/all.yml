@@ -237,7 +237,8 @@ parcel_repo_public: "{{ cm_repo_public_base_url }}/{{ cdh_repo_product }}/{{ cdh
 parcel_repo_internal: "http://{{ cm_repo_mirror_host }}/cloudera-repos/{{ cdh_repo_product }}/{{ cdh_version }}/"
 parcel_repo: "{{ parcel_repo_internal if cm_repo_source == 'internal' else parcel_repo_public }}"
 # CM wizard uses {latest} path segment (not literal "latest"); pinned cdh_version URL stays explicit.
-cm_parcel_repo_include_latest: true
+# CM Save & Verify rejects {latest} in REMOTE_PARCEL_REPO_URLS (illegal URI). Use pinned versions only unless your CM build accepts the segment.
+cm_parcel_repo_include_latest: false
 cm_parcel_repo_latest_segment: "{latest}"
 parcel_repo_latest_public: "{{ cm_repo_public_base_url }}/{{ cdh_repo_product }}/{{ cm_parcel_repo_latest_segment }}/parcels/"
 

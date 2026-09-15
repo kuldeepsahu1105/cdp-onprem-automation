@@ -82,7 +82,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `parcel_repo_latest_public` | computed | `…/p/cdh7/{latest}/parcels/` when `cm_parcel_repo_include_latest` and `cm_repo_source: public` (`cm_parcel_repo_latest_segment`) |
 | `ecs_parcel_repo_url` | computed | `…/p/cdp-pvc-ds/<ecs_pvc_ds_version>/parcels/` (see `ecs_pvc_ds_version` in ECS table above) |
 | `ecs_parcel_repo_latest_url` | computed | `…/p/cdp-pvc-ds/{latest}/parcels/` (public archive; same include rules as CDH latest) |
-| `cm_parcel_repo_include_latest` | `true` | Add `{latest}` parcel repo dirs for CDH, ECS, CDV, and CFM2 |
+| `cm_parcel_repo_include_latest` | `false` | When true, add `…/{latest}/parcels/` URLs — **CM 7.x Save & Verify rejects `{` `}` in URIs**; leave false and use pinned `cdh_version` / `ecs_pvc_ds_version` / CSD versions |
 | `cm_parcel_repo_latest_segment` | `{latest}` | CM substitution segment in archive URLs (wizard default; not literal `latest`) |
 | `cdv_parcel_repo_url` / `cdv_parcel_repo_latest_url` | computed | DATAVIZ parcels under `…/p/cdv/<cdv_version>/parcels/` and `…/p/cdv/{latest}/parcels/` |
 | `cfm_parcel_repo_url` / `cfm_parcel_repo_latest_url` | computed | NiFi / Registry parcels under `…/p/cfm2/<cfm_version>/parcels/` and `…/p/cfm2/{latest}/parcels/` |
