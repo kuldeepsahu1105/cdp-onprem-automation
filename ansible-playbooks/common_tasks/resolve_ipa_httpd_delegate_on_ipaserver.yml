@@ -27,9 +27,7 @@
   register: ipa_rewrite_conf_probe
   delegate_to: "{{ ipa_httpd_delegate_host }}"
   become: true
-  when:
-    - deployment_portal_has_ipa | default(false) | bool
-    - groups.get('ipaserver', []) | length > 0
+  when: groups.get('ipaserver', []) | length > 0
 
 - name: Choose effective FreeIPA Apache conf.d directory on ipaserver
   ansible.builtin.set_fact:
@@ -46,9 +44,7 @@
         )
         | default(ipa_httpd_conf_d_dir, true)
       }}
-  when:
-    - deployment_portal_has_ipa | default(false) | bool
-    - groups.get('ipaserver', []) | length > 0
+  when: groups.get('ipaserver', []) | length > 0
 
 - name: Check whether FreeIPA server is configured on ipaserver
   ansible.builtin.stat:
@@ -56,6 +52,4 @@
   register: ipa_server_configured
   delegate_to: "{{ ipa_httpd_delegate_host }}"
   become: true
-  when:
-    - deployment_portal_has_ipa | default(false) | bool
-    - groups.get('ipaserver', []) | length > 0
+  when: groups.get('ipaserver', []) | length > 0

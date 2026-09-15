@@ -1,7 +1,7 @@
 ---
 # Clients: keep FreeIPA's KEYRING persistent default_ccache_name commented in /etc/krb5.conf [libdefaults].
 # Active KEYRING on enrolled hosts breaks Ansible ipa/kinit across SSH sessions; automation uses KRB5CCNAME=FILE:… only.
-# ipaserver (default): restore active KEYRING — httpd GSSAPI / interactive kinit on the KDC host expect it.
+# ipaserver (default): restore active KEYRING for stock KDC/interactive kinit (browser UI SPNEGO is off via zz-ipa-disable-browser-krb.conf).
 # ipa-client-install may enable the line on clients — re-apply after enroll (join_freeipa_client.yml).
 
 - name: Kerberos — stat main krb5.conf before default_ccache_name adjustment

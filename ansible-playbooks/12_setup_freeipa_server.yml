@@ -327,6 +327,9 @@
     - name: Ensure Kerberos ticket and show klist for IPA CLI on ipaserver
       ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket_with_klist.yml
 
+    - name: Disable browser SPNEGO for IPA Web UI (password/form login)
+      ansible.builtin.import_tasks: common_tasks/sync_ipa_httpd_disable_browser_krb_on_ipaserver.yml
+
     - name: Ensure IPA DNS forwards to VPC resolver on AWS (existing installs)
       ansible.builtin.command: >
         ipa dnsconfig-mod --forwarder={{ effective_vpc_dns_resolver }} --forward-policy=first

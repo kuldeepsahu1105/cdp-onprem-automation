@@ -8,3 +8,7 @@
 - name: Remove FreeIPA HTTPD Caddy proxy snippets (default Caddy-only UI path)
   ansible.builtin.import_tasks: remove_ipa_httpd_caddy_proxy_on_ipaserver.yml
   when: not (deployment_portal_ipa_httpd_proxy_enabled | default(false) | bool)
+
+- name: Sync ipaserver HTTPD snippet to disable browser SPNEGO for IPA Web UI
+  ansible.builtin.import_tasks: sync_ipa_httpd_disable_browser_krb_on_ipaserver.yml
+  when: groups.get('ipaserver', []) | length > 0
