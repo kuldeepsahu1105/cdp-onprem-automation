@@ -247,7 +247,7 @@
                  'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
                 {'name': 'IPA Caddy vhost GET /ipa/modern-ui/ (200 or 301 OK)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/modern-ui/',
                  'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
-                {'name': 'IPA Caddy vhost GET /ipa/ui (200 or 301 OK)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/ui',
+                {'name': 'IPA Caddy vhost GET /ipa/ui/ (200 or 301 OK)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/ui/',
                  'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
               ]
               if (
@@ -386,10 +386,11 @@
       with Host: {{ item.item.host }}.
       HTTP status: {{ item.status | default('n/a') }} (expected {{ _portal_url_verify_codes_int | join('/') }}).
       {% if item.item.upstream_ipa_fqdn is defined and item.item.upstream_ipa_fqdn | length > 0 %}
-      FreeIPA upstream must receive Host: {{ item.item.upstream_ipa_fqdn }} and Referer https://{{ item.item.upstream_ipa_fqdn }}<request-path>
-      (see deployment_portal_Caddyfile_vhosts.inc.j2; cloudera-labs/openshift Caddy pattern).
+      FreeIPA upstream must use HTTPS with TLS server name and Host: {{ item.item.upstream_ipa_fqdn }},
+      plus Referer https://{{ item.item.upstream_ipa_fqdn }}<request-path>
+      (see deployment_portal_Caddyfile_vhosts.inc.j2).
       GET / on the IPA vhost should 301 to /ipa/modern-ui/; /ipa/modern-ui/ and /ipa/ui should return 200 or redirect (301/302).
-      Confirm http://{{ item.item.upstream_ipa_fqdn }}/ipa/modern-ui/ and /ipa/ui respond on the IPA server and IPA HTTPD is running.
+      Confirm https://{{ item.item.upstream_ipa_fqdn }}/ipa/modern-ui/ and /ipa/ui/ respond on the IPA server and IPA HTTPD is running.
       {% elif 'pgAdmin' in item.item.name %}
       Confirm pgAdmin container {{ deployment_portal_pgadmin_container }} is running and responds on
       http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/ (Caddy reverse_proxies pgadmin:80 on the compose network).
@@ -406,9 +407,9 @@
     - not (item.item.optional | default(false) | bool)
     - (item.status | default(0) | int not in _portal_url_verify_codes_int)
 
-- name: Verify FreeIPA modern UI on ipaserver HTTPD (direct; 301 from IPA without follow_redirects is OK)
+- name: Verify FreeIPA modern UI on ipaserver HTTPS (direct; 301 from IPA without follow_redirects is OK)
   ansible.builtin.uri:
-    url: "http://127.0.0.1/ipa/modern-ui/"
+    url: "https://127.0.0.1/ipa/modern-ui/"
     method: GET
     headers:
       Host: "{{ deployment_portal_ipa_fqdn }}"
@@ -428,9 +429,9 @@
     - inventory_hostname in groups.get('ipaserver', [])
   failed_when: false
 
-- name: Verify FreeIPA legacy UI on ipaserver HTTPD (direct; 301 from IPA without follow_redirects is OK)
+- name: Verify FreeIPA legacy UI on ipaserver HTTPS (direct; 301 from IPA without follow_redirects is OK)
   ansible.builtin.uri:
-    url: "http://127.0.0.1/ipa/ui"
+    url: "https://127.0.0.1/ipa/ui/"
     method: GET
     headers:
       Host: "{{ deployment_portal_ipa_fqdn }}"
@@ -474,10 +475,11 @@
 - name: Fail when FreeIPA modern or legacy UI does not accept its FQDN Host header locally
   ansible.builtin.fail:
     msg: >-
-      FreeIPA modern or legacy UI did not respond on http://127.0.0.1/ with Host: {{ deployment_portal_ipa_fqdn }}.
-      Caddy IPA vhost proxies HTTP with header_up Host and path-matched Referer (cloudera-labs/openshift pattern); fix IPA HTTP first.
-      Modern UI: curl -sS -o /dev/null -w '%{http_code}' -H "Host: {{ deployment_portal_ipa_fqdn }}" -H "Referer: https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/" http://127.0.0.1/ipa/modern-ui/
-      Legacy UI: curl -sS -o /dev/null -w '%{http_code}' -H "Host: {{ deployment_portal_ipa_fqdn }}" -H "Referer: https://{{ deployment_portal_ipa_fqdn }}/ipa/ui" http://127.0.0.1/ipa/ui
+      FreeIPA modern or legacy UI did not respond on https://127.0.0.1/ with Host: {{ deployment_portal_ipa_fqdn }}.
+      Caddy IPA vhost proxies HTTPS to the inventory IP with the IPA FQDN as TLS server name and Host,
+      plus a path-matched Referer; fix IPA HTTPS first.
+      Modern UI: curl -ksS -o /dev/null -w '%{http_code}' https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/
+      Legacy UI: curl -ksS -o /dev/null -w '%{http_code}' https://{{ deployment_portal_ipa_fqdn }}/ipa/ui/
       HTTP status modern={{ ipa_direct_modern_ui_check.status | default('n/a') }} legacy={{ ipa_direct_legacy_ui_check.status | default('n/a') }}
       (acceptable: {{ _portal_url_verify_codes_int | join('/') }}).
   when:

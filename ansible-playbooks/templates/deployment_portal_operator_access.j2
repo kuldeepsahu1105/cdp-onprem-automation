@@ -65,7 +65,7 @@
 {% set _pgadmin_direct = net_access_direct_url('pgadmin', _net_tier, _net_ctx) %}
 {% set _postgres_fqdn = deployment_portal_postgres_fqdn | default(postgres_host_fqdn | default('')) %}
 {% set _pgadmin_note = 'CM DB on ' ~ _postgres_fqdn %}
-{% set _postgres_host_url = 'postgresql://' ~ _postgres_fqdn ~ ':' ~ (postgres_port | string) ~ '/scm' %}
+{% set _postgres_host_url = 'jdbc:postgresql://' ~ _postgres_fqdn ~ ':' ~ (postgres_port | string) ~ '/scm' %}
 {% set ns.sections = ns.sections + [{'id': 'database', 'title': 'Database & pgAdmin', 'intro': 'CM PostgreSQL and portal pgAdmin.', 'downloads': [], 'credentials': [{'label': 'PostgreSQL (CM)', 'username': postgres_user | default('postgres'), 'password': postgres_password, 'url': _postgres_host_url, 'note': _postgres_fqdn ~ ':' ~ (postgres_port | string) ~ ' scm/' ~ scm_db_user}, {'label': 'pgAdmin', 'username': pgadmin_default_email, 'password': pgadmin_default_password, 'url': _pgadmin_url, 'note': _pgadmin_note}]}] %}
 {% if _mon_on %}
 {% set _mon_intro = 'Monitoring UIs on the ops host (' ~ (deployment_portal_anchor_fqdn | default('')) ~ '). URLs prefer Caddy lab vhosts when enabled; otherwise direct host ports or Caddy path routes on :' ~ (deployment_portal_http_port | string) ~ '.' %}

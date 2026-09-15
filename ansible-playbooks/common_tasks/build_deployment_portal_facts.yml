@@ -526,7 +526,7 @@
           {{
             (
               caddy_vhost_urls_external.ipa.url | default('') | trim | regex_replace('/+$', '')
-              + '/ipa/ui'
+              + '/ipa/ui/'
             )
             if (
               caddy_vhost_enabled | default(false) | bool

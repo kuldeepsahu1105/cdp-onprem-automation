@@ -9,7 +9,7 @@
 {% set portal_tile_url = _portal_caddy_url if (_portal_caddy_url | length > 0) else ctx.portal.index_url | default('') %}
 {% set portal_tile_hint = ctx.caddy_vhosts.urls_public.portal.hostname if (_portal_caddy_url | length > 0) else 'Ops host Caddy index' %}
 {% set _caddy_vhosts_on = ctx.caddy_vhosts.enabled | default(false) | bool %}
-{% from 'deployment_portal_url_fqdn_pubip.inc.j2' import portal_url_for_context, portal_url_fqdn_pubip_cm with context %}
+{% from 'deployment_portal_url_fqdn_pubip.inc.j2' import portal_jdbc_for_context, portal_url_bundle, portal_url_for_context, portal_url_fqdn_pubip_cm with context %}
 {% set mon_on = (
   (ctx.monitoring.enabled | default(false) | bool)
   or (ctx.monitoring.routes_enabled | default(false) | bool)
@@ -104,6 +104,11 @@
       border-radius: 4px;
       font-size: 0.85em;
       word-break: break-all;
+    }
+    .url-alternative {
+      display: inline-block;
+      color: var(--muted);
+      margin-left: 0.2rem;
     }
     .site-header {
       background: linear-gradient(135deg, #1a2332 0%, #0f1419 55%, #1a1208 100%);
@@ -1196,10 +1201,10 @@
           <li><strong>Cloudera Manager (direct HTTP)</strong> — {{ portal_url_fqdn_pubip_cm(ctx, ctx.cloudera_manager.ui_url_http, cm_http_port, 'http') }} <span class="badge">VPC / admin</span></li>
           <li><strong>Cloudera Manager (direct HTTPS)</strong> — {{ portal_url_fqdn_pubip_cm(ctx, ctx.cloudera_manager.ui_url_https, cm_https_port, 'https') }} <span class="badge">:7183 when Auto-TLS on</span></li>
           {% if ctx.identity.ipa_caddy_modern_url | default('') | length > 0 %}
-          <li><strong>{{ ctx.identity.ipa_ui_modern_label | default('FreeIPA (modern UI)') }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_caddy_modern_url }}">{{ ctx.identity.ipa_caddy_modern_url }}</a></li>
+          <li><strong>{{ ctx.identity.ipa_ui_modern_label | default('FreeIPA (modern UI)') }}</strong> — {{ portal_url_for_context(ctx.identity.ipa_caddy_modern_url, ctx) }}</li>
           {% endif %}
           {% if ctx.identity.ipa_caddy_legacy_url | default('') | length > 0 %}
-          <li><strong>{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (legacy UI)') }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_caddy_legacy_url }}">{{ ctx.identity.ipa_caddy_legacy_url }}</a></li>
+          <li><strong>{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (legacy UI)') }}</strong> — {{ portal_url_for_context(ctx.identity.ipa_caddy_legacy_url, ctx) }}</li>
           {% endif %}
           {% if ctx.identity.ipa_ui_url %}
           <li><strong>{{ ctx.identity.ipa_ui_label }} (HTTPS on ipaserver)</strong> — {{ portal_url_for_context(ctx.identity.ipa_ui_url, ctx) }}</li>
@@ -1209,6 +1214,7 @@
         <ul class="clean">
           <li>Host: <code>{{ ctx.postgresql.host_fqdn }}</code></li>
           <li>Port: <code>{{ ctx.postgresql.port }}</code></li>
+          <li>CM JDBC — {{ portal_jdbc_for_context('jdbc:postgresql://' ~ ctx.postgresql.host_fqdn ~ ':' ~ (ctx.postgresql.port | string) ~ '/scm', ctx) }}</li>
           <li>{{ ctx.postgresql.database_host_note }}</li>
         </ul>
         <h2 class="section-title" style="margin-top:1rem">Clusters</h2>
@@ -1217,8 +1223,8 @@
           {% if ctx.ecs.deployed %}
           <li>ECS cluster: <code>{{ ctx.ecs.cluster_name }}</code></li>
           <li>ECS app domain: <code>{{ ctx.ecs.app_domain }}</code></li>
-          <li>ECS console — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.ecs.console_hint }}">{{ ctx.ecs.console_hint }}</a></li>
-          <li>ECS direct HTTPS — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.ecs.console_url_direct | default('https://console.' ~ ctx.ecs.app_domain) }}">{{ ctx.ecs.console_url_direct | default('https://console.' ~ ctx.ecs.app_domain) }}</a></li>
+          <li>ECS console — {{ portal_url_for_context(ctx.ecs.console_hint, ctx) }}</li>
+          <li>ECS direct HTTPS — {{ portal_url_for_context(ctx.ecs.console_url_direct | default('https://console.' ~ ctx.ecs.app_domain), ctx) }}</li>
           <li>Data Services hostnames: <code>{{ ctx.ecs.apps_wildcard }}</code></li>
           {% else %}
           <li>ECS: <span class="badge">not in inventory</span></li>
@@ -1248,11 +1254,11 @@
     <details class="panel">
       <summary><span class="summary-main"><h2 class="section-title">Monitoring stack (on ops host)</h2></span>{{ panel_chevron | safe }}</summary>
       <div class="panel-body">
-        <p class="sub">Each monitoring endpoint is listed once with its available Caddy, public-IP, and private-IP access paths.</p>
+        <p class="sub">Each monitoring endpoint is listed once as its Caddy URL followed by available public-IP and private-IP alternatives.</p>
         <div class="table-scroll">
           <table class="portal-table">
             <thead>
-              <tr><th>Service</th><th>Caddy</th><th>Public IP</th><th>Private IP</th></tr>
+              <tr><th>Service</th><th>Access URLs</th></tr>
             </thead>
             <tbody>
               {% for service in ['grafana', 'prometheus', 'alertmanager', 'cadvisor'] %}
@@ -1261,9 +1267,7 @@
               {% set private_url = ctx.access.vpc[service ~ '_direct'] | default(ctx.access.primary[service ~ '_direct'] | default('')) %}
               <tr>
                 <td><strong>{{ 'cAdvisor' if service == 'cadvisor' else service | capitalize }}</strong></td>
-                <td>{% if caddy_url | length > 0 %}<a href="{{ caddy_url }}" target="_blank" rel="noopener noreferrer">{{ caddy_url }}</a>{% else %}<span class="badge">—</span>{% endif %}</td>
-                <td>{% if public_url | length > 0 %}<a href="{{ public_url }}" target="_blank" rel="noopener noreferrer">{{ public_url }}</a>{% else %}<span class="badge">—</span>{% endif %}</td>
-                <td>{% if private_url | length > 0 %}<a href="{{ private_url }}" target="_blank" rel="noopener noreferrer">{{ private_url }}</a>{% else %}<span class="badge">—</span>{% endif %}</td>
+                <td>{{ portal_url_bundle(caddy_url, public_url, private_url) }}</td>
               </tr>
               {% endfor %}
             </tbody>

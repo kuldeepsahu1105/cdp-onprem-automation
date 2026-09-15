@@ -967,7 +967,7 @@ deployment_portal_postgres_host_group: auto
 # Cloudera Manager and ECS use direct host ports (cldr-mngr :7180/:7183; ECS console/gateway URLs) — not Caddy.
 deployment_portal_http_port: 81
 # Optional ipaserver httpd mutations (zz-ipa-caddy-proxy.conf, ipa-rewrite). Default false: ops Caddy proxies to
-# ipaserver:80 with Host/Referer only; PORTAL/16 remove stale snippets and reload httpd when false.
+# ipaserver:443 using its inventory IP with the IPA FQDN as TLS SNI, Host, and Referer; PORTAL/16 removes stale snippets.
 deployment_portal_ipa_httpd_proxy_enabled: false
 # Suppress mod_auth_gssapi Negotiate on /ipa (zz-ipa-disable-browser-krb.conf); UI uses password/forms only.
 ipa_httpd_disable_browser_krb_negotiate: true

@@ -16,14 +16,15 @@ http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port 
 }
 
 {% if deployment_portal_has_ipa | default(false) | bool %}
-{# FreeIPA via Caddy (cloudera-labs/openshift + Adelton proxy notes): route to the inventory IP, but present the IPA FQDN in Host and Referer.
+{# FreeIPA via Caddy: connect to the inventory IP over HTTPS, but present the IPA FQDN in TLS, Host, and Referer.
+   HTTPS avoids a loop where IPA redirects its HTTP listener to HTTPS and Caddy rewrites that redirect back to the public HTTP vhost.
    Legacy /ipa/ui loads static assets under /ipa/js, /ipa/css, /ipa/config, /ipa/wsgi — not only /ipa/ui/*.
    Browsers use ipa.<slug> host; upstream expects ipaserver FQDN Referer and issues Set-Cookie for that FQDN — rewrite both or session/login 401.
    Optional ipaserver HTML rewrites: deployment_portal_ipa_httpd_proxy_enabled + ipa_httpd_caddy_proxy.conf.j2.
    Test on ops (PORT={{ deployment_portal_http_port }}, slug host {{ caddy_vhost_urls.ipa.hostname }}, upstream {{ deployment_portal_ipa_upstream_host }}, Host {{ deployment_portal_ipa_fqdn }}):
      curl -sS -o /dev/null -w '%{http_code}\n' -H "Host: {{ caddy_vhost_urls.ipa.hostname }}" "http://127.0.0.1:{{ deployment_portal_http_port }}/ipa/ui"
      curl -sS -o /dev/null -w '%{http_code}\n' -H "Host: {{ caddy_vhost_urls.ipa.hostname }}" "http://127.0.0.1:{{ deployment_portal_http_port }}/ipa/js/util.js"
-     curl -sS -o /dev/null -w '%{http_code}\n' -H "Host: {{ deployment_portal_ipa_fqdn }}" -H "Referer: https://{{ deployment_portal_ipa_fqdn }}/ipa/ui" "http://127.0.0.1/ipa/ui"
+     curl -ksS -o /dev/null -w '%{http_code}\n' --resolve "{{ deployment_portal_ipa_fqdn }}:443:{{ deployment_portal_ipa_upstream_host }}" "https://{{ deployment_portal_ipa_fqdn }}/ipa/ui/"
 #}
 http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
   redir / /ipa/modern-ui/ permanent
@@ -41,7 +42,11 @@ http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | in
   request_header -Proxy-Authorization
   header -WWW-Authenticate
 
-  reverse_proxy http://{{ deployment_portal_ipa_upstream_host }} {
+  reverse_proxy https://{{ deployment_portal_ipa_upstream_host }} {
+    transport http {
+      tls_server_name {{ deployment_portal_ipa_fqdn }}
+      tls_insecure_skip_verify
+    }
     header_up Host {{ deployment_portal_ipa_fqdn }}
     header_down Location "^https?://{{ deployment_portal_ipa_fqdn | replace('.', '\\.') }}" "{{ _ipa_caddy_origin }}"
     header_down Set-Cookie "{{ deployment_portal_ipa_fqdn }}" "{{ _ipa_caddy_vhost_host }}"
