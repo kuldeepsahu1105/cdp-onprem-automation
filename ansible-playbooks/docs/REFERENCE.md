@@ -84,9 +84,9 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `ecs_parcel_repo_latest_url` | computed | `…/p/cdp-pvc-ds/latest/parcels/` when `cm_parcel_repo_include_latest` |
 | `cm_parcel_repo_include_latest` | `false` | When true, add literal `…/latest/parcels/` paths (never `{latest}` — invalid URI and not on archive) |
 | `cm_parcel_repo_latest_segment` | `latest` | Archive path segment when include_latest is true |
-| `cdv_parcel_yum_repo_url` / `cdv_parcel_repo_url` | computed | CSD DATAVIZ: `…/cdv/<ver>/redhat8/yum` + `…/parcels/` |
-| `cfm_parcel_yum_tars_repo_url` / `cfm_parcel_repo_url` | computed | CSD CFM2: `…/cfm2/<ver>/redhat9/yum/tars/parcel` + `…/parcels/` |
-| `cdv_parcel_repo_latest_url` / `cfm_parcel_repo_latest_url` | computed | Optional `…/cdv/latest/parcels/` etc. when include_latest |
+| `cdv_parcel_repo_url` | computed | CM remote parcel repo: `…/cdv/<ver>/parcels/` (not `…/redhat8/yum` — JAR downloads only) |
+| `cfm_parcel_yum_tars_repo_url` | computed | CM remote parcel repo: `…/cfm2/<ver>/redhat9/yum/tars/parcel` (not `…/cfm2/<ver>/parcels/`) |
+| `cdv_parcel_repo_latest_url` | computed | Optional `…/cdv/latest/parcels/` when include_latest |
 | `cm_parcel_repo_include_cdv_parcel` | `true` | Include CDV parcel repo URLs in CM config |
 | `cm_parcel_repo_include_cfm_parcel` | `true` | Include CFM2 parcel repo URLs (NiFi + NiFi Registry) |
 | `cm_parcel_csd_respect_service_toggles` | `false` | When false, CDV/CFM parcel URLs are set even if `base_cluster_install_services` keys are off |
@@ -123,8 +123,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 |---|---|---|
 | CSD JAR `get_url` | `scm_csds_urls.j2`, `cdv_dataviz_csd_jar`, `cfm_nifi_csd_jar`, `cfm_nifi_registry_csd_jar` | `…/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar` |
 | CSD JAR `get_url` (NiFi / Registry) | same | `…/p/cfm2/2.1.7.3004/redhat8/yum/tars/parcel/NIFI-1.28.1.2.1.7.3004-1.jar` (two jars when both services enabled) |
-| CM remote parcel repo dir (DATAVIZ) | `scm_csd_parcel_repo_urls.j2`, `cdv_parcel_*` | `…/p/cdv/8.0.7/redhat8/yum`, `…/p/cdv/8.0.7/parcels/` |
-| CM remote parcel repo dir (CFM / NiFi) | same, `cfm_parcel_*` | `…/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel`, `…/p/cfm2/2.1.7.3004/parcels/` |
+| CM remote parcel repo dir (DATAVIZ) | `scm_csd_parcel_repo_urls.j2`, `cdv_parcel_repo_url` | `…/p/cdv/8.0.7/parcels/` |
+| CM remote parcel repo dir (CFM / NiFi) | same, `cfm_parcel_yum_tars_repo_url` | `…/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel` |
 
 On RHEL 9 CM hosts, CDV JAR paths may still use `redhat8/yum` (`cdv_redhat_yum_repo: auto`); CFM uses `redhat9/yum/…` from `csd_redhat_repo: auto`. Parcel repo scrub in `configure_cm_parcel_repo_api.yml` drops any candidate URL matching `\.jar`.
 

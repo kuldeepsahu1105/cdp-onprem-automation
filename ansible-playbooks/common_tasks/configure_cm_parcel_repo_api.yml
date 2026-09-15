@@ -120,42 +120,6 @@
             else []
           )
           + (cm_remote_parcel_csd_repo_urls_effective | default([]))
-          + (
-            [cdv_parcel_yum_repo_url]
-            if (
-              (cm_parcel_repo_include_cdv_parcel | default(true) | bool)
-              and (cm_repo_source | default('public')) == 'public'
-              and (cdv_parcel_yum_repo_url | default('') | length > 0)
-            )
-            else []
-          )
-          + (
-            [cdv_parcel_repo_url]
-            if (
-              (cm_parcel_repo_include_cdv_parcel | default(true) | bool)
-              and (cm_repo_source | default('public')) == 'public'
-              and (cdv_parcel_repo_url | default('') | length > 0)
-            )
-            else []
-          )
-          + (
-            [cfm_parcel_yum_tars_repo_url]
-            if (
-              (cm_parcel_repo_include_cfm_parcel | default(true) | bool)
-              and (cm_repo_source | default('public')) == 'public'
-              and (cfm_parcel_yum_tars_repo_url | default('') | length > 0)
-            )
-            else []
-          )
-          + (
-            [cfm_parcel_repo_url]
-            if (
-              (cm_parcel_repo_include_cfm_parcel | default(true) | bool)
-              and (cm_repo_source | default('public')) == 'public'
-              and (cfm_parcel_repo_url | default('') | length > 0)
-            )
-            else []
-          )
           + (cm_parcel_repo_extra_urls | default([]))
           | map('trim')
           | reject('equalto', '')
