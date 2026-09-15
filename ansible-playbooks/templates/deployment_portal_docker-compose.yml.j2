@@ -1,4 +1,4 @@
-# Host publishes: Caddy HTTP edge (default 81), IPA HTTPS edge (default 8443), and pgAdmin (default 5050).
+# Host publishes: Caddy HTTP edge (default 81), IPA HTTPS edge (default 9443), and pgAdmin (default 5050).
 # Values live in {{ deployment_portal_config_dir }}/.env (Ansible template deployment_portal_docker-compose.env.j2).
 # Grafana/Prometheus/Alertmanager join network deployment_portal via monitoring compose under {{ monitoring_config_dir | default('/opt/cldr-monitoring') }}.
 # After changing ports, re-run PORTAL or: cd {{ deployment_portal_config_dir }} && docker compose up -d --force-recreate caddy

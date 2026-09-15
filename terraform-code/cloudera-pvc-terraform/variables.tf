@@ -60,7 +60,7 @@ variable "allowed_cidrs" {
 
 # Deprecated — ignored by security group module (kept so older tfvars do not fail plan).
 variable "allowed_ports" {
-  description = "Deprecated — ignored by security-group module (ingress is all traffic from allowed_cidrs). Documented reference: 22, 80/443 (Caddy on dedicated proxy), 81/8443 (Caddy on IPA), 7180/7182/7183 (CM), 5050 (pgAdmin), 3000 (Grafana), 9090 (Prometheus), 9093 (Alertmanager), 8089 (cAdvisor)."
+  description = "Deprecated — ignored by security-group module (ingress is all traffic from allowed_cidrs). Documented reference: 22, 80/443 (Caddy on dedicated proxy), 81/9443 (Caddy on IPA), 7180/7182/7183 (CM), 5050 (pgAdmin), 3000 (Grafana), 9090 (Prometheus), 9093 (Alertmanager), 8089 (cAdvisor)."
   type        = list(number)
   default     = []
 }

@@ -973,11 +973,11 @@ deployment_portal_runs_on_ipaserver: >-
 deployment_portal_postgres_host_group: auto
 # Caddy edge listener on ops (ipaserver): portal, pgAdmin, monitoring, and IPA vhosts share this TCP port.
 # Cloudera Manager and ECS use direct host ports (cldr-mngr :7180/:7183; ECS console/gateway URLs) — not Caddy.
-# Avoid FreeIPA Apache's 80/443 when colocated; use standard ports on a user-provided proxy host.
+# Avoid FreeIPA Apache's 80/443 and Dogtag PKI's 8443-8445 when colocated; use standard ports on a user-provided proxy host.
 deployment_portal_http_port: "{{ 81 if (deployment_portal_runs_on_ipaserver | bool) else 80 }}"
 deployment_portal_ipa_https_enabled: true
 # Caddy's internal CA is persisted in its data volume; import its root.crt into operator browsers once.
-deployment_portal_ipa_https_port: "{{ 8443 if (deployment_portal_runs_on_ipaserver | bool) else 443 }}"
+deployment_portal_ipa_https_port: "{{ 9443 if (deployment_portal_runs_on_ipaserver | bool) else 443 }}"
 # Optional ipaserver httpd mutations (zz-ipa-caddy-proxy.conf, ipa-rewrite). Default false: ops Caddy proxies to
 # ipaserver:443 using its inventory IP with the IPA FQDN as TLS SNI, Host, and Referer; PORTAL/16 removes stale snippets.
 deployment_portal_ipa_httpd_proxy_enabled: false
