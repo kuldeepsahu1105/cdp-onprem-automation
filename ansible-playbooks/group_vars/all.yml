@@ -359,23 +359,6 @@ clo_db_name: clo
 clo_db_user: clo
 clo_db_password: clo
 
-# Idempotent ensure lists for ensure_cm_postgres_databases.yml (override postgres_ensure_database_entries per import).
-postgres_ensure_cm_database_entries:
-  - name: "{{ scm_db_name }}"
-    user: "{{ scm_db_user }}"
-    password: "{{ scm_db_password }}"
-  - name: "{{ cm_cms_reports_manager_db_name }}"
-    user: "{{ cm_cms_reports_manager_db_user }}"
-    password: "{{ cm_cms_reports_manager_db_password }}"
-postgres_ensure_atlas_database_entry:
-  name: "{{ atlas_db_name }}"
-  user: "{{ atlas_db_user }}"
-  password: "{{ atlas_db_password }}"
-postgres_ensure_clo_database_entry:
-  name: "{{ clo_db_name }}"
-  user: "{{ clo_db_user }}"
-  password: "{{ clo_db_password }}"
-
 scm_csds: []
 # Optional explicit CSD URL list (overrides auto-built URLs). Leave empty to build from version vars below.
 scm_csds_redhat: []
@@ -437,8 +420,6 @@ base_cluster_install_services:
   impala: true
   kafka: true
   atlas: true
-  # Cloudera Lakehouse Optimizer (CLO/DLM); requires PostgreSQL on cldr-mngr when enabled.
-  clo: false
   ranger: true
   # Optional CFM/CDV (install matching CSDs in 24_start_cm.yml; set true to add to base cluster)
   nifi: false

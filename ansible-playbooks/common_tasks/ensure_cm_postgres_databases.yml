@@ -1,7 +1,5 @@
 ---
-# Idempotent PostgreSQL roles/databases on postgres_inventory_host (e.g. cldr-mngr).
-# Default entries: postgres_ensure_cm_database_entries (scm + Reports Manager rman).
-# Override per import: postgres_ensure_database_entries (e.g. Atlas/CLO before base cluster in 31).
+# Idempotent CM DBs (scm + Reports Manager rman) on postgres_inventory_host (e.g. cldr-mngr).
 # Ansible controller may be Mac, Ubuntu, or RHEL — irrelevant: every list/create task delegates to the
 # DB host only (no psql, postgresql modules, or RHEL-specific DB paths on localhost/controller).
 # Root + PGPASSWORD + TCP to postgres_ensure_cm_db_psql_host_effective (see resolve_postgres_ensure_cm_db_psql_host.yml) — no become_user postgres.
@@ -9,10 +7,6 @@
 
 - name: Resolve PostgreSQL inventory host for CM databases
   ansible.builtin.import_tasks: resolve_postgres_inventory.yml
-
-- name: Record PostgreSQL database entries to ensure in this import
-  ansible.builtin.set_fact:
-    _postgres_ensure_db_entries: "{{ postgres_ensure_database_entries | default(postgres_ensure_cm_database_entries) }}"
 
 - name: Resolve delegated CM database psql connect host (controller-aware)
   ansible.builtin.import_tasks: resolve_postgres_ensure_cm_db_psql_host.yml
@@ -283,7 +277,7 @@
           ansible.builtin.set_fact:
             postgres_db_host_psql_cmd: "/usr/pgsql-{{ postgresql_version }}/bin/psql"
 
-- name: List PostgreSQL databases required by this ensure import
+- name: List CM scm and Reports Manager databases on PostgreSQL
   ansible.builtin.command:
     argv:
       - "{{ postgres_db_host_psql_cmd }}"
@@ -296,10 +290,7 @@
       - -d
       - "{{ postgres_db }}"
       - -tAc
-      - >-
-        SELECT datname FROM pg_database WHERE datname IN ('{{
-          _postgres_ensure_db_entries | map(attribute='name') | join("','")
-        }}')
+      - "SELECT datname FROM pg_database WHERE datname IN ('{{ scm_db_name }}','{{ cm_cms_reports_manager_db_name }}')"
   environment:
     PGPASSWORD: "{{ postgres_password }}"
   delegate_to: "{{ postgres_inventory_host }}"
@@ -307,36 +298,27 @@
   register: cm_db_list
   changed_when: false
 
-- name: Record PostgreSQL database names still missing after list query
-  ansible.builtin.set_fact:
-    _postgres_ensure_db_names_missing: >-
-      {{
-        _postgres_ensure_db_entries
-        | map(attribute='name')
-        | difference(cm_db_list.stdout_lines | default([]) | map('trim') | list)
-        | list
-      }}
-
-- name: PostgreSQL service databases present — skipping create
+- name: CM DBs present — skipping
   ansible.builtin.debug:
-    msg: >-
-      PostgreSQL DBs present ({{ _postgres_ensure_db_entries | map(attribute='name') | join(', ') }}) — skipping
-  when: _postgres_ensure_db_names_missing | length == 0
+    msg: CM DBs present — skipping
+  when:
+    - scm_db_name in (cm_db_list.stdout_lines | map('trim') | list)
+    - cm_cms_reports_manager_db_name in (cm_db_list.stdout_lines | map('trim') | list)
 
-- name: Create PostgreSQL service databases when any required database is missing
-  when: _postgres_ensure_db_names_missing | length > 0
+- name: Create CM PostgreSQL databases when scm or Reports Manager database is missing
+  when: >
+    scm_db_name not in (cm_db_list.stdout_lines | map('trim') | list)
+    or cm_cms_reports_manager_db_name not in (cm_db_list.stdout_lines | map('trim') | list)
   block:
-    - name: Generate PostgreSQL service database init SQL from template
+    - name: Generate CM database init SQL script from template
       ansible.builtin.template:
         src: templates/create_cm_dbs.sql.j2
         dest: /tmp/init.sql
         mode: "0644"
-      vars:
-        databases: "{{ _postgres_ensure_db_entries }}"
       delegate_to: "{{ postgres_inventory_host }}"
       become: true
 
-    - name: Run PostgreSQL service database init SQL
+    - name: Run CM database init SQL on PostgreSQL
       ansible.builtin.command:
         argv:
           - "{{ postgres_db_host_psql_cmd }}"
