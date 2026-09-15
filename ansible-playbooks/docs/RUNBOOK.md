@@ -602,16 +602,16 @@ Operators use the deployment portal index on the ops host (`http://<ops>:81/` by
 | Surface | Path / UI | Authentication |
 |---------|-----------|----------------|
 | Portal index | `:81/` | None |
-| Operator access panel | Collapsible section on the index; content loaded from `/downloads/operator-access.html` | HTTP basic auth when enabled; otherwise lab/trusted networks only |
-| SSH PEMs, JSON bundle | `/downloads/ssh/*`, `/downloads/operator-credentials.json` | HTTP basic auth when `deployment_portal_basic_auth_enabled: true` (default) |
+| Operator access panel | Collapsible section on the index; content loaded from `/downloads/operator-access.html` | Portal session login when enabled; otherwise lab/trusted networks only |
+| SSH PEMs, JSON bundle | `/downloads/ssh/*`, `/downloads/operator-credentials.json` | Revocable portal session when `deployment_portal_basic_auth_enabled: true` (default) |
 
-**Downloads HTTP basic auth** applies to **`/downloads/*` only** (not the index). Username: `deployment_portal_basic_auth_user` (default `portal`). Password: `deployment_portal_basic_auth_password` (default resolves to **`postgres_password`** — lab value `postgres`). Use the same user/password for browser downloads and `curl -u portal:<password> …`.
+**Downloads session authentication** applies to **`/downloads/*` only** (not the index). Username: `deployment_portal_basic_auth_user` (default `portal`). Password: `deployment_portal_basic_auth_password` (default resolves to **`postgres_password`** — lab value `postgres`). Caddy verifies the password only at `/api/login`; the private `cldr-portal-auth` sidecar issues an opaque `HttpOnly` cookie and keeps the active-session registry in memory.
 
-**Portal header Login** (when basic auth is on) links to **`/downloads/auth.html`**, which is served under the same `/downloads/*` basic-auth realm as PEMs, the protected Operator access fragment, and `operator-credentials.json`. After sign-in, that page immediately redirects to the portal home **`/`**. **Logout** clears the portal marker and site data, attempts to invalidate the browser's cached Basic credential, and returns to the unauthenticated panel.
+**Portal header Login** opens **`/login.html`** rather than the browser Basic Auth prompt. Successful login returns to the portal (or to the originally requested protected download). **Logout** calls the session service, removes the token from its server-side registry, expires the cookie, and returns to the unauthenticated panel. Reusing the old cookie after logout returns `401` or redirects to login. Sessions also expire after `deployment_portal_session_ttl_seconds` (default 8 hours), and all sessions are invalidated when the auth container restarts.
 
 **Operator access panel** mirrors Ansible at sync time: Cloudera Manager (`cm_admin_user` / `cm_admin_pass`), PostgreSQL and pgAdmin, FreeIPA or AD join when configured, Grafana/Prometheus paths when monitoring is enabled, optional Ranger/Knox/Hue/ECS/Jenkins rows from the same vars as playbooks. Nothing is stored in git; re-run `35_refresh_deployment_portal.yml` after changes.
 
-**`operator-credentials.json`** — machine-readable copy of the panel (`basic_auth_enabled`, `auth_username`, `downloads_path_prefix`, `sections[]` → `credentials[]` with `label`, `username`, `password`, `url`, `note`). Rendered to `/downloads/operator-credentials.json` from `deployment_portal_operator_credentials.json.j2`. Same HTTP basic auth as PEM downloads when enabled. Example:
+**`operator-credentials.json`** — machine-readable copy of the panel (`basic_auth_enabled`, `auth_username`, `downloads_path_prefix`, `sections[]` → `credentials[]` with `label`, `username`, `password`, `url`, `note`). Rendered to `/downloads/operator-credentials.json` from `deployment_portal_operator_credentials.json.j2`. It requires the same portal session as PEM downloads when enabled. Example:
 
 ```bash
 curl -fsS -u "${DEPLOYMENT_PORTAL_BASIC_AUTH_USER:-portal}:${DEPLOYMENT_PORTAL_BASIC_AUTH_PASSWORD}" \
@@ -620,9 +620,9 @@ curl -fsS -u "${DEPLOYMENT_PORTAL_BASIC_AUTH_USER:-portal}:${DEPLOYMENT_PORTAL_B
 
 **Lab default passwords (portal view):** In a fresh lab, CM is typically `admin` / `admin`, IPA admin `admin` / `PseTeam@123`, and pgAdmin, Grafana, and portal downloads auth often share **`postgres_password`** (`postgres`). EC2 SSH uses inventory user `ec2-user` with PEMs under `/downloads/ssh/` when `deployment_portal_expose_ssh_keys: true` (default). Full Ansible variable names and literals: [REFERENCE.md — Lab default passwords](REFERENCE.md#lab-default-passwords-override-before-production) — override there or below; do not paste production secrets into tickets.
 
-**Overrides:** Set passwords and portal toggles in `group_vars/all.yml` or Jenkins job parameter **`ANSIBLE_GROUP_VARS_YAML`** (allowed keys in `jenkins/ansible-group-vars-allowed-keys.yaml`, including `postgres_password`, `cm_admin_pass`, `ipaadmin_password`, `deployment_portal_basic_auth_*`, `deployment_portal_expose_credentials`, `deployment_portal_expose_ssh_keys`). Then run **`35_refresh_deployment_portal.yml`**.
+**Overrides:** Set passwords and portal toggles in `group_vars/all.yml` or Jenkins job parameter **`ANSIBLE_GROUP_VARS_YAML`** (allowed keys in `jenkins/ansible-group-vars-allowed-keys.yaml`, including `postgres_password`, `cm_admin_pass`, `ipaadmin_password`, `deployment_portal_basic_auth_*`, `deployment_portal_session_ttl_seconds`, `deployment_portal_expose_credentials`, `deployment_portal_expose_ssh_keys`). Then run **`35_refresh_deployment_portal.yml`**.
 
-**SSH key downloads:** `deployment_portal_expose_ssh_keys` — **`true`** (default) exports controller keys to `/downloads/ssh/`; **`false`** disables; **`auto`** exports only when downloads basic auth is on. Two labeled PEMs when Terraform `sshkey.pem` and a distinct Auto-TLS key both exist on the controller. Keep `deployment_portal_basic_auth_enabled: true` on untrusted networks; Ansible warns when keys are exposed without basic auth.
+**SSH key downloads:** `deployment_portal_expose_ssh_keys` — **`true`** (default) exports controller keys to `/downloads/ssh/`; **`false`** disables; **`auto`** exports only when downloads authentication is on. Two labeled PEMs when Terraform `sshkey.pem` and a distinct Auto-TLS key both exist on the controller. Keep `deployment_portal_basic_auth_enabled: true` on untrusted networks; Ansible warns when keys are exposed without authentication.
 
 ---
 

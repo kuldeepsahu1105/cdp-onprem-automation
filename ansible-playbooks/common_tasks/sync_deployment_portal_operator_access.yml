@@ -1,5 +1,5 @@
 ---
-# Copy SSH keys and credentials bundle to portal www; optional Caddy Basic Auth for /downloads.
+# Copy SSH keys and credentials bundle to portal www; optional session authentication for /downloads.
 
 - name: Stage localhost facts on play host for operator access template
   ansible.builtin.import_tasks: deployment_portal_operator_access_facts_from_localhost.yml
@@ -198,25 +198,27 @@
   when: deployment_portal_expose_credentials | default(true) | bool
   no_log: true
 
-- name: Install downloads auth redirect stub for portal Login button
+- name: Install portal session login page
   ansible.builtin.template:
-    src: deployment_portal_downloads_auth_redirect.html
-    dest: "{{ deployment_portal_www_dir }}/downloads/auth.html"
+    src: deployment_portal_login.html.j2
+    dest: "{{ deployment_portal_www_dir }}/login.html"
     mode: "0644"
   when:
     - deployment_portal_expose_credentials | default(true) | bool
     - deployment_portal_basic_auth_enabled | default(false) | bool
 
-- name: Remove downloads auth redirect stub when basic auth disabled
+- name: Remove portal session login page when authentication is disabled
   ansible.builtin.file:
-    path: "{{ deployment_portal_www_dir }}/downloads/auth.html"
+    path: "{{ deployment_portal_www_dir }}/login.html"
     state: absent
   when:
     - deployment_portal_expose_credentials | default(true) | bool
     - not (deployment_portal_basic_auth_enabled | default(false) | bool)
 
-- name: Install portal logout page
-  ansible.builtin.template:
-    src: deployment_portal_logout.html
-    dest: "{{ deployment_portal_www_dir }}/downloads/logout.html"
-    mode: "0644"
+- name: Remove obsolete browser-managed authentication pages
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ deployment_portal_www_dir }}/downloads/auth.html"
+    - "{{ deployment_portal_www_dir }}/downloads/logout.html"

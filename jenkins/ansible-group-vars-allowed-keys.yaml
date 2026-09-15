@@ -71,6 +71,7 @@ allowed_keys:
   - deployment_portal_basic_auth_enabled
   - deployment_portal_basic_auth_user
   - deployment_portal_basic_auth_password
+  - deployment_portal_session_ttl_seconds
   - deployment_portal_jenkins_url
   - deployment_portal_jenkins_user
   - deployment_portal_jenkins_password
