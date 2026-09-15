@@ -28,29 +28,7 @@ http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port 
 #}
 http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
   redir / /ipa/modern-ui/ permanent
-
-  @ipa_json_rpc path /ipa/json /ipa/json/* /ipa/xml*
-  @ipa_session path /ipa/session /ipa/session/*
-  @ipa_ui not path /ipa/json /ipa/json/* /ipa/xml* /ipa/session /ipa/session/*
-
-  request_header @ipa_json_rpc Referer "https://{{ deployment_portal_ipa_fqdn }}/ipa"
-  request_header @ipa_json_rpc Accept-Encoding identity
-  request_header @ipa_session Referer "https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/"
-  request_header @ipa_ui Referer "https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}"
-
-  request_header -Authorization
-  request_header -Proxy-Authorization
-  header -WWW-Authenticate
-
-  reverse_proxy https://{{ deployment_portal_ipa_upstream_host }} {
-    transport http {
-      tls_server_name {{ deployment_portal_ipa_fqdn }}
-      tls_insecure_skip_verify
-    }
-    header_up Host {{ deployment_portal_ipa_fqdn }}
-    header_down Location "^https?://{{ deployment_portal_ipa_fqdn | replace('.', '\\.') }}" "{{ _ipa_caddy_origin }}"
-    header_down Set-Cookie "{{ deployment_portal_ipa_fqdn }}" "{{ _ipa_caddy_vhost_host }}"
-  }
+{% include 'deployment_portal_Caddyfile_ipa_proxy.inc.j2' %}
 }
 {% endif %}
 

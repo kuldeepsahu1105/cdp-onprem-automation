@@ -39,11 +39,20 @@
   }
 } %}
 {% set _net_tier = 'primary' if (deployment_portal_access_profile_effective == 'private') else 'external' %}
+{% set _private_tier = 'primary' if (deployment_portal_access_profile_effective == 'private') else 'vpc' %}
 {% set _caddy_on = caddy_vhost_enabled | default(false) | bool %}
 {% set _graf_url = net_access_href('grafana', _net_tier, _net_ctx, _caddy_on) %}
 {% set _prom_url = net_access_href('prometheus', _net_tier, _net_ctx, _caddy_on) %}
 {% set _am_url = net_access_href('alertmanager', _net_tier, _net_ctx, _caddy_on) %}
 {% set _cadv_url = net_access_href('cadvisor', _net_tier, _net_ctx, _caddy_on) %}
+{% set _graf_public_url = net_access_direct_url('grafana', 'external', _net_ctx) %}
+{% set _graf_private_url = net_access_direct_url('grafana', _private_tier, _net_ctx) %}
+{% set _prom_public_url = net_access_direct_url('prometheus', 'external', _net_ctx) %}
+{% set _prom_private_url = net_access_direct_url('prometheus', _private_tier, _net_ctx) %}
+{% set _am_public_url = net_access_direct_url('alertmanager', 'external', _net_ctx) %}
+{% set _am_private_url = net_access_direct_url('alertmanager', _private_tier, _net_ctx) %}
+{% set _cadv_public_url = net_access_direct_url('cadvisor', 'external', _net_ctx) %}
+{% set _cadv_private_url = net_access_direct_url('cadvisor', _private_tier, _net_ctx) %}
 {% if _cadv_url | length == 0 and (deployment_portal_monitoring_routes_enabled | default(false) | bool) %}
 {% set _access_tier = deployment_portal_access_urls.primary if (deployment_portal_access_profile_effective == 'private') else deployment_portal_access_urls.external %}
 {% set _cadv_url = _access_tier.cadvisor_caddy_path | default('') | trim %}
@@ -62,29 +71,32 @@
 {% set _cm_fqdn = deployment_portal_cm_fqdn | default('') %}
 {% set ns.sections = ns.sections + [{'id': 'cm', 'title': 'Cloudera Manager', 'intro': 'CM admin UI/API credentials.', 'downloads': [], 'credentials': [{'label': 'Cloudera Manager', 'username': cm_admin_user, 'password': cm_admin_pass, 'url': 'https://' ~ _cm_fqdn ~ ':' ~ (cm_https_port | string), 'note': 'HTTP :' ~ (cm_http_port | string) ~ ' on ' ~ _cm_fqdn}]}] %}
 {% set _pgadmin_url = net_access_href('pgadmin', _net_tier, _net_ctx, _caddy_on) %}
-{% set _pgadmin_direct = net_access_direct_url('pgadmin', _net_tier, _net_ctx) %}
+{% set _pgadmin_public_url = net_access_direct_url('pgadmin', 'external', _net_ctx) %}
+{% set _pgadmin_private_url = net_access_direct_url('pgadmin', _private_tier, _net_ctx) %}
 {% set _postgres_fqdn = deployment_portal_postgres_fqdn | default(postgres_host_fqdn | default('')) %}
 {% set _pgadmin_note = 'CM DB on ' ~ _postgres_fqdn %}
 {% set _postgres_host_url = 'jdbc:postgresql://' ~ _postgres_fqdn ~ ':' ~ (postgres_port | string) ~ '/scm' %}
-{% set ns.sections = ns.sections + [{'id': 'database', 'title': 'Database & pgAdmin', 'intro': 'CM PostgreSQL and portal pgAdmin.', 'downloads': [], 'credentials': [{'label': 'PostgreSQL (CM)', 'username': postgres_user | default('postgres'), 'password': postgres_password, 'url': _postgres_host_url, 'note': _postgres_fqdn ~ ':' ~ (postgres_port | string) ~ ' scm/' ~ scm_db_user}, {'label': 'pgAdmin', 'username': pgadmin_default_email, 'password': pgadmin_default_password, 'url': _pgadmin_url, 'note': _pgadmin_note}]}] %}
+{% set ns.sections = ns.sections + [{'id': 'database', 'title': 'Database & pgAdmin', 'intro': 'CM PostgreSQL and portal pgAdmin.', 'downloads': [], 'credentials': [{'label': 'PostgreSQL (CM)', 'username': postgres_user | default('postgres'), 'password': postgres_password, 'url': _postgres_host_url, 'note': _postgres_fqdn ~ ':' ~ (postgres_port | string) ~ ' scm/' ~ scm_db_user}, {'label': 'pgAdmin', 'username': pgadmin_default_email, 'password': pgadmin_default_password, 'url': _pgadmin_url, 'public_url': _pgadmin_public_url, 'private_url': _pgadmin_private_url, 'note': _pgadmin_note}]}] %}
 {% if _mon_on %}
 {% set _mon_intro = 'Monitoring UIs on the ops host (' ~ (deployment_portal_anchor_fqdn | default('')) ~ '). URLs prefer Caddy lab vhosts when enabled; otherwise direct host ports or Caddy path routes on :' ~ (deployment_portal_http_port | string) ~ '.' %}
 {% set _mon_creds = [
-  {'label': 'Grafana', 'username': monitoring_grafana_admin_user, 'password': monitoring_grafana_admin_password, 'url': _graf_url, 'note': 'Dashboard login'},
-  {'label': 'Prometheus', 'username': '(none)', 'password': '—', 'url': _prom_url, 'note': 'No login by default'},
-  {'label': 'Alertmanager', 'username': '(none)', 'password': '—', 'url': _am_url, 'note': 'No login by default'},
-  {'label': 'cAdvisor', 'username': '(none)', 'password': '—', 'url': _cadv_url, 'note': 'No login by default'}
+  {'label': 'Grafana', 'username': monitoring_grafana_admin_user, 'password': monitoring_grafana_admin_password, 'url': _graf_url, 'public_url': _graf_public_url, 'private_url': _graf_private_url, 'note': 'Dashboard login'},
+  {'label': 'Prometheus', 'username': '(none)', 'password': '—', 'url': _prom_url, 'public_url': _prom_public_url, 'private_url': _prom_private_url, 'note': 'No login by default'},
+  {'label': 'Alertmanager', 'username': '(none)', 'password': '—', 'url': _am_url, 'public_url': _am_public_url, 'private_url': _am_private_url, 'note': 'No login by default'},
+  {'label': 'cAdvisor', 'username': '(none)', 'password': '—', 'url': _cadv_url, 'public_url': _cadv_public_url, 'private_url': _cadv_private_url, 'note': 'No login by default'}
 ] %}
 {% set ns.sections = ns.sections + [{'id': 'monitoring', 'title': 'Monitoring stack', 'intro': _mon_intro, 'downloads': [], 'credentials': _mon_creds}] %}
 {% endif %}
 {% if deployment_portal_has_ipa | default(false) | bool %}
 {% set _ipa_direct_url = 'https://' ~ deployment_portal_ipa_fqdn %}
 {% set _ipa_modern_url = ipa_caddy_modern_public_url | default('') | trim %}
+{% set _ipa_public_url = ('http://' ~ deployment_portal_ops_public_ip ~ ':' ~ (deployment_portal_http_port | string) ~ '/ipa/modern-ui/') if (deployment_portal_ops_public_ip | default('') | trim | length > 0) else '' %}
+{% set _ipa_private_url = ('http://' ~ deployment_portal_ops_private_ip ~ ':' ~ (deployment_portal_http_port | string) ~ '/ipa/modern-ui/') if (deployment_portal_ops_private_ip | default('') | trim | length > 0) else '' %}
 {% set _ipa_bind_note = 'CM LDAP bind password often matches ipaadmin_password' %}
 {% if (_ipa_modern_url | length > 0) %}
 {% set _ipa_legacy_note = 'Legacy /ipa/ui is available on the same Caddy vhost' %}
 {% set _ipa_creds = [
-  {'label': 'IPA admin (modern UI via Caddy)', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': _ipa_modern_url, 'note': (caddy_vhost_urls_external.ipa.hostname | default('')) ~ '; ' ~ _ipa_legacy_note},
+  {'label': 'IPA admin (modern UI via Caddy)', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': _ipa_modern_url, 'public_url': _ipa_public_url, 'private_url': _ipa_private_url, 'note': (caddy_vhost_urls_external.ipa.hostname | default('')) ~ '; ' ~ _ipa_legacy_note},
   {'label': 'IPA admin (direct HTTPS on ipaserver)', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': _ipa_direct_url, 'note': _ipa_bind_note}
 ] %}
 {% set _ipa_intro = 'IPA directory administrator. Caddy URLs work without /etc/hosts (use password login on modern UI — browser Kerberos SSO needs https://' ~ deployment_portal_ipa_fqdn ~ '). Direct HTTPS requires resolving that FQDN.' %}

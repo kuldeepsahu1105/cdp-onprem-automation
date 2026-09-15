@@ -77,6 +77,11 @@
       --muted: #94a3b8;
       --accent: #f96702;
       --accent-soft: #5b9fd4;
+      --cyan: #42c7c7;
+      --green: #45c98a;
+      --purple: #a78bfa;
+      --gold: #f2b84b;
+      --rose: #fb7185;
       --border: #2d3a4d;
       --tile-hover: #243044;
       --max-w: 1280px;
@@ -87,6 +92,10 @@
     body {
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       background: var(--bg);
+      background:
+        radial-gradient(circle at 8% 4%, rgba(66, 199, 199, 0.06), transparent 24rem),
+        radial-gradient(circle at 92% 10%, rgba(167, 139, 250, 0.055), transparent 27rem),
+        var(--bg);
       color: var(--text);
       margin: 0;
       padding: 0;
@@ -255,6 +264,24 @@
       font-size: 0.8rem;
       margin: 0.65rem 0 0;
     }
+    .version-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin: -0.5rem 0 1.25rem;
+    }
+    .version-strip .chip:nth-child(1) {
+      background: rgba(249, 103, 2, 0.09);
+      border-color: rgba(249, 103, 2, 0.3);
+    }
+    .version-strip .chip:nth-child(2) {
+      background: rgba(66, 199, 199, 0.08);
+      border-color: rgba(66, 199, 199, 0.28);
+    }
+    .version-strip .chip:nth-child(3) {
+      background: rgba(167, 139, 250, 0.08);
+      border-color: rgba(167, 139, 250, 0.28);
+    }
     .tile-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
@@ -263,12 +290,17 @@
       align-items: stretch;
     }
     a.tile {
+      --tile-color: var(--accent-soft);
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
       gap: 0.2rem;
       background: var(--card);
+      background:
+        linear-gradient(145deg, color-mix(in srgb, var(--tile-color) 8%, transparent), transparent 58%),
+        var(--card);
       border: 1px solid var(--border);
+      border-top-color: color-mix(in srgb, var(--tile-color) 58%, var(--border));
       border-radius: var(--radius);
       padding: 0.9rem 0.95rem;
       color: var(--text);
@@ -279,8 +311,10 @@
       height: 100%;
     }
     a.tile:hover {
-      background: var(--tile-hover);
-      border-color: #3d4f66;
+      background:
+        linear-gradient(145deg, color-mix(in srgb, var(--tile-color) 14%, transparent), transparent 65%),
+        var(--tile-hover);
+      border-color: color-mix(in srgb, var(--tile-color) 55%, #3d4f66);
       text-decoration: none;
     }
     a.tile .tile-label {
@@ -295,12 +329,27 @@
     a.tile.tile-accent {
       border-color: rgba(249, 103, 2, 0.35);
     }
+    a.tile.tile-orange { --tile-color: var(--accent); }
+    a.tile.tile-cyan { --tile-color: var(--cyan); }
+    a.tile.tile-green { --tile-color: var(--green); }
+    a.tile.tile-purple { --tile-color: var(--purple); }
+    a.tile.tile-gold { --tile-color: var(--gold); }
+    a.tile.tile-rose { --tile-color: var(--rose); }
     details.panel {
+      --panel-accent: var(--accent-soft);
       background: var(--card);
       border: 1px solid var(--border);
+      border-left: 2px solid color-mix(in srgb, var(--panel-accent) 55%, var(--border));
       border-radius: var(--radius);
       margin-bottom: 0.75rem;
       overflow: hidden;
+    }
+    main > details.panel:nth-of-type(4n + 1) { --panel-accent: var(--cyan); }
+    main > details.panel:nth-of-type(4n + 2) { --panel-accent: var(--purple); }
+    main > details.panel:nth-of-type(4n + 3) { --panel-accent: var(--green); }
+    main > details.panel:nth-of-type(4n + 4) { --panel-accent: var(--gold); }
+    details.panel[open] {
+      box-shadow: 0 6px 22px color-mix(in srgb, var(--panel-accent) 6%, transparent);
     }
     details.panel > summary {
       cursor: pointer;
@@ -330,13 +379,20 @@
     details.panel > summary .panel-chevron .chevron-icon { display: block; }
     details.panel[open] > summary .panel-chevron { transform: rotate(90deg); }
     details.panel > summary:hover { background: rgba(255, 255, 255, 0.03); }
+    details.panel > summary .section-title {
+      color: color-mix(in srgb, var(--panel-accent) 82%, white);
+    }
     .panel-body {
       padding: 0 1rem 1rem;
       border-top: 1px solid var(--border);
     }
     section.flat {
       background: var(--card);
+      background:
+        linear-gradient(145deg, rgba(66, 199, 199, 0.045), transparent 48%),
+        var(--card);
       border: 1px solid var(--border);
+      border-left: 2px solid rgba(66, 199, 199, 0.5);
       border-radius: var(--radius);
       padding: 1rem 1.1rem;
       margin-bottom: 0.75rem;
@@ -669,7 +725,7 @@
       inset: 0 0 auto;
       z-index: 50;
       height: 3px;
-      background: var(--accent);
+      background: linear-gradient(90deg, var(--accent), var(--gold), var(--cyan), var(--purple));
       transform: scaleX(0);
       transform-origin: left;
       pointer-events: none;
@@ -693,6 +749,13 @@
     .section-tool-btn:hover {
       color: var(--text);
       background: rgba(255, 255, 255, 0.06);
+    }
+    .section-tool-btn:not(.is-active) { opacity: 0.55; }
+    .section-tool-btn.is-active {
+      color: #fff;
+      background: rgba(249, 103, 2, 0.2);
+      border-color: rgba(249, 103, 2, 0.7);
+      box-shadow: 0 0 0 1px rgba(249, 103, 2, 0.15);
     }
     .page-jump {
       position: fixed;
@@ -841,60 +904,60 @@
       </div>
       <div class="tile-grid">
         {% if cm_tile_url | length > 0 %}
-        <a class="tile tile-accent" href="{{ cm_tile_url }}" target="_blank" rel="noopener noreferrer">
+        <a class="tile tile-accent tile-orange" href="{{ cm_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Cloudera Manager</span>
           <span class="tile-hint">Cluster admin UI</span>
         </a>
         {% endif %}
         {% if ctx.portal.pgadmin_url | default(pgadmin_tile_url | default('')) | length > 0 %}
-        <a class="tile" href="{{ ctx.portal.pgadmin_url | default(pgadmin_tile_url) }}" target="_blank" rel="noopener noreferrer">
+        <a class="tile tile-cyan" href="{{ ctx.portal.pgadmin_url | default(pgadmin_tile_url) }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">pgAdmin</span>
           <span class="tile-hint">CM PostgreSQL{% if ctx.portal.pgadmin_caddy_url | default('') | length > 0 %} (Caddy){% endif %}</span>
         </a>
         {% endif %}
         {% if mon_on %}
-        <a class="tile" href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">
+        <a class="tile tile-purple" href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Grafana</span>
           <span class="tile-hint">{% if ctx.monitoring.grafana_caddy_url | default('') | length > 0 %}Caddy vhost{% else %}Host :{{ monitoring_grafana_host_port | default(3000) }}{% endif %}</span>
         </a>
-        <a class="tile" href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">
+        <a class="tile tile-orange" href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Prometheus</span>
           <span class="tile-hint">{% if ctx.monitoring.prometheus_caddy_url | default('') | length > 0 %}Caddy vhost{% else %}Host :{{ monitoring_prometheus_host_port | default(9090) }}{% endif %}</span>
         </a>
-        <a class="tile" href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">
+        <a class="tile tile-gold" href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">Alertmanager</span>
           <span class="tile-hint">{% if ctx.monitoring.alertmanager_caddy_url | default('') | length > 0 %}Caddy vhost{% else %}Host :{{ monitoring_alertmanager_host_port | default(9093) }}{% endif %}</span>
         </a>
-        <a class="tile" href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">
+        <a class="tile tile-green" href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">cAdvisor</span>
           <span class="tile-hint">Container metrics (host :{{ monitoring_cadvisor_host_port | default(8089) }})</span>
         </a>
         {% endif %}
         {% if ipa_tile_url | length > 0 %}
-        <a class="tile" href="{{ ipa_tile_url }}" target="_blank" rel="noopener noreferrer">
+        <a class="tile tile-rose" href="{{ ipa_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">{{ ctx.identity.ipa_ui_modern_label | default(ctx.identity.ipa_ui_label) }}</span>
           <span class="tile-hint">Identity management (default)</span>
         </a>
         {% endif %}
         {% if ipa_legacy_caddy_url | length > 0 %}
-        <a class="tile" href="{{ ipa_legacy_caddy_url }}" target="_blank" rel="noopener noreferrer">
+        <a class="tile tile-rose" href="{{ ipa_legacy_caddy_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (legacy UI)') }}</span>
           <span class="tile-hint">Classic Web UI</span>
         </a>
         {% elif ctx.identity.ipa_ui_url | default('') | length > 0 and ipa_tile_url != ctx.identity.ipa_ui_url %}
-        <a class="tile" href="{{ ctx.identity.ipa_ui_url }}" target="_blank" rel="noopener noreferrer">
+        <a class="tile tile-rose" href="{{ ctx.identity.ipa_ui_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (direct HTTPS)') }}</span>
           <span class="tile-hint">Direct HTTPS</span>
         </a>
         {% endif %}
         {% if ecs_tile_url | length > 0 %}
-        <a class="tile" href="{{ ecs_tile_url }}" target="_blank" rel="noopener noreferrer">
+        <a class="tile tile-purple" href="{{ ecs_tile_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">ECS</span>
           <span class="tile-hint">{% if ctx.ecs.deployed %}{{ ctx.ecs.cluster_name }}{% else %}Console{% endif %}</span>
         </a>
         {% endif %}
         {% if portal_tile_url | length > 0 %}
-        <a class="tile tile-accent" target="_blank" rel="noopener noreferrer" href="{{ portal_tile_url }}">
+        <a class="tile tile-accent tile-cyan" target="_blank" rel="noopener noreferrer" href="{{ portal_tile_url }}">
           <span class="tile-label">Deployment portal</span>
           <span class="tile-hint">{{ portal_tile_hint }}</span>
         </a>
@@ -902,6 +965,11 @@
       </div>
       <p class="filter-empty" id="service-filter-empty" role="status" hidden>No matching services.</p>
     </nav>
+    <div class="version-strip" aria-label="Platform versions">
+      <span class="chip"><strong>CM</strong> {{ ctx.versions.cm }}</span>
+      <span class="chip"><strong>CDP Runtime</strong> {{ ctx.versions.cdh }}</span>
+      <span class="chip"><strong>CDS</strong> {{ ctx.versions.ecs_cds }}</span>
+    </div>
 
     <section class="live-stats" id="live-stats" aria-label="Cluster health snapshot">
       <div class="live-stats-head">
@@ -995,8 +1063,8 @@
     </section>
 
     <div class="section-tools" aria-label="Section display controls">
-      <button class="section-tool-btn" type="button" id="sections-expand">Expand all</button>
-      <button class="section-tool-btn" type="button" id="sections-collapse">Collapse all</button>
+      <button class="section-tool-btn" type="button" id="sections-expand" aria-pressed="false">Expand all</button>
+      <button class="section-tool-btn" type="button" id="sections-collapse" aria-pressed="false">Collapse all</button>
     </div>
 
     {% if oa.enabled | default(false) | bool and (oa.sections | default([]) | length > 0) %}
@@ -1130,6 +1198,7 @@
                 <th>Service</th>
                 <th>Username</th>
                 <th>Password / secret</th>
+                <th>Access URLs</th>
                 <th>Notes</th>
               </tr>
             </thead>
@@ -1139,6 +1208,17 @@
                 <td>{{ cr.label }}</td>
                 <td><code>{{ cr.username }}</code></td>
                 <td><code class="cred-secret">{{ cr.password }}</code></td>
+                <td>
+                  {% if cr.url | default('') | string | lower | regex_search('^jdbc:') %}
+                  {{ portal_jdbc_for_context(cr.url, ctx) }}
+                  {% elif cr.public_url | default('') | length > 0 or cr.private_url | default('') | length > 0 %}
+                  {{ portal_url_bundle(cr.url | default(''), cr.public_url | default(''), cr.private_url | default('')) }}
+                  {% elif cr.url | default('') | length > 0 %}
+                  {{ portal_url_for_context(cr.url, ctx) }}
+                  {% else %}
+                  <span class="badge">—</span>
+                  {% endif %}
+                </td>
                 <td>{{ cr.note | default('') }}</td>
               </tr>
               {% endfor %}
@@ -1230,7 +1310,6 @@
           <li>ECS: <span class="badge">not in inventory</span></li>
           {% endif %}
         </ul>
-        <p class="sub">Versions — CM {{ ctx.versions.cm }} · CDP Runtime {{ ctx.versions.cdh }} · CDS {{ ctx.versions.ecs_cds }}</p>
         {% if ctx.data_services.links | length > 0 %}
         <h2 class="section-title" style="margin-top:1rem">Data services &amp; related URLs</h2>
         <ul class="clean">
@@ -1541,11 +1620,29 @@
       document.querySelectorAll('main > details.panel').forEach(function (panel) {
         panel.open = open;
       });
+      updateSectionTools();
+    }
+    function updateSectionTools() {
+      var panels = Array.prototype.slice.call(document.querySelectorAll('main > details.panel'));
+      var allOpen = panels.length > 0 && panels.every(function (panel) { return panel.open; });
+      var allClosed = panels.length > 0 && panels.every(function (panel) { return !panel.open; });
+      if (expandSections) {
+        expandSections.classList.toggle('is-active', allOpen);
+        expandSections.setAttribute('aria-pressed', String(allOpen));
+      }
+      if (collapseSections) {
+        collapseSections.classList.toggle('is-active', allClosed);
+        collapseSections.setAttribute('aria-pressed', String(allClosed));
+      }
     }
     var expandSections = document.getElementById('sections-expand');
     var collapseSections = document.getElementById('sections-collapse');
     if (expandSections) expandSections.addEventListener('click', function () { setAllSections(true); });
     if (collapseSections) collapseSections.addEventListener('click', function () { setAllSections(false); });
+    document.querySelectorAll('main > details.panel').forEach(function (panel) {
+      panel.addEventListener('toggle', updateSectionTools);
+    });
+    updateSectionTools();
 
     var helpDlg = document.getElementById('portal-help-dialog');
     var helpOpen = document.getElementById('portal-help-open');

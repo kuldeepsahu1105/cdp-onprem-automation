@@ -434,9 +434,106 @@ MONITORING_STACK_ENABLED=true ansible-playbook -i inventory.ini 32_setup_monitor
 
 Ops stack runs on **ipaserver** when present (`deployment_portal_host_group: auto`), else **cldr-mngr**.
 
+#### Run the deployment portal independently with another inventory
+
+The portal can be bootstrapped without running the rest of the deployment pipeline. It is not tied to Terraform-generated inventory, but the inventory must provide:
+
+- One non-empty **portal host group**. With `deployment_portal_host_group: auto`, Ansible selects `[ipaserver]` (or legacy `[ipa_server]`) when present, otherwise `[cldr-mngr]`. For any other group name, set `deployment_portal_host_group` explicitly.
+- One non-empty **PostgreSQL reference group** so pgAdmin and JDBC links can be rendered. Auto-detection checks `[postgres]`, `[postgresql]`, `[db]`, then `[cldr-mngr]`. For another name, set `postgres_inventory_group`; `deployment_portal_postgres_host_group: auto` then follows it.
+- `ansible_host` and `cldr_hostname` for each displayed host. Set `private_ip` when `ansible_host` is a public address; when only a private address exists, use the same value for both.
+- SSH access from the Ansible controller and passwordless `sudo`/root privilege escalation on the portal host.
+- `cluster_domain`, plus connection and portal settings described below.
+
+Minimal private-only inventory:
+
+```ini
+[portal]
+portal01 ansible_host=10.20.0.10 private_ip=10.20.0.10 cldr_hostname=portal01
+
+[database]
+db01 ansible_host=10.20.0.20 private_ip=10.20.0.20 cldr_hostname=db01
+
+# Optional groups are displayed and monitored when present.
+[base-masters]
+master01 ansible_host=10.20.0.30 private_ip=10.20.0.30 cldr_hostname=master01
+
+[base-workers]
+worker01 ansible_host=10.20.0.31 private_ip=10.20.0.31 cldr_hostname=worker01
+```
+
+For a cloud host, put its SSH-reachable/public address in `ansible_host` and its VPC address in `private_ip`:
+
+```ini
+[portal]
+portal01 ansible_host=203.0.113.10 private_ip=10.20.0.10 cldr_hostname=portal01
+```
+
+Keep secrets out of the inventory and command line. Create a local, uncommitted `portal-vars.yml`:
+
+```yaml
+cluster_domain: example.internal
+deployment_environment: baremetal
+deployment_portal_access_profile: private
+
+deployment_portal_host_group: portal
+postgres_inventory_group: database
+deployment_portal_postgres_host_group: auto
+
+deployment_portal_enabled: true
+caddy_vhost_enabled: true
+deployment_portal_http_port: 81
+
+# Set false for a portal-only run that must not install monitoring exporters
+# on the other inventory hosts.
+monitoring_stack_enabled: false
+
+ansible_user: automation
+ansible_ssh_private_key_file: /secure/path/cluster.pem
+
+postgres_password: REPLACE_ME
+pgadmin_default_email: admin@example.com
+pgadmin_default_password: REPLACE_ME
+deployment_portal_basic_auth_user: portal
+deployment_portal_basic_auth_password: REPLACE_ME
+```
+
+For public/cloud URL output, use `deployment_environment: aws` (or `deployment_portal_access_profile: cloud`) and retain distinct public `ansible_host` and `private_ip` values. Optional `[ipaserver]`, `[cldr-mngr]`, `[base-masters]`, `[base-workers]`, `[ecs-masters]`, and `[ecs-workers]` groups add their corresponding URLs and role information. If `[ipaserver]` is present, it must be the real FreeIPA server because Caddy will proxy `/ipa/*` to its HTTPS listener using `cldr_hostname.cluster_domain` as TLS SNI and the HTTP `Host`.
+
+From the repository:
+
+```bash
+cd ansible-playbooks
+
+# Validate group names, host variables, SSH, and privilege escalation first.
+ansible-inventory -i /path/to/inventory.ini -e @/secure/path/portal-vars.yml --graph
+ansible all -i /path/to/inventory.ini -e @/secure/path/portal-vars.yml \
+  -m ansible.builtin.ping --become
+
+# First run: install Docker/Compose and bootstrap Caddy + pgAdmin.
+./run-playbook.sh -i /path/to/inventory.ini \
+  -e @/secure/path/portal-vars.yml \
+  10_setup_deployment_portal.yml
+
+# Later runs: re-render URLs, credentials, Caddy, and detected monitoring data.
+# This intentionally fails if the bootstrap compose file is not already present.
+./run-playbook.sh -i /path/to/inventory.ini \
+  -e @/secure/path/portal-vars.yml \
+  35_refresh_deployment_portal.yml
+```
+
+`run-playbook.sh` installs the collections from `requirements.yml` when needed. Direct `ansible-playbook` execution also works because the playbooks import `ensure_collections.yml`. The portal host needs outbound access to the Docker repository, Docker Hub, and (if the packaged Compose plugin is unavailable) GitHub or PyPI. Allow inbound TCP `deployment_portal_http_port` (default **81**) from portal users and `deployment_portal_pgadmin_host_port` (default **5050**) only when direct pgAdmin access is wanted. If monitoring is enabled, also account for the monitoring ports documented below.
+
+After bootstrap, verify `http://<portal-host>:81/`, then inspect the generated files and containers on the portal host:
+
+```bash
+sudo docker compose -f /opt/cldr-deployment-portal/docker-compose.yml ps
+sudo docker logs cldr-portal-caddy --tail 100
+sudo sed -n '1,220p' /opt/cldr-deployment-portal/Caddyfile
+```
+
 **AWS (public IP):** Jenkins and browsers on the internet use `http://<ops-public-ip>:81/`; hosts inside the VPC can use `http://<ops-private-ip>:81/`. The generated index lists both. Caddy vhost URLs use a **dashed** ops public IP in the hostname (`portal.52-221-251-41.pvc.cloudera-labs.com`, not dotted); that requires wildcard DNS on `caddy_vhost_public_base` or use `caddy_vhost_dns_mode: classic_nipio`. Playbook 28 fails fast if Caddy does not respond on `http://127.0.0.1:<deployment_portal_http_port> (default 81)/` on the ops host.
 
-**Caddy FreeIPA vhost:** When `[ipaserver]` is present, `http://ipa.<ops-ip-dashed>.<base>:81/` **`redir / /ipa/modern-ui/ permanent`** (Labs legacy-only setups use `/ipa/ui`). Caddy connects over **HTTPS** to the IPA inventory address (`private_ip`, then `ansible_host`) so its container does not need to resolve the IPA DNS zone, while using the IPA FQDN for TLS SNI and **`Host`**. Using the IPA HTTP listener causes an HTTP→HTTPS→public-HTTP redirect loop. One reverse proxy handles all IPA paths; path matchers only adjust **`Referer`** and JSON compression behavior. Response header rewrites keep redirects and cookies on the public **`ipa.*`** vhost (without this, browsers drop session cookies and **`POST /ipa/session/json`** returns **401**). **`GET /ipa/session/login_kerberos` → 401** is expected when **`ipa_httpd_disable_browser_krb_negotiate: true`** — use password login. Tier A checks accept **301/308** on `/` and **200/301** on both UI paths. **Smoke (ops):** `curl -sS -o /dev/null -w '%{http_code}' -H "Host: ipa.<slug>.<base>" http://127.0.0.1:81/ipa/ui` and **`/ipa/js/util.js`**. **Default:** no ipaserver httpd edits — Caddy alone fronts the UI. Optional **`deployment_portal_ipa_httpd_proxy_enabled: true`** adds Apache **`mod_substitute`** on UI paths only (not **`/ipa/json`**).
+**Caddy FreeIPA vhost:** When `[ipaserver]` is present, `http://ipa.<ops-ip-dashed>.<base>:81/` **`redir / /ipa/modern-ui/ permanent`** (Labs legacy-only setups use `/ipa/ui/`). Caddy connects over **HTTPS** to the IPA inventory address (`private_ip`, then `ansible_host`) so its container does not need to resolve the IPA DNS zone, while using the IPA FQDN for TLS SNI and **`Host`**. Using the IPA HTTP listener causes an HTTP→HTTPS→public-HTTP redirect loop. The shared IPA proxy route is also mounted on the direct Caddy listener, so `http://<ops-public-or-private-ip>:81/ipa/...` remains a functional alternative. Path matchers adjust **`Referer`** and JSON compression behavior. Response header rewrites keep redirects and cookies on the browser-visible host (without this, browsers drop session cookies and **`POST /ipa/session/json`** returns **401**). **`GET /ipa/session/login_kerberos` → 401** is expected when **`ipa_httpd_disable_browser_krb_negotiate: true`** — use password login. Tier A checks accept **301/308** on `/` and **200/301** on both UI paths. **Smoke (ops):** `curl -sS -o /dev/null -w '%{http_code}' -H "Host: ipa.<slug>.<base>" http://127.0.0.1:81/ipa/ui/` and **`/ipa/js/util.js`**. **Default:** no ipaserver httpd edits — Caddy alone fronts the UI. Optional **`deployment_portal_ipa_httpd_proxy_enabled: true`** adds Apache **`mod_substitute`** on UI paths only (not **`/ipa/json`**).
 
 **IPA Apache behind Caddy (ipaserver, opt-in):** Default **`deployment_portal_ipa_httpd_proxy_enabled: false`** — no ipaserver httpd edits; ops Caddy reverse-proxies HTTPS to the ipaserver inventory address on port 443. Jenkins **PORTAL** and playbook **16** run **`remove_ipa_httpd_caddy_proxy_on_ipaserver.yml`** (absent **`zz-ipa-caddy-proxy.conf`**, revert **`ipa-rewrite`** Caddy markers, **`systemctl reload httpd`** when changed). When the flag is **true**, the same entry points run **`configure_ipa_httpd_behind_caddy.yml`** (`mod_substitute` on UI paths only, **`ipa-rewrite`** patches, **`apachectl configtest`**, httpd reload — not **`ipactl restart`**). Manual check: `apachectl configtest && systemctl reload httpd`.
 
@@ -490,7 +587,7 @@ On **ipaserver**, remove or fix a stale **`zz-ipa-caddy-proxy.conf`** (SUBSTITUT
 
 **Node URL display:** Whenever a portal web or JDBC endpoint uses an inventory node FQDN under `cluster_domain`, the portal shows the FQDN first, followed by distinct clickable public-IP and private-IP web alternatives or copyable JDBC alternatives in parentheses. Paths, schemes, and ports are preserved; Caddy lab hostnames remain unpaired because their DNS name already encodes or resolves to the intended edge address.
 
-**Portal section ownership:** Quick-open cards provide navigation without repeating URL text. Network access shows only addressing/profile facts, the Caddy section shows only DNS/routing configuration, cluster URLs live with cluster details, and monitoring lists each service once as a Caddy URL followed by public-IP and private-IP alternatives. Credential tables contain credentials and notes only.
+**Portal section ownership:** Quick-open cards provide navigation without repeating URL text, followed by a compact CM/CDP Runtime/CDS version strip. Network access shows addressing/profile facts, the Caddy section shows DNS/routing configuration, and platform sections own their detailed URLs. Operator credential tables include one bundled access column: Caddy or FQDN first, then available public-IP and private-IP alternatives; PostgreSQL uses the equivalent JDBC format.
 
 **Portal PEM downloads:** The host-login PEM is the preferred download. When the resolved Auto-TLS key has identical file content, it is omitted even if it was discovered under a different path or filename; a second Auto-TLS download is shown only for a genuinely distinct key.
 

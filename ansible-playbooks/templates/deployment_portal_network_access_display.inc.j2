@@ -11,6 +11,7 @@
 {{- access[service] | default('') | trim -}}
 {%- else -%}
 {%- set ip = access.management_ip | default(access.ops_ip | default('')) | trim -%}
+{%- if ip | length > 0 -%}
 {%- if service == 'grafana' -%}
 http://{{ ip }}:{{ monitoring_grafana_host_port | default(3000) }}/
 {%- elif service == 'prometheus' -%}
@@ -19,6 +20,7 @@ http://{{ ip }}:{{ monitoring_prometheus_host_port | default(9090) }}/
 http://{{ ip }}:{{ monitoring_alertmanager_host_port | default(9093) }}/
 {%- elif service == 'cadvisor' -%}
 http://{{ ip }}:{{ monitoring_cadvisor_host_port | default(8089) }}/
+{%- endif -%}
 {%- endif -%}
 {%- endif -%}
 {%- endmacro %}
