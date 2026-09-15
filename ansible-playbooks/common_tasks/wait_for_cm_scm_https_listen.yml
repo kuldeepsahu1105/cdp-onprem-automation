@@ -1,10 +1,23 @@
 ---
-# Optional wait for scm-server :7183 before CM HTTPS REST (play 25). Uses probe context facts.
+# Optional wait for scm-server :7183 before CM HTTPS REST. Runs after set_cm_api_url when TLS is expected.
 
 - name: CM API — skip scm-server HTTPS port wait when API health already passed
   ansible.builtin.debug:
     msg: Skipping wait for CM HTTPS port — cm_api_health_ok is already true.
   when: cm_api_health_ok | default(false) | bool
+
+- name: CM API — skip scm-server HTTPS port wait when CM API is HTTP-only
+  ansible.builtin.debug:
+    msg: >-
+      Skipping wait for CM HTTPS :{{ cm_https_port | default(7183) }} —
+      CM API probes use {{ cm_protocol | default('http') }}:{{ cm_api_port | default(cm_http_port | default(7180)) }}
+      (Auto-TLS / :7183 comes from playbook 27).
+  when:
+    - not (cm_api_health_ok | default(false) | bool)
+    - cm_verify_wait_scm_https_port | default(false) | bool
+    - not (cm_api_https_active | default(false) | bool)
+    - (cm_protocol | default('http')) != 'https'
+    - not (cm_autotls_api_enabled | default(false) | bool)
 
 - name: CM API — resolve host for scm-server HTTPS port wait
   ansible.builtin.set_fact:
@@ -20,7 +33,12 @@
       }}
   when:
     - not (cm_api_health_ok | default(false) | bool)
-    - cm_verify_wait_scm_https_port | default(true) | bool
+    - cm_verify_wait_scm_https_port | default(false) | bool
+    - (
+        (cm_api_https_active | default(false) | bool)
+        or ((cm_protocol | default('http')) == 'https')
+        or (cm_autotls_api_enabled | default(false) | bool)
+      )
 
 - name: CM API — wait for Cloudera Manager HTTPS API port (:7183)
   ansible.builtin.wait_for:
@@ -35,6 +53,11 @@
   delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
   when:
     - not (cm_api_health_ok | default(false) | bool)
-    - cm_verify_wait_scm_https_port | default(true) | bool
+    - cm_verify_wait_scm_https_port | default(false) | bool
     - _cm_scm_https_wait_host | default('') | length > 0
     - _cm_scm_https_wait_host not in ['127.0.0.1', 'localhost']
+    - (
+        (cm_api_https_active | default(false) | bool)
+        or ((cm_protocol | default('http')) == 'https')
+        or (cm_autotls_api_enabled | default(false) | bool)
+      )

@@ -14,8 +14,14 @@
     cm_api_port: "{{ cm_https_port }}"
     cm_api_https_active: true
   when:
-    - (cm_api_controller_https_reachable | default(false) | bool)
-      or (cm_api_https_active | default(false) | bool)
+    - cm_api_use_https | default(false) | bool
+    - (cm_api_https_active | default(false) | bool)
+      or (cm_api_controller_https_reachable | default(false) | bool)
+    - not (
+        (cm_protocol | default('http')) == 'http'
+        and ((cm_api_port | default(0) | int) == (cm_http_port | default(7180) | int))
+        and not (cm_api_controller_https_reachable | default(false) | bool)
+      )
 
 - name: CM API — set base API URL
   ansible.builtin.set_fact:

@@ -10,6 +10,9 @@
       vars:
         required_inventory_group: cldr-mngr
 
+    - name: CM API — derive HTTP vs HTTPS transport (license before Auto-TLS)
+      ansible.builtin.import_tasks: resolve_cm_api_transport.yml
+
     - name: Resolve reachable CM API host (manager IP/FQDN; loopback only when on cldr-mngr)
       ansible.builtin.import_tasks: resolve_cm_connect_host.yml
 

@@ -1,10 +1,12 @@
 ---
 # Set cm_krb_api_url from facts already established by set_cm_api_url.yml (no API re-probe).
+# Before Auto-TLS (plays 25–26), parcel/license REST uses HTTP :7180 via cm_api_url.
 
 - name: Kerberos — delegate HTTPS REST when controller reached CM on HTTP only
   ansible.builtin.set_fact:
     cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
   when:
+    - cm_api_use_https | default(false) | bool
     - (cm_protocol | default('http')) == 'http'
     - (autotls_enabled | default(false) | bool)
       or (':' ~ (cm_http_port | default(7180) | string) ~ '/' in (cm_api_url | default('')))
@@ -38,6 +40,7 @@
         )
       }}
   when:
+    - cm_api_use_https | default(false) | bool
     - (cm_protocol | default('http')) == 'http'
     - (autotls_enabled | default(false) | bool)
       or (':' ~ (cm_http_port | default(7180) | string) ~ '/' in (cm_api_url | default('')))
@@ -51,6 +54,7 @@
         else cm_host_fqdn
       }}
   when:
+    - cm_api_use_https | default(false) | bool
     - _cm_krb_api_url_host is defined
     - (cm_protocol | default('http')) == 'http'
     - (cm_api_uri_delegate_to | default('') | length > 0)
@@ -75,6 +79,7 @@
         ~ cm_api_version
       }}
   when:
+    - cm_api_use_https | default(false) | bool
     - _cm_krb_api_url_host is defined
     - _cm_krb_api_url_host | default('') | length > 0
 

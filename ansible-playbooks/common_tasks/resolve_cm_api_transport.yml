@@ -1,0 +1,28 @@
+---
+# License (26) and verify (25) run before Auto-TLS (27): default CM REST to HTTP :7180 until TLS is applied.
+# Set cm_autotls_complete: true (or cm_api_use_https: true) after Auto-TLS for re-runs that must use :7183.
+
+- name: CM API — derive whether REST probes should use HTTPS (:7183)
+  ansible.builtin.set_fact:
+    _cm_api_use_https_effective: >-
+      {{
+        (cm_api_use_https | default(false) | bool)
+        or (cm_autotls_complete | default(false) | bool)
+        or (hostvars.get('localhost', {}).get('cm_autotls_complete', false) | bool)
+        or (
+          (cm_autotls_api_enabled | default(false) | bool)
+          and (cm_autotls_truststore_precheck is defined)
+          and (cm_autotls_truststore_precheck.stat.exists | default(false) | bool)
+        )
+      }}
+
+- name: CM API — apply transport facts for probes and URL assembly
+  ansible.builtin.set_fact:
+    cm_api_use_https: "{{ _cm_api_use_https_effective | bool }}"
+    cm_api_probe_https_first: "{{ _cm_api_use_https_effective | bool }}"
+    cm_api_port: >-
+      {{
+        cm_https_port | default(7183)
+        if (_cm_api_use_https_effective | bool)
+        else cm_http_port | default(7180)
+      }}

@@ -546,6 +546,12 @@ cm_host_heartbeat_verify_delay: 30
 # Cloudera Manager API ports
 cm_https_port: 7183
 cm_http_port: 7180
+# Plays 25–26 (license) run before 27 (Auto-TLS): REST defaults to http://<host>:7180 until TLS is on.
+# Set cm_autotls_complete: true or cm_api_use_https: true after Auto-TLS / manual HTTPS-only CM.
+cm_api_use_https: false
+cm_autotls_complete: false
+# 25_verify_cm: do not block on :7183 before Auto-TLS (enable when re-verifying HTTPS-only CM).
+cm_verify_wait_scm_https_port: false
 # Control-plane reachability (CM API + portal URL verify from the Ansible controller):
 #   auto   — remote controller outside VPC → public ansible_host; CONTROL_MODE=local on cluster → private;
 #            else try CM private/public from controller (VPN/bare metal prefers private)

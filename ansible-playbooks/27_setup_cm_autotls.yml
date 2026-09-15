@@ -20,6 +20,13 @@
       ansible.builtin.set_fact:
         cm_autotls_setup_intent: "{{ autotls_enabled | default(true) | bool }}"
 
+    - name: Auto-TLS — pre-check agent truststore for API transport (HTTPS re-runs)
+      ansible.builtin.stat:
+        path: "{{ cm_cms_autotls_truststore_path }}"
+      delegate_to: "{{ cm_manager_inventory_host }}"
+      become: true
+      register: cm_autotls_truststore_precheck
+
     - name: CM API — set connection context
       ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
 
@@ -31,13 +38,6 @@
 
     - name: CM API — read Auto-TLS state from CM configuration
       ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
-
-    - name: Auto-TLS — pre-check agent truststore on CM host (generateCmca skip gate)
-      ansible.builtin.stat:
-        path: "{{ cm_cms_autotls_truststore_path }}"
-      delegate_to: "{{ cm_manager_inventory_host }}"
-      become: true
-      register: cm_autotls_truststore_precheck
 
     - name: Auto-TLS — CM HTTPS port active (manual TLS skip helper; not Auto-TLS in CM config)
       ansible.builtin.set_fact:

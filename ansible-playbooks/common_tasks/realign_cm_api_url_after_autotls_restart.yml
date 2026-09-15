@@ -33,6 +33,8 @@
     cm_protocol: https
     cm_api_port: "{{ cm_https_port | default(7183) }}"
     cm_api_https_active: true
+    cm_api_use_https: true
+    cm_autotls_complete: true
     cm_api_url: >-
       {{
         'https://'

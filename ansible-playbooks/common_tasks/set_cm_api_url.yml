@@ -176,6 +176,7 @@
       timeout: 15
       ignore_errors: yes
       when:
+        - cm_api_use_https | default(false) | bool
         - not (cm_api_probe_https_first | default(false) | bool)
         - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
         - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
@@ -200,6 +201,7 @@
       timeout: 15
       ignore_errors: yes
       when:
+        - cm_api_use_https | default(false) | bool
         - not (cm_api_probe_https_first | default(false) | bool)
         - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
         - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
@@ -283,6 +285,7 @@
         cm_api_https_active: true
         cm_tls_mode: https
       when:
+        - cm_api_use_https | default(false) | bool
         - (cm_api_controller_probe_succeeded | default(false) | bool)
         - (cm_api_controller_https_reachable | default(false) | bool)
         - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
@@ -377,7 +380,15 @@
             and (cm_tls_probe_https.status | default(0) in [200, 301, 303, 401, 403])
           )
         - cm_tls_probe_http is not defined or cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
-        - cm_tls_probe_https is not defined or cm_tls_probe_https is failed or (cm_tls_probe_https.status | default(0) not in [200, 301, 303, 401, 403])
+        - >-
+          {{
+            not (cm_api_use_https | default(false) | bool)
+            or (
+              cm_tls_probe_https is not defined
+              or cm_tls_probe_https is failed
+              or (cm_tls_probe_https.status | default(0) not in [200, 301, 303, 401, 403])
+            )
+          }}
 
 - name: CM API — assemble URL from probe/discovery facts
   ansible.builtin.import_tasks: assemble_cm_api_url.yml
