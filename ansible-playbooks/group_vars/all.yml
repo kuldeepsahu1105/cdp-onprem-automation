@@ -1031,6 +1031,7 @@ terraform_ec2_keypair_name_suffix: "pvc-new-keypair"
 # EC2 PEM: prefer sshkey.pem + {terraform_ec2_keypair_name}.pem (Terraform copy), then ANSIBLE_PRIVATE_KEY.
 deployment_portal_ssh_pem_path: ""
 # Auto-TLS key: cm_private_key_path, autotls_private_key_path, id_rsa, or same PEM when only one key exists.
+# If it has the same content as the host-login PEM, only the host-login PEM is exported.
 deployment_portal_ssh_autotls_key_path: ""
 # HTTP basic auth for /downloads/* (SSH keys, operator-credentials.json). Index HTML stays unauthenticated so Ansible Tier A verify is unchanged.
 deployment_portal_basic_auth_enabled: true

@@ -9,10 +9,7 @@
 {% set portal_tile_url = _portal_caddy_url if (_portal_caddy_url | length > 0) else ctx.portal.index_url | default('') %}
 {% set portal_tile_hint = ctx.caddy_vhosts.urls_public.portal.hostname if (_portal_caddy_url | length > 0) else 'Ops host Caddy index' %}
 {% set _caddy_vhosts_on = ctx.caddy_vhosts.enabled | default(false) | bool %}
-{% from 'deployment_portal_network_access_display.inc.j2' import net_access_href, net_access_label %}
-{% from 'deployment_portal_url_fqdn_pubip.inc.j2' import portal_url_fqdn_pubip, portal_url_fqdn_pubip_for_endpoint, portal_url_fqdn_pubip_cm, inventory_public_ip_for_fqdn, inventory_private_ip_for_fqdn with context %}
-{% set _portal_cluster_domain = ctx.cluster_domain | default(cluster_domain | default('')) | string | trim %}
-{% set _portal_caddy_public_base = ctx.caddy_vhosts.public_base | default(caddy_vhost_public_base | default('pvc.cloudera-labs.com')) | string | trim %}
+{% from 'deployment_portal_url_fqdn_pubip.inc.j2' import portal_url_for_context, portal_url_fqdn_pubip_cm with context %}
 {% set mon_on = (
   (ctx.monitoring.enabled | default(false) | bool)
   or (ctx.monitoring.routes_enabled | default(false) | bool)
@@ -94,6 +91,10 @@
       margin: 0;
       padding: 0;
       line-height: 1.55;
+    }
+    :focus-visible {
+      outline: 2px solid var(--accent-soft);
+      outline-offset: 2px;
     }
     a { color: #7ec8ff; text-decoration: none; }
     a:hover { text-decoration: underline; }
@@ -224,6 +225,30 @@
       color: var(--muted);
       margin: 0 0 0.65rem;
       font-weight: 600;
+    }
+    .quick-actions-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.65rem;
+    }
+    .quick-actions-head h2 { margin: 0; }
+    .service-filter {
+      width: min(100%, 16rem);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-elevated);
+      color: var(--text);
+      padding: 0.4rem 0.65rem;
+      font: inherit;
+      font-size: 0.78rem;
+    }
+    .service-filter::placeholder { color: var(--muted); }
+    .filter-empty {
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin: 0.65rem 0 0;
     }
     .tile-grid {
       display: grid;
@@ -592,7 +617,7 @@
     .site-footer {
       max-width: var(--max-w);
       margin: 0 auto;
-      padding: 1.25rem 1rem 2rem;
+      padding: 1.25rem 6.5rem 4.25rem 1rem;
       border-top: 1px solid var(--border);
       font-size: 0.8rem;
       color: var(--muted);
@@ -634,6 +659,61 @@
       font-weight: 600;
     }
     .help-open-btn:hover { background: rgba(255, 255, 255, 0.1); }
+    .scroll-progress {
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: 50;
+      height: 3px;
+      background: var(--accent);
+      transform: scaleX(0);
+      transform-origin: left;
+      pointer-events: none;
+    }
+    .section-tools {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.45rem;
+      margin: -0.35rem 0 0.75rem;
+    }
+    .section-tool-btn {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.75rem;
+      padding: 0.3rem 0.6rem;
+    }
+    .section-tool-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .page-jump {
+      position: fixed;
+      right: 1rem;
+      bottom: 1rem;
+      z-index: 20;
+      display: flex;
+      gap: 0.4rem;
+    }
+    .page-jump button {
+      width: 2.35rem;
+      height: 2.35rem;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      background: var(--card);
+      color: var(--text);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+      cursor: pointer;
+      font: inherit;
+      font-size: 1rem;
+    }
+    .page-jump button:hover { background: var(--tile-hover); }
+    .page-jump button:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
     dialog.help-dialog {
       border: 1px solid var(--border);
       border-radius: var(--radius);
@@ -682,10 +762,17 @@
       h1 { font-size: 1.15rem; }
       .wrap { padding: 1rem 0.75rem 1.5rem; }
       .tile-grid { grid-template-columns: repeat(2, 1fr); }
+      .quick-actions-head { align-items: stretch; flex-direction: column; }
+      .service-filter { width: 100%; }
+      .site-footer { padding-right: 5.75rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; }
     }
   </style>
 </head>
 <body>
+  <div class="scroll-progress" id="scroll-progress" role="progressbar" aria-label="Page scroll progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
   <header class="site-header">
     <div class="site-header-inner">
       <div class="brand-row">
@@ -726,7 +813,7 @@
         </div>
         <div class="header-actions">
           {% if oa.basic_auth_enabled | default(deployment_portal_basic_auth_enabled | default(false)) | bool %}
-          <a class="help-open-btn" href="{{ _dl_prefix }}/auth.html" title="HTTP basic auth for {{ _dl_prefix }}/ (PEM keys and operator-credentials.json); returns to portal home after sign-in">Login</a>
+          <a class="help-open-btn" id="portal-auth-action" href="{{ _dl_prefix }}/auth.html" data-login-url="{{ _dl_prefix }}/auth.html" title="Sign in to protected downloads">Login</a>
           {% endif %}
           <button type="button" class="help-open-btn" id="portal-help-open" aria-haspopup="dialog">Help</button>
         </div>
@@ -743,7 +830,10 @@
 
   <main class="wrap">
     <nav class="quick-actions" aria-label="Primary services">
-      <h2>Quick open</h2>
+      <div class="quick-actions-head">
+        <h2>Quick open</h2>
+        <input class="service-filter" id="service-filter" type="search" placeholder="Filter services..." aria-label="Filter quick-open services" autocomplete="off"/>
+      </div>
       <div class="tile-grid">
         {% if cm_tile_url | length > 0 %}
         <a class="tile tile-accent" href="{{ cm_tile_url }}" target="_blank" rel="noopener noreferrer">
@@ -789,7 +879,7 @@
         {% elif ctx.identity.ipa_ui_url | default('') | length > 0 and ipa_tile_url != ctx.identity.ipa_ui_url %}
         <a class="tile" href="{{ ctx.identity.ipa_ui_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (direct HTTPS)') }}</span>
-          <span class="tile-hint">{{ ctx.identity.ipa_ui_url }}</span>
+          <span class="tile-hint">Direct HTTPS</span>
         </a>
         {% endif %}
         {% if ecs_tile_url | length > 0 %}
@@ -805,6 +895,7 @@
         </a>
         {% endif %}
       </div>
+      <p class="filter-empty" id="service-filter-empty" role="status" hidden>No matching services.</p>
     </nav>
 
     <section class="live-stats" id="live-stats" aria-label="Cluster health snapshot">
@@ -897,6 +988,11 @@
       </details>
       {% endif %}
     </section>
+
+    <div class="section-tools" aria-label="Section display controls">
+      <button class="section-tool-btn" type="button" id="sections-expand">Expand all</button>
+      <button class="section-tool-btn" type="button" id="sections-collapse">Collapse all</button>
+    </div>
 
     {% if oa.enabled | default(false) | bool and (oa.sections | default([]) | length > 0) %}
     <details class="panel" open>
@@ -1029,7 +1125,6 @@
                 <th>Service</th>
                 <th>Username</th>
                 <th>Password / secret</th>
-                <th>URL</th>
                 <th>Notes</th>
               </tr>
             </thead>
@@ -1039,7 +1134,6 @@
                 <td>{{ cr.label }}</td>
                 <td><code>{{ cr.username }}</code></td>
                 <td><code class="cred-secret">{{ cr.password }}</code></td>
-                <td>{% if cr.url | default('') | length > 0 %}<a href="{{ cr.url }}" target="_blank" rel="noopener noreferrer">{{ cr.url }}</a>{% else %}<span class="badge">—</span>{% endif %}</td>
                 <td>{{ cr.note | default('') }}</td>
               </tr>
               {% endfor %}
@@ -1048,39 +1142,6 @@
         </div>
         {% endif %}
         {% endfor %}
-      </div>
-    </details>
-    {% endif %}
-
-    {% if ctx.endpoints | default([]) | length > 0 %}
-    <details class="panel">
-      <summary><span class="summary-main"><h2 class="section-title">Endpoints</h2></span>{{ panel_chevron | safe }}</summary>
-      <div class="panel-body">
-        <p class="sub"><strong>Service</strong> is the product or UI name. <strong>Hostname</strong> is the inventory FQDN of the backing host (or ECS console name). Links open in a new tab.{% if mon_on %} Monitoring rows prefer Caddy vhosts when configured, else direct host ports (<code>{{ monitoring_grafana_host_port | default(3000) }}</code>, <code>{{ monitoring_prometheus_host_port | default(9090) }}</code>, <code>{{ monitoring_alertmanager_host_port | default(9093) }}</code>, <code>{{ monitoring_cadvisor_host_port | default(8089) }}</code>); Caddy path routes on <code>:{{ deployment_portal_http_port | default(81) }}</code> remain available.{% endif %}</p>
-        <div class="table-scroll">
-          <table class="portal-table">
-            <thead>
-              <tr>
-                <th>Service</th>
-                <th>URL</th>
-                <th>Hostname</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for ep in ctx.endpoints %}
-              <tr>
-                <td>{{ ep.name }}</td>
-                <td>
-                  {{ portal_url_fqdn_pubip_for_endpoint(ep, ctx) }}
-                </td>
-                <td>{% if ep.hostname | default('') | length > 0 %}<code>{{ ep.hostname }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
-                <td>{{ ep.note | default('') }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
       </div>
     </details>
     {% endif %}
@@ -1094,14 +1155,6 @@
           <li>Ops FQDN: <code>{{ ctx.access.primary.fqdn }}</code></li>
           <li>Management IP: <code>{{ ctx.access.primary.management_ip }}</code></li>
           <li>URL host in links: <code>{{ ctx.access.primary.host }}</code></li>
-          <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('portal', 'primary', ctx, _caddy_vhosts_on) }}">{{ net_access_label('portal', 'primary', ctx, _caddy_vhosts_on) }}</a></li>
-          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('pgadmin', 'primary', ctx, _caddy_vhosts_on) }}">{{ net_access_label('pgadmin', 'primary', ctx, _caddy_vhosts_on) }}</a></li>
-          {% if mon_on %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('grafana', 'primary', ctx, _caddy_vhosts_on) }}">{{ net_access_label('grafana', 'primary', ctx, _caddy_vhosts_on) }}</a></li>
-          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('prometheus', 'primary', ctx, _caddy_vhosts_on) }}">{{ net_access_label('prometheus', 'primary', ctx, _caddy_vhosts_on) }}</a></li>
-          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('alertmanager', 'primary', ctx, _caddy_vhosts_on) }}">{{ net_access_label('alertmanager', 'primary', ctx, _caddy_vhosts_on) }}</a></li>
-          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('cadvisor', 'primary', ctx, _caddy_vhosts_on) }}">{{ net_access_label('cadvisor', 'primary', ctx, _caddy_vhosts_on) }}</a></li>
-          {% endif %}
         </ul>
       </div>
     </details>
@@ -1112,26 +1165,10 @@
         <p class="sub"><strong>Internet / external</strong> — {{ ctx.access.external.audience }}</p>
         <ul class="clean">
           <li>Ops public IP: <code>{{ ctx.access.external.ops_ip }}</code></li>
-          <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('portal', 'external', ctx, _caddy_vhosts_on) }}">{{ net_access_label('portal', 'external', ctx, _caddy_vhosts_on) }}</a></li>
-          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('pgadmin', 'external', ctx, _caddy_vhosts_on) }}">{{ net_access_label('pgadmin', 'external', ctx, _caddy_vhosts_on) }}</a></li>
-          {% if mon_on %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('grafana', 'external', ctx, _caddy_vhosts_on) }}">{{ net_access_label('grafana', 'external', ctx, _caddy_vhosts_on) }}</a></li>
-          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('prometheus', 'external', ctx, _caddy_vhosts_on) }}">{{ net_access_label('prometheus', 'external', ctx, _caddy_vhosts_on) }}</a></li>
-          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('alertmanager', 'external', ctx, _caddy_vhosts_on) }}">{{ net_access_label('alertmanager', 'external', ctx, _caddy_vhosts_on) }}</a></li>
-          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('cadvisor', 'external', ctx, _caddy_vhosts_on) }}">{{ net_access_label('cadvisor', 'external', ctx, _caddy_vhosts_on) }}</a></li>
-          {% endif %}
         </ul>
         <p class="sub" style="margin-top:0.85rem"><strong>Same VPC (private IP)</strong> — {{ ctx.access.vpc.audience }}</p>
         <ul class="clean">
           <li>Ops private IP: <code>{{ ctx.access.vpc.ops_ip }}</code></li>
-          <li><strong>Portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('portal', 'vpc', ctx, _caddy_vhosts_on) }}">{{ net_access_label('portal', 'vpc', ctx, _caddy_vhosts_on) }}</a></li>
-          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('pgadmin', 'vpc', ctx, _caddy_vhosts_on) }}">{{ net_access_label('pgadmin', 'vpc', ctx, _caddy_vhosts_on) }}</a></li>
-          {% if mon_on %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('grafana', 'vpc', ctx, _caddy_vhosts_on) }}">{{ net_access_label('grafana', 'vpc', ctx, _caddy_vhosts_on) }}</a></li>
-          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('prometheus', 'vpc', ctx, _caddy_vhosts_on) }}">{{ net_access_label('prometheus', 'vpc', ctx, _caddy_vhosts_on) }}</a></li>
-          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('alertmanager', 'vpc', ctx, _caddy_vhosts_on) }}">{{ net_access_label('alertmanager', 'vpc', ctx, _caddy_vhosts_on) }}</a></li>
-          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ net_access_href('cadvisor', 'vpc', ctx, _caddy_vhosts_on) }}">{{ net_access_label('cadvisor', 'vpc', ctx, _caddy_vhosts_on) }}</a></li>
-          {% endif %}
         </ul>
       </div>
     </details>
@@ -1146,29 +1183,7 @@
         {% else %}
         <p class="sub">Mode <code>{{ ctx.caddy_vhosts.dns_mode }}</code> — public-IP hostnames for external/internet; private-IP hostnames when registered for in-VPC use.</p>
         {% endif %}
-        <ul class="clean">
-          <li><strong>Portal</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.portal.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.portal.hostname }}</a></li>
-          <li><strong>pgAdmin</strong> — <a href="{{ ctx.caddy_vhosts.urls_public.pgadmin.url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.pgadmin.hostname }}</a></li>
-          <li><strong>Cloudera Manager (direct HTTP)</strong> — {{ portal_url_fqdn_pubip_cm(ctx, ctx.cloudera_manager.ui_url_http, cm_http_port, 'http') }}</li>
-          <li><strong>Cloudera Manager (direct HTTPS)</strong> — {{ portal_url_fqdn_pubip_cm(ctx, ctx.cloudera_manager.ui_url_https, cm_https_port, 'https') }} <span class="badge">{{ ctx.cloudera_manager.host_fqdn }}</span></li>
-          {% if mon_on %}
-          <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.grafana.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.grafana.hostname }}{% else %}{{ grafana_tile_url }}{% endif %}</a></li>
-          <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.prometheus.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.prometheus.hostname }}{% else %}{{ prometheus_tile_url }}{% endif %}</a></li>
-          <li><strong>Alertmanager</strong> — <a href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">{% if ctx.caddy_vhosts.urls_public.alertmanager.hostname | default('') | length > 0 %}{{ ctx.caddy_vhosts.urls_public.alertmanager.hostname }}{% else %}{{ alertmanager_tile_url }}{% endif %}</a></li>
-          <li><strong>cAdvisor</strong> — <a href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">{{ cadvisor_tile_url }}</a></li>
-          {% endif %}
-          {% if ctx.caddy_vhosts.urls_vpc.portal is defined and ctx.caddy_vhosts.urls_vpc.portal.url | default('') | length > 0 %}
-          <li><strong>Portal (VPC slug)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.caddy_vhosts.urls_vpc.portal.url }}">{{ ctx.caddy_vhosts.urls_vpc.portal.hostname }}</a></li>
-          {% endif %}
-          {% if ctx.identity.ipa_caddy_modern_url | default('') | length > 0 %}
-          <li><strong>{{ ctx.identity.ipa_ui_modern_label | default('FreeIPA (modern UI)') }}</strong> — <a href="{{ ctx.identity.ipa_caddy_modern_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.ipa.hostname }}/ipa/modern-ui/</a></li>
-          {% endif %}
-          {% if ctx.identity.ipa_caddy_legacy_url | default('') | length > 0 %}
-          <li><strong>{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (legacy UI)') }}</strong> — <a href="{{ ctx.identity.ipa_caddy_legacy_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.ipa.hostname }}/ipa/ui</a></li>
-          {% elif ctx.identity.ipa_caddy_url | default('') | length > 0 %}
-          <li><strong>{{ ctx.identity.ipa_ui_label }}</strong> — <a href="{{ ctx.identity.ipa_caddy_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.caddy_vhosts.urls_public.ipa.hostname }}</a> (redirects to modern UI)</li>
-          {% endif %}
-        </ul>
+        <p class="sub">Service URLs are listed once in their owning platform sections below. Quick open remains the shortest navigation path.</p>
       </div>
     </details>
     {% endif %}
@@ -1178,26 +1193,6 @@
       <div class="panel-body">
         <p class="sub">Reverse proxy and containerized UIs on <code>{{ ctx.ops_host.fqdn }}</code> <span class="badge">{{ ctx.ops_host.inventory_group }}</span>. {{ ctx.ops_host.services }}</p>
         <ul class="clean">
-          <li><strong>Deployment portal</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ portal_tile_url | default(ctx.portal.index_url) }}">{{ portal_tile_url | default(ctx.portal.index_url) }}</a></li>
-          <li><strong>pgAdmin</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ pgadmin_tile_url }}">{{ pgadmin_tile_url }}</a> <span class="badge">CM DB on {{ ctx.postgresql.host_fqdn }}</span></li>
-          {% if ctx.portal.pgadmin_caddy_url | default('') | length > 0 and ctx.portal.pgadmin_url_direct | default('') | length > 0 %}
-          <li><strong>pgAdmin (direct port)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.portal.pgadmin_url_direct }}">{{ ctx.portal.pgadmin_url_direct }}</a></li>
-          {% endif %}
-          {% if mon_on %}
-          <li><strong>Grafana</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ grafana_tile_url }}">{{ grafana_tile_url }}</a></li>
-          {% if ctx.monitoring.grafana_caddy_url | default('') | length > 0 and ctx.monitoring.grafana_url_direct | default('') | length > 0 %}
-          <li><strong>Grafana (direct port)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.monitoring.grafana_url_direct }}">{{ ctx.monitoring.grafana_url_direct }}</a></li>
-          {% endif %}
-          <li><strong>Prometheus</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ prometheus_tile_url }}">{{ prometheus_tile_url }}</a></li>
-          {% if ctx.monitoring.prometheus_caddy_url | default('') | length > 0 and ctx.monitoring.prometheus_url_direct | default('') | length > 0 %}
-          <li><strong>Prometheus (direct port)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.monitoring.prometheus_url_direct }}">{{ ctx.monitoring.prometheus_url_direct }}</a></li>
-          {% endif %}
-          <li><strong>Alertmanager</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ alertmanager_tile_url }}">{{ alertmanager_tile_url }}</a></li>
-          {% if ctx.monitoring.alertmanager_caddy_url | default('') | length > 0 and ctx.monitoring.alertmanager_url_direct | default('') | length > 0 %}
-          <li><strong>Alertmanager (direct port)</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.monitoring.alertmanager_url_direct }}">{{ ctx.monitoring.alertmanager_url_direct }}</a></li>
-          {% endif %}
-          <li><strong>cAdvisor</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ cadvisor_tile_url }}">{{ cadvisor_tile_url }}</a> <span class="badge">:{{ monitoring_cadvisor_host_port | default(8089) }}</span></li>
-          {% endif %}
           <li><strong>Cloudera Manager (direct HTTP)</strong> — {{ portal_url_fqdn_pubip_cm(ctx, ctx.cloudera_manager.ui_url_http, cm_http_port, 'http') }} <span class="badge">VPC / admin</span></li>
           <li><strong>Cloudera Manager (direct HTTPS)</strong> — {{ portal_url_fqdn_pubip_cm(ctx, ctx.cloudera_manager.ui_url_https, cm_https_port, 'https') }} <span class="badge">:7183 when Auto-TLS on</span></li>
           {% if ctx.identity.ipa_caddy_modern_url | default('') | length > 0 %}
@@ -1207,10 +1202,7 @@
           <li><strong>{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (legacy UI)') }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ ctx.identity.ipa_caddy_legacy_url }}">{{ ctx.identity.ipa_caddy_legacy_url }}</a></li>
           {% endif %}
           {% if ctx.identity.ipa_ui_url %}
-          {% set _ipa_fqdn = deployment_portal_ipa_fqdn | default(ctx.identity.ipa_ui_url | regex_replace('^https?://', '') | regex_replace('/.*', '')) %}
-          {% set _ipa_pub = inventory_public_ip_for_fqdn(ctx, _ipa_fqdn) %}
-          {% set _ipa_priv = inventory_private_ip_for_fqdn(ctx, _ipa_fqdn) %}
-          <li><strong>{{ ctx.identity.ipa_ui_label }} (HTTPS on ipaserver)</strong> — {{ portal_url_fqdn_pubip(ctx.identity.ipa_ui_url, _ipa_pub, '443', 'https', _ipa_priv, _portal_cluster_domain, _portal_caddy_public_base) }}</li>
+          <li><strong>{{ ctx.identity.ipa_ui_label }} (HTTPS on ipaserver)</strong> — {{ portal_url_for_context(ctx.identity.ipa_ui_url, ctx) }}</li>
           {% endif %}
         </ul>
         <h2 class="section-title" style="margin-top:1rem">PostgreSQL</h2>
@@ -1237,12 +1229,7 @@
         <h2 class="section-title" style="margin-top:1rem">Data services &amp; related URLs</h2>
         <ul class="clean">
           {% for link in ctx.data_services.links %}
-          {% set _link_host = link.url | default('') | regex_replace('^https?://', '') | regex_replace('/.*', '') | regex_replace(':.*', '') %}
-          {% set _link_pub = inventory_public_ip_for_fqdn(ctx, _link_host) %}
-          {% set _link_priv = inventory_private_ip_for_fqdn(ctx, _link_host) %}
-          {% set _link_scheme = link.url.split('://')[0] if '://' in link.url else 'http' %}
-          {% set _link_port = link.url.split(':')[-1] | regex_replace('/.*', '') if '://' in link.url else '' %}
-          <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — {{ portal_url_fqdn_pubip(link.url, _link_pub, _link_port, _link_scheme, _link_priv, _portal_cluster_domain, _portal_caddy_public_base) }}</li>
+          <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — {{ portal_url_for_context(link.url, ctx) }}</li>
           {% endfor %}
         </ul>
         {% endif %}
@@ -1250,7 +1237,7 @@
         <h2 class="section-title" style="margin-top:1rem">Additional links</h2>
         <ul class="clean">
           {% for link in ctx.extra_links %}
-          <li><strong>{{ link.name }}</strong> — <a target="_blank" rel="noopener noreferrer" href="{{ link.url }}">{{ link.url }}</a></li>
+          <li><strong>{{ link.name }}</strong> — {{ portal_url_for_context(link.url, ctx) }}</li>
           {% endfor %}
         </ul>
         {% endif %}
@@ -1261,19 +1248,27 @@
     <details class="panel">
       <summary><span class="summary-main"><h2 class="section-title">Monitoring stack (on ops host)</h2></span>{{ panel_chevron | safe }}</summary>
       <div class="panel-body">
-        <p class="sub">Prefer Caddy lab vhosts when DNS is configured; direct host ports <code>{{ monitoring_grafana_host_port | default(3000) }}</code>, <code>{{ monitoring_prometheus_host_port | default(9090) }}</code>, <code>{{ monitoring_alertmanager_host_port | default(9093) }}</code>, and cAdvisor <code>{{ monitoring_cadvisor_host_port | default(8089) }}</code> work without Caddy; path routes on <code>:{{ deployment_portal_http_port | default(81) }}</code> remain available.</p>
-        <ul class="clean">
-          <li><strong>Grafana</strong> — <a href="{{ grafana_tile_url }}" target="_blank" rel="noopener noreferrer">{{ grafana_tile_url }}</a> <span class="badge">host :{{ monitoring_grafana_host_port | default(3000) }}</span></li>
-          <li><strong>Prometheus</strong> — <a href="{{ prometheus_tile_url }}" target="_blank" rel="noopener noreferrer">{{ prometheus_tile_url }}</a> <span class="badge">host :{{ monitoring_prometheus_host_port | default(9090) }}</span></li>
-          <li><strong>Alertmanager</strong> — <a href="{{ alertmanager_tile_url }}" target="_blank" rel="noopener noreferrer">{{ alertmanager_tile_url }}</a> <span class="badge">host :{{ monitoring_alertmanager_host_port | default(9093) }}</span></li>
-          <li><strong>cAdvisor</strong> — <a href="{{ cadvisor_tile_url }}" target="_blank" rel="noopener noreferrer">{{ cadvisor_tile_url }}</a> <span class="badge">host port {{ monitoring_cadvisor_host_port | default(8089) }}</span></li>
-          {% if ctx.monitoring.grafana_path_url | default('') | length > 0 %}
-          <li><strong>Caddy path fallbacks</strong> — Grafana <a href="{{ ctx.monitoring.grafana_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.grafana_path_url }}</a>;
-            Prometheus <a href="{{ ctx.monitoring.prometheus_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.prometheus_path_url }}</a>;
-            Alertmanager <a href="{{ ctx.monitoring.alertmanager_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.alertmanager_path_url }}</a>;
-            cAdvisor <a href="{{ ctx.monitoring.cadvisor_path_url }}" target="_blank" rel="noopener noreferrer">{{ ctx.monitoring.cadvisor_path_url }}</a></li>
-          {% endif %}
-        </ul>
+        <p class="sub">Each monitoring endpoint is listed once with its available Caddy, public-IP, and private-IP access paths.</p>
+        <div class="table-scroll">
+          <table class="portal-table">
+            <thead>
+              <tr><th>Service</th><th>Caddy</th><th>Public IP</th><th>Private IP</th></tr>
+            </thead>
+            <tbody>
+              {% for service in ['grafana', 'prometheus', 'alertmanager', 'cadvisor'] %}
+              {% set caddy_url = ctx.monitoring[service ~ '_caddy_url'] | default('') %}
+              {% set public_url = ctx.access.external[service ~ '_direct'] | default('') %}
+              {% set private_url = ctx.access.vpc[service ~ '_direct'] | default(ctx.access.primary[service ~ '_direct'] | default('')) %}
+              <tr>
+                <td><strong>{{ 'cAdvisor' if service == 'cadvisor' else service | capitalize }}</strong></td>
+                <td>{% if caddy_url | length > 0 %}<a href="{{ caddy_url }}" target="_blank" rel="noopener noreferrer">{{ caddy_url }}</a>{% else %}<span class="badge">—</span>{% endif %}</td>
+                <td>{% if public_url | length > 0 %}<a href="{{ public_url }}" target="_blank" rel="noopener noreferrer">{{ public_url }}</a>{% else %}<span class="badge">—</span>{% endif %}</td>
+                <td>{% if private_url | length > 0 %}<a href="{{ private_url }}" target="_blank" rel="noopener noreferrer">{{ private_url }}</a>{% else %}<span class="badge">—</span>{% endif %}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
     </details>
     {% endif %}
@@ -1430,15 +1425,20 @@
       <button type="button" class="help-close-btn" id="portal-help-close" aria-label="Close help">Close</button>
     </div>
     <div class="help-dialog-inner">
-      <p class="sub"><strong>Quick open</strong> — tiles link to Cloudera Manager, pgAdmin, monitoring, FreeIPA (modern and legacy via Caddy when configured), ECS, and this portal.</p>
+      <p class="sub"><strong>Quick open</strong> — tiles link to Cloudera Manager, pgAdmin, monitoring, FreeIPA (modern and legacy via Caddy when configured), ECS, and this portal. Filter tiles by name or description; press <code>/</code> to focus the filter and <code>Esc</code> to clear it.</p>
       <p class="sub"><strong>Health snapshot</strong> — Cloudera Manager service health from the last portal refresh (<code>35_refresh_deployment_portal.yml</code>); Prometheus target count may poll in-browser when path routes are enabled.</p>
-      <p class="sub"><strong>Operator access</strong> — lab credentials and PEM downloads rendered at sync from Ansible group_vars (not stored in git). Expand <strong>Default lab credentials</strong> for a short summary; full per-service URLs are in the panel tables and <code>operator-credentials.json</code>. Treat as sensitive; restrict network access.</p>
-      <p class="sub"><strong>Endpoints &amp; network access</strong> — consolidated URLs with inventory hostnames; private-lab vs public/VPC tiers match your access profile.</p>
+      <p class="sub"><strong>Page navigation</strong> — expand or collapse all main sections together, use the fixed arrows to jump to either end, and use the top progress bar to track your position.</p>
+      <p class="sub"><strong>Operator access</strong> — lab credentials and PEM downloads rendered at sync from Ansible group_vars (not stored in git). Service URLs live in their relevant platform sections and in <code>operator-credentials.json</code>. Treat as sensitive; restrict network access.</p>
+      <p class="sub"><strong>Network access</strong> — public/private addressing and access-profile facts without repeating service URLs.</p>
       <p class="sub"><strong>Host inventory &amp; planned roles</strong> — Ansible groups, addresses, inferred CDP/monitoring placement; cluster SSH PEM downloads appear in the Host inventory header when key export is enabled.</p>
       <p class="sub"><strong>Downloads security</strong> — when <code>deployment_portal_basic_auth_enabled</code> is true, files under <code>/downloads</code> (including SSH keys) require HTTP basic auth. Prefer auth on before exposing PEMs.</p>
       <p class="sub"><strong>FreeIPA legacy UI</strong> — use the Caddy <code>ipa.*</code> vhost (<code>/ipa/ui</code>) so browsers do not need <code>/etc/hosts</code> for the ipaserver FQDN; direct <code>https://&lt;ipaserver-fqdn&gt;</code> still needs lab DNS.</p>
     </div>
   </dialog>
+  <div class="page-jump" aria-label="Page navigation">
+    <button type="button" id="page-jump-top" title="Jump to top" aria-label="Jump to top">&uarr;</button>
+    <button type="button" id="page-jump-bottom" title="Jump to bottom" aria-label="Jump to bottom">&darr;</button>
+  </div>
   <footer class="site-footer">
     <div>Portal developed by <strong>{{ ctx.deployment.portal_owner_display | default('Kuldeep Sahu') }}</strong></div>
     <div class="footer-links">
@@ -1450,6 +1450,99 @@
   </footer>
   <script>
   (function () {
+    var authAction = document.getElementById('portal-auth-action');
+    if (authAction) {
+      var authenticated = document.cookie.split(';').some(function (cookie) {
+        return cookie.trim() === 'portal_authenticated=1';
+      });
+      if (authenticated) {
+        authAction.textContent = 'Logout';
+        authAction.title = 'Clear portal download authentication';
+        authAction.href = '#logout';
+        authAction.addEventListener('click', function (event) {
+          event.preventDefault();
+          document.cookie = 'portal_authenticated=; Path=/; Max-Age=0; SameSite=Lax';
+          fetch(authAction.dataset.loginUrl, {
+            cache: 'no-store',
+            headers: { Authorization: 'Basic ' + btoa('logout:logout') }
+          }).catch(function (error) {
+            console.debug('Portal logout request could not be completed', error);
+          }).finally(function () {
+            window.location.reload();
+          });
+        });
+      }
+    }
+
+    var jumpTop = document.getElementById('page-jump-top');
+    var jumpBottom = document.getElementById('page-jump-bottom');
+    var scrollProgress = document.getElementById('scroll-progress');
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var scrollBehavior = reduceMotion ? 'auto' : 'smooth';
+    if (jumpTop) {
+      jumpTop.addEventListener('click', function () {
+        window.scrollTo({ top: 0, behavior: scrollBehavior });
+      });
+    }
+    if (jumpBottom) {
+      jumpBottom.addEventListener('click', function () {
+        window.scrollTo({ top: document.documentElement.scrollHeight, behavior: scrollBehavior });
+      });
+    }
+    function updateScrollControls() {
+      var maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      var progress = maxScroll ? Math.min(1, window.scrollY / maxScroll) : 1;
+      if (scrollProgress) {
+        scrollProgress.style.transform = 'scaleX(' + progress + ')';
+        scrollProgress.setAttribute('aria-valuenow', String(Math.round(progress * 100)));
+      }
+      if (jumpTop) jumpTop.disabled = window.scrollY <= 1;
+      if (jumpBottom) jumpBottom.disabled = window.scrollY >= maxScroll - 1;
+    }
+    window.addEventListener('scroll', updateScrollControls, { passive: true });
+    window.addEventListener('resize', updateScrollControls);
+    updateScrollControls();
+
+    var serviceFilter = document.getElementById('service-filter');
+    var filterEmpty = document.getElementById('service-filter-empty');
+    if (serviceFilter) {
+      var serviceTiles = Array.prototype.slice.call(document.querySelectorAll('.quick-actions .tile'));
+      serviceFilter.addEventListener('input', function () {
+        var query = serviceFilter.value.trim().toLowerCase();
+        var visible = 0;
+        serviceTiles.forEach(function (tile) {
+          var matches = !query || tile.textContent.toLowerCase().indexOf(query) !== -1;
+          tile.hidden = !matches;
+          if (matches) visible += 1;
+        });
+        if (filterEmpty) filterEmpty.hidden = visible !== 0;
+      });
+      serviceFilter.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && serviceFilter.value) {
+          serviceFilter.value = '';
+          serviceFilter.dispatchEvent(new Event('input'));
+        }
+      });
+      document.addEventListener('keydown', function (event) {
+        var target = event.target;
+        var typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+        if (event.key === '/' && !typing) {
+          event.preventDefault();
+          serviceFilter.focus();
+        }
+      });
+    }
+
+    function setAllSections(open) {
+      document.querySelectorAll('main > details.panel').forEach(function (panel) {
+        panel.open = open;
+      });
+    }
+    var expandSections = document.getElementById('sections-expand');
+    var collapseSections = document.getElementById('sections-collapse');
+    if (expandSections) expandSections.addEventListener('click', function () { setAllSections(true); });
+    if (collapseSections) collapseSections.addEventListener('click', function () { setAllSections(false); });
+
     var helpDlg = document.getElementById('portal-help-dialog');
     var helpOpen = document.getElementById('portal-help-open');
     var helpClose = document.getElementById('portal-help-close');
