@@ -1,4 +1,5 @@
 {# Included per IP slug (public + optional private). Variable: caddy_vhost_urls #}
+{% set _ipa_caddy_origin = 'http://{http.request.host}' ~ (':' ~ (deployment_portal_http_port | int) if (deployment_portal_http_port | int) != 80 else '') %}
 http://{{ caddy_vhost_urls.portal.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
 {% include 'deployment_portal_Caddyfile_downloads_auth.inc.j2' %}
   @portal_static not path /downloads*
@@ -14,7 +15,15 @@ http://{{ caddy_vhost_urls.pgadmin.hostname }}{% if deployment_portal_http_port 
 }
 
 {% if deployment_portal_has_ipa | default(false) | bool %}
-{# FreeIPA via Caddy: cloudera-labs/openshift pattern (HTTP upstream, Host + Referer). Default / → modern UI; legacy /ipa/ui uses Labs Referer. Optional ipaserver HTML rewrites: deployment_portal_ipa_httpd_proxy_enabled + ipa_httpd_caddy_proxy.conf.j2. Direct https://ipaserver needs IPA DNS (_ldap._tcp SRV or hosts), not required for Caddy vhost URLs. #}
+{# FreeIPA via Caddy (cloudera-labs/openshift): HTTP upstream, Host + path-matched Referer, rewrite upstream Location to stay on ipa.* vhost.
+   Legacy /ipa/ui loads static assets under /ipa/js, /ipa/css, /ipa/config, /ipa/wsgi — not only /ipa/ui/*; fixed Referer /ipa/ui breaks those without /etc/hosts to ipaserver FQDN.
+   @ipa_api is ordered before @ipa_legacy so /ipa/xml* JSON-RPC keeps Accept-Encoding identity (no gzip stack).
+   Optional ipaserver HTML rewrites: deployment_portal_ipa_httpd_proxy_enabled + ipa_httpd_caddy_proxy.conf.j2.
+   Test on ops (PORT={{ deployment_portal_http_port }}, slug host {{ caddy_vhost_urls.ipa.hostname }}, upstream {{ deployment_portal_ipa_fqdn }}):
+     curl -sS -o /dev/null -w '%{http_code}\n' -H "Host: {{ caddy_vhost_urls.ipa.hostname }}" "http://127.0.0.1:{{ deployment_portal_http_port }}/ipa/ui"
+     curl -sS -o /dev/null -w '%{http_code}\n' -H "Host: {{ caddy_vhost_urls.ipa.hostname }}" "http://127.0.0.1:{{ deployment_portal_http_port }}/ipa/js/util.js"  # expect 200/301 like direct
+     curl -sS -o /dev/null -w '%{http_code}\n' -H "Host: {{ deployment_portal_ipa_fqdn }}" -H "Referer: https://{{ deployment_portal_ipa_fqdn }}/ipa/ui" "http://127.0.0.1/ipa/ui"
+#}
 http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
   redir / /ipa/modern-ui/ permanent
   {# JSON/XML-RPC: pass through without re-encoding; upstream may gzip — do not stack compressors. #}
@@ -30,13 +39,35 @@ http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | in
   handle @ipa_modern {
     reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
       header_up Host {{ deployment_portal_ipa_fqdn }}
-      header_up Referer https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/
+      header_up Referer https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}
+      @ipa_upstream_redirect header Location *
+      handle_response @ipa_upstream_redirect {
+        header >Location https://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
+        header >Location http://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
+      }
+    }
+  }
+  @ipa_legacy path /ipa/ui /ipa/ui/* /ipa/js /ipa/js/* /ipa/config /ipa/config/* /ipa/css /ipa/css/* /ipa/wsgi /ipa/wsgi/*
+  handle @ipa_legacy {
+    reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
+      header_up Host {{ deployment_portal_ipa_fqdn }}
+      header_up Referer https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}
+      @ipa_upstream_redirect header Location *
+      handle_response @ipa_upstream_redirect {
+        header >Location https://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
+        header >Location http://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
+      }
     }
   }
   handle {
     reverse_proxy http://{{ deployment_portal_ipa_fqdn }} {
       header_up Host {{ deployment_portal_ipa_fqdn }}
-      header_up Referer https://{{ deployment_portal_ipa_fqdn }}/ipa/ui
+      header_up Referer https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}
+      @ipa_upstream_redirect header Location *
+      handle_response @ipa_upstream_redirect {
+        header >Location https://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
+        header >Location http://{{ deployment_portal_ipa_fqdn }} {{ _ipa_caddy_origin }}
+      }
     }
   }
 }
