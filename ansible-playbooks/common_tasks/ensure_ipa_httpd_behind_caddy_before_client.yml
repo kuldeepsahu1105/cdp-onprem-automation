@@ -1,7 +1,7 @@
 ---
 # Playbook 16 (localhost play): resolve Caddy gate and build portal facts for IPA HTTPD on ipaserver.
-# Apply snippets on ipaserver via apply_ipa_httpd_behind_caddy_on_ipaserver.yml (dedicated play hosts: ipaserver).
-# Full PORTAL sync (10_setup_deployment_portal) also runs configure_ipa_httpd_behind_caddy.yml.
+# ipaserver play runs sync_ipa_httpd_caddy_proxy_state_on_ipaserver.yml (manage apply/remove + preflight).
+# Full PORTAL sync (10_setup_deployment_portal) runs manage_ipa_httpd_caddy_proxy_on_ipaserver.yml.
 
 - name: Resolve deployment portal Caddy gate for IPA HTTPD snippet
   ansible.builtin.import_tasks: resolve_deployment_portal_caddy_enabled.yml

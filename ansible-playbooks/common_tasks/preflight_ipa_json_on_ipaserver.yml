@@ -50,7 +50,8 @@
         (ipa_server_preflight_ipa_json.content | default('') | string)[:200]
         | replace('\n', ' ')
       }}.
-      Fix zz-ipa-caddy-proxy.conf (SUBSTITUTE only on /ipa/ui and /ipa/modern-ui), ipa-rewrite Caddy markers,
-      then apachectl configtest && systemctl reload httpd. Re-run playbook 16 or Jenkins PORTAL.
+      Re-run Jenkins PORTAL or playbook 16 (removes zz-ipa-caddy-proxy.conf and ipa-rewrite Caddy markers by default),
+      or set deployment_portal_ipa_httpd_proxy_enabled: true only if you need managed HTML rewrites.
+      Then apachectl configtest && systemctl reload httpd.
       See ansible-playbooks/docs/RUNBOOK.md.
   when: not (ipa_server_preflight_ipa_json_ok | default(false) | bool)

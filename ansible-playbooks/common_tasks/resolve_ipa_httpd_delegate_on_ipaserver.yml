@@ -1,0 +1,61 @@
+---
+# Shared ipaserver Apache paths for configure/remove IPA HTTPD Caddy proxy tasks.
+# Sets ipa_httpd_delegate_host, ipa_httpd_conf_d_effective, ipa_httpd_service_name, ipa_server_configured.
+
+- name: Resolve ipaserver OS family for delegated IPA HTTPD tasks
+  ansible.builtin.set_fact:
+    ipa_httpd_delegate_host: "{{ groups['ipaserver'][0] }}"
+    ipa_httpd_os_family: >-
+      {{
+        hostvars[groups['ipaserver'][0]].ansible_os_family
+        | default(ansible_os_family | default('RedHat'))
+      }}
+
+- name: Set IPA Apache paths from ipaserver OS family
+  ansible.builtin.set_fact:
+    ipa_httpd_conf_d_dir: "{{ os_vars[ipa_httpd_os_family].web_server_conf_d_dir }}"
+    ipa_httpd_service_name: "{{ os_vars[ipa_httpd_os_family].web_server_service }}"
+    ipa_httpd_package_names: "{{ os_vars[ipa_httpd_os_family].ipa_httpd_packages }}"
+
+- name: Probe FreeIPA ipa-rewrite.conf location (RHEL httpd vs Debian apache2 layouts)
+  ansible.builtin.stat:
+    path: "{{ item }}/ipa-rewrite.conf"
+  loop:
+    - "{{ ipa_httpd_conf_d_dir }}"
+    - /etc/httpd/conf.d
+    - /etc/apache2/conf.d
+  register: ipa_rewrite_conf_probe
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - groups.get('ipaserver', []) | length > 0
+
+- name: Choose effective FreeIPA Apache conf.d directory on ipaserver
+  ansible.builtin.set_fact:
+    ipa_httpd_conf_d_effective: >-
+      {{
+        (
+          ipa_rewrite_conf_probe.results
+          | default([])
+          | selectattr('stat.exists', 'defined')
+          | selectattr('stat.exists')
+          | map(attribute='item')
+          | list
+          | first
+        )
+        | default(ipa_httpd_conf_d_dir, true)
+      }}
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - groups.get('ipaserver', []) | length > 0
+
+- name: Check whether FreeIPA server is configured on ipaserver
+  ansible.builtin.stat:
+    path: /etc/ipa/default.conf
+  register: ipa_server_configured
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - groups.get('ipaserver', []) | length > 0

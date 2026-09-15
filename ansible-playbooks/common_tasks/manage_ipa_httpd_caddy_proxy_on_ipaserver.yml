@@ -1,0 +1,10 @@
+---
+# Apply or remove ipaserver HTTPD Caddy proxy snippets per deployment_portal_ipa_httpd_proxy_enabled.
+
+- name: Apply FreeIPA HTTPD snippets for deployment portal Caddy proxy (opt-in)
+  ansible.builtin.import_tasks: configure_ipa_httpd_behind_caddy.yml
+  when: deployment_portal_ipa_httpd_proxy_enabled | default(false) | bool
+
+- name: Remove FreeIPA HTTPD Caddy proxy snippets (default Caddy-only UI path)
+  ansible.builtin.import_tasks: remove_ipa_httpd_caddy_proxy_on_ipaserver.yml
+  when: not (deployment_portal_ipa_httpd_proxy_enabled | default(false) | bool)
