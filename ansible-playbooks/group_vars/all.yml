@@ -236,11 +236,17 @@ cdh_repo_product: "cdh{{ cdh_version.split('.')[0] }}"
 parcel_repo_public: "{{ cm_repo_public_base_url }}/{{ cdh_repo_product }}/{{ cdh_version }}/parcels/"
 parcel_repo_internal: "http://{{ cm_repo_mirror_host }}/cloudera-repos/{{ cdh_repo_product }}/{{ cdh_version }}/"
 parcel_repo: "{{ parcel_repo_internal if cm_repo_source == 'internal' else parcel_repo_public }}"
-# CM wizard uses {latest} path segment (not literal "latest"); pinned cdh_version URL stays explicit.
-# CM Save & Verify rejects {latest} in REMOTE_PARCEL_REPO_URLS (illegal URI). Use pinned versions only unless your CM build accepts the segment.
+# Pinned cdh_version / ecs_pvc_ds_version / CSD versions are the supported REMOTE_PARCEL_REPO_URLS shape.
+# Do not use `{latest}` in URLs — that was a mistaken CM-wizard placeholder, not an archive.cloudera.com path (CM Save & Verify: illegal URI).
+# Optional float: literal archive segment `latest` → …/cdh7/latest/parcels/ (not …/{latest}/parcels/). Default off — use pinned versions in labs.
 cm_parcel_repo_include_latest: false
-cm_parcel_repo_latest_segment: "{latest}"
+cm_parcel_repo_latest_segment: latest
 parcel_repo_latest_public: "{{ cm_repo_public_base_url }}/{{ cdh_repo_product }}/{{ cm_parcel_repo_latest_segment }}/parcels/"
+# CSD archive dirs (also built in scm_csd_parcel_repo_urls.j2); DATAVIZ yum stays redhat8 on RHEL9 CM hosts per Cloudera archive layout.
+cdv_parcel_yum_repo_url: "{{ cm_repo_public_base_url }}/cdv/{{ cdv_version }}/{{ cdv_parcel_yum_redhat_segment }}/yum"
+cdv_parcel_yum_redhat_segment: redhat8
+cfm_parcel_yum_tars_repo_url: "{{ cm_repo_public_base_url }}/cfm2/{{ cfm_version }}/{{ cfm_parcel_yum_redhat_segment }}/yum/tars/parcel"
+cfm_parcel_yum_redhat_segment: redhat9
 
 # Cloudera Manager REMOTE_PARCEL_REPO_URLS (configure_cm_parcel_repo_api.yml + scm.j2 legacy template)
 cm_remote_parcel_repo_intel_mkl_url: "https://parcels.repos.intel.com/mkl/latest"
@@ -267,7 +273,7 @@ scm_parcel_repositories: >-
     + (
       [parcel_repo_latest_public]
       if (
-        (cm_parcel_repo_include_latest | default(true) | bool)
+        (cm_parcel_repo_include_latest | default(false) | bool)
         and (cm_repo_source | default('public')) == 'public'
       )
       else []
@@ -276,7 +282,7 @@ scm_parcel_repositories: >-
     + (
       [ecs_parcel_repo_latest_url]
       if (
-        (cm_parcel_repo_include_latest | default(true) | bool)
+        (cm_parcel_repo_include_latest | default(false) | bool)
         and (cm_parcel_repo_include_ecs_parcel | default(true) | bool)
         and (cm_repo_source | default('public')) == 'public'
       )
