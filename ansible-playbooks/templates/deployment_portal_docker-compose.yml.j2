@@ -10,6 +10,10 @@ services:
     depends_on:
       pgadmin:
         condition: service_healthy
+{% if deployment_portal_basic_auth_enabled | default(false) | bool %}
+      portal-auth:
+        condition: service_healthy
+{% endif %}
     ports:
       - "0.0.0.0:${DEPLOYMENT_PORTAL_HTTP_PORT}:${DEPLOYMENT_PORTAL_HTTP_PORT}/tcp"
 {% if deployment_portal_ipa_https_enabled | default(true) | bool %}
@@ -25,6 +29,26 @@ services:
     networks:
       - deployment_portal
 
+{% if deployment_portal_basic_auth_enabled | default(false) | bool %}
+  portal-auth:
+    image: ${DEPLOYMENT_PORTAL_AUTH_IMAGE}
+    container_name: ${DEPLOYMENT_PORTAL_AUTH_CONTAINER}
+    restart: unless-stopped
+    command: ["python3", "/app/deployment_portal_auth_server.py"]
+    environment:
+      PORTAL_SESSION_TTL_SECONDS: ${DEPLOYMENT_PORTAL_SESSION_TTL_SECONDS}
+    volumes:
+      - ${DEPLOYMENT_PORTAL_CONFIG_DIR}/deployment_portal_auth_server.py:/app/deployment_portal_auth_server.py:ro,z
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - deployment_portal
+
+{% endif %}
   pgadmin:
     image: ${DEPLOYMENT_PORTAL_PGADMIN_IMAGE}
     container_name: ${DEPLOYMENT_PORTAL_PGADMIN_CONTAINER}
