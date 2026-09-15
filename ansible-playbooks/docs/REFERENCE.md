@@ -566,7 +566,9 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/join_ad_realm.yml` | AD `realm join` |
 | `common_tasks/join_freeipa_client.yml` | IPA client enrollment (detect partial state, optional uninstall, preflight, `ipa-client-install`, fail diagnostics) |
 | `common_tasks/detect_ipa_client_install_state.yml` | `default.conf` vs partial client debris (`/var/lib/ipa-client/sysrestore`, `/etc/ipa` fragments) before enroll |
-| `common_tasks/preflight_ipa_client_install.yml` | Hostname/DNS/`getent` and HTTPS `/ipa/json` probe (fails early on HTML login/404) before `ipa-client-install` on hosts without `/etc/ipa/default.conf` |
+| `common_tasks/preflight_ipa_client_install.yml` | Hostname/DNS/`getent` and HTTPS `/ipa/json` probe (accepts 401 with JSON; fails on HTML login/404) before `ipa-client-install` on hosts without `/etc/ipa/default.conf` |
+| `common_tasks/ensure_ipa_httpd_behind_caddy_before_client.yml` | Playbook **16**: rebuild portal IPA facts and run **`configure_ipa_httpd_behind_caddy.yml`** on ipaserver before client enroll when Caddy vhosts are enabled |
+| `common_tasks/configure_ipa_httpd_behind_caddy.yml` | **`zz-ipa-caddy-proxy.conf`**, **`ipa-rewrite.conf`** Caddy patches, **`apachectl configtest`**, **`systemctl reload httpd`** on ipaserver (via PORTAL sync or play **16**) |
 | `common_tasks/ensure_ipa_kdc_services.yml` | `ipactl start` + krb5kdc health on ipaserver |
 | `common_tasks/detect_ipa_server_install_state.yml` | `default.conf`, partial debris, `ipactl` / `ipa-server-status` before `ipa-server-install` |
 | `common_tasks/recover_ipa_server_install.yml` | Deeper `ipa-server-install --uninstall` + path cleanup (via `ipa_deep_recovery.yml`, not default playbook **12**) |
