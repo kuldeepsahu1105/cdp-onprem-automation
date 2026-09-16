@@ -1,0 +1,76 @@
+---
+# Reconcile a CM service or role-config-group config endpoint.
+# Required vars: cm_config_endpoint, cm_config_desired
+# Optional: cm_config_secret_names, base_cluster_force_secret_update
+
+- name: Read {{ cm_config_display_name }} configuration
+  ansible.builtin.uri:
+    url: "{{ cm_config_endpoint }}?view=full"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: cm_config_current
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Find {{ cm_config_display_name }} configuration changes
+  ansible.builtin.set_fact:
+    cm_config_updates: >-
+      {%- set updates = [] -%}
+      {%- for desired in cm_config_desired | dict2items -%}
+        {%- set matches =
+          cm_config_current.json['items']
+          | default([])
+          | selectattr('name', 'equalto', desired.key)
+          | list
+        -%}
+        {%- set current = matches[0] if matches | length > 0 else {} -%}
+        {%- set secret = desired.key in (cm_config_secret_names | default([])) -%}
+        {%- if
+          (
+            secret
+            and (
+              base_cluster_force_secret_update | default(false) | bool
+              or current.get('value', '') != 'REDACTED'
+            )
+          )
+          or (
+            not secret
+            and current.get('value', '') | string != desired.value | string
+          )
+        -%}
+          {%- set _ = updates.append({'name': desired.key, 'value': desired.value | string}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ updates }}
+  no_log: true
+
+- name: Update {{ cm_config_display_name }} configuration
+  ansible.builtin.uri:
+    url: "{{ cm_config_endpoint }}"
+    method: PUT
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body:
+      items: "{{ cm_config_updates }}"
+    status_code: [200, 204]
+    follow_redirects: none
+  when: cm_config_updates | length > 0
+  changed_when: true
+  no_log: true
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Track required cluster configuration changes
+  ansible.builtin.set_fact:
+    base_cluster_required_config_changed: >-
+      {{
+        base_cluster_required_config_changed | default(false) | bool
+        or cm_config_updates | length > 0
+      }}
