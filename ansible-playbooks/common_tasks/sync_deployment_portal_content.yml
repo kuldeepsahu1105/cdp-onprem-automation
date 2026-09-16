@@ -140,20 +140,6 @@
     mode: "0600"
   register: portal_env_render
 
-- name: Install portal session service
-  ansible.builtin.copy:
-    src: deployment_portal_auth_server.py
-    dest: "{{ deployment_portal_config_dir }}/deployment_portal_auth_server.py"
-    mode: "0644"
-  register: portal_auth_service_render
-  when: deployment_portal_basic_auth_enabled | default(false) | bool
-
-- name: Remove portal session service when authentication is disabled
-  ansible.builtin.file:
-    path: "{{ deployment_portal_config_dir }}/deployment_portal_auth_server.py"
-    state: absent
-  when: not (deployment_portal_basic_auth_enabled | default(false) | bool)
-
 - name: Render deployment portal Docker Compose file
   ansible.builtin.template:
     src: deployment_portal_docker-compose.yml.j2
@@ -214,19 +200,6 @@
     'Creating' in (portal_compose_up.stdout ~ portal_compose_up.stderr)
     or 'Starting' in (portal_compose_up.stdout ~ portal_compose_up.stderr)
     or 'Recreating' in (portal_compose_up.stdout ~ portal_compose_up.stderr)
-
-- name: Recreate portal auth service when its implementation changed
-  ansible.builtin.command:
-    argv: >-
-      {{
-        deployment_portal_compose_argv
-        + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', 'portal-auth']
-      }}
-  when:
-    - deployment_portal_basic_auth_enabled | default(false) | bool
-    - portal_auth_service_render is changed
-  register: portal_auth_recreate
-  changed_when: true
 
 - name: Recreate Caddy when Caddyfile changed
   ansible.builtin.command:
