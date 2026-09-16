@@ -8,18 +8,7 @@
 ---
 - import_playbook: ensure_collections.yml
 
-- name: Update /etc/resolv.conf on all hosts
-  hosts: all
-  become: yes
-  tasks:
-    - name: Configure DNS for identity provider
-      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
-
-    - name: Wait for 15 seconds
-      ansible.builtin.pause:
-        seconds: 15
-
-- name: Install FreeIPA client packages
+- name: Install FreeIPA client packages before DNS cutover
   hosts: all:!ipaserver
   become: yes
   tasks:
@@ -27,6 +16,20 @@
       ansible.builtin.package:
         name: "{{ os_vars[ansible_os_family].freeipa_client_packages }}"
         state: present
+      register: freeipa_client_package_install
+      retries: 3
+      delay: 10
+      until: freeipa_client_package_install is succeeded
+
+- name: Update /etc/resolv.conf on all hosts
+  hosts: all
+  become: yes
+  tasks:
+    - name: Configure DNS for identity provider
+      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
+
+    - name: Verify identity and external DNS after resolver cutover
+      ansible.builtin.import_tasks: common_tasks/verify_identity_dns.yml
 
 - name: Enroll nodes as IPA clients
   hosts: all:!ipaserver

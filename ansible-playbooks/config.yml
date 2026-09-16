@@ -50,6 +50,10 @@ ad_ldap_group_search_base: "OU=Groups,DC=corp,DC=example,DC=com"
 # Optional DNS additions applied with the environment-specific defaults.
 extra_dns_search_domains: []
 extra_dns_nameservers: []
+# Empty selects the AWS RHUI hostname on RHEL/AWS, archive.cloudera.com on
+# other AWS hosts, and skips the external probe outside AWS. Set "off" to
+# disable explicitly or provide a resolvable internal mirror hostname.
+identity_dns_external_probe_host: ""
 
 # -----------------------------------------------------------------------------
 # 2. Product versions and repositories

@@ -13,6 +13,9 @@ allowed_keys:
   - ad_ldap_bind_dn
   - ad_ldap_user_search_base
   - ad_ldap_group_search_base
+  - identity_dns_external_probe_host
+  - identity_dns_verify_retries
+  - identity_dns_verify_delay
 
   # Passwords (ansible group_vars — not Jenkins/Terraform)
   - ipaadmin_password
