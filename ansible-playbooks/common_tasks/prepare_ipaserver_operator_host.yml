@@ -81,10 +81,13 @@
     mode: "0600"
 
 - name: IPAServer operator — use private addresses for in-VPC Ansible connections
-  ansible.builtin.replace:
+  ansible.builtin.lineinfile:
     path: /root/inventory.ini
-    regexp: '^(\s*[^#;\s][^\s]*\s+[^\r\n]*?\bansible_host=)\S+([^\r\n]*?\bprivate_ip=([^\s#]+)[^\r\n]*)$'
-    replace: '\g<1>\g<3>\g<2>'
+    regexp: '^({{ item | regex_escape }}[ \t]+.*\bansible_host=)\S+(.*)$'
+    line: '\g<1>{{ hostvars[item].private_ip }}\g<2>'
+    backrefs: true
+  loop: "{{ groups['all'] | default([]) }}"
+  when: hostvars[item].private_ip | default('') | trim | length > 0
 
 - name: IPAServer operator — copy private key to root home
   ansible.builtin.copy:
@@ -111,26 +114,59 @@
       [ssh_connection]
       pipelining = True
 
-- name: IPAServer operator — verify installed commands and files
+- name: IPAServer operator — verify installed commands
   ansible.builtin.command:
     argv:
       - /bin/bash
       - -c
-      - >-
-        ansible --version >/dev/null
-        && psql --version >/dev/null
-        && test -s /root/inventory.ini
-        && test -s /root/sshkey.pem
-        && test -s /root/ansible.cfg
-        && test "$(stat -c %a /root/sshkey.pem)" = "400"
-        && ! awk '
-          /^[^#;]/ {
-            public=""; private="";
-            for (i=1; i<=NF; i++) {
-              if ($i ~ /^ansible_host=/) { split($i, a, "="); public=a[2] }
-              if ($i ~ /^private_ip=/) { split($i, a, "="); private=a[2] }
-            }
-            if (private != "" && public != private) exit 1
-          }
-        ' /root/inventory.ini
+      - ansible --version >/dev/null && psql --version >/dev/null
   changed_when: false
+
+- name: IPAServer operator — inspect installed deployment files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /root/inventory.ini
+    - /root/sshkey.pem
+    - /root/ansible.cfg
+  register: _ipaserver_operator_file_stats
+
+- name: IPAServer operator — require installed deployment files
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false) | bool
+      - item.stat.isreg | default(false) | bool
+      - item.stat.size | default(0) | int > 0
+      - item.stat.mode == ('0400' if item.item == '/root/sshkey.pem' else '0600')
+    fail_msg: >-
+      {{ item.item }} is missing, empty, not a regular file, or has mode
+      {{ item.stat.mode | default('unknown') }}; expected
+      {{ '0400' if item.item == '/root/sshkey.pem' else '0600' }}.
+  loop: "{{ _ipaserver_operator_file_stats.results }}"
+
+- name: IPAServer operator — find inventory hosts not using their private IP
+  ansible.builtin.shell: |
+    awk '
+      /^[^#;\[]/ {
+        host=$1; ansible_host=""; private_ip="";
+        for (i=2; i<=NF; i++) {
+          if ($i ~ /^ansible_host=/) { split($i, value, "="); ansible_host=value[2] }
+          if ($i ~ /^private_ip=/) { split($i, value, "="); private_ip=value[2] }
+        }
+        if (private_ip != "" && ansible_host != private_ip) {
+          print host ": ansible_host=" ansible_host ", private_ip=" private_ip
+        }
+      }
+    ' /root/inventory.ini
+  args:
+    executable: /bin/bash
+  register: _ipaserver_operator_inventory_mismatches
+  changed_when: false
+
+- name: IPAServer operator — require private IPs in local inventory
+  ansible.builtin.assert:
+    that:
+      - _ipaserver_operator_inventory_mismatches.stdout | trim | length == 0
+    fail_msg: |-
+      /root/inventory.ini still contains non-private Ansible targets:
+      {{ _ipaserver_operator_inventory_mismatches.stdout }}
