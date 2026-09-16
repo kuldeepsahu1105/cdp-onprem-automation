@@ -669,6 +669,8 @@ cm_srvr_sudo_user: "root" # Set the default SSH user for key-based/password-base
 use_freeipa_for_crt_mgmt: "{{ (identity_provider_effective == 'freeipa') | bool }}"
 # Run generateCmca even when CM API reports Auto-TLS already configured (repair / re-apply)
 cm_autotls_force_run: false
+# Maximum time for scm-server to open HTTPS :7183 after generateCmca and restart.
+cm_autotls_https_startup_timeout: 600
 # After Auto-TLS CM restart in 27: agent reconcile batch size ("100%" = all hosts, "25%" or "1" = serial waves).
 cm_agent_reconcile_serial: "100%"
 # 27_setup_cm_autotls / resolve_cm_connect_host: skip multi-line "connection target" when probe context already resolved

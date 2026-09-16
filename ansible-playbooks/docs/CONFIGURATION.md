@@ -177,6 +177,7 @@ template validation rather than being silently ignored.
 |---|---|---|
 | `autotls_enabled` | Boolean; `true` | Enables CM Auto-TLS orchestration. `false` leaves CM on its existing transport. |
 | `cm_autotls_force_run` | Boolean; `false` | Forces `generateCmca` even when CM reports Auto-TLS configured. Use only for intentional certificate regeneration. |
+| `cm_autotls_https_startup_timeout` | Integer seconds; `600` | Maximum wait for CM HTTPS port `7183` after `generateCmca` and the scm-server restart. |
 | `use_freeipa_for_crt_mgmt` | Boolean/expression; derived from identity | When true, requires and trusts `/etc/ipa/ca.crt` during Auto-TLS. Set false for CM-generated CA without FreeIPA trust. |
 | `cm_private_key_path` | Path or empty | Auto-TLS SSH-key provisioning key. Empty auto-discovers `sshkey.pem` or the Ansible SSH key. |
 | `cm_priv_key_passphrase` | Secret string or empty | Passphrase for `cm_private_key_path`; leave empty for an unencrypted key. Prefer Vault/secret input. |
