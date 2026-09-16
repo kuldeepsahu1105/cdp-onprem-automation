@@ -80,6 +80,12 @@
     group: root
     mode: "0600"
 
+- name: IPAServer operator — use private addresses for in-VPC Ansible connections
+  ansible.builtin.replace:
+    path: /root/inventory.ini
+    regexp: '^(\s*[^#;\s][^\s]*\s+[^\r\n]*?\bansible_host=)\S+([^\r\n]*?\bprivate_ip=([^\s#]+)[^\r\n]*)$'
+    replace: '\g<1>\g<3>\g<2>'
+
 - name: IPAServer operator — copy private key to root home
   ansible.builtin.copy:
     src: "{{ _ipaserver_private_key_source }}"
@@ -88,6 +94,22 @@
     group: root
     mode: "0400"
   no_log: true
+
+- name: IPAServer operator — configure Ansible defaults for root
+  ansible.builtin.copy:
+    dest: /root/ansible.cfg
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      [defaults]
+      inventory = /root/inventory.ini
+      private_key_file = /root/sshkey.pem
+      force_valid_group_names = ignore
+      interpreter_python = auto_silent
+
+      [ssh_connection]
+      pipelining = True
 
 - name: IPAServer operator — verify installed commands and files
   ansible.builtin.command:
@@ -99,5 +121,16 @@
         && psql --version >/dev/null
         && test -s /root/inventory.ini
         && test -s /root/sshkey.pem
+        && test -s /root/ansible.cfg
         && test "$(stat -c %a /root/sshkey.pem)" = "400"
+        && ! awk '
+          /^[^#;]/ {
+            public=""; private="";
+            for (i=1; i<=NF; i++) {
+              if ($i ~ /^ansible_host=/) { split($i, a, "="); public=a[2] }
+              if ($i ~ /^private_ip=/) { split($i, a, "="); private=a[2] }
+            }
+            if (private != "" && public != private) exit 1
+          }
+        ' /root/inventory.ini
   changed_when: false
