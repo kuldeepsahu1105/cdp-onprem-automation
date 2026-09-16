@@ -151,11 +151,12 @@ entries must be complete `.jar` URLs. See
 | `ozone` | `true` | Installs Ozone object storage roles. |
 | `yarn` | `true` | Installs YARN resource management. |
 | `tez` | `true` | Enables the Tez execution engine. |
+| `spark3` | `true` | Installs Spark 3 on YARN with a History Server and client gateways. |
 | `hive` | `true` | Installs Hive services and metadata integration. |
 | `hive_on_tez` | `true` | Configures Hive to use Tez; requires Hive and Tez. |
 | `hbase` | `true` | Installs HBase; requires ZooKeeper and HDFS. |
 | `hue` | `true` | Installs the Hue web application. |
-| `iceberg` | `false` | Enables Iceberg-related service/configuration where supported. |
+| `iceberg` | `true` | Validates the Hive, Impala, and Spark 3 services that provide Iceberg support in CDP 7.3.x; Iceberg is not a standalone CM service. |
 | `replication` | `false` | Enables replication service roles. |
 | `impala` | `true` | Installs Impala query services. |
 | `kafka` | `true` | Installs Kafka brokers. |

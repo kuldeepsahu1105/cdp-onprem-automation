@@ -69,7 +69,7 @@ CDH and ECS **deploy versions** are applied by Ansible (`ansible-playbooks/confi
 
 ## CDH base cluster deployment
 
-The CDP **base cluster** is deployed by Ansible playbook `31_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, CMS, LDAP, and Kerberos are in place. By default it installs HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, and Ranger. Optional services (NiFi, NiFi Registry, DataViz, Phoenix, Solr) are off unless enabled in `base_cluster_install_services`. Knox is on by default.
+The CDP **base cluster** is deployed by Ansible playbook `31_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, CMS, LDAP, and Kerberos are in place. By default it installs HDFS, Ozone, YARN, Tez, Spark 3 on YARN, Hive, Hive on Tez, HBase, Hue/Data Explorer, Impala, Kafka, ZooKeeper, Ranger, Atlas, Solr, Knox, and Core Settings. Iceberg support is provided through Hive, Impala, and Spark 3. Optional Phoenix, NiFi, NiFi Registry, and DataViz services are off unless enabled in `base_cluster_install_services`.
 
 ### Terraform instance groups (infrastructure)
 

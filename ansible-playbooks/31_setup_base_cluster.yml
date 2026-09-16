@@ -32,23 +32,41 @@
           Base cluster inventory groups '{{ base_cluster_master_group }}' and
           '{{ base_cluster_worker_group }}' must exist and contain hosts.
 
-    - name: Validate Hue requires Hive metastore (CDP 7+)
+    - name: Validate enabled base-cluster service dependencies
       ansible.builtin.assert:
         that:
-          - base_cluster_install_services.hive | default(true) | bool
+          - base_cluster_install_services[item.dependency] | default(false) | bool
         fail_msg: >-
-          Hue requires the Hive (HMS) service on CDP 7+. Enable base_cluster_install_services.hive
-          or disable hue.
-      when: base_cluster_install_services.hue | default(false) | bool
-
-    - name: Validate Hive on Tez requires Hive metastore service
-      ansible.builtin.assert:
-        that:
-          - base_cluster_install_services.hive | default(true) | bool
-        fail_msg: >-
-          Hive on Tez requires base_cluster_install_services.hive (hms_connector). Enable hive
-          or disable hive_on_tez.
-      when: base_cluster_install_services.hive_on_tez | default(false) | bool
+          base_cluster_install_services.{{ item.service }} requires
+          base_cluster_install_services.{{ item.dependency }}.
+      when: base_cluster_install_services[item.service] | default(false) | bool
+      loop:
+        - { service: yarn, dependency: hdfs }
+        - { service: yarn, dependency: zookeeper }
+        - { service: tez, dependency: yarn }
+        - { service: spark3, dependency: yarn }
+        - { service: hive, dependency: hdfs }
+        - { service: hive_on_tez, dependency: hive }
+        - { service: hive_on_tez, dependency: tez }
+        - { service: hbase, dependency: hdfs }
+        - { service: hbase, dependency: zookeeper }
+        - { service: hue, dependency: hive }
+        - { service: impala, dependency: hdfs }
+        - { service: impala, dependency: hive }
+        - { service: kafka, dependency: zookeeper }
+        - { service: atlas, dependency: hdfs }
+        - { service: atlas, dependency: hbase }
+        - { service: atlas, dependency: kafka }
+        - { service: atlas, dependency: solr }
+        - { service: ranger, dependency: solr }
+        - { service: solr, dependency: hdfs }
+        - { service: solr, dependency: zookeeper }
+        - { service: phoenix, dependency: hbase }
+        - { service: iceberg, dependency: hive }
+        - { service: iceberg, dependency: impala }
+        - { service: iceberg, dependency: spark3 }
+      loop_control:
+        label: "{{ item.service }} requires {{ item.dependency }}"
 
     - name: Set base master FQDN
       ansible.builtin.set_fact:
@@ -95,42 +113,41 @@
           Services to install:
           {{ base_cluster_spec.services | map(attribute='name') | list | join(', ') }}
 
-    - name: Validate Worker host template includes ZooKeeper Server when ZooKeeper is enabled
-      ansible.builtin.assert:
-        that:
-          - >-
-            (
-              base_cluster_spec.host_templates
-              | selectattr('name', 'equalto', 'Worker')
-              | first
-            ).role_groups
-            | selectattr('service', 'equalto', 'ZOOKEEPER')
-            | selectattr('type', 'equalto', 'SERVER')
-            | list
-            | length >= 1
-        fail_msg: >-
-          base_cluster_install_services.zookeeper is enabled but the Worker host template has no
-          ZOOKEEPER SERVER role group. In templates/base_cluster_cluster_spec.j2, role_groups[].service
-          must be the CM service type (ZOOKEEPER), not the service name (zookeeper).
-      when: base_cluster_install_services.zookeeper | default(true) | bool
+    - name: Identify host-template roles without declared base role groups
+      ansible.builtin.set_fact:
+        base_cluster_invalid_role_groups: >-
+          {%- set invalid = [] -%}
+          {%- for host_template in base_cluster_spec.host_templates -%}
+            {%- for assignment in host_template.role_groups | default([]) -%}
+              {%- set matching_services =
+                base_cluster_spec.services
+                | selectattr('type', 'equalto', assignment.service)
+                | list
+              -%}
+              {%- if
+                matching_services | length == 0
+                or (
+                  matching_services[0].role_groups | default([])
+                  | selectattr('type', 'equalto', assignment.type)
+                  | list
+                  | length == 0
+                )
+              -%}
+                {%- set _ = invalid.append(
+                  host_template.name ~ ':' ~ assignment.service ~ '/' ~ assignment.type
+                ) -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endfor -%}
+          {{ invalid }}
 
-    - name: Validate Worker host template includes Kafka Broker when Kafka is enabled
+    - name: Validate every host-template role has a declared base role group
       ansible.builtin.assert:
         that:
-          - >-
-            (
-              base_cluster_spec.host_templates
-              | selectattr('name', 'equalto', 'Worker')
-              | first
-            ).role_groups
-            | selectattr('service', 'equalto', 'KAFKA')
-            | selectattr('type', 'equalto', 'KAFKA_BROKER')
-            | list
-            | length >= 1
+          - base_cluster_invalid_role_groups | length == 0
         fail_msg: >-
-          base_cluster_install_services.kafka is enabled but the Worker host template has no
-          KAFKA KAFKA_BROKER role group.
-      when: base_cluster_install_services.kafka | default(true) | bool
+          Host-template roles missing matching service base role groups:
+          {{ base_cluster_invalid_role_groups | join(', ') }}.
 
     - name: Set remote parcel repository URL in Cloudera Manager (REST API)
       ansible.builtin.import_tasks: common_tasks/configure_cm_parcel_repo_api.yml
