@@ -459,6 +459,20 @@ complete successfully. CM can report a one-time setup command as
 reports that exact response as a skip and continues, but all other HTTP or
 command failures remain fatal.
 
+`base_cluster_enable_kerberos: true` makes playbook **31** Kerberize every base
+cluster it manages. After initial service setup succeeds, the playbook checks
+HDFS authentication. A cluster still using `simple` authentication is stopped,
+configured through CM's `configureForKerberos` command, issued fresh
+credentials, restarted, and refreshed. Completion is recorded only after CM
+reports `hadoop_security_authentication=kerberos`; already Kerberized clusters
+skip the transition. This leaves playbook **30** responsible only for KDC
+integration and account-manager credential import.
+
+New deployments use the default cluster name `CDP-base-cluster`. When that
+default is unchanged and a pre-V2 `CDH-Cluster` already exists, playbook **31**
+adopts the legacy cluster instead of creating a duplicate. Explicit custom
+cluster names never use this fallback.
+
 Kafka metadata is selected with `base_cluster_kafka_metadata_store`:
 `Zookeeper` (the automation default) omits KRaft roles and configures Kafka's
 ZooKeeper dependency, while `KRaft` assigns both `KAFKA_BROKER` and `KRAFT`

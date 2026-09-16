@@ -61,7 +61,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 
 | Variable | Default |
 |---|---|
-| `cdh_basecluster_name` | `CDH-Cluster` |
+| `cdh_basecluster_name` | `CDP-base-cluster` (adopts an existing legacy `CDH-Cluster`) |
+| `base_cluster_enable_kerberos` | `true` | Kerberize base clusters managed by playbook 31 and verify HDFS authentication |
 | `base_cluster_install_services` | see `all.yml` | Per-service booleans for `31_setup_base_cluster.yml` (Spark 3, Knox, and Solr default `true`; NiFi, NiFi Registry, DataViz, and Phoenix default `false`; Iceberg validates its engine services) |
 | `base_cluster_kafka_metadata_store` | `Zookeeper` | Kafka Broker metadata backend; accepted values are `Zookeeper` and `KRaft` |
 | `cm_admin_bootstrap_pass` | `admin` | Factory CM password; when `cm_admin_pass` differs, `ensure_cm_admin_password.yml` runs in **24_start_cm** / **27_setup_cm_autotls** only |

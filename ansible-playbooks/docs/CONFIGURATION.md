@@ -136,7 +136,8 @@ entries must be complete `.jar` URLs. See
 
 | Variable | Accepted values/default | What it does |
 |---|---|---|
-| `cdh_basecluster_name` | Name; `CDH-Cluster` | Cluster name created in CM. |
+| `cdh_basecluster_name` | Name; `CDP-base-cluster` | Cluster name created in CM. The unchanged default safely adopts an existing legacy `CDH-Cluster` instead of creating a duplicate. |
+| `base_cluster_enable_kerberos` | Boolean; `true` | Kerberizes existing and newly created base clusters after initialization and verifies HDFS authentication. |
 | `base_cluster_kafka_metadata_store` | `Zookeeper` or `KRaft`; `Zookeeper` | Kafka metadata backend selected before Kafka's first successful start. |
 | `base_cluster_master_group` | Inventory group; `base-masters` | Hosts eligible for master roles. |
 | `base_cluster_worker_group` | Inventory group; `base-workers` | Hosts eligible for worker roles and parcel OS detection. |

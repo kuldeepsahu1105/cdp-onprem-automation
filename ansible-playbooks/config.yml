@@ -100,12 +100,13 @@ cm_parcel_repo_include_cfm_parcel: true
 # -----------------------------------------------------------------------------
 # 3. Base cluster
 # -----------------------------------------------------------------------------
-cdh_basecluster_name: CDH-Cluster
+cdh_basecluster_name: CDP-base-cluster
 base_cluster_master_group: base-masters
 base_cluster_worker_group: base-workers
 base_cluster_module_async_timeout: 7500
 base_cluster_kafka_metadata_store: Zookeeper  # Zookeeper | KRaft; choose before Kafka's first start
 base_cluster_module_poll_interval: 15
+base_cluster_enable_kerberos: true  # Kerberize existing and future base clusters after initialization
 
 # Required CDP service settings. Supply production secrets through
 # ANSIBLE_GROUP_VARS_YAML or an Ansible vault.

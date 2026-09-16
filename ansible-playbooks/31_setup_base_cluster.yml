@@ -49,10 +49,12 @@
           - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_admin_password | regex_search('[0-9]'))
           - not (base_cluster_install_services.knox | default(true) | bool) or (base_cluster_knox_master_secret | string | length > 0)
           - not (base_cluster_install_services.kafka | default(true) | bool) or (base_cluster_kafka_metadata_store | lower in ['kraft', 'zookeeper'])
+          - not (base_cluster_enable_kerberos | default(true) | bool) or (base_cluster_install_services.hdfs | default(true) | bool)
         fail_msg: >-
           Required base-cluster service or database settings are empty. Set the
           base_cluster_* values through ANSIBLE_GROUP_VARS_YAML or an Ansible vault.
-          base_cluster_kafka_metadata_store must be KRaft or Zookeeper.
+          base_cluster_kafka_metadata_store must be KRaft or Zookeeper. Kerberos
+          enablement requires HDFS so its final authentication mode can be verified.
 
     - name: Check service dependencies
       ansible.builtin.assert:
@@ -192,7 +194,7 @@
     - name: Prepare cluster module connection
       ansible.builtin.import_tasks: common_tasks/resolve_cm_cluster_module_endpoint.yml
 
-    - name: Check cluster
+    - name: Check requested cluster
       ansible.builtin.uri:
         url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}"
         method: GET
@@ -202,8 +204,44 @@
         validate_certs: no
         status_code: [200, 404]
         follow_redirects: none
-      register: existing_cluster
+      register: base_cluster_requested_lookup
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Check legacy default cluster
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/clusters/{{ base_cluster_legacy_name }}"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 404]
+        follow_redirects: none
+      register: base_cluster_legacy_lookup
+      when:
+        - base_cluster_requested_lookup.status == 404
+        - cdh_basecluster_name == 'CDP-base-cluster'
+        - base_cluster_legacy_name | default('') | length > 0
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Preserve existing legacy default cluster name
+      ansible.builtin.set_fact:
+        cdh_basecluster_name: "{{ base_cluster_legacy_name }}"
+      when:
+        - base_cluster_requested_lookup.status == 404
+        - base_cluster_legacy_lookup.status | default(404) == 200
+
+    - name: Select existing cluster lookup
+      ansible.builtin.set_fact:
+        existing_cluster: >-
+          {{
+            base_cluster_legacy_lookup
+            if (
+              base_cluster_requested_lookup.status == 404
+              and base_cluster_legacy_lookup.status | default(404) == 200
+            )
+            else base_cluster_requested_lookup
+          }}
 
     - name: Check cluster hosts
       ansible.builtin.uri:
@@ -1248,6 +1286,299 @@
       when:
         - base_cluster_refresh_command is defined
         - base_cluster_refresh_command.json.id is defined
+
+    - name: Read base cluster HDFS authentication mode
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/hdfs/config?view=full
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_hdfs_auth_config
+      changed_when: false
+      when: base_cluster_enable_kerberos | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Resolve base cluster Kerberos state
+      ansible.builtin.set_fact:
+        base_cluster_hdfs_authentication: >-
+          {{
+            (
+              base_cluster_hdfs_auth_config.json['items'] | default([])
+              | selectattr('name', 'equalto', 'hadoop_security_authentication')
+              | map(attribute='value')
+              | first
+            )
+            | default(
+                (
+                  base_cluster_hdfs_auth_config.json['items'] | default([])
+                  | selectattr('name', 'equalto', 'hadoop_security_authentication')
+                  | map(attribute='default')
+                  | first
+                ),
+                true
+              )
+            | default('simple', true)
+            | lower
+          }}
+      when: base_cluster_enable_kerberos | default(true) | bool
+
+    - name: Resolve expected KDC credential marker
+      ansible.builtin.set_fact:
+        base_cluster_kdc_admin_principal: >-
+          {{
+            krb5_kdc_admin_user
+            if ('@' in (krb5_kdc_admin_user | string))
+            else (krb5_kdc_admin_user ~ '@' ~ cluster_realm)
+          }}
+        base_cluster_kdc_credentials_marker: >-
+          {{
+            cm_krb_credentials_marker_path
+            ~ '-'
+            ~ (
+              (
+                (
+                  krb5_kdc_admin_user
+                  if ('@' in (krb5_kdc_admin_user | string))
+                  else (krb5_kdc_admin_user ~ '@' ~ cluster_realm)
+                )
+                ~ '|' ~ cluster_realm ~ '|' ~ kdc_host
+              )
+              | hash('sha256')
+            )
+          }}
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+
+    - name: Check KDC account-manager credential marker
+      ansible.builtin.stat:
+        path: "{{ base_cluster_kdc_credentials_marker }}"
+      register: base_cluster_kdc_credentials
+      changed_when: false
+      become: true
+      delegate_to: "{{ cm_manager_inventory_host }}"
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+
+    - name: Check KDC reachability before cluster Kerberos transition
+      ansible.builtin.wait_for:
+        host: "{{ kdc_host }}"
+        port: 88
+        state: started
+        connect_timeout: 5
+        timeout: "{{ cm_krb_kdc_preflight_timeout }}"
+      changed_when: false
+      delegate_to: "{{ cm_manager_inventory_host }}"
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+
+    - name: Require imported KDC account-manager credentials
+      ansible.builtin.assert:
+        that:
+          - base_cluster_kdc_credentials.stat.exists | default(false) | bool
+        fail_msg: >-
+          Kerberos transition was requested, but the credential-import marker for
+          {{ base_cluster_kdc_admin_principal }} is missing. Run
+          30_setup_cm_krbs.yml successfully before playbook 31. The cluster has
+          not been stopped or modified.
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+
+    - name: Show base cluster Kerberos transition
+      ansible.builtin.debug:
+        msg: >-
+          HDFS authentication is {{ base_cluster_hdfs_authentication }}.
+          Stopping {{ cdh_basecluster_name }}, configuring Kerberos, generating
+          credentials, restarting the cluster, and refreshing client configuration.
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+
+    - name: Stop base cluster before Kerberos configuration
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/commands/stop
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_kerberos_stop_command
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Wait for pre-Kerberos cluster stop
+      ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_command_id: "{{ base_cluster_kerberos_stop_command.json.id }}"
+        cm_api_command_allow_already_exists: false
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+        - base_cluster_kerberos_stop_command.json.id is defined
+
+    - name: Configure base cluster for Kerberos
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/commands/configureForKerberos
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body: {}
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_kerberos_configure_command
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Wait for base cluster Kerberos configuration
+      ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_command_id: "{{ base_cluster_kerberos_configure_command.json.id }}"
+        cm_api_command_allow_already_exists: false
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+        - base_cluster_kerberos_configure_command.json.id is defined
+
+    - name: Generate base cluster Kerberos credentials
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/cm/commands/generateCredentials"
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_kerberos_credentials_command
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Wait for base cluster Kerberos credentials
+      ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_command_id: "{{ base_cluster_kerberos_credentials_command.json.id }}"
+        cm_api_command_allow_already_exists: false
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+        - base_cluster_kerberos_credentials_command.json.id is defined
+
+    - name: Start Kerberized base cluster
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/commands/start
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_kerberos_start_command
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Wait for Kerberized base cluster startup
+      ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_command_id: "{{ base_cluster_kerberos_start_command.json.id }}"
+        cm_api_command_allow_already_exists: false
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+        - base_cluster_kerberos_start_command.json.id is defined
+
+    - name: Refresh Kerberized base cluster client configuration
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/commands/deployClientConfigsAndRefresh
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_kerberos_refresh_command
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Wait for Kerberized base cluster client refresh
+      ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_command_id: "{{ base_cluster_kerberos_refresh_command.json.id }}"
+        cm_api_command_allow_already_exists: false
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_hdfs_authentication != 'kerberos'
+        - base_cluster_kerberos_refresh_command.json.id is defined
+
+    - name: Verify base cluster HDFS Kerberos authentication
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/hdfs/config?view=full
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_hdfs_auth_verify
+      changed_when: false
+      when: base_cluster_enable_kerberos | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Require Kerberos authentication on base cluster HDFS
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              base_cluster_hdfs_auth_verify.json['items'] | default([])
+              | selectattr('name', 'equalto', 'hadoop_security_authentication')
+              | map(attribute='value')
+              | first
+              | default('', true)
+              | lower
+            ) == 'kerberos'
+        fail_msg: >-
+          CM completed the Kerberos workflow, but HDFS authentication is not
+          reported as kerberos. Do not record the cluster initialization marker.
+      when: base_cluster_enable_kerberos | default(true) | bool
 
     - name: Read final cluster state
       ansible.builtin.uri:
