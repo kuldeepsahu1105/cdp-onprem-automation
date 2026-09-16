@@ -1,10 +1,67 @@
 ---
 # Restart cloudera-scm-server on the CM inventory host and prove its process changed.
 
+- name: Resolve Cloudera Manager restart connection
+  ansible.builtin.set_fact:
+    cm_scm_server_restart_manager_host: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+    cm_scm_server_restart_bastion_host: "{{ (groups['ipaserver'] | default([]) | first) | default('') }}"
+
+- name: Select Cloudera Manager restart route
+  ansible.builtin.set_fact:
+    cm_scm_server_restart_via_ipaserver: >-
+      {{
+        ansible_controller_outside_vpc | default(false) | bool
+        and cm_scm_server_restart_bastion_host | length > 0
+        and (
+          hostvars[cm_scm_server_restart_manager_host].private_ip
+          | default('')
+          | length > 0
+        )
+        and (
+          hostvars[cm_scm_server_restart_bastion_host].public_ip
+          | default(
+              hostvars[cm_scm_server_restart_bastion_host].ansible_host
+              | default('')
+            )
+          | length > 0
+        )
+      }}
+
+- name: Register private Cloudera Manager restart target through IPAServer
+  ansible.builtin.add_host:
+    name: cm-autotls-restart-target
+    ansible_host: "{{ hostvars[cm_scm_server_restart_manager_host].private_ip }}"
+    ansible_user: >-
+      {{
+        hostvars[cm_scm_server_restart_manager_host].ansible_user
+        | default(ansible_user | default('ec2-user'))
+      }}
+    ansible_port: "{{ hostvars[cm_scm_server_restart_manager_host].ansible_port | default(22) }}"
+    ansible_ssh_common_args: >-
+      -o StrictHostKeyChecking=no
+      -o UserKnownHostsFile=/dev/null
+      -o ProxyJump={{
+        hostvars[cm_scm_server_restart_bastion_host].ansible_user
+        | default(ansible_user | default('ec2-user'))
+      }}@{{
+        hostvars[cm_scm_server_restart_bastion_host].public_ip
+        | default(hostvars[cm_scm_server_restart_bastion_host].ansible_host)
+      }}
+  when: cm_scm_server_restart_via_ipaserver | bool
+
+- name: Select Cloudera Manager restart delegate
+  ansible.builtin.set_fact:
+    cm_scm_server_restart_delegate: >-
+      {{
+        'cm-autotls-restart-target'
+        if cm_scm_server_restart_via_ipaserver | bool
+        else cm_scm_server_restart_manager_host
+      }}
+
 - name: Identify Cloudera Manager restart target
   ansible.builtin.command: hostname -f
   become: true
-  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+  delegate_to: "{{ cm_scm_server_restart_delegate }}"
   register: cm_scm_server_restart_hostname
   changed_when: false
 
@@ -12,10 +69,13 @@
   ansible.builtin.debug:
     msg: >-
       Restarting CM on inventory host {{ cm_manager_inventory_host | default('cldr-mngr') }}
-      (ansible_host={{
-        hostvars[cm_manager_inventory_host | default('cldr-mngr')].ansible_host
-        | default(cm_manager_inventory_host | default('cldr-mngr'))
-      }}, remote hostname={{ cm_scm_server_restart_hostname.stdout | trim }}).
+      (restart route={{
+        'private IP via IPAServer'
+        if cm_scm_server_restart_via_ipaserver | bool
+        else 'inventory ansible_host'
+      }}, target={{ hostvars[cm_scm_server_restart_delegate].ansible_host
+        | default(cm_scm_server_restart_delegate) }},
+      remote hostname={{ cm_scm_server_restart_hostname.stdout | trim }}).
 
 - name: Detect Cloudera Manager systemd unit
   ansible.builtin.command:
@@ -26,7 +86,7 @@
       - --property=LoadState
       - --value
   become: true
-  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+  delegate_to: "{{ cm_scm_server_restart_delegate }}"
   register: cm_scm_server_systemd_load_state
   changed_when: false
   failed_when: false
@@ -35,7 +95,7 @@
   ansible.builtin.stat:
     path: /etc/init.d/cloudera-scm-server
   become: true
-  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+  delegate_to: "{{ cm_scm_server_restart_delegate }}"
   register: cm_scm_server_init_script
 
 - name: Select Cloudera Manager restart mechanism
@@ -76,7 +136,7 @@
   args:
     executable: /bin/bash
   become: true
-  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+  delegate_to: "{{ cm_scm_server_restart_delegate }}"
   register: cm_scm_server_pid_before_restart
   changed_when: false
   failed_when: false
@@ -88,7 +148,7 @@
       - restart
       - cloudera-scm-server.service
   become: true
-  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+  delegate_to: "{{ cm_scm_server_restart_delegate }}"
   register: cm_scm_server_systemd_restart
   changed_when: cm_scm_server_systemd_restart.rc == 0
   when: cm_scm_server_restart_mechanism == 'systemd'
@@ -99,7 +159,7 @@
       - /etc/init.d/cloudera-scm-server
       - restart
   become: true
-  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+  delegate_to: "{{ cm_scm_server_restart_delegate }}"
   register: cm_scm_server_sysv_restart
   changed_when: cm_scm_server_sysv_restart.rc == 0
   when: cm_scm_server_restart_mechanism == 'sysv'
@@ -114,7 +174,7 @@
   args:
     executable: /bin/bash
   become: true
-  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+  delegate_to: "{{ cm_scm_server_restart_delegate }}"
   register: cm_scm_server_pid_after_restart
   changed_when: false
   failed_when: false
@@ -141,8 +201,7 @@
     msg: >-
       cloudera-scm-server restarted via {{ cm_scm_server_restart_mechanism }} on
       {{ cm_scm_server_restart_hostname.stdout | trim }}
-      (ansible_host={{
-        hostvars[cm_manager_inventory_host | default('cldr-mngr')].ansible_host
-        | default(cm_manager_inventory_host | default('cldr-mngr'))
-      }}): PID {{ cm_scm_server_pid_before_restart.stdout | default('unknown') | trim }}
+      (target={{ hostvars[cm_scm_server_restart_delegate].ansible_host
+        | default(cm_scm_server_restart_delegate) }}): PID {{
+      cm_scm_server_pid_before_restart.stdout | default('unknown') | trim }}
       -> {{ cm_scm_server_pid_after_restart.stdout | trim }}.
