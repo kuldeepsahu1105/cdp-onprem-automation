@@ -25,6 +25,20 @@
     - name: CM API — read TLS / Auto-TLS state for CMS messaging
       ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
 
+    - name: CMS — wait for PostgreSQL FQDN resolution on the CM host
+      ansible.builtin.command:
+        argv:
+          - getent
+          - ahostsv4
+          - "{{ cm_cms_reports_manager_db_host }}"
+      delegate_to: "{{ cm_manager_inventory_host }}"
+      become: false
+      register: cms_postgres_dns_lookup
+      changed_when: false
+      retries: "{{ identity_dns_verify_retries | default(12) | int }}"
+      delay: "{{ identity_dns_verify_delay | default(5) | int }}"
+      until: cms_postgres_dns_lookup.rc == 0
+
     - name: Print CMS target host
       ansible.builtin.debug:
         msg:
