@@ -243,7 +243,7 @@
           cloudera.cluster collection allows up to 7200s for CM parcel and command operations.
       when: base_cluster_create_required | bool
 
-    - name: Create cluster {{ cdh_basecluster_name }} (state=present)
+    - name: Create cluster {{ cdh_basecluster_name }}
       cloudera.cluster.cluster:
         host: "{{ cm_cluster_module_host }}"
         port: "{{ cm_cluster_module_port }}"
@@ -268,14 +268,14 @@
       async: "{{ base_cluster_module_async_timeout }}"
       poll: "{{ base_cluster_module_poll_interval }}"
 
-    - name: Show First Run wait
+    - name: Show cluster startup wait
       ansible.builtin.debug:
         msg: >-
           Cluster configuration is complete. Starting CM First Run; Jenkins will poll every
           {{ base_cluster_module_poll_interval }}s until CM finishes or the bounded wait expires.
       when: base_cluster_create_required | bool
 
-    - name: Run First Run for {{ cdh_basecluster_name }} (state=started)
+    - name: Start new cluster {{ cdh_basecluster_name }}
       cloudera.cluster.cluster:
         host: "{{ cm_cluster_module_host }}"
         port: "{{ cm_cluster_module_port }}"
@@ -292,7 +292,7 @@
       async: "{{ base_cluster_module_async_timeout }}"
       poll: "{{ base_cluster_module_poll_interval }}"
 
-    - name: Start existing cluster {{ cdh_basecluster_name }} (state=started)
+    - name: Start existing cluster {{ cdh_basecluster_name }}
       cloudera.cluster.cluster:
         host: "{{ cm_cluster_module_host }}"
         port: "{{ cm_cluster_module_port }}"
