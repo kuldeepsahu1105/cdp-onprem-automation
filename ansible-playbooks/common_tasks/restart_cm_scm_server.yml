@@ -30,16 +30,14 @@
 - name: Register private Cloudera Manager restart target through IPAServer
   ansible.builtin.add_host:
     name: cm-autotls-restart-target
+    ansible_connection: ssh
     ansible_host: "{{ hostvars[cm_scm_server_restart_manager_host].private_ip }}"
-    ansible_user: >-
-      {{
-        hostvars[cm_scm_server_restart_manager_host].ansible_user
-        | default(ansible_user | default('ec2-user'))
-      }}
+    ansible_user: root
     ansible_port: "{{ hostvars[cm_scm_server_restart_manager_host].ansible_port | default(22) }}"
     ansible_ssh_common_args: >-
       -o StrictHostKeyChecking=no
       -o UserKnownHostsFile=/dev/null
+      -o ControlMaster=no
       -o ProxyJump={{
         hostvars[cm_scm_server_restart_bastion_host].ansible_user
         | default(ansible_user | default('ec2-user'))
@@ -64,6 +62,33 @@
   delegate_to: "{{ cm_scm_server_restart_delegate }}"
   register: cm_scm_server_restart_hostname
   changed_when: false
+
+- name: Require the restart target to be the Cloudera Manager host
+  ansible.builtin.assert:
+    that:
+      - >-
+        (cm_scm_server_restart_hostname.stdout | trim)
+        ==
+        (
+          hostvars[cm_scm_server_restart_manager_host].cldr_hostname
+          | default(cm_scm_server_restart_manager_host)
+        )
+        or
+        (cm_scm_server_restart_hostname.stdout | trim).startswith(
+          (
+            hostvars[cm_scm_server_restart_manager_host].cldr_hostname
+            | default(cm_scm_server_restart_manager_host)
+          )
+          ~ '.'
+        )
+    fail_msg: >-
+      Refusing to restart Cloudera Manager: target {{
+      hostvars[cm_scm_server_restart_delegate].ansible_host
+      | default(cm_scm_server_restart_delegate) }} resolved to remote hostname
+      {{ cm_scm_server_restart_hostname.stdout | default('unknown') | trim }},
+      expected {{
+      hostvars[cm_scm_server_restart_manager_host].cldr_hostname
+      | default(cm_scm_server_restart_manager_host) }}.
 
 - name: Print Cloudera Manager restart target
   ansible.builtin.debug:
