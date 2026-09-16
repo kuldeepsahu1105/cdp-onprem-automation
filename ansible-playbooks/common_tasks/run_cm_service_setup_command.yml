@@ -4,7 +4,8 @@
     url: >-
       {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
       }}/services/{{ base_cluster_setup_command.service
-      }}/commands/{{ base_cluster_setup_command.command }}
+      }}/commands/{{ base_cluster_setup_command.command
+      }}{{ ('?' ~ base_cluster_setup_command.query) if base_cluster_setup_command.query is defined else '' }}
     method: POST
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
