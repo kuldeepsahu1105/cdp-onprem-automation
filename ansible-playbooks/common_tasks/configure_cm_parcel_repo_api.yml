@@ -9,9 +9,8 @@
   ansible.builtin.assert:
     that:
       - cm_parcel_api_url | length > 0
-      - cm_api_uri_delegate_to | default('') | length > 0
     fail_msg: >-
-      The parcel repository helper requires a prepared CM API endpoint and delegate.
+      The parcel repository helper requires a prepared CM API endpoint.
       Run set_cm_api_url.yml or prepare_cm_security_api.yml before importing this task.
 
 - name: Parcel repo — read current CM configuration
@@ -29,7 +28,7 @@
         timeout: 60
       register: cm_parcel_config_get
       changed_when: false
-      delegate_to: "{{ cm_api_uri_delegate_to }}"
+      delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
   rescue:
     - name: Parcel repo — fail with scm-server and security group guidance
       ansible.builtin.fail:
@@ -235,7 +234,7 @@
   when:
     - cm_parcel_repo_urls_effective | length > 0
     - (cm_parcel_repo_config_changed | bool) or (cm_parcel_install_csd_repo_config_changed | bool)
-  delegate_to: "{{ cm_api_uri_delegate_to }}"
+  delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
   changed_when: true
 
 - name: Parcel repo — refresh Cloudera Manager parcel repositories
@@ -253,7 +252,7 @@
     - cm_parcel_repo_urls_effective | length > 0
     - (cm_parcel_repo_config_changed | bool) or (cm_parcel_install_csd_repo_config_changed | bool)
   register: cm_parcel_refresh
-  delegate_to: "{{ cm_api_uri_delegate_to }}"
+  delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
   changed_when: true
 
 - name: Parcel repo — require refresh command id
