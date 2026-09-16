@@ -134,17 +134,35 @@
               ansible.builtin.import_tasks: common_tasks/resolve_cm_autotls_private_key.yml
               when: not use_password
 
-            - name: Auto-TLS — encode private key for JSON request
+            - name: Auto-TLS — build generateCmca request
               ansible.builtin.set_fact:
-                node_key_one_line: "{{ lookup('file', autotls_controller_key_path) | replace('\n', '\\n') | replace('\"', '\\\"') }}"
+                cm_autotls_generate_cmca_request: >-
+                  {{
+                    {
+                      'customCA': false,
+                      'configureAllServices': true,
+                      'sshPort': 22,
+                      'userName': cm_srvr_sudo_user | default('root')
+                    }
+                    | combine(
+                        {
+                          'password': cm_node_sudo_password
+                        }
+                        if use_password
+                        else {
+                          'privateKey': lookup('file', autotls_controller_key_path),
+                          'passphrase': cm_priv_key_passphrase | default('')
+                        }
+                      )
+                    | combine(
+                        {
+                          'trustedCaCerts': cm_autotls_freeipa_ca_cert_path | default('/etc/ipa/ca.crt')
+                        }
+                        if (cm_autotls_trust_freeipa_ca_effective | bool)
+                        else {}
+                      )
+                  }}
               no_log: true
-              when: not use_password
-
-            - name: Create Auto-TLS request for selected provisioning method
-              ansible.builtin.template:
-                src: "{{ 'auto-tls.json.j2' if use_password else 'auto-tls-key.json.j2' }}"
-                dest: /tmp/auto-tls.json
-                mode: "0600"
 
             - name: Submit Auto-TLS generateCmca command
               ansible.builtin.uri:
@@ -153,16 +171,44 @@
                 user: "{{ cm_admin_user }}"
                 password: "{{ cm_admin_pass }}"
                 force_basic_auth: yes
-                body: "{{ lookup('file', '/tmp/auto-tls.json') }}"
+                body: "{{ cm_autotls_generate_cmca_request }}"
                 body_format: json
                 timeout: 360
                 status_code: [200, 201, 202]
+                return_content: true
                 validate_certs: no
                 follow_redirects: none
               delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
               register: auto_tls_response
-              changed_when: true
+              failed_when: false
+              changed_when: auto_tls_response.status | default(0) | int in [200, 201, 202]
               no_log: true
+
+            - name: Report generateCmca rejection without exposing credentials
+              ansible.builtin.fail:
+                msg: >-
+                  Cloudera Manager rejected generateCmca with HTTP
+                  {{ auto_tls_response.status | default('unavailable') }}:
+                  {{
+                    (
+                      auto_tls_response.json.message
+                      | default(auto_tls_response.json.error, true)
+                      | default(auto_tls_response.msg, true)
+                      | default('No diagnostic message was returned; inspect cloudera-scm-server.log.', true)
+                    )
+                    | regex_replace(
+                        '(?s)-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----',
+                        '[private key redacted]'
+                      )
+                  }}
+                  Provisioning mode={{ 'password' if use_password else 'private-key' }},
+                  SSH user={{ cm_srvr_sudo_user | default('root') }},
+                  trustedCaCerts={{
+                    cm_autotls_freeipa_ca_cert_path | default('/etc/ipa/ca.crt')
+                    if (cm_autotls_trust_freeipa_ca_effective | bool)
+                    else 'omitted'
+                  }}.
+              when: auto_tls_response.status | default(0) | int not in [200, 201, 202]
 
             - name: Require generateCmca command id
               ansible.builtin.assert:
