@@ -363,14 +363,16 @@ clo_db_password: clo
 # Resolution (common_tasks/set_os_facts.yml → scm_csds_effective):
 #   1) scm_csds non-empty     → use as-is (list of full https://…/*.jar URLs; any OS)
 #   2) else scm_csds_redhat   → RHEL-only explicit URL list (same format)
-#   3) else empty + RHEL      → scm_csds_urls.j2 builds NiFi / NiFi Registry URLs from cfm_* below
-# DATAVIZ is not in scm_csds_urls.j2: it always uses download_cdv_dataviz_csd.yml + cdv_* vars
-#   (yum jar + parcel fallback). To pin DATAVIZ, change cdv_version / cdv_dataviz_csd_jar — not scm_csds alone.
+#   3) else empty + RHEL      → templates/scm_csds_urls.j2 builds DATAVIZ + NiFi + NiFi Registry
+#      from cdv_* / cfm_* below (respects csd_install_* and base_cluster_install_services).
+# Play 24 get_url loops scm_csds_effective; DATAVIZ yum failures use parcel fallback in
+#   download_cdv_dataviz_csd.yml. cdv_* / cfm_* are inputs to the default list, not parallel paths.
 # CM REMOTE_PARCEL_REPO_URLS (directory URLs) are separate: cdv_version / cfm_version and
 #   scm_csd_parcel_repo_urls.j2 — see cm_remote_parcel_csd_repo_urls above.
 #
-# Override example (replaces auto NiFi/Registry URLs from step 3; still set cdv_* for DATAVIZ):
+# Override example (replaces step 3 entirely — include every CSD jar URL you want on CM):
 # scm_csds:
+#   - "{{ cm_repo_public_base_url }}/cdv/{{ cdv_version }}/redhat8/yum/{{ cdv_dataviz_csd_jar }}"
 #   - "{{ cm_repo_public_base_url }}/cfm2/{{ cfm_version }}/redhat8/yum/tars/parcel/{{ cfm_nifi_registry_csd_jar }}"
 #   - "{{ cm_repo_public_base_url }}/cfm2/{{ cfm_version }}/redhat8/yum/tars/parcel/{{ cfm_nifi_csd_jar }}"
 scm_csds: []
@@ -393,7 +395,7 @@ cfm_nifi_csd_jar: "NIFI-{{ cfm_nifi_app_version }}.{{ cfm_version }}-1.jar"
 cfm_nifi_registry_csd_jar: "NIFIREGISTRY-{{ cfm_nifi_app_version }}.{{ cfm_version }}-1.jar"
 # redhat8 | redhat9 | auto (CM host RHEL major version)
 csd_redhat_repo: auto
-# false disables step 3 only (NiFi/Registry template); DATAVIZ download task is unchanged
+# false disables step 3 (scm_csds_urls.j2); explicit scm_csds / scm_csds_redhat still apply
 csd_build_urls_enabled: true
 # When true, only download CSDs for base_cluster_install_services keys enabled (dataviz/nifi/nifi_registry default false).
 csd_respect_service_toggles: true

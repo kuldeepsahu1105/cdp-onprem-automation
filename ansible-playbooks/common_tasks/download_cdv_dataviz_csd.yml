@@ -1,6 +1,7 @@
 ---
-# DATAVIZ CSD: jar under cdv/<version>/redhat8/yum/ (even on RHEL 9 CM). Fall back to the
-# release parcel under cdv/<version>/parcels/ when the yum jar is missing (some 8.0.7 builds).
+# DATAVIZ CSD: primary jar URL is in scm_csds_effective (scm_csds_urls.j2) and fetched in 24_start_cm
+# get_url loop. This task supplements when the yum jar is missing (parcel extract) or when explicit
+# scm_csds omits the DATAVIZ URL (legacy yum get_url with ignore_errors).
 - name: Evaluate DATAVIZ CSD install gate
   ansible.builtin.set_fact:
     cdv_dataviz_csd_install: >-
@@ -47,7 +48,17 @@
         cdv_dataviz_parcel_download_url: >-
           {{ cm_repo_public_base_url | default('https://archive.cloudera.com/p') }}/cdv/{{ cdv_version }}/parcels/{{ cdv_dataviz_parcel_file_effective }}
 
-    - name: Download DATAVIZ CSD jar from CDV yum repository
+    - name: Detect whether DATAVIZ jar URL is in scm_csds_effective
+      ansible.builtin.set_fact:
+        cdv_dataviz_csd_url_in_scm_csds_effective: >-
+          {{ cdv_dataviz_csd_download_url in (scm_csds_effective | default([])) }}
+
+    - name: Check whether DATAVIZ CSD jar is already installed
+      ansible.builtin.stat:
+        path: "/opt/cloudera/csd/{{ cdv_dataviz_csd_jar }}"
+      register: cdv_dataviz_csd_jar_stat
+
+    - name: Download DATAVIZ CSD jar from CDV yum repository when not in scm_csds_effective
       ansible.builtin.get_url:
         url: "{{ cdv_dataviz_csd_download_url }}"
         dest: "/opt/cloudera/csd/{{ cdv_dataviz_csd_jar }}"
@@ -59,9 +70,18 @@
         force_basic_auth: true
       register: cdv_dataviz_csd_jar_result
       ignore_errors: true
+      when:
+        - not cdv_dataviz_csd_jar_stat.stat.exists | default(false)
+        - not (cdv_dataviz_csd_url_in_scm_csds_effective | bool)
+
+    - name: Refresh DATAVIZ CSD jar presence after optional yum download
+      ansible.builtin.stat:
+        path: "/opt/cloudera/csd/{{ cdv_dataviz_csd_jar }}"
+      register: cdv_dataviz_csd_jar_stat
+      when: not cdv_dataviz_csd_jar_stat.stat.exists | default(false)
 
     - name: Install DATAVIZ CSD from parcel when yum jar is unavailable
-      when: cdv_dataviz_csd_jar_result is failed
+      when: not cdv_dataviz_csd_jar_stat.stat.exists | default(false)
       block:
         - name: Download DATAVIZ parcel from CDV parcels repository
           ansible.builtin.get_url:
