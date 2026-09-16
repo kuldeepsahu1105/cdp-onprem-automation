@@ -18,7 +18,7 @@ Authoritative matrix: [Service Dependencies in Cloudera Manager](https://docs.cl
 | HBase | `hdfs_service`, `zookeeper_service` |
 | Hue | `hdfs_service`; on CDP 7+ with Hive + Hive on Tez use `hms_service: hive` and `hive_service: hive_on_tez`; optional hbase/impala/solr/atlas/zookeeper when those services enabled |
 | Impala | `hdfs_service`, `hive_service` (HMS); optional `hbase_service`, `ranger_service`, `atlas_service` |
-| Kafka | `zookeeper_service`; optional `hdfs_service`, `ranger_service` |
+| Kafka | `zookeeper_service`; optional `hdfs_service`, `ranger_service`; roles `KAFKA_BROKER`, `KRAFT`, and `GATEWAY` |
 | Atlas | `hdfs_service`, `kafka_service`; optional `hbase_service`, `solr_service`, `ranger_service` |
 | **Ranger** | **`hdfs_service`**; PostgreSQL connection and initial Admin/Keyadmin/Tagsync/Usersync passwords; **`solr_service`** when Solr is enabled (not `hive_service` / `kafka_service`) |
 | Solr | `hdfs_service`, `zookeeper_service` — do **not** set `ranger_service` on the Solr instance used for Ranger audits (cyclic dependency) |

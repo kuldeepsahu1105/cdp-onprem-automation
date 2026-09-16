@@ -462,7 +462,7 @@
           - gateway_master_secret
       when: base_cluster_install_services.knox | default(true) | bool
 
-    - name: Read CM hosts for Ozone roles
+    - name: Read CM hosts for required service roles
       ansible.builtin.uri:
         url: "{{ cm_cluster_module_api_url }}/hosts?view=summary"
         method: GET
@@ -474,7 +474,9 @@
         follow_redirects: none
       register: base_cluster_cm_hosts
       changed_when: false
-      when: base_cluster_install_services.ozone | default(true) | bool
+      when: >-
+        base_cluster_install_services.ozone | default(true) | bool
+        or base_cluster_install_services.kafka | default(true) | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Select Ozone service host
@@ -560,6 +562,78 @@
           {{
             base_cluster_required_config_changed | bool
             or base_cluster_ozone_role_create.changed | default(false) | bool
+          }}
+
+    - name: Read Kafka roles
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/kafka/roles?view=summary
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_kafka_roles
+      changed_when: false
+      when: base_cluster_install_services.kafka | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Find workers missing Kafka KRaft roles
+      ansible.builtin.set_fact:
+        base_cluster_missing_kraft_hosts: >-
+          {{
+            base_worker_fqdns
+            | difference(
+                base_cluster_kafka_roles.json['items']
+                | selectattr('type', 'equalto', 'KRAFT')
+                | map(attribute='hostRef.hostname')
+                | list
+              )
+          }}
+      when: base_cluster_install_services.kafka | default(true) | bool
+
+    - name: Add missing Kafka KRaft roles
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/kafka/roles
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          items:
+            - type: KRAFT
+              hostRef:
+                hostId: >-
+                  {{
+                    base_cluster_cm_hosts.json['items']
+                    | selectattr('hostname', 'equalto', item)
+                    | map(attribute='hostId')
+                    | first
+                  }}
+                hostname: "{{ item }}"
+        status_code: [200, 201, 204]
+        follow_redirects: none
+      loop: "{{ base_cluster_missing_kraft_hosts }}"
+      loop_control:
+        label: "{{ item }}"
+      register: base_cluster_kraft_role_create
+      when: base_cluster_install_services.kafka | default(true) | bool
+      changed_when: true
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Track Kafka KRaft role changes
+      ansible.builtin.set_fact:
+        base_cluster_required_config_changed: >-
+          {{
+            base_cluster_required_config_changed | bool
+            or base_cluster_kraft_role_create.changed | default(false) | bool
           }}
 
     - name: Read base cluster initialization marker

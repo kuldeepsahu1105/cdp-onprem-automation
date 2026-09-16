@@ -238,6 +238,7 @@ services:
 {% endif %}
     role_groups:
       - type: KAFKA_BROKER
+      - type: KRAFT
       - type: GATEWAY
 {% endif %}
 {% if svc.atlas | default(true) %}
@@ -508,6 +509,8 @@ host_templates:
 {% if svc.kafka | default(true) %}
       - service: KAFKA
         type: KAFKA_BROKER
+      - service: KAFKA
+        type: KRAFT
       - service: KAFKA
         type: GATEWAY
 {% endif %}

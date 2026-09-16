@@ -451,6 +451,10 @@ setup command as `Command not valid for ...` when that artifact is already
 initialized; recovery reports that exact response as a skip and continues, but
 all other HTTP or command failures remain fatal.
 
+Kafka uses the CDP 7.3 KRaft metadata store by default. The base-cluster
+topology assigns both `KAFKA_BROKER` and `KRAFT` roles to base workers, and
+playbook **31** adds missing KRaft roles to existing clusters before startup.
+
 **ZooKeeper placement:** When `base_cluster_install_services.zookeeper` is true (default), the **Worker** host template assigns **ZooKeeper Server** to every host in `base_cluster_worker_group` (`base-workers`). Masters use the **Master** template only. Labs typically run one or three ZK servers on workers; Cloudera Manager requires at least one Server role before Stop Cluster / Deploy Client Config (including after Kerberos/KDC is enabled manually or via playbook **28**).
 
 **Existing cluster missing ZK Server roles:** If CM shows **ZooKeeper has 0 Servers**, the cluster was usually created before host templates used CM service **types** (`ZOOKEEPER`, not `zookeeper`) or playbook **31** found the cluster already present and only started services (templates are not reapplied). Choose one:
