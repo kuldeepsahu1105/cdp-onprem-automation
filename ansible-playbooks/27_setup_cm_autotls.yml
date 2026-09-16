@@ -20,13 +20,6 @@
       ansible.builtin.set_fact:
         cm_autotls_setup_intent: "{{ autotls_enabled | default(true) | bool }}"
 
-    - name: Auto-TLS — pre-check agent truststore for API transport (HTTPS re-runs)
-      ansible.builtin.stat:
-        path: "{{ cm_cms_autotls_truststore_path }}"
-      delegate_to: "{{ cm_manager_inventory_host }}"
-      become: true
-      register: cm_autotls_truststore_precheck
-
     - name: CM API — set connection context
       ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
 
@@ -38,6 +31,19 @@
 
     - name: CM API — read Auto-TLS state from CM configuration
       ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
+
+    - name: Auto-TLS — require authoritative CM state before enablement
+      ansible.builtin.assert:
+        that:
+          - cm_autotls_state_known | default(false) | bool
+        fail_msg: >-
+          CM /cm/config?view=full did not return AUTO_TLS_TYPE, so Auto-TLS state
+          cannot be determined safely. Refusing to run generateCmca because replaying
+          it replaces the existing CMCA. Verify the CM API response or use
+          cm_autotls_force_run=true only for intentional CA regeneration.
+      when:
+        - cm_autotls_setup_intent | default(false) | bool
+        - not (cm_autotls_force_run | default(false) | bool)
 
     - name: Auto-TLS — CM HTTPS port active (manual TLS skip helper; not Auto-TLS in CM config)
       ansible.builtin.set_fact:
@@ -58,7 +64,6 @@
               (
                 not (cm_autotls_force_run | default(false) | bool)
                 and (cm_autotls_api_enabled | default(false) | bool)
-                and (cm_autotls_truststore_precheck.stat.exists | default(false) | bool)
               )
               or (
                 not (cm_autotls_api_enabled | default(false) | bool)
@@ -75,16 +80,14 @@
             (cm_autotls_generate_cmca_skip | default(false) | bool)
             and not (cm_autotls_force_run | default(false) | bool)
             and (cm_autotls_api_enabled | default(false) | bool)
-            and (cm_autotls_truststore_precheck.stat.exists | default(false) | bool)
           }}
 
     - name: Auto-TLS — already enabled (skip generateCmca, restart, and agent/CMS churn)
       ansible.builtin.debug:
         msg: >-
-          Auto-TLS already enabled in CM API config and agent truststore
-          {{ cm_cms_autotls_truststore_path | default('') }}
-          is present on {{ cm_manager_inventory_host | default('cldr-mngr') }}
-          — skipping generateCmca, CM restart, and downstream Auto-TLS reconcile.
+          Auto-TLS already enabled in CM configuration
+          (AUTO_TLS_TYPE={{ cm_autotls_type | default('unknown') }})
+          — skipping generateCmca, CM restart, and downstream agent/CMS reconcile.
       when: cm_autotls_noop_this_run | default(false) | bool
 
     - name: Auto-TLS — enable path (generateCmca and CM restart when applied)
@@ -103,24 +106,12 @@
               ansible.builtin.debug:
                 msg: >-
                   {{
-                    'CM reports Auto-TLS enabled but agent truststore is missing — running generateCmca to deploy agent-cert material.'
-                    if (
-                      (cm_autotls_api_enabled | default(false) | bool)
-                      and not (cm_autotls_truststore_precheck.stat.exists | default(false) | bool)
-                    )
-                    else (
-                      'CM Auto-TLS is not configured in CM API config'
-                      + (
-                        ' but autotls_enabled=true (setup intent) — running generateCmca despite HTTPS on :'
-                        + (cm_https_port | default(7183) | string)
-                        + '.'
-                        if (cm_autotls_setup_intent | default(false) | bool)
-                        else (
-                          ' (or cm_autotls_force_run=true). '
-                          + 'Running generateCmca to create/update Auto-TLS (changed when API accepts command).'
-                        )
-                      )
-                    )
+                    'CM reports AUTO_TLS_TYPE='
+                    + (cm_autotls_type | default('NONE'))
+                    + '; running generateCmca to enable Auto-TLS.'
+                    if not (cm_autotls_force_run | default(false) | bool)
+                    else
+                    'cm_autotls_force_run=true; running generateCmca for intentional CA regeneration.'
                   }}
 
             - name: Auto-TLS — resolve trusted CA bundle for generateCmca (Cloudera Labs cm_autotls trustedCaCerts)

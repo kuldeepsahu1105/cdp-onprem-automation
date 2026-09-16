@@ -47,82 +47,47 @@
     - _cm_autotls_config_api_https_retry is succeeded
     - _cm_autotls_config_api_https_retry.status | default(0) in [200, 301, 303]
 
-- name: CM API — parse Auto-TLS flags from CM configuration
+- name: CM API — read authoritative Auto-TLS type
   ansible.builtin.set_fact:
-    _cm_autotls_config_flag_hits: >-
+    cm_autotls_type: >-
       {{
         (
           _cm_config_items
           | selectattr('name', 'defined')
-          | selectattr('name', 'in', _cm_autotls_config_flag_names)
-          | selectattr('value', 'defined')
-          | selectattr('value', 'in', [true, 'true', 'True', 'TRUE', 'yes', 'Yes', '1'])
-          | map(attribute='name')
-          | list
+          | selectattr('name', 'equalto', 'AUTO_TLS_TYPE')
+          | map(attribute='value', default='')
+          | first
+          | default('', true)
         )
-        + (
-          _cm_config_items
-          | selectattr('name', 'defined')
-          | selectattr('name', 'match', '(?i).*auto[_-]?tls.*')
-          | selectattr('value', 'defined')
-          | selectattr('value', 'in', [true, 'true', 'True', 'TRUE', 'yes', 'Yes', '1', 'enabled', 'ENABLED'])
-          | map(attribute='name')
-          | list
-        )
-        | unique
+        | string
+        | upper
       }}
-    _cm_autotls_ca_cert_value: >-
+    cm_autotls_state_known: >-
       {{
-        (
-          _cm_config_items
-          | selectattr('name', 'defined')
-          | selectattr('name', 'match', '(?i).*auto[_-]?tls.*ca.*cert.*')
-          | map(attribute='value')
-          | first
-          | default('', true)
-        )
-        if (
-          _cm_config_items
-          | selectattr('name', 'defined')
-          | selectattr('name', 'match', '(?i).*auto[_-]?tls.*ca.*cert.*')
-          | list
-          | length > 0
-        )
-        else (
-          _cm_config_items
-          | selectattr('name', 'defined')
-          | selectattr('name', 'in', ['auto_tls_ca_cert', 'AUTO_TLS_CA_CERT'])
-          | map(attribute='value')
-          | first
-          | default('', true)
-        )
+        _cm_config_items
+        | selectattr('name', 'defined')
+        | selectattr('name', 'equalto', 'AUTO_TLS_TYPE')
+        | list
+        | length > 0
       }}
   vars:
     _cm_config_items: "{{ _cm_autotls_config_api.json['items'] | default([]) }}"
-    _cm_autotls_config_flag_names:
-      - enable_auto_tls
-      - ENABLE_AUTO_TLS
-      - autoTlsEnabled
-      - auto_tls_enabled
 
 - name: CM API — set Auto-TLS enabled from CM configuration
   ansible.builtin.set_fact:
     cm_autotls_api_enabled: >-
       {{
-        (_cm_autotls_config_flag_hits | default([]) | length > 0)
-        or ((_cm_autotls_ca_cert_value | default('') | trim | length) > 0)
+        (cm_autotls_state_known | default(false) | bool)
+        and (cm_autotls_type | default('NONE') | upper) != 'NONE'
+        and (cm_autotls_type | default('') | trim | length) > 0
       }}
     cm_autotls_config_flags_unreported: false
-    cm_autotls_parsed_from_cm_config: >-
-      {{
-        (_cm_autotls_config_flag_hits | default([]) | length > 0)
-        or ((_cm_autotls_ca_cert_value | default('') | trim | length) > 0)
-      }}
+    cm_autotls_parsed_from_cm_config: "{{ cm_autotls_state_known | default(false) | bool }}"
 
-- name: CM API — debug sample /cm/config item names when Auto-TLS flags missing after generateCmca
+- name: CM API — debug sample /cm/config item names when AUTO_TLS_TYPE is missing after generateCmca
   ansible.builtin.debug:
     msg: >-
-      CM /cm/config did not report Auto-TLS flags after successful generateCmca this run.
+      CM /cm/config did not report AUTO_TLS_TYPE after successful generateCmca this run.
       Sample config item names:
       {{ _cm_autotls_config_name_sample | join(', ') }}
   vars:
