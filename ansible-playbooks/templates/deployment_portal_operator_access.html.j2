@@ -2,13 +2,14 @@
 {% set oa = ctx.operator_access | default({}) %}
 {% from 'deployment_portal_url_fqdn_pubip.inc.j2' import portal_jdbc_for_context, portal_url_bundle, portal_url_for_context with context %}
 {% set ssh_key_filename = oa.ssh_connect_key_filename | default('cluster-access.pem', true) %}
+{% set download_revision = ctx.generated_at | default('current') | replace(':', '') | replace('+', '') | replace(' ', '') %}
 <div class="operator-protected">
   <p class="sub">Authenticated operator view. Credentials are rendered from Ansible variables at portal sync; use only on trusted networks.</p>
   <p class="sub">
     SSH user: <code>{{ oa.ssh_user | default('ec2-user') }}</code>
-    — <a href="{{ oa.downloads_path_prefix | default('/downloads') }}/operator-credentials.json">Download operator-credentials.json</a>
+    — <a href="{{ oa.downloads_path_prefix | default('/downloads') }}/operator-credentials.json?v={{ download_revision }}">Download operator-credentials.json</a>
     {% if deployment_portal_ipa_https_enabled | default(true) | bool %}
-    — <a href="{{ oa.downloads_path_prefix | default('/downloads') }}/caddy-root-ca.crt" download="caddy-root-ca.crt">Download Caddy root CA</a>
+    — <a href="{{ oa.downloads_path_prefix | default('/downloads') }}/caddy-root-ca.crt?v={{ download_revision }}" download="caddy-root-ca.crt">Download Caddy root CA</a>
     {% endif %}
   </p>
 
@@ -52,7 +53,7 @@
   {% if sec.downloads | default([]) | length > 0 %}
   <ul class="cred-dl-list">
     {% for dl in sec.downloads %}
-    <li><a href="{{ dl.href }}" download="{{ dl.filename | default('') }}">{{ dl.label }}</a>{% if dl.note | default('') | length > 0 %} — <span class="badge">{{ dl.note }}</span>{% endif %}</li>
+    <li><a href="{{ dl.href }}?v={{ download_revision }}" download="{{ dl.filename | default('') }}">{{ dl.label }}</a>{% if dl.note | default('') | length > 0 %} — <span class="badge">{{ dl.note }}</span>{% endif %}</li>
     {% endfor %}
   </ul>
   {% endif %}

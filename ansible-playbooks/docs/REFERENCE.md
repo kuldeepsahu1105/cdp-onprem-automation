@@ -392,12 +392,15 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `monitoring_stack_enabled` | `true` | Prometheus + Grafana + Alertmanager + cAdvisor with playbook 28; Jenkins `MONITORING_STACK_ENABLED` checkbox sets this override |
 | `deployment_portal_extra_links` | `[]` | Add `{name, url}` entries to the index page |
 | `deployment_portal_expose_credentials` | `true` | Render **Operator access** panel (CM, DB, IPA, Ranger/Knox/Hue, ECS, optional Jenkins) from group_vars at portal sync |
-| `deployment_portal_expose_ssh_keys` | `true` | Copy Ansible controller SSH private keys to `/downloads/ssh/` on the ops host (EC2 PEM and/or distinct Auto-TLS key). Default **on**; set `false` to disable. `auto` exports only when `deployment_portal_basic_auth_enabled` is true — keep basic auth enabled on `/downloads/*` when exposing keys on untrusted networks |
+| `deployment_portal_expose_ssh_keys` | `true` | Request copying controller SSH private keys to `/downloads/ssh/` (EC2 PEM and/or distinct Auto-TLS key). Export is always suppressed unless `deployment_portal_basic_auth_enabled` is true; set `false` to disable explicitly |
 | `deployment_portal_ssh_pem_path` | `""` | Optional explicit path to the EC2/Ansible PEM on the controller (`sshkey.pem` auto-discovered when empty) |
 | `deployment_portal_ssh_autotls_key_path` | `""` | Optional explicit Auto-TLS private key on the controller; otherwise uses `cm_private_key_path` / `id_rsa` discovery (same order as playbook 27) |
-| `deployment_portal_basic_auth_enabled` | `true` | HTTP basic auth on Caddy path `/downloads/*` only (index and Tier A verify stay unauthenticated) |
-| `deployment_portal_basic_auth_user` | `portal` | Basic auth username for downloads |
-| `deployment_portal_basic_auth_password` | `postgres_password` | Basic auth password for downloads |
+| `deployment_portal_basic_auth_enabled` | `true` | Enable portal login and revocable server-side sessions for `/downloads/*` (index and Tier A verify stay unauthenticated); variable name retained for compatibility |
+| `deployment_portal_basic_auth_user` | `portal` | Portal session-login username |
+| `deployment_portal_basic_auth_password` | `postgres_password` | Portal session-login password |
+| `deployment_portal_auth_image` | `python:3.12-alpine` | Private, unexposed session-service container image |
+| `deployment_portal_auth_container` | `cldr-portal-auth` | Session-service container name |
+| `deployment_portal_session_ttl_seconds` | `28800` | Server-side portal session lifetime (8 hours); logout revokes the current token immediately |
 | `deployment_portal_jenkins_url` | `""` | Optional Jenkins UI URL on the operator panel (passwords belong in Jenkins, not git) |
 | `monitoring_prometheus_extra_targets` | `[]` | Extra Prometheus scrape jobs |
 | `monitoring_node_exporter_enabled` | `true` | Install node_exporter (systemd) on `monitoring_node_exporter_host_groups` and add a `node_exporter` Prometheus job (playbook **32**) |
@@ -448,7 +451,7 @@ Literal defaults from `group_vars/all.yml`. The portal **Operator access** panel
 |---------------|---------------------|-----------------|
 | FreeIPA | `ipaadmin_principal`, `ipaadmin_password` | `admin` / `PseTeam@123` (`common_password` aliases IPA password) |
 | PostgreSQL | `postgres_password` | `postgres` |
-| Portal `/downloads/*` HTTP basic auth | `deployment_portal_basic_auth_user`, `deployment_portal_basic_auth_password` | `portal` / **`postgres_password`** |
+| Portal `/downloads/*` session login | `deployment_portal_basic_auth_user`, `deployment_portal_basic_auth_password` | `portal` / **`postgres_password`** |
 | Cloudera Manager | `cm_admin_user`, `cm_admin_pass` | `admin` / `admin` (factory bootstrap `cm_admin_bootstrap_pass`: `admin`) |
 | pgAdmin | `pgadmin_default_email`, `pgadmin_default_password` | email pattern in table above / **`postgres_password`** |
 | Grafana (monitoring stack) | `monitoring_grafana_admin_user`, `monitoring_grafana_admin_password` | `admin` / **`postgres_password`** |
