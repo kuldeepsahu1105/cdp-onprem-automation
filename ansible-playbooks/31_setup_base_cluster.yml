@@ -114,6 +114,24 @@
           must be the CM service type (ZOOKEEPER), not the service name (zookeeper).
       when: base_cluster_install_services.zookeeper | default(true) | bool
 
+    - name: Validate Worker host template includes Kafka Broker when Kafka is enabled
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              base_cluster_spec.host_templates
+              | selectattr('name', 'equalto', 'Worker')
+              | first
+            ).role_groups
+            | selectattr('service', 'equalto', 'KAFKA')
+            | selectattr('type', 'equalto', 'KAFKA_BROKER')
+            | list
+            | length >= 1
+        fail_msg: >-
+          base_cluster_install_services.kafka is enabled but the Worker host template has no
+          KAFKA KAFKA_BROKER role group.
+      when: base_cluster_install_services.kafka | default(true) | bool
+
     - name: Set remote parcel repository URL in Cloudera Manager (REST API)
       ansible.builtin.import_tasks: common_tasks/configure_cm_parcel_repo_api.yml
       when: parcel_repo is defined
@@ -133,6 +151,72 @@
         follow_redirects: none
       register: existing_cluster
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Check assigned hosts when base cluster already exists
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/hosts"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: existing_cluster_hosts
+      changed_when: false
+      when: existing_cluster.status == 200
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Detect empty partial base cluster from interrupted creation
+      ansible.builtin.set_fact:
+        base_cluster_partial_empty: >-
+          {{
+            existing_cluster.status == 200
+            and (existing_cluster_hosts.json.items | default([]) | length == 0)
+          }}
+
+    - name: Report empty partial base cluster recovery
+      ansible.builtin.debug:
+        msg: >-
+          Base cluster '{{ cdh_basecluster_name }}' exists with zero assigned hosts, indicating
+          an interrupted module creation; deleting only this empty partial cluster before recreation.
+      when: base_cluster_partial_empty | bool
+
+    - name: Delete empty partial base cluster
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}"
+        method: DELETE
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 202, 204, 404]
+        follow_redirects: none
+      when: base_cluster_partial_empty | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Wait for empty partial base cluster deletion
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 404]
+        follow_redirects: none
+      register: base_cluster_partial_delete_wait
+      until: base_cluster_partial_delete_wait.status == 404
+      retries: 30
+      delay: 5
+      changed_when: false
+      when: base_cluster_partial_empty | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Determine whether base cluster creation is required
+      ansible.builtin.set_fact:
+        base_cluster_create_required: >-
+          {{ existing_cluster.status == 404 or (base_cluster_partial_empty | bool) }}
 
     - name: Create and start CDP Base Cluster
       cloudera.cluster.cluster:
@@ -154,7 +238,7 @@
         host_templates: "{{ base_cluster_spec.host_templates }}"
         hosts: "{{ base_cluster_hosts }}"
       register: base_cluster_result
-      when: existing_cluster.status == 404
+      when: base_cluster_create_required | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Start existing base cluster services
@@ -168,7 +252,9 @@
         verify_tls: false
         name: "{{ cdh_basecluster_name }}"
         state: started
-      when: existing_cluster.status == 200
+      when:
+        - existing_cluster.status == 200
+        - not (base_cluster_partial_empty | bool)
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Verify ZooKeeper has at least one Server role (CM API)

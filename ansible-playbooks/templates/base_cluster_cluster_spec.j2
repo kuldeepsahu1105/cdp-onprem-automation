@@ -190,6 +190,8 @@ services:
 {% if svc.ranger | default(true) %}
       ranger_service: ranger
 {% endif %}
+    role_groups:
+      - type: KAFKA_BROKER
 {% endif %}
 {% if svc.atlas | default(true) %}
   - name: atlas
@@ -395,7 +397,7 @@ host_templates:
 {% endif %}
 {% if svc.kafka | default(true) %}
       - service: KAFKA
-        type: BROKER
+        type: KAFKA_BROKER
 {% endif %}
 {% if svc.solr | default(false) %}
       - service: SOLR
