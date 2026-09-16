@@ -32,7 +32,7 @@
   ansible.builtin.set_fact:
     base_cluster_zk_server_count: >-
       {{
-        base_cluster_zk_roles_api.json.items | default([])
+        base_cluster_zk_roles_api.json['items'] | default([])
         | selectattr('type', 'defined')
         | selectattr('type', 'equalto', 'SERVER')
         | list
