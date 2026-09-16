@@ -175,3 +175,7 @@ deployment_portal_expose_ssh_keys: true
 caddy_vhost_enabled: true
 caddy_vhost_public_base: pvc.cloudera-labs.com
 monitoring_stack_enabled: true
+# Host-level node_exporter listener. 19100 avoids Kubernetes DaemonSet hostPort 9100 conflicts.
+monitoring_node_exporter_port: 19100
+# Host-level process_exporter listener; kept outside common Kubernetes exporter host ports.
+monitoring_process_exporter_port: 19256

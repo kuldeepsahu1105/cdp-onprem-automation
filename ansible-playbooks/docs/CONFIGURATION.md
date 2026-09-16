@@ -220,6 +220,8 @@ Auto-TLS provisioning uses password mode when secret
 | `caddy_vhost_enabled` | Boolean; `true` | Enables readable Caddy virtual-host URLs in addition to direct host/port URLs. |
 | `caddy_vhost_public_base` | DNS suffix; `pvc.cloudera-labs.com` | Base suffix for embedded-IP public vhost names. Ensure DNS behavior matches the selected Caddy mode. |
 | `monitoring_stack_enabled` | Boolean; `true` | Installs Grafana, Prometheus, exporters, and related portal links when the monitoring stage runs. |
+| `monitoring_node_exporter_port` | TCP port; `19100` | Host-level node_exporter listener and Prometheus target port. Port 19100 avoids conflicts with Kubernetes applications that reserve host port 9100 for a DaemonSet. Re-run **MONITORING** after changing it. |
+| `monitoring_process_exporter_port` | TCP port; `19256` | Host-level process_exporter listener and Prometheus target port. The nonstandard port avoids workloads that deploy their own process exporter on conventional host port 9256. |
 
 ## Example profiles
 
