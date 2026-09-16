@@ -929,7 +929,7 @@
         </div>
         <div class="header-actions">
           {% if oa.basic_auth_enabled | default(deployment_portal_basic_auth_enabled | default(false)) | bool %}
-          <a class="help-open-btn" id="portal-auth-action" href="/login.html" data-login-url="/login.html" title="Sign in to protected downloads">Login</a>
+          <a class="help-open-btn" id="portal-auth-action" href="{{ _dl_prefix }}/auth.html" data-login-url="{{ _dl_prefix }}/auth.html" title="Sign in to protected downloads">Login</a>
           {% endif %}
           <button type="button" class="help-open-btn" id="portal-help-open" aria-haspopup="dialog">Help</button>
         </div>
@@ -1122,7 +1122,7 @@
         {% if oa.basic_auth_enabled | default(false) | bool %}
         <div class="auth-gate" id="operator-auth-gate" data-content-url="{{ _dl_prefix }}/operator-access.html">
           <p id="operator-auth-message"><strong>Login required.</strong> Sign in to view operator credentials and download private keys.</p>
-          <a class="help-open-btn" href="/login.html">Login to Operator access</a>
+          <a class="help-open-btn" href="{{ _dl_prefix }}/auth.html">Login to Operator access</a>
         </div>
         <div id="operator-protected-content" aria-live="polite" hidden></div>
         {% else %}
@@ -1131,7 +1131,7 @@
         <p class="operator-warning"><strong>SSH keys are downloadable without HTTP auth.</strong> Set <code>deployment_portal_basic_auth_enabled: true</code> or <code>deployment_portal_expose_ssh_keys: false</code>.</p>
         {% endif %}
         {% if oa.basic_auth_enabled | default(false) | bool %}
-        <p class="sub">Downloads under <code>{{ oa.downloads_path_prefix | default('/downloads') }}/</code> require a portal session for user <code>{{ oa.auth_username | default('portal') }}</code> (password from <code>deployment_portal_basic_auth_password</code>).</p>
+        <p class="sub">Downloads under <code>{{ oa.downloads_path_prefix | default('/downloads') }}/</code> require HTTP basic auth user <code>{{ oa.auth_username | default('portal') }}</code> (password from <code>deployment_portal_basic_auth_password</code>).</p>
         {% endif %}
         {% if deployment_portal_expose_credentials | default(true) | bool %}
         <details class="panel cred-defaults-summary" style="margin:0.5rem 0 1rem">
@@ -1150,7 +1150,7 @@
                 <tbody>
                   {% if oa.basic_auth_enabled | default(false) | bool %}
                   <tr>
-                    <td>Portal <code>/downloads/*</code> session login</td>
+                    <td>Portal <code>/downloads/*</code> HTTP auth</td>
                     <td><code>{{ oa.auth_username | default('portal') }}</code></td>
                     <td><code class="cred-secret">{{ deployment_portal_basic_auth_password | default(postgres_password) }}</code></td>
                   </tr>
@@ -1495,7 +1495,7 @@
               {% endfor %}
             </div>
             {% if oa.basic_auth_enabled | default(false) | bool %}
-            <a class="dl-btn auth-download-login" href="/login.html" onclick="event.stopPropagation();">Login to download key</a>
+            <a class="dl-btn auth-download-login" href="{{ _dl_prefix }}/auth.html" onclick="event.stopPropagation();">Login to download key</a>
             {% endif %}
             {% endif %}
           </div>
@@ -1505,7 +1505,7 @@
       <div class="panel-body">
         <p class="sub">One row per host: Ansible groups, addresses, inferred roles, and sample <code>ssh -i &lt;pem&gt;</code> commands (user <code>{{ oa.ssh_user | default('ec2-user') }}</code>, key file <code>{{ ssh_key_filename }}</code>){% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %} — use the download button{% if ns_ssh_dl.items | length == 1 %} in the header{% else %}s in the header{% endif %} for the cluster PEM (same key for all hosts; works even when only the ops/ipaserver row is listed).{% endif %}</p>
         {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) and oa.basic_auth_enabled | default(false) | bool %}
-        <p class="inventory-dl-hint">Downloads require an active portal session (user <code>{{ oa.auth_username | default('portal') }}</code>). Logout revokes the session immediately.</p>
+        <p class="inventory-dl-hint">Downloads use the same HTTP basic auth as <code>{{ _dl_prefix }}/</code> (user <code>{{ oa.auth_username | default('portal') }}</code>).</p>
         {% elif _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) and not (oa.basic_auth_enabled | default(false) | bool) %}
         <p class="inventory-dl-hint">PEM files are served without HTTP auth — enable <code>deployment_portal_basic_auth_enabled</code> for production-like labs.</p>
         {% endif %}
@@ -1573,7 +1573,7 @@
       <p class="sub"><strong>Operator access</strong> — lab credentials and PEM downloads rendered at sync from Ansible group_vars (not stored in git). Service URLs live in their relevant platform sections and in <code>operator-credentials.json</code>. Treat as sensitive; restrict network access.</p>
       <p class="sub"><strong>Network access</strong> — public/private addressing and access-profile facts without repeating service URLs.</p>
       <p class="sub"><strong>Host inventory &amp; planned roles</strong> — Ansible groups, addresses, inferred CDP/monitoring placement; cluster SSH PEM downloads appear in the Host inventory header when key export is enabled.</p>
-      <p class="sub"><strong>Downloads security</strong> — when <code>deployment_portal_basic_auth_enabled</code> is true, files under <code>/downloads</code> (including SSH keys) require a revocable portal session. Prefer authentication on before exposing PEMs.</p>
+      <p class="sub"><strong>Downloads security</strong> — when <code>deployment_portal_basic_auth_enabled</code> is true, files under <code>/downloads</code> (including SSH keys) require HTTP basic auth. Prefer auth on before exposing PEMs.</p>
       <p class="sub"><strong>FreeIPA legacy UI</strong> — use the Caddy <code>ipa.*</code> vhost (<code>/ipa/ui</code>) so browsers do not need <code>/etc/hosts</code> for the ipaserver FQDN; direct <code>https://&lt;ipaserver-fqdn&gt;</code> still needs lab DNS.</p>
     </div>
   </dialog>
@@ -1598,10 +1598,13 @@
     var authMessage = document.getElementById('operator-auth-message');
     var loggedOut = new URLSearchParams(window.location.search).has('logged_out');
     if (loggedOut) {
+      document.cookie = 'portal_authenticated=; Path=/; Max-Age=0; SameSite=Lax';
       window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
       if (authMessage) authMessage.innerHTML = '<strong>Logged out.</strong> Sign in again to view operator credentials and download private keys.';
     }
-    var authenticated = false;
+    var authenticated = !loggedOut && document.cookie.split(';').some(function (cookie) {
+      return cookie.trim() === 'portal_authenticated=1';
+    });
 
     function setAuthenticatedUi(isAuthenticated) {
       document.querySelectorAll('.auth-protected-download').forEach(function (element) {
@@ -1614,46 +1617,12 @@
         authAction.textContent = isAuthenticated ? 'Logout' : 'Login';
         authAction.title = isAuthenticated ? 'Sign out of protected operator access' : 'Sign in to protected operator access';
         authAction.href = isAuthenticated ? '/logout' : authAction.dataset.loginUrl;
+        if (isAuthenticated) {
+          authAction.addEventListener('click', function () {
+            document.cookie = 'portal_authenticated=; Path=/; Max-Age=0; SameSite=Lax';
+          }, { once: true });
+        }
       }
-    }
-
-    function loadProtectedContent() {
-      if (!authGate || !protectedContent || protectedContent.dataset.loaded === 'true') return;
-      if (authMessage) authMessage.textContent = 'Loading authenticated Operator access...';
-      fetch(authGate.dataset.contentUrl, { cache: 'no-store', credentials: 'same-origin' })
-        .then(function (response) {
-          if (!response.ok || response.redirected) {
-            throw new Error('Operator access returned HTTP ' + response.status);
-          }
-          return response.text();
-        })
-        .then(function (html) {
-          protectedContent.innerHTML = html;
-          protectedContent.dataset.loaded = 'true';
-          protectedContent.hidden = false;
-          authGate.hidden = true;
-          enhanceCopyButtons(protectedContent);
-        })
-        .catch(function () {
-          authenticated = false;
-          protectedContent.hidden = true;
-          authGate.hidden = false;
-          setAuthenticatedUi(false);
-          if (authMessage) authMessage.innerHTML = '<strong>Login required.</strong> Your session is no longer valid. Sign in to view credentials and private keys.';
-        });
-    }
-
-    function refreshAuthentication() {
-      fetch('/api/session', { cache: 'no-store', credentials: 'same-origin' })
-        .then(function (response) {
-          authenticated = response.ok;
-          setAuthenticatedUi(authenticated);
-          if (authenticated) loadProtectedContent();
-        })
-        .catch(function () {
-          authenticated = false;
-          setAuthenticatedUi(false);
-        });
     }
 
     function copyText(text) {
@@ -1714,12 +1683,31 @@
       });
     }
 
-    setAuthenticatedUi(false);
+    setAuthenticatedUi(authenticated);
     enhanceCopyButtons(document);
     if (authAction) {
-      authAction.dataset.loginUrl = authAction.dataset.loginUrl || '/login.html';
+      authAction.dataset.loginUrl = authAction.dataset.loginUrl || '{{ _dl_prefix }}/auth.html';
     }
-    if (authAction || authGate) refreshAuthentication();
+    if (authenticated && authGate && protectedContent) {
+      if (authMessage) authMessage.textContent = 'Loading authenticated Operator access...';
+      fetch(authGate.dataset.contentUrl, { cache: 'no-store', credentials: 'same-origin' })
+        .then(function (response) {
+          if (!response.ok) throw new Error('Operator access returned HTTP ' + response.status);
+          return response.text();
+        })
+        .then(function (html) {
+          protectedContent.innerHTML = html;
+          protectedContent.hidden = false;
+          authGate.hidden = true;
+          enhanceCopyButtons(protectedContent);
+        })
+        .catch(function () {
+          document.cookie = 'portal_authenticated=; Path=/; Max-Age=0; SameSite=Lax';
+          authenticated = false;
+          setAuthenticatedUi(false);
+          if (authMessage) authMessage.innerHTML = '<strong>Login required.</strong> Your session is no longer valid. Sign in to view credentials and private keys.';
+        });
+    }
 
     var jumpTop = document.getElementById('page-jump-top');
     var jumpBottom = document.getElementById('page-jump-bottom');

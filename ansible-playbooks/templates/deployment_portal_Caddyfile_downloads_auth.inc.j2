@@ -1,47 +1,22 @@
-{# Password login is verified by Caddy; the private auth service owns revocable sessions. #}
-{% if deployment_portal_basic_auth_enabled | default(false) | bool and (deployment_portal_basic_auth_hash | default('') | length > 0) %}
-  handle /api/login {
-    route {
-      basic_auth {
-        {{ deployment_portal_basic_auth_user }} {{ deployment_portal_basic_auth_hash }}
-      }
-      rewrite * /login
-      reverse_proxy portal-auth:8080 {
-        header_up X-Portal-User {http.auth.user.id}
-      }
-    }
-  }
-
-  handle /api/session {
-    route {
-      rewrite * /check
-      reverse_proxy portal-auth:8080 {
-        header_up X-Auth-Mode status
-      }
-    }
-  }
-
+{# Protected operator files plus a logout endpoint that clears portal browser state. #}
   handle /logout {
-    rewrite * /logout
-    reverse_proxy portal-auth:8080
+    header Set-Cookie "portal_authenticated=; Path=/; Max-Age=0; SameSite=Lax"
+    header Clear-Site-Data "\"cache\", \"cookies\", \"storage\""
+    rewrite * /downloads/logout.html
+    root * /srv
+    file_server
   }
 
   handle /downloads/* {
     route {
-      forward_auth portal-auth:8080 {
-        uri /check
-        header_up X-Auth-Mode redirect
-        header_up X-Forwarded-Uri {http.request.uri}
+{% if deployment_portal_basic_auth_enabled | default(false) | bool and (deployment_portal_basic_auth_hash | default('') | length > 0) %}
+      basic_auth {
+        {{ deployment_portal_basic_auth_user }} {{ deployment_portal_basic_auth_hash }}
       }
-      header Cache-Control "no-store"
+      header Set-Cookie "portal_authenticated=1; Path=/; SameSite=Lax"
+{% endif %}
       root * /srv
       file_server
     }
   }
-{% else %}
-  handle /downloads/* {
-    root * /srv
-    file_server
-  }
-{% endif %}
 {{ '\n' }}
