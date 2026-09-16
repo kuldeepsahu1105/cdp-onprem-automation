@@ -1,9 +1,21 @@
 ---
 # Ask Cloudera Manager whether Auto-TLS is configured (GET /cm/config; do not infer Auto-TLS from :7183 alone).
 
+- name: CM API — select configuration endpoint
+  ansible.builtin.set_fact:
+    _cm_autotls_config_api_base_url: >-
+      {{
+        cm_krb_api_url
+        if (
+          cm_security_api_https_required | default(false) | bool
+          and (cm_krb_api_url | default('') | length > 0)
+        )
+        else cm_api_url
+      }}
+
 - name: CM API — GET CM global configuration
   ansible.builtin.uri:
-    url: "{{ cm_api_url }}/cm/config?view=full"
+    url: "{{ _cm_autotls_config_api_base_url }}/cm/config?view=full"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -11,6 +23,7 @@
     validate_certs: no
     status_code: [200, 301, 303]
   register: _cm_autotls_config_api
+  failed_when: false
   delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
 
 - name: CM API — GET CM global configuration over HTTPS when HTTP config failed
@@ -18,8 +31,8 @@
     url: >-
       {{
         'https://' + (
-          cm_api_probe_host
-          if (cm_api_uri_delegate_to | default('') | length > 0)
+          '127.0.0.1'
+          if (cm_api_uri_delegate_to | default('')) == (cm_manager_inventory_host | default(''))
           else cm_api_client_host
         ) + ':' + (cm_https_port | string) + '/api/' + cm_api_version + '/cm/config?view=full'
       }}
@@ -30,11 +43,12 @@
     validate_certs: no
     status_code: [200, 301, 303]
   register: _cm_autotls_config_api_https_retry
+  failed_when: false
   delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
   when:
-    - _cm_autotls_config_api is failed or (_cm_autotls_config_api.status | default(0) not in [200, 301, 303])
+    - _cm_autotls_config_api.status | default(0) not in [200, 301, 303]
     - cm_api_version | default('') | length > 0
-    - (cm_protocol | default('http')) != 'https'
+    - not (_cm_autotls_config_api_base_url is match('^https://'))
 
 - name: CM API — adopt HTTPS config response when HTTP config was unreachable
   ansible.builtin.set_fact:
@@ -46,6 +60,15 @@
     - _cm_autotls_config_api_https_retry is defined
     - _cm_autotls_config_api_https_retry is succeeded
     - _cm_autotls_config_api_https_retry.status | default(0) in [200, 301, 303]
+
+- name: CM API — require readable CM global configuration
+  ansible.builtin.assert:
+    that:
+      - _cm_autotls_config_api.status | default(0) in [200, 301, 303]
+    fail_msg: >-
+      Cloudera Manager global configuration is not reachable from
+      {{ cm_api_uri_delegate_to | default('localhost') }} at
+      {{ _cm_autotls_config_api_base_url }}.
 
 - name: CM API — read authoritative Auto-TLS type
   ansible.builtin.set_fact:
