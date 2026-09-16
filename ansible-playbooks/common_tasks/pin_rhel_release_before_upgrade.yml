@@ -2,13 +2,30 @@
 # Pin RHEL before any full DNF upgrade. This works with both subscription-manager
 # and AWS RHUI, where subscription-manager release locking is commonly unavailable.
 
+- name: Read existing persistent RHEL release pin
+  ansible.builtin.command: cat /etc/dnf/vars/releasever
+  register: rhel_release_pin_existing
+  changed_when: false
+  failed_when: false
+  when: ansible_distribution == "RedHat"
+
 - name: Resolve effective RHEL minor release pin
   ansible.builtin.set_fact:
     rhel_release_pin_effective: >-
       {{
-        ansible_distribution_version
+        (
+          rhel_release_pin_existing.stdout | default('') | trim
+          if (
+            rhel_release_pin_existing.rc | default(1) == 0
+            and (
+              rhel_release_pin_existing.stdout | default('') | trim
+              is match('^[0-9]+\.[0-9]+$')
+            )
+          )
+          else ansible_distribution_version
+        )
         if (rhel_release_pin | default('auto') | string | lower) == 'auto'
-        else (rhel_release_pin | string)
+        else rhel_release_pin | string
       }}
   when: ansible_distribution == "RedHat"
 
