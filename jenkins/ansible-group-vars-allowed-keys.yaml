@@ -156,6 +156,7 @@ allowed_keys:
   - ecs_cai_workspace_name
 
   # OS / dependency versions
+  - rhel_release_pin
   - java_version
   - python_version
   - postgresql_version
