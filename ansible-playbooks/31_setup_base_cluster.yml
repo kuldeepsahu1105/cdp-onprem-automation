@@ -934,8 +934,7 @@
             + (
               [
                 {'service': 'yarn', 'command': 'yarnCreateJobHistoryDirCommand'},
-                {'service': 'yarn', 'command': 'installMrFrameworkJars'},
-                {'service': 'yarn', 'command': 'yarnCreateCmContainerUsageInputDirCommand'}
+                {'service': 'yarn', 'command': 'installMrFrameworkJars'}
               ]
               if (
                 base_cluster_install_services.yarn | default(true) | bool
