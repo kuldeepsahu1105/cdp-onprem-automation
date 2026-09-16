@@ -111,11 +111,12 @@ base_cluster_install_services:
   ozone: true
   yarn: true
   tez: true
+  spark3: true
   hive: true
   hive_on_tez: true
   hbase: true
   hue: true
-  iceberg: false
+  iceberg: true
   replication: false
   impala: true
   kafka: true

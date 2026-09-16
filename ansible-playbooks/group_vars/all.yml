@@ -442,12 +442,13 @@ base_cluster_install_services:
   ozone: true
   yarn: true
   tez: true
+  spark3: true
   hive: true
   hive_on_tez: true
   hbase: true
   hue: true
-  # ICEBERG service requires newer CDH parcels (not on CDH 7.3.2); enable when parcel supports it.
-  iceberg: false
+  # Iceberg is provided through Hive, Impala, and Spark 3 in CDP 7.3.x (no standalone CM service).
+  iceberg: true
   # Replication Manager is not on CDH 7.3.2; enable when the parcel supports REPLICATION_MANAGER.
   replication: false
   impala: true

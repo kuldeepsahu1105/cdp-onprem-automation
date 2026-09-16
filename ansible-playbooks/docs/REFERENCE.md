@@ -62,7 +62,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | Variable | Default |
 |---|---|
 | `cdh_basecluster_name` | `CDH-Cluster` |
-| `base_cluster_install_services` | see `all.yml` | Per-service booleans for `31_setup_base_cluster.yml` (Knox default `true`; NiFi, DataViz, Phoenix, Solr default `false`) |
+| `base_cluster_install_services` | see `all.yml` | Per-service booleans for `31_setup_base_cluster.yml` (Spark 3, Knox, and Solr default `true`; NiFi, NiFi Registry, DataViz, and Phoenix default `false`; Iceberg validates its engine services) |
 | `cm_admin_bootstrap_pass` | `admin` | Factory CM password; when `cm_admin_pass` differs, `ensure_cm_admin_password.yml` runs in **24_start_cm** / **27_setup_cm_autotls** only |
 | `base_cluster_yarn_*` | `4096` / `4` | YARN RM/NM memory and vcore limits in cluster spec template |
 | `ecs_cluster_name` | `ECS-Cluster` |

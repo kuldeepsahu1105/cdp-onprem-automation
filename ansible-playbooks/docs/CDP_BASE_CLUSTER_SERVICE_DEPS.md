@@ -8,9 +8,11 @@ Authoritative matrix: [Service Dependencies in Cloudera Manager](https://docs.cl
 
 | Service | Config keys used in template |
 |---------|------------------------------|
+| Core Settings | no required service reference; `GATEWAY` distributes shared client configuration |
 | HDFS | `zookeeper_service`, `core_connector` |
 | YARN | `hdfs_service`, `zookeeper_service`; optional `ranger_service` |
 | Tez | `yarn_service` only |
+| Spark 3 on YARN | `yarn_service`; roles `SPARK3_YARN_HISTORY_SERVER` and `GATEWAY` |
 | Hive | `hdfs_service`, `zookeeper_service`, `mapreduce_yarn_service`; optional `ranger_service`, `hbase_service`, `atlas_service` |
 | Hive on Tez | `hdfs_service`, `hms_connector`, `tez_service`, `mapreduce_yarn_service`, `zookeeper_service`; optional ranger/hbase/atlas |
 | HBase | `hdfs_service`, `zookeeper_service` |
@@ -21,12 +23,21 @@ Authoritative matrix: [Service Dependencies in Cloudera Manager](https://docs.cl
 | **Ranger** | **`hdfs_service`**; **`solr_service`** when Solr is enabled (not `hive_service` / `kafka_service`) |
 | Solr | `hdfs_service`, `zookeeper_service` — do **not** set `ranger_service` on the Solr instance used for Ranger audits (cyclic dependency) |
 | NiFi | `hdfs_service`, `zookeeper_service`; optional `kafka_service` |
-| Ozone | `hdfs_service` |
+| NiFi Registry | no required service reference; CM type `NIFIREGISTRY`, roles `NIFI_REGISTRY_SERVER`, optional `GATEWAY` |
+| Data Visualization | no required service reference; roles `DATAVIZ_WEBSERVER`, `DATAVIZ_REVERSE_PROXY` |
+| Phoenix | `hbase_service`; role `PHOENIX_QUERY_SERVER` |
+| Ozone | no required service reference; baseline roles `OZONE_MANAGER`, `STORAGE_CONTAINER_MANAGER`, `OZONE_DATANODE` |
 
 ## Not installed by default (intentional)
 
 - **Oozie** — not in `base_cluster_install_services`; Hue `oozie_service` is omitted unless you add an Oozie service to the template.
-- **ICEBERG**, **REPLICATION_MANAGER** — disabled by default; not on CDH 7.3.2 parcel. Enable only when the runtime exposes those service types.
+- **REPLICATION_MANAGER** — disabled by default; not on the CDH 7.3.2 parcel. Enable only when the runtime exposes that service type.
+
+## Iceberg
+
+CDP Runtime 7.3.x provides Iceberg through Hive, Impala, and Spark rather than a
+standalone `ICEBERG` CM service. The `iceberg` toggle therefore validates those
+engine dependencies and does not render a service or role.
 
 ## Ranger + Solr
 

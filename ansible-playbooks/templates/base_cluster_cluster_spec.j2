@@ -7,6 +7,8 @@ services:
   - name: core-settings
     type: CORE_SETTINGS
     display_name: Core Settings
+    role_groups:
+      - type: GATEWAY
 {% endif %}
 {% if svc.zookeeper | default(true) %}
   - name: zookeeper
@@ -14,6 +16,8 @@ services:
     display_name: ZooKeeper
     config:
       zookeeper_datadir_autocreate: true
+    role_groups:
+      - type: SERVER
 {% endif %}
 {% if svc.hdfs | default(true) %}
   - name: hdfs
@@ -32,13 +36,17 @@ services:
       - type: SECONDARYNAMENODE
         config:
           fs_checkpoint_dir_list: /dfs/snn
+      - type: GATEWAY
 {% endif %}
 {% if svc.ozone | default(true) %}
   - name: ozone
     type: OZONE
     display_name: Ozone
-    config:
-      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+    role_groups:
+      - type: OZONE_MANAGER
+      - type: STORAGE_CONTAINER_MANAGER
+      - type: OZONE_DATANODE
+      - type: GATEWAY
 {% endif %}
 {% if svc.yarn | default(true) %}
   - name: yarn
@@ -61,6 +69,8 @@ services:
           yarn_nodemanager_resource_cpu_vcores: {{ base_cluster_yarn_nm_vcores | default(4) }}
           yarn_nodemanager_local_dirs: /tmp/nm
           yarn_nodemanager_log_dirs: /var/log/nm
+      - type: JOBHISTORY
+      - type: GATEWAY
 {% endif %}
 {% if svc.tez | default(true) %}
   - name: tez
@@ -69,6 +79,21 @@ services:
     config:
       # Tez depends on YARN only (not hdfs_service) — see CDP service dependency matrix.
       yarn_service: "{{ 'yarn' if svc.yarn | default(true) else '' }}"
+    role_groups:
+      - type: GATEWAY
+{% endif %}
+{% if svc.spark3 | default(true) %}
+  - name: spark3_on_yarn
+    type: SPARK3_ON_YARN
+    display_name: Spark 3 on YARN
+    config:
+      yarn_service: "{{ 'yarn' if svc.yarn | default(true) else '' }}"
+{% if svc.hbase | default(true) %}
+      hbase_service: hbase
+{% endif %}
+    role_groups:
+      - type: SPARK3_YARN_HISTORY_SERVER
+      - type: GATEWAY
 {% endif %}
 {% if svc.hive | default(true) %}
   - name: hive
@@ -87,6 +112,9 @@ services:
 {% if svc.atlas | default(true) %}
       atlas_service: atlas
 {% endif %}
+    role_groups:
+      - type: HIVEMETASTORE
+      - type: GATEWAY
 {% endif %}
 {% if svc.hive_on_tez | default(true) %}
   - name: hive_on_tez
@@ -107,6 +135,9 @@ services:
 {% if svc.atlas | default(true) %}
       atlas_service: atlas
 {% endif %}
+    role_groups:
+      - type: HIVESERVER2
+      - type: GATEWAY
 {% endif %}
 {% if svc.hbase | default(true) %}
   - name: hbase
@@ -115,6 +146,10 @@ services:
     config:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+    role_groups:
+      - type: MASTER
+      - type: REGIONSERVER
+      - type: GATEWAY
 {% endif %}
 {% if svc.hue | default(true) %}
   - name: hue
@@ -145,14 +180,9 @@ services:
 {% if svc.zookeeper | default(true) %}
       zookeeper_service: zookeeper
 {% endif %}
-{% endif %}
-{% if svc.iceberg | default(false) %}
-  - name: iceberg
-    type: ICEBERG
-    display_name: Iceberg
-    config:
-      hive_service: "{{ 'hive' if svc.hive | default(true) else '' }}"
-      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+    role_groups:
+      - type: HUE_SERVER
+      - type: HUE_LOAD_BALANCER
 {% endif %}
 {% if svc.replication | default(false) %}
   - name: replication
@@ -160,6 +190,8 @@ services:
     display_name: Replication Manager
     config:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+    role_groups:
+      - type: REPLICATION_MANAGER
 {% endif %}
 {% if svc.impala | default(true) %}
   - name: impala
@@ -177,6 +209,10 @@ services:
 {% if svc.atlas | default(true) %}
       atlas_service: atlas
 {% endif %}
+    role_groups:
+      - type: STATESTORE
+      - type: CATALOGSERVER
+      - type: IMPALAD
 {% endif %}
 {% if svc.kafka | default(true) %}
   - name: kafka
@@ -192,6 +228,7 @@ services:
 {% endif %}
     role_groups:
       - type: KAFKA_BROKER
+      - type: GATEWAY
 {% endif %}
 {% if svc.atlas | default(true) %}
   - name: atlas
@@ -209,6 +246,9 @@ services:
 {% if svc.ranger | default(true) %}
       ranger_service: ranger
 {% endif %}
+    role_groups:
+      - type: ATLAS_SERVER
+      - type: GATEWAY
 {% endif %}
 {% if svc.ranger | default(true) %}
   - name: ranger
@@ -219,6 +259,10 @@ services:
 {% if svc.solr | default(false) %}
       solr_service: solr
 {% endif %}
+    role_groups:
+      - type: RANGER_ADMIN
+      - type: RANGER_TAGSYNC
+      - type: RANGER_USERSYNC
 {% endif %}
 {% if svc.nifi | default(false) %}
   - name: nifi
@@ -230,21 +274,25 @@ services:
 {% if svc.kafka | default(true) %}
       kafka_service: kafka
 {% endif %}
+    role_groups:
+      - type: NIFI_NODE
+      - type: GATEWAY
 {% endif %}
 {% if svc.nifi_registry | default(false) %}
   - name: nifi_registry
-    type: NIFI_REGISTRY
+    type: NIFIREGISTRY
     display_name: NiFi Registry
-    config:
-      nifi_service: "{{ 'nifi' if svc.nifi | default(false) else '' }}"
+    role_groups:
+      - type: NIFI_REGISTRY_SERVER
+      - type: GATEWAY
 {% endif %}
 {% if svc.dataviz | default(false) %}
   - name: dataviz
     type: DATAVIZ
     display_name: Data Visualization
-    config:
-      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
-      hive_service: "{{ 'hive_on_tez' if svc.hive_on_tez | default(true) else ('hive' if svc.hive | default(true) else '') }}"
+    role_groups:
+      - type: DATAVIZ_WEBSERVER
+      - type: DATAVIZ_REVERSE_PROXY
 {% endif %}
 {% if svc.phoenix | default(false) %}
   - name: phoenix
@@ -252,11 +300,15 @@ services:
     display_name: Phoenix
     config:
       hbase_service: "{{ 'hbase' if svc.hbase | default(true) else '' }}"
+    role_groups:
+      - type: PHOENIX_QUERY_SERVER
 {% endif %}
 {% if svc.knox | default(true) %}
   - name: knox
     type: KNOX
     display_name: Knox
+    role_groups:
+      - type: KNOX_GATEWAY
 {% endif %}
 {% if svc.solr | default(false) %}
   - name: solr
@@ -265,6 +317,9 @@ services:
     config:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+    role_groups:
+      - type: SOLR_SERVER
+      - type: GATEWAY
 {% endif %}
 # host_templates.role_groups[].service must be the CM service TYPE (e.g. HDFS), not the service name (hdfs).
 # cloudera.cluster.cluster find_base_role_group_name matches ApiService.type, not name.
@@ -288,6 +343,10 @@ host_templates:
         type: RESOURCEMANAGER
       - service: YARN
         type: JOBHISTORY
+{% endif %}
+{% if svc.spark3 | default(true) %}
+      - service: SPARK3_ON_YARN
+        type: SPARK3_YARN_HISTORY_SERVER
 {% endif %}
 {% if svc.hive | default(true) %}
       - service: HIVE
@@ -329,21 +388,19 @@ host_templates:
       - service: REPLICATION_MANAGER
         type: REPLICATION_MANAGER
 {% endif %}
-{% if svc.iceberg | default(false) %}
-      - service: ICEBERG
-        type: ICEBERG_CATALOG
-{% endif %}
 {% if svc.nifi | default(false) %}
       - service: NIFI
-        type: NIFI_SERVER
+        type: NIFI_NODE
 {% endif %}
 {% if svc.nifi_registry | default(false) %}
-      - service: NIFI_REGISTRY
+      - service: NIFIREGISTRY
         type: NIFI_REGISTRY_SERVER
 {% endif %}
 {% if svc.dataviz | default(false) %}
       - service: DATAVIZ
-        type: DATAVIZ_SERVER
+        type: DATAVIZ_WEBSERVER
+      - service: DATAVIZ
+        type: DATAVIZ_REVERSE_PROXY
 {% endif %}
 {% if svc.knox | default(true) %}
       - service: KNOX
@@ -359,17 +416,27 @@ host_templates:
 {% endif %}
   - name: Worker
     role_groups:
+{% if svc.core_settings | default(true) %}
+      - service: CORE_SETTINGS
+        type: GATEWAY
+{% endif %}
 {% if svc.hdfs | default(true) %}
       - service: HDFS
         type: DATANODE
+      - service: HDFS
+        type: GATEWAY
 {% endif %}
 {% if svc.ozone | default(true) %}
       - service: OZONE
         type: OZONE_DATANODE
+      - service: OZONE
+        type: GATEWAY
 {% endif %}
 {% if svc.yarn | default(true) %}
       - service: YARN
         type: NODEMANAGER
+      - service: YARN
+        type: GATEWAY
 {% endif %}
 {% if svc.zookeeper | default(true) %}
       - service: ZOOKEEPER
@@ -378,6 +445,12 @@ host_templates:
 {% if svc.hbase | default(true) %}
       - service: HBASE
         type: REGIONSERVER
+      - service: HBASE
+        type: GATEWAY
+{% endif %}
+{% if svc.atlas | default(true) %}
+      - service: ATLAS
+        type: GATEWAY
 {% endif %}
 {% if svc.hive | default(true) %}
       - service: HIVE
@@ -391,6 +464,18 @@ host_templates:
       - service: TEZ
         type: GATEWAY
 {% endif %}
+{% if svc.spark3 | default(true) %}
+      - service: SPARK3_ON_YARN
+        type: GATEWAY
+{% endif %}
+{% if svc.nifi | default(false) %}
+      - service: NIFI
+        type: GATEWAY
+{% endif %}
+{% if svc.nifi_registry | default(false) %}
+      - service: NIFIREGISTRY
+        type: GATEWAY
+{% endif %}
 {% if svc.impala | default(true) %}
       - service: IMPALA
         type: IMPALAD
@@ -398,8 +483,12 @@ host_templates:
 {% if svc.kafka | default(true) %}
       - service: KAFKA
         type: KAFKA_BROKER
+      - service: KAFKA
+        type: GATEWAY
 {% endif %}
 {% if svc.solr | default(false) %}
       - service: SOLR
         type: SOLR_SERVER
+      - service: SOLR
+        type: GATEWAY
 {% endif %}
