@@ -549,16 +549,50 @@
             or base_cluster_ozone_recon_create.changed | default(false) | bool
           }}
 
+    - name: Determine whether First Run is required
+      ansible.builtin.set_fact:
+        base_cluster_first_run_required: >-
+          {{
+            base_cluster_create_required | bool
+            or base_cluster_required_config_changed | bool
+          }}
+
     - name: Show cluster startup wait
       ansible.builtin.debug:
         msg: >-
           Cluster configuration is complete. Starting CM First Run; Jenkins will poll every
           {{ base_cluster_module_poll_interval }}s until CM finishes or the bounded wait expires.
-      when: base_cluster_create_required | bool
+      when: base_cluster_first_run_required | bool
 
     - name: Start {{ 'new' if base_cluster_create_required | bool else 'existing' }} base cluster with name {{ cdh_basecluster_name }}
       block:
-        - name: Run cluster First Run
+        - name: Submit cluster First Run
+          ansible.builtin.uri:
+            url: >-
+              {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+              }}/commands/firstRun
+            method: POST
+            user: "{{ cm_admin_user }}"
+            password: "{{ cm_admin_pass }}"
+            force_basic_auth: yes
+            validate_certs: no
+            status_code: [200]
+            follow_redirects: none
+          register: base_cluster_first_run_command
+          when: base_cluster_first_run_required | bool
+          delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+        - name: Wait for cluster First Run
+          ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+          vars:
+            cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+            cm_api_command_id: "{{ base_cluster_first_run_command.json.id }}"
+            cm_api_command_allow_already_exists: false
+          when:
+            - base_cluster_first_run_required | bool
+            - base_cluster_first_run_command.json.id is defined
+
+        - name: Start initialized cluster
           cloudera.cluster.cluster:
             host: "{{ cm_cluster_module_host }}"
             port: "{{ cm_cluster_module_port }}"
@@ -569,22 +603,24 @@
             verify_tls: false
             name: "{{ cdh_basecluster_name }}"
             state: started
-            force: >-
-              {{
-                base_cluster_create_required | bool
-                or base_cluster_required_config_changed | bool
-              }}
           register: base_cluster_start_result
+          when: not (base_cluster_first_run_required | bool)
           delegate_to: "{{ cm_cluster_module_delegate_to }}"
           async: "{{ base_cluster_module_async_timeout }}"
           poll: "{{ base_cluster_module_poll_interval }}"
       rescue:
+        - name: Select failed cluster command
+          ansible.builtin.set_fact:
+            base_cluster_failed_command_id: >-
+              {{
+                base_cluster_first_run_command.json.id
+                | default(base_cluster_start_result.command_id | default(''))
+              }}
+
         - name: Get failed First Run command
           ansible.builtin.uri:
             url: >-
-              {{ cm_cluster_module_api_url }}/commands/{{
-                base_cluster_start_result.command_id
-              }}?view=full
+              {{ cm_cluster_module_api_url }}/commands/{{ base_cluster_failed_command_id }}?view=full
             method: GET
             user: "{{ cm_admin_user }}"
             password: "{{ cm_admin_pass }}"
@@ -593,7 +629,7 @@
             status_code: [200]
             follow_redirects: none
           register: base_cluster_failed_command
-          when: base_cluster_start_result.command_id is defined
+          when: base_cluster_failed_command_id | length > 0
           changed_when: false
           delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
@@ -623,14 +659,14 @@
         - name: Report failed First Run services
           ansible.builtin.fail:
             msg: |-
-              Cluster First Run failed (command {{ base_cluster_start_result.command_id | default('unknown') }}).
+              Cluster startup failed (command {{ base_cluster_failed_command_id | default('unknown', true) }}).
               {% for result in base_cluster_failed_service_commands.results | default([]) %}
               - {{ result.json.get('serviceRef', {}).get('serviceDisplayName', result.json.name) }}: {{ result.json.resultMessage | default('unknown') }}
               {% for child in result.json.get('children', {}).get('items', []) if not (child.success | default(false) | bool) %}
                 - {{ child.name }}: {{ child.resultMessage | default('unknown') }}
               {% endfor %}
               {% endfor %}
-              Original module error: {{ base_cluster_start_result.msg | default('unknown') }}
+              Original error: {{ ansible_failed_result.msg | default('unknown') }}
 
     - name: Refresh existing base cluster with name {{ cdh_basecluster_name }}
       ansible.builtin.uri:
