@@ -12,6 +12,7 @@
 - name: Auto-TLS trusted CA — verify FreeIPA CA bundle exists on CM host
   ansible.builtin.stat:
     path: "{{ cm_autotls_freeipa_ca_cert_path | default('/etc/ipa/ca.crt') }}"
+    follow: true
   delegate_to: "{{ cm_manager_inventory_host }}"
   become: true
   register: cm_autotls_freeipa_ca_stat
@@ -60,6 +61,7 @@
 - name: Auto-TLS trusted CA — verify CA bundle after copy
   ansible.builtin.stat:
     path: "{{ cm_autotls_freeipa_ca_cert_path | default('/etc/ipa/ca.crt') }}"
+    follow: true
   delegate_to: "{{ cm_manager_inventory_host }}"
   become: true
   register: cm_autotls_freeipa_ca_stat
