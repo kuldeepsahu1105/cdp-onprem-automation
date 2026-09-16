@@ -225,11 +225,15 @@ services:
       - type: IMPALAD
 {% endif %}
 {% if svc.kafka | default(true) %}
+{% set kafka_metadata_store = base_cluster_kafka_metadata_store | default('Zookeeper') %}
   - name: kafka
     type: KAFKA
     display_name: Kafka
     config:
+      metadata.store: "{{ 'KRaft' if kafka_metadata_store | lower == 'kraft' else 'Zookeeper' }}"
+{% if kafka_metadata_store | lower == 'zookeeper' %}
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+{% endif %}
 {% if svc.hdfs | default(true) %}
       hdfs_service: hdfs
 {% endif %}
@@ -238,7 +242,9 @@ services:
 {% endif %}
     role_groups:
       - type: KAFKA_BROKER
+{% if kafka_metadata_store | lower == 'kraft' %}
       - type: KRAFT
+{% endif %}
       - type: GATEWAY
 {% endif %}
 {% if svc.atlas | default(true) %}
@@ -509,8 +515,10 @@ host_templates:
 {% if svc.kafka | default(true) %}
       - service: KAFKA
         type: KAFKA_BROKER
+{% if base_cluster_kafka_metadata_store | default('Zookeeper') | lower == 'kraft' %}
       - service: KAFKA
         type: KRAFT
+{% endif %}
       - service: KAFKA
         type: GATEWAY
 {% endif %}

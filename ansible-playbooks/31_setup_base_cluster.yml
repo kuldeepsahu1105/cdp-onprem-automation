@@ -48,9 +48,11 @@
           - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_admin_password | regex_search('[A-Za-z]'))
           - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_admin_password | regex_search('[0-9]'))
           - not (base_cluster_install_services.knox | default(true) | bool) or (base_cluster_knox_master_secret | string | length > 0)
+          - not (base_cluster_install_services.kafka | default(true) | bool) or (base_cluster_kafka_metadata_store | lower in ['kraft', 'zookeeper'])
         fail_msg: >-
           Required base-cluster service or database settings are empty. Set the
           base_cluster_* values through ANSIBLE_GROUP_VARS_YAML or an Ansible vault.
+          base_cluster_kafka_metadata_store must be KRaft or Zookeeper.
 
     - name: Check service dependencies
       ansible.builtin.assert:
@@ -73,7 +75,6 @@
         - { service: hue, dependency: hive }
         - { service: impala, dependency: hdfs }
         - { service: impala, dependency: hive }
-        - { service: kafka, dependency: zookeeper }
         - { service: atlas, dependency: hdfs }
         - { service: atlas, dependency: hbase }
         - { service: atlas, dependency: kafka }
@@ -87,6 +88,21 @@
         - { service: iceberg, dependency: spark3 }
       loop_control:
         label: "{{ item.service }} requires {{ item.dependency }}"
+
+    - name: Check Kafka ZooKeeper dependency
+      ansible.builtin.assert:
+        that:
+          - base_cluster_install_services.zookeeper | default(false) | bool
+        fail_msg: >-
+          Kafka metadata mode Zookeeper requires base_cluster_install_services.zookeeper=true.
+      when:
+        - base_cluster_install_services.kafka | default(true) | bool
+        - base_cluster_kafka_metadata_store | lower == 'zookeeper'
+
+    - name: Resolve Kafka metadata store
+      ansible.builtin.set_fact:
+        base_cluster_kafka_metadata_store_effective: >-
+          {{ 'KRaft' if base_cluster_kafka_metadata_store | lower == 'kraft' else 'Zookeeper' }}
 
     - name: Set master hostname
       ansible.builtin.set_fact:
@@ -371,6 +387,16 @@
           - hive_metastore_database_password
       when: base_cluster_install_services.hive | default(true) | bool
 
+    - name: Configure Kafka metadata store
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Kafka metadata store
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services/kafka/config
+        cm_config_desired:
+          metadata.store: "{{ base_cluster_kafka_metadata_store_effective }}"
+      when: base_cluster_install_services.kafka | default(true) | bool
+
     - name: Configure Ranger database and passwords
       ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
       vars:
@@ -578,7 +604,9 @@
         follow_redirects: none
       register: base_cluster_kafka_roles
       changed_when: false
-      when: base_cluster_install_services.kafka | default(true) | bool
+      when:
+        - base_cluster_install_services.kafka | default(true) | bool
+        - base_cluster_kafka_metadata_store_effective == 'KRaft'
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Find workers missing Kafka KRaft roles
@@ -593,7 +621,9 @@
                 | list
               )
           }}
-      when: base_cluster_install_services.kafka | default(true) | bool
+      when:
+        - base_cluster_install_services.kafka | default(true) | bool
+        - base_cluster_kafka_metadata_store_effective == 'KRaft'
 
     - name: Add missing Kafka KRaft roles
       ansible.builtin.uri:
@@ -624,7 +654,9 @@
       loop_control:
         label: "{{ item }}"
       register: base_cluster_kraft_role_create
-      when: base_cluster_install_services.kafka | default(true) | bool
+      when:
+        - base_cluster_install_services.kafka | default(true) | bool
+        - base_cluster_kafka_metadata_store_effective == 'KRaft'
       changed_when: true
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
@@ -635,6 +667,9 @@
             base_cluster_required_config_changed | bool
             or base_cluster_kraft_role_create.changed | default(false) | bool
           }}
+      when:
+        - base_cluster_install_services.kafka | default(true) | bool
+        - base_cluster_kafka_metadata_store_effective == 'KRaft'
 
     - name: Read base cluster initialization marker
       ansible.builtin.slurp:

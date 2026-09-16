@@ -451,6 +451,9 @@ base_cluster_knox_database_user: knox
 base_cluster_knox_database_password: knox
 base_cluster_knox_master_secret: "{{ base_cluster_knox_database_password }}"
 base_cluster_ozone_service_id: o3service1
+# Kafka metadata backend: Zookeeper (default) or KRaft.
+# Choose before Kafka's first start; switching an initialized Kafka service requires a migration.
+base_cluster_kafka_metadata_store: Zookeeper
 # Set true only when intentionally rotating redacted Hive/Ranger/Knox secrets.
 base_cluster_force_secret_update: false
 # Records completion of non-destructive service initialization used to recover an interrupted First Run.

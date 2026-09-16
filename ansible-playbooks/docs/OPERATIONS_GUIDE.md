@@ -453,9 +453,13 @@ complete successfully. CM can report a one-time setup command as
 reports that exact response as a skip and continues, but all other HTTP or
 command failures remain fatal.
 
-Kafka uses the CDP 7.3 KRaft metadata store by default. The base-cluster
-topology assigns both `KAFKA_BROKER` and `KRAFT` roles to base workers, and
-playbook **31** adds missing KRaft roles to existing clusters before startup.
+Kafka metadata is selected with `base_cluster_kafka_metadata_store`:
+`Zookeeper` (the automation default) omits KRaft roles and configures Kafka's
+ZooKeeper dependency, while `KRaft` assigns both `KAFKA_BROKER` and `KRAFT`
+roles to base workers. Choose the mode before Kafka's first successful start;
+changing an initialized Kafka service requires a supported Kafka metadata
+migration. In KRaft mode, playbook **31** adds missing controller roles to
+existing clusters before startup.
 
 **ZooKeeper placement:** When `base_cluster_install_services.zookeeper` is true (default), the **Worker** host template assigns **ZooKeeper Server** to every host in `base_cluster_worker_group` (`base-workers`). Masters use the **Master** template only. Labs typically run one or three ZK servers on workers; Cloudera Manager requires at least one Server role before Stop Cluster / Deploy Client Config (including after Kerberos/KDC is enabled manually or via playbook **28**).
 
