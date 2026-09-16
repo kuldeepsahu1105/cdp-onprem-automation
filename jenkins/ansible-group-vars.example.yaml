@@ -1,6 +1,6 @@
-# Paste into Jenkins ANSIBLE_GROUP_VARS_YAML (allowed keys only).
-# See jenkins/ansible-group-vars-allowed-keys.yaml for the full list.
-# CM archive login: use CM_REPO_USERNAME / CM_REPO_PASSWORD Jenkins params.
+# Paste into Jenkins ANSIBLE_GROUP_VARS_YAML.
+# Any valid Ansible group_vars key is accepted. Dedicated Jenkins parameters,
+# when set, take precedence over matching values here.
 #
 # ipaserver_domain: cldrsetup.local
 # ipaadmin_password: "ChangeMe@123"

@@ -199,7 +199,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     string(name: 'NOTIFICATION_EMAIL', defaultValue: '', description: 'Email recipient (defaults to BUILD_USER_EMAIL; validated when set)')
     text(
       name: 'ANSIBLE_GROUP_VARS_YAML',
-      defaultValue: '''# Ansible-only overrides (domain, versions, passwords) — see jenkins/ansible-group-vars-allowed-keys.yaml
+      defaultValue: '''# Ansible group_vars overrides (any valid key: value mapping)
 # Example:
 # ipaserver_domain: cldrsetup.local
 # cdh_version: "7.3.2.10000"
@@ -207,7 +207,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
 # monitoring_stack_enabled: false   # optional — prefer MONITORING_STACK_ENABLED checkbox above
 # cm_autotls_force_run: true       # CM_TLS_KRB_LDAP — force generateCmca when CM already has Auto-TLS
 ''',
-      description: 'Ansible-only YAML (allowed keys only): domain, stack versions, java/postgres/jdbc/psycopg, passwords. Not full all.yml — see jenkins/ansible-group-vars-allowed-keys.yaml. Monitoring: use MONITORING_STACK_ENABLED checkbox (wins over textarea).'
+      description: 'Ansible group_vars YAML overrides. Any valid key is accepted. Dedicated Jenkins parameters, when set, take precedence over matching textarea values.'
     )
     string(name: 'AD_JOIN_USER', defaultValue: '', description: 'AD only: account used to join Linux hosts. Empty = config.yml ad_join_user.')
     password(name: 'AD_JOIN_PASSWORD', defaultValue: '', description: 'AD only: password for AD_JOIN_USER. Also used for KDC/LDAP when their password fields are empty.')
@@ -950,7 +950,7 @@ def runAnsibleDeployPhase(String phase) {
       ],
     )
     if (yamlCheck != 0) {
-      validationFail('ANSIBLE_GROUP_VARS_YAML is invalid or contains disallowed keys — see jenkins/ansible-group-vars-allowed-keys.yaml')
+      validationFail('ANSIBLE_GROUP_VARS_YAML must contain valid YAML as a key: value mapping')
     }
   }
   def secretEnv = []
