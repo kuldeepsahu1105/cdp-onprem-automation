@@ -50,6 +50,7 @@ services:
       - type: STORAGE_CONTAINER_MANAGER
       - type: OZONE_DATANODE
       - type: OZONE_RECON
+      - type: S3_GATEWAY
       - type: GATEWAY
 {% endif %}
 {% if svc.yarn | default(true) %}
@@ -359,6 +360,8 @@ host_templates:
         type: STORAGE_CONTAINER_MANAGER
       - service: OZONE
         type: OZONE_RECON
+      - service: OZONE
+        type: S3_GATEWAY
 {% endif %}
 {% if svc.yarn | default(true) %}
       - service: YARN
