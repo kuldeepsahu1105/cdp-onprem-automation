@@ -26,7 +26,7 @@ Authoritative matrix: [Service Dependencies in Cloudera Manager](https://docs.cl
 | NiFi Registry | no required service reference; CM type `NIFIREGISTRY`, roles `NIFI_REGISTRY_SERVER`, optional `GATEWAY` |
 | Data Visualization | no required service reference; roles `DATAVIZ_WEBSERVER`, `DATAVIZ_REVERSE_PROXY` |
 | Phoenix | `hbase_service`; role `PHOENIX_QUERY_SERVER` |
-| Ozone | `ozone.service.id`, primordial SCM node; baseline roles `OZONE_MANAGER`, `STORAGE_CONTAINER_MANAGER`, `OZONE_DATANODE`, `OZONE_RECON` |
+| Ozone | `ozone.service.id`, primordial SCM node; baseline roles `OZONE_MANAGER`, `STORAGE_CONTAINER_MANAGER`, `OZONE_DATANODE`, `OZONE_RECON`, `S3_GATEWAY` |
 | Knox | PostgreSQL connection; `KNOX_GATEWAY.gateway_master_secret` |
 
 ## Not installed by default (intentional)

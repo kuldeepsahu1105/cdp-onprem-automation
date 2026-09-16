@@ -44,6 +44,9 @@
           - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_keyadmin_password | string | length > 0)
           - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_tagsync_password | string | length > 0)
           - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_usersync_password | string | length > 0)
+          - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_admin_password | string | length >= 8)
+          - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_admin_password | regex_search('[A-Za-z]'))
+          - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_admin_password | regex_search('[0-9]'))
           - not (base_cluster_install_services.knox | default(true) | bool) or (base_cluster_knox_master_secret | string | length > 0)
         fail_msg: >-
           Required base-cluster service or database settings are empty. Set the
@@ -459,7 +462,7 @@
           - gateway_master_secret
       when: base_cluster_install_services.knox | default(true) | bool
 
-    - name: Read CM hosts for Ozone Recon
+    - name: Read CM hosts for Ozone roles
       ansible.builtin.uri:
         url: "{{ cm_cluster_module_api_url }}/hosts?view=summary"
         method: GET
@@ -474,9 +477,9 @@
       when: base_cluster_install_services.ozone | default(true) | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-    - name: Select Ozone Recon host
+    - name: Select Ozone service host
       ansible.builtin.set_fact:
-        base_cluster_ozone_recon_host_id: >-
+        base_cluster_ozone_service_host_id: >-
           {{
             base_cluster_cm_hosts.json['items']
             | selectattr('hostname', 'equalto', base_master_fqdn)
@@ -486,12 +489,12 @@
           }}
       when: base_cluster_install_services.ozone | default(true) | bool
 
-    - name: Check Ozone Recon host
+    - name: Check Ozone service host
       ansible.builtin.assert:
         that:
-          - base_cluster_ozone_recon_host_id | length > 0
+          - base_cluster_ozone_service_host_id | length > 0
         fail_msg: >-
-          CM has no host matching base master {{ base_master_fqdn }} for the Ozone Recon role.
+          CM has no host matching base master {{ base_master_fqdn }} for required Ozone roles.
       when: base_cluster_install_services.ozone | default(true) | bool
 
     - name: Read Ozone roles
@@ -511,7 +514,20 @@
       when: base_cluster_install_services.ozone | default(true) | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-    - name: Add Ozone Recon role
+    - name: Find missing Ozone roles
+      ansible.builtin.set_fact:
+        base_cluster_missing_ozone_roles: >-
+          {{
+            ['OZONE_RECON', 'S3_GATEWAY']
+            | difference(
+                base_cluster_ozone_roles.json['items']
+                | map(attribute='type')
+                | list
+              )
+          }}
+      when: base_cluster_install_services.ozone | default(true) | bool
+
+    - name: Add missing Ozone roles
       ansible.builtin.uri:
         url: >-
           {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
@@ -524,53 +540,140 @@
         body_format: json
         body:
           items:
-            - type: OZONE_RECON
+            - type: "{{ item }}"
               hostRef:
-                hostId: "{{ base_cluster_ozone_recon_host_id }}"
+                hostId: "{{ base_cluster_ozone_service_host_id }}"
                 hostname: "{{ base_master_fqdn }}"
         status_code: [200, 201, 204]
         follow_redirects: none
-      register: base_cluster_ozone_recon_create
-      when:
-        - base_cluster_install_services.ozone | default(true) | bool
-        - >-
-          base_cluster_ozone_roles.json['items']
-          | selectattr('type', 'equalto', 'OZONE_RECON')
-          | list
-          | length == 0
+      loop: "{{ base_cluster_missing_ozone_roles }}"
+      loop_control:
+        label: "{{ item }}"
+      register: base_cluster_ozone_role_create
+      when: base_cluster_install_services.ozone | default(true) | bool
       changed_when: true
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-    - name: Track Ozone Recon change
+    - name: Track Ozone role changes
       ansible.builtin.set_fact:
         base_cluster_required_config_changed: >-
           {{
             base_cluster_required_config_changed | bool
-            or base_cluster_ozone_recon_create.changed | default(false) | bool
+            or base_cluster_ozone_role_create.changed | default(false) | bool
           }}
 
-    - name: Determine whether First Run is required
+    - name: Find failed First Run commands
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url
+          }}/commands/commands?view=summary&name=First%20Run&success=false&limit=50
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_failed_first_runs
+      changed_when: false
+      when:
+        - not (base_cluster_create_required | bool)
+        - base_cluster_required_config_changed | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Read failed First Run details
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/commands/{{ item.id }}?view=full"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      loop: "{{ base_cluster_failed_first_runs.json['items'] | default([]) }}"
+      loop_control:
+        label: "{{ item.id }}"
+      register: base_cluster_failed_first_run_details
+      changed_when: false
+      when:
+        - base_cluster_failed_first_runs.status | default(0) | int == 200
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Select retryable First Run
+      ansible.builtin.set_fact:
+        base_cluster_retryable_first_run_id: >-
+          {%- set candidates = [] -%}
+          {%- for result in base_cluster_failed_first_run_details.results | default([]) -%}
+            {%- set command = result.json | default({}) -%}
+            {%- set cluster_match = namespace(found=false) -%}
+            {%- for child in command.get('children', {}).get('items', []) -%}
+              {%- set child_cluster =
+                child.get('clusterRef', {}).get(
+                  'clusterName',
+                  child.get('serviceRef', {}).get('clusterName', '')
+                )
+              -%}
+              {%- if child_cluster == cdh_basecluster_name -%}
+                {%- set cluster_match.found = true -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- if
+              cluster_match.found
+              and not (command.get('active', false) | bool)
+              and not (command.get('success', false) | bool)
+              and command.get('canRetry', false) | bool
+            -%}
+              {%- set _ = candidates.append(command.id | int) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ candidates | max if candidates | length > 0 else '' }}
+
+    - name: Check failed First Run can be retried
+      ansible.builtin.assert:
+        that:
+          - base_cluster_retryable_first_run_id | string | length > 0
+        fail_msg: >-
+          Required cluster configuration changed, but CM has no retryable failed First Run
+          command for {{ cdh_basecluster_name }}. Refusing to submit a new First Run because
+          it could try to format an already-formatted NameNode.
+      when:
+        - not (base_cluster_create_required | bool)
+        - base_cluster_required_config_changed | bool
+
+    - name: Determine cluster initialization action
       ansible.builtin.set_fact:
         base_cluster_first_run_required: >-
+          {{ base_cluster_create_required | bool }}
+        base_cluster_first_run_retry_required: >-
           {{
-            base_cluster_create_required | bool
-            or base_cluster_required_config_changed | bool
+            not (base_cluster_create_required | bool)
+            and base_cluster_required_config_changed | bool
           }}
 
     - name: Show cluster startup wait
       ansible.builtin.debug:
         msg: >-
-          Cluster configuration is complete. Starting CM First Run; Jenkins will poll every
+          Cluster configuration is complete. {{
+            'Starting' if base_cluster_first_run_required | bool else 'Retrying'
+          }} CM First Run; Jenkins will poll every
           {{ base_cluster_module_poll_interval }}s until CM finishes or the bounded wait expires.
-      when: base_cluster_first_run_required | bool
+      when:
+        - base_cluster_first_run_required | bool or base_cluster_first_run_retry_required | bool
 
     - name: Start {{ 'new' if base_cluster_create_required | bool else 'existing' }} base cluster with name {{ cdh_basecluster_name }}
       block:
-        - name: Submit cluster First Run
+        - name: Submit cluster First Run or retry
           ansible.builtin.uri:
             url: >-
-              {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
-              }}/commands/firstRun
+              {{
+                cm_cluster_module_api_url
+                ~ (
+                  '/clusters/' ~ cdh_basecluster_name ~ '/commands/firstRun'
+                  if base_cluster_first_run_required | bool
+                  else '/commands/' ~ base_cluster_retryable_first_run_id ~ '/retry'
+                )
+              }}
             method: POST
             user: "{{ cm_admin_user }}"
             password: "{{ cm_admin_pass }}"
@@ -578,19 +681,19 @@
             validate_certs: no
             status_code: [200]
             follow_redirects: none
-          register: base_cluster_first_run_command
-          when: base_cluster_first_run_required | bool
+          register: base_cluster_initialization_command
+          when:
+            - base_cluster_first_run_required | bool or base_cluster_first_run_retry_required | bool
           delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
         - name: Wait for cluster First Run
           ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
           vars:
             cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
-            cm_api_command_id: "{{ base_cluster_first_run_command.json.id }}"
+            cm_api_command_id: "{{ base_cluster_initialization_command.json.id }}"
             cm_api_command_allow_already_exists: false
           when:
-            - base_cluster_first_run_required | bool
-            - base_cluster_first_run_command.json.id is defined
+            - base_cluster_initialization_command.json.id is defined
 
         - name: Start initialized cluster
           cloudera.cluster.cluster:
@@ -604,7 +707,9 @@
             name: "{{ cdh_basecluster_name }}"
             state: started
           register: base_cluster_start_result
-          when: not (base_cluster_first_run_required | bool)
+          when:
+            - not (base_cluster_first_run_required | bool)
+            - not (base_cluster_first_run_retry_required | bool)
           delegate_to: "{{ cm_cluster_module_delegate_to }}"
           async: "{{ base_cluster_module_async_timeout }}"
           poll: "{{ base_cluster_module_poll_interval }}"
@@ -613,7 +718,7 @@
           ansible.builtin.set_fact:
             base_cluster_failed_command_id: >-
               {{
-                base_cluster_first_run_command.json.id
+                base_cluster_initialization_command.json.id
                 | default(base_cluster_start_result.command_id | default(''))
               }}
 

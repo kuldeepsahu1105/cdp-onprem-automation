@@ -36,6 +36,7 @@
             and (
               base_cluster_force_secret_update | default(false) | bool
               or current.get('value', '') != 'REDACTED'
+              or current.get('validationState', '') == 'ERROR'
             )
           )
           or (

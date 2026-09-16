@@ -431,9 +431,13 @@ the cluster is started if necessary, and CM runs
 `deployClientConfigsAndRefresh`. The final cluster state and health are printed.
 
 First Run failures are expanded from the parent CM command into failed service
-commands and their child validation messages in Jenkins. Database and initial
-service passwords use the `base_cluster_*` variables and should be overridden
-through `ANSIBLE_GROUP_VARS_YAML` or an Ansible vault.
+commands and their child validation messages in Jenkins. After required
+configuration is repaired, playbook **31** retries CM's failed First Run command
+rather than submitting a new command that could attempt to format an already
+formatted NameNode. Database and initial service passwords use the
+`base_cluster_*` variables and should be overridden through
+`ANSIBLE_GROUP_VARS_YAML` or an Ansible vault. Ranger initial passwords must
+contain letters and numbers and be at least eight characters long.
 
 **ZooKeeper placement:** When `base_cluster_install_services.zookeeper` is true (default), the **Worker** host template assigns **ZooKeeper Server** to every host in `base_cluster_worker_group` (`base-workers`). Masters use the **Master** template only. Labs typically run one or three ZK servers on workers; Cloudera Manager requires at least one Server role before Stop Cluster / Deploy Client Config (including after Kerberos/KDC is enabled manually or via playbook **28**).
 
