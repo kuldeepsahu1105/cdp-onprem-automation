@@ -53,3 +53,11 @@
           | lower
         )
       )
+    - not (
+        cm_api_command_allow_not_valid | default(false) | bool
+        and 'command not valid for' in (
+          cm_api_command_poll.json.resultMessage
+          | default(cm_api_command_poll.json.result_message | default(''))
+          | lower
+        )
+      )
