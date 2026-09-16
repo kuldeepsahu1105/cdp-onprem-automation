@@ -22,6 +22,12 @@ ALLOWED_KEYS_FILE = REPO_ROOT / "jenkins" / "ansible-group-vars-allowed-keys.yam
 ENV_TO_VAR = [
     ("CM_REPO_USERNAME", "cm_repo_username"),
     ("CM_REPO_PASSWORD", "cm_repo_password"),
+    ("AD_JOIN_USER", "ad_join_user"),
+    ("AD_JOIN_PASSWORD", "ad_join_password"),
+    ("AD_KDC_ADMIN_USER", "ad_kdc_admin_user"),
+    ("AD_KDC_ADMIN_PASSWORD", "ad_kdc_admin_password"),
+    ("AD_LDAP_BIND_DN", "ad_ldap_bind_dn"),
+    ("AD_LDAP_BIND_PASSWORD", "ad_ldap_bind_password"),
     # Terraform/Jenkins tfvars (see scripts/lib/parse_tfvars_yaml.py owner→OWNER, environment→ENVIRONMENT)
     ("OWNER", "deployment_owner"),
     ("ENVIRONMENT", "deployment_name_prefix"),
@@ -193,8 +199,9 @@ def main() -> int:
 
     out_path = Path(args[0])
     allowed = _load_allowed_keys()
+    textarea = _load_yaml_fragment()
     overrides: dict = _coerce_bool_strings(
-        _filter_textarea_overrides(_load_yaml_fragment(), allowed)
+        _filter_textarea_overrides(textarea, allowed)
     )
 
     for env_key, var_name in ENV_TO_VAR:

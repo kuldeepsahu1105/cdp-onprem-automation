@@ -81,7 +81,7 @@
         API URL: Kerberos REST must use HTTPS on port {{ cm_https_port | default(7183) }} when Auto-TLS is enabled (not HTTP :7180).
       Re-run: ansible-playbook -i inventory.ini 30_setup_cm_krbs.yml
       Manual CM UI (if API import keeps failing): Administration → Settings → Kerberos — set realm/KDC host/type,
-      import Account Manager credentials, Save, then restart Cloudera Manager Server (see RUNBOOK.md).
+      import Account Manager credentials, Save, then restart Cloudera Manager Server (see OPERATIONS_GUIDE.md).
   when: not (cm_krb_verify_info.json.kerberized | default(false) | bool)
 
 - name: Kerberos — assert CM KDC integration is enabled

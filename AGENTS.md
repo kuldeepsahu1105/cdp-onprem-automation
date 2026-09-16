@@ -20,7 +20,7 @@ Implement behavior in **Terraform modules**, **Ansible playbooks/tasks**, and **
 ## Testing mindset
 
 - Prefer verifying with direct `ansible-playbook` / `terraform` when touching those trees.
-- Document new optional vars in `ansible-playbooks/docs/RUNBOOK.md` or `REFERENCE.md`, not only `jenkins/README.md`.
+- Document new optional vars in `ansible-playbooks/docs/OPERATIONS_GUIDE.md` or `REFERENCE.md`, not only `jenkins/README.md`.
 
 ## Ansible portal / CM verify edits
 

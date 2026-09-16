@@ -36,13 +36,15 @@ Supported execution paths:
 | IPAServer | RHEL or Ubuntu | Local/in-VPC |
 | Jenkins agent | RHEL or Ubuntu | Remote or in-VPC |
 
-For the full deployment sequence, identity scenarios, and cleanup steps, see the runbook below.
+For the shortest deployment sequence and cleanup path, see the runbook below.
 
 ## Documentation
 
 | Document | Purpose |
 |---|---|
-| [docs/RUNBOOK.md](docs/RUNBOOK.md) | **How to run** — step-by-step deployment, FreeIPA/AD scenarios, cleanup, wrapper scripts |
+| [docs/RUNBOOK.md](docs/RUNBOOK.md) | **Quick runbook** — prepare, validate, deploy, verify, and clean up |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | **Configuration guide** — every `config.yml` option, accepted values, effects, and credential inputs |
+| [docs/OPERATIONS_GUIDE.md](docs/OPERATIONS_GUIDE.md) | **Detailed operations** — controller/network scenarios, FreeIPA/AD, portal verification, recovery, and troubleshooting |
 | [docs/RUN_ORDER.md](docs/RUN_ORDER.md) | **Run order** — Jenkins / `pvc_setup.sh` sequence (unique numbers 10–35) |
 | [docs/REFERENCE.md](docs/REFERENCE.md) | **Detailed reference** — every playbook, variable, inventory group, DNS behavior, repo modes, cleanup toggles |
 
@@ -104,4 +106,6 @@ Spark is bundled in the CDH parcel for `>= 7.3.1` — separate SPARK3 download i
 
 **Dry run:** `DRY_RUN=true ./pvc_setup.sh` or `./pvc_setup.sh --dry-run` — runs Ansible with `--check --diff`. Terraform wrapper: `DRY_RUN=true ./clone_and_run_terraform.sh` (plan only).
 
-See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full execution steps and [docs/REFERENCE.md](docs/REFERENCE.md) for playbook and variable details.
+See [docs/RUNBOOK.md](docs/RUNBOOK.md) for the operator quick path,
+[docs/OPERATIONS_GUIDE.md](docs/OPERATIONS_GUIDE.md) for detailed procedures,
+and [docs/REFERENCE.md](docs/REFERENCE.md) for playbook and variable details.

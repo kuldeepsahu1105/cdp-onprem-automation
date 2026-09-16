@@ -2,7 +2,7 @@
 # Fail fast when this playbook's SSH target (ansible_host) is a VPC-private address that the
 # Ansible controller cannot reach — instead of silently hanging on an SSH connection timeout
 # (the exact "cldr-mngr UNREACHABLE via private IP ... SSH timeout" symptom from Jenkins/laptop
-# runs against a bare-metal-style inventory where ansible_host == private_ip; see docs/RUNBOOK.md
+# runs against a bare-metal-style inventory where ansible_host == private_ip; see docs/OPERATIONS_GUIDE.md
 # "Scenario B — Bare metal", which intentionally uses the same address for both).
 #
 # Runs entirely delegate_to localhost (safe to import from a localhost play before the real
@@ -18,7 +18,7 @@
 #   ansible_ssh_reachability_skip           — true bypasses this check (bare metal / VPN
 #                                              controller with real routing to the private network,
 #                                              or when using an SSH ProxyJump/bastion via
-#                                              ANSIBLE_SSH_COMMON_ARGS — see docs/RUNBOOK.md)
+#                                              ANSIBLE_SSH_COMMON_ARGS — see docs/OPERATIONS_GUIDE.md)
 
 - name: Resolve SSH reachability check group
   ansible.builtin.set_fact:
@@ -92,7 +92,7 @@
       ({{ _assr_unreachable_hosts | map(attribute='ansible_host') | list }}).
       Failing fast here instead of hanging on an SSH connection timeout later in this play.
       This is expected on a documented bare-metal controller with real private routing
-      (docs/RUNBOOK.md "Scenario B") — set ansible_ssh_reachability_skip=true to bypass when that
+      (docs/OPERATIONS_GUIDE.md "Scenario B") — set ansible_ssh_reachability_skip=true to bypass when that
       applies here. Otherwise, from Jenkins/laptop/pipeline outside this network: regenerate
       ansible-playbooks/inventory.ini with a public ansible_host via
       jenkins/scripts/regenerate-inventory-from-terraform.sh (or generate_inventory.sh) so

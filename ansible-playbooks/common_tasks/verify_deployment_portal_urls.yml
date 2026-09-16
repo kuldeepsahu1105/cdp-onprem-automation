@@ -1,5 +1,5 @@
 ---
-# Service URL verify tiers (see RUNBOOK.md § Service URL verification tiers):
+# Service URL verify tiers (see OPERATIONS_GUIDE.md § Service URL verification tiers):
 #   Tier A (ops host): localhost index (verify_deployment_portal_caddy.yml) plus checks scoped by
 #   deployment_portal_verify_milestones (portal/ipa at bootstrap; pgadmin/monitoring/ecs only when listed;
 #   pgAdmin Caddy vhost probes omitted until milestone pgadmin). CM / cm_tls milestones are stripped — use 25_verify_cm.yml.

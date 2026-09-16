@@ -63,6 +63,27 @@ Parameter help after **REFRESH_JENKINSFILE=YES**:
 - **`PIPELINE_STAGES`** — short checkbox help line + per-option hints via Extended Choice `descriptionPropertyValue` (plugin-dependent; some UIs only show these in job configuration).
 - Other parameters — `description` fields on boolean/string/choice params (security group, `ALLOWED_PORTS`, etc.).
 
+### Active Directory credentials
+
+For an AD deployment, set non-secret topology (`identity_provider`, `ad_domain`,
+`ad_kdc_host`, DNS/search bases) in `config.yml` or
+`ANSIBLE_GROUP_VARS_YAML`, then use the masked Jenkins parameters:
+
+| Jenkins parameter | Ansible variable | Purpose/fallback |
+|---|---|---|
+| `AD_JOIN_USER` | `ad_join_user` | Realm-join account; empty uses `config.yml` |
+| `AD_JOIN_PASSWORD` | `ad_join_password` | Realm-join secret; required for AD |
+| `AD_KDC_ADMIN_USER` | `ad_kdc_admin_user` | CM Kerberos account manager; empty uses `AD_JOIN_USER` |
+| `AD_KDC_ADMIN_PASSWORD` | `ad_kdc_admin_password` | CM credential import; empty uses `AD_JOIN_PASSWORD` |
+| `AD_LDAP_BIND_DN` | `ad_ldap_bind_dn` | Full CM LDAP search bind DN; empty uses `config.yml` |
+| `AD_LDAP_BIND_PASSWORD` | `ad_ldap_bind_password` | CM LDAP search secret; empty uses `AD_JOIN_PASSWORD` |
+
+The dedicated password parameters override values from
+`ANSIBLE_GROUP_VARS_YAML` and avoid displaying secrets in the multiline
+configuration field. See
+[`CONFIGURATION.md`](../ansible-playbooks/docs/CONFIGURATION.md#active-directory-credentials)
+for CLI/Vault input and the complete option reference.
+
 **Copy-paste `PIPELINE_STAGES` (full deploy through ECS):**
 
 ```
@@ -214,7 +235,7 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `CM_LICENSE_CONTENT` | Optional multiline Cloudera license file content when no `*license*` file on the agent (empty = trial or agent file) |
 | `MONITORING_STACK_ENABLED` | When checked (default), sets Ansible `monitoring_stack_enabled: true` for playbook `28` (Grafana/Prometheus/Alertmanager/cAdvisor). Uncheck to skip. Overrides `monitoring_stack_enabled` in `ANSIBLE_GROUP_VARS_YAML` if both are set. |
 
-**Deployment portal (playbook 10) and CM verify (25)** use two URL verification tiers (detail: `ansible-playbooks/docs/RUNBOOK.md` § Service URL verification tiers):
+**Deployment portal (playbook 10) and CM verify (25)** use two URL verification tiers (detail: `ansible-playbooks/docs/OPERATIONS_GUIDE.md` § Service URL verification tiers):
 
 | Tier | Checks | Jenkins typical outcome |
 |---|---|---|
@@ -225,7 +246,7 @@ Private-IP URLs on the index work only inside the VPC. Ensure SG allows **81** (
 
 **Control-plane reachability (Jenkins vs VPN / bare metal):** The Jenkins agent has **no route** to VPC `10.x` / `172.31.x` addresses. `run-ansible.sh` exports `ANSIBLE_CONTROL_VIA_JENKINS=1`; `jenkins_override.yml` sets `ansible_control_reachability: public` so CM API and portal verify never treat inventory `private_ip` as the controller target (probes delegate to `cldr-mngr` at manager IP/FQDN where needed). For **bare metal** or **in-VPC/VPN** automation runners, use default `auto` or `ansible_control_reachability: private` in `ANSIBLE_GROUP_VARS_YAML` — Tier **B** is skipped when the effective profile is not `public`.
 
-**SSH reachability guard (separate from the above):** `ansible_control_reachability` only affects CM API / portal-verify probing, never the real SSH connection (`ansible_host`). `common_tasks/validate_ansible_ssh_reachability.yml` (imported in `00_setup_ssh_preqs.yml`, `10_setup_deployment_portal.yml`, `32_setup_monitoring_stack.yml`, `35_refresh_deployment_portal.yml`) fails fast with an actionable message when `ansible_host` looks VPC-private and the controller cannot reach it, instead of hanging on an SSH timeout — see `ansible-playbooks/docs/RUNBOOK.md` "Running from any controller". Jenkins normally never hits this because `regenerate-inventory-from-terraform.sh` always writes public `ansible_host`; if a bare-metal/VPN Jenkins agent legitimately has private routing and the automatic probe still misfires, bypass it per-run via `ANSIBLE_EXTRA_VARS` (space-separated `key=value` pairs consumed by `scripts/lib/ansible_env.sh` → `ansible_extra_args()`, appended as `-e` to every `ansible-playbook` call for that run):
+**SSH reachability guard (separate from the above):** `ansible_control_reachability` only affects CM API / portal-verify probing, never the real SSH connection (`ansible_host`). `common_tasks/validate_ansible_ssh_reachability.yml` (imported in `00_setup_ssh_preqs.yml`, `10_setup_deployment_portal.yml`, `32_setup_monitoring_stack.yml`, `35_refresh_deployment_portal.yml`) fails fast with an actionable message when `ansible_host` looks VPC-private and the controller cannot reach it, instead of hanging on an SSH timeout — see `ansible-playbooks/docs/OPERATIONS_GUIDE.md` "Running from any controller". Jenkins normally never hits this because `regenerate-inventory-from-terraform.sh` always writes public `ansible_host`; if a bare-metal/VPN Jenkins agent legitimately has private routing and the automatic probe still misfires, bypass it per-run via `ANSIBLE_EXTRA_VARS` (space-separated `key=value` pairs consumed by `scripts/lib/ansible_env.sh` → `ansible_extra_args()`, appended as `-e` to every `ansible-playbook` call for that run):
 
 ```bash
 export ANSIBLE_EXTRA_VARS='ansible_ssh_reachability_skip=true'

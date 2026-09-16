@@ -114,7 +114,7 @@ ansible-playbook -i inventory.ini 31_setup_base_cluster.yml \
 
 ## Deployment portal (Caddy index + pgAdmin)
 
-`10_setup_deployment_portal.yml` installs the **ops stack** on **`ipaserver`** when `[ipaserver]` exists, otherwise **`cldr-mngr`** (`deployment_portal_host_group: auto`). It can also run independently against another inventory and custom portal/database groups; see [Run the deployment portal independently with another inventory](ansible-playbooks/docs/RUNBOOK.md#run-the-deployment-portal-independently-with-another-inventory). Ansible renders **`docker-compose.yml`** plus a companion **`.env`** under `/opt/cldr-deployment-portal` and `/opt/cldr-monitoring` (paths from `deployment_portal_config_dir` / `monitoring_config_dir`) so bind mounts, ports, and credentials stay out of the compose file — re-run **PORTAL** / **MONITORING** after changing `group_vars`.
+`10_setup_deployment_portal.yml` installs the **ops stack** on **`ipaserver`** when `[ipaserver]` exists, otherwise **`cldr-mngr`** (`deployment_portal_host_group: auto`). It can also run independently against another inventory and custom portal/database groups; see [Run the deployment portal independently with another inventory](ansible-playbooks/docs/OPERATIONS_GUIDE.md#run-the-deployment-portal-independently-with-another-inventory). Ansible renders **`docker-compose.yml`** plus a companion **`.env`** under `/opt/cldr-deployment-portal` and `/opt/cldr-monitoring` (paths from `deployment_portal_config_dir` / `monitoring_config_dir`) so bind mounts, ports, and credentials stay out of the compose file — re-run **PORTAL** / **MONITORING** after changing `group_vars`.
 
 | Service | Port / path |
 |---------|-------------|
@@ -215,12 +215,18 @@ ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml \
 
 | Document | Audience | Contents |
 |---|---|---|
+| [ansible-playbooks/config.yml](ansible-playbooks/config.yml) | **Deployment operators** | Primary editable domains, versions, services, security, repository, ECS, portal, and monitoring settings |
+| [ansible-playbooks/inventory.example.ini](ansible-playbooks/inventory.example.ini) | **Ansible-only users** | Copy to `inventory.ini`, then replace the example hosts and addresses |
 | [READme.adoc](READme.adoc) | **AWS users** | Terraform wrappers, `.tfvars.env`, instance groups, one-click deployment |
 | [ansible-playbooks/README.md](ansible-playbooks/README.md) | **Ansible users** | Quick start, defaults, phase summary |
-| [ansible-playbooks/docs/RUNBOOK.md](ansible-playbooks/docs/RUNBOOK.md) | **Operators** | Step-by-step deployment, identity scenarios (FreeIPA/AD), cleanup, wrapper scripts |
+| [ansible-playbooks/docs/RUNBOOK.md](ansible-playbooks/docs/RUNBOOK.md) | **Operators** | Short prepare, validate, deploy, verify, and cleanup path |
+| [ansible-playbooks/docs/CONFIGURATION.md](ansible-playbooks/docs/CONFIGURATION.md) | **Configuration** | Every `config.yml` option, accepted values, effects, and AD credential inputs |
+| [ansible-playbooks/docs/OPERATIONS_GUIDE.md](ansible-playbooks/docs/OPERATIONS_GUIDE.md) | **Detailed operations** | Controller/network scenarios, identity, portal verification, recovery, and troubleshooting |
 | [ansible-playbooks/docs/REFERENCE.md](ansible-playbooks/docs/REFERENCE.md) | **Detailed reference** | All playbooks, variables, inventory groups, DNS, repo modes, cleanup toggles |
 
-**Start here:** use the runbook for execution steps; use the reference for variable definitions and playbook details.
+**Start here:** use the short runbook for execution, the operations guide for
+detailed procedures and troubleshooting, and the reference for variables and
+playbook details.
 
 ## Default versions
 
@@ -290,11 +296,14 @@ cdp-onprem-automation/
 ├── ansible-playbooks/                 # Ansible playbooks
 │   ├── README.md                 # Ansible quick start
 │   ├── docs/
-│   │   ├── RUNBOOK.md            # How to run (step-by-step)
+│   │   ├── RUNBOOK.md            # Short operator deployment path
+│   │   ├── CONFIGURATION.md      # Config options and credential inputs
+│   │   ├── OPERATIONS_GUIDE.md   # Detailed operations and troubleshooting
 │   │   └── REFERENCE.md          # Variables, playbooks, inventory
 │   ├── config.yml                # Operator-managed deployment settings
 │   ├── group_vars/all.yml        # Stable defaults and derived variables
-│   └── inventory.ini             # Host groups
+│   ├── inventory.example.ini     # Ansible-only inventory template
+│   └── inventory.ini             # Active/generated host inventory
 ├── terraform-code/                 # AWS EC2 Terraform
 └── nutanix_terraform/              # Nutanix VM Terraform
 ```

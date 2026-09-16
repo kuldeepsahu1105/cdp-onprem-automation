@@ -10,6 +10,7 @@
 #
 # Keep passwords out of Git. Supply them with Ansible Vault, environment-backed
 # Jenkins parameters, or `ansible-playbook ... -e @secrets.yml`.
+# Every setting and accepted option is documented in docs/CONFIGURATION.md.
 #
 # Navigation:
 #   1. Environment and identity
@@ -32,6 +33,19 @@ ad_domain: corp.example.com
 ad_kdc_host: ""
 ad_dns_servers:
   - "{{ ad_kdc_host }}"
+ad_join_user: svc-cloudera-join
+ad_computer_ou: ""
+ad_kdc_admin_user: "{{ ad_join_user }}"
+ad_ldap_bind_dn: "CN=svc-cm-ldap,OU=Service Accounts,DC=corp,DC=example,DC=com"
+ad_ldap_user_search_base: "OU=Users,DC=corp,DC=example,DC=com"
+ad_ldap_group_search_base: "OU=Groups,DC=corp,DC=example,DC=com"
+
+# Required AD secrets are intentionally absent from this tracked file:
+#   ad_join_password       - joins Linux hosts to AD
+#   ad_kdc_admin_password  - CM Kerberos credential import; defaults to ad_join_password
+#   ad_ldap_bind_password  - CM LDAP searches; defaults to ad_join_password
+# Supply them with Jenkins password parameters, ANSIBLE_GROUP_VARS_YAML,
+# ANSIBLE_EXTRA_VARS=@vault.yml, or direct ansible-playbook -e @vault.yml.
 
 # Optional DNS additions applied with the environment-specific defaults.
 extra_dns_search_domains: []

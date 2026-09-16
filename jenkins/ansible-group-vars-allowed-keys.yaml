@@ -6,12 +6,19 @@ allowed_keys:
   - ipaserver_domain
   - ad_domain
   - ad_kdc_host
+  - ad_dns_servers
   - ad_join_user
+  - ad_computer_ou
+  - ad_kdc_admin_user
+  - ad_ldap_bind_dn
+  - ad_ldap_user_search_base
+  - ad_ldap_group_search_base
 
   # Passwords (ansible group_vars — not Jenkins/Terraform)
   - ipaadmin_password
   - common_password
   - ad_join_password
+  - ad_kdc_admin_password
   - ad_ldap_bind_password
   - cm_admin_user
   - cm_admin_pass

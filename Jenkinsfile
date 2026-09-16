@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-09-16.1 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-09-16.2 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -209,6 +209,12 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
 ''',
       description: 'Ansible-only YAML (allowed keys only): domain, stack versions, java/postgres/jdbc/psycopg, passwords. Not full all.yml — see jenkins/ansible-group-vars-allowed-keys.yaml. Monitoring: use MONITORING_STACK_ENABLED checkbox (wins over textarea).'
     )
+    string(name: 'AD_JOIN_USER', defaultValue: '', description: 'AD only: account used to join Linux hosts. Empty = config.yml ad_join_user.')
+    password(name: 'AD_JOIN_PASSWORD', defaultValue: '', description: 'AD only: password for AD_JOIN_USER. Also used for KDC/LDAP when their password fields are empty.')
+    string(name: 'AD_KDC_ADMIN_USER', defaultValue: '', description: 'AD only: CM Kerberos credential-import account. Empty = AD_JOIN_USER.')
+    password(name: 'AD_KDC_ADMIN_PASSWORD', defaultValue: '', description: 'AD only: CM Kerberos credential-import password. Empty = AD_JOIN_PASSWORD.')
+    string(name: 'AD_LDAP_BIND_DN', defaultValue: '', description: 'AD only: full bind DN used by CM LDAP searches. Empty = config.yml ad_ldap_bind_dn.')
+    password(name: 'AD_LDAP_BIND_PASSWORD', defaultValue: '', description: 'AD only: CM LDAP bind password. Empty = AD_JOIN_PASSWORD.')
     string(name: 'CM_REPO_USERNAME', defaultValue: '', description: 'Optional archive.cloudera.com username (empty = all.yml, *info.txt, or skip)')
     password(name: 'CM_REPO_PASSWORD', defaultValue: '', description: 'Optional archive.cloudera.com password (empty = all.yml, *info.txt, or skip)')
     text(
@@ -947,9 +953,22 @@ def runAnsibleDeployPhase(String phase) {
       validationFail('ANSIBLE_GROUP_VARS_YAML is invalid or contains disallowed keys — see jenkins/ansible-group-vars-allowed-keys.yaml')
     }
   }
-  def cmPasswordParam = ''
+  def secretEnv = []
   if (params.CM_REPO_PASSWORD) {
-    cmPasswordParam = "${params.CM_REPO_PASSWORD}".trim()
+    def value = "${params.CM_REPO_PASSWORD}".trim()
+    secretEnv << "CM_REPO_PASSWORD=${value}"
+  }
+  if (params.AD_JOIN_PASSWORD) {
+    def value = "${params.AD_JOIN_PASSWORD}".trim()
+    secretEnv << "AD_JOIN_PASSWORD=${value}"
+  }
+  if (params.AD_KDC_ADMIN_PASSWORD) {
+    def value = "${params.AD_KDC_ADMIN_PASSWORD}".trim()
+    secretEnv << "AD_KDC_ADMIN_PASSWORD=${value}"
+  }
+  if (params.AD_LDAP_BIND_PASSWORD) {
+    def value = "${params.AD_LDAP_BIND_PASSWORD}".trim()
+    secretEnv << "AD_LDAP_BIND_PASSWORD=${value}"
   }
   def prefix = """
     set -euo pipefail
@@ -968,12 +987,15 @@ def runAnsibleDeployPhase(String phase) {
     export REQUIRE_INVENTORY=true
     export ANSIBLE_GROUP_VARS_FILE='${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml'
     export CM_REPO_USERNAME='${shellEscape(params.CM_REPO_USERNAME?.trim())}'
+    export AD_JOIN_USER='${shellEscape(params.AD_JOIN_USER?.trim())}'
+    export AD_KDC_ADMIN_USER='${shellEscape(params.AD_KDC_ADMIN_USER?.trim())}'
+    export AD_LDAP_BIND_DN='${shellEscape(params.AD_LDAP_BIND_DN?.trim())}'
     export LICENSE_FILE='${licenseFile ? shellEscape(licenseFile) : ''}'
     export CM_LICENSE_CONTENT_FILE='${licenseFile ? shellEscape(licenseFile) : ''}'
   """
   echo "Running Ansible DEPLOY_PHASE=${phase}"
-  if (cmPasswordParam) {
-    withEnv(["CM_REPO_PASSWORD=${cmPasswordParam}"]) {
+  if (!secretEnv.isEmpty()) {
+    withEnv(secretEnv) {
       sh prefix + './jenkins/scripts/run-ansible.sh'
     }
   } else {

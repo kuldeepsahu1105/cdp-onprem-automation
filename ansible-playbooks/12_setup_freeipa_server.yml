@@ -304,7 +304,7 @@
           (ipaadmin_password / ipadm_password — not YOUR_DS_PASSWORD placeholders).
           On AWS, if DNS used --no-forwarders unexpectedly, check effective_vpc_dns_resolver from set_dns_facts
           and ipa_server_install_use_vpc_dns_forwarder / dns_forwarders in group vars.
-          See ansible-playbooks/docs/RUNBOOK.md troubleshooting diagnostic bundle.
+          See ansible-playbooks/docs/OPERATIONS_GUIDE.md troubleshooting diagnostic bundle.
       when:
         - ipa_server_should_run_install | bool
         - ipa_install_result is defined
