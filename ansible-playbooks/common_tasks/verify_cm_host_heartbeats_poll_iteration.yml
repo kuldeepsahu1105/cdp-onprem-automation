@@ -1,4 +1,15 @@
 ---
+- name: CM host heartbeats — report stale hosts before retry
+  ansible.builtin.debug:
+    msg: >-
+      Heartbeat poll {{ _heartbeat_poll_pass }} found
+      {{ cm_hosts_heartbeat_stale_count }} stale commissioned host(s):
+      {{ cm_hosts_stale_heartbeat | default([]) | map(attribute='hostname') | list | join(', ') }}.
+      Retrying in {{ cm_host_heartbeat_verify_delay | default(30) }} seconds.
+  when:
+    - (_heartbeat_poll_pass | default(1) | int) > 1
+    - (cm_hosts_heartbeat_stale_count | default(99) | int) > 0
+
 - name: CM host heartbeats — wait between poll passes
   ansible.builtin.pause:
     seconds: "{{ cm_host_heartbeat_verify_delay | default(30) }}"
