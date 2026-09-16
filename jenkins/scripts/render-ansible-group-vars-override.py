@@ -16,7 +16,6 @@ except ImportError:
     sys.exit(1)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ALLOWED_KEYS_FILE = REPO_ROOT / "jenkins" / "ansible-group-vars-allowed-keys.yaml"
 
 # Jenkins env vars only (not accepted from ANSIBLE_GROUP_VARS_YAML textarea).
 ENV_TO_VAR = [
@@ -41,9 +40,6 @@ BOOL_ENV_TO_VAR = [
     ("DEPLOYMENT_PORTAL_URL_VERIFY_SKIP_VPC", "deployment_portal_url_verify_skip_vpc"),
 ]
 
-# Use Jenkins CM params instead of pasting these into the textarea.
-TEXTAREA_BLOCKED_KEYS = frozenset({"cm_repo_username", "cm_repo_password"})
-
 _RFC1918_HOST = re.compile(
     r"^(?:10\.|192\.168\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.)"
 )
@@ -66,11 +62,15 @@ def _inventory_first_public_ip(group: str, inventory_path: Path) -> str:
             continue
         if not in_group:
             continue
+        values: dict[str, str] = {}
         for token in line.split():
-            if token.startswith("ansible_host="):
-                host = token.split("=", 1)[1].strip().strip("'\"")
-                if host and not _RFC1918_HOST.match(host):
-                    return host
+            if "=" in token:
+                key, value = token.split("=", 1)
+                values[key] = value.strip().strip("'\"")
+        for key in ("public_ip", "ansible_host"):
+            host = values.get(key, "")
+            if host and not _RFC1918_HOST.match(host):
+                return host
         break
     return ""
 
@@ -110,18 +110,6 @@ def _jenkins_controller_defaults() -> dict:
     return defaults
 
 
-def _load_allowed_keys() -> frozenset[str]:
-    if not ALLOWED_KEYS_FILE.is_file():
-        print(f"ERROR: allowed-keys file missing: {ALLOWED_KEYS_FILE}", file=sys.stderr)
-        sys.exit(1)
-    data = yaml.safe_load(ALLOWED_KEYS_FILE.read_text(encoding="utf-8"))
-    keys = data.get("allowed_keys") if isinstance(data, dict) else None
-    if not isinstance(keys, list) or not keys:
-        print(f"ERROR: {ALLOWED_KEYS_FILE} must define allowed_keys: [ ... ]", file=sys.stderr)
-        sys.exit(1)
-    return frozenset(str(k) for k in keys)
-
-
 def _load_yaml_fragment() -> dict:
     raw = os.environ.get("ANSIBLE_GROUP_VARS_YAML", "").strip()
     b64 = os.environ.get("ANSIBLE_GROUP_VARS_YAML_B64", "").strip()
@@ -139,33 +127,6 @@ def _load_yaml_fragment() -> dict:
         print("ERROR: ANSIBLE_GROUP_VARS_YAML must be a YAML mapping (key: value)", file=sys.stderr)
         sys.exit(1)
     return data
-
-
-def _filter_textarea_overrides(data: dict, allowed: frozenset[str]) -> dict:
-    rejected: list[str] = []
-    filtered: dict = {}
-    for key, val in data.items():
-        if key in TEXTAREA_BLOCKED_KEYS:
-            rejected.append(
-                f"{key} (use Jenkins CM_REPO_USERNAME / CM_REPO_PASSWORD instead)"
-            )
-            continue
-        if key not in allowed:
-            rejected.append(key)
-            continue
-        filtered[key] = val
-    if rejected:
-        print(
-            "ERROR: ANSIBLE_GROUP_VARS_YAML contains keys that are not allowed:\n  "
-            + "\n  ".join(sorted(rejected)),
-            file=sys.stderr,
-        )
-        print(
-            f"Allowed keys are listed in {ALLOWED_KEYS_FILE.relative_to(REPO_ROOT)}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return filtered
 
 
 def _coerce_bool_strings(data: dict) -> dict:
@@ -198,11 +159,8 @@ def main() -> int:
         return 2
 
     out_path = Path(args[0])
-    allowed = _load_allowed_keys()
     textarea = _load_yaml_fragment()
-    overrides: dict = _coerce_bool_strings(
-        _filter_textarea_overrides(textarea, allowed)
-    )
+    overrides: dict = _coerce_bool_strings(textarea)
 
     for env_key, var_name in ENV_TO_VAR:
         val = os.environ.get(env_key, "").strip()

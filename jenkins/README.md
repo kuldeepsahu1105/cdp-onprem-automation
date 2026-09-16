@@ -229,7 +229,7 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `TFVARS_FILE` | Relative config path (auto-detect if empty) |
 | `GIT_BRANCH` | Branch to checkout — use **`main` at or after `691b943`** for PORTAL operator-access fixes; **`main` at or after `b03af5a`** for CM Auto-TLS API URL realign (PR #188). Saved job parameters that pin a feature branch will run old Ansible even when `main` is fixed — set **`GIT_BRANCH=main`** and confirm **Checkout** logs `b03af5a` or later. |
 | `NOTIFICATION_EMAIL` | Email recipient |
-| `ANSIBLE_GROUP_VARS_YAML` | Ansible-only YAML overrides (allowed keys in `jenkins/ansible-group-vars-allowed-keys.yaml`) — not full `all.yml` |
+| `ANSIBLE_GROUP_VARS_YAML` | Any valid Ansible `group_vars` YAML mapping; dedicated Jenkins parameters take precedence over matching keys |
 | `CM_REPO_USERNAME` | Optional archive.cloudera.com username (empty = skip; no early validation failure) |
 | `CM_REPO_PASSWORD` | Optional archive.cloudera.com password (empty = skip) |
 | `CM_LICENSE_CONTENT` | Optional multiline Cloudera license file content when no `*license*` file on the agent (empty = trial or agent file) |
@@ -246,7 +246,7 @@ Private-IP URLs on the index work only inside the VPC. Ensure SG allows **81** (
 
 **Control-plane reachability (Jenkins vs VPN / bare metal):** The Jenkins agent has **no route** to VPC `10.x` / `172.31.x` addresses. `run-ansible.sh` exports `ANSIBLE_CONTROL_VIA_JENKINS=1`; `jenkins_override.yml` sets `ansible_control_reachability: public` so CM API and portal verify never treat inventory `private_ip` as the controller target (probes delegate to `cldr-mngr` at manager IP/FQDN where needed). For **bare metal** or **in-VPC/VPN** automation runners, use default `auto` or `ansible_control_reachability: private` in `ANSIBLE_GROUP_VARS_YAML` — Tier **B** is skipped when the effective profile is not `public`.
 
-**SSH reachability guard (separate from the above):** `ansible_control_reachability` only affects CM API / portal-verify probing, never the real SSH connection (`ansible_host`). `common_tasks/validate_ansible_ssh_reachability.yml` (imported in `00_setup_ssh_preqs.yml`, `10_setup_deployment_portal.yml`, `32_setup_monitoring_stack.yml`, `35_refresh_deployment_portal.yml`) fails fast with an actionable message when `ansible_host` looks VPC-private and the controller cannot reach it, instead of hanging on an SSH timeout — see `ansible-playbooks/docs/OPERATIONS_GUIDE.md` "Running from any controller". Jenkins normally never hits this because `regenerate-inventory-from-terraform.sh` always writes public `ansible_host`; if a bare-metal/VPN Jenkins agent legitimately has private routing and the automatic probe still misfires, bypass it per-run via `ANSIBLE_EXTRA_VARS` (space-separated `key=value` pairs consumed by `scripts/lib/ansible_env.sh` → `ansible_extra_args()`, appended as `-e` to every `ansible-playbook` call for that run):
+**SSH reachability guard (separate from the above):** `ansible_control_reachability` only affects CM API / portal-verify probing, never the real SSH connection (`ansible_host`). `common_tasks/validate_ansible_ssh_reachability.yml` (imported in `00_setup_ssh_preqs.yml`, `10_setup_deployment_portal.yml`, `32_setup_monitoring_stack.yml`, `35_refresh_deployment_portal.yml`) fails fast with an actionable message when `ansible_host` looks VPC-private and the controller cannot reach it, instead of hanging on an SSH timeout. Jenkins regeneration writes public `ansible_host` values. If a bare-metal/VPN Jenkins agent legitimately has private routing and the automatic probe still misfires, bypass it per-run via `ANSIBLE_EXTRA_VARS` (space-separated `key=value` pairs consumed by `scripts/lib/ansible_env.sh` → `ansible_extra_args()`, appended as `-e` to every `ansible-playbook` call for that run):
 
 ```bash
 export ANSIBLE_EXTRA_VARS='ansible_ssh_reachability_skip=true'
@@ -256,12 +256,12 @@ With **`caddy_vhost_enabled`**, the FreeIPA links use a lab hostname (`ipa.<ops-
 
 ## Ansible group_vars override (`ANSIBLE_GROUP_VARS_YAML`)
 
-Jenkins `text` parameters render as a **multiline text area**. Only **Ansible-only** keys are accepted (domain, passwords, CM/CDH/ECS versions, java/postgres/jdbc/psycopg, etc.) — not the full `all.yml` and not Terraform/Jenkins UI fields.
+Jenkins `text` parameters render as a **multiline text area**. Any valid Ansible `group_vars` key is accepted.
 
-- Allowed keys: `jenkins/ansible-group-vars-allowed-keys.yaml`
 - Examples: `jenkins/ansible-group-vars.example.yaml`
 - Merged at runtime via `ansible-playbooks/jenkins_override.yml` + `-e @file` (not committed; never under `group_vars/all/`).
-- Disallowed or unknown keys fail validation when Ansible stages are selected.
+- Validation rejects only malformed YAML or a top-level value that is not a `key: value` mapping.
+- Dedicated Jenkins parameters and controller safety defaults take precedence over matching textarea values.
 - CM archive login: use `CM_REPO_USERNAME` / `CM_REPO_PASSWORD` (not the textarea).
 - **Caddy edge port:** default **`deployment_portal_http_port: 81`** in `group_vars/all.yml` (portal/pgAdmin/monitoring/IPA vhosts). Do not paste legacy **`8088`** into the textarea. Jenkins `render-ansible-group-vars-override.py` rewrites **8088 → 81**. Open security group **81** from the Jenkins agent CIDR for portal Tier **B**; CM uses **7180**/**7183** on `cldr-mngr` (not Caddy).
 
@@ -275,7 +275,7 @@ There is **no** dedicated Jenkins checkbox for `cm_autotls_force_run`. Use one o
    cm_autotls_force_run: true
    ```
 
-   Allowed key (see `jenkins/ansible-group-vars-allowed-keys.yaml`). Re-run **`CM_TLS_KRB_LDAP`** (or full pipeline with that stage checked).
+   Re-run **`CM_TLS_KRB_LDAP`** (or the full pipeline with that stage checked).
 
 2. **Extra `-e` on the agent** — for custom wrappers or local `pvc_setup.sh`, export space-separated `key=value` pairs (appended after `jenkins_override.yml`):
 
