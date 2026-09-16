@@ -157,9 +157,8 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 
 | Parameter | Default | Purpose |
 |---|---|---|
-| `PIPELINE_STAGES` → **`DESTROY_STACK`** | unchecked | Enables stage **Destroy Stack** (`run-destroy-stack.sh` → `terraform destroy` for this **`ENVIRONMENT`** workspace). If the checkbox is missing, run **REFRESH_JENKINSFILE=YES** once. |
-| **`DESTROY_STACK_CONFIRM`** | `false` | **Required** when **`DESTROY_STACK`** is checked and you want destroy **applied** (not plan-only). Validation fails if **`DESTROY_STACK`** is selected and this boolean stays unchecked unless **`DRY_RUN=true`**. |
-| `DRY_RUN` | `false` | With **`DESTROY_STACK`**: `terraform destroy` **plan only** (no apply). **`DESTROY_STACK_CONFIRM`** not required. |
+| `PIPELINE_STAGES` → **`DESTROY_STACK`** | unchecked | Enables and confirms **Destroy Stack** (`run-destroy-stack.sh` → `terraform destroy` for this **`ENVIRONMENT`** workspace). If the checkbox is missing, run **REFRESH_JENKINSFILE=YES** once. |
+| `DRY_RUN` | `false` | With **`DESTROY_STACK`**: `terraform destroy` **plan only** (no apply). |
 | `CLEANUP_BEFORE_DESTROY` | `false` | When **`DESTROY_STACK`** is selected: run **`ansible-playbooks/99_cleanup.yml`** before destroy. |
 
 Full teardown steps are also in the **`PIPELINE_STAGES_REFERENCE`** text area on **Build with Parameters** (always visible; does not control what runs).
