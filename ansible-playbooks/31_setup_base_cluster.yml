@@ -668,6 +668,27 @@
             | first
             | default({})
           }}
+        base_cluster_existing_yarn_service: >-
+          {{
+            existing_cluster_services.json['items'] | default([])
+            | selectattr('name', 'equalto', 'yarn')
+            | first
+            | default({})
+          }}
+        base_cluster_existing_hive_service: >-
+          {{
+            existing_cluster_services.json['items'] | default([])
+            | selectattr('name', 'equalto', 'hive')
+            | first
+            | default({})
+          }}
+        base_cluster_existing_impala_service: >-
+          {{
+            existing_cluster_services.json['items'] | default([])
+            | selectattr('name', 'equalto', 'impala')
+            | first
+            | default({})
+          }}
       when: existing_cluster.status == 200
 
     - name: Determine whether interrupted First Run recovery is required
@@ -706,6 +727,27 @@
                   and base_cluster_existing_hbase_service.healthSummary | default('') == 'GOOD'
                 )
               )
+              and (
+                not (base_cluster_install_services.yarn | default(true) | bool)
+                or (
+                  base_cluster_existing_yarn_service.serviceState | default('') == 'STARTED'
+                  and base_cluster_existing_yarn_service.healthSummary | default('') == 'GOOD'
+                )
+              )
+              and (
+                not (base_cluster_install_services.hive | default(true) | bool)
+                or (
+                  base_cluster_existing_hive_service.serviceState | default('') == 'STARTED'
+                  and base_cluster_existing_hive_service.healthSummary | default('') == 'GOOD'
+                )
+              )
+              and (
+                not (base_cluster_install_services.impala | default(true) | bool)
+                or (
+                  base_cluster_existing_impala_service.serviceState | default('') == 'STARTED'
+                  and base_cluster_existing_impala_service.healthSummary | default('') == 'GOOD'
+                )
+              )
             )
           }}
 
@@ -736,6 +778,15 @@
               base_cluster_install_services.hbase | default(true) | bool
               and base_cluster_existing_hbase_service.serviceState | default('') == 'STARTED'
               and base_cluster_existing_hbase_service.healthSummary | default('') != 'GOOD'
+            )
+            else []
+          )
+          + (
+            [{'service': 'yarn', 'command': 'stop'}]
+            if (
+              base_cluster_install_services.yarn | default(true) | bool
+              and base_cluster_existing_yarn_service.serviceState | default('') == 'STARTED'
+              and base_cluster_existing_yarn_service.healthSummary | default('') != 'GOOD'
             )
             else []
           )
@@ -804,6 +855,47 @@
                 and (
                   base_cluster_existing_hbase_service.serviceState | default('') != 'STARTED'
                   or base_cluster_existing_hbase_service.healthSummary | default('') != 'GOOD'
+                )
+              )
+              else []
+            )
+            + (
+              [
+                {'service': 'yarn', 'command': 'yarnCreateJobHistoryDirCommand'},
+                {'service': 'yarn', 'command': 'installMrFrameworkJars'},
+                {'service': 'yarn', 'command': 'yarnCreateCmContainerUsageInputDirCommand'}
+              ]
+              if (
+                base_cluster_install_services.yarn | default(true) | bool
+                and (
+                  base_cluster_existing_yarn_service.serviceState | default('') != 'STARTED'
+                  or base_cluster_existing_yarn_service.healthSummary | default('') != 'GOOD'
+                )
+              )
+              else []
+            )
+            + (
+              [
+                {'service': 'hive', 'command': 'hiveCreateHiveUserDir'},
+                {'service': 'hive', 'command': 'hiveCreateHiveWarehouse'},
+                {'service': 'hive', 'command': 'hiveCreateHiveWarehouseExternal'}
+              ]
+              if (
+                base_cluster_install_services.hive | default(true) | bool
+                and (
+                  base_cluster_existing_hive_service.serviceState | default('') != 'STARTED'
+                  or base_cluster_existing_hive_service.healthSummary | default('') != 'GOOD'
+                )
+              )
+              else []
+            )
+            + (
+              [{'service': 'impala', 'command': 'impalaCreateUserDir'}]
+              if (
+                base_cluster_install_services.impala | default(true) | bool
+                and (
+                  base_cluster_existing_impala_service.serviceState | default('') != 'STARTED'
+                  or base_cluster_existing_impala_service.healthSummary | default('') != 'GOOD'
                 )
               )
               else []

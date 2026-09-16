@@ -444,12 +444,14 @@ service setup never occurred. When a populated cluster has no matching
 cluster-UUID marker at `base_cluster_initialization_marker_path`, playbook **31**
 performs only non-destructive recovery before normal Start: it starts ZooKeeper
 and HDFS, creates HDFS `/tmp`, initializes Solr's HDFS home and ZooKeeper state,
-and creates the HBase root and user directories. It never invokes NameNode
-format or cluster First Run. The marker is recorded only after startup and
-client-configuration refresh complete successfully. CM can report a one-time
-setup command as `Command not valid for ...` when that artifact is already
-initialized; recovery reports that exact response as a skip and continues, but
-all other HTTP or command failures remain fatal.
+creates the HBase root and user directories, creates YARN JobHistory/container
+directories and installs MapReduce framework JARs, and creates the Hive and
+Impala HDFS directories. It never invokes NameNode format or cluster First Run.
+The marker is recorded only after startup and client-configuration refresh
+complete successfully. CM can report a one-time setup command as
+`Command not valid for ...` when that artifact is already initialized; recovery
+reports that exact response as a skip and continues, but all other HTTP or
+command failures remain fatal.
 
 Kafka uses the CDP 7.3 KRaft metadata store by default. The base-cluster
 topology assigns both `KAFKA_BROKER` and `KRAFT` roles to base workers, and
