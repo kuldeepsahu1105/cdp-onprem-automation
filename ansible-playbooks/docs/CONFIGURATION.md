@@ -84,7 +84,7 @@ ansible-playbook -i inventory.ini 11_identity_setup.yml \
 |---|---|---|
 | `identity_provider` | `auto` (default), `freeipa`, `ad` | `auto` selects FreeIPA when `[ipaserver]` has a host, otherwise AD when `ad_kdc_host` is set. Use an explicit value when inventory alone must not decide. |
 | `deployment_environment` | `auto` (default), `aws`, `baremetal` | Controls DNS/network assumptions. `auto` detects AWS metadata; `baremetal` expects private routing or a configured bastion. |
-| `rhel_release_pin` | `auto` or `major.minor`; configured as `9.6` | Pins both DNF `$releasever` and subscription-manager when available before the full package update. AWS RHUI is pinned through `/etc/dnf/vars/releasever`. Existing nodes on a newer minor release must be rebuilt or deliberately configured for that newer release; automation does not perform an unsafe OS downgrade. |
+| `rhel_release_pin` | `auto` (configured default) or `major.minor` | With `auto`, detects and pins each host's current RHEL minor release before any package operation. Pins both DNF `$releasever` and subscription-manager when available; AWS RHUI uses `/etc/dnf/vars/releasever`. An explicit version rejects already-drifted hosts rather than attempting an unsafe OS downgrade. |
 | `ipaserver_domain` | DNS domain; default `cldrsetup.local` | FreeIPA DNS domain and source for the uppercase Kerberos realm. Replace it for every non-lab deployment. |
 | `ad_domain` | AD DNS domain; default example `corp.example.com` | Required for AD. It becomes the cluster domain and uppercase Kerberos realm. |
 | `ad_kdc_host` | FQDN or IP; empty by default | Required for AD. Empty prevents AD auto-detection. Prefer a resolvable domain controller FQDN. |
