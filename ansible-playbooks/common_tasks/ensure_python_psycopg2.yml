@@ -37,4 +37,3 @@
       - "import psycopg2; print(psycopg2.__version__)"
   register: python_psycopg2_verify
   changed_when: false
-
