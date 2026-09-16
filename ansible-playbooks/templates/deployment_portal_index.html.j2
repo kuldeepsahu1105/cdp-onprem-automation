@@ -1483,24 +1483,28 @@
           <div class="inventory-section-head">
             <h2 class="section-title">Host inventory</h2>
             {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %}
-            <div class="inventory-dl-actions{% if oa.basic_auth_enabled | default(false) | bool %} auth-protected-download{% endif %}"{% if oa.basic_auth_enabled | default(false) | bool %} hidden{% endif %} aria-label="SSH private key downloads" onclick="event.stopPropagation();">
-              {% for dl in ns_ssh_dl.items %}
-              <a class="dl-btn" href="{{ dl.href }}?v={{ ctx.generated_at | default('current') | replace(':', '') | replace('+', '') | replace(' ', '') }}" download="{{ dl.filename | default('') }}" title="{% if dl.note | default('') | length > 0 %}{{ dl.note }}{% else %}Save PEM, then chmod 400{% endif %}">
+            {% set inventory_header_key = ns_ssh_dl.items | first %}
+            {% set inventory_header_key_url = inventory_header_key.href ~ '?v=' ~ (ctx.generated_at | default('current') | replace(':', '') | replace('+', '') | replace(' ', '')) %}
+            <div class="inventory-dl-actions" aria-label="SSH private key download" onclick="event.stopPropagation();">
+              <a class="dl-btn" id="inventory-key-action"
+                 href="{% if oa.basic_auth_enabled | default(false) | bool %}/login.html{% else %}{{ inventory_header_key_url }}{% endif %}"
+                 data-login-url="/login.html"
+                 data-download-url="{{ inventory_header_key_url }}"
+                 data-download-name="{{ inventory_header_key.filename | default('') }}"
+                 data-download-label="{{ inventory_header_key.label }}"
+                 title="{% if oa.basic_auth_enabled | default(false) | bool %}Sign in to download the SSH private key{% elif inventory_header_key.note | default('') | length > 0 %}{{ inventory_header_key.note }}{% else %}Save PEM, then chmod 400{% endif %}"
+                 {% if not (oa.basic_auth_enabled | default(false) | bool) %}download="{{ inventory_header_key.filename | default('') }}"{% endif %}>
                 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8.5 1.5v8.793l2.146-2.147.707.708L8 12.207 4.646 8.854l.707-.708L7.5 10.293V1.5h1zM2 12.5v1h12v-1H2z"/></svg>
-                {{ dl.label }}
+                <span id="inventory-key-action-label">{% if oa.basic_auth_enabled | default(false) | bool %}Login to download key{% else %}{{ inventory_header_key.label }}{% endif %}</span>
               </a>
-              {% endfor %}
             </div>
-            {% if oa.basic_auth_enabled | default(false) | bool %}
-            <a class="dl-btn auth-download-login" href="/login.html" onclick="event.stopPropagation();">Login to download key</a>
-            {% endif %}
             {% endif %}
           </div>
         </span>
         {{ panel_chevron | safe }}
       </summary>
       <div class="panel-body">
-        <p class="sub">One row per host: Ansible groups, addresses, inferred roles, and sample <code>ssh -i &lt;pem&gt;</code> commands (user <code>{{ oa.ssh_user | default('ec2-user') }}</code>, key file <code>{{ ssh_key_filename }}</code>){% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %} — use the download button{% if ns_ssh_dl.items | length == 1 %} in the header{% else %}s in the header{% endif %} for the cluster PEM (same key for all hosts; works even when only the ops/ipaserver row is listed).{% endif %}</p>
+        <p class="sub">One row per host: Ansible groups, addresses, inferred roles, and sample <code>ssh -i &lt;pem&gt;</code> commands (user <code>{{ oa.ssh_user | default('ec2-user') }}</code>, key file <code>{{ ssh_key_filename }}</code>){% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %} — use the download button in the header for the primary cluster PEM (same key for all hosts; works even when only the ops/ipaserver row is listed).{% endif %}</p>
         {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) and oa.basic_auth_enabled | default(false) | bool %}
         <p class="inventory-dl-hint">Downloads require an active portal session (user <code>{{ oa.auth_username | default('portal') }}</code>). Logout revokes the session immediately.</p>
         {% elif _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) and not (oa.basic_auth_enabled | default(false) | bool) %}
@@ -1596,6 +1600,8 @@
     var authGate = document.getElementById('operator-auth-gate');
     var protectedContent = document.getElementById('operator-protected-content');
     var authMessage = document.getElementById('operator-auth-message');
+    var inventoryKeyAction = document.getElementById('inventory-key-action');
+    var inventoryKeyActionLabel = document.getElementById('inventory-key-action-label');
     var loggedOut = new URLSearchParams(window.location.search).has('logged_out');
     if (loggedOut) {
       window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
@@ -1610,6 +1616,16 @@
       document.querySelectorAll('.auth-download-login').forEach(function (element) {
         element.hidden = isAuthenticated;
       });
+      if (inventoryKeyAction && inventoryKeyActionLabel) {
+        inventoryKeyAction.href = isAuthenticated ? inventoryKeyAction.dataset.downloadUrl : inventoryKeyAction.dataset.loginUrl;
+        inventoryKeyActionLabel.textContent = isAuthenticated ? inventoryKeyAction.dataset.downloadLabel : 'Login to download key';
+        inventoryKeyAction.title = isAuthenticated ? 'Download SSH private key' : 'Sign in to download the SSH private key';
+        if (isAuthenticated) {
+          inventoryKeyAction.setAttribute('download', inventoryKeyAction.dataset.downloadName);
+        } else {
+          inventoryKeyAction.removeAttribute('download');
+        }
+      }
       if (authAction) {
         authAction.textContent = isAuthenticated ? 'Logout' : 'Login';
         authAction.title = isAuthenticated ? 'Sign out of protected operator access' : 'Sign in to protected operator access';
