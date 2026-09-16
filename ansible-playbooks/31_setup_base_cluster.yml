@@ -32,6 +32,23 @@
           Base cluster inventory groups '{{ base_cluster_master_group }}' and
           '{{ base_cluster_worker_group }}' must exist and contain hosts.
 
+    - name: Check required service settings
+      ansible.builtin.assert:
+        that:
+          - base_cluster_database_host | string | trim | length > 0
+          - not (base_cluster_install_services.ozone | default(true) | bool) or (base_cluster_ozone_service_id | string | trim | length > 0)
+          - not (base_cluster_install_services.hive | default(true) | bool) or (base_cluster_hive_database_name | string | trim | length > 0)
+          - not (base_cluster_install_services.hive | default(true) | bool) or (base_cluster_hive_database_user | string | trim | length > 0)
+          - not (base_cluster_install_services.hive | default(true) | bool) or (base_cluster_hive_database_password | string | length > 0)
+          - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_admin_password | string | length > 0)
+          - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_keyadmin_password | string | length > 0)
+          - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_tagsync_password | string | length > 0)
+          - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_usersync_password | string | length > 0)
+          - not (base_cluster_install_services.knox | default(true) | bool) or (base_cluster_knox_master_secret | string | length > 0)
+        fail_msg: >-
+          Required base-cluster service or database settings are empty. Set the
+          base_cluster_* values through ANSIBLE_GROUP_VARS_YAML or an Ansible vault.
+
     - name: Check service dependencies
       ansible.builtin.assert:
         that:
@@ -319,6 +336,114 @@
       async: "{{ base_cluster_module_async_timeout }}"
       poll: "{{ base_cluster_module_poll_interval }}"
 
+    - name: Configure Ozone requirements
+      cloudera.cluster.service:
+        host: "{{ cm_cluster_module_host }}"
+        port: "{{ cm_cluster_module_port }}"
+        version: "{{ cm_api_version }}"
+        force_tls: "{{ cm_cluster_module_force_tls }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        verify_tls: false
+        cluster: "{{ cdh_basecluster_name }}"
+        name: ozone
+        type: OZONE
+        config:
+          ozone.service.id: "{{ base_cluster_ozone_service_id }}"
+          ozone.scm.primordial.node.id: "{{ base_master_fqdn }}"
+        role_config_groups:
+          - type: OZONE_RECON
+        roles:
+          - type: OZONE_RECON
+            hostnames:
+              - "{{ base_master_fqdn }}"
+      register: base_cluster_ozone_config_result
+      when: base_cluster_install_services.ozone | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Configure Hive database
+      cloudera.cluster.service:
+        host: "{{ cm_cluster_module_host }}"
+        port: "{{ cm_cluster_module_port }}"
+        version: "{{ cm_api_version }}"
+        force_tls: "{{ cm_cluster_module_force_tls }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        verify_tls: false
+        cluster: "{{ cdh_basecluster_name }}"
+        name: hive
+        type: HIVE
+        config:
+          hive_metastore_database_host: "{{ base_cluster_database_host }}"
+          hive_metastore_database_port: "{{ base_cluster_database_port }}"
+          hive_metastore_database_type: postgresql
+          hive_metastore_database_name: "{{ base_cluster_hive_database_name }}"
+          hive_metastore_database_user: "{{ base_cluster_hive_database_user }}"
+          hive_metastore_database_password: "{{ base_cluster_hive_database_password }}"
+        skip_redacted: true
+      register: base_cluster_hive_config_result
+      when: base_cluster_install_services.hive | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+      no_log: true
+
+    - name: Configure Ranger database and passwords
+      cloudera.cluster.service:
+        host: "{{ cm_cluster_module_host }}"
+        port: "{{ cm_cluster_module_port }}"
+        version: "{{ cm_api_version }}"
+        force_tls: "{{ cm_cluster_module_force_tls }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        verify_tls: false
+        cluster: "{{ cdh_basecluster_name }}"
+        name: ranger
+        type: RANGER
+        config:
+          ranger_database_host: "{{ base_cluster_database_host }}"
+          ranger_database_port: "{{ base_cluster_database_port }}"
+          ranger_database_type: postgresql
+          ranger_database_name: "{{ base_cluster_ranger_database_name }}"
+          ranger_database_user: "{{ base_cluster_ranger_database_user }}"
+          ranger_database_password: "{{ base_cluster_ranger_database_password }}"
+          rangeradmin_user_password: "{{ base_cluster_ranger_admin_password }}"
+          keyadmin_user_password: "{{ base_cluster_ranger_keyadmin_password }}"
+          rangertagsync_user_password: "{{ base_cluster_ranger_tagsync_password }}"
+          rangerusersync_user_password: "{{ base_cluster_ranger_usersync_password }}"
+        skip_redacted: true
+      register: base_cluster_ranger_config_result
+      when: base_cluster_install_services.ranger | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+      no_log: true
+
+    - name: Configure Knox database and master secret
+      cloudera.cluster.service:
+        host: "{{ cm_cluster_module_host }}"
+        port: "{{ cm_cluster_module_port }}"
+        version: "{{ cm_api_version }}"
+        force_tls: "{{ cm_cluster_module_force_tls }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        verify_tls: false
+        cluster: "{{ cdh_basecluster_name }}"
+        name: knox
+        type: KNOX
+        config:
+          knox_gateway_database_host: "{{ base_cluster_database_host }}"
+          knox_gateway_database_port: "{{ base_cluster_database_port }}"
+          knox_gateway_database_type: postgresql
+          knox_gateway_database_name: "{{ base_cluster_knox_database_name }}"
+          knox_gateway_database_user: "{{ base_cluster_knox_database_user }}"
+          knox_gateway_database_password: "{{ base_cluster_knox_database_password }}"
+        role_config_groups:
+          - type: KNOX_GATEWAY
+            config:
+              gateway_master_secret: "{{ base_cluster_knox_master_secret }}"
+        skip_redacted: true
+      register: base_cluster_knox_config_result
+      when: base_cluster_install_services.knox | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+      no_log: true
+
     - name: Show cluster startup wait
       ansible.builtin.debug:
         msg: >-
@@ -326,40 +451,84 @@
           {{ base_cluster_module_poll_interval }}s until CM finishes or the bounded wait expires.
       when: base_cluster_create_required | bool
 
-    - name: Start new base cluster with name {{ cdh_basecluster_name }}
-      cloudera.cluster.cluster:
-        host: "{{ cm_cluster_module_host }}"
-        port: "{{ cm_cluster_module_port }}"
-        version: "{{ cm_api_version }}"
-        force_tls: "{{ cm_cluster_module_force_tls }}"
-        username: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        verify_tls: false
-        name: "{{ cdh_basecluster_name }}"
-        state: started
-      register: base_cluster_start_result
-      when: base_cluster_create_required | bool
-      delegate_to: "{{ cm_cluster_module_delegate_to }}"
-      async: "{{ base_cluster_module_async_timeout }}"
-      poll: "{{ base_cluster_module_poll_interval }}"
+    - name: Start {{ 'new' if base_cluster_create_required | bool else 'existing' }} base cluster with name {{ cdh_basecluster_name }}
+      block:
+        - name: Run cluster First Run
+          cloudera.cluster.cluster:
+            host: "{{ cm_cluster_module_host }}"
+            port: "{{ cm_cluster_module_port }}"
+            version: "{{ cm_api_version }}"
+            force_tls: "{{ cm_cluster_module_force_tls }}"
+            username: "{{ cm_admin_user }}"
+            password: "{{ cm_admin_pass }}"
+            verify_tls: false
+            name: "{{ cdh_basecluster_name }}"
+            state: started
+            force: >-
+              {{
+                base_cluster_create_required | bool
+                or base_cluster_ozone_config_result.changed | default(false) | bool
+                or base_cluster_hive_config_result.changed | default(false) | bool
+                or base_cluster_ranger_config_result.changed | default(false) | bool
+                or base_cluster_knox_config_result.changed | default(false) | bool
+              }}
+          register: base_cluster_start_result
+          delegate_to: "{{ cm_cluster_module_delegate_to }}"
+          async: "{{ base_cluster_module_async_timeout }}"
+          poll: "{{ base_cluster_module_poll_interval }}"
+      rescue:
+        - name: Get failed First Run command
+          ansible.builtin.uri:
+            url: >-
+              {{ cm_cluster_module_api_url }}/commands/{{
+                base_cluster_start_result.command_id
+              }}?view=full
+            method: GET
+            user: "{{ cm_admin_user }}"
+            password: "{{ cm_admin_pass }}"
+            force_basic_auth: yes
+            validate_certs: no
+            status_code: [200]
+            follow_redirects: none
+          register: base_cluster_failed_command
+          when: base_cluster_start_result.command_id is defined
+          changed_when: false
+          delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-    - name: Start existing base cluster with name {{ cdh_basecluster_name }}
-      cloudera.cluster.cluster:
-        host: "{{ cm_cluster_module_host }}"
-        port: "{{ cm_cluster_module_port }}"
-        version: "{{ cm_api_version }}"
-        force_tls: "{{ cm_cluster_module_force_tls }}"
-        username: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        verify_tls: false
-        name: "{{ cdh_basecluster_name }}"
-        state: started
-      when:
-        - existing_cluster.status == 200
-        - not (base_cluster_partial_empty | bool)
-      delegate_to: "{{ cm_cluster_module_delegate_to }}"
-      async: "{{ base_cluster_module_async_timeout }}"
-      poll: "{{ base_cluster_module_poll_interval }}"
+        - name: Get failed First Run service commands
+          ansible.builtin.uri:
+            url: "{{ cm_cluster_module_api_url }}/commands/{{ item.id }}?view=full"
+            method: GET
+            user: "{{ cm_admin_user }}"
+            password: "{{ cm_admin_pass }}"
+            force_basic_auth: yes
+            validate_certs: no
+            status_code: [200]
+            follow_redirects: none
+          loop: >-
+            {{
+              base_cluster_failed_command.json.get('children', {}).get('items', [])
+              | rejectattr('success', 'equalto', true)
+              | list
+            }}
+          loop_control:
+              label: "{{ item.get('serviceRef', {}).get('serviceDisplayName', item.name) }}"
+          register: base_cluster_failed_service_commands
+          when: base_cluster_failed_command.status | default(0) | int == 200
+          changed_when: false
+          delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+        - name: Report failed First Run services
+          ansible.builtin.fail:
+            msg: |-
+              Cluster First Run failed (command {{ base_cluster_start_result.command_id | default('unknown') }}).
+              {% for result in base_cluster_failed_service_commands.results | default([]) %}
+              - {{ result.json.get('serviceRef', {}).get('serviceDisplayName', result.json.name) }}: {{ result.json.resultMessage | default('unknown') }}
+              {% for child in result.json.get('children', {}).get('items', []) if not (child.success | default(false) | bool) %}
+                - {{ child.name }}: {{ child.resultMessage | default('unknown') }}
+              {% endfor %}
+              {% endfor %}
+              Original module error: {{ base_cluster_start_result.msg | default('unknown') }}
 
     - name: Refresh existing base cluster with name {{ cdh_basecluster_name }}
       ansible.builtin.uri:
