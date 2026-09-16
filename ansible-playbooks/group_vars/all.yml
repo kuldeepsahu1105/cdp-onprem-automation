@@ -716,9 +716,11 @@ cm_ldap_auth_backend_order_allowed:
   - LDAP_ONLY
   - EXTERNAL_ONLY_WITHOUT_DB_ADMINS
 cm_ldap_type: "LDAP"
+cm_ldap_scheme: ldaps
+cm_ldap_port: "{{ 636 if (cm_ldap_scheme | lower) == 'ldaps' else 389 }}"
+cm_ldap_host: "{{ ad_kdc_host if identity_provider_effective == 'ad' else ipa_kdc_host }}"
 cm_ldap_url: >-
-  {{ 'ldaps://' + ad_kdc_host + ':636' if identity_provider_effective == 'ad'
-     else 'ldaps://' + ipa_kdc_host + ':636' }}
+  {{ (cm_ldap_scheme | lower) + '://' + cm_ldap_host + ':' + (cm_ldap_port | string) }}
 cm_ldap_bind_dn: >-
   {{ ad_ldap_bind_dn if identity_provider_effective == 'ad'
      else 'uid=' + ipaadmin_principal + ',cn=users,cn=accounts,' + ipa_ldap_dc_suffix }}

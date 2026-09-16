@@ -146,6 +146,9 @@ cm_srvr_sudo_user: root
 cm_ldap_enabled: true
 cm_ldap_auth_backend_order: DB_THEN_LDAP
 cm_ldap_update_bind_password: false
+# LDAP transport: use ldap/389 or ldaps/636. LDAPS remains the secure default.
+cm_ldap_scheme: ldaps                    # ldap | ldaps
+cm_ldap_port: "{{ 636 if (cm_ldap_scheme | lower) == 'ldaps' else 389 }}"
 cm_cms_update_reports_manager_password: false
 cm_cms_update_autotls_truststore_password: false
 
