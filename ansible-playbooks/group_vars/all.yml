@@ -170,6 +170,7 @@ extra_dns_nameservers: []
 identity_dns_external_probe_host: ""
 identity_dns_verify_retries: 12
 identity_dns_verify_delay: 5
+dns_manage_networkmanager_resolv_conf: true
 
 # SSH and host certificates
 ssh_user: "root"

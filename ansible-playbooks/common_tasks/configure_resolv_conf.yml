@@ -4,6 +4,7 @@
 
 - name: Resolve DNS facts for deployment environment and identity provider
   ansible.builtin.import_tasks: set_dns_facts.yml
+  when: dns_nameservers is not defined or dns_nameservers | length == 0
 
 - name: Check if netplan is available
   ansible.builtin.stat:
@@ -51,6 +52,47 @@
     or netplan_files.matched | default(0) == 0
     or ansible_default_ipv4.interface is not defined
   block:
+    - name: Check for NetworkManager CLI
+      ansible.builtin.stat:
+        path: /usr/bin/nmcli
+      register: networkmanager_nmcli
+      when:
+        - ansible_os_family == "RedHat"
+        - dns_manage_networkmanager_resolv_conf | default(true) | bool
+
+    - name: Ensure NetworkManager configuration directory exists
+      ansible.builtin.file:
+        path: /etc/NetworkManager/conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when:
+        - ansible_os_family == "RedHat"
+        - dns_manage_networkmanager_resolv_conf | default(true) | bool
+        - networkmanager_nmcli.stat.exists | default(false)
+
+    - name: Prevent NetworkManager and DHCP from replacing managed resolv.conf
+      ansible.builtin.copy:
+        content: |
+          # Managed by Cloudera deployment automation
+          [main]
+          dns=none
+        dest: /etc/NetworkManager/conf.d/90-cldr-managed-dns.conf
+        owner: root
+        group: root
+        mode: "0644"
+      register: networkmanager_dns_policy
+      when:
+        - ansible_os_family == "RedHat"
+        - dns_manage_networkmanager_resolv_conf | default(true) | bool
+        - networkmanager_nmcli.stat.exists | default(false)
+
+    - name: Reload NetworkManager DNS policy
+      ansible.builtin.command: nmcli general reload
+      when: networkmanager_dns_policy is changed
+      changed_when: true
+
     - name: Update /etc/resolv.conf
       ansible.builtin.template:
         src: templates/etc_resolv_conf_generic.j2

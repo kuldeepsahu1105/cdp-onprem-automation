@@ -25,7 +25,7 @@
       - "identity client hosts: {{ identity_client_hosts }}"
       - >-
         {% if identity_provider_effective == 'freeipa' %}
-        Flow: FreeIPA full (10 server, 11 DNS, 12 records, 13 network, 14 clients, 15 wildcard)
+        Flow: FreeIPA full (12 server, 13 DNS, 14 records, 16 clients, 19 wildcard)
         {% else %}
-        Flow: AD dependent only (11 DNS, 14 realm join, 23 CM Kerberos, 25 CM LDAP)
+        Flow: AD dependent only (13 DNS, 16 realm join, 29 CM LDAP, 30 CM Kerberos)
         {% endif %}
