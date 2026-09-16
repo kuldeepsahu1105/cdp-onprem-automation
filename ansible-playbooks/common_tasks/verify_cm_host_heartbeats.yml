@@ -27,9 +27,14 @@
   ansible.builtin.debug:
     msg: >-
       CM hosts: {{ _cm_hosts_for_heartbeat | default([]) | length }} registered;
-      {{ (_cm_hosts_for_heartbeat | default([]) | length) - (cm_hosts_stale_heartbeat | default([]) | length) }}
+      {{
+        (_cm_hosts_for_heartbeat | default([]) | length)
+        - (cm_hosts_stale_heartbeat | default([]) | length)
+        - (cm_hosts_missing_heartbeat | default([]) | length)
+      }}
       within {{ cm_host_heartbeat_max_age_seconds | default(300) }}s heartbeat;
-      {{ cm_hosts_stale_heartbeat | default([]) | length }} stale.
+      {{ cm_hosts_stale_heartbeat | default([]) | length }} stale;
+      {{ cm_hosts_missing_heartbeat | default([]) | length }} without timestamps in the CM API response.
   when: cm_host_heartbeat_verify_enabled | default(true) | bool
 
 - name: CM host heartbeats — fail when any commissioned host is stale

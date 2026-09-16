@@ -19,14 +19,30 @@
     - name: LDAP — prepare Cloudera Manager API
       ansible.builtin.import_tasks: common_tasks/prepare_cm_security_api.yml
 
-    - name: LDAP — require directory service port from the CM host
-      ansible.builtin.wait_for:
-        host: "{{ cm_ldap_url | urlsplit('hostname') }}"
-        port: >-
+    - name: LDAP — resolve configured directory endpoint
+      ansible.builtin.set_fact:
+        cm_ldap_effective_host: "{{ cm_ldap_url | urlsplit('hostname') | default('', true) }}"
+        cm_ldap_effective_port: >-
           {{
             cm_ldap_url | urlsplit('port')
             | default(636 if (cm_ldap_url | urlsplit('scheme')) == 'ldaps' else 389, true)
           }}
+
+    - name: LDAP — validate directory URL
+      ansible.builtin.assert:
+        that:
+          - (cm_ldap_url | urlsplit('scheme')) in ['ldap', 'ldaps']
+          - cm_ldap_effective_host | length > 0
+          - cm_ldap_effective_port | int > 0
+          - cm_ldap_effective_port | int <= 65535
+        fail_msg: >-
+          cm_ldap_url={{ cm_ldap_url }} is invalid. Use ldap://host:389 or
+          ldaps://host:636 (custom ports are allowed).
+
+    - name: LDAP — require directory service port from the CM host
+      ansible.builtin.wait_for:
+        host: "{{ cm_ldap_effective_host }}"
+        port: "{{ cm_ldap_effective_port }}"
         timeout: "{{ cm_ldap_connect_timeout | default(30) }}"
         connect_timeout: 5
       delegate_to: "{{ cm_manager_inventory_host }}"
