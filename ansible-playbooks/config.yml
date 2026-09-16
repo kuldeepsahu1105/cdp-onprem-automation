@@ -65,7 +65,7 @@ dns_manage_networkmanager_resolv_conf: true
 # -----------------------------------------------------------------------------
 java_version: "17"
 python_version: "3.11"
-postgresql_version: 18
+postgresql_version: 17
 postgres_jdbc_version: "42.7.10"
 
 cm_version: "7.13.2.10000"

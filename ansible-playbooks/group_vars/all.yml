@@ -33,9 +33,9 @@ rhel_release_pin: auto
 
 java_version: "17"
 python_version: "3.11"
-postgresql_version: 18
-# Amazon Linux: distro ships postgresql15–17 only (no PGDG / no 18). CM DB client install uses native packages;
-# set postgresql_version: 17 on AL2023 if the server is 17, or keep 18 and rely on cap vars below.
+postgresql_version: 17
+# Amazon Linux: distro ships postgresql15–17 only. CM DB client install uses native packages;
+# set postgresql_version: 17 on AL2023 if the server is 17, or rely on cap vars below.
 postgres_amazon_linux_2023_native_client_version_cap: 17
 postgres_amazon_linux_2_native_client_version_cap: 15
 postgres_amazon_linux_2023_native_client_version: "{{ [postgresql_version | int, postgres_amazon_linux_2023_native_client_version_cap | int] | min }}"
