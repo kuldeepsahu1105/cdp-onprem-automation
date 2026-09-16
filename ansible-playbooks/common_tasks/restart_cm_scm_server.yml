@@ -6,7 +6,7 @@
     argv:
       - systemctl
       - show
-      - cloudera-scm-server
+      - cloudera-scm-server.service
       - --property=InvocationID
       - --value
   become: true
@@ -15,20 +15,22 @@
   changed_when: false
 
 - name: Restart Cloudera Manager server after configuration change
-  ansible.builtin.systemd:
-    name: cloudera-scm-server
-    state: restarted
-    daemon_reload: true
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - restart
+      - cloudera-scm-server.service
   become: true
   delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
   register: cm_scm_server_restart_result
+  changed_when: cm_scm_server_restart_result.rc == 0
 
 - name: Read Cloudera Manager server invocation after restart
   ansible.builtin.command:
     argv:
       - systemctl
       - show
-      - cloudera-scm-server
+      - cloudera-scm-server.service
       - --property=InvocationID
       - --value
   become: true
@@ -41,7 +43,7 @@
     argv:
       - systemctl
       - show
-      - cloudera-scm-server
+      - cloudera-scm-server.service
       - --property=MainPID
       - --value
   become: true
@@ -54,7 +56,7 @@
     argv:
       - systemctl
       - is-active
-      - cloudera-scm-server
+      - cloudera-scm-server.service
   become: true
   delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
   register: cm_scm_server_state_after_restart
