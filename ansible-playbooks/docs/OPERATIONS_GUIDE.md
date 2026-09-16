@@ -422,6 +422,13 @@ Cluster creation is split into a create/configure phase and a First Run phase. T
 for CM commands; Ansible runs it asynchronously and Jenkins prints a poll update
 every `base_cluster_module_poll_interval` seconds instead of appearing frozen.
 
+When a base cluster with the configured name already exists, playbook **31**
+reads its current state, assigned hosts, and service types. A zero-host partial
+cluster left by an interrupted create is deleted and recreated. A populated
+cluster is never deleted: all requested service types must already exist, then
+the cluster is started if necessary and CM runs
+`deployClientConfigsAndRefresh`. The final cluster state and health are printed.
+
 **ZooKeeper placement:** When `base_cluster_install_services.zookeeper` is true (default), the **Worker** host template assigns **ZooKeeper Server** to every host in `base_cluster_worker_group` (`base-workers`). Masters use the **Master** template only. Labs typically run one or three ZK servers on workers; Cloudera Manager requires at least one Server role before Stop Cluster / Deploy Client Config (including after Kerberos/KDC is enabled manually or via playbook **28**).
 
 **Existing cluster missing ZK Server roles:** If CM shows **ZooKeeper has 0 Servers**, the cluster was usually created before host templates used CM service **types** (`ZOOKEEPER`, not `zookeeper`) or playbook **31** found the cluster already present and only started services (templates are not reapplied). Choose one:

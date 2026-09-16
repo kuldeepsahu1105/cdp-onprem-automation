@@ -184,6 +184,21 @@
       when: existing_cluster.status == 200
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+    - name: Check cluster services
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services?view=summary"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: existing_cluster_services
+      changed_when: false
+      when: existing_cluster.status == 200
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
     - name: Detect incomplete cluster
       ansible.builtin.set_fact:
         base_cluster_partial_empty: >-
@@ -191,6 +206,30 @@
             existing_cluster.status == 200
             and (existing_cluster_hosts.json['items'] | default([]) | length == 0)
           }}
+        base_cluster_missing_service_types: >-
+          {{
+            (
+              base_cluster_spec.services
+              | map(attribute='type')
+              | list
+              | difference(
+                  existing_cluster_services.json['items'] | default([])
+                  | map(attribute='type')
+                  | list
+                )
+            )
+            if existing_cluster.status == 200
+            else []
+          }}
+
+    - name: Show existing cluster state
+      ansible.builtin.debug:
+        msg: >-
+          Base cluster with name {{ cdh_basecluster_name }} already exists:
+          state={{ existing_cluster.json.clusterState | default('unknown') }},
+          hosts={{ existing_cluster_hosts.json['items'] | default([]) | length }},
+          services={{ existing_cluster_services.json['items'] | default([]) | map(attribute='type') | sort | join(', ') }}.
+      when: existing_cluster.status == 200
 
     - name: Show incomplete cluster recovery
       ansible.builtin.debug:
@@ -199,7 +238,7 @@
           an interrupted module creation; deleting only this empty partial cluster before recreation.
       when: base_cluster_partial_empty | bool
 
-    - name: Delete incomplete cluster {{ cdh_basecluster_name }}
+    - name: Delete incomplete base cluster with name {{ cdh_basecluster_name }}
       ansible.builtin.uri:
         url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}"
         method: DELETE
@@ -235,6 +274,18 @@
         base_cluster_create_required: >-
           {{ existing_cluster.status == 404 or (base_cluster_partial_empty | bool) }}
 
+    - name: Check existing cluster services
+      ansible.builtin.assert:
+        that:
+          - base_cluster_missing_service_types | length == 0
+        fail_msg: >-
+          Existing populated base cluster with name {{ cdh_basecluster_name }} is missing requested
+          service types: {{ base_cluster_missing_service_types | join(', ') }}. The cluster module
+          cannot safely reconcile service topology on an existing populated cluster.
+      when:
+        - existing_cluster.status == 200
+        - not (base_cluster_partial_empty | bool)
+
     - name: Show cluster creation wait
       ansible.builtin.debug:
         msg: >-
@@ -243,7 +294,7 @@
           cloudera.cluster collection allows up to 7200s for CM parcel and command operations.
       when: base_cluster_create_required | bool
 
-    - name: Create cluster {{ cdh_basecluster_name }}
+    - name: Create base cluster with name {{ cdh_basecluster_name }}
       cloudera.cluster.cluster:
         host: "{{ cm_cluster_module_host }}"
         port: "{{ cm_cluster_module_port }}"
@@ -275,7 +326,7 @@
           {{ base_cluster_module_poll_interval }}s until CM finishes or the bounded wait expires.
       when: base_cluster_create_required | bool
 
-    - name: Start new cluster {{ cdh_basecluster_name }}
+    - name: Start new base cluster with name {{ cdh_basecluster_name }}
       cloudera.cluster.cluster:
         host: "{{ cm_cluster_module_host }}"
         port: "{{ cm_cluster_module_port }}"
@@ -292,7 +343,7 @@
       async: "{{ base_cluster_module_async_timeout }}"
       poll: "{{ base_cluster_module_poll_interval }}"
 
-    - name: Start existing cluster {{ cdh_basecluster_name }}
+    - name: Start existing base cluster with name {{ cdh_basecluster_name }}
       cloudera.cluster.cluster:
         host: "{{ cm_cluster_module_host }}"
         port: "{{ cm_cluster_module_port }}"
@@ -310,9 +361,54 @@
       async: "{{ base_cluster_module_async_timeout }}"
       poll: "{{ base_cluster_module_poll_interval }}"
 
+    - name: Refresh existing base cluster with name {{ cdh_basecluster_name }}
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/commands/deployClientConfigsAndRefresh
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_refresh_command
+      when:
+        - existing_cluster.status == 200
+        - not (base_cluster_partial_empty | bool)
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Wait for base cluster refresh
+      ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_command_id: "{{ base_cluster_refresh_command.json.id }}"
+        cm_api_command_allow_already_exists: false
+      when:
+        - base_cluster_refresh_command is defined
+        - base_cluster_refresh_command.json.id is defined
+
+    - name: Read final cluster state
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}?view=full"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_final_state
+      changed_when: false
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
     - name: Check ZooKeeper roles
       ansible.builtin.import_tasks: common_tasks/verify_base_cluster_zookeeper_servers.yml
 
     - name: Show cluster result
       ansible.builtin.debug:
-        msg: "Base cluster '{{ cdh_basecluster_name }}' deployment complete or already exists"
+        msg: >-
+          Base cluster with name {{ cdh_basecluster_name }} is ready:
+          state={{ base_cluster_final_state.json.clusterState | default('unknown') }},
+          health={{ base_cluster_final_state.json.healthSummary | default('unknown') }}.
