@@ -98,13 +98,25 @@
       public host or version could not be resolved for the HTTPS URL.
   when: cm_autotls_api_enabled | default(false) | bool
 
+- name: CM API — announce bounded HTTPS check for enabled Auto-TLS
+  ansible.builtin.debug:
+    msg: >-
+      AUTO_TLS_TYPE={{ cm_autotls_type }}; checking port
+      {{ cm_https_port | default(7183) }} on
+      {{ cm_manager_inventory_host | default('cldr-mngr') }} for up to
+      {{ cm_autotls_existing_https_probe_timeout | default(30) }} seconds.
+  when:
+    - cm_autotls_api_enabled | default(false) | bool
+    - not (cm_api_https_listener_verified | default(false) | bool)
+
 - name: CM API — require HTTPS listener when Auto-TLS is enabled
   ansible.builtin.wait_for:
     host: 127.0.0.1
     port: "{{ cm_https_port | default(7183) }}"
     state: started
+    connect_timeout: 3
     sleep: 5
-    timeout: "{{ cm_autotls_https_startup_timeout | default(600) | int }}"
+    timeout: "{{ cm_autotls_existing_https_probe_timeout | default(30) | int }}"
   delegate_to: "{{ cm_manager_inventory_host }}"
   when:
     - cm_autotls_api_enabled | default(false) | bool
