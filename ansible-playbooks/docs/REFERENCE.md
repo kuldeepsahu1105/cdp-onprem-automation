@@ -285,7 +285,7 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 |---|---|
 | `00_setup_ssh_preqs.yml` | SSH prerequisites |
 | `ensure_collections.yml` | Galaxy install from `requirements.yml` (imported by every playbook; same logic as `pvc_setup.sh`) |
-| `01_install_collection.yml` | Imports `ensure_collections.yml`; pins RHEL subscription release to installed minor (`common_tasks/pin_rhel_release_before_upgrade.yml`) then full system update on targets |
+| `01_install_collection.yml` | Imports `ensure_collections.yml`; pins DNF `$releasever` before any package operation (and subscription-manager when available), then updates only within that RHEL minor |
 | `02_set_hostname.yml` | Set FQDN hostnames |
 | `03_create_etc_hosts.yml` | Populate `/etc/hosts` |
 | `04_setup_autossh.yml` | Passwordless SSH |

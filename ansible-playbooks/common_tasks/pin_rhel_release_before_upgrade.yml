@@ -1,46 +1,77 @@
 ---
-# Pin subscription-manager release to the installed RHEL minor before a full dnf upgrade.
-# Skips hosts without a working subscription-manager (e.g. some EC2/RHEL images).
-- name: Resolve installed RHEL minor release for subscription pin
-  ansible.builtin.command: rpm -E '%{rhel}.%{minor}'
-  register: rhel_release_pin_target
-  changed_when: false
-  when: ansible_os_family == "RedHat"
+# Pin RHEL before any full DNF upgrade. This works with both subscription-manager
+# and AWS RHUI, where subscription-manager release locking is commonly unavailable.
 
-- name: Query subscription-manager release (RHEL)
+- name: Resolve effective RHEL minor release pin
+  ansible.builtin.set_fact:
+    rhel_release_pin_effective: >-
+      {{
+        ansible_distribution_version
+        if (rhel_release_pin | default('auto') | string | lower) == 'auto'
+        else (rhel_release_pin | string)
+      }}
+  when: ansible_distribution == "RedHat"
+
+- name: Validate RHEL minor release pin
+  ansible.builtin.assert:
+    that:
+      - rhel_release_pin_effective is match('^[0-9]+\.[0-9]+$')
+    fail_msg: >-
+      rhel_release_pin must be "auto" or a major.minor release such as "9.6";
+      resolved value={{ rhel_release_pin_effective | default('unset') }}.
+  when: ansible_distribution == "RedHat"
+
+- name: Refuse silent RHEL minor-version drift
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution_version == rhel_release_pin_effective
+    fail_msg: >-
+      {{ inventory_hostname }} is already RHEL {{ ansible_distribution_version }}, but
+      rhel_release_pin={{ rhel_release_pin_effective }}. A release pin prevents future
+      upgrades; it does not safely downgrade an already-upgraded operating system.
+      Rebuild this node from the RHEL {{ rhel_release_pin_effective }} AMI, or intentionally
+      change rhel_release_pin to {{ ansible_distribution_version }}.
+  when: ansible_distribution == "RedHat"
+
+- name: Ensure DNF variables directory exists
+  ansible.builtin.file:
+    path: /etc/dnf/vars
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: ansible_distribution == "RedHat"
+
+- name: Persist RHEL release pin for DNF and AWS RHUI
+  ansible.builtin.copy:
+    content: "{{ rhel_release_pin_effective }}\n"
+    dest: /etc/dnf/vars/releasever
+    owner: root
+    group: root
+    mode: "0644"
+  when: ansible_distribution == "RedHat"
+
+- name: Query subscription-manager release support
   ansible.builtin.command: subscription-manager release --show
   register: subscription_release_show
   changed_when: false
   failed_when: false
-  when: ansible_os_family == "RedHat"
+  when: ansible_distribution == "RedHat"
 
-- name: Pin RHEL subscription release to installed minor (before dnf upgrade)
-  ansible.builtin.command: "subscription-manager release --set={{ rhel_release_pin_target.stdout | trim }}"
+- name: Pin subscription-manager release when available
+  ansible.builtin.command: "subscription-manager release --set={{ rhel_release_pin_effective }}"
   register: subscription_release_set
   changed_when: subscription_release_set.rc == 0
   failed_when: false
   when:
-    - ansible_os_family == "RedHat"
-    - rhel_release_pin_target is defined
-    - rhel_release_pin_target.rc == 0
-    - rhel_release_pin_target.stdout | default('') | trim | length > 0
-    - subscription_release_show is defined
-    - subscription_release_show.rc == 0
+    - ansible_distribution == "RedHat"
+    - subscription_release_show.rc | default(1) == 0
     - (subscription_release_show.stdout | regex_replace('(?i)^Release:\\s*', '') | trim)
-      != (rhel_release_pin_target.stdout | trim)
+      != rhel_release_pin_effective
 
-- name: Verify RHEL subscription release pin
-  ansible.builtin.command: subscription-manager release --show
-  register: subscription_release_verify
+- name: Verify persistent DNF release pin
+  ansible.builtin.command: cat /etc/dnf/vars/releasever
+  register: rhel_release_pin_verify
   changed_when: false
-  failed_when: >-
-    subscription_release_verify.rc != 0
-    or (
-      subscription_release_verify.stdout | regex_replace('(?i)^Release:\\s*', '') | trim
-    ) != (rhel_release_pin_target.stdout | trim)
-  when:
-    - ansible_os_family == "RedHat"
-    - subscription_release_set is defined
-    - subscription_release_set is changed
-    - subscription_release_set.rc == 0
-    - rhel_release_pin_target is defined
+  failed_when: (rhel_release_pin_verify.stdout | trim) != rhel_release_pin_effective
+  when: ansible_distribution == "RedHat"

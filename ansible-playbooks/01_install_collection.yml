@@ -10,20 +10,29 @@
     - name: Set OS-specific facts
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
+    - name: Pin RHEL release before full package upgrade
+      ansible.builtin.import_tasks: common_tasks/pin_rhel_release_before_upgrade.yml
+
     - name: Ensure package manager utilities are installed (RHEL)
       ansible.builtin.package:
         name: "{{ os.pkg_utils }}"
         state: present
       when: ansible_os_family == "RedHat"
 
-    - name: Pin RHEL release before full package upgrade
-      ansible.builtin.import_tasks: common_tasks/pin_rhel_release_before_upgrade.yml
+    - name: Update all packages within pinned RHEL minor release
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        releasever: "{{ rhel_release_pin_effective }}"
+      when: ansible_distribution == "RedHat"
 
-    - name: Update all packages (RHEL)
+    - name: Update all packages (other RedHat-family distributions)
       ansible.builtin.package:
         name: "*"
         state: latest
-      when: ansible_os_family == "RedHat"
+      when:
+        - ansible_os_family == "RedHat"
+        - ansible_distribution != "RedHat"
 
     - name: Update all packages (Debian family)
       ansible.builtin.apt:
