@@ -445,7 +445,7 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 
 ### Lab default passwords (override before production)
 
-Literal defaults from `group_vars/all.yml`. The portal **Operator access** panel and `/downloads/operator-credentials.json` mirror these at sync time (not committed to git). Several services share **`postgres_password`** via Jinja. Operator-focused portal behavior (downloads auth, JSON bundle, overrides): [RUNBOOK.md — Deployment portal default credentials](RUNBOOK.md#deployment-portal-default-credentials).
+Literal defaults from `group_vars/all.yml`. The portal **Operator access** panel and `/downloads/operator-credentials.json` mirror these at sync time (not committed to git). Several services share **`postgres_password`** via Jinja. Operator-focused portal behavior (downloads auth, JSON bundle, overrides): [OPERATIONS_GUIDE.md — Deployment portal default credentials](OPERATIONS_GUIDE.md#deployment-portal-default-credentials).
 
 | Service / use | Ansible variable(s) | Default (lab) |
 |---------------|---------------------|-----------------|

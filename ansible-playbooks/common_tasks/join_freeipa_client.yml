@@ -78,7 +78,7 @@
       must not cover /ipa/json; re-run PORTAL).
       Re-run enrollment for one host: ansible-playbook -i inventory.ini 16_setup_identity_client.yml
       --limit {{ inventory_hostname }} -e ansible_no_log=false with ANSIBLE_PRIVATE_KEY set.
-      See ansible-playbooks/docs/RUNBOOK.md identity troubleshooting.
+      See ansible-playbooks/docs/OPERATIONS_GUIDE.md identity troubleshooting.
   when:
     - not (ipa_client_has_default_conf | default(false) | bool)
     - ipa_client_output is defined
@@ -165,7 +165,7 @@
       on enrolled hosts: kinit -k -t /etc/krb5.keytab host/$(hostname -f)@{{ ipaserver_realm }}.
       Re-run: ansible-playbook -i inventory.ini 16_setup_identity_client.yml
       --limit {{ inventory_hostname }} -e ansible_no_log=false.
-      See ansible-playbooks/docs/RUNBOOK.md identity troubleshooting.
+      See ansible-playbooks/docs/OPERATIONS_GUIDE.md identity troubleshooting.
   when:
     - ipa_client_need_kerberos_ticket | bool
     - not (kinit_host_keytab_result.rc | default(1) | int == 0)

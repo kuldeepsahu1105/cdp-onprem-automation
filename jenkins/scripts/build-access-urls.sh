@@ -364,7 +364,7 @@ render_access_urls_from_inventory() {
   fi
 
   echo ""
-  echo "Service URL verify tiers (RUNBOOK.md): Tier A = localhost on ops host (portal 127.0.0.1:<deployment_portal_http_port> (default 81)); CM manager IP/FQDN :7180 on cldr-mngr;"
+  echo "Service URL verify tiers (OPERATIONS_GUIDE.md): Tier A = localhost on ops host (portal 127.0.0.1:<deployment_portal_http_port> (default 81)); CM manager IP/FQDN :7180 on cldr-mngr;"
   echo "Tier B = external printed URLs from Jenkins when ansible_control_reachability is public (warn if SG blocks ports)."
   echo ""
   echo "Vars: deployment_external_url_verify (global), deployment_cm_external_url_verify (per-service)."

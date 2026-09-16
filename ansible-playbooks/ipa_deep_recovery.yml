@@ -27,7 +27,7 @@
           - ipa_server_deep_recovery | default(false) | bool
         fail_msg: >-
           Deep recovery is disabled. Set ipa_server_deep_recovery: true
-          (-e ipa_server_deep_recovery=true) or follow manual steps in docs/RUNBOOK.md,
+          (-e ipa_server_deep_recovery=true) or follow manual steps in docs/OPERATIONS_GUIDE.md,
           then re-run 12_setup_freeipa_server.yml.
 
     - name: Check if IPA Server is configured
@@ -104,7 +104,7 @@
           (add --force on RHEL if prompted), then as root: rm -rf /var/lib/ipa /etc/ipa and remove /etc/dirsrv/slapd-* if needed.
           Re-run: ansible-playbook -i inventory.ini ipa_deep_recovery.yml --limit {{ inventory_hostname }}
           then 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}
-          See ansible-playbooks/docs/RUNBOOK.md (FreeIPA partial install).
+          See ansible-playbooks/docs/OPERATIONS_GUIDE.md (FreeIPA partial install).
       when:
         - ipa_server_should_run_install | bool
         - ipa_server_has_partial_state | default(false) | bool
@@ -115,7 +115,7 @@
           - not (ipa_detect_sysrestore_present | default(false) | bool)
         fail_msg: >-
           /var/lib/ipa/sysrestore still present while ipactl reports IPA is not configured.
-          Re-run deep recovery or remove partial state manually per RUNBOOK.md.
+          Re-run deep recovery or remove partial state manually per OPERATIONS_GUIDE.md.
       when:
         - ipa_server_should_run_install | bool
         - ipa_detect_ipactl_not_configured | default(false) | bool

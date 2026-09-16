@@ -1,6 +1,6 @@
 # Agent learnings (crux)
 
-Scan this before deep-diving playbooks/Jenkins. Details: `ansible-playbooks/docs/RUN_ORDER.md`, `REFERENCE.md`, `RUNBOOK.md`.
+Scan this before deep-diving playbooks/Jenkins. Details: `ansible-playbooks/docs/RUN_ORDER.md`, `REFERENCE.md`, `OPERATIONS_GUIDE.md`.
 
 ## Reference examples: [cloudera-labs](https://github.com/cloudera-labs) on GitHub
 

@@ -20,5 +20,5 @@
       Cluster-wide cloudera-scm-agent restart was skipped to avoid losing host heartbeats.
       Recovery on cldr-mngr: systemctl restart cloudera-scm-server; wait until
       https://<manager-fqdn>:7183/api/vXX/cm/version responds; then restart agents
-      (see ansible-playbooks/docs/RUNBOOK.md — CM agent heartbeat recovery).
+      (see ansible-playbooks/docs/OPERATIONS_GUIDE.md — CM agent heartbeat recovery).
   when: not (cm_api_health_ok | default(false) | bool)

@@ -99,7 +99,7 @@
         ipa-server-install --uninstall --unattended
         ipa-server-install --uninstall --unattended --force
       Then re-run playbook 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}.
-      See ansible-playbooks/docs/RUNBOOK.md (FreeIPA partial install).
+      See ansible-playbooks/docs/OPERATIONS_GUIDE.md (FreeIPA partial install).
   when: ipa_recover_uninstall.rc | default(1) != 0
 
 - name: Recover IPA — read ipactl status after successful uninstall

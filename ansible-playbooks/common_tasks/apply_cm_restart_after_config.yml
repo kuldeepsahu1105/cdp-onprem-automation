@@ -16,7 +16,7 @@
     msg: >-
       Cloudera Manager Server was restarted but /cm/version is not reachable.
       Fix CM Server on {{ cm_manager_inventory_host | default('cldr-mngr') }} before
-      restarting agents (see RUNBOOK.md — CM agent heartbeat recovery).
+      restarting agents (see OPERATIONS_GUIDE.md — CM agent heartbeat recovery).
   when: not (cm_api_health_ok | default(false) | bool)
 
 - name: Restart Cloudera Manager agent on CM host after API is healthy

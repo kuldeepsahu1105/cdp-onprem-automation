@@ -21,7 +21,10 @@ End-to-end automation for provisioning AWS infrastructure and deploying Cloudera
 | Ansible quick start and phase summary
 
 | link:ansible-playbooks/docs/RUNBOOK.md[ansible-playbooks/docs/RUNBOOK.md]
-| *How to run* — step-by-step deployment, FreeIPA/AD scenarios, cleanup
+| *Quick runbook* — prepare, validate, deploy, verify, and clean up
+
+| link:ansible-playbooks/docs/OPERATIONS_GUIDE.md[ansible-playbooks/docs/OPERATIONS_GUIDE.md]
+| *Detailed operations* — controller/network scenarios, FreeIPA/AD, recovery, and troubleshooting
 
 | link:ansible-playbooks/docs/REFERENCE.md[ansible-playbooks/docs/REFERENCE.md]
 | *Detailed reference* — playbooks, variables, inventory, DNS, repo modes, cleanup toggles
@@ -288,7 +291,7 @@ Wrappers can be executed independently:
 For standalone Ansible execution:
 
 * Ensure `inventory.ini` exists in the execution directory
-* See link:ansible-playbooks/docs/RUNBOOK.md[RUNBOOK.md] for full playbook execution order
+* See link:ansible-playbooks/docs/RUN_ORDER.md[RUN_ORDER.md] for full playbook execution order
 * See link:ansible-playbooks/docs/REFERENCE.md[REFERENCE.md] for cleanup toggles and variable reference
 ====
 
@@ -297,7 +300,8 @@ For standalone Ansible execution:
 All Ansible automation lives under `ansible-playbooks/`.
 
 * link:ansible-playbooks/README.md[ansible-playbooks/README.md] — quick start and defaults
-* link:ansible-playbooks/docs/RUNBOOK.md[RUNBOOK.md] — step-by-step deployment guide
+* link:ansible-playbooks/docs/RUNBOOK.md[RUNBOOK.md] — short deployment runbook
+* link:ansible-playbooks/docs/OPERATIONS_GUIDE.md[OPERATIONS_GUIDE.md] — detailed operations and troubleshooting
 * link:ansible-playbooks/docs/REFERENCE.md[REFERENCE.md] — detailed playbook and variable reference
 
 Default versions (configured in `group_vars/all.yml`):
@@ -327,7 +331,7 @@ DEPLOY_PHASE=5 ./pvc_setup.sh    # ECS cluster only
 DEPLOY_PHASE=all ./pvc_setup.sh  # full flow
 ----
 
-Set `CONTROL_MODE=local` when running on a host listed in `inventory.ini`. See link:ansible-playbooks/docs/RUNBOOK.md[RUNBOOK.md] for control-node options and environment variables (`ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, `CM_INFO_FILE`).
+Set `CONTROL_MODE=local` when running on a host listed in `inventory.ini`. See link:ansible-playbooks/docs/OPERATIONS_GUIDE.md[OPERATIONS_GUIDE.md] for control-node options and environment variables (`ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, `CM_INFO_FILE`).
 
 === Key playbook phases
 

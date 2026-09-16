@@ -8,7 +8,7 @@
 #   ipa_server_services_healthy   — ipactl status OK and Directory Service + krb5kdc RUNNING
 #   ipa_server_install_clean_host — safe to run ipa-server-install (no config, no partial debris)
 #
-# Recovery for partial/broken: ipa-server-install --uninstall (see RUNBOOK.md troubleshooting).
+# Recovery for partial/broken: ipa-server-install --uninstall (see OPERATIONS_GUIDE.md troubleshooting).
 
 - name: Detect IPA — check for configured server (default.conf)
   ansible.builtin.stat:
@@ -226,4 +226,3 @@
           if ipa_detect_ipa_server_status.rc | default(1) == 0
           else (ipa_detect_ipa_server_status.stderr | default('not available') | trim)
         }}
-
