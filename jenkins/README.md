@@ -143,19 +143,22 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 
 Full teardown steps are also in the **`PIPELINE_STAGES_REFERENCE`** text area on **Build with Parameters** (always visible; does not control what runs).
 
-**Your example:** `VALIDATE,TERRAFORM,PREREQS,IDENTITY,CM_INSTALL` = validate → provision VMs → Ansible phases 1–3 (through Cloudera Manager install).
+**Copy-ready combinations:** copy the value exactly as shown into `PIPELINE_STAGES`. Stages execute in the fixed pipeline order.
 
-**Examples:**
-
-| Goal | Checkboxes |
+| Goal | `PIPELINE_STAGES` value |
 |---|---|
 | Validation only | `VALIDATE` |
-| Create machines only | `VALIDATE`, `TERRAFORM` |
-| Prerequisites only | `VALIDATE`, `PREREQS` |
-| CM install only | `VALIDATE`, `CM_INSTALL` |
-| Terraform + CM | `VALIDATE`, `TERRAFORM`, `CM_INSTALL` |
-| CM + CDH base | `VALIDATE`, `TERRAFORM`, `PREREQS`, `PORTAL`, `IDENTITY`, `CM_INSTALL`, `CM_TLS_KRB_LDAP`, `CDH_INSTALL` |
-| Full stack (through ECS) | All of the above + `MONITORING`, `ECS_INSTALL` |
+| Provision infrastructure only | `VALIDATE,TERRAFORM` |
+| Greenfield through Cloudera Manager | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL` |
+| Greenfield CDH base cluster | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL` |
+| Greenfield CDH plus monitoring | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING` |
+| Full stack through ECS | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL` |
+| Existing hosts through Cloudera Manager | `VALIDATE,PREREQS,PORTAL,IDENTITY,CM_INSTALL` |
+| Apply CM security to an existing CM | `VALIDATE,CM_TLS_KRB_LDAP` |
+| Install CDH on an existing secured CM | `VALIDATE,CDH_INSTALL` |
+| Install monitoring on existing CDH | `VALIDATE,PORTAL,MONITORING` |
+| Install ECS on existing CDH | `VALIDATE,ECS_INSTALL` |
+| Install/update EC2 start/stop helper | `VALIDATE,STARTSTOP_AUTOMATION` |
 
 Ansible-only stages (no `TERRAFORM`) require existing `ansible-playbooks/inventory.ini`.
 
