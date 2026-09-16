@@ -356,9 +356,10 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
       steps {
         script {
           def stages = effectivePipelineStages(params.PIPELINE_STAGES)
-          def label = "#${BUILD_NUMBER} — ${stages.join('+')}"
           def deploymentPrefix = params.ENVIRONMENT?.trim()
+          def label = "#${BUILD_NUMBER}"
           if (deploymentPrefix) { label += " — ${deploymentPrefix}" }
+          label += " — ${stages.join('+')}"
           if (params.DRY_RUN == true || "${params.DRY_RUN}" == 'true') { label += ' (dry-run)' }
           currentBuild.displayName = label
         }
