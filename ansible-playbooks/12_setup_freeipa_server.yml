@@ -366,3 +366,9 @@
       when:
         - ipa_install_dns_use_vpc_forwarder | default(false) | bool
         - effective_aws_region | default('') | length > 0
+
+    - name: Restore managed resolver configuration after FreeIPA server installation
+      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
+
+    - name: Verify resolver configuration after FreeIPA server installation
+      ansible.builtin.import_tasks: common_tasks/verify_identity_dns.yml

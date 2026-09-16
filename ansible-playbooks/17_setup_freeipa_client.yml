@@ -106,3 +106,9 @@
     - name: Print Kerberos Ticket Details
       debug:
         msg: "{{ kerberos_ticket.stdout.replace('\t', '    ').split('\n') }}"
+
+    - name: Restore managed resolver configuration after FreeIPA enrollment
+      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
+
+    - name: Verify resolver configuration after FreeIPA enrollment
+      ansible.builtin.import_tasks: common_tasks/verify_identity_dns.yml

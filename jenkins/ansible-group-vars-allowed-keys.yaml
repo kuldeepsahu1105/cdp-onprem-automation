@@ -16,6 +16,7 @@ allowed_keys:
   - identity_dns_external_probe_host
   - identity_dns_verify_retries
   - identity_dns_verify_delay
+  - dns_manage_networkmanager_resolv_conf
 
   # Passwords (ansible group_vars — not Jenkins/Terraform)
   - ipaadmin_password

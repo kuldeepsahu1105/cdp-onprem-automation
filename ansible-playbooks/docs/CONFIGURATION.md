@@ -97,6 +97,7 @@ ansible-playbook -i inventory.ini 11_identity_setup.yml \
 | `extra_dns_search_domains` | YAML list; default `[]` | Appends search domains to environment-derived DNS configuration. |
 | `extra_dns_nameservers` | YAML list; default `[]` | Appends additional resolver addresses. |
 | `identity_dns_external_probe_host` | FQDN, empty, or `"off"` | External name checked after DNS cutover. Empty uses the regional RHUI name on RHEL/AWS, `archive.cloudera.com` on other AWS hosts, and skips the public check outside AWS. Use an internal mirror FQDN for restricted networks or quoted `"off"` to disable explicitly. |
+| `dns_manage_networkmanager_resolv_conf` | Boolean; `true` | On RHEL 8/9, installs a NetworkManager `dns=none` drop-in so DHCP, NetworkManager, and identity installers do not replace the Ansible-managed `/etc/resolv.conf`. Set false only when another resolver manager owns the file. Ubuntu uses netplan instead. |
 
 ## 2. Product versions and repositories
 

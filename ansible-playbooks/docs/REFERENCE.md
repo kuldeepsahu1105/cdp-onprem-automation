@@ -305,7 +305,6 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 | `ipa_deep_recovery.yml` | Optional IPA detect/recover/sanitize before playbook 12 |
 | `13_update_resolv_conf.yml` | DNS (netplan or resolv.conf) |
 | `14_setup_dns_records.yml` | FreeIPA DNS records (skipped for AD) |
-| `15_update_syscfg_network.yml` | `/etc/sysconfig/network` (RHEL) |
 | `16_setup_identity_client.yml` | FreeIPA client or AD realm join |
 | `18_setup_ad_client.yml` | AD realm join only |
 | `17_setup_freeipa_client.yml` | FreeIPA client only |

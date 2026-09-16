@@ -68,7 +68,7 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 | — | `ipa_deep_recovery.yml` | Optional IPA detect/recover/sanitize before **12** (`ipa_server_deep_recovery: true`) |
 | 13 | `13_update_resolv_conf.yml` | resolv.conf / netplan |
 | 14 | `14_setup_dns_records.yml` | FreeIPA DNS (skipped for AD) |
-| 15 | `15_update_syscfg_network.yml` | RHEL network sysconfig |
+| 15 | — | Removed: RHEL 8/9 DNS persistence is owned by NetworkManager configuration in playbook 13; `/etc/sysconfig/network` is not authoritative |
 | 16 | `16_setup_identity_client.yml` | FreeIPA or AD client |
 | 17 | `17_setup_freeipa_client.yml` | FreeIPA only (manual) |
 | 18 | `18_setup_ad_client.yml` | AD only (manual) |
@@ -126,7 +126,7 @@ Four playbooks previously duplicated a numeric prefix with another, unrelated pl
 | `10_setup_freeipa_server.yml` | `12_setup_freeipa_server.yml` |
 | `11_update_resolv_conf.yml` | `13_update_resolv_conf.yml` |
 | `12_setup_dns_records.yml` | `14_setup_dns_records.yml` |
-| `13_update_syscfg_network.yml` | `15_update_syscfg_network.yml` |
+| `13_update_syscfg_network.yml` | Removed; RHEL 8/9 DNS persistence is handled by `13_update_resolv_conf.yml` through NetworkManager |
 | `14_setup_identity_client.yml` | `16_setup_identity_client.yml` |
 | `14_setup_freeipa_client.yml` | `17_setup_freeipa_client.yml` |
 | `14_setup_ad_client.yml` | `18_setup_ad_client.yml` |

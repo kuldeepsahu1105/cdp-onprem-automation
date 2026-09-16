@@ -54,6 +54,9 @@ extra_dns_nameservers: []
 # other AWS hosts, and skips the external probe outside AWS. Set "off" to
 # disable explicitly or provide a resolvable internal mirror hostname.
 identity_dns_external_probe_host: ""
+# RHEL 8/9: prevent NetworkManager/DHCP and IPA installers from replacing the
+# Ansible-managed /etc/resolv.conf. Ubuntu persistence is handled by netplan.
+dns_manage_networkmanager_resolv_conf: true
 
 # -----------------------------------------------------------------------------
 # 2. Product versions and repositories
