@@ -1,11 +1,24 @@
 ---
 # Set REMOTE_PARCEL_REPO_URLS via PUT /cm/config (no cloudera.cluster.cm_config).
 
+- name: Parcel repo — select the prepared CM API endpoint
+  ansible.builtin.set_fact:
+    cm_parcel_api_url: "{{ cm_krb_api_url | default(cm_api_url | default(''), true) }}"
+
+- name: Parcel repo — require a prepared CM API endpoint
+  ansible.builtin.assert:
+    that:
+      - cm_parcel_api_url | length > 0
+      - cm_api_uri_delegate_to | default('') | length > 0
+    fail_msg: >-
+      The parcel repository helper requires a prepared CM API endpoint and delegate.
+      Run set_cm_api_url.yml or prepare_cm_security_api.yml before importing this task.
+
 - name: Parcel repo — read current CM configuration
   block:
     - name: Parcel repo — GET /cm/config
       ansible.builtin.uri:
-        url: "{{ cm_krb_api_url }}/cm/config"
+        url: "{{ cm_parcel_api_url }}/cm/config"
         method: GET
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
@@ -21,7 +34,7 @@
     - name: Parcel repo — fail with scm-server and security group guidance
       ansible.builtin.fail:
         msg: >-
-          Cloudera Manager parcel repo API unreachable at {{ cm_krb_api_url }}/cm/config
+          Cloudera Manager parcel repo API unreachable at {{ cm_parcel_api_url }}/cm/config
           (called from {{ inventory_hostname | default('localhost') }}
           {% if cm_api_uri_delegate_to | default('') | length > 0 %}
           via {{ cm_api_uri_delegate_to }} at bind {{ cm_api_probe_host | default('unknown') }}
@@ -203,7 +216,7 @@
 
 - name: Parcel repo — apply REMOTE_PARCEL_REPO_URLS in Cloudera Manager
   ansible.builtin.uri:
-    url: "{{ cm_krb_api_url }}/cm/config"
+    url: "{{ cm_parcel_api_url }}/cm/config"
     method: PUT
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -227,7 +240,7 @@
 
 - name: Parcel repo — refresh Cloudera Manager parcel repositories
   ansible.builtin.uri:
-    url: "{{ cm_krb_api_url }}/cm/commands/refreshParcelRepos"
+    url: "{{ cm_parcel_api_url }}/cm/commands/refreshParcelRepos"
     method: POST
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -257,6 +270,7 @@
 - name: Parcel repo — wait for repository refresh
   ansible.builtin.import_tasks: wait_cm_api_command.yml
   vars:
+    cm_krb_api_url: "{{ cm_parcel_api_url }}"
     cm_api_command_id: "{{ cm_parcel_refresh.json.id }}"
   when:
     - cm_parcel_refresh is defined

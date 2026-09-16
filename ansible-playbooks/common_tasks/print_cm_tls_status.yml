@@ -49,6 +49,14 @@
             if (cm_autotls_config_flags_unreported | default(false) | bool)
             else (
               ' ; Auto-TLS in CM config=' + (cm_autotls_api_enabled | default(false) | string)
+              + (
+                ' ; requested=True — enablement runs in playbook 27 / CM_TLS_KRB_LDAP'
+                if (
+                  not (cm_autotls_api_enabled | default(false) | bool)
+                  and (cm_autotls_setup_intent | default(false) | bool)
+                )
+                else ''
+              )
               if (cm_autotls_api_enabled is defined)
               else ''
             )
@@ -63,6 +71,14 @@
             if (cm_autotls_config_flags_unreported | default(false) | bool)
             else (
               ' ; Auto-TLS in CM config=' + (cm_autotls_api_enabled | default(false) | string)
+              + (
+                ' ; requested=True — enablement runs in playbook 27 / CM_TLS_KRB_LDAP'
+                if (
+                  not (cm_autotls_api_enabled | default(false) | bool)
+                  and (cm_autotls_setup_intent | default(false) | bool)
+                )
+                else ''
+              )
               if (cm_autotls_api_enabled is defined)
               else ''
             )
