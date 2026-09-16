@@ -747,6 +747,13 @@
             | first
             | default({})
           }}
+        base_cluster_existing_spark3_service: >-
+          {{
+            existing_cluster_services.json['items'] | default([])
+            | selectattr('name', 'equalto', 'spark3_on_yarn')
+            | first
+            | default({})
+          }}
         base_cluster_existing_hive_service: >-
           {{
             existing_cluster_services.json['items'] | default([])
@@ -807,6 +814,13 @@
                 )
               )
               and (
+                not (base_cluster_install_services.spark3 | default(true) | bool)
+                or (
+                  base_cluster_existing_spark3_service.serviceState | default('') == 'STARTED'
+                  and base_cluster_existing_spark3_service.healthSummary | default('') == 'GOOD'
+                )
+              )
+              and (
                 not (base_cluster_install_services.hive | default(true) | bool)
                 or (
                   base_cluster_existing_hive_service.serviceState | default('') == 'STARTED'
@@ -827,7 +841,7 @@
       ansible.builtin.debug:
         msg: >-
           The populated cluster has no matching initialization marker. Starting ZooKeeper and HDFS,
-          then reconciling only non-destructive HDFS, Solr, and HBase initialization artifacts.
+          then reconciling only non-destructive HDFS and dependent service initialization artifacts.
           NameNode format and cluster First Run will not be invoked.
       when: base_cluster_recovery_required | bool
 
@@ -888,22 +902,116 @@
         label: "{{ base_cluster_setup_command.service }}:{{ base_cluster_setup_command.command }}"
       when: base_cluster_recovery_required | bool
 
+    - name: Read YARN initialization paths
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/yarn/config?view=full
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_yarn_recovery_config
+      changed_when: false
+      when:
+        - base_cluster_recovery_required | bool
+        - base_cluster_install_services.yarn | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Resolve YARN node labels directory
+      ansible.builtin.set_fact:
+        base_cluster_yarn_node_labels_dir: >-
+          {{
+            (
+              base_cluster_yarn_recovery_config.json['items'] | default([])
+              | selectattr('name', 'equalto', 'node_labels_root_dir')
+              | map(attribute='value')
+              | first
+            )
+            | default('/yarn/node-labels', true)
+          }}
+      when:
+        - base_cluster_recovery_required | bool
+        - base_cluster_install_services.yarn | default(true) | bool
+
+    - name: Read Hive initialization paths
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/hive/config?view=full
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_hive_recovery_config
+      changed_when: false
+      when:
+        - base_cluster_recovery_required | bool
+        - base_cluster_install_services.hive | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Resolve Hive external warehouse directory
+      ansible.builtin.set_fact:
+        base_cluster_hive_external_warehouse_dir: >-
+          {{
+            (
+              base_cluster_hive_recovery_config.json['items'] | default([])
+              | selectattr('name', 'equalto', 'hive_warehouse_external_directory')
+              | map(attribute='value')
+              | first
+            )
+            | default('/warehouse/tablespace/external/hive', true)
+          }}
+      when:
+        - base_cluster_recovery_required | bool
+        - base_cluster_install_services.hive | default(true) | bool
+
+    - name: Recover required HDFS directories
+      ansible.builtin.shell: |
+        set -euo pipefail
+        hdfs_cli=/opt/cloudera/parcels/CDH/bin/hdfs
+        changed=false
+
+        ensure_dir() {
+          local path="$1"
+          if ! "$hdfs_cli" dfs -test -d "$path"; then
+            "$hdfs_cli" dfs -mkdir -p "$path"
+            changed=true
+          fi
+        }
+
+        ensure_dir /tmp
+        "$hdfs_cli" dfs -chmod 1777 /tmp
+        {% if base_cluster_install_services.yarn | default(true) | bool %}
+        ensure_dir {{ base_cluster_yarn_node_labels_dir | quote }}
+        "$hdfs_cli" dfs -chown yarn:yarn {{ base_cluster_yarn_node_labels_dir | quote }}
+        "$hdfs_cli" dfs -chmod 700 {{ base_cluster_yarn_node_labels_dir | quote }}
+        {% endif %}
+        echo "changed=${changed}"
+      args:
+        executable: /bin/bash
+      environment:
+        HADOOP_CONF_DIR: /etc/hadoop/conf
+      register: base_cluster_hdfs_directory_recovery
+      changed_when: "'changed=true' in base_cluster_hdfs_directory_recovery.stdout"
+      become: true
+      become_user: hdfs
+      delegate_to: "{{ groups[base_cluster_worker_group] | first }}"
+      when:
+        - base_cluster_recovery_required | bool
+        - base_cluster_install_services.hdfs | default(true) | bool
+
     - name: Build safe service initialization recovery commands
       ansible.builtin.set_fact:
         base_cluster_recovery_commands: >-
           {{
             (
-              [{'service': 'hdfs', 'command': 'hdfsCreateTmpDir'}]
-              if (
-                base_cluster_install_services.hdfs | default(true) | bool
-                and (
-                  base_cluster_existing_hdfs_service.serviceState | default('') != 'STARTED'
-                  or base_cluster_existing_hdfs_service.healthSummary | default('') != 'GOOD'
-                )
-              )
-              else []
-            )
-            + (
               [
                 {'service': 'solr', 'command': 'createSolrHdfsHomeDir'},
                 {'service': 'solr', 'command': 'initSolr'}
@@ -947,9 +1055,32 @@
             )
             + (
               [
+                {'service': 'spark3_on_yarn', 'command': 'CreateSparkHistoryDirCommand'},
+                {'service': 'spark3_on_yarn', 'command': 'CreateSparkUserDirCommand'},
+                {'service': 'spark3_on_yarn', 'command': 'CreateSparkDriverLogDirCommand'}
+              ]
+              if (
+                base_cluster_install_services.spark3 | default(true) | bool
+                and (
+                  base_cluster_existing_spark3_service.serviceState | default('') != 'STARTED'
+                  or base_cluster_existing_spark3_service.healthSummary | default('') != 'GOOD'
+                )
+              )
+              else []
+            )
+            + (
+              [
                 {'service': 'hive', 'command': 'hiveCreateHiveUserDir'},
                 {'service': 'hive', 'command': 'hiveCreateHiveWarehouse'},
-                {'service': 'hive', 'command': 'hiveCreateHiveWarehouseExternal'}
+                {
+                  'service': 'hive',
+                  'command': 'hiveCreateHiveWarehouseExternal',
+                  'query': 'directory=' ~ (
+                    base_cluster_hive_external_warehouse_dir
+                    | regex_replace('^/warehouse/?', '')
+                    | urlencode
+                  )
+                }
               ]
               if (
                 base_cluster_install_services.hive | default(true) | bool
