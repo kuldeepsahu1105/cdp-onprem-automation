@@ -30,8 +30,7 @@
     route {
       forward_auth portal-auth:8080 {
         uri /check
-        header_up X-Auth-Mode redirect
-        header_up X-Forwarded-Uri {http.request.uri}
+        header_up X-Auth-Mode status
       }
       header Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
       header Pragma "no-cache"

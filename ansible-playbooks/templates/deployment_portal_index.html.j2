@@ -69,6 +69,7 @@
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png"/>
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"/>
   <style>
+    [hidden] { display: none !important; }
     :root {
       --bg: #0c1017;
       --bg-elevated: #121926;
@@ -1541,11 +1542,14 @@
                 <td>{% if h.ssh_command | default('') | length > 0 %}<code class="ssh-inline-cmd">{{ h.ssh_command }}</code>{% else %}<span class="badge">—</span>{% endif %}</td>
                 {% if _ssh_keys_ui_on and (ns_ssh_dl.items | length > 0) %}
                 <td>
-                  <div class="inventory-pem-links">
+                  <div class="inventory-pem-links{% if oa.basic_auth_enabled | default(false) | bool %} auth-protected-download{% endif %}"{% if oa.basic_auth_enabled | default(false) | bool %} hidden{% endif %}>
                   {% for dl in ns_ssh_dl.items %}
-                  <a class="dl-link-inline" href="{{ dl.href }}" download="{{ dl.filename | default('') }}" title="{{ dl.label }}">{{ dl.filename | default(dl.label) }}</a>
+                  <a class="dl-link-inline" href="{{ dl.href }}?v={{ ctx.generated_at | default('current') | replace(':', '') | replace('+', '') | replace(' ', '') }}" download="{{ dl.filename | default('') }}" title="{{ dl.label }}">{{ dl.filename | default(dl.label) }}</a>
                   {% endfor %}
                   </div>
+                  {% if oa.basic_auth_enabled | default(false) | bool %}
+                  <a class="dl-link-inline auth-download-login" href="/login.html">Login required</a>
+                  {% endif %}
                 </td>
                 {% endif %}
               </tr>
