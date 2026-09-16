@@ -143,21 +143,59 @@
 
     # scm_csds_effective: explicit scm_csds / scm_csds_redhat, else scm_csds_urls.j2 (DATAVIZ + CFM).
     # DATAVIZ yum get_url ignores errors so download_cdv_dataviz_csd.yml can fall back to parcel.
+    - name: Show CSD download plan
+      ansible.builtin.debug:
+        msg: >-
+          CSD downloads: {{
+            scm_csds_effective
+            if (scm_csds_effective | length > 0)
+            else 'none (service filtering or CSD URL generation is disabled)'
+          }}
+
     - name: Download CSDs from scm_csds_effective
       ansible.builtin.get_url:
         url: "{{ item }}"
         dest: /opt/cloudera/csd
         mode: '0644'
+        owner: cloudera-scm
+        group: cloudera-scm
         url_username: "{{ cm_repo_username }}"
         url_password: "{{ cm_repo_password }}"
         force_basic_auth: yes
       loop: "{{ scm_csds_effective }}"
+      register: scm_csd_download_results
       when: scm_csds_effective | length > 0
       ignore_errors: "{{ (cdv_dataviz_csd_jar | default('')) in (item | string) }}"
 
     - name: DATAVIZ CSD parcel fallback when yum jar missing (or scm_csds omitted DATAVIZ URL)
       ansible.builtin.import_tasks: common_tasks/download_cdv_dataviz_csd.yml
       # delegate_to: cldr-mngr
+
+    - name: Track whether CSD content changed
+      ansible.builtin.set_fact:
+        cm_csd_content_changed: >-
+          {{
+            (
+              (scm_csd_download_results | default({})).get('results', [])
+              | selectattr('changed', 'defined')
+              | selectattr('changed')
+              | list
+              | length
+            ) > 0
+            or ((cdv_dataviz_csd_jar_result | default({})).get('changed', false) | bool)
+            or ((cdv_dataviz_csd_copy_result | default({})).get('changed', false) | bool)
+          }}
+
+    - name: List installed CSD jars
+      ansible.builtin.find:
+        paths: /opt/cloudera/csd
+        patterns: "*.jar"
+        file_type: file
+      register: installed_csd_jars
+
+    - name: Show installed CSD jars
+      ansible.builtin.debug:
+        msg: "{{ installed_csd_jars.files | map(attribute='path') | sort | list }}"
 
     # ----------------------------------------
     # Start and enable Cloudera Manager Server
@@ -173,12 +211,22 @@
         msg: >-
           cloudera-scm-server is already active on cldr-mngr — skipping systemd start
           (wait_for_cm_server_active still runs when needed).
-      when: cm_server_pre_active.rc | int == 0
+      when:
+        - cm_server_pre_active.rc | int == 0
+        - not (cm_csd_content_changed | bool)
 
     - name: Ensure Cloudera Manager server is enabled
       ansible.builtin.systemd:
         name: cloudera-scm-server
         enabled: true
+
+    - name: Restart Cloudera Manager server to load changed CSDs
+      ansible.builtin.systemd:
+        name: cloudera-scm-server
+        state: restarted
+      when:
+        - cm_server_pre_active.rc | int == 0
+        - cm_csd_content_changed | bool
 
     - name: Start Cloudera Manager server when not active
       ansible.builtin.systemd:
@@ -214,4 +262,3 @@
       ansible.builtin.import_tasks: common_tasks/restart_cm_agent_if_needed.yml
 
 # CM API probe, password alignment, and verify: playbook 25_verify_cm.yml (once per CM install phase).
-

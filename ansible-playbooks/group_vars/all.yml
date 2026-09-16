@@ -409,8 +409,9 @@ cfm_nifi_registry_csd_jar: "NIFIREGISTRY-{{ cfm_nifi_app_version }}.{{ cfm_versi
 csd_redhat_repo: auto
 # false disables step 3 (scm_csds_urls.j2); explicit scm_csds / scm_csds_redhat still apply
 csd_build_urls_enabled: true
-# When true, only download CSDs for base_cluster_install_services keys enabled (dataviz/nifi/nifi_registry default false).
-csd_respect_service_toggles: true
+# When true, only download CSDs for enabled service keys. Keep false so optional services can be enabled later
+# without rerunning CM installation solely to stage their CSD descriptors.
+csd_respect_service_toggles: false
 csd_install_dataviz: true
 csd_install_nifi: true
 csd_install_nifi_registry: true

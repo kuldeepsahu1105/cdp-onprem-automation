@@ -8,7 +8,7 @@
       {{
         (csd_install_dataviz | default(true) | bool)
         and (
-          (not (csd_respect_service_toggles | default(true) | bool))
+          (not (csd_respect_service_toggles | default(false) | bool))
           or (base_cluster_install_services.dataviz | default(false) | bool)
         )
       }}
@@ -121,3 +121,4 @@
             owner: cloudera-scm
             group: cloudera-scm
             remote_src: true
+          register: cdv_dataviz_csd_copy_result

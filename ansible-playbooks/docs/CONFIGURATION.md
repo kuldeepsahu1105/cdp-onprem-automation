@@ -123,6 +123,7 @@ archive account. Numeric build IDs must correspond to the selected release.
 | `cm_parcel_repo_urls_override` | `[]` or list of directory URLs | Non-empty **replaces the entire** CM parcel repository list. Include every CDH/CDV/CFM/ECS repository required. |
 | `cm_csd_urls_override` | `[]` or list of `.jar` URLs | Non-empty replaces generated CSD downloads. Include every required CSD JAR. |
 | `cm_parcel_repo_extra_urls` | `[]` or list of directory URLs | Appends repositories without replacing generated URLs. Use this for optional/custom parcels. |
+| `csd_respect_service_toggles` | Boolean; `false` | When false, stages DataViz, NiFi, and NiFi Registry CSD JARs even while those optional services are disabled. |
 | `cm_parcel_repo_include_ecs_parcel` | Boolean; `true` | Adds pinned ECS and required ECS `latest` repository candidates. |
 | `cm_parcel_repo_include_cdv_parcel` | Boolean; `true` | Adds the pinned Data Visualization parcel repository. |
 | `cm_parcel_repo_include_cfm_parcel` | Boolean; `true` | Adds the pinned Flow Management parcel repository used by NiFi services. |
