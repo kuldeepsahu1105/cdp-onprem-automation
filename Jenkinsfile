@@ -937,17 +937,18 @@ def runAnsibleDeployPhase(String phase) {
   writeAnsibleGroupVarsFragmentFile()
   def licenseFile = writeCmLicenseContentFile()
   if (ansibleGroupVarsYamlHasKeys(params.ANSIBLE_GROUP_VARS_YAML?.toString())) {
-    def yamlCheck = sh(
-      script: '''
-        set -euo pipefail
-        export ANSIBLE_GROUP_VARS_FILE="${ANSIBLE_GROUP_VARS_FILE:?}"
-        python3 jenkins/scripts/render-ansible-group-vars-override.py --validate-only /dev/null
-      ''',
-      returnStatus: true,
-      env: [
-        ANSIBLE_GROUP_VARS_FILE: "${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml",
-      ],
-    )
+    def yamlCheck
+    withEnv([
+      "ANSIBLE_GROUP_VARS_FILE=${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml",
+    ]) {
+      yamlCheck = sh(
+        script: '''
+          set -euo pipefail
+          python3 jenkins/scripts/render-ansible-group-vars-override.py --validate-only /dev/null
+        ''',
+        returnStatus: true,
+      )
+    }
     if (yamlCheck != 0) {
       validationFail('ANSIBLE_GROUP_VARS_YAML must contain valid YAML as a key: value mapping')
     }
