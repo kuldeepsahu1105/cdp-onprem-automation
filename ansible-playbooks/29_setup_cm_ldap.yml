@@ -55,6 +55,9 @@
           - "LDAP bind DN: {{ cm_ldap_bind_dn }}"
           - "User search base: {{ cm_ldap_user_search_base }}"
           - "User search filter: {{ cm_ldap_user_search_filter }}"
+          - "Group search base: {{ cm_ldap_group_search_base }}"
+          - "Group search filter: {{ cm_ldap_group_search_filter }}"
+          - "Authentication backend order: {{ cm_ldap_auth_backend_order }}"
 
     - name: Configure Cloudera Manager LDAP settings (REST API)
       ansible.builtin.import_tasks: common_tasks/configure_cm_ldap_api.yml
