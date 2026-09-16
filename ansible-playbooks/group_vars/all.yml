@@ -553,7 +553,8 @@ cm_krb_kerberized_wait_retries: 30
 cm_krb_kerberized_wait_delay: 10
 cm_krb_kerberized_wait_timeout_seconds: "{{ (cm_krb_kerberized_wait_retries | int) * (cm_krb_kerberized_wait_delay | int) }}"
 cm_krb_kdc_preflight_timeout: 60
-# Post-CMS checks: Postgres for Reports Manager; TCP listen for Service Monitor Avro (firehose).
+# Post-CMS checks: Postgres for Reports Manager; best-effort TCP listen check when CM exposes
+# the Service Monitor Avro (firehose) port. STARTED role state remains authoritative.
 cm_cms_verify_reports_manager_db: true
 cm_cms_verify_servicemonitor_listen: true
 cm_cms_servicemonitor_port_config_names:

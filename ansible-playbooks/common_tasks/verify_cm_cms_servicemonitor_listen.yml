@@ -1,6 +1,7 @@
 ---
 # CM → Service Monitor Avro RPC uses the firehose listen port on the CMS host.
-# Connection refused with roleState RUNNING usually means the process exited or is still binding.
+# CM does not expose this port consistently across releases, so role state is authoritative
+# and the socket probe is an additional diagnostic only when the port can be discovered.
 
 - name: CMS — skip Service Monitor listen probe when disabled
   ansible.builtin.debug:
@@ -104,13 +105,13 @@
     - (cms_smon_listen_port_effective | default('') | trim) | length > 0
     - (cms_smon_listen_port_effective | int) > 0
 
-- name: CMS — fail when Service Monitor listen port could not be determined
-  ansible.builtin.fail:
+- name: CMS — report when Service Monitor listen port is not exposed
+  ansible.builtin.debug:
     msg: >-
-      Could not determine Service Monitor (firehose) listen port for role {{ cms_smon_role.name }}.
+      Service Monitor role {{ cms_smon_role.name }} is STARTED, but this CM release did not expose
+      its firehose listen port through the role configuration or process directory.
       CM API config keys tried: {{ cm_cms_servicemonitor_port_config_names | join(', ') }}.
-      On {{ cms_target_hostname }}, inspect /var/run/cloudera-scm-agent/process/*-SERVICEMONITOR*/
-      and /var/log/cloudera-scm-firehose/.
+      Skipping the optional socket probe; role-state verification already passed.
   when:
     - cm_cms_verify_servicemonitor_listen | default(true) | bool
     - (
