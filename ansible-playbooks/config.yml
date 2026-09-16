@@ -92,7 +92,6 @@ cm_parcel_repo_extra_urls: []
 
 # Generated parcel matrix when cm_parcel_repo_urls_override is empty:
 #   CDH pinned, DataViz pinned, CFM pinned, ECS pinned, ECS /latest.
-cm_parcel_repo_include_intel_mkl: true
 cm_parcel_repo_include_ecs_parcel: true
 cm_parcel_repo_include_cdv_parcel: true
 cm_parcel_repo_include_cfm_parcel: true

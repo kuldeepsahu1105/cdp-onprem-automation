@@ -112,14 +112,6 @@
             )
             else []
           )
-          + (
-            [cm_remote_parcel_repo_intel_mkl_url]
-            if (
-              (cm_parcel_repo_include_intel_mkl | default(true) | bool)
-              and (cm_remote_parcel_repo_intel_mkl_url | default('') | length > 0)
-            )
-            else []
-          )
           + (cm_remote_parcel_csd_repo_urls_effective | default([]))
           + (cm_parcel_repo_extra_urls | default([]))
           | map('trim')
@@ -175,6 +167,7 @@
           | reject('search', 'archive\\.cloudera\\.com/cdh5/')
           | reject('search', '/p/spark3/')
           | reject('search', 'archive\\.cloudera\\.com/spark3/')
+          | reject('search', 'parcels\\.repos\\.intel\\.com/mkl/')
           | reject('search', '/\\{latest\\}/')
           | reject('search', '/%7Blatest%7D/')
           | reject('search', '[{}]')
