@@ -548,10 +548,9 @@ cm_api_command_poll_delay: 10
 cm_cms_monitor_wait_retries: 30
 cm_cms_monitor_wait_delay: 20
 cm_cms_monitor_wait_timeout_seconds: "{{ (cm_cms_monitor_wait_retries | int) * (cm_cms_monitor_wait_delay | int) }}"
-# Bounded wait for CM kerberosInfo.kerberized after importAdminCredentials + CM restart (playbook 28).
-cm_krb_kerberized_wait_retries: 30
-cm_krb_kerberized_wait_delay: 10
-cm_krb_kerberized_wait_timeout_seconds: "{{ (cm_krb_kerberized_wait_retries | int) * (cm_krb_kerberized_wait_delay | int) }}"
+# Re-import KDC account-manager credentials only for intentional password rotation.
+cm_krb_force_credential_import: false
+cm_krb_credentials_marker_path: /var/lib/cloudera-scm-server/.ansible-kdc-account-manager-imported
 cm_krb_kdc_preflight_timeout: 60
 # Post-CMS checks: Postgres for Reports Manager; best-effort TCP listen check when CM exposes
 # the Service Monitor Avro (firehose) port. STARTED role state remains authoritative.

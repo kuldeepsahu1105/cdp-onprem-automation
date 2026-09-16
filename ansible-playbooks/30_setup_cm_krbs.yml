@@ -45,57 +45,53 @@
           - "KDC admin principal (import): {{ cm_krb_kdc_admin_principal }}"
           - "CM KRB_ENC_TYPES: {{ krb5_enc_types }}"
 
-    - name: Read CM Kerberos enabled state (kerberized)
-      ansible.builtin.uri:
-        url: "{{ cm_krb_api_url }}/cm/kerberosInfo"
-        method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: yes
-        validate_certs: no
-        status_code: [200, 404]
-        follow_redirects: none
-      delegate_to: "{{ cm_api_uri_delegate_to }}"
-      register: cm_krb_info_initial
-      changed_when: false
-
-    - name: Determine if Kerberos/KDC is already enabled in Cloudera Manager
-      ansible.builtin.set_fact:
-        kerberos_already_configured: >-
-          {{
-            cm_krb_info_initial.json is defined
-            and (cm_krb_info_initial.json.kerberized | default(false) | bool)
-          }}
-        cm_krb_kerberized_before: >-
-          {{
-            cm_krb_info_initial.json.kerberized | default(false) | bool
-            if (cm_krb_info_initial.json is defined)
-            else false
-          }}
-
     - name: Configure Kerberos via Cloudera Manager REST API
       ansible.builtin.import_tasks: common_tasks/configure_cm_kerberos_api.yml
+
+    - name: Kerberos — identify this KDC account-manager credential set
+      ansible.builtin.set_fact:
+        cm_krb_credentials_marker_effective_path: >-
+          {{
+            cm_krb_credentials_marker_path
+            ~ '-'
+            ~ ((cm_krb_kdc_admin_principal ~ '|' ~ cluster_realm ~ '|' ~ kdc_host) | hash('sha256'))
+          }}
+
+    - name: Kerberos — check successful credential-import marker
+      ansible.builtin.stat:
+        path: "{{ cm_krb_credentials_marker_effective_path }}"
+      delegate_to: "{{ groups['cm-server'][0] }}"
+      become: true
+      register: cm_krb_credentials_marker
+
+    - name: Kerberos — determine whether KDC account-manager credentials are current
+      ansible.builtin.set_fact:
+        cm_krb_credentials_current: >-
+          {{
+            cm_krb_credentials_marker.stat.exists | default(false) | bool
+            and not (cm_kerberos_config_changed | bool)
+            and not (cm_krb_force_credential_import | bool)
+          }}
 
     - name: Kerberos — report healthy matching KDC integration
       ansible.builtin.debug:
         msg: >-
-          Cloudera Manager reports kerberized=true, the KDC preflight succeeded, and the
-          realm, KDC host/type, and encryption settings match; skipping credential import,
-          restart, and bounded status wait.
+          KDC preflight succeeded, CM Kerberos settings match, and the KDC account-manager
+          credentials were previously imported successfully; skipping credential import and restart.
       when:
-        - kerberos_already_configured | bool
+        - cm_krb_credentials_current | bool
         - not (cm_kerberos_config_changed | bool)
 
     - name: Kerberos — print existing Cloudera Manager access URLs
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
       when:
-        - kerberos_already_configured | bool
+        - cm_krb_credentials_current | bool
         - not (cm_kerberos_config_changed | bool)
 
     - name: Kerberos — finish healthy matching no-op play
       ansible.builtin.meta: end_play
       when:
-        - kerberos_already_configured | bool
+        - cm_krb_credentials_current | bool
         - not (cm_kerberos_config_changed | bool)
 
     - name: Configure Active Directory-specific Kerberos settings
@@ -119,7 +115,6 @@
       register: cm_kerberos_ad_config
       when:
         - identity_provider_effective == 'ad'
-        - not kerberos_already_configured | default(false)
         - cm_kerberos_config_changed | default(false) | bool
       changed_when: true
 
@@ -132,16 +127,12 @@
 
     - name: Restart Cloudera Manager after Kerberos /cm/config before credential import
       ansible.builtin.import_tasks: common_tasks/apply_cm_restart_after_config.yml
-      when:
-        - not kerberos_already_configured | default(false)
-        - cm_restart_after_config_change | default(false) | bool
+      when: cm_restart_after_config_change | default(false) | bool
 
     - name: Kerberos — clear restart flag after pre-import CM restart
       ansible.builtin.set_fact:
         cm_restart_after_config_change: false
-      when:
-        - not kerberos_already_configured | default(false)
-        - cm_restart_after_config_change | default(false) | bool
+      when: cm_restart_after_config_change | default(false) | bool
 
     - name: Kerberos — require KDC admin password before credential import
       ansible.builtin.assert:
@@ -151,7 +142,7 @@
         fail_msg: >-
           krb5_kdc_admin_password is empty (FreeIPA: ipaadmin_password; AD: ad_kdc_admin_password).
           CM cannot import KDC admin credentials without a password — set via group_vars or Jenkins ANSIBLE_GROUP_VARS_YAML.
-      when: not kerberos_already_configured | default(false)
+      when: not (cm_krb_credentials_current | bool)
 
     - name: Import KDC admin credentials into Cloudera Manager
       ansible.builtin.uri:
@@ -170,7 +161,7 @@
       register: kdc_import_result
       changed_when: true
       no_log: true
-      when: not kerberos_already_configured | default(false)
+      when: not (cm_krb_credentials_current | bool)
 
     - name: Require importAdminCredentials command id
       ansible.builtin.assert:
@@ -180,7 +171,7 @@
           importAdminCredentials returned HTTP {{ kdc_import_result.status | default('unknown') }}
           without an ApiCommand id. Check the KDC principal, password, and
           /var/log/cloudera-scm-server/cloudera-scm-server.log.
-      when: not kerberos_already_configured | default(false)
+      when: not (cm_krb_credentials_current | bool)
 
     - name: Wait for importAdminCredentials command
       ansible.builtin.import_tasks: common_tasks/wait_cm_api_command.yml
@@ -188,43 +179,71 @@
         cm_api_command_id: "{{ kdc_import_result.json.id }}"
         cm_api_command_allow_already_exists: true
       when:
-        - not kerberos_already_configured | default(false)
+        - not (cm_krb_credentials_current | bool)
         - kdc_import_result.json.id is defined
 
-    - name: Kerberos — CM restart required after KDC admin credential import
+    - name: Kerberos — confirm importAdminCredentials command success
       ansible.builtin.set_fact:
-        cm_restart_after_config_change: true
+        cm_krb_import_confirmed: >-
+          {{
+            cm_api_command_poll.json.success | default(false) | bool
+            or (
+              'already exists' in (
+                cm_api_command_poll.json.resultMessage
+                | default(cm_api_command_poll.json.result_message | default(''))
+                | lower
+              )
+            )
+          }}
       when:
-        - not kerberos_already_configured | default(false)
-        - not (kdc_import_result.skipped | default(false))
-        - kdc_import_result.status | default(0) | int in [200, 201]
+        - not (cm_krb_credentials_current | bool)
+        - kdc_import_result.json.id is defined
+
+    - name: Kerberos — require confirmed account-manager credential import
+      ansible.builtin.assert:
+        that:
+          - cm_krb_import_confirmed | default(false) | bool
+        fail_msg: >-
+          importAdminCredentials command {{ kdc_import_result.json.id | default('unknown') }}
+          completed without a confirmed successful result.
+      when: not (cm_krb_credentials_current | bool)
+
+    - name: Kerberos — record successful KDC account-manager credential import
+      ansible.builtin.copy:
+        dest: "{{ cm_krb_credentials_marker_effective_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          principal={{ cm_krb_kdc_admin_principal }}
+          realm={{ cluster_realm }}
+          kdc={{ kdc_host }}
+      delegate_to: "{{ groups['cm-server'][0] }}"
+      become: true
+      when:
+        - not (cm_krb_credentials_current | bool)
+        - cm_krb_import_confirmed | default(false) | bool
 
     - name: Print KDC credential import result
       ansible.builtin.debug:
         msg: >-
           KDC credential import submitted (command id={{ kdc_import_result.json.id | default('n/a') }},
           HTTP {{ kdc_import_result.status | default('skipped') }})
-      when: not kerberos_already_configured | default(false)
-
-    - name: Restart Cloudera Manager after Kerberos configuration change
-      ansible.builtin.import_tasks: common_tasks/apply_cm_restart_after_config.yml
-      when: cm_restart_after_config_change | default(false) | bool
-
-    - name: Print Kerberos configuration result
-      ansible.builtin.debug:
-        msg: >-
-          Kerberos CM config applied (REST).
-          kerberized={{ cm_krb_info.json.kerberized | default('unknown') }}
       when:
-        - cm_kerberos_api_result is defined
-        - cm_kerberos_api_result is changed
+        - kdc_import_result is defined
+        - kdc_import_result is changed
 
-    - name: Kerberos already configured (credential import skipped)
-      ansible.builtin.debug:
-        msg: >-
-          Kerberos is already enabled in Cloudera Manager (kerberized=true); skipped KDC credential import.
-          CM Kerberos settings (e.g. KRB_ENC_TYPES) were reconciled when drift was detected.
-      when: kerberos_already_configured | default(false)
+    - name: Kerberos — confirm pre-cluster KDC integration
+      ansible.builtin.assert:
+        that:
+          - >-
+            cm_krb_credentials_marker.stat.exists | default(false) | bool
+            or cm_krb_import_confirmed | default(false) | bool
+        success_msg: >-
+          KDC integration is ready: the KDC is reachable, CM settings match, and account-manager
+          credentials are imported. A managed cluster can still report kerberized=false until
+          cluster creation and Kerberos enablement.
+        fail_msg: KDC account-manager credential import was not confirmed.
 
-    - name: Verify Cloudera Manager KDC integration is enabled
-      ansible.builtin.import_tasks: common_tasks/verify_cm_kerberos_enabled.yml
+    - name: Kerberos — print Cloudera Manager access URLs
+      ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
