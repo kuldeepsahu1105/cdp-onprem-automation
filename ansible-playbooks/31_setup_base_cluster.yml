@@ -562,6 +562,189 @@
             or base_cluster_ozone_role_create.changed | default(false) | bool
           }}
 
+    - name: Read base cluster initialization marker
+      ansible.builtin.slurp:
+        src: "{{ base_cluster_initialization_marker_path }}"
+      register: base_cluster_initialization_marker
+      failed_when: false
+      changed_when: false
+      become: true
+      delegate_to: "{{ cm_manager_inventory_host }}"
+
+    - name: Read existing initialization service states
+      ansible.builtin.set_fact:
+        base_cluster_existing_hdfs_service: >-
+          {{
+            existing_cluster_services.json['items'] | default([])
+            | selectattr('name', 'equalto', 'hdfs')
+            | first
+            | default({})
+          }}
+        base_cluster_existing_solr_service: >-
+          {{
+            existing_cluster_services.json['items'] | default([])
+            | selectattr('name', 'equalto', 'solr')
+            | first
+            | default({})
+          }}
+        base_cluster_existing_hbase_service: >-
+          {{
+            existing_cluster_services.json['items'] | default([])
+            | selectattr('name', 'equalto', 'hbase')
+            | first
+            | default({})
+          }}
+      when: existing_cluster.status == 200
+
+    - name: Determine whether interrupted First Run recovery is required
+      ansible.builtin.set_fact:
+        base_cluster_recovery_required: >-
+          {{
+            existing_cluster.status == 200
+            and not (base_cluster_partial_empty | bool)
+            and not (
+              existing_cluster.json.uuid is defined
+              and base_cluster_initialization_marker.content is defined
+              and (
+                'uuid=' ~ existing_cluster.json.uuid
+                in (base_cluster_initialization_marker.content | b64decode)
+              )
+            )
+            and not (
+              (
+                not (base_cluster_install_services.hdfs | default(true) | bool)
+                or (
+                  base_cluster_existing_hdfs_service.serviceState | default('') == 'STARTED'
+                  and base_cluster_existing_hdfs_service.healthSummary | default('') == 'GOOD'
+                )
+              )
+              and (
+                not (base_cluster_install_services.solr | default(false) | bool)
+                or (
+                  base_cluster_existing_solr_service.serviceState | default('') == 'STARTED'
+                  and base_cluster_existing_solr_service.healthSummary | default('') == 'GOOD'
+                )
+              )
+              and (
+                not (base_cluster_install_services.hbase | default(true) | bool)
+                or (
+                  base_cluster_existing_hbase_service.serviceState | default('') == 'STARTED'
+                  and base_cluster_existing_hbase_service.healthSummary | default('') == 'GOOD'
+                )
+              )
+            )
+          }}
+
+    - name: Show interrupted First Run recovery
+      ansible.builtin.debug:
+        msg: >-
+          The populated cluster has no matching initialization marker. Starting ZooKeeper and HDFS,
+          then reconciling only non-destructive HDFS, Solr, and HBase initialization artifacts.
+          NameNode format and cluster First Run will not be invoked.
+      when: base_cluster_recovery_required | bool
+
+    - name: Stop partially running services before initialization recovery
+      ansible.builtin.include_tasks: common_tasks/run_cm_service_setup_command.yml
+      loop: >-
+        {{
+          (
+            [{'service': 'solr', 'command': 'stop'}]
+            if (
+              base_cluster_install_services.solr | default(false) | bool
+              and base_cluster_existing_solr_service.serviceState | default('') == 'STARTED'
+              and base_cluster_existing_solr_service.healthSummary | default('') != 'GOOD'
+            )
+            else []
+          )
+          + (
+            [{'service': 'hbase', 'command': 'stop'}]
+            if (
+              base_cluster_install_services.hbase | default(true) | bool
+              and base_cluster_existing_hbase_service.serviceState | default('') == 'STARTED'
+              and base_cluster_existing_hbase_service.healthSummary | default('') != 'GOOD'
+            )
+            else []
+          )
+        }}
+      loop_control:
+        loop_var: base_cluster_setup_command
+        label: "{{ base_cluster_setup_command.service }}:{{ base_cluster_setup_command.command }}"
+      when: base_cluster_recovery_required | bool
+
+    - name: Start recovery prerequisite services
+      ansible.builtin.include_tasks: common_tasks/run_cm_service_setup_command.yml
+      loop: >-
+        {{
+          (
+            [{'service': 'zookeeper', 'command': 'start'}]
+            if (base_cluster_install_services.zookeeper | default(true) | bool)
+            else []
+          )
+          + (
+            [{'service': 'hdfs', 'command': 'start'}]
+            if (base_cluster_install_services.hdfs | default(true) | bool)
+            else []
+          )
+        }}
+      loop_control:
+        loop_var: base_cluster_setup_command
+        label: "{{ base_cluster_setup_command.service }}:{{ base_cluster_setup_command.command }}"
+      when: base_cluster_recovery_required | bool
+
+    - name: Build safe service initialization recovery commands
+      ansible.builtin.set_fact:
+        base_cluster_recovery_commands: >-
+          {{
+            (
+              [{'service': 'hdfs', 'command': 'hdfsCreateTmpDir'}]
+              if (
+                base_cluster_install_services.hdfs | default(true) | bool
+                and (
+                  base_cluster_existing_hdfs_service.serviceState | default('') != 'STARTED'
+                  or base_cluster_existing_hdfs_service.healthSummary | default('') != 'GOOD'
+                )
+              )
+              else []
+            )
+            + (
+              [
+                {'service': 'solr', 'command': 'createSolrHdfsHomeDir'},
+                {'service': 'solr', 'command': 'initSolr'}
+              ]
+              if (
+                base_cluster_install_services.solr | default(false) | bool
+                and (
+                  base_cluster_existing_solr_service.serviceState | default('') != 'STARTED'
+                  or base_cluster_existing_solr_service.healthSummary | default('') != 'GOOD'
+                )
+              )
+              else []
+            )
+            + (
+              [
+                {'service': 'hbase', 'command': 'hbaseCreateRoot'},
+                {'service': 'hbase', 'command': 'hbaseCreateUserDirectory'}
+              ]
+              if (
+                base_cluster_install_services.hbase | default(true) | bool
+                and (
+                  base_cluster_existing_hbase_service.serviceState | default('') != 'STARTED'
+                  or base_cluster_existing_hbase_service.healthSummary | default('') != 'GOOD'
+                )
+              )
+              else []
+            )
+          }}
+      when: base_cluster_recovery_required | bool
+
+    - name: Recover interrupted First Run service initialization
+      ansible.builtin.include_tasks: common_tasks/run_cm_service_setup_command.yml
+      loop: "{{ base_cluster_recovery_commands }}"
+      loop_control:
+        loop_var: base_cluster_setup_command
+        label: "{{ base_cluster_setup_command.service }}:{{ base_cluster_setup_command.command }}"
+      when: base_cluster_recovery_required | bool
+
     - name: Determine cluster initialization action
       ansible.builtin.set_fact:
         base_cluster_first_run_required: >-
@@ -704,6 +887,18 @@
       register: base_cluster_final_state
       changed_when: false
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Record completed base cluster initialization
+      ansible.builtin.copy:
+        dest: "{{ base_cluster_initialization_marker_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          cluster={{ cdh_basecluster_name }}
+          uuid={{ base_cluster_final_state.json.uuid }}
+      become: true
+      delegate_to: "{{ cm_manager_inventory_host }}"
 
     - name: Check ZooKeeper roles
       ansible.builtin.import_tasks: common_tasks/verify_base_cluster_zookeeper_servers.yml

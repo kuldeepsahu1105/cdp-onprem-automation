@@ -439,6 +439,15 @@ passwords use the `base_cluster_*` variables and should be overridden through
 `ANSIBLE_GROUP_VARS_YAML` or an Ansible vault. Ranger initial passwords must
 contain letters and numbers and be at least eight characters long.
 
+An interrupted First Run can leave HDFS formatted and running while later
+service setup never occurred. When a populated cluster has no matching
+cluster-UUID marker at `base_cluster_initialization_marker_path`, playbook **31**
+performs only non-destructive recovery before normal Start: it starts ZooKeeper
+and HDFS, creates HDFS `/tmp`, initializes Solr's HDFS home and ZooKeeper state,
+and creates the HBase root and user directories. It never invokes NameNode
+format or cluster First Run. The marker is recorded only after startup and
+client-configuration refresh complete successfully.
+
 **ZooKeeper placement:** When `base_cluster_install_services.zookeeper` is true (default), the **Worker** host template assigns **ZooKeeper Server** to every host in `base_cluster_worker_group` (`base-workers`). Masters use the **Master** template only. Labs typically run one or three ZK servers on workers; Cloudera Manager requires at least one Server role before Stop Cluster / Deploy Client Config (including after Kerberos/KDC is enabled manually or via playbook **28**).
 
 **Existing cluster missing ZK Server roles:** If CM shows **ZooKeeper has 0 Servers**, the cluster was usually created before host templates used CM service **types** (`ZOOKEEPER`, not `zookeeper`) or playbook **31** found the cluster already present and only started services (templates are not reapplied). Choose one:
