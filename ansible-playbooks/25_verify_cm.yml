@@ -53,7 +53,7 @@
     - name: Require Cloudera SCM Server active on cldr-mngr (systemctl exit code 0 only)
       ansible.builtin.command: systemctl is-active cloudera-scm-server
       register: scm_server_status
-      delegate_to: cldr-mngr
+      delegate_to: "{{ cm_manager_inventory_host }}"
       become: true
       changed_when: false
       failed_when: scm_server_status.rc | int != 0
@@ -64,7 +64,7 @@
 
     - name: Check Cloudera Manager Service status
       ansible.builtin.shell: systemctl status cloudera-scm-server --no-pager
-      delegate_to: cldr-mngr
+      delegate_to: "{{ cm_manager_inventory_host }}"
       register: cm_status_output
       changed_when: false
       when: not (cm_verify_skip_redundant_systemd_details | default(true) | bool)

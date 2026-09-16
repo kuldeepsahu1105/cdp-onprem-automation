@@ -1,9 +1,6 @@
 ---
 # LDAP settings via PUT /cm/config (no cloudera.cluster.cm_config / cm_client).
 
-- name: LDAP — resolve HTTPS CM API URL
-  ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
-
 - name: LDAP — validate Authentication Backend Order value
   ansible.builtin.assert:
     that:
@@ -34,9 +31,23 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cm_ldap_config_before
   changed_when: false
+
+- name: LDAP — detect whether the bind password has ever been configured
+  ansible.builtin.set_fact:
+    cm_ldap_bind_password_present: >-
+      {{
+        (
+          cm_ldap_config_before.json['items'] | default([])
+          | selectattr('name', 'equalto', 'LDAP_BIND_PW')
+          | list
+          | length
+        ) > 0
+      }}
 
 - name: LDAP — detect CM LDAP configuration drift
   ansible.builtin.set_fact:
@@ -52,11 +63,8 @@
            | selectattr('name', 'equalto', 'LDAP_BIND_DN')
            | map(attribute='value') | first | default('')) != (cm_ldap_bind_dn | string)
         )
-        or (
-          (cm_ldap_config_before.json['items'] | default([])
-           | selectattr('name', 'equalto', 'LDAP_BIND_PW')
-           | map(attribute='value') | first | default('')) != (cm_ldap_bind_password | string)
-        )
+        or not (cm_ldap_bind_password_present | bool)
+        or (cm_ldap_update_bind_password | default(false) | bool)
         or (
           (cm_ldap_config_before.json['items'] | default([])
            | selectattr('name', 'equalto', 'AUTH_BACKEND_ORDER')
@@ -105,10 +113,13 @@
     body_format: json
     body:
       items: "{{ cm_ldap_desired_items }}"
-    status_code: [200, 204, 301, 303]
+    status_code: [200, 204]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cm_ldap_result
   when: cm_ldap_config_changed | bool
   changed_when: true
+  no_log: true
 
 - name: LDAP — mark Cloudera Manager restart required after config PUT
   ansible.builtin.set_fact:

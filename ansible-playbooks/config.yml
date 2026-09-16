@@ -1,0 +1,156 @@
+---
+# =============================================================================
+# Deployment configuration
+# =============================================================================
+# Edit this file for a deployment. Stable defaults, derived values, package
+# maps, and compatibility variables stay in group_vars/all.yml.
+#
+# Precedence (lowest to highest):
+#   group_vars/all.yml -> this file -> command-line/Jenkins extra vars
+#
+# Keep passwords out of Git. Supply them with Ansible Vault, environment-backed
+# Jenkins parameters, or `ansible-playbook ... -e @secrets.yml`.
+#
+# Navigation:
+#   1. Environment and identity
+#   2. Product versions and repositories
+#   3. Base cluster
+#   4. CM security integrations
+#   5. ECS
+#   6. Portal and monitoring
+
+# -----------------------------------------------------------------------------
+# 1. Environment and identity
+# -----------------------------------------------------------------------------
+identity_provider: auto                 # auto | freeipa | ad
+deployment_environment: auto            # auto | aws | baremetal
+ipaserver_domain: cldrsetup.local
+
+# Active Directory is selected automatically when identity_provider is auto,
+# no FreeIPA host exists, and ad_kdc_host is non-empty.
+ad_domain: corp.example.com
+ad_kdc_host: ""
+ad_dns_servers:
+  - "{{ ad_kdc_host }}"
+
+# Optional DNS additions applied with the environment-specific defaults.
+extra_dns_search_domains: []
+extra_dns_nameservers: []
+
+# -----------------------------------------------------------------------------
+# 2. Product versions and repositories
+# -----------------------------------------------------------------------------
+java_version: "17"
+python_version: "3.11"
+postgresql_version: 18
+postgres_jdbc_version: "42.7.10"
+
+cm_version: "7.13.2.10000"
+cm_numeric_version: "713210000"
+cdh_version: "7.3.2.10000"
+cdh_numeric_version: "82216952"
+cdv_version: "8.0.7"
+cfm_version: "2.1.7.3004"
+cfm_nifi_app_version: "1.28.1"
+ecs_pvc_ds_version: "1.5.5-h3300"
+
+cm_repo_source: public                  # public | internal
+
+# Repository override rules:
+# - Empty lists use the version-derived URLs from group_vars/all.yml.
+# - cm_parcel_repo_urls_override replaces the complete CM
+#   REMOTE_PARCEL_REPO_URLS list. Include every required repository.
+# - cm_csd_urls_override replaces the auto-built NiFi/NiFi Registry CSD JAR
+#   downloads used by 24_start_cm.yml. DataViz uses its dedicated variables.
+# - cm_parcel_repo_extra_urls appends optional repositories to generated URLs.
+cm_parcel_repo_urls_override: []
+cm_csd_urls_override: []
+cm_parcel_repo_extra_urls: []
+
+# Generated parcel matrix when cm_parcel_repo_urls_override is empty:
+#   CDH pinned, DataViz pinned, CFM pinned, ECS pinned, ECS /latest.
+cm_parcel_repo_include_intel_mkl: true
+cm_parcel_repo_include_ecs_parcel: true
+cm_parcel_repo_include_cdv_parcel: true
+cm_parcel_repo_include_cfm_parcel: true
+
+# -----------------------------------------------------------------------------
+# 3. Base cluster
+# -----------------------------------------------------------------------------
+cdh_basecluster_name: CDH-Cluster
+base_cluster_master_group: base-masters
+base_cluster_worker_group: base-workers
+
+base_cluster_install_services:
+  core_settings: true
+  zookeeper: true
+  hdfs: true
+  ozone: true
+  yarn: true
+  tez: true
+  hive: true
+  hive_on_tez: true
+  hbase: true
+  hue: true
+  iceberg: false
+  replication: false
+  impala: true
+  kafka: true
+  atlas: true
+  ranger: true
+  nifi: false
+  nifi_registry: false
+  dataviz: false
+  phoenix: false
+  knox: true
+  solr: true
+
+# -----------------------------------------------------------------------------
+# 4. Cloudera Manager security integrations
+# -----------------------------------------------------------------------------
+autotls_enabled: true
+cm_autotls_force_run: false
+use_freeipa_for_crt_mgmt: "{{ (identity_provider_effective == 'freeipa') | bool }}"
+
+# Auto-TLS provisioning:
+# - Set cm_node_sudo_password through Vault/extra-vars for password mode.
+# - Leave it undefined/empty for SSH-key mode; cm_private_key_path empty means
+#   auto-discover sshkey.pem or ansible_ssh_private_key_file.
+cm_private_key_path: ""
+cm_priv_key_passphrase: ""
+cm_srvr_sudo_user: root
+
+cm_ldap_enabled: true
+cm_ldap_auth_backend_order: DB_THEN_LDAP
+cm_ldap_update_bind_password: false
+cm_cms_update_reports_manager_password: false
+cm_cms_update_autotls_truststore_password: false
+
+# -----------------------------------------------------------------------------
+# 5. ECS
+# -----------------------------------------------------------------------------
+ecs_deploy_enabled: auto                # auto | true | false
+ecs_cluster_name: ECS-Cluster
+ecs_cluster_master_group: ecs-masters
+ecs_cluster_worker_group: ecs-workers
+ecs_data_services_deploy_enabled: false
+ecs_deploy_cdw: false
+ecs_deploy_cde: false
+ecs_deploy_cai: false
+ecs_deploy_cai_registry: false
+ecs_ldap_enabled: false
+
+# -----------------------------------------------------------------------------
+# 6. Deployment portal and monitoring
+# -----------------------------------------------------------------------------
+deployment_owner: ""
+deployment_name_prefix: ""
+deployment_portal_enabled: true
+deployment_portal_host_group: auto
+deployment_portal_access_profile: auto  # auto | cloud | private
+deployment_portal_basic_auth_enabled: true
+deployment_portal_expose_credentials: true
+deployment_portal_expose_ssh_keys: true
+caddy_vhost_enabled: true
+caddy_vhost_public_base: pvc.cloudera-labs.com
+monitoring_stack_enabled: true

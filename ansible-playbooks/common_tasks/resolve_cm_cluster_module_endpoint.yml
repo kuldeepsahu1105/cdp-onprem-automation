@@ -8,14 +8,23 @@
 - name: Cluster module — set host/port for cloudera.cluster modules
   ansible.builtin.set_fact:
     cm_cluster_module_api_url: "{{ cm_krb_api_url | default(cm_api_url) }}"
-    cm_cluster_module_host: "{{ _cm_api_url_host | default(cm_api_client_host) }}"
+    cm_cluster_module_host: "{{ (cm_krb_api_url | default(cm_api_url)) | urlsplit('hostname') }}"
     cm_cluster_module_port: >-
       {{
-        (cm_https_port | default(7183) | int)
-        if ((cm_protocol | default('http')) == 'https')
-        else (cm_http_port | default(7180) | int)
+        ((cm_krb_api_url | default(cm_api_url)) | urlsplit('port'))
+        | default(
+            7183
+            if ((cm_krb_api_url | default(cm_api_url)) | urlsplit('scheme')) == 'https'
+            else 7180,
+            true
+          )
       }}
-    cm_cluster_module_force_tls: "{{ (cm_protocol | default('http')) == 'https' }}"
+    cm_cluster_module_force_tls: >-
+      {{ ((cm_krb_api_url | default(cm_api_url)) | urlsplit('scheme')) == 'https' }}
+    cm_cluster_module_delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
+
+- name: Cluster module — ensure Python client on API execution host
+  ansible.builtin.import_tasks: ensure_cm_client_on_module_host.yml
 
 - name: Cluster module — verify CM API accepts admin credentials
   ansible.builtin.uri:
@@ -26,8 +35,10 @@
     force_basic_auth: yes
     validate_certs: no
     status_code: [200, 401, 403, 404]
+    follow_redirects: none
   register: cm_cluster_module_auth_probe
   changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Cluster module — fail when CM API rejects admin password
   ansible.builtin.fail:

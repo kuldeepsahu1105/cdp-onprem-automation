@@ -49,4 +49,4 @@
         - ansible_os_family == "RedHat"
         - os.reboot_check_command | length > 0
         - reboot_check.rc != 0
-        - inventory_hostname != 'ipaserver'
+        - inventory_hostname not in groups.get('ipaserver', [])

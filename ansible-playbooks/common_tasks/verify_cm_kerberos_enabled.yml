@@ -2,9 +2,6 @@
 # Assert Cloudera Manager reports Kerberos/KDC integration as enabled (kerberized).
 # Polls GET /cm/kerberosInfo until kerberized=true or bounded wait expires (see group_vars).
 
-- name: Kerberos — resolve HTTPS CM API URL
-  ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
-
 - name: Kerberos — read CM kerberosInfo before bounded wait
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/kerberosInfo"
@@ -13,7 +10,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cm_krb_verify_preflight
   changed_when: false
 
@@ -29,7 +28,7 @@
       Expected kdc_host={{ kdc_host }}, realm={{ cluster_realm }}.
       Likely causes: importAdminCredentials failed or was never applied; CM not restarted after PUT /cm/config;
       wrong KDC admin password for {{ cm_krb_kdc_admin_principal | default('krb5_kdc_admin_user') }}; or Kerberos REST used HTTP :7180 (303) instead of HTTPS :7183.
-      Check cloudera-scm-server.log (ImportCredentials) on cldr-mngr and re-run 28_setup_cm_krbs.yml.
+      Check cloudera-scm-server.log (ImportCredentials) on cldr-mngr and re-run 30_setup_cm_krbs.yml.
   when:
     - not (cm_krb_verify_preflight.json.kerberized | default(false) | bool)
     - >
@@ -53,7 +52,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cm_krb_verify_info
   changed_when: false
   until: cm_krb_verify_info.json.kerberized | default(false) | bool
@@ -78,7 +79,7 @@
         AD: confirm ad_kdc_host / ad_domain in group_vars (ad_kdc_host must not be empty for AD).
         CM: confirm importAdminCredentials succeeded and CM was restarted — see /var/log/cloudera-scm-server/cloudera-scm-server.log (ImportCredentials).
         API URL: Kerberos REST must use HTTPS on port {{ cm_https_port | default(7183) }} when Auto-TLS is enabled (not HTTP :7180).
-      Re-run: ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
+      Re-run: ansible-playbook -i inventory.ini 30_setup_cm_krbs.yml
       Manual CM UI (if API import keeps failing): Administration → Settings → Kerberos — set realm/KDC host/type,
       import Account Manager credentials, Save, then restart Cloudera Manager Server (see RUNBOOK.md).
   when: not (cm_krb_verify_info.json.kerberized | default(false) | bool)

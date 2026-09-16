@@ -2,7 +2,7 @@
 # Terminal UI helpers for wrapper scripts (colors + emojis when stdout is a TTY).
 
 UI_STEP_NUM=0
-UI_WIDTH=66
+UI_WIDTH=78
 UI_INDENT='    '
 UI_KV_LABEL_W=22
 
@@ -122,12 +122,29 @@ ui_log_c() {
   fi
 }
 
+ui_timestamp() {
+  date '+%Y-%m-%d %H:%M:%S'
+}
+
+ui_log_context() {
+  if [[ -n "${JENKINS_URL:-}" || -n "${BUILD_NUMBER:-}" ]]; then
+    printf 'Jenkins'
+  else
+    printf 'Manual'
+  fi
+}
+
 ui_phase_header() {
   local phase="$1"
   ui_nl
   ui_rule "═"
   printf '  '
+  ui_log_c "1;30;43" " PHASE START "
+  printf '  '
   ui_log_c "1;33" "PHASE: ${phase}"
+  ui_nl
+  printf '  '
+  ui_log_c "2;37" "Started: $(ui_timestamp) | Mode: $(ui_log_context)"
   ui_nl
   ui_rule "═"
   ui_nl
@@ -136,9 +153,14 @@ ui_phase_header() {
 ui_phase_footer() {
   local phase="$1"
   ui_nl
-  ui_rule "─"
+  ui_rule "═"
+  printf '  '
+  ui_log_c "1;30;42" " PHASE END "
   printf '  '
   ui_log_c "1;32" "PHASE COMPLETE: ${phase}"
+  ui_nl
+  printf '  '
+  ui_log_c "2;37" "Finished: $(ui_timestamp) | Status: SUCCESS"
   ui_nl
   ui_rule "═"
   ui_nl
@@ -147,14 +169,31 @@ ui_phase_footer() {
 ui_playbook_header() {
   local playbook="$1"
   local kind="${2:-start}"
+  local status="${3:-success}"
   ui_nl
   if [[ "$kind" == "end" ]]; then
+    ui_rule "─"
     printf '  '
-    ui_log_c "1;32" "PLAYBOOK DONE: ${playbook}"
+    if [[ "$status" == "success" ]]; then
+      ui_log_c "1;30;42" " PLAYBOOK END "
+      printf '  '
+      ui_log_c "1;32" "PLAYBOOK DONE: ${playbook}"
+    else
+      ui_log_c "1;37;41" " PLAYBOOK END "
+      printf '  '
+      ui_log_c "1;31" "PLAYBOOK FAILED: ${playbook}"
+    fi
+    ui_nl
+    ui_rule "─"
   else
     ui_rule "─"
     printf '  '
+    ui_log_c "1;30;46" " PLAYBOOK START "
+    printf '  '
     ui_log_c "1;36" "PLAYBOOK: ${playbook}"
+    ui_nl
+    printf '  '
+    ui_log_c "2;37" "Started: $(ui_timestamp)"
     ui_nl
     ui_rule "─"
   fi
@@ -179,7 +218,13 @@ ui_kv() {
   local value="$2"
   local emoji="${3:-}"
   printf '%s' "$UI_INDENT"
-  [[ -n "$emoji" ]] && printf '%s  ' "$emoji"
+  if [[ -n "$emoji" ]]; then
+    if ui_ascii_enabled; then
+      printf '%s  ' '[*]'
+    else
+      printf '%s  ' "$emoji"
+    fi
+  fi
   ui_c "36" "$(printf '%-*s' "$UI_KV_LABEL_W" "${key}:")"
   ui_c "1" "$value"
   ui_nl
@@ -247,7 +292,7 @@ ui_ok() {
 
 ui_info() {
   printf '%s' "$UI_INDENT"
-  ui_c "33" '💡  '
+  ui_c "36" "$(ui_plain_emoji '💡' '[INFO]')  "
   ui_c "36" "$*"
   ui_nl
 }
@@ -255,7 +300,7 @@ ui_info() {
 ui_warn() {
   {
     printf '%s' "$UI_INDENT"
-    ui_c "33" "⚠️  $*"
+    ui_c "1;33" "$(ui_plain_emoji '⚠️' '[WARN]')  $*"
     ui_nl
   } >&2
 }
@@ -263,7 +308,7 @@ ui_warn() {
 ui_err() {
   {
     printf '%s' "$UI_INDENT"
-    ui_c "31" "❌  $*"
+    ui_c "1;31" "$(ui_plain_emoji '❌' '[ERROR]')  $*"
     ui_nl
   } >&2
 }
@@ -329,7 +374,9 @@ ui_done() {
   ui_nl
   ui_rule "═"
   printf '  '
-  ui_c "1;32" "🎉  ${msg}"
+  ui_c "1;30;42" " SUCCESS "
+  printf '  '
+  ui_c "1;32" "$(ui_plain_emoji '🎉' '[DONE]')  ${msg}"
   ui_nl
   ui_rule "═"
   ui_nl

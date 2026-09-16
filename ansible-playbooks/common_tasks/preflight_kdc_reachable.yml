@@ -48,7 +48,7 @@
     timeout: "{{ cm_krb_kdc_preflight_timeout | default(60) }}"
     connect_timeout: 5
   register: cm_krb_kdc_port_check
-  failed_when: false
+  ignore_errors: true
   when: not (cm_krb_kdc_preflight_from_delegate | default(false) | bool)
 
 - name: Kerberos preflight — wait for KDC krb5 port from CM host (same path as CM Server)
@@ -59,7 +59,7 @@
     connect_timeout: 5
   delegate_to: "{{ cm_krb_kdc_preflight_delegate }}"
   register: cm_krb_kdc_port_check
-  failed_when: false
+  ignore_errors: true
   when:
     - cm_krb_kdc_preflight_from_delegate | default(false) | bool
     - (cm_krb_kdc_preflight_delegate | default('') | length) > 0
@@ -82,6 +82,6 @@
         if (cm_krb_kdc_preflight_from_delegate | default(false) | bool)
         else 'Ansible controller'
       }}.
-      FreeIPA: re-run 12_setup_freeipa_server.yml and ensure ipaserver play in 28_setup_cm_krbs.yml completed.
+      FreeIPA: re-run 12_setup_freeipa_server.yml and ensure ipaserver play in 30_setup_cm_krbs.yml completed.
       AD: verify ad_kdc_host and network/firewall from the CM host to the DC.
   when: cm_krb_kdc_port_check is failed

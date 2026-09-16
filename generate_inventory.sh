@@ -60,18 +60,36 @@ generate_inventory_section() {
   for i in "${!pub_ips[@]}"; do
     local pub_ip="${pub_ips[$i]}"
     local pvt_ip="${pvt_ips[$i]}"
-    local hostname
+    local inventory_name hostname
 
     case "$group" in
-      ipaserver) hostname="ipaserver" ;;
-      cldr-mngr) hostname="cldr-mngr" ;;
-      base-masters) hostname="pvcbase-master" ;;
-      base-workers) hostname="pvcbase-worker${index}" ;;
-      ecs-masters) hostname="pvcecs-master" ;;
-      ecs-workers) hostname="pvcecs-worker${index}" ;;
+      ipaserver)
+        inventory_name="ipa-node"
+        hostname="ipaserver"
+        ;;
+      cldr-mngr)
+        inventory_name="cm-node"
+        hostname="cldr-mngr"
+        ;;
+      base-masters)
+        inventory_name="pvcbase-master"
+        hostname="pvcbase-master"
+        ;;
+      base-workers)
+        inventory_name="pvcbase-worker${index}"
+        hostname="pvcbase-worker${index}"
+        ;;
+      ecs-masters)
+        inventory_name="pvcecs-master"
+        hostname="pvcecs-master"
+        ;;
+      ecs-workers)
+        inventory_name="pvcecs-worker${index}"
+        hostname="pvcecs-worker${index}"
+        ;;
     esac
 
-    echo "$hostname ansible_host=$pub_ip private_ip=$pvt_ip cldr_hostname=$hostname"
+    echo "$inventory_name ansible_host=$pub_ip private_ip=$pvt_ip public_ip=$pub_ip cldr_hostname=$hostname"
     ((index++))
   done
 
@@ -104,6 +122,9 @@ ui_kv "Output file" "$OUTPUT_FILE" "📄"
   generate_inventory_section "base-workers" base_w_pub[@] base_w_pvt[@]
   generate_inventory_section "ecs-masters" ecs_m_pub[@] ecs_m_pvt[@]
   generate_inventory_section "ecs-workers" ecs_w_pub[@] ecs_w_pvt[@]
+  echo "[deployment_portal_runtime]"
+  echo "# Populated dynamically by portal and monitoring playbooks"
+  echo
 
 } | tee "$OUTPUT_FILE"
 

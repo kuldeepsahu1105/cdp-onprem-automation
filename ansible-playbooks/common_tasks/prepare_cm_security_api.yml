@@ -1,0 +1,7 @@
+---
+- name: CM API — discover active endpoint and API version
+  ansible.builtin.import_tasks: set_cm_api_url.yml
+  when: cm_api_url | default('') | length == 0
+
+- name: CM API — select mutation-safe URL and execution host
+  ansible.builtin.import_tasks: resolve_cm_krb_api_url_from_facts.yml

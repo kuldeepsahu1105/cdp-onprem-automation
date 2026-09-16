@@ -49,8 +49,8 @@
       ansible.builtin.meta: end_play
       when: not ecs_deploy_effective | bool
 
-    - name: Set up Cloudera Manager API URL
-      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+    - name: Prepare Cloudera Manager API
+      ansible.builtin.import_tasks: common_tasks/prepare_cm_security_api.yml
 
     - name: Build deployment portal Caddy URL facts for ECS console
       ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
@@ -98,22 +98,31 @@
 
     - name: Verify base cluster exists before ECS install
       ansible.builtin.uri:
-        url: "{{ cm_api_url }}/clusters/{{ cdh_basecluster_name }}"
+        url: "{{ cm_krb_api_url }}/clusters/{{ cdh_basecluster_name }}"
         method: GET
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
         force_basic_auth: yes
         validate_certs: no
         status_code: [200]
+        follow_redirects: none
       register: base_cluster_check
+      delegate_to: "{{ cm_api_uri_delegate_to }}"
 
     - name: Set ECS master FQDN
       ansible.builtin.set_fact:
-        ecs_master_fqdn: "{{ hostvars[groups[ecs_cluster_master_group][0]].cldr_hostname }}.{{ cluster_domain }}"
+        ecs_master_fqdn: >-
+          {%- set hostname = hostvars[groups[ecs_cluster_master_group][0]].cldr_hostname -%}
+          {{ hostname if hostname.endswith('.' ~ cluster_domain) else hostname ~ '.' ~ cluster_domain }}
 
     - name: Build ECS worker FQDNs
       ansible.builtin.set_fact:
-        ecs_worker_fqdns: "{{ ecs_worker_fqdns | default([]) + [hostvars[item].cldr_hostname + '.' + cluster_domain] }}"
+        ecs_worker_fqdns: >-
+          {%- set hostname = hostvars[item].cldr_hostname -%}
+          {{
+            ecs_worker_fqdns | default([])
+            + [hostname if hostname.endswith('.' ~ cluster_domain) else hostname ~ '.' ~ cluster_domain]
+          }}
       loop: "{{ groups[ecs_cluster_worker_group] }}"
       loop_control:
         label: "{{ item }}"
@@ -135,17 +144,19 @@
 
     - name: Discover available ECS parcel versions
       ansible.builtin.uri:
-        url: "{{ cm_api_url }}/parcels/products/ECS/versions"
+        url: "{{ cm_krb_api_url }}/parcels/products/ECS/versions"
         method: GET
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
         force_basic_auth: yes
         validate_certs: no
         status_code: [200]
+        follow_redirects: none
       register: ecs_parcel_versions
       retries: 5
       delay: 10
       until: ecs_parcel_versions is succeeded
+      delegate_to: "{{ cm_api_uri_delegate_to }}"
 
     - name: Resolve ECS parcel version
       ansible.builtin.set_fact:
@@ -172,7 +183,7 @@
         that:
           - ecs_parcel_version_effective | default('') | length > 0
         fail_msg: >-
-          Could not determine ECS parcel version. Set ecs_parcel_version in group_vars/all.yml
+          Could not determine ECS parcel version. Set ecs_parcel_version in config.yml
           or verify archive credentials and ecs_pvc_ds_version ({{ ecs_pvc_ds_version }}).
 
     - name: Print selected ECS parcel version
@@ -191,7 +202,9 @@
         force_basic_auth: yes
         validate_certs: no
         status_code: [200, 404]
+        follow_redirects: none
       register: existing_ecs_cluster
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Phased ECS cluster install (reference-aligned)
       ansible.builtin.import_tasks: common_tasks/ecs_phased_cluster_install.yml
@@ -209,6 +222,7 @@
         name: "{{ ecs_cluster_name }}"
         state: started
       when: existing_ecs_cluster.status == 200
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Wait for ECS Management Console when auto-provisioning API keys
       ansible.builtin.import_tasks: common_tasks/ecs_wait_control_plane_console.yml

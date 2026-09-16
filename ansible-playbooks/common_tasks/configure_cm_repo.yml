@@ -98,7 +98,9 @@
 - name: Download Cloudera Manager apt archive signing key (Debian family, public)
   ansible.builtin.get_url:
     url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt/archive.key"
-    dest: /tmp/cloudera-cm-archive.key
+    dest: /usr/share/keyrings/cloudera-cm-archive-keyring.asc
+    owner: root
+    group: root
     mode: "0644"
     url_username: "{{ cm_repo_username }}"
     url_password: "{{ cm_repo_password }}"
@@ -107,10 +109,11 @@
     - ansible_os_family == "Debian"
     - cm_repo_source == 'public'
 
-- name: Import Cloudera Manager apt archive signing key (public)
-  ansible.builtin.apt_key:
-    file: /tmp/cloudera-cm-archive.key
-    state: present
+- name: Configure signed-by for Cloudera Manager apt repository (public)
+  ansible.builtin.replace:
+    path: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
+    regexp: '^deb \[(?!signed-by=)'
+    replace: 'deb [signed-by=/usr/share/keyrings/cloudera-cm-archive-keyring.asc '
   when:
     - ansible_os_family == "Debian"
     - cm_repo_source == 'public'
@@ -125,16 +128,10 @@
 - name: Download Cloudera Manager apt archive signing key (internal mirror)
   ansible.builtin.get_url:
     url: "http://{{ cm_repo_mirror_host }}/cloudera-repos/cloudera-manager/apt/archive.key"
-    dest: /tmp/cloudera-cm-archive.key
+    dest: /usr/share/keyrings/cloudera-cm-archive-keyring.asc
+    owner: root
+    group: root
     mode: "0644"
-  when:
-    - ansible_os_family == "Debian"
-    - cm_repo_source == 'internal'
-
-- name: Import Cloudera Manager apt archive signing key (internal mirror)
-  ansible.builtin.apt_key:
-    file: /tmp/cloudera-cm-archive.key
-    state: present
   when:
     - ansible_os_family == "Debian"
     - cm_repo_source == 'internal'

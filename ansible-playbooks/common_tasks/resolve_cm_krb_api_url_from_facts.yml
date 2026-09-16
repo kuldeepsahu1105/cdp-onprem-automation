@@ -1,21 +1,32 @@
 ---
-# Set cm_krb_api_url from facts already established by set_cm_api_url.yml (no API re-probe).
-# Before Auto-TLS (plays 25–26), parcel/license REST uses HTTP :7180 via cm_api_url.
+# Set the mutation-safe CM API URL and execution host from facts established by set_cm_api_url.yml.
 
-- name: Kerberos — delegate HTTPS REST when controller reached CM on HTTP only
+- name: CM API — determine whether security REST requires HTTPS
+  ansible.builtin.set_fact:
+    cm_security_api_https_required: >-
+      {{
+        (cm_api_use_https | default(false) | bool)
+        or (cm_api_https_active | default(false) | bool)
+        or (cm_autotls_api_enabled | default(false) | bool)
+        or (cm_autotls_setup_intent | default(false) | bool)
+        or (autotls_enabled | default(false) | bool)
+      }}
+
+- name: CM API — delegate HTTPS REST when the controller cannot reach CM TLS
   ansible.builtin.set_fact:
     cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
   when:
-    - cm_api_use_https | default(false) | bool
-    - (cm_protocol | default('http')) == 'http'
-    - (autotls_enabled | default(false) | bool)
-      or (':' ~ (cm_http_port | default(7180) | string) ~ '/' in (cm_api_url | default('')))
+    - cm_security_api_https_required | bool
     - not (cm_api_controller_https_reachable | default(false) | bool)
-    - cm_api_uri_delegate_to | default('') | length == 0
     - cm_manager_inventory_host | default('') | length > 0
     - not (cm_api_runner_is_manager | default(false) | bool)
 
-- name: Kerberos — resolve HTTPS API hostname for REST (reachable bind, not stale public EIP)
+- name: CM API — execute REST locally when delegation is unnecessary
+  ansible.builtin.set_fact:
+    cm_api_uri_delegate_to: localhost
+  when: cm_api_uri_delegate_to | default('') | length == 0
+
+- name: CM API — resolve HTTPS API hostname for REST
   ansible.builtin.set_fact:
     _cm_krb_api_url_host: >-
       {{
@@ -40,12 +51,9 @@
         )
       }}
   when:
-    - cm_api_use_https | default(false) | bool
-    - (cm_protocol | default('http')) == 'http'
-    - (autotls_enabled | default(false) | bool)
-      or (':' ~ (cm_http_port | default(7180) | string) ~ '/' in (cm_api_url | default('')))
+    - cm_security_api_https_required | bool
 
-- name: Kerberos — use VPC bind for delegated HTTPS when probe host is public EIP
+- name: CM API — use VPC bind for delegated HTTPS when probe host is public EIP
   ansible.builtin.set_fact:
     _cm_krb_api_url_host: >-
       {{
@@ -54,10 +62,9 @@
         else cm_host_fqdn
       }}
   when:
-    - cm_api_use_https | default(false) | bool
+    - cm_security_api_https_required | bool
     - _cm_krb_api_url_host is defined
-    - (cm_protocol | default('http')) == 'http'
-    - (cm_api_uri_delegate_to | default('') | length > 0)
+    - cm_api_uri_delegate_to != 'localhost'
     - (
         (_cm_krb_api_url_host | default('') == cm_host_public | default(''))
         or (_cm_krb_api_url_host | default('') in ['127.0.0.1', 'localhost', ''])
@@ -67,7 +74,7 @@
         or (cm_host_fqdn | default('') | length > 0)
       )
 
-- name: Kerberos — use HTTPS API base when CM redirects HTTP to TLS
+- name: CM API — use HTTPS API base for security mutations
   ansible.builtin.set_fact:
     cm_krb_api_url: >-
       {{
@@ -79,11 +86,11 @@
         ~ cm_api_version
       }}
   when:
-    - cm_api_use_https | default(false) | bool
+    - cm_security_api_https_required | bool
     - _cm_krb_api_url_host is defined
     - _cm_krb_api_url_host | default('') | length > 0
 
-- name: Kerberos — use discovered CM API URL for REST calls
+- name: CM API — use discovered API URL when HTTPS is not required
   ansible.builtin.set_fact:
     cm_krb_api_url: "{{ cm_api_url }}"
   when: cm_krb_api_url is not defined

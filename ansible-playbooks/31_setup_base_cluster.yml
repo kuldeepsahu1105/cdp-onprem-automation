@@ -1,7 +1,7 @@
 ### ansible-playbook -i inventory.ini 31_setup_base_cluster.yml
 #
 # Install CDP Base Cluster on base-masters/base-workers (services: see base_cluster_install_services).
-# This is separate from Cloudera Management Service (CMS) — see 29_setup_cm_cms.yml
+# This is separate from Cloudera Management Service (CMS) — see 28_setup_cm_cms.yml
 ---
 - import_playbook: ensure_collections.yml
 
@@ -18,8 +18,8 @@
   connection: local
   gather_facts: no
   tasks:
-    - name: Set up Cloudera Manager API URL
-      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+    - name: Base cluster — prepare Cloudera Manager API
+      ansible.builtin.import_tasks: common_tasks/prepare_cm_security_api.yml
 
     - name: Validate base cluster inventory groups
       ansible.builtin.assert:
@@ -52,11 +52,18 @@
 
     - name: Set base master FQDN
       ansible.builtin.set_fact:
-        base_master_fqdn: "{{ hostvars[groups[base_cluster_master_group][0]].cldr_hostname }}.{{ cluster_domain }}"
+        base_master_fqdn: >-
+          {%- set hostname = hostvars[groups[base_cluster_master_group][0]].cldr_hostname -%}
+          {{ hostname if hostname.endswith('.' ~ cluster_domain) else hostname ~ '.' ~ cluster_domain }}
 
     - name: Build base worker FQDNs
       ansible.builtin.set_fact:
-        base_worker_fqdns: "{{ base_worker_fqdns | default([]) + [hostvars[item].cldr_hostname + '.' + cluster_domain] }}"
+        base_worker_fqdns: >-
+          {%- set hostname = hostvars[item].cldr_hostname -%}
+          {{
+            base_worker_fqdns | default([])
+            + [hostname if hostname.endswith('.' ~ cluster_domain) else hostname ~ '.' ~ cluster_domain]
+          }}
       loop: "{{ groups[base_cluster_worker_group] }}"
       loop_control:
         label: "{{ item }}"
@@ -123,7 +130,9 @@
         force_basic_auth: yes
         validate_certs: no
         status_code: [200, 404]
+        follow_redirects: none
       register: existing_cluster
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Create and start CDP Base Cluster
       cloudera.cluster.cluster:
@@ -146,6 +155,7 @@
         hosts: "{{ base_cluster_hosts }}"
       register: base_cluster_result
       when: existing_cluster.status == 404
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Start existing base cluster services
       cloudera.cluster.cluster:
@@ -159,6 +169,7 @@
         name: "{{ cdh_basecluster_name }}"
         state: started
       when: existing_cluster.status == 200
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Verify ZooKeeper has at least one Server role (CM API)
       ansible.builtin.import_tasks: common_tasks/verify_base_cluster_zookeeper_servers.yml

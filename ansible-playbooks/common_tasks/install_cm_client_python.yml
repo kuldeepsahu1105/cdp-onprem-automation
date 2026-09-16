@@ -6,36 +6,66 @@
   ansible.builtin.set_fact:
     _cm_controller_python: "{{ ansible_playbook_python | default(ansible_python_interpreter | default('python3')) }}"
 
-- name: Pin urllib3 1.x on controller (pip3 install --user 'urllib3>=1.26.5,<2')
-  ansible.builtin.pip:
-    name: "urllib3>=1.26.5,<2"
-    executable: pip3
-    extra_args: --user
-  # Always run — Jenkins images often ship urllib3 2.x
-
-- name: Check cm_client import on controller Python
+- name: Check cm_client and urllib3 on controller Python
   ansible.builtin.command:
     argv:
       - "{{ _cm_controller_python }}"
       - -c
-      - import cm_client
+      - |
+        import cm_client
+        import urllib3
+        assert urllib3.__version__.split(".")[0] == "1"
   register: cm_client_import
   changed_when: false
   failed_when: false
 
-- name: Install cm_client on controller when missing (pip --user)
-  ansible.builtin.pip:
-    name: cm_client
-    executable: pip3
-    extra_args: --user
+- name: Detect whether controller Python is a virtual environment
+  ansible.builtin.command:
+    argv:
+      - "{{ _cm_controller_python }}"
+      - -c
+      - import sys; print("yes" if sys.prefix != sys.base_prefix else "no")
+  register: _cm_controller_python_venv
+  changed_when: false
   when: cm_client_import.rc != 0
+
+- name: Install compatible dependencies into controller Python
+  when: cm_client_import.rc != 0
+  block:
+    - name: Install into the selected controller Python
+      ansible.builtin.command:
+        argv: >-
+          {{
+            [_cm_controller_python, '-m', 'pip', 'install']
+            + ([] if _cm_controller_python_venv.stdout == 'yes' else ['--user'])
+            + ['cm_client', 'urllib3>=1.26.5,<2']
+          }}
+      register: _cm_controller_pip_install
+      changed_when: "'Successfully installed' in (_cm_controller_pip_install.stdout | default(''))"
+  rescue:
+    - name: Install into externally managed controller Python
+      ansible.builtin.command:
+        argv:
+          - "{{ _cm_controller_python }}"
+          - -m
+          - pip
+          - install
+          - --user
+          - --break-system-packages
+          - cm_client
+          - "urllib3>=1.26.5,<2"
+      register: _cm_controller_pip_install_external
+      changed_when: "'Successfully installed' in (_cm_controller_pip_install_external.stdout | default(''))"
 
 - name: Verify cm_client import after pip install
   ansible.builtin.command:
     argv:
       - "{{ _cm_controller_python }}"
       - -c
-      - import cm_client
+      - |
+        import cm_client
+        import urllib3
+        assert urllib3.__version__.split(".")[0] == "1"
   changed_when: false
   failed_when: false
   register: cm_client_import_after
@@ -45,19 +75,9 @@
   ansible.builtin.fail:
     msg: >-
       cm_client could not be imported by {{ _cm_controller_python }}.
-      Install manually: pip3 install --user cm_client
+      Install manually with that interpreter:
+      {{ _cm_controller_python }} -m pip install cm_client 'urllib3>=1.26.5,<2'
   when:
     - cm_client_import.rc != 0
     - cm_client_import_after is defined
     - cm_client_import_after.rc != 0
-
-- name: Assert controller urllib3 is 1.x (required for cloudera.cluster modules)
-  ansible.builtin.command:
-    argv:
-      - "{{ _cm_controller_python }}"
-      - -c
-      - |
-        import urllib3
-        v = urllib3.__version__.split(".")[0]
-        assert v == "1", f"urllib3 {urllib3.__version__} — need 1.x; playbook should have pinned via pip"
-  changed_when: false

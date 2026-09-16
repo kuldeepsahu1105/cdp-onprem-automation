@@ -11,14 +11,16 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
   register: cm_api_command_poll
   until: >
     cm_api_command_poll.json.active is defined
     and not (cm_api_command_poll.json.active | bool)
   retries: "{{ cm_api_command_poll_retries | default(90) }}"
   delay: "{{ cm_api_command_poll_delay | default(10) }}"
-  ignore_errors: true
+  failed_when: false
 
 - name: Fail when CM API command poll timed out
   ansible.builtin.fail:
@@ -29,7 +31,8 @@
       Last state: active={{ cm_api_command_poll.json.active | default('unknown') }},
       success={{ cm_api_command_poll.json.success | default('unknown') }}.
   when: >
-    cm_api_command_poll.json.active is not defined
+    cm_api_command_poll.status | default(0) | int != 200
+    or cm_api_command_poll.json.active is not defined
     or (cm_api_command_poll.json.active | bool)
 
 - name: Fail when CM API command did not succeed

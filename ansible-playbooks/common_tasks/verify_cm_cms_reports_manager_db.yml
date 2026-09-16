@@ -10,6 +10,18 @@
   ansible.builtin.import_tasks: ensure_cm_postgres_databases.yml
   when: cm_cms_verify_reports_manager_db | default(true) | bool
 
+- name: CMS — ensure psycopg2 is installed for the delegated database probe
+  ansible.builtin.import_tasks: ensure_python_psycopg2.yml
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true
+  vars:
+    python_psycopg2_interpreter: >-
+      {{
+        hostvars[cm_manager_inventory_host].ansible_python_interpreter
+        | default('/usr/bin/python3')
+      }}
+  when: cm_cms_verify_reports_manager_db | default(true) | bool
+
 - name: CMS — probe Reports Manager database from CM host
   when: cm_cms_verify_reports_manager_db | default(true) | bool
   block:
@@ -35,7 +47,7 @@
           (login user {{ cm_cms_reports_manager_db_user }}).
           Probe detail: {{ cms_rman_db_ping.msg | default('is_available=false') }}.
           If the database was missing, this play re-ran create_cm_dbs.sql.j2 on {{ cm_postgres_inventory_host }}.
-          Otherwise re-run ansible-playbook -i inventory.ini 23_setup_postgres.yml, then 29_setup_cm_cms.yml.
+          Otherwise re-run ansible-playbook -i inventory.ini 23_setup_postgres.yml, then 28_setup_cm_cms.yml.
           Manual test on the CM host:
           PGPASSWORD='***' psql -h {{ cm_cms_reports_manager_db_host }} -p {{ postgres_port }}
           -U {{ cm_cms_reports_manager_db_user }} -d {{ cm_cms_reports_manager_db_name }} -c 'SELECT 1'.

@@ -7,7 +7,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cm_hosts_heartbeat_list
 
 - name: CM host heartbeats — compute stale host list (single pass)

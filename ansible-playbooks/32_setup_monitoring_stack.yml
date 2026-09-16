@@ -12,6 +12,12 @@
     - name: Resolve portal install host
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
 
+    - name: Register deployment portal runtime host
+      ansible.builtin.add_host:
+        name: "{{ groups[deployment_portal_host_group_effective][0] }}"
+        groups: deployment_portal_runtime
+      changed_when: false
+
     - name: Validate SSH reachability of monitoring/Caddy target host before connecting
       ansible.builtin.import_tasks: common_tasks/validate_ansible_ssh_reachability.yml
       vars:
@@ -27,7 +33,7 @@
 - import_playbook: enroll_monitoring_exporters.yml
 
 - name: Deploy monitoring stack and update Caddy routes
-  hosts: "{{ hostvars['localhost']['deployment_portal_host_group_effective'] }}"
+  hosts: deployment_portal_runtime
   become: true
   gather_facts: true
   vars:

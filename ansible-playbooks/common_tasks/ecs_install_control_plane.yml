@@ -23,6 +23,7 @@
       valuesYaml: "{{ ecs_control_plane_values_yaml }}"
   register: ecs_control_plane_install
   ignore_errors: true
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Fail when ECS control plane install returned an unexpected error
   ansible.builtin.fail:

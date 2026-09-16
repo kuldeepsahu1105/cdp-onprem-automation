@@ -1,14 +1,39 @@
-### ansible-playbook -i inventory.ini ensure_collections.yml
-# Control-node Galaxy install (same logic as pvc_setup.sh / CI). Imported by other playbooks.
 ---
+# Shared bootstrap imported by deployment playbooks.
+# config.yml contains operator-managed overrides; group_vars/all.yml remains the defaults catalog.
+
+- name: Load deployment configuration on control node
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags:
+    - always
+    - configuration
+  tasks:
+    - name: Load operator-managed deployment overrides
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/config.yml"
+
+- name: Load deployment configuration on managed hosts
+  hosts: all
+  gather_facts: false
+  tags:
+    - always
+    - configuration
+  tasks:
+    - name: Load operator-managed deployment overrides
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/config.yml"
+
 - name: Ensure Ansible Galaxy collections on control node
   hosts: localhost
   connection: local
   gather_facts: false
   tags:
     - always
-    - collections
-    - galaxy
   tasks:
     - name: Ensure collections from requirements.yml
       ansible.builtin.import_tasks: common_tasks/ensure_ansible_collections.yml
+      tags:
+        - collections
+        - galaxy

@@ -1,4 +1,4 @@
-### ansible-playbook -i inventory.ini 29_setup_cm_cms.yml
+### ansible-playbook -i inventory.ini 28_setup_cm_cms.yml
 #
 # Enable Cloudera Management Service (CMS) on the CM host.
 # CMS includes: Service Monitor, Host Monitor, Event Server, Alert Publisher,
@@ -19,8 +19,8 @@
       ansible.builtin.set_fact:
         cm_autotls_setup_intent: "{{ autotls_enabled | default(true) | bool }}"
 
-    - name: Set up Cloudera Manager API URL
-      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+    - name: CMS — prepare Cloudera Manager API
+      ansible.builtin.import_tasks: common_tasks/prepare_cm_security_api.yml
 
     - name: CM API — read TLS / Auto-TLS state for CMS messaging
       ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
@@ -32,24 +32,6 @@
           - "Postgres (Reports Manager DB) host: {{ cm_cms_reports_manager_db_host }} (inventory: {{ cm_postgres_inventory_host }})"
           - "CMS role types: {{ cm_cms_role_types | join(', ') }}"
           - "Prerequisite: run 27_setup_cm_autotls.yml before CMS only when CM Auto-TLS is enabled (MGMT ssl_client_truststore_*); manual HTTPS :7183 skips agent truststore automation"
-
-    - name: Check Cloudera Management Service status
-      ansible.builtin.uri:
-        url: "{{ cm_api_url }}/cm/service"
-        method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: yes
-        validate_certs: no
-        status_code: [200, 404]
-      register: cms_status
-      failed_when: false
-
-    - name: Print current CMS status
-      ansible.builtin.debug:
-        msg: >-
-          CMS status: {{ cms_status.json.serviceState | default(cms_status.json.message | default('not configured')) }}
-          [HTTP {{ cms_status.status }}]
 
     - name: Configure and start Cloudera Management Service (REST API)
       ansible.builtin.import_tasks: common_tasks/configure_cm_cms_api.yml

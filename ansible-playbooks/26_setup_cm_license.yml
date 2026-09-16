@@ -115,7 +115,7 @@
     # Validate that Cloudera Manager is running after license changes
     - name: Wait for Cloudera Manager Server to Start
       ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
-      delegate_to: cldr-mngr
+      delegate_to: "{{ cm_manager_inventory_host }}"
       when: >
         (license_upload_response is defined and license_upload_response is changed)
         or (trial_license_response is defined and trial_license_response is changed)

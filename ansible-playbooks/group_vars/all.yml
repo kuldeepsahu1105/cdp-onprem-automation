@@ -1,13 +1,34 @@
 ---
-# ansible_config_vars:
+# =============================================================================
+# Deployment defaults and derived variables
+# =============================================================================
+# Operators should edit ../config.yml. This file is the implementation defaults
+# catalog and remains available to legacy scripts that read group_vars/all.yml.
+#
+# Navigation:
+#   01. Ansible controller and dependency defaults
+#   02. Identity, DNS, and SSH
+#   03. PostgreSQL and shared certificates
+#   04. CM/CDH versions and repositories
+#   05. CM API and base cluster
+#   06. CM security and management service
+#   07. Architecture and cleanup controls
+#   08. ECS
+#   09. Portal and monitoring
+#   10. Cleanup manifests and OS package maps
+#
+# Precedence:
+#   this file -> ../config.yml -> command-line/Jenkins extra vars
+
+# -----------------------------------------------------------------------------
+# 01. Ansible controller and dependency defaults
+# -----------------------------------------------------------------------------
 # Fresh RHEL EC2 AMIs reject root SSH until bootstrap; use ec2-user + become (ansible.cfg).
 # Override for in-VPC local control: ansible_user=root or CONTROL_MODE=local in pvc_setup.sh
 ansible_user: ec2-user
 ansible_ssh_private_key_file: ./id_rsa
 ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
-# ansible_galaxy: "/usr/bin/ansible-galaxy"
 
-# dependencies versions:
 java_version: "17"
 python_version: "3.11"
 postgresql_version: 18
@@ -26,11 +47,12 @@ postgres_db_host_psql_probe_versions: >-
     ] | unique | list
   }}
 
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# 02. Identity, DNS, and SSH
+# -----------------------------------------------------------------------------
 # Identity provider: auto | freeipa | ad
 # auto: [ipaserver] in inventory -> FreeIPA full flow
 #       no ipaserver + ad_kdc_host set -> AD dependent flow only
-# ---------------------------------------------------------------------------
 identity_provider: auto
 
 # True when inventory.ini has at least one host in [ipaserver] or legacy [ipa_server]
@@ -74,7 +96,7 @@ identity_client_hosts: "{{ 'all:!ipaserver' if ipa_server_in_inventory | bool el
 cluster_domain: "{{ ad_domain if identity_provider_effective == 'ad' else ipaserver_domain }}"
 cluster_realm: "{{ cluster_domain | upper }}"
 
-# ipa_server_vars:
+# FreeIPA
 ipaserver_domain: cldrsetup.local
 ipaserver_realm: "{{ ipaserver_domain | upper }}"
 ipaadmin_principal: "admin"
@@ -138,17 +160,15 @@ ad_organizational_unit: "{{ ad_computer_ou }}"
 ad_kdc_admin_user: "{{ ad_join_user }}"
 ad_kdc_admin_password: "{{ ad_join_password }}"
 
-# ---------------------------------------------------------------------------
 # DNS / resolv.conf — AWS vs bare metal
 # deployment_environment: auto (detect) | aws | baremetal
-# ---------------------------------------------------------------------------
 deployment_environment: auto
 aws_region: "{{ lookup('env', 'AWS_REGION') | default('', true) }}"
 aws_vpc_dns_resolver: ""
 extra_dns_search_domains: []
 extra_dns_nameservers: []
 
-# ssh_vars:
+# SSH and host certificates
 ssh_user: "root"
 ssh_dir: "/root/.ssh"
 private_key_path: "{{ ssh_dir }}/id_rsa"
@@ -156,12 +176,10 @@ public_key_path: "{{ ssh_dir }}/id_rsa.pub"
 authorized_keys_path: "{{ ssh_dir }}/authorized_keys"
 force_generate: "{{ hostvars[inventory_hostname].force_generate | default(false) }}"
 
-# Variables for setting internal repo (OS-specific paths resolved at runtime):
 httpd_repo_dir: /var/www/https
 server_name: "{{ ansible_fqdn }}"
 cert_days_valid: 3650
 
-# Variables for customizable certificate subject fields:
 cert_country: "US"
 cert_state: "Santa Clara"
 cert_locality: "Raleigh"
@@ -169,11 +187,14 @@ cert_organization: "Cloudera Inc"
 cert_organizational_unit: "CLDR"
 # cert_common_name: "cldr-mngr.cldrsetup.local"
 
-# The CN (Common Name) will be automatically set to the FQDN:
+# The certificate CN is the current host FQDN.
 cert_subj: "/C={{ cert_country }}/ST={{ cert_state }}/L={{ cert_locality }}/O={{ cert_organization }}/OU={{ cert_organizational_unit }}/CN={{ ansible_fqdn }}"
 
-# Variables for wildcard record and postgres jdbc driver setup:
 wildcard_dns_record: "*.apps"
+
+# -----------------------------------------------------------------------------
+# 03. PostgreSQL
+# -----------------------------------------------------------------------------
 postgres_jdbc_version: "42.7.10"  # Configurable version
 psycopg2_binary_version: ""  # empty = latest from pip; pin e.g. "2.9.9"
 jdbc_driver_url: "https://jdbc.postgresql.org/download/postgresql-{{ postgres_jdbc_version }}.jar"
@@ -203,7 +224,9 @@ ssl_ca_file: "root.crt"
 ssl_cert_file: "server.crt"
 ssl_key_file: "server.key"
 
-# cldr-mngr repo setup variables:
+# -----------------------------------------------------------------------------
+# 04. Cloudera Manager, Runtime, parcel, and CSD repositories
+# -----------------------------------------------------------------------------
 cm_version: "7.13.2.10000"
 cm_numeric_version: "713210000"
 
@@ -223,12 +246,10 @@ cm_repo_password: "<password>"
 webserver_path: "/var/www/html"
 cldr_repos_path: "{{ webserver_path }}/cloudera-repos"
 
-# ---------------------------------------------------------------------------
 # CM/CDH repository source: public | internal
 # public   — use archive.cloudera.com/p/ directly (default)
 # internal — mirror CM + CDH parcels to cldr-mngr web server (16 + 17 playbooks)
 #            RHEL: yum/RPM + createrepo | Ubuntu/Debian: apt mirror + Packages index
-# ---------------------------------------------------------------------------
 cm_repo_source: public
 cm_repo_public_base_url: "https://archive.cloudera.com/p"
 cm_repo_mirror_host: "{{ hostvars[groups['cldr-mngr'][0]].ansible_host | default(groups['cldr-mngr'][0]) }}"
@@ -236,17 +257,19 @@ cdh_repo_product: "cdh{{ cdh_version.split('.')[0] }}"
 parcel_repo_public: "{{ cm_repo_public_base_url }}/{{ cdh_repo_product }}/{{ cdh_version }}/parcels/"
 parcel_repo_internal: "http://{{ cm_repo_mirror_host }}/cloudera-repos/{{ cdh_repo_product }}/{{ cdh_version }}/"
 parcel_repo: "{{ parcel_repo_internal if cm_repo_source == 'internal' else parcel_repo_public }}"
-# Pinned cdh_version / ecs_pvc_ds_version / CSD versions are the supported REMOTE_PARCEL_REPO_URLS shape.
-# Do not use `{latest}` in URLs — that was a mistaken CM-wizard placeholder, not an archive.cloudera.com path (CM Save & Verify: illegal URI).
-# Optional float: literal archive segment `latest` → …/cdh7/latest/parcels/ (not …/{latest}/parcels/). Default off — use pinned versions in labs.
-cm_parcel_repo_include_latest: false
+# CDH, DataViz, and CFM use pinned versions. ECS requires both its pinned version and /latest.
+# Do not use `{latest}` placeholders; only the literal ECS archive /latest path is valid here.
 cm_parcel_repo_latest_segment: latest
-parcel_repo_latest_public: "{{ cm_repo_public_base_url }}/{{ cdh_repo_product }}/{{ cm_parcel_repo_latest_segment }}/parcels/"
 # CSD parcel repo dirs (scm_csd_parcel_repo_urls.j2). DATAVIZ yum JAR paths use scm_csds_urls.j2 / download_cdv_dataviz_csd.yml — not REMOTE_PARCEL_REPO_URLS.
 cfm_parcel_yum_tars_repo_url: "{{ cm_repo_public_base_url }}/cfm2/{{ cfm_version }}/{{ cfm_parcel_yum_redhat_segment }}/yum/tars/parcel"
 cfm_parcel_yum_redhat_segment: redhat9
 
-# Cloudera Manager REMOTE_PARCEL_REPO_URLS (configure_cm_parcel_repo_api.yml + scm.j2 legacy template)
+# Operator lists belong in config.yml. Empty means use version-derived defaults.
+cm_parcel_repo_urls_override: []
+cm_csd_urls_override: []
+cm_parcel_repo_extra_urls: []
+
+# Generated Cloudera Manager REMOTE_PARCEL_REPO_URLS.
 cm_remote_parcel_repo_intel_mkl_url: "https://parcels.repos.intel.com/mkl/latest"
 cm_parcel_repo_include_intel_mkl: true
 cm_parcel_repo_include_ecs_parcel: true
@@ -254,43 +277,31 @@ cm_parcel_repo_include_ecs_parcel: true
 cm_parcel_repo_include_cdv_parcel: true
 cm_parcel_repo_include_cfm_parcel: true
 cdv_parcel_repo_url: "{{ cm_repo_public_base_url }}/cdv/{{ cdv_version }}/parcels/"
-cdv_parcel_repo_latest_url: "{{ cm_repo_public_base_url }}/cdv/{{ cm_parcel_repo_latest_segment }}/parcels/"
 # When false, publish CDV/CFM parcel repo URLs even if base_cluster_install_services toggles are off.
 cm_parcel_csd_respect_service_toggles: false
 # When false, replace CM installation-wizard defaults instead of merging (scrub still applies when true).
 cm_parcel_repo_merge_existing_cm_urls: false
 # Stop CM from re-injecting CSD/spark/cdh6 wizard URLs on scm-server restart (explicit CSD dirs are added below).
 cm_parcel_install_csd_repo_urls: false
-cm_remote_parcel_csd_repo_urls: []  # non-empty overrides scm_csd_parcel_repo_urls.j2 auto-build
+# Compatibility override; prefer the complete cm_parcel_repo_urls_override in config.yml.
+cm_remote_parcel_csd_repo_urls: []
 cm_parcel_repo_include_csd_archive_dirs: true
 scm_parcel_repositories: >-
   {{
+    cm_parcel_repo_urls_override
+    if (cm_parcel_repo_urls_override | default([]) | length > 0)
+    else (
     [parcel_repo]
-    + (
-      [parcel_repo_latest_public]
-      if (
-        (cm_parcel_repo_include_latest | default(false) | bool)
-        and (cm_repo_source | default('public')) == 'public'
-      )
-      else []
-    )
     + ([ecs_parcel_repo_url] if (cm_parcel_repo_include_ecs_parcel | default(true) | bool) else [])
     + (
       [ecs_parcel_repo_latest_url]
       if (
-        (cm_parcel_repo_include_latest | default(false) | bool)
-        and (cm_parcel_repo_include_ecs_parcel | default(true) | bool)
-        and (cm_repo_source | default('public')) == 'public'
+        (cm_parcel_repo_include_ecs_parcel | default(true) | bool)
       )
       else []
     )
     + (
       [cdv_parcel_repo_url]
-      + (
-        [cdv_parcel_repo_latest_url]
-        if (cm_parcel_repo_include_latest | default(false) | bool)
-        else []
-      )
       if (
         (cm_parcel_repo_include_cdv_parcel | default(true) | bool)
         and (cm_repo_source | default('public')) == 'public'
@@ -306,6 +317,8 @@ scm_parcel_repositories: >-
       else []
     )
     + ([cm_remote_parcel_repo_intel_mkl_url] if (cm_parcel_repo_include_intel_mkl | default(true) | bool) else [])
+    + (cm_parcel_repo_extra_urls | default([]))
+    )
   }}
 
 # CDH parcel file suffix — auto-detects from worker OS when set to "auto".
@@ -359,22 +372,18 @@ clo_db_name: clo
 clo_db_user: clo
 clo_db_password: clo
 
-# --- CSD JAR downloads (24_start_cm.yml → /opt/cloudera/csd) ---
+# CSD JAR downloads (24_start_cm.yml -> /opt/cloudera/csd).
 # Resolution (common_tasks/set_os_facts.yml → scm_csds_effective):
-#   1) scm_csds non-empty     → use as-is (list of full https://…/*.jar URLs; any OS)
-#   2) else scm_csds_redhat   → RHEL-only explicit URL list (same format)
-#   3) else empty + RHEL      → templates/scm_csds_urls.j2 builds DATAVIZ + NiFi + NiFi Registry
-#      from cdv_* / cfm_* below (respects csd_install_* and base_cluster_install_services).
+#   1) cm_csd_urls_override in config.yml
+#   2) legacy scm_csds / scm_csds_redhat
+#   3) generated DATAVIZ, NiFi, and NiFi Registry URLs from the CDV/CFM versions
+#      (respects csd_install_* and base_cluster_install_services).
 # Play 24 get_url loops scm_csds_effective; DATAVIZ yum failures use parcel fallback in
 #   download_cdv_dataviz_csd.yml. cdv_* / cfm_* are inputs to the default list, not parallel paths.
 # CM REMOTE_PARCEL_REPO_URLS (directory URLs) are separate: cdv_version / cfm_version and
 #   scm_csd_parcel_repo_urls.j2 — see cm_remote_parcel_csd_repo_urls above.
 #
-# Override example (replaces step 3 entirely — include every CSD jar URL you want on CM):
-# scm_csds:
-#   - "{{ cm_repo_public_base_url }}/cdv/{{ cdv_version }}/redhat8/yum/{{ cdv_dataviz_csd_jar }}"
-#   - "{{ cm_repo_public_base_url }}/cfm2/{{ cfm_version }}/redhat8/yum/tars/parcel/{{ cfm_nifi_registry_csd_jar }}"
-#   - "{{ cm_repo_public_base_url }}/cfm2/{{ cfm_version }}/redhat8/yum/tars/parcel/{{ cfm_nifi_csd_jar }}"
+# Deprecated compatibility lists. Use cm_csd_urls_override in config.yml.
 scm_csds: []
 scm_csds_redhat: []
 
@@ -407,7 +416,9 @@ csd_install_nifi_registry: true
 cm_debian_use_ubuntu_repo: false
 cm_debian_ubuntu_compat_version: "2204"
 
-##### cm_server api configs:
+# -----------------------------------------------------------------------------
+# 05. Cloudera Manager API and base cluster
+# -----------------------------------------------------------------------------
 cm_port: 7180
 cm_admin_user: "admin"
 cm_admin_pass: "admin"
@@ -465,6 +476,9 @@ krb5_kdc_admin_password: "{{ ad_kdc_admin_password if identity_provider_effectiv
 krb5_ad_suffix: "{{ ad_domain }}"
 krb5_ad_delete_on_regenerate: true
 
+# -----------------------------------------------------------------------------
+# 06. CM security and management service
+# -----------------------------------------------------------------------------
 # PostgreSQL server for Cloudera Manager (23_setup_postgres.yml) and CMS Reports Manager.
 # Auto-detect install target: [postgres] → [postgresql] → [db] → cldr-mngr. Set postgres_inventory_group to pin a group name.
 postgres_inventory_group: ""
@@ -509,9 +523,13 @@ cm_cms_reports_manager_db_host: "{{ postgres_host_fqdn }}"
 cm_cms_reports_manager_db_name: rman
 cm_cms_reports_manager_db_user: rman
 cm_cms_reports_manager_db_password: rman
+# CM redacts stored passwords; set true only when intentionally rotating the Reports Manager secret.
+cm_cms_update_reports_manager_password: false
 # After 27_setup_cm_autotls.yml, point CMS Java clients (firehose/headlamp) at agent Auto-TLS truststore.
 cm_cms_configure_autotls_trust: true
 cm_cms_autotls_truststore_path: /var/lib/cloudera-scm-agent/agent-cert/cm-auto-global_truststore.jks
+# CM redacts this secret on reads; set true only for an explicit truststore password repair.
+cm_cms_update_autotls_truststore_password: false
 # ensure_cm_autotls_agent_truststore.yml: wait after manager agent restart when JKS missing under Auto-TLS
 cm_autotls_truststore_wait_retries: 12
 cm_autotls_truststore_wait_delay: 10
@@ -598,8 +616,7 @@ cm_apply_caddy_frontend_url: false
 cm_config_api_via_caddy_proxy: false
 # fail | warn — reserved for CM API reachability policy (default fail)
 cm_api_verify_mode: fail
-# Deprecated — cm_api_version is fetched from GET /api/version (see fetch_cm_api_version_slug.yml)
-cm_api_version_default: v58
+# CM API version is always discovered from GET /api/version (see fetch_cm_api_version_slug.yml).
 # Portal verify: skip VPC-only URL checks when control profile is public-only (remote controller default)
 deployment_portal_url_verify_skip_vpc: false
 # Milestone-scoped URL verify (portal, ipa, identity, cm, cm_tls, cdh, monitoring, ecs).
@@ -628,8 +645,7 @@ deployment_ipa_direct_fqdn_external_url_verify: auto
 # Set false for manual-TLS-only CM (:7183 HTTPS without Auto-TLS); playbook 27 skips generateCmca then.
 autotls_enabled: true
 
-##### cm_server autotls variables:
-# SSH Authentication (Choose one)
+# Auto-TLS authentication (choose password or SSH key).
 # cm_node_sudo_password: "your-root-pass"  # Required for password-based authentication # Either commented out or defined but not set to empty string
 # Path on Ansible controller (CI runner or laptop), not on CM host. Empty = auto (sshkey.pem / ansible_ssh_private_key_file).
 cm_private_key_path: ""
@@ -660,7 +676,7 @@ cloudera_cluster_collection_git_ref: v4.4.0
 # ECS data services / LDAP IAM (cloudera.cloud.*); keep in sync with requirements.yml
 cloudera_cloud_collection_git_ref: v2.5.1
 
-##### KDC integration for cldr-mngr:
+# KDC integration for Cloudera Manager.
 # Cloudera Manager KRB_ENC_TYPES (short names). AES only — Java 17+ disables RC4.
 krb5_allow_weak_rc4: false
 krb5_enc_types: >-
@@ -680,6 +696,9 @@ ipa_kdc_host: "ipaserver.{{ ipaserver_domain }}"
 # Cloudera Manager LDAP integration (FreeIPA or Active Directory)
 # AUTH_BACKEND_ORDER must be one of: DB_ONLY, LDAP_THEN_DB, DB_THEN_LDAP, LDAP_ONLY, EXTERNAL_ONLY_WITHOUT_DB_ADMINS
 cm_ldap_enabled: true
+# Set true only when rotating an already-configured secret; CM redacts LDAP_BIND_PW on reads.
+cm_ldap_update_bind_password: false
+cm_ldap_connect_timeout: 30
 cm_ldap_auth_backend_order: DB_THEN_LDAP
 cm_ldap_auth_backend_order_allowed:
   - DB_ONLY
@@ -717,13 +736,14 @@ ipa_ldap_dc_suffix: "{% for part in ipaserver_domain.split('.') %}dc={{ part }}{
 cloudera_manager_api_user: "{{ cm_admin_user }}"
 cloudera_manager_api_password: "{{ cm_admin_pass }}"
 
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# 07. Architecture and cleanup controls
+# -----------------------------------------------------------------------------
 # CPU architecture (optional ARM64 / AWS Graviton)
 # CPU_ARCHITECTURE: x86_64 (default) | arm64
 # APPLY_GRAVITON_DEFAULTS: remap m5/r5 → m7g/r7g when arm64 (default true)
 # AUTO_RESOLVE_ARM64_AMI: lookup RHEL 9 arm64 AMI in AWS_REGION when arm64 (default true)
 # ECS_DEPLOY_ON_ARM64: enable ECS on ARM64 — experimental (default false)
-# ---------------------------------------------------------------------------
 target_cpu_architecture: auto  # auto | x86_64 | arm64 — wrappers pass CPU_ARCHITECTURE from .tfvars
 ecs_deploy_on_arm64: false
 cdh_parcel_arm64_suffix: ".aarch64le"  # appended to el8/el9/jammy/noble parcel names on ARM64 workers
@@ -769,11 +789,12 @@ cleanup_reboot_hosts: false
 # Cluster names for API deletion
 ecs_cluster_name: "ECS-Cluster"
 
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# 08. ECS
+# -----------------------------------------------------------------------------
 # ECS (Cloudera Data Services / Experience Cluster) deployment
 # Requires base cluster (31) and wildcard DNS (*.apps) when using FreeIPA.
 # Compatible with CDH 7.3.2: CDS 1.5.5 SP3+ (see Cloudera release matrix).
-# ---------------------------------------------------------------------------
 ecs_deploy_enabled: auto  # auto | true | false — auto runs when ecs-masters/workers exist
 ecs_cluster_master_group: ecs-masters
 ecs_cluster_worker_group: ecs-workers
@@ -885,11 +906,12 @@ ecs_model_registry_s3_bucket: "{{ cdh_basecluster_name | lower }}-registry"
 ecs_model_registry_s3_endpoint: ""  # default https://<first-sdx-fqdn>:9879 when model_registry is selected
 ecs_model_registry_ozone_service_id: o3service1
 
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# 09. Deployment portal and monitoring
+# -----------------------------------------------------------------------------
 # Deployment portal + ops UI — 10_setup_deployment_portal.yml
 # Caddy index, pgAdmin, Prometheus, Grafana, Alertmanager, cAdvisor on ops host.
 # auto = ipaserver when [ipaserver] exists, else cldr-mngr. pgAdmin targets CM PostgreSQL on cldr-mngr.
-# ---------------------------------------------------------------------------
 # Portal header attribution (index badges). Filled from tfvars/Jenkins when unset:
 #   owner → deployment_owner (Terraform pvc_cluster_tags.owner / Jenkins OWNER)
 #   environment → deployment_name_prefix (workspace + EC2 Name prefix / Jenkins ENVIRONMENT)
@@ -1194,6 +1216,9 @@ monitoring_alertmanager_group_by:
   - severity
 monitoring_alertmanager_receiver_webhook_url: ""
 
+# -----------------------------------------------------------------------------
+# 10. Cleanup manifests and OS-specific package maps
+# -----------------------------------------------------------------------------
 # Service users/groups removed during E2E cleanup
 cleanup_service_users:
   - hdfs
@@ -1271,10 +1296,8 @@ cleanup_cm_packages:
   - cloudera-manager-daemons
   - cloudera-manager-server-db
 
-# ---------------------------------------------------------------------------
 # OS-specific configuration (RHEL/RedHat and Debian/Ubuntu)
 # Reference maps with: {{ os_vars[ansible_os_family].<key> }}
-# ---------------------------------------------------------------------------
 os_vars:
   RedHat:
     pkg_mgr: dnf

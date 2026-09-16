@@ -44,7 +44,7 @@
       Reconcile agents: ansible-playbook -i inventory.ini reconcile_cm_agents.yml
       Clock skew: re-run 07_prereq_setup_002.yml (chrony) on affected hosts.
       UI metrics columns (load/disk/memory) come from Host Monitor — if heartbeats are fresh but columns are empty,
-      re-run 29_setup_cm_cms.yml (Service Monitor + Host Monitor RUNNING).
+      re-run 28_setup_cm_cms.yml (Service Monitor + Host Monitor RUNNING).
       ZooKeeper "0 Servers" is a separate base-cluster role issue (31_setup_base_cluster.yml) and can block Stop Cluster.
   when:
     - cm_host_heartbeat_verify_enabled | default(true) | bool

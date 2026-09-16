@@ -49,7 +49,7 @@ Both formats set the same variables and produce the same `TF_VARS` for Terraform
 | Terraform resource mode | `CREATE_VPC`, `CREATE_NEW_SG`, `CREATE_KEYPAIR`, `CREATE_EIP` |
 | Existing AWS resources | `EXISTING_SG_NAME`, `EXISTING_KEYPAIR_NAME` (when create flags are `false`) |
 | New VPC / SG / keypair | `VPC_*`, `SG_NAME`, `ALLOWED_CIDRS`, `KEYPAIR_NAME`, `CLDR_EIP_NAME` (when create flags are `true`) |
-| Cloudera versions | `CM_VERSION`; optional commented `CDH_VERSION`, `ECS_PVC_DS_VERSION` (Ansible deploy uses `group_vars/all.yml`) |
+| Cloudera versions | `CM_VERSION`; optional commented `CDH_VERSION`, `ECS_PVC_DS_VERSION` (Ansible deploy uses `ansible-playbooks/config.yml`) |
 | AMI | `AMI_ID` (shared across instance groups) |
 | Instance groups | `CLDR_MNGR_*`, `IPA_SERVER_*`, `PVCBASE_*`, `PVCECS_*` |
 | Tooling | `TERRAFORM_VERSION` (default `latest`, at bottom of file) |
@@ -65,11 +65,11 @@ EXISTING_SG_NAME="testing-pvc_cluster_sg"
 EXISTING_KEYPAIR_NAME="kuldeep-pvc-session"
 ```
 
-CDH and ECS **deploy versions** are applied by Ansible (`ansible-playbooks/group_vars/all.yml`). Optional `CDH_VERSION` / `ECS_PVC_DS_VERSION` comments in tfvars are for reference only — edit `all.yml` before cluster deploy.
+CDH and ECS **deploy versions** are applied by Ansible (`ansible-playbooks/config.yml`). Optional `CDH_VERSION` / `ECS_PVC_DS_VERSION` comments in tfvars are for reference only.
 
 ## CDH base cluster deployment
 
-The CDP **base cluster** is deployed by Ansible playbook `31_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, Kerberos, and CMS are in place. By default it installs HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, and Ranger. Optional services (NiFi, NiFi Registry, DataViz, Phoenix, Solr) are off unless enabled in `base_cluster_install_services`. Knox is on by default.
+The CDP **base cluster** is deployed by Ansible playbook `31_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, CMS, LDAP, and Kerberos are in place. By default it installs HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, and Ranger. Optional services (NiFi, NiFi Registry, DataViz, Phoenix, Solr) are off unless enabled in `base_cluster_install_services`. Knox is on by default.
 
 ### Terraform instance groups (infrastructure)
 
@@ -87,7 +87,7 @@ The CDP **base cluster** is deployed by Ansible playbook `31_setup_base_cluster.
 
 Terraform generates `inventory.ini` with these groups when you run `clone_and_run_terraform.sh`.
 
-### Key Ansible variables (`group_vars/all.yml`)
+### Key Ansible variables (`config.yml`)
 
 | Variable | Default | Description |
 |---|---|---|
@@ -169,7 +169,7 @@ ECS nodes need larger root volumes (default 1300 GB) for Docker, Longhorn, and l
 
 Set `PVCECS_*_COUNT=0` in tfvars to skip ECS infrastructure entirely, or leave groups empty and ECS deployment is skipped automatically.
 
-### Key Ansible variables (`group_vars/all.yml`)
+### Key Ansible variables (`config.yml`)
 
 | Variable | Default | Description |
 |---|---|---|
@@ -224,7 +224,7 @@ ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml \
 
 ## Default versions
 
-Configured in `ansible-playbooks/group_vars/all.yml`:
+Configured in `ansible-playbooks/config.yml`:
 
 | Component | Version |
 |---|---|
@@ -292,7 +292,8 @@ cdp-onprem-automation/
 │   ├── docs/
 │   │   ├── RUNBOOK.md            # How to run (step-by-step)
 │   │   └── REFERENCE.md          # Variables, playbooks, inventory
-│   ├── group_vars/all.yml        # All configuration defaults
+│   ├── config.yml                # Operator-managed deployment settings
+│   ├── group_vars/all.yml        # Stable defaults and derived variables
 │   └── inventory.ini             # Host groups
 ├── terraform-code/                 # AWS EC2 Terraform
 └── nutanix_terraform/              # Nutanix VM Terraform

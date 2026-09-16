@@ -52,7 +52,7 @@
       {{ cm_cms_autotls_truststore_path }} is missing on {{ cm_manager_inventory_host | default('cldr-mngr') }}.
       The JKS is created by the CM agent after generateCmca — not by CMS setup alone.
       Re-run 27_setup_cm_autotls.yml (or -e cm_autotls_force_run=true if CM already reports Auto-TLS),
-      confirm cloudera-scm-agent is active on the manager, then run 29_setup_cm_cms.yml.
+      confirm cloudera-scm-agent is active on the manager, then run 28_setup_cm_cms.yml.
   when:
     - cm_autotls_truststore_fail_if_missing | default(true) | bool
     - cm_autotls_api_enabled | default(false) | bool
