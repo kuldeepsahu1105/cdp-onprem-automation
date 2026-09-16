@@ -316,7 +316,10 @@ Success/failure emails (Email Extension plugin) include:
 - **`access-urls.txt`** — Portal, pgAdmin, Grafana, CM direct vs Caddy lab URLs (also embedded in build summary and email)
 - Build summary, inventory, and stage logs
 
-Set `NOTIFICATION_EMAIL` or rely on `BUILD_USER_EMAIL`. CM credentials come from `group_vars/all.yml` (and Jenkins `ANSIBLE_GROUP_VARS_YAML` overrides when set).
+`NOTIFICATION_EMAIL` defaults to `ksahu@cloudera.com`. When another authenticated user
+triggers the build and Jenkins provides `BUILD_USER_EMAIL`, that address is appended and
+deduplicated. CM credentials come from `group_vars/all.yml` (and Jenkins
+`ANSIBLE_GROUP_VARS_YAML` overrides when set).
 
 ## Artifacts
 
