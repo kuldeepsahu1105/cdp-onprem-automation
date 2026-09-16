@@ -19,11 +19,48 @@
         state: present
       when: ansible_os_family == "RedHat"
 
+    - name: Read RHEL release before DNF upgrade
+      ansible.builtin.command: cat /etc/redhat-release
+      register: rhel_release_before_dnf
+      changed_when: false
+      when: ansible_distribution == "RedHat"
+
+    - name: Print RHEL version before DNF upgrade
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }} before DNF upgrade:
+          {{ rhel_release_before_dnf.stdout | trim }}
+          (Ansible detected {{ ansible_distribution }} {{ ansible_distribution_version }},
+          releasever pin {{ rhel_release_pin_effective }}).
+      when: ansible_distribution == "RedHat"
+
     - name: Update all packages within pinned RHEL minor release
       ansible.builtin.dnf:
         name: "*"
         state: latest
         releasever: "{{ rhel_release_pin_effective }}"
+      when: ansible_distribution == "RedHat"
+
+    - name: Refresh RHEL version facts after DNF upgrade
+      ansible.builtin.setup:
+        filter:
+          - ansible_distribution
+          - ansible_distribution_version
+      when: ansible_distribution == "RedHat"
+
+    - name: Read RHEL release after DNF upgrade
+      ansible.builtin.command: cat /etc/redhat-release
+      register: rhel_release_after_dnf
+      changed_when: false
+      when: ansible_distribution == "RedHat"
+
+    - name: Print RHEL version after DNF upgrade
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }} after DNF upgrade:
+          {{ rhel_release_after_dnf.stdout | trim }}
+          (Ansible detected {{ ansible_distribution }} {{ ansible_distribution_version }},
+          releasever pin {{ rhel_release_pin_effective }}).
       when: ansible_distribution == "RedHat"
 
     - name: Update all packages (other RedHat-family distributions)

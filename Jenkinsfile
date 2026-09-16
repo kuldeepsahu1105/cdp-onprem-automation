@@ -29,10 +29,10 @@ Order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL
 
 CM_TLS_KRB_LDAP = playbooks 27→28→29→30 (Auto-TLS, CMS, LDAP, Kerberos). Legacy CDH_BASE → check CM_TLS_KRB_LDAP + CDH_INSTALL.
 
-DESTROY_STACK = terraform destroy (optional 99_cleanup via CLEANUP_BEFORE_DESTROY). Requires DESTROY_STACK_CONFIRM=true unless DRY_RUN=true (destroy plan only).
+DESTROY_STACK = terraform destroy (optional 99_cleanup via CLEANUP_BEFORE_DESTROY). Selecting the stage confirms destroy; DRY_RUN=true produces a destroy plan only.
 
 After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once, then re-run with your stage checkboxes.''',
-      descriptionPropertyValue: '''VALIDATE — standard prerequisite checks,TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→28→29→30 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — ECS cluster (33),STARTSTOP_AUTOMATION — deploy EC2 start/stop helper on ipaserver,DESTROY_STACK — terraform destroy; DESTROY_STACK_CONFIRM or DRY_RUN'''
+      descriptionPropertyValue: '''VALIDATE — standard prerequisite checks,TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→28→29→30 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — ECS cluster (33),STARTSTOP_AUTOMATION — deploy EC2 start/stop helper on ipaserver,DESTROY_STACK — terraform destroy or DRY_RUN plan'''
     )
     string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Deployment name prefix + Terraform workspace (overrides tfvars when set)')
     text(
@@ -82,8 +82,8 @@ Optional tail stages (append when needed): STARTSTOP_AUTOMATION, DESTROY_STACK
 Job defaults (lighter): VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION
 
 Teardown — check PIPELINE_STAGES checkbox DESTROY_STACK, then:
-  Apply destroy:  DESTROY_STACK  +  boolean DESTROY_STACK_CONFIRM=true  (required; build fails if unchecked)
-  Destroy plan only (no apply):  DESTROY_STACK  +  DRY_RUN=true  (DESTROY_STACK_CONFIRM not required)
+  Apply destroy:  DESTROY_STACK
+  Destroy plan only (no apply):  DESTROY_STACK  +  DRY_RUN=true
   Optional: CLEANUP_BEFORE_DESTROY=true runs ansible-playbooks/99_cleanup.yml before terraform destroy
 
 Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → STARTSTOP_AUTOMATION → DESTROY_STACK
@@ -100,11 +100,11 @@ Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INS
 | MONITORING | Monitoring stack (32); needs PORTAL; MONITORING_STACK_ENABLED |
 | ECS_INSTALL | ECS (33) + optional data services when ECS_DATA_SERVICES_DEPLOY_ENABLED |
 | STARTSTOP_AUTOMATION | run-ec2-startstop-automation.sh — deploy/update the helper on ipaserver (36); running operations remains disabled in this job |
-| DESTROY_STACK | run-destroy-stack.sh — optional 99_cleanup (CLEANUP_BEFORE_DESTROY) then terraform destroy for this ENVIRONMENT workspace. Must enable DESTROY_STACK_CONFIRM (unless DRY_RUN=true). |
+| DESTROY_STACK | run-destroy-stack.sh — optional 99_cleanup (CLEANUP_BEFORE_DESTROY) then terraform destroy for this ENVIRONMENT workspace. Selecting this stage confirms destroy; DRY_RUN produces a plan only. |
 
-Destroy safety (boolean parameters on Build with Parameters):
-  DESTROY_STACK_CONFIRM — check this when DESTROY_STACK stage is selected and you intend to apply terraform destroy.
-  DRY_RUN=true — terraform destroy plan only (no apply); DESTROY_STACK_CONFIRM not required.
+Destroy behavior:
+  Selecting DESTROY_STACK confirms terraform destroy for the selected ENVIRONMENT workspace.
+  DRY_RUN=true — terraform destroy plan only (no apply).
   CLEANUP_BEFORE_DESTROY — run ansible-playbooks/99_cleanup.yml before destroy when enabled.
 
 Legacy: CDH_BASE (old jobs) expands to CM_TLS_KRB_LDAP + CDH_INSTALL — check those two boxes instead.
@@ -115,11 +115,10 @@ Examples:
 
 Details: jenkins/README.md
 ''',
-      description: 'Stage guide (multiline text — always visible on Build with Parameters). Includes DESTROY_STACK and DESTROY_STACK_CONFIRM teardown steps. Editing this field does not change what runs; use PIPELINE_STAGES checkboxes + DESTROY_STACK_CONFIRM boolean.'
+      description: 'Stage guide (multiline text — always visible on Build with Parameters). Editing this field does not change what runs; use PIPELINE_STAGES checkboxes.'
     )
     // Hidden advanced input: VALIDATION_CHECKS uses defaultValidationChecks().
     booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Terraform plan only / Ansible --check --diff (no apply). With DESTROY_STACK: terraform destroy plan only.')
-    booleanParam(name: 'DESTROY_STACK_CONFIRM', defaultValue: false, description: 'Required when PIPELINE_STAGES includes DESTROY_STACK (unless DRY_RUN=true). Confirms terraform destroy for this ENVIRONMENT workspace.')
     booleanParam(name: 'CLEANUP_BEFORE_DESTROY', defaultValue: false, description: 'When DESTROY_STACK is selected: run ansible-playbooks/99_cleanup.yml (cleanup_e2e) before terraform destroy.')
     // Hidden advanced inputs: operation=describe, groups empty, confirmation=false, run-script=false.
     booleanParam(
@@ -334,7 +333,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     GIT_BRANCH = "${params.GIT_BRANCH?.trim() ?: 'main'}"
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
-    DESTROY_STACK_CONFIRM = "${params.DESTROY_STACK_CONFIRM}"
+    DESTROY_STACK_CONFIRM = 'true'
     CLEANUP_BEFORE_DESTROY = "${params.CLEANUP_BEFORE_DESTROY}"
     EC2_STARTSTOP_OPERATION = 'describe'
     EC2_STARTSTOP_GROUPS = ''
@@ -577,7 +576,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
           set -euo pipefail
           export AWS_USE_INSTANCE_ROLE="${AWS_USE_INSTANCE_ROLE:-false}"
           export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
-          export DESTROY_STACK_CONFIRM="${DESTROY_STACK_CONFIRM:-false}"
+          export DESTROY_STACK_CONFIRM=true
           export CLEANUP_BEFORE_DESTROY="${CLEANUP_BEFORE_DESTROY:-false}"
           export DRY_RUN="${DRY_RUN:-false}"
           # shellcheck source=jenkins/scripts/aws-credential-check.sh
@@ -777,7 +776,7 @@ def echoPipelineStagesQuickReference() {
   Optional: STARTSTOP_AUTOMATION, DESTROY_STACK | Job defaults: VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION
   VALIDATE → prereqs script | TERRAFORM → EC2/inventory | PREREQS → Ansible 01-09 | PORTAL → bootstrap (10)
   IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → 27→28→29→30 | CDH_INSTALL → base cluster (31)
-  MONITORING → (32) | ECS_INSTALL → (33) | STARTSTOP_AUTOMATION → ipaserver (EC2_STARTSTOP_DEPLOY_SCRIPT/ RUN_SCRIPT + OPERATION/GROUPS) | DESTROY_STACK → destroy (DESTROY_STACK_CONFIRM or DRY_RUN plan)
+  MONITORING → (32) | ECS_INSTALL → (33) | STARTSTOP_AUTOMATION → ipaserver (EC2_STARTSTOP_DEPLOY_SCRIPT/ RUN_SCRIPT + OPERATION/GROUPS) | DESTROY_STACK → destroy (or DRY_RUN plan)
   Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. PORTAL may auto-insert when DEPLOYMENT_PORTAL_ENABLED and CM/CDH/ECS selected without PORTAL.'''
 }
 
@@ -1109,12 +1108,6 @@ def validatePipelineInputs() {
   }
 
   if (stages.contains('DESTROY_STACK')) {
-    if (!isParamEnabled(params.DRY_RUN) && !isParamEnabled(params.DESTROY_STACK_CONFIRM)) {
-      validationFail(
-        'DESTROY_STACK is selected but DESTROY_STACK_CONFIRM is not enabled. ' +
-        'Check the DESTROY_STACK_CONFIRM parameter to apply terraform destroy, or enable DRY_RUN for a destroy plan only (no apply).'
-      )
-    }
     if (stages.contains('TERRAFORM')) {
       echo 'WARN: PIPELINE_STAGES includes both TERRAFORM and DESTROY_STACK — provision runs first, destroy runs last in this build.'
     }
