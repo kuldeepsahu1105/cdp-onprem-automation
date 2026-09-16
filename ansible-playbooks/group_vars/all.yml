@@ -453,6 +453,8 @@ base_cluster_knox_master_secret: "{{ base_cluster_knox_database_password }}"
 base_cluster_ozone_service_id: o3service1
 # Set true only when intentionally rotating redacted Hive/Ranger/Knox secrets.
 base_cluster_force_secret_update: false
+# Records completion of non-destructive service initialization used to recover an interrupted First Run.
+base_cluster_initialization_marker_path: /var/lib/cloudera-scm-server/.ansible-base-cluster-initialized
 
 # CDP base cluster services (31_setup_base_cluster.yml). Override per key in Ansible controller via base_cluster_install_services.
 base_cluster_install_services:
