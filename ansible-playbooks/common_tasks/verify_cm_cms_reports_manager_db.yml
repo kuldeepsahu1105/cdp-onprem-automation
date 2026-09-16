@@ -38,28 +38,50 @@
       no_log: true
       failed_when: false
 
-    - name: CMS — fail when Reports Manager database is unreachable
-      ansible.builtin.fail:
-        msg: >-
+    - name: CMS — reconcile Reports Manager database role after failed login
+      community.postgresql.postgresql_user:
+        login_db: "{{ postgres_db }}"
+        login_host: "{{ postgres_ensure_cm_db_psql_host_effective }}"
+        login_port: "{{ postgres_port }}"
+        login_user: "{{ postgres_user }}"
+        login_password: "{{ postgres_password }}"
+        name: "{{ cm_cms_reports_manager_db_user }}"
+        password: "{{ cm_cms_reports_manager_db_password }}"
+        state: present
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+      no_log: true
+      when: not (cms_rman_db_ping.is_available | default(false) | bool)
+
+    - name: CMS — retry Reports Manager database login after role reconciliation
+      community.postgresql.postgresql_ping:
+        db: "{{ cm_cms_reports_manager_db_name }}"
+        login_host: "{{ cm_cms_reports_manager_db_host }}"
+        login_port: "{{ postgres_port }}"
+        login_user: "{{ cm_cms_reports_manager_db_user }}"
+        login_password: "{{ cm_cms_reports_manager_db_password }}"
+      delegate_to: "{{ cm_manager_inventory_host }}"
+      become: true
+      register: cms_rman_db_ping_after_repair
+      no_log: true
+      failed_when: false
+      when: not (cms_rman_db_ping.is_available | default(false) | bool)
+
+    - name: CMS — require Reports Manager database login
+      ansible.builtin.assert:
+        that:
+          - >-
+            (cms_rman_db_ping.is_available | default(false) | bool)
+            or (cms_rman_db_ping_after_repair.is_available | default(false) | bool)
+        fail_msg: >-
           Reports Manager database "{{ cm_cms_reports_manager_db_name }}" is not reachable at
           {{ cm_cms_reports_manager_db_host }}:{{ postgres_port }} from
           {{ cms_target_hostname | default(cm_manager_inventory_host) }}
-          (login user {{ cm_cms_reports_manager_db_user }}).
-          Probe detail: {{ cms_rman_db_ping.msg | default('is_available=false') }}.
-          If the database was missing, this play re-ran create_cm_dbs.sql.j2 on {{ cm_postgres_inventory_host }}.
-          Otherwise re-run ansible-playbook -i inventory.ini 23_setup_postgres.yml, then 28_setup_cm_cms.yml.
-          Manual test on the CM host:
-          PGPASSWORD='***' psql -h {{ cm_cms_reports_manager_db_host }} -p {{ postgres_port }}
-          -U {{ cm_cms_reports_manager_db_user }} -d {{ cm_cms_reports_manager_db_name }} -c 'SELECT 1'.
-      when: not (cms_rman_db_ping.is_available | default(false) | bool)
-
-  rescue:
-    - name: CMS — fail with probe error (no credentials in output)
-      ansible.builtin.fail:
-        msg: >-
-          Reports Manager database probe failed on {{ cm_manager_inventory_host }}
-          connecting to {{ cm_cms_reports_manager_db_host }}:{{ postgres_port }}
-          as user {{ cm_cms_reports_manager_db_user }}.
-          {{ ansible_failed_result.msg | default(ansible_failed_result) | regex_replace('password[=:][^\\s]+', 'password=***') }}.
-          Ensure playbook 06 (psycopg2 on all hosts) and 23 completed; confirm database
-          "{{ cm_cms_reports_manager_db_name }}" exists on {{ cm_postgres_inventory_host }}.
+          as user {{ cm_cms_reports_manager_db_user }}, even after reconciling that role.
+          Probe detail: {{
+            cms_rman_db_ping_after_repair.conn_err_msg
+            | default(cms_rman_db_ping.conn_err_msg | default('is_available=false'))
+            | regex_replace('password[=:][^\\s]+', '******')
+          }}.
+          Confirm PostgreSQL is listening on {{ cm_cms_reports_manager_db_host }}:{{ postgres_port }}
+          and pg_hba.conf permits the CM host.
