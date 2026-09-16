@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-09-15.2 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-09-16.1 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -21,6 +21,8 @@ pipeline {
 Copy-paste (full deploy path, no STARTSTOP/DESTROY):
 VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL
 
+More copy-ready combinations: see PIPELINE_STAGES_REFERENCE below.
+
 Optional tail stages (append when needed): STARTSTOP_AUTOMATION, DESTROY_STACK
 
 Order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → STARTSTOP_AUTOMATION → DESTROY_STACK
@@ -37,8 +39,44 @@ After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once, then re-run with your s
       name: 'PIPELINE_STAGES_REFERENCE',
       defaultValue: '''PIPELINE_STAGES — reference (edit optional; default is documentation)
 
-Copy-paste — full stack through ECS (comma-separated, matches checkboxes above):
+COPY-READY COMBINATIONS
+Copy only the comma-separated line below the required goal. Stages always execute in the fixed order.
+
+Validation only:
+VALIDATE
+
+Provision infrastructure only:
+VALIDATE,TERRAFORM
+
+Greenfield through Cloudera Manager:
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL
+
+Greenfield CDH base cluster:
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL
+
+Greenfield CDH plus monitoring:
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING
+
+Full stack through ECS:
 VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL
+
+Existing hosts — configure through Cloudera Manager (requires a valid inventory):
+VALIDATE,PREREQS,PORTAL,IDENTITY,CM_INSTALL
+
+Existing CM — apply Auto-TLS, CMS, LDAP, and Kerberos:
+VALIDATE,CM_TLS_KRB_LDAP
+
+Existing secured CM — install the CDH base cluster:
+VALIDATE,CDH_INSTALL
+
+Existing CDH cluster — install monitoring:
+VALIDATE,PORTAL,MONITORING
+
+Existing CDH cluster — install ECS:
+VALIDATE,ECS_INSTALL
+
+Install or update the EC2 start/stop helper:
+VALIDATE,STARTSTOP_AUTOMATION
 
 Optional tail stages (append when needed): STARTSTOP_AUTOMATION, DESTROY_STACK
 Job defaults (lighter): VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION
@@ -73,8 +111,6 @@ Legacy: CDH_BASE (old jobs) expands to CM_TLS_KRB_LDAP + CDH_INSTALL — check t
 
 Examples:
   New job defaults: VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION (ECS_INSTALL and CDH_INSTALL unchecked; ECS_DATA_SERVICES_DEPLOY_ENABLED=false)
-  Validate + provision only: VALIDATE,TERRAFORM (uncheck PORTAL and STARTSTOP_AUTOMATION)
-  Through CM (greenfield): VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL
   Old PREREQS,IDENTITY,CM_INSTALL,CDH_BASE equivalent: PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL (+ VALIDATE,TERRAFORM if you still provision VMs)
 
 Details: jenkins/README.md
