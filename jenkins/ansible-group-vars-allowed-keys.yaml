@@ -70,6 +70,8 @@ allowed_keys:
   - monitoring_prometheus_host_port
   - monitoring_alertmanager_host_port
   - monitoring_cadvisor_host_port
+  - monitoring_node_exporter_port
+  - monitoring_process_exporter_port
   - deployment_portal_access_profile
   - deployment_portal_prefer_fqdn_urls
   - deployment_portal_use_private_network_only

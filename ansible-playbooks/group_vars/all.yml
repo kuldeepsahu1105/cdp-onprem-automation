@@ -1139,7 +1139,8 @@ monitoring_prometheus_extra_targets: []
 # Runs as a systemd service outside Docker so it reports the real host, not the container namespace.
 monitoring_node_exporter_enabled: true
 monitoring_node_exporter_version: "1.8.2"
-monitoring_node_exporter_port: 9100
+# Avoid 9100: Kubernetes applications commonly reserve it as a hostPort for their own DaemonSets.
+monitoring_node_exporter_port: 19100
 monitoring_node_exporter_bin_dir: /usr/local/bin
 monitoring_node_exporter_user: node_exporter
 monitoring_node_exporter_group: node_exporter
@@ -1160,7 +1161,8 @@ monitoring_node_exporter_host_groups:
 # node_exporter, not a container) so process accounting reflects the real host process tree.
 monitoring_process_exporter_enabled: true
 monitoring_process_exporter_version: "0.8.7"
-monitoring_process_exporter_port: 9256
+# Avoid the conventional 9256 host port for Kubernetes workloads that deploy their own exporter.
+monitoring_process_exporter_port: 19256
 monitoring_process_exporter_bin_dir: /usr/local/bin
 monitoring_process_exporter_user: process_exporter
 monitoring_process_exporter_group: process_exporter
