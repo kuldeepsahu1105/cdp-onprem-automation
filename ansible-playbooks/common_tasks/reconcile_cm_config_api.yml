@@ -48,7 +48,7 @@
         {%- endif -%}
       {%- endfor -%}
       {{ updates }}
-  no_log: true
+  no_log: "{{ cm_config_secret_names | default([]) | length > 0 }}"
 
 - name: Update {{ cm_config_display_name }} configuration
   ansible.builtin.uri:
@@ -65,7 +65,7 @@
     follow_redirects: none
   when: cm_config_updates | length > 0
   changed_when: true
-  no_log: true
+  no_log: "{{ cm_config_secret_names | default([]) | length > 0 }}"
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Track required cluster configuration changes

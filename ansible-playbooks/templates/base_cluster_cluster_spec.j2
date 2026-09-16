@@ -230,7 +230,6 @@ services:
     type: KAFKA
     display_name: Kafka
     config:
-      metadata.store: "{{ 'KRaft' if kafka_metadata_store | lower == 'kraft' else 'Zookeeper' }}"
 {% if kafka_metadata_store | lower == 'zookeeper' %}
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
 {% endif %}
@@ -242,6 +241,8 @@ services:
 {% endif %}
     role_groups:
       - type: KAFKA_BROKER
+        config:
+          metadata.store: "{{ 'KRaft' if kafka_metadata_store | lower == 'kraft' else 'Zookeeper' }}"
 {% if kafka_metadata_store | lower == 'kraft' %}
       - type: KRAFT
 {% endif %}

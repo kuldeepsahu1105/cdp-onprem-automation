@@ -387,12 +387,49 @@
           - hive_metastore_database_password
       when: base_cluster_install_services.hive | default(true) | bool
 
-    - name: Configure Kafka metadata store
+    - name: Read Kafka role config groups
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/kafka/roleConfigGroups?view=summary
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_kafka_role_groups
+      changed_when: false
+      when: base_cluster_install_services.kafka | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Select Kafka Broker role config group
+      ansible.builtin.set_fact:
+        base_cluster_kafka_broker_group: >-
+          {{
+            base_cluster_kafka_role_groups.json['items']
+            | selectattr('roleType', 'equalto', 'KAFKA_BROKER')
+            | map(attribute='name')
+            | first
+            | default('')
+          }}
+      when: base_cluster_install_services.kafka | default(true) | bool
+
+    - name: Check Kafka Broker role config group
+      ansible.builtin.assert:
+        that:
+          - base_cluster_kafka_broker_group | length > 0
+        fail_msg: Kafka service has no KAFKA_BROKER base role config group.
+      when: base_cluster_install_services.kafka | default(true) | bool
+
+    - name: Configure Kafka Broker metadata store
       ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
       vars:
-        cm_config_display_name: Kafka metadata store
+        cm_config_display_name: Kafka Broker metadata store
         cm_config_endpoint: >-
-          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services/kafka/config
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/kafka/roleConfigGroups/{{ base_cluster_kafka_broker_group }}/config
         cm_config_desired:
           metadata.store: "{{ base_cluster_kafka_metadata_store_effective }}"
       when: base_cluster_install_services.kafka | default(true) | bool

@@ -137,6 +137,7 @@ entries must be complete `.jar` URLs. See
 | Variable | Accepted values/default | What it does |
 |---|---|---|
 | `cdh_basecluster_name` | Name; `CDH-Cluster` | Cluster name created in CM. |
+| `base_cluster_kafka_metadata_store` | `Zookeeper` or `KRaft`; `Zookeeper` | Kafka metadata backend selected before Kafka's first successful start. |
 | `base_cluster_master_group` | Inventory group; `base-masters` | Hosts eligible for master roles. |
 | `base_cluster_worker_group` | Inventory group; `base-workers` | Hosts eligible for worker roles and parcel OS detection. |
 | `base_cluster_module_async_timeout` | Seconds; `7500` | Outer bound for cluster creation, parcel activation, and First Run. |
