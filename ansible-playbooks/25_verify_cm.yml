@@ -19,6 +19,10 @@
     - name: Align Cloudera Manager admin password with group_vars after CM server start
       ansible.builtin.import_tasks: common_tasks/ensure_cm_admin_password.yml
 
+    - name: Capture requested Auto-TLS state before API discovery
+      ansible.builtin.set_fact:
+        cm_autotls_setup_intent: "{{ autotls_enabled | default(true) | bool }}"
+
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
       become: false
