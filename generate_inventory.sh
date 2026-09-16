@@ -11,6 +11,14 @@ source "$SCRIPT_DIR/scripts/lib/ui.sh"
 ensure_bash
 ensure_jq || exit 1
 
+INVENTORY_SSH_MODE="${INVENTORY_SSH_MODE:-public}"
+ANSIBLE_SSH_USER="${ANSIBLE_SSH_USER:-ec2-user}"
+
+if [[ "$INVENTORY_SSH_MODE" != "public" && "$INVENTORY_SSH_MODE" != "private" && "$INVENTORY_SSH_MODE" != "bastion" ]]; then
+  ui_err "INVENTORY_SSH_MODE must be public, private, or bastion (received: $INVENTORY_SSH_MODE)"
+  exit 1
+fi
+
 ui_step "Fetch Terraform output" "📥"
 TF_OUTPUT="$(terraform output -json)"
 
@@ -60,7 +68,7 @@ generate_inventory_section() {
   for i in "${!pub_ips[@]}"; do
     local pub_ip="${pub_ips[$i]}"
     local pvt_ip="${pvt_ips[$i]}"
-    local inventory_name hostname
+    local inventory_name hostname ansible_target ssh_args=""
 
     case "$group" in
       ipaserver)
@@ -89,7 +97,25 @@ generate_inventory_section() {
         ;;
     esac
 
-    echo "$inventory_name ansible_host=$pub_ip private_ip=$pvt_ip public_ip=$pub_ip cldr_hostname=$hostname"
+    ansible_target="$pub_ip"
+    if [[ "$INVENTORY_SSH_MODE" == "private" ]] ||
+       [[ "$INVENTORY_SSH_MODE" == "bastion" && "$group" != "ipaserver" ]]; then
+      if [[ -z "$pvt_ip" ]]; then
+        ui_err "$INVENTORY_SSH_MODE inventory requires a private IP for $inventory_name"
+        exit 1
+      fi
+      ansible_target="$pvt_ip"
+    fi
+
+    if [[ "$INVENTORY_SSH_MODE" == "bastion" && "$group" != "ipaserver" ]]; then
+      if [[ -z "${BASTION_PUBLIC_IP:-}" ]]; then
+        ui_err "Bastion inventory requires an IPAServer public IP"
+        exit 1
+      fi
+      ssh_args=" ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyJump=${ANSIBLE_SSH_USER}@${BASTION_PUBLIC_IP}'"
+    fi
+
+    echo "$inventory_name ansible_host=$ansible_target private_ip=$pvt_ip public_ip=$pub_ip cldr_hostname=$hostname$ssh_args"
     ((index++))
   done
 
@@ -115,6 +141,7 @@ ui_kv "Output file" "$OUTPUT_FILE" "📄"
   base_w_pvt=( $(extract_ips "private_ips" "^pvcbase_worker") )
   ecs_m_pvt=( $(extract_ips "private_ips" "^pvcecs_master") )
   ecs_w_pvt=( $(extract_ips "private_ips" "^pvcecs_worker") )
+  BASTION_PUBLIC_IP="${ipa_pub[0]:-}"
 
   generate_inventory_section "ipaserver" ipa_pub[@] ipa_pvt[@]
   generate_inventory_section "cldr-mngr" mngr_pub[@] mngr_pvt[@]
