@@ -330,14 +330,39 @@
     - name: Disable browser SPNEGO for IPA Web UI (password/form login)
       ansible.builtin.import_tasks: common_tasks/sync_ipa_httpd_disable_browser_krb_on_ipaserver.yml
 
-    - name: Ensure IPA DNS forwards to VPC resolver on AWS (existing installs)
+    - name: Read current IPA DNS forwarding configuration on AWS
+      ansible.builtin.command: ipa dnsconfig-show --all --raw
+      register: ipa_dns_config
+      changed_when: false
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+      when: ipa_install_dns_use_vpc_forwarder | default(false) | bool
+
+    - name: Ensure IPA DNS forwards to the VPC resolver on AWS
       ansible.builtin.command: >
         ipa dnsconfig-mod --forwarder={{ effective_vpc_dns_resolver }} --forward-policy=first
       register: ipa_vpc_forwarder
-      changed_when: ipa_vpc_forwarder.rc == 0
-      failed_when: false
+      changed_when: true
       environment:
         KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
       when:
         - ipa_install_dns_use_vpc_forwarder | default(false) | bool
-        - not (ipa_server_should_run_install | default(false) | bool)
+        - >-
+          effective_vpc_dns_resolver not in (ipa_dns_config.stdout | default(''))
+
+    - name: Wait for external DNS through FreeIPA on AWS
+      ansible.builtin.command:
+        argv:
+          - dig
+          - +short
+          - "@127.0.0.1"
+          - "{{ identity_dns_external_probe_host | default('', true) | ternary(identity_dns_external_probe_host, 'rhui.' + effective_aws_region + '.aws.ce.redhat.com') }}"
+          - A
+      register: ipa_external_dns_probe
+      changed_when: false
+      retries: "{{ identity_dns_verify_retries | default(12) | int }}"
+      delay: "{{ identity_dns_verify_delay | default(5) | int }}"
+      until: ipa_external_dns_probe.rc == 0 and ipa_external_dns_probe.stdout | trim | length > 0
+      when:
+        - ipa_install_dns_use_vpc_forwarder | default(false) | bool
+        - effective_aws_region | default('') | length > 0

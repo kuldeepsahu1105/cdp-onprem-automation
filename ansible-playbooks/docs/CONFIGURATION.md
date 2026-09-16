@@ -96,6 +96,7 @@ ansible-playbook -i inventory.ini 11_identity_setup.yml \
 | `ad_ldap_group_search_base` | LDAP distinguished name | Base under which CM searches for groups. |
 | `extra_dns_search_domains` | YAML list; default `[]` | Appends search domains to environment-derived DNS configuration. |
 | `extra_dns_nameservers` | YAML list; default `[]` | Appends additional resolver addresses. |
+| `identity_dns_external_probe_host` | FQDN, empty, or `"off"` | External name checked after DNS cutover. Empty uses the regional RHUI name on RHEL/AWS, `archive.cloudera.com` on other AWS hosts, and skips the public check outside AWS. Use an internal mirror FQDN for restricted networks or quoted `"off"` to disable explicitly. |
 
 ## 2. Product versions and repositories
 

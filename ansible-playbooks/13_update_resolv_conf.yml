@@ -15,12 +15,5 @@
     - name: Configure resolv.conf for identity provider
       ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
 
-    - name: Verify new /etc/resolv.conf content
-      ansible.builtin.command:
-        cmd: cat /etc/resolv.conf
-      register: resolv_conf_output
-      changed_when: false
-
-    - name: Show the final content of /etc/resolv.conf
-      debug:
-        msg: "{{ resolv_conf_output.stdout.replace('\t', '    ').split('\n') }}"
+    - name: Verify identity and external DNS after resolver cutover
+      ansible.builtin.import_tasks: common_tasks/verify_identity_dns.yml

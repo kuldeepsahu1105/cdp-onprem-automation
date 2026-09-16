@@ -167,6 +167,9 @@ aws_region: "{{ lookup('env', 'AWS_REGION') | default('', true) }}"
 aws_vpc_dns_resolver: ""
 extra_dns_search_domains: []
 extra_dns_nameservers: []
+identity_dns_external_probe_host: ""
+identity_dns_verify_retries: 12
+identity_dns_verify_delay: 5
 
 # SSH and host certificates
 ssh_user: "root"

@@ -1,12 +1,4 @@
 ---
-- name: Set OS-specific facts
-  ansible.builtin.import_tasks: set_os_facts.yml
-
-- name: Install Active Directory join packages
-  ansible.builtin.package:
-    name: "{{ os.ad_join_packages }}"
-    state: present
-
 - name: Ensure oddjobd is running for mkhomedir
   ansible.builtin.systemd:
     name: oddjobd

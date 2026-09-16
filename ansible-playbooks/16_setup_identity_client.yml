@@ -60,16 +60,27 @@
       ansible.builtin.import_tasks: common_tasks/sync_ipa_httpd_caddy_proxy_state_on_ipaserver.yml
       when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'
 
+- name: Install identity client packages before DNS cutover
+  hosts: "{{ identity_client_hosts }}"
+  become: true
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: Install packages required by the selected identity provider
+      ansible.builtin.import_tasks: common_tasks/install_identity_client_packages.yml
+      when: not (identity_client_packages_preinstalled | default(false) | bool)
+
 - name: Update DNS for identity provider
   hosts: all
   become: yes
   tasks:
     - name: Configure DNS (netplan or resolv.conf)
       ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
+      when: not (identity_dns_configured_by_router | default(false) | bool)
 
-    - name: Wait for DNS to settle
-      ansible.builtin.pause:
-        seconds: 10
+    - name: Verify identity and external DNS after resolver cutover
+      ansible.builtin.import_tasks: common_tasks/verify_identity_dns.yml
+      when: not (identity_dns_configured_by_router | default(false) | bool)
 
 - name: Enroll cluster hosts with identity provider
   hosts: "{{ identity_client_hosts }}"
@@ -77,12 +88,6 @@
   vars_files:
     - group_vars/all.yml
   tasks:
-    - name: Install FreeIPA client packages
-      ansible.builtin.package:
-        name: "{{ os_vars[ansible_os_family].freeipa_client_packages }}"
-        state: present
-      when: identity_provider_effective == 'freeipa'
-
     - name: Join FreeIPA domain
       ansible.builtin.import_tasks: common_tasks/join_freeipa_client.yml
       when: identity_provider_effective == 'freeipa'

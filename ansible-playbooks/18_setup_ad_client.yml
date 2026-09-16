@@ -21,6 +21,15 @@
           Active Directory not detected. Leave [ipaserver] empty in inventory
           and set ad_domain, ad_kdc_host, ad_join_user, ad_join_password.
 
+- name: Install Active Directory client packages before DNS cutover
+  hosts: "{{ identity_client_hosts }}"
+  become: true
+  vars_files:
+    - group_vars/all.yml
+  tasks:
+    - name: Install packages required by Active Directory
+      ansible.builtin.import_tasks: common_tasks/install_identity_client_packages.yml
+
 - name: Update DNS for Active Directory
   hosts: all
   become: yes
@@ -28,9 +37,8 @@
     - name: Configure DNS
       ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
 
-    - name: Wait for DNS to settle
-      ansible.builtin.pause:
-        seconds: 10
+    - name: Verify identity and external DNS after resolver cutover
+      ansible.builtin.import_tasks: common_tasks/verify_identity_dns.yml
 
 - name: Join cluster hosts to Active Directory realm
   hosts: "{{ identity_client_hosts }}"
