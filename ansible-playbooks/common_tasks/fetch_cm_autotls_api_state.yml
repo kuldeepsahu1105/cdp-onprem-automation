@@ -84,6 +84,55 @@
     cm_autotls_config_flags_unreported: false
     cm_autotls_parsed_from_cm_config: "{{ cm_autotls_state_known | default(false) | bool }}"
 
+- name: CM API — resolve public URL host when Auto-TLS is enabled
+  ansible.builtin.import_tasks: resolve_cm_api_url_host.yml
+  when: cm_autotls_api_enabled | default(false) | bool
+
+- name: CM API — require HTTPS URL inputs when Auto-TLS is enabled
+  ansible.builtin.assert:
+    that:
+      - _cm_api_url_host_resolved | default('') | length > 0
+      - cm_api_version | default('') | length > 0
+    fail_msg: >-
+      AUTO_TLS_TYPE={{ cm_autotls_type | default('unknown') }}, but the CM API
+      public host or version could not be resolved for the HTTPS URL.
+  when: cm_autotls_api_enabled | default(false) | bool
+
+- name: CM API — require HTTPS listener when Auto-TLS is enabled
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ cm_https_port | default(7183) }}"
+    state: started
+    sleep: 5
+    timeout: "{{ cm_autotls_https_startup_timeout | default(600) | int }}"
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  when:
+    - cm_autotls_api_enabled | default(false) | bool
+    - not (cm_api_https_listener_verified | default(false) | bool)
+
+- name: CM API — record verified HTTPS listener
+  ansible.builtin.set_fact:
+    cm_api_https_listener_verified: true
+  when: cm_autotls_api_enabled | default(false) | bool
+
+- name: CM API — use HTTPS URL when Auto-TLS is enabled
+  ansible.builtin.set_fact:
+    cm_protocol: https
+    cm_api_port: "{{ cm_https_port | default(7183) }}"
+    cm_api_https_active: true
+    cm_api_use_https: true
+    cm_autotls_complete: true
+    cm_api_url: >-
+      {{
+        'https://'
+        ~ _cm_api_url_host_resolved
+        ~ ':'
+        ~ (cm_https_port | default(7183) | string)
+        ~ '/api/'
+        ~ cm_api_version
+      }}
+  when: cm_autotls_api_enabled | default(false) | bool
+
 - name: CM API — debug sample /cm/config item names when AUTO_TLS_TYPE is missing after generateCmca
   ansible.builtin.debug:
     msg: >-

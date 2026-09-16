@@ -5,6 +5,13 @@
   ansible.builtin.set_fact:
     cm_api_health_ok: false
 
+- name: CM API — announce required Cloudera Manager restart
+  ansible.builtin.debug:
+    msg: >-
+      Cloudera Manager configuration changed. Restarting cloudera-scm-server on
+      {{ cm_manager_inventory_host | default('cldr-mngr') }}, then polling HTTPS
+      :{{ cm_https_port | default(7183) }} until the API is ready.
+
 - name: Restart Cloudera Manager server on CM host (before any agent restart)
   ansible.builtin.import_tasks: restart_cm_scm_server.yml
 

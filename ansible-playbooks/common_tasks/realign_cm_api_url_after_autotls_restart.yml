@@ -50,6 +50,13 @@
 
 - name: CM API — wait for local HTTPS listener after Auto-TLS restart
   block:
+    - name: CM API — announce HTTPS listener poll
+      ansible.builtin.debug:
+        msg: >-
+          Restart completed; polling port {{ cm_https_port | default(7183) }} on
+          {{ cm_manager_inventory_host | default('cldr-mngr') }} before checking
+          {{ cm_api_url }}/cm/version.
+
     - name: CM API — wait for scm-server HTTPS port on manager
       ansible.builtin.wait_for:
         host: 127.0.0.1
@@ -101,6 +108,10 @@
 
           Recent journal:
           {{ cm_autotls_scm_server_journal.stdout | default('unavailable') }}
+
+- name: CM API — record verified HTTPS listener after restart
+  ansible.builtin.set_fact:
+    cm_api_https_listener_verified: true
 
 - name: CM API — wait for /cm/version after CM server restart
   ansible.builtin.import_tasks: wait_for_cm_api.yml
