@@ -336,69 +336,45 @@
       async: "{{ base_cluster_module_async_timeout }}"
       poll: "{{ base_cluster_module_poll_interval }}"
 
+    - name: Reset required configuration change state
+      ansible.builtin.set_fact:
+        base_cluster_required_config_changed: false
+
     - name: Configure Ozone requirements
-      cloudera.cluster.service:
-        host: "{{ cm_cluster_module_host }}"
-        port: "{{ cm_cluster_module_port }}"
-        version: "{{ cm_api_version }}"
-        force_tls: "{{ cm_cluster_module_force_tls }}"
-        username: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        verify_tls: false
-        cluster: "{{ cdh_basecluster_name }}"
-        name: ozone
-        type: OZONE
-        config:
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Ozone
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services/ozone/config
+        cm_config_desired:
           ozone.service.id: "{{ base_cluster_ozone_service_id }}"
           ozone.scm.primordial.node.id: "{{ base_master_fqdn }}"
-        role_config_groups:
-          - type: OZONE_RECON
-        roles:
-          - type: OZONE_RECON
-            hostnames:
-              - "{{ base_master_fqdn }}"
-      register: base_cluster_ozone_config_result
       when: base_cluster_install_services.ozone | default(true) | bool
-      delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Configure Hive database
-      cloudera.cluster.service:
-        host: "{{ cm_cluster_module_host }}"
-        port: "{{ cm_cluster_module_port }}"
-        version: "{{ cm_api_version }}"
-        force_tls: "{{ cm_cluster_module_force_tls }}"
-        username: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        verify_tls: false
-        cluster: "{{ cdh_basecluster_name }}"
-        name: hive
-        type: HIVE
-        config:
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Hive database
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services/hive/config
+        cm_config_desired:
           hive_metastore_database_host: "{{ base_cluster_database_host }}"
           hive_metastore_database_port: "{{ base_cluster_database_port }}"
           hive_metastore_database_type: postgresql
           hive_metastore_database_name: "{{ base_cluster_hive_database_name }}"
           hive_metastore_database_user: "{{ base_cluster_hive_database_user }}"
           hive_metastore_database_password: "{{ base_cluster_hive_database_password }}"
-        skip_redacted: true
-      register: base_cluster_hive_config_result
+        cm_config_secret_names:
+          - hive_metastore_database_password
       when: base_cluster_install_services.hive | default(true) | bool
-      delegate_to: "{{ cm_cluster_module_delegate_to }}"
-      no_log: true
 
     - name: Configure Ranger database and passwords
-      cloudera.cluster.service:
-        host: "{{ cm_cluster_module_host }}"
-        port: "{{ cm_cluster_module_port }}"
-        version: "{{ cm_api_version }}"
-        force_tls: "{{ cm_cluster_module_force_tls }}"
-        username: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        verify_tls: false
-        cluster: "{{ cdh_basecluster_name }}"
-        name: ranger
-        type: RANGER
-        config:
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Ranger database and passwords
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services/ranger/config
+        cm_config_desired:
           ranger_database_host: "{{ base_cluster_database_host }}"
           ranger_database_port: "{{ base_cluster_database_port }}"
           ranger_database_type: postgresql
@@ -409,40 +385,169 @@
           keyadmin_user_password: "{{ base_cluster_ranger_keyadmin_password }}"
           rangertagsync_user_password: "{{ base_cluster_ranger_tagsync_password }}"
           rangerusersync_user_password: "{{ base_cluster_ranger_usersync_password }}"
-        skip_redacted: true
-      register: base_cluster_ranger_config_result
+        cm_config_secret_names:
+          - ranger_database_password
+          - rangeradmin_user_password
+          - keyadmin_user_password
+          - rangertagsync_user_password
+          - rangerusersync_user_password
       when: base_cluster_install_services.ranger | default(true) | bool
-      delegate_to: "{{ cm_cluster_module_delegate_to }}"
-      no_log: true
 
-    - name: Configure Knox database and master secret
-      cloudera.cluster.service:
-        host: "{{ cm_cluster_module_host }}"
-        port: "{{ cm_cluster_module_port }}"
-        version: "{{ cm_api_version }}"
-        force_tls: "{{ cm_cluster_module_force_tls }}"
-        username: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        verify_tls: false
-        cluster: "{{ cdh_basecluster_name }}"
-        name: knox
-        type: KNOX
-        config:
+    - name: Configure Knox database
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Knox database
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services/knox/config
+        cm_config_desired:
           knox_gateway_database_host: "{{ base_cluster_database_host }}"
           knox_gateway_database_port: "{{ base_cluster_database_port }}"
           knox_gateway_database_type: postgresql
           knox_gateway_database_name: "{{ base_cluster_knox_database_name }}"
           knox_gateway_database_user: "{{ base_cluster_knox_database_user }}"
           knox_gateway_database_password: "{{ base_cluster_knox_database_password }}"
-        role_config_groups:
-          - type: KNOX_GATEWAY
-            config:
-              gateway_master_secret: "{{ base_cluster_knox_master_secret }}"
-        skip_redacted: true
-      register: base_cluster_knox_config_result
+        cm_config_secret_names:
+          - knox_gateway_database_password
+      when: base_cluster_install_services.knox | default(true) | bool
+
+    - name: Find Knox role config group
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/knox/roleConfigGroups?view=summary
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_knox_role_groups
+      changed_when: false
       when: base_cluster_install_services.knox | default(true) | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
-      no_log: true
+
+    - name: Select Knox Gateway role config group
+      ansible.builtin.set_fact:
+        base_cluster_knox_gateway_group: >-
+          {{
+            base_cluster_knox_role_groups.json['items']
+            | selectattr('roleType', 'equalto', 'KNOX_GATEWAY')
+            | map(attribute='name')
+            | first
+            | default('')
+          }}
+      when: base_cluster_install_services.knox | default(true) | bool
+
+    - name: Check Knox Gateway role config group
+      ansible.builtin.assert:
+        that:
+          - base_cluster_knox_gateway_group | length > 0
+        fail_msg: Knox service has no KNOX_GATEWAY base role config group.
+      when: base_cluster_install_services.knox | default(true) | bool
+
+    - name: Configure Knox master secret
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Knox Gateway
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/knox/roleConfigGroups/{{ base_cluster_knox_gateway_group }}/config
+        cm_config_desired:
+          gateway_master_secret: "{{ base_cluster_knox_master_secret }}"
+        cm_config_secret_names:
+          - gateway_master_secret
+      when: base_cluster_install_services.knox | default(true) | bool
+
+    - name: Read CM hosts for Ozone Recon
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/hosts?view=summary"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_cm_hosts
+      changed_when: false
+      when: base_cluster_install_services.ozone | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Select Ozone Recon host
+      ansible.builtin.set_fact:
+        base_cluster_ozone_recon_host_id: >-
+          {{
+            base_cluster_cm_hosts.json['items']
+            | selectattr('hostname', 'equalto', base_master_fqdn)
+            | map(attribute='hostId')
+            | first
+            | default('')
+          }}
+      when: base_cluster_install_services.ozone | default(true) | bool
+
+    - name: Check Ozone Recon host
+      ansible.builtin.assert:
+        that:
+          - base_cluster_ozone_recon_host_id | length > 0
+        fail_msg: >-
+          CM has no host matching base master {{ base_master_fqdn }} for the Ozone Recon role.
+      when: base_cluster_install_services.ozone | default(true) | bool
+
+    - name: Read Ozone roles
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/ozone/roles?view=summary
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_ozone_roles
+      changed_when: false
+      when: base_cluster_install_services.ozone | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Add Ozone Recon role
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/ozone/roles
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          items:
+            - type: OZONE_RECON
+              hostRef:
+                hostId: "{{ base_cluster_ozone_recon_host_id }}"
+                hostname: "{{ base_master_fqdn }}"
+        status_code: [200, 201, 204]
+        follow_redirects: none
+      register: base_cluster_ozone_recon_create
+      when:
+        - base_cluster_install_services.ozone | default(true) | bool
+        - >-
+          base_cluster_ozone_roles.json['items']
+          | selectattr('type', 'equalto', 'OZONE_RECON')
+          | list
+          | length == 0
+      changed_when: true
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Track Ozone Recon change
+      ansible.builtin.set_fact:
+        base_cluster_required_config_changed: >-
+          {{
+            base_cluster_required_config_changed | bool
+            or base_cluster_ozone_recon_create.changed | default(false) | bool
+          }}
 
     - name: Show cluster startup wait
       ansible.builtin.debug:
@@ -467,10 +572,7 @@
             force: >-
               {{
                 base_cluster_create_required | bool
-                or base_cluster_ozone_config_result.changed | default(false) | bool
-                or base_cluster_hive_config_result.changed | default(false) | bool
-                or base_cluster_ranger_config_result.changed | default(false) | bool
-                or base_cluster_knox_config_result.changed | default(false) | bool
+                or base_cluster_required_config_changed | bool
               }}
           register: base_cluster_start_result
           delegate_to: "{{ cm_cluster_module_delegate_to }}"
