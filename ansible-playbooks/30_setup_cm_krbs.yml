@@ -60,7 +60,7 @@
     - name: Kerberos — check successful credential-import marker
       ansible.builtin.stat:
         path: "{{ cm_krb_credentials_marker_effective_path }}"
-      delegate_to: "{{ groups['cm-server'][0] }}"
+      delegate_to: "{{ cm_manager_inventory_host }}"
       become: true
       register: cm_krb_credentials_marker
 
@@ -218,7 +218,7 @@
           principal={{ cm_krb_kdc_admin_principal }}
           realm={{ cluster_realm }}
           kdc={{ kdc_host }}
-      delegate_to: "{{ groups['cm-server'][0] }}"
+      delegate_to: "{{ cm_manager_inventory_host }}"
       become: true
       when:
         - not (cm_krb_credentials_current | bool)
