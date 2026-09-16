@@ -8,7 +8,7 @@
     path: "{{ cm_cms_autotls_truststore_path }}"
   delegate_to: "{{ cm_manager_inventory_host }}"
   become: true
-  register: cm_autotls_truststore_stat
+  register: cm_autotls_truststore_initial_stat
 
 - name: Auto-TLS — restart CM agent on manager when truststore missing under Auto-TLS
   ansible.builtin.systemd:
@@ -21,15 +21,15 @@
   when:
     - cm_autotls_ensure_truststore | default(true) | bool
     - cm_autotls_api_enabled | default(false) | bool
-    - not (cm_autotls_truststore_stat.stat.exists | default(false) | bool)
+    - not ((cm_autotls_truststore_initial_stat | default({})).get('stat', {}).get('exists', false) | bool)
 
 - name: Auto-TLS — wait for agent truststore file after manager agent restart
   ansible.builtin.stat:
     path: "{{ cm_cms_autotls_truststore_path }}"
   delegate_to: "{{ cm_manager_inventory_host }}"
   become: true
-  register: cm_autotls_truststore_stat
-  until: cm_autotls_truststore_stat.stat.exists | default(false) | bool
+  register: cm_autotls_truststore_after_restart_stat
+  until: (cm_autotls_truststore_after_restart_stat | default({})).get('stat', {}).get('exists', false) | bool
   retries: "{{ cm_autotls_truststore_wait_retries | default(12) }}"
   delay: "{{ cm_autotls_truststore_wait_delay | default(10) }}"
   when:
@@ -40,10 +40,12 @@
 
 - name: Auto-TLS — record agent truststore presence for downstream CMS tasks
   ansible.builtin.set_fact:
-    cm_autotls_truststore_ready: "{{ cm_autotls_truststore_stat.stat.exists | bool }}"
-  when:
-    - cm_autotls_truststore_stat is defined
-    - cm_autotls_truststore_stat is succeeded
+    cm_autotls_truststore_ready: >-
+      {{
+        ((cm_autotls_truststore_initial_stat | default({})).get('stat', {}).get('exists', false) | bool)
+        or
+        ((cm_autotls_truststore_after_restart_stat | default({})).get('stat', {}).get('exists', false) | bool)
+      }}
 
 - name: Auto-TLS — fail when agent truststore still missing (re-run generateCmca / 27)
   ansible.builtin.fail:
