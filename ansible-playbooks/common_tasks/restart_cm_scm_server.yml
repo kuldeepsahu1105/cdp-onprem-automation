@@ -1,21 +1,88 @@
 ---
-# Restart only cloudera-scm-server on the CM host (same pattern as restart_cm_services.yml).
+# Restart only cloudera-scm-server on the CM host and prove systemd started a new invocation.
 
-- name: Restart Cloudera Manager server after configuration change
-  ansible.builtin.shell: |
-    set -euo pipefail
-    systemctl daemon-reload 2>/dev/null || true
-    unit=cloudera-scm-server
-    if systemctl cat "${unit}" >/dev/null 2>&1; then
-      systemctl restart "${unit}"
-      echo "restarted ${unit}"
-    else
-      echo "WARN: systemd unit ${unit} not found — skip"
-      exit 0
-    fi
-  args:
-    executable: /bin/bash
+- name: Read Cloudera Manager server invocation before restart
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - cloudera-scm-server
+      - --property=InvocationID
+      - --value
   become: true
   delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
-  register: cm_scm_server_restart_cmd
-  changed_when: "'restarted' in cm_scm_server_restart_cmd.stdout"
+  register: cm_scm_server_before_restart
+  changed_when: false
+
+- name: Restart Cloudera Manager server after configuration change
+  ansible.builtin.systemd:
+    name: cloudera-scm-server
+    state: restarted
+    daemon_reload: true
+  become: true
+  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+  register: cm_scm_server_restart_result
+
+- name: Read Cloudera Manager server invocation after restart
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - cloudera-scm-server
+      - --property=InvocationID
+      - --value
+  become: true
+  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+  register: cm_scm_server_after_restart
+  changed_when: false
+
+- name: Read Cloudera Manager server PID after restart
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - cloudera-scm-server
+      - --property=MainPID
+      - --value
+  become: true
+  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+  register: cm_scm_server_pid_after_restart
+  changed_when: false
+
+- name: Read Cloudera Manager server state after restart
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - cloudera-scm-server
+  become: true
+  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+  register: cm_scm_server_state_after_restart
+  changed_when: false
+  failed_when: false
+
+- name: Require a new active Cloudera Manager server invocation
+  ansible.builtin.assert:
+    that:
+      - cm_scm_server_restart_result is changed
+      - cm_scm_server_before_restart.stdout | trim | length > 0
+      - cm_scm_server_after_restart.stdout | trim | length > 0
+      - (cm_scm_server_after_restart.stdout | trim) != (cm_scm_server_before_restart.stdout | trim)
+      - cm_scm_server_pid_after_restart.stdout | int > 0
+      - cm_scm_server_state_after_restart.stdout | trim == 'active'
+    fail_msg: >-
+      systemd did not create a new active cloudera-scm-server invocation on
+      {{ cm_manager_inventory_host | default('cldr-mngr') }}.
+      Before invocation={{ cm_scm_server_before_restart.stdout | default('unknown') | trim }};
+      after invocation={{ cm_scm_server_after_restart.stdout | default('unknown') | trim }},
+      PID={{ cm_scm_server_pid_after_restart.stdout | default('unknown') | trim }},
+      state={{ cm_scm_server_state_after_restart.stdout | default('unknown') | trim }}.
+      Check systemctl status cloudera-scm-server and its journal.
+
+- name: Confirm Cloudera Manager server restart
+  ansible.builtin.debug:
+    msg: >-
+      cloudera-scm-server restarted on {{ cm_manager_inventory_host | default('cldr-mngr') }}:
+      invocation={{ cm_scm_server_after_restart.stdout | trim }},
+      pid={{ cm_scm_server_pid_after_restart.stdout | trim }},
+      state={{ cm_scm_server_state_after_restart.stdout | trim }}.
