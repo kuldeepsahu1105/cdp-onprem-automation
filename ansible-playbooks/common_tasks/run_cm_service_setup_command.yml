@@ -29,7 +29,26 @@
       )
       | lower
     )
+    and 'command not valid for' not in (
+      (base_cluster_service_setup_command.json | default({})).get(
+        'message',
+        base_cluster_service_setup_command.msg | default('')
+      )
+      | lower
+    )
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Show skipped unavailable setup command
+  ansible.builtin.debug:
+    msg: >-
+      CM skipped {{ base_cluster_setup_command.service }}:{{ base_cluster_setup_command.command }}:
+      {{
+        (base_cluster_service_setup_command.json | default({})).get(
+          'message',
+          base_cluster_service_setup_command.msg | default('command is not currently valid')
+        )
+      }}. Continuing with the remaining non-destructive initialization commands.
+  when: base_cluster_service_setup_command.status | int == 400
 
 - name: Wait for {{ base_cluster_setup_command.command }} on {{ base_cluster_setup_command.service }}
   ansible.builtin.include_tasks: wait_cm_api_command.yml
@@ -37,6 +56,7 @@
     cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
     cm_api_command_id: "{{ base_cluster_service_setup_command.json.id }}"
     cm_api_command_allow_already_exists: true
+    cm_api_command_allow_not_valid: true
     cm_api_uri_delegate_to: "{{ cm_cluster_module_delegate_to }}"
   when:
     - base_cluster_service_setup_command.status | int == 200
