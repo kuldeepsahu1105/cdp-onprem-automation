@@ -18,10 +18,10 @@
   connection: local
   gather_facts: no
   tasks:
-    - name: Base cluster — prepare Cloudera Manager API
+    - name: Prepare CM API
       ansible.builtin.import_tasks: common_tasks/prepare_cm_security_api.yml
 
-    - name: Validate base cluster inventory groups
+    - name: Check inventory groups
       ansible.builtin.assert:
         that:
           - base_cluster_master_group in groups
@@ -32,7 +32,7 @@
           Base cluster inventory groups '{{ base_cluster_master_group }}' and
           '{{ base_cluster_worker_group }}' must exist and contain hosts.
 
-    - name: Validate enabled base-cluster service dependencies
+    - name: Check service dependencies
       ansible.builtin.assert:
         that:
           - base_cluster_install_services[item.dependency] | default(false) | bool
@@ -68,13 +68,13 @@
       loop_control:
         label: "{{ item.service }} requires {{ item.dependency }}"
 
-    - name: Set base master FQDN
+    - name: Set master hostname
       ansible.builtin.set_fact:
         base_master_fqdn: >-
           {%- set hostname = hostvars[groups[base_cluster_master_group][0]].cldr_hostname -%}
           {{ hostname if hostname.endswith('.' ~ cluster_domain) else hostname ~ '.' ~ cluster_domain }}
 
-    - name: Build base worker FQDNs
+    - name: Set worker hostnames
       ansible.builtin.set_fact:
         base_worker_fqdns: >-
           {%- set hostname = hostvars[item].cldr_hostname -%}
@@ -86,16 +86,16 @@
       loop_control:
         label: "{{ item }}"
 
-    - name: Build worker host assignment entries
+    - name: Build worker assignments
       ansible.builtin.set_fact:
         base_worker_host_entries: "{{ base_worker_host_entries | default([]) + [{'name': item, 'host_template': 'Worker'}] }}"
       loop: "{{ base_worker_fqdns }}"
 
-    - name: Build cluster host assignment list
+    - name: Build cluster hosts
       ansible.builtin.set_fact:
         base_cluster_hosts: "{{ [{'name': base_master_fqdn, 'host_template': 'Master'}] + base_worker_host_entries }}"
 
-    - name: Print base cluster targets
+    - name: Show cluster targets
       ansible.builtin.debug:
         msg:
           - "Cluster name: {{ cdh_basecluster_name }}"
@@ -103,17 +103,17 @@
           - "Master host: {{ base_master_fqdn }}"
           - "Worker hosts: {{ base_worker_fqdns }}"
 
-    - name: Render base cluster service and host-template specification
+    - name: Build cluster specification
       ansible.builtin.set_fact:
         base_cluster_spec: "{{ lookup('template', 'base_cluster_cluster_spec.j2') | from_yaml }}"
 
-    - name: Print enabled base cluster services
+    - name: Show enabled services
       ansible.builtin.debug:
         msg: >-
           Services to install:
           {{ base_cluster_spec.services | map(attribute='name') | list | join(', ') }}
 
-    - name: Identify host-template roles without declared base role groups
+    - name: Find invalid role mappings
       ansible.builtin.set_fact:
         base_cluster_invalid_role_groups: >-
           {%- set invalid = [] -%}
@@ -141,7 +141,7 @@
           {%- endfor -%}
           {{ invalid }}
 
-    - name: Validate every host-template role has a declared base role group
+    - name: Check role mappings
       ansible.builtin.assert:
         that:
           - base_cluster_invalid_role_groups | length == 0
@@ -149,14 +149,14 @@
           Host-template roles missing matching service base role groups:
           {{ base_cluster_invalid_role_groups | join(', ') }}.
 
-    - name: Set remote parcel repository URL in Cloudera Manager (REST API)
+    - name: Configure parcel repository
       ansible.builtin.import_tasks: common_tasks/configure_cm_parcel_repo_api.yml
       when: parcel_repo is defined
 
-    - name: Resolve CM API endpoint for cloudera.cluster modules
+    - name: Prepare cluster module connection
       ansible.builtin.import_tasks: common_tasks/resolve_cm_cluster_module_endpoint.yml
 
-    - name: Check if base cluster already exists
+    - name: Check cluster
       ansible.builtin.uri:
         url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}"
         method: GET
@@ -169,7 +169,7 @@
       register: existing_cluster
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-    - name: Check assigned hosts when base cluster already exists
+    - name: Check cluster hosts
       ansible.builtin.uri:
         url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/hosts"
         method: GET
@@ -184,7 +184,7 @@
       when: existing_cluster.status == 200
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-    - name: Detect empty partial base cluster from interrupted creation
+    - name: Detect incomplete cluster
       ansible.builtin.set_fact:
         base_cluster_partial_empty: >-
           {{
@@ -192,14 +192,14 @@
             and (existing_cluster_hosts.json['items'] | default([]) | length == 0)
           }}
 
-    - name: Report empty partial base cluster recovery
+    - name: Show incomplete cluster recovery
       ansible.builtin.debug:
         msg: >-
           Base cluster '{{ cdh_basecluster_name }}' exists with zero assigned hosts, indicating
           an interrupted module creation; deleting only this empty partial cluster before recreation.
       when: base_cluster_partial_empty | bool
 
-    - name: Delete empty partial base cluster
+    - name: Delete incomplete cluster
       ansible.builtin.uri:
         url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}"
         method: DELETE
@@ -212,7 +212,7 @@
       when: base_cluster_partial_empty | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-    - name: Wait for empty partial base cluster deletion
+    - name: Wait for cluster deletion
       ansible.builtin.uri:
         url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}"
         method: GET
@@ -230,12 +230,12 @@
       when: base_cluster_partial_empty | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-    - name: Determine whether base cluster creation is required
+    - name: Set cluster creation state
       ansible.builtin.set_fact:
         base_cluster_create_required: >-
           {{ existing_cluster.status == 404 or (base_cluster_partial_empty | bool) }}
 
-    - name: Announce bounded base cluster creation wait
+    - name: Show cluster creation wait
       ansible.builtin.debug:
         msg: >-
           Creating the CM cluster, services, host templates, host assignments, and activating
@@ -243,7 +243,7 @@
           cloudera.cluster collection allows up to 7200s for CM parcel and command operations.
       when: base_cluster_create_required | bool
 
-    - name: Create and configure CDP Base Cluster
+    - name: Create cluster configuration
       cloudera.cluster.cluster:
         host: "{{ cm_cluster_module_host }}"
         port: "{{ cm_cluster_module_port }}"
@@ -268,14 +268,14 @@
       async: "{{ base_cluster_module_async_timeout }}"
       poll: "{{ base_cluster_module_poll_interval }}"
 
-    - name: Announce bounded base cluster First Run wait
+    - name: Show First Run wait
       ansible.builtin.debug:
         msg: >-
           Cluster configuration is complete. Starting CM First Run; Jenkins will poll every
           {{ base_cluster_module_poll_interval }}s until CM finishes or the bounded wait expires.
       when: base_cluster_create_required | bool
 
-    - name: Start newly created base cluster
+    - name: Run cluster First Run
       cloudera.cluster.cluster:
         host: "{{ cm_cluster_module_host }}"
         port: "{{ cm_cluster_module_port }}"
@@ -292,7 +292,7 @@
       async: "{{ base_cluster_module_async_timeout }}"
       poll: "{{ base_cluster_module_poll_interval }}"
 
-    - name: Start existing base cluster services
+    - name: Start existing cluster
       cloudera.cluster.cluster:
         host: "{{ cm_cluster_module_host }}"
         port: "{{ cm_cluster_module_port }}"
@@ -310,9 +310,9 @@
       async: "{{ base_cluster_module_async_timeout }}"
       poll: "{{ base_cluster_module_poll_interval }}"
 
-    - name: Verify ZooKeeper has at least one Server role (CM API)
+    - name: Check ZooKeeper roles
       ansible.builtin.import_tasks: common_tasks/verify_base_cluster_zookeeper_servers.yml
 
-    - name: Print base cluster result
+    - name: Show cluster result
       ansible.builtin.debug:
         msg: "Base cluster '{{ cdh_basecluster_name }}' deployment complete or already exists"
