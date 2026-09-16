@@ -469,6 +469,10 @@ base_cluster_yarn_rm_max_mb: 4096
 base_cluster_yarn_rm_max_vcores: 4
 base_cluster_yarn_nm_memory_mb: 4096
 base_cluster_yarn_nm_vcores: 4
+# cloudera.cluster hard-codes a 7200-second internal parcel/command timeout.
+# Run it asynchronously so Jenkins emits a poll update instead of appearing frozen.
+base_cluster_module_async_timeout: 7500
+base_cluster_module_poll_interval: 15
 
 cdh_parcel_version: "{{ cdh_version.split('.')[:3] | join('.') }}-1.cdh{{ cdh_version.split('.')[:3] | join('.') }}.p{{ cdh_version.split('.')[-1] }}.{{ cdh_numeric_version }}"
 kerberos_principal: "{{ ipaadmin_principal }}/{{ ipaadmin_principal }}@{{ cluster_realm }}"

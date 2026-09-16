@@ -103,6 +103,8 @@ cm_parcel_repo_include_cfm_parcel: true
 cdh_basecluster_name: CDH-Cluster
 base_cluster_master_group: base-masters
 base_cluster_worker_group: base-workers
+base_cluster_module_async_timeout: 7500
+base_cluster_module_poll_interval: 15
 
 base_cluster_install_services:
   core_settings: true

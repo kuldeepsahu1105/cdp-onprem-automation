@@ -139,6 +139,8 @@ entries must be complete `.jar` URLs. See
 | `cdh_basecluster_name` | Name; `CDH-Cluster` | Cluster name created in CM. |
 | `base_cluster_master_group` | Inventory group; `base-masters` | Hosts eligible for master roles. |
 | `base_cluster_worker_group` | Inventory group; `base-workers` | Hosts eligible for worker roles and parcel OS detection. |
+| `base_cluster_module_async_timeout` | Seconds; `7500` | Outer bound for cluster creation, parcel activation, and First Run. |
+| `base_cluster_module_poll_interval` | Seconds; `15` | Jenkins progress-update interval while the cluster module waits on CM. |
 
 `base_cluster_install_services` controls service creation. Set a value to
 `true` to include that service in the cluster specification:

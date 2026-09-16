@@ -235,7 +235,15 @@
         base_cluster_create_required: >-
           {{ existing_cluster.status == 404 or (base_cluster_partial_empty | bool) }}
 
-    - name: Create and start CDP Base Cluster
+    - name: Announce bounded base cluster creation wait
+      ansible.builtin.debug:
+        msg: >-
+          Creating the CM cluster, services, host templates, host assignments, and activating
+          parcels. Jenkins will poll every {{ base_cluster_module_poll_interval }}s; the
+          cloudera.cluster collection allows up to 7200s for CM parcel and command operations.
+      when: base_cluster_create_required | bool
+
+    - name: Create and configure CDP Base Cluster
       cloudera.cluster.cluster:
         host: "{{ cm_cluster_module_host }}"
         port: "{{ cm_cluster_module_port }}"
@@ -248,15 +256,41 @@
         display_name: "{{ cdh_basecluster_name }}"
         cluster_version: "{{ cdh_parcel_version }}"
         type: BASE_CLUSTER
-        state: started
+        state: present
         parcels:
           CDH: "{{ cdh_parcel_version }}"
         services: "{{ base_cluster_spec.services }}"
         host_templates: "{{ base_cluster_spec.host_templates }}"
         hosts: "{{ base_cluster_hosts }}"
-      register: base_cluster_result
+      register: base_cluster_create_result
       when: base_cluster_create_required | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
+      async: "{{ base_cluster_module_async_timeout }}"
+      poll: "{{ base_cluster_module_poll_interval }}"
+
+    - name: Announce bounded base cluster First Run wait
+      ansible.builtin.debug:
+        msg: >-
+          Cluster configuration is complete. Starting CM First Run; Jenkins will poll every
+          {{ base_cluster_module_poll_interval }}s until CM finishes or the bounded wait expires.
+      when: base_cluster_create_required | bool
+
+    - name: Start newly created base cluster
+      cloudera.cluster.cluster:
+        host: "{{ cm_cluster_module_host }}"
+        port: "{{ cm_cluster_module_port }}"
+        version: "{{ cm_api_version }}"
+        force_tls: "{{ cm_cluster_module_force_tls }}"
+        username: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        verify_tls: false
+        name: "{{ cdh_basecluster_name }}"
+        state: started
+      register: base_cluster_start_result
+      when: base_cluster_create_required | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+      async: "{{ base_cluster_module_async_timeout }}"
+      poll: "{{ base_cluster_module_poll_interval }}"
 
     - name: Start existing base cluster services
       cloudera.cluster.cluster:
@@ -273,6 +307,8 @@
         - existing_cluster.status == 200
         - not (base_cluster_partial_empty | bool)
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
+      async: "{{ base_cluster_module_async_timeout }}"
+      poll: "{{ base_cluster_module_poll_interval }}"
 
     - name: Verify ZooKeeper has at least one Server role (CM API)
       ansible.builtin.import_tasks: common_tasks/verify_base_cluster_zookeeper_servers.yml
