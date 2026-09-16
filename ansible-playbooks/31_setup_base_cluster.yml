@@ -1012,6 +1012,11 @@
         base_cluster_recovery_commands: >-
           {{
             (
+              [{'service': 'ranger', 'command': 'SetupPluginServices'}]
+              if (base_cluster_install_services.ranger | default(true) | bool)
+              else []
+            )
+            + (
               [
                 {'service': 'solr', 'command': 'createSolrHdfsHomeDir'},
                 {'service': 'solr', 'command': 'initSolr'}

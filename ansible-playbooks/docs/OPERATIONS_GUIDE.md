@@ -444,7 +444,8 @@ service setup never occurred. When a populated cluster has no matching
 cluster-UUID marker at `base_cluster_initialization_marker_path`, playbook **31**
 performs only non-destructive recovery before normal Start: it starts ZooKeeper
 and HDFS, creates HDFS `/tmp` plus the configured YARN node-label store with
-the required permissions, initializes Solr's HDFS home and ZooKeeper state,
+the required permissions, initializes Ranger plugin services (which populate
+their local policy caches), initializes Solr's HDFS home and ZooKeeper state,
 creates the HBase root and user directories, creates the YARN JobHistory
 directory and installs MapReduce framework JARs, creates the Spark history,
 user, and driver-log directories, and creates the Hive and Impala HDFS
