@@ -6,7 +6,7 @@
 {% endif %}
 {% set archive = cm_repo_public_base_url | default('https://archive.cloudera.com/p') %}
 {% set svc = base_cluster_install_services | default({}) %}
-{% set use_svc_toggles = csd_respect_service_toggles | default(true) %}
+{% set use_svc_toggles = csd_respect_service_toggles | default(false) %}
 {% if csd_install_dataviz | default(true) and ((not use_svc_toggles) or (svc.dataviz | default(false))) %}
 {% if (cdv_redhat_yum_repo | default('auto')) == 'auto' and (ansible_distribution_major_version | default('8') | string) == '9' %}
 {% set cdv_yum = 'redhat8' %}

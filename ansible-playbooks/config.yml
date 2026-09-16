@@ -89,6 +89,7 @@ cm_repo_source: public                  # public | internal
 cm_parcel_repo_urls_override: []
 cm_csd_urls_override: []
 cm_parcel_repo_extra_urls: []
+csd_respect_service_toggles: false       # false stages DataViz/NiFi CSDs even when those services are disabled
 
 # Generated parcel matrix when cm_parcel_repo_urls_override is empty:
 #   CDH pinned, DataViz pinned, CFM pinned, ECS pinned, ECS /latest.
