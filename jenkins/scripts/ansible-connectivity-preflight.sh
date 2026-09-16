@@ -51,16 +51,13 @@ awk '
 ' "$INVENTORY" | head -n "$MAX_HOSTS"
 
 _ssh_probe() {
-  local user="$1" host="$2" attempt
+  local user="$1" ip="$2" attempt
   for attempt in $(seq 1 "$SSH_RETRIES"); do
-    if ANSIBLE_HOST_KEY_CHECKING=False ansible \
-      -i "$INVENTORY" \
-      "$host" \
-      --user "$user" \
-      --private-key "$SSH_KEY" \
-      -e "ansible_ssh_timeout=$SSH_TIMEOUT" \
-      -m ansible.builtin.raw \
-      -a "echo ok" >/dev/null 2>&1; then
+    if ssh -i "$SSH_KEY" \
+      -o BatchMode=yes \
+      -o ConnectTimeout="$SSH_TIMEOUT" \
+      -o StrictHostKeyChecking=no \
+      "${user}@${ip}" "echo ok" >/dev/null 2>&1; then
       return 0
     fi
     [[ "$attempt" -lt "$SSH_RETRIES" ]] && sleep "$SSH_RETRY_DELAY"
@@ -79,7 +76,7 @@ while IFS= read -r line; do
   used_user=""
   while IFS= read -r ssh_user; do
     [[ -z "$ssh_user" ]] && continue
-    if _ssh_probe "$ssh_user" "$host"; then
+    if _ssh_probe "$ssh_user" "$ip"; then
       host_ok=true
       used_user="$ssh_user"
       break
@@ -88,7 +85,7 @@ while IFS= read -r line; do
   if [[ "$host_ok" == true ]]; then
     log "OK  ${host} (${ip}) user=${used_user}"
   else
-    log "FAIL ${host} (${ip}) — SSH unreachable after ${SSH_RETRIES} attempt(s) per user (check direct/ProxyJump route, SG port 22, PEM/keypair match, users tried: $(tr '\n' ' ' < <(_ssh_users_for_preflight)))"
+    log "FAIL ${host} (${ip}) — SSH unreachable after ${SSH_RETRIES} attempt(s) per user (check SG port 22, PEM/keypair match, users tried: $(tr '\n' ' ' < <(_ssh_users_for_preflight)))"
     failed=$((failed + 1))
   fi
   [[ "$checked" -ge "$MAX_HOSTS" ]] && break
@@ -103,8 +100,8 @@ done < <(awk '
 
 if [[ "$failed" -gt 0 ]]; then
   log "ERROR: ${failed}/${checked} host(s) failed SSH preflight"
-  log "Hint: off-VPC Jenkins uses the IPAServer public IP as ProxyJump to node private IPs."
-  log "Hint: allow Jenkins ${agent_ip:-<unknown>} -> IPAServer:22 and IPAServer -> cluster private IPs:22."
+  log "Hint: inventory must use public IPs for off-VPC Jenkins; regenerate via regenerate-inventory-from-terraform.sh"
+  log "Hint: add agent IP ${agent_ip:-<unknown>} to Jenkins ALLOWED_CIDRS when SG_MODE=CREATE_NEW"
   exit 1
 fi
 

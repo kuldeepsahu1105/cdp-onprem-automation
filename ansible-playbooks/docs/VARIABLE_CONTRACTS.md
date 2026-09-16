@@ -83,7 +83,7 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 
 **Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml`. Deployment portal playbooks (**10**, **35**) do **not** call CM API or CM UI probes — index links use inventory FQDNs only; live-stats JSON is inventory-only.
 
-**SSH target vs CM API target are separate facts — do not conflate them.** `ansible_control_reachability_effective` / `cm_connect_host` / `cm_api_client_host` pick the address used for CM API `uri`/`wait_for` probes. Jenkins inventory regeneration uses `INVENTORY_SSH_MODE=bastion`: `ipa-node` is reached on its public IP and all other SSH targets use private IPs through `ansible_ssh_common_args` ProxyJump. Direct `generate_inventory.sh` usage defaults to public SSH targets; IPAServer or another cluster node can use `INVENTORY_SSH_MODE=private`. `common_tasks/validate_ansible_ssh_reachability.yml` is a separate guard and the Jenkins preflight invokes Ansible itself so inventory ProxyJump settings are honored. See `docs/OPERATIONS_GUIDE.md` "Running from any controller" and "Control-plane reachability".
+**SSH target vs CM API target are separate facts — do not conflate them.** `ansible_control_reachability_effective` / `cm_connect_host` / `cm_api_client_host` only pick the address used for CM API `uri`/`wait_for` probes; they never change the real Ansible `ansible_host` used for SSH. Jenkins and external controllers use the public inventory generated from Terraform. `common_tasks/validate_ansible_ssh_reachability.yml` independently verifies those SSH targets. See `docs/OPERATIONS_GUIDE.md` "Running from any controller" and "Control-plane reachability".
 
 ---
 
