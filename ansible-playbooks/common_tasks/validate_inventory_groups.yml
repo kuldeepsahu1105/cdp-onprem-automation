@@ -14,3 +14,11 @@
   ansible.builtin.set_fact:
     cm_manager_inventory_host: "{{ groups[required_inventory_group | default('cldr-mngr')][0] }}"
   when: cm_manager_inventory_host is not defined
+
+- name: Use SSH for CM manager delegation from localhost plays
+  ansible.builtin.add_host:
+    name: "{{ cm_manager_inventory_host }}"
+    ansible_connection: ssh
+  when:
+    - inventory_hostname == 'localhost'
+    - cm_manager_inventory_host not in ['localhost', '127.0.0.1']
