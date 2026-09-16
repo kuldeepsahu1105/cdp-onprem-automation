@@ -978,30 +978,32 @@
         hdfs_cli=/opt/cloudera/parcels/CDH/bin/hdfs
         changed=false
 
+        hdfs_dfs() {
+          runuser --user hdfs -- env HADOOP_CONF_DIR=/etc/hadoop/conf \
+            "$hdfs_cli" dfs "$@"
+        }
+
         ensure_dir() {
           local path="$1"
-          if ! "$hdfs_cli" dfs -test -d "$path"; then
-            "$hdfs_cli" dfs -mkdir -p "$path"
+          if ! hdfs_dfs -test -d "$path"; then
+            hdfs_dfs -mkdir -p "$path"
             changed=true
           fi
         }
 
         ensure_dir /tmp
-        "$hdfs_cli" dfs -chmod 1777 /tmp
+        hdfs_dfs -chmod 1777 /tmp
         {% if base_cluster_install_services.yarn | default(true) | bool %}
         ensure_dir {{ base_cluster_yarn_node_labels_dir | quote }}
-        "$hdfs_cli" dfs -chown yarn:yarn {{ base_cluster_yarn_node_labels_dir | quote }}
-        "$hdfs_cli" dfs -chmod 700 {{ base_cluster_yarn_node_labels_dir | quote }}
+        hdfs_dfs -chown yarn:yarn {{ base_cluster_yarn_node_labels_dir | quote }}
+        hdfs_dfs -chmod 700 {{ base_cluster_yarn_node_labels_dir | quote }}
         {% endif %}
         echo "changed=${changed}"
       args:
         executable: /bin/bash
-      environment:
-        HADOOP_CONF_DIR: /etc/hadoop/conf
       register: base_cluster_hdfs_directory_recovery
       changed_when: "'changed=true' in base_cluster_hdfs_directory_recovery.stdout"
       become: true
-      become_user: hdfs
       delegate_to: "{{ groups[base_cluster_worker_group] | first }}"
       when:
         - base_cluster_recovery_required | bool
