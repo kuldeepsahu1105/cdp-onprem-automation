@@ -90,12 +90,11 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `cm_parcel_repo_include_cdv_parcel` | `true` | Include CDV parcel repo URLs in CM config |
 | `cm_parcel_repo_include_cfm_parcel` | `true` | Include CFM2 parcel repo URLs (NiFi + NiFi Registry) |
 | `cm_parcel_csd_respect_service_toggles` | `false` | When false, CDV/CFM parcel URLs are set even if `base_cluster_install_services` keys are off |
-| `cm_remote_parcel_repo_intel_mkl_url` | Intel MKL parcels | Optional third-party parcel repo (left enabled by default) |
 | `cm_parcel_repo_merge_existing_cm_urls` | `false` | When false, CM wizard defaults are not merged (only Ansible URLs + scrub) |
 | `cm_parcel_install_csd_repo_urls` | `false` | Maps to CM `PARCEL_INSTALL_CSD_REPO_URLS` (blocks auto spark/cdh6 URLs on restart) |
 | `cm_remote_parcel_csd_repo_urls` | `[]` | Explicit CSD archive dirs; empty = build from `scm_csd_parcel_repo_urls.j2` |
 | `cm_parcel_repo_include_csd_archive_dirs` | `true` | Add CDV/CFM archive paths to `REMOTE_PARCEL_REPO_URLS` |
-| `scm_parcel_repositories` | computed | Legacy `scm.j2` list: pinned + latest CDH/ECS, CDV/CFM parcels, Intel MKL |
+| `scm_parcel_repositories` | computed | Legacy `scm.j2` list: pinned + latest CDH/ECS and CDV/CFM parcels |
 | `cdh_parcel_os_suffix` | `auto` | Parcel filename suffix: `auto`, `el8`, `el9`, `jammy`, `noble`, `sles15`, `el8.aarch64le` |
 | `cdh_parcel_target_group` | `base-workers` | Inventory group used to auto-detect worker OS for parcel suffix |
 | `cdh_parcel_os_suffix_fallback` | `el8` | Fallback when auto-detect cannot read worker facts |

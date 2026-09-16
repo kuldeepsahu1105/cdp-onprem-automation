@@ -276,8 +276,6 @@ cm_csd_urls_override: []
 cm_parcel_repo_extra_urls: []
 
 # Generated Cloudera Manager REMOTE_PARCEL_REPO_URLS.
-cm_remote_parcel_repo_intel_mkl_url: "https://parcels.repos.intel.com/mkl/latest"
-cm_parcel_repo_include_intel_mkl: true
 cm_parcel_repo_include_ecs_parcel: true
 # CDV (DATAVIZ) and CFM2 (NiFi / NiFi Registry) parcel directories under …/parcels/ (public archive).
 cm_parcel_repo_include_cdv_parcel: true
@@ -322,7 +320,6 @@ scm_parcel_repositories: >-
       )
       else []
     )
-    + ([cm_remote_parcel_repo_intel_mkl_url] if (cm_parcel_repo_include_intel_mkl | default(true) | bool) else [])
     + (cm_parcel_repo_extra_urls | default([]))
     )
   }}
