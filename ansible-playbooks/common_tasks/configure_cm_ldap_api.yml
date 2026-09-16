@@ -22,6 +22,7 @@
       - { name: LDAP_GROUP_SEARCH_BASE, value: "{{ cm_ldap_group_search_base }}" }
       - { name: LDAP_GROUP_SEARCH_FILTER, value: "{{ cm_ldap_group_search_filter }}" }
       - { name: LDAP_DN_PATTERN, value: "{{ cm_ldap_dn_pattern | default('') }}" }
+  no_log: true
 
 - name: LDAP — read current CM configuration
   ansible.builtin.uri:

@@ -90,6 +90,14 @@
           — skipping generateCmca, CM restart, and downstream agent/CMS reconcile.
       when: cm_autotls_noop_this_run | default(false) | bool
 
+    - name: Auto-TLS — print existing Cloudera Manager access URLs
+      ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
+      when: cm_autotls_noop_this_run | default(false) | bool
+
+    - name: Auto-TLS — finish healthy no-op play
+      ansible.builtin.meta: end_play
+      when: cm_autotls_noop_this_run | default(false) | bool
+
     - name: Auto-TLS — enable path (generateCmca and CM restart when applied)
       when: not (cm_autotls_noop_this_run | default(false) | bool)
       block:

@@ -76,6 +76,28 @@
     - name: Configure Kerberos via Cloudera Manager REST API
       ansible.builtin.import_tasks: common_tasks/configure_cm_kerberos_api.yml
 
+    - name: Kerberos — report healthy matching KDC integration
+      ansible.builtin.debug:
+        msg: >-
+          Cloudera Manager reports kerberized=true, the KDC preflight succeeded, and the
+          realm, KDC host/type, and encryption settings match; skipping credential import,
+          restart, and bounded status wait.
+      when:
+        - kerberos_already_configured | bool
+        - not (cm_kerberos_config_changed | bool)
+
+    - name: Kerberos — print existing Cloudera Manager access URLs
+      ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
+      when:
+        - kerberos_already_configured | bool
+        - not (cm_kerberos_config_changed | bool)
+
+    - name: Kerberos — finish healthy matching no-op play
+      ansible.builtin.meta: end_play
+      when:
+        - kerberos_already_configured | bool
+        - not (cm_kerberos_config_changed | bool)
+
     - name: Configure Active Directory-specific Kerberos settings
       ansible.builtin.uri:
         url: "{{ cm_krb_api_url }}/cm/kerberosConfig"

@@ -25,6 +25,80 @@
     - name: CM API — read TLS / Auto-TLS state for CMS messaging
       ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
 
+    - name: CMS — read existing management service
+      ansible.builtin.uri:
+        url: "{{ cm_krb_api_url }}/cm/service"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 404]
+        follow_redirects: none
+      delegate_to: "{{ cm_api_uri_delegate_to }}"
+      register: cms_fast_path_service
+      changed_when: false
+      failed_when: false
+
+    - name: CMS — read existing management roles
+      ansible.builtin.uri:
+        url: "{{ cm_krb_api_url }}/cm/service/roles"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      delegate_to: "{{ cm_api_uri_delegate_to }}"
+      register: cms_fast_path_roles
+      changed_when: false
+      when: cms_fast_path_service.status | default(0) == 200
+
+    - name: CMS — detect healthy existing management service
+      ansible.builtin.set_fact:
+        cm_cms_noop_this_run: >-
+          {{
+            cms_fast_path_service.status | default(0) == 200
+            and cms_fast_path_service.json.serviceState | default('') == 'STARTED'
+            and cms_fast_path_service.json.healthSummary | default('') == 'GOOD'
+            and (
+              cms_fast_path_roles.json['items'] | default([])
+              | selectattr('type', 'in', cm_cms_role_types)
+              | list
+              | length
+            ) == (cm_cms_role_types | length)
+            and (
+              cms_fast_path_roles.json['items'] | default([])
+              | selectattr('type', 'in', cm_cms_role_types)
+              | rejectattr('roleState', 'equalto', 'STARTED')
+              | list
+              | length
+            ) == 0
+            and (
+              cms_fast_path_roles.json['items'] | default([])
+              | selectattr('type', 'in', cm_cms_role_types)
+              | rejectattr('healthSummary', 'equalto', 'GOOD')
+              | list
+              | length
+            ) == 0
+          }}
+
+    - name: CMS — report healthy existing service
+      ansible.builtin.debug:
+        msg: >-
+          Cloudera Management Service and all requested roles are already STARTED and GOOD;
+          skipping database reconciliation, role configuration, restart, and health waits.
+      when: cm_cms_noop_this_run | bool
+
+    - name: CMS — print existing Cloudera Manager access URLs
+      ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
+      when: cm_cms_noop_this_run | bool
+
+    - name: CMS — finish healthy no-op play
+      ansible.builtin.meta: end_play
+      when: cm_cms_noop_this_run | bool
+
     - name: CMS — wait for PostgreSQL FQDN resolution on the CM host
       ansible.builtin.command:
         argv:
