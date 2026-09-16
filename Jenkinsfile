@@ -195,7 +195,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     string(name: 'PVCECS_WORKER_INSTANCE_TYPE', defaultValue: 'r5a.4xlarge', description: 'ECS worker instance type override')
     string(name: 'TFVARS_FILE', defaultValue: '.tfvars.yaml', description: 'Config file path relative to repo root (empty = auto-detect)')
     string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to checkout (no spaces or ..). CM_TLS_KRB_LDAP Auto-TLS realign needs main at b03af5a+ (PR #188 — removes regex .group on cm_api_url). Saved jobs: confirm this is main, not a stale feature branch.')
-    string(name: 'NOTIFICATION_EMAIL', defaultValue: '', description: 'Email recipient (defaults to BUILD_USER_EMAIL; validated when set)')
+    string(name: 'NOTIFICATION_EMAIL', defaultValue: 'ksahu@cloudera.com', description: 'Primary email recipient; a different triggering user email is appended automatically')
     text(
       name: 'ANSIBLE_GROUP_VARS_YAML',
       defaultValue: '''# Ansible group_vars overrides (any valid key: value mapping)
@@ -348,7 +348,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     PIPELINE_STAGES = "${params.PIPELINE_STAGES?.trim() ?: ''}"
     VALIDATION_CHECKS = 'TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY'
     BUILD_RESULT = 'IN_PROGRESS'
-    MAIL_TO = "${params.NOTIFICATION_EMAIL?.trim() ?: env.BUILD_USER_EMAIL ?: ''}"
+    MAIL_TO = "${params.NOTIFICATION_EMAIL?.trim() ?: 'ksahu@cloudera.com'}"
   }
 
   stages {
@@ -1263,8 +1263,13 @@ def archivePipelineArtifacts() {
 }
 
 def sendPipelineEmail(String buildResult) {
-  if (!env.MAIL_TO?.trim()) {
-    echo 'No NOTIFICATION_EMAIL or BUILD_USER_EMAIL — skipping email.'
+  def mailTo = [
+    env.MAIL_TO?.trim(),
+    env.BUILD_USER_EMAIL?.trim(),
+  ].findAll { it }.collect { it.toLowerCase() }.unique().join(',')
+
+  if (!mailTo) {
+    echo 'No notification recipient or BUILD_USER_EMAIL — skipping email.'
     return
   }
 
@@ -1374,7 +1379,7 @@ def sendPipelineEmail(String buildResult) {
   }
 
   emailext(
-    to: env.MAIL_TO,
+    to: mailTo,
     subject: "${statusIcon} Jenkins ${statusText}: ${env.JOB_NAME} [${env.BUILD_NUMBER}] — ${stageInfo}",
     mimeType: 'text/html',
     attachmentsPattern: attachmentList.unique().join(','),
