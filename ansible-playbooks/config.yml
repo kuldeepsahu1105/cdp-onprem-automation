@@ -26,8 +26,8 @@
 identity_provider: auto                 # auto | freeipa | ad
 deployment_environment: auto            # auto | aws | baremetal
 ipaserver_domain: cldrsetup.local
-# Preserve the selected RHEL minor release across full DNF updates.
-rhel_release_pin: "9.6"                 # auto | major.minor
+# Detect and pin each host's current RHEL minor release before any DNF operation.
+rhel_release_pin: auto                  # auto | major.minor
 
 # Active Directory is selected automatically when identity_provider is auto,
 # no FreeIPA host exists, and ad_kdc_host is non-empty.
