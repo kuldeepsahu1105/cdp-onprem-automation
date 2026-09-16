@@ -48,5 +48,59 @@
     - cm_api_version | default('') | length > 0
     - _cm_api_url_host_resolved | default('') | length > 0
 
+- name: CM API — wait for local HTTPS listener after Auto-TLS restart
+  block:
+    - name: CM API — wait for scm-server HTTPS port on manager
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ cm_https_port | default(7183) }}"
+        state: started
+        delay: 5
+        sleep: 5
+        timeout: "{{ cm_autotls_https_startup_timeout | default(600) | int }}"
+      delegate_to: "{{ cm_manager_inventory_host }}"
+      become: true
+
+  rescue:
+    - name: CM API — collect scm-server service status after HTTPS startup failure
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - status
+          - cloudera-scm-server
+          - --no-pager
+          - --lines=30
+      delegate_to: "{{ cm_manager_inventory_host }}"
+      become: true
+      register: cm_autotls_scm_server_status
+      changed_when: false
+      failed_when: false
+
+    - name: CM API — collect recent scm-server journal after HTTPS startup failure
+      ansible.builtin.command:
+        argv:
+          - journalctl
+          - --unit=cloudera-scm-server
+          - --no-pager
+          - --lines=50
+      delegate_to: "{{ cm_manager_inventory_host }}"
+      become: true
+      register: cm_autotls_scm_server_journal
+      changed_when: false
+      failed_when: false
+
+    - name: CM API — fail with scm-server startup diagnostics
+      ansible.builtin.fail:
+        msg: |-
+          Cloudera Manager accepted generateCmca and was restarted, but HTTPS
+          :{{ cm_https_port | default(7183) }} did not listen within
+          {{ cm_autotls_https_startup_timeout | default(600) }} seconds.
+
+          systemctl status:
+          {{ cm_autotls_scm_server_status.stdout | default('unavailable') }}
+
+          Recent journal:
+          {{ cm_autotls_scm_server_journal.stdout | default('unavailable') }}
+
 - name: CM API — wait for /cm/version after CM server restart
   ansible.builtin.import_tasks: wait_for_cm_api.yml

@@ -3,6 +3,7 @@
 
 - name: CM API — read API version before health wait
   ansible.builtin.import_tasks: fetch_cm_api_version_slug.yml
+  when: cm_api_version | default('') | length == 0
 
 - name: CM API — set health check URL on cldr-mngr path
   ansible.builtin.set_fact:
