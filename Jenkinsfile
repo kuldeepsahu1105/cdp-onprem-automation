@@ -25,12 +25,12 @@ Optional tail stages (append when needed): STARTSTOP_AUTOMATION, DESTROY_STACK
 
 Order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → STARTSTOP_AUTOMATION → DESTROY_STACK
 
-CM_TLS_KRB_LDAP = playbooks 27→29→30→28 (Auto-TLS, CMS, LDAP, Kerberos). Legacy CDH_BASE → check CM_TLS_KRB_LDAP + CDH_INSTALL.
+CM_TLS_KRB_LDAP = playbooks 27→28→29→30 (Auto-TLS, CMS, LDAP, Kerberos). Legacy CDH_BASE → check CM_TLS_KRB_LDAP + CDH_INSTALL.
 
 DESTROY_STACK = terraform destroy (optional 99_cleanup via CLEANUP_BEFORE_DESTROY). Requires DESTROY_STACK_CONFIRM=true unless DRY_RUN=true (destroy plan only).
 
 After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once, then re-run with your stage checkboxes.''',
-      descriptionPropertyValue: '''VALIDATE — standard prerequisite checks,TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→29→30→28 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — ECS cluster (33),STARTSTOP_AUTOMATION — deploy EC2 start/stop helper on ipaserver,DESTROY_STACK — terraform destroy; DESTROY_STACK_CONFIRM or DRY_RUN'''
+      descriptionPropertyValue: '''VALIDATE — standard prerequisite checks,TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→28→29→30 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — ECS cluster (33),STARTSTOP_AUTOMATION — deploy EC2 start/stop helper on ipaserver,DESTROY_STACK — terraform destroy; DESTROY_STACK_CONFIRM or DRY_RUN'''
     )
     string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Deployment name prefix + Terraform workspace (overrides tfvars when set)')
     text(
@@ -57,7 +57,7 @@ Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INS
 | PORTAL | Deployment portal bootstrap (10); before CM when portal enabled |
 | IDENTITY | Ansible phase 2 — FreeIPA or AD |
 | CM_INSTALL | Ansible phase 3 — CM repos, Postgres, CM server |
-| CM_TLS_KRB_LDAP | Auto-TLS, CMS, LDAP, Kerberos (27→29→30→28) |
+| CM_TLS_KRB_LDAP | Auto-TLS, CMS, LDAP, Kerberos (27→28→29→30) |
 | CDH_INSTALL | CDH base cluster (31_setup_base_cluster.yml) |
 | MONITORING | Monitoring stack (32); needs PORTAL; MONITORING_STACK_ENABLED |
 | ECS_INSTALL | ECS (33) + optional data services when ECS_DATA_SERVICES_DEPLOY_ENABLED |
@@ -734,7 +734,7 @@ def echoPipelineStagesQuickReference() {
   Copy-paste full path: VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL
   Optional: STARTSTOP_AUTOMATION, DESTROY_STACK | Job defaults: VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION
   VALIDATE → prereqs script | TERRAFORM → EC2/inventory | PREREQS → Ansible 01-09 | PORTAL → bootstrap (10)
-  IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → 27→29→30→28 | CDH_INSTALL → base cluster (31)
+  IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → 27→28→29→30 | CDH_INSTALL → base cluster (31)
   MONITORING → (32) | ECS_INSTALL → (33) | STARTSTOP_AUTOMATION → ipaserver (EC2_STARTSTOP_DEPLOY_SCRIPT/ RUN_SCRIPT + OPERATION/GROUPS) | DESTROY_STACK → destroy (DESTROY_STACK_CONFIRM or DRY_RUN plan)
   Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. PORTAL may auto-insert when DEPLOYMENT_PORTAL_ENABLED and CM/CDH/ECS selected without PORTAL.'''
 }

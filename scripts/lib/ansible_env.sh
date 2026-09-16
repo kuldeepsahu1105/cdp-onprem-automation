@@ -2,6 +2,33 @@
 # Shared Ansible control-node helpers for Mac, Linux, remote laptop, or cluster node.
 # Source from wrapper scripts after portable.sh.
 
+ensure_ansible_cli() {
+  if command -v ansible >/dev/null 2>&1 \
+    && command -v ansible-playbook >/dev/null 2>&1 \
+    && command -v ansible-galaxy >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "[ansible] Ansible CLI not found; installing ansible-core for this controller." >&2
+  if command -v brew >/dev/null 2>&1; then
+    brew install ansible
+  elif command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get update -qq
+    sudo apt-get install -y ansible-core
+  elif command -v dnf >/dev/null 2>&1; then
+    sudo dnf install -y ansible-core
+  elif command -v yum >/dev/null 2>&1; then
+    sudo yum install -y ansible-core
+  else
+    echo "ERROR: Install ansible-core; supported controllers are macOS, Ubuntu, and RHEL." >&2
+    return 1
+  fi
+
+  command -v ansible >/dev/null 2>&1 \
+    && command -v ansible-playbook >/dev/null 2>&1 \
+    && command -v ansible-galaxy >/dev/null 2>&1
+}
+
 # Resolve scripts/lib directory (repo root or nested cdp-onprem-automation).
 resolve_scripts_lib() {
   local base="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
@@ -55,7 +82,20 @@ detect_control_mode() {
   local fqdn
   fqdn="$(hostname -f 2>/dev/null || hostname)"
 
-  if [[ -f "$inventory" ]] && grep -qE "^[[:space:]]*(${short_host}|${fqdn})[[:space:]]" "$inventory"; then
+  if [[ -f "$inventory" ]] && awk -v short_host="$short_host" -v fqdn="$fqdn" '
+    /^[[:space:]]*[#;]/ || /^[[:space:]]*$/ || /^[[:space:]]*\[/ { next }
+    {
+      if ($1 == short_host || $1 == fqdn) {
+        found = 1
+      }
+      for (i = 2; i <= NF; i++) {
+        if ($i == "cldr_hostname=" short_host || $i == "cldr_hostname=" fqdn) {
+          found = 1
+        }
+      }
+    }
+    END { exit(found ? 0 : 1) }
+  ' "$inventory"; then
     printf '%s' "local"
   else
     printf '%s' "remote"

@@ -8,16 +8,20 @@
     webserver_path: "{{ os_vars[ansible_os_family].webserver_path }}"
     scm_csds_effective: >-
       {{
-        scm_csds if (scm_csds | default([]) | length > 0)
+        cm_csd_urls_override
+        if (cm_csd_urls_override | default([]) | length > 0)
         else (
-          scm_csds_redhat if (scm_csds_redhat | default([]) | length > 0)
+          scm_csds if (scm_csds | default([]) | length > 0)
           else (
-            (lookup('template', 'scm_csds_urls.j2') | from_yaml | default([], true))
-            if (
-              ansible_os_family == 'RedHat'
-              and (csd_build_urls_enabled | default(true) | bool)
+            scm_csds_redhat if (scm_csds_redhat | default([]) | length > 0)
+            else (
+              (lookup('template', 'scm_csds_urls.j2') | from_yaml | default([], true))
+              if (
+                ansible_os_family == 'RedHat'
+                and (csd_build_urls_enabled | default(true) | bool)
+              )
+              else []
             )
-            else []
           )
         )
       }}

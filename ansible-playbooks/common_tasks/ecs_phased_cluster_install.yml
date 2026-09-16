@@ -29,6 +29,7 @@
     cluster_version: "{{ ecs_parcel_version_effective }}"
     type: EXPERIENCE_CLUSTER
     state: present
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Attach ECS master to cluster
   cloudera.cluster.host:
@@ -42,6 +43,7 @@
     cluster_hostname: "{{ ecs_master_fqdn }}"
     name: "{{ ecs_cluster_name }}"
     state: attached
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Attach ECS workers to cluster
   cloudera.cluster.host:
@@ -58,6 +60,7 @@
   loop: "{{ ecs_worker_fqdns }}"
   loop_control:
     label: "{{ item }}"
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Activate ECS parcel on cluster
   cloudera.cluster.parcel:
@@ -72,6 +75,7 @@
     name: ECS
     parcel_version: "{{ ecs_parcel_version_effective }}"
     state: activated
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Create Docker service on ECS cluster
   cloudera.cluster.service:
@@ -87,6 +91,7 @@
     name: docker
     type: DOCKER
     state: present
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Configure Docker service data path
   cloudera.cluster.service_config:
@@ -101,6 +106,7 @@
     service: docker
     parameters:
       defaultDataPath: "{{ ecs_docker_data_path }}"
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Create ECS service on cluster
   cloudera.cluster.service:
@@ -116,6 +122,7 @@
     name: ecs
     type: ECS
     state: present
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Configure ECS ingress credentials (sensitive)
   cloudera.cluster.service_config:
@@ -133,6 +140,7 @@
       infra_prometheus_ingress_password: "{{ ecs_infra_prometheus_ingress_password }}"
       k8s_webui_secret_admin_token: "{{ ecs_k8s_webui_secret_admin_token }}"
   no_log: true
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Configure ECS service
   cloudera.cluster.service_config:
@@ -154,6 +162,7 @@
       lsoDataPath: "{{ ecs_lso_data_path }}"
       defaultDataPath: "{{ ecs_longhorn_data_path }}"
       nfs_over_provisioning: "{{ ecs_nfs_over_provisioning }}"
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Apply ECS host templates and role assignments
   ansible.builtin.import_tasks: ecs_apply_host_templates.yml
@@ -172,3 +181,4 @@
     verify_tls: false
     name: "{{ ecs_cluster_name }}"
     state: started
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"

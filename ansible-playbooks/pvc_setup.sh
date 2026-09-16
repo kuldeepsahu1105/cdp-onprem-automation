@@ -77,6 +77,7 @@ EOF
 fi
 
 ensure_bash
+ensure_ansible_cli
 jenkins_prepare_log_output
 ansible_configure_output
 
@@ -128,6 +129,7 @@ run_playbook() {
     ui_playbook_header "$label" end
   else
     local rc=$?
+    ui_playbook_header "$label" end failed
     ui_err "PLAYBOOK FAILED: ${label} (exit ${rc})"
     return "$rc"
   fi
@@ -184,7 +186,10 @@ if [[ -n "${CM_REPO_USERID:-}" ]]; then
   ui_kv "CM archive user" "$CM_REPO_USERID" "👤"
 fi
 
-mapfile -t ANSIBLE_PLAYBOOK_ARGS < <(ansible_extra_args "$PRIVATE_KEY")
+ANSIBLE_PLAYBOOK_ARGS=()
+while IFS= read -r ansible_arg; do
+  [[ -n "$ansible_arg" ]] && ANSIBLE_PLAYBOOK_ARGS+=("$ansible_arg")
+done < <(ansible_extra_args "$PRIVATE_KEY")
 
 # Same helper as ensure_collections.yml / manual playbooks (no-op when already installed).
 if _ansible_requirements_collections_present "$SCRIPT_DIR/requirements.yml"; then
@@ -228,6 +233,7 @@ if _should_run_ssh_preqs; then
     ui_playbook_header "00_setup_ssh_preqs.yml" end
   else
     rc=$?
+    ui_playbook_header "00_setup_ssh_preqs.yml" end failed
     ui_err "PLAYBOOK FAILED: 00_setup_ssh_preqs.yml (exit ${rc})"
     exit "$rc"
   fi
@@ -313,11 +319,15 @@ run_phase_3() {
   local cm_user="${CM_REPO_USERID:-${CM_REPO_USERNAME:-}}"
   local cm_pass="${CM_REPO_PASSWD:-${CM_REPO_PASSWORD:-}}"
   local cm_extra=()
-  local cm_repo_source="${CM_REPO_SOURCE:-public}"
-  if [[ -f group_vars/all.yml ]]; then
-    cm_repo_source="$(awk -F': *' '/^cm_repo_source:/ {gsub(/["'\'']/, "", $2); print $2; exit}' group_vars/all.yml)"
-    cm_repo_source="${cm_repo_source:-public}"
-  fi
+  local cm_repo_source="public"
+  local vars_file configured_repo_source
+  # Match Ansible precedence: defaults first, then operator config, then environment.
+  for vars_file in group_vars/all.yml config.yml; do
+    [[ -f "$vars_file" ]] || continue
+    configured_repo_source="$(awk -F': *' '/^cm_repo_source:/ {gsub(/["'\'']/, "", $2); print $2; exit}' "$vars_file")"
+    cm_repo_source="${configured_repo_source:-$cm_repo_source}"
+  done
+  cm_repo_source="${CM_REPO_SOURCE:-$cm_repo_source}"
   if [[ -n "$cm_user" && -n "$cm_pass" ]]; then
     cm_extra=(-e "cm_repo_username=$cm_user" -e "cm_repo_password=$cm_pass")
   fi
@@ -340,9 +350,9 @@ run_phase_cm_tls() {
   # CM API health waits (fetch /api/version then /api/<slug>/version) run in 27+ — not portal refresh.
   # Order matches Cloudera Labs: cm_autotls → cm_service (CMS) → external_auth (LDAP) → cm_kerberos.
   run_playbook 27_setup_cm_autotls.yml
-  run_playbook 29_setup_cm_cms.yml
-  run_playbook 30_setup_cm_ldap.yml
-  run_playbook 28_setup_cm_krbs.yml
+  run_playbook 28_setup_cm_cms.yml
+  run_playbook 29_setup_cm_ldap.yml
+  run_playbook 30_setup_cm_krbs.yml
   _maybe_run_deployment_portal_refresh "portal,ipa,identity"
   ui_phase_footer "$_phase"
 }

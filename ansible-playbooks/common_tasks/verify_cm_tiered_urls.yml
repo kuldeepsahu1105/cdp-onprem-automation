@@ -59,7 +59,7 @@
   when:
     - cm_api_https_active | default(autotls_enabled | default(false) | bool) | bool
     - _cm_tier_a_https is defined
-  delegate_to: cldr-mngr
+  delegate_to: "{{ cm_manager_inventory_host }}"
   run_once: true
 
 - name: Fail when CM HTTP UI check failed on cldr-mngr

@@ -1,12 +1,6 @@
 ---
 # Cloudera Management Service (CMS) via REST — aligned with Cloudera Labs cm_service settings.
 
-- name: CMS — use CM API URL from play (no second full API probe)
-  ansible.builtin.import_tasks: resolve_cm_krb_api_url_from_facts.yml
-
-- name: CMS — configure Auto-TLS client truststore for management roles
-  ansible.builtin.import_tasks: configure_cm_cms_autotls_trust.yml
-
 - name: CMS — verify Reports Manager database connectivity
   ansible.builtin.import_tasks: verify_cm_cms_reports_manager_db.yml
 
@@ -19,6 +13,8 @@
     force_basic_auth: yes
     validate_certs: no
     status_code: [200, 404]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_service_get
   failed_when: false
 
@@ -33,9 +29,15 @@
     body_format: json
     body:
       type: MGMT
-    status_code: [200, 201, 204, 301, 303]
+    status_code: [200, 201, 204]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_setup
   when: cms_service_get.status == 404
+  changed_when: true
+
+- name: CMS — configure Auto-TLS client truststore for management roles
+  ansible.builtin.import_tasks: configure_cm_cms_autotls_trust.yml
 
 - name: CMS — list CM hosts for role placement
   ansible.builtin.uri:
@@ -45,7 +47,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_hosts
 
 - name: CMS — resolve CM host entry for CMS roles (FQDN, short name, or manager IP)
@@ -133,7 +137,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_rcgs
 
 - name: CMS — pick base role config group names
@@ -167,6 +173,40 @@
         )
       }}
 
+- name: CMS — initialize role config drift state
+  ansible.builtin.set_fact:
+    cms_servicemonitor_config_changed: false
+    cms_reportsmanager_config_changed: false
+
+- name: CMS — read Service Monitor role config group
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/roleConfigGroups/{{ cms_rcg_servicemonitor }}/config"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
+  register: cms_rcg_servicemonitor_get
+  when: cms_rcg_servicemonitor | default('') | length > 0
+
+- name: CMS — detect Service Monitor role config drift
+  ansible.builtin.set_fact:
+    cms_servicemonitor_config_changed: >-
+      {{
+        (
+          cms_rcg_servicemonitor_get.json['items'] | default([])
+          | selectattr('name', 'equalto', 'firehose_non_java_memory_bytes')
+          | map(attribute='value')
+          | first
+          | default('', true)
+          | string
+        ) != (cm_cms_servicemonitor_memory_bytes | string)
+      }}
+  when: cms_rcg_servicemonitor_get is defined and not (cms_rcg_servicemonitor_get.skipped | default(false))
+
 - name: CMS — configure Service Monitor role config group
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/service/roleConfigGroups/{{ cms_rcg_servicemonitor }}/config"
@@ -180,9 +220,61 @@
       items:
         - name: firehose_non_java_memory_bytes
           value: "{{ cm_cms_servicemonitor_memory_bytes | string }}"
-    status_code: [200, 204, 301, 303]
+    status_code: [200, 204]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_rcg_servicemonitor_put
-  when: cms_rcg_servicemonitor | default('') | length > 0
+  when:
+    - cms_rcg_servicemonitor | default('') | length > 0
+    - cms_servicemonitor_config_changed | bool
+  changed_when: true
+
+- name: CMS — read Reports Manager role config group
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/roleConfigGroups/{{ cms_rcg_reportsmanager }}/config"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
+  register: cms_rcg_reportsmanager_get
+  when: cms_rcg_reportsmanager | default('') | length > 0
+
+- name: CMS — detect Reports Manager role config drift
+  ansible.builtin.set_fact:
+    cms_reportsmanager_config_changed: >-
+      {{
+        (
+          cms_rcg_reportsmanager_get.json['items'] | default([])
+          | selectattr('name', 'equalto', 'headlamp_database_type')
+          | map(attribute='value') | first | default('', true)
+        ) != 'postgresql'
+        or (
+          cms_rcg_reportsmanager_get.json['items'] | default([])
+          | selectattr('name', 'equalto', 'headlamp_database_host')
+          | map(attribute='value') | first | default('', true)
+        ) != cm_cms_reports_manager_db_host
+        or (
+          cms_rcg_reportsmanager_get.json['items'] | default([])
+          | selectattr('name', 'equalto', 'headlamp_database_name')
+          | map(attribute='value') | first | default('', true)
+        ) != cm_cms_reports_manager_db_name
+        or (
+          cms_rcg_reportsmanager_get.json['items'] | default([])
+          | selectattr('name', 'equalto', 'headlamp_database_user')
+          | map(attribute='value') | first | default('', true)
+        ) != cm_cms_reports_manager_db_user
+        or (
+          cms_rcg_reportsmanager_get.json['items'] | default([])
+          | selectattr('name', 'equalto', 'headlamp_database_password')
+          | list | length
+        ) == 0
+        or (cm_cms_update_reports_manager_password | default(false) | bool)
+      }}
+  when: cms_rcg_reportsmanager_get is defined and not (cms_rcg_reportsmanager_get.skipped | default(false))
 
 - name: CMS — configure Reports Manager role config group
   ansible.builtin.uri:
@@ -205,9 +297,15 @@
           value: "{{ cm_cms_reports_manager_db_user }}"
         - name: headlamp_database_password
           value: "{{ cm_cms_reports_manager_db_password }}"
-    status_code: [200, 204, 301, 303]
+    status_code: [200, 204]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_rcg_reportsmanager_put
-  when: cms_rcg_reportsmanager | default('') | length > 0
+  when:
+    - cms_rcg_reportsmanager | default('') | length > 0
+    - cms_reportsmanager_config_changed | bool
+  changed_when: true
+  no_log: true
 
 - name: CMS — list existing management roles
   ansible.builtin.uri:
@@ -217,7 +315,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_roles_get
 
 - name: CMS — build missing management role instances
@@ -246,18 +346,21 @@
           hostRef:
             hostId: "{{ cms_target_host_id }}"
             hostname: "{{ cms_target_hostname }}"
-    status_code: [200, 201, 204, 301, 303]
+    status_code: [200, 201, 204]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   loop: "{{ cms_role_types_desired | difference(cms_existing_role_types) }}"
   loop_control:
     label: "{{ item }}"
   register: cms_roles_create
+  changed_when: true
 
 - name: CMS — fail when CMS roles exist on a host other than the CM node
   ansible.builtin.fail:
     msg: >-
       CMS role {{ item.name }} ({{ item.type }}) is on host
       {{ item.hostRef.hostname | default(item.hostRef.hostId) }}, expected {{ cms_target_hostname }}.
-      Stop CMS in the UI, delete misplaced roles, and re-run 29_setup_cm_cms.yml.
+      Stop CMS in the UI, delete misplaced roles, and re-run 28_setup_cm_cms.yml.
   loop: "{{ cms_roles_get.json['items'] | default([]) }}"
   loop_control:
     label: "{{ item.type }}"
@@ -296,7 +399,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_roles_before_action
 
 - name: CMS — detect unhealthy Service Monitor, Host Monitor, or Reports Manager roles
@@ -318,7 +423,7 @@
         and (
           cms_roles_before_action.json['items'] | default([])
           | selectattr('type', 'in', cms_health_role_types)
-          | rejectattr('roleState', 'equalto', 'RUNNING')
+          | rejectattr('roleState', 'equalto', 'STARTED')
           | list
           | length
         ) == 0
@@ -339,7 +444,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_service_before_action
 
 - name: CMS — restart management service (unhealthy CMS roles or config drift)
@@ -350,7 +457,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 201, 204, 301, 303]
+    status_code: [200, 201, 204]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_restart_cmd
   when:
     - cms_service_before_action.json.serviceState | default('') == 'STARTED'
@@ -373,7 +482,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 201, 204, 301, 303]
+    status_code: [200, 201, 204]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_start_cmd
   when:
     - cms_service_before_action.json.serviceState | default('') != 'STARTED'
@@ -388,7 +499,7 @@
     - cms_start_cmd is not skipped
     - cms_start_cmd.json.id is defined
 
-- name: CMS — wait for Service Monitor, Host Monitor, and Reports Manager to reach RUNNING
+- name: CMS — wait for Service Monitor, Host Monitor, and Reports Manager to reach STARTED
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/service/roles"
     method: GET
@@ -396,7 +507,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_roles_health_poll
   until: >
     (
@@ -408,7 +521,7 @@
     and (
       cms_roles_health_poll.json['items'] | default([])
       | selectattr('type', 'in', cms_health_role_types)
-      | rejectattr('roleState', 'equalto', 'RUNNING')
+      | rejectattr('roleState', 'equalto', 'STARTED')
       | list
       | length
     ) == 0
@@ -418,7 +531,7 @@
 - name: CMS — fail when critical CMS roles did not become healthy
   ansible.builtin.fail:
     msg: >-
-      Service Monitor, Host Monitor, or Reports Manager are not RUNNING after CMS start/restart
+      Service Monitor, Host Monitor, or Reports Manager are not STARTED after CMS start/restart
       (waited up to {{ cm_cms_monitor_wait_timeout_seconds | default((cm_cms_monitor_wait_retries | default(30) | int) * (cm_cms_monitor_wait_delay | default(20) | int)) }}s,
       {{ cm_cms_monitor_wait_retries | default(30) }} retries × {{ cm_cms_monitor_wait_delay | default(20) }}s delay):
       {{ cms_roles_health_poll.json['items'] | default([])
@@ -432,12 +545,12 @@
         Reports Manager: /var/log/cloudera-scm-headlamp/
         CM agent: /var/log/cloudera-scm-agent/cloudera-scm-agent.log
         CM server (ImportCredentials): /var/log/cloudera-scm-server/cloudera-scm-server.log
-      Re-run 27_setup_cm_autotls.yml then 29_setup_cm_cms.yml when Auto-TLS truststore was missing.
+      Re-run 27_setup_cm_autotls.yml then 28_setup_cm_cms.yml when Auto-TLS truststore was missing.
   when: >
     (
       cms_roles_health_poll.json['items'] | default([])
       | selectattr('type', 'in', cms_health_role_types)
-      | rejectattr('roleState', 'equalto', 'RUNNING')
+      | rejectattr('roleState', 'equalto', 'STARTED')
       | list
       | length
     ) > 0

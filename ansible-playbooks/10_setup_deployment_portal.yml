@@ -16,6 +16,12 @@
     - name: Resolve deployment portal install host group (play hosts line when Caddy skipped)
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
 
+    - name: Register deployment portal runtime host
+      ansible.builtin.add_host:
+        name: "{{ groups[deployment_portal_host_group_effective][0] }}"
+        groups: deployment_portal_runtime
+      changed_when: false
+
     - name: Validate SSH reachability of portal target host before connecting
       ansible.builtin.import_tasks: common_tasks/validate_ansible_ssh_reachability.yml
       vars:
@@ -41,7 +47,7 @@
   when: monitoring_stack_enabled | default(false) | bool
 
 - name: Install deployment portal and monitoring (Caddy, pgAdmin, Grafana, Prometheus, …)
-  hosts: "{{ hostvars['localhost']['deployment_portal_host_group_effective'] }}"
+  hosts: deployment_portal_runtime
   become: true
   gather_facts: true
   vars:

@@ -10,6 +10,7 @@
     force_basic_auth: yes
     validate_certs: no
     status_code: [200]
+    follow_redirects: none
   register: ecs_docker_rcg_response
   changed_when: false
 
@@ -83,6 +84,7 @@
   failed_when: >-
     ecs_ht_master_create is failed
     and 'already exists' not in (ecs_ht_master_create.msg | default('') | lower)
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Ensure ECS worker host template exists
   cloudera.cluster.cm_resource:
@@ -105,6 +107,7 @@
   failed_when: >-
     ecs_ht_worker_create is failed
     and 'already exists' not in (ecs_ht_worker_create.msg | default('') | lower)
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Resolve host IDs for ECS cluster nodes
   ansible.builtin.uri:
@@ -120,6 +123,7 @@
     label: "{{ item }}"
   register: ecs_host_id_lookups
   changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Apply ECS master host template
   cloudera.cluster.cm_resource:
@@ -138,6 +142,7 @@
       items:
         - hostId: "{{ ecs_host_id_lookups.results[0].json.hostId }}"
   register: ecs_ht_master_apply
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Build host refs for ECS worker template apply
   ansible.builtin.set_fact:
@@ -163,3 +168,4 @@
       startRoles: "false"
     body:
       items: "{{ ecs_worker_host_apply_items }}"
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"

@@ -1,5 +1,5 @@
-### ansible-playbook -i inventory.ini 30_setup_cm_ldap.yml
-# Run after 27_setup_cm_autotls.yml and 29_setup_cm_cms.yml; before 28_setup_cm_krbs.yml (Labs external_auth).
+### ansible-playbook -i inventory.ini 29_setup_cm_ldap.yml
+# Run after 27_setup_cm_autotls.yml and 28_setup_cm_cms.yml; before 30_setup_cm_krbs.yml.
 ---
 - import_playbook: ensure_collections.yml
 
@@ -16,8 +16,20 @@
       ansible.builtin.meta: end_play
       when: not cm_ldap_enabled | default(false)
 
-    - name: Set up Cloudera Manager API URL
-      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+    - name: LDAP — prepare Cloudera Manager API
+      ansible.builtin.import_tasks: common_tasks/prepare_cm_security_api.yml
+
+    - name: LDAP — require directory service port from the CM host
+      ansible.builtin.wait_for:
+        host: "{{ cm_ldap_url | urlsplit('hostname') }}"
+        port: >-
+          {{
+            cm_ldap_url | urlsplit('port')
+            | default(636 if (cm_ldap_url | urlsplit('scheme')) == 'ldaps' else 389, true)
+          }}
+        timeout: "{{ cm_ldap_connect_timeout | default(30) }}"
+        connect_timeout: 5
+      delegate_to: "{{ cm_manager_inventory_host }}"
 
     - name: Print LDAP integration targets
       ansible.builtin.debug:

@@ -12,9 +12,11 @@
     force_basic_auth: yes
     validate_certs: no
     status_code: [200, 404]
+    follow_redirects: none
   register: base_cluster_zk_roles_api
   changed_when: false
   when: base_cluster_install_services.zookeeper | default(true) | bool
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Fail when ZooKeeper service is missing from the base cluster
   ansible.builtin.fail:

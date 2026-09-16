@@ -23,7 +23,7 @@
   ansible.builtin.fail:
     msg: >-
       No SERVICEMONITOR role found in Cloudera Management Service after health wait.
-      Re-run 29_setup_cm_cms.yml or create the role in CM UI on {{ cms_target_hostname }}.
+      Re-run 28_setup_cm_cms.yml or create the role in CM UI on {{ cms_target_hostname }}.
   when:
     - cm_cms_verify_servicemonitor_listen | default(true) | bool
     - (cms_smon_role.name | default('') | trim) | length == 0
@@ -36,7 +36,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_smon_role_config
   when: cm_cms_verify_servicemonitor_listen | default(true) | bool
 
@@ -130,7 +132,7 @@
         /var/log/cloudera-scm-agent/cloudera-scm-agent.log
       CM server (ImportCredentials / credential store):
         /var/log/cloudera-scm-server/cloudera-scm-server.log
-      Re-run: ansible-playbook -i inventory.ini 29_setup_cm_cms.yml
+      Re-run: ansible-playbook -i inventory.ini 28_setup_cm_cms.yml
   when:
     - cm_cms_verify_servicemonitor_listen | default(true) | bool
     - cms_smon_listen_wait is defined

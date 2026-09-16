@@ -6,9 +6,35 @@ Automation for deploying and cleaning up Cloudera Private Cloud on **RHEL** and 
 
 ```bash
 cd ansible-playbooks
+# Edit config.yml for this deployment; keep secrets in Vault or an extra-vars file.
 ./run-playbook.sh detect_identity.yml    # or: ansible-playbook … (imports ensure_collections.yml)
 DEPLOY_PHASE=all ./pvc_setup.sh             # or repo clone_and_run_pvc_automation.sh
 ```
+
+For an **Ansible-only deployment without Terraform**, start from the included
+inventory template:
+
+```bash
+cp inventory.example.ini inventory.ini
+vi inventory.ini
+vi config.yml
+ansible all -i inventory.ini -m ping -e @config.yml
+DEPLOY_PHASE=all ./pvc_setup.sh
+```
+
+Use `ansible_host` for the controller-reachable address, `private_ip` for
+cluster traffic, and optional `public_ip` for public portal links. Deployment
+playbooks load `config.yml` automatically. Add `-e @config.yml` to direct
+ad-hoc `ansible` commands that need deployment variables.
+
+Supported execution paths:
+
+| Controller | Managed nodes | Mode |
+|---|---|---|
+| macOS | RHEL or Ubuntu | Remote |
+| Ubuntu or RHEL | RHEL or Ubuntu | Remote |
+| IPAServer | RHEL or Ubuntu | Local/in-VPC |
+| Jenkins agent | RHEL or Ubuntu | Remote or in-VPC |
 
 For the full deployment sequence, identity scenarios, and cleanup steps, see the runbook below.
 
@@ -30,7 +56,23 @@ For the full deployment sequence, identity scenarios, and cleanup steps, see the
 | Internal CM mirror | RPM + createrepo | apt `.deb` mirror |
 | CDH parcels / base cluster | `el8` / `el9` | `jammy` / `noble` |
 
-## Defaults (`group_vars/all.yml`)
+## Configuration
+
+Edit [`config.yml`](config.yml) for deployment-specific values such as domains,
+product versions, services, parcel/CSD overrides, ECS, and portal settings.
+[`group_vars/all.yml`](group_vars/all.yml) contains stable defaults, derived
+values, compatibility aliases, and OS package maps; it normally does not need
+editing. Jenkins and command-line extra vars take precedence over both files.
+
+Keep passwords out of Git and provide them through Ansible Vault, Jenkins
+credentials, or an extra-vars file:
+
+```bash
+ansible-playbook -i inventory.ini 31_setup_base_cluster.yml \
+  -e @secrets.yml
+```
+
+### Main defaults
 
 | Variable | Default | Notes |
 |---|---|---|

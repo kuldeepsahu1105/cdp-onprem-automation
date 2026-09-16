@@ -14,7 +14,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 4 | PORTAL | `portal` | `10_setup_deployment_portal` |
 | 5 | IDENTITY | `2` / `identity` | `11_identity_setup` (imports `detect_identity.yml` as its own first play — `pvc_setup.sh` no longer runs `detect_identity.yml` separately; see [Avoiding duplicate work](#avoiding-duplicate-work-within-a-run)) |
 | 6 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
-| 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `29` → `30` → `28` (requires `04_setup_autossh` from PREREQS) |
+| 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `28` → `29` → `30` (requires `04_setup_autossh` from PREREQS) |
 | 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` |
 | 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` (includes portal Caddy/index sync) |
 | 10 | ECS_INSTALL | `5` / `ecs` | `33_setup_ecs_cluster` → optional `34_setup_ecs_data_services` |
@@ -34,7 +34,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | `portal` | Optional | Skippable entirely with `DEPLOYMENT_PORTAL_ENABLED=false`; still recommended for pgAdmin/monitoring/IPA UI links |
 | `2` / `identity` | **Mandatory** | FreeIPA or AD must exist before CM Kerberos/LDAP (`cm_tls` phase) |
 | `3` / `cm` | **Mandatory** | CM server/agents/DB — everything after depends on it |
-| `cm_tls` | **Mandatory for Kerberos/LDAP-secured clusters**; skippable only for throwaway/manual-TLS clusters | Order inside this phase (`27→29→30→28`) is fixed — do not reorder or split without re-reading `VARIABLE_CONTRACTS.md` |
+| `cm_tls` | **Mandatory for Kerberos/LDAP-secured clusters**; skippable only for throwaway/manual-TLS clusters | Order inside this phase (`27→28→29→30`) is fixed — do not reorder or split without re-reading `VARIABLE_CONTRACTS.md` |
 | `cdh` | **Mandatory** | Base CDH cluster (HDFS/YARN/ZK) |
 | `monitoring` | Optional | Gated by `MONITORING_STACK_ENABLED` (default true); safe to skip |
 | `5` / `ecs` | Optional | Only when ECS is part of the deployment |
@@ -56,7 +56,7 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 | `cm_api_url` / `cm_api_version` / `cm_api_discovery_succeeded` early-exit (`common_tasks/set_cm_api_url.yml`) | Within one `ansible-playbook` process | Re-running the `/api/version` HTTP+HTTPS probe loop when a prior play in the **same process** already resolved it (this is why `pvc_setup.sh` runs `25_verify_cm.yml 26_setup_cm_license.yml` as one `ansible-playbook` call — `26` reuses `25`'s already-resolved `cm_api_url`) |
 | `11_identity_setup.yml` importing `detect_identity.yml` itself | `pvc_setup.sh` no longer also calls `detect_identity.yml` standalone in `run_phase_2` | A guaranteed double run of the identity-provider assert/debug on every identity-phase run |
 
-**Known, intentional non-dedup (do not "fix"):** `27_setup_cm_autotls.yml`, `29_setup_cm_cms.yml`, `30_setup_cm_ldap.yml`, and `28_setup_cm_krbs.yml` each run as a **separate** `ansible-playbook` process in the `cm_tls` phase (`run_phase_cm_tls`), so each pays its own CM API probe cost — there is no cross-process fact cache (`fact_caching` is disabled in `ansible.cfg`). Combining them into one `run_playbook` call (like `25`+`26`) would remove that cost but also removes independent per-file retry semantics that Jenkins' `DEPLOY_PHASE=cm_tls_krb_ldap` partial-rerun relies on (rerunning only the step that failed) — do not merge these without re-reading `VARIABLE_CONTRACTS.md`'s CM API chain notes and confirming Jenkins partial-rerun behavior is preserved. Likewise, `validate_ansible_ssh_reachability.yml` deliberately re-probes SSH reachability in `00`, `10`, `32`, and `35` even when their target host groups overlap — it is a cheap fail-fast guard against the exact "SSH timeout" symptom in `docs/RUNBOOK.md`, not a redundant check to remove.
+**Known, intentional non-dedup (do not "fix"):** `27_setup_cm_autotls.yml`, `28_setup_cm_cms.yml`, `29_setup_cm_ldap.yml`, and `30_setup_cm_krbs.yml` each run as a **separate** `ansible-playbook` process in the `cm_tls` phase (`run_phase_cm_tls`), so each pays its own CM API probe cost — there is no cross-process fact cache (`fact_caching` is disabled in `ansible.cfg`). Combining them into one `run_playbook` call (like `25`+`26`) would remove that cost but also removes independent per-file retry semantics that Jenkins' `DEPLOY_PHASE=cm_tls_krb_ldap` partial-rerun relies on (rerunning only the step that failed) — do not merge these without re-reading `VARIABLE_CONTRACTS.md`'s CM API chain notes and confirming Jenkins partial-rerun behavior is preserved. Likewise, `validate_ansible_ssh_reachability.yml` deliberately re-probes SSH reachability in `00`, `10`, `32`, and `35` even when their target host groups overlap — it is a cheap fail-fast guard against the exact "SSH timeout" symptom in `docs/RUNBOOK.md`, not a redundant check to remove.
 
 ## Sequential index (10–35)
 
@@ -82,9 +82,9 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 | — | `reconcile_cm_agents.yml` | Optional agent reconcile (also at end of **27**) |
 | 26 | `26_setup_cm_license.yml` | License / trial |
 | 27 | `27_setup_cm_autotls.yml` | Auto-TLS (+ agent reconcile; CMS trust/restart when MGMT already exists) |
-| 29 | `29_setup_cm_cms.yml` | CMS (Cloudera Management Service) — **before LDAP/Kerberos** |
-| 30 | `30_setup_cm_ldap.yml` | LDAP (`external_auth` in Labs) |
-| 28 | `28_setup_cm_krbs.yml` | Kerberos — **last** in `cm_tls` phase |
+| 28 | `28_setup_cm_cms.yml` | CMS (Cloudera Management Service) — **before LDAP/Kerberos** |
+| 29 | `29_setup_cm_ldap.yml` | LDAP (`external_auth` in Labs) |
+| 30 | `30_setup_cm_krbs.yml` | Kerberos — **last** in `cm_tls` phase |
 | 31 | `31_setup_base_cluster.yml` | CDH base cluster |
 | 32 | `32_setup_monitoring_stack.yml` | Grafana / Prometheus |
 | 33 | `33_setup_ecs_cluster.yml` | ECS cluster |
@@ -102,7 +102,7 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 | `detect_identity.yml` | Unnumbered — imported by `11_identity_setup.yml` as its first play (no free number between `10` and `11`) — `pvc_setup.sh` does not also invoke it standalone (see [Avoiding duplicate work](#avoiding-duplicate-work-within-a-run)) |
 | `01`–`09` | OS prerequisites (`04_setup_autossh.yml` in phase 1 after `03_create_etc_hosts`) |
 | `99_cleanup.yml` | Teardown |
-| `unused_legacy_cm_service_enable.yml` | Unused; prefer `29_setup_cm_cms.yml` |
+| `unused_legacy_cm_service_enable.yml` | Unused; prefer `28_setup_cm_cms.yml` |
 
 ## Migration: renumbering duplicate prefixes (2026-09)
 
@@ -139,9 +139,9 @@ Four playbooks previously duplicated a numeric prefix with another, unrelated pl
 | `20_verify_cm.yml` | `25_verify_cm.yml` |
 | `21_setup_cm_license.yml` | `26_setup_cm_license.yml` |
 | `22_setup_cm_autotls.yml` | `27_setup_cm_autotls.yml` |
-| `23_setup_cm_krbs.yml` | `28_setup_cm_krbs.yml` |
-| `24_setup_cm_cms.yml` | `29_setup_cm_cms.yml` |
-| `25_setup_cm_ldap.yml` | `30_setup_cm_ldap.yml` |
+| `23_setup_cm_krbs.yml` | `30_setup_cm_krbs.yml` |
+| `24_setup_cm_cms.yml` | `28_setup_cm_cms.yml` |
+| `25_setup_cm_ldap.yml` | `29_setup_cm_ldap.yml` |
 | `26_setup_base_cluster.yml` | `31_setup_base_cluster.yml` |
 | `29_setup_monitoring_stack.yml` | `32_setup_monitoring_stack.yml` |
 | `27_setup_ecs_cluster.yml` | `33_setup_ecs_cluster.yml` |

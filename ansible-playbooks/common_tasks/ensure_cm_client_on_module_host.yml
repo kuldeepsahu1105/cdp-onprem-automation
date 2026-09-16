@@ -1,0 +1,88 @@
+---
+- name: Cluster module — select Python on API execution host
+  ansible.builtin.set_fact:
+    _cm_module_python: >-
+      {{
+        ansible_playbook_python
+        if cm_cluster_module_delegate_to == 'localhost'
+        else (
+          hostvars[cm_cluster_module_delegate_to].ansible_python_interpreter
+          | default('/usr/bin/python3')
+        )
+      }}
+
+- name: Cluster module — test Python client dependencies
+  ansible.builtin.command:
+    argv:
+      - "{{ _cm_module_python }}"
+      - -c
+      - |
+        import cm_client
+        import urllib3
+        assert urllib3.__version__.split(".")[0] == "1"
+  register: cm_module_python_dependencies
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Cluster module — install pip on delegated API host
+  ansible.builtin.package:
+    name: python3-pip
+    state: present
+  become: true
+  when:
+    - cm_cluster_module_delegate_to != 'localhost'
+    - cm_module_python_dependencies.rc != 0
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Cluster module — install compatible Python client dependencies
+  when: cm_module_python_dependencies.rc != 0
+  block:
+    - name: Cluster module — detect whether selected Python is a virtual environment
+      ansible.builtin.command:
+        argv:
+          - "{{ _cm_module_python }}"
+          - -c
+          - import sys; print("yes" if sys.prefix != sys.base_prefix else "no")
+      register: _cm_module_python_venv
+      changed_when: false
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Cluster module — install dependencies into selected Python
+      ansible.builtin.command:
+        argv: >-
+          {{
+            [_cm_module_python, '-m', 'pip', 'install']
+            + ([] if _cm_module_python_venv.stdout == 'yes' else ['--user'])
+            + ['cm_client', 'urllib3>=1.26.5,<2']
+          }}
+      register: _cm_module_pip_install
+      changed_when: "'Successfully installed' in (_cm_module_pip_install.stdout | default(''))"
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  rescue:
+    - name: Cluster module — install into externally managed selected Python
+      ansible.builtin.command:
+        argv:
+          - "{{ _cm_module_python }}"
+          - -m
+          - pip
+          - install
+          - --user
+          - --break-system-packages
+          - cm_client
+          - "urllib3>=1.26.5,<2"
+      register: _cm_module_pip_install_external
+      changed_when: "'Successfully installed' in (_cm_module_pip_install_external.stdout | default(''))"
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Cluster module — verify Python client dependencies
+  ansible.builtin.command:
+    argv:
+      - "{{ _cm_module_python }}"
+      - -c
+      - |
+        import cm_client
+        import urllib3
+        assert urllib3.__version__.split(".")[0] == "1"
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"

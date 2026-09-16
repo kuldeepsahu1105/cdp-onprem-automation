@@ -322,7 +322,7 @@ cd ansible-playbooks
 DEPLOY_PHASE=1 ./pvc_setup.sh    # prerequisites
 DEPLOY_PHASE=2 ./pvc_setup.sh    # identity (FreeIPA or AD)
 DEPLOY_PHASE=3 ./pvc_setup.sh    # Cloudera Manager
-DEPLOY_PHASE=4 ./pvc_setup.sh    # Auto-TLS, Kerberos, CMS, base cluster, ECS (when ecs-* groups exist)
+DEPLOY_PHASE=4 ./pvc_setup.sh    # Auto-TLS, CMS, LDAP, Kerberos, then base cluster
 DEPLOY_PHASE=5 ./pvc_setup.sh    # ECS cluster only
 DEPLOY_PHASE=all ./pvc_setup.sh  # full flow
 ----
@@ -348,7 +348,7 @@ Set `CONTROL_MODE=local` when running on a host listed in `inventory.ini`. See l
 | `22` Auto-TLS, `23` Kerberos/KDC, `25` LDAP
 
 | CMS & base cluster
-| `29_setup_cm_cms.yml` (Management Service), `31_setup_base_cluster.yml` (full CDP base stack; see `base_cluster_install_services`)
+| `28_setup_cm_cms.yml` (Management Service), `31_setup_base_cluster.yml` (full CDP base stack; see `base_cluster_install_services`)
 
 | ECS (Data Services)
 | `33_setup_ecs_cluster.yml` (DOCKER + ECS experience cluster; requires base cluster)
@@ -357,7 +357,7 @@ Set `CONTROL_MODE=local` when running on a host listed in `inventory.ini`. See l
 | `99_cleanup.yml` — toggle-driven teardown (see README)
 |===
 
-WARNING: `29_setup_cm_cms.yml` deploys the *Cloudera Management Service* (Service Monitor, Host Monitor, etc.). The CDP *base cluster* is deployed separately via `31_setup_base_cluster.yml`.
+WARNING: `28_setup_cm_cms.yml` deploys the *Cloudera Management Service* (Service Monitor, Host Monitor, etc.). The CDP *base cluster* is deployed separately via `31_setup_base_cluster.yml`.
 
 === Cleanup
 

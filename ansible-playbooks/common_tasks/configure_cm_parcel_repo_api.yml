@@ -1,9 +1,6 @@
 ---
 # Set REMOTE_PARCEL_REPO_URLS via PUT /cm/config (no cloudera.cluster.cm_config).
 
-- name: Parcel repo — resolve HTTPS CM API URL
-  ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
-
 - name: Parcel repo — read current CM configuration
   block:
     - name: Parcel repo — GET /cm/config
@@ -14,11 +11,12 @@
         password: "{{ cm_admin_pass }}"
         force_basic_auth: yes
         validate_certs: no
-        status_code: [200, 301, 303]
+        status_code: [200]
+        follow_redirects: none
         timeout: 60
       register: cm_parcel_config_get
       changed_when: false
-      delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
+      delegate_to: "{{ cm_api_uri_delegate_to }}"
   rescue:
     - name: Parcel repo — fail with scm-server and security group guidance
       ansible.builtin.fail:
@@ -69,7 +67,9 @@
   ansible.builtin.set_fact:
     cm_parcel_repo_urls_candidates: >-
       {{
-        (
+        cm_parcel_repo_urls_override
+        if (cm_parcel_repo_urls_override | default([]) | length > 0)
+        else (
           (
             (
               (cm_parcel_config_get.json['items'] | default([])
@@ -85,15 +85,6 @@
           )
           + ([parcel_repo | default('')] if (parcel_repo is defined) else [])
           + (
-            [parcel_repo_latest_public]
-            if (
-              (cm_parcel_repo_include_latest | default(false) | bool)
-              and (cm_repo_source | default('public')) == 'public'
-              and (parcel_repo_latest_public | default('') | length > 0)
-            )
-            else []
-          )
-          + (
             [ecs_parcel_repo_url]
             if (
               (cm_parcel_repo_include_ecs_parcel | default(true) | bool)
@@ -104,9 +95,7 @@
           + (
             [ecs_parcel_repo_latest_url]
             if (
-              (cm_parcel_repo_include_latest | default(false) | bool)
-              and (cm_parcel_repo_include_ecs_parcel | default(true) | bool)
-              and (cm_repo_source | default('public')) == 'public'
+              (cm_parcel_repo_include_ecs_parcel | default(true) | bool)
               and (ecs_parcel_repo_latest_url | default('') | length > 0)
             )
             else []
@@ -127,6 +116,39 @@
           | unique
         )
       }}
+
+- name: Parcel repo — validate required repository URL matrix
+  ansible.builtin.assert:
+    that:
+      - not (cm_parcel_repo_urls_candidates | select('search', '/cdh[^/]*/latest/') | list | length)
+      - not (cm_parcel_repo_urls_candidates | select('search', '/cdv/latest/') | list | length)
+      - not (cm_parcel_repo_urls_candidates | select('search', '[{}]') | list | length)
+      - >-
+        cm_parcel_repo_urls_override | default([]) | length > 0
+        or parcel_repo in cm_parcel_repo_urls_candidates
+      - >-
+        cm_parcel_repo_urls_override | default([]) | length > 0
+        or
+        not (cm_parcel_repo_include_cdv_parcel | default(true) | bool)
+        or cdv_parcel_repo_url in cm_parcel_repo_urls_candidates
+      - >-
+        cm_parcel_repo_urls_override | default([]) | length > 0
+        or
+        not (cm_parcel_repo_include_cfm_parcel | default(true) | bool)
+        or cfm_parcel_yum_tars_repo_url in cm_parcel_repo_urls_candidates
+      - >-
+        cm_parcel_repo_urls_override | default([]) | length > 0
+        or
+        not (cm_parcel_repo_include_ecs_parcel | default(true) | bool)
+        or (
+          ecs_parcel_repo_url in cm_parcel_repo_urls_candidates
+          and ecs_parcel_repo_latest_url in cm_parcel_repo_urls_candidates
+        )
+    fail_msg: >-
+      Invalid CM parcel repository matrix. Required: pinned CDH, DataViz, and CFM URLs;
+      pinned ECS plus ECS /latest. A non-empty cm_parcel_repo_urls_override is authoritative
+      but cannot contain CDH/DataViz /latest or placeholder URLs.
+      Candidates={{ cm_parcel_repo_urls_candidates }}.
 
 # Drop CM UI placeholders, {latest} substitution segments (invalid URI in CM 7.x verify), and legacy paths.
 - name: Parcel repo — remove invalid or legacy remote parcel repository URLs
@@ -194,12 +216,14 @@
           value: "{{ cm_parcel_repo_urls_effective }}"
         - name: PARCEL_INSTALL_CSD_REPO_URLS
           value: "{{ cm_parcel_install_csd_repo_urls | default(false) | string | lower }}"
-    status_code: [200, 204, 301, 303]
+    status_code: [200, 204]
+    follow_redirects: none
     timeout: 60
   when:
     - cm_parcel_repo_urls_effective | length > 0
     - (cm_parcel_repo_config_changed | bool) or (cm_parcel_install_csd_repo_config_changed | bool)
-  delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
+  changed_when: true
 
 - name: Parcel repo — refresh Cloudera Manager parcel repositories
   ansible.builtin.uri:
@@ -209,11 +233,32 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 201, 202, 204, 301, 303]
+    status_code: [200, 201, 202]
+    follow_redirects: none
     timeout: 60
   when:
     - cm_parcel_repo_urls_effective | length > 0
     - (cm_parcel_repo_config_changed | bool) or (cm_parcel_install_csd_repo_config_changed | bool)
   register: cm_parcel_refresh
-  failed_when: false
-  delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
+  changed_when: true
+
+- name: Parcel repo — require refresh command id
+  ansible.builtin.assert:
+    that:
+      - cm_parcel_refresh.json.id is defined
+    fail_msg: >-
+      refreshParcelRepos returned HTTP {{ cm_parcel_refresh.status | default('unknown') }}
+      without an ApiCommand id.
+  when:
+    - cm_parcel_refresh is defined
+    - not (cm_parcel_refresh.skipped | default(false))
+
+- name: Parcel repo — wait for repository refresh
+  ansible.builtin.import_tasks: wait_cm_api_command.yml
+  vars:
+    cm_api_command_id: "{{ cm_parcel_refresh.json.id }}"
+  when:
+    - cm_parcel_refresh is defined
+    - not (cm_parcel_refresh.skipped | default(false))
+    - cm_parcel_refresh.json.id is defined

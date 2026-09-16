@@ -1,8 +1,8 @@
 {
-    "customCA" : false,
-    "configureAllServices" : "true",
-    "sshPort" : 22,
-    {% if cm_autotls_trust_freeipa_ca_effective | default(use_freeipa_for_crt_mgmt) | bool %}"trustedCaCerts" : "{{ cm_autotls_freeipa_ca_cert_path | default('/etc/ipa/ca.crt') }}",{% endif %}
-    "userName" : "{{ cm_srvr_sudo_user }}",
+    "customCA": false,
+    "configureAllServices": true,
+    "sshPort": 22,
+    {% if cm_autotls_trust_freeipa_ca_effective | default(use_freeipa_for_crt_mgmt) | bool %}"trustedCaCerts": "{{ cm_autotls_freeipa_ca_cert_path | default('/etc/ipa/ca.crt') }}",{% endif %}
+    "userName": "{{ cm_srvr_sudo_user }}",
     "password": "{{ cm_node_sudo_password }}"
 }

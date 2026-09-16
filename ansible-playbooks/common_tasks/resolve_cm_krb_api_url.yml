@@ -1,12 +1,8 @@
 ---
-# HTTPS CM API base for Kerberos REST (PUT /cm/config rejects HTTP :7180 with 303).
+# Prepare the CM API and add the Kerberos account-manager principal.
 
-- name: Kerberos — refresh CM API URL when not resolved in this play
-  ansible.builtin.import_tasks: set_cm_api_url.yml
-  when: cm_api_url | default('') | length == 0
-
-- name: Kerberos — derive HTTPS CM API URL from CM facts
-  ansible.builtin.import_tasks: resolve_cm_krb_api_url_from_facts.yml
+- name: Kerberos — prepare CM security API
+  ansible.builtin.import_tasks: prepare_cm_security_api.yml
 
 - name: Kerberos — build KDC admin principal for CM import
   ansible.builtin.set_fact:

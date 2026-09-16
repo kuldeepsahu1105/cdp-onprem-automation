@@ -15,9 +15,9 @@ This repo pins **`cloudera.cluster` v4.4.0** (see `requirements.yml`). That rele
 | Step | This repo | Labs tag / role |
 |------|-----------|-----------------|
 | 1 | `27_setup_cm_autotls.yml` | `cm_autotls` — generateCmca, CM restart, agent reconcile, optional CMS trust + restart |
-| 2 | `29_setup_cm_cms.yml` | `cm_service` — roles on `cloudera_manager`, 6 GiB Service Monitor, Reports Manager DB |
-| 3 | `30_setup_cm_ldap.yml` | `external_auth` / `cm_config` LDAP keys |
-| 4 | `28_setup_cm_krbs.yml` | `cm_kerberos` — KDC import, bounded `kerberized` wait |
+| 2 | `28_setup_cm_cms.yml` | `cm_service` — roles on `cloudera_manager`, 6 GiB Service Monitor, Reports Manager DB |
+| 3 | `29_setup_cm_ldap.yml` | `external_auth` / `cm_config` LDAP keys |
+| 4 | `30_setup_cm_krbs.yml` | `cm_kerberos` — KDC import, bounded `kerberized` wait |
 
 ### Labs vs this repo (behavior)
 
@@ -327,9 +327,9 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 | CM API on **HTTP :7180** (Auto-TLS off) | Agents must use **`use_tls=0`** | **27** / **25** set `use_tls=0` in `config.ini` when CM reports Auto-TLS disabled — agents cannot speak TLS to an HTTP-only CM server. CMS TLS trust reconcile in **27** is skipped when Auto-TLS is off. |
 | `26_setup_cm_license.yml` | Upload license or trial |
 | `27_setup_cm_autotls.yml` | Enable Auto-TLS; agent reconcile; CMS trust/restart when MGMT already exists |
-| `29_setup_cm_cms.yml` | CMS — run **before** LDAP/Kerberos in `cm_tls` phase |
-| `30_setup_cm_ldap.yml` | LDAP auth (FreeIPA or AD) — run **before** **28** |
-| `28_setup_cm_krbs.yml` | Kerberos (FreeIPA or AD KDC); PUT `/cm/config`, `POST /cm/commands/importAdminCredentials` (query params), CM restart; bounded wait on `kerberosInfo.kerberized` |
+| `28_setup_cm_cms.yml` | CMS — run **before** LDAP/Kerberos in `cm_tls` phase |
+| `29_setup_cm_ldap.yml` | LDAP auth (FreeIPA or AD) — run **before** **30** |
+| `30_setup_cm_krbs.yml` | Kerberos (FreeIPA or AD KDC); PUT `/cm/config`, `POST /cm/commands/importAdminCredentials` (query params), CM restart; bounded wait on `kerberosInfo.kerberized` |
 
 ### Phase 4 — CMS & base cluster
 
@@ -337,19 +337,19 @@ CMS (Management Service) and CDP base cluster are **separate**:
 
 | Playbook | Component | Deploys |
 |---|---|---|
-| `29_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. Run **after** `27_setup_cm_autotls.yml` when Auto-TLS is on. |
+| `28_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. Run **after** `27_setup_cm_autotls.yml` when Auto-TLS is on. |
 
 **CMS troubleshooting (Service Monitor / Avro `Connection refused`):**
 
 | Symptom | Likely cause | Operator checks |
 |---|---|---|
-| `AvroRuntimeException: Connection refused` in CM UI / debug bundles | Service Monitor (firehose) not listening — crashed, OOM, or still starting | `29_setup_cm_cms.yml` now waits on the firehose TCP port; on `cldr-mngr`: `/var/log/cloudera-scm-firehose/`, `/var/run/cloudera-scm-agent/process/*-SERVICEMONITOR*/logs/` |
+| `AvroRuntimeException: Connection refused` in CM UI / debug bundles | Service Monitor (firehose) not listening — crashed, OOM, or still starting | `28_setup_cm_cms.yml` now waits on the firehose TCP port; on `cldr-mngr`: `/var/log/cloudera-scm-firehose/`, `/var/run/cloudera-scm-agent/process/*-SERVICEMONITOR*/logs/` |
 | JMX `smonStatusRequest` / `smonReportRequest` Count 0 | CM cannot reach Service Monitor Avro endpoint | Confirm role **RUNNING** in CM → Management Service; `ss -ltn` on loopback for firehose port from role config |
-| `ImportCredentials - Execution error` in `cloudera-scm-server.log` | TLS / credential store mismatch after Auto-TLS | Ensure MGMT `ssl_client_truststore_*` points at agent `cm-auto-global_truststore.jks` (automation in `configure_cm_cms_autotls_trust.yml`); re-run **27** then **29** |
-| Reports Manager won't start / **29** fails RM DB probe | Postgres `rman` DB missing (partial **23** init) or TCP auth from CM host | **29** runs `ensure_cm_postgres_databases` before probe; re-run **23** or **29**. From CM host: `psql -h <postgres-fqdn> -U rman -d rman`; logs: `/var/log/cloudera-scm-headlamp/` |
+| `ImportCredentials - Execution error` in `cloudera-scm-server.log` | TLS / credential store mismatch after Auto-TLS | Ensure MGMT `ssl_client_truststore_*` points at agent `cm-auto-global_truststore.jks` (automation in `configure_cm_cms_autotls_trust.yml`); re-run **27** then **28** |
+| Reports Manager won't start / **28** fails RM DB probe | Postgres `rman` DB missing (partial **23** init) or TCP auth from CM host | **28** runs `ensure_cm_postgres_databases` before probe; re-run **23** or **28**. From CM host: `psql -h <postgres-fqdn> -U rman -d rman`; logs: `/var/log/cloudera-scm-headlamp/` |
 | **Hosts: Last Heartbeat ~minutes** (all commissioned) | **CM agent** not checking in to CM Server (not a browser refresh issue) | `systemctl status cloudera-scm-agent`; `grep ^server_host= /etc/cloudera-scm-agent/config.ini` (cldr-mngr FQDN); after Auto-TLS `use_tls=1` — re-run **27** or **`reconcile_cm_agents.yml`**; agent log `/var/log/cloudera-scm-agent/cloudera-scm-agent.log`; chrony via **07** |
-| **Hosts: load/disk/memory empty or stale** but heartbeat fresh | **Host Monitor** (CMS) not publishing host metrics | CM → Management Service: Host Monitor **RUNNING**; re-run **29_setup_cm_cms.yml** (after **27** when Auto-TLS on); firehose/agent logs on cldr-mngr |
-| **Hosts: Tags column empty** | Tags are optional; not set at agent install | Enable `cm_host_tags_enabled` (default true) — **29** applies inventory role/env/owner tags via API |
+| **Hosts: load/disk/memory empty or stale** but heartbeat fresh | **Host Monitor** (CMS) not publishing host metrics | CM → Management Service: Host Monitor **RUNNING**; re-run **28_setup_cm_cms.yml** (after **27** when Auto-TLS on); firehose/agent logs on cldr-mngr |
+| **Hosts: Tags column empty** | Tags are optional; not set at agent install | Enable `cm_host_tags_enabled` (default true) — **28** applies inventory role/env/owner tags via API |
 | `31_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
 | `33_setup_ecs_cluster.yml` | ECS cluster | Phased DOCKER + ECS + embedded control plane — see [CDP_ECS_INSTALL.md](CDP_ECS_INSTALL.md) |
 | `10_setup_deployment_portal.yml` | Ops portal bootstrap | Caddy, pgAdmin, optional monitoring on ops host (`auto` → ipaserver else cldr-mngr); run early in phase 1 |

@@ -10,7 +10,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303, 404]
+    status_code: [200, 404]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_service_state_for_restart
   failed_when: false
   changed_when: false
@@ -23,7 +25,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 201, 204, 301, 303]
+    status_code: [200, 201, 204]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cms_restart_api_cmd
   when:
     - cms_service_state_for_restart.status | default(0) | int == 200

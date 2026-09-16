@@ -1,8 +1,5 @@
 ---
-# Kerberos CM settings via REST (credentials import runs once in 28_setup_cm_krbs.yml).
-
-- name: Kerberos — resolve HTTPS CM API URL
-  ansible.builtin.import_tasks: resolve_cm_krb_api_url.yml
+# Kerberos CM settings via REST (credentials import runs once in 30_setup_cm_krbs.yml).
 
 - name: Kerberos — build Kerberos encryption types value
   ansible.builtin.set_fact:
@@ -20,7 +17,9 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cm_krb_config_before
   changed_when: false
 
@@ -76,7 +75,9 @@
     body_format: json
     body:
       items: "{{ cm_krb_desired_items }}"
-    status_code: [200, 204, 301, 303]
+    status_code: [200, 204]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cm_kerberos_api_result
   when: cm_kerberos_config_changed | bool
   changed_when: true
@@ -112,6 +113,8 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 301, 303]
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
   register: cm_krb_info
   changed_when: false

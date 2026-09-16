@@ -2,7 +2,9 @@
 # Normalize tfvars before terraform -var CLI (compact HCL lists, bool coercion).
 
 normalize_tf_bool() {
-  case "${1,,}" in
+  local normalized
+  normalized="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  case "$normalized" in
     true|1|yes|on) printf '%s' 'true' ;;
     *) printf '%s' 'false' ;;
   esac

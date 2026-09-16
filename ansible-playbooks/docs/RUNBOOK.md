@@ -362,17 +362,17 @@ ansible-playbook -i inventory.ini 25_verify_cm.yml
 ansible-playbook -i inventory.ini 26_setup_cm_license.yml
 ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml
 # CM API probes: VPC private_ip from Jenkins (not same-host public EIP); manager IP/FQDN on cldr-mngr. SG must allow 7180/7183 from Jenkins to private IPs.
-ansible-playbook -i inventory.ini 29_setup_cm_cms.yml
-ansible-playbook -i inventory.ini 30_setup_cm_ldap.yml
-ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
+ansible-playbook -i inventory.ini 28_setup_cm_cms.yml
+ansible-playbook -i inventory.ini 29_setup_cm_ldap.yml
+ansible-playbook -i inventory.ini 30_setup_cm_krbs.yml
 ```
 
 **Kerberos encryption types (AES):** Defaults use **AES only** (`krb5_enc_types`: `aes256-cts aes128-cts` in CM; FreeIPA KDC via `/etc/krb5.conf.d/cldr-permitted-enctypes.conf`). RC4 is omitted because Java 17+ and Cloudera recommend AES. Do **not** set `allow_weak_crypto=true` unless you explicitly opt in with `krb5_allow_weak_rc4: true` in group_vars.
 
 **Existing deployments** that already show `rc4-hmac` in the CM Kerberos wizard:
 
-1. Re-run `12_setup_freeipa_server.yml` (or at least the ipaserver play in `28_setup_cm_krbs.yml`) to apply the IPA KDC snippet and restart IPA (`ipactl restart` when configured, else `krb5kdc`).
-2. Re-run `28_setup_cm_krbs.yml` — it reconciles `KRB_ENC_TYPES` via the CM API even when `kerberized=true` (may restart Cloudera Manager).
+1. Re-run `12_setup_freeipa_server.yml` (or at least the ipaserver play in `30_setup_cm_krbs.yml`) to apply the IPA KDC snippet and restart IPA (`ipactl restart` when configured, else `krb5kdc`).
+2. Re-run `30_setup_cm_krbs.yml` — it reconciles `KRB_ENC_TYPES` via the CM API even when `kerberized=true` (may restart Cloudera Manager).
 3. In CM, **regenerate** cluster/service keytabs/principals so new keys use AES (CM Kerberos wizard or cluster Kerberos enablement flow). Principals created under RC4-default KDC settings may retain RC4 long-term keys until regenerated.
 
 If `cm_admin_pass` is not the factory password (`cm_admin_bootstrap_pass`, default `admin`), `25_verify_cm.yml` and later playbooks reset the CM `admin` user to `cm_admin_pass` via the API on first successful connection.
@@ -406,7 +406,7 @@ If CM shows **no CDV/CFM remote repos** after a run, check: (1) `cm_parcel_repo_
 ### 7. Run Phase 4 (CMS + base cluster)
 
 ```bash
-ansible-playbook -i inventory.ini 29_setup_cm_cms.yml
+ansible-playbook -i inventory.ini 28_setup_cm_cms.yml
 ansible-playbook -i inventory.ini 31_setup_base_cluster.yml
 ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml
 ```
@@ -678,9 +678,9 @@ ansible-playbook -i inventory.ini 11_identity_setup.yml
 ansible-playbook -i inventory.ini 24_start_cm.yml
 ansible-playbook -i inventory.ini 26_setup_cm_license.yml
 ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml
-ansible-playbook -i inventory.ini 29_setup_cm_cms.yml
-ansible-playbook -i inventory.ini 30_setup_cm_ldap.yml
-ansible-playbook -i inventory.ini 28_setup_cm_krbs.yml
+ansible-playbook -i inventory.ini 28_setup_cm_cms.yml
+ansible-playbook -i inventory.ini 29_setup_cm_ldap.yml
+ansible-playbook -i inventory.ini 30_setup_cm_krbs.yml
 ```
 
 Continue with CMS and base cluster as in Scenario A step 7.
@@ -758,7 +758,7 @@ Set **`ANSIBLE_GROUP_VARS_YAML`** (or `group_vars/all.yml`) so **`ipaadmin_passw
 | **ZooKeeper** | Base cluster → **ZooKeeper** → at least one **Server** role on `base-workers` (playbook **31** fails if zero servers). Required before Stop Cluster / Deploy Client Config after KDC. |
 | **Portal / URLs** | `jenkins/artifacts/access-urls.txt` and deployment portal index (when enabled). |
 
-Re-run **`CM_TLS_KRB_LDAP`** only after **`CM_INSTALL`** (and **`IDENTITY`** for FreeIPA) if a mid-pipeline fix is needed; for KDC-only issues re-run **`28_setup_cm_krbs.yml`** from `ansible-playbooks/`.
+Re-run **`CM_TLS_KRB_LDAP`** only after **`CM_INSTALL`** (and **`IDENTITY`** for FreeIPA) if a mid-pipeline fix is needed; for KDC-only issues re-run **`30_setup_cm_krbs.yml`** from `ansible-playbooks/`.
 
 ### When to restart `cloudera-scm-server` / `cloudera-scm-agent` (automation gates)
 
@@ -805,7 +805,7 @@ Jenkins: set **`cm_autotls_force_run: true`** in **`ANSIBLE_GROUP_VARS_YAML`** a
 
 ### Alignment with cloudera-labs `cm_autotls` / `cm_kerberos` reference pattern
 
-A user-supplied "working" reference playbook pattern (Caddy `proxy_host` CM API, `cloudera.cluster.cm_autotls` / `cm_kerberos` **modules** with `trusted_ca_certs`/`state: present`, restart-then-Caddy-flip order) was compared against `27_setup_cm_autotls.yml` / `28_setup_cm_krbs.yml`. Findings:
+A user-supplied "working" reference playbook pattern (Caddy `proxy_host` CM API, `cloudera.cluster.cm_autotls` / `cm_kerberos` **modules** with `trusted_ca_certs`/`state: present`, restart-then-Caddy-flip order) was compared against `27_setup_cm_autotls.yml` / `30_setup_cm_krbs.yml`. Findings:
 
 | Reference pattern | This repo | Verdict |
 |---|---|---|
@@ -813,7 +813,7 @@ A user-supplied "working" reference playbook pattern (Caddy `proxy_host` CM API,
 | CM API via Caddy `proxy_host` :80 (HTTP→CM :7180, then :7183 after Auto-TLS) | CM/ECS are **not** on Caddy by design (`caddy_vhost_urls.j2` serves portal/pgAdmin/monitoring/IPA only) — direct `https://<cldr-mngr>:7183` / `:7180`. See `.cursor/LEARNINGS.md` and "CM UI hostname" note above. | **Architectural gap, left as-is.** Fronting CM through Caddy would need `cm_config_api_via_caddy_proxy`-style wiring end-to-end (frontend_url, module_defaults host/port) beyond this fix's scope. Flagged for the user — see below. |
 | CA bundle on CM host (FreeIPA CA + optional Caddy self-signed) trusted **before** Auto-TLS via `trustedCaCerts` | `auto-tls*.json.j2` already emits `trustedCaCerts` from `use_freeipa_for_crt_mgmt`, but the default was hardcoded `false` regardless of identity provider — FreeIPA deployments silently got **no** IPA CA trust in the Auto-TLS truststore. | **Fixed.** `use_freeipa_for_crt_mgmt` now defaults to `identity_provider_effective == 'freeipa'` (still overridable via group_vars / `ANSIBLE_GROUP_VARS_YAML` — added to `jenkins/ansible-group-vars-allowed-keys.yaml`). New `common_tasks/resolve_cm_autotls_trusted_ca.yml` `stat`s `/etc/ipa/ca.crt` on the CM host first and disables the flag (with a warning) instead of sending generateCmca a path that does not exist. Caddy's self-signed cert is **not** added — Caddy does not front CM here, so there is no matching cert to trust. |
 | `auto_tls_changed` → restart agents → restart scm-server (wait `:7183`) → flip Caddy frontend → restart CMS | `27_setup_cm_autotls.yml`: restart scm-server → wait `/cm/version` healthy → restart the CM host's own agent → cluster-wide agent reconcile (`hosts: all:!ipaserver`) → ensure agent truststore (`cm-auto-global_truststore.jks`) → reconcile CMS trust + restart CMS. No Caddy flip (no CM Caddy frontend to flip). | **Kept as-is.** This ordering (server → local agent → cluster agents → truststore → CMS) was hardened across many prior fixes (`fix-cms-truststore-stat`, `fix-autotls-truststore-on-cm`, `cms-trust-respect-autotls-intent`, etc.) for CM's actual truststore-materialization behavior; it is not a straight port of the generic Labs role's handler order and changing it risks reintroducing already-fixed bugs. |
-| `cloudera.cluster.cm_kerberos` (`kdc_host`, `kdc_admin_host`, `realm`, IPA `state: present`) | `28_setup_cm_krbs.yml` PUTs `/cm/config` (`KDC_HOST`, `KDC_ADMIN_HOST`, `SECURITY_REALM`, `KDC_TYPE`, `KRB_ENC_TYPES`) then POSTs `/cm/commands/importAdminCredentials` over **HTTPS `:7183`** — same CM API the reference module would call. Traced the "already configured" gates (`kerberos_already_configured`, `cm_kerberos_config_changed`): both force the PUT + restart + import path whenever CM reports `kerberized=false` — **no path skips the import when Kerberos is actually not enabled.** | **No functional gap found**; kept as-is. If `kerberized` still reads `false` after a run, it is almost always one of: KDC port 88 unreachable from the CM host (`preflight_kdc_reachable.yml` fails first), wrong `ipaadmin_password`/`ad_kdc_admin_password`, or `importAdminCredentials` HTTP failure logged in `cloudera-scm-server.log` — see the **`kerberized=false`** troubleshooting row below and `verify_cm_kerberos_enabled.yml`'s fail-fast diagnostics, which print the exact CM API URL, response, and cause to check. |
+| `cloudera.cluster.cm_kerberos` (`kdc_host`, `kdc_admin_host`, `realm`, IPA `state: present`) | `30_setup_cm_krbs.yml` PUTs `/cm/config` (`KDC_HOST`, `KDC_ADMIN_HOST`, `SECURITY_REALM`, `KDC_TYPE`, `KRB_ENC_TYPES`) then POSTs `/cm/commands/importAdminCredentials` over **HTTPS `:7183`** — same CM API the reference module would call. Traced the "already configured" gates (`kerberos_already_configured`, `cm_kerberos_config_changed`): both force the PUT + restart + import path whenever CM reports `kerberized=false` — **no path skips the import when Kerberos is actually not enabled.** | **No functional gap found**; kept as-is. If `kerberized` still reads `false` after a run, it is almost always one of: KDC port 88 unreachable from the CM host (`preflight_kdc_reachable.yml` fails first), wrong `ipaadmin_password`/`ad_kdc_admin_password`, or `importAdminCredentials` HTTP failure logged in `cloudera-scm-server.log` — see the **`kerberized=false`** troubleshooting row below and `verify_cm_kerberos_enabled.yml`'s fail-fast diagnostics, which print the exact CM API URL, response, and cause to check. |
 
 **Action needed from the user (not implemented here):** `cm_config_api_via_caddy_proxy` and `cm_apply_caddy_frontend_url` already exist in `group_vars/all.yml` but are marked **Deprecated** (`docs/REFERENCE.md`) — CM-behind-Caddy was tried previously and this repo settled on direct `:7180`/`:7183` access instead (see `.cursor/LEARNINGS.md` "CM UI hostname ... is Caddy-only" note). If you still want the reference's Caddy `proxy_host` :80 pattern for CM, that is a deliberate un-deprecation + Caddy vhost/`frontend_url` wiring change, not a bug fix — flag it explicitly and we can scope that separately rather than silently re-enabling a path this codebase already moved away from.
 
@@ -887,11 +887,11 @@ See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 | **FreeIPA client partial install** (`default.conf` missing; **`sysrestore.index`** / **`sysrestore.state`** or **`/etc/ipa/*`** fragments; retry says *already configured*) | On worker: **`ipa-client-install --uninstall --unattended`** (or re-run playbook **16**, which detects debris via **`detect_ipa_client_install_state.yml`**). Server-side **`sanitize_ipa_paths_before_fresh_install.yml`** applies to **ipaserver** playbook **12** only, not clients. |
 | Stale `default.conf` (`ipactl` rc=4 / "IPA is not configured", install was skipped) | Playbook **12** removes lone stale `/etc/ipa/default.conf` when no partial debris, then runs `ipa-server-install`. Manual: `rm -f /etc/ipa/default.conf` only if `ipactl status` shows not configured and there is no `/etc/ipa/ca.crt` / DS data; then re-run playbook **12**. |
 | FreeIPA configured but stopped (`default.conf` present, `ipactl` healthy, services not RUNNING) | Playbook **12** skips `ipa-server-install` and runs `ensure_ipa_kdc_services.yml` (`systemctl start ipa`, then `ipactl start` if needed). Manual: `systemctl start ipa` or `ipactl start` on ipaserver. |
-| CM Kerberos/KDC not enabled (`kerberized=false`) | Playbook **28** waits up to `cm_krb_kerberized_wait_retries × cm_krb_kerberized_wait_delay` (default 300s) then fails with `kerberosInfo` details. **FreeIPA:** on ipaserver `ipactl status` (krb5kdc RUNNING); re-run `12_setup_freeipa_server.yml` then `28_setup_cm_krbs.yml`. **AD:** set `ad_kdc_host` (not empty). **CM:** confirm `importAdminCredentials` in `cloudera-scm-server.log`; Kerberos REST must use HTTPS `:7183` when Auto-TLS is on. **Manual UI:** Administration → Settings → Kerberos — set realm, KDC type/host, import Account Manager principal/password, Save, restart CM Server. |
-| CM Kerberos UI warns on **rc4-hmac** / weak crypto | Set `krb5_enc_types` to `aes256-cts aes128-cts` (default). Re-run `12` + `28`; regenerate Kerberos credentials in CM. See **Kerberos encryption types (AES)** above. |
-| **ZooKeeper has 0 Servers** (Stop Cluster / Deploy Client Config after KDC) | ZK **service** exists but no **Server** roles — common on clusters created before host template `service: ZOOKEEPER` fix or when **31** skipped create. Add **Server** on `base-workers` in CM, or delete base cluster and re-run **31**. See **ZooKeeper placement** under step 7. Kerberos enablement (`28_setup_cm_krbs.yml` / manual KDC) is separate; fix ZK roles first. **Stop Cluster** can remain blocked until ZK has at least one Server role. |
+| CM Kerberos/KDC not enabled (`kerberized=false`) | Playbook **30** waits up to `cm_krb_kerberized_wait_retries × cm_krb_kerberized_wait_delay` (default 300s) then fails with `kerberosInfo` details. **FreeIPA:** on ipaserver `ipactl status` (krb5kdc RUNNING); re-run `12_setup_freeipa_server.yml` then `30_setup_cm_krbs.yml`. **AD:** set `ad_kdc_host` (not empty). **CM:** confirm `importAdminCredentials` in `cloudera-scm-server.log`; Kerberos REST must use HTTPS `:7183` when Auto-TLS is on. **Manual UI:** Administration → Settings → Kerberos — set realm, KDC type/host, import Account Manager principal/password, Save, restart CM Server. |
+| CM Kerberos UI warns on **rc4-hmac** / weak crypto | Set `krb5_enc_types` to `aes256-cts aes128-cts` (default). Re-run `12` + `30`; regenerate Kerberos credentials in CM. See **Kerberos encryption types (AES)** above. |
+| **ZooKeeper has 0 Servers** (Stop Cluster / Deploy Client Config after KDC) | ZK **service** exists but no **Server** roles — common on clusters created before host template `service: ZOOKEEPER` fix or when **31** skipped create. Add **Server** on `base-workers` in CM, or delete base cluster and re-run **31**. See **ZooKeeper placement** under step 7. Kerberos enablement (`30_setup_cm_krbs.yml` / manual KDC) is separate; fix ZK roles first. **Stop Cluster** can remain blocked until ZK has at least one Server role. |
 | CM **Hosts** — **Last Heartbeat** stale (~minutes), all **Commissioned** | **Agent → CM Server** path (heartbeat is not Host Monitor). Check `cloudera-scm-agent`, `server_host` FQDN, `use_tls` after **27**, SG **7182/7183** agent→manager. Re-run **`reconcile_cm_agents.yml`** or **27** (agent reconcile play). Chrony: **07_prereq_setup_002.yml**. |
-| CM **Hosts** — **Tags** empty | Expected until tags are set (automation: **29** with `cm_host_tags_enabled`, or CM UI). |
+| CM **Hosts** — **Tags** empty | Expected until tags are set (automation: **28** with `cm_host_tags_enabled`, or CM UI). |
 | CM **Hosts** — load/disk/memory sparse | **Host Monitor** (CMS). Re-run **29** when Service Monitor / Host Monitor unhealthy; see REFERENCE CMS troubleshooting. |
 | DNS not persisting on Ubuntu | DNS is applied via netplan — see [REFERENCE.md](REFERENCE.md#dns-configuration) |
 | CM install fails on Ubuntu | Set `cm_repo_username` / `cm_repo_password`; use `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr) |

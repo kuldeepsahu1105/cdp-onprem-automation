@@ -1,0 +1,103 @@
+---
+- name: IPAServer operator — install PostgreSQL client
+  ansible.builtin.package:
+    name: "{{ 'postgresql' if ansible_os_family == 'RedHat' else 'postgresql-client' }}"
+    state: present
+
+- name: IPAServer operator — check Ansible installation
+  ansible.builtin.command: ansible --version
+  register: _ipaserver_ansible_check
+  changed_when: false
+  failed_when: false
+
+- name: IPAServer operator — install Ansible from OS packages
+  when: _ipaserver_ansible_check.rc != 0
+  block:
+    - name: IPAServer operator — install ansible-core package
+      ansible.builtin.package:
+        name: ansible-core
+        state: present
+  rescue:
+    - name: IPAServer operator — install ansible-core with active Python
+      ansible.builtin.pip:
+        name: ansible-core
+        executable: pip3
+
+- name: IPAServer operator — build controller key candidates
+  ansible.builtin.set_fact:
+    _ipaserver_key_candidates: >-
+      {{
+        (
+          [lookup('env', 'ANSIBLE_PRIVATE_KEY')]
+          if lookup('env', 'ANSIBLE_PRIVATE_KEY') | length > 0
+          else []
+        )
+        + [
+            (
+              ansible_ssh_private_key_file
+              if ansible_ssh_private_key_file.startswith('/')
+              else playbook_dir ~ '/' ~ (ansible_ssh_private_key_file | regex_replace('^\\./', ''))
+            ),
+            playbook_dir ~ '/sshkey.pem'
+          ]
+        + query('fileglob', playbook_dir ~ '/*.pem')
+        | unique
+      }}
+
+- name: IPAServer operator — inspect controller key candidates
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ _ipaserver_key_candidates }}"
+  register: _ipaserver_key_candidate_stats
+  delegate_to: localhost
+  become: false
+
+- name: IPAServer operator — select controller private key
+  ansible.builtin.set_fact:
+    _ipaserver_private_key_source: >-
+      {{
+        _ipaserver_key_candidate_stats.results
+        | selectattr('stat.exists')
+        | selectattr('stat.isreg')
+        | map(attribute='item')
+        | first
+        | default('')
+      }}
+
+- name: IPAServer operator — require controller private key
+  ansible.builtin.assert:
+    that:
+      - _ipaserver_private_key_source | length > 0
+    fail_msg: >-
+      No Ansible private key was found on the controller. Set ANSIBLE_PRIVATE_KEY,
+      ansible_ssh_private_key_file, or place sshkey.pem in ansible-playbooks/.
+
+- name: IPAServer operator — copy inventory to root home
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/inventory.ini"
+    dest: /root/inventory.ini
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: IPAServer operator — copy private key to root home
+  ansible.builtin.copy:
+    src: "{{ _ipaserver_private_key_source }}"
+    dest: /root/sshkey.pem
+    owner: root
+    group: root
+    mode: "0400"
+  no_log: true
+
+- name: IPAServer operator — verify installed commands and files
+  ansible.builtin.command:
+    argv:
+      - /bin/bash
+      - -c
+      - >-
+        ansible --version >/dev/null
+        && psql --version >/dev/null
+        && test -s /root/inventory.ini
+        && test -s /root/sshkey.pem
+        && test "$(stat -c %a /root/sshkey.pem)" = "400"
+  changed_when: false
