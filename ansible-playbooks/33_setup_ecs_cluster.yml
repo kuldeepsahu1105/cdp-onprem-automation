@@ -172,7 +172,7 @@
               | list
               | last
               | default(
-                ecs_parcel_versions.json.items | default([]) | map(attribute='version') | list | last,
+                ecs_parcel_versions.json['items'] | default([]) | map(attribute='version') | list | last,
                 true
               )
             )

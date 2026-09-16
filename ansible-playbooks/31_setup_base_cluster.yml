@@ -189,7 +189,7 @@
         base_cluster_partial_empty: >-
           {{
             existing_cluster.status == 200
-            and (existing_cluster_hosts.json.items | default([]) | length == 0)
+            and (existing_cluster_hosts.json['items'] | default([]) | length == 0)
           }}
 
     - name: Report empty partial base cluster recovery
