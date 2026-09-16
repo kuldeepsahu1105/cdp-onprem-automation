@@ -23,6 +23,9 @@ End-to-end automation for provisioning AWS infrastructure and deploying Cloudera
 | link:ansible-playbooks/docs/RUNBOOK.md[ansible-playbooks/docs/RUNBOOK.md]
 | *Quick runbook* — prepare, validate, deploy, verify, and clean up
 
+| link:ansible-playbooks/docs/CONFIGURATION.md[ansible-playbooks/docs/CONFIGURATION.md]
+| *Configuration guide* — every `config.yml` option, accepted values, effects, and AD credential inputs
+
 | link:ansible-playbooks/docs/OPERATIONS_GUIDE.md[ansible-playbooks/docs/OPERATIONS_GUIDE.md]
 | *Detailed operations* — controller/network scenarios, FreeIPA/AD, recovery, and troubleshooting
 
@@ -301,6 +304,7 @@ All Ansible automation lives under `ansible-playbooks/`.
 
 * link:ansible-playbooks/README.md[ansible-playbooks/README.md] — quick start and defaults
 * link:ansible-playbooks/docs/RUNBOOK.md[RUNBOOK.md] — short deployment runbook
+* link:ansible-playbooks/docs/CONFIGURATION.md[CONFIGURATION.md] — all operator configuration choices and credential inputs
 * link:ansible-playbooks/docs/OPERATIONS_GUIDE.md[OPERATIONS_GUIDE.md] — detailed operations and troubleshooting
 * link:ansible-playbooks/docs/REFERENCE.md[REFERENCE.md] — detailed playbook and variable reference
 

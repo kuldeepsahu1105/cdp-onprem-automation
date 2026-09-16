@@ -63,6 +63,27 @@ Parameter help after **REFRESH_JENKINSFILE=YES**:
 - **`PIPELINE_STAGES`** — short checkbox help line + per-option hints via Extended Choice `descriptionPropertyValue` (plugin-dependent; some UIs only show these in job configuration).
 - Other parameters — `description` fields on boolean/string/choice params (security group, `ALLOWED_PORTS`, etc.).
 
+### Active Directory credentials
+
+For an AD deployment, set non-secret topology (`identity_provider`, `ad_domain`,
+`ad_kdc_host`, DNS/search bases) in `config.yml` or
+`ANSIBLE_GROUP_VARS_YAML`, then use the masked Jenkins parameters:
+
+| Jenkins parameter | Ansible variable | Purpose/fallback |
+|---|---|---|
+| `AD_JOIN_USER` | `ad_join_user` | Realm-join account; empty uses `config.yml` |
+| `AD_JOIN_PASSWORD` | `ad_join_password` | Realm-join secret; required for AD |
+| `AD_KDC_ADMIN_USER` | `ad_kdc_admin_user` | CM Kerberos account manager; empty uses `AD_JOIN_USER` |
+| `AD_KDC_ADMIN_PASSWORD` | `ad_kdc_admin_password` | CM credential import; empty uses `AD_JOIN_PASSWORD` |
+| `AD_LDAP_BIND_DN` | `ad_ldap_bind_dn` | Full CM LDAP search bind DN; empty uses `config.yml` |
+| `AD_LDAP_BIND_PASSWORD` | `ad_ldap_bind_password` | CM LDAP search secret; empty uses `AD_JOIN_PASSWORD` |
+
+The dedicated password parameters override values from
+`ANSIBLE_GROUP_VARS_YAML` and avoid displaying secrets in the multiline
+configuration field. See
+[`CONFIGURATION.md`](../ansible-playbooks/docs/CONFIGURATION.md#active-directory-credentials)
+for CLI/Vault input and the complete option reference.
+
 **Copy-paste `PIPELINE_STAGES` (full deploy through ECS):**
 
 ```

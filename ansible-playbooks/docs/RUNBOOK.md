@@ -5,6 +5,7 @@ documents for configuration details and troubleshooting:
 
 | Document | Use it for |
 |---|---|
+| [CONFIGURATION.md](CONFIGURATION.md) | Every `config.yml` option, accepted values, behavior, and AD credential inputs |
 | [OPERATIONS_GUIDE.md](OPERATIONS_GUIDE.md) | Controller/network scenarios, FreeIPA and AD procedures, portal verification, recovery, and troubleshooting |
 | [REFERENCE.md](REFERENCE.md) | Playbooks, variables, inventory groups, repositories, services, and cleanup controls |
 | [RUN_ORDER.md](RUN_ORDER.md) | Exact playbook and Jenkins execution order |

@@ -220,6 +220,7 @@ ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml \
 | [READme.adoc](READme.adoc) | **AWS users** | Terraform wrappers, `.tfvars.env`, instance groups, one-click deployment |
 | [ansible-playbooks/README.md](ansible-playbooks/README.md) | **Ansible users** | Quick start, defaults, phase summary |
 | [ansible-playbooks/docs/RUNBOOK.md](ansible-playbooks/docs/RUNBOOK.md) | **Operators** | Short prepare, validate, deploy, verify, and cleanup path |
+| [ansible-playbooks/docs/CONFIGURATION.md](ansible-playbooks/docs/CONFIGURATION.md) | **Configuration** | Every `config.yml` option, accepted values, effects, and AD credential inputs |
 | [ansible-playbooks/docs/OPERATIONS_GUIDE.md](ansible-playbooks/docs/OPERATIONS_GUIDE.md) | **Detailed operations** | Controller/network scenarios, identity, portal verification, recovery, and troubleshooting |
 | [ansible-playbooks/docs/REFERENCE.md](ansible-playbooks/docs/REFERENCE.md) | **Detailed reference** | All playbooks, variables, inventory groups, DNS, repo modes, cleanup toggles |
 
@@ -296,6 +297,7 @@ cdp-onprem-automation/
 │   ├── README.md                 # Ansible quick start
 │   ├── docs/
 │   │   ├── RUNBOOK.md            # Short operator deployment path
+│   │   ├── CONFIGURATION.md      # Config options and credential inputs
 │   │   ├── OPERATIONS_GUIDE.md   # Detailed operations and troubleshooting
 │   │   └── REFERENCE.md          # Variables, playbooks, inventory
 │   ├── config.yml                # Operator-managed deployment settings

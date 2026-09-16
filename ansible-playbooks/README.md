@@ -43,6 +43,7 @@ For the shortest deployment sequence and cleanup path, see the runbook below.
 | Document | Purpose |
 |---|---|
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | **Quick runbook** — prepare, validate, deploy, verify, and clean up |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | **Configuration guide** — every `config.yml` option, accepted values, effects, and credential inputs |
 | [docs/OPERATIONS_GUIDE.md](docs/OPERATIONS_GUIDE.md) | **Detailed operations** — controller/network scenarios, FreeIPA/AD, portal verification, recovery, and troubleshooting |
 | [docs/RUN_ORDER.md](docs/RUN_ORDER.md) | **Run order** — Jenkins / `pvc_setup.sh` sequence (unique numbers 10–35) |
 | [docs/REFERENCE.md](docs/REFERENCE.md) | **Detailed reference** — every playbook, variable, inventory group, DNS behavior, repo modes, cleanup toggles |

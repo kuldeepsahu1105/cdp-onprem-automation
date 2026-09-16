@@ -2,7 +2,8 @@
 
 Detailed controller, networking, deployment, recovery, and troubleshooting
 guide for Cloudera Private Cloud. For the concise deployment path, start with
-[RUNBOOK.md](RUNBOOK.md).
+[RUNBOOK.md](RUNBOOK.md). For accepted values and effects of every
+operator-facing setting, use [CONFIGURATION.md](CONFIGURATION.md).
 
 All commands assume you are in the `ansible-playbooks/` directory:
 
