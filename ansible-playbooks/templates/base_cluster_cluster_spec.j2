@@ -42,10 +42,14 @@ services:
   - name: ozone
     type: OZONE
     display_name: Ozone
+    config:
+      ozone.service.id: "{{ base_cluster_ozone_service_id }}"
+      ozone.scm.primordial.node.id: "{{ base_master_fqdn }}"
     role_groups:
       - type: OZONE_MANAGER
       - type: STORAGE_CONTAINER_MANAGER
       - type: OZONE_DATANODE
+      - type: OZONE_RECON
       - type: GATEWAY
 {% endif %}
 {% if svc.yarn | default(true) %}
@@ -103,6 +107,11 @@ services:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
       mapreduce_yarn_service: "{{ 'yarn' if svc.yarn | default(true) else '' }}"
+      hive_metastore_database_host: "{{ base_cluster_database_host }}"
+      hive_metastore_database_port: {{ base_cluster_database_port }}
+      hive_metastore_database_type: postgresql
+      hive_metastore_database_name: "{{ base_cluster_hive_database_name }}"
+      hive_metastore_database_user: "{{ base_cluster_hive_database_user }}"
 {% if svc.ranger | default(true) %}
       ranger_service: ranger
 {% endif %}
@@ -256,6 +265,11 @@ services:
     display_name: Ranger
     config:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+      ranger_database_host: "{{ base_cluster_database_host }}"
+      ranger_database_port: {{ base_cluster_database_port }}
+      ranger_database_type: postgresql
+      ranger_database_name: "{{ base_cluster_ranger_database_name }}"
+      ranger_database_user: "{{ base_cluster_ranger_database_user }}"
 {% if svc.solr | default(false) %}
       solr_service: solr
 {% endif %}
@@ -307,6 +321,12 @@ services:
   - name: knox
     type: KNOX
     display_name: Knox
+    config:
+      knox_gateway_database_host: "{{ base_cluster_database_host }}"
+      knox_gateway_database_port: {{ base_cluster_database_port }}
+      knox_gateway_database_type: postgresql
+      knox_gateway_database_name: "{{ base_cluster_knox_database_name }}"
+      knox_gateway_database_user: "{{ base_cluster_knox_database_user }}"
     role_groups:
       - type: KNOX_GATEWAY
 {% endif %}
@@ -337,6 +357,8 @@ host_templates:
         type: OZONE_MANAGER
       - service: OZONE
         type: STORAGE_CONTAINER_MANAGER
+      - service: OZONE
+        type: OZONE_RECON
 {% endif %}
 {% if svc.yarn | default(true) %}
       - service: YARN

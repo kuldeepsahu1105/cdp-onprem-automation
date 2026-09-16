@@ -426,8 +426,14 @@ When a base cluster with the configured name already exists, playbook **31**
 reads its current state, assigned hosts, and service types. A zero-host partial
 cluster left by an interrupted create is deleted and recreated. A populated
 cluster is never deleted: all requested service types must already exist, then
-the cluster is started if necessary and CM runs
+required Ozone/Hive/Ranger/Knox settings and the Ozone Recon role are reconciled,
+the cluster is started if necessary, and CM runs
 `deployClientConfigsAndRefresh`. The final cluster state and health are printed.
+
+First Run failures are expanded from the parent CM command into failed service
+commands and their child validation messages in Jenkins. Database and initial
+service passwords use the `base_cluster_*` variables and should be overridden
+through `ANSIBLE_GROUP_VARS_YAML` or an Ansible vault.
 
 **ZooKeeper placement:** When `base_cluster_install_services.zookeeper` is true (default), the **Worker** host template assigns **ZooKeeper Server** to every host in `base_cluster_worker_group` (`base-workers`). Masters use the **Master** template only. Labs typically run one or three ZK servers on workers; Cloudera Manager requires at least one Server role before Stop Cluster / Deploy Client Config (including after Kerberos/KDC is enabled manually or via playbook **28**).
 

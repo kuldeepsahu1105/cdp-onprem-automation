@@ -105,6 +105,26 @@ base_cluster_worker_group: base-workers
 base_cluster_module_async_timeout: 7500
 base_cluster_module_poll_interval: 15
 
+# Required CDP service settings. Supply production secrets through
+# ANSIBLE_GROUP_VARS_YAML or an Ansible vault.
+base_cluster_database_host: "{{ postgres_host_fqdn }}"
+base_cluster_database_port: "{{ postgres_port }}"
+base_cluster_hive_database_name: hive
+base_cluster_hive_database_user: hive
+base_cluster_hive_database_password: hive
+base_cluster_ranger_database_name: ranger
+base_cluster_ranger_database_user: rangeradmin
+base_cluster_ranger_database_password: rangeradmin
+base_cluster_ranger_admin_password: "{{ base_cluster_ranger_database_password }}"
+base_cluster_ranger_keyadmin_password: "{{ base_cluster_ranger_admin_password }}"
+base_cluster_ranger_tagsync_password: "{{ base_cluster_ranger_admin_password }}"
+base_cluster_ranger_usersync_password: "{{ base_cluster_ranger_admin_password }}"
+base_cluster_knox_database_name: knox
+base_cluster_knox_database_user: knox
+base_cluster_knox_database_password: knox
+base_cluster_knox_master_secret: "{{ base_cluster_knox_database_password }}"
+base_cluster_ozone_service_id: o3service1
+
 base_cluster_install_services:
   core_settings: true
   zookeeper: true
