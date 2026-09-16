@@ -78,3 +78,9 @@
       Verify [ipaserver] inventory, /etc/ipa/ca.crt on the IPA server, and SSH access to both hosts.
   when:
     - cm_autotls_trust_freeipa_ca_effective | bool
+
+- name: Auto-TLS trusted CA — verify complete FreeIPA enrollment on CM host
+  ansible.builtin.include_tasks: verify_freeipa_client_enrollment.yml
+  vars:
+    freeipa_client_validation_host: "{{ cm_manager_inventory_host }}"
+  when: cm_autotls_trust_freeipa_ca_effective | bool
