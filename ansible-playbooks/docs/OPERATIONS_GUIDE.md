@@ -431,11 +431,11 @@ the cluster is started if necessary, and CM runs
 `deployClientConfigsAndRefresh`. The final cluster state and health are printed.
 
 First Run failures are expanded from the parent CM command into failed service
-commands and their child validation messages in Jenkins. After required
-configuration is repaired, playbook **31** retries CM's failed First Run command
-rather than submitting a new command that could attempt to format an already
-formatted NameNode. Database and initial service passwords use the
-`base_cluster_*` variables and should be overridden through
+commands and their child validation messages in Jenkins. First Run is submitted
+only for a newly created cluster. Existing populated clusters always use CM's
+normal cluster start command, even after configuration repair, so an already
+formatted NameNode is never formatted again. Database and initial service
+passwords use the `base_cluster_*` variables and should be overridden through
 `ANSIBLE_GROUP_VARS_YAML` or an Ansible vault. Ranger initial passwords must
 contain letters and numbers and be at least eight characters long.
 

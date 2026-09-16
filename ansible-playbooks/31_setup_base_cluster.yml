@@ -562,108 +562,21 @@
             or base_cluster_ozone_role_create.changed | default(false) | bool
           }}
 
-    - name: Find failed First Run commands
-      ansible.builtin.uri:
-        url: >-
-          {{ cm_cluster_module_api_url
-          }}/commands/commands?view=summary&name=First%20Run&success=false&limit=50
-        method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: yes
-        validate_certs: no
-        status_code: [200]
-        follow_redirects: none
-      register: base_cluster_failed_first_runs
-      changed_when: false
-      when:
-        - not (base_cluster_create_required | bool)
-        - base_cluster_required_config_changed | bool
-      delegate_to: "{{ cm_cluster_module_delegate_to }}"
-
-    - name: Read failed First Run details
-      ansible.builtin.uri:
-        url: "{{ cm_cluster_module_api_url }}/commands/{{ item.id }}?view=full"
-        method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: yes
-        validate_certs: no
-        status_code: [200]
-        follow_redirects: none
-      loop: "{{ base_cluster_failed_first_runs.json['items'] | default([]) }}"
-      loop_control:
-        label: "{{ item.id }}"
-      register: base_cluster_failed_first_run_details
-      changed_when: false
-      when:
-        - base_cluster_failed_first_runs.status | default(0) | int == 200
-      delegate_to: "{{ cm_cluster_module_delegate_to }}"
-
-    - name: Select retryable First Run
-      ansible.builtin.set_fact:
-        base_cluster_retryable_first_run_id: >-
-          {%- set candidates = [] -%}
-          {%- for result in base_cluster_failed_first_run_details.results | default([]) -%}
-            {%- set command = result.json | default({}) -%}
-            {%- set cluster_match = namespace(found=false) -%}
-            {%- for child in command.get('children', {}).get('items', []) -%}
-              {%- set child_cluster =
-                child.get('clusterRef', {}).get(
-                  'clusterName',
-                  child.get('serviceRef', {}).get('clusterName', '')
-                )
-              -%}
-              {%- if child_cluster == cdh_basecluster_name -%}
-                {%- set cluster_match.found = true -%}
-              {%- endif -%}
-            {%- endfor -%}
-            {%- if
-              cluster_match.found
-              and not (command.get('active', false) | bool)
-              and not (command.get('success', false) | bool)
-              and command.get('canRetry', false) | bool
-            -%}
-              {%- set _ = candidates.append(command.id | int) -%}
-            {%- endif -%}
-          {%- endfor -%}
-          {{ candidates | max if candidates | length > 0 else '' }}
-
-    - name: Check failed First Run can be retried
-      ansible.builtin.assert:
-        that:
-          - base_cluster_retryable_first_run_id | string | length > 0
-        fail_msg: >-
-          Required cluster configuration changed, but CM has no retryable failed First Run
-          command for {{ cdh_basecluster_name }}. Refusing to submit a new First Run because
-          it could try to format an already-formatted NameNode.
-      when:
-        - not (base_cluster_create_required | bool)
-        - base_cluster_required_config_changed | bool
-
     - name: Determine cluster initialization action
       ansible.builtin.set_fact:
         base_cluster_first_run_required: >-
           {{ base_cluster_create_required | bool }}
-        base_cluster_first_run_retry_required: >-
-          {{
-            not (base_cluster_create_required | bool)
-            and base_cluster_required_config_changed | bool
-          }}
 
     - name: Show cluster startup wait
       ansible.builtin.debug:
         msg: >-
-          Cluster configuration is complete. {{
-            'Starting' if base_cluster_first_run_required | bool else 'Retrying'
-          }} CM First Run; Jenkins will poll every
+          Cluster configuration is complete. Starting CM First Run; Jenkins will poll every
           {{ base_cluster_module_poll_interval }}s until CM finishes or the bounded wait expires.
-      when:
-        - base_cluster_first_run_required | bool or base_cluster_first_run_retry_required | bool
+      when: base_cluster_first_run_required | bool
 
     - name: Start {{ 'new' if base_cluster_create_required | bool else 'existing' }} base cluster with name {{ cdh_basecluster_name }}
       block:
-        - name: Submit cluster First Run or retry
+        - name: Submit cluster First Run or start
           ansible.builtin.uri:
             url: >-
               {{
@@ -671,7 +584,7 @@
                 ~ (
                   '/clusters/' ~ cdh_basecluster_name ~ '/commands/firstRun'
                   if base_cluster_first_run_required | bool
-                  else '/commands/' ~ base_cluster_retryable_first_run_id ~ '/retry'
+                  else '/clusters/' ~ cdh_basecluster_name ~ '/commands/start'
                 )
               }}
             method: POST
@@ -682,11 +595,9 @@
             status_code: [200]
             follow_redirects: none
           register: base_cluster_initialization_command
-          when:
-            - base_cluster_first_run_required | bool or base_cluster_first_run_retry_required | bool
           delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-        - name: Wait for cluster First Run
+        - name: Wait for cluster startup
           ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
           vars:
             cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
@@ -695,32 +606,11 @@
           when:
             - base_cluster_initialization_command.json.id is defined
 
-        - name: Start initialized cluster
-          cloudera.cluster.cluster:
-            host: "{{ cm_cluster_module_host }}"
-            port: "{{ cm_cluster_module_port }}"
-            version: "{{ cm_api_version }}"
-            force_tls: "{{ cm_cluster_module_force_tls }}"
-            username: "{{ cm_admin_user }}"
-            password: "{{ cm_admin_pass }}"
-            verify_tls: false
-            name: "{{ cdh_basecluster_name }}"
-            state: started
-          register: base_cluster_start_result
-          when:
-            - not (base_cluster_first_run_required | bool)
-            - not (base_cluster_first_run_retry_required | bool)
-          delegate_to: "{{ cm_cluster_module_delegate_to }}"
-          async: "{{ base_cluster_module_async_timeout }}"
-          poll: "{{ base_cluster_module_poll_interval }}"
       rescue:
         - name: Select failed cluster command
           ansible.builtin.set_fact:
             base_cluster_failed_command_id: >-
-              {{
-                base_cluster_initialization_command.json.id
-                | default(base_cluster_start_result.command_id | default(''))
-              }}
+              {{ base_cluster_initialization_command.json.id | default('') }}
 
         - name: Get failed First Run command
           ansible.builtin.uri:
