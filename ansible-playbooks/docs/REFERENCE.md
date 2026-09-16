@@ -117,13 +117,13 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `cm_repo_username` | — | Required (archive credentials) |
 | `cm_repo_password` | — | Required (archive credentials) |
 
-**CSD JAR override vs default:** Leave `scm_csds` and `scm_csds_redhat` empty (default) and set `cdv_version`, `cfm_version`, and jar basename vars — play **24** auto-downloads. To override NiFi/Registry JAR URLs only, set `scm_csds` to a YAML list of full `https://…/*.jar` strings (same shape the template emits). `scm_csds_effective` is computed in `set_os_facts.yml`: explicit list → else `scm_csds_redhat` → else `scm_csds_urls.j2` on RHEL when `csd_build_urls_enabled` is true. **DATAVIZ** is always fetched by `download_cdv_dataviz_csd.yml` from `cdv_*` vars, not from `scm_csds_urls.j2`; pinning DATAVIZ means updating `cdv_*`, not moving URLs into `scm_csds` alone.
+**CSD JAR override vs default:** Leave `scm_csds` and `scm_csds_redhat` empty (default) and set `cdv_version`, `cfm_version`, and jar basename vars — play **24** builds `scm_csds_effective` via `scm_csds_urls.j2` (DATAVIZ + NiFi + Registry when toggles allow) and `get_url`s each URL. DATAVIZ yum failures ignore errors so `download_cdv_dataviz_csd.yml` can extract the jar from the CDV parcel. To override all CSD URLs, set `scm_csds` to a YAML list of full `https://…/*.jar` strings (same shape the template emits). `scm_csds_effective` is computed in `set_os_facts.yml`: explicit list → else `scm_csds_redhat` → else `scm_csds_urls.j2` on RHEL when `csd_build_urls_enabled` is true.
 
 **CSD JAR downloads vs CM remote parcel repo directories:** Do not reuse the same URL for both. NiFi/Registry JARs use `get_url` on `scm_csds_effective` in **24_start_cm.yml**. CM **REMOTE_PARCEL_REPO_URLS** (playbooks **25** / **31** / **33** via `configure_cm_parcel_repo_api.yml`) must list **archive directory** URLs only, from `scm_csd_parcel_repo_urls.j2` unless `cm_remote_parcel_csd_repo_urls` is set (still driven by `cdv_version` / `cfm_version` when auto-built). NiFi and NiFi Registry share one CFM parcel directory; the parcel template dedupes with Jinja `unique` when both services are enabled.
 
 | Purpose | Template / vars | Example (public archive, RHEL 8 CM) |
 |---|---|---|
-| DATAVIZ CSD JAR `get_url` | `download_cdv_dataviz_csd.yml`, `cdv_*` | `…/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar` |
+| DATAVIZ CSD JAR `get_url` | `scm_csds_urls.j2` (+ parcel fallback in `download_cdv_dataviz_csd.yml`) | `…/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar` |
 | NiFi / Registry CSD JAR `get_url` | `scm_csds_urls.j2` or explicit `scm_csds` | `…/p/cfm2/2.1.7.3004/redhat8/yum/tars/parcel/NIFI-1.28.1.2.1.7.3004-1.jar` (two jars when both services enabled) |
 | CM remote parcel repo dir (DATAVIZ) | `scm_csd_parcel_repo_urls.j2`, `cdv_parcel_repo_url` | `…/p/cdv/8.0.7/parcels/` |
 | CM remote parcel repo dir (CFM / NiFi) | same, `cfm_parcel_yum_tars_repo_url` | `…/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel` |

@@ -5,9 +5,18 @@
 {% set rh_yum = csd_redhat_repo %}
 {% endif %}
 {% set archive = cm_repo_public_base_url | default('https://archive.cloudera.com/p') %}
-{# DATAVIZ CSD is installed via common_tasks/download_cdv_dataviz_csd.yml (yum jar + parcel fallback). #}
 {% set svc = base_cluster_install_services | default({}) %}
 {% set use_svc_toggles = csd_respect_service_toggles | default(true) %}
+{% if csd_install_dataviz | default(true) and ((not use_svc_toggles) or (svc.dataviz | default(false))) %}
+{% if (cdv_redhat_yum_repo | default('auto')) == 'auto' and (ansible_distribution_major_version | default('8') | string) == '9' %}
+{% set cdv_yum = 'redhat8' %}
+{% elif (cdv_redhat_yum_repo | default('auto')) != 'auto' %}
+{% set cdv_yum = cdv_redhat_yum_repo %}
+{% else %}
+{% set cdv_yum = 'redhat' ~ (ansible_distribution_major_version | default('8') | string) %}
+{% endif %}
+- {{ archive }}/cdv/{{ cdv_version }}/{{ cdv_yum }}/yum/{{ cdv_dataviz_csd_jar }}
+{% endif %}
 {% if csd_install_nifi_registry | default(true) and ((not use_svc_toggles) or (svc.nifi_registry | default(false))) %}
 - {{ archive }}/cfm2/{{ cfm_version }}/{{ rh_yum }}/yum/tars/parcel/{{ cfm_nifi_registry_csd_jar }}
 {% endif %}

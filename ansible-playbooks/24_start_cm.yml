@@ -141,11 +141,9 @@
         mode: 0755
       # delegate_to: cldr-mngr
 
-    - name: Download and install DATAVIZ CSD (CDV yum jar with parcel fallback)
-      ansible.builtin.import_tasks: common_tasks/download_cdv_dataviz_csd.yml
-
-    # No-op when scm_csds_effective is empty; see group_vars and common_tasks/set_os_facts.yml.
-    - name: Download CSDs
+    # scm_csds_effective: explicit scm_csds / scm_csds_redhat, else scm_csds_urls.j2 (DATAVIZ + CFM).
+    # DATAVIZ yum get_url ignores errors so download_cdv_dataviz_csd.yml can fall back to parcel.
+    - name: Download CSDs from scm_csds_effective
       ansible.builtin.get_url:
         url: "{{ item }}"
         dest: /opt/cloudera/csd
@@ -155,6 +153,10 @@
         force_basic_auth: yes
       loop: "{{ scm_csds_effective }}"
       when: scm_csds_effective | length > 0
+      ignore_errors: "{{ (cdv_dataviz_csd_jar | default('')) in (item | string) }}"
+
+    - name: DATAVIZ CSD parcel fallback when yum jar missing (or scm_csds omitted DATAVIZ URL)
+      ansible.builtin.import_tasks: common_tasks/download_cdv_dataviz_csd.yml
       # delegate_to: cldr-mngr
 
     # ----------------------------------------
