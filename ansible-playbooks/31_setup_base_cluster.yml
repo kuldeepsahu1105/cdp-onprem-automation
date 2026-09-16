@@ -462,7 +462,7 @@
           - gateway_master_secret
       when: base_cluster_install_services.knox | default(true) | bool
 
-    - name: Read CM hosts for Ozone roles
+    - name: Read CM hosts for required service roles
       ansible.builtin.uri:
         url: "{{ cm_cluster_module_api_url }}/hosts?view=summary"
         method: GET
@@ -474,7 +474,9 @@
         follow_redirects: none
       register: base_cluster_cm_hosts
       changed_when: false
-      when: base_cluster_install_services.ozone | default(true) | bool
+      when: >-
+        base_cluster_install_services.ozone | default(true) | bool
+        or base_cluster_install_services.kafka | default(true) | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Select Ozone service host
@@ -562,6 +564,78 @@
             or base_cluster_ozone_role_create.changed | default(false) | bool
           }}
 
+    - name: Read Kafka roles
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/kafka/roles?view=summary
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_kafka_roles
+      changed_when: false
+      when: base_cluster_install_services.kafka | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Find workers missing Kafka KRaft roles
+      ansible.builtin.set_fact:
+        base_cluster_missing_kraft_hosts: >-
+          {{
+            base_worker_fqdns
+            | difference(
+                base_cluster_kafka_roles.json['items']
+                | selectattr('type', 'equalto', 'KRAFT')
+                | map(attribute='hostRef.hostname')
+                | list
+              )
+          }}
+      when: base_cluster_install_services.kafka | default(true) | bool
+
+    - name: Add missing Kafka KRaft roles
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/kafka/roles
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          items:
+            - type: KRAFT
+              hostRef:
+                hostId: >-
+                  {{
+                    base_cluster_cm_hosts.json['items']
+                    | selectattr('hostname', 'equalto', item)
+                    | map(attribute='hostId')
+                    | first
+                  }}
+                hostname: "{{ item }}"
+        status_code: [200, 201, 204]
+        follow_redirects: none
+      loop: "{{ base_cluster_missing_kraft_hosts }}"
+      loop_control:
+        label: "{{ item }}"
+      register: base_cluster_kraft_role_create
+      when: base_cluster_install_services.kafka | default(true) | bool
+      changed_when: true
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Track Kafka KRaft role changes
+      ansible.builtin.set_fact:
+        base_cluster_required_config_changed: >-
+          {{
+            base_cluster_required_config_changed | bool
+            or base_cluster_kraft_role_create.changed | default(false) | bool
+          }}
+
     - name: Read base cluster initialization marker
       ansible.builtin.slurp:
         src: "{{ base_cluster_initialization_marker_path }}"
@@ -591,6 +665,27 @@
           {{
             existing_cluster_services.json['items'] | default([])
             | selectattr('name', 'equalto', 'hbase')
+            | first
+            | default({})
+          }}
+        base_cluster_existing_yarn_service: >-
+          {{
+            existing_cluster_services.json['items'] | default([])
+            | selectattr('name', 'equalto', 'yarn')
+            | first
+            | default({})
+          }}
+        base_cluster_existing_hive_service: >-
+          {{
+            existing_cluster_services.json['items'] | default([])
+            | selectattr('name', 'equalto', 'hive')
+            | first
+            | default({})
+          }}
+        base_cluster_existing_impala_service: >-
+          {{
+            existing_cluster_services.json['items'] | default([])
+            | selectattr('name', 'equalto', 'impala')
             | first
             | default({})
           }}
@@ -632,6 +727,27 @@
                   and base_cluster_existing_hbase_service.healthSummary | default('') == 'GOOD'
                 )
               )
+              and (
+                not (base_cluster_install_services.yarn | default(true) | bool)
+                or (
+                  base_cluster_existing_yarn_service.serviceState | default('') == 'STARTED'
+                  and base_cluster_existing_yarn_service.healthSummary | default('') == 'GOOD'
+                )
+              )
+              and (
+                not (base_cluster_install_services.hive | default(true) | bool)
+                or (
+                  base_cluster_existing_hive_service.serviceState | default('') == 'STARTED'
+                  and base_cluster_existing_hive_service.healthSummary | default('') == 'GOOD'
+                )
+              )
+              and (
+                not (base_cluster_install_services.impala | default(true) | bool)
+                or (
+                  base_cluster_existing_impala_service.serviceState | default('') == 'STARTED'
+                  and base_cluster_existing_impala_service.healthSummary | default('') == 'GOOD'
+                )
+              )
             )
           }}
 
@@ -662,6 +778,15 @@
               base_cluster_install_services.hbase | default(true) | bool
               and base_cluster_existing_hbase_service.serviceState | default('') == 'STARTED'
               and base_cluster_existing_hbase_service.healthSummary | default('') != 'GOOD'
+            )
+            else []
+          )
+          + (
+            [{'service': 'yarn', 'command': 'stop'}]
+            if (
+              base_cluster_install_services.yarn | default(true) | bool
+              and base_cluster_existing_yarn_service.serviceState | default('') == 'STARTED'
+              and base_cluster_existing_yarn_service.healthSummary | default('') != 'GOOD'
             )
             else []
           )
@@ -730,6 +855,47 @@
                 and (
                   base_cluster_existing_hbase_service.serviceState | default('') != 'STARTED'
                   or base_cluster_existing_hbase_service.healthSummary | default('') != 'GOOD'
+                )
+              )
+              else []
+            )
+            + (
+              [
+                {'service': 'yarn', 'command': 'yarnCreateJobHistoryDirCommand'},
+                {'service': 'yarn', 'command': 'installMrFrameworkJars'},
+                {'service': 'yarn', 'command': 'yarnCreateCmContainerUsageInputDirCommand'}
+              ]
+              if (
+                base_cluster_install_services.yarn | default(true) | bool
+                and (
+                  base_cluster_existing_yarn_service.serviceState | default('') != 'STARTED'
+                  or base_cluster_existing_yarn_service.healthSummary | default('') != 'GOOD'
+                )
+              )
+              else []
+            )
+            + (
+              [
+                {'service': 'hive', 'command': 'hiveCreateHiveUserDir'},
+                {'service': 'hive', 'command': 'hiveCreateHiveWarehouse'},
+                {'service': 'hive', 'command': 'hiveCreateHiveWarehouseExternal'}
+              ]
+              if (
+                base_cluster_install_services.hive | default(true) | bool
+                and (
+                  base_cluster_existing_hive_service.serviceState | default('') != 'STARTED'
+                  or base_cluster_existing_hive_service.healthSummary | default('') != 'GOOD'
+                )
+              )
+              else []
+            )
+            + (
+              [{'service': 'impala', 'command': 'impalaCreateUserDir'}]
+              if (
+                base_cluster_install_services.impala | default(true) | bool
+                and (
+                  base_cluster_existing_impala_service.serviceState | default('') != 'STARTED'
+                  or base_cluster_existing_impala_service.healthSummary | default('') != 'GOOD'
                 )
               )
               else []
