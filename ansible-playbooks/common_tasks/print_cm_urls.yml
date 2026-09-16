@@ -64,28 +64,21 @@
   ansible.builtin.set_fact:
     cm_protocol: >-
       {{
-        cm_protocol
-        | default('https' if (_cm_display_autotls | bool) else 'http', true)
+        'https'
+        if (_cm_display_autotls | bool)
+        else (cm_protocol | default('http', true))
       }}
     cm_port_ui: >-
       {{
-        cm_api_port
-        | default(
-            (cm_https_port | default(7183))
-            if (_cm_display_autotls | bool)
-            else (cm_http_port | default(7180)),
-            true
-          )
+        (cm_https_port | default(7183))
+        if (_cm_display_autotls | bool)
+        else (cm_api_port | default(cm_http_port | default(7180), true))
       }}
     cm_port_api: >-
       {{
-        cm_api_port
-        | default(
-            (cm_https_port | default(7183))
-            if (_cm_display_autotls | bool)
-            else (cm_http_port | default(7180)),
-            true
-          )
+        (cm_https_port | default(7183))
+        if (_cm_display_autotls | bool)
+        else (cm_api_port | default(cm_http_port | default(7180), true))
       }}
 
 - name: Set Cloudera Manager URLs
