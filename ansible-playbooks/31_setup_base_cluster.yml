@@ -979,7 +979,7 @@
         changed=false
 
         hdfs_dfs() {
-          runuser --user hdfs -- env HADOOP_CONF_DIR=/etc/hadoop/conf \
+          env HADOOP_USER_NAME=hdfs HADOOP_CONF_DIR=/etc/hadoop/conf \
             "$hdfs_cli" dfs "$@"
         }
 
