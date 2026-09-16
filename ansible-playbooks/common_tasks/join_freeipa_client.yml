@@ -97,6 +97,9 @@
 - name: Ensure FreeIPA client CA bundle is present after enrollment
   ansible.builtin.import_tasks: ensure_freeipa_client_ca.yml
 
+- name: Verify complete FreeIPA client enrollment
+  ansible.builtin.import_tasks: verify_freeipa_client_enrollment.yml
+
 - name: Keep KEYRING default_ccache_name commented in krb5.conf after IPA client enroll
   ansible.builtin.import_tasks: ensure_krb5_default_ccache_commented.yml
   when: ipa_client_default_conf_now.stat.exists | default(false)

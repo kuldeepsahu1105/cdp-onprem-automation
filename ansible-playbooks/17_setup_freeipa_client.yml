@@ -62,6 +62,12 @@
         msg: "{{ ipa_client_output.stderr_lines }}"
       when: ipa_client_output is defined and not ipa_client_config.stat.exists
 
+    - name: Ensure FreeIPA client CA bundle is present after enrollment
+      ansible.builtin.import_tasks: common_tasks/ensure_freeipa_client_ca.yml
+
+    - name: Verify complete FreeIPA client enrollment
+      ansible.builtin.import_tasks: common_tasks/verify_freeipa_client_enrollment.yml
+
     - name: Ensure Kerberos ticket is available (Ansible FILE ccache)
       ansible.builtin.command: klist
       register: klist_output
