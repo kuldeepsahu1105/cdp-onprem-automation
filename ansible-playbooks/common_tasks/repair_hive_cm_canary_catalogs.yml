@@ -1,0 +1,240 @@
+---
+# Removes only stale Cloudera Manager Hive Metastore canary catalogs.
+# The Hive service is stopped before database changes when a stale catalog exists.
+
+- name: Resolve PostgreSQL inventory host for Hive canary repair
+  ansible.builtin.import_tasks: resolve_postgres_inventory.yml
+
+- name: Resolve PostgreSQL connection host for Hive canary repair
+  ansible.builtin.import_tasks: resolve_postgres_ensure_cm_db_psql_host.yml
+
+- name: Ensure PostgreSQL is running for Hive canary repair
+  ansible.builtin.import_tasks: ensure_postgresql_running.yml
+
+- name: Check versioned PostgreSQL psql for Hive canary repair
+  ansible.builtin.stat:
+    path: "/usr/pgsql-{{ postgresql_version }}/bin/psql"
+  register: hive_canary_versioned_psql
+  become: true
+  connection: ssh
+  delegate_to: "{{ postgres_inventory_host }}"
+
+- name: Check standard PostgreSQL psql for Hive canary repair
+  ansible.builtin.stat:
+    path: /usr/bin/psql
+  register: hive_canary_standard_psql
+  become: true
+  connection: ssh
+  delegate_to: "{{ postgres_inventory_host }}"
+
+- name: Select PostgreSQL psql for Hive canary repair
+  ansible.builtin.set_fact:
+    hive_canary_psql: >-
+      {{
+        '/usr/pgsql-' ~ postgresql_version ~ '/bin/psql'
+        if hive_canary_versioned_psql.stat.exists
+        else '/usr/bin/psql'
+      }}
+
+- name: Require PostgreSQL psql for Hive canary repair
+  ansible.builtin.assert:
+    that:
+      - hive_canary_versioned_psql.stat.exists or hive_canary_standard_psql.stat.exists
+    fail_msg: >-
+      PostgreSQL psql was not found on {{ postgres_inventory_host }}.
+      No Hive metadata was modified.
+
+- name: Check whether the Hive catalog tables exist
+  ansible.builtin.command:
+    argv:
+      - "{{ hive_canary_psql }}"
+      - "--host={{ postgres_ensure_cm_db_psql_host_effective }}"
+      - "--port={{ base_cluster_database_port }}"
+      - "--username={{ base_cluster_hive_database_user }}"
+      - "--dbname={{ base_cluster_hive_database_name }}"
+      - "--tuples-only"
+      - "--no-align"
+      - "--set=ON_ERROR_STOP=1"
+      - >-
+        --command=SELECT (
+        to_regclass('public."CTLGS"') IS NOT NULL
+        AND to_regclass('public."DBS"') IS NOT NULL
+        )::text;
+  environment:
+    PGPASSWORD: "{{ base_cluster_hive_database_password }}"
+  register: hive_canary_schema_exists
+  changed_when: false
+  become: true
+  connection: ssh
+  delegate_to: "{{ postgres_inventory_host }}"
+
+- name: Find stale CM Hive Metastore canary catalogs
+  ansible.builtin.command:
+    argv:
+      - "{{ hive_canary_psql }}"
+      - "--host={{ postgres_ensure_cm_db_psql_host_effective }}"
+      - "--port={{ base_cluster_database_port }}"
+      - "--username={{ base_cluster_hive_database_user }}"
+      - "--dbname={{ base_cluster_hive_database_name }}"
+      - "--tuples-only"
+      - "--no-align"
+      - "--set=ON_ERROR_STOP=1"
+      - >-
+        --command=SELECT "NAME" FROM "CTLGS"
+        WHERE "NAME" LIKE 'cloudera_manager_metastore_canary_test_catalog_%'
+        ORDER BY "NAME";
+  environment:
+    PGPASSWORD: "{{ base_cluster_hive_database_password }}"
+  register: hive_canary_stale_catalogs
+  changed_when: false
+  become: true
+  connection: ssh
+  delegate_to: "{{ postgres_inventory_host }}"
+  when: hive_canary_schema_exists.stdout | trim == 'true'
+
+- name: Read Hive state before stale canary repair
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services/hive?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: hive_canary_hive_state
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: hive_canary_stale_catalogs.stdout_lines | default([]) | length > 0
+
+- name: Stop Hive before stale canary repair
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/hive/commands/stop
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: hive_canary_stop_command
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when:
+    - hive_canary_stale_catalogs.stdout_lines | default([]) | length > 0
+    - hive_canary_hive_state.json.serviceState | default('') in ['STARTED', 'STARTING']
+
+- name: Wait for Hive stop before stale canary repair
+  ansible.builtin.include_tasks: wait_cm_api_command.yml
+  vars:
+    cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+    cm_api_command_id: "{{ hive_canary_stop_command.json.id }}"
+    cm_api_command_allow_already_exists: false
+  when:
+    - hive_canary_stop_command is defined
+    - hive_canary_stop_command.json.id is defined
+
+- name: Remove stale CM Hive Metastore canary catalogs
+  ansible.builtin.command:
+    argv:
+      - "{{ hive_canary_psql }}"
+      - "--host={{ postgres_ensure_cm_db_psql_host_effective }}"
+      - "--port={{ base_cluster_database_port }}"
+      - "--username={{ base_cluster_hive_database_user }}"
+      - "--dbname={{ base_cluster_hive_database_name }}"
+      - "--tuples-only"
+      - "--no-align"
+      - "--set=ON_ERROR_STOP=1"
+      - >-
+        --command=DO $repair$
+        DECLARE unexpected_count bigint;
+        BEGIN
+          SELECT count(*) INTO unexpected_count
+          FROM "TBLS" t
+          JOIN "DBS" d ON d."DB_ID" = t."DB_ID"
+          WHERE d."CTLG_NAME" LIKE 'cloudera_manager_metastore_canary_test_catalog_%';
+          IF unexpected_count > 0 THEN
+            RAISE EXCEPTION
+              'Refusing CM canary cleanup: % table(s) exist in canary catalogs',
+              unexpected_count;
+          END IF;
+
+          SELECT count(*) INTO unexpected_count
+          FROM "FUNCS" f
+          JOIN "DBS" d ON d."DB_ID" = f."DB_ID"
+          WHERE d."CTLG_NAME" LIKE 'cloudera_manager_metastore_canary_test_catalog_%';
+          IF unexpected_count > 0 THEN
+            RAISE EXCEPTION
+              'Refusing CM canary cleanup: % function(s) exist in canary catalogs',
+              unexpected_count;
+          END IF;
+
+          DELETE FROM "DATABASE_PARAMS"
+          WHERE "DB_ID" IN (
+            SELECT "DB_ID" FROM "DBS"
+            WHERE "CTLG_NAME" LIKE 'cloudera_manager_metastore_canary_test_catalog_%'
+          );
+          DELETE FROM "DB_PRIVS"
+          WHERE "DB_ID" IN (
+            SELECT "DB_ID" FROM "DBS"
+            WHERE "CTLG_NAME" LIKE 'cloudera_manager_metastore_canary_test_catalog_%'
+          );
+          DELETE FROM "NOTIFICATION_LOG"
+          WHERE "CAT_NAME" LIKE 'cloudera_manager_metastore_canary_test_catalog_%';
+          DELETE FROM "DBS"
+          WHERE "CTLG_NAME" LIKE 'cloudera_manager_metastore_canary_test_catalog_%';
+          DELETE FROM "CTLGS"
+          WHERE "NAME" LIKE 'cloudera_manager_metastore_canary_test_catalog_%';
+        END
+        $repair$;
+  environment:
+    PGPASSWORD: "{{ base_cluster_hive_database_password }}"
+    PGOPTIONS: "-c lock_timeout=30s -c statement_timeout=300s"
+  register: hive_canary_repair
+  changed_when: true
+  become: true
+  connection: ssh
+  delegate_to: "{{ postgres_inventory_host }}"
+  when: hive_canary_stale_catalogs.stdout_lines | default([]) | length > 0
+
+- name: Verify stale CM Hive Metastore canary catalogs were removed
+  ansible.builtin.command:
+    argv:
+      - "{{ hive_canary_psql }}"
+      - "--host={{ postgres_ensure_cm_db_psql_host_effective }}"
+      - "--port={{ base_cluster_database_port }}"
+      - "--username={{ base_cluster_hive_database_user }}"
+      - "--dbname={{ base_cluster_hive_database_name }}"
+      - "--tuples-only"
+      - "--no-align"
+      - "--set=ON_ERROR_STOP=1"
+      - >-
+        --command=SELECT count(*) FROM "CTLGS"
+        WHERE "NAME" LIKE 'cloudera_manager_metastore_canary_test_catalog_%';
+  environment:
+    PGPASSWORD: "{{ base_cluster_hive_database_password }}"
+  register: hive_canary_repair_verify
+  changed_when: false
+  become: true
+  connection: ssh
+  delegate_to: "{{ postgres_inventory_host }}"
+  when: hive_canary_stale_catalogs.stdout_lines | default([]) | length > 0
+
+- name: Require successful CM Hive Metastore canary cleanup
+  ansible.builtin.assert:
+    that:
+      - hive_canary_repair_verify.stdout | trim == '0'
+    fail_msg: >-
+      Stale Cloudera Manager Hive Metastore canary catalogs remain after cleanup.
+      The cluster will not be started.
+  when: hive_canary_stale_catalogs.stdout_lines | default([]) | length > 0
+
+- name: Report repaired CM Hive Metastore canary catalogs
+  ansible.builtin.debug:
+    msg: >-
+      Removed stale CM Hive Metastore canary catalogs:
+      {{ hive_canary_stale_catalogs.stdout_lines | join(', ') }}.
+      Real Hive catalogs and databases were not modified.
+  when: hive_canary_stale_catalogs.stdout_lines | default([]) | length > 0

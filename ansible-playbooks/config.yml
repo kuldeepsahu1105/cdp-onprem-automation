@@ -115,6 +115,7 @@ base_cluster_database_port: "{{ postgres_port }}"
 base_cluster_hive_database_name: hive
 base_cluster_hive_database_user: hive
 base_cluster_hive_database_password: hive
+base_cluster_repair_hive_canary_catalogs: true
 base_cluster_hue_database_name: hue
 base_cluster_hue_database_user: hue
 base_cluster_hue_database_password: hue

@@ -512,6 +512,16 @@ startup, playbook **31** separately verifies `psycopg2` or `psycopg` in that
 exact environment on the Hue role host and installs `psycopg2-binary` there
 when both imports are unavailable.
 
+For an existing cluster, playbook **31** also detects stale Hive Metastore
+catalogs whose names begin with
+`cloudera_manager_metastore_canary_test_catalog_`. When found, it stops Hive,
+refuses cleanup if any table or function belongs to a canary database, removes
+only CM-canary database parameters, privileges, notification rows, database
+rows, and catalog rows, then verifies that no stale canary catalog remains
+before cluster startup. Set `base_cluster_repair_hive_canary_catalogs: false`
+to disable this narrowly scoped repair. Normal Hive catalogs and databases are
+never selected.
+
 New deployments use the default cluster name `CDP-base-cluster`. When that
 default is unchanged and a pre-V2 `CDH-Cluster` already exists, playbook **31**
 adopts the legacy cluster instead of creating a duplicate. Explicit custom

@@ -428,6 +428,13 @@
           - hive_metastore_database_password
       when: base_cluster_install_services.hive | default(true) | bool
 
+    - name: Repair stale CM Hive Metastore canary catalogs
+      ansible.builtin.include_tasks: common_tasks/repair_hive_cm_canary_catalogs.yml
+      when:
+        - existing_cluster.status == 200
+        - base_cluster_repair_hive_canary_catalogs | default(true) | bool
+        - base_cluster_install_services.hive | default(true) | bool
+
     - name: Configure Hue database
       ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
       vars:
