@@ -942,6 +942,12 @@
             )
           }}
 
+    - name: Prepare Kerberos before any new or recovery cluster service start
+      ansible.builtin.include_tasks: common_tasks/prepare_cluster_kerberos_before_start.yml
+      when:
+        - base_cluster_enable_kerberos | default(true) | bool
+        - base_cluster_create_required | bool or base_cluster_recovery_required | bool
+
     - name: Show interrupted First Run recovery
       ansible.builtin.debug:
         msg: >-
@@ -1219,7 +1225,8 @@
     - name: Show cluster startup wait
       ansible.builtin.debug:
         msg: >-
-          Cluster configuration is complete. Starting CM First Run; Jenkins will poll every
+          Cluster configuration and pre-First-Run security convergence are complete.
+          Starting CM First Run; Jenkins will poll every
           {{ base_cluster_module_poll_interval }}s until CM finishes or the bounded wait expires.
       when: base_cluster_first_run_required | bool
 
