@@ -462,7 +462,12 @@ and verify mode `1777` (world-writable with sticky bit). The probe checks
 `PATH`, the active `/opt/cloudera/parcels/CDH/bin/hdfs` link, and executable
 versioned `/opt/cloudera/parcels/CDH-*/bin/hdfs` clients. These delegated
 commands explicitly use SSH so the localhost CM orchestration play cannot run
-them on the Jenkins controller.
+them on the Jenkins controller. The fallback reads
+`hadoop.security.authentication` from the deployed client configuration. In
+SIMPLE mode it uses `HADOOP_USER_NAME=hdfs`; after Kerberos enablement it
+selects the newest CM-generated `hdfs.keytab`, obtains an `hdfs/*` ticket in an
+isolated temporary credential cache, performs the same `/tmp` verification,
+and destroys the cache on exit.
 The same verification runs after a fresh First Run, so the HDFS canary can
 create `/tmp/.cloudera_health_monitoring_canary_files`. This is not the local
 Linux `/tmp` directory on each DataNode.

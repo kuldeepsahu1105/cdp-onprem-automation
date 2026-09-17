@@ -61,11 +61,54 @@
     set -euo pipefail
     hdfs_cli={{ base_cluster_hdfs_client_path | quote }}
     changed=false
+    hdfs_authentication=$(
+      env HADOOP_CONF_DIR=/etc/hadoop/conf \
+        "$hdfs_cli" getconf -confKey hadoop.security.authentication
+    )
+    hdfs_authentication=${hdfs_authentication,,}
 
-    hdfs_dfs() {
-      env HADOOP_USER_NAME=hdfs HADOOP_CONF_DIR=/etc/hadoop/conf \
-        "$hdfs_cli" dfs "$@"
-    }
+    if [ "$hdfs_authentication" = "kerberos" ]; then
+      hdfs_keytab=""
+      while IFS= read -r candidate; do
+        if [ -z "$hdfs_keytab" ] || [ "$candidate" -nt "$hdfs_keytab" ]; then
+          hdfs_keytab="$candidate"
+        fi
+      done < <(
+        find /var/run/cloudera-scm-agent/process -maxdepth 3 \
+          -type f -name hdfs.keytab -print 2>/dev/null
+      )
+
+      if [ -z "$hdfs_keytab" ]; then
+        echo "HDFS uses Kerberos, but no active CM-generated hdfs.keytab was found." >&2
+        exit 1
+      fi
+
+      hdfs_principal=$(
+        klist -k "$hdfs_keytab" \
+          | awk '$NF ~ /^hdfs(\/|@)/ { print $NF; exit }'
+      )
+      if [ -z "$hdfs_principal" ]; then
+        echo "No hdfs principal was found in $hdfs_keytab." >&2
+        exit 1
+      fi
+
+      export KRB5CCNAME="FILE:/tmp/ansible-hdfs-tmp-$$"
+      trap 'kdestroy -c "$KRB5CCNAME" >/dev/null 2>&1 || rm -f "${KRB5CCNAME#FILE:}"' EXIT
+      kinit -c "$KRB5CCNAME" -kt "$hdfs_keytab" "$hdfs_principal"
+
+      hdfs_dfs() {
+        env KRB5CCNAME="$KRB5CCNAME" HADOOP_CONF_DIR=/etc/hadoop/conf \
+          "$hdfs_cli" dfs "$@"
+      }
+    elif [ "$hdfs_authentication" = "simple" ]; then
+      hdfs_dfs() {
+        env HADOOP_USER_NAME=hdfs HADOOP_CONF_DIR=/etc/hadoop/conf \
+          "$hdfs_cli" dfs "$@"
+      }
+    else
+      echo "Unsupported HDFS authentication mode: $hdfs_authentication" >&2
+      exit 1
+    fi
 
     if ! hdfs_dfs -test -d /tmp; then
       hdfs_dfs -mkdir -p /tmp
