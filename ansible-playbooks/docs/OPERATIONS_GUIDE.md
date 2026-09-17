@@ -449,10 +449,17 @@ the required permissions, starts Ranger and initializes its plugin services
 creates the HBase root and user directories, creates the YARN JobHistory
 directory and installs MapReduce framework JARs, creates the Spark history,
 user, and driver-log directories, and creates the Hive and Impala HDFS
-directories. The optional YARN container-usage directory command is not part
-of automatic recovery; run it only after enabling container-usage aggregation
-and configuring its MapReduce job user. Recovery never invokes NameNode format
-or cluster First Run.
+directories. Ozone recovery starts the SCM role alone, waits until an
+authenticated `ozone admin scm roles` check reports `LEADER`, and only then
+starts the remaining Ozone roles. This prevents DataNodes from exhausting
+certificate-enrollment retries against a running but not-yet-leader SCM and
+leaving SCM in safe mode with no healthy pipeline. CM First Run retains
+responsibility for initializing SCM on a new cluster; if that initial run is
+interrupted, the next Base Cluster phase applies the ordered recovery without
+deleting Ozone metadata. The optional YARN container-usage directory command is
+not part of automatic recovery; run it only after enabling container-usage
+aggregation and configuring its MapReduce job user. Recovery never invokes
+NameNode format or cluster First Run.
 
 HDFS `/tmp` reconciliation first calls CM's documented
 `hdfsCreateTmpDir` service command. Some CM 7.13/CDP 7.3.2 layouts return
@@ -525,6 +532,17 @@ refreshed. Completion is recorded only after CM reports
 `hadoop_security_authentication=kerberos`; already Kerberized clusters skip the
 transition. This leaves playbook **30** responsible for CM-wide KDC integration
 and account-manager credential import.
+
+Hue's `KT_RENEWER` requires its initial keytab login to receive a renewable TGT.
+Playbook **12** reconciles the FreeIPA global policy to a 24-hour maximum ticket
+life and 7-day maximum renewable life. Playbook **16** deploys matching
+`ticket_lifetime` and `renew_lifetime` defaults under `/etc/krb5.conf.d` on
+identity clients. This applies to existing hosts when the IDENTITY phase is
+rerun and to future hosts during enrollment. After changing these settings,
+restart a failed Hue `KT_RENEWER` role (or start the cluster) so it performs a
+new keytab `kinit`; an already-issued non-renewable TGT cannot be converted by
+`kinit -R`. Verify with `klist -f`: the TGT must include the renewable flag and
+a non-empty `renew until` timestamp.
 
 Kerberized Ozone client configuration also requires the Ozone service's
 `hdfs_service` dependency to reference HDFS. HDFS itself references

@@ -504,6 +504,10 @@ base_cluster_module_poll_interval: 15
 # reaches healthy state. Bound the narrow First Run recovery wait.
 base_cluster_knox_readiness_recovery_retries: 30
 base_cluster_knox_readiness_recovery_delay: 10
+# During interrupted First Run recovery, start SCM alone and wait for its
+# authenticated HA status to report LEADER before starting Ozone DataNodes.
+base_cluster_ozone_scm_leader_retries: 60
+base_cluster_ozone_scm_leader_delay: 5
 # New clusters are Kerberized before First Run; existing unsecure clusters use
 # the guarded stop/configure/credentials/start convergence path.
 base_cluster_enable_kerberos: true
@@ -522,6 +526,11 @@ krb5_kdc_admin_user: "{{ ad_kdc_admin_user if identity_provider_effective == 'ad
 krb5_kdc_admin_password: "{{ ad_kdc_admin_password if identity_provider_effective == 'ad' else ipaadmin_password }}"
 krb5_ad_suffix: "{{ ad_domain }}"
 krb5_ad_delete_on_regenerate: true
+# Hue KT_RENEWER and other long-running services require renewable TGTs.
+krb5_ticket_lifetime: 24h
+krb5_renew_lifetime: 7d
+ipa_krbtpolicy_maxlife_seconds: 86400
+ipa_krbtpolicy_maxrenew_seconds: 604800
 
 # -----------------------------------------------------------------------------
 # 06. CM security and management service

@@ -891,6 +891,27 @@
       when: base_cluster_install_services.ozone | default(true) | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+    - name: Select Ozone SCM role
+      ansible.builtin.set_fact:
+        base_cluster_ozone_scm_role: >-
+          {{
+            base_cluster_ozone_roles.json['items']
+            | selectattr('type', 'equalto', 'STORAGE_CONTAINER_MANAGER')
+            | selectattr('hostRef.hostname', 'equalto', base_master_fqdn)
+            | first
+            | default({})
+          }}
+      when: base_cluster_install_services.ozone | default(true) | bool
+
+    - name: Require Ozone SCM role
+      ansible.builtin.assert:
+        that:
+          - base_cluster_ozone_scm_role.name | default('') | length > 0
+        fail_msg: >-
+          Ozone is enabled but CM has no STORAGE_CONTAINER_MANAGER role.
+          Correct the Ozone role assignment before cluster startup.
+      when: base_cluster_install_services.ozone | default(true) | bool
+
     - name: Find missing Ozone roles
       ansible.builtin.set_fact:
         base_cluster_missing_ozone_roles: >-
@@ -1022,6 +1043,13 @@
 
     - name: Read existing initialization service states
       ansible.builtin.set_fact:
+        base_cluster_existing_ozone_service: >-
+          {{
+            existing_cluster_services.json['items'] | default([])
+            | selectattr('name', 'equalto', 'ozone')
+            | first
+            | default({})
+          }}
         base_cluster_existing_hdfs_service: >-
           {{
             existing_cluster_services.json['items'] | default([])
@@ -1089,6 +1117,13 @@
             )
             and not (
               (
+                not (base_cluster_install_services.ozone | default(true) | bool)
+                or (
+                  base_cluster_existing_ozone_service.serviceState | default('') == 'STARTED'
+                  and base_cluster_existing_ozone_service.healthSummary | default('') == 'GOOD'
+                )
+              )
+              and (
                 not (base_cluster_install_services.hdfs | default(true) | bool)
                 or (
                   base_cluster_existing_hdfs_service.serviceState | default('') == 'STARTED'
@@ -1160,6 +1195,15 @@
       loop: >-
         {{
           (
+            [{'service': 'ozone', 'command': 'stop'}]
+            if (
+              base_cluster_install_services.ozone | default(true) | bool
+              and base_cluster_existing_ozone_service.serviceState | default('') == 'STARTED'
+              and base_cluster_existing_ozone_service.healthSummary | default('') != 'GOOD'
+            )
+            else []
+          )
+          + (
             [{'service': 'solr', 'command': 'stop'}]
             if (
               base_cluster_install_services.solr | default(false) | bool
@@ -1414,6 +1458,134 @@
         loop_var: base_cluster_setup_command
         label: "{{ base_cluster_setup_command.service }}:{{ base_cluster_setup_command.command }}"
       when: base_cluster_recovery_required | bool
+
+    - name: Read Ozone SCM state before cluster startup
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/ozone/roles/{{ base_cluster_ozone_scm_role.name }}?view=summary
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_ozone_scm_state
+      changed_when: false
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+      when:
+        - base_cluster_install_services.ozone | default(true) | bool
+        - base_cluster_recovery_required | bool
+
+    - name: Start Ozone SCM before other Ozone roles
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/ozone/roleCommands/start
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          items:
+            - "{{ base_cluster_ozone_scm_role.name }}"
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_ozone_scm_start
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+      when:
+        - base_cluster_install_services.ozone | default(true) | bool
+        - base_cluster_recovery_required | bool
+        - base_cluster_ozone_scm_state.json.roleState | default('') != 'STARTED'
+
+    - name: Require Ozone SCM role start command
+      ansible.builtin.assert:
+        that:
+          - base_cluster_ozone_scm_start.json['items'] | default([]) | length == 1
+          - base_cluster_ozone_scm_start.json['items'][0].id is defined
+        fail_msg: >-
+          CM did not return exactly one command while starting the Ozone SCM role.
+      when:
+        - base_cluster_ozone_scm_start is defined
+        - base_cluster_ozone_scm_start is not skipped
+
+    - name: Wait for Ozone SCM role start
+      ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_command_id: "{{ base_cluster_ozone_scm_start.json['items'][0].id }}"
+        cm_api_command_allow_already_exists: false
+      when:
+        - base_cluster_ozone_scm_start is defined
+        - base_cluster_ozone_scm_start is not skipped
+        - base_cluster_ozone_scm_start.json['items'][0].id is defined
+
+    - name: Wait for Ozone SCM leader before starting DataNodes
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          scm_process_dir="$(
+            ls -dt /var/run/cloudera-scm-agent/process/*-ozone-STORAGE_CONTAINER_MANAGER \
+              2>/dev/null | head -1
+          )"
+          test -n "${scm_process_dir}" && test -f "${scm_process_dir}/ozone.keytab"
+          export HADOOP_CONF_DIR="${scm_process_dir}/ozone-conf"
+          export OZONE_CONF_DIR="${scm_process_dir}/ozone-conf"
+          export KRB5CCNAME="/tmp/ansible-ozone-scm-leader-$$.ccache"
+          cleanup() {
+            kdestroy >/dev/null 2>&1 || true
+            rm -f "${KRB5CCNAME}"
+          }
+          trap cleanup EXIT
+          scm_principal="$(
+            klist -kt "${scm_process_dir}/ozone.keytab" \
+              | awk '$NF ~ /^scm\// { print $NF; exit }'
+          )"
+          test -n "${scm_principal}"
+          kinit -kt "${scm_process_dir}/ozone.keytab" "${scm_principal}"
+          scm_service_id="$(
+            awk '
+              /<name>ozone.scm.service.ids<\/name>/ {
+                getline
+                gsub(/.*<value>|<\/value>.*/, "")
+                print
+                exit
+              }
+            ' "${OZONE_CONF_DIR}/ozone-site.xml"
+          )"
+          test -n "${scm_service_id}"
+          ozone_bin="$(command -v ozone || true)"
+          if test -z "${ozone_bin}" && test -x /opt/cloudera/parcels/CDH/bin/ozone; then
+            ozone_bin=/opt/cloudera/parcels/CDH/bin/ozone
+          fi
+          test -x "${ozone_bin}"
+          "${ozone_bin}" admin scm roles --service-id="${scm_service_id}" 2>&1 \
+            | grep -Eq '(^|:)LEADER(:|$)'
+        executable: /bin/bash
+      register: base_cluster_ozone_scm_leader
+      until: base_cluster_ozone_scm_leader.rc == 0
+      retries: "{{ base_cluster_ozone_scm_leader_retries }}"
+      delay: "{{ base_cluster_ozone_scm_leader_delay }}"
+      changed_when: false
+      become: true
+      connection: ssh
+      delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+      when:
+        - base_cluster_install_services.ozone | default(true) | bool
+        - base_cluster_recovery_required | bool
+
+    - name: Start Ozone roles after SCM leader recovery
+      ansible.builtin.include_tasks: common_tasks/run_cm_service_setup_command.yml
+      vars:
+        base_cluster_setup_command:
+          service: ozone
+          command: start
+      when:
+        - base_cluster_install_services.ozone | default(true) | bool
+        - base_cluster_recovery_required | bool
 
     - name: Determine cluster initialization action
       ansible.builtin.set_fact:
