@@ -26,7 +26,10 @@
     rm -rf /tmp/.scm_prepare_node.lock
     rm -rf /var/local/kafka/data/meta.properties
     rm -rf /hdfs /dfs /hdfs/mapred /hdfs/yarn /impala
-    rm -rf /var/lib/hadoop-ozone /yarn* /hadoop*
+    rm -rf /var/lib/hadoop-ozone/om/data/om
+    rm -rf /var/lib/hadoop-ozone/scm/data/scm
+    rm -rf /var/lib/hadoop-ozone/recon/data/recon
+    rm -rf /yarn* /hadoop*
     rm -rf /etc/atlas /etc/hadoop* /etc/ranger* /etc/hue /etc/impala /etc/knox
     rm -rf /etc/hbase /etc/hive* /etc/hbase-solr /etc/hadoop-kms /etc/ozone*
     rm -rf /etc/oozie /etc/kafka* /etc/zeppelin* /etc/spark* /etc/sqoop*
