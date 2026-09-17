@@ -878,9 +878,10 @@
     - name: Show interrupted First Run recovery
       ansible.builtin.debug:
         msg: >-
-          The populated cluster has no matching initialization marker. Starting ZooKeeper and HDFS,
-          then reconciling only non-destructive HDFS and dependent service initialization artifacts.
-          NameNode format and cluster First Run will not be invoked.
+          The populated cluster has no matching initialization marker. Starting ZooKeeper, HDFS,
+          and Ranger prerequisites, then reconciling only non-destructive HDFS and dependent
+          service initialization artifacts. NameNode format and cluster First Run will not be
+          invoked.
       when: base_cluster_recovery_required | bool
 
     - name: Stop partially running services before initialization recovery
@@ -932,6 +933,11 @@
           + (
             [{'service': 'hdfs', 'command': 'start'}]
             if (base_cluster_install_services.hdfs | default(true) | bool)
+            else []
+          )
+          + (
+            [{'service': 'ranger', 'command': 'start'}]
+            if (base_cluster_install_services.ranger | default(true) | bool)
             else []
           )
         }}
