@@ -964,6 +964,13 @@ removes explicitly allowlisted service configuration, data, logs, runtime state,
 and discovered service-specific `/tmp` traces, recreates the agent process
 directory, and restarts the agent.
 
+Base-node cleanup includes the traditional reinstall-conflict locations
+`/hadoop-ozone`, `/impala`, `/hdfs`, `/dfs`, `/hadoop*`, `/yarn*`,
+`/var/local/kafka`, `/tmp/.scm_prepare_node.lock`, `/tmp/kafka-logs`, and
+generated `/etc` trees for all supported Cloudera services. Wildcard-equivalent
+targets are discovered and printed during preview, then removed individually
+through `ansible.builtin.file`.
+
 For ECS, this is a destructive rebuild rather than a lightweight runtime reset:
 it runs the parcel-shipped `rke2-killall.sh` twice, runs
 `rke2-uninstall.sh`, refuses to delete configured ECS storage while it is
