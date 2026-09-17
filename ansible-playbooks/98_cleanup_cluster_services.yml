@@ -243,6 +243,7 @@
           '/impala',
           '/yarn',
           '/data/ozone',
+          '/var/lib/hadoop-ozone',
           '/var/local/kafka',
           '/var/log/nm',
           '/var/run/cloudera-scm-agent/process',
