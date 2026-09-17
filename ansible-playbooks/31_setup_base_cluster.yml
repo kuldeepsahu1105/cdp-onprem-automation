@@ -454,6 +454,7 @@
         follow: true
       register: base_cluster_hue_python_environments
       become: true
+      connection: ssh
       delegate_to: "{{ groups[base_cluster_master_group][0] }}"
       when: base_cluster_install_services.hue | default(true) | bool
 
@@ -480,6 +481,7 @@
         python_psycopg2_additional_interpreters:
           - "{{ base_cluster_hue_python_interpreter_effective }}"
       become: true
+      connection: ssh
       delegate_to: "{{ groups[base_cluster_master_group][0] }}"
       when: base_cluster_install_services.hue | default(true) | bool
 

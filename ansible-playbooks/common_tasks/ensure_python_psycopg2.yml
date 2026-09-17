@@ -8,30 +8,35 @@
       }}
     state: present
 
-- name: Resolve Python interpreters that require psycopg2
+- name: Resolve Python interpreters requiring psycopg2
   ansible.builtin.set_fact:
-    python_psycopg2_interpreters_effective: >-
+    python_psycopg2_interpreters: >-
       {{
         (
           [
             python_psycopg2_interpreter
             | default(ansible_python_interpreter | default('/usr/bin/python3')),
             python_psycopg2_versioned_interpreter
-            | default('/usr/bin/python' + (python_version | string))
+            | default('/usr/bin/python' ~ (python_version | string))
           ]
           + (python_psycopg2_additional_interpreters | default([]))
         )
+        | map('string')
+        | map('trim')
+        | reject('equalto', '')
         | unique
         | list
       }}
 
-- name: Check psycopg2 in each Python interpreter
+- name: Check psycopg2 in each required Python interpreter
   ansible.builtin.command:
     argv:
       - "{{ item }}"
       - -c
       - "import psycopg2; print(psycopg2.__version__)"
-  loop: "{{ python_psycopg2_interpreters_effective }}"
+  loop: "{{ python_psycopg2_interpreters }}"
+  loop_control:
+    label: "{{ item }}"
   register: python_psycopg2_import
   changed_when: false
   failed_when: false
@@ -47,15 +52,19 @@
   environment:
     PIP_BREAK_SYSTEM_PACKAGES: "1"
   loop: "{{ python_psycopg2_import.results }}"
+  loop_control:
+    label: "{{ item.item }}"
   when: item.rc | int != 0
   changed_when: true
 
-- name: Verify psycopg2 in each Python interpreter
+- name: Verify psycopg2 in each required Python interpreter
   ansible.builtin.command:
     argv:
       - "{{ item }}"
       - -c
       - "import psycopg2; print(psycopg2.__version__)"
-  loop: "{{ python_psycopg2_interpreters_effective }}"
+  loop: "{{ python_psycopg2_interpreters }}"
+  loop_control:
+    label: "{{ item }}"
   register: python_psycopg2_verify
   changed_when: false

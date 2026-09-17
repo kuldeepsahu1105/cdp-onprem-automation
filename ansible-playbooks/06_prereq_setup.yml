@@ -78,9 +78,10 @@
 
     - name: Display psycopg2 installation
       ansible.builtin.debug:
-        msg: >-
-          psycopg2 {{ item.stdout }} is available in {{ item.item }}.
+        msg: "psycopg2 {{ item.stdout }} is available in {{ item.item }}."
       loop: "{{ python_psycopg2_verify.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
     - name: Prepare IPAServer operator tools and deployment files
       ansible.builtin.import_tasks: common_tasks/prepare_ipaserver_operator_host.yml
