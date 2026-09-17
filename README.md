@@ -93,7 +93,7 @@ Terraform generates `inventory.ini` with these groups when you run `clone_and_ru
 |---|---|---|
 | `cdh_version` | `7.3.2.10000` | CDH Runtime parcel version |
 | `cdh_numeric_version` | `82216952` | Parcel build number (used to build full parcel name) |
-| `cdh_basecluster_name` | `CDH-Cluster` | Cluster name in Cloudera Manager |
+| `cdh_basecluster_name` | `CDP-base-cluster` | Cluster name in Cloudera Manager; the default adopts an existing legacy `CDH-Cluster` |
 | `base_cluster_master_group` | `base-masters` | Inventory group for master host |
 | `base_cluster_worker_group` | `base-workers` | Inventory group for worker hosts |
 | `base_cluster_install_services` | see `all.yml` | Per-service booleans for base cluster create |
@@ -210,6 +210,21 @@ ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml \
 | `cleanup_reset_iptables` | `false` | Reset iptables on ECS nodes |
 | `cleanup_ecs_remove_docker_registry` | `true` | Remove local Docker registry |
 | `cleanup_ecs_run_rke2_killall` | `true` | Run rke2-killall on ECS nodes |
+
+For a preview-first base/ECS rebuild that preserves CM, agents, parcels, CSDs,
+repositories, PostgreSQL databases, roles, and contents:
+
+```bash
+cd ansible-playbooks
+./cleanup-cluster-services.sh --scope all
+./cleanup-cluster-services.sh --scope all --execute
+```
+
+ECS execution is destructive to the configured ECS storage paths and refuses
+to proceed while any of those paths is mounted. Full `cleanup_e2e=true` removes
+CM, agents, supervisor state, parcels/CSDs, and service state; it clears
+configured database schema objects while retaining database containers and
+roles unless PostgreSQL removal is explicitly enabled.
 
 ## Documentation
 

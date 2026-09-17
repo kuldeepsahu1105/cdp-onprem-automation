@@ -61,7 +61,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 
 | Variable | Default |
 |---|---|
-| `cdh_basecluster_name` | `CDH-Cluster` |
+| `cdh_basecluster_name` | `CDP-base-cluster` (adopts an existing legacy `CDH-Cluster`) |
+| `base_cluster_enable_kerberos` | `true` | Kerberize base clusters managed by playbook 31 and verify HDFS authentication |
 | `base_cluster_install_services` | see `all.yml` | Per-service booleans for `31_setup_base_cluster.yml` (Spark 3, Knox, and Solr default `true`; NiFi, NiFi Registry, DataViz, and Phoenix default `false`; Iceberg validates its engine services) |
 | `base_cluster_kafka_metadata_store` | `Zookeeper` | Kafka Broker metadata backend; accepted values are `Zookeeper` and `KRaft` |
 | `cm_admin_bootstrap_pass` | `admin` | Factory CM password; when `cm_admin_pass` differs, `ensure_cm_admin_password.yml` runs in **24_start_cm** / **27_setup_cm_autotls** only |
@@ -486,9 +487,28 @@ Requires:
 | `cleanup_remove_postgres_data` | Remove PG data (optional backup) |
 | `cleanup_backup_postgres_data` | `true` = mv to backup dir |
 | `cleanup_remove_postgres_packages` | Uninstall PostgreSQL packages |
-| `cleanup_e2e` | Full teardown (service users, deep dirs) |
+| `cleanup_e2e` | Full CM/node teardown: CM server/agents, supervisor state, parcels/CSDs, deep service dirs/users; removes DB schema objects while preserving PostgreSQL database containers and roles |
+| `cleanup_reset_service_databases` | On CM-only removal, clear `scm`/`rman`; on E2E cleanup, clear every configured DB schema. Database containers and roles remain |
 | `cleanup_reset_iptables` | Reset iptables (ECS nodes) |
 | `cleanup_reboot_hosts` | Reboot after cleanup |
+
+### Service-only reset (`98_cleanup_cluster_services.yml`)
+
+`98_cleanup_cluster_services.yml` successfully stops selected base/ECS clusters,
+deletes their registrations with explicit 404 verification, and removes their
+allowlisted node configuration, data, logs, runtime state, and temporary traces.
+ECS scope is a destructive rebuild using the parcel killall/uninstall helpers
+and configuration-derived storage paths; mounted storage is rejected. It
+preserves CM, CM agents, agent host UUIDs, packages, parcels, CSDs, caches,
+repositories, PostgreSQL databases, and PostgreSQL roles. PostgreSQL contents
+are not modified. Use
+`cleanup-cluster-services.sh` for a preview-first wrapper.
+
+| Input | Values/default |
+|---|---|
+| `cleanup_cluster_services_scope_input` | `base`, `ecs`, or `all`; default `all` |
+| `cleanup_cluster_services_execute_input` | `false` previews; `true` performs deletion |
+| `cleanup_cluster_services_confirm_input` | Must equal `DELETE-CLUSTER-SERVICE-DATA` for execution |
 
 ---
 

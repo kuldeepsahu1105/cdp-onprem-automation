@@ -99,6 +99,18 @@ Review the final `CDP_ACCESS_URLS` block or the Jenkins
 
 ## 5. Cleanup
 
+For a cluster service-data reset that preserves CM, agents, packages, parcels,
+CSDs, caches, repositories, and agent host UUIDs:
+
+```bash
+cd ansible-playbooks
+./cleanup-cluster-services.sh --scope all          # preview
+./cleanup-cluster-services.sh --scope all --execute
+```
+
+The ECS scope is a destructive rebuild. It validates configured ECS storage
+mounts before stopping or deleting anything and refuses mounted paths.
+
 Preview cleanup:
 
 ```bash

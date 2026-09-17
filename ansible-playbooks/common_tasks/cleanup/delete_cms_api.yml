@@ -1,5 +1,17 @@
 ---
-- name: Delete Cloudera Management Service (CMS) via API
+- name: Check whether Cloudera Management Service exists before deletion
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/cm/service"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 404]
+    follow_redirects: none
+  register: cms_before_delete
+
+- name: Delete Cloudera Management Service via API
   ansible.builtin.uri:
     url: "{{ cm_api_url }}/cm/service"
     method: DELETE
@@ -7,10 +19,27 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
-    status_code: [200, 202, 204, 400, 404]
+    status_code: [200]
+    follow_redirects: none
   register: delete_cms_result
-  failed_when: false
+  when: cms_before_delete.status == 200
+
+- name: Confirm Cloudera Management Service is absent
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/cm/service"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [404]
+    follow_redirects: none
+  register: cms_deleted
+  retries: 12
+  delay: 5
+  until: cms_deleted.status == 404
 
 - name: Print CMS delete API result
   ansible.builtin.debug:
-    msg: "CMS delete API status: {{ delete_cms_result.status | default('unknown') }}"
+    msg: >-
+      CMS is absent (initial status {{ cms_before_delete.status }}).
