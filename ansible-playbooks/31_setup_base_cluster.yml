@@ -409,6 +409,7 @@
         cm_config_desired:
           ozone.service.id: "{{ base_cluster_ozone_service_id }}"
           ozone.scm.primordial.node.id: "{{ base_master_fqdn }}"
+          hdfs_service: "{{ 'hdfs' if base_cluster_install_services.hdfs | default(true) else '' }}"
       when: base_cluster_install_services.ozone | default(true) | bool
 
     - name: Configure Hive database
