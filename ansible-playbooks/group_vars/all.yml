@@ -577,6 +577,11 @@ cm_cms_configure_autotls_trust: true
 cm_cms_autotls_truststore_path: /var/lib/cloudera-scm-agent/agent-cert/cm-auto-global_truststore.jks
 # CM redacts this secret on reads; set true only for an explicit truststore password repair.
 cm_cms_update_autotls_truststore_password: false
+# Knox service discovery calls CM over HTTPS and must use the Auto-TLS truststore.
+base_cluster_knox_configure_autotls_trust: true
+base_cluster_knox_autotls_truststore_path: /var/lib/cloudera-scm-agent/agent-cert/cm-auto-in_cluster_truststore.jks
+# Set true only to repair/rotate an already-configured Knox client truststore password.
+base_cluster_knox_update_autotls_truststore_password: false
 # ensure_cm_autotls_agent_truststore.yml: wait after manager agent restart when JKS missing under Auto-TLS
 cm_autotls_truststore_wait_retries: 12
 cm_autotls_truststore_wait_delay: 10

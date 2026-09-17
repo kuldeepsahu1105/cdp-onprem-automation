@@ -494,6 +494,17 @@ recovery above only after CM ends First Run with the single
 `WaitForKnoxGatewayReadyToServe` failure and Knox subsequently reports
 `STARTED/GOOD`.
 
+When `gateway.log` reports `Failed to configure truststore` followed by a
+`PKIX path building failed` error while discovering the CM API, waiting cannot
+recover the gateway: `cdp-proxy`, `cdp-proxy-token`, `cdp-proxy-api`, and
+`cdp-datashare-access` cannot be generated. Playbook **31** configures the Knox
+Gateway role's `ssl_client_truststore_*` settings from CM's Auto-TLS truststore
+and password before First Run. On a rerun, it restarts an already-running Knox
+service when those settings change. The expected generated
+`gateway-site.xml` value is a non-empty
+`gateway.httpclient.truststore.path`; an empty value confirms the trust
+configuration is missing.
+
 `base_cluster_enable_kerberos: true` makes playbook **31** Kerberize every base
 cluster it manages. Auto-TLS and CM KDC/account-manager integration must already
 be active before cluster creation. For a newly created cluster, playbook **31**
