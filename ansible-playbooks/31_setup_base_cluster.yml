@@ -1039,6 +1039,7 @@
       register: base_cluster_yarn_directory_recovery
       changed_when: "'changed=true' in base_cluster_yarn_directory_recovery.stdout"
       become: true
+      connection: ssh
       delegate_to: "{{ base_cluster_hdfs_client_host }}"
       when:
         - base_cluster_recovery_required | bool

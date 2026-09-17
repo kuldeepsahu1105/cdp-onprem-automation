@@ -460,7 +460,9 @@ HDFS `/tmp` reconciliation first calls CM's documented
 worker, then uses the first available HDFS client to create the namespace path
 and verify mode `1777` (world-writable with sticky bit). The probe checks
 `PATH`, the active `/opt/cloudera/parcels/CDH/bin/hdfs` link, and executable
-versioned `/opt/cloudera/parcels/CDH-*/bin/hdfs` clients.
+versioned `/opt/cloudera/parcels/CDH-*/bin/hdfs` clients. These delegated
+commands explicitly use SSH so the localhost CM orchestration play cannot run
+them on the Jenkins controller.
 The same verification runs after a fresh First Run, so the HDFS canary can
 create `/tmp/.cloudera_health_monitoring_canary_files`. This is not the local
 Linux `/tmp` directory on each DataNode.
