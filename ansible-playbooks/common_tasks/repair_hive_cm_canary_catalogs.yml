@@ -92,6 +92,40 @@
   delegate_to: "{{ postgres_inventory_host }}"
   when: hive_canary_schema_exists.stdout | trim == 'true'
 
+- name: Read Hive catalog foreign-key deferral state
+  ansible.builtin.command:
+    argv:
+      - "{{ hive_canary_psql }}"
+      - "--host={{ postgres_ensure_cm_db_psql_host_effective }}"
+      - "--port={{ base_cluster_database_port }}"
+      - "--username={{ base_cluster_hive_database_user }}"
+      - "--dbname={{ base_cluster_hive_database_name }}"
+      - "--tuples-only"
+      - "--no-align"
+      - "--set=ON_ERROR_STOP=1"
+      - >-
+        --command=SELECT condeferrable::text || '|' || condeferred::text
+        FROM pg_constraint
+        WHERE conname = 'DBS_FK1'
+          AND conrelid = 'public."DBS"'::regclass;
+  environment:
+    PGPASSWORD: "{{ base_cluster_hive_database_password }}"
+  register: hive_canary_dbs_fk_state
+  changed_when: false
+  become: true
+  connection: ssh
+  delegate_to: "{{ postgres_inventory_host }}"
+  when: hive_canary_schema_exists.stdout | trim == 'true'
+
+- name: Require Hive catalog foreign key
+  ansible.builtin.assert:
+    that:
+      - hive_canary_dbs_fk_state.stdout | default('') | trim | length > 0
+    fail_msg: >-
+      Hive metastore tables exist, but DBS_FK1 was not found on public."DBS".
+      Refusing to modify an unknown metastore schema.
+  when: hive_canary_schema_exists.stdout | trim == 'true'
+
 - name: Read Hive state before stale canary repair
   ansible.builtin.uri:
     url: >-
@@ -106,7 +140,12 @@
   register: hive_canary_hive_state
   changed_when: false
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
-  when: hive_canary_stale_catalogs.stdout_lines | default([]) | length > 0
+  when: >-
+    hive_canary_stale_catalogs.stdout_lines | default([]) | length > 0
+    or (
+      hive_canary_dbs_fk_state.stdout | default('') | trim
+      != 'true|true'
+    )
 
 - name: Stop Hive before stale canary repair
   ansible.builtin.uri:
@@ -123,7 +162,12 @@
   register: hive_canary_stop_command
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
   when:
-    - hive_canary_stale_catalogs.stdout_lines | default([]) | length > 0
+    - >-
+      hive_canary_stale_catalogs.stdout_lines | default([]) | length > 0
+      or (
+        hive_canary_dbs_fk_state.stdout | default('') | trim
+        != 'true|true'
+      )
     - hive_canary_hive_state.json.serviceState | default('') in ['STARTED', 'STARTING']
 
 - name: Wait for Hive stop before stale canary repair
@@ -135,6 +179,65 @@
   when:
     - hive_canary_stop_command is defined
     - hive_canary_stop_command.json.id is defined
+
+- name: Defer Hive catalog foreign-key validation until transaction commit
+  ansible.builtin.command:
+    argv:
+      - "{{ hive_canary_psql }}"
+      - "--host={{ postgres_ensure_cm_db_psql_host_effective }}"
+      - "--port={{ base_cluster_database_port }}"
+      - "--username={{ base_cluster_hive_database_user }}"
+      - "--dbname={{ base_cluster_hive_database_name }}"
+      - "--set=ON_ERROR_STOP=1"
+      - >-
+        --command=ALTER TABLE "DBS"
+        ALTER CONSTRAINT "DBS_FK1"
+        DEFERRABLE INITIALLY DEFERRED;
+  environment:
+    PGPASSWORD: "{{ base_cluster_hive_database_password }}"
+    PGOPTIONS: "-c lock_timeout=30s -c statement_timeout=300s"
+  register: hive_canary_dbs_fk_reconcile
+  changed_when: true
+  become: true
+  connection: ssh
+  delegate_to: "{{ postgres_inventory_host }}"
+  when:
+    - hive_canary_schema_exists.stdout | trim == 'true'
+    - hive_canary_dbs_fk_state.stdout | default('') | trim != 'true|true'
+
+- name: Verify deferred Hive catalog foreign key
+  ansible.builtin.command:
+    argv:
+      - "{{ hive_canary_psql }}"
+      - "--host={{ postgres_ensure_cm_db_psql_host_effective }}"
+      - "--port={{ base_cluster_database_port }}"
+      - "--username={{ base_cluster_hive_database_user }}"
+      - "--dbname={{ base_cluster_hive_database_name }}"
+      - "--tuples-only"
+      - "--no-align"
+      - "--set=ON_ERROR_STOP=1"
+      - >-
+        --command=SELECT condeferrable::text || '|' || condeferred::text
+        FROM pg_constraint
+        WHERE conname = 'DBS_FK1'
+          AND conrelid = 'public."DBS"'::regclass;
+  environment:
+    PGPASSWORD: "{{ base_cluster_hive_database_password }}"
+  register: hive_canary_dbs_fk_verify
+  changed_when: false
+  become: true
+  connection: ssh
+  delegate_to: "{{ postgres_inventory_host }}"
+  when: hive_canary_schema_exists.stdout | trim == 'true'
+
+- name: Require deferred Hive catalog foreign key
+  ansible.builtin.assert:
+    that:
+      - hive_canary_dbs_fk_verify.stdout | trim == 'true|true'
+    fail_msg: >-
+      DBS_FK1 is not DEFERRABLE INITIALLY DEFERRED. Hive drop_catalog can delete
+      CTLGS before DBS in one transaction, so the CM metastore canary would fail.
+  when: hive_canary_schema_exists.stdout | trim == 'true'
 
 - name: Remove stale CM Hive Metastore canary catalogs
   ansible.builtin.command:

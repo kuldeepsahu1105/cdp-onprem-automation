@@ -510,6 +510,8 @@ base_cluster_knox_readiness_recovery_retries: 30
 base_cluster_knox_readiness_recovery_delay: 10
 # Kerberize every base cluster managed by playbook 31 after its initial service setup succeeds.
 base_cluster_enable_kerberos: true
+# Restart CMS after base-cluster startup and security convergence.
+base_cluster_restart_cms_after_start: true
 
 cdh_parcel_version: "{{ cdh_version.split('.')[:3] | join('.') }}-1.cdh{{ cdh_version.split('.')[:3] | join('.') }}.p{{ cdh_version.split('.')[-1] }}.{{ cdh_numeric_version }}"
 kerberos_principal: "{{ ipaadmin_principal }}/{{ ipaadmin_principal }}@{{ cluster_realm }}"

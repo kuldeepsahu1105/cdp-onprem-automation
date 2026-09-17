@@ -498,6 +498,13 @@ being Kerberized are already started after the security change and avoid that
 extra restart. The final initialization marker is written only after both CM
 Auto-TLS and HDFS Kerberos report the requested enabled state.
 
+After base-cluster startup, any required Auto-TLS/Kerberos restart, and client
+configuration refresh complete, playbook **31** restarts Cloudera Management
+Service through the CM API and waits for the restart command. The base-cluster
+completion marker is not written unless CMS was running and CM accepted the
+restart. Set `base_cluster_restart_cms_after_start: false` only when CMS restart
+is intentionally managed outside this workflow.
+
 Hue is configured with the external `hue` PostgreSQL database before cluster
 startup. Playbook **31** reconciles the database settings for existing Hue
 services as well as rendering them for new clusters, preventing reruns from
@@ -512,12 +519,15 @@ hardcoding a Python minor version or full venv interpreter path.
 For an existing cluster, playbook **31** also detects stale Hive Metastore
 catalogs whose names begin with
 `cloudera_manager_metastore_canary_test_catalog_`. When found, it stops Hive,
-refuses cleanup if any table or function belongs to a canary database, removes
-only CM-canary database parameters, privileges, notification rows, database
-rows, and catalog rows, then verifies that no stale canary catalog remains
-before cluster startup. Set `base_cluster_repair_hive_canary_catalogs: false`
-to disable this narrowly scoped repair. Normal Hive catalogs and databases are
-never selected.
+reconciles `DBS_FK1` to `DEFERRABLE INITIALLY DEFERRED`, refuses cleanup if any
+table or function belongs to a canary database, removes only CM-canary database
+parameters, privileges, notification rows, database rows, and catalog rows,
+then verifies that no stale canary catalog remains before cluster startup.
+Deferred validation preserves the foreign key but lets Hive's `drop_catalog`
+transaction batch its `CTLGS` and `DBS` deletes in either order; this prevents
+each new canary run from recreating the same FK failure. Set
+`base_cluster_repair_hive_canary_catalogs: false` to disable this narrowly
+scoped repair. Normal Hive catalogs and databases are never selected.
 
 New deployments use the default cluster name `CDP-base-cluster`. When that
 default is unchanged and a pre-V2 `CDH-Cluster` already exists, playbook **31**

@@ -1866,6 +1866,25 @@
           AUTO_TLS_TYPE. Do not record the cluster initialization marker.
       when: autotls_enabled | default(true) | bool
 
+    - name: Restart Cloudera Management Service after base cluster convergence
+      ansible.builtin.include_tasks: common_tasks/restart_cm_management_service_api.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_uri_delegate_to: "{{ cm_cluster_module_delegate_to }}"
+      when: base_cluster_restart_cms_after_start | default(true) | bool
+
+    - name: Require completed Cloudera Management Service restart
+      ansible.builtin.assert:
+        that:
+          - cms_service_state_for_restart.status | default(0) | int == 200
+          - cms_service_state_for_restart.json.serviceState | default('') == 'STARTED'
+          - cms_restart_api_cmd.json.id is defined
+        fail_msg: >-
+          Base cluster convergence completed, but Cloudera Management Service
+          was not running or CM did not return a restart command. Do not record
+          the cluster initialization marker.
+      when: base_cluster_restart_cms_after_start | default(true) | bool
+
     - name: Read final cluster state
       ansible.builtin.uri:
         url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}?view=full"
