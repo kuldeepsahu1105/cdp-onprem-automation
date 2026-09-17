@@ -1097,30 +1097,11 @@
         - base_cluster_install_services.hdfs | default(true) | bool
 
     - name: Recover YARN node-label directory
-      ansible.builtin.shell: |
-        set -euo pipefail
-        hdfs_cli={{ base_cluster_hdfs_client_path | quote }}
-        changed=false
-
-        hdfs_dfs() {
-          env HADOOP_USER_NAME=hdfs HADOOP_CONF_DIR=/etc/hadoop/conf \
-            "$hdfs_cli" dfs "$@"
-        }
-
-        if ! hdfs_dfs -test -d {{ base_cluster_yarn_node_labels_dir | quote }}; then
-          hdfs_dfs -mkdir -p {{ base_cluster_yarn_node_labels_dir | quote }}
-          changed=true
-        fi
-        hdfs_dfs -chown yarn:yarn {{ base_cluster_yarn_node_labels_dir | quote }}
-        hdfs_dfs -chmod 700 {{ base_cluster_yarn_node_labels_dir | quote }}
-        echo "changed=${changed}"
-      args:
-        executable: /bin/bash
-      register: base_cluster_yarn_directory_recovery
-      changed_when: "'changed=true' in base_cluster_yarn_directory_recovery.stdout"
-      become: true
-      connection: ssh
-      delegate_to: "{{ base_cluster_hdfs_client_host }}"
+      ansible.builtin.include_tasks: common_tasks/reconcile_hdfs_directory.yml
+      vars:
+        hdfs_directory_path: "{{ base_cluster_yarn_node_labels_dir }}"
+        hdfs_directory_mode: "700"
+        hdfs_directory_owner: "yarn:yarn"
       when:
         - base_cluster_recovery_required | bool
         - base_cluster_install_services.hdfs | default(true) | bool

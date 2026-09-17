@@ -1,0 +1,95 @@
+---
+# Required:
+# - hdfs_directory_path
+# - hdfs_directory_mode
+# Uses the HDFS client/authentication facts resolved by ensure_hdfs_tmp.yml.
+# Optional:
+# - hdfs_directory_owner (user:group)
+
+- name: Reconcile HDFS directory {{ hdfs_directory_path }}
+  ansible.builtin.shell: |
+    set -euo pipefail
+    hdfs_cli={{ base_cluster_hdfs_client_path | quote }}
+    directory={{ hdfs_directory_path | quote }}
+    required_mode={{ hdfs_directory_mode | quote }}
+    required_owner={{ hdfs_directory_owner | default('') | quote }}
+    changed=false
+    hdfs_authentication={{ base_cluster_hdfs_tmp_authentication | quote }}
+
+    if [ "$hdfs_authentication" = "kerberos" ]; then
+      hdfs_keytab=""
+      while IFS= read -r candidate; do
+        if [ -z "$hdfs_keytab" ] || [ "$candidate" -nt "$hdfs_keytab" ]; then
+          hdfs_keytab="$candidate"
+        fi
+      done < <(
+        find /var/run/cloudera-scm-agent/process -maxdepth 3 \
+          -type f -name hdfs.keytab -print 2>/dev/null
+      )
+
+      if [ -z "$hdfs_keytab" ]; then
+        echo "HDFS uses Kerberos, but no active CM-generated hdfs.keytab was found." >&2
+        exit 1
+      fi
+      hadoop_conf_dir=$(dirname "$hdfs_keytab")
+
+      hdfs_principal=$(
+        klist -k "$hdfs_keytab" \
+          | awk '$NF ~ /^hdfs(\/|@)/ { print $NF; exit }'
+      )
+      if [ -z "$hdfs_principal" ]; then
+        echo "No hdfs principal was found in $hdfs_keytab." >&2
+        exit 1
+      fi
+
+      export KRB5CCNAME="FILE:/tmp/ansible-hdfs-directory-$$"
+      trap 'kdestroy -c "$KRB5CCNAME" >/dev/null 2>&1 || rm -f "${KRB5CCNAME#FILE:}"' EXIT
+      kinit -c "$KRB5CCNAME" -kt "$hdfs_keytab" "$hdfs_principal"
+
+      hdfs_dfs() {
+        env KRB5CCNAME="$KRB5CCNAME" HADOOP_CONF_DIR="$hadoop_conf_dir" \
+          "$hdfs_cli" dfs "$@"
+      }
+    elif [ "$hdfs_authentication" = "simple" ]; then
+      hdfs_dfs() {
+        env HADOOP_USER_NAME=hdfs HADOOP_CONF_DIR=/etc/hadoop/conf \
+          "$hdfs_cli" dfs "$@"
+      }
+    else
+      echo "Unsupported HDFS authentication mode: $hdfs_authentication" >&2
+      exit 1
+    fi
+
+    if ! hdfs_dfs -test -d "$directory"; then
+      hdfs_dfs -mkdir -p "$directory"
+      changed=true
+    fi
+
+    if [ -n "$required_owner" ]; then
+      current_owner=$(hdfs_dfs -stat '%u:%g' "$directory")
+      if [ "$current_owner" != "$required_owner" ]; then
+        hdfs_dfs -chown "$required_owner" "$directory"
+        changed=true
+      fi
+    fi
+
+    current_mode=$(hdfs_dfs -stat '%a' "$directory")
+    if [ "$current_mode" != "$required_mode" ]; then
+      hdfs_dfs -chmod "$required_mode" "$directory"
+      changed=true
+    fi
+
+    hdfs_dfs -test -d "$directory"
+    test "$(hdfs_dfs -stat '%a' "$directory")" = "$required_mode"
+    if [ -n "$required_owner" ]; then
+      test "$(hdfs_dfs -stat '%u:%g' "$directory")" = "$required_owner"
+    fi
+    hdfs_dfs -ls -d "$directory"
+    echo "changed=${changed}"
+  args:
+    executable: /bin/bash
+  register: hdfs_directory_reconcile
+  changed_when: "'changed=true' in hdfs_directory_reconcile.stdout"
+  become: true
+  connection: ssh
+  delegate_to: "{{ base_cluster_hdfs_client_host }}"
