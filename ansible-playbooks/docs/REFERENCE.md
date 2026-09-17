@@ -596,7 +596,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/disable_firewall.yml` | firewalld (RHEL) or ufw skip |
 | `common_tasks/join_ad_realm.yml` | AD `realm join` |
 | `common_tasks/join_freeipa_client.yml` | IPA client enrollment (detect partial state, optional uninstall, preflight, `ipa-client-install`, fail diagnostics) |
-| `common_tasks/detect_ipa_client_install_state.yml` | `default.conf` vs partial client debris (`/var/lib/ipa-client/sysrestore`, `/etc/ipa` fragments) before enroll |
+| `common_tasks/detect_ipa_client_install_state.yml` | `default.conf` vs partial client state (`/var/lib/ipa-client/sysrestore` markers and deployment-specific `ca.crt`) before enroll; ordinary package-created `/etc/ipa` files are ignored |
 | `common_tasks/preflight_ipa_client_install.yml` | Optional hostname/DNS/`getent` asserts before `ipa-client-install` when **`ipa_client_preflight_enabled: true`** (default **`false`**) on hosts without `/etc/ipa/default.conf` |
 | `common_tasks/ensure_krb5_ansible_ccache_note.yml` | Comment-only **`/etc/krb5.conf.d/ansible-ccache-note.conf`**; play **12** / **16**; **SSSD restart** on clients when drop-in changes and SSSD is active |
 | `common_tasks/ensure_krb5_default_ccache_commented.yml` | **Clients:** comment KEYRING **`default_ccache_name`** (`krb5_libdefaults_default_ccache_commented_line`). **ipaserver:** restore active KEYRING unless **`krb5_comment_default_ccache_on_ipaserver: true`**; play **12** / **16** / **`join_freeipa_client`**; **`ipactl`** / **SSSD** restart when krb5.conf changes |

@@ -108,7 +108,7 @@ See also: `docs/OPERATIONS_GUIDE.md` (URL verification tiers), `docs/REFERENCE.m
 | `krb5_libdefaults_default_ccache_commented_line` | `group_vars/all.yml` | Target commented line on **clients** (`ensure_krb5_default_ccache_commented.yml`) |
 | `krb5_conf_default_ccache_adjusted` | `ensure_krb5_default_ccache_commented.yml` | **`true`** when main krb5.conf was edited; gates **`ipactl`** / **SSSD** restart helpers |
 | `ipa_client_preflight_enabled` | `group_vars/all.yml` (default **`false`**) | When **`true`**, `join_freeipa_client.yml` imports **`preflight_ipa_client_install.yml`** on hosts without **`/etc/ipa/default.conf`** (hostname **`hostname -f`**, FQDN **`getent ahostsv4`**, **`ipaserver`** **`getent hosts`**). No HTTPS **`/ipa/json`** probe — use RUNBOOK **`zlib.error`** **`curl`** checks on ipaserver misconfig. |
-| `ipa_client_has_default_conf`, `ipa_client_has_partial_state` | `detect_ipa_client_install_state.yml` | Gates install, optional uninstall, and preflight import |
+| `ipa_client_has_default_conf`, `ipa_client_has_partial_state`, `ipa_client_recovery_requires_uninstall` | `detect_ipa_client_install_state.yml` | Gates install and preflight; uninstall requires concrete client sysrestore markers |
 
 ---
 

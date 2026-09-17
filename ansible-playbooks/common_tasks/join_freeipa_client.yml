@@ -16,7 +16,7 @@
   failed_when: false
   when:
     - not (ipa_client_has_default_conf | default(false) | bool)
-    - ipa_client_has_partial_state | default(false) | bool
+    - ipa_client_recovery_requires_uninstall | default(false) | bool
 
 - name: Log ipa-client-install uninstall result before enroll
   ansible.builtin.debug:
@@ -72,7 +72,7 @@
       Common causes on scaled or new nodes: hostname/FQDN mismatch (re-run 02 and 03),
       stale /etc/hosts on peers, missing IPA PTR/A for this host (re-run 14_setup_dns_records.yml),
       duplicate host entry in IPA, clock skew (chronyd), partial install debris (playbook runs
-      ipa-client-install --uninstall --unattended when sysrestore or /etc/ipa fragments exist without
+      ipa-client-install --uninstall --unattended when sysrestore markers exist without
       default.conf; manual: ipa-client-install --uninstall --unattended on the host), or corrupted gzip
       on https://{{ ipaserver }}/ipa/json (check ipaserver zz-ipa-caddy-proxy.conf — mod_substitute
       must not cover /ipa/json; re-run PORTAL).
