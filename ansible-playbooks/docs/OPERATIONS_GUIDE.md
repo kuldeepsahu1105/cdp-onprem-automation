@@ -459,6 +459,12 @@ complete successfully. CM can report a one-time setup command as
 reports that exact response as a skip and continues, but all other HTTP or
 command failures remain fatal.
 
+CM can occasionally fail First Run at `WaitForKnoxGatewayReadyToServe` even
+though the Knox process subsequently reaches `STARTED/GOOD`. When that is the
+only failed First Run child, playbook **31** performs a bounded Knox health
+poll, then starts and polls the full cluster. It does not suppress other Knox
+failures or continue while the remaining services are stopped.
+
 `base_cluster_enable_kerberos: true` makes playbook **31** Kerberize every base
 cluster it manages. After initial service setup succeeds, the playbook checks
 HDFS authentication. A cluster still using `simple` authentication is stopped,

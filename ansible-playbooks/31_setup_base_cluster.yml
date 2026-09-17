@@ -1247,6 +1247,105 @@
           changed_when: false
           delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+        - name: Collect failed First Run service details
+          ansible.builtin.set_fact:
+            base_cluster_failed_service_details: >-
+              {{
+                base_cluster_failed_service_commands.results
+                | default([])
+                | selectattr('json', 'defined')
+                | map(attribute='json')
+                | list
+              }}
+
+        - name: Detect recoverable Knox readiness timeout
+          ansible.builtin.set_fact:
+            base_cluster_knox_readiness_recovery_candidate: >-
+              {{
+                base_cluster_first_run_required | bool
+                and base_cluster_failed_service_details | length == 1
+                and base_cluster_failed_service_details[0]
+                  .get('serviceRef', {}).get('serviceName', '') == 'knox'
+                and (
+                  base_cluster_failed_service_details[0]
+                  .get('children', {}).get('items', [])
+                  | rejectattr('success', 'equalto', true)
+                  | map(attribute='name')
+                  | list
+                ) == ['WaitForKnoxGatewayReadyToServe']
+              }}
+
+        - name: Wait for Knox after transient First Run readiness timeout
+          ansible.builtin.uri:
+            url: >-
+              {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+              }}/services/knox?view=full
+            method: GET
+            user: "{{ cm_admin_user }}"
+            password: "{{ cm_admin_pass }}"
+            force_basic_auth: yes
+            validate_certs: no
+            status_code: [200]
+            follow_redirects: none
+          register: base_cluster_knox_readiness_recovery
+          until:
+            - base_cluster_knox_readiness_recovery.json.serviceState | default('') == 'STARTED'
+            - base_cluster_knox_readiness_recovery.json.healthSummary | default('') == 'GOOD'
+          retries: "{{ base_cluster_knox_readiness_recovery_retries | default(30) }}"
+          delay: "{{ base_cluster_knox_readiness_recovery_delay | default(10) }}"
+          failed_when: false
+          changed_when: false
+          delegate_to: "{{ cm_cluster_module_delegate_to }}"
+          when: base_cluster_knox_readiness_recovery_candidate | bool
+
+        - name: Confirm recoverable Knox readiness timeout
+          ansible.builtin.set_fact:
+            base_cluster_knox_readiness_recovered: >-
+              {{
+                base_cluster_knox_readiness_recovery_candidate | bool
+                and base_cluster_knox_readiness_recovery.status | default(0) == 200
+                and base_cluster_knox_readiness_recovery.json.serviceState | default('') == 'STARTED'
+                and base_cluster_knox_readiness_recovery.json.healthSummary | default('') == 'GOOD'
+              }}
+
+        - name: Start full cluster after Knox readiness recovery
+          ansible.builtin.uri:
+            url: >-
+              {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/commands/start
+            method: POST
+            user: "{{ cm_admin_user }}"
+            password: "{{ cm_admin_pass }}"
+            force_basic_auth: yes
+            validate_certs: no
+            status_code: [200]
+            follow_redirects: none
+          register: base_cluster_post_knox_recovery_start
+          delegate_to: "{{ cm_cluster_module_delegate_to }}"
+          when: base_cluster_knox_readiness_recovered | bool
+
+        - name: Require post-Knox recovery cluster start command
+          ansible.builtin.assert:
+            that:
+              - base_cluster_post_knox_recovery_start.json.id is defined
+            fail_msg: >-
+              CM did not return a command ID while starting the cluster after
+              Knox readiness recovery.
+          when: base_cluster_knox_readiness_recovered | bool
+
+        - name: Wait for full cluster start after Knox readiness recovery
+          ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+          vars:
+            cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+            cm_api_command_id: "{{ base_cluster_post_knox_recovery_start.json.id }}"
+          when: base_cluster_knox_readiness_recovered | bool
+
+        - name: Report recovered Knox First Run readiness timeout
+          ansible.builtin.debug:
+            msg: >-
+              Knox became STARTED/GOOD after CM First Run timed out waiting for
+              readiness. The full cluster start then completed successfully.
+          when: base_cluster_knox_readiness_recovered | bool
+
         - name: Report failed First Run services
           ansible.builtin.fail:
             msg: |-
@@ -1258,6 +1357,7 @@
               {% endfor %}
               {% endfor %}
               Original error: {{ ansible_failed_result.msg | default('unknown') }}
+          when: not (base_cluster_knox_readiness_recovered | default(false) | bool)
 
     - name: Refresh existing base cluster with name {{ cdh_basecluster_name }}
       ansible.builtin.uri:
