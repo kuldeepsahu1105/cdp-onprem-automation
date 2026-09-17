@@ -928,6 +928,64 @@ ansible-playbook -i inventory.ini 99_cleanup.yml \
 
 See [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) for all toggles.
 
+### Service-data reset while preserving installation assets
+
+Use `98_cleanup_cluster_services.yml` when rebuilding only the base and/or ECS
+clusters. Unlike `99_cleanup.yml`, this workflow preserves CM, agents, packages,
+agent host UUIDs, `/opt/cloudera/parcels`, `/opt/cloudera/csd`, parcel caches,
+and package repositories.
+
+Preview first:
+
+```bash
+cd ansible-playbooks
+./cleanup-cluster-services.sh --scope all
+```
+
+Execute for `base`, `ecs`, or `all`:
+
+```bash
+./cleanup-cluster-services.sh --scope all --execute
+```
+
+Direct Ansible execution requires the exact confirmation token:
+
+```bash
+ansible-playbook -i inventory.ini 98_cleanup_cluster_services.yml \
+  -e cleanup_cluster_services_scope_input=all \
+  -e cleanup_cluster_services_execute_input=true \
+  -e cleanup_cluster_services_confirm_input=DELETE-CLUSTER-SERVICE-DATA
+```
+
+The playbook first submits the selected cluster stop command, polls its CM
+command ID to successful completion, deletes the cluster registration, and
+requires an explicit follow-up HTTP 404. It then stops the preserved agent,
+removes explicitly allowlisted service configuration, data, logs, runtime state,
+and discovered service-specific `/tmp` traces, recreates the agent process
+directory, and restarts the agent.
+
+For ECS, this is a destructive rebuild rather than a lightweight runtime reset:
+it runs the parcel-shipped `rke2-killall.sh` twice, runs
+`rke2-uninstall.sh`, refuses to delete configured ECS storage while it is
+mounted, and removes only `ecs_docker_data_path`, `ecs_lso_data_path`, and
+`ecs_longhorn_data_path` plus known RKE2/ECS state. It does not blanket-delete
+shared standalone Docker/containerd/etcd paths. Parcel and CSD content remain.
+PostgreSQL is not modified by base/ECS cleanup. The preserved agent UUID retains
+the host identity; it does not recreate deleted clusters or roles.
+
+When `99_cleanup.yml` removes CM (`cleanup_remove_cm=true` or
+`cleanup_e2e=true`), CM-only cleanup resets `scm` and `rman`; E2E cleanup,
+after successfully stopping/deleting base and ECS clusters, resets every
+configured PostgreSQL service database. CM/CMS are stopped and remaining
+database sessions are terminated before schemas are reset. Database containers
+and login roles are preserved;
+tables, sequences, functions, views, extensions, and other schema objects are
+removed. The E2E path removes CM
+server/agent packages, supervisor state, CSDs, parcels, parcel repositories, and
+cluster-node service state. Even with `cleanup_e2e=true`, PostgreSQL data and
+packages are preserved unless the separate `cleanup_remove_postgres_*` toggles
+are explicitly enabled.
+
 ---
 
 ## Troubleshooting

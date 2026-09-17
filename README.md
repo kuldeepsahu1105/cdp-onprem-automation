@@ -211,6 +211,21 @@ ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml \
 | `cleanup_ecs_remove_docker_registry` | `true` | Remove local Docker registry |
 | `cleanup_ecs_run_rke2_killall` | `true` | Run rke2-killall on ECS nodes |
 
+For a preview-first base/ECS rebuild that preserves CM, agents, parcels, CSDs,
+repositories, PostgreSQL databases, roles, and contents:
+
+```bash
+cd ansible-playbooks
+./cleanup-cluster-services.sh --scope all
+./cleanup-cluster-services.sh --scope all --execute
+```
+
+ECS execution is destructive to the configured ECS storage paths and refuses
+to proceed while any of those paths is mounted. Full `cleanup_e2e=true` removes
+CM, agents, supervisor state, parcels/CSDs, and service state; it clears
+configured database schema objects while retaining database containers and
+roles unless PostgreSQL removal is explicitly enabled.
+
 ## Documentation
 
 | Document | Audience | Contents |

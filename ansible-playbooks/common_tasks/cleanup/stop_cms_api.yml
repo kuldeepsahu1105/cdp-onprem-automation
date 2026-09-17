@@ -1,17 +1,5 @@
 ---
-- name: Stop Cloudera Management Service (CMS) via API
-  ansible.builtin.uri:
-    url: "{{ cm_api_url }}/cm/service/commands/stop"
-    method: POST
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: yes
-    validate_certs: no
-    status_code: [200, 202, 204, 400, 404]
-  register: stop_cms_result
-  failed_when: false
-
-- name: Wait for CMS to stop
+- name: Check whether Cloudera Management Service exists
   ansible.builtin.uri:
     url: "{{ cm_api_url }}/cm/service"
     method: GET
@@ -20,18 +8,38 @@
     force_basic_auth: yes
     validate_certs: no
     status_code: [200, 404]
-  register: cms_status
-  until: >
-    cms_status.status == 404
-    or (
-      cms_status.json is defined
-      and cms_status.json.serviceState | default('') in ['STOPPED', 'NONE']
-    )
-  retries: 20
-  delay: 10
-  failed_when: false
-  when: stop_cms_result.status in [200, 202]
+    follow_redirects: none
+  register: cms_before_stop
+
+- name: Stop Cloudera Management Service via API
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/cm/service/commands/stop"
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: stop_cms_result
+  when:
+    - cms_before_stop.status == 200
+    - cms_before_stop.json.serviceState | default('') != 'STOPPED'
+
+- name: Require CMS stop command ID
+  ansible.builtin.assert:
+    that:
+      - stop_cms_result.json.id is defined
+    fail_msg: CM did not return a command ID while stopping CMS.
+  when: stop_cms_result is not skipped
+
+- name: Wait for CMS stop command
+  ansible.builtin.import_tasks: common_tasks/wait_cm_api_command.yml
+  vars:
+    cm_krb_api_url: "{{ cm_api_url }}"
+    cm_api_command_id: "{{ stop_cms_result.json.id }}"
+  when: stop_cms_result is not skipped
 
 - name: Print CMS stop API result
   ansible.builtin.debug:
-    msg: "CMS stop API status: {{ stop_cms_result.status | default('unknown') }}"
+    msg: "CMS is {{ 'absent' if cms_before_stop.status == 404 else 'stopped' }}."

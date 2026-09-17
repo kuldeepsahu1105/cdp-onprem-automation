@@ -1,0 +1,158 @@
+---
+# Required variable: cleanup_service_database_targets [{name, user}, ...]
+# Drops schemas/tables only. Databases and PostgreSQL roles remain.
+
+- name: Resolve PostgreSQL inventory host for service database reset
+  ansible.builtin.import_tasks: common_tasks/resolve_postgres_inventory.yml
+
+- name: Resolve PostgreSQL connection host for service database reset
+  ansible.builtin.import_tasks: common_tasks/resolve_postgres_ensure_cm_db_psql_host.yml
+
+- name: Ensure PostgreSQL is running for service database reset
+  ansible.builtin.import_tasks: common_tasks/ensure_postgresql_running.yml
+
+- name: Validate service database identifiers
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[A-Za-z_][A-Za-z0-9_-]*$')
+      - item.user is match('^[A-Za-z_][A-Za-z0-9_-]*$')
+    fail_msg: >-
+      Refusing unsafe database reset target:
+      database={{ item.name }}, owner={{ item.user }}.
+  loop: "{{ cleanup_service_database_targets }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Check configured PostgreSQL psql path
+  ansible.builtin.stat:
+    path: "/usr/pgsql-{{ postgresql_version }}/bin/psql"
+  register: cleanup_service_db_versioned_psql
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+
+- name: Check standard PostgreSQL psql path
+  ansible.builtin.stat:
+    path: /usr/bin/psql
+  register: cleanup_service_db_standard_psql
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+
+- name: Select PostgreSQL psql path
+  ansible.builtin.set_fact:
+    cleanup_service_db_psql: >-
+      {{
+        '/usr/pgsql-' ~ postgresql_version ~ '/bin/psql'
+        if cleanup_service_db_versioned_psql.stat.exists
+        else '/usr/bin/psql'
+      }}
+
+- name: Require PostgreSQL client for service database reset
+  ansible.builtin.assert:
+    that:
+      - >-
+        cleanup_service_db_versioned_psql.stat.exists
+        or cleanup_service_db_standard_psql.stat.exists
+    fail_msg: >-
+      PostgreSQL psql was not found on {{ postgres_inventory_host }}.
+      No database was modified.
+
+- name: Check service databases
+  ansible.builtin.command:
+    argv:
+      - "{{ cleanup_service_db_psql }}"
+      - "--host={{ postgres_ensure_cm_db_psql_host_effective }}"
+      - "--port={{ postgres_port }}"
+      - "--username={{ postgres_user }}"
+      - "--dbname={{ postgres_db }}"
+      - "--tuples-only"
+      - "--no-align"
+      - "--set=ON_ERROR_STOP=1"
+      - "--set=db_name={{ item.name }}"
+      - "--command=SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = :'db_name';"
+  environment:
+    PGPASSWORD: "{{ postgres_password }}"
+  register: cleanup_service_db_exists
+  changed_when: false
+  no_log: true
+  delegate_to: "{{ postgres_inventory_host }}"
+  loop: "{{ cleanup_service_database_targets }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Require expected database ownership before schema reset
+  ansible.builtin.assert:
+    that:
+      - item.stdout | default('') | trim in ['', item.item.user]
+    fail_msg: >-
+      Refusing to reset {{ item.item.name }} because its database owner is
+      {{ item.stdout | default('unknown') | trim }}, not {{ item.item.user }}.
+  loop: "{{ cleanup_service_db_exists.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Terminate remaining connections to service databases
+  ansible.builtin.command:
+    argv:
+      - "{{ cleanup_service_db_psql }}"
+      - "--host={{ postgres_ensure_cm_db_psql_host_effective }}"
+      - "--port={{ postgres_port }}"
+      - "--username={{ postgres_user }}"
+      - "--dbname={{ postgres_db }}"
+      - "--set=ON_ERROR_STOP=1"
+      - "--set=db_name={{ item.item.name }}"
+      - >-
+        --command=SELECT pg_terminate_backend(pid)
+        FROM pg_stat_activity
+        WHERE datname = :'db_name' AND pid <> pg_backend_pid();
+  environment:
+    PGPASSWORD: "{{ postgres_password }}"
+  changed_when: true
+  no_log: true
+  delegate_to: "{{ postgres_inventory_host }}"
+  loop: "{{ cleanup_service_db_exists.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: item.stdout | default('') | trim == item.item.user
+
+- name: Reset service database schemas and preserve database roles
+  ansible.builtin.command:
+    argv:
+      - "{{ cleanup_service_db_psql }}"
+      - "--host={{ postgres_ensure_cm_db_psql_host_effective }}"
+      - "--port={{ postgres_port }}"
+      - "--username={{ postgres_user }}"
+      - "--dbname={{ item.item.name }}"
+      - "--set=ON_ERROR_STOP=1"
+      - >-
+        --command=DO $reset$
+        DECLARE schema_record record;
+        BEGIN
+          FOR schema_record IN
+            SELECT nspname FROM pg_namespace
+            WHERE nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema'
+          LOOP
+            EXECUTE format('DROP SCHEMA %I CASCADE', schema_record.nspname);
+          END LOOP;
+        END
+        $reset$;
+        CREATE SCHEMA public AUTHORIZATION "{{ item.item.user }}";
+        GRANT ALL ON SCHEMA public TO "{{ item.item.user }}";
+  environment:
+    PGPASSWORD: "{{ postgres_password }}"
+    PGOPTIONS: "-c lock_timeout=30s -c statement_timeout=300s"
+  no_log: true
+  delegate_to: "{{ postgres_inventory_host }}"
+  loop: "{{ cleanup_service_db_exists.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: item.stdout | default('') | trim == item.item.user
+
+- name: Report reset databases and preserved roles
+  ansible.builtin.debug:
+    msg: >-
+      Reset schemas in {{ item.item.name }}. The database container and
+      {{ item.item.user }} login role were preserved; schema objects were removed.
+  loop: "{{ cleanup_service_db_exists.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: item.stdout | default('') | trim == item.item.user

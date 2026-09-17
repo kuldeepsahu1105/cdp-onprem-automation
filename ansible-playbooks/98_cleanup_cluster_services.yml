@@ -1,0 +1,487 @@
+### Preview:
+#   ./cleanup-cluster-services.sh --scope all
+#
+# Execute:
+#   ./cleanup-cluster-services.sh --scope all --execute
+#
+# Direct Ansible execution requires the exact confirmation token:
+#   ansible-playbook -i inventory.ini 98_cleanup_cluster_services.yml \
+#     -e cleanup_cluster_services_scope=all \
+#     -e cleanup_cluster_services_execute=true \
+#     -e cleanup_cluster_services_confirm=DELETE-CLUSTER-SERVICE-DATA
+#
+# This reset preserves CM packages and agents, parcel/CSD content, package
+# repositories, and the CM agent host UUID. Use 99_cleanup.yml for full E2E
+# teardown.
+---
+- import_playbook: ensure_collections.yml
+
+- name: Validate CDP cluster service cleanup
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    cleanup_cluster_services_scope: "{{ cleanup_cluster_services_scope_input | default('all') }}"
+    cleanup_cluster_services_execute: "{{ cleanup_cluster_services_execute_input | default(false) }}"
+    cleanup_cluster_services_confirm: "{{ cleanup_cluster_services_confirm_input | default('') }}"
+  tasks:
+    - name: Validate cleanup scope
+      ansible.builtin.assert:
+        that:
+          - cleanup_cluster_services_scope in ['base', 'ecs', 'all']
+          - >-
+            not (cleanup_cluster_services_execute | bool)
+            or cleanup_cluster_services_confirm == 'DELETE-CLUSTER-SERVICE-DATA'
+        fail_msg: >-
+          Scope must be base, ecs, or all. Destructive execution also requires
+          cleanup_cluster_services_confirm=DELETE-CLUSTER-SERVICE-DATA.
+
+    - name: Record cleanup selection
+      ansible.builtin.set_fact:
+        cleanup_cluster_services_base: "{{ cleanup_cluster_services_scope in ['base', 'all'] }}"
+        cleanup_cluster_services_ecs: "{{ cleanup_cluster_services_scope in ['ecs', 'all'] }}"
+        cleanup_cluster_services_apply: "{{ cleanup_cluster_services_execute | bool }}"
+
+    - name: Show cluster service cleanup plan
+      ansible.builtin.debug:
+        msg:
+          - "Mode: {{ 'EXECUTE' if cleanup_cluster_services_apply else 'PREVIEW' }}"
+          - "Scope: {{ cleanup_cluster_services_scope }}"
+          - "Base nodes: {{ groups['base-masters'] | default([]) | union(groups['base-workers'] | default([])) | join(', ') }}"
+          - "ECS nodes: {{ groups['ecs-masters'] | default([]) | union(groups['ecs-workers'] | default([])) | join(', ') }}"
+          - "Preserved: CM server/agents/packages, agent UUID, /opt/cloudera/parcels, /opt/cloudera/csd, parcel caches, repositories"
+          - "Removed in execute mode: selected CM cluster registrations and allowlisted service config/data/log/runtime paths"
+          - "PostgreSQL databases are not modified by this base/ECS service reset"
+
+- name: Validate ECS persistent storage before destructive changes
+  hosts: ecs-masters:ecs-workers
+  become: true
+  gather_facts: no
+  vars:
+    cleanup_ecs_storage_paths:
+      - "{{ ecs_docker_data_path }}"
+      - "{{ ecs_lso_data_path }}"
+      - "{{ ecs_longhorn_data_path }}"
+  tasks:
+    - name: Skip ECS storage preflight outside execute scope
+      ansible.builtin.meta: end_play
+      when: >-
+        not (hostvars['localhost']['cleanup_cluster_services_apply'] | bool)
+        or not (hostvars['localhost']['cleanup_cluster_services_ecs'] | bool)
+
+    - name: Check configured ECS storage mount points before cluster deletion
+      ansible.builtin.command:
+        argv:
+          - findmnt
+          - --mountpoint
+          - "{{ item }}"
+      register: cleanup_ecs_storage_preflight_mounts
+      changed_when: false
+      failed_when: false
+      loop: "{{ cleanup_ecs_storage_paths | unique | list }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Refuse mounted ECS storage before destructive changes
+      ansible.builtin.assert:
+        that:
+          - item.rc != 0
+        fail_msg: >-
+          Refusing ECS rebuild because {{ item.item }} is mounted.
+          Unmount or detach it explicitly before cluster deletion.
+      loop: "{{ cleanup_ecs_storage_preflight_mounts.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+- name: Delete selected cluster registrations from Cloudera Manager
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Skip CM API changes during preview
+      ansible.builtin.meta: end_play
+      when: not (hostvars['localhost']['cleanup_cluster_services_apply'] | bool)
+
+    - name: Prepare Cloudera Manager API
+      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+
+    - name: Read existing CM clusters
+      ansible.builtin.uri:
+        url: "{{ cm_api_url }}/clusters?view=summary"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: cleanup_cluster_services_existing_clusters
+
+    - name: Resolve base cluster name for deletion
+      ansible.builtin.set_fact:
+        cleanup_cluster_services_base_name: >-
+          {{
+            cdh_basecluster_name
+            if (
+              cdh_basecluster_name
+              in (
+                cleanup_cluster_services_existing_clusters.json['items'] | default([])
+                | map(attribute='name')
+                | list
+              )
+            )
+            else (
+              base_cluster_legacy_name
+              if (
+                cdh_basecluster_name == 'CDP-base-cluster'
+                and base_cluster_legacy_name
+                in (
+                  cleanup_cluster_services_existing_clusters.json['items'] | default([])
+                  | map(attribute='name')
+                  | list
+                )
+              )
+              else cdh_basecluster_name
+            )
+          }}
+
+    - name: Delete base cluster through CM
+      ansible.builtin.include_tasks: common_tasks/cleanup/delete_base_cluster_api.yml
+      vars:
+        cdh_basecluster_name: "{{ cleanup_cluster_services_base_name }}"
+      when: hostvars['localhost']['cleanup_cluster_services_base'] | bool
+
+    - name: Require base cluster deletion
+      ansible.builtin.assert:
+        that:
+          - base_cluster_deleted.status | default(0) == 404
+        fail_msg: >-
+          CM did not confirm deletion of {{ cleanup_cluster_services_base_name }}.
+          Node data cleanup was not started.
+      when: hostvars['localhost']['cleanup_cluster_services_base'] | bool
+
+    - name: Delete ECS cluster through CM
+      ansible.builtin.include_tasks: common_tasks/cleanup/delete_ecs_cluster_api.yml
+      when: hostvars['localhost']['cleanup_cluster_services_ecs'] | bool
+
+    - name: Require ECS cluster deletion
+      ansible.builtin.assert:
+        that:
+          - ecs_cluster_deleted.status | default(0) == 404
+        fail_msg: >-
+          CM did not confirm deletion of {{ ecs_cluster_name }}.
+          Node data cleanup was not started.
+      when: hostvars['localhost']['cleanup_cluster_services_ecs'] | bool
+
+- name: Reset base cluster service state while preserving software
+  hosts: base-masters:base-workers
+  become: true
+  gather_facts: no
+  vars:
+    # CM-managed service names, including optional/legacy services that can
+    # leave state behind even when they are disabled in the current spec.
+    cleanup_base_service_path_names:
+      - accumulo
+      - atlas
+      - cruisecontrol
+      - dataviz
+      - dpprofiler
+      - druid
+      - flink
+      - flume
+      - hadoop
+      - hadoop-hdfs
+      - hadoop-kms
+      - hadoop-mapreduce
+      - hadoop-yarn
+      - hbase
+      - hbase-solr
+      - hive
+      - hive-hcatalog
+      - hive-webhcat
+      - httpfs
+      - hue
+      - impala
+      - kafka
+      - knox
+      - kraft
+      - kudu
+      - livy
+      - kms
+      - mapred
+      - nifi
+      - nifi-registry
+      - nifiregistry
+      - omid
+      - oozie
+      - ozone
+      - phoenix
+      - ranger
+      - rangerraz
+      - rangerrms
+      - replication-manager
+      - schemaregistry
+      - solr
+      - spark
+      - spark3
+      - sqoop
+      - streams
+      - streamsmsgmgr
+      - streamsrepmgr
+      - superset
+      - tez
+      - yarn
+      - zeppelin
+      - zookeeper
+    cleanup_base_service_paths: >-
+      {{
+        [
+          '/dfs',
+          '/hdfs',
+          '/hadoop',
+          '/yarn',
+          '/data/ozone',
+          '/var/local/kafka',
+          '/var/log/nm',
+          '/var/run/cloudera-scm-agent/process'
+        ]
+        + (
+          ['/var/lib', '/var/log', '/var/run', '/etc']
+          | product(cleanup_base_service_path_names)
+          | map('join', '/')
+          | list
+        )
+      }}
+  tasks:
+    - name: Skip base nodes outside selected scope
+      ansible.builtin.meta: end_play
+      when: not (hostvars['localhost']['cleanup_cluster_services_base'] | bool)
+
+    - name: Find base service temporary traces
+      ansible.builtin.find:
+        paths: /tmp
+        file_type: any
+        patterns: >-
+          {{
+            cleanup_base_service_path_names
+            | map('regex_replace', '$', '*')
+            | list
+            + ['hsperfdata_*', 'nm-*', 'scm_prepare_node.*']
+          }}
+        recurse: false
+      register: cleanup_base_tmp_traces
+
+    - name: Show base service cleanup targets
+      ansible.builtin.debug:
+        msg:
+          - "Static paths: {{ cleanup_base_service_paths }}"
+          - "Temporary traces: {{ cleanup_base_tmp_traces.files | map(attribute='path') | list }}"
+      when: not (hostvars['localhost']['cleanup_cluster_services_apply'] | bool)
+
+    - name: Stop CM agent before base service cleanup
+      ansible.builtin.systemd:
+        name: cloudera-scm-agent
+        state: stopped
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Remove allowlisted base service paths
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ cleanup_base_service_paths }}"
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Remove discovered base service temporary traces
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ cleanup_base_tmp_traces.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Recreate CM agent process directory
+      ansible.builtin.file:
+        path: /var/run/cloudera-scm-agent/process
+        state: directory
+        owner: cloudera-scm
+        group: cloudera-scm
+        mode: "0755"
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Restart preserved CM agent
+      ansible.builtin.systemd:
+        name: cloudera-scm-agent
+        state: restarted
+        enabled: true
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+- name: Rebuild ECS service state while preserving parcel software
+  hosts: ecs-masters:ecs-workers
+  become: true
+  gather_facts: no
+  vars:
+    cleanup_ecs_storage_paths:
+      - "{{ ecs_docker_data_path }}"
+      - "{{ ecs_lso_data_path }}"
+      - "{{ ecs_longhorn_data_path }}"
+    cleanup_ecs_service_paths:
+      - /etc/rancher
+      - /etc/cni
+      - /var/lib/rancher
+      - /var/lib/kubelet
+      - /var/lib/cni
+      - /var/lib/docker_server
+      - /var/lib/longhorn
+      - /var/log/rancher
+      - /var/log/pods
+      - /var/log/containers
+      - /var/log/kube-audit
+      - /run/k3s
+      - /run/rke2
+      - /var/run/netns
+      - /var/run/cloudera-scm-agent/process
+      - /root/.kube
+      - /root/.helm
+      - /root/.cache/helm
+  tasks:
+    - name: Skip ECS nodes outside selected scope
+      ansible.builtin.meta: end_play
+      when: not (hostvars['localhost']['cleanup_cluster_services_ecs'] | bool)
+
+    - name: Find ECS temporary traces
+      ansible.builtin.find:
+        paths: /tmp
+        file_type: any
+        patterns:
+          - "cni-*"
+          - "calico-*"
+          - "containerd-*"
+          - "etcd-*"
+          - "helm-*"
+          - "kube-*"
+          - "longhorn-*"
+          - "rke2-*"
+        recurse: false
+      register: cleanup_ecs_tmp_traces
+
+    - name: Show ECS service cleanup targets
+      ansible.builtin.debug:
+        msg:
+          - "ECS rebuild paths: {{ cleanup_ecs_service_paths }}"
+          - "Configured persistent storage paths: {{ cleanup_ecs_storage_paths | unique | list }}"
+          - "Temporary traces: {{ cleanup_ecs_tmp_traces.files | map(attribute='path') | list }}"
+      when: not (hostvars['localhost']['cleanup_cluster_services_apply'] | bool)
+
+    - name: Stop CM agent before ECS service cleanup
+      ansible.builtin.systemd:
+        name: cloudera-scm-agent
+        state: stopped
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Stop ECS runtime services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop:
+        - rke2-server
+        - rke2-agent
+        - k3s
+        - k3s-agent
+        - containerd
+        - docker
+      failed_when: false
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Check ECS killall helper
+      ansible.builtin.stat:
+        path: /opt/cloudera/parcels/ECS/bin/rke2-killall.sh
+      register: cleanup_ecs_killall
+
+    - name: Require ECS runtime cleanup helpers
+      ansible.builtin.stat:
+        path: /opt/cloudera/parcels/ECS/bin/rke2-uninstall.sh
+      register: cleanup_ecs_uninstall
+
+    - name: Require parcel-shipped ECS cleanup helpers
+      ansible.builtin.assert:
+        that:
+          - cleanup_ecs_killall.stat.exists
+          - cleanup_ecs_uninstall.stat.exists
+        fail_msg: >-
+          ECS parcel cleanup helpers are missing. Persistent ECS state was not removed.
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Stop ECS runtime twice through parcel helper
+      ansible.builtin.command: /opt/cloudera/parcels/ECS/bin/rke2-killall.sh
+      loop: [1, 2]
+      when:
+        - hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+        - cleanup_ecs_killall.stat.exists
+      changed_when: true
+
+    - name: Remove RKE2 installation links and durable runtime state
+      ansible.builtin.command: /opt/cloudera/parcels/ECS/bin/rke2-uninstall.sh
+      when:
+        - hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+        - cleanup_ecs_uninstall.stat.exists
+      changed_when: true
+
+    - name: Remove allowlisted ECS service paths
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ cleanup_ecs_service_paths }}"
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Remove configured ECS persistent storage paths
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ cleanup_ecs_storage_paths | unique | list }}"
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Remove discovered ECS temporary traces
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ cleanup_ecs_tmp_traces.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Reload systemd after ECS runtime reset
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Recreate CM agent process directory on ECS node
+      ansible.builtin.file:
+        path: /var/run/cloudera-scm-agent/process
+        state: directory
+        owner: cloudera-scm
+        group: cloudera-scm
+        mode: "0755"
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Restart preserved CM agent on ECS node
+      ansible.builtin.systemd:
+        name: cloudera-scm-agent
+        state: restarted
+        enabled: true
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+- name: Report preserved installation assets
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Show cleanup completion
+      ansible.builtin.debug:
+        msg: >-
+          Cluster service cleanup {{ 'completed' if cleanup_cluster_services_apply else 'preview completed' }}.
+          CM server, agents, packages, host UUIDs, parcels, CSDs, parcel caches,
+          repositories, PostgreSQL databases, and PostgreSQL roles were preserved
+          without modifying database contents.
+          Use 99_cleanup.yml only for full E2E node teardown.

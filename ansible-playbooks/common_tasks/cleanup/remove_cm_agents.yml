@@ -27,4 +27,15 @@
     - /etc/cloudera-scm-agent
     - /var/log/cloudera-scm-agent
     - /var/run/cloudera-scm-agent
+    - /var/lib/supervisor
+    - /var/log/supervisor
+    - /var/run/supervisor
+    - /etc/supervisor
+    - /etc/supervisord.conf
   failed_when: false
+
+- name: Remove parcels, CSDs, and remaining Cloudera installation assets during E2E cleanup
+  ansible.builtin.file:
+    path: /opt/cloudera
+    state: absent
+  when: hostvars['localhost']['cleanup_effective']['deep_remove_data_dirs'] | default(false)

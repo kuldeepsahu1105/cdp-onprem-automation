@@ -14,14 +14,20 @@
     cleanup_effective:
       delete_base_cluster: "{{ cleanup_delete_base_cluster or cleanup_e2e }}"
       delete_ecs_cluster: "{{ cleanup_delete_ecs_cluster or cleanup_e2e }}"
-      stop_cms: "{{ cleanup_stop_cms or cleanup_remove_cm or cleanup_e2e }}"
+      stop_cms: "{{ cleanup_stop_cms or cleanup_delete_cms or cleanup_remove_cm or cleanup_e2e }}"
       delete_cms: "{{ cleanup_delete_cms or cleanup_remove_cm or cleanup_e2e }}"
       remove_cm: "{{ cleanup_remove_cm or cleanup_e2e }}"
       remove_cm_agents: "{{ cleanup_remove_cm_agents or cleanup_remove_cm or cleanup_e2e }}"
-      stop_postgres: "{{ cleanup_stop_postgres or cleanup_remove_postgres_data or cleanup_remove_postgres_packages or cleanup_e2e }}"
-      remove_postgres_data: "{{ cleanup_remove_postgres_data or cleanup_e2e }}"
-      remove_postgres_packages: "{{ cleanup_remove_postgres_packages or cleanup_e2e }}"
-      remove_postgres_user: "{{ cleanup_remove_postgres_user or cleanup_e2e }}"
+      stop_postgres: "{{ cleanup_stop_postgres or cleanup_remove_postgres_data or cleanup_remove_postgres_packages }}"
+      remove_postgres_data: "{{ cleanup_remove_postgres_data }}"
+      remove_postgres_packages: "{{ cleanup_remove_postgres_packages }}"
+      remove_postgres_user: "{{ cleanup_remove_postgres_user }}"
+      reset_service_databases: >-
+        {{
+          cleanup_reset_service_databases | default(true) | bool
+          and (cleanup_remove_cm or cleanup_e2e)
+          and not cleanup_remove_postgres_data
+        }}
       remove_service_users: "{{ cleanup_remove_service_users or cleanup_e2e }}"
       remove_service_groups: "{{ cleanup_remove_service_groups or cleanup_e2e }}"
       deep_remove_data_dirs: "{{ cleanup_deep_remove_data_dirs or cleanup_e2e }}"
@@ -30,6 +36,8 @@
         {{
           cleanup_stop_cms
           or cleanup_delete_cms
+          or cleanup_remove_cm
+          or cleanup_e2e
           or (
             (cleanup_delete_base_cluster or cleanup_delete_ecs_cluster or cleanup_e2e)
             and cleanup_delete_cluster_via_api | default(true)
@@ -68,6 +76,7 @@
       - "  remove_postgres_data: {{ cleanup_effective.remove_postgres_data }} (backup={{ cleanup_backup_postgres_data }})"
       - "  remove_postgres_packages: {{ cleanup_effective.remove_postgres_packages }}"
       - "  remove_postgres_user: {{ cleanup_effective.remove_postgres_user }}"
+      - "  reset_service_databases: {{ cleanup_effective.reset_service_databases }}"
       - "  deep_remove_data_dirs: {{ cleanup_effective.deep_remove_data_dirs }}"
       - "  remove_service_users: {{ cleanup_effective.remove_service_users }}"
       - "  reset_iptables: {{ cleanup_effective.reset_iptables }}"

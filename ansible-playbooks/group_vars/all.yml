@@ -832,6 +832,10 @@ cleanup_reboot_hosts: false
 # Cluster names for API deletion
 ecs_cluster_name: "ECS-Cluster"
 
+# When CM itself is removed, clear schemas/tables from all configured databases
+# while preserving the database objects and login roles for the next install.
+cleanup_reset_service_databases: true
+
 # -----------------------------------------------------------------------------
 # 08. ECS
 # -----------------------------------------------------------------------------

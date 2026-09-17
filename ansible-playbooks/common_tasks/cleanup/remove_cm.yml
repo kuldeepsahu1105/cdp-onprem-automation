@@ -67,8 +67,12 @@
     - /var/run/cloudera-scm-agent
     - /etc/cloudera-scm-server
     - /etc/cloudera-scm-agent
-    - /opt/cloudera/cm-agent
-    - /opt/cloudera/csd
+    - /opt/cloudera
+    - /var/lib/supervisor
+    - /var/log/supervisor
+    - /var/run/supervisor
+    - /etc/supervisor
+    - /etc/supervisord.conf
   failed_when: false
 
 - name: Remove Cloudera Manager repo file
