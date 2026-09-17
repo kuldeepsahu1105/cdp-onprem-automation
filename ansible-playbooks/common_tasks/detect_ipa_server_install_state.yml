@@ -7,8 +7,10 @@
 #   ipa_server_has_partial_state  — leftover IPA/DS paths without default.conf (failed/partial install)
 #   ipa_server_services_healthy   — ipactl status OK and Directory Service + krb5kdc RUNNING
 #   ipa_server_install_clean_host — safe to run ipa-server-install (no config, no partial debris)
+#   ipa_server_recovery_requires_uninstall — concrete server-install markers require uninstall first
 #
-# Recovery for partial/broken: ipa-server-install --uninstall (see OPERATIONS_GUIDE.md troubleshooting).
+# Recovery for partial/broken only: ipa-server-install --uninstall
+# (see OPERATIONS_GUIDE.md troubleshooting). A clean new host does not need uninstall.
 
 - name: Detect IPA — check for configured server (default.conf)
   ansible.builtin.stat:
@@ -189,6 +191,16 @@
         not (ipa_server_has_default_conf | bool)
         and not (ipa_server_has_partial_state | bool)
       }}
+    ipa_server_recovery_requires_uninstall: >-
+      {{
+        (
+          (ipa_detect_default_conf.stat.exists | default(false) | bool)
+          and (ipa_detect_ipactl_not_configured | bool)
+        )
+        or (ipa_detect_sysrestore_present | default(false) | bool)
+        or (ipa_detect_ca_crt.stat.exists | default(false) | bool)
+        or ((ipa_detect_dirsrv_instances.matched | default(0) | int) > 0)
+      }}
 
 - name: Detect IPA — remove stale default.conf when ipactl reports not configured
   ansible.builtin.file:
@@ -217,6 +229,7 @@
       - "IPA incomplete sysrestore install: {{ ipa_detect_incomplete_sysrestore_install | default(false) }}"
       - "IPA critical install debris: {{ ipa_detect_critical_debris | default(false) }}"
       - "IPA partial/broken debris detected: {{ ipa_server_has_partial_state }}"
+      - "IPA recovery requires uninstall: {{ ipa_server_recovery_requires_uninstall }}"
       - "IPA services healthy (ipactl): {{ ipa_server_services_healthy }}"
       - "Safe for fresh ipa-server-install: {{ ipa_server_install_clean_host }}"
       - "dirsrv unit activity: {{ ipa_detect_dirsrv_active.stdout | default('unknown') | trim }}"

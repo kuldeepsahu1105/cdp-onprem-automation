@@ -105,8 +105,7 @@
       ansible.builtin.set_fact:
         ipa_server_configured_healthy: >-
           {{
-            (ipa_cli_version_ok | default(false) | bool)
-            and (ipa_server_has_default_conf | default(false) | bool)
+            (ipa_server_has_default_conf | default(false) | bool)
             and not (ipa_server_has_partial_state | default(false) | bool)
             and not (ipa_detect_ipactl_not_configured | default(false) | bool)
           }}
@@ -123,7 +122,7 @@
           {% if ipa_server_install_force | default(false) | bool -%}
           ipa_server_install_force=true (re-run install even when healthy; rare)
           {%- elif ipa_server_configured_healthy | bool -%}
-          IPA configured (ipa --version, default.conf, ipactl not "not configured", no partial debris)
+          IPA configured (default.conf, ipactl not "not configured", no partial debris)
           {%- elif ipa_server_has_partial_state | default(false) | bool -%}
           partial or broken IPA install debris detected
           {%- elif not (ipa_cli_version_ok | bool) -%}
@@ -146,7 +145,7 @@
         msg: >-
           ipa-server-install gate: run={{ ipa_server_should_run_install | bool }}
           reason={{ ipa_server_install_gate_reason | default('') | trim }}
-          (skip when ipa --version OK, default.conf + ipactl configured, no partial debris;
+          (skip when default.conf + ipactl indicate configured and no partial debris;
           ipactl rc={{ ipa_ipactl_rc | default('n/a') }} — stopped services alone do not trigger reinstall)
 
     - name: "IPA status: already installed — skipping install"
@@ -217,7 +216,9 @@
       failed_when: false
       when:
         - ipa_server_should_run_install | bool
-        - (ipa_server_install_force | default(false) | bool) or not (ipa_server_configured_healthy | bool)
+        - >-
+          (ipa_server_install_force | default(false) | bool)
+          or (ipa_server_recovery_requires_uninstall | default(false) | bool)
 
     - name: Log ipa-server-install uninstall result before preflight
       ansible.builtin.debug:
@@ -226,7 +227,9 @@
           ipa_server_preflight_uninstall.rc | default('n/a')
           }}{% if (ipa_server_preflight_uninstall.stderr | default('') | trim) %}
           (stderr: {{ ipa_server_preflight_uninstall.stderr | default('') | truncate(400, True) }}){% endif %}
-      when: ipa_server_should_run_install | bool
+      when:
+        - ipa_server_preflight_uninstall is defined
+        - not (ipa_server_preflight_uninstall.skipped | default(false) | bool)
 
     - name: Preflight hostname/DNS and tooling before fresh ipa-server-install
       ansible.builtin.import_tasks: common_tasks/preflight_ipa_server_install.yml
