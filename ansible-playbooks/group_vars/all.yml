@@ -266,7 +266,7 @@ parcel_repo: "{{ parcel_repo_internal if cm_repo_source == 'internal' else parce
 # CDH, DataViz, and CFM use pinned versions. ECS requires both its pinned version and /latest.
 # Do not use `{latest}` placeholders; only the literal ECS archive /latest path is valid here.
 cm_parcel_repo_latest_segment: latest
-# CSD parcel repo dirs (scm_csd_parcel_repo_urls.j2). DATAVIZ yum JAR paths use scm_csds_urls.j2 / download_cdv_dataviz_csd.yml — not REMOTE_PARCEL_REPO_URLS.
+# CSD parcel repo dirs (scm_csd_parcel_repo_urls.j2). DATAVIZ JAR paths use scm_csds_urls.j2 — not REMOTE_PARCEL_REPO_URLS.
 cfm_parcel_yum_tars_repo_url: "{{ cm_repo_public_base_url }}/cfm2/{{ cfm_version }}/{{ cfm_parcel_yum_redhat_segment }}/yum/tars/parcel"
 cfm_parcel_yum_redhat_segment: redhat9
 
@@ -381,8 +381,8 @@ clo_db_password: clo
 #   2) legacy scm_csds / scm_csds_redhat
 #   3) generated DATAVIZ, NiFi, and NiFi Registry URLs from the CDV/CFM versions
 #      (respects csd_install_* and base_cluster_install_services).
-# Play 24 get_url loops scm_csds_effective; DATAVIZ yum failures use parcel fallback in
-#   download_cdv_dataviz_csd.yml. cdv_* / cfm_* are inputs to the default list, not parallel paths.
+# Play 24 downloads every CSD directly to its exact JAR filename under /opt/cloudera/csd.
+# Download failures are fatal so missing or invalid repository artifacts are reported immediately.
 # CM REMOTE_PARCEL_REPO_URLS (directory URLs) are separate: cdv_version / cfm_version and
 #   scm_csd_parcel_repo_urls.j2 — see cm_remote_parcel_csd_repo_urls above.
 #
@@ -395,10 +395,6 @@ scm_csds_redhat: []
 cdv_version: "8.0.7"
 # Basename from cdv/<version>/release_manifest.json (version b50, gbn 71299628).
 cdv_dataviz_csd_jar: "DATAVIZ-{{ cdv_version }}-b50.p1.71299628.jar"
-# Parcel under cdv/<version>/parcels/ (e.g. …-el9.parcel); used when yum CSD jar is absent.
-cdv_dataviz_parcel_build: "DATAVIZ-{{ cdv_version }}-b50.p1.71299628"
-# Leave empty to derive …-el<rhel-major>.parcel on the CM host; or set full filename explicitly.
-cdv_dataviz_parcel_file: ""
 # auto: use redhat8 yum path for CDV on RHEL 9 CM when redhat9 CSD is absent; redhat8 | redhat9 to override.
 cdv_redhat_yum_repo: auto
 cfm_version: "2.1.7.3004"
