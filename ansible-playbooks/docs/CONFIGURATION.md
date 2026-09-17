@@ -148,6 +148,7 @@ entries must be complete `.jar` URLs. See
 | `base_cluster_hue_database_name` | Database name; `hue` | PostgreSQL database used by Hue instead of its non-production SQLite fallback. |
 | `base_cluster_hue_database_user` | Database user; `hue` | PostgreSQL login used by Hue. |
 | `base_cluster_hue_database_password` | Secret; `hue` | PostgreSQL password used by Hue; override through a vault or `ANSIBLE_GROUP_VARS_YAML`. |
+| `base_cluster_repair_hive_canary_catalogs` | Boolean; `true` | Before starting an existing cluster, removes only stale CM Hive Metastore health-canary catalogs after refusing cleanup when they contain tables or functions. |
 
 `base_cluster_install_services` controls service creation. Set a value to
 `true` to include that service in the cluster specification:
