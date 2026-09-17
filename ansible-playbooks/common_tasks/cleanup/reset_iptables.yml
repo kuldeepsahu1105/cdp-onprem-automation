@@ -18,6 +18,6 @@
     done
     iptables -F || true
     iptables -L || true
-    rm -rf /etc/rancher /var/lib/rancher /var/log/rancher
+    rm -rf /etc/rancher /var/log/rancher
   changed_when: true
   failed_when: false

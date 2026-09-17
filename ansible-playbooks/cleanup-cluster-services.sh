@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCOPE="all"
 EXECUTE=false
 RESET_BASE_DATABASES=false
+REMOVE_SERVICE_LIB_DIRS=false
 INVENTORY="inventory.ini"
 
 usage() {
@@ -12,7 +13,7 @@ usage() {
 Usage:
   ./cleanup-cluster-services.sh [--scope base|ecs|all] [--inventory PATH]
   ./cleanup-cluster-services.sh [--scope base|ecs|all] [--inventory PATH] \
-    [--reset-base-databases] --execute
+    [--reset-base-databases] [--remove-service-lib-dirs] --execute
 
 Without --execute, the playbook previews the selected hosts and paths.
 Execution successfully stops and deletes the selected CM cluster registration,
@@ -24,6 +25,9 @@ then removes service config/data/log/runtime state while preserving:
 
 --reset-base-databases resets only Hive, Hue, Ranger, and Knox schemas while
 preserving their PostgreSQL database containers and login roles.
+
+--remove-service-lib-dirs also removes allowlisted service-owned /var/lib
+directories. It is disabled by default, including for E2E cleanup.
 
 ECS scope is a destructive rebuild: parcel killall/uninstall helpers run and
 configured ECS storage paths are removed only when they are not mounted.
@@ -51,6 +55,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --reset-base-databases)
       RESET_BASE_DATABASES=true
+      shift
+      ;;
+    --remove-service-lib-dirs)
+      REMOVE_SERVICE_LIB_DIRS=true
       shift
       ;;
     -h|--help)
@@ -84,6 +92,7 @@ args=(
   -e "cleanup_cluster_services_scope_input=$SCOPE"
   -e "cleanup_cluster_services_execute_input=$EXECUTE"
   -e "cleanup_cluster_services_reset_base_databases_input=$RESET_BASE_DATABASES"
+  -e "cleanup_cluster_services_remove_service_lib_dirs_input=$REMOVE_SERVICE_LIB_DIRS"
 )
 
 if [[ "$EXECUTE" == true ]]; then

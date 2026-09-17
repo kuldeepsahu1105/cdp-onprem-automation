@@ -1101,10 +1101,12 @@ the RKE2/Rancher tree are not removed. Parcel and CSD content remain.
 PostgreSQL is not modified by base/ECS cleanup. The preserved agent UUID retains
 the host identity; it does not recreate deleted clusters or roles.
 
-Base and ECS cluster cleanup removes the corresponding allowlisted service
-directories under `/var/lib` in both scoped and E2E modes. PostgreSQL, FreeIPA,
-and Cloudera Manager server state remain controlled by their separate cleanup
-switches. When `99_cleanup.yml` removes CM (`cleanup_remove_cm=true` or
+Base, ECS, and E2E cleanup preserve service-owned `/var/lib` directories by
+default. Set `cleanup_remove_service_lib_dirs=true` for playbook 99, or pass
+`--remove-service-lib-dirs` to `cleanup-cluster-services.sh`, to remove the
+corresponding allowlisted service libraries. PostgreSQL, FreeIPA, and Cloudera
+Manager server state remain controlled by their separate cleanup switches.
+When `99_cleanup.yml` removes CM (`cleanup_remove_cm=true` or
 `cleanup_e2e=true`), CM-only cleanup resets `scm` and `rman`; E2E cleanup,
 after successfully stopping/deleting base and ECS clusters, resets every
 configured PostgreSQL service database. CM/CMS are stopped and remaining

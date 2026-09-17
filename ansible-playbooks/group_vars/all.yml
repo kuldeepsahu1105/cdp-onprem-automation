@@ -828,10 +828,10 @@ cleanup_e2e: false
 cleanup_remove_service_users: "{{ cleanup_e2e }}"
 cleanup_remove_service_groups: "{{ cleanup_e2e }}"
 cleanup_deep_remove_data_dirs: "{{ cleanup_e2e }}"
+cleanup_remove_service_lib_dirs: false
 
-# Service-owned /var/lib directories removed whenever base-cluster cleanup runs,
-# in both scoped and end-to-end cleanup modes. Infrastructure services such as
-# PostgreSQL, FreeIPA, and Cloudera Manager are intentionally controlled separately.
+# Service-owned /var/lib directory names. Removal requires the explicit
+# cleanup_remove_service_lib_dirs=true opt-in, including during E2E cleanup.
 cleanup_base_service_path_names:
   - accumulo
   - atlas

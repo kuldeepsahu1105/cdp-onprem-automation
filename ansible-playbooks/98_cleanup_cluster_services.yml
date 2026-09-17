@@ -27,6 +27,8 @@
     cleanup_cluster_services_confirm: "{{ cleanup_cluster_services_confirm_input | default('') }}"
     cleanup_cluster_services_reset_base_databases: >-
       {{ cleanup_cluster_services_reset_base_databases_input | default(false) }}
+    cleanup_cluster_services_remove_service_lib_dirs: >-
+      {{ cleanup_cluster_services_remove_service_lib_dirs_input | default(false) }}
   tasks:
     - name: Validate cleanup scope
       ansible.builtin.assert:
@@ -58,6 +60,8 @@
             cleanup_cluster_services_execute | bool
             and cleanup_cluster_services_reset_base_databases | bool
           }}
+        cleanup_cluster_services_remove_service_libs: >-
+          {{ cleanup_cluster_services_remove_service_lib_dirs | bool }}
 
     - name: Show cluster service cleanup plan
       ansible.builtin.debug:
@@ -68,6 +72,7 @@
           - "ECS nodes: {{ groups['ecs-masters'] | default([]) | union(groups['ecs-workers'] | default([])) | join(', ') }}"
           - "Preserved: CM server/agents/packages, agent UUID, /opt/cloudera/parcels, /opt/cloudera/csd, parcel caches, repositories"
           - "Removed in execute mode: selected CM cluster registrations and allowlisted service config/data/log/runtime paths"
+          - "Remove service /var/lib directories: {{ cleanup_cluster_services_remove_service_libs }}"
           - >-
             Base service schemas:
             {{
@@ -102,7 +107,19 @@
       register: cleanup_ecs_storage_preflight_mounts
       changed_when: false
       failed_when: false
-      loop: "{{ (cleanup_ecs_storage_paths + cleanup_ecs_service_library_paths) | unique | list }}"
+      loop: >-
+        {{
+          (
+            cleanup_ecs_storage_paths
+            + (
+              cleanup_ecs_service_library_paths
+              if hostvars['localhost']['cleanup_cluster_services_remove_service_libs'] | bool
+              else []
+            )
+          )
+          | unique
+          | list
+        }}
       loop_control:
         label: "{{ item }}"
 
@@ -212,9 +229,6 @@
           '/impala',
           '/yarn',
           '/data/ozone',
-          '/var/lib/hadoop-ozone/om/data/om',
-          '/var/lib/hadoop-ozone/scm/data/scm',
-          '/var/lib/hadoop-ozone/recon/data/recon',
           '/var/local/kafka',
           '/var/log/nm',
           '/var/run/cloudera-scm-agent/process',
@@ -222,10 +236,28 @@
           '/tmp/kafka-logs'
         ]
         + (
-          ['/var/lib', '/var/log', '/var/run', '/etc']
+          ['/var/log', '/var/run', '/etc']
           | product(cleanup_base_service_path_names)
           | map('join', '/')
           | list
+        )
+        + (
+          (
+            [
+              '/var/lib/hadoop-ozone/om/data/om',
+              '/var/lib/hadoop-ozone/scm/data/scm',
+              '/var/lib/hadoop-ozone/recon/data/recon'
+            ]
+            + (
+              ['var/lib']
+              | product(cleanup_base_service_path_names)
+              | map('join', '/')
+              | map('regex_replace', '^', '/')
+              | list
+            )
+          )
+          if hostvars['localhost']['cleanup_cluster_services_remove_service_libs'] | bool
+          else []
         )
       }}
     cleanup_base_etc_patterns:
@@ -265,6 +297,7 @@
           - item is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
         fail_msg: "Unsafe cleanup_base_service_path_names entry: {{ item | string }}"
       loop: "{{ cleanup_base_service_path_names }}"
+      when: hostvars['localhost']['cleanup_cluster_services_remove_service_libs'] | bool
 
     - name: Find base service temporary traces
       ansible.builtin.find:
@@ -411,7 +444,11 @@
           '/root/.helm',
           '/root/.cache/helm'
         ]
-        + cleanup_ecs_service_library_paths
+        + (
+          cleanup_ecs_service_library_paths
+          if hostvars['localhost']['cleanup_cluster_services_remove_service_libs'] | bool
+          else []
+        )
       }}
   tasks:
     - name: Skip ECS nodes outside selected scope

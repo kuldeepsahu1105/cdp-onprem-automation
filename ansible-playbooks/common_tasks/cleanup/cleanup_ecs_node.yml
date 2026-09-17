@@ -55,7 +55,7 @@
   ansible.builtin.shell: |
     rm -rf /ecs/*
     rm -rf /etc/docker/certs.d /etc/docker/*
-    rm -rf /etc/rancher /var/lib/rancher /var/log/rancher
+    rm -rf /etc/rancher /var/log/rancher
     rm -rf /run/k3s /opt/containerd /opt/cni
     rm -rf /docker/* /lhdata/* /cdwdata/*
     rm -rf /root/.kube /root/.cache
@@ -67,6 +67,7 @@
     path: "{{ item }}"
     state: absent
   loop: "{{ cleanup_ecs_service_library_paths }}"
+  when: hostvars['localhost']['cleanup_effective']['remove_service_lib_dirs'] | default(false)
 
 - name: Reload systemd after ECS cleanup
   ansible.builtin.systemd:

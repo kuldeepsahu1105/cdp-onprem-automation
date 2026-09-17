@@ -106,6 +106,7 @@ CSDs, caches, repositories, and agent host UUIDs:
 cd ansible-playbooks
 ./cleanup-cluster-services.sh --scope all          # preview
 ./cleanup-cluster-services.sh --scope all --execute
+./cleanup-cluster-services.sh --scope all --remove-service-lib-dirs --execute
 ```
 
 The ECS scope is a destructive rebuild. It validates configured ECS storage

@@ -479,15 +479,16 @@ Requires:
 |---|---|
 | `cleanup_stop_cms` | Stop CMS via API |
 | `cleanup_delete_cms` | Delete CMS via API |
-| `cleanup_delete_base_cluster` | Delete base cluster + node cleanup, including allowlisted `/var/lib/<service>` state in scoped and E2E modes |
-| `cleanup_delete_ecs_cluster` | Delete ECS cluster + node cleanup, including container/Kubernetes `/var/lib` state in scoped and E2E modes |
+| `cleanup_delete_base_cluster` | Delete base cluster + node cleanup; service `/var/lib` removal is separately opt-in |
+| `cleanup_delete_ecs_cluster` | Delete ECS cluster + node cleanup; container/Kubernetes `/var/lib` removal is separately opt-in |
 | `cleanup_remove_cm` | Uninstall CM server |
 | `cleanup_remove_cm_agents` | Remove CM agents |
 | `cleanup_stop_postgres` | Stop PostgreSQL |
 | `cleanup_remove_postgres_data` | Remove PG data (optional backup) |
 | `cleanup_backup_postgres_data` | `true` = mv to backup dir |
 | `cleanup_remove_postgres_packages` | Uninstall PostgreSQL packages |
-| `cleanup_e2e` | Full CM/node teardown: CM server/agents, CMS/base/ECS `/var/lib` state, supervisor state, parcels/CSDs, deep service dirs/users; removes DB schema objects while preserving PostgreSQL database containers and roles |
+| `cleanup_e2e` | Full CM/node teardown: CM server/agents, supervisor state, parcels/CSDs, deep service dirs/users; service `/var/lib` removal remains separately opt-in |
+| `cleanup_remove_service_lib_dirs` | `false`; explicitly remove allowlisted base/ECS/CMS service `/var/lib` directories in scoped or E2E cleanup |
 | `cleanup_reset_service_databases` | On CM-only removal, clear `scm`/`rman`; on E2E cleanup, clear every configured DB schema. Database containers and roles remain |
 | `cleanup_reset_iptables` | Reset iptables (ECS nodes) |
 | `cleanup_reboot_hosts` | Reboot after cleanup |
@@ -509,6 +510,7 @@ are not modified. Use
 | `cleanup_cluster_services_scope_input` | `base`, `ecs`, or `all`; default `all` |
 | `cleanup_cluster_services_execute_input` | `false` previews; `true` performs deletion |
 | `cleanup_cluster_services_confirm_input` | Must equal `DELETE-CLUSTER-SERVICE-DATA` for execution |
+| `cleanup_cluster_services_remove_service_lib_dirs_input` | `false`; explicitly include allowlisted service `/var/lib` directories |
 
 ---
 
