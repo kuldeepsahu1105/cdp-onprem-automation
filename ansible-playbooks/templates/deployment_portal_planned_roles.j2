@@ -1,11 +1,11 @@
 {# JSON array for from_yaml — planned roles from groups + base_cluster_install_services #}
 {% set _svc = base_cluster_install_services | default({}) %}
-{% if _svc.core_settings | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'Core Settings Gateway', 'placement': 'base-workers', 'source': 'base_cluster_install_services'}) %}{% endif %}
 {% set _mon = (monitoring_stack_enabled | default(false) | bool) or (deployment_portal_monitoring_deployed | default(false) | bool) or (deployment_portal_monitoring_routes_enabled | default(false) | bool) %}
 {% set _ecs = deployment_portal_ecs_present | default(false) | bool %}
 {% set _ops = deployment_portal_host_group_effective | default('ipaserver') %}
 {% set _pg_host = deployment_portal_postgres_inv | default('cldr-mngr') %}
 {% set _rows = namespace(items=[]) %}
+{% if _svc.core_settings | default(true) | bool %}{% set _ = _rows.items.append({'stack': 'CDP Runtime base cluster', 'role': 'Core Settings Gateway', 'placement': 'base-workers', 'source': 'base_cluster_install_services'}) %}{% endif %}
 {% if true %}{% set _ = _rows.items.append({'stack': 'Cloudera Manager', 'role': 'CM server', 'placement': 'cldr-mngr', 'source': 'inventory'}) %}{% endif %}
 {% if true %}{% set _ = _rows.items.append({'stack': 'Cloudera Manager', 'role': 'PostgreSQL (CM DB)', 'placement': _pg_host, 'source': 'inventory'}) %}{% endif %}
 {% if true %}{% set _ = _rows.items.append({'stack': 'Cloudera Manager', 'role': 'CM agent', 'placement': 'base-masters, base-workers, ecs-masters, ecs-workers', 'source': 'inventory'}) %}{% endif %}
