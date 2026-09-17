@@ -2,6 +2,45 @@
 # Creates HDFS namespace /tmp through the supported CM command when available,
 # then verifies and repairs it through an available base-node HDFS client.
 
+- name: Read authoritative HDFS authentication mode for temporary-directory repair
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/hdfs/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_hdfs_tmp_auth_config
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Resolve authoritative HDFS authentication mode for temporary-directory repair
+  ansible.builtin.set_fact:
+    base_cluster_hdfs_tmp_authentication: >-
+      {{
+        (
+          base_cluster_hdfs_tmp_auth_config.json['items'] | default([])
+          | selectattr('name', 'equalto', 'hadoop_security_authentication')
+          | map(attribute='value')
+          | first
+        )
+        | default(
+            (
+              base_cluster_hdfs_tmp_auth_config.json['items'] | default([])
+              | selectattr('name', 'equalto', 'hadoop_security_authentication')
+              | map(attribute='default')
+              | first
+            ),
+            true
+          )
+        | default('simple', true)
+        | lower
+      }}
+
 - name: Resolve a base-node HDFS client
   ansible.builtin.include_tasks: resolve_hdfs_client.yml
 
@@ -61,11 +100,7 @@
     set -euo pipefail
     hdfs_cli={{ base_cluster_hdfs_client_path | quote }}
     changed=false
-    hdfs_authentication=$(
-      env HADOOP_CONF_DIR=/etc/hadoop/conf \
-        "$hdfs_cli" getconf -confKey hadoop.security.authentication
-    )
-    hdfs_authentication=${hdfs_authentication,,}
+    hdfs_authentication={{ base_cluster_hdfs_tmp_authentication | quote }}
 
     if [ "$hdfs_authentication" = "kerberos" ]; then
       hdfs_keytab=""
@@ -82,6 +117,7 @@
         echo "HDFS uses Kerberos, but no active CM-generated hdfs.keytab was found." >&2
         exit 1
       fi
+      hadoop_conf_dir=$(dirname "$hdfs_keytab")
 
       hdfs_principal=$(
         klist -k "$hdfs_keytab" \
@@ -97,7 +133,7 @@
       kinit -c "$KRB5CCNAME" -kt "$hdfs_keytab" "$hdfs_principal"
 
       hdfs_dfs() {
-        env KRB5CCNAME="$KRB5CCNAME" HADOOP_CONF_DIR=/etc/hadoop/conf \
+        env KRB5CCNAME="$KRB5CCNAME" HADOOP_CONF_DIR="$hadoop_conf_dir" \
           "$hdfs_cli" dfs "$@"
       }
     elif [ "$hdfs_authentication" = "simple" ]; then
