@@ -20,6 +20,20 @@
   ansible.builtin.import_tasks: common_tasks/cleanup/remove_cm_agents.yml
   when: hostvars['localhost']['cleanup_effective']['remove_cm_agents'] | default(false)
 
+- name: Validate base service library directory names
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
+    fail_msg: "Unsafe cleanup_base_service_path_names entry: {{ item | string }}"
+  loop: "{{ cleanup_base_service_path_names }}"
+
+- name: Remove base service library directories
+  ansible.builtin.file:
+    path: "/var/lib/{{ item }}"
+    state: absent
+  loop: "{{ cleanup_base_service_path_names }}"
+
 - name: Remove base cluster data and config directories
   ansible.builtin.shell: |
     rm -rf /tmp/kafka-logs
@@ -38,8 +52,6 @@
     rm -rf /etc/zookeeper* /etc/*nifiregistry*
     rm -rf /usr/share/cmf /var/lib/cloudera* /var/cache/yum/cloudera* /var/cache/apt/archives/partial
     rm -rf /var/log/cloudera* /var/run/cloudera* /opt/cloudera
-  args:
-    warn: false
   when: hostvars['localhost']['cleanup_effective']['deep_remove_data_dirs'] | default(false)
   changed_when: true
   failed_when: false

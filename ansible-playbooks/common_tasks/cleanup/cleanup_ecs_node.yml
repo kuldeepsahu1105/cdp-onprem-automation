@@ -8,10 +8,23 @@
       "$DOCKER_BIN" container rm -v registry || true
       "$DOCKER_BIN" image rm registry:2 || true
     fi
-  args:
-    warn: false
   when: cleanup_ecs_remove_docker_registry | default(true)
   changed_when: false
+  failed_when: false
+
+- name: Stop CM agent and ECS runtime services before library cleanup
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop:
+    - cloudera-scm-agent
+    - rke2-server
+    - rke2-agent
+    - k3s
+    - k3s-agent
+    - containerd
+    - docker
   failed_when: false
 
 - name: Check if ECS rke2-killall script exists
@@ -41,18 +54,19 @@
 - name: Remove ECS and container runtime directories
   ansible.builtin.shell: |
     rm -rf /ecs/*
-    rm -rf /var/lib/docker_server/*
     rm -rf /etc/docker/certs.d /etc/docker/*
-    rm -rf /var/lib/docker/*
     rm -rf /etc/rancher /var/lib/rancher /var/log/rancher
-    rm -rf /var/lib/rancher/k3s/server/node-token
     rm -rf /run/k3s /opt/containerd /opt/cni
     rm -rf /docker/* /lhdata/* /cdwdata/*
     rm -rf /root/.kube /root/.cache
-  args:
-    warn: false
   changed_when: true
   failed_when: false
+
+- name: Remove ECS service library directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ cleanup_ecs_service_library_paths }}"
 
 - name: Reload systemd after ECS cleanup
   ansible.builtin.systemd:

@@ -58,6 +58,12 @@
     state: absent
   loop:
     - /usr/share/cmf
+    - /var/lib/cloudera-host-monitor
+    - /var/lib/cloudera-service-monitor
+    - /var/lib/cloudera-scm-alertpublisher
+    - /var/lib/cloudera-scm-eventserver
+    - /var/lib/cloudera-scm-headlamp
+    - /var/lib/cloudera-scm-navigator
     - /var/lib/cloudera-scm-server
     - /var/cache/yum/cloudera-manager
     - "{{ os.cm_package_cache_glob }}"

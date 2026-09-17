@@ -2,6 +2,9 @@
 # Cloudera Labs cm_autotls playbook: after CM server/agent TLS, reconcile MGMT truststore and restart CMS when it already exists.
 # Greenfield installs create CMS in 28_setup_cm_cms.yml (after this play); re-runs and partial stacks benefit here.
 
+- name: CMS after Auto-TLS — resolve mutation-safe CM API endpoint
+  ansible.builtin.import_tasks: prepare_cm_security_api.yml
+
 - name: CMS after Auto-TLS — read management service presence
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/service"

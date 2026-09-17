@@ -79,7 +79,7 @@
       register: cleanup_e2e_ecs_storage_mounts
       changed_when: false
       failed_when: false
-      loop: "{{ cleanup_ecs_storage_paths | unique | list }}"
+      loop: "{{ (cleanup_ecs_storage_paths + cleanup_ecs_service_library_paths) | unique | list }}"
       loop_control:
         label: "{{ item }}"
 

@@ -829,6 +829,74 @@ cleanup_remove_service_users: "{{ cleanup_e2e }}"
 cleanup_remove_service_groups: "{{ cleanup_e2e }}"
 cleanup_deep_remove_data_dirs: "{{ cleanup_e2e }}"
 
+# Service-owned /var/lib directories removed whenever base-cluster cleanup runs,
+# in both scoped and end-to-end cleanup modes. Infrastructure services such as
+# PostgreSQL, FreeIPA, and Cloudera Manager are intentionally controlled separately.
+cleanup_base_service_path_names:
+  - accumulo
+  - atlas
+  - cruisecontrol
+  - dataviz
+  - dpprofiler
+  - druid
+  - flink
+  - flume
+  - hadoop
+  - hadoop-hdfs
+  - hadoop-kms
+  - hadoop-mapreduce
+  - hadoop-ozone
+  - hadoop-yarn
+  - hbase
+  - hbase-solr
+  - hive
+  - hive-hcatalog
+  - hive-webhcat
+  - httpfs
+  - hue
+  - impala
+  - kafka
+  - knox
+  - kraft
+  - kudu
+  - livy
+  - kms
+  - mapred
+  - nifi
+  - nifi-registry
+  - nifiregistry
+  - omid
+  - oozie
+  - ozone
+  - phoenix
+  - ranger
+  - rangerraz
+  - rangerrms
+  - replication-manager
+  - schemaregistry
+  - solr
+  - spark
+  - spark3
+  - sqoop
+  - streams
+  - streamsmsgmgr
+  - streamsrepmgr
+  - superset
+  - tez
+  - yarn
+  - zeppelin
+  - zookeeper
+
+cleanup_ecs_service_library_paths:
+  - /var/lib/cni
+  - /var/lib/containerd
+  - /var/lib/docker
+  - /var/lib/docker_server
+  - /var/lib/kubelet
+  - /var/lib/longhorn
+  - /var/lib/rancher
+  - /var/lib/rke2
+
 # ECS-specific options
 cleanup_reset_iptables: false
 cleanup_ecs_remove_docker_registry: true
@@ -1324,26 +1392,8 @@ cleanup_service_users:
 
 cleanup_service_groups: "{{ cleanup_service_users }}"
 
-# CM process users killed before package removal on cluster nodes
-cleanup_cm_process_users:
-  - cloudera-scm
-  - flume
-  - hadoop
-  - hdfs
-  - hbase
-  - hive
-  - httpfs
-  - hue
-  - impala
-  - llama
-  - mapred
-  - oozie
-  - solr
-  - spark
-  - sqoop
-  - sqoop2
-  - yarn
-  - zookeeper
+# Service process users stopped before data or package removal on cluster nodes.
+cleanup_cm_process_users: "{{ cleanup_service_users }}"
 
 # CM packages to remove (same package names on RHEL yum and Ubuntu apt)
 cleanup_cm_packages:

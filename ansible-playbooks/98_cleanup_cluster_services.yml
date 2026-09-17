@@ -102,7 +102,7 @@
       register: cleanup_ecs_storage_preflight_mounts
       changed_when: false
       failed_when: false
-      loop: "{{ cleanup_ecs_storage_paths | unique | list }}"
+      loop: "{{ (cleanup_ecs_storage_paths + cleanup_ecs_service_library_paths) | unique | list }}"
       loop_control:
         label: "{{ item }}"
 
@@ -202,61 +202,6 @@
   become: true
   gather_facts: no
   vars:
-    # CM-managed service names, including optional/legacy services that can
-    # leave state behind even when they are disabled in the current spec.
-    cleanup_base_service_path_names:
-      - accumulo
-      - atlas
-      - cruisecontrol
-      - dataviz
-      - dpprofiler
-      - druid
-      - flink
-      - flume
-      - hadoop
-      - hadoop-hdfs
-      - hadoop-kms
-      - hadoop-mapreduce
-      - hadoop-yarn
-      - hbase
-      - hbase-solr
-      - hive
-      - hive-hcatalog
-      - hive-webhcat
-      - httpfs
-      - hue
-      - impala
-      - kafka
-      - knox
-      - kraft
-      - kudu
-      - livy
-      - kms
-      - mapred
-      - nifi
-      - nifi-registry
-      - nifiregistry
-      - omid
-      - oozie
-      - ozone
-      - phoenix
-      - ranger
-      - rangerraz
-      - rangerrms
-      - replication-manager
-      - schemaregistry
-      - solr
-      - spark
-      - spark3
-      - sqoop
-      - streams
-      - streamsmsgmgr
-      - streamsrepmgr
-      - superset
-      - tez
-      - yarn
-      - zeppelin
-      - zookeeper
     cleanup_base_service_paths: >-
       {{
         [
@@ -312,6 +257,14 @@
     - name: Skip base nodes outside selected scope
       ansible.builtin.meta: end_play
       when: not (hostvars['localhost']['cleanup_cluster_services_base'] | bool)
+
+    - name: Validate base service library directory names
+      ansible.builtin.assert:
+        that:
+          - item is string
+          - item is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
+        fail_msg: "Unsafe cleanup_base_service_path_names entry: {{ item | string }}"
+      loop: "{{ cleanup_base_service_path_names }}"
 
     - name: Find base service temporary traces
       ansible.builtin.find:
@@ -441,25 +394,25 @@
       - "{{ ecs_docker_data_path }}"
       - "{{ ecs_lso_data_path }}"
       - "{{ ecs_longhorn_data_path }}"
-    cleanup_ecs_service_paths:
-      - /etc/rancher
-      - /etc/cni
-      - /var/lib/rancher
-      - /var/lib/kubelet
-      - /var/lib/cni
-      - /var/lib/docker_server
-      - /var/lib/longhorn
-      - /var/log/rancher
-      - /var/log/pods
-      - /var/log/containers
-      - /var/log/kube-audit
-      - /run/k3s
-      - /run/rke2
-      - /var/run/netns
-      - /var/run/cloudera-scm-agent/process
-      - /root/.kube
-      - /root/.helm
-      - /root/.cache/helm
+    cleanup_ecs_service_paths: >-
+      {{
+        [
+          '/etc/rancher',
+          '/etc/cni',
+          '/var/log/rancher',
+          '/var/log/pods',
+          '/var/log/containers',
+          '/var/log/kube-audit',
+          '/run/k3s',
+          '/run/rke2',
+          '/var/run/netns',
+          '/var/run/cloudera-scm-agent/process',
+          '/root/.kube',
+          '/root/.helm',
+          '/root/.cache/helm'
+        ]
+        + cleanup_ecs_service_library_paths
+      }}
   tasks:
     - name: Skip ECS nodes outside selected scope
       ansible.builtin.meta: end_play
