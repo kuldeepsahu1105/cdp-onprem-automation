@@ -562,13 +562,16 @@ After reviewing the cleanup targets, execute the rebuild:
 ./rebuild-base-cluster.sh --execute
 ```
 
-The execute path deletes the base-cluster registration and node service state,
-resets only the Hive, Hue, Ranger, and Knox schemas while preserving their
-database containers/login roles, and then runs playbook **31**. That playbook
-idempotently verifies or enables CM Auto-TLS, creates the new base cluster,
-enables and verifies cluster Kerberos before First Run, refreshes client configuration, and
-restarts CMS. Existing clusters managed by playbook **31** receive the same
-Auto-TLS/Kerberos convergence without requiring a rebuild.
+The execute path first runs playbooks **27** and **30** to converge CM Auto-TLS
+and KDC/account-manager integration. This happens before destructive cleanup,
+so a security prerequisite failure leaves the existing cluster intact. It then
+deletes the base-cluster registration and node service state, resets only the
+Hive, Hue, Ranger, and Knox schemas while preserving their database
+containers/login roles, and runs playbook **31**. The new cluster is configured
+and verified for Kerberos before First Run, then client configuration is
+refreshed and CMS is restarted. Existing initialized clusters managed by
+playbook **31** receive guarded Auto-TLS/Kerberos convergence without requiring
+a rebuild.
 
 New deployments use the default cluster name `CDP-base-cluster`. When that
 default is unchanged and a pre-V2 `CDH-Cluster` already exists, playbook **31**
