@@ -1,6 +1,9 @@
 ---
 # Creates HDFS namespace /tmp through the supported CM command when available,
-# then verifies and repairs it through the HDFS client on the base master.
+# then verifies and repairs it through an available base-node HDFS client.
+
+- name: Resolve a base-node HDFS client
+  ansible.builtin.include_tasks: resolve_hdfs_client.yml
 
 - name: Submit CM HDFS temporary-directory command
   ansible.builtin.uri:
@@ -49,30 +52,14 @@
         base_cluster_hdfs_tmp_command.json.message
         | default(base_cluster_hdfs_tmp_command.msg | default('command unavailable'))
       }}.
-      Verifying and repairing HDFS /tmp through the base master client.
+      Verifying and repairing HDFS /tmp through the discovered base-node client
+      on {{ base_cluster_hdfs_client_host }}.
   when: base_cluster_hdfs_tmp_command.status | int == 400
 
 - name: Ensure HDFS temporary directory and sticky permissions
   ansible.builtin.shell: |
     set -euo pipefail
-    hdfs_cli=""
-    if path_hdfs=$(command -v hdfs 2>/dev/null) && [ -x "$path_hdfs" ]; then
-      hdfs_cli="$path_hdfs"
-    else
-      for parcel_hdfs in \
-        /opt/cloudera/parcels/CDH/bin/hdfs \
-        /opt/cloudera/parcels/CDH-*/bin/hdfs; do
-        if [ -x "$parcel_hdfs" ]; then
-          hdfs_cli="$parcel_hdfs"
-          break
-        fi
-      done
-    fi
-    if [ -z "$hdfs_cli" ]; then
-      echo "No executable hdfs client found in PATH or an installed CDH-* parcel." >&2
-      ls -la /opt/cloudera/parcels >&2 || true
-      exit 127
-    fi
+    hdfs_cli={{ base_cluster_hdfs_client_path | quote }}
     changed=false
 
     hdfs_dfs() {
@@ -100,4 +87,5 @@
   register: base_cluster_hdfs_tmp_reconcile
   changed_when: "'changed=true' in base_cluster_hdfs_tmp_reconcile.stdout"
   become: true
-  delegate_to: "{{ groups[base_cluster_master_group] | first }}"
+  connection: ssh
+  delegate_to: "{{ base_cluster_hdfs_client_host }}"
