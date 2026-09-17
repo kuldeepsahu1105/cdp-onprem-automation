@@ -1,0 +1,73 @@
+---
+- name: Probe base nodes for an HDFS client
+  ansible.builtin.shell: |
+    set -u
+    if path_hdfs=$(command -v hdfs 2>/dev/null) && [ -x "$path_hdfs" ]; then
+      printf '%s\n' "$path_hdfs"
+      exit 0
+    fi
+
+    for parcel_hdfs in \
+      /opt/cloudera/parcels/CDH/bin/hdfs \
+      /opt/cloudera/parcels/CDH-*/bin/hdfs; do
+      if [ -x "$parcel_hdfs" ]; then
+        printf '%s\n' "$parcel_hdfs"
+        exit 0
+      fi
+    done
+
+    echo "No executable hdfs client found in PATH or an installed CDH-* parcel." >&2
+    ls -la /opt/cloudera/parcels >&2 || true
+    exit 127
+  args:
+    executable: /bin/bash
+  loop: >-
+    {{
+      groups[base_cluster_master_group] | default([])
+      | union(groups[base_cluster_worker_group] | default([]))
+    }}
+  loop_control:
+    label: "{{ item }}"
+  register: base_cluster_hdfs_client_probes
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ item }}"
+
+- name: Select base node with an HDFS client
+  ansible.builtin.set_fact:
+    base_cluster_hdfs_client_host: >-
+      {{
+        (
+          base_cluster_hdfs_client_probes.results
+          | selectattr('rc', 'equalto', 0)
+          | map(attribute='item')
+          | first
+        )
+        | default('', true)
+      }}
+    base_cluster_hdfs_client_path: >-
+      {{
+        (
+          base_cluster_hdfs_client_probes.results
+          | selectattr('rc', 'equalto', 0)
+          | map(attribute='stdout')
+          | first
+        )
+        | default('', true)
+        | trim
+      }}
+
+- name: Require an HDFS client on a base node
+  ansible.builtin.assert:
+    that:
+      - base_cluster_hdfs_client_host | length > 0
+      - base_cluster_hdfs_client_path | length > 0
+    fail_msg: >-
+      No executable HDFS client was found on any base master or worker.
+      Verify parcel distribution and activation on:
+      {{
+        groups[base_cluster_master_group] | default([])
+        | union(groups[base_cluster_worker_group] | default([]))
+        | join(', ')
+      }}.

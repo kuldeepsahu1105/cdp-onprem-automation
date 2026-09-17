@@ -1019,24 +1019,7 @@
     - name: Recover YARN node-label directory
       ansible.builtin.shell: |
         set -euo pipefail
-        hdfs_cli=""
-        if path_hdfs=$(command -v hdfs 2>/dev/null) && [ -x "$path_hdfs" ]; then
-          hdfs_cli="$path_hdfs"
-        else
-          for parcel_hdfs in \
-            /opt/cloudera/parcels/CDH/bin/hdfs \
-            /opt/cloudera/parcels/CDH-*/bin/hdfs; do
-            if [ -x "$parcel_hdfs" ]; then
-              hdfs_cli="$parcel_hdfs"
-              break
-            fi
-          done
-        fi
-        if [ -z "$hdfs_cli" ]; then
-          echo "No executable hdfs client found in PATH or an installed CDH-* parcel." >&2
-          ls -la /opt/cloudera/parcels >&2 || true
-          exit 127
-        fi
+        hdfs_cli={{ base_cluster_hdfs_client_path | quote }}
         changed=false
 
         hdfs_dfs() {
@@ -1056,7 +1039,7 @@
       register: base_cluster_yarn_directory_recovery
       changed_when: "'changed=true' in base_cluster_yarn_directory_recovery.stdout"
       become: true
-      delegate_to: "{{ groups[base_cluster_master_group] | first }}"
+      delegate_to: "{{ base_cluster_hdfs_client_host }}"
       when:
         - base_cluster_recovery_required | bool
         - base_cluster_install_services.hdfs | default(true) | bool

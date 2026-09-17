@@ -456,11 +456,11 @@ or cluster First Run.
 
 HDFS `/tmp` reconciliation first calls CM's documented
 `hdfsCreateTmpDir` service command. Some CM 7.13/CDP 7.3.2 layouts return
-`Command not valid for ...`; in that case a gateway client creates the HDFS
-namespace path and verifies mode `1777` (world-writable with sticky bit).
-The client is resolved from `PATH` or an executable versioned
-`/opt/cloudera/parcels/CDH-*/bin/hdfs`; the `CDH` convenience symlink is not
-required.
+`Command not valid for ...`; in that case Ansible probes every base master and
+worker, then uses the first available HDFS client to create the namespace path
+and verify mode `1777` (world-writable with sticky bit). The probe checks
+`PATH`, the active `/opt/cloudera/parcels/CDH/bin/hdfs` link, and executable
+versioned `/opt/cloudera/parcels/CDH-*/bin/hdfs` clients.
 The same verification runs after a fresh First Run, so the HDFS canary can
 create `/tmp/.cloudera_health_monitoring_canary_files`. This is not the local
 Linux `/tmp` directory on each DataNode.
