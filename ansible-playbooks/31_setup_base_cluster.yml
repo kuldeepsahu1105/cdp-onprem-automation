@@ -631,6 +631,31 @@
           - gateway_master_secret
       when: base_cluster_install_services.knox | default(true) | bool
 
+    - name: Read base cluster initialization marker before Knox trust repair
+      ansible.builtin.slurp:
+        src: "{{ base_cluster_initialization_marker_path }}"
+      register: base_cluster_initialization_marker
+      failed_when: false
+      changed_when: false
+      become: true
+      delegate_to: "{{ cm_manager_inventory_host }}"
+      when: existing_cluster.status == 200
+
+    - name: Detect incomplete initialization before Knox trust repair
+      ansible.builtin.set_fact:
+        base_cluster_initialization_incomplete: >-
+          {{
+            existing_cluster.status == 200
+            and not (
+              existing_cluster.json.uuid is defined
+              and base_cluster_initialization_marker.content is defined
+              and (
+                'uuid=' ~ existing_cluster.json.uuid
+                in (base_cluster_initialization_marker.content | b64decode)
+              )
+            )
+          }}
+
     - name: Read Knox Gateway Auto-TLS client truststore schema
       ansible.builtin.uri:
         url: >-
@@ -752,6 +777,7 @@
           {{
             base_cluster_knox_update_autotls_truststore_password | default(false) | bool
             or autotls_applied_this_run | default(false) | bool
+            or base_cluster_initialization_incomplete | default(false) | bool
           }}
       when:
         - base_cluster_install_services.knox | default(true) | bool
@@ -993,15 +1019,6 @@
       when:
         - base_cluster_install_services.kafka | default(true) | bool
         - base_cluster_kafka_metadata_store_effective == 'KRaft'
-
-    - name: Read base cluster initialization marker
-      ansible.builtin.slurp:
-        src: "{{ base_cluster_initialization_marker_path }}"
-      register: base_cluster_initialization_marker
-      failed_when: false
-      changed_when: false
-      become: true
-      delegate_to: "{{ cm_manager_inventory_host }}"
 
     - name: Read existing initialization service states
       ansible.builtin.set_fact:

@@ -500,7 +500,10 @@ recover the gateway: `cdp-proxy`, `cdp-proxy-token`, `cdp-proxy-api`, and
 `cdp-datashare-access` cannot be generated. Playbook **31** configures the Knox
 Gateway role's `ssl_client_truststore_*` settings from CM's Auto-TLS truststore
 and password before First Run. On a rerun, it restarts an already-running Knox
-service when those settings change. The expected generated
+service when those settings change. An interrupted initialization also forces
+the redacted truststore password to be refreshed, preventing a stale Knox
+credential alias from producing `Keystore was tampered with, or password was
+incorrect`. The expected generated
 `gateway-site.xml` value is a non-empty
 `gateway.httpclient.truststore.path`; an empty value confirms the trust
 configuration is missing.
