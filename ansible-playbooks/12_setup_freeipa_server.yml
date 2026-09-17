@@ -353,13 +353,6 @@
       changed_when: false
       no_log: true
 
-    - name: Read FreeIPA global Kerberos ticket policy
-      ansible.builtin.command: ipa krbtpolicy-show --raw
-      register: ipa_global_krbtpolicy
-      changed_when: false
-      environment:
-        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
-
     - name: Reconcile FreeIPA global Kerberos ticket policy
       ansible.builtin.command:
         argv:
@@ -367,23 +360,12 @@
           - krbtpolicy-mod
           - "--maxlife={{ ipa_krbtpolicy_maxlife_seconds }}"
           - "--maxrenew={{ ipa_krbtpolicy_maxrenew_seconds }}"
-      when: >-
-        (
-          ipa_global_krbtpolicy.stdout
-          | regex_search(
-              '(?im)^krbmaxticketlife:\\s*'
-              ~ (ipa_krbtpolicy_maxlife_seconds | string)
-              ~ '\\s*$'
-            )
-        ) is none
-        or (
-          ipa_global_krbtpolicy.stdout
-          | regex_search(
-              '(?im)^krbmaxrenewableage:\\s*'
-              ~ (ipa_krbtpolicy_maxrenew_seconds | string)
-              ~ '\\s*$'
-            )
-        ) is none
+      register: ipa_global_krbtpolicy_update
+      changed_when: ipa_global_krbtpolicy_update.rc == 0
+      failed_when: >-
+        ipa_global_krbtpolicy_update.rc != 0
+        and 'no modifications to be performed' not in
+          (ipa_global_krbtpolicy_update.stderr | default('') | lower)
       environment:
         KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
 
