@@ -505,7 +505,12 @@ falling back to Hue's local SQLite database. During prerequisites, playbook
 **06** installs and verifies `psycopg2` on every inventory host for both
 Ansible's default `/usr/bin/python3` and the configured
 `python{{ python_version }}` runtime, using each interpreter's own `-m pip`
-fallback when the OS package is not importable there.
+fallback when the OS package is not importable there. Hue itself runs from the
+active CDH parcel virtual environment, such as
+`/opt/cloudera/parcels/CDH/lib/hue/build/venvs/python3.11`. Before cluster
+startup, playbook **31** separately verifies `psycopg2` or `psycopg` in that
+exact environment on the Hue role host and installs `psycopg2-binary` there
+when both imports are unavailable.
 
 New deployments use the default cluster name `CDP-base-cluster`. When that
 default is unchanged and a pre-V2 `CDH-Cluster` already exists, playbook **31**

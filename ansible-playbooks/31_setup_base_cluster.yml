@@ -445,6 +445,53 @@
           - database_password
       when: base_cluster_install_services.hue | default(true) | bool
 
+    - name: Ensure PostgreSQL driver in the active Hue parcel environment
+      ansible.builtin.shell: |
+        set -euo pipefail
+        hue_python=""
+
+        for candidate in \
+          /opt/cloudera/parcels/CDH/lib/hue/build/venvs/python*/bin/python \
+          /opt/cloudera/parcels/CDH/lib/hue/build/env/bin/python
+        do
+          if [ -x "$candidate" ]; then
+            hue_python="$candidate"
+            break
+          fi
+        done
+
+        if [ -z "$hue_python" ]; then
+          echo "No executable Python was found in the active CDH Hue parcel environment." >&2
+          exit 127
+        fi
+
+        if "$hue_python" -c 'import psycopg2' >/dev/null 2>&1 \
+          || "$hue_python" -c 'import psycopg' >/dev/null 2>&1; then
+          "$hue_python" -c 'import sys; print("Hue PostgreSQL driver available in " + sys.executable)'
+          echo "changed=false"
+          exit 0
+        fi
+
+        "$hue_python" -m pip install --disable-pip-version-check "$HUE_PSYCOPG_PACKAGE"
+        "$hue_python" -c 'import psycopg2, sys; print("psycopg2 " + psycopg2.__version__ + " available in " + sys.executable)'
+        echo "changed=true"
+      args:
+        executable: /bin/bash
+      environment:
+        PIP_BREAK_SYSTEM_PACKAGES: "1"
+        HUE_PSYCOPG_PACKAGE: >-
+          {{
+            'psycopg2-binary==' + psycopg2_binary_version
+            if psycopg2_binary_version | default('') | length > 0
+            else 'psycopg2-binary'
+          }}
+      register: base_cluster_hue_psycopg2
+      changed_when: "'changed=true' in base_cluster_hue_psycopg2.stdout"
+      become: true
+      connection: ssh
+      delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+      when: base_cluster_install_services.hue | default(true) | bool
+
     - name: Read Kafka role config groups
       ansible.builtin.uri:
         url: >-
