@@ -486,13 +486,22 @@ poll, then starts and polls the full cluster. It does not suppress other Knox
 failures or continue while the remaining services are stopped.
 
 `base_cluster_enable_kerberos: true` makes playbook **31** Kerberize every base
-cluster it manages. After initial service setup succeeds, the playbook checks
-HDFS authentication. A cluster still using `simple` authentication is stopped,
-configured through CM's `configureForKerberos` command, issued fresh
-credentials, restarted, and refreshed. Completion is recorded only after CM
-reports `hadoop_security_authentication=kerberos`; already Kerberized clusters
-skip the transition. This leaves playbook **30** responsible only for KDC
-integration and account-manager credential import.
+cluster it manages. Auto-TLS and CM KDC/account-manager integration must already
+be active before cluster creation. For a newly created cluster, playbook **31**
+refuses First Run unless the KDC is reachable and CM's matching credential
+marker exists; it then runs `configureForKerberos`, generates credentials, and
+verifies HDFS authentication **before any cluster service is started**. This
+avoids initializing service state in SIMPLE mode and retrofitting security
+afterward. Interrupted pre-First-Run attempts repeat credential generation and
+verification before any retry starts the cluster.
+
+For an existing initialized cluster, the playbook checks HDFS authentication.
+A cluster still using `simple` authentication is stopped, configured through
+CM's `configureForKerberos` command, issued fresh credentials, restarted, and
+refreshed. Completion is recorded only after CM reports
+`hadoop_security_authentication=kerberos`; already Kerberized clusters skip the
+transition. This leaves playbook **30** responsible for CM-wide KDC integration
+and account-manager credential import.
 
 Playbook **31** also imports the idempotent **27** Auto-TLS workflow before base
 cluster reconciliation. When `autotls_enabled: true`, CM's authoritative
@@ -538,6 +547,28 @@ transaction batch its `CTLGS` and `DBS` deletes in either order; this prevents
 each new canary run from recreating the same FK failure. Set
 `base_cluster_repair_hive_canary_catalogs: false` to disable this narrowly
 scoped repair. Normal Hive catalogs and databases are never selected.
+
+For a clean base-only recreation that preserves CM, CMS, FreeIPA, ECS, and
+downloaded parcels, use `rebuild-base-cluster.sh`. It previews by default:
+
+```bash
+cd ansible-playbooks
+./rebuild-base-cluster.sh
+```
+
+After reviewing the cleanup targets, execute the rebuild:
+
+```bash
+./rebuild-base-cluster.sh --execute
+```
+
+The execute path deletes the base-cluster registration and node service state,
+resets only the Hive, Hue, Ranger, and Knox schemas while preserving their
+database containers/login roles, and then runs playbook **31**. That playbook
+idempotently verifies or enables CM Auto-TLS, creates the new base cluster,
+enables and verifies cluster Kerberos before First Run, refreshes client configuration, and
+restarts CMS. Existing clusters managed by playbook **31** receive the same
+Auto-TLS/Kerberos convergence without requiring a rebuild.
 
 New deployments use the default cluster name `CDP-base-cluster`. When that
 default is unchanged and a pre-V2 `CDH-Cluster` already exists, playbook **31**

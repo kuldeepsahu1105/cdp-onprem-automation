@@ -508,7 +508,8 @@ base_cluster_module_poll_interval: 15
 # reaches healthy state. Bound the narrow First Run recovery wait.
 base_cluster_knox_readiness_recovery_retries: 30
 base_cluster_knox_readiness_recovery_delay: 10
-# Kerberize every base cluster managed by playbook 31 after its initial service setup succeeds.
+# New clusters are Kerberized before First Run; existing unsecure clusters use
+# the guarded stop/configure/credentials/start convergence path.
 base_cluster_enable_kerberos: true
 # Restart CMS after base-cluster startup and security convergence.
 base_cluster_restart_cms_after_start: true

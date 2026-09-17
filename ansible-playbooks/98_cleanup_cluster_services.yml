@@ -8,6 +8,7 @@
 #   ansible-playbook -i inventory.ini 98_cleanup_cluster_services.yml \
 #     -e cleanup_cluster_services_scope=all \
 #     -e cleanup_cluster_services_execute=true \
+#     -e cleanup_cluster_services_reset_base_databases=true \
 #     -e cleanup_cluster_services_confirm=DELETE-CLUSTER-SERVICE-DATA
 #
 # This reset preserves CM packages and agents, parcel/CSD content, package
@@ -24,6 +25,8 @@
     cleanup_cluster_services_scope: "{{ cleanup_cluster_services_scope_input | default('all') }}"
     cleanup_cluster_services_execute: "{{ cleanup_cluster_services_execute_input | default(false) }}"
     cleanup_cluster_services_confirm: "{{ cleanup_cluster_services_confirm_input | default('') }}"
+    cleanup_cluster_services_reset_base_databases: >-
+      {{ cleanup_cluster_services_reset_base_databases_input | default(false) }}
   tasks:
     - name: Validate cleanup scope
       ansible.builtin.assert:
@@ -36,11 +39,25 @@
           Scope must be base, ecs, or all. Destructive execution also requires
           cleanup_cluster_services_confirm=DELETE-CLUSTER-SERVICE-DATA.
 
+    - name: Validate base service database reset scope
+      ansible.builtin.assert:
+        that:
+          - >-
+            not (cleanup_cluster_services_reset_base_databases | bool)
+            or cleanup_cluster_services_scope in ['base', 'all']
+        fail_msg: >-
+          Base service database reset requires cleanup scope base or all.
+
     - name: Record cleanup selection
       ansible.builtin.set_fact:
         cleanup_cluster_services_base: "{{ cleanup_cluster_services_scope in ['base', 'all'] }}"
         cleanup_cluster_services_ecs: "{{ cleanup_cluster_services_scope in ['ecs', 'all'] }}"
         cleanup_cluster_services_apply: "{{ cleanup_cluster_services_execute | bool }}"
+        cleanup_cluster_services_reset_base_db: >-
+          {{
+            cleanup_cluster_services_execute | bool
+            and cleanup_cluster_services_reset_base_databases | bool
+          }}
 
     - name: Show cluster service cleanup plan
       ansible.builtin.debug:
@@ -51,7 +68,14 @@
           - "ECS nodes: {{ groups['ecs-masters'] | default([]) | union(groups['ecs-workers'] | default([])) | join(', ') }}"
           - "Preserved: CM server/agents/packages, agent UUID, /opt/cloudera/parcels, /opt/cloudera/csd, parcel caches, repositories"
           - "Removed in execute mode: selected CM cluster registrations and allowlisted service config/data/log/runtime paths"
-          - "PostgreSQL databases are not modified by this base/ECS service reset"
+          - >-
+            Base service schemas:
+            {{
+              'RESET (Hive, Hue, Ranger, Knox)'
+              if cleanup_cluster_services_reset_base_databases | bool
+              else 'preserved'
+            }}
+          - "PostgreSQL database containers and login roles are always preserved"
 
 - name: Validate ECS persistent storage before destructive changes
   hosts: ecs-masters:ecs-workers
@@ -384,6 +408,30 @@
         enabled: true
       when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
 
+- name: Reset base service database schemas for clean recreation
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Skip base database reset unless explicitly selected
+      ansible.builtin.meta: end_play
+      when: not (hostvars['localhost']['cleanup_cluster_services_reset_base_db'] | bool)
+
+    - name: Select base service databases
+      ansible.builtin.set_fact:
+        cleanup_service_database_targets:
+          - name: "{{ base_cluster_hive_database_name }}"
+            user: "{{ base_cluster_hive_database_user }}"
+          - name: "{{ base_cluster_hue_database_name }}"
+            user: "{{ base_cluster_hue_database_user }}"
+          - name: "{{ base_cluster_ranger_database_name }}"
+            user: "{{ base_cluster_ranger_database_user }}"
+          - name: "{{ base_cluster_knox_database_name }}"
+            user: "{{ base_cluster_knox_database_user }}"
+
+    - name: Reset base service schemas while preserving databases and roles
+      ansible.builtin.import_tasks: common_tasks/cleanup/reset_service_database_schemas.yml
+
 - name: Rebuild ECS service state while preserving parcel software
   hosts: ecs-masters:ecs-workers
   become: true
@@ -550,6 +598,7 @@
         msg: >-
           Cluster service cleanup {{ 'completed' if cleanup_cluster_services_apply else 'preview completed' }}.
           CM server, agents, packages, host UUIDs, parcels, CSDs, parcel caches,
-          repositories, PostgreSQL databases, and PostgreSQL roles were preserved
-          without modifying database contents.
+          repositories, PostgreSQL database containers, and PostgreSQL roles
+          were preserved. Base service schemas were
+          {{ 'reset' if cleanup_cluster_services_reset_base_db else 'preserved' }}.
           Use 99_cleanup.yml only for full E2E node teardown.

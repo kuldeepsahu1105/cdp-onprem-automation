@@ -1,0 +1,207 @@
+---
+- name: Read HDFS authentication before the first secure start
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/hdfs/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_pre_start_hdfs_auth_config
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Resolve HDFS authentication before the first secure start
+  ansible.builtin.set_fact:
+    base_cluster_pre_start_hdfs_authentication: >-
+      {{
+        (
+          base_cluster_pre_start_hdfs_auth_config.json['items'] | default([])
+          | selectattr('name', 'equalto', 'hadoop_security_authentication')
+          | map(attribute='value')
+          | first
+        )
+        | default(
+            (
+              base_cluster_pre_start_hdfs_auth_config.json['items'] | default([])
+              | selectattr('name', 'equalto', 'hadoop_security_authentication')
+              | map(attribute='default')
+              | first
+            ),
+            true
+          )
+        | default('simple', true)
+        | lower
+      }}
+    base_cluster_pre_start_has_running_services: >-
+      {{
+        existing_cluster_services.json['items'] | default([])
+        | selectattr('serviceState', 'defined')
+        | selectattr('serviceState', 'equalto', 'STARTED')
+        | list
+        | length > 0
+      }}
+
+- name: Resolve pre-start KDC credential marker
+  ansible.builtin.set_fact:
+    base_cluster_pre_start_kdc_admin_principal: >-
+      {{
+        krb5_kdc_admin_user
+        if ('@' in (krb5_kdc_admin_user | string))
+        else (krb5_kdc_admin_user ~ '@' ~ cluster_realm)
+      }}
+    base_cluster_pre_start_kdc_credentials_marker: >-
+      {{
+        cm_krb_credentials_marker_path
+        ~ '-'
+        ~ (
+          (
+            (
+              krb5_kdc_admin_user
+              if ('@' in (krb5_kdc_admin_user | string))
+              else (krb5_kdc_admin_user ~ '@' ~ cluster_realm)
+            )
+            ~ '|' ~ cluster_realm ~ '|' ~ kdc_host
+          )
+          | hash('sha256')
+        )
+      }}
+
+- name: Check pre-start KDC account-manager credentials
+  ansible.builtin.stat:
+    path: "{{ base_cluster_pre_start_kdc_credentials_marker }}"
+  register: base_cluster_pre_start_kdc_credentials
+  changed_when: false
+  become: true
+  delegate_to: "{{ cm_manager_inventory_host }}"
+
+- name: Check KDC reachability before secure cluster start
+  ansible.builtin.wait_for:
+    host: "{{ kdc_host }}"
+    port: 88
+    state: started
+    connect_timeout: 5
+    timeout: "{{ cm_krb_kdc_preflight_timeout }}"
+  changed_when: false
+  delegate_to: "{{ cm_manager_inventory_host }}"
+
+- name: Require KDC integration before secure cluster start
+  ansible.builtin.assert:
+    that:
+      - base_cluster_pre_start_kdc_credentials.stat.exists | default(false) | bool
+    fail_msg: >-
+      Refusing to start cluster services without Kerberos. Run
+      30_setup_cm_krbs.yml successfully first so CM has KDC account-manager
+      credentials for {{ base_cluster_pre_start_kdc_admin_principal }}.
+
+- name: Stop partially running cluster before Kerberos configuration
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/commands/stop
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_pre_start_stop_command
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when:
+    - base_cluster_pre_start_hdfs_authentication != 'kerberos'
+    - base_cluster_pre_start_has_running_services | bool
+
+- name: Wait for partially running cluster to stop
+  ansible.builtin.include_tasks: wait_cm_api_command.yml
+  vars:
+    cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+    cm_api_command_id: "{{ base_cluster_pre_start_stop_command.json.id }}"
+    cm_api_command_allow_already_exists: false
+  when:
+    - base_cluster_pre_start_stop_command is defined
+    - base_cluster_pre_start_stop_command.json.id is defined
+
+- name: Configure cluster for Kerberos before service start
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/commands/configureForKerberos
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body: {}
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_pre_start_kerberos_configure_command
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: base_cluster_pre_start_hdfs_authentication != 'kerberos'
+
+- name: Wait for pre-start Kerberos configuration
+  ansible.builtin.include_tasks: wait_cm_api_command.yml
+  vars:
+    cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+    cm_api_command_id: "{{ base_cluster_pre_start_kerberos_configure_command.json.id }}"
+    cm_api_command_allow_already_exists: false
+  when:
+    - base_cluster_pre_start_hdfs_authentication != 'kerberos'
+    - base_cluster_pre_start_kerberos_configure_command.json.id is defined
+
+- name: Generate Kerberos credentials before service start
+  ansible.builtin.uri:
+    url: "{{ cm_cluster_module_api_url }}/cm/commands/generateCredentials"
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_pre_start_kerberos_credentials_command
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Wait for pre-start Kerberos credentials
+  ansible.builtin.include_tasks: wait_cm_api_command.yml
+  vars:
+    cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+    cm_api_command_id: "{{ base_cluster_pre_start_kerberos_credentials_command.json.id }}"
+    cm_api_command_allow_already_exists: false
+  when: base_cluster_pre_start_kerberos_credentials_command.json.id is defined
+
+- name: Verify Kerberos configuration before service start
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/hdfs/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_pre_start_hdfs_auth
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Require Kerberos before starting cluster services
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          base_cluster_pre_start_hdfs_auth.json['items'] | default([])
+          | selectattr('name', 'equalto', 'hadoop_security_authentication')
+          | map(attribute='value')
+          | first
+          | default('', true)
+          | lower
+        ) == 'kerberos'
+    fail_msg: >-
+      CM completed configureForKerberos, but HDFS is not configured for
+      Kerberos. Refusing to start cluster services.
