@@ -984,7 +984,8 @@ and discovered service-specific `/tmp` traces, recreates the agent process
 directory, and restarts the agent.
 
 Base-node cleanup includes the traditional reinstall-conflict locations
-`/hadoop-ozone`, `/var/lib/hadoop-ozone`, `/impala`, `/hdfs`, `/dfs`, `/hadoop*`, `/yarn*`,
+`/hadoop-ozone`, the OM/SCM/Recon metadata leaves below
+`/var/lib/hadoop-ozone`, `/impala`, `/hdfs`, `/dfs`, `/hadoop*`, `/yarn*`,
 `/var/local/kafka`, `/tmp/.scm_prepare_node.lock`, `/tmp/kafka-logs`, and
 generated `/etc` trees for all supported Cloudera services. Wildcard-equivalent
 targets are discovered and printed during preview, then removed individually
