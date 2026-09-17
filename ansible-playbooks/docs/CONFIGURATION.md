@@ -143,6 +143,8 @@ entries must be complete `.jar` URLs. See
 | `base_cluster_worker_group` | Inventory group; `base-workers` | Hosts eligible for worker roles and parcel OS detection. |
 | `base_cluster_module_async_timeout` | Seconds; `7500` | Outer bound for cluster creation, parcel activation, and First Run. |
 | `base_cluster_module_poll_interval` | Seconds; `15` | Jenkins progress-update interval while the cluster module waits on CM. |
+| `base_cluster_knox_readiness_recovery_retries` | Integer; `30` | Maximum health polls when Knox is the sole First Run readiness failure. |
+| `base_cluster_knox_readiness_recovery_delay` | Seconds; `10` | Delay between bounded Knox recovery health polls. |
 
 `base_cluster_install_services` controls service creation. Set a value to
 `true` to include that service in the cluster specification:

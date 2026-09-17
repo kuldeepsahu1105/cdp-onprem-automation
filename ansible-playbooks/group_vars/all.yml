@@ -499,6 +499,10 @@ base_cluster_yarn_nm_vcores: 4
 # Run it asynchronously so Jenkins emits a poll update instead of appearing frozen.
 base_cluster_module_async_timeout: 7500
 base_cluster_module_poll_interval: 15
+# CM can time out its Knox readiness subcommand shortly before the gateway
+# reaches healthy state. Bound the narrow First Run recovery wait.
+base_cluster_knox_readiness_recovery_retries: 30
+base_cluster_knox_readiness_recovery_delay: 10
 # Kerberize every base cluster managed by playbook 31 after its initial service setup succeeds.
 base_cluster_enable_kerberos: true
 
