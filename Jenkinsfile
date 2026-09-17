@@ -271,6 +271,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
   }
 
   options {
+    skipDefaultCheckout(true)
     timeout(time: 8, unit: 'HOURS')
     timestamps()
     ansiColor('xterm')
@@ -447,11 +448,23 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
 
     stage('Checkout') {
       steps {
+        script {
+          if (fileExists('.git')) {
+            sh '''
+              set -euo pipefail
+              echo 'Pruning stale remote-tracking branches before checkout'
+              git remote prune origin
+            '''
+          }
+        }
         checkout([
           $class: 'GitSCM',
           branches: [[name: "*/${params.GIT_BRANCH}"]],
           doGenerateSubmoduleConfigurations: false,
-          extensions: [[$class: 'CleanBeforeCheckout']],
+          extensions: [
+            [$class: 'PruneStaleBranch'],
+            [$class: 'CleanBeforeCheckout']
+          ],
           userRemoteConfigs: scm.userRemoteConfigs
         ])
         sh """
@@ -695,7 +708,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     }
 
     cleanup {
-      sh 'echo "Pipeline cleanup complete for build ${BUILD_NUMBER}"'
+      echo "Pipeline cleanup complete for build ${env.BUILD_NUMBER}"
     }
   }
 }
