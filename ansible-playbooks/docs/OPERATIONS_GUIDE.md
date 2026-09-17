@@ -501,7 +501,11 @@ Auto-TLS and HDFS Kerberos report the requested enabled state.
 Hue is configured with the external `hue` PostgreSQL database before cluster
 startup. Playbook **31** reconciles the database settings for existing Hue
 services as well as rendering them for new clusters, preventing reruns from
-falling back to Hue's local SQLite database.
+falling back to Hue's local SQLite database. During prerequisites, playbook
+**06** installs and verifies `psycopg2` on every inventory host for both
+Ansible's default `/usr/bin/python3` and the configured
+`python{{ python_version }}` runtime, using each interpreter's own `-m pip`
+fallback when the OS package is not importable there.
 
 New deployments use the default cluster name `CDP-base-cluster`. When that
 default is unchanged and a pre-V2 `CDH-Cluster` already exists, playbook **31**
