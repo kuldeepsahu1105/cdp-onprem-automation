@@ -96,6 +96,9 @@
       ansible.builtin.import_tasks: common_tasks/join_ad_realm.yml
       when: identity_provider_effective == 'ad'
 
+    - name: Configure renewable Kerberos ticket defaults
+      ansible.builtin.import_tasks: common_tasks/configure_krb5_ticket_renewal.yml
+
     - name: Restore managed resolver configuration after identity enrollment
       ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
 

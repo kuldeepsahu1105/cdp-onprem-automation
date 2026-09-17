@@ -330,6 +330,52 @@
     - name: Ensure Kerberos ticket and show klist for IPA CLI on ipaserver
       ansible.builtin.import_tasks: common_tasks/ensure_ipa_kerberos_ticket_with_klist.yml
 
+    - name: Configure renewable Kerberos ticket defaults on ipaserver
+      ansible.builtin.import_tasks: common_tasks/configure_krb5_ticket_renewal.yml
+
+    - name: Validate FreeIPA global Kerberos ticket policy
+      ansible.builtin.assert:
+        that:
+          - ipa_krbtpolicy_maxlife_seconds | int > 0
+          - ipa_krbtpolicy_maxrenew_seconds | int >= ipa_krbtpolicy_maxlife_seconds | int
+        fail_msg: >-
+          ipa_krbtpolicy_maxlife_seconds must be positive and
+          ipa_krbtpolicy_maxrenew_seconds must be at least as large.
+
+    - name: Read FreeIPA global Kerberos ticket policy
+      ansible.builtin.command: ipa krbtpolicy-show --raw
+      register: ipa_global_krbtpolicy
+      changed_when: false
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+
+    - name: Reconcile FreeIPA global Kerberos ticket policy
+      ansible.builtin.command:
+        argv:
+          - ipa
+          - krbtpolicy-mod
+          - "--maxlife={{ ipa_krbtpolicy_maxlife_seconds }}"
+          - "--maxrenew={{ ipa_krbtpolicy_maxrenew_seconds }}"
+      when: >-
+        (
+          ipa_global_krbtpolicy.stdout
+          | regex_search(
+              '(?im)^krbmaxticketlife:\\s*'
+              ~ (ipa_krbtpolicy_maxlife_seconds | string)
+              ~ '\\s*$'
+            )
+        ) is none
+        or (
+          ipa_global_krbtpolicy.stdout
+          | regex_search(
+              '(?im)^krbmaxrenewableage:\\s*'
+              ~ (ipa_krbtpolicy_maxrenew_seconds | string)
+              ~ '\\s*$'
+            )
+        ) is none
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+
     - name: Disable browser SPNEGO for IPA Web UI (password/form login)
       ansible.builtin.import_tasks: common_tasks/sync_ipa_httpd_disable_browser_krb_on_ipaserver.yml
 

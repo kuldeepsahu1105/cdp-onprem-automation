@@ -217,6 +217,8 @@ Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` 
 | `krb5_enc_types` | Space-separated CM `KRB_ENC_TYPES` (default `aes256-cts aes128-cts`) |
 | `krb5_allow_weak_rc4` | `false` — set `true` only if legacy RC4 clients are required (not recommended; Java 17+ disables RC4) |
 | `krb5_ipa_default_enctypes` / `krb5_ipa_permitted_enctypes` | Long krb5 names for FreeIPA KDC `krb5.conf.d` snippet (`configure_ipa_krb_enc_types.yml`) |
+| `krb5_ticket_lifetime` / `krb5_renew_lifetime` | Client ticket request defaults (24 hours / 7 days) used by long-running roles such as Hue `KT_RENEWER` |
+| `ipa_krbtpolicy_maxlife_seconds` / `ipa_krbtpolicy_maxrenew_seconds` | Matching FreeIPA global maximum ticket and renewable lifetimes (86400 / 604800 seconds) |
 
 ### Active Directory variables
 

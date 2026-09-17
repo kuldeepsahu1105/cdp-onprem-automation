@@ -449,10 +449,17 @@ the required permissions, starts Ranger and initializes its plugin services
 creates the HBase root and user directories, creates the YARN JobHistory
 directory and installs MapReduce framework JARs, creates the Spark history,
 user, and driver-log directories, and creates the Hive and Impala HDFS
-directories. The optional YARN container-usage directory command is not part
-of automatic recovery; run it only after enabling container-usage aggregation
-and configuring its MapReduce job user. Recovery never invokes NameNode format
-or cluster First Run.
+directories. Ozone recovery starts the SCM role alone, waits until an
+authenticated `ozone admin scm roles` check reports `LEADER`, and only then
+starts the remaining Ozone roles. This prevents DataNodes from exhausting
+certificate-enrollment retries against a running but not-yet-leader SCM and
+leaving SCM in safe mode with no healthy pipeline. CM First Run retains
+responsibility for initializing SCM on a new cluster; if that initial run is
+interrupted, the next Base Cluster phase applies the ordered recovery without
+deleting Ozone metadata. The optional YARN container-usage directory command is
+not part of automatic recovery; run it only after enabling container-usage
+aggregation and configuring its MapReduce job user. Recovery never invokes
+NameNode format or cluster First Run.
 
 HDFS `/tmp` reconciliation first calls CM's documented
 `hdfsCreateTmpDir` service command. Some CM 7.13/CDP 7.3.2 layouts return
@@ -494,6 +501,20 @@ recovery above only after CM ends First Run with the single
 `WaitForKnoxGatewayReadyToServe` failure and Knox subsequently reports
 `STARTED/GOOD`.
 
+When `gateway.log` reports `Failed to configure truststore` followed by a
+`PKIX path building failed` error while discovering the CM API, waiting cannot
+recover the gateway: `cdp-proxy`, `cdp-proxy-token`, `cdp-proxy-api`, and
+`cdp-datashare-access` cannot be generated. Playbook **31** configures the Knox
+Gateway role's `ssl_client_truststore_*` settings from CM's Auto-TLS truststore
+and password before First Run. On a rerun, it restarts an already-running Knox
+service when those settings change. An interrupted initialization also forces
+the redacted truststore password to be refreshed, preventing a stale Knox
+credential alias from producing `Keystore was tampered with, or password was
+incorrect`. The expected generated
+`gateway-site.xml` value is a non-empty
+`gateway.httpclient.truststore.path`; an empty value confirms the trust
+configuration is missing.
+
 `base_cluster_enable_kerberos: true` makes playbook **31** Kerberize every base
 cluster it manages. Auto-TLS and CM KDC/account-manager integration must already
 be active before cluster creation. For a newly created cluster, playbook **31**
@@ -511,6 +532,17 @@ refreshed. Completion is recorded only after CM reports
 `hadoop_security_authentication=kerberos`; already Kerberized clusters skip the
 transition. This leaves playbook **30** responsible for CM-wide KDC integration
 and account-manager credential import.
+
+Hue's `KT_RENEWER` requires its initial keytab login to receive a renewable TGT.
+Playbook **12** reconciles the FreeIPA global policy to a 24-hour maximum ticket
+life and 7-day maximum renewable life. Playbook **16** deploys matching
+`ticket_lifetime` and `renew_lifetime` defaults under `/etc/krb5.conf.d` on
+identity clients. This applies to existing hosts when the IDENTITY phase is
+rerun and to future hosts during enrollment. After changing these settings,
+restart a failed Hue `KT_RENEWER` role (or start the cluster) so it performs a
+new keytab `kinit`; an already-issued non-renewable TGT cannot be converted by
+`kinit -R`. Verify with `klist -f`: the TGT must include the renewable flag and
+a non-empty `renew until` timestamp.
 
 Kerberized Ozone client configuration also requires the Ozone service's
 `hdfs_service` dependency to reference HDFS. HDFS itself references
