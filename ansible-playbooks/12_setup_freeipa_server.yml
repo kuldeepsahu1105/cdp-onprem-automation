@@ -342,6 +342,17 @@
           ipa_krbtpolicy_maxlife_seconds must be positive and
           ipa_krbtpolicy_maxrenew_seconds must be at least as large.
 
+    - name: Obtain IPA admin ticket for global Kerberos policy
+      ansible.builtin.command:
+        argv:
+          - kinit
+          - -c
+          - "FILE:{{ ipa_kerberos_ccache_path }}"
+          - "{{ ipaadmin_principal }}"
+        stdin: "{{ ipaadmin_password }}"
+      changed_when: false
+      no_log: true
+
     - name: Read FreeIPA global Kerberos ticket policy
       ansible.builtin.command: ipa krbtpolicy-show --raw
       register: ipa_global_krbtpolicy
