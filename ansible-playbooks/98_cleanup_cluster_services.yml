@@ -239,11 +239,15 @@
           '/dfs',
           '/hdfs',
           '/hadoop',
+          '/hadoop-ozone',
+          '/impala',
           '/yarn',
           '/data/ozone',
           '/var/local/kafka',
           '/var/log/nm',
-          '/var/run/cloudera-scm-agent/process'
+          '/var/run/cloudera-scm-agent/process',
+          '/tmp/.scm_prepare_node.lock',
+          '/tmp/kafka-logs'
         ]
         + (
           ['/var/lib', '/var/log', '/var/run', '/etc']
@@ -252,6 +256,31 @@
           | list
         )
       }}
+    cleanup_base_etc_patterns:
+      - "*atlas*"
+      - "*hadoop*"
+      - "*ranger*"
+      - "hue*"
+      - "impala*"
+      - "knox*"
+      - "*hbase*"
+      - "*hive*"
+      - "*ozone*"
+      - "*kafka*"
+      - "*zeppelin*"
+      - "*spark*"
+      - "sqoop*"
+      - "schemaregistry*"
+      - "*solr*"
+      - "*kudu*"
+      - "zookeeper*"
+      - "*tez*"
+      - "streams*"
+      - "*nifi*"
+      - "*nifiregistry*"
+    cleanup_base_root_patterns:
+      - "hadoop*"
+      - "yarn*"
   tasks:
     - name: Skip base nodes outside selected scope
       ansible.builtin.meta: end_play
@@ -271,10 +300,28 @@
         recurse: false
       register: cleanup_base_tmp_traces
 
+    - name: Find generated service configuration trees
+      ansible.builtin.find:
+        paths: /etc
+        file_type: any
+        patterns: "{{ cleanup_base_etc_patterns }}"
+        recurse: false
+      register: cleanup_base_etc_traces
+
+    - name: Find root-level Hadoop and YARN data trees
+      ansible.builtin.find:
+        paths: /
+        file_type: any
+        patterns: "{{ cleanup_base_root_patterns }}"
+        recurse: false
+      register: cleanup_base_root_traces
+
     - name: Show base service cleanup targets
       ansible.builtin.debug:
         msg:
           - "Static paths: {{ cleanup_base_service_paths }}"
+          - "Root-level data trees: {{ cleanup_base_root_traces.files | map(attribute='path') | list }}"
+          - "Generated /etc trees: {{ cleanup_base_etc_traces.files | map(attribute='path') | list }}"
           - "Temporary traces: {{ cleanup_base_tmp_traces.files | map(attribute='path') | list }}"
       when: not (hostvars['localhost']['cleanup_cluster_services_apply'] | bool)
 
@@ -296,6 +343,24 @@
         path: "{{ item.path }}"
         state: absent
       loop: "{{ cleanup_base_tmp_traces.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Remove discovered generated service configuration trees
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ cleanup_base_etc_traces.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Remove discovered root-level Hadoop and YARN data trees
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ cleanup_base_root_traces.files }}"
       loop_control:
         label: "{{ item.path }}"
       when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
