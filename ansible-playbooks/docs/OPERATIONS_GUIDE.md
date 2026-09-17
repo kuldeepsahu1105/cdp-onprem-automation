@@ -501,7 +501,13 @@ Auto-TLS and HDFS Kerberos report the requested enabled state.
 Hue is configured with the external `hue` PostgreSQL database before cluster
 startup. Playbook **31** reconciles the database settings for existing Hue
 services as well as rendering them for new clusters, preventing reruns from
-falling back to Hue's local SQLite database.
+falling back to Hue's local SQLite database. It also installs and verifies
+`psycopg2` inside Hue's parcel-managed Python virtual environment before First
+Run; installing the driver only in `/usr/bin/python3` does not make it available
+to Hue. The system targets are derived as `/usr/bin/python3` and
+`/usr/bin/python{{ python_version }}`; playbook **31** discovers Hue's matching
+`python{{ python_version }}` environment from the active CDH parcel instead of
+hardcoding a Python minor version or full venv interpreter path.
 
 New deployments use the default cluster name `CDP-base-cluster`. When that
 default is unchanged and a pre-V2 `CDH-Cluster` already exists, playbook **31**

@@ -108,8 +108,10 @@
       ansible.builtin.debug:
         msg: "PostgreSQL version is {{ pg_version.stdout }}"
 
-    - name: Ensure psycopg2 is installed for the Ansible Python interpreter
+    - name: Ensure psycopg2 is installed for both Python interpreters
       ansible.builtin.import_tasks: common_tasks/ensure_python_psycopg2.yml
+      vars:
+        python_psycopg2_runtime_packages: "{{ os.python_packages }}"
 
     ##### Postgres Configuration updates
     - name: Deploy updated PostgreSQL configuration files

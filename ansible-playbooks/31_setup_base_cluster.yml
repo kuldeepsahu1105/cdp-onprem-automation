@@ -445,6 +445,44 @@
           - database_password
       when: base_cluster_install_services.hue | default(true) | bool
 
+    - name: Discover Hue parcel Python environment
+      ansible.builtin.find:
+        paths: /opt/cloudera/parcels/CDH/lib/hue/build/venvs
+        patterns: "python{{ python_version }}"
+        file_type: directory
+        recurse: false
+        follow: true
+      register: base_cluster_hue_python_environments
+      become: true
+      delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+      when: base_cluster_install_services.hue | default(true) | bool
+
+    - name: Require Hue parcel Python environment
+      ansible.builtin.assert:
+        that:
+          - base_cluster_hue_python_environments.matched | default(0) | int == 1
+        fail_msg: >-
+          Hue is enabled but exactly one python{{ python_version }} environment was not found
+          below the active CDH parcel's Hue venv directory on
+          {{ groups[base_cluster_master_group][0] }}. Confirm the CDH parcel is activated and
+          its Hue Python version matches python_version={{ python_version }}.
+      when: base_cluster_install_services.hue | default(true) | bool
+
+    - name: Resolve Hue parcel Python interpreter
+      ansible.builtin.set_fact:
+        base_cluster_hue_python_interpreter_effective: >-
+          {{ base_cluster_hue_python_environments.files[0].path }}/bin/python
+      when: base_cluster_install_services.hue | default(true) | bool
+
+    - name: Ensure psycopg2 is installed for Hue
+      ansible.builtin.import_tasks: common_tasks/ensure_python_psycopg2.yml
+      vars:
+        python_psycopg2_additional_interpreters:
+          - "{{ base_cluster_hue_python_interpreter_effective }}"
+      become: true
+      delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+      when: base_cluster_install_services.hue | default(true) | bool
+
     - name: Read Kafka role config groups
       ansible.builtin.uri:
         url: >-
