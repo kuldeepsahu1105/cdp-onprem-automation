@@ -1,21 +1,26 @@
 ---
 - name: Install PostgreSQL Python driver packages
   ansible.builtin.package:
-    name:
-      - python3-pip
-      - python3-psycopg2
+    name: >-
+      {{
+        ['python3-pip', 'python3-psycopg2']
+        + (python_psycopg2_runtime_packages | default([]))
+      }}
     state: present
 
 - name: Resolve Python interpreters requiring psycopg2
   ansible.builtin.set_fact:
     python_psycopg2_interpreters: >-
       {{
-        [
-          python_psycopg2_interpreter
-          | default(ansible_python_interpreter | default('/usr/bin/python3')),
-          (os | default({})).python_executable
-          | default('python' ~ (python_version | default('3')))
-        ]
+        (
+          [
+            python_psycopg2_interpreter
+            | default(ansible_python_interpreter | default('/usr/bin/python3')),
+            python_psycopg2_versioned_interpreter
+            | default('/usr/bin/python' ~ (python_version | string))
+          ]
+          + (python_psycopg2_additional_interpreters | default([]))
+        )
         | map('string')
         | map('trim')
         | reject('equalto', '')
@@ -29,8 +34,10 @@
       - "{{ item }}"
       - -c
       - "import psycopg2; print(psycopg2.__version__)"
-  register: python_psycopg2_import
   loop: "{{ python_psycopg2_interpreters }}"
+  loop_control:
+    label: "{{ item }}"
+  register: python_psycopg2_import
   changed_when: false
   failed_when: false
 
@@ -56,6 +63,8 @@
       - "{{ item }}"
       - -c
       - "import psycopg2; print(psycopg2.__version__)"
-  register: python_psycopg2_verify
   loop: "{{ python_psycopg2_interpreters }}"
+  loop_control:
+    label: "{{ item }}"
+  register: python_psycopg2_verify
   changed_when: false

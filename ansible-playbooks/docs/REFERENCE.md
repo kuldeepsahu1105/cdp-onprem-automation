@@ -53,8 +53,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | Area | Behavior |
 |---|---|
 | Ansible on targets | `ansible.cfg` sets `interpreter_python = /usr/bin/python3`; remote modules use that unless you set `ansible_python_interpreter` in inventory or host vars |
-| **06** / **23** psycopg2 | The OS `python3-psycopg2` package is installed first. The shared task then verifies both Ansible's interpreter (default `/usr/bin/python3`) and `os.python_executable` (normally `python{{ python_version }}`), installing with each interpreter's own `-m pip` only when its import fails. Duplicate interpreter names are removed. |
-| **31** Hue psycopg2 | Hue uses the active parcel virtual environment rather than either system interpreter. Before CM starts the cluster, playbook 31 discovers the active Hue parcel Python on the Hue role host, accepts either `psycopg2` or `psycopg`, and installs `psycopg2-binary` with that interpreter when both are missing. |
+| **06** / **23** / **31** psycopg2 | `psycopg2` is installed and verified in Ansible's target interpreter (`/usr/bin/python3` by default), the configured `python{{ python_version }}` interpreter, and before First Run in Hue's isolated parcel virtual environment when Hue is enabled; duplicate executable names are installed only once |
 | Debian pip upgrade | `os_vars.Debian.pip_executable` is `pip3`; **06** pip upgrade uses it even when `python_version` changes |
 | `psycopg2_binary_version` | Pins the **library** for every interpreter fallback (`psycopg2-binary==…` when set); interpreter selection remains independent |
 
