@@ -108,7 +108,6 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `scm_csds_redhat` | `[]` | Same as `scm_csds` when that list is empty (RHEL CM hosts only) |
 | `cdv_version` | `8.0.7` | Cloudera Data Visualization (CDV) CSD path version, e.g. `8.1.5` |
 | `cdv_dataviz_csd_jar` | `DATAVIZ-{{ cdv_version }}-…` | DATAVIZ CSD jar basename under `cdv/<version>/<redhat8\|9>/yum/` |
-| `cdv_dataviz_parcel_build` / `cdv_dataviz_parcel_file` | build + optional full name | CDV parcel under `cdv/<version>/parcels/` when yum CSD jar is missing |
 | `cdv_redhat_yum_repo` | `auto` | CDV yum repo dir: `auto` uses `redhat8` on RHEL 9 CM when needed, or `redhat8` / `redhat9` |
 | `cfm_version` | `2.1.7.3004` | Cloudera Flow Management (NiFi) CSD path version |
 | `cfm_nifi_app_version` | `1.28.1` | NiFi app version segment in `NIFI-*.jar` / `NIFIREGISTRY-*.jar` |
@@ -119,13 +118,13 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `cm_repo_username` | — | Required (archive credentials) |
 | `cm_repo_password` | — | Required (archive credentials) |
 
-**CSD JAR override vs default:** Leave `scm_csds` and `scm_csds_redhat` empty (default) and set `cdv_version`, `cfm_version`, and jar basename vars — play **24** builds `scm_csds_effective` via `scm_csds_urls.j2` (DATAVIZ + NiFi + Registry by default) and `get_url`s each URL. Set `csd_respect_service_toggles: true` only when disabled optional services should also suppress their CSD downloads. DATAVIZ yum failures ignore errors so `download_cdv_dataviz_csd.yml` can extract the jar from the CDV parcel. To override all CSD URLs, set `scm_csds` to a YAML list of full `https://…/*.jar` strings (same shape the template emits). `scm_csds_effective` is computed in `set_os_facts.yml`: explicit list → else `scm_csds_redhat` → else `scm_csds_urls.j2` on RHEL when `csd_build_urls_enabled` is true.
+**CSD JAR override vs default:** Leave `scm_csds` and `scm_csds_redhat` empty (default) and set `cdv_version`, `cfm_version`, and jar basename vars — play **24** builds `scm_csds_effective` via `scm_csds_urls.j2` (DATAVIZ + NiFi + Registry by default) and downloads every URL directly to its exact filename under `/opt/cloudera/csd`. Download failures are fatal rather than falling back to unrelated parcel contents. Set `csd_respect_service_toggles: true` only when disabled optional services should also suppress their CSD downloads. To override all CSD URLs, set `scm_csds` to a YAML list of full `https://…/*.jar` strings (same shape the template emits). `scm_csds_effective` is computed in `set_os_facts.yml`: explicit list → else `scm_csds_redhat` → else `scm_csds_urls.j2` on RHEL when `csd_build_urls_enabled` is true.
 
 **CSD JAR downloads vs CM remote parcel repo directories:** Do not reuse the same URL for both. NiFi/Registry JARs use `get_url` on `scm_csds_effective` in **24_start_cm.yml**. CM **REMOTE_PARCEL_REPO_URLS** (playbooks **25** / **31** / **33** via `configure_cm_parcel_repo_api.yml`) must list **archive directory** URLs only, from `scm_csd_parcel_repo_urls.j2` unless `cm_remote_parcel_csd_repo_urls` is set (still driven by `cdv_version` / `cfm_version` when auto-built). NiFi and NiFi Registry share one CFM parcel directory; the parcel template dedupes with Jinja `unique` when both services are enabled.
 
 | Purpose | Template / vars | Example (public archive, RHEL 8 CM) |
 |---|---|---|
-| DATAVIZ CSD JAR `get_url` | `scm_csds_urls.j2` (+ parcel fallback in `download_cdv_dataviz_csd.yml`) | `…/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar` |
+| DATAVIZ CSD JAR `get_url` | `scm_csds_urls.j2` | `…/p/cdv/8.0.7/redhat8/yum/DATAVIZ-8.0.7-b50.p1.71299628.jar` |
 | NiFi / Registry CSD JAR `get_url` | `scm_csds_urls.j2` or explicit `scm_csds` | `…/p/cfm2/2.1.7.3004/redhat8/yum/tars/parcel/NIFI-1.28.1.2.1.7.3004-1.jar` (two jars when both services enabled) |
 | CM remote parcel repo dir (DATAVIZ) | `scm_csd_parcel_repo_urls.j2`, `cdv_parcel_repo_url` | `…/p/cdv/8.0.7/parcels/` |
 | CM remote parcel repo dir (CFM / NiFi) | same, `cfm_parcel_yum_tars_repo_url` | `…/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel` |
