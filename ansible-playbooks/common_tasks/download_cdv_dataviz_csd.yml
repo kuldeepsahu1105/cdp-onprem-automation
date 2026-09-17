@@ -92,6 +92,12 @@
             url_password: "{{ cm_repo_password }}"
             force_basic_auth: true
 
+        - name: Create DATAVIZ parcel extraction directory
+          ansible.builtin.file:
+            path: /tmp/cdv-dataviz-csd-extract
+            state: directory
+            mode: "0755"
+
         - name: Extract DATAVIZ parcel to locate CSD jar
           ansible.builtin.unarchive:
             src: "/tmp/{{ cdv_dataviz_parcel_file_effective }}"
