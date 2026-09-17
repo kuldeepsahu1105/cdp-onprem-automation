@@ -138,6 +138,7 @@ entries must be complete `.jar` URLs. See
 |---|---|---|
 | `cdh_basecluster_name` | Name; `CDP-base-cluster` | Cluster name created in CM. The unchanged default safely adopts an existing legacy `CDH-Cluster` instead of creating a duplicate. |
 | `base_cluster_enable_kerberos` | Boolean; `true` | Kerberizes existing and newly created base clusters after initialization and verifies HDFS authentication. |
+| `base_cluster_restart_cms_after_start` | Boolean; `true` | Restarts Cloudera Management Service after base-cluster startup/security convergence and waits for the CM command before recording completion. |
 | `base_cluster_kafka_metadata_store` | `Zookeeper` or `KRaft`; `Zookeeper` | Kafka metadata backend selected before Kafka's first successful start. |
 | `base_cluster_master_group` | Inventory group; `base-masters` | Hosts eligible for master roles. |
 | `base_cluster_worker_group` | Inventory group; `base-workers` | Hosts eligible for worker roles and parcel OS detection. |
@@ -148,7 +149,7 @@ entries must be complete `.jar` URLs. See
 | `base_cluster_hue_database_name` | Database name; `hue` | PostgreSQL database used by Hue instead of its non-production SQLite fallback. |
 | `base_cluster_hue_database_user` | Database user; `hue` | PostgreSQL login used by Hue. |
 | `base_cluster_hue_database_password` | Secret; `hue` | PostgreSQL password used by Hue; override through a vault or `ANSIBLE_GROUP_VARS_YAML`. |
-| `base_cluster_repair_hive_canary_catalogs` | Boolean; `true` | Before starting an existing cluster, removes only stale CM Hive Metastore health-canary catalogs after refusing cleanup when they contain tables or functions. |
+| `base_cluster_repair_hive_canary_catalogs` | Boolean; `true` | Before starting an existing cluster, makes Hive's `DBS_FK1` constraint deferred so transactional catalog deletion works, then removes only stale CM health-canary catalogs after refusing cleanup when they contain tables or functions. |
 
 `base_cluster_install_services` controls service creation. Set a value to
 `true` to include that service in the cluster specification:
