@@ -3,7 +3,7 @@
 # Install CDP Base Cluster on base-masters/base-workers (services: see base_cluster_install_services).
 # This is separate from Cloudera Management Service (CMS) — see 28_setup_cm_cms.yml
 ---
-- import_playbook: ensure_collections.yml
+- import_playbook: 27_setup_cm_autotls.yml
 
 - name: Install cloudera.cluster collection on control node
   hosts: localhost
@@ -40,6 +40,9 @@
           - not (base_cluster_install_services.hive | default(true) | bool) or (base_cluster_hive_database_name | string | trim | length > 0)
           - not (base_cluster_install_services.hive | default(true) | bool) or (base_cluster_hive_database_user | string | trim | length > 0)
           - not (base_cluster_install_services.hive | default(true) | bool) or (base_cluster_hive_database_password | string | length > 0)
+          - not (base_cluster_install_services.hue | default(true) | bool) or (base_cluster_hue_database_name | string | trim | length > 0)
+          - not (base_cluster_install_services.hue | default(true) | bool) or (base_cluster_hue_database_user | string | trim | length > 0)
+          - not (base_cluster_install_services.hue | default(true) | bool) or (base_cluster_hue_database_password | string | length > 0)
           - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_admin_password | string | length > 0)
           - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_keyadmin_password | string | length > 0)
           - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_tagsync_password | string | length > 0)
@@ -424,6 +427,23 @@
         cm_config_secret_names:
           - hive_metastore_database_password
       when: base_cluster_install_services.hive | default(true) | bool
+
+    - name: Configure Hue database
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Hue database
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services/hue/config
+        cm_config_desired:
+          database_host: "{{ base_cluster_database_host }}"
+          database_port: "{{ base_cluster_database_port }}"
+          database_type: postgresql
+          database_name: "{{ base_cluster_hue_database_name }}"
+          database_user: "{{ base_cluster_hue_database_user }}"
+          database_password: "{{ base_cluster_hue_database_password }}"
+        cm_config_secret_names:
+          - database_password
+      when: base_cluster_install_services.hue | default(true) | bool
 
     - name: Read Kafka role config groups
       ansible.builtin.uri:
@@ -1439,6 +1459,96 @@
           }}
       when: base_cluster_enable_kerberos | default(true) | bool
 
+    - name: Determine whether Auto-TLS requires an existing cluster restart
+      ansible.builtin.set_fact:
+        base_cluster_autotls_restart_required: >-
+          {{
+            autotls_applied_this_run | default(false) | bool
+            and existing_cluster.status == 200
+            and not (base_cluster_recovery_required | bool)
+            and (
+              not (base_cluster_enable_kerberos | default(true) | bool)
+              or base_cluster_hdfs_authentication | default('simple') == 'kerberos'
+            )
+          }}
+      when: autotls_enabled | default(true) | bool
+
+    - name: Stop existing secured cluster after enabling Auto-TLS
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/commands/stop
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_autotls_stop_command
+      when: base_cluster_autotls_restart_required | default(false) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Wait for post-Auto-TLS cluster stop
+      ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_command_id: "{{ base_cluster_autotls_stop_command.json.id }}"
+        cm_api_command_allow_already_exists: false
+      when:
+        - base_cluster_autotls_restart_required | default(false) | bool
+        - base_cluster_autotls_stop_command.json.id is defined
+
+    - name: Start existing secured cluster after enabling Auto-TLS
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/commands/start
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_autotls_start_command
+      when: base_cluster_autotls_restart_required | default(false) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Wait for post-Auto-TLS cluster start
+      ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_command_id: "{{ base_cluster_autotls_start_command.json.id }}"
+        cm_api_command_allow_already_exists: false
+      when:
+        - base_cluster_autotls_restart_required | default(false) | bool
+        - base_cluster_autotls_start_command.json.id is defined
+
+    - name: Refresh client configuration after Auto-TLS cluster restart
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/commands/deployClientConfigsAndRefresh
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_autotls_refresh_command
+      when: base_cluster_autotls_restart_required | default(false) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Wait for post-Auto-TLS client configuration refresh
+      ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_command_id: "{{ base_cluster_autotls_refresh_command.json.id }}"
+        cm_api_command_allow_already_exists: false
+      when:
+        - base_cluster_autotls_restart_required | default(false) | bool
+        - base_cluster_autotls_refresh_command.json.id is defined
+
     - name: Resolve expected KDC credential marker
       ansible.builtin.set_fact:
         base_cluster_kdc_admin_principal: >-
@@ -1690,6 +1800,24 @@
           CM completed the Kerberos workflow, but HDFS authentication is not
           reported as kerberos. Do not record the cluster initialization marker.
       when: base_cluster_enable_kerberos | default(true) | bool
+
+    - name: Refresh final Auto-TLS state
+      ansible.builtin.set_fact:
+        cm_autotls_config_fetched_this_play: false
+      when: autotls_enabled | default(true) | bool
+
+    - name: Verify final Cloudera Manager Auto-TLS state
+      ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
+      when: autotls_enabled | default(true) | bool
+
+    - name: Require Cloudera Manager Auto-TLS
+      ansible.builtin.assert:
+        that:
+          - cm_autotls_api_enabled | default(false) | bool
+        fail_msg: >-
+          Auto-TLS was requested, but Cloudera Manager does not report an enabled
+          AUTO_TLS_TYPE. Do not record the cluster initialization marker.
+      when: autotls_enabled | default(true) | bool
 
     - name: Read final cluster state
       ansible.builtin.uri:

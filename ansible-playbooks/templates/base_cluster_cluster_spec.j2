@@ -166,6 +166,12 @@ services:
     type: HUE
     display_name: Hue
     config:
+      database_host: "{{ base_cluster_database_host }}"
+      database_port: {{ base_cluster_database_port }}
+      database_type: postgresql
+      database_name: "{{ base_cluster_hue_database_name }}"
+      database_user: "{{ base_cluster_hue_database_user }}"
+      database_password: "{{ base_cluster_hue_database_password }}"
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
 {% if svc.hive | default(true) and svc.hive_on_tez | default(true) %}
       hms_service: hive

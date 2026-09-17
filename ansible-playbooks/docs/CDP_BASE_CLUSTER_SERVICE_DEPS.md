@@ -16,7 +16,7 @@ Authoritative matrix: [Service Dependencies in Cloudera Manager](https://docs.cl
 | Hive | `hdfs_service`, `zookeeper_service`, `mapreduce_yarn_service`; PostgreSQL metastore host, port, name, user, and password; optional `ranger_service`, `hbase_service`, `atlas_service` |
 | Hive on Tez | `hdfs_service`, `hms_connector`, `tez_service`, `mapreduce_yarn_service`, `zookeeper_service`; optional ranger/hbase/atlas |
 | HBase | `hdfs_service`, `zookeeper_service` |
-| Hue | `hdfs_service`; on CDP 7+ with Hive + Hive on Tez use `hms_service: hive` and `hive_service: hive_on_tez`; optional hbase/impala/solr/atlas/zookeeper when those services enabled |
+| Hue | PostgreSQL database host, port, name, user, and password; `hdfs_service`; on CDP 7+ with Hive + Hive on Tez use `hms_service: hive` and `hive_service: hive_on_tez`; optional hbase/impala/solr/atlas/zookeeper when those services enabled |
 | Impala | `hdfs_service`, `hive_service` (HMS); optional `hbase_service`, `ranger_service`, `atlas_service` |
 | Kafka | `base_cluster_kafka_metadata_store: Zookeeper` (default) uses `zookeeper_service`; `KRaft` uses `KRAFT` controllers; optional `hdfs_service`, `ranger_service`; always includes `KAFKA_BROKER` and `GATEWAY` |
 | Atlas | `hdfs_service`, `kafka_service`; optional `hbase_service`, `solr_service`, `ranger_service` |

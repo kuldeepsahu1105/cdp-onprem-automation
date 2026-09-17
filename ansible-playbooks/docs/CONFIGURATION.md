@@ -145,6 +145,9 @@ entries must be complete `.jar` URLs. See
 | `base_cluster_module_poll_interval` | Seconds; `15` | Jenkins progress-update interval while the cluster module waits on CM. |
 | `base_cluster_knox_readiness_recovery_retries` | Integer; `30` | Maximum health polls when Knox is the sole First Run readiness failure. |
 | `base_cluster_knox_readiness_recovery_delay` | Seconds; `10` | Delay between bounded Knox recovery health polls. |
+| `base_cluster_hue_database_name` | Database name; `hue` | PostgreSQL database used by Hue instead of its non-production SQLite fallback. |
+| `base_cluster_hue_database_user` | Database user; `hue` | PostgreSQL login used by Hue. |
+| `base_cluster_hue_database_password` | Secret; `hue` | PostgreSQL password used by Hue; override through a vault or `ANSIBLE_GROUP_VARS_YAML`. |
 
 `base_cluster_install_services` controls service creation. Set a value to
 `true` to include that service in the cluster specification:

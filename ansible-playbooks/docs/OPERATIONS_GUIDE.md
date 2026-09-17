@@ -487,6 +487,22 @@ reports `hadoop_security_authentication=kerberos`; already Kerberized clusters
 skip the transition. This leaves playbook **30** responsible only for KDC
 integration and account-manager credential import.
 
+Playbook **31** also imports the idempotent **27** Auto-TLS workflow before base
+cluster reconciliation. When `autotls_enabled: true`, CM's authoritative
+`AUTO_TLS_TYPE` is checked and Auto-TLS is enabled only when absent. A newly
+enabled Auto-TLS installation restarts CM and its agents through playbook **27**.
+If the base cluster already existed and did not otherwise need its Kerberos
+transition or interrupted-run recovery, playbook **31** then performs one
+cluster stop/start and client-configuration refresh. Fresh clusters and clusters
+being Kerberized are already started after the security change and avoid that
+extra restart. The final initialization marker is written only after both CM
+Auto-TLS and HDFS Kerberos report the requested enabled state.
+
+Hue is configured with the external `hue` PostgreSQL database before cluster
+startup. Playbook **31** reconciles the database settings for existing Hue
+services as well as rendering them for new clusters, preventing reruns from
+falling back to Hue's local SQLite database.
+
 New deployments use the default cluster name `CDP-base-cluster`. When that
 default is unchanged and a pre-V2 `CDH-Cluster` already exists, playbook **31**
 adopts the legacy cluster instead of creating a duplicate. Explicit custom
@@ -1074,7 +1090,7 @@ are explicitly enabled.
 25        Verify CM
 26        CM license
 27-30     Auto-TLS, CMS, LDAP, Kerberos
-31        Base cluster (HDFS/YARN/ZK)
+31        Base cluster; rechecks Auto-TLS and converges cluster Kerberos
 32        Monitoring stack
 33-34     ECS cluster + data services
 35        Portal refresh
