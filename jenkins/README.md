@@ -486,6 +486,15 @@ sudo rm -rf /var/lib/jenkins/workspace/cdp-onprem-automation-deploy/terraform-co
 
 If **Checkout** fails on `ansible-playbooks/callback_plugins/__pycache__` (Permission denied during `git clean`), the **Prepare Workspace** stage runs `jenkins/scripts/clean-workspace-pycache.sh` (sudo when needed, then `chown` the workspace back to the Jenkins user so `.git/objects` stays writable). One-time agent fix if a prior build left root-owned objects: `sudo chown -R jenkins:jenkins "$WORKSPACE"` then re-run the job.
 
+The pipeline disables Declarative Pipeline's implicit checkout and uses its
+controlled **Checkout** stage instead. That stage runs `git remote prune origin`
+and enables Jenkins' `PruneStaleBranch` extension before fetching. This repairs
+file/directory ref conflicts such as an old
+`origin/stable/portal-session-auth` tracking ref blocking a newer
+`origin/stable` branch. The cleanup post-action uses pipeline `echo`, so a
+checkout failure cannot produce a second `MissingContextVariableException`
+merely while printing the cleanup message.
+
 **Required sudoers** (same as AWS creds):
 
 ```
