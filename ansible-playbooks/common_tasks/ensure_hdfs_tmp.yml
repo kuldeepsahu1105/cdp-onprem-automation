@@ -1,0 +1,86 @@
+---
+# Creates HDFS namespace /tmp through the supported CM command when available,
+# then verifies and repairs it through an HDFS gateway client.
+
+- name: Submit CM HDFS temporary-directory command
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/hdfs/commands/hdfsCreateTmpDir
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 400]
+    follow_redirects: none
+  register: base_cluster_hdfs_tmp_command
+  failed_when: >-
+    base_cluster_hdfs_tmp_command.status | int == 400
+    and 'command not valid for' not in (
+      base_cluster_hdfs_tmp_command.json.message
+      | default(base_cluster_hdfs_tmp_command.msg | default(''))
+      | lower
+    )
+    and 'already exists' not in (
+      base_cluster_hdfs_tmp_command.json.message
+      | default(base_cluster_hdfs_tmp_command.msg | default(''))
+      | lower
+    )
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Wait for CM HDFS temporary-directory command
+  ansible.builtin.include_tasks: wait_cm_api_command.yml
+  vars:
+    cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+    cm_api_command_id: "{{ base_cluster_hdfs_tmp_command.json.id }}"
+    cm_api_command_allow_already_exists: true
+    cm_api_command_allow_not_valid: true
+    cm_api_uri_delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when:
+    - base_cluster_hdfs_tmp_command.status | int == 200
+    - base_cluster_hdfs_tmp_command.json.id is defined
+
+- name: Note CM HDFS temporary-directory fallback
+  ansible.builtin.debug:
+    msg: >-
+      CM could not run hdfsCreateTmpDir for this service layout:
+      {{
+        base_cluster_hdfs_tmp_command.json.message
+        | default(base_cluster_hdfs_tmp_command.msg | default('command unavailable'))
+      }}.
+      Verifying and repairing HDFS /tmp through a gateway client.
+  when: base_cluster_hdfs_tmp_command.status | int == 400
+
+- name: Ensure HDFS temporary directory and sticky permissions
+  ansible.builtin.shell: |
+    set -euo pipefail
+    hdfs_cli=/opt/cloudera/parcels/CDH/bin/hdfs
+    changed=false
+
+    hdfs_dfs() {
+      env HADOOP_USER_NAME=hdfs HADOOP_CONF_DIR=/etc/hadoop/conf \
+        "$hdfs_cli" dfs "$@"
+    }
+
+    if ! hdfs_dfs -test -d /tmp; then
+      hdfs_dfs -mkdir -p /tmp
+      changed=true
+    fi
+
+    permissions=$(hdfs_dfs -stat '%a' /tmp)
+    if [ "$permissions" != "1777" ]; then
+      hdfs_dfs -chmod 1777 /tmp
+      changed=true
+    fi
+
+    hdfs_dfs -test -d /tmp
+    test "$(hdfs_dfs -stat '%a' /tmp)" = "1777"
+    hdfs_dfs -ls -d /tmp
+    echo "changed=${changed}"
+  args:
+    executable: /bin/bash
+  register: base_cluster_hdfs_tmp_reconcile
+  changed_when: "'changed=true' in base_cluster_hdfs_tmp_reconcile.stdout"
+  become: true
+  delegate_to: "{{ groups[base_cluster_worker_group] | first }}"

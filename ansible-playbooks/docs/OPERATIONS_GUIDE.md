@@ -453,6 +453,14 @@ directories. The optional YARN container-usage directory command is not part
 of automatic recovery; run it only after enabling container-usage aggregation
 and configuring its MapReduce job user. Recovery never invokes NameNode format
 or cluster First Run.
+
+HDFS `/tmp` reconciliation first calls CM's documented
+`hdfsCreateTmpDir` service command. Some CM 7.13/CDP 7.3.2 layouts return
+`Command not valid for ...`; in that case a gateway client creates the HDFS
+namespace path and verifies mode `1777` (world-writable with sticky bit).
+The same verification runs after a fresh First Run, so the HDFS canary can
+create `/tmp/.cloudera_health_monitoring_canary_files`. This is not the local
+Linux `/tmp` directory on each DataNode.
 The marker is recorded only after startup and client-configuration refresh
 complete successfully. CM can report a one-time setup command as
 `Command not valid for ...` when that artifact is already initialized; recovery

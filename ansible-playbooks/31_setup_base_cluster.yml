@@ -1010,7 +1010,13 @@
         - base_cluster_recovery_required | bool
         - base_cluster_install_services.hive | default(true) | bool
 
-    - name: Recover required HDFS directories
+    - name: Recover HDFS temporary directory
+      ansible.builtin.include_tasks: common_tasks/ensure_hdfs_tmp.yml
+      when:
+        - base_cluster_recovery_required | bool
+        - base_cluster_install_services.hdfs | default(true) | bool
+
+    - name: Recover YARN node-label directory
       ansible.builtin.shell: |
         set -euo pipefail
         hdfs_cli=/opt/cloudera/parcels/CDH/bin/hdfs
@@ -1021,31 +1027,23 @@
             "$hdfs_cli" dfs "$@"
         }
 
-        ensure_dir() {
-          local path="$1"
-          if ! hdfs_dfs -test -d "$path"; then
-            hdfs_dfs -mkdir -p "$path"
-            changed=true
-          fi
-        }
-
-        ensure_dir /tmp
-        hdfs_dfs -chmod 1777 /tmp
-        {% if base_cluster_install_services.yarn | default(true) | bool %}
-        ensure_dir {{ base_cluster_yarn_node_labels_dir | quote }}
+        if ! hdfs_dfs -test -d {{ base_cluster_yarn_node_labels_dir | quote }}; then
+          hdfs_dfs -mkdir -p {{ base_cluster_yarn_node_labels_dir | quote }}
+          changed=true
+        fi
         hdfs_dfs -chown yarn:yarn {{ base_cluster_yarn_node_labels_dir | quote }}
         hdfs_dfs -chmod 700 {{ base_cluster_yarn_node_labels_dir | quote }}
-        {% endif %}
         echo "changed=${changed}"
       args:
         executable: /bin/bash
-      register: base_cluster_hdfs_directory_recovery
-      changed_when: "'changed=true' in base_cluster_hdfs_directory_recovery.stdout"
+      register: base_cluster_yarn_directory_recovery
+      changed_when: "'changed=true' in base_cluster_yarn_directory_recovery.stdout"
       become: true
       delegate_to: "{{ groups[base_cluster_worker_group] | first }}"
       when:
         - base_cluster_recovery_required | bool
         - base_cluster_install_services.hdfs | default(true) | bool
+        - base_cluster_install_services.yarn | default(true) | bool
 
     - name: Build safe service initialization recovery commands
       ansible.builtin.set_fact:
@@ -1358,6 +1356,12 @@
               {% endfor %}
               Original error: {{ ansible_failed_result.msg | default('unknown') }}
           when: not (base_cluster_knox_readiness_recovered | default(false) | bool)
+
+    - name: Ensure HDFS temporary directory after fresh First Run
+      ansible.builtin.include_tasks: common_tasks/ensure_hdfs_tmp.yml
+      when:
+        - base_cluster_first_run_required | bool
+        - base_cluster_install_services.hdfs | default(true) | bool
 
     - name: Refresh existing base cluster with name {{ cdh_basecluster_name }}
       ansible.builtin.uri:
