@@ -23,15 +23,23 @@
     state: absent
   loop:
     - /opt/cloudera/cm-agent
-    - /var/lib/cloudera-scm-agent
     - /etc/cloudera-scm-agent
     - /var/log/cloudera-scm-agent
     - /var/run/cloudera-scm-agent
-    - /var/lib/supervisor
     - /var/log/supervisor
     - /var/run/supervisor
     - /etc/supervisor
     - /etc/supervisord.conf
+  failed_when: false
+
+- name: Remove Cloudera Manager agent library directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/cloudera-scm-agent
+    - /var/lib/supervisor
+  when: hostvars['localhost']['cleanup_effective']['remove_service_lib_dirs'] | default(false)
   failed_when: false
 
 - name: Remove parcels, CSDs, and remaining Cloudera installation assets during E2E cleanup

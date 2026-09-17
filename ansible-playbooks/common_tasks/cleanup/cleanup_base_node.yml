@@ -27,12 +27,14 @@
       - item is match('^[A-Za-z0-9][A-Za-z0-9._-]*$')
     fail_msg: "Unsafe cleanup_base_service_path_names entry: {{ item | string }}"
   loop: "{{ cleanup_base_service_path_names }}"
+  when: hostvars['localhost']['cleanup_effective']['remove_service_lib_dirs'] | default(false)
 
 - name: Remove base service library directories
   ansible.builtin.file:
     path: "/var/lib/{{ item }}"
     state: absent
   loop: "{{ cleanup_base_service_path_names }}"
+  when: hostvars['localhost']['cleanup_effective']['remove_service_lib_dirs'] | default(false)
 
 - name: Remove base cluster data and config directories
   ansible.builtin.shell: |
@@ -40,9 +42,6 @@
     rm -rf /tmp/.scm_prepare_node.lock
     rm -rf /var/local/kafka/data/meta.properties
     rm -rf /hdfs /dfs /hdfs/mapred /hdfs/yarn /impala
-    rm -rf /var/lib/hadoop-ozone/om/data/om
-    rm -rf /var/lib/hadoop-ozone/scm/data/scm
-    rm -rf /var/lib/hadoop-ozone/recon/data/recon
     rm -rf /yarn* /hadoop*
     rm -rf /etc/atlas /etc/hadoop* /etc/ranger* /etc/hue /etc/impala /etc/knox
     rm -rf /etc/hbase /etc/hive* /etc/hbase-solr /etc/hadoop-kms /etc/ozone*
@@ -50,7 +49,7 @@
     rm -rf /etc/schemaregistry /etc/solr* /etc/hive-hcatalog /etc/hive-webhcat
     rm -rf /etc/kudu* /etc/tez* /etc/streams* /etc/nifi*
     rm -rf /etc/zookeeper* /etc/*nifiregistry*
-    rm -rf /usr/share/cmf /var/lib/cloudera* /var/cache/yum/cloudera* /var/cache/apt/archives/partial
+    rm -rf /usr/share/cmf /var/cache/yum/cloudera* /var/cache/apt/archives/partial
     rm -rf /var/log/cloudera* /var/run/cloudera* /opt/cloudera
   when: hostvars['localhost']['cleanup_effective']['deep_remove_data_dirs'] | default(false)
   changed_when: true

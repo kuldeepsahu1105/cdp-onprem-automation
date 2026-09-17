@@ -31,6 +31,7 @@
       remove_service_users: "{{ cleanup_remove_service_users or cleanup_e2e }}"
       remove_service_groups: "{{ cleanup_remove_service_groups or cleanup_e2e }}"
       deep_remove_data_dirs: "{{ cleanup_deep_remove_data_dirs or cleanup_e2e }}"
+      remove_service_lib_dirs: "{{ cleanup_remove_service_lib_dirs | default(false) | bool }}"
       reset_iptables: "{{ cleanup_reset_iptables or (cleanup_delete_ecs_cluster or cleanup_e2e) }}"
       needs_cm_api: >-
         {{
@@ -78,6 +79,7 @@
       - "  remove_postgres_user: {{ cleanup_effective.remove_postgres_user }}"
       - "  reset_service_databases: {{ cleanup_effective.reset_service_databases }}"
       - "  deep_remove_data_dirs: {{ cleanup_effective.deep_remove_data_dirs }}"
+      - "  remove_service_lib_dirs: {{ cleanup_effective.remove_service_lib_dirs }}"
       - "  remove_service_users: {{ cleanup_effective.remove_service_users }}"
       - "  reset_iptables: {{ cleanup_effective.reset_iptables }}"
       - "  needs_cm_api: {{ cleanup_effective.needs_cm_api }}"

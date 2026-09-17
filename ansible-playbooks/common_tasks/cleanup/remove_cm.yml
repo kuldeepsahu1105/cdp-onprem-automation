@@ -58,13 +58,6 @@
     state: absent
   loop:
     - /usr/share/cmf
-    - /var/lib/cloudera-host-monitor
-    - /var/lib/cloudera-service-monitor
-    - /var/lib/cloudera-scm-alertpublisher
-    - /var/lib/cloudera-scm-eventserver
-    - /var/lib/cloudera-scm-headlamp
-    - /var/lib/cloudera-scm-navigator
-    - /var/lib/cloudera-scm-server
     - /var/cache/yum/cloudera-manager
     - "{{ os.cm_package_cache_glob }}"
     - /var/log/cloudera-scm-server
@@ -74,12 +67,26 @@
     - /etc/cloudera-scm-server
     - /etc/cloudera-scm-agent
     - /opt/cloudera
-    - /var/lib/supervisor
     - /var/log/supervisor
     - /var/run/supervisor
     - /etc/supervisor
     - /etc/supervisord.conf
   failed_when: false
+
+- name: Remove Cloudera Management Service library directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/cloudera-host-monitor
+    - /var/lib/cloudera-service-monitor
+    - /var/lib/cloudera-scm-alertpublisher
+    - /var/lib/cloudera-scm-eventserver
+    - /var/lib/cloudera-scm-headlamp
+    - /var/lib/cloudera-scm-navigator
+    - /var/lib/cloudera-scm-server
+    - /var/lib/supervisor
+  when: cleanup_effective.remove_service_lib_dirs | default(false)
 
 - name: Remove Cloudera Manager repo file
   ansible.builtin.file:
