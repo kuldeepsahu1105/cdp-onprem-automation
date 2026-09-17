@@ -14,11 +14,12 @@ Usage:
 Without --execute, previews the destructive base-only cleanup.
 
 With --execute:
-  1. Deletes only the CM base-cluster registration.
-  2. Removes base service state while preserving CM, CMS, FreeIPA, ECS, and parcels.
-  3. Resets Hive, Hue, Ranger, and Knox schemas while preserving databases/roles.
-  4. Runs 31_setup_base_cluster.yml to recreate and start the base cluster.
-  5. Verifies/enables CM Auto-TLS and cluster Kerberos, then restarts CMS.
+  1. Verifies/enables CM Auto-TLS and CM KDC/account-manager integration.
+  2. Deletes only the CM base-cluster registration.
+  3. Removes base service state while preserving CM, CMS, FreeIPA, ECS, and parcels.
+  4. Resets Hive, Hue, Ranger, and Knox schemas while preserving databases/roles.
+  5. Runs 31_setup_base_cluster.yml to create the base cluster Kerberized before First Run.
+  6. Verifies final Auto-TLS/Kerberos state and restarts CMS.
 EOF
 }
 
@@ -57,6 +58,12 @@ if [[ "$EXECUTE" != true ]]; then
   exit 0
 fi
 
+"$SCRIPT_DIR/run-playbook.sh" \
+  -i "$INVENTORY" \
+  27_setup_cm_autotls.yml
+"$SCRIPT_DIR/run-playbook.sh" \
+  -i "$INVENTORY" \
+  30_setup_cm_krbs.yml
 "$SCRIPT_DIR/cleanup-cluster-services.sh" "${cleanup_args[@]}" --execute
 exec "$SCRIPT_DIR/run-playbook.sh" \
   -i "$INVENTORY" \
