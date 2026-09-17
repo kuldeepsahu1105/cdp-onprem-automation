@@ -6,34 +6,56 @@
       - python3-psycopg2
     state: present
 
-- name: Check psycopg2 in the Ansible Python interpreter
+- name: Resolve Python interpreters requiring psycopg2
+  ansible.builtin.set_fact:
+    python_psycopg2_interpreters: >-
+      {{
+        [
+          python_psycopg2_interpreter
+          | default(ansible_python_interpreter | default('/usr/bin/python3')),
+          (os | default({})).python_executable
+          | default('python' ~ (python_version | default('3')))
+        ]
+        | map('string')
+        | map('trim')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+
+- name: Check psycopg2 in each required Python interpreter
   ansible.builtin.command:
     argv:
-      - "{{ python_psycopg2_interpreter | default(ansible_python_interpreter | default('/usr/bin/python3')) }}"
+      - "{{ item }}"
       - -c
       - "import psycopg2; print(psycopg2.__version__)"
   register: python_psycopg2_import
+  loop: "{{ python_psycopg2_interpreters }}"
   changed_when: false
   failed_when: false
 
-- name: Install psycopg2-binary in the Ansible Python interpreter when required
+- name: Install psycopg2-binary in each Python interpreter when required
   ansible.builtin.command:
     argv:
-      - "{{ python_psycopg2_interpreter | default(ansible_python_interpreter | default('/usr/bin/python3')) }}"
+      - "{{ item.item }}"
       - -m
       - pip
       - install
       - "{{ 'psycopg2-binary==' + psycopg2_binary_version if psycopg2_binary_version | default('') | length > 0 else 'psycopg2-binary' }}"
   environment:
     PIP_BREAK_SYSTEM_PACKAGES: "1"
-  when: python_psycopg2_import.rc | int != 0
+  loop: "{{ python_psycopg2_import.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.rc | int != 0
   changed_when: true
 
-- name: Verify psycopg2 in the Ansible Python interpreter
+- name: Verify psycopg2 in each required Python interpreter
   ansible.builtin.command:
     argv:
-      - "{{ python_psycopg2_interpreter | default(ansible_python_interpreter | default('/usr/bin/python3')) }}"
+      - "{{ item }}"
       - -c
       - "import psycopg2; print(psycopg2.__version__)"
   register: python_psycopg2_verify
+  loop: "{{ python_psycopg2_interpreters }}"
   changed_when: false

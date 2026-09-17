@@ -53,9 +53,9 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | Area | Behavior |
 |---|---|
 | Ansible on targets | `ansible.cfg` sets `interpreter_python = /usr/bin/python3`; remote modules use that unless you set `ansible_python_interpreter` in inventory or host vars |
-| **06** / **23** psycopg2 | `psycopg2-binary` is installed with hardcoded `pip3` and verified with `/usr/bin/python3` (Ansible's default interpreter), not `python{{ python_version }}` |
+| **06** / **23** psycopg2 | The OS `python3-psycopg2` package is installed first. The shared task then verifies both Ansible's interpreter (default `/usr/bin/python3`) and `os.python_executable` (normally `python{{ python_version }}`), installing with each interpreter's own `-m pip` only when its import fails. Duplicate interpreter names are removed. |
 | Debian pip upgrade | `os_vars.Debian.pip_executable` is `pip3`; **06** pip upgrade uses it even when `python_version` changes |
-| `psycopg2_binary_version` | Pins the **library** on pip install (`psycopg2-binary==…` when set); does not select the Python minor version |
+| `psycopg2_binary_version` | Pins the **library** for every interpreter fallback (`psycopg2-binary==…` when set); interpreter selection remains independent |
 
 ### Cluster names
 
