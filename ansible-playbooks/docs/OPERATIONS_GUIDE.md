@@ -485,6 +485,15 @@ only failed First Run child, playbook **31** performs a bounded Knox health
 poll, then starts and polls the full cluster. It does not suppress other Knox
 failures or continue while the remaining services are stopped.
 
+`KNOX_GATEWAY=STARTED` only confirms the Java process is running. CM's
+`checkTopologyDeployment.sh` separately polls
+`/gateway/health/v1/gateway-status`; HTTP 200 with body `PENDING` means topology
+deployment is not ready yet. The CSD's default bounded wait is 600 seconds.
+Playbook **31** does not falsely convert `PENDING` to success. It applies the
+recovery above only after CM ends First Run with the single
+`WaitForKnoxGatewayReadyToServe` failure and Knox subsequently reports
+`STARTED/GOOD`.
+
 `base_cluster_enable_kerberos: true` makes playbook **31** Kerberize every base
 cluster it manages. Auto-TLS and CM KDC/account-manager integration must already
 be active before cluster creation. For a newly created cluster, playbook **31**
@@ -502,6 +511,14 @@ refreshed. Completion is recorded only after CM reports
 `hadoop_security_authentication=kerberos`; already Kerberized clusters skip the
 transition. This leaves playbook **30** responsible for CM-wide KDC integration
 and account-manager credential import.
+
+Kerberized Ozone client configuration also requires the Ozone service's
+`hdfs_service` dependency to reference HDFS. HDFS itself references
+`CORE_SETTINGS` through `core_connector`. Playbook **31** sets the Ozone→HDFS
+dependency in the new-cluster template and reconciles it on existing Ozone
+services. Without that dependency CM's Ozone CSD receives no `core-site.xml`; its
+`deploy_client_configs` script fails at `add_to_site ''` with
+`Could not find  or  is not a file`.
 
 Playbook **31** also imports the idempotent **27** Auto-TLS workflow before base
 cluster reconciliation. When `autotls_enabled: true`, CM's authoritative
