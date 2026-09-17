@@ -57,8 +57,10 @@
         msg: "Pip version: {{ pip_version_output.stdout }}"
       when: pip_version_output.rc == 0
 
-    - name: Ensure psycopg2 is installed for the Ansible Python interpreter
+    - name: Ensure psycopg2 is installed for both Python interpreters
       ansible.builtin.import_tasks: common_tasks/ensure_python_psycopg2.yml
+      vars:
+        python_psycopg2_runtime_packages: "{{ os.python_packages }}"
 
     - name: Install Java
       ansible.builtin.package:

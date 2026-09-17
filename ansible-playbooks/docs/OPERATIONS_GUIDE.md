@@ -541,16 +541,13 @@ is intentionally managed outside this workflow.
 Hue is configured with the external `hue` PostgreSQL database before cluster
 startup. Playbook **31** reconciles the database settings for existing Hue
 services as well as rendering them for new clusters, preventing reruns from
-falling back to Hue's local SQLite database. During prerequisites, playbook
-**06** installs and verifies `psycopg2` on every inventory host for both
-Ansible's default `/usr/bin/python3` and the configured
-`python{{ python_version }}` runtime, using each interpreter's own `-m pip`
-fallback when the OS package is not importable there. Hue itself runs from the
-active CDH parcel virtual environment, such as
-`/opt/cloudera/parcels/CDH/lib/hue/build/venvs/python3.11`. Before cluster
-startup, playbook **31** separately verifies `psycopg2` or `psycopg` in that
-exact environment on the Hue role host and installs `psycopg2-binary` there
-when both imports are unavailable.
+falling back to Hue's local SQLite database. It also installs and verifies
+`psycopg2` inside Hue's parcel-managed Python virtual environment before First
+Run; installing the driver only in `/usr/bin/python3` does not make it available
+to Hue. The system targets are derived as `/usr/bin/python3` and
+`/usr/bin/python{{ python_version }}`; playbook **31** discovers Hue's matching
+`python{{ python_version }}` environment from the active CDH parcel instead of
+hardcoding a Python minor version or full venv interpreter path.
 
 For an existing cluster, playbook **31** also detects stale Hive Metastore
 catalogs whose names begin with

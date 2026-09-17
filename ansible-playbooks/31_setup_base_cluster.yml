@@ -453,48 +453,41 @@
           - database_password
       when: base_cluster_install_services.hue | default(true) | bool
 
-    - name: Ensure PostgreSQL driver in the active Hue parcel environment
-      ansible.builtin.shell: |
-        set -euo pipefail
-        hue_python=""
+    - name: Discover Hue parcel Python environment
+      ansible.builtin.find:
+        paths: /opt/cloudera/parcels/CDH/lib/hue/build/venvs
+        patterns: "python{{ python_version }}"
+        file_type: directory
+        recurse: false
+        follow: true
+      register: base_cluster_hue_python_environments
+      become: true
+      connection: ssh
+      delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+      when: base_cluster_install_services.hue | default(true) | bool
 
-        for candidate in \
-          /opt/cloudera/parcels/CDH/lib/hue/build/venvs/python*/bin/python \
-          /opt/cloudera/parcels/CDH/lib/hue/build/env/bin/python
-        do
-          if [ -x "$candidate" ]; then
-            hue_python="$candidate"
-            break
-          fi
-        done
+    - name: Require Hue parcel Python environment
+      ansible.builtin.assert:
+        that:
+          - base_cluster_hue_python_environments.matched | default(0) | int == 1
+        fail_msg: >-
+          Hue is enabled but exactly one python{{ python_version }} environment was not found
+          below the active CDH parcel's Hue venv directory on
+          {{ groups[base_cluster_master_group][0] }}. Confirm the CDH parcel is activated and
+          its Hue Python version matches python_version={{ python_version }}.
+      when: base_cluster_install_services.hue | default(true) | bool
 
-        if [ -z "$hue_python" ]; then
-          echo "No executable Python was found in the active CDH Hue parcel environment." >&2
-          exit 127
-        fi
+    - name: Resolve Hue parcel Python interpreter
+      ansible.builtin.set_fact:
+        base_cluster_hue_python_interpreter_effective: >-
+          {{ base_cluster_hue_python_environments.files[0].path }}/bin/python
+      when: base_cluster_install_services.hue | default(true) | bool
 
-        if "$hue_python" -c 'import psycopg2' >/dev/null 2>&1 \
-          || "$hue_python" -c 'import psycopg' >/dev/null 2>&1; then
-          "$hue_python" -c 'import sys; print("Hue PostgreSQL driver available in " + sys.executable)'
-          echo "changed=false"
-          exit 0
-        fi
-
-        "$hue_python" -m pip install --disable-pip-version-check "$HUE_PSYCOPG_PACKAGE"
-        "$hue_python" -c 'import psycopg2, sys; print("psycopg2 " + psycopg2.__version__ + " available in " + sys.executable)'
-        echo "changed=true"
-      args:
-        executable: /bin/bash
-      environment:
-        PIP_BREAK_SYSTEM_PACKAGES: "1"
-        HUE_PSYCOPG_PACKAGE: >-
-          {{
-            'psycopg2-binary==' + psycopg2_binary_version
-            if psycopg2_binary_version | default('') | length > 0
-            else 'psycopg2-binary'
-          }}
-      register: base_cluster_hue_psycopg2
-      changed_when: "'changed=true' in base_cluster_hue_psycopg2.stdout"
+    - name: Ensure psycopg2 is installed for Hue
+      ansible.builtin.import_tasks: common_tasks/ensure_python_psycopg2.yml
+      vars:
+        python_psycopg2_additional_interpreters:
+          - "{{ base_cluster_hue_python_interpreter_effective }}"
       become: true
       connection: ssh
       delegate_to: "{{ groups[base_cluster_master_group][0] }}"
