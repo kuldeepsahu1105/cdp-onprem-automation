@@ -1019,7 +1019,18 @@
     - name: Recover YARN node-label directory
       ansible.builtin.shell: |
         set -euo pipefail
-        hdfs_cli=/opt/cloudera/parcels/CDH/bin/hdfs
+        hdfs_cli=$(command -v hdfs 2>/dev/null || true)
+        if [ -z "$hdfs_cli" ] || [ ! -x "$hdfs_cli" ]; then
+          hdfs_cli=$(
+            find /opt/cloudera/parcels -maxdepth 3 -type f -path '*/CDH-*/bin/hdfs' \
+              -perm -u+x -print 2>/dev/null | sort -V | tail -1
+          )
+        fi
+        if [ -z "$hdfs_cli" ] || [ ! -x "$hdfs_cli" ]; then
+          echo "No executable hdfs client found in PATH or an installed CDH-* parcel." >&2
+          find /opt/cloudera/parcels -maxdepth 1 -mindepth 1 -printf '%f\n' 2>/dev/null | sort >&2
+          exit 127
+        fi
         changed=false
 
         hdfs_dfs() {
