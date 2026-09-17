@@ -1095,19 +1095,24 @@ For ECS, this is a destructive rebuild rather than a lightweight runtime reset:
 it runs the parcel-shipped `rke2-killall.sh` twice, runs
 `rke2-uninstall.sh`, refuses to delete configured ECS storage while it is
 mounted, and removes only `ecs_docker_data_path`, `ecs_lso_data_path`, and
-`ecs_longhorn_data_path` plus known RKE2/ECS state. It does not blanket-delete
-shared standalone Docker/containerd/etcd paths. Parcel and CSD content remain.
+`ecs_longhorn_data_path` plus allowlisted RKE2/ECS state, including managed
+Docker and containerd library roots. Standalone etcd/k3s library roots outside
+the RKE2/Rancher tree are not removed. Parcel and CSD content remain.
 PostgreSQL is not modified by base/ECS cleanup. The preserved agent UUID retains
 the host identity; it does not recreate deleted clusters or roles.
 
-When `99_cleanup.yml` removes CM (`cleanup_remove_cm=true` or
+Base and ECS cluster cleanup removes the corresponding allowlisted service
+directories under `/var/lib` in both scoped and E2E modes. PostgreSQL, FreeIPA,
+and Cloudera Manager server state remain controlled by their separate cleanup
+switches. When `99_cleanup.yml` removes CM (`cleanup_remove_cm=true` or
 `cleanup_e2e=true`), CM-only cleanup resets `scm` and `rman`; E2E cleanup,
 after successfully stopping/deleting base and ECS clusters, resets every
 configured PostgreSQL service database. CM/CMS are stopped and remaining
 database sessions are terminated before schemas are reset. Database containers
 and login roles are preserved;
 tables, sequences, functions, views, extensions, and other schema objects are
-removed. The E2E path removes CM
+removed. ECS cleanup refuses to proceed while configured storage or managed
+container-runtime `/var/lib` paths are mounted. The E2E path removes CM
 server/agent packages, supervisor state, CSDs, parcels, parcel repositories, and
 cluster-node service state. Even with `cleanup_e2e=true`, PostgreSQL data and
 packages are preserved unless the separate `cleanup_remove_postgres_*` toggles
