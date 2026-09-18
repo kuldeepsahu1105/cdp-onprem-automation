@@ -205,8 +205,7 @@
     - cm_api_probe_host_candidates | length > 0
     - (cm_api_probe_https_first | default(false) | bool) and (cm_api_use_https | default(false) | bool)
       or (
-        not (cm_api_probe_https_first | default(false) | bool)
-        and cm_api_probe_host_discovery is defined
+        cm_api_probe_host_discovery is defined
         and (
           cm_api_probe_host_discovery.results | default([])
           | selectattr('status', 'defined')
@@ -214,6 +213,10 @@
           | list
           | length
         ) == 0
+      )
+      or (
+        (cm_autotls_complete | default(false) | bool)
+        and not (cm_api_controller_probe_succeeded | default(false) | bool)
       )
 
 - name: CM API — pick working address on Ansible controller (HTTP, then HTTPS)
@@ -910,7 +913,6 @@
   failed_when: false
   delegate_to: "{{ cm_api_probe_delegate_to }}"
   when:
-    - cm_api_use_https | default(false) | bool
     - cm_api_manager_https_fallback | default(false) | bool
     - cm_api_probe_host_candidates is defined
     - cm_api_probe_host_candidates | length > 0
