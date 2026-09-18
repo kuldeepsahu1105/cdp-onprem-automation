@@ -209,7 +209,7 @@
     - condition: "{{ base_cluster_install_services.ranger | default(false) }}"
       link:
         name: Ranger Admin
-        url: "http://{{ deployment_portal_base_master_fqdn }}:6080"
+        url: "http://{{ deployment_portal_base_master_fqdn }}:{{ base_cluster_ranger_admin_port }}"
         description: Base cluster Ranger
     - condition: "{{ base_cluster_install_services.knox | default(false) }}"
       link:
