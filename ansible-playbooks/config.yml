@@ -107,6 +107,9 @@ base_cluster_module_async_timeout: 7500
 base_cluster_kafka_metadata_store: Zookeeper  # Zookeeper | KRaft; choose before Kafka's first start
 base_cluster_module_poll_interval: 15
 base_cluster_enable_kerberos: true  # Kerberize new clusters before First Run and converge existing clusters
+base_cluster_enable_autotls: true
+base_cluster_knox_configure_gateway_site: true
+base_cluster_knox_configure_kerberos: true
 base_cluster_restart_cms_after_start: true  # Restart CMS after base-cluster startup/security convergence
 
 # Required CDP service settings. Supply production secrets through
