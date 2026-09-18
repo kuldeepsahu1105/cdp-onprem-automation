@@ -233,11 +233,19 @@ ssl_key_file: "server.key"
 # -----------------------------------------------------------------------------
 # 04. Cloudera Manager, Runtime, parcel, and CSD repositories
 # -----------------------------------------------------------------------------
-cm_version: "7.13.2.10000"
-cm_numeric_version: "713210000"
+cm_version: "7.13.2.6"
+cm_numeric_version: "713200006"
+# Archive path under .../p/cm7/ (cumulative hotfixes use patch/<version>/).
+cm_repo_version_path: >-
+  {%- set cm_build = cm_version.split('.')[-1] | int -%}
+  {%- if cm_build >= 1 and cm_build < 100 -%}
+  patch/{{ cm_version }}
+  {%- else -%}
+  {{ cm_version }}
+  {%- endif -%}
 
-cdh_version: "7.3.2.10000"
-cdh_numeric_version: "82216952"
+cdh_version: "7.3.2.0"
+cdh_numeric_version: "77083870"
 # Spark is bundled in the CDH parcel for 7.3.1+ — separate SPARK3 parcel not required
 cdh_spark_bundled_min_version: "7.3.1"
 

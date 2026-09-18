@@ -45,8 +45,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `python_version` | `3.11` | Python version (packages and module enablement) |
 | `postgresql_version` | `18` | PostgreSQL version |
 | `postgres_amazon_linux_2023_native_client_version` | (computed) | Native Amazon Linux 2023 `psql` client package version (`min(postgresql_version, 17)`); CM DB tasks on `cldr-mngr` may use this while the server stays `postgresql_version` |
-| `cm_version` | `7.13.2.10000` | Cloudera Manager version |
-| `cdh_version` | `7.3.2.10000` | CDH parcel version |
+| `cm_version` | `7.13.2.6` | Cloudera Manager version |
+| `cdh_version` | `7.3.2.0` | CDH parcel version |
 
 **`python_version` scope:** On targets, this drives `os_vars` package names (`python{{ python_version }}`, pip/devel or venv/dev packages), RHEL 8 `dnf module enable python<version>`, and on RedHat the `python{{ python_version }}` / `pip{{ python_version }}` executables used in **06_prereq_setup.yml** for install and pip upgrade. It does **not** fully align every Python path in the repo:
 

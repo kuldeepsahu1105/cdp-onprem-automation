@@ -4,10 +4,10 @@
 #
 # ipaserver_domain: cldrsetup.local
 # ipaadmin_password: "ChangeMe@123"
-# cm_version: "7.13.2.10000"
+# cm_version: "7.13.2.6"
 # autotls_enabled: true   # default in group_vars — Cloudera Auto-TLS (playbook 27, CM HTTPS :7183); false = manual TLS only
 # cm_autotls_force_run: true   # CM_TLS_KRB_LDAP / 27 — re-run generateCmca when CM already reports Auto-TLS (e.g. missing truststore)
-# cdh_version: "7.3.2.10000"
+# cdh_version: "7.3.2.0"
 # cdv_version: "8.1.5"
 # cdv_dataviz_csd_jar: "DATAVIZ-8.1.5-b66.p1.81473462.jar"
 # cfm_version: "2.1.7.3004"

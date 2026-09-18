@@ -389,7 +389,7 @@ CSD JARs for DataViz / NiFi / NiFi Registry are listed in `scm_csds_effective` d
 **Example `REMOTE_PARCEL_REPO_URLS` (defaults in `group_vars/all.yml`, public archive, `cm_parcel_repo_include_latest: false`):**
 
 ```text
-https://archive.cloudera.com/p/cdh7/7.3.2.10000/parcels/
+https://archive.cloudera.com/p/cdh7/7.3.2.0/parcels/
 https://archive.cloudera.com/p/cdp-pvc-ds/1.5.5-h3300/parcels/
 https://archive.cloudera.com/p/cdv/8.0.7/parcels/
 https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel
@@ -970,7 +970,7 @@ YAML example (`.tfvars.yaml`):
 ```yaml
 aws_region: ap-southeast-1
 environment: development
-cm_version: "7.13.2.10000"
+cm_version: "7.13.2.6"
 instance_groups:
   cldr_mngr:
     count: 1
