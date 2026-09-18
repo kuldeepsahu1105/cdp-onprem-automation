@@ -64,13 +64,33 @@
       become: true
       register: cm_krb_credentials_marker
 
+    - name: Kerberos — detect kerberosInfo evidence of stored account-manager credentials
+      ansible.builtin.set_fact:
+        cm_krb_kerberosinfo_has_credential_evidence: >-
+          {{
+            (
+              cm_krb_kerberized_before_info.json.kerberized | default(false) | bool
+              and (
+                (
+                  cm_krb_kerberized_before_info.json.kerberosRealm
+                  | default(cm_krb_kerberized_before_info.json.securityRealm | default(''))
+                  | trim
+                ) == cluster_realm
+              )
+              and (
+                cm_krb_kerberized_before_info.json.kdcHost | default('') | trim
+              ) == kdc_host
+            )
+          }}
+
     - name: Kerberos — determine whether KDC account-manager credentials are current
       ansible.builtin.set_fact:
         cm_krb_credentials_current: >-
           {{
-            cm_krb_credentials_marker.stat.exists | default(false) | bool
-            and not (cm_kerberos_config_changed | bool)
-            and not (cm_krb_force_credential_import | bool)
+            not (cm_krb_force_credential_import | bool)
+            and (cm_krb_credentials_marker.stat.exists | default(false) | bool)
+            and (cm_krb_kerberosinfo_has_credential_evidence | default(false) | bool)
+            and not (cm_kerberos_config_changed | default(false) | bool)
           }}
         cm_krb_credentials_import_skipped: false
 
@@ -82,29 +102,21 @@
     - name: Kerberos — report healthy matching KDC integration
       ansible.builtin.debug:
         msg: >-
-          KDC preflight succeeded, CM Kerberos settings match, and the KDC account-manager
-          credentials were previously imported successfully; skipping credential import and restart.
-      when:
-        - cm_krb_credentials_current | bool
-        - not (cm_kerberos_config_changed | bool)
+          KDC preflight succeeded, CM Kerberos settings and kerberosInfo match, marker file is
+          present, and CM reports kerberized=true; skipping importAdminCredentials and restart.
+      when: cm_krb_credentials_current | bool
 
     - name: Kerberos — verify CM KDC state before no-op exit (marker may be stale)
       ansible.builtin.import_tasks: common_tasks/verify_cm_kerberos_enabled.yml
-      when:
-        - cm_krb_credentials_current | bool
-        - not (cm_kerberos_config_changed | bool)
+      when: cm_krb_credentials_current | bool
 
     - name: Kerberos — print existing Cloudera Manager access URLs
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
-      when:
-        - cm_krb_credentials_current | bool
-        - not (cm_kerberos_config_changed | bool)
+      when: cm_krb_credentials_current | bool
 
     - name: Kerberos — finish healthy matching no-op play
       ansible.builtin.meta: end_play
-      when:
-        - cm_krb_credentials_current | bool
-        - not (cm_kerberos_config_changed | bool)
+      when: cm_krb_credentials_current | bool
 
     - name: Configure Active Directory-specific Kerberos settings
       ansible.builtin.uri:
@@ -158,6 +170,16 @@
         fail_msg: >-
           krb5_kdc_admin_password is empty (FreeIPA: ipaadmin_password; AD: ad_kdc_admin_password).
           CM cannot import KDC admin credentials without a password — set via group_vars or Jenkins ANSIBLE_GROUP_VARS_YAML.
+      when: not (cm_krb_credentials_current | bool)
+
+    - name: Kerberos — announce importAdminCredentials branch
+      ansible.builtin.debug:
+        msg: >-
+          Submitting importAdminCredentials for {{ cm_krb_kdc_admin_principal }}
+          (marker={{ cm_krb_credentials_marker.stat.exists | default(false) }},
+          kerberosInfo_evidence={{ cm_krb_kerberosinfo_has_credential_evidence | default(false) }},
+          config_changed={{ cm_kerberos_config_changed | default(false) }},
+          force={{ cm_krb_force_credential_import | default(false) }}).
       when: not (cm_krb_credentials_current | bool)
 
     - name: Import KDC admin credentials into Cloudera Manager

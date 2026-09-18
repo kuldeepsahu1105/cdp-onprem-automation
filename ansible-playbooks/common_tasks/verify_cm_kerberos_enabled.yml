@@ -67,7 +67,10 @@
     cm_krb_verify_credentials_evidence: >-
       {{
         (cm_krb_import_confirmed | default(false) | bool)
-        or (cm_krb_credentials_marker.stat.exists | default(false) | bool)
+        or (
+          (cm_krb_credentials_marker.stat.exists | default(false) | bool)
+          and (cm_krb_kerberosinfo_has_credential_evidence | default(false) | bool)
+        )
       }}
 
 - name: Kerberos — pre-cluster KDC integration ready (config + credentials, kerberized may stay false)
@@ -111,9 +114,9 @@
       KDC_HOST={{ cm_krb_verify_config_kdc | default('unset') }}.
       Expected kdc_host={{ kdc_host }}, realm={{ cluster_realm }}.
       {% if cm_krb_credentials_import_skipped | default(false) | bool %}
-      Credential import was skipped this run (marker file matched group_vars). If CM was reset or Kerberos
-      was never applied, remove the marker on {{ cm_manager_inventory_host | default('cldr-mngr') }} or re-run
-      with -e cm_krb_force_credential_import=true.
+      Credential import was skipped this run (marker + kerberosInfo kerberized=true). If CM was reset,
+      credentials were never imported, or kerberized=false with only /cm/config set, remove the marker
+      on {{ cm_manager_inventory_host | default('cldr-mngr') }} or re-run with -e cm_krb_force_credential_import=true.
       {% else %}
       Likely causes: importAdminCredentials failed or was never applied; CM not restarted after PUT /cm/config
       or after credential import; wrong KDC admin password for
