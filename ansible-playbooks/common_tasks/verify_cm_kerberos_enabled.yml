@@ -16,19 +16,38 @@
   register: cm_krb_verify_preflight
   changed_when: false
 
+- name: Kerberos — report kerberosInfo probe context
+  ansible.builtin.debug:
+    msg: >-
+      Kerberos read: ok [{{ inventory_hostname }} -> {{ cm_api_uri_delegate_to | default('localhost') }}
+      ({{ hostvars[cm_api_uri_delegate_to | default(inventory_hostname)].ansible_host | default(cm_api_uri_delegate_to | default('localhost')) }})];
+      CM API {{ cm_krb_api_url }}/cm/kerberosInfo;
+      manager inventory host {{ cm_manager_inventory_host | default('unset') }}.
+
 - name: Kerberos — fail fast when CM never received Kerberos settings (skip long wait)
   ansible.builtin.fail:
     msg: >-
-      Cloudera Manager Kerberos is not enabled and kerberosInfo has no realm/KDC after playbook 28
+      Cloudera Manager Kerberos is not enabled and kerberosInfo has no realm/KDC after playbook 30
       configure/import/restart steps (fail-fast before {{ cm_krb_kerberized_wait_retries | default(30) }}×{{ cm_krb_kerberized_wait_delay | default(10) }}s wait).
       CM API: {{ cm_krb_api_url }}/cm/kerberosInfo
+      (delegate {{ cm_api_uri_delegate_to | default('localhost') }}, probe bind
+      {{ cm_api_probe_host | default('n/a') }}, manager {{ cm_manager_inventory_host | default('n/a') }}).
       kerberized={{ cm_krb_verify_preflight.json.kerberized | default(false) }},
       kerberosRealm={{ cm_krb_verify_preflight.json.kerberosRealm | default(cm_krb_verify_preflight.json.securityRealm | default('unset')) }},
       kdcHost={{ cm_krb_verify_preflight.json.kdcHost | default('unset') }}.
       Expected kdc_host={{ kdc_host }}, realm={{ cluster_realm }}.
-      Likely causes: importAdminCredentials failed or was never applied; CM not restarted after PUT /cm/config;
-      wrong KDC admin password for {{ cm_krb_kdc_admin_principal | default('krb5_kdc_admin_user') }}; or Kerberos REST used HTTP :7180 (303) instead of HTTPS :7183.
-      Check cloudera-scm-server.log (ImportCredentials) on cldr-mngr and re-run 30_setup_cm_krbs.yml.
+      {% if cm_krb_credentials_import_skipped | default(false) | bool %}
+      Credential import was skipped this run (marker file matched group_vars). If CM was reset or Kerberos
+      was never applied, remove the marker on {{ cm_manager_inventory_host | default('cldr-mngr') }} or re-run
+      with -e cm_krb_force_credential_import=true.
+      {% else %}
+      Likely causes: importAdminCredentials failed or was never applied; CM not restarted after PUT /cm/config
+      or after credential import; wrong KDC admin password for
+      {{ cm_krb_kdc_admin_principal | default('krb5_kdc_admin_user') }}; or Kerberos REST used HTTP :7180
+      (303) instead of HTTPS :7183.
+      {% endif %}
+      Check cloudera-scm-server.log (ImportCredentials) on {{ cm_manager_inventory_host | default('cldr-mngr') }}
+      and re-run 30_setup_cm_krbs.yml.
   when:
     - not (cm_krb_verify_preflight.json.kerberized | default(false) | bool)
     - >

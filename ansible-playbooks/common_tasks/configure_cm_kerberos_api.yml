@@ -9,6 +9,25 @@
         else (krb5_enc_types | join(' '))
       }}
 
+- name: Kerberos — read CM kerberosInfo before /cm/config reconcile
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/kerberosInfo"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
+  register: cm_krb_kerberized_before_info
+  changed_when: false
+
+- name: Kerberos — record whether CM reports KDC integration enabled
+  ansible.builtin.set_fact:
+    cm_krb_kerberized_before: >-
+      {{ cm_krb_kerberized_before_info.json.kerberized | default(false) | bool }}
+
 - name: Kerberos — read full CM configuration
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/config"
@@ -56,7 +75,8 @@
   ansible.builtin.set_fact:
     cm_kerberos_config_changed: >-
       {{
-        (
+        not (cm_krb_kerberized_before | default(false) | bool)
+        or (
           (cm_krb_config_before.json['items'] | default([])
            | selectattr('name', 'equalto', 'SECURITY_REALM')
            | map(attribute='value') | first | default('')) != cluster_realm
@@ -130,10 +150,20 @@
 - name: Kerberos — CM Kerberos settings already match desired state
   ansible.builtin.debug:
     msg: >-
-      Kerberos CM /cm/config matches group_vars; skipped PUT and pre-import CM restart.
-      Pre-cluster readiness does not depend on kerberosInfo.kerberized, which can remain false
-      until a managed cluster is created and secured.
-  when: not (cm_kerberos_config_changed | bool)
+      Kerberos CM /cm/config matches group_vars and CM reports kerberized=true;
+      skipped PUT and pre-import CM restart.
+  when:
+    - not (cm_kerberos_config_changed | bool)
+    - cm_krb_kerberized_before | default(false) | bool
+
+- name: Kerberos — CM Kerberos settings match group_vars but KDC is not enabled yet
+  ansible.builtin.debug:
+    msg: >-
+      CM /cm/config matches group_vars but kerberized=false — will PUT Kerberos settings and restart
+      CM before importAdminCredentials (realm={{ cluster_realm }}, kdc={{ kdc_host }}).
+  when:
+    - cm_kerberos_config_changed | bool
+    - not (cm_krb_kerberized_before | default(false) | bool)
 
 - name: Kerberos — report CM Kerberos configuration drift
   ansible.builtin.debug:

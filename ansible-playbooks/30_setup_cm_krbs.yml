@@ -72,12 +72,24 @@
             and not (cm_kerberos_config_changed | bool)
             and not (cm_krb_force_credential_import | bool)
           }}
+        cm_krb_credentials_import_skipped: false
+
+    - name: Kerberos — record skipped credential import for verify messaging
+      ansible.builtin.set_fact:
+        cm_krb_credentials_import_skipped: true
+      when: cm_krb_credentials_current | bool
 
     - name: Kerberos — report healthy matching KDC integration
       ansible.builtin.debug:
         msg: >-
           KDC preflight succeeded, CM Kerberos settings match, and the KDC account-manager
           credentials were previously imported successfully; skipping credential import and restart.
+      when:
+        - cm_krb_credentials_current | bool
+        - not (cm_kerberos_config_changed | bool)
+
+    - name: Kerberos — verify CM KDC state before no-op exit (marker may be stale)
+      ansible.builtin.import_tasks: common_tasks/verify_cm_kerberos_enabled.yml
       when:
         - cm_krb_credentials_current | bool
         - not (cm_kerberos_config_changed | bool)
@@ -127,6 +139,10 @@
 
     - name: Restart Cloudera Manager after Kerberos /cm/config before credential import
       ansible.builtin.import_tasks: common_tasks/apply_cm_restart_after_config.yml
+      when: cm_restart_after_config_change | default(false) | bool
+
+    - name: Kerberos — refresh HTTPS REST base after pre-import CM restart
+      ansible.builtin.import_tasks: common_tasks/resolve_cm_krb_api_url_from_facts.yml
       when: cm_restart_after_config_change | default(false) | bool
 
     - name: Kerberos — clear restart flag after pre-import CM restart
@@ -232,6 +248,26 @@
       when:
         - kdc_import_result is defined
         - kdc_import_result is changed
+
+    - name: Kerberos — CM restart required after KDC admin credential import
+      ansible.builtin.set_fact:
+        cm_restart_after_config_change: true
+      when:
+        - not (cm_krb_credentials_current | bool)
+        - cm_krb_import_confirmed | default(false) | bool
+
+    - name: Restart Cloudera Manager after Kerberos credential import
+      ansible.builtin.import_tasks: common_tasks/apply_cm_restart_after_config.yml
+      when:
+        - not (cm_krb_credentials_current | bool)
+        - cm_krb_import_confirmed | default(false) | bool
+        - cm_restart_after_config_change | default(false) | bool
+
+    - name: Kerberos — refresh HTTPS REST base after post-import CM restart
+      ansible.builtin.import_tasks: common_tasks/resolve_cm_krb_api_url_from_facts.yml
+      when:
+        - not (cm_krb_credentials_current | bool)
+        - cm_krb_import_confirmed | default(false) | bool
 
     - name: Kerberos — confirm pre-cluster KDC integration
       ansible.builtin.assert:
