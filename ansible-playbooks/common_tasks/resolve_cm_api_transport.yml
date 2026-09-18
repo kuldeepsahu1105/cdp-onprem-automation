@@ -22,7 +22,9 @@
         else cm_http_port | default(7180)
       }}
 
-- name: CM API — skip doomed HTTP :7180 probes from public Jenkins controller after Auto-TLS
+# When true, skip all /api/version probes from the public Jenkins controller (:7180 and :7183);
+# probe on cldr-mngr instead (see resolve_cm_connect_host.yml).
+- name: CM API — skip doomed HTTP/HTTPS probes from public Jenkins controller after Auto-TLS
   ansible.builtin.set_fact:
     cm_api_probe_skip_controller_http: >-
       {{

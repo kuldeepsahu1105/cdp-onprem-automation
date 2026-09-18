@@ -669,7 +669,8 @@ cm_http_port: 7180
 # Set cm_autotls_complete: true or cm_api_use_https: true after Auto-TLS / manual HTTPS-only CM.
 cm_api_use_https: false
 cm_autotls_complete: false
-# After Auto-TLS, skip HTTP :7180 /api/version from the public Jenkins controller (avoids FAILED-RETRYING noise).
+# After Auto-TLS, skip HTTP :7180 and HTTPS :7183 /api/version from the public Jenkins controller
+# (avoids FAILED-RETRYING noise; probes run on cldr-mngr instead).
 cm_api_probe_skip_controller_http_when_autotls: true
 # 25_verify_cm: do not block on :7183 before Auto-TLS (enable when re-verifying HTTPS-only CM).
 cm_verify_wait_scm_https_port: false

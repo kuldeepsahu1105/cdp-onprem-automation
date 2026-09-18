@@ -100,6 +100,7 @@
         - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
         - cm_api_probe_delegate_to | default('') | length == 0
         - not (cm_api_probe_on_manager_local | default(false) | bool)
+        - not (cm_api_probe_skip_controller_http | default(false) | bool)
         - not (cm_api_discovery_succeeded | default(false) | bool)
 
     - name: CM API — GET /api/version (HTTP) on cldr-mngr
@@ -206,6 +207,7 @@
         - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
         - cm_api_probe_delegate_to | default('') | length == 0
         - not (cm_api_probe_on_manager_local | default(false) | bool)
+        - not (cm_api_probe_skip_controller_http | default(false) | bool)
         - not (cm_api_discovery_succeeded | default(false) | bool)
 
     - name: CM API — set protocol and port from /api/version results (cldr-mngr address scan)
