@@ -29,6 +29,24 @@ assert values["cm_repo_username"] == "from-yaml"
 assert values["nested_override"] == {"retries": 7, "enabled": True}
 PY
 
+# Textarea keys survive merge; Jenkins controller safety defaults override reachability keys.
+ANSIBLE_GROUP_VARS_FILE="$TMP_DIR/input.yml" \
+  ANSIBLE_CONTROL_VIA_JENKINS=1 \
+  BUILD_NUMBER=1 \
+  python3 "$RENDERER" "$TMP_DIR/jenkins.yml" >/dev/null
+
+python3 - "$TMP_DIR/jenkins.yml" <<'PY'
+import sys
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    values = yaml.safe_load(stream)
+
+assert values["arbitrary_future_variable"] == "accepted"
+assert values["ansible_control_reachability"] == "public"
+assert values["cm_api_verify_mode"] == "warn"
+PY
+
 printf '%s\n' '- invalid' '- top-level-list' >"$TMP_DIR/invalid.yml"
 if ANSIBLE_GROUP_VARS_FILE="$TMP_DIR/invalid.yml" \
   python3 "$RENDERER" --validate-only /dev/null >/dev/null 2>&1; then

@@ -70,7 +70,7 @@ log() { printf '[ansible] %s\n' "$*" | tee -a "$LOG_FILE"; }
 # shellcheck source=scripts/lib/jenkins_log_pipe.sh
 source "$REPO_ROOT/scripts/lib/jenkins_log_pipe.sh"
 
-log "Git branch: ${GIT_BRANCH:-${BRANCH_NAME:-unknown}}"
+log "Git branch: ${EXECUTION_BRANCH:-${GIT_BRANCH:-${BRANCH_NAME:-unknown}}}"
 log "Git commit: $(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 log "Starting clone_and_run_pvc_automation.sh (DEPLOY_PHASE=${DEPLOY_PHASE}, DRY_RUN=${DRY_RUN})"
 if ! command -v ansible-playbook >/dev/null 2>&1; then
