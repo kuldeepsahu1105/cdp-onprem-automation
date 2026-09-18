@@ -1201,6 +1201,65 @@ cluster-node service state. Even with `cleanup_e2e=true`, PostgreSQL data and
 packages are preserved unless the separate `cleanup_remove_postgres_*` toggles
 are explicitly enabled.
 
+### Manual PostgreSQL reset of the CM `scm` schema
+
+Service-only reset (`98_cleanup_cluster_services.yml`) **does not** change the
+CM PostgreSQL database. Use the steps below when you need an empty `scm` schema
+so Cloudera Manager can be re-initialized (for example after a failed first
+install or before re-running `scm_prepare_database.sh` / playbook **24**) while
+keeping CM packages, agents, parcels, and CSDs on the nodes.
+
+**When to use this (partial / CM DB only) vs full cleanup (`99_cleanup.yml`):**
+
+| Goal | Approach |
+|---|---|
+| Rebuild base/ECS clusters only; keep CM DB and CM state | `98_cleanup_cluster_services.yml` (no PostgreSQL changes) |
+| Wipe CM (and Reports Manager) DB schemas; optionally uninstall CM | `99_cleanup.yml` with `cleanup_remove_cm=true` or `cleanup_e2e=true` and `cleanup_reset_service_databases=true` (default) — see [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) |
+| Wipe only the `scm` schema inside the existing `scm` database; CM still installed | Manual SQL below (or CM-only **99** scope above) |
+
+**Warnings:**
+
+- **Destructive** — removes all tables and other objects in the `scm` schema.
+  CM configuration, cluster metadata, and wizard state in that schema are lost.
+- **Stop Cloudera Manager** — stop `cloudera-scm-server` and CMS
+  (`cloudera-scm-headlamp` / Reports Manager) before running SQL so no sessions
+  hold locks on `scm` objects.
+- **Backup** — dump the database or schema if you might need to recover
+  (`pg_dump -Fc -n scm …` or a snapshot of the PostgreSQL data directory).
+- **Permissions** — connect as a role that can drop objects in the `scm` schema
+  (typically the `scm` database owner or PostgreSQL superuser). Defaults:
+  database `scm`, owner `scm` (`group_vars/all.yml`).
+
+Connect to the CM database on the PostgreSQL host (see portal **Database &
+pgAdmin** or `postgres_host_fqdn` / `postgres_port` in inventory), then run
+**one** of:
+
+**Option 1 — drop each table in the `scm` schema:**
+
+```sql
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'scm') LOOP
+        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+    END LOOP;
+END $$;
+```
+
+**Option 2 — drop and recreate the schema (simpler):**
+
+```sql
+DROP SCHEMA scm CASCADE;
+CREATE SCHEMA scm;
+```
+
+After reset, grant ownership on the new schema to the CM DB user if you used
+Option 2 (`GRANT ALL ON SCHEMA scm TO scm;` / `ALTER SCHEMA scm OWNER TO scm;`
+when your install expects the `scm` role to own the schema). Restart
+`cloudera-scm-server`, then re-run CM database preparation and the CM playbooks
+(**23**–**24**) as needed.
+
 ---
 
 ## Troubleshooting
