@@ -193,7 +193,8 @@ def main() -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     header = (
         "# Generated at runtime — do not commit.\n"
-        "# Applied via ansible -e @file (merged over group_vars/all.yml).\n"
+        "# Applied via ansible -e @file (extra vars — wins over group_vars/all.yml and\n"
+        "# playbook include_vars from config.yml).\n"
     )
     out_path.write_text(
         header + yaml.safe_dump(overrides, default_flow_style=False, sort_keys=False),

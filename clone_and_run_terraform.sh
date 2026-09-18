@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 GIT_REPO_NAME="cdp-onprem-automation"
 GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/kuldeepsahu1105/$GIT_REPO_NAME.git}"
-GIT_BRANCH="${GIT_BRANCH:-main}"
+GIT_BRANCH="${EXECUTION_BRANCH:-${GIT_BRANCH:-main}}"
 
 HOST_MACHINE_ARCH="$(uname -m)"
 case "$HOST_MACHINE_ARCH" in

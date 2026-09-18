@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-09-16.2 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-09-18.1 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -194,7 +194,16 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     string(name: 'PVCECS_WORKER_COUNT', defaultValue: '7', description: 'ECS worker count override')
     string(name: 'PVCECS_WORKER_INSTANCE_TYPE', defaultValue: 'r5a.4xlarge', description: 'ECS worker instance type override')
     string(name: 'TFVARS_FILE', defaultValue: '.tfvars.yaml', description: 'Config file path relative to repo root (empty = auto-detect)')
-    string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to checkout (no spaces or ..). CM_TLS_KRB_LDAP Auto-TLS realign needs main at b03af5a+ (PR #188 — removes regex .group on cm_api_url). Saved jobs: confirm this is main, not a stale feature branch.')
+    string(
+      name: 'EXECUTION_BRANCH',
+      defaultValue: 'main',
+      description: 'Git branch to checkout for this run (no spaces or ..). Default main — use this instead of editing a saved GIT_BRANCH. CM_TLS_KRB_LDAP Auto-TLS realign needs main at b03af5a+ (PR #188).'
+    )
+    string(
+      name: 'GIT_BRANCH',
+      defaultValue: 'main',
+      description: 'Legacy checkout branch (superseded by EXECUTION_BRANCH). Used only when EXECUTION_BRANCH is empty (pre-refresh jobs). After REFRESH_JENKINSFILE=YES, set EXECUTION_BRANCH for the branch you want.'
+    )
     string(name: 'NOTIFICATION_EMAIL', defaultValue: 'ksahu@cloudera.com', description: 'Primary email recipient; a different triggering user email is appended automatically')
     text(
       name: 'ANSIBLE_GROUP_VARS_YAML',
@@ -331,7 +340,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     JENKINS_ALLOWED_CIDRS = "${params.ALLOWED_CIDRS?.trim() ?: ''}"
     JENKINS_ALLOWED_PORTS = "${params.ALLOWED_PORTS?.trim() ?: ''}"
     JENKINS_CLDR_EIP_NAME = "${params.CLDR_EIP_NAME?.trim() ?: ''}"
-    GIT_BRANCH = "${params.GIT_BRANCH?.trim() ?: 'main'}"
+    GIT_BRANCH = "${resolveExecutionBranch()}"
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
     DESTROY_STACK_CONFIRM = 'true'
@@ -459,7 +468,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
         }
         checkout([
           $class: 'GitSCM',
-          branches: [[name: "*/${params.GIT_BRANCH}"]],
+          branches: [[name: "*/${resolveExecutionBranch()}"]],
           doGenerateSubmoduleConfigurations: false,
           extensions: [
             [$class: 'PruneStaleBranch'],
@@ -469,7 +478,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
         ])
         sh """
           set -euo pipefail
-          echo "Checked out branch: ${shellEscape(params.GIT_BRANCH?.trim() ?: 'main')}"
+          echo "Checked out branch: ${shellEscape(resolveExecutionBranch())}"
           git rev-parse HEAD
           git log -1 --oneline
         """
@@ -1056,6 +1065,15 @@ def writeCmLicenseContentFile() {
   return path
 }
 
+def resolveExecutionBranch() {
+  def execution = params.EXECUTION_BRANCH?.trim()
+  if (execution) {
+    return execution
+  }
+  def legacy = params.GIT_BRANCH?.trim()
+  return legacy ?: 'main'
+}
+
 def ansibleGroupVarsYamlHasKeys(String yamlText) {
   if (!yamlText?.trim()) {
     return false
@@ -1212,12 +1230,12 @@ def validatePipelineInputs() {
     }
   }
 
-  def branch = params.GIT_BRANCH?.trim()
+  def branch = resolveExecutionBranch()
   if (!branch) {
-    validationFail('GIT_BRANCH cannot be empty.')
+    validationFail('EXECUTION_BRANCH cannot be empty.')
   }
   if (branch.contains(' ') || branch.contains('..')) {
-    validationFail("GIT_BRANCH '${branch}' contains invalid characters.")
+    validationFail("EXECUTION_BRANCH '${branch}' contains invalid characters.")
   }
 
   def tfvarsPath = params.TFVARS_FILE?.trim()
