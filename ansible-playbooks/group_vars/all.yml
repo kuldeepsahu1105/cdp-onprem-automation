@@ -748,8 +748,14 @@ cloudera_cloud_collection_git_ref: v2.5.1
 
 # KDC integration for Cloudera Manager.
 # CM Administration → Settings: "Manage krb5.conf through Cloudera Manager" (KRB_MANAGE_KRB5_CONF).
+# When true, CM regenerates and deploys krb5.conf on cluster hosts (does not merge IPA/Ansible edits).
+# Preserve fleet ccache policy via KRB_LIBDEFAULTS_SAFETY_VALVE (play 30): same commented KEYRING line as
+# identity playbooks on workers; automation still uses KRB5CCNAME=FILE:… only. Set krb5_cm_managed_krb5_conf:
+# false if hosts must keep a hand-managed /etc/krb5.conf (and krb5.conf.d snippets) without CM overwrite.
 krb5_cm_managed_krb5_conf: true
 krb5_conf_path: "/etc/krb5.conf"
+# Verbatim [libdefaults] lines CM emits when krb5_cm_managed_krb5_conf is true (API: krb_libdefaults_safety_valve).
+krb5_cm_libdefaults_safety_valve: "{{ krb5_libdefaults_default_ccache_commented_line }}"
 # Cloudera Manager KRB_ENC_TYPES (short names). AES only — Java 17+ disables RC4.
 krb5_allow_weak_rc4: false
 krb5_enc_types: >-

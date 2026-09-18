@@ -23,16 +23,34 @@
   register: cm_krb_config_before
   changed_when: false
 
+- name: Kerberos — resolve CM libdefaults safety valve for managed krb5.conf
+  ansible.builtin.set_fact:
+    cm_krb_libdefaults_safety_valve_effective: >-
+      {{
+        (krb5_cm_libdefaults_safety_valve | default('') | string | trim)
+        if (krb5_cm_managed_krb5_conf | default(true) | bool)
+        else ''
+      }}
+
 - name: Kerberos — build desired CM Kerberos configuration items
   ansible.builtin.set_fact:
-    cm_krb_desired_items:
-      - { name: KRB_ENC_TYPES, value: "{{ cm_krb_enc_types_value }}" }
-      - { name: SECURITY_REALM, value: "{{ cluster_realm }}" }
-      - { name: KDC_TYPE, value: "{{ krb5_kdc_type }}" }
-      - { name: KDC_ADMIN_HOST, value: "{{ kdc_host }}" }
-      - { name: KDC_HOST, value: "{{ kdc_host }}" }
-      - { name: KRB_MANAGE_KRB5_CONF, value: "{{ krb5_cm_managed_krb5_conf | bool | lower }}" }
-      - { name: KRB_KRB5_CONF_PATH, value: "{{ krb5_conf_path | default('/etc/krb5.conf') }}" }
+    cm_krb_desired_items: >-
+      {{
+        [
+          { 'name': 'KRB_ENC_TYPES', 'value': cm_krb_enc_types_value },
+          { 'name': 'SECURITY_REALM', 'value': cluster_realm },
+          { 'name': 'KDC_TYPE', 'value': krb5_kdc_type },
+          { 'name': 'KDC_ADMIN_HOST', 'value': kdc_host },
+          { 'name': 'KDC_HOST', 'value': kdc_host },
+          { 'name': 'KRB_MANAGE_KRB5_CONF', 'value': (krb5_cm_managed_krb5_conf | bool | lower) },
+          { 'name': 'KRB_KRB5_CONF_PATH', 'value': (krb5_conf_path | default('/etc/krb5.conf')) },
+        ]
+        + (
+          [{ 'name': 'KRB_LIBDEFAULTS_SAFETY_VALVE', 'value': cm_krb_libdefaults_safety_valve_effective }]
+          if (cm_krb_libdefaults_safety_valve_effective | length) > 0
+          else []
+        )
+      }}
 
 - name: Kerberos — detect whether CM Kerberos settings need update
   ansible.builtin.set_fact:
@@ -74,6 +92,15 @@
            | selectattr('name', 'equalto', 'KRB_KRB5_CONF_PATH')
            | map(attribute='value') | first | default('/etc/krb5.conf'))
           != (krb5_conf_path | default('/etc/krb5.conf'))
+        )
+        or (
+          (cm_krb_libdefaults_safety_valve_effective | default('') | length) > 0
+          and (
+            (cm_krb_config_before.json['items'] | default([])
+             | selectattr('name', 'equalto', 'KRB_LIBDEFAULTS_SAFETY_VALVE')
+             | map(attribute='value') | first | default('') | trim)
+            != (cm_krb_libdefaults_safety_valve_effective | trim)
+          )
         )
       }}
 

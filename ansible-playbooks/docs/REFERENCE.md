@@ -215,6 +215,8 @@ Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` 
 | `ipaadmin_password` | IPA admin password |
 | `ipa_kdc_host` | `ipaserver.<domain>` |
 | `krb5_enc_types` | Space-separated CM `KRB_ENC_TYPES` (default `aes256-cts aes128-cts`) |
+| `krb5_cm_managed_krb5_conf` | CM `KRB_MANAGE_KRB5_CONF` (default `true`); `false` leaves `/etc/krb5.conf` to IPA/Ansible |
+| `krb5_cm_libdefaults_safety_valve` | CM `KRB_LIBDEFAULTS_SAFETY_VALVE` — preserves commented KEYRING `default_ccache_name` when CM deploys krb5.conf |
 | `krb5_allow_weak_rc4` | `false` — set `true` only if legacy RC4 clients are required (not recommended; Java 17+ disables RC4) |
 | `krb5_ipa_default_enctypes` / `krb5_ipa_permitted_enctypes` | Long krb5 names for FreeIPA KDC `krb5.conf.d` snippet (`configure_ipa_krb_enc_types.yml`) |
 | `krb5_ticket_lifetime` / `krb5_renew_lifetime` | Client ticket request defaults (24 hours / 7 days) used by long-running roles such as Hue `KT_RENEWER` |
