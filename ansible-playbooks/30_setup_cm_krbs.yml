@@ -284,5 +284,5 @@
     - name: Kerberos — print Cloudera Manager access URLs
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
 
-    - name: Kerberos — verify Cloudera Manager reports kerberized=true
+    - name: Kerberos — verify CM KDC integration (kerberized or pre-cluster /cm/config + credentials)
       ansible.builtin.import_tasks: common_tasks/verify_cm_kerberos_enabled.yml

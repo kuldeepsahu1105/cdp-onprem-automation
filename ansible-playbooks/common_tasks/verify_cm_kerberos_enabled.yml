@@ -1,6 +1,7 @@
 ---
-# Assert Cloudera Manager reports Kerberos/KDC integration as enabled (kerberized).
-# Polls GET /cm/kerberosInfo until kerberized=true or bounded wait expires (see group_vars).
+# Assert Cloudera Manager KDC integration is configured (kerberosInfo and/or /cm/config).
+# Pre-cluster CM often reports kerberized=false while SECURITY_REALM/KDC_HOST are set and
+# importAdminCredentials succeeded — treat that as success (cluster Kerberos is a later step).
 
 - name: Kerberos — read CM kerberosInfo before bounded wait
   ansible.builtin.uri:
@@ -16,6 +17,70 @@
   register: cm_krb_verify_preflight
   changed_when: false
 
+- name: Kerberos — read CM /cm/config for pre-cluster integration check
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/config"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
+  register: cm_krb_verify_config
+  changed_when: false
+
+- name: Kerberos — resolve SECURITY_REALM and KDC_HOST from /cm/config
+  ansible.builtin.set_fact:
+    cm_krb_verify_config_realm: >-
+      {{
+        cm_krb_verify_config.json['items'] | default([])
+        | selectattr('name', 'equalto', 'SECURITY_REALM')
+        | map(attribute='value')
+        | first
+        | default('')
+        | trim
+      }}
+    cm_krb_verify_config_kdc: >-
+      {{
+        cm_krb_verify_config.json['items'] | default([])
+        | selectattr('name', 'equalto', 'KDC_HOST')
+        | map(attribute='value')
+        | first
+        | default('')
+        | trim
+      }}
+
+- name: Kerberos — detect matching Kerberos settings in /cm/config
+  ansible.builtin.set_fact:
+    cm_krb_verify_config_matches_group_vars: >-
+      {{
+        (cm_krb_verify_config_realm | default('') | length) > 0
+        and (cm_krb_verify_config_kdc | default('') | length) > 0
+        and (cm_krb_verify_config_realm == cluster_realm)
+        and (cm_krb_verify_config_kdc == kdc_host)
+      }}
+
+- name: Kerberos — record credential-import evidence for verify
+  ansible.builtin.set_fact:
+    cm_krb_verify_credentials_evidence: >-
+      {{
+        (cm_krb_import_confirmed | default(false) | bool)
+        or (cm_krb_credentials_marker.stat.exists | default(false) | bool)
+      }}
+
+- name: Kerberos — pre-cluster KDC integration ready (config + credentials, kerberized may stay false)
+  ansible.builtin.set_fact:
+    cm_krb_precluster_integration_ready: >-
+      {{
+        (cm_krb_verify_config_matches_group_vars | default(false) | bool)
+        and (
+          (cm_krb_verify_credentials_evidence | default(false) | bool)
+          or (cm_krb_credentials_import_skipped | default(false) | bool)
+        )
+      }}
+
 - name: Kerberos — report kerberosInfo probe context
   ansible.builtin.debug:
     msg: >-
@@ -23,18 +88,27 @@
       ({{ hostvars[cm_api_uri_delegate_to | default(inventory_hostname)].ansible_host | default(cm_api_uri_delegate_to | default('localhost')) }})];
       CM API {{ cm_krb_api_url }}/cm/kerberosInfo;
       manager inventory host {{ cm_manager_inventory_host | default('unset') }}.
+      kerberized={{ cm_krb_verify_preflight.json.kerberized | default(false) }},
+      kerberosInfo realm={{ cm_krb_verify_preflight.json.kerberosRealm | default(cm_krb_verify_preflight.json.securityRealm | default('unset')) }},
+      kdcHost={{ cm_krb_verify_preflight.json.kdcHost | default('unset') }}.
+      /cm/config SECURITY_REALM={{ cm_krb_verify_config_realm | default('unset') }},
+      KDC_HOST={{ cm_krb_verify_config_kdc | default('unset') }},
+      precluster_ready={{ cm_krb_precluster_integration_ready | default(false) }}.
 
 - name: Kerberos — fail fast when CM never received Kerberos settings (skip long wait)
   ansible.builtin.fail:
     msg: >-
-      Cloudera Manager Kerberos is not enabled and kerberosInfo has no realm/KDC after playbook 30
-      configure/import/restart steps (fail-fast before {{ cm_krb_kerberized_wait_retries | default(30) }}×{{ cm_krb_kerberized_wait_delay | default(10) }}s wait).
+      Cloudera Manager Kerberos is not enabled and neither kerberosInfo nor /cm/config report
+      realm/KDC after playbook 30 configure/import/restart steps (fail-fast before
+      {{ cm_krb_kerberized_wait_retries | default(30) }}×{{ cm_krb_kerberized_wait_delay | default(10) }}s wait).
       CM API: {{ cm_krb_api_url }}/cm/kerberosInfo
       (delegate {{ cm_api_uri_delegate_to | default('localhost') }}, probe bind
       {{ cm_api_probe_host | default('n/a') }}, manager {{ cm_manager_inventory_host | default('n/a') }}).
       kerberized={{ cm_krb_verify_preflight.json.kerberized | default(false) }},
       kerberosRealm={{ cm_krb_verify_preflight.json.kerberosRealm | default(cm_krb_verify_preflight.json.securityRealm | default('unset')) }},
       kdcHost={{ cm_krb_verify_preflight.json.kdcHost | default('unset') }}.
+      /cm/config SECURITY_REALM={{ cm_krb_verify_config_realm | default('unset') }},
+      KDC_HOST={{ cm_krb_verify_config_kdc | default('unset') }}.
       Expected kdc_host={{ kdc_host }}, realm={{ cluster_realm }}.
       {% if cm_krb_credentials_import_skipped | default(false) | bool %}
       Credential import was skipped this run (marker file matched group_vars). If CM was reset or Kerberos
@@ -50,6 +124,7 @@
       and re-run 30_setup_cm_krbs.yml.
   when:
     - not (cm_krb_verify_preflight.json.kerberized | default(false) | bool)
+    - not (cm_krb_precluster_integration_ready | default(false) | bool)
     - >
       (
         cm_krb_verify_preflight.json.kerberosRealm
@@ -62,6 +137,7 @@
         | default('')
         | trim
       ) | length == 0
+    - not (cm_krb_verify_config_matches_group_vars | default(false) | bool)
 
 - name: Kerberos — wait for CM kerberosInfo.kerberized after restart
   ansible.builtin.uri:
@@ -80,6 +156,14 @@
   retries: "{{ cm_krb_kerberized_wait_retries | default(30) }}"
   delay: "{{ cm_krb_kerberized_wait_delay | default(10) }}"
   failed_when: false
+  when: not (cm_krb_precluster_integration_ready | default(false) | bool)
+
+- name: Kerberos — use pre-cluster verify facts when kerberized wait was skipped
+  ansible.builtin.set_fact:
+    cm_krb_verify_info: "{{ cm_krb_verify_preflight }}"
+  when:
+    - cm_krb_precluster_integration_ready | default(false) | bool
+    - cm_krb_verify_info is not defined
 
 - name: Kerberos — fail when CM KDC integration did not become enabled
   ansible.builtin.fail:
@@ -101,27 +185,45 @@
       Re-run: ansible-playbook -i inventory.ini 30_setup_cm_krbs.yml
       Manual CM UI (if API import keeps failing): Administration → Settings → Kerberos — set realm/KDC host/type,
       import Account Manager credentials, Save, then restart Cloudera Manager Server (see OPERATIONS_GUIDE.md).
-  when: not (cm_krb_verify_info.json.kerberized | default(false) | bool)
+  when:
+    - not (cm_krb_precluster_integration_ready | default(false) | bool)
+    - not (cm_krb_verify_info.json.kerberized | default(false) | bool)
 
 - name: Kerberos — assert CM KDC integration is enabled
   ansible.builtin.assert:
     that:
-      - cm_krb_verify_info.json.kerberized | default(false) | bool
-      - >
+      - >-
+        (cm_krb_verify_info.json.kerberized | default(false) | bool)
+        or (cm_krb_precluster_integration_ready | default(false) | bool)
+      - >-
         (
           cm_krb_verify_info.json.kerberosRealm
           | default(cm_krb_verify_info.json.securityRealm | default(''))
+          | default(cm_krb_verify_config_realm | default(''), true)
           | default(cluster_realm, true)
           | length
         ) > 0
     fail_msg: >-
-      CM kerberosInfo is inconsistent after kerberized=true (missing realm).
-      Full response: {{ cm_krb_verify_info.json | default({}) }}
+      CM Kerberos verify is inconsistent (kerberized=false and pre-cluster check failed, or missing realm).
+      kerberosInfo={{ cm_krb_verify_info.json | default({}) }};
+      /cm/config realm={{ cm_krb_verify_config_realm | default('unset') }},
+      kdc={{ cm_krb_verify_config_kdc | default('unset') }}.
 
 - name: Kerberos — CM KDC integration verified
   ansible.builtin.debug:
     msg:
-      - "CM kerberized: {{ cm_krb_verify_info.json.kerberized }}"
-      - "CM kerberos realm: {{ cm_krb_verify_info.json.kerberosRealm | default(cm_krb_verify_info.json.securityRealm | default('n/a')) }}"
-      - "CM kdcHost: {{ cm_krb_verify_info.json.kdcHost | default('n/a') }}"
+      - >-
+        CM kerberized: {{ cm_krb_verify_info.json.kerberized | default(false) }}
+        {% if cm_krb_precluster_integration_ready | default(false) | bool %}
+        (pre-cluster: /cm/config + credentials OK; cluster Kerberos enablement is later)
+        {% endif %}
+      - >-
+        CM kerberos realm: {{
+          cm_krb_verify_info.json.kerberosRealm
+          | default(cm_krb_verify_info.json.securityRealm | default(cm_krb_verify_config_realm | default('n/a')))
+        }}
+      - >-
+        CM kdcHost: {{
+          cm_krb_verify_info.json.kdcHost | default(cm_krb_verify_config_kdc | default('n/a'))
+        }}
       - "KDC host (group_vars): {{ kdc_host }}"

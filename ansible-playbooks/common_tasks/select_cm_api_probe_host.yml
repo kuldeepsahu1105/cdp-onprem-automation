@@ -170,6 +170,7 @@
     - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
     - cm_api_probe_host_candidates is defined
     - cm_api_probe_host_candidates | length > 0
+    - not (cm_api_probe_skip_controller_http | default(false) | bool)
     - not (cm_api_probe_https_first | default(false) | bool)
       or not (cm_api_use_https | default(false) | bool)
       or (

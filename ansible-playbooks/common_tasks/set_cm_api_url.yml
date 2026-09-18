@@ -151,6 +151,7 @@
       when:
         - cm_api_probe_delegate_to | default('') | length == 0
         - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+        - not (cm_api_probe_skip_controller_http | default(false) | bool)
         - not (
             (cm_api_probe_https_first | default(false) | bool)
             and (cm_tls_probe_https is defined)
