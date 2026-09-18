@@ -526,7 +526,7 @@ base_cluster_ozone_scm_leader_delay: 5
 base_cluster_enable_kerberos: true
 # Cluster-wide Auto-TLS (configureAutoTlsServices) after configureForKerberos in play 31; CM generateCmca in play 27.
 base_cluster_enable_autotls: true
-# Knox gateway-site safety valve + kerberos.auth.enabled (CDP cdp-proxy* topology discovery).
+# Knox gateway-site safety valve (role) + kerberos.auth.enabled on Knox service config (CDP cdp-proxy*).
 base_cluster_knox_gateway_frontend_url: ""
 base_cluster_knox_configure_gateway_site: true
 base_cluster_knox_configure_kerberos: true

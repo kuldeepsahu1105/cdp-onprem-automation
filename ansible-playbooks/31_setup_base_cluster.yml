@@ -621,7 +621,7 @@
         cm_config_display_name: Knox Kerberos
         cm_config_endpoint: >-
           {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
-          }}/services/knox/roleConfigGroups/{{ base_cluster_knox_gateway_group }}/config
+          }}/services/knox/config
         cm_config_desired:
           kerberos.auth.enabled: >-
             {{ 'true' if base_cluster_enable_kerberos | default(true) | bool else 'false' }}
