@@ -628,9 +628,10 @@ falling back to Hue's local SQLite database. It also installs and verifies
 `psycopg2` inside Hue's parcel-managed Python virtual environment before First
 Run; installing the driver only in `/usr/bin/python3` does not make it available
 to Hue. The system targets are derived as `/usr/bin/python3` and
-`/usr/bin/python{{ python_version }}`; playbook **31** discovers Hue's matching
-`python{{ python_version }}` environment from the active CDH parcel instead of
-hardcoding a Python minor version or full venv interpreter path.
+`/usr/bin/python{{ python_version }}`; playbook **31** discovers Hue's parcel
+interpreter from the active CDH parcel (`lib/hue/build/env/bin/python` for
+Python 3.11+ Hue, or `lib/hue/build/venvs/python{{ python_version }}` on older
+layouts) instead of hardcoding a full venv path.
 
 For an existing cluster, playbook **31** also detects stale Hive Metastore
 catalogs whose names begin with
