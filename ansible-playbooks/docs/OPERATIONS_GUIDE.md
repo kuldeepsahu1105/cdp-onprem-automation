@@ -372,6 +372,8 @@ ansible-playbook -i inventory.ini 29_setup_cm_ldap.yml
 ansible-playbook -i inventory.ini 30_setup_cm_krbs.yml
 ```
 
+**Manual KDC account-manager import (CM API):** After `/cm/config` is set, POST credentials (use HTTPS `:7183` when Auto-TLS is on): `curl -sk -u admin:'<cm_admin_pass>' -X POST 'https://<cldr-mngr-fqdn>:7183/api/v59/cm/commands/importAdminCredentials?username=<principal-urlencoded>&password=<password-urlencoded>'` — then restart `cloudera-scm-server` and confirm `ImportCredentials` in `/var/log/cloudera-scm-server/cloudera-scm-server.log`.
+
 **Kerberos encryption types (AES):** Defaults use **AES only** (`krb5_enc_types`: `aes256-cts aes128-cts` in CM; FreeIPA KDC via `/etc/krb5.conf.d/cldr-permitted-enctypes.conf`). RC4 is omitted because Java 17+ and Cloudera recommend AES. Do **not** set `allow_weak_crypto=true` unless you explicitly opt in with `krb5_allow_weak_rc4: true` in group_vars.
 
 **Existing deployments** that already show `rc4-hmac` in the CM Kerberos wizard:
