@@ -55,3 +55,6 @@
 - "{{ label_prefix }}Monitoring install (extra-var): {{ monitoring_stack_enabled | default(false) }}"
 - "{{ label_prefix }}Monitoring routes/index: {{ deployment_portal_monitoring_routes_enabled | default(false) }}"
 {% endif %}
+{% for link in ctx.data_services.links | default([]) %}
+- "{{ label_prefix }}{{ link.name }}: {{ link.url }}"
+{% endfor %}

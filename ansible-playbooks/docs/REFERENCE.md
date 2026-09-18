@@ -69,6 +69,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `base_cluster_knox_cdp_proxy_topology_retries` / `base_cluster_knox_cdp_proxy_topology_delay` | `60` / `10` | Poll Knox `gateway-status` until CDP proxy topologies deploy (~10 min default) |
 | `base_cluster_knox_gateway_https_port` | `8443` | HTTPS port for Knox topology readiness probes on the gateway host |
 | `base_cluster_ranger_admin_port` | `6182` | Direct Ranger Admin UI on the base cluster master (deployment portal links; Knox uses its own gateway URL) |
+| `base_cluster_*_ui_port` | see `all.yml` | Direct HTTP UI ports on `base-masters` when Knox is off (`hdfs` 9870, `yarn` 8088, `hue` 8888, `hbase` 16010, `atlas` 21000, `ozone` Recon 9888, `solr` 8983, `impala` debug 25000) |
+| `base_cluster_knox_cdp_proxy_path` | `/gateway/cdp-proxy` | Knox topology prefix for portal links when `base_cluster_install_services.knox` is true (`deployment_portal_base_cluster_portal_urls.j2`) |
 | `base_cluster_force_first_run` | `false` | Force `POST .../commands/firstRun` on an existing cluster; normally auto when marker missing and HDFS not `STARTED/GOOD` |
 | `cm_admin_bootstrap_pass` | `admin` | Factory CM password; when `cm_admin_pass` differs, `ensure_cm_admin_password.yml` runs in **24_start_cm** / **27_setup_cm_autotls** only |
 | `base_cluster_yarn_*` | `4096` / `4` | YARN RM/NM memory and vcore limits in cluster spec template |
