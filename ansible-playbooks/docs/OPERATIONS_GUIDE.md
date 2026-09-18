@@ -520,14 +520,24 @@ When `gateway.log` reports `Failed to configure truststore` followed by a
 recover the gateway: `cdp-proxy`, `cdp-proxy-token`, `cdp-proxy-api`, and
 `cdp-datashare-access` cannot be generated. Playbook **31** configures the Knox
 Gateway role's `ssl_client_truststore_*` settings from CM's Auto-TLS truststore
-and password before First Run. On a rerun, it restarts an already-running Knox
-service when those settings change. An interrupted initialization also forces
-the redacted truststore password to be refreshed, preventing a stale Knox
-credential alias from producing `Keystore was tampered with, or password was
-incorrect`. The expected generated
-`gateway-site.xml` value is a non-empty
-`gateway.httpclient.truststore.path`; an empty value confirms the trust
-configuration is missing.
+and password **after** `configureAutoTlsServices` and before First Run. It also
+sets the Knox service `kerberos.auth.enabled` flag (when Kerberos is enabled)
+and the KNOX_GATEWAY safety valve `gateway.cluster.config.monitor.cm.enabled=true`
+plus `gateway.frontend.url`. When any of those change, **31** deploys Knox client
+configuration and restarts an already-running Knox gateway so `gateway-site.xml`
+on the host matches CM before topology discovery runs. An interrupted
+initialization also forces the redacted truststore password to be refreshed,
+preventing a stale Knox credential alias from producing `Keystore was tampered
+with, or password was incorrect`. The expected generated `gateway-site.xml` value
+is a non-empty `gateway.httpclient.truststore.path`; an empty value confirms the
+trust configuration is missing.
+
+After Knox is `STARTED`, **31** polls `https://<knox-host>:8443/gateway/health/v1/gateway-status`
+until the response is no longer `PENDING` and no longer lists `cdp-proxy` or
+`cdp-datashare-access` in the **Waiting for** section (same signal CM's
+`checkTopologyDeployment.sh` uses). Tune `base_cluster_knox_cdp_proxy_topology_retries`
+and `base_cluster_knox_cdp_proxy_topology_delay` when large clusters need more than
+the default ~10 minutes.
 
 `base_cluster_enable_kerberos: true` makes playbook **31** Kerberize every base
 cluster it manages. Auto-TLS and CM KDC/account-manager integration must already

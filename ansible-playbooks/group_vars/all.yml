@@ -520,6 +520,10 @@ base_cluster_module_poll_interval: 15
 # reaches healthy state. Bound the narrow First Run recovery wait.
 base_cluster_knox_readiness_recovery_retries: 30
 base_cluster_knox_readiness_recovery_delay: 10
+# Poll Knox /gateway/health/v1/gateway-status until cdp-proxy* topologies leave the wait list.
+base_cluster_knox_cdp_proxy_topology_retries: 60
+base_cluster_knox_cdp_proxy_topology_delay: 10
+base_cluster_knox_gateway_https_port: 8443
 # During interrupted First Run recovery, start SCM alone and wait for its
 # authenticated HA status to report LEADER before starting Ozone DataNodes.
 base_cluster_ozone_scm_leader_retries: 60
