@@ -1,0 +1,80 @@
+---
+# Enable CDP cluster-wide Auto-TLS (POST .../commands/configureAutoTlsServices).
+# Requires CM-level generateCmca (play 27) first. Play 31 runs this after
+# configureForKerberos/generateCredentials and before First Run or cluster start.
+# Skips when GET .../isTlsEnabled is true.
+
+- name: Read base cluster Auto-TLS enabled state
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/isTlsEnabled
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_is_tls_enabled
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Resolve base cluster Auto-TLS enabled flag
+  ansible.builtin.set_fact:
+    base_cluster_tls_already_enabled: >-
+      {{
+        base_cluster_is_tls_enabled.json
+        if (base_cluster_is_tls_enabled.json is boolean)
+        else (base_cluster_is_tls_enabled.json | default(false) | bool)
+      }}
+
+- name: Show base cluster Auto-TLS state
+  ansible.builtin.debug:
+    msg: >-
+      Cluster {{ cdh_basecluster_name }} isTlsEnabled={{
+      base_cluster_tls_already_enabled | default(false) }} (CM Auto-TLS configured={{
+      cm_autotls_api_enabled | default(false) }}).
+
+- name: Require CM Auto-TLS before enabling cluster services TLS
+  ansible.builtin.assert:
+    that:
+      - cm_autotls_api_enabled | default(false) | bool
+    fail_msg: >-
+      base_cluster_enable_autotls is true but Cloudera Manager does not report Auto-TLS
+      (AUTO_TLS_TYPE). Run 27_setup_cm_autotls.yml and the CM_TLS_KRB_LDAP phase before
+      playbook 31.
+  when:
+    - not (base_cluster_tls_already_enabled | default(false) | bool)
+
+- name: Submit configureAutoTlsServices for base cluster
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/commands/configureAutoTlsServices
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_configure_autotls_services
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: not (base_cluster_tls_already_enabled | default(false) | bool)
+
+- name: Wait for configureAutoTlsServices command
+  ansible.builtin.include_tasks: wait_cm_api_command.yml
+  vars:
+    cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+    cm_api_command_id: "{{ base_cluster_configure_autotls_services.json.id }}"
+    cm_api_command_allow_already_exists: false
+  when:
+    - base_cluster_configure_autotls_services is defined
+    - base_cluster_configure_autotls_services.json.id is defined
+
+- name: Record cluster Auto-TLS enablement this run
+  ansible.builtin.set_fact:
+    base_cluster_cluster_autotls_applied_this_run: true
+  when:
+    - base_cluster_configure_autotls_services is defined
+    - base_cluster_configure_autotls_services.json.id is defined

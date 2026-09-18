@@ -389,7 +389,7 @@ CSD JARs for DataViz / NiFi / NiFi Registry are listed in `scm_csds_effective` d
 **Example `REMOTE_PARCEL_REPO_URLS` (defaults in `group_vars/all.yml`, public archive, `cm_parcel_repo_include_latest: false`):**
 
 ```text
-https://archive.cloudera.com/p/cdh7/7.3.2.10000/parcels/
+https://archive.cloudera.com/p/cdh7/7.3.2.0/parcels/
 https://archive.cloudera.com/p/cdp-pvc-ds/1.5.5-h3300/parcels/
 https://archive.cloudera.com/p/cdv/8.0.7/parcels/
 https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel
@@ -551,6 +551,49 @@ dependency in the new-cluster template and reconciles it on existing Ozone
 services. Without that dependency CM's Ozone CSD receives no `core-site.xml`; its
 `deploy_client_configs` script fails at `add_to_site ''` with
 `Could not find  or  is not a file`.
+
+### Ozone SCM, SafeMode, and certificate signing
+
+Playbook **31** sets `ozone.scm.primordial.node.id` and attaches the single
+`Master` host template to **`groups[base_cluster_master_group][0]`** only
+(`cldr_hostname` + `cluster_domain`, e.g. `pvcbase-master.cldrsetup.local`).
+Workers receive `OZONE_DATANODE` only; OM/SCM/Recon/S3 Gateway run on that one
+master. Before First Run or recovery start, **31** runs `configureForKerberos`
+(when enabled), then `generateCredentials`, then `configureAutoTlsServices`
+(when Auto-TLS is on), so Ozone and other services start under Kerberos +
+cluster TLS, not SIMPLE + HTTP.
+
+**Symptoms:** `ServerNotLeaderException`, SCM SafeMode with `0/N datanodes
+registered`, OM/DN cert enrollment retries, `RAFT closed`, or
+`Invalid domain … in CertificateSignRequest`.
+
+**Likely causes (check in order):**
+
+1. **CM host FQDN vs primordial id** — In CM → Hosts, the master must be
+   `pvcbase-master.<cluster_domain>` matching `ozone.scm.primordial.node.id`.
+   Reconcile via playbook **31** or fix host attachment; do not mix short names
+   with FQDN primordial ids.
+2. **Extra SCM roles (manual HA)** — More than one `STORAGE_CONTAINER_MANAGER`
+   without a supported HA template breaks Ratis leadership. This repo deploys
+   **one** SCM on the first `[base-masters]` host; remove stray SCM roles or
+   extend the cluster spec before expecting HA.
+3. **Security phase skipped** — Run **CM_TLS_KRB_LDAP** (plays **27** → **30**)
+   before **31**. Starting Ozone before `configureForKerberos` /
+   `configureAutoTlsServices` causes cert/Kerberos mismatches.
+4. **Interrupted First Run** — Re-run **31** without deleting the cluster: it
+   stops unhealthy Ozone, starts SCM alone, waits for `ozone admin scm roles`
+   `LEADER`, then starts remaining Ozone roles (see recovery section above).
+5. **`.local` cluster domains** — IPA default `cldrsetup.local` is valid for
+   hostnames but some Ozone/Auto-TLS cert validators log `Invalid domain` for
+   internal TLDs. Confirm SANs on signed certs match the CM host FQDN; for
+   production labs consider a resolvable suffix consistent with CM Auto-TLS.
+
+**Operator checks:** SCM role logs under
+`/var/log/cloudera-scm-agent/process/*-ozone-STORAGE_CONTAINER_MANAGER/`; Ratis
+metadata under `/var/lib/hadoop-ozone/scm/data/` (do not delete on retry);
+`ozone admin scm roles --service-id=<base_cluster_ozone_service_id>` from the
+SCM host after `kinit` with the role keytab; CM → Ozone → Configuration →
+`ozone.scm.primordial.node.id` and `hdfs_service`.
 
 Playbook **31** also imports the idempotent **27** Auto-TLS workflow before base
 cluster reconciliation. When `autotls_enabled: true`, CM's authoritative
@@ -927,7 +970,7 @@ YAML example (`.tfvars.yaml`):
 ```yaml
 aws_region: ap-southeast-1
 environment: development
-cm_version: "7.13.2.10000"
+cm_version: "7.13.2.6"
 instance_groups:
   cldr_mngr:
     count: 1

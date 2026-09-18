@@ -2,5 +2,5 @@
 {% if cm_repo_source == 'internal' %}
 deb [signed-by=/usr/share/keyrings/cloudera-cm-archive-keyring.asc arch={{ 'amd64' if ansible_architecture == 'x86_64' else ansible_architecture }}] http://{{ cm_repo_mirror_host }}/cloudera-repos/cloudera-manager/apt {{ cm_apt_suite | default(ansible_distribution_release + '-cm' + cm_version.split('.')[:3] | join('.')) }} contrib
 {% else %}
-deb [signed-by=/usr/share/keyrings/cloudera-cm-archive-keyring.asc arch={{ 'amd64' if ansible_architecture == 'x86_64' else ansible_architecture }}] https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt ./
+deb [signed-by=/usr/share/keyrings/cloudera-cm-archive-keyring.asc arch={{ 'amd64' if ansible_architecture == 'x86_64' else ansible_architecture }}] https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_repo_version_path | default(cm_version) }}/{{ cm_repo_os_version }}/apt ./
 {% endif %}

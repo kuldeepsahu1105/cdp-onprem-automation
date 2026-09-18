@@ -631,6 +631,44 @@
           - gateway_master_secret
       when: base_cluster_install_services.knox | default(true) | bool
 
+    - name: Set Knox gateway frontend URL for topology rewrite
+      ansible.builtin.set_fact:
+        base_cluster_knox_gateway_frontend_url_effective: >-
+          {{
+            base_cluster_knox_gateway_frontend_url | default('', true) | trim
+            if (base_cluster_knox_gateway_frontend_url | default('', true) | trim | length > 0)
+            else ('https://' ~ base_master_fqdn ~ ':8443/gateway/')
+          }}
+      when: base_cluster_install_services.knox | default(true) | bool
+
+    - name: Configure Knox gateway-site safety valve for CM topology discovery
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Knox gateway-site safety valve
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/knox/roleConfigGroups/{{ base_cluster_knox_gateway_group }}/config
+        cm_config_desired:
+          conf/gateway-site.xml_role_safety_valve: >-
+            {{ lookup('template', 'knox_gateway_site_safety_valve.xml.j2') | trim }}
+      when:
+        - base_cluster_install_services.knox | default(true) | bool
+        - base_cluster_knox_configure_gateway_site | default(true) | bool
+
+    - name: Configure Knox Kerberos authentication for secured clusters
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Knox Kerberos
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/knox/roleConfigGroups/{{ base_cluster_knox_gateway_group }}/config
+        cm_config_desired:
+          kerberos.auth.enabled: >-
+            {{ 'true' if base_cluster_enable_kerberos | default(true) | bool else 'false' }}
+      when:
+        - base_cluster_install_services.knox | default(true) | bool
+        - base_cluster_knox_configure_kerberos | default(true) | bool
+
     - name: Read base cluster initialization marker before Knox trust repair
       ansible.builtin.slurp:
         src: "{{ base_cluster_initialization_marker_path }}"
@@ -908,8 +946,42 @@
         that:
           - base_cluster_ozone_scm_role.name | default('') | length > 0
         fail_msg: >-
-          Ozone is enabled but CM has no STORAGE_CONTAINER_MANAGER role.
-          Correct the Ozone role assignment before cluster startup.
+          Ozone is enabled but CM has no STORAGE_CONTAINER_MANAGER role on
+          {{ base_master_fqdn }}. Correct the Ozone role assignment before cluster startup.
+      when: base_cluster_install_services.ozone | default(true) | bool
+
+    - name: Require single Ozone SCM role on primordial host
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              base_cluster_ozone_roles.json['items'] | default([])
+              | selectattr('type', 'equalto', 'STORAGE_CONTAINER_MANAGER')
+              | list
+              | length
+            ) == 1
+          - >-
+            (
+              base_cluster_ozone_roles.json['items'] | default([])
+              | selectattr('type', 'equalto', 'STORAGE_CONTAINER_MANAGER')
+              | map(attribute='hostRef')
+              | map(attribute='hostname')
+              | first
+              | default('')
+            ) == base_master_fqdn
+        fail_msg: >-
+          This automation expects exactly one STORAGE_CONTAINER_MANAGER on
+          {{ base_master_fqdn }} (ozone.scm.primordial.node.id). CM reports
+          {{
+            base_cluster_ozone_roles.json['items'] | default([])
+            | selectattr('type', 'equalto', 'STORAGE_CONTAINER_MANAGER')
+            | map(attribute='hostRef')
+            | map(attribute='hostname')
+            | list
+            | join(', ')
+          }}.
+          Remove extra SCM roles or align primordial node id and CM host FQDN before
+          startup. Multi-master Ozone HA is not defined in base_cluster_cluster_spec.j2.
       when: base_cluster_install_services.ozone | default(true) | bool
 
     - name: Find missing Ozone roles
@@ -1180,6 +1252,19 @@
       when:
         - base_cluster_enable_kerberos | default(true) | bool
         - base_cluster_create_required | bool or base_cluster_recovery_required | bool
+
+    - name: Refresh Cloudera Manager Auto-TLS state before cluster Auto-TLS
+      ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
+      when:
+        - base_cluster_enable_autotls | default(true) | bool
+        - autotls_enabled | default(true) | bool
+        - not (cm_autotls_config_fetched_this_play | default(false) | bool)
+
+    - name: Enable cluster-wide Auto-TLS on base cluster services
+      ansible.builtin.include_tasks: common_tasks/enable_base_cluster_autotls_api.yml
+      when:
+        - base_cluster_enable_autotls | default(true) | bool
+        - autotls_enabled | default(true) | bool
 
     - name: Show interrupted First Run recovery
       ansible.builtin.debug:
@@ -1795,6 +1880,13 @@
         - base_cluster_first_run_required | bool
         - base_cluster_install_services.hdfs | default(true) | bool
 
+    - name: Verify Knox CDP proxy descriptors after cluster startup
+      ansible.builtin.include_tasks: common_tasks/verify_knox_cdp_proxy_descriptors.yml
+      when:
+        - base_cluster_install_services.knox | default(true) | bool
+        - base_cluster_knox_gateway_group is defined
+        - base_cluster_knox_gateway_group | length > 0
+
     - name: Refresh existing base cluster with name {{ cdh_basecluster_name }}
       ansible.builtin.uri:
         url: >-
@@ -1868,7 +1960,10 @@
       ansible.builtin.set_fact:
         base_cluster_autotls_restart_required: >-
           {{
-            autotls_applied_this_run | default(false) | bool
+            (
+              autotls_applied_this_run | default(false) | bool
+              or base_cluster_cluster_autotls_applied_this_run | default(false) | bool
+            )
             and existing_cluster.status == 200
             and not (base_cluster_recovery_required | bool)
             and (
@@ -2223,6 +2318,36 @@
           Auto-TLS was requested, but Cloudera Manager does not report an enabled
           AUTO_TLS_TYPE. Do not record the cluster initialization marker.
       when: autotls_enabled | default(true) | bool
+
+    - name: Read base cluster service Auto-TLS state
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/isTlsEnabled
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_final_tls_enabled
+      changed_when: false
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+      when: base_cluster_enable_autotls | default(true) | bool
+
+    - name: Require base cluster Auto-TLS (isTlsEnabled)
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              base_cluster_final_tls_enabled.json
+              if (base_cluster_final_tls_enabled.json is boolean)
+              else (base_cluster_final_tls_enabled.json | default(false) | bool)
+            ) | bool
+        fail_msg: >-
+          Cluster {{ cdh_basecluster_name }} does not report isTlsEnabled=true after
+          configureAutoTlsServices. Do not record the cluster initialization marker.
+      when: base_cluster_enable_autotls | default(true) | bool
 
     - name: Restart Cloudera Management Service after base cluster convergence
       ansible.builtin.include_tasks: common_tasks/restart_cm_management_service_api.yml

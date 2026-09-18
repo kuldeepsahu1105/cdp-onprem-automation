@@ -24,7 +24,7 @@
   ansible.builtin.set_fact:
     cm_apt_suite: "{{ ansible_distribution_release }}-cm{{ cm_version.split('.')[:3] | join('.') }}"
     cm_apt_mirror_root: "{{ cldr_repos_path }}/cloudera-manager/apt"
-    cm_apt_archive_url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt"
+    cm_apt_archive_url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_repo_version_path | default(cm_version) }}/{{ cm_repo_os_version }}/apt"
   when: ansible_os_family == "Debian"
 
 - name: Pick inventory host used to resolve CDH parcel suffix

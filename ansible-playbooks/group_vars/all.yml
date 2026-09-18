@@ -233,11 +233,19 @@ ssl_key_file: "server.key"
 # -----------------------------------------------------------------------------
 # 04. Cloudera Manager, Runtime, parcel, and CSD repositories
 # -----------------------------------------------------------------------------
-cm_version: "7.13.2.10000"
-cm_numeric_version: "713210000"
+cm_version: "7.13.2.6"
+cm_numeric_version: "713200006"
+# Archive path under .../p/cm7/ (cumulative hotfixes use patch/<version>/).
+cm_repo_version_path: >-
+  {%- set cm_build = cm_version.split('.')[-1] | int -%}
+  {%- if cm_build >= 1 and cm_build < 100 -%}
+  patch/{{ cm_version }}
+  {%- else -%}
+  {{ cm_version }}
+  {%- endif -%}
 
-cdh_version: "7.3.2.10000"
-cdh_numeric_version: "82216952"
+cdh_version: "7.3.2.0"
+cdh_numeric_version: "77083870"
 # Spark is bundled in the CDH parcel for 7.3.1+ — separate SPARK3 parcel not required
 cdh_spark_bundled_min_version: "7.3.1"
 
@@ -511,6 +519,12 @@ base_cluster_ozone_scm_leader_delay: 5
 # New clusters are Kerberized before First Run; existing unsecure clusters use
 # the guarded stop/configure/credentials/start convergence path.
 base_cluster_enable_kerberos: true
+# Cluster-wide Auto-TLS (configureAutoTlsServices) after configureForKerberos in play 31; CM generateCmca in play 27.
+base_cluster_enable_autotls: true
+# Knox gateway-site safety valve + kerberos.auth.enabled (CDP cdp-proxy* topology discovery).
+base_cluster_knox_gateway_frontend_url: ""
+base_cluster_knox_configure_gateway_site: true
+base_cluster_knox_configure_kerberos: true
 # Restart CMS after base-cluster startup and security convergence.
 base_cluster_restart_cms_after_start: true
 
@@ -702,6 +716,7 @@ deployment_portal_external_url_verify: warn
 # Tier B direct https://ipaserver.<domain> from controller: auto skips on public remote when Caddy IPA vhosts exist
 deployment_ipa_direct_fqdn_external_url_verify: auto
 # Cloudera Auto-TLS (generateCmca) in 27_setup_cm_autotls.yml — default on (not manual TLS).
+# generateCmca configureAllServices:true = wizard "All existing and future clusters" (existing services + future).
 # When true, CM_TLS phase runs playbook 27 → generateCmca → CM UI/API on HTTPS :7183 with Auto-TLS in CM config.
 # Set false for manual-TLS-only CM (:7183 HTTPS without Auto-TLS); playbook 27 skips generateCmca then.
 autotls_enabled: true
@@ -740,6 +755,15 @@ cloudera_cluster_collection_git_ref: v4.4.0
 cloudera_cloud_collection_git_ref: v2.5.1
 
 # KDC integration for Cloudera Manager.
+# CM Administration → Settings: "Manage krb5.conf through Cloudera Manager" (KRB_MANAGE_KRB5_CONF).
+# When true, CM regenerates and deploys krb5.conf on cluster hosts (does not merge IPA/Ansible edits).
+# Preserve fleet ccache policy via KRB_LIBDEFAULTS_SAFETY_VALVE (play 30): same commented KEYRING line as
+# identity playbooks on workers; automation still uses KRB5CCNAME=FILE:… only. Set krb5_cm_managed_krb5_conf:
+# false if hosts must keep a hand-managed /etc/krb5.conf (and krb5.conf.d snippets) without CM overwrite.
+krb5_cm_managed_krb5_conf: true
+krb5_conf_path: "/etc/krb5.conf"
+# Verbatim [libdefaults] lines CM emits when krb5_cm_managed_krb5_conf is true (API: krb_libdefaults_safety_valve).
+krb5_cm_libdefaults_safety_valve: "{{ krb5_libdefaults_default_ccache_commented_line }}"
 # Cloudera Manager KRB_ENC_TYPES (short names). AES only — Java 17+ disables RC4.
 krb5_allow_weak_rc4: false
 krb5_enc_types: >-
