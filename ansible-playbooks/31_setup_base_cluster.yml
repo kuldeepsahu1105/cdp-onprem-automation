@@ -1133,12 +1133,39 @@
           }}
       when: existing_cluster.status == 200
 
+    - name: Determine whether CM First Run still needs to run
+      ansible.builtin.set_fact:
+        base_cluster_pending_first_run: >-
+          {{
+            base_cluster_force_first_run | default(false) | bool
+            or (
+              existing_cluster.status == 200
+              and not (base_cluster_partial_empty | bool)
+              and base_cluster_initialization_incomplete | default(false) | bool
+              and not (
+                base_cluster_install_services.hdfs | default(true) | bool
+                and base_cluster_existing_hdfs_service.serviceState | default('') == 'STARTED'
+                and base_cluster_existing_hdfs_service.healthSummary | default('') == 'GOOD'
+              )
+            )
+          }}
+      when: existing_cluster.status == 200
+
+    - name: Show pending CM First Run on existing cluster
+      ansible.builtin.debug:
+        msg: >-
+          Base cluster exists but First Run never completed (no initialization marker and HDFS
+          is not STARTED/GOOD). Playbook will submit CM First Run instead of interrupted-run
+          recovery or a normal cluster start.
+      when: base_cluster_pending_first_run | default(false) | bool
+
     - name: Determine whether interrupted First Run recovery is required
       ansible.builtin.set_fact:
         base_cluster_recovery_required: >-
           {{
             existing_cluster.status == 200
             and not (base_cluster_partial_empty | bool)
+            and not (base_cluster_pending_first_run | default(false) | bool)
             and not (
               existing_cluster.json.uuid is defined
               and base_cluster_initialization_marker.content is defined
@@ -1240,6 +1267,7 @@
           base_cluster_create_required | bool
           or base_cluster_recovery_required | bool
           or base_cluster_ozone_ordered_recovery_required | bool
+          or base_cluster_pending_first_run | default(false) | bool
 
     - name: Refresh Cloudera Manager Auto-TLS state before cluster Auto-TLS
       ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
@@ -1687,7 +1715,10 @@
     - name: Determine cluster initialization action
       ansible.builtin.set_fact:
         base_cluster_first_run_required: >-
-          {{ base_cluster_create_required | bool }}
+          {{
+            (base_cluster_create_required | bool)
+            or (base_cluster_pending_first_run | default(false) | bool)
+          }}
 
     - name: Show cluster startup wait
       ansible.builtin.debug:

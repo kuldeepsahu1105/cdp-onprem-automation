@@ -434,9 +434,15 @@ the cluster is started if necessary, and CM runs
 
 First Run failures are expanded from the parent CM command into failed service
 commands and their child validation messages in Jenkins. First Run is submitted
-only for a newly created cluster. Existing populated clusters always use CM's
-normal cluster start command, even after configuration repair, so an already
-formatted NameNode is never formatted again. Database and initial service
+for a newly created cluster and for an existing populated cluster when the
+initialization marker is absent **and** HDFS is not yet `STARTED/GOOD` (typical
+when playbook **31** failed during Knox or other pre-First-Run configuration
+before CM ever formatted the NameNode). In that case **31** skips interrupted-run
+recovery and calls `POST .../commands/firstRun` instead of `commands/start`.
+Once HDFS is healthy, reruns use interrupted First Run recovery or a normal
+cluster start so an already formatted NameNode is never formatted again. Set
+`base_cluster_force_first_run: true` only when CM support directs a deliberate
+First Run retry. Database and initial service
 passwords use the `base_cluster_*` variables and should be overridden through
 `ANSIBLE_GROUP_VARS_YAML` or an Ansible vault. Ranger initial passwords must
 contain letters and numbers and be at least eight characters long.

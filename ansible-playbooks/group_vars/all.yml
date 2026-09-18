@@ -473,6 +473,9 @@ base_cluster_kafka_metadata_store: Zookeeper
 base_cluster_force_secret_update: false
 # Records completion of non-destructive service initialization used to recover an interrupted First Run.
 base_cluster_initialization_marker_path: /var/lib/cloudera-scm-server/.ansible-base-cluster-initialized
+# When true, submit CM First Run even on an existing cluster (normally auto-detected when the marker
+# is missing and HDFS is not STARTED/GOOD — e.g. playbook failed on Knox config before First Run).
+base_cluster_force_first_run: false
 
 # CDP base cluster services (31_setup_base_cluster.yml). Override per key in Ansible controller via base_cluster_install_services.
 base_cluster_install_services:

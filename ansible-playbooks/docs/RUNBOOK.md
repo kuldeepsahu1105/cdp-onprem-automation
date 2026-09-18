@@ -88,6 +88,8 @@ Run **CM_TLS_KRB_LDAP** before **CDH_INSTALL**. Do not start CM **First Run** fr
 
 Interrupted First Run recovery in **31** starts ZK/HDFS/Ranger only (no `firstRun`), then ordered Ozone SCM → leader → remaining Ozone roles. See [OPERATIONS_GUIDE.md](OPERATIONS_GUIDE.md) (Run Phase 4 / base cluster).
 
+If **31** failed before First Run (for example Knox `kerberos.auth.enabled` HTTP 400 on a role group), the cluster may exist with an unformatted NameNode. Re-run **31** after the fix: when the CM initialization marker is missing and HDFS is not `STARTED/GOOD`, **31** submits First Run automatically. Do not run the CM UI First Run wizard in parallel.
+
 Run one playbook:
 
 ```bash
