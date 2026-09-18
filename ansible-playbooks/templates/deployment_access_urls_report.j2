@@ -86,4 +86,11 @@ Same VPC (ops private IP):
   Console (direct):   {{ deployment_portal_context.ecs.console_url_direct | default('') }}
   Apps:         {{ deployment_portal_context.ecs.apps_wildcard }}
 {% endif %}
+{% if deployment_portal_context.data_services.links | default([]) | length > 0 %}
+--- CDP Runtime base cluster (play 31; direct + Knox cdp-proxy when enabled) ---
+{% for link in deployment_portal_context.data_services.links %}
+  {{ link.name }}: {{ link.url }}{% if link.description | default('') | length > 0 %} — {{ link.description }}{% endif %}
+
+{% endfor %}
+{% endif %}
 ========== CDP_ACCESS_URLS_END ==========

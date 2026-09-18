@@ -18,7 +18,12 @@
   ansible.builtin.set_fact:
     deployment_portal_endpoints: >-
       {{
-        lookup('template', 'deployment_portal_endpoints.j2') | from_yaml | default([], true)
+        (
+          lookup('template', 'deployment_portal_endpoints.j2') | from_yaml | default([], true)
+        )
+        + (
+          lookup('template', 'deployment_portal_base_cluster_portal_urls.j2') | from_yaml | default({}, true)
+        ).endpoints | default([])
       }}
   when:
     - deployment_portal_context is defined

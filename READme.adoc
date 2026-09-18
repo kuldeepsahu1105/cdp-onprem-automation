@@ -150,7 +150,7 @@ WARNING: Do *NOT* commit license, credentials, or SSH key files to GitHub.
 
 | `CM_VERSION`
 | Cloudera Manager version
-| `7.13.2.10000`
+| `7.13.2.6`
 
 | `create_vpc`
 | Create a new VPC or use an existing one
@@ -245,7 +245,7 @@ AWS_REGION="ap-southeast-1"
 OWNER="ksahu-ygulati"
 ENVIRONMENT="development"
 TERRAFORM_VERSION="latest"
-CM_VERSION="7.13.2.10000"
+CM_VERSION="7.13.2.6"
 ----
 
 NOTE: No need to modify Terraform or Ansible code.
@@ -310,8 +310,8 @@ All Ansible automation lives under `ansible-playbooks/`.
 
 Default versions (configured in `group_vars/all.yml`):
 
-* Cloudera Manager `7.13.2.10000`
-* CDH Runtime `7.3.2.10000` (`cdh_parcel_os_suffix`: `auto` — selects `jammy`/`noble` on Ubuntu workers, `el8`/`el9` on RHEL)
+* Cloudera Manager `7.13.2.6`
+* CDH Runtime `7.3.2.0` (`cdh_parcel_os_suffix`: `auto` — selects `jammy`/`noble` on Ubuntu workers, `el8`/`el9` on RHEL)
 * Java 17, Python 3.11, PostgreSQL 18
 
 === OS support (Ansible)

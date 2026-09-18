@@ -1,0 +1,83 @@
+---
+# Push Knox CDP discovery settings to the gateway host and restart when already running.
+# Required facts: base_cluster_knox_gateway_group; optional change flags from playbook 31.
+
+- name: Resolve Knox CDP discovery configuration changes
+  ansible.builtin.set_fact:
+    base_cluster_knox_discovery_config_changed: >-
+      {{
+        base_cluster_knox_gateway_site_changed | default(false) | bool
+        or base_cluster_knox_kerberos_config_changed | default(false) | bool
+        or base_cluster_knox_autotls_trust_changed | default(false) | bool
+        or base_cluster_cluster_autotls_applied_this_run | default(false) | bool
+      }}
+
+- name: Read Knox service state before CDP discovery refresh
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services/knox?view=summary
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_knox_before_discovery_refresh
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: base_cluster_knox_discovery_config_changed | bool
+
+- name: Deploy Knox client configuration for CDP discovery
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/knox/commands/deployClientConfig
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_knox_deploy_client_config
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: base_cluster_knox_discovery_config_changed | bool
+
+- name: Wait for Knox client configuration deployment
+  ansible.builtin.include_tasks: wait_cm_api_command.yml
+  vars:
+    cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+    cm_api_command_id: "{{ base_cluster_knox_deploy_client_config.json.id }}"
+    cm_api_command_allow_already_exists: false
+  when:
+    - base_cluster_knox_discovery_config_changed | bool
+    - base_cluster_knox_deploy_client_config.json.id is defined
+
+- name: Restart running Knox after CDP discovery configuration
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/knox/commands/restart
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_knox_discovery_restart
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when:
+    - base_cluster_knox_discovery_config_changed | bool
+    - base_cluster_knox_before_discovery_refresh.json.serviceState | default('') == 'STARTED'
+
+- name: Wait for Knox CDP discovery restart
+  ansible.builtin.include_tasks: wait_cm_api_command.yml
+  vars:
+    cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+    cm_api_command_id: "{{ base_cluster_knox_discovery_restart.json.id }}"
+    cm_api_command_allow_already_exists: false
+  when:
+    - base_cluster_knox_discovery_restart is defined
+    - base_cluster_knox_discovery_restart.json.id is defined

@@ -15,7 +15,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 5 | IDENTITY | `2` / `identity` | `11_identity_setup` (imports `detect_identity.yml` as its own first play — `pvc_setup.sh` no longer runs `detect_identity.yml` separately; see [Avoiding duplicate work](#avoiding-duplicate-work-within-a-run)) |
 | 6 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
 | 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `28` → `29` → `30` (requires `04_setup_autossh` from PREREQS) |
-| 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` |
+| 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` (see [RUNBOOK.md](RUNBOOK.md) — CM First Run sub-step order inside **31**) |
 | 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` (includes portal Caddy/index sync) |
 | 10 | ECS_INSTALL | `5` / `ecs` | `33_setup_ecs_cluster` → optional `34_setup_ecs_data_services` |
 | 11 | STARTSTOP_AUTOMATION | — | `37_run_ipaserver_ec2_startstop.yml` on ipaserver (script installed by `36` / IDENTITY phase) |

@@ -78,8 +78,8 @@ ansible-playbook -i inventory.ini 31_setup_base_cluster.yml \
 
 | Variable | Default | Notes |
 |---|---|---|
-| `cm_version` | `7.13.2.10000` | Cloudera Manager |
-| `cdh_version` | `7.3.2.10000` | CDH Runtime parcel |
+| `cm_version` | `7.13.2.6` | Cloudera Manager |
+| `cdh_version` | `7.3.2.0` | CDH Runtime parcel |
 | `cdh_parcel_os_suffix` | `auto` | `noble`, `jammy`, `el8`, `el9`, or `auto` from worker OS |
 | `java_version` | `17` | OpenJDK |
 | `python_version` | `3.11` | System Python |

@@ -100,6 +100,7 @@
         - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
         - cm_api_probe_delegate_to | default('') | length == 0
         - not (cm_api_probe_on_manager_local | default(false) | bool)
+        - not (cm_api_probe_skip_controller_http | default(false) | bool)
         - not (cm_api_discovery_succeeded | default(false) | bool)
 
     - name: CM API — GET /api/version (HTTP) on cldr-mngr
@@ -151,6 +152,7 @@
       when:
         - cm_api_probe_delegate_to | default('') | length == 0
         - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+        - not (cm_api_probe_skip_controller_http | default(false) | bool)
         - not (
             (cm_api_probe_https_first | default(false) | bool)
             and (cm_tls_probe_https is defined)
@@ -176,7 +178,6 @@
       timeout: 15
       ignore_errors: yes
       when:
-        - cm_api_use_https | default(false) | bool
         - not (cm_api_probe_https_first | default(false) | bool)
         - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
         - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
@@ -201,12 +202,12 @@
       timeout: 15
       ignore_errors: yes
       when:
-        - cm_api_use_https | default(false) | bool
         - not (cm_api_probe_https_first | default(false) | bool)
         - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
         - cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
         - cm_api_probe_delegate_to | default('') | length == 0
         - not (cm_api_probe_on_manager_local | default(false) | bool)
+        - not (cm_api_probe_skip_controller_http | default(false) | bool)
         - not (cm_api_discovery_succeeded | default(false) | bool)
 
     - name: CM API — set protocol and port from /api/version results (cldr-mngr address scan)
@@ -382,12 +383,9 @@
         - cm_tls_probe_http is not defined or cm_tls_probe_http is failed or (cm_tls_probe_http.status | default(0) not in [200, 301, 303, 401, 403])
         - >-
           {{
-            not (cm_api_use_https | default(false) | bool)
-            or (
-              cm_tls_probe_https is not defined
-              or cm_tls_probe_https is failed
-              or (cm_tls_probe_https.status | default(0) not in [200, 301, 303, 401, 403])
-            )
+            cm_tls_probe_https is not defined
+            or cm_tls_probe_https is failed
+            or (cm_tls_probe_https.status | default(0) not in [200, 301, 303, 401, 403])
           }}
 
 - name: CM API — assemble URL from probe/discovery facts

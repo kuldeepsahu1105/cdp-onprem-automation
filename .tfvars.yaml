@@ -54,9 +54,9 @@ allowed_ports: '[22,443,80,7180,7183,7182]'
 # cldr_eip_name: development-cldr-mngr-eip
 
 # --- Cloudera versions (Ansible — deploy versions live in group_vars/all.yml) --
-cm_version: "7.13.2.10000"
+cm_version: "7.13.2.6"
 # autotls_enabled: true   # Ansible-only (group_vars/all.yml default); false = manual TLS :7183, skip generateCmca in playbook 27
-# cdh_version: "7.3.2.10000"
+# cdh_version: "7.3.2.0"
 # ecs_pvc_ds_version: "1.5.5-h3300"
 
 # --- AMI (shared by all groups) ----------------------------------------------

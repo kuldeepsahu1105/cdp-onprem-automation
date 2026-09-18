@@ -45,8 +45,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `python_version` | `3.11` | Python version (packages and module enablement) |
 | `postgresql_version` | `18` | PostgreSQL version |
 | `postgres_amazon_linux_2023_native_client_version` | (computed) | Native Amazon Linux 2023 `psql` client package version (`min(postgresql_version, 17)`); CM DB tasks on `cldr-mngr` may use this while the server stays `postgresql_version` |
-| `cm_version` | `7.13.2.10000` | Cloudera Manager version |
-| `cdh_version` | `7.3.2.10000` | CDH parcel version |
+| `cm_version` | `7.13.2.6` | Cloudera Manager version |
+| `cdh_version` | `7.3.2.0` | CDH parcel version |
 
 **`python_version` scope:** On targets, this drives `os_vars` package names (`python{{ python_version }}`, pip/devel or venv/dev packages), RHEL 8 `dnf module enable python<version>`, and on RedHat the `python{{ python_version }}` / `pip{{ python_version }}` executables used in **06_prereq_setup.yml** for install and pip upgrade. It does **not** fully align every Python path in the repo:
 
@@ -66,6 +66,12 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `base_cluster_install_services` | see `all.yml` | Per-service booleans for `31_setup_base_cluster.yml` (Spark 3, Knox, and Solr default `true`; NiFi, NiFi Registry, DataViz, and Phoenix default `false`; Iceberg validates its engine services) |
 | `base_cluster_kafka_metadata_store` | `Zookeeper` | Kafka Broker metadata backend; accepted values are `Zookeeper` and `KRaft` |
 | `base_cluster_knox_readiness_recovery_retries` / `base_cluster_knox_readiness_recovery_delay` | `30` / `10` | Bounded health wait when Knox readiness is the sole First Run failure |
+| `base_cluster_knox_cdp_proxy_topology_retries` / `base_cluster_knox_cdp_proxy_topology_delay` | `60` / `10` | Poll Knox `gateway-status` until CDP proxy topologies deploy (~10 min default) |
+| `base_cluster_knox_gateway_https_port` | `8443` | HTTPS port for Knox topology readiness probes on the gateway host |
+| `base_cluster_ranger_admin_port` | `6182` | Direct Ranger Admin UI on the base cluster master (deployment portal links; Knox uses its own gateway URL) |
+| `base_cluster_*_ui_port` | see `all.yml` | Direct HTTP UI ports on `base-masters` when Knox is off (`hdfs` 9870, `yarn` 8088, `hue` 8888, `hbase` 16010, `atlas` 21000, `ozone` Recon 9888, `solr` 8983, `impala` debug 25000) |
+| `base_cluster_knox_cdp_proxy_path` | `/gateway/cdp-proxy` | Knox topology prefix for portal links when `base_cluster_install_services.knox` is true (`deployment_portal_base_cluster_portal_urls.j2`) |
+| `base_cluster_force_first_run` | `false` | Force `POST .../commands/firstRun` on an existing cluster; normally auto when marker missing and HDFS not `STARTED/GOOD` |
 | `cm_admin_bootstrap_pass` | `admin` | Factory CM password; when `cm_admin_pass` differs, `ensure_cm_admin_password.yml` runs in **24_start_cm** / **27_setup_cm_autotls** only |
 | `base_cluster_yarn_*` | `4096` / `4` | YARN RM/NM memory and vcore limits in cluster spec template |
 | `ecs_cluster_name` | `ECS-Cluster` |
@@ -215,6 +221,8 @@ Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` 
 | `ipaadmin_password` | IPA admin password |
 | `ipa_kdc_host` | `ipaserver.<domain>` |
 | `krb5_enc_types` | Space-separated CM `KRB_ENC_TYPES` (default `aes256-cts aes128-cts`) |
+| `krb5_cm_managed_krb5_conf` | CM `KRB_MANAGE_KRB5_CONF` (default `true`); `false` leaves `/etc/krb5.conf` to IPA/Ansible |
+| `krb5_cm_libdefaults_safety_valve` | CM `KRB_LIBDEFAULTS_SAFETY_VALVE` — preserves commented KEYRING `default_ccache_name` when CM deploys krb5.conf |
 | `krb5_allow_weak_rc4` | `false` — set `true` only if legacy RC4 clients are required (not recommended; Java 17+ disables RC4) |
 | `krb5_ipa_default_enctypes` / `krb5_ipa_permitted_enctypes` | Long krb5 names for FreeIPA KDC `krb5.conf.d` snippet (`configure_ipa_krb_enc_types.yml`) |
 | `krb5_ticket_lifetime` / `krb5_renew_lifetime` | Client ticket request defaults (24 hours / 7 days) used by long-running roles such as Hue `KT_RENEWER` |

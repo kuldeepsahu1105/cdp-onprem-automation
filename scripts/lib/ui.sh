@@ -136,6 +136,7 @@ ui_log_context() {
 
 ui_phase_header() {
   local phase="$1"
+  printf '======== PHASE: %s ========\n' "$phase"
   ui_nl
   ui_rule "═"
   printf '  '
@@ -186,6 +187,7 @@ ui_playbook_header() {
     ui_nl
     ui_rule "─"
   else
+    printf '======== PLAYBOOK: %s ========\n' "$playbook"
     ui_rule "─"
     printf '  '
     ui_log_c "1;30;46" " PLAYBOOK START "

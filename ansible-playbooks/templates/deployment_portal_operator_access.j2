@@ -112,13 +112,13 @@
 {% set _base_master_fqdn = deployment_portal_base_master_fqdn | default('') | trim %}
 {% set svc_creds = [] %}
 {% if base_cluster_install_services.ranger | default(false) | bool and (_base_master_fqdn | length > 0) %}
-{% set svc_creds = svc_creds + [{'label': 'Ranger Admin', 'username': 'rangeradmin', 'password': (databases | selectattr('name', 'equalto', 'ranger') | map(attribute='password') | first | default('rangeradmin')), 'url': 'http://' ~ _base_master_fqdn ~ ':6080', 'note': 'Base cluster'}] %}
+{% set svc_creds = svc_creds + [{'label': 'Ranger Admin', 'username': 'rangeradmin', 'password': (databases | selectattr('name', 'equalto', 'ranger') | map(attribute='password') | first | default('rangeradmin')), 'url': 'http://' ~ _base_master_fqdn ~ ':' ~ base_cluster_ranger_admin_port, 'note': 'Base cluster'}] %}
 {% endif %}
 {% if base_cluster_install_services.knox | default(false) | bool and (_base_master_fqdn | length > 0) %}
-{% set svc_creds = svc_creds + [{'label': 'Knox Gateway', 'username': 'knox', 'password': (databases | selectattr('name', 'equalto', 'knox') | map(attribute='password') | first | default('knox')), 'url': 'https://' ~ _base_master_fqdn ~ ':8443/gateway/homepage/home', 'note': 'Knox DB user'}] %}
+{% set svc_creds = svc_creds + [{'label': 'Knox Gateway', 'username': 'knox', 'password': (databases | selectattr('name', 'equalto', 'knox') | map(attribute='password') | first | default('knox')), 'url': 'https://' ~ _base_master_fqdn ~ ':' ~ (base_cluster_knox_gateway_https_port | default(8443) | string) ~ '/gateway/homepage/home', 'note': 'Knox DB user'}] %}
 {% endif %}
 {% if base_cluster_install_services.hue | default(false) | bool and (_base_master_fqdn | length > 0) %}
-{% set svc_creds = svc_creds + [{'label': 'Hue', 'username': 'hue', 'password': (databases | selectattr('name', 'equalto', 'hue') | map(attribute='password') | first | default('hue')), 'url': 'http://' ~ _base_master_fqdn ~ ':8888', 'note': 'Often LDAP after CM sync'}] %}
+{% set svc_creds = svc_creds + [{'label': 'Hue', 'username': 'hue', 'password': (databases | selectattr('name', 'equalto', 'hue') | map(attribute='password') | first | default('hue')), 'url': 'http://' ~ _base_master_fqdn ~ ':' ~ (base_cluster_hue_ui_port | default(8888) | string), 'note': 'Often LDAP after CM sync'}] %}
 {% endif %}
 {% if svc_creds | length > 0 %}
 {% set ns.sections = ns.sections + [{'id': 'cdp_services', 'title': 'CDP Runtime services', 'intro': 'External DB users from CM database setup (lab defaults).', 'downloads': [], 'credentials': svc_creds}] %}

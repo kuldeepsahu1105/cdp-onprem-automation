@@ -372,6 +372,8 @@ ansible-playbook -i inventory.ini 29_setup_cm_ldap.yml
 ansible-playbook -i inventory.ini 30_setup_cm_krbs.yml
 ```
 
+**Manual KDC account-manager import (CM API):** After `/cm/config` is set, POST credentials (use HTTPS `:7183` when Auto-TLS is on): `curl -sk -u admin:'<cm_admin_pass>' -X POST 'https://<cldr-mngr-fqdn>:7183/api/v59/cm/commands/importAdminCredentials?username=<principal-urlencoded>&password=<password-urlencoded>'` — then restart `cloudera-scm-server` and confirm `ImportCredentials` in `/var/log/cloudera-scm-server/cloudera-scm-server.log`.
+
 **Kerberos encryption types (AES):** Defaults use **AES only** (`krb5_enc_types`: `aes256-cts aes128-cts` in CM; FreeIPA KDC via `/etc/krb5.conf.d/cldr-permitted-enctypes.conf`). RC4 is omitted because Java 17+ and Cloudera recommend AES. Do **not** set `allow_weak_crypto=true` unless you explicitly opt in with `krb5_allow_weak_rc4: true` in group_vars.
 
 **Existing deployments** that already show `rc4-hmac` in the CM Kerberos wizard:
@@ -389,7 +391,7 @@ CSD JARs for DataViz / NiFi / NiFi Registry are listed in `scm_csds_effective` d
 **Example `REMOTE_PARCEL_REPO_URLS` (defaults in `group_vars/all.yml`, public archive, `cm_parcel_repo_include_latest: false`):**
 
 ```text
-https://archive.cloudera.com/p/cdh7/7.3.2.10000/parcels/
+https://archive.cloudera.com/p/cdh7/7.3.2.0/parcels/
 https://archive.cloudera.com/p/cdp-pvc-ds/1.5.5-h3300/parcels/
 https://archive.cloudera.com/p/cdv/8.0.7/parcels/
 https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel
@@ -432,9 +434,15 @@ the cluster is started if necessary, and CM runs
 
 First Run failures are expanded from the parent CM command into failed service
 commands and their child validation messages in Jenkins. First Run is submitted
-only for a newly created cluster. Existing populated clusters always use CM's
-normal cluster start command, even after configuration repair, so an already
-formatted NameNode is never formatted again. Database and initial service
+for a newly created cluster and for an existing populated cluster when the
+initialization marker is absent **and** HDFS is not yet `STARTED/GOOD` (typical
+when playbook **31** failed during Knox or other pre-First-Run configuration
+before CM ever formatted the NameNode). In that case **31** skips interrupted-run
+recovery and calls `POST .../commands/firstRun` instead of `commands/start`.
+Once HDFS is healthy, reruns use interrupted First Run recovery or a normal
+cluster start so an already formatted NameNode is never formatted again. Set
+`base_cluster_force_first_run: true` only when CM support directs a deliberate
+First Run retry. Database and initial service
 passwords use the `base_cluster_*` variables and should be overridden through
 `ANSIBLE_GROUP_VARS_YAML` or an Ansible vault. Ranger initial passwords must
 contain letters and numbers and be at least eight characters long.
@@ -456,10 +464,16 @@ certificate-enrollment retries against a running but not-yet-leader SCM and
 leaving SCM in safe mode with no healthy pipeline. CM First Run retains
 responsibility for initializing SCM on a new cluster; if that initial run is
 interrupted, the next Base Cluster phase applies the ordered recovery without
-deleting Ozone metadata. The optional YARN container-usage directory command is
-not part of automatic recovery; run it only after enabling container-usage
-aggregation and configuring its MapReduce job user. Recovery never invokes
-NameNode format or cluster First Run.
+deleting Ozone metadata. The same ordered recovery runs for an initialized
+existing cluster when the cluster remains started but Ozone is stopped or has
+`BAD` health, so a later SCM or DataNode failure does not depend on the
+initialization marker being absent. A deliberately stopped whole cluster uses
+the normal cluster start path, and an initialized cluster does not restart
+Ozone for a transient `CONCERNING` health state. Interrupted First Run recovery
+continues to recover any non-`GOOD` Ozone state. The optional YARN
+container-usage directory command is not part of automatic recovery; run it
+only after enabling container-usage aggregation and configuring its MapReduce
+job user. Recovery never invokes NameNode format or cluster First Run.
 
 HDFS `/tmp` reconciliation first calls CM's documented
 `hdfsCreateTmpDir` service command. Some CM 7.13/CDP 7.3.2 layouts return
@@ -506,14 +520,24 @@ When `gateway.log` reports `Failed to configure truststore` followed by a
 recover the gateway: `cdp-proxy`, `cdp-proxy-token`, `cdp-proxy-api`, and
 `cdp-datashare-access` cannot be generated. Playbook **31** configures the Knox
 Gateway role's `ssl_client_truststore_*` settings from CM's Auto-TLS truststore
-and password before First Run. On a rerun, it restarts an already-running Knox
-service when those settings change. An interrupted initialization also forces
-the redacted truststore password to be refreshed, preventing a stale Knox
-credential alias from producing `Keystore was tampered with, or password was
-incorrect`. The expected generated
-`gateway-site.xml` value is a non-empty
-`gateway.httpclient.truststore.path`; an empty value confirms the trust
-configuration is missing.
+and password **after** `configureAutoTlsServices` and before First Run. It also
+sets the Knox service `kerberos.auth.enabled` flag (when Kerberos is enabled)
+and the KNOX_GATEWAY safety valve `gateway.cluster.config.monitor.cm.enabled=true`
+plus `gateway.frontend.url`. When any of those change, **31** deploys Knox client
+configuration and restarts an already-running Knox gateway so `gateway-site.xml`
+on the host matches CM before topology discovery runs. An interrupted
+initialization also forces the redacted truststore password to be refreshed,
+preventing a stale Knox credential alias from producing `Keystore was tampered
+with, or password was incorrect`. The expected generated `gateway-site.xml` value
+is a non-empty `gateway.httpclient.truststore.path`; an empty value confirms the
+trust configuration is missing.
+
+After Knox is `STARTED`, **31** polls `https://<knox-host>:8443/gateway/health/v1/gateway-status`
+until the response is no longer `PENDING` and no longer lists `cdp-proxy` or
+`cdp-datashare-access` in the **Waiting for** section (same signal CM's
+`checkTopologyDeployment.sh` uses). Tune `base_cluster_knox_cdp_proxy_topology_retries`
+and `base_cluster_knox_cdp_proxy_topology_delay` when large clusters need more than
+the default ~10 minutes.
 
 `base_cluster_enable_kerberos: true` makes playbook **31** Kerberize every base
 cluster it manages. Auto-TLS and CM KDC/account-manager integration must already
@@ -552,6 +576,49 @@ services. Without that dependency CM's Ozone CSD receives no `core-site.xml`; it
 `deploy_client_configs` script fails at `add_to_site ''` with
 `Could not find  or  is not a file`.
 
+### Ozone SCM, SafeMode, and certificate signing
+
+Playbook **31** sets `ozone.scm.primordial.node.id` and attaches the single
+`Master` host template to **`groups[base_cluster_master_group][0]`** only
+(`cldr_hostname` + `cluster_domain`, e.g. `pvcbase-master.cldrsetup.local`).
+Workers receive `OZONE_DATANODE` only; OM/SCM/Recon/S3 Gateway run on that one
+master. Before First Run or recovery start, **31** runs `configureForKerberos`
+(when enabled), then `generateCredentials`, then `configureAutoTlsServices`
+(when Auto-TLS is on), so Ozone and other services start under Kerberos +
+cluster TLS, not SIMPLE + HTTP.
+
+**Symptoms:** `ServerNotLeaderException`, SCM SafeMode with `0/N datanodes
+registered`, OM/DN cert enrollment retries, `RAFT closed`, or
+`Invalid domain … in CertificateSignRequest`.
+
+**Likely causes (check in order):**
+
+1. **CM host FQDN vs primordial id** — In CM → Hosts, the master must be
+   `pvcbase-master.<cluster_domain>` matching `ozone.scm.primordial.node.id`.
+   Reconcile via playbook **31** or fix host attachment; do not mix short names
+   with FQDN primordial ids.
+2. **Extra SCM roles (manual HA)** — More than one `STORAGE_CONTAINER_MANAGER`
+   without a supported HA template breaks Ratis leadership. This repo deploys
+   **one** SCM on the first `[base-masters]` host; remove stray SCM roles or
+   extend the cluster spec before expecting HA.
+3. **Security phase skipped** — Run **CM_TLS_KRB_LDAP** (plays **27** → **30**)
+   before **31**. Starting Ozone before `configureForKerberos` /
+   `configureAutoTlsServices` causes cert/Kerberos mismatches.
+4. **Interrupted First Run** — Re-run **31** without deleting the cluster: it
+   stops unhealthy Ozone, starts SCM alone, waits for `ozone admin scm roles`
+   `LEADER`, then starts remaining Ozone roles (see recovery section above).
+5. **`.local` cluster domains** — IPA default `cldrsetup.local` is valid for
+   hostnames but some Ozone/Auto-TLS cert validators log `Invalid domain` for
+   internal TLDs. Confirm SANs on signed certs match the CM host FQDN; for
+   production labs consider a resolvable suffix consistent with CM Auto-TLS.
+
+**Operator checks:** SCM role logs under
+`/var/log/cloudera-scm-agent/process/*-ozone-STORAGE_CONTAINER_MANAGER/`; Ratis
+metadata under `/var/lib/hadoop-ozone/scm/data/` (do not delete on retry);
+`ozone admin scm roles --service-id=<base_cluster_ozone_service_id>` from the
+SCM host after `kinit` with the role keytab; CM → Ozone → Configuration →
+`ozone.scm.primordial.node.id` and `hdfs_service`.
+
 Playbook **31** also imports the idempotent **27** Auto-TLS workflow before base
 cluster reconciliation. When `autotls_enabled: true`, CM's authoritative
 `AUTO_TLS_TYPE` is checked and Auto-TLS is enabled only when absent. A newly
@@ -577,9 +644,10 @@ falling back to Hue's local SQLite database. It also installs and verifies
 `psycopg2` inside Hue's parcel-managed Python virtual environment before First
 Run; installing the driver only in `/usr/bin/python3` does not make it available
 to Hue. The system targets are derived as `/usr/bin/python3` and
-`/usr/bin/python{{ python_version }}`; playbook **31** discovers Hue's matching
-`python{{ python_version }}` environment from the active CDH parcel instead of
-hardcoding a Python minor version or full venv interpreter path.
+`/usr/bin/python{{ python_version }}`; playbook **31** discovers Hue's parcel
+interpreter from the active CDH parcel (`lib/hue/build/env/bin/python` for
+Python 3.11+ Hue, or `lib/hue/build/venvs/python{{ python_version }}` on older
+layouts) instead of hardcoding a full venv path.
 
 For an existing cluster, playbook **31** also detects stale Hive Metastore
 catalogs whose names begin with
@@ -927,7 +995,7 @@ YAML example (`.tfvars.yaml`):
 ```yaml
 aws_region: ap-southeast-1
 environment: development
-cm_version: "7.13.2.10000"
+cm_version: "7.13.2.6"
 instance_groups:
   cldr_mngr:
     count: 1
@@ -1151,6 +1219,65 @@ server/agent packages, supervisor state, CSDs, parcels, parcel repositories, and
 cluster-node service state. Even with `cleanup_e2e=true`, PostgreSQL data and
 packages are preserved unless the separate `cleanup_remove_postgres_*` toggles
 are explicitly enabled.
+
+### Manual PostgreSQL reset of the CM `scm` schema
+
+Service-only reset (`98_cleanup_cluster_services.yml`) **does not** change the
+CM PostgreSQL database. Use the steps below when you need an empty `scm` schema
+so Cloudera Manager can be re-initialized (for example after a failed first
+install or before re-running `scm_prepare_database.sh` / playbook **24**) while
+keeping CM packages, agents, parcels, and CSDs on the nodes.
+
+**When to use this (partial / CM DB only) vs full cleanup (`99_cleanup.yml`):**
+
+| Goal | Approach |
+|---|---|
+| Rebuild base/ECS clusters only; keep CM DB and CM state | `98_cleanup_cluster_services.yml` (no PostgreSQL changes) |
+| Wipe CM (and Reports Manager) DB schemas; optionally uninstall CM | `99_cleanup.yml` with `cleanup_remove_cm=true` or `cleanup_e2e=true` and `cleanup_reset_service_databases=true` (default) — see [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) |
+| Wipe only the `scm` schema inside the existing `scm` database; CM still installed | Manual SQL below (or CM-only **99** scope above) |
+
+**Warnings:**
+
+- **Destructive** — removes all tables and other objects in the `scm` schema.
+  CM configuration, cluster metadata, and wizard state in that schema are lost.
+- **Stop Cloudera Manager** — stop `cloudera-scm-server` and CMS
+  (`cloudera-scm-headlamp` / Reports Manager) before running SQL so no sessions
+  hold locks on `scm` objects.
+- **Backup** — dump the database or schema if you might need to recover
+  (`pg_dump -Fc -n scm …` or a snapshot of the PostgreSQL data directory).
+- **Permissions** — connect as a role that can drop objects in the `scm` schema
+  (typically the `scm` database owner or PostgreSQL superuser). Defaults:
+  database `scm`, owner `scm` (`group_vars/all.yml`).
+
+Connect to the CM database on the PostgreSQL host (see portal **Database &
+pgAdmin** or `postgres_host_fqdn` / `postgres_port` in inventory), then run
+**one** of:
+
+**Option 1 — drop each table in the `scm` schema:**
+
+```sql
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'scm') LOOP
+        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+    END LOOP;
+END $$;
+```
+
+**Option 2 — drop and recreate the schema (simpler):**
+
+```sql
+DROP SCHEMA scm CASCADE;
+CREATE SCHEMA scm;
+```
+
+After reset, grant ownership on the new schema to the CM DB user if you used
+Option 2 (`GRANT ALL ON SCHEMA scm TO scm;` / `ALTER SCHEMA scm OWNER TO scm;`
+when your install expects the `scm` role to own the schema). Restart
+`cloudera-scm-server`, then re-run CM database preparation and the CM playbooks
+(**23**–**24**) as needed.
 
 ---
 

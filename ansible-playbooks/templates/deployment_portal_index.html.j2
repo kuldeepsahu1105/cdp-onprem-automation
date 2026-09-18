@@ -1364,7 +1364,7 @@
           {% endif %}
         </ul>
         {% if ctx.data_services.links | length > 0 %}
-        <h2 class="section-title" style="margin-top:1rem">Data services &amp; related URLs</h2>
+        <h2 class="section-title" style="margin-top:1rem">CDP Runtime base cluster &amp; data service URLs</h2>
         <ul class="clean">
           {% for link in ctx.data_services.links %}
           <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — {{ portal_url_for_context(link.url, ctx) }}</li>

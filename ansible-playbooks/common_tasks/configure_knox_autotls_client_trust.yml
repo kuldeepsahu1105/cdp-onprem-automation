@@ -1,0 +1,108 @@
+---
+# Knox KNOX_GATEWAY ssl_client_truststore_* for CM HTTPS discovery (CDP cdp-proxy* topologies).
+# Run after cluster configureAutoTlsServices so the in-cluster truststore and password exist.
+
+- name: Read Knox Gateway Auto-TLS client truststore schema
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/knox/roleConfigGroups/{{ base_cluster_knox_gateway_group }}/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_knox_gateway_config_schema
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Require Knox Gateway Auto-TLS client truststore settings
+  ansible.builtin.assert:
+    that:
+      - >-
+        base_cluster_knox_gateway_config_schema.json['items'] | default([])
+        | selectattr('name', 'equalto', 'ssl_client_truststore_location')
+        | list | length == 1
+      - >-
+        base_cluster_knox_gateway_config_schema.json['items'] | default([])
+        | selectattr('name', 'equalto', 'ssl_client_truststore_password')
+        | list | length == 1
+    fail_msg: >-
+      The Knox Gateway role schema does not expose ssl_client_truststore_location and
+      ssl_client_truststore_password. Available truststore settings:
+      {{
+        base_cluster_knox_gateway_config_schema.json['items'] | default([])
+        | map(attribute='name')
+        | select('search', 'truststore')
+        | list
+        | join(', ')
+      }}.
+
+- name: Check Knox Auto-TLS client truststore
+  ansible.builtin.stat:
+    path: "{{ base_cluster_knox_autotls_truststore_path }}"
+  register: base_cluster_knox_autotls_truststore
+  delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+  become: true
+
+- name: Require Knox Auto-TLS client truststore
+  ansible.builtin.assert:
+    that:
+      - base_cluster_knox_autotls_truststore.stat.exists | default(false) | bool
+      - base_cluster_knox_autotls_truststore.stat.isreg | default(false) | bool
+    fail_msg: >-
+      Knox cannot discover cluster services over the Auto-TLS CM API because
+      {{ base_cluster_knox_autotls_truststore_path }} is missing on
+      {{ groups[base_cluster_master_group][0] }}. Re-run 27_setup_cm_autotls.yml
+      so the CM agent deploys its truststore, then retry the base-cluster phase.
+
+- name: Read Auto-TLS truststore password for Knox
+  ansible.builtin.uri:
+    url: "{{ cm_cluster_module_api_url }}/certs/truststorePassword"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    return_content: yes
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_knox_truststore_password_api
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  no_log: true
+
+- name: Require Auto-TLS truststore password for Knox
+  ansible.builtin.assert:
+    that:
+      - base_cluster_knox_truststore_password_api.content | default('') | trim | length > 0
+    fail_msg: >-
+      CM Auto-TLS did not return a truststore password for Knox service discovery.
+      Re-run 27_setup_cm_autotls.yml and verify the CM cert API before retrying.
+  no_log: true
+
+- name: Configure Knox Auto-TLS client truststore
+  ansible.builtin.include_tasks: reconcile_cm_config_api.yml
+  vars:
+    cm_config_display_name: Knox Gateway Auto-TLS client truststore
+    cm_config_endpoint: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/knox/roleConfigGroups/{{ base_cluster_knox_gateway_group }}/config
+    cm_config_desired:
+      ssl_client_truststore_location: "{{ base_cluster_knox_autotls_truststore_path }}"
+      ssl_client_truststore_password: >-
+        {{ base_cluster_knox_truststore_password_api.content | trim }}
+    cm_config_secret_names:
+      - ssl_client_truststore_password
+    base_cluster_force_secret_update: >-
+      {{
+        base_cluster_knox_update_autotls_truststore_password | default(false) | bool
+        or autotls_applied_this_run | default(false) | bool
+        or base_cluster_cluster_autotls_applied_this_run | default(false) | bool
+        or base_cluster_initialization_incomplete | default(false) | bool
+      }}
+
+- name: Record Knox Auto-TLS client truststore update
+  ansible.builtin.set_fact:
+    base_cluster_knox_autotls_trust_changed: "{{ cm_config_updates | length > 0 }}"

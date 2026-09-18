@@ -2,12 +2,17 @@
 - name: Set OS-specific facts
   ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
-# CM holds JDBC pools to Postgres; record whether we must restart CM after PG comes back.
+# CM holds JDBC pools to Postgres; restart CM on the manager host (not necessarily the Postgres host).
 - name: Check if Cloudera Manager Server is running before PostgreSQL restart
   ansible.builtin.command: systemctl is-active cloudera-scm-server
   register: cm_active_before_pg_restart
   changed_when: false
   failed_when: cm_active_before_pg_restart.rc | int not in [0, 3]
+  become: true
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  when:
+    - cm_manager_inventory_host | default('') | length > 0
+    - cm_manager_inventory_host in hostvars
 
 - name: Restart PostgreSQL to apply configuration (RHEL)
   ansible.builtin.systemd:
@@ -50,21 +55,35 @@
 - name: Assert PostgreSQL accepts remote TCP connections
   ansible.builtin.assert:
     that:
-      - >
-        '0.0.0.0:{{ postgres_port }}' in pg_listen_sockets.stdout
-        or '[::]:{{ postgres_port }}' in pg_listen_sockets.stdout
-        or (ansible_default_ipv4.address ~ ':' ~ postgres_port|string) in pg_listen_sockets.stdout
+      - postgres_listen_accepts_remote_tcp | bool
     fail_msg: >-
       PostgreSQL is still bound to localhost only (127.0.0.1:{{ postgres_port }}).
       Expected listen_addresses='*' in {{ postgres_config_dir }}/postgresql.conf
       and a full cluster restart.
+  vars:
+    _pg_listen_port: "{{ postgres_port | string }}"
+    _pg_host_listen: "{{ ansible_default_ipv4.address }}:{{ postgres_port }}"
+    postgres_listen_accepts_remote_tcp: >-
+      {{
+        ('0.0.0.0:' ~ _pg_listen_port) in pg_listen_sockets.stdout
+        or ('[::]:' ~ _pg_listen_port) in pg_listen_sockets.stdout
+        or (_pg_host_listen in pg_listen_sockets.stdout)
+      }}
 
 - name: Restart Cloudera Manager after PostgreSQL restart (refresh DB connections)
-  ansible.builtin.systemd:
-    name: cloudera-scm-server
-    state: restarted
-  when: cm_active_before_pg_restart.rc | int == 0
+  ansible.builtin.import_tasks: common_tasks/restart_cm_scm_server.yml
+  when:
+    - cm_manager_inventory_host | default('') | length > 0
+    - cm_manager_inventory_host in hostvars
+    - cm_active_before_pg_restart is defined
+    - cm_active_before_pg_restart.rc | int == 0
 
 - name: Wait for Cloudera Manager Server after PostgreSQL restart
   ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
-  when: cm_active_before_pg_restart.rc | int == 0
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true
+  when:
+    - cm_manager_inventory_host | default('') | length > 0
+    - cm_manager_inventory_host in hostvars
+    - cm_active_before_pg_restart is defined
+    - cm_active_before_pg_restart.rc | int == 0

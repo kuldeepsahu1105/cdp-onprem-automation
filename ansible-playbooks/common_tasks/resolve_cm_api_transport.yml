@@ -21,3 +21,17 @@
         if (_cm_api_use_https_effective | bool)
         else cm_http_port | default(7180)
       }}
+
+# When true, skip all /api/version probes from the public Jenkins controller (:7180 and :7183);
+# probe on cldr-mngr instead (see resolve_cm_connect_host.yml).
+- name: CM API — skip doomed HTTP/HTTPS probes from public Jenkins controller after Auto-TLS
+  ansible.builtin.set_fact:
+    cm_api_probe_skip_controller_http: >-
+      {{
+        (cm_api_probe_skip_controller_http_when_autotls | default(true) | bool)
+        and (
+          (cm_autotls_complete | default(false) | bool)
+          or (hostvars.get('localhost', {}).get('cm_autotls_complete', false) | bool)
+          or (_cm_api_use_https_effective | default(false) | bool)
+        )
+      }}

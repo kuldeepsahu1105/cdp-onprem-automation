@@ -109,7 +109,7 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 | `AWS_REGION` | `ap-southeast-1` |
 | `AMI_ID` | `ami-030a276b398df7eb7` (ap-southeast-1) |
 | `TFVARS_FILE` | `.tfvars.yaml` |
-| `GIT_BRANCH` | `main` |
+| `EXECUTION_BRANCH` | `main` (Git branch to checkout for the run) |
 | `CREDENTIALS_USER` | `holautosa` (uses `/home/holautosa/.aws` and `~/.ssh` read-only) |
 | `USE_CREDENTIALS_USER_AWS` | `true` (checked — holautosa `~/.aws`; uncheck for EC2 IAM role via IMDS) |
 | Instance counts/types | Same as `.tfvars.yaml` instance_groups |
@@ -134,9 +134,9 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | `TERRAFORM` | EC2/VPC/SG/EIP via Terraform; `inventory.ini` + `.pem` key |
 | `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 |
 | `PORTAL` | Bootstrap Caddy/pgAdmin/index (`10`); before CM when `DEPLOYMENT_PORTAL_ENABLED` |
-| `IDENTITY` | Ansible **phase 2** — FreeIPA or AD (`11_identity_setup.yml` → `12_setup_freeipa_server.yml` with DNS preflight + VPC forwarder); refreshes portal index (`35`). **Checkout `GIT_BRANCH=main` at commit `e30c2de` or newer** — older trees used `dns_forwarders: no` → `--no-forwarders` on AWS and skipped dig preflight (IDENTITY failures: `[Errno 2]`, ~10 playbook tasks). |
+| `IDENTITY` | Ansible **phase 2** — FreeIPA or AD (`11_identity_setup.yml` → `12_setup_freeipa_server.yml` with DNS preflight + VPC forwarder); refreshes portal index (`35`). **Checkout `EXECUTION_BRANCH=main` at commit `e30c2de` or newer** — older trees used `dns_forwarders: no` → `--no-forwarders` on AWS and skipped dig preflight (IDENTITY failures: `[Errno 2]`, ~10 playbook tasks). |
 | `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
-| `CM_TLS_KRB_LDAP` | Auto-TLS, CMS, LDAP, Kerberos (27→28→29→30); portal refresh. **Checkout `GIT_BRANCH=main` at commit `b03af5a` or newer** — older trees fail in `realign_cm_api_url_after_autotls_restart.yml` with task *CM API — derive API host from existing cm_api_url* (`NoneType` `.group` when `cm_api_url` has no hostname match). |
+| `CM_TLS_KRB_LDAP` | Auto-TLS, CMS, LDAP, Kerberos (27→28→29→30); portal refresh. **Checkout `EXECUTION_BRANCH=main` at commit `b03af5a` or newer** — older trees fail in `realign_cm_api_url_after_autotls_restart.yml` with task *CM API — derive API host from existing cm_api_url* (`NoneType` `.group` when `cm_api_url` has no hostname match). |
 | `CDH_INSTALL` | CDH base cluster (`31_setup_base_cluster.yml`); portal refresh |
 | `MONITORING` | `32_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
 | `ECS_INSTALL` | ECS cluster (`33`); optional `34_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` |
@@ -204,7 +204,7 @@ Fails fast with clear errors for:
 - Empty `PIPELINE_STAGES` (unless `REFRESH_JENKINSFILE=YES`)
 - Invalid `AWS_REGION`, `ENVIRONMENT`, `AMI_ID`, instance types
 - Non-integer or zero counts/volume sizes
-- Invalid `GIT_BRANCH`, `TFVARS_FILE` path traversal
+- Invalid `EXECUTION_BRANCH`, `TFVARS_FILE` path traversal
 
 Warnings (non-blocking): ECS without CDH, CM without prereqs.
 
@@ -226,7 +226,7 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 |---|---|
 | `DRY_RUN` | Terraform plan only / Ansible `--check --diff` |
 | `TFVARS_FILE` | Relative config path (auto-detect if empty) |
-| `GIT_BRANCH` | Branch to checkout — use **`main` at or after `691b943`** for PORTAL operator-access fixes; **`main` at or after `b03af5a`** for CM Auto-TLS API URL realign (PR #188). Saved job parameters that pin a feature branch will run old Ansible even when `main` is fixed — set **`GIT_BRANCH=main`** and confirm **Checkout** logs `b03af5a` or later. |
+| `EXECUTION_BRANCH` | Branch to checkout (default **`main`**). For fixes on `main`, use **`main` at or after `691b943`** (PORTAL) and **`b03af5a`** (CM Auto-TLS realign, PR #188); confirm **Checkout** logs the expected commit. |
 | `NOTIFICATION_EMAIL` | Email recipient |
 | `ANSIBLE_GROUP_VARS_YAML` | Any valid Ansible `group_vars` YAML mapping; dedicated Jenkins parameters take precedence over matching keys |
 | `CM_REPO_USERNAME` | Optional archive.cloudera.com username (empty = skip; no early validation failure) |
@@ -259,6 +259,7 @@ Jenkins `text` parameters render as a **multiline text area**. Any valid Ansible
 
 - Examples: `jenkins/ansible-group-vars.example.yaml`
 - Merged at runtime via `ansible-playbooks/jenkins_override.yml` + `-e @file` (not committed; never under `group_vars/all/`).
+- **Variable precedence (lowest → highest):** `group_vars/all.yml` → operator [`ansible-playbooks/config.yml`](../ansible-playbooks/config.yml) (`include_vars` at playbook start) → **`jenkins_override.yml`** (`-e @file`, including keys from this textarea) → dedicated Jenkins password/boolean parameters (also written into `jenkins_override.yml`) → Jenkins controller safety defaults for reachability/verify keys (override matching textarea keys when running on the agent).
 - Validation rejects only malformed YAML or a top-level value that is not a `key: value` mapping.
 - Dedicated Jenkins parameters and controller safety defaults take precedence over matching textarea values.
 - CM archive login: use `CM_REPO_USERNAME` / `CM_REPO_PASSWORD` (not the textarea).

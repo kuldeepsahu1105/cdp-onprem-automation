@@ -44,8 +44,8 @@ KEYPAIR_NAME="${KEYPAIR_NAME:-${ENVIRONMENT}-${KEYPAIR_NAME_SUFFIX}}"
 CLDR_EIP_NAME="${CLDR_EIP_NAME:-${ENVIRONMENT}-cldr-mngr-eip}"
 
 # --- Cloudera versions (Ansible / group_vars/all.yml — reference only in tfvars) ---
-CM_VERSION="${CM_VERSION:-7.13.2.10000}"
-# CDH_VERSION="7.3.2.10000"           # base cluster parcel (ansible group_vars)
+CM_VERSION="${CM_VERSION:-7.13.2.6}"
+# CDH_VERSION="7.3.2.0"               # base cluster parcel (ansible group_vars)
 # ECS_PVC_DS_VERSION="1.5.5-h3300"    # ECS Data Services repo tag (ansible group_vars)
 
 # --- AMI ---

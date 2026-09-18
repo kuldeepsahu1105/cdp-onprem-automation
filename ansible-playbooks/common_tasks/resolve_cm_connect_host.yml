@@ -247,6 +247,28 @@
     cm_api_uri_delegate_to: ""
   when:
     - cm_api_probe_from_controller_public | default(false) | bool
+    - not (cm_api_probe_skip_controller_http | default(false) | bool)
+
+- name: CM API — delegate /api/version to cldr-mngr (skip public :7180/:7183 on controller)
+  ansible.builtin.set_fact:
+    cm_api_probe_delegate_to: "{{ cm_manager_inventory_host }}"
+    cm_api_probe_host: "{{ cm_connect_host }}"
+    cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
+  when:
+    - cm_api_probe_from_controller_public | default(false) | bool
+    - cm_api_probe_skip_controller_http | default(false) | bool
+    - cm_api_delegate_probes_to_manager | default(true) | bool
+    - not (cm_api_probe_on_manager_local | default(false) | bool)
+
+- name: CM API — skipping doomed controller HTTP/HTTPS probes after Auto-TLS
+  ansible.builtin.debug:
+    msg: >-
+      CM API — skipping controller :7180/:7183 /api/version probes;
+      delegating to {{ cm_manager_inventory_host }} (private HTTPS :{{ cm_https_port | default(7183) }}).
+  when:
+    - cm_api_probe_from_controller_public | default(false) | bool
+    - cm_api_probe_skip_controller_http | default(false) | bool
+    - not (cm_autotls_skip_verbose_probe_logs | default(true) | bool)
 
 - name: CM API — set check host on cldr-mngr
   ansible.builtin.set_fact:
