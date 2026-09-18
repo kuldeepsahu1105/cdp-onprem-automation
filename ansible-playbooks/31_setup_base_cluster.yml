@@ -875,19 +875,6 @@
         - base_cluster_knox_trust_restart is defined
         - base_cluster_knox_trust_restart.json.id is defined
 
-    - name: Refresh Cloudera Manager Auto-TLS state before cluster Auto-TLS
-      ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
-      when:
-        - base_cluster_enable_autotls | default(true) | bool
-        - autotls_enabled | default(true) | bool
-        - not (cm_autotls_config_fetched_this_play | default(false) | bool)
-
-    - name: Enable cluster-wide Auto-TLS on base cluster services
-      ansible.builtin.include_tasks: common_tasks/enable_base_cluster_autotls_api.yml
-      when:
-        - base_cluster_enable_autotls | default(true) | bool
-        - autotls_enabled | default(true) | bool
-
     - name: Read CM hosts for required service roles
       ansible.builtin.uri:
         url: "{{ cm_cluster_module_api_url }}/hosts?view=summary"
@@ -1265,6 +1252,19 @@
       when:
         - base_cluster_enable_kerberos | default(true) | bool
         - base_cluster_create_required | bool or base_cluster_recovery_required | bool
+
+    - name: Refresh Cloudera Manager Auto-TLS state before cluster Auto-TLS
+      ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
+      when:
+        - base_cluster_enable_autotls | default(true) | bool
+        - autotls_enabled | default(true) | bool
+        - not (cm_autotls_config_fetched_this_play | default(false) | bool)
+
+    - name: Enable cluster-wide Auto-TLS on base cluster services
+      ansible.builtin.include_tasks: common_tasks/enable_base_cluster_autotls_api.yml
+      when:
+        - base_cluster_enable_autotls | default(true) | bool
+        - autotls_enabled | default(true) | bool
 
     - name: Show interrupted First Run recovery
       ansible.builtin.debug:

@@ -511,7 +511,7 @@ base_cluster_ozone_scm_leader_delay: 5
 # New clusters are Kerberized before First Run; existing unsecure clusters use
 # the guarded stop/configure/credentials/start convergence path.
 base_cluster_enable_kerberos: true
-# Cluster-wide Auto-TLS (configureAutoTlsServices) after CM generateCmca (play 27).
+# Cluster-wide Auto-TLS (configureAutoTlsServices) after configureForKerberos in play 31; CM generateCmca in play 27.
 base_cluster_enable_autotls: true
 # Knox gateway-site safety valve + kerberos.auth.enabled (CDP cdp-proxy* topology discovery).
 base_cluster_knox_gateway_frontend_url: ""

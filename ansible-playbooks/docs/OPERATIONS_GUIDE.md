@@ -559,8 +559,9 @@ Playbook **31** sets `ozone.scm.primordial.node.id` and attaches the single
 (`cldr_hostname` + `cluster_domain`, e.g. `pvcbase-master.cldrsetup.local`).
 Workers receive `OZONE_DATANODE` only; OM/SCM/Recon/S3 Gateway run on that one
 master. Before First Run or recovery start, **31** runs `configureForKerberos`
-(when enabled) and `configureAutoTlsServices` (when Auto-TLS is on) so Ozone
-starts under Kerberos + cluster TLS, not SIMPLE + HTTP.
+(when enabled), then `generateCredentials`, then `configureAutoTlsServices`
+(when Auto-TLS is on), so Ozone and other services start under Kerberos +
+cluster TLS, not SIMPLE + HTTP.
 
 **Symptoms:** `ServerNotLeaderException`, SCM SafeMode with `0/N datanodes
 registered`, OM/DN cert enrollment retries, `RAFT closed`, or

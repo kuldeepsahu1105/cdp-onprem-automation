@@ -1,6 +1,8 @@
 ---
 # Enable CDP cluster-wide Auto-TLS (POST .../commands/configureAutoTlsServices).
-# Requires CM-level generateCmca (play 27) first. Skips when GET .../isTlsEnabled is true.
+# Requires CM-level generateCmca (play 27) first. Play 31 runs this after
+# configureForKerberos/generateCredentials and before First Run or cluster start.
+# Skips when GET .../isTlsEnabled is true.
 
 - name: Read base cluster Auto-TLS enabled state
   ansible.builtin.uri:
