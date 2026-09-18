@@ -708,6 +708,7 @@ deployment_portal_external_url_verify: warn
 # Tier B direct https://ipaserver.<domain> from controller: auto skips on public remote when Caddy IPA vhosts exist
 deployment_ipa_direct_fqdn_external_url_verify: auto
 # Cloudera Auto-TLS (generateCmca) in 27_setup_cm_autotls.yml — default on (not manual TLS).
+# generateCmca configureAllServices:true = wizard "All existing and future clusters" (existing services + future).
 # When true, CM_TLS phase runs playbook 27 → generateCmca → CM UI/API on HTTPS :7183 with Auto-TLS in CM config.
 # Set false for manual-TLS-only CM (:7183 HTTPS without Auto-TLS); playbook 27 skips generateCmca then.
 autotls_enabled: true
@@ -746,6 +747,9 @@ cloudera_cluster_collection_git_ref: v4.4.0
 cloudera_cloud_collection_git_ref: v2.5.1
 
 # KDC integration for Cloudera Manager.
+# CM Administration → Settings: "Manage krb5.conf through Cloudera Manager" (KRB_MANAGE_KRB5_CONF).
+krb5_cm_managed_krb5_conf: true
+krb5_conf_path: "/etc/krb5.conf"
 # Cloudera Manager KRB_ENC_TYPES (short names). AES only — Java 17+ disables RC4.
 krb5_allow_weak_rc4: false
 krb5_enc_types: >-

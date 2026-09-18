@@ -31,6 +31,8 @@
       - { name: KDC_TYPE, value: "{{ krb5_kdc_type }}" }
       - { name: KDC_ADMIN_HOST, value: "{{ kdc_host }}" }
       - { name: KDC_HOST, value: "{{ kdc_host }}" }
+      - { name: KRB_MANAGE_KRB5_CONF, value: "{{ krb5_cm_managed_krb5_conf | bool | lower }}" }
+      - { name: KRB_KRB5_CONF_PATH, value: "{{ krb5_conf_path | default('/etc/krb5.conf') }}" }
 
 - name: Kerberos — detect whether CM Kerberos settings need update
   ansible.builtin.set_fact:
@@ -60,6 +62,18 @@
           (cm_krb_config_before.json['items'] | default([])
            | selectattr('name', 'equalto', 'KDC_ADMIN_HOST')
            | map(attribute='value') | first | default('')) != kdc_host
+        )
+        or (
+          (cm_krb_config_before.json['items'] | default([])
+           | selectattr('name', 'equalto', 'KRB_MANAGE_KRB5_CONF')
+           | map(attribute='value') | first | default('false') | lower)
+          != (krb5_cm_managed_krb5_conf | bool | lower)
+        )
+        or (
+          (cm_krb_config_before.json['items'] | default([])
+           | selectattr('name', 'equalto', 'KRB_KRB5_CONF_PATH')
+           | map(attribute='value') | first | default('/etc/krb5.conf'))
+          != (krb5_conf_path | default('/etc/krb5.conf'))
         )
       }}
 
