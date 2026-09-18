@@ -959,8 +959,42 @@
         that:
           - base_cluster_ozone_scm_role.name | default('') | length > 0
         fail_msg: >-
-          Ozone is enabled but CM has no STORAGE_CONTAINER_MANAGER role.
-          Correct the Ozone role assignment before cluster startup.
+          Ozone is enabled but CM has no STORAGE_CONTAINER_MANAGER role on
+          {{ base_master_fqdn }}. Correct the Ozone role assignment before cluster startup.
+      when: base_cluster_install_services.ozone | default(true) | bool
+
+    - name: Require single Ozone SCM role on primordial host
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              base_cluster_ozone_roles.json['items'] | default([])
+              | selectattr('type', 'equalto', 'STORAGE_CONTAINER_MANAGER')
+              | list
+              | length
+            ) == 1
+          - >-
+            (
+              base_cluster_ozone_roles.json['items'] | default([])
+              | selectattr('type', 'equalto', 'STORAGE_CONTAINER_MANAGER')
+              | map(attribute='hostRef')
+              | map(attribute='hostname')
+              | first
+              | default('')
+            ) == base_master_fqdn
+        fail_msg: >-
+          This automation expects exactly one STORAGE_CONTAINER_MANAGER on
+          {{ base_master_fqdn }} (ozone.scm.primordial.node.id). CM reports
+          {{
+            base_cluster_ozone_roles.json['items'] | default([])
+            | selectattr('type', 'equalto', 'STORAGE_CONTAINER_MANAGER')
+            | map(attribute='hostRef')
+            | map(attribute='hostname')
+            | list
+            | join(', ')
+          }}.
+          Remove extra SCM roles or align primordial node id and CM host FQDN before
+          startup. Multi-master Ozone HA is not defined in base_cluster_cluster_spec.j2.
       when: base_cluster_install_services.ozone | default(true) | bool
 
     - name: Find missing Ozone roles
