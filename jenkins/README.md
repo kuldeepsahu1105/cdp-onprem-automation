@@ -109,7 +109,7 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 | `AWS_REGION` | `ap-southeast-1` |
 | `AMI_ID` | `ami-030a276b398df7eb7` (ap-southeast-1) |
 | `TFVARS_FILE` | `.tfvars.yaml` |
-| `EXECUTION_BRANCH` | `main` (checkout branch; supersedes legacy `GIT_BRANCH` on refreshed jobs) |
+| `EXECUTION_BRANCH` | `main` (Git branch to checkout for the run) |
 | `CREDENTIALS_USER` | `holautosa` (uses `/home/holautosa/.aws` and `~/.ssh` read-only) |
 | `USE_CREDENTIALS_USER_AWS` | `true` (checked — holautosa `~/.aws`; uncheck for EC2 IAM role via IMDS) |
 | Instance counts/types | Same as `.tfvars.yaml` instance_groups |
@@ -204,7 +204,7 @@ Fails fast with clear errors for:
 - Empty `PIPELINE_STAGES` (unless `REFRESH_JENKINSFILE=YES`)
 - Invalid `AWS_REGION`, `ENVIRONMENT`, `AMI_ID`, instance types
 - Non-integer or zero counts/volume sizes
-- Invalid `EXECUTION_BRANCH` / `GIT_BRANCH`, `TFVARS_FILE` path traversal
+- Invalid `EXECUTION_BRANCH`, `TFVARS_FILE` path traversal
 
 Warnings (non-blocking): ECS without CDH, CM without prereqs.
 
@@ -226,8 +226,7 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 |---|---|
 | `DRY_RUN` | Terraform plan only / Ansible `--check --diff` |
 | `TFVARS_FILE` | Relative config path (auto-detect if empty) |
-| `EXECUTION_BRANCH` | Branch to checkout (default **`main`**). Takes precedence over legacy **`GIT_BRANCH`** after **REFRESH_JENKINSFILE=YES** — use this on saved jobs instead of clearing a stale `GIT_BRANCH` in the UI. For fixes on `main`, use **`main` at or after `691b943`** (PORTAL) and **`b03af5a`** (CM Auto-TLS realign, PR #188); confirm **Checkout** logs the expected commit. |
-| `GIT_BRANCH` | Legacy checkout parameter (used only when `EXECUTION_BRANCH` is empty, e.g. before Jenkinsfile reload). Prefer **`EXECUTION_BRANCH`**. |
+| `EXECUTION_BRANCH` | Branch to checkout (default **`main`**). For fixes on `main`, use **`main` at or after `691b943`** (PORTAL) and **`b03af5a`** (CM Auto-TLS realign, PR #188); confirm **Checkout** logs the expected commit. |
 | `NOTIFICATION_EMAIL` | Email recipient |
 | `ANSIBLE_GROUP_VARS_YAML` | Any valid Ansible `group_vars` YAML mapping; dedicated Jenkins parameters take precedence over matching keys |
 | `CM_REPO_USERNAME` | Optional archive.cloudera.com username (empty = skip; no early validation failure) |

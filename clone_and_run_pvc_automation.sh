@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 GIT_REPO_NAME="cdp-onprem-automation"
 GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/kuldeepsahu1105/$GIT_REPO_NAME.git}"
-GIT_BRANCH="${EXECUTION_BRANCH:-${GIT_BRANCH:-main}}"
+GIT_BRANCH="${EXECUTION_BRANCH:-main}"
 
 resolve_scripts_lib_early() {
   if [[ -f "$SCRIPT_DIR/scripts/lib/load_tfvars.sh" ]]; then

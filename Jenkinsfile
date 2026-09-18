@@ -197,12 +197,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     string(
       name: 'EXECUTION_BRANCH',
       defaultValue: 'main',
-      description: 'Git branch to checkout for this run (no spaces or ..). Default main — use this instead of editing a saved GIT_BRANCH. CM_TLS_KRB_LDAP Auto-TLS realign needs main at b03af5a+ (PR #188).'
-    )
-    string(
-      name: 'GIT_BRANCH',
-      defaultValue: 'main',
-      description: 'Legacy checkout branch (superseded by EXECUTION_BRANCH). Used only when EXECUTION_BRANCH is empty (pre-refresh jobs). After REFRESH_JENKINSFILE=YES, set EXECUTION_BRANCH for the branch you want.'
+      description: 'Git branch to checkout for this run (no spaces or ..). Default main. CM_TLS_KRB_LDAP Auto-TLS realign needs main at b03af5a+ (PR #188).'
     )
     string(name: 'NOTIFICATION_EMAIL', defaultValue: 'ksahu@cloudera.com', description: 'Primary email recipient; a different triggering user email is appended automatically')
     text(
@@ -340,6 +335,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     JENKINS_ALLOWED_CIDRS = "${params.ALLOWED_CIDRS?.trim() ?: ''}"
     JENKINS_ALLOWED_PORTS = "${params.ALLOWED_PORTS?.trim() ?: ''}"
     JENKINS_CLDR_EIP_NAME = "${params.CLDR_EIP_NAME?.trim() ?: ''}"
+    EXECUTION_BRANCH = "${resolveExecutionBranch()}"
     GIT_BRANCH = "${resolveExecutionBranch()}"
     TFVARS_FILE = "${params.TFVARS_FILE?.trim() ?: ''}"
     DRY_RUN = "${params.DRY_RUN}"
@@ -1067,11 +1063,7 @@ def writeCmLicenseContentFile() {
 
 def resolveExecutionBranch() {
   def execution = params.EXECUTION_BRANCH?.trim()
-  if (execution) {
-    return execution
-  }
-  def legacy = params.GIT_BRANCH?.trim()
-  return legacy ?: 'main'
+  return execution ?: 'main'
 }
 
 def ansibleGroupVarsYamlHasKeys(String yamlText) {
