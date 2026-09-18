@@ -456,10 +456,16 @@ certificate-enrollment retries against a running but not-yet-leader SCM and
 leaving SCM in safe mode with no healthy pipeline. CM First Run retains
 responsibility for initializing SCM on a new cluster; if that initial run is
 interrupted, the next Base Cluster phase applies the ordered recovery without
-deleting Ozone metadata. The optional YARN container-usage directory command is
-not part of automatic recovery; run it only after enabling container-usage
-aggregation and configuring its MapReduce job user. Recovery never invokes
-NameNode format or cluster First Run.
+deleting Ozone metadata. The same ordered recovery runs for an initialized
+existing cluster when the cluster remains started but Ozone is stopped or has
+`BAD` health, so a later SCM or DataNode failure does not depend on the
+initialization marker being absent. A deliberately stopped whole cluster uses
+the normal cluster start path, and an initialized cluster does not restart
+Ozone for a transient `CONCERNING` health state. Interrupted First Run recovery
+continues to recover any non-`GOOD` Ozone state. The optional YARN
+container-usage directory command is not part of automatic recovery; run it
+only after enabling container-usage aggregation and configuring its MapReduce
+job user. Recovery never invokes NameNode format or cluster First Run.
 
 HDFS `/tmp` reconciliation first calls CM's documented
 `hdfsCreateTmpDir` service command. Some CM 7.13/CDP 7.3.2 layouts return

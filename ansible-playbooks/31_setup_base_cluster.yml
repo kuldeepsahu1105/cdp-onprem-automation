@@ -1247,11 +1247,39 @@
             )
           }}
 
+    - name: Determine whether ordered Ozone recovery is required
+      ansible.builtin.set_fact:
+        base_cluster_ozone_ordered_recovery_required: >-
+          {{
+            existing_cluster.status == 200
+            and not (base_cluster_partial_empty | bool)
+            and base_cluster_install_services.ozone | default(true) | bool
+            and (
+              (
+                base_cluster_recovery_required | bool
+                and (
+                  base_cluster_existing_ozone_service.serviceState | default('') != 'STARTED'
+                  or base_cluster_existing_ozone_service.healthSummary | default('') != 'GOOD'
+                )
+              )
+              or (
+                existing_cluster.json.clusterState | default('') == 'STARTED'
+                and (
+                  base_cluster_existing_ozone_service.serviceState | default('') != 'STARTED'
+                  or base_cluster_existing_ozone_service.healthSummary | default('') == 'BAD'
+                )
+              )
+            )
+          }}
+
     - name: Prepare Kerberos before any new or recovery cluster service start
       ansible.builtin.include_tasks: common_tasks/prepare_cluster_kerberos_before_start.yml
       when:
         - base_cluster_enable_kerberos | default(true) | bool
-        - base_cluster_create_required | bool or base_cluster_recovery_required | bool
+        - >-
+          base_cluster_create_required | bool
+          or base_cluster_recovery_required | bool
+          or base_cluster_ozone_ordered_recovery_required | bool
 
     - name: Refresh Cloudera Manager Auto-TLS state before cluster Auto-TLS
       ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
@@ -1275,20 +1303,29 @@
           invoked.
       when: base_cluster_recovery_required | bool
 
+    - name: Show ordered Ozone recovery
+      ansible.builtin.debug:
+        msg: >-
+          Ozone requires ordered recovery. Stopping any remaining Ozone roles,
+          starting SCM alone, waiting for authenticated SCM leadership, and then
+          starting the remaining Ozone roles.
+      when: base_cluster_ozone_ordered_recovery_required | bool
+
+    - name: Stop unhealthy Ozone before ordered recovery
+      ansible.builtin.include_tasks: common_tasks/run_cm_service_setup_command.yml
+      vars:
+        base_cluster_setup_command:
+          service: ozone
+          command: stop
+      when:
+        - base_cluster_ozone_ordered_recovery_required | bool
+        - base_cluster_existing_ozone_service.serviceState | default('') == 'STARTED'
+
     - name: Stop partially running services before initialization recovery
       ansible.builtin.include_tasks: common_tasks/run_cm_service_setup_command.yml
       loop: >-
         {{
           (
-            [{'service': 'ozone', 'command': 'stop'}]
-            if (
-              base_cluster_install_services.ozone | default(true) | bool
-              and base_cluster_existing_ozone_service.serviceState | default('') == 'STARTED'
-              and base_cluster_existing_ozone_service.healthSummary | default('') != 'GOOD'
-            )
-            else []
-          )
-          + (
             [{'service': 'solr', 'command': 'stop'}]
             if (
               base_cluster_install_services.solr | default(false) | bool
@@ -1561,7 +1598,7 @@
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
       when:
         - base_cluster_install_services.ozone | default(true) | bool
-        - base_cluster_recovery_required | bool
+        - base_cluster_ozone_ordered_recovery_required | bool
 
     - name: Start Ozone SCM before other Ozone roles
       ansible.builtin.uri:
@@ -1583,7 +1620,7 @@
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
       when:
         - base_cluster_install_services.ozone | default(true) | bool
-        - base_cluster_recovery_required | bool
+        - base_cluster_ozone_ordered_recovery_required | bool
         - base_cluster_ozone_scm_state.json.roleState | default('') != 'STARTED'
 
     - name: Require Ozone SCM role start command
@@ -1660,7 +1697,7 @@
       delegate_to: "{{ groups[base_cluster_master_group][0] }}"
       when:
         - base_cluster_install_services.ozone | default(true) | bool
-        - base_cluster_recovery_required | bool
+        - base_cluster_ozone_ordered_recovery_required | bool
 
     - name: Start Ozone roles after SCM leader recovery
       ansible.builtin.include_tasks: common_tasks/run_cm_service_setup_command.yml
@@ -1670,7 +1707,7 @@
           command: start
       when:
         - base_cluster_install_services.ozone | default(true) | bool
-        - base_cluster_recovery_required | bool
+        - base_cluster_ozone_ordered_recovery_required | bool
 
     - name: Determine cluster initialization action
       ansible.builtin.set_fact:
