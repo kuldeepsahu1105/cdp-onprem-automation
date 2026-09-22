@@ -219,3 +219,5 @@ monitoring_stack_enabled: true
 monitoring_node_exporter_port: 19100
 # Host-level process_exporter listener; kept outside common Kubernetes exporter host ports.
 monitoring_process_exporter_port: 19256
+# Host-level cAdvisor Docker publish on ECS/cluster nodes (Prometheus job cadvisor_host).
+monitoring_cadvisor_cluster_port: 19180
