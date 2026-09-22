@@ -24,6 +24,7 @@
         monitoring_prometheus_host_port | int,
         monitoring_alertmanager_host_port | int,
         monitoring_cadvisor_host_port | int,
+        monitoring_blackbox_exporter_host_port | int,
       ]
       + (
           [deployment_portal_ipa_https_port | default(9443) | int]

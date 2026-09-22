@@ -1,0 +1,40 @@
+---
+# Poll Knox gateway-status until CDP proxy topologies are no longer pending.
+# CM checkTopologyDeployment.sh treats HTTP 200 body PENDING or "Waiting for [cdp-proxy..." as not ready.
+
+- name: Read Knox service state for topology readiness poll
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services/knox?view=summary
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_knox_topology_service
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Poll Knox gateway CDP proxy topology deployment
+  ansible.builtin.uri:
+    url: >-
+      https://127.0.0.1:{{ base_cluster_knox_gateway_https_port | default(8443) }}/gateway/health/v1/gateway-status
+    method: GET
+    validate_certs: no
+    status_code: [200]
+    return_content: yes
+    follow_redirects: none
+  register: base_cluster_knox_gateway_topology_status
+  until: >-
+    base_cluster_knox_gateway_topology_status.status | default(0) | int == 200
+    and (base_cluster_knox_gateway_topology_status.content | default('', true) | trim) != 'PENDING'
+    and 'Waiting for [cdp-proxy' not in (base_cluster_knox_gateway_topology_status.content | default('', true))
+    and 'Waiting for [cdp-datashare-access' not in (base_cluster_knox_gateway_topology_status.content | default('', true))
+  retries: "{{ base_cluster_knox_cdp_proxy_topology_retries | default(60) }}"
+  delay: "{{ base_cluster_knox_cdp_proxy_topology_delay | default(10) }}"
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+  when: base_cluster_knox_topology_service.json.serviceState | default('') == 'STARTED'

@@ -68,10 +68,10 @@ python_version: "3.11"
 postgresql_version: 17
 postgres_jdbc_version: "42.7.10"
 
-cm_version: "7.13.2.10000"
-cm_numeric_version: "713210000"
-cdh_version: "7.3.2.10000"
-cdh_numeric_version: "82216952"
+cm_version: "7.13.2.6"
+cm_numeric_version: "713200006"
+cdh_version: "7.3.2.0"
+cdh_numeric_version: "77083870"
 cdv_version: "8.0.7"
 cfm_version: "2.1.7.3004"
 cfm_nifi_app_version: "1.28.1"
@@ -107,6 +107,9 @@ base_cluster_module_async_timeout: 7500
 base_cluster_kafka_metadata_store: Zookeeper  # Zookeeper | KRaft; choose before Kafka's first start
 base_cluster_module_poll_interval: 15
 base_cluster_enable_kerberos: true  # Kerberize new clusters before First Run and converge existing clusters
+base_cluster_enable_autotls: true
+base_cluster_knox_configure_gateway_site: true
+base_cluster_knox_configure_kerberos: true
 base_cluster_restart_cms_after_start: true  # Restart CMS after base-cluster startup/security convergence
 
 # Required CDP service settings. Supply production secrets through
@@ -216,3 +219,5 @@ monitoring_stack_enabled: true
 monitoring_node_exporter_port: 19100
 # Host-level process_exporter listener; kept outside common Kubernetes exporter host ports.
 monitoring_process_exporter_port: 19256
+# Host-level cAdvisor Docker publish on ECS/cluster nodes (Prometheus job cadvisor_host).
+monitoring_cadvisor_cluster_port: 19180

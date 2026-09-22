@@ -1,0 +1,83 @@
+{# YAML list of blackbox probe targets (module, target, labels) for Prometheus. #}
+{% if monitoring_blackbox_exporter_enabled | default(true) | bool %}
+{% set _ops_priv = deployment_portal_ops_private_ip | default('') | trim %}
+{% set _http_port = deployment_portal_http_port | default(81) %}
+{% if _ops_priv | length > 0 %}
+- module: http_2xx
+  target: "http://{{ _ops_priv }}:{{ _http_port }}/"
+  labels:
+    probe: portal_caddy
+    service: deployment_portal
+{% endif %}
+{% if deployment_portal_cm_private_ip | default('') | length > 0 %}
+{% set _cm_priv = deployment_portal_cm_private_ip | trim %}
+- module: http_2xx_ssl
+  target: "https://{{ _cm_priv }}:{{ cm_https_port | default(7183) }}/api/version"
+  labels:
+    probe: cm_api_https
+    service: cloudera_manager
+- module: http_2xx_ssl
+  target: "https://{{ _cm_priv }}:{{ cm_http_port | default(7180) }}/"
+  labels:
+    probe: cm_ui_https
+    service: cloudera_manager
+- module: tcp_connect
+  target: "{{ _cm_priv }}:{{ postgres_port | default(5432) }}"
+  labels:
+    probe: cm_postgres_tcp
+    service: postgresql
+{% endif %}
+{% if deployment_portal_has_ipa | default(false) | bool and (deployment_portal_ipa_upstream_host | default('') | length > 0) %}
+- module: http_2xx
+  target: "http://{{ deployment_portal_ipa_upstream_host | trim }}:80/ipa/json"
+  labels:
+    probe: ipa_json
+    service: freeipa
+{% endif %}
+- module: http_2xx
+  target: "http://{{ deployment_portal_pgadmin_container | default('cldr-portal-pgadmin') }}:80/"
+  labels:
+    probe: pgadmin_container
+    service: pgadmin
+- module: http_2xx
+  target: "http://{{ monitoring_grafana_container | default('cldr-mon-grafana') }}:3000/login"
+  labels:
+    probe: grafana_ui
+    service: grafana
+- module: http_2xx
+  target: "http://{{ monitoring_prometheus_container | default('cldr-mon-prometheus') }}:9090/-/healthy"
+  labels:
+    probe: prometheus_health
+    service: prometheus
+{% if base_cluster_install_services.knox | default(false) | bool and base_cluster_master_group in groups and groups[base_cluster_master_group] | length > 0 %}
+{% set _knox_host = hostvars[groups[base_cluster_master_group][0]].private_ip | default(hostvars[groups[base_cluster_master_group][0]].ansible_host | default('')) %}
+{% if _knox_host | length > 0 %}
+- module: tcp_connect
+  target: "{{ _knox_host }}:{{ base_cluster_knox_gateway_https_port | default(8443) }}"
+  labels:
+    probe: knox_gateway_tcp
+    service: knox
+{% endif %}
+{% endif %}
+{% if deployment_portal_ecs_present | default(false) | bool and (ecs_app_domain | default('') | length > 0) %}
+{% set _ecs_url = ecs_control_plane_url | default('') | trim %}
+{% if _ecs_url | length == 0 %}
+{% set _ecs_url = 'https://console.' ~ ecs_app_domain %}
+{% endif %}
+- module: http_2xx_ssl
+  target: "{{ _ecs_url }}"
+  labels:
+    probe: ecs_console_https
+    service: ecs
+{% endif %}
+{% for extra in monitoring_blackbox_extra_probes | default([]) %}
+{% if extra.module | default('') | length > 0 and extra.target | default('') | length > 0 %}
+- module: {{ extra.module }}
+  target: "{{ extra.target }}"
+  labels:
+{% for label_key, label_val in (extra.labels | default({})).items() %}
+    {{ label_key }}: {{ label_val }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}

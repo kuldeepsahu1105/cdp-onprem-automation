@@ -162,7 +162,7 @@ If Tier **B** warns but Tier **A** passed, open security groups for the relevant
 
 **Caddy still on legacy :8088 in `docker ps`:** compose binds `0.0.0.0:${DEPLOYMENT_PORTAL_HTTP_PORT}` (repo default **81** in `.env` via `deployment_portal_http_port`). An ops host that was provisioned earlier keeps the old publish until compose is re-rendered and Caddy is recreated — `docker compose up -d` alone does not remapping ports. Fix: re-run Jenkins **PORTAL** (play 10/35 re-templates compose/`.env` and `--force-recreate caddy` when the files change) or on **ipaserver**: `cd /opt/cldr-deployment-portal && docker compose up -d --force-recreate caddy`. Confirm with `curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:81/`.
 
-**Monitoring host ports:** Grafana (**`monitoring_grafana_host_port`**, default **3000**), Prometheus (**9090**), Alertmanager (**9093**), and cAdvisor (**8089**) publish on the ops host (`0.0.0.0:PORT` in `docker ps`) for direct browser and Tier **B** access. Caddy on **`deployment_portal_http_port`** (default **81**) still serves path routes (`/grafana/`, …) and lab vhosts when `caddy_vhost_enabled` is true — host publishes are **in addition**, not a replacement. With lab vhosts enabled, the portal index prefers monitoring URLs like **`http://cadvisor.<ops-public-ip-dashed>.<caddy_vhost_public_base>:81/`** (same pattern as Grafana/Prometheus; Caddy reverse-proxies to the `cadvisor` container on **8080**). Example for deployment prefix **`ptgtyv1`** on **ipaserver** (ops public IP `52.221.251.41`): `http://cadvisor.52-221-251-41.pvc.cloudera-labs.com:81/` when `caddy_vhost_dns_mode: embedded_ip`. After changing ports, re-run Jenkins **MONITORING** (play **32**) or `docker compose -f {{ monitoring_config_dir | default('/opt/cldr-monitoring') }}/docker-compose.yml up -d --force-recreate`.
+**Monitoring host ports:** Grafana (**`monitoring_grafana_host_port`**, default **3000**), Prometheus (**9090**), Alertmanager (**9093**), cAdvisor (**8089**), and blackbox_exporter (**`monitoring_blackbox_exporter_host_port`**, default **19115**) publish on the ops host (`0.0.0.0:PORT` in `docker ps`) for direct browser and Tier **B** access. Caddy on **`deployment_portal_http_port`** (default **81**) still serves path routes (`/grafana/`, …) and lab vhosts when `caddy_vhost_enabled` is true — host publishes are **in addition**, not a replacement. With lab vhosts enabled, the portal index prefers monitoring URLs like **`http://cadvisor.<ops-public-ip-dashed>.<caddy_vhost_public_base>:81/`** (same pattern as Grafana/Prometheus; Caddy reverse-proxies to the `cadvisor` container on **8080**). Example for deployment prefix **`ptgtyv1`** on **ipaserver** (ops public IP `52.221.251.41`): `http://cadvisor.52-221-251-41.pvc.cloudera-labs.com:81/` when `caddy_vhost_dns_mode: embedded_ip`. After changing ports, re-run Jenkins **MONITORING** (play **32**) or `docker compose -f {{ monitoring_config_dir | default('/opt/cldr-monitoring') }}/docker-compose.yml up -d --force-recreate`.
 
 **node_exporter (host metrics):** Playbooks **10** (when `monitoring_stack_enabled`), **32** (`MONITORING_STACK_ENABLED=true ansible-playbook -i inventory.ini 32_setup_monitoring_stack.yml`), and **35** (when monitoring routes are active) import **`enroll_monitoring_exporters.yml`**, which installs `node_exporter` as a systemd service (`common_tasks/install_node_exporter.yml`) on every host in `monitoring_node_exporter_host_groups` (default: `ipaserver`, `cldr-mngr`, `base-masters`, `base-workers`, `ecs-masters`, `ecs-workers`) and appends a `node_exporter` job to `{{ monitoring_config_dir }}/prometheus.yml` with one static target per host at `<private_ip>:{{ monitoring_node_exporter_port }}` (default port **19100**). Port **19100** intentionally leaves the commonly claimed Kubernetes DaemonSet `hostPort: 9100` free on ECS nodes. Targets always use the **private IP** — the Prometheus container runs on the ops host's `deployment_portal`/`monitoring_internal` Docker bridge networks and reaches other cluster hosts over the VPC/private network, not the (possibly Jenkins-only-reachable) public IP. Set `monitoring_node_exporter_enabled: false` to skip installation and drop the scrape job entirely; this does not affect `monitoring_stack_enabled` or the Docker-based Prometheus/Grafana/Alertmanager/cAdvisor stack, and never runs when those are disabled (the render block is still gated by `deployment_portal_monitoring_routes_enabled`). Verify: `systemctl status node_exporter` on any target host, then check **Status → Targets** in the Prometheus UI for `job="node_exporter"`.
 
@@ -177,11 +177,54 @@ If Tier **B** warns but Tier **A** passed, open security groups for the relevant
 | `node_exporter` job missing entirely | `monitoring_node_exporter_enabled: false` or empty `monitoring_node_exporter_host_groups` / missing `private_ip` in inventory | Check `group_vars/all.yml` and inventory; re-run play **32** after fixing. |
 | `process_exporter` job missing while `node_exporter` exists | Stale `prometheus.yml` from before process enrollment, or ops host render without `deployment_portal_process_exporter_targets` | Re-run **MONITORING** or **35** after upgrading to a build that copies process scrape facts in `deployment_portal_load_host_facts.yml`; confirm `/opt/cldr-monitoring/prometheus.yml` contains `job_name: process_exporter`. |
 
-**cAdvisor (container-level metrics):** Already part of the monitoring Docker Compose stack (`monitoring_docker-compose.yml.j2`, service `cadvisor`, image `monitoring_cadvisor_image`) — no separate enable flag; it runs whenever `monitoring_stack_enabled` (or an already-deployed stack) is true. Mounts `/`, `/var/run`, `/sys`, and `/var/lib/docker` read-only from the ops host to report per-container CPU/memory/network/disk-IO for every container on that host (Caddy, pgAdmin, Prometheus, Grafana, Alertmanager, and cAdvisor itself), scraped by Prometheus as the `cadvisor` job (`container_*` metrics, e.g. `container_last_seen`, `container_cpu_usage_seconds_total`). Exposed on host port **`monitoring_cadvisor_host_port`** (default **8089**) and via Caddy `/cadvisor/` (path route) or the `cadvisor.<ip>.<base>` lab vhost when `caddy_vhost_enabled` is true. cAdvisor only sees **containers on the ops host** — it does not report on cluster nodes (CM, base-masters/workers, ECS); use `node_exporter` + `process_exporter` for host/process-level metrics on those.
+**cAdvisor (container-level metrics):** Two layers:
 
-**Grafana provisioning (datasources + prepopulated dashboard):** Gated by `monitoring_grafana_provisioning_enabled` (default `true`) inside the same `deployment_portal_monitoring_routes_enabled` block as the rest of the stack. Ansible renders `{{ monitoring_config_dir }}/grafana/provisioning/datasources/datasources.yml` (Prometheus datasource, `uid: prometheus`, `isDefault: true`; Alertmanager datasource, `uid: alertmanager`, linked via `jsonData.alertmanagerUid` on the Prometheus datasource so Grafana's alerting UI can show Alertmanager state — this is the Prometheus↔Alertmanager↔Grafana inter-linking) and `{{ monitoring_config_dir }}/grafana/provisioning/dashboards/dashboards.yml` (a `file`-type dashboard provider pointing at `/var/lib/grafana/dashboards`, folder **"Cloudera Monitoring"**). The dashboard JSON itself (`ansible-playbooks/files/grafana_dashboards/cm_cluster_overview.json`, a minimal custom "Cloudera Cluster Overview" — not the full community `node_exporter`/id-**1860** dashboard, kept small on purpose) is copied (not templated) to `{{ monitoring_config_dir }}/grafana/dashboards/` and bind-mounted read-only into the Grafana container. It ships CPU/memory/root-filesystem/network panels from `node_exporter`, top-process CPU/memory tables from `process_exporter`, a container count from cAdvisor, and a firing-alerts count from Alertmanager. All panels reference the datasource by the fixed `uid: prometheus` set above (not Grafana's auto-generated id), so the dashboard loads correctly on a fresh provision with no manual wiring. To import the full community dashboards instead (optional, requires internet/Grafana.com access from the browser): **Dashboards → New → Import**, ids **1860** (Node Exporter Full) and **249** (process-exporter) — pick the **Prometheus** datasource (uid `prometheus`) when prompted. Set `monitoring_grafana_provisioning_enabled: false` to skip provisioning entirely and use a bare Grafana install.
+1. **Ops host (portal / monitoring Compose)** — service `cadvisor` in `monitoring_docker-compose.yml.j2` (`monitoring_cadvisor_image`, container `cldr-mon-cadvisor`). Runs whenever `monitoring_stack_enabled` (or an already-deployed stack) is true. Mounts `/`, `/var/run`, `/sys`, and `/var/lib/docker` read-only from the ops host (Caddy, pgAdmin, Prometheus, Grafana, Alertmanager, blackbox_exporter, etc.). Prometheus job **`cadvisor`** scrapes `cldr-mon-cadvisor:8080` on the Docker network (`cadvisor_scope: ops`). UI on host port **`monitoring_cadvisor_host_port`** (default **8089**) and via Caddy `/cadvisor/` or the `cadvisor.<ip>.<base>` lab vhost when `caddy_vhost_enabled` is true.
 
-**Prometheus alerting rules + Alertmanager receiver:** Gated by `monitoring_alert_rules_enabled` (default `true`). Ansible renders `{{ monitoring_config_dir }}/rules/alerts.yml` (group `cldr-cluster-basic-alerts`: `InstanceDown` — `up == 0` for `monitoring_alert_instance_down_for`, default **2m**; `HostHighCpuLoad` — CPU busy % above `monitoring_alert_high_cpu_threshold` (default **85**) for `monitoring_alert_high_cpu_for` (default **10m**); `HostHighMemoryUsage` — memory used % above `monitoring_alert_high_mem_threshold` (default **90**) for `monitoring_alert_high_mem_for` (default **10m**)) and Prometheus loads it via `rule_files: [/etc/prometheus/rules/*.yml]`. Alertmanager's `route.group_by` is `monitoring_alertmanager_group_by` (default `[alertname, severity]`); the `default` receiver has **no notification integration configured** out of the box (labs just need alerts visible in the Alertmanager/Grafana UI, not paged) — set `monitoring_alertmanager_receiver_webhook_url` to a real webhook (Slack/Opsgenie relay, etc.) to notify externally; when set, a `webhook_configs` entry with `send_resolved: true` is added to the `default` receiver. Set `monitoring_alert_rules_enabled: false` to skip rule rendering (the empty `{{ monitoring_config_dir }}/rules/` mount stays, which Prometheus tolerates). Verify: **Alerts** tab in the Prometheus UI, or **Status → Rules**; Alertmanager UI **Alerts** tab shows the same firing alerts.
+2. **Cluster hosts (ECS and optional wider groups)** — playbook **`enroll_monitoring_exporters.yml`** imports `common_tasks/install_cadvisor_host.yml`, which runs the same image as a **standalone Docker container** (`monitoring_cadvisor_host_container`, default `cldr-host-cadvisor`) on every host in **`monitoring_cadvisor_host_groups`** (default **`ecs-masters`**, **`ecs-workers`** only). Host publish port **`monitoring_cadvisor_cluster_port`** (default **19180** → container **8080**) avoids common CDP/YARN ports such as **8088**. Extra read-only mount **`/var/lib/containerd`** helps containerd/Kubernetes on ECS nodes. Set `monitoring_cadvisor_host_enabled: false` to skip host enrollment; widen to all six exporter groups by setting `monitoring_cadvisor_host_groups` to the same list as `monitoring_node_exporter_host_groups`. Prometheus job **`cadvisor_host`** adds one static target per enrolled host at `<private_ip>:19180` with `instance` and `inventory_group` labels (`cadvisor_scope: host`). **Prerequisite:** Docker daemon reachable on target hosts (ECS install provides Docker; IPA/CM nodes may have no containers — metrics can be empty but scrape `up==1` is still useful). Verify: `docker ps --filter name=cldr-host-cadvisor` and `curl -s http://127.0.0.1:19180/metrics | head` on an ECS node; Prometheus **Status → Targets** for `job="cadvisor_host"`.
+
+**Monitoring coverage — which exporter runs where (all inventory groups):**
+
+| Inventory group | Host metrics (`node_exporter` :19100) | Process metrics (`process_exporter` :19256) | Docker/container metrics (`cAdvisor`) | HTTP/TCP uptime (`blackbox_exporter`) |
+|-----------------|--------------------------------------|---------------------------------------------|---------------------------------------|----------------------------------------|
+| **ipaserver** (ops / portal host) | Yes (systemd on host) | Yes | Yes — Compose **`cadvisor`** job on ops (`:8089`); host daemon only if `ipaserver` is in `monitoring_cadvisor_host_groups` | Probes run **from** blackbox on ops; targets include portal Caddy `:81`, pgAdmin/Grafana/Prometheus containers, IPA/CM/ECS URLs |
+| **cldr-mngr** | Yes | Yes | Only when in `monitoring_cadvisor_host_groups` (default: no) — typically no workload containers | CM UI `:7180`, CM API `:7183/api/version`, PostgreSQL `:5432` (TCP) |
+| **base-masters** / **base-workers** | Yes | Yes | Only when in `monitoring_cadvisor_host_groups` (default: no) | Knox gateway **TCP :8443** when `base_cluster_install_services.knox` is true (master private IP) |
+| **ecs-masters** / **ecs-workers** | Yes | Yes | Yes — host Docker cAdvisor **`:19180`** (`job="cadvisor_host"`) | ECS console HTTPS when ECS is in inventory (`https://console.<ecs_app_domain>`) |
+
+**“All nodes”** for CPU/memory/disk/network still means **`node_exporter` + `process_exporter`** on every group in `monitoring_node_exporter_host_groups` / `monitoring_process_exporter_host_groups`. Container-level metrics use Compose cAdvisor on the ops host plus host cAdvisor on **`monitoring_cadvisor_host_groups`** (default ECS masters/workers). Extend `monitoring_cadvisor_host_groups` to match the six exporter groups when you want cAdvisor on every inventory host.
+
+```mermaid
+flowchart LR
+  subgraph ops["ipaserver / ops host"]
+    Prom[Prometheus container]
+    BB[blackbox_exporter container]
+    Cadv[cAdvisor container]
+    NE_ops[node_exporter systemd]
+  end
+  subgraph cluster["VPC cluster hosts"]
+    NE_cm[node_exporter on cldr-mngr]
+    NE_base[node_exporter on base-masters/workers]
+    NE_ecs[node_exporter on ecs-masters/workers]
+    Cadv_ecs[cAdvisor Docker :19180 on ecs-*]
+  end
+  Prom -->|scrape :19100| NE_ops
+  Prom -->|scrape :19100| NE_cm
+  Prom -->|scrape :19100| NE_base
+  Prom -->|scrape :19100| NE_ecs
+  Prom -->|scrape :8080| Cadv
+  Prom -->|scrape :19180 cadvisor_host| Cadv_ecs
+  Prom -->|/probe| BB
+  BB -->|HTTP/TCP| CM[cldr-mngr APIs]
+  BB -->|HTTP/TCP| IPA[FreeIPA]
+  BB -->|HTTP/TCP| ECS[ECS console]
+```
+
+**blackbox_exporter (HTTP/TCP probes):** Docker service `blackbox` on the ops host (`monitoring_blackbox_exporter_image`, container `cldr-mon-blackbox`, host publish **`monitoring_blackbox_exporter_host_port`** default **19115** → container **9115**). Config: `{{ monitoring_config_dir }}/blackbox.yml` (modules `http_2xx`, `http_2xx_ssl` with `insecure_skip_verify` for lab CM/ECS TLS, `tcp_connect`). Probe list is rendered in `monitoring_blackbox_probe_targets.j2` into `deployment_portal_blackbox_probe_targets` during `build_deployment_portal_facts.yml` (after CM/IPA/ECS facts exist). Prometheus jobs `blackbox_<module>` use `/probe` with relabel to `cldr-mon-blackbox:9115`. Default probes: portal Caddy on ops private IP `:{{ deployment_portal_http_port }}`; CM HTTPS API/UI and Postgres TCP on `cldr-mngr` private IP; FreeIPA `/ipa/json`; pgAdmin/Grafana/Prometheus container health on the `deployment_portal` Docker network; optional Knox TCP and ECS console HTTPS. Extend with `monitoring_blackbox_extra_probes` (list of `{module, target, labels}`) or disable entirely with `monitoring_blackbox_exporter_enabled: false`. Verify: Prometheus **Status → Targets** for `job=~"blackbox_.*"` and `probe_success==1`, or `curl -s "http://127.0.0.1:19115/probe?target=https://<cm-private-ip>:7183/api/version&module=http_2xx_ssl" | head` on the ops host.
+
+**Grafana provisioning (datasources + prepopulated dashboards):** Gated by `monitoring_grafana_provisioning_enabled` (default `true`) inside the same `deployment_portal_monitoring_routes_enabled` block as the rest of the stack. Ansible renders `{{ monitoring_config_dir }}/grafana/provisioning/datasources/datasources.yml` (Prometheus datasource, `uid: prometheus`, `isDefault: true`; Alertmanager datasource, `uid: alertmanager`, linked via `jsonData.alertmanagerUid` on the Prometheus datasource so Grafana's alerting UI can show Alertmanager state — this is the Prometheus↔Alertmanager↔Grafana inter-linking) and `{{ monitoring_config_dir }}/grafana/provisioning/dashboards/dashboards.yml` (a `file`-type dashboard provider pointing at `/var/lib/grafana/dashboards`, folder **"Cloudera Monitoring"**). Dashboard JSON files listed in `monitoring_grafana_dashboard_files` (under `ansible-playbooks/files/grafana_dashboards/`) are copied (not templated) to `{{ monitoring_config_dir }}/grafana/dashboards/` and bind-mounted read-only into the Grafana container. Defaults: **CDP Ops Overview** (`cdp_ops_overview.json`), **Cloudera Cluster Overview** (`cm_cluster_overview.json`), plus focused boards for **node_exporter**, **process_exporter**, **blackbox** probes, and **cAdvisor** ops containers — all panels use the fixed `uid: prometheus` datasource. To import full community dashboards instead (optional): **Dashboards → New → Import**, ids **1860** (Node Exporter Full) and **249** (process-exporter). Set `monitoring_grafana_provisioning_enabled: false` to skip provisioning entirely.
+
+**Prometheus alerting rules + Alertmanager receiver:** Gated by `monitoring_alert_rules_enabled` (default `true`). Ansible renders `{{ monitoring_config_dir }}/rules/alerts.yml` with scoped groups (toggle per area via `monitoring_alert_node_rules_enabled`, `monitoring_alert_process_rules_enabled`, `monitoring_alert_blackbox_rules_enabled`, `monitoring_alert_cadvisor_rules_enabled`): **node** — `NodeExporterDown`, `HostHighCpuLoad`, `HostHighMemoryUsage`, `HostDiskSpaceLow` / `HostDiskSpaceCritical`; **process** — `ProcessExporterDown`, optional `ProcessGroupHighCount` when `monitoring_alert_process_high_count_enabled: true`; **blackbox** — `BlackboxProbeFailed`, `BlackboxSslCertificateExpiringSoon` (TLS probes only); **cAdvisor** — `CadvisorTargetDown`, `OpsStackContainerAbsent`, `OpsStackContainerHighMemory`; **scrape** — `PrometheusTargetDown`. Thresholds and `for:` durations are in `group_vars/all.yml` (`monitoring_alert_*`). Optional `monitoring_alert_runbook_base_url` adds `runbook_url` labels when set. Prometheus loads rules via `rule_files: [/etc/prometheus/rules/*.yml]` and forwards to Alertmanager (`alerting.alertmanagers` → `{{ monitoring_alertmanager_container }}:9093` in `prometheus.yml`). Alertmanager **route** uses receiver **`default`** (`monitoring_alertmanager_group_by`, default `[alertname, severity]`). External notify integrations (all optional on the `default` receiver): `monitoring_alertmanager_receiver_webhook_url`, `monitoring_alertmanager_slack_api_url` + `monitoring_alertmanager_slack_channel`, or SMTP via `monitoring_alertmanager_smtp_smarthost` + `monitoring_alertmanager_email_to` (and optional SMTP auth vars). Child routes: `monitoring_alertmanager_route_child_receivers` + `monitoring_alertmanager_extra_receivers`. With every integration empty, alerts remain visible in Prometheus / Alertmanager / Grafana only. Verify: Prometheus **Alerts** or **Status → Rules**; Alertmanager **Alerts**; Grafana folder **Cloudera Monitoring** after play **32**.
 
 **pgAdmin 502 / :5050 unreachable:** On **ipaserver** (or portal host), `cd {{ deployment_portal_config_dir | default('/opt/cldr-deployment-portal') }}` then `docker ps -a --filter name=cldr-portal-pgadmin` and `curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:5050/`. Caddy must reverse-proxy **`pgadmin:80`** (compose service name). Fix: re-run Jenkins **PORTAL** or `docker compose -f docker-compose.yml up -d --force-recreate pgadmin caddy`. Ansible task `verify_deployment_portal_pgadmin.yml` fails with `docker logs` on error; set `deployment_portal_pgadmin_debug_logs: true` for extra log output after a successful sync.
 
@@ -372,6 +415,8 @@ ansible-playbook -i inventory.ini 29_setup_cm_ldap.yml
 ansible-playbook -i inventory.ini 30_setup_cm_krbs.yml
 ```
 
+**Manual KDC account-manager import (CM API):** After `/cm/config` is set, POST credentials (use HTTPS `:7183` when Auto-TLS is on): `curl -sk -u admin:'<cm_admin_pass>' -X POST 'https://<cldr-mngr-fqdn>:7183/api/v59/cm/commands/importAdminCredentials?username=<principal-urlencoded>&password=<password-urlencoded>'` — then restart `cloudera-scm-server` and confirm `ImportCredentials` in `/var/log/cloudera-scm-server/cloudera-scm-server.log`.
+
 **Kerberos encryption types (AES):** Defaults use **AES only** (`krb5_enc_types`: `aes256-cts aes128-cts` in CM; FreeIPA KDC via `/etc/krb5.conf.d/cldr-permitted-enctypes.conf`). RC4 is omitted because Java 17+ and Cloudera recommend AES. Do **not** set `allow_weak_crypto=true` unless you explicitly opt in with `krb5_allow_weak_rc4: true` in group_vars.
 
 **Existing deployments** that already show `rc4-hmac` in the CM Kerberos wizard:
@@ -389,7 +434,7 @@ CSD JARs for DataViz / NiFi / NiFi Registry are listed in `scm_csds_effective` d
 **Example `REMOTE_PARCEL_REPO_URLS` (defaults in `group_vars/all.yml`, public archive, `cm_parcel_repo_include_latest: false`):**
 
 ```text
-https://archive.cloudera.com/p/cdh7/7.3.2.10000/parcels/
+https://archive.cloudera.com/p/cdh7/7.3.2.0/parcels/
 https://archive.cloudera.com/p/cdp-pvc-ds/1.5.5-h3300/parcels/
 https://archive.cloudera.com/p/cdv/8.0.7/parcels/
 https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel
@@ -432,9 +477,15 @@ the cluster is started if necessary, and CM runs
 
 First Run failures are expanded from the parent CM command into failed service
 commands and their child validation messages in Jenkins. First Run is submitted
-only for a newly created cluster. Existing populated clusters always use CM's
-normal cluster start command, even after configuration repair, so an already
-formatted NameNode is never formatted again. Database and initial service
+for a newly created cluster and for an existing populated cluster when the
+initialization marker is absent **and** HDFS is not yet `STARTED/GOOD` (typical
+when playbook **31** failed during Knox or other pre-First-Run configuration
+before CM ever formatted the NameNode). In that case **31** skips interrupted-run
+recovery and calls `POST .../commands/firstRun` instead of `commands/start`.
+Once HDFS is healthy, reruns use interrupted First Run recovery or a normal
+cluster start so an already formatted NameNode is never formatted again. Set
+`base_cluster_force_first_run: true` only when CM support directs a deliberate
+First Run retry. Database and initial service
 passwords use the `base_cluster_*` variables and should be overridden through
 `ANSIBLE_GROUP_VARS_YAML` or an Ansible vault. Ranger initial passwords must
 contain letters and numbers and be at least eight characters long.
@@ -456,10 +507,16 @@ certificate-enrollment retries against a running but not-yet-leader SCM and
 leaving SCM in safe mode with no healthy pipeline. CM First Run retains
 responsibility for initializing SCM on a new cluster; if that initial run is
 interrupted, the next Base Cluster phase applies the ordered recovery without
-deleting Ozone metadata. The optional YARN container-usage directory command is
-not part of automatic recovery; run it only after enabling container-usage
-aggregation and configuring its MapReduce job user. Recovery never invokes
-NameNode format or cluster First Run.
+deleting Ozone metadata. The same ordered recovery runs for an initialized
+existing cluster when the cluster remains started but Ozone is stopped or has
+`BAD` health, so a later SCM or DataNode failure does not depend on the
+initialization marker being absent. A deliberately stopped whole cluster uses
+the normal cluster start path, and an initialized cluster does not restart
+Ozone for a transient `CONCERNING` health state. Interrupted First Run recovery
+continues to recover any non-`GOOD` Ozone state. The optional YARN
+container-usage directory command is not part of automatic recovery; run it
+only after enabling container-usage aggregation and configuring its MapReduce
+job user. Recovery never invokes NameNode format or cluster First Run.
 
 HDFS `/tmp` reconciliation first calls CM's documented
 `hdfsCreateTmpDir` service command. Some CM 7.13/CDP 7.3.2 layouts return
@@ -506,14 +563,24 @@ When `gateway.log` reports `Failed to configure truststore` followed by a
 recover the gateway: `cdp-proxy`, `cdp-proxy-token`, `cdp-proxy-api`, and
 `cdp-datashare-access` cannot be generated. Playbook **31** configures the Knox
 Gateway role's `ssl_client_truststore_*` settings from CM's Auto-TLS truststore
-and password before First Run. On a rerun, it restarts an already-running Knox
-service when those settings change. An interrupted initialization also forces
-the redacted truststore password to be refreshed, preventing a stale Knox
-credential alias from producing `Keystore was tampered with, or password was
-incorrect`. The expected generated
-`gateway-site.xml` value is a non-empty
-`gateway.httpclient.truststore.path`; an empty value confirms the trust
-configuration is missing.
+and password **after** `configureAutoTlsServices` and before First Run. It also
+sets the Knox service `kerberos.auth.enabled` flag (when Kerberos is enabled)
+and the KNOX_GATEWAY safety valve `gateway.cluster.config.monitor.cm.enabled=true`
+plus `gateway.frontend.url`. When any of those change, **31** deploys Knox client
+configuration and restarts an already-running Knox gateway so `gateway-site.xml`
+on the host matches CM before topology discovery runs. An interrupted
+initialization also forces the redacted truststore password to be refreshed,
+preventing a stale Knox credential alias from producing `Keystore was tampered
+with, or password was incorrect`. The expected generated `gateway-site.xml` value
+is a non-empty `gateway.httpclient.truststore.path`; an empty value confirms the
+trust configuration is missing.
+
+After Knox is `STARTED`, **31** polls `https://<knox-host>:8443/gateway/health/v1/gateway-status`
+until the response is no longer `PENDING` and no longer lists `cdp-proxy` or
+`cdp-datashare-access` in the **Waiting for** section (same signal CM's
+`checkTopologyDeployment.sh` uses). Tune `base_cluster_knox_cdp_proxy_topology_retries`
+and `base_cluster_knox_cdp_proxy_topology_delay` when large clusters need more than
+the default ~10 minutes.
 
 `base_cluster_enable_kerberos: true` makes playbook **31** Kerberize every base
 cluster it manages. Auto-TLS and CM KDC/account-manager integration must already
@@ -552,6 +619,49 @@ services. Without that dependency CM's Ozone CSD receives no `core-site.xml`; it
 `deploy_client_configs` script fails at `add_to_site ''` with
 `Could not find  or  is not a file`.
 
+### Ozone SCM, SafeMode, and certificate signing
+
+Playbook **31** sets `ozone.scm.primordial.node.id` and attaches the single
+`Master` host template to **`groups[base_cluster_master_group][0]`** only
+(`cldr_hostname` + `cluster_domain`, e.g. `pvcbase-master.cldrsetup.local`).
+Workers receive `OZONE_DATANODE` only; OM/SCM/Recon/S3 Gateway run on that one
+master. Before First Run or recovery start, **31** runs `configureForKerberos`
+(when enabled), then `generateCredentials`, then `configureAutoTlsServices`
+(when Auto-TLS is on), so Ozone and other services start under Kerberos +
+cluster TLS, not SIMPLE + HTTP.
+
+**Symptoms:** `ServerNotLeaderException`, SCM SafeMode with `0/N datanodes
+registered`, OM/DN cert enrollment retries, `RAFT closed`, or
+`Invalid domain … in CertificateSignRequest`.
+
+**Likely causes (check in order):**
+
+1. **CM host FQDN vs primordial id** — In CM → Hosts, the master must be
+   `pvcbase-master.<cluster_domain>` matching `ozone.scm.primordial.node.id`.
+   Reconcile via playbook **31** or fix host attachment; do not mix short names
+   with FQDN primordial ids.
+2. **Extra SCM roles (manual HA)** — More than one `STORAGE_CONTAINER_MANAGER`
+   without a supported HA template breaks Ratis leadership. This repo deploys
+   **one** SCM on the first `[base-masters]` host; remove stray SCM roles or
+   extend the cluster spec before expecting HA.
+3. **Security phase skipped** — Run **CM_TLS_KRB_LDAP** (plays **27** → **30**)
+   before **31**. Starting Ozone before `configureForKerberos` /
+   `configureAutoTlsServices` causes cert/Kerberos mismatches.
+4. **Interrupted First Run** — Re-run **31** without deleting the cluster: it
+   stops unhealthy Ozone, starts SCM alone, waits for `ozone admin scm roles`
+   `LEADER`, then starts remaining Ozone roles (see recovery section above).
+5. **`.local` cluster domains** — IPA default `cldrsetup.local` is valid for
+   hostnames but some Ozone/Auto-TLS cert validators log `Invalid domain` for
+   internal TLDs. Confirm SANs on signed certs match the CM host FQDN; for
+   production labs consider a resolvable suffix consistent with CM Auto-TLS.
+
+**Operator checks:** SCM role logs under
+`/var/log/cloudera-scm-agent/process/*-ozone-STORAGE_CONTAINER_MANAGER/`; Ratis
+metadata under `/var/lib/hadoop-ozone/scm/data/` (do not delete on retry);
+`ozone admin scm roles --service-id=<base_cluster_ozone_service_id>` from the
+SCM host after `kinit` with the role keytab; CM → Ozone → Configuration →
+`ozone.scm.primordial.node.id` and `hdfs_service`.
+
 Playbook **31** also imports the idempotent **27** Auto-TLS workflow before base
 cluster reconciliation. When `autotls_enabled: true`, CM's authoritative
 `AUTO_TLS_TYPE` is checked and Auto-TLS is enabled only when absent. A newly
@@ -577,9 +687,10 @@ falling back to Hue's local SQLite database. It also installs and verifies
 `psycopg2` inside Hue's parcel-managed Python virtual environment before First
 Run; installing the driver only in `/usr/bin/python3` does not make it available
 to Hue. The system targets are derived as `/usr/bin/python3` and
-`/usr/bin/python{{ python_version }}`; playbook **31** discovers Hue's matching
-`python{{ python_version }}` environment from the active CDH parcel instead of
-hardcoding a Python minor version or full venv interpreter path.
+`/usr/bin/python{{ python_version }}`; playbook **31** discovers Hue's parcel
+interpreter from the active CDH parcel (`lib/hue/build/env/bin/python` for
+Python 3.11+ Hue, or `lib/hue/build/venvs/python{{ python_version }}` on older
+layouts) instead of hardcoding a full venv path.
 
 For an existing cluster, playbook **31** also detects stale Hive Metastore
 catalogs whose names begin with
@@ -927,7 +1038,7 @@ YAML example (`.tfvars.yaml`):
 ```yaml
 aws_region: ap-southeast-1
 environment: development
-cm_version: "7.13.2.10000"
+cm_version: "7.13.2.6"
 instance_groups:
   cldr_mngr:
     count: 1
@@ -1151,6 +1262,65 @@ server/agent packages, supervisor state, CSDs, parcels, parcel repositories, and
 cluster-node service state. Even with `cleanup_e2e=true`, PostgreSQL data and
 packages are preserved unless the separate `cleanup_remove_postgres_*` toggles
 are explicitly enabled.
+
+### Manual PostgreSQL reset of the CM `scm` schema
+
+Service-only reset (`98_cleanup_cluster_services.yml`) **does not** change the
+CM PostgreSQL database. Use the steps below when you need an empty `scm` schema
+so Cloudera Manager can be re-initialized (for example after a failed first
+install or before re-running `scm_prepare_database.sh` / playbook **24**) while
+keeping CM packages, agents, parcels, and CSDs on the nodes.
+
+**When to use this (partial / CM DB only) vs full cleanup (`99_cleanup.yml`):**
+
+| Goal | Approach |
+|---|---|
+| Rebuild base/ECS clusters only; keep CM DB and CM state | `98_cleanup_cluster_services.yml` (no PostgreSQL changes) |
+| Wipe CM (and Reports Manager) DB schemas; optionally uninstall CM | `99_cleanup.yml` with `cleanup_remove_cm=true` or `cleanup_e2e=true` and `cleanup_reset_service_databases=true` (default) — see [REFERENCE.md](REFERENCE.md#cleanup-99_cleanupyml) |
+| Wipe only the `scm` schema inside the existing `scm` database; CM still installed | Manual SQL below (or CM-only **99** scope above) |
+
+**Warnings:**
+
+- **Destructive** — removes all tables and other objects in the `scm` schema.
+  CM configuration, cluster metadata, and wizard state in that schema are lost.
+- **Stop Cloudera Manager** — stop `cloudera-scm-server` and CMS
+  (`cloudera-scm-headlamp` / Reports Manager) before running SQL so no sessions
+  hold locks on `scm` objects.
+- **Backup** — dump the database or schema if you might need to recover
+  (`pg_dump -Fc -n scm …` or a snapshot of the PostgreSQL data directory).
+- **Permissions** — connect as a role that can drop objects in the `scm` schema
+  (typically the `scm` database owner or PostgreSQL superuser). Defaults:
+  database `scm`, owner `scm` (`group_vars/all.yml`).
+
+Connect to the CM database on the PostgreSQL host (see portal **Database &
+pgAdmin** or `postgres_host_fqdn` / `postgres_port` in inventory), then run
+**one** of:
+
+**Option 1 — drop each table in the `scm` schema:**
+
+```sql
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'scm') LOOP
+        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+    END LOOP;
+END $$;
+```
+
+**Option 2 — drop and recreate the schema (simpler):**
+
+```sql
+DROP SCHEMA scm CASCADE;
+CREATE SCHEMA scm;
+```
+
+After reset, grant ownership on the new schema to the CM DB user if you used
+Option 2 (`GRANT ALL ON SCHEMA scm TO scm;` / `ALTER SCHEMA scm OWNER TO scm;`
+when your install expects the `scm` role to own the schema). Restart
+`cloudera-scm-server`, then re-run CM database preparation and the CM playbooks
+(**23**–**24**) as needed.
 
 ---
 

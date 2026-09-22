@@ -1,0 +1,99 @@
+{
+  "id": null,
+  "uid": "cldr-node-exporter",
+  "title": "Node Exporter — Cluster Hosts",
+  "description": "CPU, memory, disk, and network from node_exporter on CDP cluster hosts. Provisioned by Ansible playbook 32.",
+  "tags": ["cloudera", "node_exporter"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Targets up",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "count(up{job=\"node_exporter\"} == 1)", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "title": "Targets down",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }]
+          }
+        }
+      },
+      "targets": [{ "expr": "count(up{job=\"node_exporter\"} == 0) OR on() vector(0)", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "title": "CPU usage % by host",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } },
+      "targets": [{
+        "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{job=\"node_exporter\",mode=\"idle\"}[5m])) * 100)",
+        "legendFormat": "{{instance}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 4,
+      "title": "Memory usage % by host",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } },
+      "targets": [{
+        "expr": "100 - (node_memory_MemAvailable_bytes{job=\"node_exporter\"} / node_memory_MemTotal_bytes{job=\"node_exporter\"} * 100)",
+        "legendFormat": "{{instance}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "Root filesystem used %",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } },
+      "targets": [{
+        "expr": "100 - (node_filesystem_avail_bytes{job=\"node_exporter\",mountpoint=\"/\",fstype!=\"rootfs\"} / node_filesystem_size_bytes{job=\"node_exporter\",mountpoint=\"/\",fstype!=\"rootfs\"} * 100)",
+        "legendFormat": "{{instance}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 6,
+      "title": "Network throughput (bytes/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [
+        {
+          "expr": "sum by (instance) (rate(node_network_receive_bytes_total{job=\"node_exporter\",device!~\"lo|veth.*|docker.*\"}[5m]))",
+          "legendFormat": "{{instance}} rx",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (instance) (rate(node_network_transmit_bytes_total{job=\"node_exporter\",device!~\"lo|veth.*|docker.*\"}[5m]))",
+          "legendFormat": "{{instance}} tx",
+          "refId": "B"
+        }
+      ]
+    }
+  ]
+}

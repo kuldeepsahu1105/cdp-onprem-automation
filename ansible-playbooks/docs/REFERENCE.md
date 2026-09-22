@@ -45,8 +45,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `python_version` | `3.11` | Python version (packages and module enablement) |
 | `postgresql_version` | `18` | PostgreSQL version |
 | `postgres_amazon_linux_2023_native_client_version` | (computed) | Native Amazon Linux 2023 `psql` client package version (`min(postgresql_version, 17)`); CM DB tasks on `cldr-mngr` may use this while the server stays `postgresql_version` |
-| `cm_version` | `7.13.2.10000` | Cloudera Manager version |
-| `cdh_version` | `7.3.2.10000` | CDH parcel version |
+| `cm_version` | `7.13.2.6` | Cloudera Manager version |
+| `cdh_version` | `7.3.2.0` | CDH parcel version |
 
 **`python_version` scope:** On targets, this drives `os_vars` package names (`python{{ python_version }}`, pip/devel or venv/dev packages), RHEL 8 `dnf module enable python<version>`, and on RedHat the `python{{ python_version }}` / `pip{{ python_version }}` executables used in **06_prereq_setup.yml** for install and pip upgrade. It does **not** fully align every Python path in the repo:
 
@@ -66,6 +66,12 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `base_cluster_install_services` | see `all.yml` | Per-service booleans for `31_setup_base_cluster.yml` (Spark 3, Knox, and Solr default `true`; NiFi, NiFi Registry, DataViz, and Phoenix default `false`; Iceberg validates its engine services) |
 | `base_cluster_kafka_metadata_store` | `Zookeeper` | Kafka Broker metadata backend; accepted values are `Zookeeper` and `KRaft` |
 | `base_cluster_knox_readiness_recovery_retries` / `base_cluster_knox_readiness_recovery_delay` | `30` / `10` | Bounded health wait when Knox readiness is the sole First Run failure |
+| `base_cluster_knox_cdp_proxy_topology_retries` / `base_cluster_knox_cdp_proxy_topology_delay` | `60` / `10` | Poll Knox `gateway-status` until CDP proxy topologies deploy (~10 min default) |
+| `base_cluster_knox_gateway_https_port` | `8443` | HTTPS port for Knox topology readiness probes on the gateway host |
+| `base_cluster_ranger_admin_port` | `6182` | Direct Ranger Admin UI on the base cluster master (deployment portal links; Knox uses its own gateway URL) |
+| `base_cluster_*_ui_port` | see `all.yml` | Direct HTTP UI ports on `base-masters` when Knox is off (`hdfs` 9870, `yarn` 8088, `hue` 8888, `hbase` 16010, `atlas` 21000, `ozone` Recon 9888, `solr` 8983, `impala` debug 25000) |
+| `base_cluster_knox_cdp_proxy_path` | `/gateway/cdp-proxy` | Knox topology prefix for portal links when `base_cluster_install_services.knox` is true (`deployment_portal_base_cluster_portal_urls.j2`) |
+| `base_cluster_force_first_run` | `false` | Force `POST .../commands/firstRun` on an existing cluster; normally auto when marker missing and HDFS not `STARTED/GOOD` |
 | `cm_admin_bootstrap_pass` | `admin` | Factory CM password; when `cm_admin_pass` differs, `ensure_cm_admin_password.yml` runs in **24_start_cm** / **27_setup_cm_autotls** only |
 | `base_cluster_yarn_*` | `4096` / `4` | YARN RM/NM memory and vcore limits in cluster spec template |
 | `ecs_cluster_name` | `ECS-Cluster` |
@@ -215,6 +221,8 @@ Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` 
 | `ipaadmin_password` | IPA admin password |
 | `ipa_kdc_host` | `ipaserver.<domain>` |
 | `krb5_enc_types` | Space-separated CM `KRB_ENC_TYPES` (default `aes256-cts aes128-cts`) |
+| `krb5_cm_managed_krb5_conf` | CM `KRB_MANAGE_KRB5_CONF` (default `true`); `false` leaves `/etc/krb5.conf` to IPA/Ansible |
+| `krb5_cm_libdefaults_safety_valve` | CM `KRB_LIBDEFAULTS_SAFETY_VALVE` — preserves commented KEYRING `default_ccache_name` when CM deploys krb5.conf |
 | `krb5_allow_weak_rc4` | `false` — set `true` only if legacy RC4 clients are required (not recommended; Java 17+ disables RC4) |
 | `krb5_ipa_default_enctypes` / `krb5_ipa_permitted_enctypes` | Long krb5 names for FreeIPA KDC `krb5.conf.d` snippet (`configure_ipa_krb_enc_types.yml`) |
 | `krb5_ticket_lifetime` / `krb5_renew_lifetime` | Client ticket request defaults (24 hours / 7 days) used by long-running roles such as Hue `KT_RENEWER` |
@@ -355,7 +363,7 @@ CMS (Management Service) and CDP base cluster are **separate**:
 | `31_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
 | `33_setup_ecs_cluster.yml` | ECS cluster | Phased DOCKER + ECS + embedded control plane — see [CDP_ECS_INSTALL.md](CDP_ECS_INSTALL.md) |
 | `10_setup_deployment_portal.yml` | Ops portal bootstrap | Caddy, pgAdmin, optional monitoring on ops host (`auto` → ipaserver else cldr-mngr); run early in phase 1 |
-| `32_setup_monitoring_stack.yml` | Monitoring only | Add monitoring after 28 (requires portal network): Prometheus/Grafana/Alertmanager/cAdvisor stack + node_exporter/process_exporter on cluster hosts + Grafana provisioning + Prometheus alert rules |
+| `32_setup_monitoring_stack.yml` | Monitoring only | Add monitoring after 28 (requires portal network): Prometheus/Grafana/Alertmanager/cAdvisor/blackbox_exporter stack + node_exporter/process_exporter/host cAdvisor on cluster hosts + HTTP/TCP blackbox probes + Grafana provisioning + Prometheus alert rules |
 | `34_setup_ecs_data_services.yml` | ECS data services | CDW/CDE/CAI/Model Registry via `cloudera.cloud` + Caddy — see [CDP_ECS_DATA_SERVICES.md](CDP_ECS_DATA_SERVICES.md) |
 
 **ECS API keys (automation):** IAM `createMachineUserAccessKey` requires a **signed** request. Password-only console login is not enough. After ECS is up, either set `ecs_api_access_key_id` / `ecs_api_private_key`, or set a **one-time** bootstrap admin key (`ecs_iam_bootstrap_*` or Jenkins `ECS_IAM_BOOTSTRAP_*` credentials) and enable `ecs_auto_provision_api_access_key` (default `true`) to create machine user `ecs_automation_machine_user` via CDP CLI; keys are cached at `ecs_api_credentials_cache_path`.
@@ -386,7 +394,18 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `monitoring_grafana_host_port` | `3000` | Grafana UI on ops host (docker `HOST:3000`) |
 | `monitoring_prometheus_host_port` | `9090` | Prometheus UI on ops host |
 | `monitoring_alertmanager_host_port` | `9093` | Alertmanager UI on ops host |
-| `monitoring_cadvisor_host_port` | `8089` | cAdvisor metrics UI on ops host |
+| `monitoring_cadvisor_host_port` | `8089` | cAdvisor metrics UI on ops host (Compose `cadvisor` service; Prometheus job `cadvisor`) |
+| `monitoring_cadvisor_host_enabled` | `true` | Deploy host-level cAdvisor Docker container on `monitoring_cadvisor_host_groups` via `enroll_monitoring_exporters.yml` |
+| `monitoring_cadvisor_host_container` | `cldr-host-cadvisor` | Docker container name on cluster hosts (distinct from ops `cldr-mon-cadvisor`) |
+| `monitoring_cadvisor_cluster_port` | `19180` | Host publish port for cluster cAdvisor (`cadvisor_host` scrape targets use `<private_ip>:19180`) |
+| `monitoring_cadvisor_host_groups` | `[ecs-masters, ecs-workers]` | Inventory groups for host cAdvisor; widen to all six exporter groups for full-node coverage |
+| `monitoring_cadvisor_host_docker_privileged` | `true` | Pass `--privileged` to host cAdvisor `docker run` (helps containerd/K8s visibility on ECS) |
+| `monitoring_blackbox_exporter_enabled` | `true` | Run blackbox_exporter in monitoring Compose and add `blackbox_*` Prometheus scrape jobs |
+| `monitoring_blackbox_exporter_image` | `prom/blackbox-exporter:v0.25.0` | blackbox_exporter container image |
+| `monitoring_blackbox_exporter_container` | `cldr-mon-blackbox` | Docker container name (Prometheus probe relabel target `…:9115`) |
+| `monitoring_blackbox_exporter_host_port` | `19115` | Host publish for blackbox UI/probes (container listens on **9115**) |
+| `monitoring_blackbox_extra_probes` | `[]` | Extra `{module, target, labels}` entries appended to auto-generated probes |
+| `monitoring_blackbox_modules_extra` | `{}` | Extra blackbox module definitions merged into `blackbox.yml` |
 | `pgadmin_default_email` | `admin@{{ caddy_vhost_public_base }}` | pgAdmin 8 login email (`PGADMIN_DEFAULT_EMAIL`); must not use `.local` cluster domains |
 | `deployment_portal_access_profile` | `auto` | `auto`, `cloud` (public + VPC URLs), or `private` (bare metal / no public IP) |
 | `deployment_portal_prefer_fqdn_urls` | `true` | In `private` profile, use ops FQDN in portal links instead of raw management IP |
@@ -421,13 +440,24 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `monitoring_process_exporter_host_groups` | same six groups as `monitoring_node_exporter_host_groups` | Inventory groups that get process_exporter + a scrape target; override to narrow scope independently of node_exporter |
 | `monitoring_process_exporter_process_names` | see `group_vars/all.yml` | Named cmdline-regex matchers (`cloudera-scm-server`, `postgres`, `java`, `docker`, …) grouping per-process metrics; first match wins |
 | `monitoring_process_exporter_catch_all` | `true` | Append a `{{.Comm}}` matcher grouping every other process by executable name |
-| `monitoring_grafana_provisioning_enabled` | `true` | Render Grafana datasource + dashboard provisioning YAML and copy the prepopulated dashboard JSON under `{{ monitoring_config_dir }}/grafana/` (playbook **32** / portal sync) |
-| `monitoring_alert_rules_enabled` | `true` | Render Prometheus alerting rules (`InstanceDown`, `HostHighCpuLoad`, `HostHighMemoryUsage`) to `{{ monitoring_config_dir }}/rules/alerts.yml` |
-| `monitoring_alert_instance_down_for` | `2m` | `for:` duration before `InstanceDown` fires |
+| `monitoring_grafana_provisioning_enabled` | `true` | Render Grafana datasource + dashboard provisioning YAML and copy dashboard JSON listed in `monitoring_grafana_dashboard_files` under `{{ monitoring_config_dir }}/grafana/` (playbook **32** / portal sync) |
+| `monitoring_grafana_dashboard_files` | see `group_vars/all.yml` | Basenames under `ansible-playbooks/files/grafana_dashboards/` copied into Grafana |
+| `monitoring_alert_rules_enabled` | `true` | Render Prometheus alerting rules to `{{ monitoring_config_dir }}/rules/alerts.yml` |
+| `monitoring_alert_node_rules_enabled` / `monitoring_alert_process_rules_enabled` / `monitoring_alert_blackbox_rules_enabled` / `monitoring_alert_cadvisor_rules_enabled` | `true` each | Per-area alert group toggles |
+| `monitoring_alert_runbook_base_url` | `""` | When set, adds `runbook_url` labels on alerts (path suffix per alert) |
+| `monitoring_alert_instance_down_for` | `2m` | `for:` duration before exporter/scrape-down alerts fire |
 | `monitoring_alert_high_cpu_threshold` / `monitoring_alert_high_cpu_for` | `85` / `10m` | CPU busy % threshold and duration for `HostHighCpuLoad` |
 | `monitoring_alert_high_mem_threshold` / `monitoring_alert_high_mem_for` | `90` / `10m` | Memory used % threshold and duration for `HostHighMemoryUsage` |
+| `monitoring_alert_disk_used_threshold` / `monitoring_alert_disk_used_for` | `85` / `15m` | Root filesystem warning threshold for `HostDiskSpaceLow` |
+| `monitoring_alert_blackbox_probe_failed_for` | `5m` | Duration before `BlackboxProbeFailed` fires |
+| `monitoring_alert_blackbox_ssl_expiry_days` | `14` | Days-before-expiry threshold for `BlackboxSslCertificateExpiringSoon` |
+| `monitoring_alert_ops_container_mem_bytes` | `3221225472` | Resident memory threshold for `OpsStackContainerHighMemory` |
 | `monitoring_alertmanager_group_by` | `[alertname, severity]` | Alertmanager `route.group_by` |
-| `monitoring_alertmanager_receiver_webhook_url` | `""` | Optional webhook URL added to the `default` Alertmanager receiver (empty = no external notification integration, alerts still visible in the UI) |
+| `monitoring_alertmanager_receiver_webhook_url` | `""` | Optional webhook on the `default` receiver |
+| `monitoring_alertmanager_slack_api_url` / `monitoring_alertmanager_slack_channel` | `""` / `#alerts` | Optional Slack incoming webhook on the `default` receiver |
+| `monitoring_alertmanager_smtp_smarthost` / `monitoring_alertmanager_email_to` | `""` / `[]` | Optional email on the `default` receiver (requires smarthost + at least one address) |
+| `monitoring_alertmanager_route_child_receivers` | `[]` | Optional Alertmanager child `routes` (e.g. severity matchers) |
+| `monitoring_alertmanager_extra_receivers` | `[]` | Optional named receivers for child routes |
 | `caddy_vhost_enabled` | `true` | Host-based Caddy URLs (nip.io-style) |
 | `caddy_vhost_public_base` | `pvc.cloudera-labs.com` | Base domain for `svc.<ip-dashed>.<base>` |
 | `caddy_vhost_dns_mode` | `embedded_ip` | `embedded_ip`, `classic_nipio`, or `flat` |

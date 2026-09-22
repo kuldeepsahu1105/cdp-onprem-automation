@@ -1,0 +1,49 @@
+---
+# Resolve Hue's parcel-managed Python interpreter for psycopg2 install (playbook 31).
+# CDP 7.3.2+ Hue (Python 3.11) uses lib/hue/build/env; older layouts use build/venvs/pythonX.Y.
+- name: Wait for Hue parcel Python interpreter (build/env layout)
+  ansible.builtin.stat:
+    path: "{{ base_cluster_hue_parcel_hue_root }}/build/env/bin/python"
+  register: base_cluster_hue_env_python
+  until: base_cluster_hue_env_python.stat.exists | default(false) | bool
+  retries: "{{ base_cluster_hue_venv_wait_retries }}"
+  delay: "{{ base_cluster_hue_venv_wait_delay }}"
+  become: true
+  connection: ssh
+
+- name: Discover Hue parcel Python environment (legacy build/venvs layout)
+  ansible.builtin.find:
+    paths: "{{ base_cluster_hue_parcel_hue_root }}/build/venvs"
+    patterns: "python{{ base_cluster_hue_python_version }}"
+    file_type: directory
+    recurse: false
+    follow: true
+  register: base_cluster_hue_python_environments
+  become: true
+  connection: ssh
+  when: not (base_cluster_hue_env_python.stat.exists | default(false) | bool)
+
+- name: Require Hue parcel Python environment
+  ansible.builtin.assert:
+    that:
+      - >-
+        {{
+          (base_cluster_hue_env_python.stat.exists | default(false) | bool)
+          or (base_cluster_hue_python_environments.matched | default(0) | int == 1)
+        }}
+    fail_msg: >-
+      Hue is enabled but no parcel-managed Python environment was found under
+      {{ base_cluster_hue_parcel_hue_root }} on {{ inventory_hostname }}.
+      Expected {{ base_cluster_hue_parcel_hue_root }}/build/env/bin/python (Python 3.11+ Hue)
+      or exactly one {{ base_cluster_hue_parcel_hue_root }}/build/venvs/python{{ base_cluster_hue_python_version }}
+      directory. Confirm the CDH parcel is activated on this host and
+      base_cluster_hue_python_version={{ base_cluster_hue_python_version }} matches the parcel.
+
+- name: Resolve Hue parcel Python interpreter
+  ansible.builtin.set_fact:
+    base_cluster_hue_python_interpreter_effective: >-
+      {{
+        (base_cluster_hue_parcel_hue_root ~ '/build/env/bin/python')
+        if (base_cluster_hue_env_python.stat.exists | default(false) | bool)
+        else (base_cluster_hue_python_environments.files[0].path ~ '/bin/python')
+      }}

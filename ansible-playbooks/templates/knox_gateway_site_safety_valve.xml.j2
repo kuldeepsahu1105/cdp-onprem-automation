@@ -1,0 +1,9 @@
+{# Knox KNOX_GATEWAY role safety valve — gateway-site.xml snippets for CDP topology discovery. #}
+<property>
+  <name>gateway.frontend.url</name>
+  <value>{{ base_cluster_knox_gateway_frontend_url_effective }}</value>
+</property>
+<property>
+  <name>gateway.cluster.config.monitor.cm.enabled</name>
+  <value>true</value>
+</property>

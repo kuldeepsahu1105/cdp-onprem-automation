@@ -111,10 +111,10 @@ archive account. Numeric build IDs must correspond to the selected release.
 | `python_version` | `"3.11"` | Preferred target Python package version; Ansible still uses each host's configured `ansible_python_interpreter`. |
 | `postgresql_version` | `18` | PostgreSQL server/client target version. |
 | `postgres_jdbc_version` | `"42.7.10"` | JDBC driver downloaded for CM services. |
-| `cm_version` | `"7.13.2.10000"` | Cloudera Manager package/repository version. |
-| `cm_numeric_version` | `"713210000"` | Numeric CM build path used by archive URLs; update with `cm_version`. |
-| `cdh_version` | `"7.3.2.10000"` | Runtime parcel version. |
-| `cdh_numeric_version` | `"82216952"` | CDH parcel build identifier; update with `cdh_version`. |
+| `cm_version` | `"7.13.2.6"` | Cloudera Manager package/repository version. |
+| `cm_numeric_version` | `"713200006"` | Numeric CM build path used by archive URLs; update with `cm_version`. |
+| `cdh_version` | `"7.3.2.0"` | Runtime parcel version. |
+| `cdh_numeric_version` | `"77083870"` | CDH parcel build identifier; update with `cdh_version`. |
 | `cdv_version` | `"8.0.7"` | Data Visualization CSD/parcel release. |
 | `cfm_version` | `"2.1.7.3004"` | Flow Management CSD/parcel release. |
 | `cfm_nifi_app_version` | `"1.28.1"` | NiFi application segment used in CSD filenames. |
@@ -236,6 +236,8 @@ Auto-TLS provisioning uses password mode when secret
 | `monitoring_stack_enabled` | Boolean; `true` | Installs Grafana, Prometheus, exporters, and related portal links when the monitoring stage runs. |
 | `monitoring_node_exporter_port` | TCP port; `19100` | Host-level node_exporter listener and Prometheus target port. Port 19100 avoids conflicts with Kubernetes applications that reserve host port 9100 for a DaemonSet. Re-run **MONITORING** after changing it. |
 | `monitoring_process_exporter_port` | TCP port; `19256` | Host-level process_exporter listener and Prometheus target port. The nonstandard port avoids workloads that deploy their own process exporter on conventional host port 9256. |
+| `monitoring_cadvisor_cluster_port` | TCP port; `19180` | Host-level cAdvisor Docker publish on ECS/cluster nodes (`cadvisor_host` job). Avoids YARN/UI ports such as 8088. Re-run **MONITORING** after changing. |
+| `monitoring_cadvisor_host_groups` | inventory groups | Hosts that receive `cldr-host-cadvisor` and a `cadvisor_host` scrape target. Default `ecs-masters` + `ecs-workers`; set to the same list as `monitoring_node_exporter_host_groups` for all nodes. |
 
 ## Example profiles
 

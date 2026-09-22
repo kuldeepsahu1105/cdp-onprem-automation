@@ -9,6 +9,25 @@
         else (krb5_enc_types | join(' '))
       }}
 
+- name: Kerberos — read CM kerberosInfo before /cm/config reconcile
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/kerberosInfo"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
+  register: cm_krb_kerberized_before_info
+  changed_when: false
+
+- name: Kerberos — record whether CM reports KDC integration enabled
+  ansible.builtin.set_fact:
+    cm_krb_kerberized_before: >-
+      {{ cm_krb_kerberized_before_info.json.kerberized | default(false) | bool }}
+
 - name: Kerberos — read full CM configuration
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/config"
@@ -23,20 +42,41 @@
   register: cm_krb_config_before
   changed_when: false
 
+- name: Kerberos — resolve CM libdefaults safety valve for managed krb5.conf
+  ansible.builtin.set_fact:
+    cm_krb_libdefaults_safety_valve_effective: >-
+      {{
+        (krb5_cm_libdefaults_safety_valve | default('') | string | trim)
+        if (krb5_cm_managed_krb5_conf | default(true) | bool)
+        else ''
+      }}
+
 - name: Kerberos — build desired CM Kerberos configuration items
   ansible.builtin.set_fact:
-    cm_krb_desired_items:
-      - { name: KRB_ENC_TYPES, value: "{{ cm_krb_enc_types_value }}" }
-      - { name: SECURITY_REALM, value: "{{ cluster_realm }}" }
-      - { name: KDC_TYPE, value: "{{ krb5_kdc_type }}" }
-      - { name: KDC_ADMIN_HOST, value: "{{ kdc_host }}" }
-      - { name: KDC_HOST, value: "{{ kdc_host }}" }
+    cm_krb_desired_items: >-
+      {{
+        [
+          { 'name': 'KRB_ENC_TYPES', 'value': cm_krb_enc_types_value },
+          { 'name': 'SECURITY_REALM', 'value': cluster_realm },
+          { 'name': 'KDC_TYPE', 'value': krb5_kdc_type },
+          { 'name': 'KDC_ADMIN_HOST', 'value': kdc_host },
+          { 'name': 'KDC_HOST', 'value': kdc_host },
+          { 'name': 'KRB_MANAGE_KRB5_CONF', 'value': (krb5_cm_managed_krb5_conf | bool | lower) },
+          { 'name': 'KRB_KRB5_CONF_PATH', 'value': (krb5_conf_path | default('/etc/krb5.conf')) },
+        ]
+        + (
+          [{ 'name': 'KRB_LIBDEFAULTS_SAFETY_VALVE', 'value': cm_krb_libdefaults_safety_valve_effective }]
+          if (cm_krb_libdefaults_safety_valve_effective | length) > 0
+          else []
+        )
+      }}
 
 - name: Kerberos — detect whether CM Kerberos settings need update
   ansible.builtin.set_fact:
     cm_kerberos_config_changed: >-
       {{
-        (
+        not (cm_krb_kerberized_before | default(false) | bool)
+        or (
           (cm_krb_config_before.json['items'] | default([])
            | selectattr('name', 'equalto', 'SECURITY_REALM')
            | map(attribute='value') | first | default('')) != cluster_realm
@@ -60,6 +100,27 @@
           (cm_krb_config_before.json['items'] | default([])
            | selectattr('name', 'equalto', 'KDC_ADMIN_HOST')
            | map(attribute='value') | first | default('')) != kdc_host
+        )
+        or (
+          (cm_krb_config_before.json['items'] | default([])
+           | selectattr('name', 'equalto', 'KRB_MANAGE_KRB5_CONF')
+           | map(attribute='value') | first | default('false') | lower)
+          != (krb5_cm_managed_krb5_conf | bool | lower)
+        )
+        or (
+          (cm_krb_config_before.json['items'] | default([])
+           | selectattr('name', 'equalto', 'KRB_KRB5_CONF_PATH')
+           | map(attribute='value') | first | default('/etc/krb5.conf'))
+          != (krb5_conf_path | default('/etc/krb5.conf'))
+        )
+        or (
+          (cm_krb_libdefaults_safety_valve_effective | default('') | length) > 0
+          and (
+            (cm_krb_config_before.json['items'] | default([])
+             | selectattr('name', 'equalto', 'KRB_LIBDEFAULTS_SAFETY_VALVE')
+             | map(attribute='value') | first | default('') | trim)
+            != (cm_krb_libdefaults_safety_valve_effective | trim)
+          )
         )
       }}
 
@@ -89,10 +150,20 @@
 - name: Kerberos — CM Kerberos settings already match desired state
   ansible.builtin.debug:
     msg: >-
-      Kerberos CM /cm/config matches group_vars; skipped PUT and pre-import CM restart.
-      Pre-cluster readiness does not depend on kerberosInfo.kerberized, which can remain false
-      until a managed cluster is created and secured.
-  when: not (cm_kerberos_config_changed | bool)
+      Kerberos CM /cm/config matches group_vars and CM reports kerberized=true;
+      skipped PUT and pre-import CM restart.
+  when:
+    - not (cm_kerberos_config_changed | bool)
+    - cm_krb_kerberized_before | default(false) | bool
+
+- name: Kerberos — CM Kerberos settings match group_vars but KDC is not enabled yet
+  ansible.builtin.debug:
+    msg: >-
+      CM /cm/config matches group_vars but kerberized=false — will PUT Kerberos settings and restart
+      CM before importAdminCredentials (realm={{ cluster_realm }}, kdc={{ kdc_host }}).
+  when:
+    - cm_kerberos_config_changed | bool
+    - not (cm_krb_kerberized_before | default(false) | bool)
 
 - name: Kerberos — report CM Kerberos configuration drift
   ansible.builtin.debug:

@@ -1,0 +1,19 @@
+{# YAML list of host-level cAdvisor Prometheus scrape targets (Docker on cluster nodes).
+   monitoring_cadvisor_host_groups — default ecs-masters/ecs-workers. Uses private_ip like node_exporter. #}
+{% set _seen = namespace(hosts=[]) %}
+{% for group_name in monitoring_cadvisor_host_groups | default([]) %}
+{% for inv_host in groups.get(group_name, []) %}
+{% if inv_host not in _seen.hosts %}
+{% set _ = _seen.hosts.append(inv_host) %}
+{% set _hv = hostvars[inv_host] %}
+{% set _priv = _hv.private_ip | default(_hv.ansible_host | default('')) %}
+{% if _priv | length > 0 %}
+- target: "{{ _priv }}:{{ monitoring_cadvisor_cluster_port }}"
+  instance: "{{ _hv.cldr_hostname | default(inv_host) }}"
+  labels:
+    inventory_group: "{{ group_name }}"
+    cadvisor_scope: host
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endfor %}

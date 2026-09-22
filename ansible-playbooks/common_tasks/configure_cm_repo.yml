@@ -32,7 +32,7 @@
 
 - name: Download official Cloudera Manager yum repo file (RHEL, public)
   ansible.builtin.get_url:
-    url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/yum/cloudera-manager.repo"
+    url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_repo_version_path | default(cm_version) }}/{{ cm_repo_os_version }}/yum/cloudera-manager.repo"
     dest: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
     owner: root
     group: root
@@ -70,7 +70,7 @@
 
 - name: Download official Cloudera Manager apt sources list (Debian family, public)
   ansible.builtin.get_url:
-    url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt/cloudera-manager.list"
+    url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_repo_version_path | default(cm_version) }}/{{ cm_repo_os_version }}/apt/cloudera-manager.list"
     dest: "{{ os.cm_repo_dir }}/{{ os.cm_repo_file }}"
     owner: root
     group: root
@@ -97,7 +97,7 @@
 
 - name: Download Cloudera Manager apt archive signing key (Debian family, public)
   ansible.builtin.get_url:
-    url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_version }}/{{ cm_repo_os_version }}/apt/archive.key"
+    url: "{{ cm_repo_public_base_url }}/cm7/{{ cm_repo_version_path | default(cm_version) }}/{{ cm_repo_os_version }}/apt/archive.key"
     dest: /usr/share/keyrings/cloudera-cm-archive-keyring.asc
     owner: root
     group: root

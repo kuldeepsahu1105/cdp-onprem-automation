@@ -1,4 +1,4 @@
-# Grafana, Prometheus, Alertmanager, and cAdvisor host ports are set via {{ monitoring_config_dir }}/.env
+# Grafana, Prometheus, Alertmanager, cAdvisor, and blackbox_exporter host ports are set via {{ monitoring_config_dir }}/.env
 # (Ansible template monitoring_docker-compose.env.j2). Caddy on the portal stack still serves path/vhost routes.
 services:
   prometheus:
@@ -67,6 +67,22 @@ services:
     networks:
       - deployment_portal
       - monitoring_internal
+
+{% if monitoring_blackbox_exporter_enabled | default(true) | bool %}
+  blackbox:
+    image: ${MONITORING_BLACKBOX_IMAGE}
+    container_name: ${MONITORING_BLACKBOX_CONTAINER}
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/blackbox_exporter/config.yml
+    volumes:
+      - ${MONITORING_CONFIG_DIR}/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    ports:
+      - "0.0.0.0:${MONITORING_BLACKBOX_HOST_PORT}:9115/tcp"
+    networks:
+      - deployment_portal
+      - monitoring_internal
+{% endif %}
 
 networks:
   deployment_portal:

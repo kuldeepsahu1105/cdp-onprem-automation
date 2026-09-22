@@ -29,7 +29,7 @@
 - name: Download Cloudera Manager yum metadata from archive
   ansible.builtin.get_url:
     url: >-
-      https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_version }}/
+      https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_repo_version_path | default(cm_version) }}/
       {%- if item in ['allkeys.asc', 'allkeyssha256.asc'] -%}
       {{ item }}
       {%- else -%}
@@ -48,7 +48,7 @@
 
 - name: Download Cloudera Manager RPMs from archive
   ansible.builtin.get_url:
-    url: "https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_version }}/{{ os_version }}/yum/RPMS/{{ ansible_architecture }}/{{ item }}"
+    url: "https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_repo_version_path | default(cm_version) }}/{{ os_version }}/yum/RPMS/{{ ansible_architecture }}/{{ item }}"
     dest: "{{ cldr_repos_path }}/cloudera-manager/cm{{ cm_major_version }}/{{ os_version }}/yum/RPMS/{{ ansible_architecture }}/"
     url_username: "{{ cm_repo_username }}"
     url_password: "{{ cm_repo_password }}"

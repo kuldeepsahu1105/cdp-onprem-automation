@@ -71,6 +71,25 @@ Phased deployment:
 | 4 | Auto-TLS, CMS, LDAP, Kerberos, CDH (`27`-`31`) | `DEPLOY_PHASE=4 ./pvc_setup.sh` |
 | 5 | ECS and optional data services (`33`-`34`) | `DEPLOY_PHASE=5 ./pvc_setup.sh` |
 
+### Recommended CM security + First Run order (plays 27 → 30 → 31)
+
+Run **CM_TLS_KRB_LDAP** before **CDH_INSTALL**. Do not start CM **First Run** from the UI while playbook **31** is running (both call `POST .../commands/firstRun` — double-run risk).
+
+| Step | Playbook / sub-step | CM API or behavior | vs CM First Run wizard |
+|------|---------------------|--------------------|-------------------------|
+| 1 | **27** `27_setup_cm_autotls.yml` | `generateCmca`, CM/agent TLS | Before cluster exists |
+| 2 | **28** CMS, **29** LDAP, **30** KDC import | CMS, LDAP, `importAdminCredentials` | KDC admin creds in CM before cluster |
+| 3 | **31** (imports **27** idempotently) | `cloudera.cluster.cluster` create + service config | Cluster + roles in CM |
+| 4 | **31** Knox reconcile | DB, master secret, `gateway-site` safety valve, Knox service `kerberos.auth.enabled`, Auto-TLS client truststore | Before Knox starts in First Run |
+| 5 | **31** `prepare_cluster_kerberos_before_start` | `configureForKerberos`, `generateCredentials` | Matches “wait for Kerberos credentials” before service start |
+| 6 | **31** `enable_base_cluster_autotls_api` | `configureAutoTlsServices` | After Kerberos, before any service start |
+| 7 | **31** `POST .../commands/firstRun` | CM starts ZK → HDFS → Ranger → Knox → … → **Ozone last** | Do not run UI First Run in parallel |
+| 8 | **31** post-start | Knox CDP proxy descriptor verify, marker, CMS restart, ZK assert | After First Run completes |
+
+Interrupted First Run recovery in **31** starts ZK/HDFS/Ranger only (no `firstRun`), then ordered Ozone SCM → leader → remaining Ozone roles. See [OPERATIONS_GUIDE.md](OPERATIONS_GUIDE.md) (Run Phase 4 / base cluster).
+
+If **31** failed before First Run (for example Knox `kerberos.auth.enabled` HTTP 400 on a role group), the cluster may exist with an unformatted NameNode. Re-run **31** after the fix: when the CM initialization marker is missing and HDFS is not `STARTED/GOOD`, **31** submits First Run automatically. Do not run the CM UI First Run wizard in parallel.
+
 Run one playbook:
 
 ```bash

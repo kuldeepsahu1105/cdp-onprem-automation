@@ -1,9 +1,28 @@
+# Ansible-managed Alertmanager routing (see group_vars monitoring_alertmanager_*).
 route:
   receiver: default
   group_by: {{ monitoring_alertmanager_group_by | default(['alertname']) | to_json }}
-  group_wait: 30s
-  group_interval: 5m
-  repeat_interval: 4h
+  group_wait: {{ monitoring_alertmanager_group_wait | default('30s') }}
+  group_interval: {{ monitoring_alertmanager_group_interval | default('5m') }}
+  repeat_interval: {{ monitoring_alertmanager_repeat_interval | default('4h') }}
+{% if monitoring_alertmanager_route_child_receivers | default([]) | length > 0 %}
+  routes:
+{% for child in monitoring_alertmanager_route_child_receivers %}
+    - receiver: {{ child.receiver }}
+{% if child.matchers is defined %}
+      matchers:
+{% for matcher in child.matchers %}
+        - {{ matcher | to_json }}
+{% endfor %}
+{% elif child.match is defined %}
+      match:
+{{ child.match | to_nice_yaml(indent=8) }}
+{% endif %}
+{% if child.continue is defined %}
+      continue: {{ child.continue | bool }}
+{% endif %}
+{% endfor %}
+{% endif %}
 
 receivers:
   - name: default
@@ -12,3 +31,36 @@ receivers:
       - url: {{ monitoring_alertmanager_receiver_webhook_url }}
         send_resolved: true
 {% endif %}
+{% if monitoring_alertmanager_slack_api_url | default('') | length > 0 %}
+    slack_configs:
+      - api_url: {{ monitoring_alertmanager_slack_api_url }}
+        channel: {{ monitoring_alertmanager_slack_channel | default('#alerts') | quote }}
+        send_resolved: true
+{% endif %}
+{% if monitoring_alertmanager_email_to | default([]) | length > 0 and (monitoring_alertmanager_smtp_smarthost | default('') | length > 0) %}
+    email_configs:
+{% for addr in monitoring_alertmanager_email_to %}
+      - to: {{ addr | quote }}
+        from: {{ monitoring_alertmanager_smtp_from | default('alertmanager@localhost') | quote }}
+        smarthost: {{ monitoring_alertmanager_smtp_smarthost | quote }}
+        send_resolved: true
+{% if monitoring_alertmanager_smtp_auth_username | default('') | length > 0 %}
+        auth_username: {{ monitoring_alertmanager_smtp_auth_username | quote }}
+        auth_password: {{ monitoring_alertmanager_smtp_auth_password | default('') | quote }}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% for extra in monitoring_alertmanager_extra_receivers | default([]) %}
+  - name: {{ extra.name }}
+{% if extra.webhook_url | default('') | length > 0 %}
+    webhook_configs:
+      - url: {{ extra.webhook_url }}
+        send_resolved: true
+{% endif %}
+{% if extra.slack_api_url | default('') | length > 0 %}
+    slack_configs:
+      - api_url: {{ extra.slack_api_url }}
+        channel: {{ extra.slack_channel | default('#alerts') | quote }}
+        send_resolved: true
+{% endif %}
+{% endfor %}

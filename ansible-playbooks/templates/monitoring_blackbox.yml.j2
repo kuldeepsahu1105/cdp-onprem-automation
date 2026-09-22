@@ -1,0 +1,30 @@
+# Ansible-managed blackbox_exporter modules ({{ monitoring_config_dir }}/blackbox.yml).
+# Extend via monitoring_blackbox_modules_extra in group_vars.
+modules:
+  http_2xx:
+    prober: http
+    timeout: 15s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200, 301, 302, 401, 403]
+      method: GET
+      preferred_ip_protocol: ip4
+  http_2xx_ssl:
+    prober: http
+    timeout: 15s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200, 301, 302, 401, 403]
+      method: GET
+      preferred_ip_protocol: ip4
+      tls_config:
+        insecure_skip_verify: true
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      preferred_ip_protocol: ip4
+{% for mod_name, mod_cfg in monitoring_blackbox_modules_extra | default({}).items() %}
+  {{ mod_name }}:
+{{ mod_cfg | to_nice_yaml(indent=4) }}
+{% endfor %}
