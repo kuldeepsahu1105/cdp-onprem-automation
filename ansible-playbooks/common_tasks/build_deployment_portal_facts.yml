@@ -200,6 +200,19 @@
         lookup('template', 'deployment_portal_base_cluster_portal_urls.j2') | from_yaml | default({}, true)
       }}
 
+- name: Render blackbox_exporter probe targets for Prometheus
+  ansible.builtin.set_fact:
+    deployment_portal_blackbox_probe_targets: >-
+      {{
+        lookup('template', 'monitoring_blackbox_probe_targets.j2') | from_yaml | default([], true)
+      }}
+  when: monitoring_blackbox_exporter_enabled | default(true) | bool
+
+- name: Default empty blackbox probe targets when disabled
+  ansible.builtin.set_fact:
+    deployment_portal_blackbox_probe_targets: []
+  when: not (monitoring_blackbox_exporter_enabled | default(true) | bool)
+
 - name: Set dynamic data service links from base cluster URL catalog
   ansible.builtin.set_fact:
     deployment_portal_dynamic_links: "{{ deployment_portal_base_cluster_portal_urls.links | default([]) }}"
@@ -563,7 +576,7 @@
       ops_host:
         fqdn: "{{ deployment_portal_anchor_fqdn }}"
         inventory_group: "{{ deployment_portal_anchor_group }}"
-        services: "Caddy index, pgAdmin, Prometheus, Grafana, Alertmanager, cAdvisor"
+        services: "Caddy index, pgAdmin, Prometheus, Grafana, Alertmanager, cAdvisor, blackbox_exporter"
       ecs:
         deployed: "{{ deployment_portal_ecs_present | bool }}"
         cluster_name: "{{ ecs_cluster_name }}"

@@ -1166,7 +1166,7 @@ ecs_model_registry_ozone_service_id: o3service1
 # 09. Deployment portal and monitoring
 # -----------------------------------------------------------------------------
 # Deployment portal + ops UI — 10_setup_deployment_portal.yml
-# Caddy index, pgAdmin, Prometheus, Grafana, Alertmanager, cAdvisor on ops host.
+# Caddy index, pgAdmin, Prometheus, Grafana, Alertmanager, cAdvisor, blackbox_exporter on ops host.
 # auto = ipaserver when [ipaserver] exists, else cldr-mngr. pgAdmin targets CM PostgreSQL on cldr-mngr.
 # Portal header attribution (index badges). Filled from tfvars/Jenkins when unset:
 #   owner → deployment_owner (Terraform pvc_cluster_tags.owner / Jenkins OWNER)
@@ -1379,6 +1379,14 @@ monitoring_cadvisor_image: gcr.io/cadvisor/cadvisor:v0.49.1
 monitoring_cadvisor_container: cldr-mon-cadvisor
 monitoring_cadvisor_docker_service: cadvisor
 monitoring_cadvisor_host_port: 8089
+# blackbox_exporter runs in Docker on the ops host (Prometheus scrapes cldr-mon-blackbox:9115).
+monitoring_blackbox_exporter_enabled: true
+monitoring_blackbox_exporter_image: prom/blackbox-exporter:v0.25.0
+monitoring_blackbox_exporter_container: cldr-mon-blackbox
+monitoring_blackbox_exporter_host_port: 19115
+monitoring_blackbox_modules_extra: {}
+# Optional extra probes: list of {module, target, labels} appended to auto-generated targets.
+monitoring_blackbox_extra_probes: []
 monitoring_grafana_host_port: 3000
 monitoring_prometheus_host_port: 9090
 monitoring_alertmanager_host_port: 9093

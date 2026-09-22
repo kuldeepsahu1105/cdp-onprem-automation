@@ -52,6 +52,32 @@ scrape_configs:
 {% endfor %}
 {% endif %}
 
+{% if monitoring_blackbox_exporter_enabled | default(true) | bool and (deployment_portal_blackbox_probe_targets | default([]) | length > 0) %}
+{% for module_name in deployment_portal_blackbox_probe_targets | map(attribute='module') | unique | list %}
+  - job_name: blackbox_{{ module_name }}
+    metrics_path: /probe
+    params:
+      module:
+        - {{ module_name }}
+    static_configs:
+{% for probe in deployment_portal_blackbox_probe_targets | selectattr('module', 'equalto', module_name) | list %}
+      - targets:
+          - {{ probe.target }}
+        labels:
+{% for label_key, label_val in (probe.labels | default({})).items() %}
+          {{ label_key }}: {{ label_val }}
+{% endfor %}
+{% endfor %}
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: {{ monitoring_blackbox_exporter_container }}:9115
+{% endfor %}
+{% endif %}
+
 {% for target in monitoring_prometheus_extra_targets | default([]) %}
   - job_name: {{ target.job_name }}
     static_configs:

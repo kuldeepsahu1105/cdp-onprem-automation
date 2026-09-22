@@ -14,7 +14,8 @@
           monitoring_grafana_host_port | int,
           monitoring_prometheus_host_port | int,
           monitoring_alertmanager_host_port | int,
-          monitoring_cadvisor_host_port | int
+          monitoring_cadvisor_host_port | int,
+          monitoring_blackbox_exporter_host_port | int
         ]
     fail_msg: >-
       deployment_portal_ipa_https_port={{ deployment_portal_ipa_https_port }} must be unique on the portal host.
@@ -332,6 +333,20 @@
         - "{{ monitoring_config_dir }}/grafana/provisioning/dashboards"
         - "{{ monitoring_config_dir }}/grafana/dashboards"
 
+    - name: Render blackbox_exporter configuration
+      ansible.builtin.template:
+        src: monitoring_blackbox.yml.j2
+        dest: "{{ monitoring_config_dir }}/blackbox.yml"
+        mode: "0644"
+      register: monitoring_blackbox_render
+      when: monitoring_blackbox_exporter_enabled | default(true) | bool
+
+    - name: Remove blackbox_exporter configuration when disabled
+      ansible.builtin.file:
+        path: "{{ monitoring_config_dir }}/blackbox.yml"
+        state: absent
+      when: not (monitoring_blackbox_exporter_enabled | default(true) | bool)
+
     - name: Render Prometheus configuration
       ansible.builtin.template:
         src: monitoring_prometheus.yml.j2
@@ -410,6 +425,7 @@
       when: >-
         monitoring_compose_render is changed
         or monitoring_env_render is changed
+        or (monitoring_blackbox_render is defined and monitoring_blackbox_render is changed)
         or monitoring_prometheus_render is changed
         or monitoring_alertmanager_render is changed
         or (monitoring_alert_rules_render is defined and monitoring_alert_rules_render is changed)
@@ -430,6 +446,7 @@
       when: >-
         not (monitoring_compose_render is changed)
         and not (monitoring_env_render is changed)
+        and not (monitoring_blackbox_render is defined and monitoring_blackbox_render is changed)
         and not (monitoring_prometheus_render is changed)
         and not (monitoring_alertmanager_render is changed)
         and not (monitoring_alert_rules_render is defined and monitoring_alert_rules_render is changed)
