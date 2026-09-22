@@ -125,7 +125,7 @@
 {% if deployment_portal_ecs_present | default(false) | bool and (ecs_app_domain | default('') | length > 0) %}
 {% set _ecs_url = ecs_control_plane_url | default('') | trim %}
 {% if _ecs_url | length == 0 %}
-{% set _ecs_url = 'https://console.' ~ ecs_app_domain %}
+{% set _ecs_url = 'https://' ~ ecs_console_host_prefix ~ '.' ~ ecs_app_domain %}
 {% endif %}
 - module: http_2xx_ssl
   target: "{{ _ecs_url }}"
@@ -134,7 +134,7 @@
     service: ecs
 {% set _ecs_cdp_api = ecs_cdp_console_api_url | default('') | trim %}
 {% if _ecs_cdp_api | length == 0 %}
-{% set _ecs_cdp_api = 'https://console-cdp.' ~ ecs_app_domain %}
+{% set _ecs_cdp_api = 'https://' ~ ecs_console_host_prefix ~ '.' ~ ecs_app_domain %}
 {% endif %}
 - module: http_2xx_ssl
   target: "{{ _ecs_cdp_api }}"

@@ -186,6 +186,7 @@ render_access_urls_from_inventory() {
   caddy_mode="$(read_group_var caddy_vhost_dns_mode embedded_ip)"
   caddy_base="$(read_group_var caddy_vhost_public_base pvc.cloudera-labs.com)"
   ecs_app_domain="$(read_group_var ecs_app_domain '')"
+  ecs_console_host_prefix="$(read_group_var ecs_console_host_prefix 'console-cdp')"
   monitoring_on="$(read_group_var monitoring_stack_enabled true)"
 
   ops_group="cldr-mngr"
@@ -238,7 +239,7 @@ render_access_urls_from_inventory() {
     if [[ -n "$ecs_app_domain" && "$ecs_app_domain" != *'{{'* ]]; then
       echo ""
       echo "--- ECS control plane ---"
-      echo "  Console (typical): https://console.${ecs_app_domain}/"
+      echo "  Console (typical): https://${ecs_console_host_prefix}.${ecs_app_domain}/"
     fi
     return 0
   fi
@@ -359,7 +360,7 @@ render_access_urls_from_inventory() {
   if [[ -n "$ecs_app_domain" && "$ecs_app_domain" != *'{{'* ]]; then
     echo ""
     echo "--- ECS control plane ---"
-    echo "  Console (typical): https://console.${ecs_app_domain}/"
+    echo "  Console (typical): https://${ecs_console_host_prefix}.${ecs_app_domain}/"
     echo "  Apps wildcard:     https://*.${ecs_app_domain}/"
   fi
 

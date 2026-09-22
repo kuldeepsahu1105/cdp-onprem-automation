@@ -124,7 +124,7 @@
 {% set ns.sections = ns.sections + [{'id': 'cdp_services', 'title': 'CDP Runtime services', 'intro': 'External DB users from CM database setup (lab defaults).', 'downloads': [], 'credentials': svc_creds}] %}
 {% endif %}
 {% if deployment_portal_ecs_present | default(false) | bool %}
-{% set ecs_creds = [{'label': 'ECS Console', 'username': 'admin', 'password': ecs_console_admin_password, 'url': 'https://console.' ~ ecs_app_domain, 'note': 'UMS bootstrap'}, {'label': 'ECS K8s WebUI token', 'username': '(token)', 'password': ecs_k8s_webui_secret_admin_token, 'url': '', 'note': 'When dashboard enabled'}] %}
+{% set ecs_creds = [{'label': 'ECS Console', 'username': 'admin', 'password': ecs_console_admin_password, 'url': 'https://' ~ ecs_console_host_prefix ~ '.' ~ ecs_app_domain, 'note': 'UMS bootstrap'}, {'label': 'ECS K8s WebUI token', 'username': '(token)', 'password': ecs_k8s_webui_secret_admin_token, 'url': '', 'note': 'When dashboard enabled'}] %}
 {% if ecs_ldap_admin_user_enabled | default(false) | bool %}
 {% set ecs_creds = ecs_creds + [{'label': 'ECS LDAP admin', 'username': ecs_ldap_admin_username, 'password': ecs_ldap_admin_password, 'url': '', 'note': ''}] %}
 {% endif %}

@@ -548,8 +548,8 @@
         deployed: "{{ deployment_portal_ecs_present | bool }}"
         cluster_name: "{{ ecs_cluster_name }}"
         app_domain: "{{ ecs_app_domain }}"
-        console_hint: "https://console.{{ ecs_app_domain }}"
-        console_url_direct: "https://console.{{ ecs_app_domain }}"
+        console_hint: "https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}"
+        console_url_direct: "https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}"
         caddy_url: ""
         apps_wildcard: "https://*.{{ ecs_app_domain }}"
       data_services:

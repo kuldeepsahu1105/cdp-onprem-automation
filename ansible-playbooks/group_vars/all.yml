@@ -1061,6 +1061,8 @@ ecs_parcel_repo_latest_url: "{{ cm_repo_public_base_url }}/cdp-pvc-ds/{{ cm_parc
 # Optional override; when empty the playbook discovers the latest ECS parcel from CM after refresh
 ecs_parcel_version: ""
 ecs_app_domain: "apps.{{ cluster_domain }}"
+# ECS Management Console DNS label (FQDN {{ ecs_console_host_prefix }}.{{ ecs_app_domain }})
+ecs_console_host_prefix: "console-cdp"
 ecs_docker_data_path: "/mnt/docker"
 ecs_lso_data_path: "/ecs/local"
 ecs_longhorn_data_path: "/ecs/longhorn-storage"
@@ -1082,7 +1084,7 @@ ecs_control_plane_embedded_vault_storage_gb: 2
 # IAM access keys are signed API credentials — automation can CREATE machine-user keys after ECS
 # is up only when a bootstrap admin key exists (one-time console key or ecs_iam_bootstrap_*).
 ecs_data_services_deploy_enabled: false
-ecs_control_plane_url: ""  # blank = https://console.{{ ecs_app_domain }}
+ecs_control_plane_url: ""  # blank = https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}
 ecs_api_access_key_id: ""
 ecs_api_private_key: ""
 ecs_auto_provision_api_access_key: true
@@ -1116,7 +1118,7 @@ ecs_data_services_catalog:
     url: ""
 # CDP environment name on private cloud (must match ECS control plane environment)
 ecs_cdp_environment_name: ecs
-ecs_cdp_console_api_url: ""  # default https://console-cdp.<ecs_app_domain>
+ecs_cdp_console_api_url: ""  # default https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}
 ecs_data_services_verify_tls: false
 # Optional ECS control plane LDAP (FreeIPA/AD) — playbook 33 end and/or 34
 ecs_ldap_enabled: false

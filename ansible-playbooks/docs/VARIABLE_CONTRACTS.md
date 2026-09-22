@@ -79,7 +79,7 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 | `pgadmin_caddy_public_url` | `resolve_caddy_service_public_urls.yml` — preferred browser URL for pgAdmin on Caddy port `deployment_portal_http_port` (default **81**) |
 | `ipa_caddy_public_url`, `ipa_caddy_modern_public_url`, `ipa_caddy_legacy_public_url` | `resolve_caddy_service_public_urls.yml` — FreeIPA Caddy vhost base, modern (`/ipa/modern-ui/`), and legacy (`/ipa/ui`) browser URLs |
 | `deployment_tier_b_url_checks` | `build_deployment_tier_b_url_checks.yml` on **localhost** — Tier B reads via `hostvars['localhost']` in `verify_service_urls_from_controller.yml` |
-| `ecs_control_plane_url_effective` | `resolve_ecs_control_plane_url.yml` — `ecs_control_plane_url` or `https://console.<ecs_app_domain>` (no Caddy) |
+| `ecs_control_plane_url_effective` | `resolve_ecs_control_plane_url.yml` — `ecs_control_plane_url` or `https://<ecs_console_host_prefix>.<ecs_app_domain>` (default prefix `console-cdp`; no Caddy) |
 
 **Consumers:** `25_verify_cm.yml` → `verify_cm_tiered_urls.yml`. Deployment portal playbooks (**10**, **35**) do **not** call CM API or CM UI probes — index links use inventory FQDNs only; live-stats JSON is inventory-only.
 
