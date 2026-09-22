@@ -1389,6 +1389,8 @@ monitoring_cadvisor_host_docker_privileged: true
 monitoring_cadvisor_host_docker_volume_args:
   - --volume
   - /var/lib/containerd:/var/lib/containerd:ro
+  - --device
+  - /dev/kmsg
 # Inventory groups that receive a host cAdvisor container + cadvisor_host scrape target. Default ECS
 # only; set to the same six groups as monitoring_node_exporter_host_groups for full coverage.
 monitoring_cadvisor_host_groups:
@@ -1402,6 +1404,11 @@ monitoring_blackbox_exporter_host_port: 19115
 monitoring_blackbox_modules_extra: {}
 # Optional extra probes: list of {module, target, labels} appended to auto-generated targets.
 monitoring_blackbox_extra_probes: []
+# Auto-generated blackbox probes (monitoring_blackbox_probe_targets.j2):
+monitoring_blackbox_probe_caddy_paths_enabled: true
+monitoring_blackbox_probe_caddy_vhosts_enabled: true
+monitoring_blackbox_probe_base_cluster_enabled: true
+monitoring_blackbox_probe_ecs_data_services_enabled: true
 monitoring_grafana_host_port: 3000
 monitoring_prometheus_host_port: 9090
 monitoring_alertmanager_host_port: 9093
@@ -1473,6 +1480,20 @@ monitoring_process_exporter_process_names:
     cmdline: ['node_exporter']
   - name: "process_exporter"
     cmdline: ['process_exporter']
+  - name: "kubelet"
+    cmdline: ['kubelet']
+  - name: "containerd"
+    cmdline: ['containerd']
+  - name: "hadoop"
+    cmdline: ['hadoop', 'yarn', 'mapred']
+  - name: "knox"
+    cmdline: ['knox', 'gateway']
+  - name: "prometheus"
+    cmdline: ['prometheus']
+  - name: "grafana"
+    cmdline: ['grafana']
+  - name: "caddy"
+    cmdline: ['caddy']
 # When true, append a catch-all matcher grouping every other process by executable name (comm).
 monitoring_process_exporter_catch_all: true
 

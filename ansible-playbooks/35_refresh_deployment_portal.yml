@@ -41,8 +41,11 @@
     - name: Build deployment portal context from inventory
       ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
 
+    - name: Resolve monitoring exporter enrollment gate
+      ansible.builtin.import_tasks: common_tasks/resolve_monitoring_exporter_enroll_enabled.yml
+
 - import_playbook: enroll_monitoring_exporters.yml
-  when: hostvars['localhost'].deployment_portal_monitoring_routes_enabled | default(false) | bool
+  when: hostvars['localhost'].monitoring_exporter_enrollment_enabled | default(false) | bool
 
 - name: Refresh deployment portal content on ops host
   hosts: deployment_portal_runtime

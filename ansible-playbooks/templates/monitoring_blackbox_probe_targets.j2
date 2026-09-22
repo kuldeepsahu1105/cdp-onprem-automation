@@ -8,6 +8,33 @@
   labels:
     probe: portal_caddy
     service: deployment_portal
+{% if monitoring_blackbox_probe_caddy_paths_enabled | default(true) | bool %}
+- module: http_2xx
+  target: "http://{{ _ops_priv }}:{{ _http_port }}/grafana/login"
+  labels:
+    probe: grafana_caddy_path
+    service: grafana
+- module: http_2xx
+  target: "http://{{ _ops_priv }}:{{ _http_port }}/prometheus/-/healthy"
+  labels:
+    probe: prometheus_caddy_path
+    service: prometheus
+- module: http_2xx
+  target: "http://{{ _ops_priv }}:{{ _http_port }}/alertmanager/-/healthy"
+  labels:
+    probe: alertmanager_caddy_path
+    service: alertmanager
+- module: http_2xx
+  target: "http://{{ _ops_priv }}:{{ _http_port }}/cadvisor/"
+  labels:
+    probe: cadvisor_caddy_path
+    service: cadvisor
+{% endif %}
+- module: http_2xx
+  target: "http://{{ _ops_priv }}:{{ monitoring_cadvisor_host_port | default(8089) }}/"
+  labels:
+    probe: cadvisor_host_port
+    service: cadvisor
 {% endif %}
 {% if deployment_portal_cm_private_ip | default('') | length > 0 %}
 {% set _cm_priv = deployment_portal_cm_private_ip | trim %}
@@ -49,6 +76,42 @@
   labels:
     probe: prometheus_health
     service: prometheus
+- module: http_2xx
+  target: "http://{{ monitoring_alertmanager_container | default('cldr-mon-alertmanager') }}:9093/-/healthy"
+  labels:
+    probe: alertmanager_health
+    service: alertmanager
+- module: http_2xx
+  target: "http://{{ monitoring_cadvisor_container | default('cldr-mon-cadvisor') }}:8080/metrics"
+  labels:
+    probe: cadvisor_ops_container
+    service: cadvisor
+{% if caddy_vhost_enabled | default(false) | bool and monitoring_blackbox_probe_caddy_vhosts_enabled | default(true) | bool %}
+{% for _vhost_key, _vhost in (caddy_vhost_urls_external | default({})).items() %}
+{% if _vhost.url | default('') | length > 0 %}
+{% set _vurl = _vhost.url | trim %}
+{% set _vmod = 'http_2xx_ssl' if _vurl.startswith('https://') else 'http_2xx' %}
+- module: {{ _vmod }}
+  target: "{{ _vurl }}"
+  labels:
+    probe: caddy_vhost_{{ _vhost_key }}
+    service: caddy_vhost
+{% endif %}
+{% endfor %}
+{% endif %}
+{% if monitoring_blackbox_probe_base_cluster_enabled | default(true) | bool %}
+{% for ep in (deployment_portal_base_cluster_portal_urls | default({})).endpoints | default([]) %}
+{% if ep.url | default('') | length > 0 %}
+{% set _ep_url = ep.url | trim %}
+{% set _ep_mod = 'http_2xx_ssl' if (ep.scheme | default('http')) == 'https' else 'http_2xx' %}
+- module: {{ _ep_mod }}
+  target: "{{ _ep_url }}"
+  labels:
+    probe: base_{{ ep.name | default('endpoint') | regex_replace('[^a-zA-Z0-9]+', '_') | lower }}
+    service: base_cluster
+{% endif %}
+{% endfor %}
+{% endif %}
 {% if base_cluster_install_services.knox | default(false) | bool and base_cluster_master_group in groups and groups[base_cluster_master_group] | length > 0 %}
 {% set _knox_host = hostvars[groups[base_cluster_master_group][0]].private_ip | default(hostvars[groups[base_cluster_master_group][0]].ansible_host | default('')) %}
 {% if _knox_host | length > 0 %}
@@ -69,6 +132,27 @@
   labels:
     probe: ecs_console_https
     service: ecs
+{% set _ecs_cdp_api = ecs_cdp_console_api_url | default('') | trim %}
+{% if _ecs_cdp_api | length == 0 %}
+{% set _ecs_cdp_api = 'https://console-cdp.' ~ ecs_app_domain %}
+{% endif %}
+- module: http_2xx_ssl
+  target: "{{ _ecs_cdp_api }}"
+  labels:
+    probe: ecs_cdp_console_api
+    service: ecs
+{% if monitoring_blackbox_probe_ecs_data_services_enabled | default(true) | bool %}
+{% for _ds_key in ['cdw', 'cde', 'cai'] %}
+{% set _ds = ecs_data_services_catalog[_ds_key] | default({}) %}
+{% if _ds.url | default('') | length > 0 %}
+- module: http_2xx_ssl
+  target: "{{ _ds.url | trim }}"
+  labels:
+    probe: ecs_ds_{{ _ds_key }}
+    service: ecs_data_service
+{% endif %}
+{% endfor %}
+{% endif %}
 {% endif %}
 {% for extra in monitoring_blackbox_extra_probes | default([]) %}
 {% if extra.module | default('') | length > 0 and extra.target | default('') | length > 0 %}

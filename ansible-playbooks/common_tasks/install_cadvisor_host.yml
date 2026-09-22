@@ -36,6 +36,11 @@
       from monitoring_cadvisor_host_groups. Prometheus may show the scrape target as DOWN.
   when: _cadvisor_docker_info.rc != 0
 
+- name: Mark host cAdvisor scrape target inactive when Docker is unavailable
+  ansible.builtin.set_fact:
+    monitoring_cadvisor_host_scrape_enabled: false
+  when: _cadvisor_docker_info.rc != 0
+
 - name: Install and run host cAdvisor container
   when: _cadvisor_docker_info.rc == 0
   block:
@@ -141,6 +146,10 @@
       changed_when: "'Started' in (_cadvisor_container_started.stdout | default(''))"
       failed_when: false
       when: not (_cadvisor_container_recreate | bool)
+
+    - name: Mark host cAdvisor scrape target active after container is running
+      ansible.builtin.set_fact:
+        monitoring_cadvisor_host_scrape_enabled: true
 
     - name: Check firewalld service state for host cAdvisor port
       ansible.builtin.systemd:

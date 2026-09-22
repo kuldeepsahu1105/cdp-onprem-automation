@@ -1,0 +1,48 @@
+---
+# Re-render Prometheus static scrape target lists on localhost (node/process/host cAdvisor).
+# Imported from build_deployment_portal_facts.yml and after enroll_monitoring_exporters.yml.
+
+- name: Render node_exporter Prometheus scrape targets from inventory
+  ansible.builtin.set_fact:
+    deployment_portal_node_exporter_targets: >-
+      {{
+        lookup('template', 'monitoring_node_exporter_targets.j2') | from_yaml | default([], true)
+      }}
+  when: monitoring_node_exporter_enabled | default(true) | bool
+
+- name: Default empty node_exporter scrape targets when disabled
+  ansible.builtin.set_fact:
+    deployment_portal_node_exporter_targets: []
+  when: not (monitoring_node_exporter_enabled | default(true) | bool)
+
+- name: Render process_exporter Prometheus scrape targets from inventory
+  ansible.builtin.set_fact:
+    deployment_portal_process_exporter_targets: >-
+      {{
+        lookup('template', 'monitoring_process_exporter_targets.j2') | from_yaml | default([], true)
+      }}
+  when: monitoring_process_exporter_enabled | default(true) | bool
+
+- name: Default empty process_exporter scrape targets when disabled
+  ansible.builtin.set_fact:
+    deployment_portal_process_exporter_targets: []
+  when: not (monitoring_process_exporter_enabled | default(true) | bool)
+
+- name: Render host cAdvisor Prometheus scrape targets from inventory
+  ansible.builtin.set_fact:
+    deployment_portal_cadvisor_host_targets: >-
+      {{
+        lookup('template', 'monitoring_cadvisor_host_targets.j2') | from_yaml | default([], true)
+      }}
+  when: monitoring_cadvisor_host_enabled | default(true) | bool
+
+- name: Default empty host cAdvisor scrape targets when disabled
+  ansible.builtin.set_fact:
+    deployment_portal_cadvisor_host_targets: []
+  when: not (monitoring_cadvisor_host_enabled | default(true) | bool)
+
+- name: Stamp monitoring scrape target facts refresh time
+  ansible.builtin.set_fact:
+    monitoring_scrape_targets_generated_at: >-
+      {{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ')) }}
+  when: monitoring_scrape_targets_bump_config | default(false) | bool

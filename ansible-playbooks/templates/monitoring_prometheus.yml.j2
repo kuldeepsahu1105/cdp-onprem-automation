@@ -1,6 +1,9 @@
 global:
   scrape_interval: 30s
   evaluation_interval: 30s
+{% if monitoring_scrape_targets_generated_at | default('') | length > 0 %}
+# Exporter scrape targets refreshed: {{ monitoring_scrape_targets_generated_at }}
+{% endif %}
 
 alerting:
   alertmanagers:

@@ -405,6 +405,10 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `monitoring_blackbox_exporter_container` | `cldr-mon-blackbox` | Docker container name (Prometheus probe relabel target `…:9115`) |
 | `monitoring_blackbox_exporter_host_port` | `19115` | Host publish for blackbox UI/probes (container listens on **9115**) |
 | `monitoring_blackbox_extra_probes` | `[]` | Extra `{module, target, labels}` entries appended to auto-generated probes |
+| `monitoring_blackbox_probe_caddy_paths_enabled` | `true` | Probe Caddy path routes on ops private IP (`/grafana/`, `/prometheus/`, …) |
+| `monitoring_blackbox_probe_caddy_vhosts_enabled` | `true` | Probe lab Caddy vhost URLs from `caddy_vhost_urls_external` |
+| `monitoring_blackbox_probe_base_cluster_enabled` | `true` | Probe CDP Runtime base cluster URLs from `deployment_portal_base_cluster_portal_urls.endpoints` |
+| `monitoring_blackbox_probe_ecs_data_services_enabled` | `true` | Probe ECS data-service URLs from `ecs_data_services_catalog` when set |
 | `monitoring_blackbox_modules_extra` | `{}` | Extra blackbox module definitions merged into `blackbox.yml` |
 | `pgadmin_default_email` | `admin@{{ caddy_vhost_public_base }}` | pgAdmin 8 login email (`PGADMIN_DEFAULT_EMAIL`); must not use `.local` cluster domains |
 | `deployment_portal_access_profile` | `auto` | `auto`, `cloud` (public + VPC URLs), or `private` (bare metal / no public IP) |
