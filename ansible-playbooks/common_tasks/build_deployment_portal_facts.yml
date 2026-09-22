@@ -36,44 +36,8 @@
         lookup('template', 'deployment_portal_inventory_hosts.j2') | from_yaml | default([], true)
       }}
 
-- name: Render node_exporter Prometheus scrape targets from inventory
-  ansible.builtin.set_fact:
-    deployment_portal_node_exporter_targets: >-
-      {{
-        lookup('template', 'monitoring_node_exporter_targets.j2') | from_yaml | default([], true)
-      }}
-  when: monitoring_node_exporter_enabled | default(true) | bool
-
-- name: Default empty node_exporter scrape targets when disabled
-  ansible.builtin.set_fact:
-    deployment_portal_node_exporter_targets: []
-  when: not (monitoring_node_exporter_enabled | default(true) | bool)
-
-- name: Render process_exporter Prometheus scrape targets from inventory
-  ansible.builtin.set_fact:
-    deployment_portal_process_exporter_targets: >-
-      {{
-        lookup('template', 'monitoring_process_exporter_targets.j2') | from_yaml | default([], true)
-      }}
-  when: monitoring_process_exporter_enabled | default(true) | bool
-
-- name: Default empty process_exporter scrape targets when disabled
-  ansible.builtin.set_fact:
-    deployment_portal_process_exporter_targets: []
-  when: not (monitoring_process_exporter_enabled | default(true) | bool)
-
-- name: Render host cAdvisor Prometheus scrape targets from inventory
-  ansible.builtin.set_fact:
-    deployment_portal_cadvisor_host_targets: >-
-      {{
-        lookup('template', 'monitoring_cadvisor_host_targets.j2') | from_yaml | default([], true)
-      }}
-  when: monitoring_cadvisor_host_enabled | default(true) | bool
-
-- name: Default empty host cAdvisor scrape targets when disabled
-  ansible.builtin.set_fact:
-    deployment_portal_cadvisor_host_targets: []
-  when: not (monitoring_cadvisor_host_enabled | default(true) | bool)
+- name: Render Prometheus exporter scrape targets from inventory
+  ansible.builtin.import_tasks: refresh_monitoring_scrape_target_facts.yml
 
 - name: Render EC2 start/stop helper facts for portal and docs
   ansible.builtin.set_fact:
@@ -213,19 +177,6 @@
         lookup('template', 'deployment_portal_base_cluster_portal_urls.j2') | from_yaml | default({}, true)
       }}
 
-- name: Render blackbox_exporter probe targets for Prometheus
-  ansible.builtin.set_fact:
-    deployment_portal_blackbox_probe_targets: >-
-      {{
-        lookup('template', 'monitoring_blackbox_probe_targets.j2') | from_yaml | default([], true)
-      }}
-  when: monitoring_blackbox_exporter_enabled | default(true) | bool
-
-- name: Default empty blackbox probe targets when disabled
-  ansible.builtin.set_fact:
-    deployment_portal_blackbox_probe_targets: []
-  when: not (monitoring_blackbox_exporter_enabled | default(true) | bool)
-
 - name: Set dynamic data service links from base cluster URL catalog
   ansible.builtin.set_fact:
     deployment_portal_dynamic_links: "{{ deployment_portal_base_cluster_portal_urls.links | default([]) }}"
@@ -315,6 +266,9 @@
     caddy_vhost_urls: {}
     caddy_vhost_urls_external: {}
   when: not (caddy_vhost_enabled | default(false) | bool)
+
+- name: Render blackbox_exporter probe targets (after Caddy vhost URL facts)
+  ansible.builtin.import_tasks: refresh_monitoring_blackbox_probe_targets.yml
 
 - name: Initialize ECS data service portal links
   ansible.builtin.set_fact:

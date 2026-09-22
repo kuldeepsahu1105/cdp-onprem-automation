@@ -427,6 +427,7 @@
         or (monitoring_blackbox_render is defined and monitoring_blackbox_render is changed)
         or monitoring_prometheus_render is changed
         or monitoring_alertmanager_render is changed
+        or (monitoring_exporters_enrolled_this_run | default(false) | bool)
         or (monitoring_alert_rules_render is defined and monitoring_alert_rules_render is changed)
         or (monitoring_grafana_datasources_render is defined and monitoring_grafana_datasources_render is changed)
         or (monitoring_grafana_dashboard_provider_render is defined and monitoring_grafana_dashboard_provider_render is changed)
