@@ -190,7 +190,7 @@ If Tier **B** warns but Tier **A** passed, open security groups for the relevant
 | **ipaserver** (ops / portal host) | Yes (systemd on host) | Yes | Yes — Compose **`cadvisor`** job on ops (`:8089`); host daemon only if `ipaserver` is in `monitoring_cadvisor_host_groups` | Probes run **from** blackbox on ops; targets include portal Caddy `:81`, pgAdmin/Grafana/Prometheus containers, IPA/CM/ECS URLs |
 | **cldr-mngr** | Yes | Yes | Only when in `monitoring_cadvisor_host_groups` (default: no) — typically no workload containers | CM UI `:7180`, CM API `:7183/api/version`, PostgreSQL `:5432` (TCP) |
 | **base-masters** / **base-workers** | Yes | Yes | Only when in `monitoring_cadvisor_host_groups` (default: no) | Knox gateway **TCP :8443** when `base_cluster_install_services.knox` is true (master private IP) |
-| **ecs-masters** / **ecs-workers** | Yes | Yes | Yes — host Docker cAdvisor **`:19180`** (`job="cadvisor_host"`) | ECS console HTTPS when ECS is in inventory (`https://console.<ecs_app_domain>`) |
+| **ecs-masters** / **ecs-workers** | Yes | Yes | Yes — host Docker cAdvisor **`:19180`** (`job="cadvisor_host"`) | ECS console HTTPS when ECS is in inventory (`https://<ecs_console_host_prefix>.<ecs_app_domain>`, default `console-cdp`) |
 
 **“All nodes”** for CPU/memory/disk/network still means **`node_exporter` + `process_exporter`** on every group in `monitoring_node_exporter_host_groups` / `monitoring_process_exporter_host_groups`. Container-level metrics use Compose cAdvisor on the ops host plus host cAdvisor on **`monitoring_cadvisor_host_groups`** (default ECS masters/workers). Extend `monitoring_cadvisor_host_groups` to match the six exporter groups when you want cAdvisor on every inventory host.
 
@@ -915,7 +915,7 @@ On **ipaserver**, remove or fix a stale **`zz-ipa-caddy-proxy.conf`** (SUBSTITUT
 
 **Cloudera Manager (not via Caddy):** Use direct **`https://<cldr-mngr-fqdn>:7183`** (or `:7180` before Auto-TLS) from browsers and Jenkins Tier **B**. Caddy on the ops host serves portal, pgAdmin, monitoring, and IPA only. Optional `cm_external_url` sets a custom published CM URL in portal facts; it does not configure Caddy.
 
-**ECS console (not via Caddy):** Published console URL is **`https://console.<ecs_app_domain>`** (`ecs_control_plane_url_effective`). Override with `ecs_control_plane_url` when needed. Internal ECS **`ApplicationDomain`** stays `ecs_app_domain`.
+**ECS console (not via Caddy):** Published console URL is **`https://<ecs_console_host_prefix>.<ecs_app_domain>`** (default prefix **`console-cdp`**; `ecs_control_plane_url_effective`). Override with `ecs_control_plane_url` when needed. Internal ECS **`ApplicationDomain`** stays `ecs_app_domain`.
 
 **Bare metal / private network (no public IP):** Set `deployment_environment: baremetal` (or `deployment_portal_access_profile: private`). The portal index shows only private-network URLs — typically `http://<ops-fqdn>:81/` when `deployment_portal_prefer_fqdn_urls: true`, or `http://<management-ip>:81/` otherwise. pgAdmin stays on port `5050` on the same ops host; database is **cldr-mngr** PostgreSQL. Caddy lab hostnames use the ops management IP (often `caddy_vhost_dns_mode: flat` with IPA/AD DNS).
 

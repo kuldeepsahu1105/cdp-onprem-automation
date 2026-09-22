@@ -35,7 +35,7 @@ ecs_data_services_install: [cdw, cde, cai]  # model_registry for registry only
 
 ## API endpoint
 
-Signed calls use **`https://console-cdp.<ecs_app_domain>`** (`ecs_cdp_console_api_url`). The UI may still be at `https://console.<ecs_app_domain>` (`ecs_control_plane_url_effective`).
+Signed API calls and the management console UI use **`https://<ecs_console_host_prefix>.<ecs_app_domain>`** (default **`console-cdp`**; `ecs_control_plane_url_effective` / `ecs_cdp_console_api_url_effective`). Override with `ecs_control_plane_url` or `ecs_cdp_console_api_url` when needed.
 
 ## Optional ECS LDAP and admin user
 

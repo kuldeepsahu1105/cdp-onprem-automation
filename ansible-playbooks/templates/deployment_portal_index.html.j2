@@ -1357,7 +1357,7 @@
           <li>ECS cluster: <code>{{ ctx.ecs.cluster_name }}</code></li>
           <li>ECS app domain: <code>{{ ctx.ecs.app_domain }}</code></li>
           <li>ECS console — {{ portal_url_for_context(ctx.ecs.console_hint, ctx) }}</li>
-          <li>ECS direct HTTPS — {{ portal_url_for_context(ctx.ecs.console_url_direct | default('https://console.' ~ ctx.ecs.app_domain), ctx) }}</li>
+          <li>ECS direct HTTPS — {{ portal_url_for_context(ctx.ecs.console_url_direct | default('https://' ~ (ecs_console_host_prefix | default('console-cdp')) ~ '.' ~ ctx.ecs.app_domain), ctx) }}</li>
           <li>Data Services hostnames: <code>{{ ctx.ecs.apps_wildcard }}</code></li>
           {% else %}
           <li>ECS: <span class="badge">not in inventory</span></li>

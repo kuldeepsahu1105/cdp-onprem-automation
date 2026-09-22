@@ -79,6 +79,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `ecs_pvc_ds_version` | `1.5.5-h3300` | CDS repo tag (`1.5.5-h3300` = SP3 CHF3; older: `1.5.5-h2000` SP2, `1.5.5-h2100` SP2 CHF1) |
 | `ecs_parcel_version` | `""` | Optional override; auto-discovered from CM after parcel repo refresh |
 | `ecs_app_domain` | `apps.<domain>` | Application domain for ECS services |
+| `ecs_console_host_prefix` | `console-cdp` | DNS label for ECS management console (`https://<prefix>.<ecs_app_domain>`) |
 
 ### CM/CDH repository source
 
@@ -674,7 +675,7 @@ Playbook **`12_setup_freeipa_server.yml`** imports **`detect_ipa_server_install_
 | `cm_apply_caddy_frontend_url` | `false` | Deprecated — CM is not fronted by Caddy |
 | `cm_config_api_via_caddy_proxy` | `false` | Deprecated — CM API probes use direct `:7180`/`:7183` |
 | `cm_frontend_url_effective` | (fact) | Optional `cm_external_url` override only |
-| `ecs_control_plane_url_effective` | (fact) | `ecs_control_plane_url` or `https://console.<ecs_app_domain>` |
+| `ecs_control_plane_url_effective` | (fact) | `ecs_control_plane_url` or `https://<ecs_console_host_prefix>.<ecs_app_domain>` (default `console-cdp`) |
 | `deployment_portal_url_verify_skip_vpc` | `false` | Skip VPC-only portal URL hard-fail during verify (Jenkins sets `true`) |
 | `deployment_external_url_verify` | `warn` | Tier B: GET external service URLs from controller when reachability is `public` — `warn`, `fail`, or `skip` |
 | `deployment_portal_external_url_verify` | `warn` | Legacy Tier B default for portal when `deployment_external_url_verify` is unset |

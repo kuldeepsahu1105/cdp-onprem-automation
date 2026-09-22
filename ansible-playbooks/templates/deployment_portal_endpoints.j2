@@ -100,8 +100,8 @@
 {% set _ecs_master = groups[ecs_cluster_master_group][0] if (ecs_cluster_master_group in groups and groups[ecs_cluster_master_group] | default([]) | length > 0) else '' %}
 {% set _ecs_master_ip = hostvars[_ecs_master].ansible_host | default('') if (_ecs_master | length > 0) else '' %}
 - name: "ECS console"
-  url: "https://console.{{ ecs_app_domain }}"
-  hostname: "console.{{ ecs_app_domain }}"
+  url: "https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}"
+  hostname: "{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}"
   public_ip: "{{ _ecs_master_ip }}"
   port: "443"
   scheme: https

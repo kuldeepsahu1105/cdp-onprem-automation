@@ -5,5 +5,5 @@
       {{
         ecs_control_plane_url | trim
         if (ecs_control_plane_url | default('') | length > 0)
-        else ('https://console.' + ecs_app_domain)
+        else ('https://' + ecs_console_host_prefix + '.' + ecs_app_domain)
       }}
