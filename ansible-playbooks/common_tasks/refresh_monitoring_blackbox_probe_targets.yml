@@ -1,0 +1,17 @@
+---
+# Render blackbox_exporter probe target list on localhost.
+# Requires deployment_portal_ops_* and (for vhost probes) caddy_vhost_urls_external when enabled.
+# Call after Caddy vhost URL facts are built in build_deployment_portal_facts.yml.
+
+- name: Render blackbox_exporter probe targets for Prometheus
+  ansible.builtin.set_fact:
+    deployment_portal_blackbox_probe_targets: >-
+      {{
+        lookup('template', 'monitoring_blackbox_probe_targets.j2') | from_yaml | default([], true)
+      }}
+  when: monitoring_blackbox_exporter_enabled | default(true) | bool
+
+- name: Default empty blackbox probe targets when disabled
+  ansible.builtin.set_fact:
+    deployment_portal_blackbox_probe_targets: []
+  when: not (monitoring_blackbox_exporter_enabled | default(true) | bool)

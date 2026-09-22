@@ -1,7 +1,7 @@
 ---
 # Install node_exporter, process_exporter, and optional host cAdvisor on cluster hosts.
-# Imported from 10 (when monitoring_stack_enabled), 32 (MONITORING phase), and 35 (when
-# monitoring routes are active) so Prometheus scrape targets are not published before listeners exist.
+# Imported from 10 (when monitoring_stack_enabled or monitoring routes are active), 32 (MONITORING
+# phase), and 35 (when monitoring routes are active) so Prometheus scrape targets match listeners.
 - name: Install and enroll node_exporter on cluster hosts
   hosts: "{{ monitoring_node_exporter_host_groups | join(':') }}"
   become: true
@@ -34,3 +34,17 @@
     - name: Install cAdvisor container (per-host container metrics for Prometheus)
       ansible.builtin.import_tasks: common_tasks/install_cadvisor_host.yml
       when: monitoring_cadvisor_host_enabled | default(true) | bool
+
+- name: Refresh Prometheus scrape target facts after exporter enrollment
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Re-render exporter scrape targets from inventory (host cAdvisor flags)
+      ansible.builtin.import_tasks: common_tasks/refresh_monitoring_scrape_target_facts.yml
+      vars:
+        monitoring_scrape_targets_bump_config: true
+
+    - name: Mark exporter enrollment completed for this Ansible run
+      ansible.builtin.set_fact:
+        monitoring_exporters_enrolled_this_run: true

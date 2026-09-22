@@ -7,7 +7,7 @@
 {% set _ = _seen.hosts.append(inv_host) %}
 {% set _hv = hostvars[inv_host] %}
 {% set _priv = _hv.private_ip | default(_hv.ansible_host | default('')) %}
-{% if _priv | length > 0 %}
+{% if _priv | length > 0 and (_hv.monitoring_cadvisor_host_scrape_enabled | default(true) | bool) %}
 - target: "{{ _priv }}:{{ monitoring_cadvisor_cluster_port }}"
   instance: "{{ _hv.cldr_hostname | default(inv_host) }}"
   labels:
