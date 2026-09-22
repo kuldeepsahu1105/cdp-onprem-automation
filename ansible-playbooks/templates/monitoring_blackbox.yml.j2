@@ -1,5 +1,5 @@
 # Ansible-managed blackbox_exporter modules ({{ monitoring_config_dir }}/blackbox.yml).
-# Extend via monitoring_blackbox_modules_extra in group_vars.
+{# Extend via monitoring_blackbox_modules_extra in group_vars/all.yml #}
 modules:
   http_2xx:
     prober: http
@@ -24,7 +24,7 @@ modules:
     timeout: 5s
     tcp:
       preferred_ip_protocol: ip4
-{% for mod_name, mod_cfg in monitoring_blackbox_modules_extra | default({}).items() %}
+{% for mod_name, mod_cfg in (monitoring_blackbox_modules_extra | default({})).items() %}
   {{ mod_name }}:
 {{ mod_cfg | to_nice_yaml(indent=4) }}
 {% endfor %}
