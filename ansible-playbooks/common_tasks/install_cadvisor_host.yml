@@ -1,0 +1,160 @@
+---
+# Run cAdvisor as a Docker container on cluster hosts (ECS and optionally other groups) so
+# Prometheus can scrape per-container metrics outside the ops monitoring compose stack.
+# Imported from enroll_monitoring_exporters.yml when monitoring_cadvisor_host_enabled.
+
+- name: Resolve Docker CLI for host cAdvisor
+  ansible.builtin.command:
+    argv:
+      - bash
+      - -lc
+      - >-
+        command -v docker
+        || test -x /opt/cloudera/parcels/ECS/docker/docker && echo /opt/cloudera/parcels/ECS/docker/docker
+        || test -x /usr/bin/docker && echo /usr/bin/docker
+        || true
+  register: _cadvisor_docker_bin_cmd
+  changed_when: false
+  failed_when: false
+
+- name: Set Docker binary path fact for host cAdvisor
+  ansible.builtin.set_fact:
+    _cadvisor_docker_bin: "{{ (_cadvisor_docker_bin_cmd.stdout | default('') | trim) or 'docker' }}"
+
+- name: Check Docker daemon for host cAdvisor
+  ansible.builtin.command:
+    argv: ["{{ _cadvisor_docker_bin }}", "info"]
+  register: _cadvisor_docker_info
+  changed_when: false
+  failed_when: false
+
+- name: Skip host cAdvisor when Docker is not available on this host
+  ansible.builtin.debug:
+    msg: >-
+      Docker is not available on {{ inventory_hostname }}; skipping host cAdvisor enrollment.
+      Install/start Docker (ECS nodes: docker service from ECS install) or remove this host
+      from monitoring_cadvisor_host_groups. Prometheus may show the scrape target as DOWN.
+  when: _cadvisor_docker_info.rc != 0
+
+- name: Install and run host cAdvisor container
+  when: _cadvisor_docker_info.rc == 0
+  block:
+    - name: Ensure Docker service is started when systemd unit exists
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
+      register: _cadvisor_docker_systemd
+      failed_when: false
+
+    - name: Pull pinned cAdvisor image for host deployment
+      ansible.builtin.command:
+        argv: ["{{ _cadvisor_docker_bin }}", "pull", "{{ monitoring_cadvisor_image }}"]
+      register: _cadvisor_image_pull
+      changed_when: >-
+        'Downloaded newer image' in (_cadvisor_image_pull.stdout | default(''))
+        or 'Pull complete' in (_cadvisor_image_pull.stdout | default(''))
+        or (_cadvisor_image_pull.stderr | default('') | regex_search('Downloaded newer image|Pull complete'))
+
+    - name: Inspect existing host cAdvisor container
+      ansible.builtin.command:
+        argv:
+          - "{{ _cadvisor_docker_bin }}"
+          - inspect
+          - "{{ monitoring_cadvisor_host_container }}"
+      register: _cadvisor_container_inspect
+      changed_when: false
+      failed_when: false
+
+    - name: Parse host cAdvisor container image when present
+      ansible.builtin.set_fact:
+        _cadvisor_container_image: >-
+          {{
+            (_cadvisor_container_inspect.stdout | default('') | from_json | first).Config.Image
+            | default('')
+          }}
+      when:
+        - _cadvisor_container_inspect.rc == 0
+        - (_cadvisor_container_inspect.stdout | default('') | trim | length) > 0
+
+    - name: Default empty host cAdvisor container image when absent
+      ansible.builtin.set_fact:
+        _cadvisor_container_image: ""
+      when: _cadvisor_container_inspect.rc != 0
+
+    - name: Decide whether host cAdvisor container must be recreated
+      ansible.builtin.set_fact:
+        _cadvisor_container_recreate: >-
+          {{
+            _cadvisor_container_inspect.rc != 0
+            or (_cadvisor_container_image | default('')) != monitoring_cadvisor_image
+          }}
+
+    - name: Remove stale host cAdvisor container before recreate
+      ansible.builtin.command:
+        argv:
+          - "{{ _cadvisor_docker_bin }}"
+          - rm
+          - -f
+          - "{{ monitoring_cadvisor_host_container }}"
+      register: _cadvisor_container_removed
+      changed_when: _cadvisor_container_removed.rc == 0
+      when: _cadvisor_container_recreate | bool and _cadvisor_container_inspect.rc == 0
+
+    - name: Build host cAdvisor docker run argument list
+      ansible.builtin.set_fact:
+        _cadvisor_run_argv: >-
+          {{
+            [
+              _cadvisor_docker_bin, 'run', '-d',
+              '--name', monitoring_cadvisor_host_container,
+              '--restart=unless-stopped',
+              '--publish', '0.0.0.0:' ~ (monitoring_cadvisor_cluster_port | string) ~ ':8080/tcp',
+              '--volume', '/:/rootfs:ro',
+              '--volume', '/var/run:/var/run:ro',
+              '--volume', '/sys:/sys:ro',
+              '--volume', '/var/lib/docker/:/var/lib/docker:ro',
+            ]
+            + (
+              ['--privileged']
+              if (monitoring_cadvisor_host_docker_privileged | default(true) | bool)
+              else []
+            )
+            + (monitoring_cadvisor_host_docker_volume_args | default([]))
+            + [monitoring_cadvisor_image]
+          }}
+
+    - name: Create host cAdvisor container
+      ansible.builtin.command:
+        argv: "{{ _cadvisor_run_argv }}"
+      register: _cadvisor_container_created
+      changed_when: true
+      when: _cadvisor_container_recreate | bool
+
+    - name: Ensure host cAdvisor container is running
+      ansible.builtin.command:
+        argv:
+          - "{{ _cadvisor_docker_bin }}"
+          - start
+          - "{{ monitoring_cadvisor_host_container }}"
+      register: _cadvisor_container_started
+      changed_when: "'Started' in (_cadvisor_container_started.stdout | default(''))"
+      failed_when: false
+      when: not (_cadvisor_container_recreate | bool)
+
+    - name: Check firewalld service state for host cAdvisor port
+      ansible.builtin.systemd:
+        name: firewalld
+      register: _cadvisor_firewalld_svc
+      failed_when: false
+      changed_when: false
+
+    - name: Allow host cAdvisor metrics port in firewalld
+      ansible.posix.firewalld:
+        port: "{{ monitoring_cadvisor_cluster_port }}/tcp"
+        permanent: true
+        state: enabled
+        immediate: true
+      when:
+        - _cadvisor_firewalld_svc is succeeded
+        - (_cadvisor_firewalld_svc.status.ActiveState | default('inactive')) == 'active'

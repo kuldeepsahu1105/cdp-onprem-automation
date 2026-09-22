@@ -1379,6 +1379,21 @@ monitoring_cadvisor_image: gcr.io/cadvisor/cadvisor:v0.49.1
 monitoring_cadvisor_container: cldr-mon-cadvisor
 monitoring_cadvisor_docker_service: cadvisor
 monitoring_cadvisor_host_port: 8089
+# Host-level cAdvisor (Docker on cluster nodes) — scraped as job cadvisor_host; distinct from the
+# ops Compose cAdvisor (job cadvisor, monitoring_cadvisor_host_port default 8089).
+monitoring_cadvisor_host_enabled: true
+monitoring_cadvisor_host_container: cldr-host-cadvisor
+# Nonstandard host publish port avoids YARN/UI ports such as 8088 on ECS workers.
+monitoring_cadvisor_cluster_port: 19180
+monitoring_cadvisor_host_docker_privileged: true
+monitoring_cadvisor_host_docker_volume_args:
+  - --volume
+  - /var/lib/containerd:/var/lib/containerd:ro
+# Inventory groups that receive a host cAdvisor container + cadvisor_host scrape target. Default ECS
+# only; set to the same six groups as monitoring_node_exporter_host_groups for full coverage.
+monitoring_cadvisor_host_groups:
+  - ecs-masters
+  - ecs-workers
 # blackbox_exporter runs in Docker on the ops host (Prometheus scrapes cldr-mon-blackbox:9115).
 monitoring_blackbox_exporter_enabled: true
 monitoring_blackbox_exporter_image: prom/blackbox-exporter:v0.25.0
@@ -1466,21 +1481,64 @@ monitoring_process_exporter_catch_all: true
 # Gated by deployment_portal_monitoring_routes_enabled — same as the rest of the monitoring stack.
 monitoring_grafana_provisioning_enabled: true
 
-# Prometheus alerting rules (InstanceDown, high CPU/mem) rendered to {{ monitoring_config_dir }}/rules/
-# and loaded via rule_files in prometheus.yml. Alertmanager route/receiver stays minimal (a
-# webhook placeholder) so labs work without any external notification integration configured.
+# Prometheus alerting rules rendered to {{ monitoring_config_dir }}/rules/alerts.yml and loaded via
+# rule_files in prometheus.yml. Per-area toggles avoid noise when an exporter is intentionally off.
 monitoring_alert_rules_enabled: true
+monitoring_alert_runbook_base_url: ""
+monitoring_alert_node_rules_enabled: true
+monitoring_alert_process_rules_enabled: true
+monitoring_alert_blackbox_rules_enabled: true
+monitoring_alert_cadvisor_rules_enabled: true
 monitoring_alert_instance_down_for: "2m"
 monitoring_alert_high_cpu_threshold: 85
 monitoring_alert_high_cpu_for: "10m"
 monitoring_alert_high_mem_threshold: 90
 monitoring_alert_high_mem_for: "10m"
-# Alertmanager route grouping and optional webhook receiver (empty = accept/ack alerts, no external
-# notification integration; set to a real endpoint, e.g. Slack/Opsgenie webhook relay, to notify out).
+monitoring_alert_disk_used_threshold: 85
+monitoring_alert_disk_used_for: "15m"
+monitoring_alert_disk_used_critical_threshold: 95
+monitoring_alert_disk_used_critical_for: "5m"
+monitoring_alert_process_high_count_enabled: false
+monitoring_alert_process_high_count_threshold: 50
+monitoring_alert_process_high_count_for: "15m"
+monitoring_alert_blackbox_probe_failed_for: "5m"
+monitoring_alert_blackbox_ssl_expiry_enabled: true
+monitoring_alert_blackbox_ssl_expiry_days: 14
+monitoring_alert_blackbox_ssl_expiry_for: "1h"
+monitoring_alert_ops_container_name_regex: "cldr-mon-.*|cldr-portal-.*"
+monitoring_alert_ops_container_absent_seconds: 180
+monitoring_alert_ops_container_absent_for: "5m"
+monitoring_alert_ops_container_mem_bytes: 3221225472
+monitoring_alert_ops_container_mem_for: "15m"
+# Grafana dashboard JSON files copied from ansible-playbooks/files/grafana_dashboards/
+monitoring_grafana_dashboard_files:
+  - cm_cluster_overview.json
+  - cdp_ops_overview.json
+  - node_exporter_hosts.json
+  - process_exporter_overview.json
+  - blackbox_probes.json
+  - cadvisor_ops.json
+# Alertmanager: default route → `default` receiver (UI-only when all integrations empty).
 monitoring_alertmanager_group_by:
   - alertname
   - severity
+monitoring_alertmanager_group_wait: "30s"
+monitoring_alertmanager_group_interval: "5m"
+monitoring_alertmanager_repeat_interval: "4h"
 monitoring_alertmanager_receiver_webhook_url: ""
+# Slack incoming webhook (Alertmanager slack_configs api_url — create in Slack app settings).
+monitoring_alertmanager_slack_api_url: ""
+monitoring_alertmanager_slack_channel: "#alerts"
+# SMTP email (requires smarthost + at least one `to` address).
+monitoring_alertmanager_email_to: []
+monitoring_alertmanager_smtp_smarthost: ""
+monitoring_alertmanager_smtp_from: "alertmanager@localhost"
+monitoring_alertmanager_smtp_auth_username: ""
+monitoring_alertmanager_smtp_auth_password: ""
+# Optional child routes (list of {receiver, matchers: ['severity="critical"'], continue: true}).
+monitoring_alertmanager_route_child_receivers: []
+# Optional extra named receivers for child routes, e.g. [{name: oncall, slack_api_url: "..."}].
+monitoring_alertmanager_extra_receivers: []
 
 # -----------------------------------------------------------------------------
 # 10. Cleanup manifests and OS-specific package maps

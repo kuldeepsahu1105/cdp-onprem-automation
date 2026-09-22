@@ -396,8 +396,7 @@
         src: "grafana_dashboards/{{ item }}"
         dest: "{{ monitoring_config_dir }}/grafana/dashboards/{{ item }}"
         mode: "0644"
-      loop:
-        - cm_cluster_overview.json
+      loop: "{{ monitoring_grafana_dashboard_files | default(['cm_cluster_overview.json']) }}"
       register: monitoring_grafana_dashboards_copy
       when: monitoring_grafana_provisioning_enabled | default(true) | bool
 

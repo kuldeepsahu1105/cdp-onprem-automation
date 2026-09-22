@@ -1,32 +1,195 @@
 # Ansible-managed Prometheus alerting rules (see common_tasks/sync_deployment_portal_content.yml).
-# Minimal, conservative baseline: instance reachability + basic CPU/memory thresholds against
-# node_exporter metrics. Extend with more groups/rules as the cluster's alerting needs grow.
+# Conservative defaults: scoped jobs, `for:` delays, and optional toggles in group_vars/all.yml.
+{% set _runbook = monitoring_alert_runbook_base_url | default('') %}
 groups:
-  - name: cldr-cluster-basic-alerts
+{% if monitoring_alert_node_rules_enabled | default(true) | bool %}
+  - name: cldr-node-alerts
     rules:
-      - alert: InstanceDown
-        expr: up == 0
+      - alert: NodeExporterDown
+        expr: up{job="node_exporter"} == 0
         for: {{ monitoring_alert_instance_down_for | default('2m') }}
         labels:
           severity: critical
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/node-exporter-down
+{% endif %}
         annotations:
-          summary: "Instance {% raw %}{{ $labels.instance }}{% endraw %} down"
-          description: "Job {% raw %}{{ $labels.job }}{% endraw %} on {% raw %}{{ $labels.instance }}{% endraw %} has been unreachable for more than {{ monitoring_alert_instance_down_for | default('2m') }}."
+          summary: "node_exporter unreachable on {% raw %}{{ $labels.instance }}{% endraw %}"
+          description: "Prometheus cannot scrape node_exporter on {% raw %}{{ $labels.instance }}{% endraw %} for more than {{ monitoring_alert_instance_down_for | default('2m') }}."
 
       - alert: HostHighCpuLoad
-        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > {{ monitoring_alert_high_cpu_threshold | default(85) }}
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{job="node_exporter",mode="idle"}[5m])) * 100) > {{ monitoring_alert_high_cpu_threshold | default(85) }}
         for: {{ monitoring_alert_high_cpu_for | default('10m') }}
         labels:
           severity: warning
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/high-cpu
+{% endif %}
         annotations:
           summary: "High CPU load on {% raw %}{{ $labels.instance }}{% endraw %}"
-          description: "CPU load on {% raw %}{{ $labels.instance }}{% endraw %} is above {{ monitoring_alert_high_cpu_threshold | default(85) }}% for more than {{ monitoring_alert_high_cpu_for | default('10m') }}."
+          description: "CPU busy % on {% raw %}{{ $labels.instance }}{% endraw %} is above {{ monitoring_alert_high_cpu_threshold | default(85) }} for more than {{ monitoring_alert_high_cpu_for | default('10m') }}."
 
       - alert: HostHighMemoryUsage
-        expr: 100 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100) > {{ monitoring_alert_high_mem_threshold | default(90) }}
+        expr: 100 - (node_memory_MemAvailable_bytes{job="node_exporter"} / node_memory_MemTotal_bytes{job="node_exporter"} * 100) > {{ monitoring_alert_high_mem_threshold | default(90) }}
         for: {{ monitoring_alert_high_mem_for | default('10m') }}
         labels:
           severity: warning
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/high-memory
+{% endif %}
         annotations:
           summary: "High memory usage on {% raw %}{{ $labels.instance }}{% endraw %}"
-          description: "Memory usage on {% raw %}{{ $labels.instance }}{% endraw %} is above {{ monitoring_alert_high_mem_threshold | default(90) }}% for more than {{ monitoring_alert_high_mem_for | default('10m') }}."
+          description: "Memory used % on {% raw %}{{ $labels.instance }}{% endraw %} is above {{ monitoring_alert_high_mem_threshold | default(90) }} for more than {{ monitoring_alert_high_mem_for | default('10m') }}."
+
+      - alert: HostDiskSpaceLow
+        expr: 100 - (node_filesystem_avail_bytes{job="node_exporter",mountpoint="/",fstype!="rootfs"} / node_filesystem_size_bytes{job="node_exporter",mountpoint="/",fstype!="rootfs"} * 100) > {{ monitoring_alert_disk_used_threshold | default(85) }}
+        for: {{ monitoring_alert_disk_used_for | default('15m') }}
+        labels:
+          severity: warning
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/disk-space-low
+{% endif %}
+        annotations:
+          summary: "Root filesystem nearly full on {% raw %}{{ $labels.instance }}{% endraw %}"
+          description: "Root (/) used % on {% raw %}{{ $labels.instance }}{% endraw %} is above {{ monitoring_alert_disk_used_threshold | default(85) }} for more than {{ monitoring_alert_disk_used_for | default('15m') }}."
+
+      - alert: HostDiskSpaceCritical
+        expr: 100 - (node_filesystem_avail_bytes{job="node_exporter",mountpoint="/",fstype!="rootfs"} / node_filesystem_size_bytes{job="node_exporter",mountpoint="/",fstype!="rootfs"} * 100) > {{ monitoring_alert_disk_used_critical_threshold | default(95) }}
+        for: {{ monitoring_alert_disk_used_critical_for | default('5m') }}
+        labels:
+          severity: critical
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/disk-space-critical
+{% endif %}
+        annotations:
+          summary: "Root filesystem critically full on {% raw %}{{ $labels.instance }}{% endraw %}"
+          description: "Root (/) used % on {% raw %}{{ $labels.instance }}{% endraw %} is above {{ monitoring_alert_disk_used_critical_threshold | default(95) }} for more than {{ monitoring_alert_disk_used_critical_for | default('5m') }}."
+{% endif %}
+
+{% if monitoring_alert_process_rules_enabled | default(true) | bool %}
+  - name: cldr-process-alerts
+    rules:
+      - alert: ProcessExporterDown
+        expr: up{job="process_exporter"} == 0
+        for: {{ monitoring_alert_instance_down_for | default('2m') }}
+        labels:
+          severity: warning
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/process-exporter-down
+{% endif %}
+        annotations:
+          summary: "process_exporter unreachable on {% raw %}{{ $labels.instance }}{% endraw %}"
+          description: "Prometheus cannot scrape process_exporter on {% raw %}{{ $labels.instance }}{% endraw %} for more than {{ monitoring_alert_instance_down_for | default('2m') }}."
+
+{% if monitoring_alert_process_high_count_enabled | default(false) | bool %}
+      - alert: ProcessGroupHighCount
+        expr: namedprocess_namegroup_num_procs{job="process_exporter"} > {{ monitoring_alert_process_high_count_threshold | default(50) }}
+        for: {{ monitoring_alert_process_high_count_for | default('15m') }}
+        labels:
+          severity: warning
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/process-high-count
+{% endif %}
+        annotations:
+          summary: "High process count for {% raw %}{{ $labels.groupname }}{% endraw %} on {% raw %}{{ $labels.instance }}{% endraw %}"
+          description: "Process group {% raw %}{{ $labels.groupname }}{% endraw %} has more than {{ monitoring_alert_process_high_count_threshold | default(50) }} processes on {% raw %}{{ $labels.instance }}{% endraw %} for {{ monitoring_alert_process_high_count_for | default('15m') }}."
+{% endif %}
+{% endif %}
+
+{% if monitoring_alert_blackbox_rules_enabled | default(true) | bool %}
+  - name: cldr-blackbox-alerts
+    rules:
+      - alert: BlackboxProbeFailed
+        expr: probe_success{job=~"blackbox_.*"} == 0
+        for: {{ monitoring_alert_blackbox_probe_failed_for | default('5m') }}
+        labels:
+          severity: warning
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/blackbox-probe-failed
+{% endif %}
+        annotations:
+          summary: "Blackbox probe failed for {% raw %}{{ $labels.instance }}{% endraw %}"
+          description: "HTTP/TCP probe (job {% raw %}{{ $labels.job }}{% endraw %}) to {% raw %}{{ $labels.instance }}{% endraw %} has been failing for more than {{ monitoring_alert_blackbox_probe_failed_for | default('5m') }}."
+
+{% if monitoring_alert_blackbox_ssl_expiry_enabled | default(true) | bool %}
+      - alert: BlackboxSslCertificateExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry{job=~"blackbox_.*"} - time()) / 86400 < {{ monitoring_alert_blackbox_ssl_expiry_days | default(14) }}
+        for: {{ monitoring_alert_blackbox_ssl_expiry_for | default('1h') }}
+        labels:
+          severity: warning
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/ssl-cert-expiring
+{% endif %}
+        annotations:
+          summary: "TLS certificate expiring soon for {% raw %}{{ $labels.instance }}{% endraw %}"
+          description: "Certificate for {% raw %}{{ $labels.instance }}{% endraw %} expires in fewer than {{ monitoring_alert_blackbox_ssl_expiry_days | default(14) }} days (blackbox probe)."
+{% endif %}
+{% endif %}
+
+{% if monitoring_alert_cadvisor_rules_enabled | default(true) | bool %}
+  - name: cldr-cadvisor-alerts
+    rules:
+      - alert: CadvisorTargetDown
+        expr: up{job="cadvisor"} == 0
+        for: {{ monitoring_alert_instance_down_for | default('2m') }}
+        labels:
+          severity: critical
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/cadvisor-down
+{% endif %}
+        annotations:
+          summary: "cAdvisor scrape target down on ops host"
+          description: "Prometheus cannot scrape the cAdvisor job for more than {{ monitoring_alert_instance_down_for | default('2m') }}."
+
+      - alert: OpsStackContainerAbsent
+        expr: (time() - container_last_seen{job="cadvisor",name=~"{{ monitoring_alert_ops_container_name_regex | default('cldr-mon-.*|cldr-portal-.*') }}"}) > {{ monitoring_alert_ops_container_absent_seconds | default(180) }}
+        for: {{ monitoring_alert_ops_container_absent_for | default('5m') }}
+        labels:
+          severity: warning
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/ops-container-absent
+{% endif %}
+        annotations:
+          summary: "Ops stack container missing or stopped ({% raw %}{{ $labels.name }}{% endraw %})"
+          description: "cAdvisor has not seen container {% raw %}{{ $labels.name }}{% endraw %} for more than {{ monitoring_alert_ops_container_absent_seconds | default(180) }}s."
+
+      - alert: OpsStackContainerHighMemory
+        expr: container_memory_usage_bytes{job="cadvisor",name=~"{{ monitoring_alert_ops_container_name_regex | default('cldr-mon-.*|cldr-portal-.*') }}"} > {{ monitoring_alert_ops_container_mem_bytes | default(3221225472) }}
+        for: {{ monitoring_alert_ops_container_mem_for | default('15m') }}
+        labels:
+          severity: warning
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/ops-container-high-memory
+{% endif %}
+        annotations:
+          summary: "High memory use by ops container {% raw %}{{ $labels.name }}{% endraw %}"
+          description: "Container {% raw %}{{ $labels.name }}{% endraw %} resident memory is above {{ monitoring_alert_ops_container_mem_bytes | default(3221225472) }} bytes for {{ monitoring_alert_ops_container_mem_for | default('15m') }}."
+
+{% if monitoring_cadvisor_host_enabled | default(true) | bool %}
+      - alert: CadvisorHostTargetDown
+        expr: up{job="cadvisor_host"} == 0
+        for: {{ monitoring_alert_instance_down_for | default('2m') }}
+        labels:
+          severity: warning
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/cadvisor-host-down
+{% endif %}
+        annotations:
+          summary: "Host cAdvisor scrape down on {% raw %}{{ $labels.instance }}{% endraw %}"
+          description: "Prometheus cannot scrape cadvisor_host on {% raw %}{{ $labels.instance }}{% endraw %} for more than {{ monitoring_alert_instance_down_for | default('2m') }}."
+{% endif %}
+{% endif %}
+
+  - name: cldr-scrape-alerts
+    rules:
+      - alert: PrometheusTargetDown
+        expr: up{job="prometheus"} == 0
+        for: {{ monitoring_alert_instance_down_for | default('2m') }}
+        labels:
+          severity: critical
+{% if _runbook | length > 0 %}
+          runbook_url: {{ _runbook }}/prometheus-down
+{% endif %}
+        annotations:
+          summary: "Prometheus self-monitoring target down"
+          description: "The prometheus job scrape target is unreachable for more than {{ monitoring_alert_instance_down_for | default('2m') }}."

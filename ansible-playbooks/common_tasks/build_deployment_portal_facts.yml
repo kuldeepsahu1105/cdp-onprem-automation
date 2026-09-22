@@ -62,6 +62,19 @@
     deployment_portal_process_exporter_targets: []
   when: not (monitoring_process_exporter_enabled | default(true) | bool)
 
+- name: Render host cAdvisor Prometheus scrape targets from inventory
+  ansible.builtin.set_fact:
+    deployment_portal_cadvisor_host_targets: >-
+      {{
+        lookup('template', 'monitoring_cadvisor_host_targets.j2') | from_yaml | default([], true)
+      }}
+  when: monitoring_cadvisor_host_enabled | default(true) | bool
+
+- name: Default empty host cAdvisor scrape targets when disabled
+  ansible.builtin.set_fact:
+    deployment_portal_cadvisor_host_targets: []
+  when: not (monitoring_cadvisor_host_enabled | default(true) | bool)
+
 - name: Render EC2 start/stop helper facts for portal and docs
   ansible.builtin.set_fact:
     deployment_portal_ec2_startstop: >-

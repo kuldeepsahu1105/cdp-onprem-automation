@@ -23,6 +23,22 @@ scrape_configs:
     static_configs:
       - targets:
           - {{ monitoring_cadvisor_container }}:8080
+        labels:
+          cadvisor_scope: ops
+
+{% if monitoring_cadvisor_host_enabled | default(true) | bool and (deployment_portal_cadvisor_host_targets | default([]) | length > 0) %}
+  - job_name: cadvisor_host
+    static_configs:
+{% for cadv_target in deployment_portal_cadvisor_host_targets %}
+      - targets:
+          - {{ cadv_target.target }}
+        labels:
+          instance: {{ cadv_target.instance }}
+{% for label_key, label_val in (cadv_target.labels | default({})).items() %}
+          {{ label_key }}: {{ label_val }}
+{% endfor %}
+{% endfor %}
+{% endif %}
 
 {% if monitoring_node_exporter_enabled | default(true) | bool and (deployment_portal_node_exporter_targets | default([]) | length > 0) %}
   - job_name: node_exporter

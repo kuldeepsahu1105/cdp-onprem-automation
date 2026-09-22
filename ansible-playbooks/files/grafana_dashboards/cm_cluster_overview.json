@@ -69,7 +69,7 @@
       "fieldConfig": { "defaults": {}, "overrides": [] },
       "options": {},
       "targets": [
-        { "expr": "count(count by (name) (container_last_seen{name!=\"\"}))", "legendFormat": "containers", "refId": "A" }
+        { "expr": "sum(count by (instance) (count by (instance, name) (container_last_seen{job=~\"cadvisor.*\",name!=\"\"})))", "legendFormat": "containers", "refId": "A" }
       ]
     },
     {
@@ -171,6 +171,22 @@
           "expr": "topk(10, namedprocess_namegroup_memory_bytes{memtype=\"resident\"})",
           "format": "table",
           "instant": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Container CPU (cAdvisor, top by name)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "options": {},
+      "targets": [
+        {
+          "expr": "topk(15, sum by (instance, name) (rate(container_cpu_usage_seconds_total{job=~\"cadvisor.*\",name!=\"\"}[5m])))",
+          "legendFormat": "{{instance}} / {{name}}",
           "refId": "A"
         }
       ]

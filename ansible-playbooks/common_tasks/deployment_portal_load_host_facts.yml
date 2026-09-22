@@ -49,6 +49,7 @@
     deployment_portal_inventory_hosts: "{{ hostvars['localhost']['deployment_portal_inventory_hosts'] | default([]) }}"
     deployment_portal_node_exporter_targets: "{{ hostvars['localhost']['deployment_portal_node_exporter_targets'] | default([]) }}"
     deployment_portal_process_exporter_targets: "{{ hostvars['localhost']['deployment_portal_process_exporter_targets'] | default([]) }}"
+    deployment_portal_cadvisor_host_targets: "{{ hostvars['localhost']['deployment_portal_cadvisor_host_targets'] | default([]) }}"
     deployment_portal_blackbox_probe_targets: "{{ hostvars['localhost']['deployment_portal_blackbox_probe_targets'] | default([]) }}"
     deployment_portal_ecs_api_cache: "{{ hostvars['localhost']['deployment_portal_ecs_api_cache'] | default({}) }}"
     ipa_caddy_modern_public_url: "{{ hostvars['localhost']['ipa_caddy_modern_public_url'] | default('') }}"
