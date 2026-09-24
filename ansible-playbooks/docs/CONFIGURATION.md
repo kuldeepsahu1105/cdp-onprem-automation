@@ -237,7 +237,7 @@ Auto-TLS provisioning uses password mode when secret
 | `monitoring_node_exporter_port` | TCP port; `19100` | Host-level node_exporter listener and Prometheus target port. Port 19100 avoids conflicts with Kubernetes applications that reserve host port 9100 for a DaemonSet. Re-run **MONITORING** after changing it. |
 | `monitoring_process_exporter_port` | TCP port; `19256` | Host-level process_exporter listener and Prometheus target port. The nonstandard port avoids workloads that deploy their own process exporter on conventional host port 9256. |
 | `monitoring_cadvisor_cluster_port` | TCP port; `19180` | Host-level cAdvisor Docker publish on ECS/cluster nodes (`cadvisor_host` job). Avoids YARN/UI ports such as 8088. Re-run **MONITORING** after changing. |
-| `monitoring_cadvisor_host_groups` | inventory groups | Hosts that receive `cldr-host-cadvisor` and a `cadvisor_host` scrape target. Defaults to all six cluster groups; hosts without a working Docker daemon are skipped. |
+| `monitoring_cadvisor_host_groups` | inventory groups | Hosts that receive standalone `cldr-host-cadvisor` and a `cadvisor_host` scrape target. Defaults to ECS masters/workers; the ops host is already covered by the monitoring Compose cAdvisor. |
 
 ## Example profiles
 

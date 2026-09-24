@@ -31,9 +31,11 @@
 - name: Skip host cAdvisor when Docker is not available on this host
   ansible.builtin.debug:
     msg: >-
-      Docker is not available on {{ inventory_hostname }}; skipping host cAdvisor enrollment.
-      Install/start Docker (ECS nodes: docker service from ECS install) or remove this host
-      from monitoring_cadvisor_host_groups. Prometheus may show the scrape target as DOWN.
+      Docker CLI or daemon is unavailable on {{ inventory_hostname }}; skipping host cAdvisor
+      enrollment and omitting this host from Prometheus targets.
+      Command={{ _cadvisor_docker_bin }}, rc={{ _cadvisor_docker_info.rc }},
+      error={{ _cadvisor_docker_info.stderr | default('') | trim | default('none', true) }}.
+      On ECS nodes, verify the Docker service installed by ECS.
   when: _cadvisor_docker_info.rc != 0
 
 - name: Mark host cAdvisor scrape target inactive when Docker is unavailable

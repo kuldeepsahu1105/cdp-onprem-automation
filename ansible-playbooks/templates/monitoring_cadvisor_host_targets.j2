@@ -1,5 +1,5 @@
 {# YAML list of host-level cAdvisor Prometheus scrape targets (Docker on cluster nodes).
-   monitoring_cadvisor_host_groups defaults to all cluster groups. Uses private_ip like node_exporter. #}
+   monitoring_cadvisor_host_groups defaults to ECS masters/workers. Uses private_ip like node_exporter. #}
 {% set _seen = namespace(hosts=[]) %}
 {% for group_name in monitoring_cadvisor_host_groups | default([]) %}
 {% for inv_host in groups.get(group_name, []) %}
