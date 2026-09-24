@@ -61,6 +61,20 @@
         or 'Pull complete' in (_cadvisor_image_pull.stdout | default(''))
         or (_cadvisor_image_pull.stderr | default('') | regex_search('Downloaded newer image|Pull complete'))
 
+    - name: Build host cAdvisor runtime configuration signature
+      ansible.builtin.set_fact:
+        _cadvisor_runtime_signature: >-
+          {{
+            {
+              'image': monitoring_cadvisor_image,
+              'port': monitoring_cadvisor_cluster_port | string,
+              'privileged': monitoring_cadvisor_host_docker_privileged | default(true) | bool,
+              'extra_args': monitoring_cadvisor_host_docker_volume_args | default([])
+            }
+            | to_json
+            | hash('sha256')
+          }}
+
     - name: Inspect existing host cAdvisor container
       ansible.builtin.command:
         argv:
@@ -82,9 +96,30 @@
         - _cadvisor_container_inspect.rc == 0
         - (_cadvisor_container_inspect.stdout | default('') | trim | length) > 0
 
-    - name: Default empty host cAdvisor container image when absent
+    - name: Parse host cAdvisor runtime signature when present
+      ansible.builtin.set_fact:
+        _cadvisor_container_runtime_signature: >-
+          {{
+            (
+              (_cadvisor_container_inspect.stdout | default('') | from_json | first).Config.Labels
+              | default({}, true)
+            ).get('com.cloudera.cadvisor.runtime-signature', '')
+          }}
+        _cadvisor_container_running: >-
+          {{
+            (_cadvisor_container_inspect.stdout | default('') | from_json | first).State.Running
+            | default(false)
+            | bool
+          }}
+      when:
+        - _cadvisor_container_inspect.rc == 0
+        - (_cadvisor_container_inspect.stdout | default('') | trim | length) > 0
+
+    - name: Default empty host cAdvisor container metadata when absent
       ansible.builtin.set_fact:
         _cadvisor_container_image: ""
+        _cadvisor_container_runtime_signature: ""
+        _cadvisor_container_running: false
       when: _cadvisor_container_inspect.rc != 0
 
     - name: Decide whether host cAdvisor container must be recreated
@@ -93,6 +128,7 @@
           {{
             _cadvisor_container_inspect.rc != 0
             or (_cadvisor_container_image | default('')) != monitoring_cadvisor_image
+            or (_cadvisor_container_runtime_signature | default('')) != _cadvisor_runtime_signature
           }}
 
     - name: Remove stale host cAdvisor container before recreate
@@ -114,6 +150,7 @@
               _cadvisor_docker_bin, 'run', '-d',
               '--name', monitoring_cadvisor_host_container,
               '--restart=unless-stopped',
+              '--label', 'com.cloudera.cadvisor.runtime-signature=' ~ _cadvisor_runtime_signature,
               '--publish', '0.0.0.0:' ~ (monitoring_cadvisor_cluster_port | string) ~ ':8080/tcp',
               '--volume', '/:/rootfs:ro',
               '--volume', '/var/run:/var/run:ro',
@@ -143,9 +180,25 @@
           - start
           - "{{ monitoring_cadvisor_host_container }}"
       register: _cadvisor_container_started
-      changed_when: "'Started' in (_cadvisor_container_started.stdout | default(''))"
-      failed_when: false
-      when: not (_cadvisor_container_recreate | bool)
+      changed_when: true
+      when:
+        - not (_cadvisor_container_recreate | bool)
+        - not (_cadvisor_container_running | default(false) | bool)
+
+    - name: Verify host cAdvisor publishes container metrics
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ monitoring_cadvisor_cluster_port }}/metrics"
+        method: GET
+        return_content: true
+        status_code: 200
+        timeout: 15
+      register: _cadvisor_metrics_check
+      changed_when: false
+      retries: 12
+      delay: 5
+      until:
+        - _cadvisor_metrics_check is succeeded
+        - "'container_last_seen' in (_cadvisor_metrics_check.content | default(''))"
 
     - name: Mark host cAdvisor scrape target active after container is running
       ansible.builtin.set_fact:

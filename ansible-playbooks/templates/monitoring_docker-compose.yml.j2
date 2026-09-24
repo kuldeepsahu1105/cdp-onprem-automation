@@ -57,6 +57,9 @@ services:
     image: ${MONITORING_CADVISOR_IMAGE}
     container_name: ${MONITORING_CADVISOR_CONTAINER}
     restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
     ports:
       - "0.0.0.0:${MONITORING_CADVISOR_HOST_PORT}:8080/tcp"
     volumes:
@@ -64,6 +67,8 @@ services:
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
+      - /var/lib/containerd:/var/lib/containerd:ro
+      - /dev/disk:/dev/disk:ro
     networks:
       - deployment_portal
       - monitoring_internal

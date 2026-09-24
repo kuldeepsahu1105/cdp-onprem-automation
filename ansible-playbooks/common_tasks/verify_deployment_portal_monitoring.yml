@@ -101,14 +101,16 @@
 
 - name: Verify cAdvisor on published host port (localhost)
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ monitoring_cadvisor_host_port | int }}/containers/"
+    url: "http://127.0.0.1:{{ monitoring_cadvisor_host_port | int }}/metrics"
     method: GET
-    status_code: "{{ deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]) }}"
-    follow_redirects: none
+    status_code: 200
+    return_content: true
     validate_certs: false
     timeout: 45
   register: _monitoring_cadvisor_host_check
   retries: 5
   delay: 5
-  until: _monitoring_cadvisor_host_check is succeeded
+  until:
+    - _monitoring_cadvisor_host_check is succeeded
+    - "'container_last_seen' in (_monitoring_cadvisor_host_check.content | default(''))"
   when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"

@@ -399,7 +399,7 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `monitoring_cadvisor_host_enabled` | `true` | Deploy host-level cAdvisor Docker container on `monitoring_cadvisor_host_groups` via `enroll_monitoring_exporters.yml` |
 | `monitoring_cadvisor_host_container` | `cldr-host-cadvisor` | Docker container name on cluster hosts (distinct from ops `cldr-mon-cadvisor`) |
 | `monitoring_cadvisor_cluster_port` | `19180` | Host publish port for cluster cAdvisor (`cadvisor_host` scrape targets use `<private_ip>:19180`) |
-| `monitoring_cadvisor_host_groups` | `[ecs-masters, ecs-workers]` | Inventory groups for host cAdvisor; widen to all six exporter groups for full-node coverage |
+| `monitoring_cadvisor_host_groups` | all six cluster groups | Inventory groups where host cAdvisor enrollment is attempted; hosts without a working Docker daemon are skipped |
 | `monitoring_cadvisor_host_docker_privileged` | `true` | Pass `--privileged` to host cAdvisor `docker run` (helps containerd/K8s visibility on ECS) |
 | `monitoring_blackbox_exporter_enabled` | `true` | Run blackbox_exporter in monitoring Compose and add `blackbox_*` Prometheus scrape jobs |
 | `monitoring_blackbox_exporter_image` | `prom/blackbox-exporter:v0.25.0` | blackbox_exporter container image |

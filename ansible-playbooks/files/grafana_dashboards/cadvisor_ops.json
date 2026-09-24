@@ -1,12 +1,12 @@
 {
   "id": null,
   "uid": "cldr-cadvisor-ops",
-  "title": "cAdvisor — Ops Host Containers",
-  "description": "Portal and monitoring stack containers on the ops host (cAdvisor). Provisioned by Ansible playbook 32.",
+  "title": "cAdvisor — Cluster Containers",
+  "description": "Container metrics from the ops monitoring stack and enrolled cluster hosts. Provisioned by Ansible playbook 32.",
   "tags": ["cloudera", "cadvisor", "docker"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "editable": true,
   "time": { "from": "now-6h", "to": "now" },
@@ -14,43 +14,43 @@
   "panels": [
     {
       "id": 1,
-      "title": "Running containers",
+      "title": "Observed containers",
       "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 8, "x": 0, "y": 0 },
-      "targets": [{ "expr": "count(count by (name) (container_last_seen{job=\"cadvisor\",name!=\"\"}))", "refId": "A" }]
+      "targets": [{ "expr": "count(count by (instance, name) (container_last_seen{job=~\"cadvisor|cadvisor_host\",name!=\"\"}))", "refId": "A" }]
     },
     {
       "id": 2,
-      "title": "cAdvisor scrape up",
+      "title": "cAdvisor targets up",
       "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 8, "x": 8, "y": 0 },
-      "targets": [{ "expr": "max(up{job=\"cadvisor\"})", "refId": "A" }]
+      "targets": [{ "expr": "sum(up{job=~\"cadvisor|cadvisor_host\"} == 1)", "refId": "A" }]
     },
     {
       "id": 3,
-      "title": "CPU usage — ops stack containers",
+      "title": "CPU usage by host and container",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
       "fieldConfig": { "defaults": { "unit": "percentunit" } },
       "targets": [{
-        "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{job=\"cadvisor\",name=~\"cldr-mon-.*|cldr-portal-.*\"}[5m]))",
-        "legendFormat": "{{name}}",
+        "expr": "sum by (instance, name) (rate(container_cpu_usage_seconds_total{job=~\"cadvisor|cadvisor_host\",name!=\"\"}[5m]))",
+        "legendFormat": "{{instance}} · {{name}}",
         "refId": "A"
       }]
     },
     {
       "id": 4,
-      "title": "Memory usage — ops stack containers",
+      "title": "Memory usage by host and container",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
       "fieldConfig": { "defaults": { "unit": "bytes" } },
       "targets": [{
-        "expr": "container_memory_usage_bytes{job=\"cadvisor\",name=~\"cldr-mon-.*|cldr-portal-.*\"}",
-        "legendFormat": "{{name}}",
+        "expr": "max by (instance, name) (container_memory_usage_bytes{job=~\"cadvisor|cadvisor_host\",name!=\"\"})",
+        "legendFormat": "{{instance}} · {{name}}",
         "refId": "A"
       }]
     },
@@ -62,8 +62,8 @@
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 13 },
       "fieldConfig": { "defaults": { "unit": "s" } },
       "targets": [{
-        "expr": "time() - container_last_seen{job=\"cadvisor\",name=~\"cldr-mon-.*|cldr-portal-.*\"}",
-        "legendFormat": "{{name}}",
+        "expr": "time() - container_last_seen{job=~\"cadvisor|cadvisor_host\",name!=\"\"}",
+        "legendFormat": "{{instance}} · {{name}}",
         "refId": "A"
       }]
     }

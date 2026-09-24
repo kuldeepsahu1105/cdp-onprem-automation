@@ -1393,9 +1393,13 @@ monitoring_cadvisor_host_docker_volume_args:
   - /var/lib/containerd:/var/lib/containerd:ro
   - --device
   - /dev/kmsg
-# Inventory groups that receive a host cAdvisor container + cadvisor_host scrape target. Default ECS
-# only; set to the same six groups as monitoring_node_exporter_host_groups for full coverage.
+# Inventory groups that receive a host cAdvisor container + cadvisor_host scrape target. Hosts without
+# a working Docker daemon are skipped because cAdvisor has no container runtime to inspect there.
 monitoring_cadvisor_host_groups:
+  - ipaserver
+  - cldr-mngr
+  - base-masters
+  - base-workers
   - ecs-masters
   - ecs-workers
 # blackbox_exporter runs in Docker on the ops host (Prometheus scrapes cldr-mon-blackbox:9115).
