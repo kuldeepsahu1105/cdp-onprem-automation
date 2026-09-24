@@ -198,7 +198,12 @@
       delay: 5
       until:
         - _cadvisor_metrics_check is succeeded
-        - "'container_last_seen' in (_cadvisor_metrics_check.content | default(''))"
+        - >-
+          (
+            _cadvisor_metrics_check.content
+            | default('')
+            | regex_search('container_last_seen[{][^}\\n]*name="[^"]+"')
+          ) is not none
 
     - name: Mark host cAdvisor scrape target active after container is running
       ansible.builtin.set_fact:

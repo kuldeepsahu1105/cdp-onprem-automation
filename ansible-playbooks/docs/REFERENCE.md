@@ -402,7 +402,7 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `monitoring_cadvisor_host_groups` | all six cluster groups | Inventory groups where host cAdvisor enrollment is attempted; hosts without a working Docker daemon are skipped |
 | `monitoring_cadvisor_host_docker_privileged` | `true` | Pass `--privileged` to host cAdvisor `docker run` (helps containerd/K8s visibility on ECS) |
 | `monitoring_blackbox_exporter_enabled` | `true` | Run blackbox_exporter in monitoring Compose and add `blackbox_*` Prometheus scrape jobs |
-| `monitoring_blackbox_exporter_image` | `prom/blackbox-exporter:v0.25.0` | blackbox_exporter container image |
+| `monitoring_blackbox_exporter_image` | `prom/blackbox-exporter:v0.28.0` | blackbox_exporter container image |
 | `monitoring_blackbox_exporter_container` | `cldr-mon-blackbox` | Docker container name (Prometheus probe relabel target `…:9115`) |
 | `monitoring_blackbox_exporter_host_port` | `19115` | Host publish for blackbox UI/probes (container listens on **9115**) |
 | `monitoring_blackbox_extra_probes` | `[]` | Extra `{module, target, labels}` entries appended to auto-generated probes |
@@ -430,7 +430,7 @@ Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-maste
 | `deployment_portal_jenkins_url` | `""` | Optional Jenkins UI URL on the operator panel (passwords belong in Jenkins, not git) |
 | `monitoring_prometheus_extra_targets` | `[]` | Extra Prometheus scrape jobs |
 | `monitoring_node_exporter_enabled` | `true` | Install node_exporter (systemd) on `monitoring_node_exporter_host_groups` and add a `node_exporter` Prometheus job (playbook **32**) |
-| `monitoring_node_exporter_version` | `1.8.2` | Pinned node_exporter release (linux amd64/arm64 tarball from GitHub releases) |
+| `monitoring_node_exporter_version` | `1.12.1` | Pinned node_exporter release (linux amd64/arm64 tarball from GitHub releases) |
 | `monitoring_node_exporter_port` | `19100` | node_exporter `--web.listen-address` port; opened in firewalld on each target host when active. The nonstandard default intentionally leaves common Kubernetes DaemonSet host port `9100` available. |
 | `monitoring_node_exporter_bin_dir` | `/usr/local/bin` | Install path for the `node_exporter` binary |
 | `monitoring_node_exporter_user` / `monitoring_node_exporter_group` | `node_exporter` | Dedicated system user/group running the systemd service (no login shell) |

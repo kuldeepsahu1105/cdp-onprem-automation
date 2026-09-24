@@ -1368,16 +1368,16 @@ caddy_vhost_service_names:
 
 monitoring_stack_enabled: true
 monitoring_config_dir: /opt/cldr-monitoring
-monitoring_prometheus_image: prom/prometheus:v2.54.1
+monitoring_prometheus_image: prom/prometheus:v3.14.0
 monitoring_prometheus_container: cldr-mon-prometheus
-monitoring_grafana_image: grafana/grafana:11.2.0
+monitoring_grafana_image: grafana/grafana:13.2.2
 monitoring_grafana_container: cldr-mon-grafana
 monitoring_grafana_docker_service: grafana
 monitoring_prometheus_docker_service: prometheus
 monitoring_alertmanager_docker_service: alertmanager
-monitoring_alertmanager_image: prom/alertmanager:v0.27.0
+monitoring_alertmanager_image: prom/alertmanager:v0.34.1
 monitoring_alertmanager_container: cldr-mon-alertmanager
-monitoring_cadvisor_image: gcr.io/cadvisor/cadvisor:v0.49.1
+monitoring_cadvisor_image: ghcr.io/google/cadvisor:v0.60.6
 monitoring_cadvisor_container: cldr-mon-cadvisor
 monitoring_cadvisor_docker_service: cadvisor
 monitoring_cadvisor_host_port: 8089
@@ -1404,7 +1404,7 @@ monitoring_cadvisor_host_groups:
   - ecs-workers
 # blackbox_exporter runs in Docker on the ops host (Prometheus scrapes cldr-mon-blackbox:9115).
 monitoring_blackbox_exporter_enabled: true
-monitoring_blackbox_exporter_image: prom/blackbox-exporter:v0.25.0
+monitoring_blackbox_exporter_image: prom/blackbox-exporter:v0.28.0
 monitoring_blackbox_exporter_container: cldr-mon-blackbox
 monitoring_blackbox_exporter_host_port: 19115
 monitoring_blackbox_modules_extra: {}
@@ -1426,7 +1426,7 @@ monitoring_prometheus_extra_targets: []
 # Prometheus container on the ops host (32_setup_monitoring_stack.yml / install_node_exporter.yml).
 # Runs as a systemd service outside Docker so it reports the real host, not the container namespace.
 monitoring_node_exporter_enabled: true
-monitoring_node_exporter_version: "1.8.2"
+monitoring_node_exporter_version: "1.12.1"
 # Avoid 9100: Kubernetes applications commonly reserve it as a hostPort for their own DaemonSets.
 monitoring_node_exporter_port: 19100
 monitoring_node_exporter_bin_dir: /usr/local/bin

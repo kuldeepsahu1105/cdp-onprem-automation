@@ -112,5 +112,10 @@
   delay: 5
   until:
     - _monitoring_cadvisor_host_check is succeeded
-    - "'container_last_seen' in (_monitoring_cadvisor_host_check.content | default(''))"
+    - >-
+      (
+        _monitoring_cadvisor_host_check.content
+        | default('')
+        | regex_search('container_last_seen[{][^}\\n]*name="[^"]+"')
+      ) is not none
   when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
