@@ -50,3 +50,17 @@
   ansible.builtin.set_fact:
     deployment_portal_postgres_fqdn: "{{ postgres_host_fqdn }}"
     deployment_portal_postgres_inv: "{{ postgres_inventory_host }}"
+    deployment_portal_postgres_connect_host: >-
+      {{
+        hostvars[postgres_inventory_host].private_ip
+        | default(hostvars[postgres_inventory_host].ansible_host, true)
+        | default(postgres_host_fqdn, true)
+      }}
+
+- name: Validate PostgreSQL connection address for pgAdmin
+  ansible.builtin.assert:
+    that:
+      - deployment_portal_postgres_connect_host | default('') | trim | length > 0
+    fail_msg: >-
+      Could not resolve a PostgreSQL connection address for pgAdmin from
+      private_ip, ansible_host, or postgres_host_fqdn on {{ postgres_inventory_host }}.

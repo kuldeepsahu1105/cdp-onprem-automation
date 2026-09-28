@@ -734,8 +734,8 @@ deployment_portal_cm_vhost_tier_a_verify: fail
 deployment_external_url_verify: warn
 # External URL GET checks from Ansible controller in 10/35 (default off — portal sync only checks Caddy :port + index)
 deployment_portal_verify_tier_b_enabled: false
-# pgAdmin HTTP verify after portal sync (default off)
-deployment_portal_pgadmin_verify_enabled: false
+# Verify pgAdmin HTTP, passfile installation, and PostgreSQL login after portal sync.
+deployment_portal_pgadmin_verify_enabled: true
 # Legacy portal-only key (used when deployment_external_url_verify is unset)
 deployment_portal_external_url_verify: warn
 # Optional per-service overrides, e.g. deployment_cm_external_url_verify: skip

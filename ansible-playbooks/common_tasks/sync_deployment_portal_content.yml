@@ -113,6 +113,28 @@
     mode: "0644"
   register: pgadmin_servers_render
 
+- name: Validate PostgreSQL password for pgAdmin passfile
+  ansible.builtin.assert:
+    that:
+      - postgres_password is defined
+      - postgres_password | string | length > 0
+      - "'\n' not in (postgres_password | string)"
+      - "'\r' not in (postgres_password | string)"
+    fail_msg: >-
+      postgres_password must be non-empty and must not contain newline characters
+      when provisioning the pgAdmin passfile.
+  no_log: true
+
+- name: Render pgAdmin PostgreSQL passfile
+  ansible.builtin.template:
+    src: deployment_portal_pgadmin-pgpass.j2
+    dest: "{{ deployment_portal_config_dir }}/pgadmin-pgpass"
+    owner: "5050"
+    group: "5050"
+    mode: "0600"
+  register: pgadmin_passfile_render
+  no_log: true
+
 - name: Render Caddy configuration
   ansible.builtin.template:
     src: deployment_portal_Caddyfile.j2
@@ -270,7 +292,7 @@
   register: pgadmin_recreate_compose
   failed_when: pgadmin_recreate_compose.rc != 0
 
-- name: Recreate pgAdmin when server preset changed
+- name: Recreate pgAdmin when server preset or passfile changed
   ansible.builtin.command:
     argv: >-
       {{
@@ -278,7 +300,7 @@
         + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', 'pgadmin']
       }}
   when:
-    - pgadmin_servers_render is changed
+    - pgadmin_servers_render is changed or pgadmin_passfile_render is changed
     - not (portal_compose_render is changed)
     - not (portal_env_render is changed)
   register: pgadmin_recreate_servers

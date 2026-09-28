@@ -39,6 +39,46 @@
       cd {{ deployment_portal_config_dir }} && docker compose up -d --force-recreate pgadmin
   when: pgadmin_container_running.stdout | default('') | trim | length == 0
 
+- name: Verify pgAdmin can read the PostgreSQL passfile
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - "{{ deployment_portal_pgadmin_container }}"
+      - test
+      - -r
+      - /var/lib/pgadmin/.pgpass
+  register: pgadmin_passfile_readable
+  changed_when: false
+  retries: 6
+  delay: 3
+  until: pgadmin_passfile_readable.rc == 0
+
+- name: Verify pgAdmin PostgreSQL credentials
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -e
+      - "PGHOST={{ deployment_portal_context.postgresql.connect_host }}"
+      - -e
+      - "PGPORT={{ deployment_portal_context.postgresql.port }}"
+      - -e
+      - PGDATABASE=postgres
+      - -e
+      - "PGUSER={{ postgres_user }}"
+      - -e
+      - PGPASSFILE=/var/lib/pgadmin/.pgpass
+      - "{{ deployment_portal_pgadmin_container }}"
+      - /venv/bin/python3
+      - -c
+      - "import psycopg; psycopg.connect(connect_timeout=10).close()"
+  register: pgadmin_postgres_login
+  changed_when: false
+  retries: 3
+  delay: 5
+  until: pgadmin_postgres_login.rc == 0
+
 - name: Verify pgAdmin responds on localhost published port
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ deployment_portal_pgadmin_host_port | int }}/"

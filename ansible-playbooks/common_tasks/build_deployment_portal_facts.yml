@@ -536,6 +536,7 @@
         cluster_name: "{{ cdh_basecluster_name }}"
       postgresql:
         host_fqdn: "{{ deployment_portal_postgres_fqdn }}"
+        connect_host: "{{ deployment_portal_postgres_connect_host }}"
         port: "{{ postgres_port }}"
         database_host_note: >-
           PostgreSQL for CM on {{ deployment_portal_postgres_fqdn }}:{{ postgres_port }}

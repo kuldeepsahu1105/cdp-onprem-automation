@@ -1,0 +1,2 @@
+# Ansible-managed libpq password file for the pgAdmin desktop-mode connection.
+{{ deployment_portal_context.postgresql.connect_host }}:{{ deployment_portal_context.postgresql.port }}:*:{{ postgres_user }}:{{ postgres_password | string | replace('\\', '\\\\') | replace(':', '\\:') }}
