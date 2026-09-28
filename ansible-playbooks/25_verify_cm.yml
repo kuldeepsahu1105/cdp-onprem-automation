@@ -37,18 +37,30 @@
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
         force_basic_auth: yes
-        status_code: [200, 301, 303]
+        status_code: 200
+        return_content: yes
         validate_certs: no
-      register: cm_version
+      register: cm_version_response
       delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
 
-    # - name: Print Cloudera Manager API Version Response
-    #   ansible.builtin.debug:
-    #     msg: "Cloudera Manager API Version: {{ cm_version.json }}"
+    - name: Parse Cloudera Manager version response
+      ansible.builtin.set_fact:
+        cm_version_info: "{{ cm_version_response.content | from_json }}"
+
+    - name: Validate Cloudera Manager version response
+      ansible.builtin.assert:
+        that:
+          - cm_version_info is mapping
+          - cm_version_info.version | default('') | length > 0
+        fail_msg: >-
+          Cloudera Manager {{ cm_api_url }}/cm/version returned HTTP
+          {{ cm_version_response.status | default('unknown') }} without a valid version object.
 
     - name: Print Cloudera Manager API Version and Build Timestamp
       ansible.builtin.debug:
-        msg: "Cloudera Manager Version: {{ cm_version.json.version }}, Build Timestamp: {{ cm_version.json.buildTimestamp }}"
+        msg: >-
+          Cloudera Manager Version: {{ cm_version_info.version }},
+          Build Timestamp: {{ cm_version_info.buildTimestamp | default('not reported') }}
 
     - name: Apply remote parcel repository URLs in Cloudera Manager (scrub wizard defaults)
       ansible.builtin.import_tasks: common_tasks/configure_cm_parcel_repo_api.yml
