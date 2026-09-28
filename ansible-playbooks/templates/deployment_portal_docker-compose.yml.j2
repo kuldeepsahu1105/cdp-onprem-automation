@@ -61,10 +61,9 @@ services:
       PGADMIN_CONFIG_SERVER_MODE: "False"
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
       PGADMIN_REPLACE_SERVERS_ON_STARTUP: "True"
-      PGPASS_FILE: /pgpass
     volumes:
       - ${DEPLOYMENT_PORTAL_CONFIG_DIR}/pgadmin-servers.json:/pgadmin4/servers.json:ro,z
-      - ${DEPLOYMENT_PORTAL_CONFIG_DIR}/pgadmin-pgpass:/pgpass:ro,z
+      - ${DEPLOYMENT_PORTAL_CONFIG_DIR}/pgadmin-pgpass:/var/lib/pgadmin/.pgpass:ro,z
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/misc/ping || exit 1"]
       interval: 15s
