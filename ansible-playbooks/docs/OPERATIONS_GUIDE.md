@@ -539,8 +539,15 @@ destroys the cache on exit.
 The same verification runs after a fresh First Run, so the HDFS canary can
 create `/tmp/.cloudera_health_monitoring_canary_files`. This is not the local
 Linux `/tmp` directory on each DataNode.
-The marker is recorded only after startup and client-configuration refresh
-complete successfully. CM can report a one-time setup command as
+The marker is recorded only after startup, client-configuration refresh,
+ZooKeeper role validation, and every enabled service with a non-gateway role
+reports `STARTED` with an accepted health summary (default: `GOOD`). The bounded
+poll uses `base_cluster_service_health_retries`,
+`base_cluster_service_health_delay`, and
+`base_cluster_accepted_health_summaries`. On a rerun, reconciled service
+configuration or an existing runtime service that is stopped/BAD triggers one
+controlled cluster stop/start before this gate, so already-running roles do not
+retain stale Hive, Ranger, Knox, Kafka, or Ozone configuration. CM can report a one-time setup command as
 `Command not valid for ...` when that artifact is already initialized; recovery
 reports that exact response as a skip and continues, but all other HTTP or
 command failures remain fatal.

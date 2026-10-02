@@ -84,9 +84,9 @@ Run **CM_TLS_KRB_LDAP** before **CDH_INSTALL**. Do not start CM **First Run** fr
 | 5 | **31** `prepare_cluster_kerberos_before_start` | `configureForKerberos`, `generateCredentials` | Matches “wait for Kerberos credentials” before service start |
 | 6 | **31** `enable_base_cluster_autotls_api` | `configureAutoTlsServices` | After Kerberos, before any service start |
 | 7 | **31** `POST .../commands/firstRun` | CM starts ZK → HDFS → Ranger → Knox → … → **Ozone last** | Do not run UI First Run in parallel |
-| 8 | **31** post-start | Knox CDP proxy descriptor verify, marker, CMS restart, ZK assert | After First Run completes |
+| 8 | **31** post-start | Knox CDP proxy descriptor verify, CMS restart, all enabled runtime services `STARTED/GOOD`, ZK role assert, then marker | After First Run completes |
 
-Interrupted First Run recovery in **31** starts ZK/HDFS/Ranger only (no `firstRun`), then ordered Ozone SCM → leader → remaining Ozone roles. See [OPERATIONS_GUIDE.md](OPERATIONS_GUIDE.md) (Run Phase 4 / base cluster).
+Interrupted First Run recovery in **31** starts ZK/HDFS/Ranger only (no `firstRun`), then ordered Ozone SCM → leader → remaining Ozone roles. A rerun also performs a controlled stop/start when existing service configuration changed or a runtime service is stopped/BAD. The initialization marker is written only after every enabled service with a non-gateway role is `STARTED/GOOD`. See [OPERATIONS_GUIDE.md](OPERATIONS_GUIDE.md) (Run Phase 4 / base cluster).
 
 If **31** failed before First Run (for example Knox `kerberos.auth.enabled` HTTP 400 on a role group), the cluster may exist with an unformatted NameNode. Re-run **31** after the fix: when the CM initialization marker is missing and HDFS is not `STARTED/GOOD`, **31** submits First Run automatically. Do not run the CM UI First Run wizard in parallel.
 

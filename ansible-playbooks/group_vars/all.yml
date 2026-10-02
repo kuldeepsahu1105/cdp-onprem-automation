@@ -528,6 +528,12 @@ base_cluster_yarn_nm_vcores: 4
 # Run it asynchronously so Jenkins emits a poll update instead of appearing frozen.
 base_cluster_module_async_timeout: 7500
 base_cluster_module_poll_interval: 15
+# Do not persist the initialization marker until every enabled service with a
+# runtime role is STARTED and reports one of these health summaries.
+base_cluster_service_health_retries: 90
+base_cluster_service_health_delay: 10
+base_cluster_accepted_health_summaries:
+  - GOOD
 # CM can time out its Knox readiness subcommand shortly before the gateway
 # reaches healthy state. Bound the narrow First Run recovery wait.
 base_cluster_knox_readiness_recovery_retries: 30

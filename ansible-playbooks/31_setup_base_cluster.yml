@@ -68,25 +68,33 @@
           base_cluster_install_services.{{ item.dependency }}.
       when: base_cluster_install_services[item.service] | default(false) | bool
       loop:
+        - { service: hdfs, dependency: zookeeper }
+        - { service: hdfs, dependency: core_settings }
         - { service: yarn, dependency: hdfs }
         - { service: yarn, dependency: zookeeper }
         - { service: tez, dependency: yarn }
         - { service: spark3, dependency: yarn }
         - { service: hive, dependency: hdfs }
+        - { service: hive, dependency: yarn }
+        - { service: hive, dependency: zookeeper }
         - { service: hive_on_tez, dependency: hive }
         - { service: hive_on_tez, dependency: tez }
         - { service: hbase, dependency: hdfs }
         - { service: hbase, dependency: zookeeper }
         - { service: hue, dependency: hive }
+        - { service: hue, dependency: hdfs }
         - { service: impala, dependency: hdfs }
         - { service: impala, dependency: hive }
         - { service: atlas, dependency: hdfs }
         - { service: atlas, dependency: hbase }
         - { service: atlas, dependency: kafka }
         - { service: atlas, dependency: solr }
+        - { service: ranger, dependency: hdfs }
         - { service: ranger, dependency: solr }
         - { service: solr, dependency: hdfs }
         - { service: solr, dependency: zookeeper }
+        - { service: nifi, dependency: hdfs }
+        - { service: nifi, dependency: zookeeper }
         - { service: phoenix, dependency: hbase }
         - { service: iceberg, dependency: hive }
         - { service: iceberg, dependency: impala }
@@ -147,6 +155,22 @@
     - name: Build cluster specification
       ansible.builtin.set_fact:
         base_cluster_spec: "{{ lookup('template', 'base_cluster_cluster_spec.j2') | from_yaml }}"
+
+    - name: Select runtime services requiring health verification
+      ansible.builtin.set_fact:
+        base_cluster_runtime_service_names: >-
+          {%- set runtime_services = [] -%}
+          {%- for service in base_cluster_spec.services -%}
+            {%- set runtime_roles =
+              service.role_groups | default([])
+              | rejectattr('type', 'equalto', 'GATEWAY')
+              | list
+            -%}
+            {%- if runtime_roles | length > 0 -%}
+              {%- set _ = runtime_services.append(service.name) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ runtime_services }}
 
     - name: Show enabled services
       ansible.builtin.debug:
@@ -1575,6 +1599,77 @@
       delegate_to: "{{ groups[base_cluster_master_group][0] }}"
       when: base_cluster_install_services.hue | default(true) | bool
 
+    - name: Find unhealthy existing runtime services
+      ansible.builtin.set_fact:
+        base_cluster_existing_unhealthy_runtime_services: >-
+          {%- set unhealthy = [] -%}
+          {%- for service_name in base_cluster_runtime_service_names -%}
+            {%- set service =
+              existing_cluster_services.json['items'] | default([])
+              | selectattr('name', 'equalto', service_name)
+              | first
+              | default({})
+            -%}
+            {%- if
+              service.get('serviceState', '') != 'STARTED'
+              or service.get('healthSummary', '') == 'BAD'
+            -%}
+              {%- set _ = unhealthy.append(service_name) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ unhealthy }}
+      when: existing_cluster.status == 200
+
+    - name: Determine whether existing cluster requires a controlled restart
+      ansible.builtin.set_fact:
+        base_cluster_existing_restart_required: >-
+          {{
+            existing_cluster.status == 200
+            and not (base_cluster_partial_empty | bool)
+            and existing_cluster.json.clusterState | default('') == 'STARTED'
+            and not (base_cluster_pending_first_run | default(false) | bool)
+            and not (base_cluster_recovery_required | default(false) | bool)
+            and not (base_cluster_ozone_ordered_recovery_required | default(false) | bool)
+            and (
+              base_cluster_required_config_changed | default(false) | bool
+              or base_cluster_existing_unhealthy_runtime_services | default([]) | length > 0
+            )
+          }}
+
+    - name: Show controlled existing cluster restart reason
+      ansible.builtin.debug:
+        msg: >-
+          Restarting existing cluster before convergence because
+          configuration_changed={{ base_cluster_required_config_changed | default(false) | bool }}
+          and unhealthy_runtime_services={{
+          base_cluster_existing_unhealthy_runtime_services | default([]) | join(', ') | default('none', true) }}.
+      when: base_cluster_existing_restart_required | bool
+
+    - name: Stop existing cluster before applying reconciled configuration
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/commands/stop
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_existing_restart_stop
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+      when: base_cluster_existing_restart_required | bool
+
+    - name: Wait for existing cluster stop before configuration restart
+      ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_command_id: "{{ base_cluster_existing_restart_stop.json.id }}"
+        cm_api_command_allow_already_exists: false
+      when:
+        - base_cluster_existing_restart_required | bool
+        - base_cluster_existing_restart_stop.json.id is defined
+
     - name: Determine cluster initialization action
       ansible.builtin.set_fact:
         base_cluster_first_run_required: >-
@@ -2304,6 +2399,12 @@
       changed_when: false
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+    - name: Require healthy enabled base cluster services
+      ansible.builtin.import_tasks: common_tasks/verify_base_cluster_service_health.yml
+
+    - name: Check ZooKeeper roles
+      ansible.builtin.import_tasks: common_tasks/verify_base_cluster_zookeeper_servers.yml
+
     - name: Record completed base cluster initialization
       ansible.builtin.copy:
         dest: "{{ base_cluster_initialization_marker_path }}"
@@ -2315,9 +2416,6 @@
           uuid={{ base_cluster_final_state.json.uuid }}
       become: true
       delegate_to: "{{ cm_manager_inventory_host }}"
-
-    - name: Check ZooKeeper roles
-      ansible.builtin.import_tasks: common_tasks/verify_base_cluster_zookeeper_servers.yml
 
     - name: Show cluster result
       ansible.builtin.debug:

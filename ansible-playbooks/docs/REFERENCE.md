@@ -72,6 +72,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `base_cluster_*_ui_port` | see `all.yml` | Direct HTTP UI ports on `base-masters` when Knox is off (`hdfs` 9870, `yarn` 8088, `hue` 8888, `hbase` 16010, `atlas` 21000, `ozone` Recon 9888, `solr` 8983, `impala` debug 25000) |
 | `base_cluster_knox_cdp_proxy_path` | `/gateway/cdp-proxy` | Knox topology prefix for portal links when `base_cluster_install_services.knox` is true (`deployment_portal_base_cluster_portal_urls.j2`) |
 | `base_cluster_force_first_run` | `false` | Force `POST .../commands/firstRun` on an existing cluster; normally auto when marker missing and HDFS not `STARTED/GOOD` |
+| `base_cluster_service_health_retries` / `base_cluster_service_health_delay` | `90` / `10` | Bounded final poll for every enabled service with a non-gateway role before initialization is recorded |
+| `base_cluster_accepted_health_summaries` | `[GOOD]` | Health summaries accepted by the final base-cluster service gate |
 | `cm_admin_bootstrap_pass` | `admin` | Factory CM password; when `cm_admin_pass` differs, `ensure_cm_admin_password.yml` runs in **24_start_cm** / **27_setup_cm_autotls** only |
 | `base_cluster_yarn_*` | `4096` / `4` | YARN RM/NM memory and vcore limits in cluster spec template |
 | `ecs_cluster_name` | `ECS-Cluster` |
