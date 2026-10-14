@@ -1,0 +1,161 @@
+// Jenkins pipeline for cloudera-labs/cloudera-ce-aws with local portal/monitoring add-ons.
+pipeline {
+  agent any
+
+  parameters {
+    choice(
+      name: 'REFRESH_JENKINSFILE',
+      choices: ['NO', 'YES'],
+      description: 'Reload this job definition and exit.'
+    )
+    extendedChoice(
+      name: 'CE_AWS_STAGES',
+      type: 'PT_CHECKBOX',
+      value: 'INFRASTRUCTURE,SERVICES,CMS,OZONE,KAFKA,FLINK,NIFI,CSA,PORTAL_ADDON,MONITORING_ADDON,TEARDOWN',
+      defaultValue: 'INFRASTRUCTURE,SERVICES,CMS,OZONE,PORTAL_ADDON,MONITORING_ADDON',
+      multiSelectDelimiter: ',',
+      visibleItemCount: 11,
+      quoteValue: false,
+      description: 'Run upstream stages in fixed order, then optional add-ons from this repository.'
+    )
+    string(name: 'CE_AWS_REF', defaultValue: 'main', description: 'cloudera-labs/cloudera-ce-aws branch, tag, or commit.')
+    string(name: 'NAME_PREFIX', defaultValue: 'cldtest', description: 'Upstream deployment prefix: 4-7 lowercase letters/digits/hyphens.')
+    string(name: 'AWS_REGION', defaultValue: 'ap-southeast-1', description: 'AWS region used by the upstream deployment.')
+    password(name: 'COMMON_PASSWORD', defaultValue: '', description: 'Shared upstream lab password. Minimum 8 characters and at least one digit.')
+    string(name: 'OWNER_EMAIL', defaultValue: '', description: 'Owner tag and upstream pgAdmin login email.')
+    string(
+      name: 'JENKINS_IP',
+      defaultValue: '',
+      description: 'Exact public IPv4 address of the Jenkins agent. The pipeline alone converts it to one /32 ingress entry; do not enter CIDR notation.'
+    )
+    text(
+      name: 'CE_AWS_CONFIG_OVERRIDES_YAML',
+      defaultValue: '''# Optional cloudera-ce-aws config.yml overrides.
+# infra:
+#   nodes:
+#     workers: { count: 4, instance_type: "t3a.xlarge", root_volume_size: 250 }
+''',
+      description: 'Optional upstream YAML overrides. Dedicated Jenkins fields and the generated Jenkins-IP /32 take precedence.'
+    )
+    text(
+      name: 'ADDON_OVERRIDES_YAML',
+      defaultValue: '''# Optional variables for this repository's portal/monitoring add-ons.
+# monitoring_grafana_admin_password: "override-if-not-common-password"
+''',
+      description: 'Optional overrides for the local add-ons. Use when upstream per-service passwords differ from COMMON_PASSWORD.'
+    )
+  }
+
+  options {
+    ansiColor('xterm')
+    disableConcurrentBuilds()
+    timestamps()
+  }
+
+  environment {
+    CE_AWS_DIR = "${WORKSPACE}/.ce-aws"
+    CE_AWS_STAGES = "${params.CE_AWS_STAGES}"
+    CE_AWS_REF = "${params.CE_AWS_REF}"
+    CE_NAME_PREFIX = "${params.NAME_PREFIX}"
+    CE_AWS_REGION = "${params.AWS_REGION}"
+    CE_COMMON_PASSWORD = "${params.COMMON_PASSWORD}"
+    CE_OWNER_EMAIL = "${params.OWNER_EMAIL}"
+    CE_JENKINS_IP = "${params.JENKINS_IP}"
+    CE_AWS_CONFIG_OVERRIDES_FILE = "${WORKSPACE}/jenkins/artifacts/ce-aws-config-overrides.yml"
+    CE_ADDON_OVERRIDES_FILE = "${WORKSPACE}/jenkins/artifacts/ce-aws-addon-overrides.yml"
+  }
+
+  stages {
+    stage('Refresh Jenkinsfile') {
+      when { expression { params.REFRESH_JENKINSFILE == 'YES' } }
+      steps {
+        echo 'Jenkins parameters refreshed. Run the job again with REFRESH_JENKINSFILE=NO.'
+        script { currentBuild.result = 'NOT_BUILT' }
+      }
+    }
+
+    stage('Validate and prepare') {
+      when { expression { params.REFRESH_JENKINSFILE != 'YES' } }
+      steps {
+        writeFile file: env.CE_AWS_CONFIG_OVERRIDES_FILE, text: params.CE_AWS_CONFIG_OVERRIDES_YAML ?: ''
+        writeFile file: env.CE_ADDON_OVERRIDES_FILE, text: params.ADDON_OVERRIDES_YAML ?: ''
+        sh 'jenkins/scripts/run-ce-aws-pipeline.sh prepare'
+      }
+    }
+
+    stage('Infrastructure') {
+      when { expression { selectedCeStage('INFRASTRUCTURE') } }
+      steps { sh 'jenkins/scripts/run-ce-aws-pipeline.sh run infrastructure' }
+    }
+
+    stage('Platform services') {
+      when { expression { selectedCeStage('SERVICES') } }
+      steps { sh 'jenkins/scripts/run-ce-aws-pipeline.sh run services' }
+    }
+
+    stage('Cloudera Manager') {
+      when { expression { selectedCeStage('CMS') } }
+      steps { sh 'jenkins/scripts/run-ce-aws-pipeline.sh run cms' }
+    }
+
+    stage('Ozone cluster') {
+      when { expression { selectedCeStage('OZONE') } }
+      steps { sh 'jenkins/scripts/run-ce-aws-pipeline.sh run ozone-cluster' }
+    }
+
+    stage('Kafka cluster') {
+      when { expression { selectedCeStage('KAFKA') } }
+      steps { sh 'jenkins/scripts/run-ce-aws-pipeline.sh run kafka-cluster' }
+    }
+
+    stage('Flink cluster') {
+      when { expression { selectedCeStage('FLINK') } }
+      steps { sh 'jenkins/scripts/run-ce-aws-pipeline.sh run flink-cluster' }
+    }
+
+    stage('NiFi cluster') {
+      when { expression { selectedCeStage('NIFI') } }
+      steps { sh 'jenkins/scripts/run-ce-aws-pipeline.sh run nifi-cluster' }
+    }
+
+    stage('CSA cluster') {
+      when { expression { selectedCeStage('CSA') } }
+      steps { sh 'jenkins/scripts/run-ce-aws-pipeline.sh run csa-cluster' }
+    }
+
+    stage('Deployment portal add-on') {
+      when { expression { selectedCeStage('PORTAL_ADDON') } }
+      steps { sh 'jenkins/scripts/run-ce-aws-pipeline.sh addon portal' }
+    }
+
+    stage('Monitoring add-on') {
+      when { expression { selectedCeStage('MONITORING_ADDON') } }
+      steps { sh 'jenkins/scripts/run-ce-aws-pipeline.sh addon monitoring' }
+    }
+
+    stage('Teardown') {
+      when { expression { selectedCeStage('TEARDOWN') } }
+      steps {
+        input message: "Destroy cloudera-ce-aws deployment '${params.NAME_PREFIX}'?", ok: 'Destroy'
+        sh 'jenkins/scripts/run-ce-aws-pipeline.sh run infrastructure-teardown'
+      }
+    }
+  }
+
+  post {
+    always {
+      sh 'jenkins/scripts/run-ce-aws-pipeline.sh cleanup-secrets || true'
+      archiveArtifacts artifacts: 'jenkins/artifacts/ce-aws-*.log', allowEmptyArchive: true
+    }
+  }
+}
+
+def selectedCeStage(String name) {
+  if (params.REFRESH_JENKINSFILE == 'YES') {
+    return false
+  }
+  return (params.CE_AWS_STAGES ?: '')
+    .split(',')
+    .collect { it.trim() }
+    .contains(name)
+}

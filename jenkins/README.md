@@ -2,6 +2,40 @@
 
 Declarative pipeline with **checkbox stage selection**, standard prerequisite validation, and **REFRESH_JENKINSFILE** support.
 
+## cloudera-ce-aws pipeline
+
+`Jenkinsfile.ce-aws` defines a separate job that keeps
+[`cloudera-labs/cloudera-ce-aws`](https://github.com/cloudera-labs/cloudera-ce-aws)
+as the deployment implementation. It checks out the selected upstream ref into
+`.ce-aws`, generates the mandatory upstream configuration, and runs its
+playbooks unchanged with `ansible-navigator`.
+
+The job accepts `JENKINS_IP` as one exact IPv4 address and generates one
+`ingress_cidr` entry with a `/32` suffix. Do not enter a network or CIDR in that
+field. Optional `PORTAL_ADDON` and `MONITORING_ADDON` stages copy this
+repository's Ansible add-on code into the upstream project-local `.local`
+directory, adapt upstream inventory group names, and deploy the portal and
+monitoring stack on the upstream `reverse_proxy` host. The add-on Caddy listener
+uses port `81`; upstream HTTPS on port `443` remains owned by cloudera-ce-aws.
+The pipeline injects `jenkins/ce-aws/portal-ingress.tf` into the upstream
+Terraform working directory. That state-managed rule opens only TCP `81` on
+the upstream reverse-proxy security group and reuses the upstream managed
+prefix list containing the single Jenkins `/32`.
+
+Create a second Jenkins Pipeline job whose **Script Path** is
+`Jenkinsfile.ce-aws`. Required inputs are `NAME_PREFIX`, `AWS_REGION`,
+`COMMON_PASSWORD`, `OWNER_EMAIL`, and `JENKINS_IP`. The agent must provide
+working AWS credentials and `ansible-navigator`. Upstream Terraform state stays
+under `.ce-aws/tf_cluster_aws`; generated files containing passwords are removed
+after every build.
+
+Use `CE_AWS_CONFIG_OVERRIDES_YAML` for upstream options from
+`config-template.yml`; dedicated Jenkins fields (`NAME_PREFIX`, `AWS_REGION`,
+`COMMON_PASSWORD`, `OWNER_EMAIL`, and the generated Jenkins-IP `/32`) take
+precedence. Use `ADDON_OVERRIDES_YAML` when an upstream per-service password
+differs from `COMMON_PASSWORD`, so portal credentials and monitoring
+configuration match the deployed service.
+
 ## Required Jenkins plugins
 
 | Plugin | Purpose |

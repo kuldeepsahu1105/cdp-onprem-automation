@@ -28,6 +28,7 @@ ansible-playbooks/jenkins_override.yml
 # Jenkins pipeline runtime artifacts (keep directory placeholder)
 jenkins/artifacts/*
 !jenkins/artifacts/.gitkeep
+.ce-aws/
 
 # Local inventory overrides (keep inventory.ini as template if needed)
 ansible-playbooks/inventory.ini.bak

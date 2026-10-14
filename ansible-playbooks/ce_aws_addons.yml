@@ -1,0 +1,92 @@
+---
+- name: Adapt cloudera-ce-aws inventory for repository add-ons
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Validate required upstream inventory groups
+      ansible.builtin.assert:
+        that:
+          - groups.get('reverse_proxy', []) | length == 1
+          - groups.get('freeipa', []) | length > 0
+          - groups.get('postgresql', []) | length > 0
+          - groups.get('cloudera_manager', []) | length > 0
+        fail_msg: >-
+          cloudera-ce-aws inventory must contain reverse_proxy, freeipa,
+          postgresql, and cloudera_manager before portal or monitoring add-ons run.
+
+    - name: Add FreeIPA compatibility groups and host facts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups:
+          - ipaserver
+          - ipa_server
+        private_ip: "{{ hostvars[item].private_ip | default(hostvars[item].ansible_host, true) }}"
+        cldr_hostname: "{{ item.split('.')[0] }}"
+      loop: "{{ groups.get('freeipa', []) }}"
+      changed_when: false
+
+    - name: Add Cloudera Manager compatibility group and host facts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups:
+          - cldr-mngr
+        private_ip: "{{ hostvars[item].private_ip | default(hostvars[item].ansible_host, true) }}"
+        cldr_hostname: "{{ item.split('.')[0] }}"
+      loop: "{{ groups.get('cloudera_manager', []) }}"
+      changed_when: false
+
+    - name: Add base master compatibility group and host facts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups:
+          - base-masters
+        private_ip: "{{ hostvars[item].private_ip | default(hostvars[item].ansible_host, true) }}"
+        cldr_hostname: "{{ item.split('.')[0] }}"
+      loop: "{{ groups.get('base_masters', []) }}"
+      changed_when: false
+
+    - name: Add base worker compatibility group and host facts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups:
+          - base-workers
+        private_ip: "{{ hostvars[item].private_ip | default(hostvars[item].ansible_host, true) }}"
+        cldr_hostname: "{{ item.split('.')[0] }}"
+      loop: "{{ groups.get('base_workers', []) }}"
+      changed_when: false
+
+    - name: Add ECS master compatibility group and host facts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups:
+          - ecs-masters
+        private_ip: "{{ hostvars[item].private_ip | default(hostvars[item].ansible_host, true) }}"
+        cldr_hostname: "{{ item.split('.')[0] }}"
+      loop: "{{ groups.get('ecs_masters', []) }}"
+      changed_when: false
+
+    - name: Add ECS worker compatibility group and host facts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups:
+          - ecs-workers
+        private_ip: "{{ hostvars[item].private_ip | default(hostvars[item].ansible_host, true) }}"
+        cldr_hostname: "{{ item.split('.')[0] }}"
+      loop: "{{ groups.get('ecs_workers', []) }}"
+      changed_when: false
+
+    - name: Add reverse proxy host facts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        public_ip: "{{ hostvars[item].public_ip | default(hostvars[item].ansible_host, true) }}"
+        private_ip: "{{ hostvars[item].private_ip | default(hostvars[item].ansible_host, true) }}"
+        cldr_hostname: "{{ item.split('.')[0] }}"
+      loop: "{{ groups.get('reverse_proxy', []) }}"
+      changed_when: false
+
+- import_playbook: 10_setup_deployment_portal.yml
+  when: ce_aws_addon_portal_enabled | default(false) | bool
+
+- import_playbook: 32_setup_monitoring_stack.yml
+  when: ce_aws_addon_monitoring_enabled | default(false) | bool
