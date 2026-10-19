@@ -38,6 +38,8 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
+    body_format: json
+    body: {}
     status_code: [200]
     follow_redirects: none
   register: base_cluster_knox_deploy_client_config
@@ -64,6 +66,8 @@
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
+    body_format: json
+    body: {}
     status_code: [200]
     follow_redirects: none
   register: base_cluster_knox_discovery_restart

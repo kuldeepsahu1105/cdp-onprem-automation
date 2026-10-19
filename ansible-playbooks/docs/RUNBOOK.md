@@ -79,12 +79,12 @@ Run **CM_TLS_KRB_LDAP** before **CDH_INSTALL**. Do not start CM **First Run** fr
 |------|---------------------|--------------------|-------------------------|
 | 1 | **27** `27_setup_cm_autotls.yml` | `generateCmca`, CM/agent TLS | Before cluster exists |
 | 2 | **28** CMS, **29** LDAP, **30** KDC import | CMS, LDAP, `importAdminCredentials` | KDC admin creds in CM before cluster |
-| 3 | **31** (imports **27** idempotently) | `cloudera.cluster.cluster` create + service config | Cluster + roles in CM |
+| 3 | **31** (read-only CM Auto-TLS prerequisite check) | `cloudera.cluster.cluster` create + service config | Cluster + roles in CM; never reruns `generateCmca` |
 | 4 | **31** Knox reconcile | DB, master secret, `gateway-site` safety valve, Knox service `kerberos.auth.enabled`, Auto-TLS client truststore | Before Knox starts in First Run |
 | 5 | **31** `prepare_cluster_kerberos_before_start` | `configureForKerberos`, `generateCredentials` | Matches “wait for Kerberos credentials” before service start |
 | 6 | **31** `enable_base_cluster_autotls_api` | `configureAutoTlsServices` | After Kerberos, before any service start |
 | 7 | **31** `POST .../commands/firstRun` | CM starts ZK → HDFS → Ranger → Knox → … → **Ozone last** | Do not run UI First Run in parallel |
-| 8 | **31** post-start | Knox CDP proxy descriptor verify, CMS restart, all enabled runtime services `STARTED/GOOD`, ZK role assert, then marker | After First Run completes |
+| 8 | **31** post-start | Knox CDP proxy descriptor verify, conditional CMS restart after First Run/security transition, all enabled runtime services `STARTED/GOOD`, ZK role assert, then marker | After First Run completes |
 
 Interrupted First Run recovery in **31** starts ZK/HDFS/Ranger only (no `firstRun`), then ordered Ozone SCM → leader → remaining Ozone roles. A rerun also performs a controlled stop/start when existing service configuration changed or a runtime service is stopped/BAD. The initialization marker is written only after every enabled service with a non-gateway role is `STARTED/GOOD`. See [OPERATIONS_GUIDE.md](OPERATIONS_GUIDE.md) (Run Phase 4 / base cluster).
 

@@ -153,7 +153,7 @@
     - base_cluster_pre_start_hdfs_authentication != 'kerberos'
     - base_cluster_pre_start_kerberos_configure_command.json.id is defined
 
-- name: Generate Kerberos credentials before service start
+- name: Generate Kerberos credentials for the initial cluster transition
   ansible.builtin.uri:
     url: "{{ cm_cluster_module_api_url }}/cm/commands/generateCredentials"
     method: POST
@@ -165,6 +165,7 @@
     follow_redirects: none
   register: base_cluster_pre_start_kerberos_credentials_command
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: base_cluster_pre_start_hdfs_authentication != 'kerberos'
 
 - name: Wait for pre-start Kerberos credentials
   ansible.builtin.include_tasks: wait_cm_api_command.yml
@@ -172,7 +173,9 @@
     cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
     cm_api_command_id: "{{ base_cluster_pre_start_kerberos_credentials_command.json.id }}"
     cm_api_command_allow_already_exists: false
-  when: base_cluster_pre_start_kerberos_credentials_command.json.id is defined
+  when:
+    - base_cluster_pre_start_hdfs_authentication != 'kerberos'
+    - base_cluster_pre_start_kerberos_credentials_command.json.id is defined
 
 - name: Verify Kerberos configuration before service start
   ansible.builtin.uri:

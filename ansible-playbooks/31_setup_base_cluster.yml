@@ -2,9 +2,10 @@
 #
 # Install CDP Base Cluster on base-masters/base-workers (services: see base_cluster_install_services).
 # This is separate from Cloudera Management Service (CMS) — see 28_setup_cm_cms.yml
+# Prerequisite: run 27_setup_cm_autotls.yml and 30_setup_cm_krbs.yml first when
+# Auto-TLS and Kerberos are enabled. This playbook verifies those prerequisites;
+# it does not regenerate the CMCA or restart cloudera-scm-server.
 ---
-- import_playbook: 27_setup_cm_autotls.yml
-
 - name: Install cloudera.cluster collection on control node
   hosts: localhost
   connection: local
@@ -20,6 +21,24 @@
   tasks:
     - name: Prepare CM API
       ansible.builtin.import_tasks: common_tasks/prepare_cm_security_api.yml
+
+    - name: Read Cloudera Manager Auto-TLS prerequisite
+      ansible.builtin.include_tasks: common_tasks/fetch_cm_autotls_api_state.yml
+      when:
+        - base_cluster_enable_autotls | default(true) | bool
+        - autotls_enabled | default(true) | bool
+
+    - name: Require Cloudera Manager Auto-TLS before CDH installation
+      ansible.builtin.assert:
+        that:
+          - cm_autotls_api_enabled | default(false) | bool
+        fail_msg: >-
+          CDH_INSTALL requires CM Auto-TLS to be complete, but CM does not report
+          AUTO_TLS_TYPE enabled. Run the CM_TLS_KRB_LDAP phase first. CDH_INSTALL
+          never runs generateCmca or restarts cloudera-scm-server.
+      when:
+        - base_cluster_enable_autotls | default(true) | bool
+        - autotls_enabled | default(true) | bool
 
     - name: Check inventory groups
       ansible.builtin.assert:
@@ -215,7 +234,7 @@
           {{ base_cluster_invalid_role_groups | join(', ') }}.
 
     - name: Configure parcel repository
-      ansible.builtin.import_tasks: common_tasks/configure_cm_parcel_repo_api.yml
+      ansible.builtin.include_tasks: common_tasks/configure_cm_parcel_repo_api.yml
       when: parcel_repo is defined
 
     - name: Prepare cluster module connection
@@ -1345,7 +1364,7 @@
           or base_cluster_pending_first_run | default(false) | bool
 
     - name: Refresh Cloudera Manager Auto-TLS state before cluster Auto-TLS
-      ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
+      ansible.builtin.include_tasks: common_tasks/fetch_cm_autotls_api_state.yml
       when:
         - base_cluster_enable_autotls | default(true) | bool
         - autotls_enabled | default(true) | bool
@@ -2539,7 +2558,7 @@
       when: autotls_enabled | default(true) | bool
 
     - name: Verify final Cloudera Manager Auto-TLS state
-      ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
+      ansible.builtin.include_tasks: common_tasks/fetch_cm_autotls_api_state.yml
       when: autotls_enabled | default(true) | bool
 
     - name: Require Cloudera Manager Auto-TLS
@@ -2581,12 +2600,31 @@
           configureAutoTlsServices. Do not record the cluster initialization marker.
       when: base_cluster_enable_autotls | default(true) | bool
 
-    - name: Restart Cloudera Management Service after base cluster convergence
+    - name: Determine whether Cloudera Management Service restart is required
+      ansible.builtin.set_fact:
+        base_cluster_cms_restart_required: >-
+          {{
+            base_cluster_restart_cms_after_start | default(true) | bool
+            and (
+              base_cluster_first_run_required | default(false) | bool
+              or base_cluster_cluster_autotls_applied_this_run | default(false) | bool
+              or (
+                base_cluster_pre_start_kerberos_configure_command is defined
+                and base_cluster_pre_start_kerberos_configure_command.json.id is defined
+              )
+              or (
+                base_cluster_kerberos_configure_command is defined
+                and base_cluster_kerberos_configure_command.json.id is defined
+              )
+            )
+          }}
+
+    - name: Restart Cloudera Management Service after security or First Run changes
       ansible.builtin.include_tasks: common_tasks/restart_cm_management_service_api.yml
       vars:
         cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
         cm_api_uri_delegate_to: "{{ cm_cluster_module_delegate_to }}"
-      when: base_cluster_restart_cms_after_start | default(true) | bool
+      when: base_cluster_cms_restart_required | bool
 
     - name: Require completed Cloudera Management Service restart
       ansible.builtin.assert:
@@ -2598,7 +2636,7 @@
           Base cluster convergence completed, but Cloudera Management Service
           was not running or CM did not return a restart command. Do not record
           the cluster initialization marker.
-      when: base_cluster_restart_cms_after_start | default(true) | bool
+      when: base_cluster_cms_restart_required | bool
 
     - name: Read final cluster state
       ansible.builtin.uri:

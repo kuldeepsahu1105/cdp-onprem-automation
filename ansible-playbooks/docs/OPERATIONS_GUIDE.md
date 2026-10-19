@@ -643,10 +643,11 @@ adopting a populated cluster, **31** preserves its initialized
 `base_cluster_adopt_existing_ozone_ha: true`, an existing odd-sized SCM HA
 quorum of at least three roles is retained and started together during ordered
 recovery; automation never adds or removes SCM HA roles. Before First Run or
-recovery start, **31** runs `configureForKerberos`
-(when enabled), then `generateCredentials`, then `configureAutoTlsServices`
-(when Auto-TLS is on), so Ozone and other services start under Kerberos +
-cluster TLS, not SIMPLE + HTTP.
+recovery start, **31** runs `configureForKerberos` and `generateCredentials`
+only when the initial HDFS transition is needed, then runs
+`configureAutoTlsServices` only when cluster-service TLS is not already enabled.
+Ozone and other services therefore start under Kerberos + cluster TLS, not
+SIMPLE + HTTP.
 
 **Symptoms:** `ServerNotLeaderException`, SCM SafeMode with `0/N datanodes
 registered`, OM/DN cert enrollment retries, `RAFT closed`, or
@@ -681,23 +682,22 @@ metadata under `/var/lib/hadoop-ozone/scm/data/` (do not delete on retry);
 SCM host after `kinit` with the role keytab; CM → Ozone → Configuration →
 `ozone.scm.primordial.node.id` and `hdfs_service`.
 
-Playbook **31** also imports the idempotent **27** Auto-TLS workflow before base
-cluster reconciliation. When `autotls_enabled: true`, CM's authoritative
-`AUTO_TLS_TYPE` is checked and Auto-TLS is enabled only when absent. A newly
-enabled Auto-TLS installation restarts CM and its agents through playbook **27**.
-If the base cluster already existed and did not otherwise need its Kerberos
-transition or interrupted-run recovery, playbook **31** then performs one
-cluster stop/start and client-configuration refresh. Fresh clusters and clusters
-being Kerberized are already started after the security change and avoid that
-extra restart. The final initialization marker is written only after both CM
-Auto-TLS and HDFS Kerberos report the requested enabled state.
+Playbook **31** treats playbooks **27** and **30** as prerequisites. It reads
+CM's authoritative `AUTO_TLS_TYPE` and fails before cluster creation when CM
+Auto-TLS is required but absent; it never calls `generateCmca`, restarts
+`cloudera-scm-server`, or performs the subsequent manager/cluster-agent
+certificate restart wave. Run **CM_TLS_KRB_LDAP** explicitly when CM security
+must change. An already Kerberized recovery does not regenerate credentials.
+The final initialization marker is written only after both CM Auto-TLS and HDFS
+Kerberos report the requested enabled state.
 
-After base-cluster startup, any required Auto-TLS/Kerberos restart, and client
-configuration refresh complete, playbook **31** restarts Cloudera Management
-Service through the CM API and waits for the restart command. The base-cluster
-completion marker is not written unless CMS was running and CM accepted the
-restart. Set `base_cluster_restart_cms_after_start: false` only when CMS restart
-is intentionally managed outside this workflow.
+After First Run or an actual cluster-service Auto-TLS/Kerberos transition,
+playbook **31** restarts Cloudera Management Service through the CM API and
+waits for the restart command. Healthy reruns and Ozone/service recovery skip
+that CMS restart. The base-cluster
+completion marker is not written when a required CMS restart cannot be
+completed. Set `base_cluster_restart_cms_after_start: false` only when CMS
+restart is intentionally managed outside this workflow.
 
 Hue is configured with the external `hue` PostgreSQL database before cluster
 startup. Playbook **31** reconciles the database settings for existing Hue
