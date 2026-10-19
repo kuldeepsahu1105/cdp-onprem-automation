@@ -26,6 +26,7 @@
     - name: Clear CM restart flag for this play
       ansible.builtin.set_fact:
         cm_restart_after_config_change: false
+        cm_krb_api_url: ""
 
     - name: Kerberos — prepare CM API and KDC admin principal
       ansible.builtin.import_tasks: common_tasks/resolve_cm_krb_api_url.yml
@@ -124,6 +125,38 @@
       ansible.builtin.meta: end_play
       when: cm_krb_healthy_noop | bool
 
+    - name: Read Active Directory-specific Kerberos settings
+      ansible.builtin.uri:
+        url: "{{ cm_krb_api_url }}/cm/kerberosConfig"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      delegate_to: "{{ cm_api_uri_delegate_to }}"
+      register: cm_kerberos_ad_config_before
+      changed_when: false
+      when: identity_provider_effective == 'ad'
+
+    - name: Detect Active Directory-specific Kerberos configuration drift
+      ansible.builtin.set_fact:
+        cm_kerberos_ad_config_changed: >-
+          {{
+            (
+              cm_kerberos_ad_config_before.json['items'] | default([])
+              | selectattr('name', 'equalto', 'AD_DELETE_ON_REGENERATE')
+              | map(attribute='value') | first | default('') | string | lower
+            ) != (krb5_ad_delete_on_regenerate | default(true) | bool | lower)
+            or (
+              cm_kerberos_ad_config_before.json['items'] | default([])
+              | selectattr('name', 'equalto', 'AD_KDC_DOMAIN')
+              | map(attribute='value') | first | default('') | string | trim
+            ) != (krb5_ad_suffix | string | trim)
+          }}
+      when: identity_provider_effective == 'ad'
+
     - name: Configure Active Directory-specific Kerberos settings
       ansible.builtin.uri:
         url: "{{ cm_krb_api_url }}/cm/kerberosConfig"
@@ -145,7 +178,7 @@
       register: cm_kerberos_ad_config
       when:
         - identity_provider_effective == 'ad'
-        - cm_kerberos_config_changed | default(false) | bool
+        - cm_kerberos_ad_config_changed | default(false) | bool
       changed_when: true
 
     - name: Kerberos — include AD configuration in restart decision

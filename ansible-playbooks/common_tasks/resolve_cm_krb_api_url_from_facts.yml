@@ -93,4 +93,4 @@
 - name: CM API — use discovered API URL when HTTPS is not required
   ansible.builtin.set_fact:
     cm_krb_api_url: "{{ cm_api_url }}"
-  when: cm_krb_api_url is not defined
+  when: cm_krb_api_url | default('') | length == 0

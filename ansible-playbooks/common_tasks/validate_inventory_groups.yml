@@ -19,6 +19,7 @@
   ansible.builtin.add_host:
     name: "{{ cm_manager_inventory_host }}"
     ansible_connection: ssh
+  changed_when: false
   when:
     - inventory_hostname == 'localhost'
     - cm_manager_inventory_host not in ['localhost', '127.0.0.1']

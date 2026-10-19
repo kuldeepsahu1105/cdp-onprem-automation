@@ -11,6 +11,7 @@
     - name: Clear CM restart flag for this play
       ansible.builtin.set_fact:
         cm_restart_after_config_change: false
+        cm_krb_api_url: ""
 
     - name: Skip LDAP configuration when disabled
       ansible.builtin.meta: end_play
