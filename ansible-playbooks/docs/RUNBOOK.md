@@ -1,166 +1,185 @@
 # Deployment Runbook
 
-Short operator path for deploying Cloudera Private Cloud. Use the linked
-documents for configuration details and troubleshooting:
+Copy-ready commands for AWS and existing bare-metal nodes. See
+[CONFIGURATION.md](CONFIGURATION.md) for variables and
+[OPERATIONS_GUIDE.md](OPERATIONS_GUIDE.md) for detailed troubleshooting.
 
-| Document | Use it for |
-|---|---|
-| [CONFIGURATION.md](CONFIGURATION.md) | Every `config.yml` option, accepted values, behavior, and AD credential inputs |
-| [OPERATIONS_GUIDE.md](OPERATIONS_GUIDE.md) | Controller/network scenarios, FreeIPA and AD procedures, portal verification, recovery, and troubleshooting |
-| [REFERENCE.md](REFERENCE.md) | Playbooks, variables, inventory groups, repositories, services, and cleanup controls |
-| [RUN_ORDER.md](RUN_ORDER.md) | Exact playbook and Jenkins execution order |
-| [VARIABLE_CONTRACTS.md](VARIABLE_CONTRACTS.md) | Maintainer-facing variable precedence and API/delegation contracts |
-| [../../jenkins/README.md](../../jenkins/README.md) | Jenkins parameters and copy-ready stage combinations |
+## Before starting
 
-All commands below run from `ansible-playbooks/`:
+Provide:
+
+- Supported RHEL or Ubuntu nodes with working forward/reverse DNS and NTP.
+- Root SSH or an SSH user with passwordless `become`.
+- Cloudera archive credentials and an optional `license.txt`.
+- Required network access between all cluster nodes.
+
+Keep passwords outside Git in environment variables, Vault, Jenkins
+credentials, or a protected extra-vars file.
+
+## AWS deployment
+
+### 1. Download and configure
 
 ```bash
-cd ansible-playbooks
+mkdir -p cdp-deployment && cd cdp-deployment
+
+curl -fsSLO https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/main/clone_and_run_terraform.sh
+curl -fsSLO https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/main/clone_and_run_pvc_automation.sh
+curl -fsSLO https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/main/.tfvars.yaml
+
+chmod +x clone_and_run_*.sh
+vi .tfvars.yaml
+
+export AWS_PROFILE=my-aws-profile
+export CM_REPO_USERNAME='archive-user'
+export CM_REPO_PASSWORD='archive-password'
+cp /secure/path/license.txt .   # optional for trial deployments
 ```
 
-## 1. Prepare configuration
+Review region, environment, versions, instance groups, sizing, volumes, key
+pair, VPC, and allowed CIDRs in `.tfvars.yaml`.
 
-For an Ansible-only deployment, copy and edit the inventory template:
+### 2. Provision and deploy
 
 ```bash
+./clone_and_run_terraform.sh
+DEPLOY_PHASE=all ./clone_and_run_pvc_automation.sh
+```
+
+For phased execution:
+
+```bash
+DEPLOY_PHASE=1          ./clone_and_run_pvc_automation.sh # prerequisites
+DEPLOY_PHASE=portal     ./clone_and_run_pvc_automation.sh # portal/pgAdmin
+DEPLOY_PHASE=2          ./clone_and_run_pvc_automation.sh # identity/DNS
+DEPLOY_PHASE=3          ./clone_and_run_pvc_automation.sh # PostgreSQL/CM
+DEPLOY_PHASE=cm_tls     ./clone_and_run_pvc_automation.sh # TLS/CMS/LDAP/Kerberos
+DEPLOY_PHASE=cdh        ./clone_and_run_pvc_automation.sh # base CDH
+DEPLOY_PHASE=monitoring ./clone_and_run_pvc_automation.sh # monitoring
+DEPLOY_PHASE=ecs        ./clone_and_run_pvc_automation.sh # optional ECS
+```
+
+## Bare-metal deployment
+
+Terraform and AWS are not required. The Ansible controller must route to each
+node's private management address, directly or through ProxyJump.
+
+### 1. Prepare inventory
+
+```bash
+git clone https://github.com/kuldeepsahu1105/cdp-onprem-automation.git
+cd cdp-onprem-automation/ansible-playbooks
 cp inventory.example.ini inventory.ini
 vi inventory.ini
 vi config.yml
 ```
 
-Terraform deployments generate `inventory.ini`; still review `config.yml`
-before running Ansible.
+Example `inventory.ini`:
 
-- Put deployment settings in [`config.yml`](../config.yml).
-- Keep stable defaults and derived values in
-  [`group_vars/all.yml`](../group_vars/all.yml).
-- Keep passwords outside Git in Ansible Vault, Jenkins credentials, or a
-  separate extra-vars file.
-- Place the SSH key in this directory, use `~/.ssh/id_rsa`, or export
-  `ANSIBLE_PRIVATE_KEY=/path/to/key.pem`.
-- Supply CM archive credentials through `CM_INFO_FILE`,
-  `CM_REPO_USERNAME`/`CM_REPO_PASSWORD`, Vault, or Jenkins credentials.
+```ini
+[ipaserver]
+ipa-node ansible_host=10.54.75.10 private_ip=10.54.75.10 cldr_hostname=ipaserver
 
-## 2. Validate access
+[cldr-mngr]
+cm-node ansible_host=10.54.75.20 private_ip=10.54.75.20 cldr_hostname=cldr-mngr
+
+[base-masters]
+base-master ansible_host=10.54.75.30 private_ip=10.54.75.30 cldr_hostname=pvcbase-master
+
+[base-workers]
+worker1 ansible_host=10.54.75.31 private_ip=10.54.75.31 cldr_hostname=pvcbase-worker1
+worker2 ansible_host=10.54.75.32 private_ip=10.54.75.32 cldr_hostname=pvcbase-worker2
+```
+
+Remove the `[ipaserver]` host when using existing Active Directory. Add a
+`[postgres]` host only for a dedicated database node; otherwise PostgreSQL is
+installed on `cldr-mngr`.
+
+### 2. Configure
+
+Common `config.yml`:
+
+```yaml
+deployment_environment: baremetal
+ansible_control_reachability: private
+deployment_portal_access_profile: private
+ansible_user: root
+```
+
+Add one identity configuration:
+
+```yaml
+# FreeIPA
+identity_provider: freeipa
+ipaserver_domain: cldrsetup.example.com
+dns_forwarders: no-forwarders
+```
+
+```yaml
+# Existing Active Directory
+identity_provider: ad
+ad_domain: corp.example.com
+ad_kdc_host: 10.54.75.5
+ad_dns_servers: [10.54.75.5]
+ad_join_user: svc-cloudera-join
+```
+
+### 3. Validate
 
 ```bash
+export ANSIBLE_PRIVATE_KEY=/secure/path/id_rsa
+export CM_REPO_USERNAME='archive-user'
+export CM_REPO_PASSWORD='archive-password'
+cp /secure/path/license.txt .   # optional for trial deployments
+
 ansible all -i inventory.ini -m ping -e @config.yml
+ansible-playbook -i inventory.ini detect_identity.yml -e @config.yml
 ./run-playbook.sh 00_setup_ssh_preqs.yml --check
 ```
 
-Use `ansible_host` for the controller-reachable SSH address, `private_ip` for
-cluster traffic, and optional `public_ip` for public links. See
-[controller and network scenarios](OPERATIONS_GUIDE.md#running-from-any-controller-jenkins-ec2-bare-metal-laptop)
-when using Jenkins, VPN, bare metal, macOS, or IPAServer as the controller.
-For existing physical hosts, follow the complete
-[bare-metal deployment procedure](OPERATIONS_GUIDE.md#scenario-b--bare-metal-deployment).
-It identifies the Terraform and EC2-only steps to exclude and provides the
-safe phase order.
+### 4. Deploy
 
-## 3. Run the deployment
-
-Full deployment:
+Do **not** use `DEPLOY_PHASE=all`, `DEPLOY_PHASE=2`, or the portal wrapper on
+bare metal: those paths currently install EC2 helper playbook **36**. Use:
 
 ```bash
-DEPLOY_PHASE=all ./pvc_setup.sh
+DEPLOY_PHASE=1 ./pvc_setup.sh
+
+# Optional portal
+ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml -e @config.yml
+
+# Required identity; selects FreeIPA or AD
+ansible-playbook -i inventory.ini 11_identity_setup.yml -e @config.yml
+
+DEPLOY_PHASE=3          ./pvc_setup.sh # PostgreSQL and CM
+DEPLOY_PHASE=cm_tls     ./pvc_setup.sh # TLS/CMS/LDAP/Kerberos
+DEPLOY_PHASE=cdh        ./pvc_setup.sh # base CDH
+DEPLOY_PHASE=monitoring ./pvc_setup.sh # optional monitoring
 ```
 
-`DEPLOY_PHASE=all` currently includes the EC2 start/stop helper and must not be
-used unchanged for bare metal. Use the phase sequence in the
-[bare-metal deployment procedure](OPERATIONS_GUIDE.md#scenario-b--bare-metal-deployment)
-instead.
+Exclude Terraform, Terraform destroy, playbooks **36** and **37**, and Jenkins
+`STARTSTOP_AUTOMATION`. ECS additionally requires suitable bare-metal DNS,
+Kubernetes, storage, load balancing, and sizing.
 
-Phased deployment:
+## Verify
 
-| Phase | Scope | Command |
-|---|---|---|
-| 1 | Prerequisites (`00`-`09`) | `DEPLOY_PHASE=1 ./pvc_setup.sh` |
-| 2 | Identity and DNS (`11`-`12`) | `DEPLOY_PHASE=2 ./pvc_setup.sh` |
-| 3 | PostgreSQL and Cloudera Manager (`20`-`26`) | `DEPLOY_PHASE=3 ./pvc_setup.sh` |
-| 4 | Auto-TLS, CMS, LDAP, Kerberos, CDH (`27`-`31`) | `DEPLOY_PHASE=4 ./pvc_setup.sh` |
-| 5 | ECS and optional data services (`33`-`34`) | `DEPLOY_PHASE=5 ./pvc_setup.sh` |
-
-### Recommended CM security + First Run order (plays 27 → 30 → 31)
-
-Run **CM_TLS_KRB_LDAP** before **CDH_INSTALL**. Do not start CM **First Run** from the UI while playbook **31** is running (both call `POST .../commands/firstRun` — double-run risk).
-
-| Step | Playbook / sub-step | CM API or behavior | vs CM First Run wizard |
-|------|---------------------|--------------------|-------------------------|
-| 1 | **27** `27_setup_cm_autotls.yml` | `generateCmca`, CM/agent TLS | Before cluster exists |
-| 2 | **28** CMS, **29** LDAP, **30** KDC import | CMS, LDAP, `importAdminCredentials` | KDC admin creds in CM before cluster |
-| 3 | **31** (read-only CM Auto-TLS prerequisite check) | `cloudera.cluster.cluster` create + service config | Cluster + roles in CM; never reruns `generateCmca` |
-| 4 | **31** Knox reconcile | DB, master secret, `gateway-site` safety valve, Knox service `kerberos.auth.enabled`, Auto-TLS client truststore | Before Knox starts in First Run |
-| 5 | **31** `prepare_cluster_kerberos_before_start` | `configureForKerberos`, `generateCredentials` | Matches “wait for Kerberos credentials” before service start |
-| 6 | **31** `enable_base_cluster_autotls_api` | `configureAutoTlsServices` | After Kerberos, before any service start |
-| 7 | **31** `POST .../commands/firstRun` | CM starts ZK → HDFS → Ranger → Knox → … → **Ozone last** | Do not run UI First Run in parallel |
-| 8 | **31** post-start | Knox CDP proxy descriptor verify, conditional CMS restart after First Run/security transition, all enabled runtime services `STARTED/GOOD`, ZK role assert, then marker | After First Run completes |
-
-Interrupted First Run recovery in **31** starts ZK/HDFS/Ranger only (no `firstRun`), then ordered Ozone SCM → leader → remaining Ozone roles. A rerun also performs a controlled stop/start when existing service configuration changed or a runtime service is stopped/BAD. The initialization marker is written only after every enabled service with a non-gateway role is `STARTED/GOOD`. See [OPERATIONS_GUIDE.md](OPERATIONS_GUIDE.md) (Run Phase 4 / base cluster).
-
-If **31** failed before First Run (for example Knox `kerberos.auth.enabled` HTTP 400 on a role group), the cluster may exist with an unformatted NameNode. Re-run **31** after the fix: when the CM initialization marker is missing and HDFS is not `STARTED/GOOD`, **31** submits First Run automatically. Do not run the CM UI First Run wizard in parallel.
-
-Run one playbook:
-
-```bash
-./run-playbook.sh 27_setup_cm_autotls.yml
-```
-
-Dry run:
-
-```bash
-DRY_RUN=true ./pvc_setup.sh
-```
-
-For Jenkins, select or paste one of the documented
-[`PIPELINE_STAGES` combinations](../../jenkins/README.md#stage-checkboxes-pipeline_stages).
-
-## 4. Verify
+From `ansible-playbooks/`:
 
 ```bash
 ./run-playbook.sh 25_verify_cm.yml
-./run-playbook.sh 35_refresh_deployment_portal.yml
+./run-playbook.sh 35_refresh_deployment_portal.yml # when portal is installed
 ```
 
-Review the final `CDP_ACCESS_URLS` block or the Jenkins
-`jenkins/artifacts/access-urls.txt` artifact. Detailed service checks are in
-[Service URL verification](OPERATIONS_GUIDE.md#service-url-verification-portal-stack--cloudera-manager).
+CM API output should use the manager's private address on bare metal. Do not
+start CM First Run manually while the `cdh` phase is running.
 
-## 5. Cleanup
-
-For a cluster service-data reset that preserves CM, agents, packages, parcels,
-CSDs, caches, repositories, and agent host UUIDs:
+## Re-run a failed step
 
 ```bash
-cd ansible-playbooks
-./cleanup-cluster-services.sh --scope all          # preview
-./cleanup-cluster-services.sh --scope all --execute
-./cleanup-cluster-services.sh --scope all --remove-service-lib-dirs --execute
+./run-playbook.sh 23_setup_postgres.yml
+./run-playbook.sh 24_start_cm.yml
+./run-playbook.sh 31_setup_base_cluster.yml
 ```
 
-The ECS scope is a destructive rebuild. It validates configured ECS storage
-mounts before stopping or deleting anything and refuses mounted paths.
-
-Preview cleanup:
-
-```bash
-./run-playbook.sh 99_cleanup.yml --check
-```
-
-Run only the cleanup scopes explicitly enabled in `config.yml` or extra vars:
-
-```bash
-./run-playbook.sh 99_cleanup.yml -e cleanup_e2e=true
-```
-
-Review all destructive switches before execution in
-[Cleanup controls](REFERENCE.md#cleanup-99_cleanupyml) and the
-[detailed cleanup procedure](OPERATIONS_GUIDE.md#cleanup-runbook).
-
-## Failure path
-
-1. Re-run the failed numbered playbook with `./run-playbook.sh`.
-2. Confirm inventory SSH addresses and `ANSIBLE_PRIVATE_KEY`.
-3. Check the failed task's CM, PostgreSQL, FreeIPA, DNS, or repository
-   prerequisite in [OPERATIONS_GUIDE.md](OPERATIONS_GUIDE.md#troubleshooting).
-4. Use [REFERENCE.md](REFERENCE.md) for the exact variable or playbook
-   contract; do not bypass failed preflight or verification tasks.
+Fix the reported prerequisite rather than bypassing its assertion. Exact
+phase order is in [RUN_ORDER.md](RUN_ORDER.md).
