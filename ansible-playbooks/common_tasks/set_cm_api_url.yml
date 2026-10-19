@@ -33,6 +33,7 @@
         (cm_api_url | default('') | length == 0)
         or (cm_api_version | default('') | length == 0)
         or not (_cm_api_url_stored_valid | default(false) | bool)
+        or (cm_api_uri_delegate_to | default('') | length > 0)
       }}
 
 - name: CM API — set connection context when missing
@@ -393,6 +394,7 @@
   when: >-
     (_cm_api_url_full_probe_required | default(false) | bool)
     or (_cm_api_url_assembly_required | default(true) | bool)
+    or (cm_api_uri_delegate_to | default('') | length > 0)
 
 - name: CM API — print API URL
   ansible.builtin.debug:

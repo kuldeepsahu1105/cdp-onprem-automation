@@ -67,7 +67,8 @@ assembled API URL must remain aligned with the manager-local bind address.
 Discovery prefers the manager private IP, then loopback and FQDN fallbacks.
 Never replace that address with the manager public IP while
 `cm_api_uri_delegate_to` is set; AWS instances may not hairpin to their own
-public EIP.
+public EIP. URL assembly must run again after delegation is selected, even
+when an existing public `cm_api_url` is otherwise syntactically valid.
 
 **Version variable names:** `cm_version` is the configured Cloudera Manager product/package version from `config.yml` and can have extra-var precedence in Jenkins. Never use it as a `register` target. Play **25** stores `GET /cm/version` in `cm_version_response` and parses the payload into `cm_version_info`; the API slug remains `cm_api_version`.
 
