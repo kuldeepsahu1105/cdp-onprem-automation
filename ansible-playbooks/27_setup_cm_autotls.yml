@@ -40,16 +40,26 @@
       loop: "{{ groups['all'] | difference(groups.get('ipaserver', [])) }}"
       register: cm_agent_reported_hostname_marker_stats
       changed_when: false
+      when:
+        - cm_autotls_api_enabled | default(false) | bool
+        - not (cm_autotls_force_run | default(false) | bool)
 
     - name: Auto-TLS — collect hosts requiring certificate regeneration
       ansible.builtin.set_fact:
         cm_agent_reported_hostname_changed_hosts: >-
           {{
-            cm_agent_reported_hostname_marker_stats.results
-            | selectattr('stat.exists', 'defined')
-            | selectattr('stat.exists')
-            | map(attribute='item')
-            | list
+            (
+              cm_agent_reported_hostname_marker_stats.results
+              | selectattr('stat.exists', 'defined')
+              | selectattr('stat.exists')
+              | map(attribute='item')
+              | list
+            )
+            if (
+              cm_autotls_api_enabled | default(false) | bool
+              and not (cm_autotls_force_run | default(false) | bool)
+            )
+            else []
           }}
 
     - name: Auto-TLS — require explicit certificate regeneration after agent identity change
@@ -284,26 +294,6 @@
           ansible.builtin.import_tasks: common_tasks/apply_cm_restart_after_config.yml
           when: cm_restart_after_autotls_this_run | default(false) | bool
 
-        - name: Refresh CM API URL when generateCmca did not restart CM
-          ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
-          when:
-            - not (cm_restart_after_autotls_this_run | default(false) | bool)
-            - autotls_applied_this_run | default(false) | bool
-
-        - name: Wait for Cloudera Manager API when generateCmca did not restart CM
-          ansible.builtin.import_tasks: common_tasks/wait_for_cm_api.yml
-          when:
-            - not (cm_restart_after_autotls_this_run | default(false) | bool)
-            - autotls_applied_this_run | default(false) | bool
-
-        - name: Wait for Cloudera Manager Server when generateCmca did not restart CM
-          ansible.builtin.import_tasks: common_tasks/wait_for_cm_server_active.yml
-          delegate_to: "{{ cm_manager_inventory_host }}"
-          become: true
-          when:
-            - not (cm_restart_after_autotls_this_run | default(false) | bool)
-            - autotls_applied_this_run | default(false) | bool
-
     - name: CM API — allow fresh /cm/config read after generateCmca and CM health wait
       ansible.builtin.set_fact:
         cm_autotls_config_fetched_this_play: false
@@ -419,9 +409,6 @@
     - name: Skip truststore ensure when Auto-TLS unchanged this run
       ansible.builtin.meta: end_play
       when: cm_autotls_noop_this_run | default(false) | bool
-
-    - name: CM API — refresh Auto-TLS state before truststore ensure
-      ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
 
     - name: Auto-TLS — ensure agent truststore on manager (restart agent if needed)
       ansible.builtin.import_tasks: common_tasks/ensure_cm_autotls_agent_truststore.yml
