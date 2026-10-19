@@ -54,59 +54,98 @@
   delay: 3
   until: pgadmin_passfile_readable.rc == 0
 
-- name: Gather PostgreSQL service facts for pgAdmin verification
-  ansible.builtin.service_facts:
+- name: Discover installed PostgreSQL systemd units for pgAdmin verification
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      systemctl list-unit-files --type=service --no-legend --no-pager
+      | awk '$1 ~ /^(postgresql|postgres|pgsql)([-@.][^ ]*)?\.service$/ {
+          sub(/\.service$/, "", $1); print $1
+        }'
+    executable: /bin/bash
+  register: pgadmin_postgres_installed_units
+  changed_when: false
   become: true
   delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
-  delegate_facts: true
 
-- name: Build PostgreSQL service candidates for pgAdmin verification
+- name: Record installed PostgreSQL systemd units
   ansible.builtin.set_fact:
     pgadmin_postgres_service_candidates: >-
       {{
-        (
-          [
-            hostvars[deployment_portal_context.postgresql.inventory_host].os.postgres_service | default(''),
-            'postgresql-' ~ (postgresql_version | string),
-            'postgresql' ~ (postgresql_version | string),
-            'postgresql@' ~ (postgresql_version | string) ~ '-main'
-          ]
-          + (
-            postgres_db_host_psql_probe_versions
-            | default([])
-            | map('string')
-            | map('regex_replace', '^', 'postgresql-')
-            | list
-          )
-          + ['postgresql']
-        )
+        pgadmin_postgres_installed_units.stdout_lines
+        | default([])
+        | map('trim')
         | reject('equalto', '')
         | unique
         | list
       }}
 
-- name: Initialize resolved PostgreSQL service for pgAdmin verification
+- name: Select configured PostgreSQL systemd unit
   ansible.builtin.set_fact:
-    pgadmin_postgres_service: ""
+    pgadmin_postgres_service: >-
+      {{
+        (
+          [
+            'postgresql-' ~ (postgresql_version | string),
+            'postgresql' ~ (postgresql_version | string),
+            'postgresql@' ~ (postgresql_version | string) ~ '-main',
+            'postgresql'
+          ]
+          | intersect(pgadmin_postgres_service_candidates)
+          | first
+        )
+        | default('')
+      }}
 
-- name: Resolve installed PostgreSQL service for pgAdmin verification
+- name: Select sole installed PostgreSQL systemd unit as fallback
   ansible.builtin.set_fact:
-    pgadmin_postgres_service: "{{ item }}"
-  loop: "{{ pgadmin_postgres_service_candidates }}"
+    pgadmin_postgres_service: "{{ pgadmin_postgres_service_candidates | first }}"
   when:
-    - pgadmin_postgres_service | length == 0
-    - (item ~ '.service') in
-      (hostvars[deployment_portal_context.postgresql.inventory_host].ansible_facts.services | default({}))
+    - pgadmin_postgres_service | default('') | length == 0
+    - pgadmin_postgres_service_candidates | length == 1
+
+- name: Capture PostgreSQL listener when service discovery is unresolved
+  ansible.builtin.command:
+    argv:
+      - ss
+      - -ltnp
+      - "sport = :{{ deployment_portal_context.postgresql.port }}"
+  register: pgadmin_postgres_listener
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
+  when: pgadmin_postgres_service | default('') | length == 0
+
+- name: Capture PostgreSQL processes when service discovery is unresolved
+  ansible.builtin.command:
+    argv:
+      - pgrep
+      - -a
+      - -f
+      - "postgres|postmaster"
+  register: pgadmin_postgres_processes
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
+  when: pgadmin_postgres_service | default('') | length == 0
 
 - name: Require an installed PostgreSQL service for pgAdmin verification
   ansible.builtin.assert:
     that:
-      - pgadmin_postgres_service | length > 0
+      - pgadmin_postgres_service | default('') | length > 0
     fail_msg: >-
-      No PostgreSQL systemd service is installed on
+      Could not unambiguously resolve the PostgreSQL systemd service on
       {{ deployment_portal_context.postgresql.inventory_host }}.
-      Tried: {{ pgadmin_postgres_service_candidates | join(', ') }}.
-      Run 23_setup_postgres.yml before verifying pgAdmin.
+      Installed PostgreSQL units:
+      {{ pgadmin_postgres_service_candidates | default([]) | join(', ') | default('(none)', true) }}.
+      Port {{ deployment_portal_context.postgresql.port }} listener:
+      {{ pgadmin_postgres_listener.stdout | default('(not captured)') }}.
+      PostgreSQL processes:
+      {{ pgadmin_postgres_processes.stdout | default('(not captured)') }}.
+      Run 23_setup_postgres.yml when no dedicated PostgreSQL unit is installed;
+      if multiple versions are installed, align postgresql_version with the intended unit.
 
 - name: Ensure PostgreSQL is started for pgAdmin verification
   ansible.builtin.systemd:
