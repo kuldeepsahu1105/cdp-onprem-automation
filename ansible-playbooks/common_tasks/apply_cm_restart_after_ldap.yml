@@ -1,11 +1,5 @@
 ---
-# Run on localhost after LDAP CM config changes (replaces handler chain in 30).
+# Run on localhost after LDAP CM config changes.
 
-- name: Restart Cloudera Manager on CM host (server + agent when installed)
-  ansible.builtin.import_tasks: restart_cm_services.yml
-
-- name: Refresh CM API URL after CM restart
-  ansible.builtin.import_tasks: set_cm_api_url.yml
-
-- name: Wait for Cloudera Manager API after restart
-  ansible.builtin.import_tasks: wait_for_cm_api.yml
+- name: Restart Cloudera Manager server and wait for API health
+  ansible.builtin.import_tasks: apply_cm_restart_after_config.yml

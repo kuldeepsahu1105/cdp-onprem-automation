@@ -90,11 +90,17 @@
             not (cm_krb_force_credential_import | bool)
             and (cm_krb_credentials_marker.stat.exists | default(false) | bool)
             and (cm_krb_kerberosinfo_has_credential_evidence | default(false) | bool)
+          }}
+        cm_krb_healthy_noop: >-
+          {{
+            not (cm_krb_force_credential_import | bool)
+            and (cm_krb_credentials_marker.stat.exists | default(false) | bool)
+            and (cm_krb_kerberosinfo_has_credential_evidence | default(false) | bool)
             and not (cm_kerberos_config_changed | default(false) | bool)
           }}
         cm_krb_credentials_import_skipped: false
 
-    - name: Kerberos — record skipped credential import for verify messaging
+    - name: Kerberos — record retained credential import for verify messaging
       ansible.builtin.set_fact:
         cm_krb_credentials_import_skipped: true
       when: cm_krb_credentials_current | bool
@@ -104,19 +110,19 @@
         msg: >-
           KDC preflight succeeded, CM Kerberos settings and kerberosInfo match, marker file is
           present, and CM reports kerberized=true; skipping importAdminCredentials and restart.
-      when: cm_krb_credentials_current | bool
+      when: cm_krb_healthy_noop | bool
 
     - name: Kerberos — verify CM KDC state before no-op exit (marker may be stale)
       ansible.builtin.import_tasks: common_tasks/verify_cm_kerberos_enabled.yml
-      when: cm_krb_credentials_current | bool
+      when: cm_krb_healthy_noop | bool
 
     - name: Kerberos — print existing Cloudera Manager access URLs
       ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
-      when: cm_krb_credentials_current | bool
+      when: cm_krb_healthy_noop | bool
 
     - name: Kerberos — finish healthy matching no-op play
       ansible.builtin.meta: end_play
-      when: cm_krb_credentials_current | bool
+      when: cm_krb_healthy_noop | bool
 
     - name: Configure Active Directory-specific Kerberos settings
       ansible.builtin.uri:
@@ -161,6 +167,16 @@
       ansible.builtin.set_fact:
         cm_restart_after_config_change: false
       when: cm_restart_after_config_change | default(false) | bool
+
+    - name: Kerberos — retain current account-manager credentials after config-only reconciliation
+      ansible.builtin.debug:
+        msg: >-
+          CM Kerberos configuration was reconciled and CM restarted, but the credential marker
+          and kerberosInfo confirm the same account-manager credentials are already stored.
+          Skipping importAdminCredentials and its additional CM restart.
+      when:
+        - cm_kerberos_config_changed | default(false) | bool
+        - cm_krb_credentials_current | bool
 
     - name: Kerberos — require KDC admin password before credential import
       ansible.builtin.assert:
