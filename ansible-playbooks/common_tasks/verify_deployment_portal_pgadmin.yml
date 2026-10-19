@@ -54,6 +54,127 @@
   delay: 3
   until: pgadmin_passfile_readable.rc == 0
 
+- name: Gather PostgreSQL service facts for pgAdmin verification
+  ansible.builtin.service_facts:
+  become: true
+  delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
+  delegate_facts: true
+
+- name: Build PostgreSQL service candidates for pgAdmin verification
+  ansible.builtin.set_fact:
+    pgadmin_postgres_service_candidates: >-
+      {{
+        (
+          [
+            hostvars[deployment_portal_context.postgresql.inventory_host].os.postgres_service | default(''),
+            'postgresql-' ~ (postgresql_version | string),
+            'postgresql' ~ (postgresql_version | string),
+            'postgresql@' ~ (postgresql_version | string) ~ '-main'
+          ]
+          + (
+            postgres_db_host_psql_probe_versions
+            | default([])
+            | map('string')
+            | map('regex_replace', '^', 'postgresql-')
+            | list
+          )
+          + ['postgresql']
+        )
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+
+- name: Initialize resolved PostgreSQL service for pgAdmin verification
+  ansible.builtin.set_fact:
+    pgadmin_postgres_service: ""
+
+- name: Resolve installed PostgreSQL service for pgAdmin verification
+  ansible.builtin.set_fact:
+    pgadmin_postgres_service: "{{ item }}"
+  loop: "{{ pgadmin_postgres_service_candidates }}"
+  when:
+    - pgadmin_postgres_service | length == 0
+    - (item ~ '.service') in
+      (hostvars[deployment_portal_context.postgresql.inventory_host].ansible_facts.services | default({}))
+
+- name: Require an installed PostgreSQL service for pgAdmin verification
+  ansible.builtin.assert:
+    that:
+      - pgadmin_postgres_service | length > 0
+    fail_msg: >-
+      No PostgreSQL systemd service is installed on
+      {{ deployment_portal_context.postgresql.inventory_host }}.
+      Tried: {{ pgadmin_postgres_service_candidates | join(', ') }}.
+      Run 23_setup_postgres.yml before verifying pgAdmin.
+
+- name: Ensure PostgreSQL is started for pgAdmin verification
+  ansible.builtin.systemd:
+    name: "{{ pgadmin_postgres_service }}"
+    state: started
+    enabled: true
+    daemon_reload: true
+  register: pgadmin_postgres_start
+  failed_when: false
+  become: true
+  delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
+
+- name: Capture PostgreSQL service state for pgAdmin verification
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ pgadmin_postgres_service }}"
+  register: pgadmin_postgres_service_state
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
+
+- name: Capture PostgreSQL service status after startup failure
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - status
+      - "{{ pgadmin_postgres_service }}"
+      - --no-pager
+      - -l
+  register: pgadmin_postgres_service_status
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
+  when: pgadmin_postgres_service_state.rc | int != 0
+
+- name: Capture PostgreSQL journal after startup failure
+  ansible.builtin.command:
+    argv:
+      - journalctl
+      - -u
+      - "{{ pgadmin_postgres_service }}"
+      - -n
+      - "120"
+      - --no-pager
+  register: pgadmin_postgres_start_journal
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
+  when: pgadmin_postgres_service_state.rc | int != 0
+
+- name: Fail when PostgreSQL cannot be started for pgAdmin
+  ansible.builtin.fail:
+    msg: >-
+      PostgreSQL service {{ pgadmin_postgres_service }} is not active on
+      {{ deployment_portal_context.postgresql.inventory_host }}.
+      Start result: {{ pgadmin_postgres_start.msg | default('no systemd error reported') }}.
+      Service status:
+      {{ pgadmin_postgres_service_status.stdout | default('(no status output)') }}.
+      Recent journal:
+      {{ pgadmin_postgres_start_journal.stdout | default('(no journal output)') }}.
+      Repair the database service or re-run 23_setup_postgres.yml before PORTAL.
+  when: pgadmin_postgres_service_state.rc | int != 0
+
 - name: Verify pgAdmin PostgreSQL credentials
   ansible.builtin.command:
     argv:
@@ -86,11 +207,11 @@
   ansible.builtin.command:
     argv:
       - systemctl
-      - is-active
-      - "postgresql-{{ postgresql_version }}"
-      - "postgresql@{{ postgresql_version }}-main"
-      - postgresql
-  register: pgadmin_postgres_service_state
+      - status
+      - "{{ pgadmin_postgres_service }}"
+      - --no-pager
+      - -l
+  register: pgadmin_postgres_login_service_status
   changed_when: false
   failed_when: false
   become: true
@@ -102,11 +223,7 @@
     argv:
       - journalctl
       - -u
-      - "postgresql-{{ postgresql_version }}"
-      - -u
-      - "postgresql@{{ postgresql_version }}-main"
-      - -u
-      - postgresql
+      - "{{ pgadmin_postgres_service }}"
       - --since
       - -5 minutes
       - -n
@@ -126,7 +243,8 @@
       {{ deployment_portal_context.postgresql.connect_host }}:{{ deployment_portal_context.postgresql.port }}
       with sslmode={{ deployment_portal_pgadmin_postgres_sslmode | default('disable') }}.
       Client error: {{ pgadmin_postgres_login.stderr | default('unknown') }}.
-      PostgreSQL service state: {{ pgadmin_postgres_service_state.stdout | default('unknown') }}.
+      PostgreSQL service status:
+      {{ pgadmin_postgres_login_service_status.stdout | default('unknown') }}.
       Recent PostgreSQL journal:
       {{ pgadmin_postgres_journal.stdout | default('(no journal output)') }}.
   when: pgadmin_postgres_login.rc | default(1) | int != 0
