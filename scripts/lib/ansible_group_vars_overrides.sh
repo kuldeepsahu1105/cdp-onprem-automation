@@ -35,3 +35,32 @@ apply_ansible_group_vars_overrides() {
     unset ANSIBLE_GROUP_VARS_OVERRIDE_FILE
   fi
 }
+
+resolve_effective_ansible_cm_version() {
+  local ansible_dir="${1:?ansible playbooks directory is required}"
+  python3 - "$ansible_dir" "${ANSIBLE_GROUP_VARS_OVERRIDE_FILE:-}" <<'PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+ansible_dir = Path(sys.argv[1])
+override_path = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] else None
+value = ""
+paths = [
+    ansible_dir / "group_vars" / "all.yml",
+    ansible_dir / "config.yml",
+]
+if override_path:
+    paths.append(override_path)
+
+for path in paths:
+    if not path.is_file():
+        continue
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if isinstance(data, dict) and data.get("cm_version") not in (None, ""):
+        value = str(data["cm_version"])
+
+print(value)
+PY
+}

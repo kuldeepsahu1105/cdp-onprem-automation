@@ -326,7 +326,12 @@ ui_config_summary() {
     ui_kv "ECS on ARM64" "${ECS_DEPLOY_ON_ARM64:-false}" "📦"
   fi
   ui_kv "AMI" "${AMI_ID:-—}" "💿"
-  ui_kv "CM version" "${CM_VERSION:-—}" "🔖"
+  if [[ -n "${ANSIBLE_EFFECTIVE_CM_VERSION:-}" ]]; then
+    ui_kv "CM version (.tfvars reference)" "${CM_VERSION:-—}" "🔖"
+    ui_kv "CM version (Ansible effective)" "$ANSIBLE_EFFECTIVE_CM_VERSION" "🔖"
+  else
+    ui_kv "CM version (.tfvars reference)" "${CM_VERSION:-—}" "🔖"
+  fi
   case "${DRY_RUN:-${ANSIBLE_DRY_RUN:-false}}" in
     1|true|yes|TRUE|YES|on|ON)
       ui_kv "Dry run" "enabled (no changes applied)" "🧪"

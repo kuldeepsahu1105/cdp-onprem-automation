@@ -104,6 +104,10 @@ ansible-playbook -i inventory.ini 11_identity_setup.yml \
 
 Version strings must match artifacts available to your authenticated Cloudera
 archive account. Numeric build IDs must correspond to the selected release.
+For Ansible runs, precedence is `group_vars/all.yml`, then `config.yml`, then
+the Jenkins `ANSIBLE_GROUP_VARS_YAML` extra-vars file. The `cm_version` field in
+`.tfvars.yaml` is a Terraform-wrapper reference and does not override these
+Ansible values. The Ansible deployment banner prints both values when they differ.
 
 | Variable | Default | What it controls |
 |---|---|---|

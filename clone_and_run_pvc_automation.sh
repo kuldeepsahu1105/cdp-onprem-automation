@@ -40,6 +40,8 @@ fi
 source "$SCRIPTS_LIB/portable.sh"
 # shellcheck source=scripts/lib/ansible_env.sh
 source "$SCRIPTS_LIB/ansible_env.sh"
+# shellcheck source=scripts/lib/ansible_group_vars_overrides.sh
+source "$SCRIPTS_LIB/ansible_group_vars_overrides.sh"
 # shellcheck source=scripts/lib/ui.sh
 source "$SCRIPTS_LIB/ui.sh"
 # shellcheck source=scripts/lib/wrapper_info.sh
@@ -66,12 +68,16 @@ source "$SCRIPTS_LIB/load_tfvars.sh"
 set -a
 load_tfvars
 set +a
-ui_config_summary
 
 ui_section "Ansible deployment" "🎯"
 ui_step "Resolving Ansible playbooks directory" "📁"
 ANSIBLE_DIR="$(resolve_ansible_playbooks_dir "$SCRIPT_DIR")"
 ui_kv "Ansible directory" "$ANSIBLE_DIR" "📂"
+
+apply_ansible_group_vars_overrides "$REPO_ROOT" "$ANSIBLE_DIR"
+ANSIBLE_EFFECTIVE_CM_VERSION="$(resolve_effective_ansible_cm_version "$ANSIBLE_DIR")"
+export ANSIBLE_EFFECTIVE_CM_VERSION
+ui_config_summary
 
 ui_note_ssh_key_requirement
 pem_file="$(resolve_private_key "$ANSIBLE_DIR")"
