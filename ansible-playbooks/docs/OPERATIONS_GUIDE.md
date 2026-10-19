@@ -1040,12 +1040,19 @@ base-master ansible_host=10.54.75.30 private_ip=10.54.75.30 cldr_hostname=pvcbas
 [base-workers]
 worker1 ansible_host=10.54.75.31 private_ip=10.54.75.31 cldr_hostname=pvcbase-worker1
 worker2 ansible_host=10.54.75.32 private_ip=10.54.75.32 cldr_hostname=pvcbase-worker2
+
+# Keep both ECS groups defined even when ECS is not deployed.
+[ecs-masters]
+
+[ecs-workers]
 ```
 
 For Active Directory, leave `[ipaserver]` empty or remove its host line.
 For a dedicated PostgreSQL server, add a host to `[postgres]`; otherwise
 playbook **23** installs PostgreSQL on `cldr-mngr`. Keep the established group
-names from `inventory.example.ini`.
+names from `inventory.example.ini`. Do not remove the empty `[ecs-masters]`
+and `[ecs-workers]` headers: ECS-aware tasks reference those inventory groups
+even when ECS deployment is disabled.
 
 ### 3. Configure bare-metal networking and identity
 

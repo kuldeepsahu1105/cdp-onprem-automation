@@ -89,11 +89,17 @@ base-master ansible_host=10.54.75.30 private_ip=10.54.75.30 cldr_hostname=pvcbas
 [base-workers]
 worker1 ansible_host=10.54.75.31 private_ip=10.54.75.31 cldr_hostname=pvcbase-worker1
 worker2 ansible_host=10.54.75.32 private_ip=10.54.75.32 cldr_hostname=pvcbase-worker2
+
+# Keep both ECS groups defined even when ECS is not deployed.
+[ecs-masters]
+
+[ecs-workers]
 ```
 
 Remove the `[ipaserver]` host when using existing Active Directory. Add a
 `[postgres]` host only for a dedicated database node; otherwise PostgreSQL is
-installed on `cldr-mngr`.
+installed on `cldr-mngr`. Keep the empty `[ecs-masters]` and `[ecs-workers]`
+headers when ECS has no hosts; ECS-aware tasks reference both groups.
 
 ### 2. Configure
 
