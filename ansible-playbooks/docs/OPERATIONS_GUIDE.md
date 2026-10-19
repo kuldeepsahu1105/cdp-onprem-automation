@@ -633,11 +633,17 @@ services. Without that dependency CM's Ozone CSD receives no `core-site.xml`; it
 
 ### Ozone SCM, SafeMode, and certificate signing
 
-Playbook **31** sets `ozone.scm.primordial.node.id` and attaches the single
-`Master` host template to **`groups[base_cluster_master_group][0]`** only
-(`cldr_hostname` + `cluster_domain`, e.g. `pvcbase-master.cldrsetup.local`).
-Workers receive `OZONE_DATANODE` only; OM/SCM/Recon/S3 Gateway run on that one
-master. Before First Run or recovery start, **31** runs `configureForKerberos`
+For new clusters, playbook **31** sets `ozone.scm.primordial.node.id` and
+attaches the single `Master` host template to
+**`groups[base_cluster_master_group][0]`** only (`cldr_hostname` +
+`cluster_domain`, e.g. `pvcbase-master.cldrsetup.local`). Workers receive
+`OZONE_DATANODE` only; OM/SCM/Recon/S3 Gateway run on that one master. When
+adopting a populated cluster, **31** preserves its initialized
+`ozone.service.id` and primordial node. With
+`base_cluster_adopt_existing_ozone_ha: true`, an existing odd-sized SCM HA
+quorum of at least three roles is retained and started together during ordered
+recovery; automation never adds or removes SCM HA roles. Before First Run or
+recovery start, **31** runs `configureForKerberos`
 (when enabled), then `generateCredentials`, then `configureAutoTlsServices`
 (when Auto-TLS is on), so Ozone and other services start under Kerberos +
 cluster TLS, not SIMPLE + HTTP.
@@ -652,16 +658,17 @@ registered`, OM/DN cert enrollment retries, `RAFT closed`, or
    `pvcbase-master.<cluster_domain>` matching `ozone.scm.primordial.node.id`.
    Reconcile via playbook **31** or fix host attachment; do not mix short names
    with FQDN primordial ids.
-2. **Extra SCM roles (manual HA)** — More than one `STORAGE_CONTAINER_MANAGER`
-   without a supported HA template breaks Ratis leadership. This repo deploys
-   **one** SCM on the first `[base-masters]` host; remove stray SCM roles or
-   extend the cluster spec before expecting HA.
+2. **SCM topology** — New clusters deploy one `STORAGE_CONTAINER_MANAGER` on
+   the first `[base-masters]` host. Adopted clusters may retain an initialized
+   odd-sized HA quorum (three or more) when the primordial node is a member.
+   Even-sized, two-node, or primordial-missing topologies fail before mutation.
 3. **Security phase skipped** — Run **CM_TLS_KRB_LDAP** (plays **27** → **30**)
    before **31**. Starting Ozone before `configureForKerberos` /
    `configureAutoTlsServices` causes cert/Kerberos mismatches.
 4. **Interrupted First Run** — Re-run **31** without deleting the cluster: it
-   stops unhealthy Ozone, starts SCM alone, waits for `ozone admin scm roles`
-   `LEADER`, then starts remaining Ozone roles (see recovery section above).
+   stops unhealthy Ozone, starts the single SCM or all preserved HA SCM roles,
+   waits for `ozone admin scm roles` `LEADER`, then starts remaining Ozone roles
+   (see recovery section above).
 5. **`.local` cluster domains** — IPA default `cldrsetup.local` is valid for
    hostnames but some Ozone/Auto-TLS cert validators log `Invalid domain` for
    internal TLDs. Confirm SANs on signed certs match the CM host FQDN; for

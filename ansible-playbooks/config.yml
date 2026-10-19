@@ -102,6 +102,7 @@ cm_parcel_repo_include_cfm_parcel: true
 # -----------------------------------------------------------------------------
 cdh_basecluster_name: CDP-base-cluster
 base_cluster_adopt_by_master_host: true
+base_cluster_adopt_existing_ozone_ha: true
 base_cluster_master_group: base-masters
 base_cluster_worker_group: base-workers
 base_cluster_module_async_timeout: 7500

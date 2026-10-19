@@ -550,6 +550,76 @@
       ansible.builtin.set_fact:
         base_cluster_required_config_changed: false
 
+    - name: Read initialized Ozone identity before existing-cluster reconciliation
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/ozone/config?view=full
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_existing_ozone_config
+      changed_when: false
+      when:
+        - existing_cluster.status == 200
+        - not (base_cluster_partial_empty | bool)
+        - base_cluster_install_services.ozone | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Preserve initialized Ozone service identity
+      ansible.builtin.set_fact:
+        base_cluster_ozone_service_id_effective: >-
+          {{
+            (
+              (
+                base_cluster_existing_ozone_config.json['items'] | default([])
+                | selectattr('name', 'equalto', 'ozone.service.id')
+                | map(attribute='value')
+                | first
+              )
+              | default(base_cluster_ozone_service_id, true)
+            )
+            if (
+              existing_cluster.status == 200
+              and not (base_cluster_partial_empty | bool)
+            )
+            else base_cluster_ozone_service_id
+          }}
+        base_cluster_ozone_primordial_node_effective: >-
+          {{
+            (
+              (
+                base_cluster_existing_ozone_config.json['items'] | default([])
+                | selectattr('name', 'equalto', 'ozone.scm.primordial.node.id')
+                | map(attribute='value')
+                | first
+              )
+              | default(base_master_fqdn, true)
+            )
+            if (
+              existing_cluster.status == 200
+              and not (base_cluster_partial_empty | bool)
+            )
+            else base_master_fqdn
+          }}
+      when: base_cluster_install_services.ozone | default(true) | bool
+
+    - name: Report preserved existing Ozone identity
+      ansible.builtin.debug:
+        msg: >-
+          Preserving initialized Ozone identity:
+          service_id={{ base_cluster_ozone_service_id_effective }},
+          primordial_node={{ base_cluster_ozone_primordial_node_effective }}.
+          Existing service IDs are not rewritten during cluster adoption.
+      when:
+        - existing_cluster.status == 200
+        - not (base_cluster_partial_empty | bool)
+        - base_cluster_install_services.ozone | default(true) | bool
+
     - name: Configure Ozone requirements
       ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
       vars:
@@ -557,8 +627,8 @@
         cm_config_endpoint: >-
           {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services/ozone/config
         cm_config_desired:
-          ozone.service.id: "{{ base_cluster_ozone_service_id }}"
-          ozone.scm.primordial.node.id: "{{ base_master_fqdn }}"
+          ozone.service.id: "{{ base_cluster_ozone_service_id_effective }}"
+          ozone.scm.primordial.node.id: "{{ base_cluster_ozone_primordial_node_effective }}"
           hdfs_service: "{{ 'hdfs' if base_cluster_install_services.hdfs | default(true) else '' }}"
       when: base_cluster_install_services.ozone | default(true) | bool
 
@@ -887,8 +957,14 @@
       when: base_cluster_install_services.ozone | default(true) | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-    - name: Select Ozone SCM role
+    - name: Select Ozone SCM roles and control host
       ansible.builtin.set_fact:
+        base_cluster_ozone_scm_roles: >-
+          {{
+            base_cluster_ozone_roles.json['items']
+            | selectattr('type', 'equalto', 'STORAGE_CONTAINER_MANAGER')
+            | list
+          }}
         base_cluster_ozone_scm_role: >-
           {{
             base_cluster_ozone_roles.json['items']
@@ -908,38 +984,39 @@
           {{ base_master_fqdn }}. Correct the Ozone role assignment before cluster startup.
       when: base_cluster_install_services.ozone | default(true) | bool
 
-    - name: Require single Ozone SCM role on primordial host
+    - name: Require supported Ozone SCM topology including primordial host
       ansible.builtin.assert:
         that:
           - >-
             (
-              base_cluster_ozone_roles.json['items'] | default([])
-              | selectattr('type', 'equalto', 'STORAGE_CONTAINER_MANAGER')
-              | list
-              | length
-            ) == 1
+              base_cluster_ozone_scm_roles | length == 1
+              or (
+                base_cluster_adopt_existing_ozone_ha | default(true) | bool
+                and existing_cluster.status == 200
+                and not (base_cluster_partial_empty | bool)
+                and base_cluster_ozone_scm_roles | length >= 3
+                and (base_cluster_ozone_scm_roles | length) % 2 == 1
+              )
+            )
           - >-
-            (
-              base_cluster_ozone_roles.json['items'] | default([])
-              | selectattr('type', 'equalto', 'STORAGE_CONTAINER_MANAGER')
+            base_cluster_ozone_primordial_node_effective
+            in (
+              base_cluster_ozone_scm_roles
               | map(attribute='hostRef')
               | map(attribute='hostname')
-              | first
-              | default('')
-            ) == base_master_fqdn
+              | list
+            )
         fail_msg: >-
-          This automation expects exactly one STORAGE_CONTAINER_MANAGER on
-          {{ base_master_fqdn }} (ozone.scm.primordial.node.id). CM reports
+          Unsupported existing Ozone SCM topology. CM reports
           {{
-            base_cluster_ozone_roles.json['items'] | default([])
-            | selectattr('type', 'equalto', 'STORAGE_CONTAINER_MANAGER')
+            base_cluster_ozone_scm_roles
             | map(attribute='hostRef')
             | map(attribute='hostname')
             | list
             | join(', ')
-          }}.
-          Remove extra SCM roles or align primordial node id and CM host FQDN before
-          startup. Multi-master Ozone HA is not defined in base_cluster_cluster_spec.j2.
+          }}, with primordial node {{ base_cluster_ozone_primordial_node_effective }}.
+          New clusters require one SCM; adopted clusters may retain an existing odd-sized
+          HA quorum of at least three SCMs when base_cluster_adopt_existing_ozone_ha=true.
       when: base_cluster_install_services.ozone | default(true) | bool
 
     - name: Find missing Ozone roles
@@ -1613,8 +1690,7 @@
         validate_certs: no
         body_format: json
         body:
-          items:
-            - "{{ base_cluster_ozone_scm_role.name }}"
+          items: "{{ base_cluster_ozone_scm_roles | map(attribute='name') | list }}"
         status_code: [200]
         follow_redirects: none
       register: base_cluster_ozone_scm_start
@@ -1627,10 +1703,19 @@
     - name: Require Ozone SCM role start command
       ansible.builtin.assert:
         that:
-          - base_cluster_ozone_scm_start.json['items'] | default([]) | length == 1
-          - base_cluster_ozone_scm_start.json['items'][0].id is defined
+          - >-
+            base_cluster_ozone_scm_start.json['items'] | default([]) | length
+            == base_cluster_ozone_scm_roles | length
+          - >-
+            base_cluster_ozone_scm_start.json['items'] | default([])
+            | selectattr('id', 'defined')
+            | list
+            | length
+            == base_cluster_ozone_scm_roles | length
         fail_msg: >-
-          CM did not return exactly one command while starting the Ozone SCM role.
+          CM did not return one command per SCM role while starting the Ozone quorum
+          (expected={{ base_cluster_ozone_scm_roles | length }},
+          returned={{ base_cluster_ozone_scm_start.json['items'] | default([]) | length }}).
       when:
         - base_cluster_ozone_scm_start is defined
         - base_cluster_ozone_scm_start is not skipped
@@ -1639,12 +1724,16 @@
       ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
       vars:
         cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
-        cm_api_command_id: "{{ base_cluster_ozone_scm_start.json['items'][0].id }}"
+        cm_api_command_id: "{{ base_cluster_ozone_scm_start_command.id }}"
         cm_api_command_allow_already_exists: false
+      loop: "{{ base_cluster_ozone_scm_start.json['items'] | default([]) }}"
+      loop_control:
+        loop_var: base_cluster_ozone_scm_start_command
+        label: "{{ base_cluster_ozone_scm_start_command.id | default('missing-id') }}"
       when:
         - base_cluster_ozone_scm_start is defined
         - base_cluster_ozone_scm_start is not skipped
-        - base_cluster_ozone_scm_start.json['items'][0].id is defined
+        - base_cluster_ozone_scm_start_command.id is defined
 
     - name: Wait for Ozone SCM leader before starting DataNodes
       ansible.builtin.shell:

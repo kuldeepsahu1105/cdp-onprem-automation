@@ -138,6 +138,7 @@ entries must be complete `.jar` URLs. See
 |---|---|---|
 | `cdh_basecluster_name` | Name; `CDP-base-cluster` | Cluster name created in CM. The unchanged default safely adopts an existing legacy `CDH-Cluster` or the single CM cluster that already owns every configured base host. |
 | `base_cluster_adopt_by_master_host` | Boolean; `true` | When the unchanged default name is absent, adopt the single existing cluster containing the configured base master only if it contains all expected base hosts; ambiguous or partial matches fail safely. |
+| `base_cluster_adopt_existing_ozone_ha` | Boolean; `true` | Preserve an adopted populated cluster's initialized Ozone service ID and recover an existing odd-sized SCM HA quorum (at least three roles) without adding/removing SCM roles; new clusters retain the single-SCM topology. |
 | `base_cluster_enable_kerberos` | Boolean; `true` | Configures newly created base clusters for Kerberos before First Run; safely converges existing unsecure clusters and verifies HDFS authentication. |
 | `base_cluster_restart_cms_after_start` | Boolean; `true` | Restarts Cloudera Management Service after base-cluster startup/security convergence and waits for the CM command before recording completion. |
 | `base_cluster_kafka_metadata_store` | `Zookeeper` or `KRaft`; `Zookeeper` | Kafka metadata backend selected before Kafka's first successful start. |
