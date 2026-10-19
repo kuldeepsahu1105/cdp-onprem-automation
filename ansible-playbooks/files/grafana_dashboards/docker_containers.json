@@ -1,0 +1,128 @@
+{
+  "id": null,
+  "uid": "cldr-docker-containers",
+  "title": "Docker — Containers Detail",
+  "description": "Detailed Docker and container runtime metrics from all cAdvisor targets.",
+  "tags": ["cloudera", "docker", "containers", "cadvisor"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "Host",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(container_last_seen{job=~\"cadvisor|cadvisor_host\",name!=\"\"}, instance)",
+        "definition": "label_values(container_last_seen{job=~\"cadvisor|cadvisor_host\",name!=\"\"}, instance)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 1
+      },
+      {
+        "name": "container",
+        "label": "Container",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(container_last_seen{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name!=\"\"}, name)",
+        "definition": "label_values(container_last_seen{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name!=\"\"}, name)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Observed containers",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "count(container_last_seen{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"})", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "title": "cAdvisor targets up",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [{ "expr": "sum(up{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\"} == 1)", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "title": "CPU cores",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "cores" } },
+      "targets": [{ "expr": "sum(rate(container_cpu_usage_seconds_total{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"}[5m]))", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "title": "Memory working set",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [{ "expr": "sum(container_memory_working_set_bytes{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"})", "refId": "A" }]
+    },
+    {
+      "id": 5,
+      "title": "CPU by container",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "cores" } },
+      "targets": [{ "expr": "sum by (instance, name) (rate(container_cpu_usage_seconds_total{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"}[5m]))", "legendFormat": "{{instance}} / {{name}}", "refId": "A" }]
+    },
+    {
+      "id": 6,
+      "title": "Memory by container",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [{ "expr": "max by (instance, name) (container_memory_working_set_bytes{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"})", "legendFormat": "{{instance}} / {{name}}", "refId": "A" }]
+    },
+    {
+      "id": 7,
+      "title": "Network throughput",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 13 },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [
+        { "expr": "sum by (instance, name) (rate(container_network_receive_bytes_total{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"}[5m]))", "legendFormat": "{{instance}} / {{name}} rx", "refId": "A" },
+        { "expr": "sum by (instance, name) (rate(container_network_transmit_bytes_total{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"}[5m]))", "legendFormat": "{{instance}} / {{name}} tx", "refId": "B" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Block I/O",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 13 },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [
+        { "expr": "sum by (instance, name) (rate(container_fs_reads_bytes_total{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"}[5m]))", "legendFormat": "{{instance}} / {{name}} read", "refId": "A" },
+        { "expr": "sum by (instance, name) (rate(container_fs_writes_bytes_total{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"}[5m]))", "legendFormat": "{{instance}} / {{name}} write", "refId": "B" }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Container last-seen age",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [{ "expr": "time() - container_last_seen{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"}", "legendFormat": "{{instance}} / {{name}}", "refId": "A" }]
+    }
+  ]
+}

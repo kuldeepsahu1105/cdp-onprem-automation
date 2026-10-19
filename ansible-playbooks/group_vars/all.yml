@@ -1562,6 +1562,10 @@ monitoring_grafana_dashboard_files:
   - process_exporter_overview.json
   - blackbox_probes.json
   - cadvisor_ops.json
+  - cadvisor_deep_dive.json
+  - docker_containers.json
+  - kubernetes_workloads.json
+  - longhorn_storage.json
 # Alertmanager: default route → `default` receiver (UI-only when all integrations empty).
 monitoring_alertmanager_group_by:
   - alertname

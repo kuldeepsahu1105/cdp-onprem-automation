@@ -1,0 +1,161 @@
+{
+  "id": null,
+  "uid": "cldr-kubernetes-workloads",
+  "title": "Kubernetes — Workloads Detail",
+  "description": "Kubernetes pod and container resource usage derived from cAdvisor labels on ECS hosts.",
+  "tags": ["cloudera", "kubernetes", "ecs", "cadvisor"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "Host",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(container_last_seen{job=\"cadvisor_host\",container_label_io_kubernetes_pod_name!=\"\"}, instance)",
+        "definition": "label_values(container_last_seen{job=\"cadvisor_host\",container_label_io_kubernetes_pod_name!=\"\"}, instance)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 1
+      },
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(container_last_seen{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_name!=\"\"}, container_label_io_kubernetes_pod_namespace)",
+        "definition": "label_values(container_last_seen{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_name!=\"\"}, container_label_io_kubernetes_pod_namespace)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 1
+      },
+      {
+        "name": "pod",
+        "label": "Pod",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(container_last_seen{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=~\"$namespace\"}, container_label_io_kubernetes_pod_name)",
+        "definition": "label_values(container_last_seen{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=~\"$namespace\"}, container_label_io_kubernetes_pod_name)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Observed pods",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "count(count by (container_label_io_kubernetes_pod_namespace, container_label_io_kubernetes_pod_name) (container_last_seen{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=~\"$namespace\",container_label_io_kubernetes_pod_name=~\"$pod\"}))", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "title": "Observed containers",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [{ "expr": "count(container_last_seen{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=~\"$namespace\",container_label_io_kubernetes_pod_name=~\"$pod\",container_label_io_kubernetes_container_name!=\"\"})", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "title": "CPU cores",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "cores" } },
+      "targets": [{ "expr": "sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=~\"$namespace\",container_label_io_kubernetes_pod_name=~\"$pod\",container_label_io_kubernetes_container_name!=\"\"}[5m]))", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "title": "Memory working set",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [{ "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=~\"$namespace\",container_label_io_kubernetes_pod_name=~\"$pod\",container_label_io_kubernetes_container_name!=\"\"})", "refId": "A" }]
+    },
+    {
+      "id": 5,
+      "title": "CPU by pod",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "cores" } },
+      "targets": [{
+        "expr": "sum by (container_label_io_kubernetes_pod_namespace, container_label_io_kubernetes_pod_name) (rate(container_cpu_usage_seconds_total{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=~\"$namespace\",container_label_io_kubernetes_pod_name=~\"$pod\",container_label_io_kubernetes_container_name!=\"\"}[5m]))",
+        "legendFormat": "{{container_label_io_kubernetes_pod_namespace}} / {{container_label_io_kubernetes_pod_name}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 6,
+      "title": "Memory working set by pod",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [{
+        "expr": "sum by (container_label_io_kubernetes_pod_namespace, container_label_io_kubernetes_pod_name) (container_memory_working_set_bytes{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=~\"$namespace\",container_label_io_kubernetes_pod_name=~\"$pod\",container_label_io_kubernetes_container_name!=\"\"})",
+        "legendFormat": "{{container_label_io_kubernetes_pod_namespace}} / {{container_label_io_kubernetes_pod_name}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 7,
+      "title": "Pod network throughput",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 13 },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [
+        {
+          "expr": "sum by (container_label_io_kubernetes_pod_namespace, container_label_io_kubernetes_pod_name) (rate(container_network_receive_bytes_total{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=~\"$namespace\",container_label_io_kubernetes_pod_name=~\"$pod\"}[5m]))",
+          "legendFormat": "{{container_label_io_kubernetes_pod_namespace}} / {{container_label_io_kubernetes_pod_name}} rx",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (container_label_io_kubernetes_pod_namespace, container_label_io_kubernetes_pod_name) (rate(container_network_transmit_bytes_total{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=~\"$namespace\",container_label_io_kubernetes_pod_name=~\"$pod\"}[5m]))",
+          "legendFormat": "{{container_label_io_kubernetes_pod_namespace}} / {{container_label_io_kubernetes_pod_name}} tx",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Filesystem writes by pod",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 13 },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [{
+        "expr": "sum by (container_label_io_kubernetes_pod_namespace, container_label_io_kubernetes_pod_name) (rate(container_fs_writes_bytes_total{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=~\"$namespace\",container_label_io_kubernetes_pod_name=~\"$pod\"}[5m]))",
+        "legendFormat": "{{container_label_io_kubernetes_pod_namespace}} / {{container_label_io_kubernetes_pod_name}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 9,
+      "title": "Container last-seen age",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [{
+        "expr": "time() - container_last_seen{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=~\"$namespace\",container_label_io_kubernetes_pod_name=~\"$pod\",container_label_io_kubernetes_container_name!=\"\"}",
+        "legendFormat": "{{container_label_io_kubernetes_pod_namespace}} / {{container_label_io_kubernetes_pod_name}} / {{container_label_io_kubernetes_container_name}}",
+        "refId": "A"
+      }]
+    }
+  ]
+}
