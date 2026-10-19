@@ -92,6 +92,24 @@ _monitoring_enabled() {
   [[ "${MONITORING_STACK_ENABLED:-true}" == "true" || "${MONITORING_STACK_ENABLED:-true}" == "1" ]]
 }
 
+_pipeline_stage_selected() {
+  local stage="${1:-}"
+  [[ -n "$stage" && ",${SELECTED_ANSIBLE_STAGES:-}," == *",${stage},"* ]]
+}
+
+_identity_phase_will_run() {
+  [[ "$DEPLOY_PHASE" == "all" || "$DEPLOY_PHASE" == "full" ]] \
+    || _pipeline_stage_selected "IDENTITY"
+}
+
+_monitoring_phase_will_run() {
+  _monitoring_enabled \
+    && {
+      [[ "$DEPLOY_PHASE" == "all" || "$DEPLOY_PHASE" == "full" ]] \
+        || _pipeline_stage_selected "MONITORING"
+    }
+}
+
 ARCH_ANSIBLE_ARGS=()
 if [[ "${CPU_ARCHITECTURE:-x86_64}" == "arm64" ]]; then
   ARCH_ANSIBLE_ARGS+=(-e "target_cpu_architecture=arm64")
@@ -298,7 +316,11 @@ run_phase_portal() {
     ui_warn "DEPLOY_PHASE=portal will not install Caddy/pgAdmin (DEPLOYMENT_PORTAL_ENABLED is off)."
   fi
   _run_deployment_portal_bootstrap
-  _install_ipaserver_ec2_startstop
+  if _identity_phase_will_run; then
+    ui_info "Deferring EC2 start/stop helper installation to the selected IDENTITY phase."
+  else
+    _install_ipaserver_ec2_startstop
+  fi
   ui_phase_footer "$_phase"
 }
 
@@ -408,7 +430,10 @@ _run_deployment_portal_bootstrap() {
   fi
   local portal_extra=()
   while IFS= read -r -d '' arg; do portal_extra+=("$arg"); done < <(_portal_extra_args)
-  # Defer Grafana/Prometheus to playbook 32 when MONITORING_STACK_ENABLED=false; does not gate Caddy.
+  if _monitoring_phase_will_run; then
+    ui_info "Deferring monitoring stack and exporter enrollment to the selected MONITORING phase."
+    portal_extra+=(-e monitoring_stack_enabled=false)
+  fi
   portal_extra+=(-e deployment_portal_install_required=true)
   run_playbook 10_setup_deployment_portal.yml "${portal_extra[@]}"
 }
