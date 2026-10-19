@@ -220,7 +220,7 @@
       - docker
       - exec
       - -e
-      - "PGHOST={{ deployment_portal_context.postgresql.connect_host }}"
+      - "PGHOST={{ deployment_portal_context.postgresql.host_fqdn }}"
       - -e
       - "PGPORT={{ deployment_portal_context.postgresql.port }}"
       - -e
@@ -279,7 +279,8 @@
   ansible.builtin.fail:
     msg: >-
       pgAdmin could not connect to PostgreSQL at
-      {{ deployment_portal_context.postgresql.connect_host }}:{{ deployment_portal_context.postgresql.port }}
+      {{ deployment_portal_context.postgresql.host_fqdn }}:{{ deployment_portal_context.postgresql.port }}
+      (container host mapping {{ deployment_portal_context.postgresql.connect_host }})
       with sslmode={{ deployment_portal_pgadmin_postgres_sslmode | default('disable') }}.
       Client error: {{ pgadmin_postgres_login.stderr | default('unknown') }}.
       PostgreSQL service status:

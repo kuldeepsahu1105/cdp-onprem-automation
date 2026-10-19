@@ -1303,8 +1303,8 @@ deployment_portal_compose_argv: ['docker', 'compose']
 deployment_portal_pgadmin_image: dpage/pgadmin4:9.17
 deployment_portal_pgadmin_pull_on_sync: true
 deployment_portal_pgadmin_container: cldr-portal-pgadmin
-# pgAdmin connects to the DB private IP; disable TLS until the DB CA is mounted into the container.
-deployment_portal_pgadmin_postgres_sslmode: disable
+# Preserve the PostgreSQL FQDN and TLS-preferred behavior while Docker maps it to the DB private IP.
+deployment_portal_pgadmin_postgres_sslmode: prefer
 # When true, print docker logs for pgAdmin after successful PORTAL sync (troubleshooting).
 deployment_portal_pgadmin_debug_logs: false
 # pgAdmin validates PGADMIN_DEFAULT_EMAIL; IPA/cluster .local domains (e.g. cldrsetup.local) fail at container start.
