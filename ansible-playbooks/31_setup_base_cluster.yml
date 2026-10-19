@@ -19,6 +19,9 @@
   connection: local
   gather_facts: no
   tasks:
+    - name: Require PostgreSQL before CDH installation
+      ansible.builtin.import_tasks: common_tasks/assert_postgresql_installed.yml
+
     - name: Prepare CM API
       ansible.builtin.import_tasks: common_tasks/prepare_cm_security_api.yml
 

@@ -1250,8 +1250,11 @@ def validatePipelineInputs() {
   if (stages.contains('MONITORING') && !stages.contains('PORTAL')) {
     echo 'WARN: MONITORING without PORTAL — ensure 10_setup_deployment_portal.yml ran previously.'
   }
-  if (stages.contains('CM_TLS_KRB_LDAP') && !stages.contains('CM_INSTALL') && !stages.contains('TERRAFORM')) {
-    echo 'WARN: CM_TLS_KRB_LDAP without CM_INSTALL — ensure Cloudera Manager is installed.'
+  if (stages.contains('CM_TLS_KRB_LDAP') && !stages.contains('CM_INSTALL')) {
+    echo 'WARN: CM_TLS_KRB_LDAP without CM_INSTALL — the target must already have PostgreSQL and Cloudera Manager installed.'
+  }
+  if (stages.contains('CDH_INSTALL') && !stages.contains('CM_INSTALL')) {
+    echo 'WARN: CDH_INSTALL without CM_INSTALL — the target must already have PostgreSQL and Cloudera Manager installed.'
   }
   def cmStages = ['CM_INSTALL', 'CM_TLS_KRB_LDAP', 'CDH_INSTALL', 'ECS_INSTALL']
   if (stages.any { it in cmStages }) {

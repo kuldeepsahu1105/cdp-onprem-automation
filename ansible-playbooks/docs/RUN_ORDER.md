@@ -34,8 +34,8 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | `portal` | Optional | Skippable entirely with `DEPLOYMENT_PORTAL_ENABLED=false`; still recommended for pgAdmin/monitoring/IPA UI links |
 | `2` / `identity` | **Mandatory** | FreeIPA or AD must exist before CM Kerberos/LDAP (`cm_tls` phase) |
 | `3` / `cm` | **Mandatory** | CM server/agents/DB — everything after depends on it |
-| `cm_tls` | **Mandatory for Kerberos/LDAP-secured clusters**; skippable only for throwaway/manual-TLS clusters | Order inside this phase (`27→28→29→30`) is fixed — do not reorder or split without re-reading `VARIABLE_CONTRACTS.md` |
-| `cdh` | **Mandatory** | Base CDH cluster (HDFS/YARN/ZK) |
+| `cm_tls` | **Mandatory for Kerberos/LDAP-secured clusters**; skippable only for throwaway/manual-TLS clusters | Requires **CM_INSTALL** / play 23 to have installed and initialized PostgreSQL. Order inside this phase (`27→28→29→30`) is fixed — do not reorder or split without re-reading `VARIABLE_CONTRACTS.md` |
+| `cdh` | **Mandatory** | Requires **CM_INSTALL** / play 23 to have installed and initialized PostgreSQL; installs the base CDH cluster (HDFS/YARN/ZK) |
 | `monitoring` | Optional | Gated by `MONITORING_STACK_ENABLED` (default true); safe to skip |
 | `5` / `ecs` | Optional | Only when ECS is part of the deployment |
 | `6` / `portal_refresh` | Optional, idempotent | Re-render/re-verify portal content; safe to run repeatedly |

@@ -104,6 +104,18 @@
     - pgadmin_postgres_service | default('') | length == 0
     - pgadmin_postgres_service_candidates | length == 1
 
+- name: Record whether PostgreSQL is installed for pgAdmin verification
+  ansible.builtin.set_fact:
+    pgadmin_postgres_database_present: "{{ pgadmin_postgres_service_candidates | length > 0 }}"
+
+- name: Defer pgAdmin database verification until CM_INSTALL
+  ansible.builtin.debug:
+    msg: >-
+      PostgreSQL is not installed on {{ deployment_portal_context.postgresql.inventory_host }} yet.
+      Skipping the database login check during portal bootstrap; CM_INSTALL owns
+      23_setup_postgres.yml and must complete before CM_TLS_KRB_LDAP or CDH_INSTALL.
+  when: not (pgadmin_postgres_database_present | bool)
+
 - name: Capture PostgreSQL listener when service discovery is unresolved
   ansible.builtin.command:
     argv:
@@ -115,7 +127,9 @@
   failed_when: false
   become: true
   delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
-  when: pgadmin_postgres_service | default('') | length == 0
+  when:
+    - pgadmin_postgres_database_present | bool
+    - pgadmin_postgres_service | default('') | length == 0
 
 - name: Capture PostgreSQL processes when service discovery is unresolved
   ansible.builtin.command:
@@ -129,7 +143,9 @@
   failed_when: false
   become: true
   delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
-  when: pgadmin_postgres_service | default('') | length == 0
+  when:
+    - pgadmin_postgres_database_present | bool
+    - pgadmin_postgres_service | default('') | length == 0
 
 - name: Require an installed PostgreSQL service for pgAdmin verification
   ansible.builtin.assert:
@@ -146,6 +162,7 @@
       {{ pgadmin_postgres_processes.stdout | default('(not captured)') }}.
       Run 23_setup_postgres.yml when no dedicated PostgreSQL unit is installed;
       if multiple versions are installed, align postgresql_version with the intended unit.
+  when: pgadmin_postgres_database_present | bool
 
 - name: Ensure PostgreSQL is started for pgAdmin verification
   ansible.builtin.systemd:
@@ -157,6 +174,7 @@
   failed_when: false
   become: true
   delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
+  when: pgadmin_postgres_database_present | bool
 
 - name: Capture PostgreSQL service state for pgAdmin verification
   ansible.builtin.command:
@@ -169,6 +187,7 @@
   failed_when: false
   become: true
   delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
+  when: pgadmin_postgres_database_present | bool
 
 - name: Capture PostgreSQL service status after startup failure
   ansible.builtin.command:
@@ -183,7 +202,9 @@
   failed_when: false
   become: true
   delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
-  when: pgadmin_postgres_service_state.rc | int != 0
+  when:
+    - pgadmin_postgres_database_present | bool
+    - pgadmin_postgres_service_state.rc | int != 0
 
 - name: Capture PostgreSQL journal after startup failure
   ansible.builtin.command:
@@ -199,7 +220,9 @@
   failed_when: false
   become: true
   delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
-  when: pgadmin_postgres_service_state.rc | int != 0
+  when:
+    - pgadmin_postgres_database_present | bool
+    - pgadmin_postgres_service_state.rc | int != 0
 
 - name: Fail when PostgreSQL cannot be started for pgAdmin
   ansible.builtin.fail:
@@ -212,7 +235,9 @@
       Recent journal:
       {{ pgadmin_postgres_start_journal.stdout | default('(no journal output)') }}.
       Repair the database service or re-run 23_setup_postgres.yml before PORTAL.
-  when: pgadmin_postgres_service_state.rc | int != 0
+  when:
+    - pgadmin_postgres_database_present | bool
+    - pgadmin_postgres_service_state.rc | int != 0
 
 - name: Verify pgAdmin PostgreSQL credentials
   ansible.builtin.command:
@@ -241,6 +266,7 @@
   retries: 3
   delay: 5
   until: pgadmin_postgres_login.rc == 0
+  when: pgadmin_postgres_database_present | bool
 
 - name: Capture PostgreSQL service state after pgAdmin login failure
   ansible.builtin.command:
@@ -255,7 +281,9 @@
   failed_when: false
   become: true
   delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
-  when: pgadmin_postgres_login.rc | default(1) | int != 0
+  when:
+    - pgadmin_postgres_database_present | bool
+    - pgadmin_postgres_login.rc | default(1) | int != 0
 
 - name: Capture PostgreSQL journal after pgAdmin login failure
   ansible.builtin.command:
@@ -273,7 +301,9 @@
   failed_when: false
   become: true
   delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
-  when: pgadmin_postgres_login.rc | default(1) | int != 0
+  when:
+    - pgadmin_postgres_database_present | bool
+    - pgadmin_postgres_login.rc | default(1) | int != 0
 
 - name: Fail when pgAdmin cannot authenticate to PostgreSQL
   ansible.builtin.fail:
@@ -287,7 +317,9 @@
       {{ pgadmin_postgres_login_service_status.stdout | default('unknown') }}.
       Recent PostgreSQL journal:
       {{ pgadmin_postgres_journal.stdout | default('(no journal output)') }}.
-  when: pgadmin_postgres_login.rc | default(1) | int != 0
+  when:
+    - pgadmin_postgres_database_present | bool
+    - pgadmin_postgres_login.rc | default(1) | int != 0
 
 - name: Verify pgAdmin responds on localhost published port
   ansible.builtin.uri:

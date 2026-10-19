@@ -8,6 +8,9 @@
   connection: local
   gather_facts: no
   tasks:
+    - name: Require PostgreSQL before CM security configuration
+      ansible.builtin.import_tasks: common_tasks/assert_postgresql_installed.yml
+
     - name: Clear Auto-TLS applied / restart flags for this run
       ansible.builtin.set_fact:
         autotls_applied_this_run: false
