@@ -769,37 +769,11 @@
     - cm_api_discovery_succeeded | default(false) | bool
     - cm_api_probe_host | default('') | length > 0
 
-- name: CM API — use manager bind address on in-VPC localhost plays
+- name: CM API — use discovered manager-local bind address on delegated plays
   ansible.builtin.set_fact:
     cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
-    cm_api_client_host: >-
-      {{
-        cm_api_connect_host
-        if (cm_api_connect_host | default('') | length > 0)
-        else (
-          cm_host_private
-          if (cm_host_private | default('') | length > 0)
-          else (
-            cm_host_fqdn
-            if (cm_host_fqdn | default('') | length > 0)
-            else cm_host_public
-          )
-        )
-      }}
-    cm_host: >-
-      {{
-        cm_api_connect_host
-        if (cm_api_connect_host | default('') | length > 0)
-        else (
-          cm_host_private
-          if (cm_host_private | default('') | length > 0)
-          else (
-            cm_host_fqdn
-            if (cm_host_fqdn | default('') | length > 0)
-            else cm_host_public
-          )
-        )
-      }}
+    cm_api_client_host: "{{ cm_api_probe_host }}"
+    cm_host: "{{ cm_api_probe_host }}"
   when:
     - cm_api_controller_is_localhost | default(false) | bool
     - not (cm_api_runner_is_manager | default(false) | bool)
@@ -957,6 +931,8 @@
 - name: CM API — route CM API calls via cldr-mngr after manager HTTPS fallback
   ansible.builtin.set_fact:
     cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
+    cm_api_client_host: "{{ cm_api_probe_host }}"
+    cm_host: "{{ cm_api_probe_host }}"
   when:
     - cm_api_manager_https_fallback | default(false) | bool
     - cm_api_delegate_discovery_succeeded | default(false) | bool

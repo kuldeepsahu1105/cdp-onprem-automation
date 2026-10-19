@@ -61,6 +61,13 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 
 **Probe context:** `resolve_cm_api_probe_context.yml` → **`resolve_cm_api_transport.yml`** (`cm_api_use_https`, `cm_api_probe_https_first`, default `cm_api_port`) → `resolve_cm_connect_host.yml` + `select_cm_api_probe_host.yml`. Plays **25–26** default **`cm_api_use_https: false`** (HTTP **:7180**); set **`cm_autotls_complete: true`** or **`cm_api_use_https: true`** after **27** or for HTTPS-only re-runs.
 
+When Jenkins cannot reach a CM API port directly and discovery falls back to a
+request delegated to `cldr-mngr`, `cm_api_client_host`, `cm_host`, and the
+assembled API URL must remain aligned with the manager-local bind address
+(`127.0.0.1`, private IP, or FQDN). Never replace that address with the
+manager public IP while `cm_api_uri_delegate_to` is set; AWS instances may not
+hairpin to their own public EIP.
+
 **Version variable names:** `cm_version` is the configured Cloudera Manager product/package version from `config.yml` and can have extra-var precedence in Jenkins. Never use it as a `register` target. Play **25** stores `GET /cm/version` in `cm_version_response` and parses the payload into `cm_version_info`; the API slug remains `cm_api_version`.
 
 **`set_cm_api_url.yml`:** HTTP/HTTPS `/api/version` probes → `cm_protocol`, `cm_api_port`; **`assemble_cm_api_url.yml`** (+ **`resolve_cm_api_url_host.yml`**) → **`cm_api_version`**, **`cm_api_url`** (dynamically includes probe context only when `cm_api_probe_host` is unset, so resolved-context reruns do not expand its skipped task chain). URL assembly runs when probes run **or** stored URL/version is missing/invalid (discovery-only skips must not skip assembly). **`fetch_cm_api_version_slug.yml`:** `GET /api/version` → **`cm_api_version`** slug (`v58`, `v59`, …). Used by **`assemble_cm_api_url.yml`** and **`wait_for_cm_api.yml`** (re-fetches before each health wait). **`wait_for_cm_api.yml`** then checks `GET {{ cm_api_url }}/cm/version` (same as `25_verify_cm.yml`). **`fetch_cm_autotls_api_state.yml`** → **`cm_tls_mode`**, **`cm_api_https_active`**, **`cm_autotls_api_enabled`**, **`cm_agent_use_tls`**, **`cm_autotls_config_flags_unreported`** (generateCmca + agent truststore when `/cm/config` omits flags), then recalculates **`cm_krb_api_url`** from the live state so later mutations cannot retain a stale HTTP endpoint after Auto-TLS. Its conditional URL-host and display imports are dynamic to avoid repeated skipped task expansion. **27** re-fetches after generateCmca / CM restart before **`print_cm_urls.yml`**.
