@@ -52,6 +52,10 @@ Use `ansible_host` for the controller-reachable SSH address, `private_ip` for
 cluster traffic, and optional `public_ip` for public links. See
 [controller and network scenarios](OPERATIONS_GUIDE.md#running-from-any-controller-jenkins-ec2-bare-metal-laptop)
 when using Jenkins, VPN, bare metal, macOS, or IPAServer as the controller.
+For existing physical hosts, follow the complete
+[bare-metal deployment procedure](OPERATIONS_GUIDE.md#scenario-b--bare-metal-deployment).
+It identifies the Terraform and EC2-only steps to exclude and provides the
+safe phase order.
 
 ## 3. Run the deployment
 
@@ -60,6 +64,11 @@ Full deployment:
 ```bash
 DEPLOY_PHASE=all ./pvc_setup.sh
 ```
+
+`DEPLOY_PHASE=all` currently includes the EC2 start/stop helper and must not be
+used unchanged for bare metal. Use the phase sequence in the
+[bare-metal deployment procedure](OPERATIONS_GUIDE.md#scenario-b--bare-metal-deployment)
+instead.
 
 Phased deployment:
 

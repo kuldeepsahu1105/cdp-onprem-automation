@@ -986,64 +986,179 @@ curl -fsS -u "${DEPLOYMENT_PORTAL_BASIC_AUTH_USER:-portal}:${DEPLOYMENT_PORTAL_B
 
 ---
 
-## Scenario B — Bare metal with Active Directory
+## Scenario B — Bare-metal deployment
 
-### 1. Inventory (no ipaserver)
+The Ansible layer supports existing bare-metal RHEL or Ubuntu hosts without
+Terraform or AWS. The controller must have direct private-network SSH access
+to every node, or use an SSH bastion configured through
+`ansible_ssh_common_args`.
+
+### 1. Exclude cloud-only automation
+
+Do not run these operations for bare metal:
+
+- Terraform provisioning, Terraform inventory generation, or Terraform
+  destroy.
+- `36_install_ipaserver_ec2_startstop.yml`.
+- `37_run_ipaserver_ec2_startstop.yml`.
+- Jenkins `STARTSTOP_AUTOMATION`.
+
+The current `pvc_setup.sh` identity path installs playbook **36**, including
+from `DEPLOY_PHASE=all`. Until that helper is gated by deployment environment,
+do not use `DEPLOY_PHASE=all` or `DEPLOY_PHASE=2` for bare metal. Run
+`11_identity_setup.yml` directly as shown below. Run
+`10_setup_deployment_portal.yml` directly too, because a portal-only wrapper
+run can install playbook **36** when no identity phase is selected.
+
+Portal, monitoring, ECS, and data services are optional. Base CDH does not
+require them.
+
+### 2. Create the inventory
+
+Copy the Ansible-only template and replace every example address:
+
+```bash
+cd ansible-playbooks
+cp inventory.example.ini inventory.ini
+vi inventory.ini
+```
+
+For a controller on the same private network, set `ansible_host` and
+`private_ip` to the node's private management address. Omit `public_ip` when
+the node has none.
 
 ```ini
+[ipaserver]
+ipa-node ansible_host=10.54.75.10 private_ip=10.54.75.10 cldr_hostname=ipaserver
+
 [cldr-mngr]
-cldr-mngr ansible_host=10.54.75.123 private_ip=10.54.75.123 cldr_hostname=cldr-mngr
+cm-node ansible_host=10.54.75.20 private_ip=10.54.75.20 cldr_hostname=cldr-mngr
 
 [base-masters]
-pvcbase-master ansible_host=10.54.75.74 private_ip=10.54.75.74 cldr_hostname=pvcbase-master
+base-master ansible_host=10.54.75.30 private_ip=10.54.75.30 cldr_hostname=pvcbase-master
+
+[base-workers]
+worker1 ansible_host=10.54.75.31 private_ip=10.54.75.31 cldr_hostname=pvcbase-worker1
+worker2 ansible_host=10.54.75.32 private_ip=10.54.75.32 cldr_hostname=pvcbase-worker2
 ```
 
-Leave `[ipaserver]` empty or commented out.
+For Active Directory, leave `[ipaserver]` empty or remove its host line.
+For a dedicated PostgreSQL server, add a host to `[postgres]`; otherwise
+playbook **23** installs PostgreSQL on `cldr-mngr`. Keep the established group
+names from `inventory.example.ini`.
 
-### 2. Configure AD in group_vars/all.yml
+### 3. Configure bare-metal networking and identity
+
+Put deployment-specific choices in `config.yml`:
 
 ```yaml
-identity_provider: auto
 deployment_environment: baremetal
+ansible_control_reachability: private
+deployment_portal_access_profile: private
+```
+
+Set the SSH user in inventory, `config.yml`, or as an extra variable. It must
+be `root` or have passwordless `become` access:
+
+```yaml
+ansible_user: root
+```
+
+For FreeIPA:
+
+```yaml
+identity_provider: freeipa
+ipaserver_domain: cldrsetup.example.com
+dns_forwarders: no-forwarders
+```
+
+For existing Active Directory:
+
+```yaml
+identity_provider: ad
 ad_domain: corp.example.com
-ad_kdc_host: 10.54.75.10
+ad_kdc_host: 10.54.75.5
 ad_dns_servers:
-  - "{{ ad_kdc_host }}"
+  - 10.54.75.5
 ad_join_user: svc-cloudera-join
-ad_join_password: "ChangeMe@123"
 ```
 
-### 3. Detect and verify
+Keep `ad_join_password`, LDAP bind credentials, CM repository credentials,
+and other secrets in Ansible Vault, environment variables, Jenkins
+credentials, or a protected extra-vars file. Do not commit them.
+
+### 4. Validate SSH and configuration
 
 ```bash
-ansible-playbook -i inventory.ini detect_identity.yml
+export ANSIBLE_PRIVATE_KEY=/path/to/private-key
+
+ansible all -i inventory.ini -m ping -e @config.yml
+ansible-playbook -i inventory.ini detect_identity.yml -e @config.yml
+./run-playbook.sh 00_setup_ssh_preqs.yml --check
 ```
 
-Expected: `effective identity provider: ad`
+The detected identity provider must match the intended FreeIPA or AD mode.
+If the controller genuinely has private routing but the fail-fast SSH probe
+cannot detect it, pass
+`-e ansible_ssh_reachability_skip=true`. Do not use that override to hide a
+real routing failure.
 
-### 4. Prerequisites + identity
+Before deployment, ensure forward and reverse DNS, time synchronization,
+required inter-node ports, supported OS repositories, and adequate disks are
+available on the physical network.
+
+### 5. Run the base-cluster phases
+
+Run prerequisites with the wrapper, but invoke portal and identity directly
+to exclude the EC2 helper:
 
 ```bash
-# Phase 1
-ansible-playbook -i inventory.ini 00_setup_ssh_preqs.yml --limit 'all:!ipaserver'
-# ... run 01-09 or use pvc_setup.sh
+# Mandatory OS and SSH prerequisites (00-09)
+DEPLOY_PHASE=1 ./pvc_setup.sh
 
-# Phase 2 (DNS + realm join only — skips FreeIPA server playbooks)
-ansible-playbook -i inventory.ini 11_identity_setup.yml
+# Optional portal; skip when not required
+ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml -e @config.yml
+
+# Mandatory identity and DNS; routes to FreeIPA or AD from configuration
+ansible-playbook -i inventory.ini 11_identity_setup.yml -e @config.yml
+
+# Mandatory PostgreSQL and Cloudera Manager (20-26)
+DEPLOY_PHASE=3 ./pvc_setup.sh
+
+# Mandatory for a Kerberos/LDAP-secured cluster (27-30)
+DEPLOY_PHASE=cm_tls ./pvc_setup.sh
+
+# Mandatory base CDH cluster (31)
+DEPLOY_PHASE=cdh ./pvc_setup.sh
+
+# Optional Prometheus, Grafana, exporters, Docker, and cAdvisor (32)
+DEPLOY_PHASE=monitoring ./pvc_setup.sh
 ```
 
-### 5. Cloudera Manager + AD integration
+The wrappers load `config.yml`; when invoking `ansible-playbook` directly,
+keep the explicit `-e @config.yml`. Do not run CM First Run manually in the
+Cloudera Manager UI while playbook **31** is active.
+
+ECS is optional and requires its own inventory groups, DNS wildcard,
+Kubernetes, storage, and sizing prerequisites. Validate those requirements
+before running `DEPLOY_PHASE=ecs`; excluding AWS playbooks alone does not make
+an arbitrary bare-metal environment ECS-ready.
+
+### 6. Verify the deployment
 
 ```bash
-ansible-playbook -i inventory.ini 24_start_cm.yml
-ansible-playbook -i inventory.ini 26_setup_cm_license.yml
-ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml
-ansible-playbook -i inventory.ini 28_setup_cm_cms.yml
-ansible-playbook -i inventory.ini 29_setup_cm_ldap.yml
-ansible-playbook -i inventory.ini 30_setup_cm_krbs.yml
+ansible-playbook -i inventory.ini 25_verify_cm.yml -e @config.yml
+ansible-playbook -i inventory.ini 31_setup_base_cluster.yml \
+  -e @config.yml --check
+
+# Optional portal/monitoring verification
+ansible-playbook -i inventory.ini 35_refresh_deployment_portal.yml \
+  -e @config.yml
 ```
 
-Continue with CMS and base cluster as in Scenario A step 7.
+CM API calls should use the manager's private address. Bare-metal portal URLs
+use private FQDNs or management IPs; no public-IP or AWS security-group
+behavior is required.
 
 ---
 
