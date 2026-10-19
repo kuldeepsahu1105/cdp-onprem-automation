@@ -73,8 +73,7 @@
     cm_api_probe_host_candidates: >-
       {{
         (
-          ['127.0.0.1']
-          + (
+          (
             [cm_host_private]
             if (
               (cm_host_private | default('') | length > 0)
@@ -82,6 +81,7 @@
             )
             else []
           )
+          + ['127.0.0.1']
           + ([cm_host_fqdn] if (cm_host_fqdn | default('') | length > 0) else [])
           + (
             [hostvars[cm_manager_inventory_host].ansible_fqdn | default('')]
@@ -119,8 +119,7 @@
     cm_api_probe_host_candidates: >-
       {{
         (
-          ['127.0.0.1']
-          + (
+          (
             [cm_host_private]
             if (
               (cm_host_private | default('') | length > 0)
@@ -128,6 +127,7 @@
             )
             else []
           )
+          + ['127.0.0.1']
           + ([cm_host_fqdn] if (cm_host_fqdn | default('') | length > 0) else [])
           + (
             [hostvars[cm_manager_inventory_host].ansible_fqdn | default('')]
@@ -828,8 +828,7 @@
     cm_api_probe_host_candidates: >-
       {{
         (
-          ['127.0.0.1']
-          + (
+          (
             [cm_host_private]
             if (
               (cm_host_private | default('') | length > 0)
@@ -837,6 +836,7 @@
             )
             else []
           )
+          + ['127.0.0.1']
           + ([cm_host_fqdn] if (cm_host_fqdn | default('') | length > 0) else [])
           + (
             [hostvars[cm_manager_inventory_host].ansible_fqdn | default('')]

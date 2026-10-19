@@ -63,10 +63,11 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 
 When Jenkins cannot reach a CM API port directly and discovery falls back to a
 request delegated to `cldr-mngr`, `cm_api_client_host`, `cm_host`, and the
-assembled API URL must remain aligned with the manager-local bind address
-(`127.0.0.1`, private IP, or FQDN). Never replace that address with the
-manager public IP while `cm_api_uri_delegate_to` is set; AWS instances may not
-hairpin to their own public EIP.
+assembled API URL must remain aligned with the manager-local bind address.
+Discovery prefers the manager private IP, then loopback and FQDN fallbacks.
+Never replace that address with the manager public IP while
+`cm_api_uri_delegate_to` is set; AWS instances may not hairpin to their own
+public EIP.
 
 **Version variable names:** `cm_version` is the configured Cloudera Manager product/package version from `config.yml` and can have extra-var precedence in Jenkins. Never use it as a `register` target. Play **25** stores `GET /cm/version` in `cm_version_response` and parses the payload into `cm_version_info`; the API slug remains `cm_api_version`.
 
