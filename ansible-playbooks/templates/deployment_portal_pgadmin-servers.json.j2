@@ -7,7 +7,7 @@
       "Port": {{ deployment_portal_context.postgresql.port }},
       "MaintenanceDB": "postgres",
       "Username": "{{ postgres_user }}",
-      "SSLMode": "prefer",
+      "SSLMode": "{{ deployment_portal_pgadmin_postgres_sslmode | default('disable') }}",
       "Comment": "Cloudera Manager external database"
     }
   }

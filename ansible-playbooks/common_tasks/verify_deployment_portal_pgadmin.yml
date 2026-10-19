@@ -69,15 +69,67 @@
       - "PGUSER={{ postgres_user }}"
       - -e
       - PGPASSFILE=/var/lib/pgadmin/.pgpass
+      - -e
+      - "PGSSLMODE={{ deployment_portal_pgadmin_postgres_sslmode | default('disable') }}"
       - "{{ deployment_portal_pgadmin_container }}"
       - /venv/bin/python3
       - -c
       - "import psycopg; psycopg.connect(connect_timeout=10).close()"
   register: pgadmin_postgres_login
   changed_when: false
+  failed_when: false
   retries: 3
   delay: 5
   until: pgadmin_postgres_login.rc == 0
+
+- name: Capture PostgreSQL service state after pgAdmin login failure
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "postgresql-{{ postgresql_version }}"
+      - "postgresql@{{ postgresql_version }}-main"
+      - postgresql
+  register: pgadmin_postgres_service_state
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
+  when: pgadmin_postgres_login.rc | default(1) | int != 0
+
+- name: Capture PostgreSQL journal after pgAdmin login failure
+  ansible.builtin.command:
+    argv:
+      - journalctl
+      - -u
+      - "postgresql-{{ postgresql_version }}"
+      - -u
+      - "postgresql@{{ postgresql_version }}-main"
+      - -u
+      - postgresql
+      - --since
+      - -5 minutes
+      - -n
+      - "80"
+      - --no-pager
+  register: pgadmin_postgres_journal
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ deployment_portal_context.postgresql.inventory_host }}"
+  when: pgadmin_postgres_login.rc | default(1) | int != 0
+
+- name: Fail when pgAdmin cannot authenticate to PostgreSQL
+  ansible.builtin.fail:
+    msg: >-
+      pgAdmin could not connect to PostgreSQL at
+      {{ deployment_portal_context.postgresql.connect_host }}:{{ deployment_portal_context.postgresql.port }}
+      with sslmode={{ deployment_portal_pgadmin_postgres_sslmode | default('disable') }}.
+      Client error: {{ pgadmin_postgres_login.stderr | default('unknown') }}.
+      PostgreSQL service state: {{ pgadmin_postgres_service_state.stdout | default('unknown') }}.
+      Recent PostgreSQL journal:
+      {{ pgadmin_postgres_journal.stdout | default('(no journal output)') }}.
+  when: pgadmin_postgres_login.rc | default(1) | int != 0
 
 - name: Verify pgAdmin responds on localhost published port
   ansible.builtin.uri:

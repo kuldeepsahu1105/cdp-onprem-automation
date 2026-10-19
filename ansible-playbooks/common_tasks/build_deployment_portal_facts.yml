@@ -535,6 +535,7 @@
           }}
         cluster_name: "{{ cdh_basecluster_name }}"
       postgresql:
+        inventory_host: "{{ deployment_portal_postgres_inv }}"
         host_fqdn: "{{ deployment_portal_postgres_fqdn }}"
         connect_host: "{{ deployment_portal_postgres_connect_host }}"
         port: "{{ postgres_port }}"
