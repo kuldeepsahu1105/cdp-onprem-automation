@@ -807,6 +807,8 @@ krb5_cm_managed_krb5_conf: true
 krb5_conf_path: "/etc/krb5.conf"
 # Verbatim [libdefaults] lines CM emits when krb5_cm_managed_krb5_conf is true (API: krb_libdefaults_safety_valve).
 krb5_cm_libdefaults_safety_valve: "{{ krb5_libdefaults_default_ccache_commented_line }}"
+# CM redacts the stored safety valve; set true only for intentional repair/rotation.
+cm_krb_update_libdefaults_safety_valve: false
 # Cloudera Manager KRB_ENC_TYPES (short names). AES only — Java 17+ disables RC4.
 krb5_allow_weak_rc4: false
 krb5_enc_types: >-
@@ -826,7 +828,7 @@ ipa_kdc_host: "ipaserver.{{ ipaserver_domain }}"
 # Cloudera Manager LDAP integration (FreeIPA or Active Directory)
 # AUTH_BACKEND_ORDER must be one of: DB_ONLY, LDAP_THEN_DB, DB_THEN_LDAP, LDAP_ONLY, EXTERNAL_ONLY_WITHOUT_DB_ADMINS
 cm_ldap_enabled: true
-# Set true only when rotating an already-configured secret; CM redacts LDAP_BIND_PW on reads.
+# Set true only when rotating the bind identity/password pair; CM may redact both on reads.
 cm_ldap_update_bind_password: false
 cm_ldap_connect_timeout: 30
 cm_ldap_auth_backend_order: DB_THEN_LDAP

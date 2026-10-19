@@ -17,7 +17,7 @@
       }}
 
 - name: CM API — full URL discovery when base URL or version slug missing or invalid
-  ansible.builtin.import_tasks: set_cm_api_url.yml
+  ansible.builtin.include_tasks: set_cm_api_url.yml
   when: >-
     (cm_api_url | default('') | length == 0)
     or (cm_api_version | default('') | length == 0)

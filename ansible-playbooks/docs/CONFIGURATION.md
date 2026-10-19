@@ -199,7 +199,8 @@ template validation rather than being silently ignored.
 | `cm_srvr_sudo_user` | User; `root` | Remote sudo-capable account used by Auto-TLS provisioning. |
 | `cm_ldap_enabled` | Boolean; `true` | Configures CM external LDAP authentication. Set false to keep database-only authentication. |
 | `cm_ldap_auth_backend_order` | `DB_ONLY`, `LDAP_THEN_DB`, `DB_THEN_LDAP`, `LDAP_ONLY`, `EXTERNAL_ONLY_WITHOUT_DB_ADMINS` | Controls CM login fallback/order. `DB_THEN_LDAP` preserves local CM admin recovery. |
-| `cm_ldap_update_bind_password` | Boolean; `false` | Set true only to rotate the existing LDAP bind password; CM redacts it on reads. |
+| `cm_ldap_update_bind_password` | Boolean; `false` | Set true only to rotate the existing LDAP bind DN/password pair. CM may redact both credential values on reads, so ordinary reruns verify their presence rather than comparing an unavailable value. |
+| `cm_krb_update_libdefaults_safety_valve` | Boolean; `false` | Set true only to intentionally rewrite `KRB_LIBDEFAULTS_SAFETY_VALVE`. CM returns this setting as `REDACTED`, so ordinary reruns verify presence and do not treat the redaction token as drift. |
 | `cm_cms_update_reports_manager_password` | Boolean; `false` | Set true only to rotate the CMS Reports Manager database password. |
 | `cm_cms_update_autotls_truststore_password` | Boolean; `false` | Set true only to rotate the CMS Auto-TLS truststore password. |
 

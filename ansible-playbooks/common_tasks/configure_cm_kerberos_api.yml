@@ -71,6 +71,16 @@
         )
       }}
 
+- name: Kerberos — read current libdefaults safety valve metadata
+  ansible.builtin.set_fact:
+    cm_krb_libdefaults_safety_valve_item: >-
+      {{
+        cm_krb_config_before.json['items'] | default([])
+        | selectattr('name', 'equalto', 'KRB_LIBDEFAULTS_SAFETY_VALVE')
+        | first
+        | default({})
+      }}
+
 - name: Kerberos — collect CM configuration drift details
   ansible.builtin.set_fact:
     cm_kerberos_config_drift_details: >-
@@ -125,12 +135,6 @@
     - name: KRB_KRB5_CONF_PATH
       value: "{{ krb5_conf_path | default('/etc/krb5.conf') }}"
       default: "/etc/krb5.conf"
-    - name: KRB_LIBDEFAULTS_SAFETY_VALVE
-      value: "{{ cm_krb_libdefaults_safety_valve_effective }}"
-      default: ""
-  when:
-    - item.name != 'KRB_LIBDEFAULTS_SAFETY_VALVE'
-      or (cm_krb_libdefaults_safety_valve_effective | default('') | length) > 0
   register: cm_kerberos_config_drift_detail_results
 
 - name: Kerberos — flatten CM configuration drift details
@@ -142,6 +146,36 @@
         | map(attribute='ansible_facts.cm_kerberos_config_drift_details')
         | flatten
       }}
+
+- name: Kerberos — detect actionable libdefaults safety valve drift
+  ansible.builtin.set_fact:
+    cm_kerberos_config_drift_details: >-
+      {{
+        cm_kerberos_config_drift_details
+        + [
+            {
+              'name': 'KRB_LIBDEFAULTS_SAFETY_VALVE',
+              'current': (
+                cm_krb_libdefaults_safety_valve_item.value
+                | default('not configured', true)
+              ),
+              'desired': cm_krb_libdefaults_safety_valve_effective
+            }
+          ]
+      }}
+  when:
+    - cm_krb_libdefaults_safety_valve_effective | default('') | length > 0
+    - >-
+      cm_krb_update_libdefaults_safety_valve | default(false) | bool
+      or cm_krb_libdefaults_safety_valve_item | length == 0
+      or (
+        'REDACTED' not in (
+          cm_krb_libdefaults_safety_valve_item.value | default('') | upper
+        )
+        and (
+          cm_krb_libdefaults_safety_valve_item.value | default('') | string | trim
+        ) != (cm_krb_libdefaults_safety_valve_effective | trim)
+      )
 
 - name: Kerberos — detect whether CM Kerberos settings need update
   ansible.builtin.set_fact:

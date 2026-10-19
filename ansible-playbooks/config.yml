@@ -182,7 +182,10 @@ cm_srvr_sudo_user: root
 
 cm_ldap_enabled: true
 cm_ldap_auth_backend_order: DB_THEN_LDAP
+# Rotates the LDAP bind DN and password together when CM redacts stored credential values.
 cm_ldap_update_bind_password: false
+# Set true only to intentionally rewrite CM's redacted KRB_LIBDEFAULTS_SAFETY_VALVE.
+cm_krb_update_libdefaults_safety_valve: false
 # LDAP transport: use ldap/389 or ldaps/636. LDAPS remains the secure default.
 cm_ldap_scheme: ldaps                    # ldap | ldaps
 cm_ldap_port: "{{ 636 if (cm_ldap_scheme | lower) == 'ldaps' else 389 }}"

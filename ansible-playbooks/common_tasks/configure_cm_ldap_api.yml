@@ -38,8 +38,17 @@
   register: cm_ldap_config_before
   changed_when: false
 
-- name: LDAP — detect whether the bind password has ever been configured
+- name: LDAP — detect whether bind credentials have ever been configured
   ansible.builtin.set_fact:
+    cm_ldap_bind_dn_present: >-
+      {{
+        (
+          cm_ldap_config_before.json['items'] | default([])
+          | selectattr('name', 'equalto', 'LDAP_BIND_DN')
+          | list
+          | length
+        ) > 0
+      }}
     cm_ldap_bind_password_present: >-
       {{
         (
@@ -57,7 +66,13 @@
 - name: LDAP — identify changed non-secret settings
   ansible.builtin.set_fact:
     cm_ldap_drift_reasons: "{{ cm_ldap_drift_reasons + [item.name] }}"
-  loop: "{{ cm_ldap_desired_items | rejectattr('name', 'equalto', 'LDAP_BIND_PW') | list }}"
+  loop: >-
+    {{
+      cm_ldap_desired_items
+      | rejectattr('name', 'equalto', 'LDAP_BIND_DN')
+      | rejectattr('name', 'equalto', 'LDAP_BIND_PW')
+      | list
+    }}
   when: >-
     (
       cm_ldap_config_before.json['items'] | default([])
@@ -70,8 +85,13 @@
     cm_ldap_drift_reasons: >-
       {{
         cm_ldap_drift_reasons
+        + (['LDAP_BIND_DN is not configured'] if not (cm_ldap_bind_dn_present | bool) else [])
         + (['LDAP_BIND_PW is not configured'] if not (cm_ldap_bind_password_present | bool) else [])
-        + (['LDAP_BIND_PW rotation requested'] if (cm_ldap_update_bind_password | default(false) | bool) else [])
+        + (
+          ['LDAP bind credential rotation requested']
+          if (cm_ldap_update_bind_password | default(false) | bool)
+          else []
+        )
       }}
 
 - name: LDAP — detect CM LDAP configuration drift
