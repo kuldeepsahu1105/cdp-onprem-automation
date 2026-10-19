@@ -246,5 +246,9 @@
   ansible.builtin.set_fact:
     cm_autotls_config_fetched_this_play: true
 
+- name: CM API — realign mutation endpoint after reading live Auto-TLS state
+  ansible.builtin.include_tasks: resolve_cm_krb_api_url_from_facts.yml
+  when: cm_api_version | default('') | length > 0
+
 - name: CM API — print TLS / Auto-TLS summary (single line)
   ansible.builtin.include_tasks: print_cm_tls_status.yml
