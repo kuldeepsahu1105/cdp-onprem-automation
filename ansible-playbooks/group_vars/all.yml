@@ -672,6 +672,10 @@ cm_agent_active_wait_delay: 5
 cm_verify_skip_redundant_systemd_details: true
 # When true, set use_tls=1 in config.ini (also set from CM API in 25/27 when Auto-TLS is on)
 cm_agent_use_tls: false
+# Pin agent host identity instead of relying on CM agent socket.getfqdn/getaddrinfo discovery.
+# Empty = inventory cldr_hostname + cluster_domain.
+cm_agent_reported_hostname: ""
+cm_agent_reported_hostname_change_marker_path: /var/lib/cloudera-scm-agent/.ansible-reported-hostname-changed
 
 # CM Hosts UI — optional tags (PUT /hosts/{fqdn}/tags); empty Tags column is normal until this runs
 cm_host_tags_enabled: true

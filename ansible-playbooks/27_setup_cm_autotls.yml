@@ -32,6 +32,41 @@
     - name: CM API — read Auto-TLS state from CM configuration
       ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
 
+    - name: Auto-TLS — inspect CM agent identity-change markers
+      ansible.builtin.stat:
+        path: "{{ cm_agent_reported_hostname_change_marker_path }}"
+      delegate_to: "{{ item }}"
+      become: true
+      loop: "{{ groups['all'] | difference(groups.get('ipaserver', [])) }}"
+      register: cm_agent_reported_hostname_marker_stats
+      changed_when: false
+
+    - name: Auto-TLS — collect hosts requiring certificate regeneration
+      ansible.builtin.set_fact:
+        cm_agent_reported_hostname_changed_hosts: >-
+          {{
+            cm_agent_reported_hostname_marker_stats.results
+            | selectattr('stat.exists', 'defined')
+            | selectattr('stat.exists')
+            | map(attribute='item')
+            | list
+          }}
+
+    - name: Auto-TLS — require explicit certificate regeneration after agent identity change
+      ansible.builtin.assert:
+        that:
+          - cm_autotls_force_run | default(false) | bool
+        fail_msg: >-
+          CM Auto-TLS is already enabled, but reported_hostname changed on:
+          {{ cm_agent_reported_hostname_changed_hosts | join(', ') }}.
+          Existing certificates may contain the previous or DNS-derived identity.
+          Re-run 27_setup_cm_autotls.yml once with -e cm_autotls_force_run=true
+          to intentionally regenerate the CMCA/certificates. This safety gate prevents
+          silent CA replacement on an existing deployment.
+      when:
+        - cm_autotls_api_enabled | default(false) | bool
+        - cm_agent_reported_hostname_changed_hosts | length > 0
+
     - name: Auto-TLS — require authoritative CM state before enablement
       ansible.builtin.assert:
         that:
@@ -364,6 +399,17 @@
     - name: Mark cluster CM agents restarted after Auto-TLS for this run
       ansible.builtin.set_fact:
         cm_agents_restarted_after_autotls_this_run: true
+
+- name: Clear CM agent identity-change marker after successful certificate regeneration
+  hosts: all:!ipaserver
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Remove reported_hostname certificate-remediation marker
+      ansible.builtin.file:
+        path: "{{ cm_agent_reported_hostname_change_marker_path }}"
+        state: absent
+      when: hostvars['localhost'].autotls_applied_this_run | default(false) | bool
 
 - name: Ensure Auto-TLS agent truststore on CM host after agent reconcile
   hosts: localhost

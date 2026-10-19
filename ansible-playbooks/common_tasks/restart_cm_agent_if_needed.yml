@@ -17,6 +17,10 @@
           and (cm_agent_config_server_host.changed | default(false))
         )
         or (
+          not (cm_agent_config_reported_hostname.skipped | default(false))
+          and (cm_agent_config_reported_hostname.changed | default(false))
+        )
+        or (
           not (cm_agent_config_use_tls_enable.skipped | default(false))
           and (cm_agent_config_use_tls_enable.changed | default(false))
         )

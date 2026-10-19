@@ -623,7 +623,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/configure_cm_repo.yml` | Public or internal CM repo setup |
 | `common_tasks/prepare_debian_cm_install.yml` | Ubuntu apt prep (needrestart, etc.) |
 | `common_tasks/install_cm_packages.yml` | OS-aware CM server/agent package install |
-| `common_tasks/configure_cm_agent.yml` | Set `server_host` (and `use_tls` when Auto-TLS) in agent `config.ini` |
+| `common_tasks/configure_cm_agent.yml` | Set `server_host`, stable inventory-FQDN `reported_hostname`, and `use_tls` in agent `config.ini`; validate OS FQDN and IPv4 resolution before certificate issuance |
 | `common_tasks/reconcile_cm_agents.yml` | Configure agent + restart + wait for `active` |
 | `common_tasks/apply_cm_host_tags.yml` | PUT `/hosts/{fqdn}/tags` from inventory groups |
 | `common_tasks/verify_cm_host_heartbeats.yml` | Fail when commissioned hosts exceed `cm_host_heartbeat_max_age_seconds` |
