@@ -743,9 +743,12 @@ playbook **31** receive guarded Auto-TLS/Kerberos convergence without requiring
 a rebuild.
 
 New deployments use the default cluster name `CDP-base-cluster`. When that
-default is unchanged and a pre-V2 `CDH-Cluster` already exists, playbook **31**
-adopts the legacy cluster instead of creating a duplicate. Explicit custom
-cluster names never use this fallback.
+default is unchanged, playbook **31** first adopts a pre-V2 `CDH-Cluster`.
+If neither default name exists, `base_cluster_adopt_by_master_host: true`
+adopts the single CM cluster containing the configured base master only when
+that cluster also contains every configured base host. Multiple or partial
+matches fail before mutation. Explicit custom cluster names never use these
+fallbacks.
 
 Kafka metadata is selected with `base_cluster_kafka_metadata_store`:
 `Zookeeper` (the automation default) omits KRaft roles and configures Kafka's

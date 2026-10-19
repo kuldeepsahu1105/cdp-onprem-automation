@@ -434,6 +434,9 @@ cm_admin_pass: "admin"
 cm_admin_bootstrap_pass: "admin"
 cdh_basecluster_name: "CDP-base-cluster"
 base_cluster_legacy_name: "CDH-Cluster"
+# When the unchanged default name is absent, safely adopt the single CM cluster
+# containing the configured base master only when it also contains every base host.
+base_cluster_adopt_by_master_host: true
 base_cluster_master_group: base-masters
 base_cluster_worker_group: base-workers
 

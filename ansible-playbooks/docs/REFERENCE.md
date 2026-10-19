@@ -61,7 +61,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 
 | Variable | Default |
 |---|---|
-| `cdh_basecluster_name` | `CDP-base-cluster` (adopts an existing legacy `CDH-Cluster`) |
+| `cdh_basecluster_name` | `CDP-base-cluster` (adopts an existing legacy `CDH-Cluster`, or a single full host-ownership match when enabled) |
+| `base_cluster_adopt_by_master_host` | `true` — with the unchanged default name, adopt one existing CM cluster only when it owns the configured base master and every expected base host |
 | `base_cluster_enable_kerberos` | `true` | Kerberize new base clusters before First Run, converge existing unsecure clusters, and verify HDFS authentication |
 | `base_cluster_install_services` | see `all.yml` | Per-service booleans for `31_setup_base_cluster.yml` (Spark 3, Knox, and Solr default `true`; NiFi, NiFi Registry, DataViz, and Phoenix default `false`; Iceberg validates its engine services) |
 | `base_cluster_kafka_metadata_store` | `Zookeeper` | Kafka Broker metadata backend; accepted values are `Zookeeper` and `KRaft` |

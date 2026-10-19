@@ -258,16 +258,142 @@
         - base_cluster_requested_lookup.status == 404
         - base_cluster_legacy_lookup.status | default(404) == 200
 
+    - name: Discover existing CM clusters for default-name adoption
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/clusters?view=summary"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_discovery_list
+      changed_when: false
+      when:
+        - base_cluster_requested_lookup.status == 404
+        - base_cluster_legacy_lookup.status | default(404) == 404
+        - cdh_basecluster_name == 'CDP-base-cluster'
+        - base_cluster_adopt_by_master_host | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Read hosts assigned to existing CM clusters
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/clusters/{{ item.name | urlencode }}/hosts"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      loop: >-
+        {{
+          base_cluster_discovery_list.json['items'] | default([])
+          if not (base_cluster_discovery_list.skipped | default(false) | bool)
+          else []
+        }}
+      loop_control:
+        label: "{{ item.name }}"
+      register: base_cluster_discovery_host_results
+      changed_when: false
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Initialize existing cluster host matches
+      ansible.builtin.set_fact:
+        base_cluster_host_matches: []
+
+    - name: Match existing cluster containing configured base master
+      ansible.builtin.set_fact:
+        base_cluster_host_matches: >-
+          {{
+            base_cluster_host_matches
+            + [{
+                'name': item.item.name,
+                'hostnames': (
+                  item.json['items'] | default([])
+                  | map(attribute='hostname')
+                  | list
+                )
+              }]
+          }}
+      loop: "{{ base_cluster_discovery_host_results.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.name | default('unknown') }}"
+      when:
+        - not (item.skipped | default(false) | bool)
+        - base_master_fqdn in (item.json['items'] | default([]) | map(attribute='hostname') | list)
+
+    - name: Require unambiguous existing cluster host ownership
+      ansible.builtin.assert:
+        that:
+          - base_cluster_host_matches | length <= 1
+        fail_msg: >-
+          Configured base master {{ base_master_fqdn }} appears in multiple CM clusters:
+          {{ base_cluster_host_matches | map(attribute='name') | join(', ') }}.
+          Refusing automatic adoption; set cdh_basecluster_name explicitly.
+
+    - name: Require discovered cluster to contain every configured base host
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              base_cluster_hosts | map(attribute='name') | list
+              | difference(base_cluster_host_matches[0].hostnames)
+              | length
+            ) == 0
+        fail_msg: >-
+          CM cluster {{ base_cluster_host_matches[0].name }} owns base master
+          {{ base_master_fqdn }}, but does not contain all configured base hosts. Missing:
+          {{
+            base_cluster_hosts | map(attribute='name') | list
+            | difference(base_cluster_host_matches[0].hostnames)
+            | join(', ')
+          }}. Refusing to adopt a partially matching cluster.
+      when: base_cluster_host_matches | length == 1
+
+    - name: Adopt existing cluster discovered from base master ownership
+      ansible.builtin.set_fact:
+        cdh_basecluster_name: "{{ base_cluster_host_matches[0].name }}"
+      when: base_cluster_host_matches | length == 1
+
+    - name: Read adopted existing cluster
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name | urlencode }}"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_discovered_lookup
+      changed_when: false
+      when: base_cluster_host_matches | length == 1
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Report adopted cluster discovered from host ownership
+      ansible.builtin.debug:
+        msg: >-
+          Requested default cluster CDP-base-cluster is absent, but all configured base hosts
+          already belong to CM cluster {{ cdh_basecluster_name }}. Adopting that cluster for
+          idempotent reconciliation instead of attempting duplicate host assignment.
+      when: base_cluster_host_matches | length == 1
+
     - name: Select existing cluster lookup
       ansible.builtin.set_fact:
         existing_cluster: >-
           {{
+            base_cluster_discovered_lookup
+            if (base_cluster_discovered_lookup.status | default(404) == 200)
+            else (
             base_cluster_legacy_lookup
             if (
               base_cluster_requested_lookup.status == 404
               and base_cluster_legacy_lookup.status | default(404) == 200
             )
             else base_cluster_requested_lookup
+            )
           }}
 
     - name: Check cluster hosts
