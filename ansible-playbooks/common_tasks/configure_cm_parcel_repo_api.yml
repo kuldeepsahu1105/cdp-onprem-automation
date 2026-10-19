@@ -3,7 +3,15 @@
 
 - name: Parcel repo — select the prepared CM API endpoint
   ansible.builtin.set_fact:
-    cm_parcel_api_url: "{{ cm_krb_api_url | default(cm_api_url | default(''), true) }}"
+    cm_parcel_api_url: >-
+      {{
+        cm_api_url
+        if (
+          cm_autotls_api_enabled | default(false) | bool
+          and (cm_api_url | default('') is match('^https://'))
+        )
+        else (cm_krb_api_url | default(cm_api_url | default(''), true))
+      }}
 
 - name: Parcel repo — require a prepared CM API endpoint
   ansible.builtin.assert:
@@ -23,12 +31,78 @@
         password: "{{ cm_admin_pass }}"
         force_basic_auth: yes
         validate_certs: no
-        status_code: [200]
+        status_code: [200, 303]
         follow_redirects: none
         timeout: 60
       register: cm_parcel_config_get
       changed_when: false
       delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
+
+    - name: Parcel repo — validate CM HTTP-to-HTTPS redirect
+      ansible.builtin.assert:
+        that:
+          - cm_parcel_config_get.location | default('') | urlsplit('scheme') == 'https'
+          - >-
+            (cm_parcel_config_get.location | default('') | urlsplit('hostname'))
+            == (cm_parcel_api_url | urlsplit('hostname'))
+          - >-
+            (cm_parcel_config_get.location | default('') | urlsplit('port') | int)
+            == (cm_https_port | default(7183) | int)
+          - >-
+            (cm_parcel_config_get.location | default('') | urlsplit('path'))
+            == ('/api/' ~ cm_api_version ~ '/cm/config')
+        fail_msg: >-
+          Cloudera Manager returned an unexpected redirect for parcel configuration:
+          {{ cm_parcel_config_get.location | default('missing Location header') }}.
+          Only same-manager HTTPS redirects to :{{ cm_https_port | default(7183) }}
+          and /api/{{ cm_api_version }}/cm/config are accepted.
+      when: cm_parcel_config_get.status | default(0) | int == 303
+
+    - name: Parcel repo — adopt redirected HTTPS API endpoint
+      ansible.builtin.set_fact:
+        cm_parcel_api_url: >-
+          {{
+            cm_parcel_config_get.location
+            | regex_replace('/cm/config$', '')
+          }}
+        cm_api_url: >-
+          {{
+            cm_parcel_config_get.location
+            | regex_replace('/cm/config$', '')
+          }}
+        cm_krb_api_url: >-
+          {{
+            cm_parcel_config_get.location
+            | regex_replace('/cm/config$', '')
+          }}
+        cm_protocol: https
+        cm_api_port: "{{ cm_https_port | default(7183) }}"
+        cm_api_https_active: true
+        cm_api_use_https: true
+      when: cm_parcel_config_get.status | default(0) | int == 303
+
+    - name: Parcel repo — GET /cm/config from redirected HTTPS endpoint
+      ansible.builtin.uri:
+        url: "{{ cm_parcel_api_url }}/cm/config"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+        timeout: 60
+      register: cm_parcel_config_get_https
+      changed_when: false
+      delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
+      when: cm_parcel_config_get.status | default(0) | int == 303
+
+    - name: Parcel repo — use HTTPS CM configuration response
+      ansible.builtin.set_fact:
+        cm_parcel_config_get: "{{ cm_parcel_config_get_https }}"
+      when:
+        - cm_parcel_config_get_https is defined
+        - not (cm_parcel_config_get_https.skipped | default(false) | bool)
   rescue:
     - name: Parcel repo — fail with scm-server and security group guidance
       ansible.builtin.fail:
