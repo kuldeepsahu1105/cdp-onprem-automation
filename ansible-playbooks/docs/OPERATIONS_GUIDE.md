@@ -492,8 +492,8 @@ passwords use the `base_cluster_*` variables and should be overridden through
 `ANSIBLE_GROUP_VARS_YAML` or an Ansible vault. Ranger initial passwords must
 contain letters and numbers and be at least eight characters long. By default,
 `base_cluster_ranger_admin_password` uses `common_password`, which defaults to
-the FreeIPA administrator password; the Ranger database password remains a
-separate credential.
+the FreeIPA administrator password. The Ranger Admin UI username is `admin`;
+`rangeradmin` is the separate PostgreSQL database account.
 
 An interrupted First Run can leave HDFS formatted and running while later
 service setup never occurred. When a populated cluster has no matching

@@ -112,7 +112,7 @@
 {% set _base_master_fqdn = deployment_portal_base_master_fqdn | default('') | trim %}
 {% set svc_creds = [] %}
 {% if base_cluster_install_services.ranger | default(false) | bool and (_base_master_fqdn | length > 0) %}
-{% set svc_creds = svc_creds + [{'label': 'Ranger Admin', 'username': 'rangeradmin', 'password': base_cluster_ranger_admin_password, 'url': 'http://' ~ _base_master_fqdn ~ ':' ~ base_cluster_ranger_admin_port, 'note': 'Ranger Admin UI'}] %}
+{% set svc_creds = svc_creds + [{'label': 'Ranger Admin', 'username': 'admin', 'password': base_cluster_ranger_admin_password, 'url': 'http://' ~ _base_master_fqdn ~ ':' ~ base_cluster_ranger_admin_port, 'note': 'Ranger Admin UI'}] %}
 {% endif %}
 {% if base_cluster_install_services.knox | default(false) | bool and (_base_master_fqdn | length > 0) %}
 {% set svc_creds = svc_creds + [{'label': 'Knox Gateway', 'username': 'knox', 'password': (databases | selectattr('name', 'equalto', 'knox') | map(attribute='password') | first | default('knox')), 'url': 'https://' ~ _base_master_fqdn ~ ':' ~ (base_cluster_knox_gateway_https_port | default(8443) | string) ~ '/gateway/homepage/home', 'note': 'Knox DB user'}] %}
