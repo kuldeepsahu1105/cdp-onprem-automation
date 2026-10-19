@@ -41,6 +41,20 @@
   changed_when: false
   failed_when: false
 
+- name: Require each Python interpreter to run before installing psycopg2
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.rc | int == 0
+        or "No module named 'psycopg2'" in (item.stderr | default(''))
+    fail_msg: >-
+      Python interpreter {{ item.item }} cannot run successfully:
+      {{ item.stderr | default(item.stdout | default('unknown interpreter error')) }}.
+      Repair the interpreter runtime before installing psycopg2.
+  loop: "{{ python_psycopg2_import.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
 - name: Install psycopg2-binary in each Python interpreter when required
   ansible.builtin.command:
     argv:
@@ -54,7 +68,10 @@
   loop: "{{ python_psycopg2_import.results }}"
   loop_control:
     label: "{{ item.item }}"
-  when: item.rc | int != 0
+  when:
+    - item.rc | int != 0
+    - >-
+      "No module named 'psycopg2'" in (item.stderr | default(''))
   changed_when: true
 
 - name: Verify psycopg2 in each required Python interpreter

@@ -709,7 +709,11 @@ to Hue. The system targets are derived as `/usr/bin/python3` and
 `/usr/bin/python{{ python_version }}`; playbook **31** discovers Hue's parcel
 interpreter from the active CDH parcel (`lib/hue/build/env/bin/python` for
 Python 3.11+ Hue, or `lib/hue/build/venvs/python{{ python_version }}` on older
-layouts) instead of hardcoding a full venv path.
+layouts) instead of hardcoding a full venv path. Before invoking pip, it verifies
+that the parcel interpreter itself starts. If its ELF loader reports a missing
+`libpythonX.Y.so`, the play installs the matching OS runtime package
+(`pythonX.Y-libs` on Red Hat family or `libpythonX.Y` on Debian family) and
+rechecks the interpreter.
 
 For an existing cluster, playbook **31** also detects stale Hive Metastore
 catalogs whose names begin with
