@@ -108,7 +108,7 @@
     cm_autotls_parsed_from_cm_config: "{{ cm_autotls_state_known | default(false) | bool }}"
 
 - name: CM API — resolve public URL host when Auto-TLS is enabled
-  ansible.builtin.import_tasks: resolve_cm_api_url_host.yml
+  ansible.builtin.include_tasks: resolve_cm_api_url_host.yml
   when: cm_autotls_api_enabled | default(false) | bool
 
 - name: CM API — require HTTPS URL inputs when Auto-TLS is enabled
@@ -247,4 +247,4 @@
     cm_autotls_config_fetched_this_play: true
 
 - name: CM API — print TLS / Auto-TLS summary (single line)
-  ansible.builtin.import_tasks: print_cm_tls_status.yml
+  ansible.builtin.include_tasks: print_cm_tls_status.yml

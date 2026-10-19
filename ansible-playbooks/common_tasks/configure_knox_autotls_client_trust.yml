@@ -48,11 +48,25 @@
   become: true
 
 - name: Restart CM agent on Knox host when in-cluster truststore is missing
-  ansible.builtin.systemd:
-    name: cloudera-scm-agent
-    enabled: true
-    state: restarted
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if systemctl cat cloudera-scm-agent >/dev/null 2>&1; then
+      systemctl daemon-reload
+      systemctl enable cloudera-scm-agent >/dev/null 2>&1
+      systemctl restart cloudera-scm-agent
+      echo restarted-systemd
+    elif [ -x /etc/init.d/cloudera-scm-agent ]; then
+      service cloudera-scm-agent restart
+      echo restarted-sysv
+    else
+      echo "cloudera-scm-agent service is not installed on $(hostname -f)" >&2
+      exit 3
+    fi
+  args:
+    executable: /bin/bash
   register: base_cluster_knox_autotls_agent_restart
+  changed_when: >-
+    'restarted-' in (base_cluster_knox_autotls_agent_restart.stdout | default(''))
   delegate_to: "{{ groups[base_cluster_master_group][0] }}"
   become: true
   when:

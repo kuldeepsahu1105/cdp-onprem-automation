@@ -36,7 +36,7 @@
       }}
 
 - name: CM API — set connection context when missing
-  ansible.builtin.import_tasks: resolve_cm_api_probe_context.yml
+  ansible.builtin.include_tasks: resolve_cm_api_probe_context.yml
   when:
     - _cm_api_url_full_probe_required | default(true) | bool
     - not (cm_api_context_resolved_this_play | default(false) | bool)
@@ -400,4 +400,3 @@
   when:
     - not (cm_autotls_skip_verbose_probe_logs | default(true) | bool)
     - cm_api_url | default('') | length > 0
-
