@@ -1,0 +1,31 @@
+---
+- name: Identify network interface in use (excluding loopback)
+  ansible.builtin.shell: |
+    ifconfig | grep flags | grep -v lo || ip addr | grep mtu | grep -v lo
+  register: network_interface_info
+
+- name: Extract interface name
+  ansible.builtin.set_fact:
+    network_interface: "{{ network_interface_info.stdout_lines[0].split(':')[0] }}"
+
+- name: Display detected network interface
+  ansible.builtin.debug:
+    msg: "Identified network interface: {{ network_interface }}"
+
+- name: Generate TCP checksum offload disable script from template
+  ansible.builtin.template:
+    src: disable_tcp_checksum_offload.j2
+    dest: /root/disable_tcp_checksum.sh
+    mode: "0755"
+    backup: yes
+
+- name: Execute TCP checksum offload disable script
+  ansible.builtin.command: /root/disable_tcp_checksum.sh
+
+- name: Verify TCP checksum offload is disabled
+  ansible.builtin.shell: "ethtool -k {{ network_interface }} | grep tx-checksumming"
+  register: checksum_offload_status
+
+- name: Display checksum offload status
+  ansible.builtin.debug:
+    msg: "{{ checksum_offload_status.stdout.replace('\t', '    ').split('\n') }}"

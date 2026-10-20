@@ -247,6 +247,12 @@ ansible-playbook -i inventory.ini 00_setup_ssh_preqs.yml --private-key "$ANSIBLE
 ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml --private-key "$ANSIBLE_PRIVATE_KEY"
 ```
 
+The numbered playbooks remain the compatibility API even where implementation
+has moved into `roles/`. For PREREQS, continue invoking `00`–`09` directly or
+use `DEPLOY_PHASE=1 ./pvc_setup.sh`; do not replace those calls with ad hoc
+role-only playbooks because the wrappers preserve host targeting, privilege
+escalation, and multi-play ordering.
+
 Playbooks resolve SSH keys and Auto-TLS material on the **control machine** via `ANSIBLE_PRIVATE_KEY`, files under `ansible-playbooks/`, or `group_vars` (`cm_private_key_path`, `cm_node_sudo_password`). Wrappers only set the same env vars and `--private-key` for convenience.
 
 | Target OS | CM repo mode | Notes |

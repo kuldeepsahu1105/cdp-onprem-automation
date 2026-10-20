@@ -1,0 +1,27 @@
+---
+- name: Skip tuned configuration on non-RHEL hosts
+  ansible.builtin.meta: end_host
+  when: ansible_os_family != "RedHat"
+
+- name: Ensure tuned service is started
+  ansible.builtin.systemd:
+    name: tuned
+    state: started
+    enabled: yes
+
+- name: Turn off tuned service
+  ansible.builtin.command: tuned-adm off
+
+- name: Verify no active tuned profile
+  ansible.builtin.command: tuned-adm list
+  register: tuned_profiles
+
+- name: Display tuned profiles
+  ansible.builtin.debug:
+    msg: "{{ tuned_profiles.stdout.replace('\t', '    ').split('\n') }}"
+
+- name: Stop and disable tuned service
+  ansible.builtin.systemd:
+    name: tuned
+    state: stopped
+    enabled: no

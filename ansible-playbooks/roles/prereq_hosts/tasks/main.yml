@@ -1,0 +1,67 @@
+---
+- name: Generate /etc/hosts from template
+  ansible.builtin.template:
+    src: etc_hosts.j2
+    dest: /etc/hosts
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Ensure OS version is RHEL 9.x
+  ansible.builtin.shell: cat /etc/*rel* | grep -E 'NAME|VERSION'
+  register: os_version
+  changed_when: false
+
+- name: Print OS version information
+  ansible.builtin.debug:
+    msg: "{{ os_version.stdout.replace('\t', '    ').split('\n') }}"
+
+- name: Verify hostname (FQDN)
+  ansible.builtin.command: hostname -f
+  register: hostname_fqdn
+  changed_when: false
+
+- name: Print hostname (FQDN)
+  ansible.builtin.debug:
+    msg: "Hostname (FQDN): {{ hostname_fqdn.stdout }}"
+
+- name: Verify host IP address
+  ansible.builtin.command: hostname -i
+  register: hostname_ip
+  changed_when: false
+
+- name: Print host IP address
+  ansible.builtin.debug:
+    msg: "Hostname IP Address: {{ hostname_ip.stdout }}"
+
+- name: Verify /etc/hostname file content
+  ansible.builtin.command: cat /etc/hostname
+  register: hostname_file
+  changed_when: false
+
+- name: Print /etc/hostname content
+  ansible.builtin.debug:
+    msg: "Content of /etc/hostname: {{ hostname_file.stdout }}"
+
+- name: Get IP addresses (cross-platform)
+  ansible.builtin.shell: |
+    if command -v ip >/dev/null 2>&1; then
+      ip -o -4 addr show | awk '{print $4}'
+    else
+      ifconfig | grep -E 'inet ' | awk '{print $2}'
+    fi
+  register: net_info
+  changed_when: false
+
+- name: Print interfaces and IPs
+  ansible.builtin.debug:
+    msg: "{{ net_info.stdout_lines }}"
+
+- name: Verify kernel version
+  ansible.builtin.command: uname -a
+  register: kernel_version
+  changed_when: false
+
+- name: Print kernel version
+  ansible.builtin.debug:
+    msg: "Kernel Version: {{ kernel_version.stdout }}"

@@ -1,0 +1,21 @@
+---
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/set_os_facts.yml"
+
+- name: Verify Chrony tracking
+  ansible.builtin.command: chronyc tracking
+  register: chrony_tracking_output
+  changed_when: false
+
+- name: Display Chrony tracking output
+  ansible.builtin.debug:
+    msg: "{{ chrony_tracking_output.stdout_lines }}"
+
+- name: Verify Chrony sources
+  ansible.builtin.command: chronyc sources
+  register: chrony_sources_output
+  changed_when: false
+
+- name: Display Chrony sources output
+  ansible.builtin.debug:
+    msg: "{{ chrony_sources_output.stdout_lines }}"

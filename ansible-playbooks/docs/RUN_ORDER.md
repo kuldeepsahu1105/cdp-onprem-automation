@@ -102,9 +102,24 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 | `00_setup_ssh_preqs.yml` | First in wrapper — the only playbook that still uses prefix `00` |
 | `ensure_collections.yml` | Unnumbered — imported by every numbered playbook; no fixed position in the sequence |
 | `detect_identity.yml` | Unnumbered — imported by `11_identity_setup.yml` as its first play (no free number between `10` and `11`) — `pvc_setup.sh` does not also invoke it standalone (see [Avoiding duplicate work](#avoiding-duplicate-work-within-a-run)) |
-| `01`–`09` | OS prerequisites (`04_setup_autossh.yml` in phase 1 after `03_create_etc_hosts`) |
+| `01`–`09` | OS prerequisites (`04_setup_autossh.yml` in phase 1 after `03_create_etc_hosts`); compatibility playbooks delegate implementation to `roles/prereq_*` |
 | `99_cleanup.yml` | Teardown |
 | `unused_legacy_cm_service_enable.yml` | Unused; prefer `28_setup_cm_cms.yml` |
+
+### Role architecture and compatibility entry points
+
+The PREREQS implementation is organized under `roles/prereq_*`. Numbered
+playbooks `00_setup_ssh_preqs.yml` through `09_verify_os_prereqs.yml` remain
+the supported orchestration entry points and preserve their original play
+names, host patterns, play order, privilege escalation, play vars, and
+`ensure_collections.yml` import. `pvc_setup.sh`, Jenkins, and direct
+`ansible-playbook` invocations continue to call those filenames; roles are
+implementation units, not replacements for the compatibility playbooks.
+
+Multi-play sequencing remains visible in the wrappers. In particular,
+`04_setup_autossh.yml` keeps generate/fetch/distribute as three plays and
+`07_prereq_setup_002.yml` keeps each original host-targeting boundary while
+selecting task files from `prereq_system_tuning`.
 
 ## Migration: renumbering duplicate prefixes (2026-09)
 

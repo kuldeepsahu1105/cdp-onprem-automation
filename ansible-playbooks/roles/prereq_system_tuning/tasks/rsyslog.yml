@@ -1,0 +1,16 @@
+---
+- name: Check rsyslog version
+  ansible.builtin.command: rsyslogd -v
+  register: rsyslog_version
+
+- name: Display rsyslog version
+  ansible.builtin.debug:
+    msg: "{{ rsyslog_version.stdout.replace('\t', '    ').split('\n') }}"
+
+- name: Check rsyslog service status
+  ansible.builtin.command: service rsyslog status
+  register: rsyslog_status
+
+- name: Display rsyslog service status
+  ansible.builtin.debug:
+    msg: "{{ rsyslog_status.stdout.replace('\t', '    ').split('\n') }}"

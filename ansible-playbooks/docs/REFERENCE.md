@@ -298,19 +298,24 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 
 ### Phase 1 — Infrastructure & prerequisites
 
-| Playbook | Description |
-|---|---|
-| `00_setup_ssh_preqs.yml` | SSH prerequisites |
-| `ensure_collections.yml` | Galaxy install from `requirements.yml` (imported by every playbook; same logic as `pvc_setup.sh`) |
-| `01_install_collection.yml` | Imports `ensure_collections.yml`; pins DNF `$releasever` before any package operation (and subscription-manager when available), then updates only within that RHEL minor |
-| `02_set_hostname.yml` | Set FQDN hostnames |
-| `03_create_etc_hosts.yml` | Populate `/etc/hosts` |
-| `04_setup_autossh.yml` | Passwordless SSH |
-| `05_disable_selinux.yml` | SELinux permissive (RHEL) |
-| `06_prereq_setup.yml` | Base packages, Java, Python 3.11 |
-| `07_prereq_setup_002.yml` | sysctl, ulimit, THP, chrony |
-| `08_prereq_setup_003.yml` | PostgreSQL client + PGDG repo |
-| `09_verify_os_prereqs.yml` | Verify OS prerequisites |
+The numbered files remain the public standalone entry points. Their task
+implementations live in `roles/prereq_*`; do not invoke a role directly when
+you need the compatibility play's `hosts`, `become`, vars, or multi-play
+ordering.
+
+| Playbook | Role implementation | Description |
+|---|---|---|
+| `00_setup_ssh_preqs.yml` | `prereq_ssh` | SSH prerequisites |
+| `ensure_collections.yml` | n/a | Galaxy install from `requirements.yml` (imported by every playbook; same logic as `pvc_setup.sh`) |
+| `01_install_collection.yml` | `prereq_system_update` | Imports `ensure_collections.yml`; pins DNF `$releasever` before any package operation (and subscription-manager when available), then updates only within that RHEL minor |
+| `02_set_hostname.yml` | `prereq_hostname` | Set FQDN hostnames |
+| `03_create_etc_hosts.yml` | `prereq_hosts` | Populate `/etc/hosts` |
+| `04_setup_autossh.yml` | `prereq_autossh` | Passwordless SSH |
+| `05_disable_selinux.yml` | `prereq_selinux` | SELinux permissive (RHEL) |
+| `06_prereq_setup.yml` | `prereq_packages` | Base packages, Java, Python 3.11 |
+| `07_prereq_setup_002.yml` | `prereq_system_tuning` | sysctl, ulimit, THP, chrony |
+| `08_prereq_setup_003.yml` | `prereq_postgres_client` | PostgreSQL client + PGDG repo |
+| `09_verify_os_prereqs.yml` | `prereq_verify` | Verify OS prerequisites |
 
 ### Phase 2 — Identity & DNS
 

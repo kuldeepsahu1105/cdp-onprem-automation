@@ -6,6 +6,24 @@ Automated checks: `jenkins/scripts/validate-ansible-contracts.sh` (runs from Jen
 
 ---
 
+## Role import contract
+
+Numbered compatibility playbooks own orchestration: play order, `hosts`,
+`connection`, `remote_user`, `become`, play vars, and collection bootstrap.
+Roles own reusable task implementation. The PREREQS wrappers `00`–`09`
+therefore import `roles/prereq_*` without introducing role defaults or vars;
+inventory, `group_vars`, config, Jenkins values, and extra-vars retain their
+existing precedence.
+
+Runtime values registered or set by a prerequisite role remain host facts in
+the same play scope as before. Shared task imports use
+`{{ playbook_dir }}/common_tasks/...` so moving their caller into a role does
+not change which shared task file executes. Multi-play facts such as the
+AutoSSH key material and controller-fetched files retain their original play
+boundaries in the numbered wrappers.
+
+---
+
 ## Playbook import order (portal verify chain)
 
 End-to-end order inside `sync_deployment_portal_content.yml` (used by `10_setup_deployment_portal.yml` and `35_refresh_deployment_portal.yml`):

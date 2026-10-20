@@ -1,0 +1,90 @@
+---
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/set_os_facts.yml"
+
+- name: Pin RHEL release before full package upgrade
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/pin_rhel_release_before_upgrade.yml"
+
+- name: Ensure package manager utilities are installed (RHEL)
+  ansible.builtin.package:
+    name: "{{ os.pkg_utils }}"
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Read RHEL release before DNF upgrade
+  ansible.builtin.command: cat /etc/redhat-release
+  register: rhel_release_before_dnf
+  changed_when: false
+  when: ansible_distribution == "RedHat"
+
+- name: Print RHEL version before DNF upgrade
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }} before DNF upgrade:
+      {{ rhel_release_before_dnf.stdout | trim }}
+      (Ansible detected {{ ansible_distribution }} {{ ansible_distribution_version }},
+      releasever pin {{ rhel_release_pin_effective }}).
+  when: ansible_distribution == "RedHat"
+
+- name: Update all packages within pinned RHEL minor release
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+    releasever: "{{ rhel_release_pin_effective }}"
+  when: ansible_distribution == "RedHat"
+
+- name: Refresh RHEL version facts after DNF upgrade
+  ansible.builtin.setup:
+    filter:
+      - ansible_distribution
+      - ansible_distribution_version
+  when: ansible_distribution == "RedHat"
+
+- name: Read RHEL release after DNF upgrade
+  ansible.builtin.command: cat /etc/redhat-release
+  register: rhel_release_after_dnf
+  changed_when: false
+  when: ansible_distribution == "RedHat"
+
+- name: Print RHEL version after DNF upgrade
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }} after DNF upgrade:
+      {{ rhel_release_after_dnf.stdout | trim }}
+      (Ansible detected {{ ansible_distribution }} {{ ansible_distribution_version }},
+      releasever pin {{ rhel_release_pin_effective }}).
+  when: ansible_distribution == "RedHat"
+
+- name: Update all packages (other RedHat-family distributions)
+  ansible.builtin.package:
+    name: "*"
+    state: latest
+  when:
+    - ansible_os_family == "RedHat"
+    - ansible_distribution != "RedHat"
+
+- name: Update all packages (Debian family)
+  ansible.builtin.apt:
+    upgrade: dist
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Check if reboot is required (RHEL)
+  ansible.builtin.command: "{{ os.reboot_check_command }} {{ os.reboot_check_flag }}"
+  register: reboot_check
+  ignore_errors: yes
+  changed_when: false
+  failed_when: false
+  when:
+    - ansible_os_family == "RedHat"
+    - os.reboot_check_command | length > 0
+
+- name: Reboot if needed and not ipaserver (RHEL)
+  ansible.builtin.reboot:
+    msg: "Rebooting after update"
+    reboot_timeout: 600
+  when:
+    - ansible_os_family == "RedHat"
+    - os.reboot_check_command | length > 0
+    - reboot_check.rc != 0
+    - inventory_hostname not in groups.get('ipaserver', [])
