@@ -139,6 +139,17 @@ callers. FreeIPA/AD routing, localhost facts, client host expressions,
 delegation, and `vars_files` therefore remain owned by the compatibility
 entry points.
 
+The CM_INSTALL implementation is organized under `roles/cm_install`.
+Repository router `20_setup_cm_repos.yml` continues to import compatibility
+playbooks `21` and `22` literally; playbooks `23`–`26` retain every original
+play boundary and delegate task bodies to the role. Install-owned
+`common_tasks` paths remain static compatibility shims for CM security and
+CDH callers. The shared CM API discovery/transport chain remains in
+`common_tasks` because it is jointly owned by CM_INSTALL and security phases.
+The wrapper still invokes `25_verify_cm.yml` and
+`26_setup_cm_license.yml` in one `ansible-playbook` process so localhost API
+facts are reused.
+
 ## Migration: renumbering duplicate prefixes (2026-09)
 
 Four playbooks previously duplicated a numeric prefix with another, unrelated playbook (`00_*` had three files, `25_*` had two, and `12_*`/`12b_*` used a letter suffix that **sorts before** its own `12_` file under common UTF-8 locales — `ls` in `en_US.UTF-8` prints `12b_ipa_deep_recovery.yml` before `12_setup_freeipa_server.yml`, inverting the intended order). None of the four own a distinct mainline `pvc_setup.sh` sequence slot (they are either always-imported libraries or optional/manual helpers), so they were **de-numbered** rather than assigned a new colliding or ambiguous number. This is a **rename only** — no task/behavior changes, no cascading renumber of any other playbook.

@@ -1,0 +1,31 @@
+---
+- name: Ensure Java library directory exists for JDBC driver
+  ansible.builtin.file:
+    path: /usr/share/java
+    state: directory
+    mode: "0755"
+
+- name: Copy JDBC driver from IPA server to all hosts
+  copy:
+    src: "/tmp/postgresql-{{ postgres_jdbc_version }}.jar"
+    dest: "/usr/share/java/postgresql-connector-java.jar"
+    mode: "0644"
+    remote_src: yes
+
+- name: Debug - Check if file exists after copying
+  command: "ls -l /usr/share/java/postgresql-connector-java.jar"
+  register: jdbc_file_check
+  ignore_errors: true
+
+- name: Debug output for JDBC file existence
+  debug:
+    var: jdbc_file_check.stdout_lines
+
+- name: Verify JDBC driver file
+  command: "ls -l /usr/share/java/postgresql-connector-java.jar"
+  register: jdbc_ls_output
+  changed_when: false
+
+- name: Display JDBC driver file details
+  debug:
+    var: jdbc_ls_output.stdout_lines

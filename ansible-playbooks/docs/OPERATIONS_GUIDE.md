@@ -267,6 +267,13 @@ and cross-play facts while delegating task implementation to
 `roles/identity`; do not construct an ad hoc role-only playbook as a
 replacement.
 
+For CM_INSTALL, continue invoking router `20` and playbooks `23`–`26`
+directly, or use `DEPLOY_PHASE=3 ./pvc_setup.sh`. Their implementations live
+in `roles/cm_install`, but compatibility playbooks retain repository-mode
+routing, PostgreSQL host/service discovery, delegation, and CM API localhost
+facts. In particular, keep plays `25` and `26` in the wrapper's combined
+invocation; splitting them loses the intentional in-process API fact reuse.
+
 Playbooks resolve SSH keys and Auto-TLS material on the **control machine** via `ANSIBLE_PRIVATE_KEY`, files under `ansible-playbooks/`, or `group_vars` (`cm_private_key_path`, `cm_node_sudo_password`). Wrappers only set the same env vars and `--private-key` for convenience.
 
 | Target OS | CM repo mode | Notes |

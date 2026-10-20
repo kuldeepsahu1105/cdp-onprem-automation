@@ -1,20 +1,5 @@
 ---
-# Debian-family (Ubuntu/Debian) steps before installing Cloudera Manager packages via apt.
-- name: Ensure needrestart config directory exists (Debian family)
-  ansible.builtin.file:
-    path: /etc/needrestart
-    state: directory
-    mode: "0755"
-  when: ansible_os_family == "Debian"
-
-- name: Disable needrestart automatic service restarts (Ubuntu 24.04+)
-  ansible.builtin.lineinfile:
-    path: /etc/needrestart/needrestart.conf
-    regexp: "^#?\\$nrconf\\{restart\\}"
-    line: "$nrconf{restart} = 'l';"
-    create: false
-  when:
-    - ansible_os_family == "Debian"
-    - ansible_distribution == "Ubuntu"
-    - ansible_distribution_major_version | int >= 24
-  failed_when: false
+- name: Compatibility entry point for CM install prepare debian cm install
+  ansible.builtin.import_role:
+    name: cm_install
+    tasks_from: prepare_debian_cm_install

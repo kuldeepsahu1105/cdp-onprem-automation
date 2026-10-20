@@ -1,0 +1,62 @@
+---
+##### Verify CRT
+- name: Verify CRT
+  ansible.builtin.command:
+    cmd: openssl x509 -req -in "{{ postgres_data_dir }}/server.csr" -text -days 3650 -CA "{{ postgres_data_dir }}/root.crt" -CAkey "{{ postgres_data_dir }}/root.key" -CAcreateserial -out "{{ postgres_data_dir }}/server.crt"
+  register: csr_check_result
+  changed_when: false
+
+- name: Display CRT Verification Output
+  ansible.builtin.debug:
+    msg: "{{ csr_check_result.stderr.replace('\t', '    ').split('\n') }}"
+
+##### Verify CSR
+- name: Verify CSR
+  ansible.builtin.shell: openssl req -in "{{ postgres_data_dir }}/server.csr" -noout -text | head -20
+  register: csr_check_result
+  changed_when: false
+
+- name: Display CSR Verification Output
+  ansible.builtin.debug:
+    msg: "{{ csr_check_result.stdout.replace('\t', '    ').split('\n') }}"
+
+- name: Verify Key
+  ansible.builtin.shell: openssl rsa -noout -text -in "{{ postgres_data_dir }}/server.key" | head -20
+  register: csr_check_result
+  changed_when: false
+
+- name: Display Key Verification Output
+  ansible.builtin.debug:
+    msg: "{{ csr_check_result.stdout.replace('\t', '    ').split('\n') }}"
+
+##### Verify Private Key
+- name: Verify Private Key
+  ansible.builtin.shell: openssl rsa -in "{{ postgres_data_dir }}/server.key" -check | head -20
+  register: key_check_result
+  changed_when: false
+
+- name: Display Private Key Verification Output
+  ansible.builtin.debug:
+    msg: "{{ key_check_result.stdout.replace('\t', '    ').split('\n') }}"
+
+##### Verify Certificate
+- name: Verify Certificate
+  ansible.builtin.shell: openssl x509 -in "{{ postgres_data_dir }}/server.crt" -noout -text | head -20
+  register: cert_check_result
+  changed_when: false
+
+- name: Display Certificate Verification Output
+  ansible.builtin.debug:
+    msg: "{{ cert_check_result.stdout.replace('\t', '    ').split('\n') }}"
+
+# - name: Configure PostgreSQL for SSL
+#   ansible.builtin.blockinfile:
+#     path: "{{ postgres_data_dir }}/postgresql.conf"
+#     block: |
+#       ssl = on
+#       ssl_ca_file = 'root.crt'
+#       ssl_cert_file = 'server.crt'
+#       ssl_key_file = 'server.key'
+#     marker: "# {mark} ANSIBLE MANAGED BLOCK SSL CONFIG"
+
+##### Restart and verify Postgres DB

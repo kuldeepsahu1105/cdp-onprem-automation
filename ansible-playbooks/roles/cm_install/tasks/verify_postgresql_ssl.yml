@@ -1,0 +1,61 @@
+---
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/set_os_facts.yml"
+
+- name: Verify if SSL is enabled in PostgreSQL
+  ansible.builtin.shell: |
+    PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -c "SHOW ssl;"
+  register: ssl_status
+  changed_when: false
+
+- name: Display SSL Status
+  ansible.builtin.debug:
+    msg: "{{ ssl_status.stdout.replace('\t', '    ').split('\n') }}"
+
+- name: Check Active SSL Connections
+  ansible.builtin.shell: |
+    PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -c "SELECT * FROM pg_stat_ssl;"
+  register: pg_stat_ssl
+  changed_when: false
+
+- name: Display SSL Connection Status
+  ansible.builtin.debug:
+    msg: "{{ pg_stat_ssl.stdout.replace('\t', '    ').split('\n') }}"
+
+- name: Verify SSL settings in PostgreSQL
+  ansible.builtin.shell: |
+    PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -c "SELECT name, setting FROM pg_settings WHERE name LIKE '%ssl%';"
+  register: ssl_settings
+  changed_when: false
+
+- name: Display PostgreSQL SSL Configuration
+  ansible.builtin.debug:
+    msg: "{{ ssl_settings.stdout.replace('\t', '    ').split('\n') }}"
+
+- name: Test SSL Connection with verify-full
+  ansible.builtin.shell: |
+    PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} "dbname={{ postgres_db }} sslmode=verify-full" -c "SELECT version();"
+  register: ssl_verify_full
+  changed_when: false
+  failed_when: ssl_verify_full.rc != 0
+
+- name: Display SSL Connection Test (verify-full)
+  ansible.builtin.debug:
+    msg:
+      - "SSL verify-full connection successful:"
+      - "{{ ssl_verify_full.stdout | replace('\t', '    ') | split('\n') }}"
+
+- name: Test SSL Connection with verify-ca
+  ansible.builtin.shell: |
+    PGPASSWORD={{ postgres_password }} psql -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} "dbname={{ postgres_db }} sslmode=verify-ca" -c "SELECT version();"
+  register: ssl_verify_ca
+  changed_when: false
+  failed_when: ssl_verify_ca.rc != 0
+
+- name: Display SSL Connection Test (verify-ca)
+  ansible.builtin.debug:
+    msg:
+      - "SSL verify-ca connection successful:"
+      - "{{ ssl_verify_ca.stdout | replace('\t', '    ') | split('\n') }}"
+
+##### Create databases, users for Cloudera-Manager

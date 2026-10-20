@@ -1,0 +1,6 @@
+---
+- name: Fetch {{ postgres_data_dir }}/root.crt to control node
+  fetch:
+    src: "{{ postgres_data_dir }}/root.crt"
+    dest: /tmp/root.crt
+    flat: yes

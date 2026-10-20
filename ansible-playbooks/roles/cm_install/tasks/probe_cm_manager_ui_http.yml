@@ -1,0 +1,108 @@
+---
+# Check CM Admin UI HTTP on cldr-mngr (private IP / ansible_host / FQDN first; 127.0.0.1 last).
+
+- name: CM UI — set allowed HTTP status codes
+  ansible.builtin.set_fact:
+    cm_manager_ui_probe_status_codes: >-
+      {{
+        deployment_service_url_verify_status_codes
+        | default(deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]))
+      }}
+
+- name: CM UI — build HTTP check host list on cldr-mngr
+  ansible.builtin.set_fact:
+    cm_manager_ui_probe_hosts: >-
+      {{
+        (
+          (
+            [hostvars[groups['cldr-mngr'][0]].private_ip | default('')]
+            if (
+              'cldr-mngr' in groups
+              and groups['cldr-mngr'] | default([]) | length > 0
+              and (hostvars[groups['cldr-mngr'][0]].private_ip | default('') | length > 0)
+              and (hostvars[groups['cldr-mngr'][0]].private_ip | default('') != '127.0.0.1')
+            )
+            else []
+          )
+          + (
+            [hostvars[groups['cldr-mngr'][0]].ansible_host | default('')]
+            if (
+              'cldr-mngr' in groups
+              and groups['cldr-mngr'] | default([]) | length > 0
+              and (hostvars[groups['cldr-mngr'][0]].ansible_host | default('') | length > 0)
+              and (hostvars[groups['cldr-mngr'][0]].ansible_host | default('') not in ['127.0.0.1', 'localhost'])
+            )
+            else []
+          )
+          + ([deployment_portal_cm_fqdn] if (deployment_portal_cm_fqdn | default('') | length > 0) else [])
+          + (
+            [hostvars[groups['cldr-mngr'][0]].ansible_fqdn | default('')]
+            if (
+              'cldr-mngr' in groups
+              and groups['cldr-mngr'] | default([]) | length > 0
+              and (hostvars[groups['cldr-mngr'][0]].ansible_fqdn | default('') | length > 0)
+            )
+            else []
+          )
+          + (
+            [hostvars[groups['cldr-mngr'][0]].ansible_hostname | default('')]
+            if (
+              'cldr-mngr' in groups
+              and groups['cldr-mngr'] | default([]) | length > 0
+              and (hostvars[groups['cldr-mngr'][0]].ansible_hostname | default('') | length > 0)
+            )
+            else []
+          )
+          + ['127.0.0.1']
+        )
+        | unique
+        | reject('equalto', '')
+        | list
+      }}
+  when:
+    - "'cldr-mngr' in groups"
+    - groups['cldr-mngr'] | default([]) | length > 0
+
+- name: CM UI — GET / on cldr-mngr (try manager addresses)
+  ansible.builtin.uri:
+    url: "http://{{ item }}:{{ cm_http_port | int }}/"
+    method: GET
+    status_code: "{{ cm_manager_ui_probe_status_codes }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 15
+  loop: "{{ cm_manager_ui_probe_hosts | default([]) }}"
+  register: cm_manager_ui_probe_results
+  failed_when: false
+  delegate_to: "{{ groups['cldr-mngr'][0] }}"
+  run_once: true
+  when:
+    - cm_manager_ui_probe_hosts is defined
+    - cm_manager_ui_probe_hosts | length > 0
+
+- name: CM UI — record HTTP check result
+  ansible.builtin.set_fact:
+    deployment_portal_cm_http_probe:
+      failed: >-
+        {{
+          (
+            cm_manager_ui_probe_results.results | default([])
+            | selectattr('status', 'defined')
+            | selectattr('status', 'in', cm_manager_ui_probe_status_codes)
+            | list
+            | length
+          ) == 0
+        }}
+    cm_manager_ui_probe_host_effective: >-
+      {{
+        (
+          cm_manager_ui_probe_results.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'in', cm_manager_ui_probe_status_codes)
+          | map(attribute='item')
+          | list
+          | first
+        )
+        | default('', true)
+      }}
+  when: cm_manager_ui_probe_results is defined

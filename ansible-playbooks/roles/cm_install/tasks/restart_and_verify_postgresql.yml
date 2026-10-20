@@ -1,0 +1,56 @@
+---
+- name: Restart PostgreSQL and wait for network listen
+  ansible.builtin.import_tasks: restart_postgresql.yml
+
+##### Verify PostgreSQL DB status
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/set_os_facts.yml"
+
+- name: Check PostgreSQL service status
+  ansible.builtin.command: "systemctl status {{ os.postgres_service }} -l"
+  register: postgres_status
+  changed_when: false
+
+- name: Display PostgreSQL service status
+  ansible.builtin.debug:
+    msg: "{{ postgres_status.stdout_lines }}"
+
+- name: Verify PostgreSQL is listening on port 5432
+  ansible.builtin.shell: netstat -ltnup | grep LISTEN | grep -E '5432|postmaster'
+  register: netstat_output
+  changed_when: false
+
+- name: Display netstat output
+  ansible.builtin.debug:
+    msg: "{{ netstat_output.stdout_lines }}"
+
+- name: Set PostgreSQL password for user 'postgres'
+  community.postgresql.postgresql_user:
+    name: "{{ postgres_user }}"
+    password: "{{ postgres_password }}"
+    encrypted: yes
+    login_unix_socket: "{{ os.postgres_socket_dir }}"
+  become: yes
+  become_user: postgres
+
+##### Distribute root.crt to other nodes
+# - name: Distribute root.crt to all other nodes
+#   hosts: all
+#   become: yes
+#   tasks:
+#     - name: Distribute root.crt to all nodes
+#       ansible.builtin.copy:
+#         src: "{{ pg_client_crt_dir }}/root.crt"
+#         dest: "{{ pg_client_crt_dir }}/root.crt"
+#         owner: root
+#         group: root
+#         mode: "0644"
+
+# - name: Install and Configure PostgreSQL with TLS/SSL for Cloudera Manager
+#   hosts: cloudera_manager
+#   become: true
+#   roles:
+#     - postgresql
+#     - cloudera_manager
+
+##### Verify PostgreSQL SSL Configuration (Post Start)

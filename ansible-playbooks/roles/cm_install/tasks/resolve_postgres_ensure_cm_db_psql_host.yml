@@ -1,0 +1,45 @@
+---
+# psql -h for ensure_cm_postgres_databases / ensure_postgresql_running (delegated on postgres_inventory_host).
+# The controller never opens this TCP connection; only the DB host does. Auto target matches CM JDBC:
+# postgres_host_fqdn, then DB private_ip, then ansible_host — not 127.0.0.1 (listen_addresses often excludes loopback).
+#
+# Override: -e postgres_ensure_cm_db_psql_host=<host>
+
+- name: Record explicit postgres CM DB psql host override
+  ansible.builtin.set_fact:
+    _pg_cm_db_psql_host_override: "{{ postgres_ensure_cm_db_psql_host | default('') | trim }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Resolve effective postgres psql host for delegated CM database tasks
+  ansible.builtin.set_fact:
+    postgres_ensure_cm_db_psql_host_effective: >-
+      {{
+        _pg_cm_db_psql_host_override
+        if (_pg_cm_db_psql_host_override | length > 0)
+        else (
+          postgres_host_fqdn | default('') | trim
+          if (postgres_host_fqdn | default('') | trim | length > 0)
+          else (
+            hostvars[postgres_inventory_host].private_ip | default('') | trim
+            if (hostvars[postgres_inventory_host].private_ip | default('') | trim | length > 0)
+            else hostvars[postgres_inventory_host].ansible_host | default('') | trim
+          )
+        )
+      }}
+  delegate_to: localhost
+  run_once: true
+
+- name: Explain delegated CM database psql connect host
+  ansible.builtin.debug:
+    msg:
+      - >-
+        CM DB psql -h={{ postgres_ensure_cm_db_psql_host_effective }}
+        (delegate {{ postgres_inventory_host }};
+        override={{ (_pg_cm_db_psql_host_override | length > 0) | ternary(_pg_cm_db_psql_host_override, 'auto') }})
+      - >-
+        Same address family as CM JDBC (postgres_host_fqdn={{ postgres_host_fqdn }}).
+        Controller reachability does not affect this — psql runs on the DB host.
+  when: ansible_verbosity | default(0) | int >= 1
+  delegate_to: localhost
+  run_once: true

@@ -1,0 +1,19 @@
+---
+- name: Download PostgreSQL JDBC driver jar file
+  get_url:
+    url: "https://jdbc.postgresql.org/download/postgresql-{{ postgres_jdbc_version }}.jar"
+    dest: "/tmp/postgresql-{{ postgres_jdbc_version }}.jar"
+    mode: "0644"
+  register: jdbc_download
+  retries: 3
+  delay: 5
+  until: jdbc_download is succeeded
+
+- name: Verify JDBC driver download
+  stat:
+    path: "/tmp/postgresql-{{ postgres_jdbc_version }}.jar"
+  register: jdbc_file_check
+
+- name: Debug - Check if JDBC file is present
+  debug:
+    msg: "JDBC file exists: {{ jdbc_file_check.stat.exists }}"

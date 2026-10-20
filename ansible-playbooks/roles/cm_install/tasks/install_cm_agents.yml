@@ -1,0 +1,16 @@
+---
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/set_os_facts.yml"
+
+- name: Install Cloudera Manager Agent packages
+  ansible.builtin.import_tasks: install_cm_packages.yml
+  vars:
+    cm_package_list: "{{ cldr_mngr_packages.client }}"
+
+- name: Configure CM agent server_host to cldr-mngr FQDN
+  ansible.builtin.import_tasks: configure_cm_agent.yml
+
+- name: Start or restart CM agent only when config.ini changed or agent not active
+  ansible.builtin.import_tasks: restart_cm_agent_if_needed.yml
+
+# CM API probe, password alignment, and verify: playbook 25_verify_cm.yml (once per CM install phase).

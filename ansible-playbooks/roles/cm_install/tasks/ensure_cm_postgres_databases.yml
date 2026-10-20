@@ -1,0 +1,343 @@
+---
+# Idempotent CM DBs (scm + Reports Manager rman) on postgres_inventory_host (e.g. cldr-mngr).
+# Ansible controller may be Mac, Ubuntu, or RHEL — irrelevant: every list/create task delegates to the
+# DB host only (no psql, postgresql modules, or RHEL-specific DB paths on localhost/controller).
+# Root + PGPASSWORD + TCP to postgres_ensure_cm_db_psql_host_effective (see resolve_postgres_ensure_cm_db_psql_host.yml) — no become_user postgres.
+# When both databases exist: one debug line and no further tasks in this import.
+
+- name: Resolve PostgreSQL inventory host for CM databases
+  ansible.builtin.import_tasks: resolve_postgres_inventory.yml
+
+- name: Resolve delegated CM database psql connect host (controller-aware)
+  ansible.builtin.import_tasks: resolve_postgres_ensure_cm_db_psql_host.yml
+
+- name: Ensure PostgreSQL server is running before CM database psql
+  ansible.builtin.import_tasks: ensure_postgresql_running.yml
+
+- name: Stat versioned psql on PostgreSQL DB host (configured PostgreSQL version)
+  ansible.builtin.stat:
+    path: "/usr/pgsql-{{ postgresql_version }}/bin/psql"
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  register: pgsql_client_psql_stat
+
+- name: Stat psql on PostgreSQL DB host (/usr/bin/psql, Amazon native RPM layout)
+  ansible.builtin.stat:
+    path: /usr/bin/psql
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  register: pgsql_client_usr_bin_psql_stat
+  when: not (pgsql_client_psql_stat.stat.exists | default(false) | bool)
+
+- name: Stat Amazon Linux native versioned psql paths on DB host (cap may differ from postgresql_version)
+  ansible.builtin.stat:
+    path: "/usr/pgsql-{{ item }}/bin/psql"
+  loop: "{{ postgres_db_host_psql_probe_versions | default([]) | unique | list }}"
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  register: pgsql_client_probe_versioned_psql_stat
+  when:
+    - not (pgsql_client_psql_stat.stat.exists | default(false) | bool)
+    - not (
+        pgsql_client_usr_bin_psql_stat is defined
+        and (pgsql_client_usr_bin_psql_stat.stat.exists | default(false) | bool)
+      )
+
+- name: Record PostgreSQL DB host psql path from probed versioned install
+  ansible.builtin.set_fact:
+    postgres_db_host_psql_cmd: "/usr/pgsql-{{ item.item }}/bin/psql"
+  loop: "{{ pgsql_client_probe_versioned_psql_stat.results | default([]) }}"
+  when:
+    - postgres_db_host_psql_cmd is not defined
+    - item.stat is defined
+    - item.stat.exists | default(false) | bool
+  loop_control:
+    label: "{{ item.item | default('unknown') }}"
+
+- name: Record PostgreSQL DB host psql path from configured versioned install
+  ansible.builtin.set_fact:
+    postgres_db_host_psql_cmd: "/usr/pgsql-{{ postgresql_version }}/bin/psql"
+  when: pgsql_client_psql_stat.stat.exists | default(false)
+
+- name: Record PostgreSQL DB host psql path from /usr/bin/psql
+  ansible.builtin.set_fact:
+    postgres_db_host_psql_cmd: /usr/bin/psql
+  when:
+    - postgres_db_host_psql_cmd is not defined
+    - pgsql_client_usr_bin_psql_stat.stat.exists | default(false) | bool
+
+- name: PostgreSQL client on DB host — skipping client install
+  ansible.builtin.debug:
+    msg: >-
+      psql already present on {{ postgres_inventory_host }}
+      ({{ postgres_db_host_psql_cmd }}) — skipping client repo and package install
+  when: postgres_db_host_psql_cmd is defined
+
+- name: Resolve or install PostgreSQL client on DB host when psql is missing
+  when: postgres_db_host_psql_cmd is not defined
+  block:
+    - name: Gather distribution facts on PostgreSQL DB host
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - distribution
+      delegate_to: "{{ postgres_inventory_host }}"
+      delegate_facts: true
+
+    - name: Record PostgreSQL DB host uses Amazon Linux native client (no PGDG)
+      ansible.builtin.set_fact:
+        postgres_db_host_use_amazon_native_client: true
+      when:
+        - hostvars[postgres_inventory_host].ansible_os_family | default('') == 'RedHat'
+        - hostvars[postgres_inventory_host].ansible_distribution | default('') == 'Amazon'
+
+    - name: Record Amazon Linux 2023 native PostgreSQL client package version
+      ansible.builtin.set_fact:
+        postgres_db_host_amazon_native_client_version: "{{ postgres_amazon_linux_2023_native_client_version }}"
+      when:
+        - postgres_db_host_use_amazon_native_client | default(false) | bool
+        - >-
+          {{
+            hostvars[postgres_inventory_host].ansible_distribution_major_version | default('') | string | trim
+            in ['2023']
+            or hostvars[postgres_inventory_host].ansible_distribution_version | default('') | string | trim
+            is match('^2023([.].*)?$')
+          }}
+
+    - name: Record Amazon Linux 2 native PostgreSQL client package version
+      ansible.builtin.set_fact:
+        postgres_db_host_amazon_native_client_version: "{{ postgres_amazon_linux_2_native_client_version }}"
+      when:
+        - postgres_db_host_use_amazon_native_client | default(false) | bool
+        - postgres_db_host_amazon_native_client_version is not defined
+        - >-
+          {{
+            hostvars[postgres_inventory_host].ansible_distribution_major_version | default('') | string | trim
+            in ['2']
+            or hostvars[postgres_inventory_host].ansible_distribution_version | default('') | string | trim
+            is match('^2([.].*)?$')
+          }}
+
+    - name: Default Amazon Linux native PostgreSQL client package version
+      ansible.builtin.set_fact:
+        postgres_db_host_amazon_native_client_version: "{{ postgres_amazon_linux_2023_native_client_version }}"
+      when:
+        - postgres_db_host_use_amazon_native_client | default(false) | bool
+        - postgres_db_host_amazon_native_client_version is not defined
+
+    - name: Stat versioned psql on Amazon Linux DB host (native package path)
+      ansible.builtin.stat:
+        path: "/usr/pgsql-{{ postgres_db_host_amazon_native_client_version }}/bin/psql"
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+      register: pgsql_client_amazon_versioned_psql_stat
+      when: postgres_db_host_use_amazon_native_client | default(false) | bool
+
+    - name: Record PostgreSQL DB host psql from Amazon native versioned path
+      ansible.builtin.set_fact:
+        postgres_db_host_psql_cmd: "/usr/pgsql-{{ postgres_db_host_amazon_native_client_version }}/bin/psql"
+      when:
+        - postgres_db_host_use_amazon_native_client | default(false) | bool
+        - pgsql_client_amazon_versioned_psql_stat.stat.exists | default(false) | bool
+
+    - name: Install Amazon Linux native PostgreSQL client on DB host
+      when:
+        - postgres_db_host_use_amazon_native_client | default(false) | bool
+        - postgres_db_host_psql_cmd is not defined
+      block:
+        - name: Note Amazon Linux native PostgreSQL client install (no PGDG)
+          ansible.builtin.debug:
+            msg: >-
+              {{ postgres_inventory_host }} is Amazon Linux — installing native
+              postgresql{{ postgres_db_host_amazon_native_client_version }} client
+              (configured server version {{ postgresql_version }} may differ)
+
+        - name: Ensure Amazon Linux native PostgreSQL client package on DB host
+          ansible.builtin.package:
+            name: "postgresql{{ postgres_db_host_amazon_native_client_version }}"
+            state: present
+          delegate_to: "{{ postgres_inventory_host }}"
+          become: true
+
+        - name: Stat versioned psql after Amazon native client install
+          ansible.builtin.stat:
+            path: "/usr/pgsql-{{ postgres_db_host_amazon_native_client_version }}/bin/psql"
+          delegate_to: "{{ postgres_inventory_host }}"
+          become: true
+          register: pgsql_client_amazon_versioned_psql_stat_after_install
+
+        - name: Record psql path from Amazon versioned install after package install
+          ansible.builtin.set_fact:
+            postgres_db_host_psql_cmd: "/usr/pgsql-{{ postgres_db_host_amazon_native_client_version }}/bin/psql"
+          when: pgsql_client_amazon_versioned_psql_stat_after_install.stat.exists | default(false) | bool
+
+        - name: Resolve psql path via which on Amazon Linux DB host
+          ansible.builtin.command:
+            argv:
+              - which
+              - psql
+          delegate_to: "{{ postgres_inventory_host }}"
+          become: true
+          register: postgres_db_host_psql_which
+          changed_when: false
+          when: postgres_db_host_psql_cmd is not defined
+
+        - name: Record psql path from which on Amazon Linux DB host
+          ansible.builtin.set_fact:
+            postgres_db_host_psql_cmd: "{{ postgres_db_host_psql_which.stdout | trim }}"
+          when:
+            - postgres_db_host_psql_cmd is not defined
+            - (postgres_db_host_psql_which.stdout | default('') | trim | length) > 0
+
+        - name: Stat /usr/bin/psql after Amazon native client install
+          ansible.builtin.stat:
+            path: /usr/bin/psql
+          delegate_to: "{{ postgres_inventory_host }}"
+          become: true
+          register: pgsql_client_usr_bin_psql_stat_after_amazon_install
+          when: postgres_db_host_psql_cmd is not defined
+
+        - name: Record psql path from /usr/bin/psql after Amazon native client install
+          ansible.builtin.set_fact:
+            postgres_db_host_psql_cmd: /usr/bin/psql
+          when:
+            - postgres_db_host_psql_cmd is not defined
+            - pgsql_client_usr_bin_psql_stat_after_amazon_install.stat.exists | default(false) | bool
+
+    - name: PostgreSQL PGDG repo on DB host when psql is missing (RHEL family, not Amazon Linux)
+      when: not (postgres_db_host_use_amazon_native_client | default(false) | bool)
+      block:
+        - name: Record PostgreSQL DB host EL major from Ansible distribution facts
+          ansible.builtin.set_fact:
+            postgres_db_host_el_major: >-
+              {{ hostvars[postgres_inventory_host].ansible_distribution_major_version | string | trim }}
+          when:
+            - hostvars[postgres_inventory_host].ansible_os_family | default('') == 'RedHat'
+            - hostvars[postgres_inventory_host].ansible_distribution | default('') in
+              ['RedHat', 'CentOS', 'Rocky', 'AlmaLinux', 'OracleLinux', 'Oracle Linux']
+            - hostvars[postgres_inventory_host].ansible_distribution_major_version | default('') | string | trim in ['8', '9']
+
+        - name: Query RHEL major on PostgreSQL DB host for PGDG (rpm macro fallback)
+          ansible.builtin.shell: rpm --eval '%{rhel}'
+          args:
+            executable: /bin/bash
+          delegate_to: "{{ postgres_inventory_host }}"
+          become: true
+          register: postgres_db_host_el_major_rpm
+          changed_when: false
+          when: postgres_db_host_el_major | default('') not in ['8', '9']
+
+        - name: Record PostgreSQL DB host EL major from rpm macro fallback
+          ansible.builtin.set_fact:
+            postgres_db_host_el_major: "{{ postgres_db_host_el_major_rpm.stdout | trim }}"
+          when:
+            - postgres_db_host_el_major | default('') not in ['8', '9']
+            - postgres_db_host_el_major_rpm.stdout | default('') | trim in ['8', '9']
+
+        - name: Require supported RHEL major version for PGDG repository RPM URL
+          ansible.builtin.assert:
+            that:
+              - postgres_db_host_el_major | default('') in ['8', '9']
+            fail_msg: >-
+              PostgreSQL DB host {{ postgres_inventory_host }} could not resolve EL major 8 or 9
+              (facts: os_family={{ hostvars[postgres_inventory_host].ansible_os_family | default('unknown') }},
+              distribution={{ hostvars[postgres_inventory_host].ansible_distribution | default('unknown') }},
+              major={{ hostvars[postgres_inventory_host].ansible_distribution_major_version | default('unknown') }},
+              rpm --eval %%{rhel}={{ postgres_db_host_el_major_rpm.stdout | default('not run') | trim }}).
+              PGDG reporpms URLs use EL-8 or EL-9 only.
+              Amazon Linux hosts use native postgresql client packages instead of PGDG.
+
+        - name: Download PostgreSQL PGDG repository RPM on DB host
+          ansible.builtin.get_url:
+            url: >-
+              https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{
+                postgres_db_host_el_major | trim
+              }}-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+            dest: /tmp/pgdg-redhat-repo-latest.noarch.rpm
+            mode: "0644"
+          delegate_to: "{{ postgres_inventory_host }}"
+          become: true
+
+        - name: Install PostgreSQL PGDG repository from local RPM on DB host
+          ansible.builtin.dnf:
+            name: /tmp/pgdg-redhat-repo-latest.noarch.rpm
+            state: present
+            disable_gpg_check: true
+          delegate_to: "{{ postgres_inventory_host }}"
+          become: true
+
+        - name: Ensure PostgreSQL PGDG client package on DB host
+          ansible.builtin.package:
+            name: "postgresql{{ postgresql_version }}"
+            state: present
+          delegate_to: "{{ postgres_inventory_host }}"
+          become: true
+
+        - name: Record PostgreSQL DB host psql path after PGDG client install
+          ansible.builtin.set_fact:
+            postgres_db_host_psql_cmd: "/usr/pgsql-{{ postgresql_version }}/bin/psql"
+
+- name: List CM scm and Reports Manager databases on PostgreSQL
+  ansible.builtin.command:
+    argv:
+      - "{{ postgres_db_host_psql_cmd }}"
+      - -h
+      - "{{ postgres_ensure_cm_db_psql_host_effective }}"
+      - -p
+      - "{{ postgres_port | string }}"
+      - -U
+      - "{{ postgres_user }}"
+      - -d
+      - "{{ postgres_db }}"
+      - -tAc
+      - "SELECT datname FROM pg_database WHERE datname IN ('{{ scm_db_name }}','{{ cm_cms_reports_manager_db_name }}')"
+  environment:
+    PGPASSWORD: "{{ postgres_password }}"
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  register: cm_db_list
+  changed_when: false
+
+- name: CM DBs present — skipping
+  ansible.builtin.debug:
+    msg: CM DBs present — skipping
+  when:
+    - scm_db_name in (cm_db_list.stdout_lines | map('trim') | list)
+    - cm_cms_reports_manager_db_name in (cm_db_list.stdout_lines | map('trim') | list)
+
+- name: Create CM PostgreSQL databases when scm or Reports Manager database is missing
+  when: >
+    scm_db_name not in (cm_db_list.stdout_lines | map('trim') | list)
+    or cm_cms_reports_manager_db_name not in (cm_db_list.stdout_lines | map('trim') | list)
+  block:
+    - name: Generate CM database init SQL script from template
+      ansible.builtin.template:
+        src: templates/create_cm_dbs.sql.j2
+        dest: /tmp/init.sql
+        mode: "0644"
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+
+    - name: Run CM database init SQL on PostgreSQL
+      ansible.builtin.command:
+        argv:
+          - "{{ postgres_db_host_psql_cmd }}"
+          - -v
+          - ON_ERROR_STOP=1
+          - -h
+          - "{{ postgres_ensure_cm_db_psql_host_effective }}"
+          - -p
+          - "{{ postgres_port | string }}"
+          - -U
+          - "{{ postgres_user }}"
+          - -d
+          - "{{ postgres_db }}"
+          - -f
+          - /tmp/init.sql
+      environment:
+        PGPASSWORD: "{{ postgres_password }}"
+      delegate_to: "{{ postgres_inventory_host }}"
+      become: true
+      register: cm_db_init_sql
+      changed_when: cm_db_init_sql.rc == 0
+      failed_when: cm_db_init_sql.rc | default(1) | int != 0

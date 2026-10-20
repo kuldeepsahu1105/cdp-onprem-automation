@@ -1,0 +1,78 @@
+---
+- name: Resolve PostgreSQL install host from inventory
+  ansible.builtin.import_tasks: resolve_postgres_inventory.yml
+
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/set_os_facts.yml"
+
+- name: Install PostgreSQL repository
+  ansible.builtin.import_tasks: install_postgresql_repo.yml
+
+- name: "Install PostgreSQL {{ postgresql_version }}"
+  ansible.builtin.package:
+    name: "{{ os.postgres_server_packages }}"
+    state: present
+
+- name: Initialize PostgreSQL database
+  ansible.builtin.import_tasks: init_postgresql.yml
+
+- name: Verify PostgreSQL version
+  ansible.builtin.command: "cat {{ postgres_data_dir }}/PG_VERSION"
+  register: pg_version
+  changed_when: false
+
+- name: Display PostgreSQL version
+  ansible.builtin.debug:
+    msg: "PostgreSQL version is {{ pg_version.stdout }}"
+
+- name: Ensure psycopg2 is installed for both Python interpreters
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/ensure_python_psycopg2.yml"
+  vars:
+    python_psycopg2_runtime_packages: "{{ os.python_packages }}"
+
+##### Postgres Configuration updates
+- name: Deploy updated PostgreSQL configuration files
+  ansible.builtin.template:
+    src: "templates/{{ item.src }}"
+    dest: "{{ postgres_config_dir }}/{{ item.dest }}"
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_group | default(postgres_user) }}"
+    mode: "0640"
+    backup: yes
+  loop:
+    - { src: "pg_hba.conf.j2", dest: "pg_hba.conf" }
+    - { src: "postgresql.conf.j2", dest: "postgresql.conf" }
+  register: postgres_config_deploy
+
+- name: Show listen_addresses from deployed postgresql.conf
+  ansible.builtin.shell: grep -E '^listen_addresses' "{{ postgres_config_dir }}/postgresql.conf"
+  register: postgres_listen_config
+  changed_when: false
+
+- name: Display PostgreSQL listen_addresses setting
+  ansible.builtin.debug:
+    msg: "{{ postgres_listen_config.stdout }}"
+
+- name: Ensure LC_ALL is set to C.UTF-8 (RHEL)
+  ansible.builtin.lineinfile:
+    path: /etc/locale.conf
+    line: '{{ item }}="C.UTF-8"'
+    create: yes
+    backup: yes
+  loop:
+    - LANG
+    - LC_CTYPE
+  when: ansible_os_family == "RedHat"
+
+- name: Ensure LC_ALL is set to C.UTF-8 (Ubuntu)
+  ansible.builtin.lineinfile:
+    path: /etc/default/locale
+    line: '{{ item }}=C.UTF-8'
+    create: yes
+    backup: yes
+  loop:
+    - LANG
+    - LC_CTYPE
+  when: ansible_os_family == "Debian"
+
+##### TLS Setup for Postgres DB

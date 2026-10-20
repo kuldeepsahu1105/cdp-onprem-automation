@@ -1,0 +1,223 @@
+---
+# Start PostgreSQL on postgres_inventory_host and wait for the TCP target used by ensure_cm_postgres_databases.
+# Does not restart PostgreSQL or Cloudera Manager (unlike restart_postgresql.yml).
+# Play 29 (localhost, gather_facts: no) delegates here. Do not import set_os_facts on a delegate:
+# set_fact os: "{{ os_vars[ansible_os_family] }}" templates the whole os_vars branch (e.g.
+# postgres_repo_url uses ansible_distribution_major_version) in the play host scope (localhost),
+# even after delegate_facts setup on the DB host. Resolve the systemd unit via hostvars[...].os.postgres_service
+# (set by play 23 on the DB host), service_facts on the DB host, and version/distro candidate names.
+
+- name: Build delegated PostgreSQL CM DB TCP probe host list
+  ansible.builtin.set_fact:
+    _postgres_cm_db_tcp_probe_hosts: >-
+      {{
+        [
+          postgres_ensure_cm_db_psql_host_effective | default(''),
+          postgres_host_fqdn | default(''),
+          _pg_db_hostvars.private_ip | default(''),
+          _pg_db_hostvars.ansible_host | default(''),
+          '127.0.0.1'
+        ]
+        | map('trim')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+  vars:
+    _pg_db_hostvars: "{{ hostvars[postgres_inventory_host] }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Probe PostgreSQL TCP on CM database psql candidate hosts
+  ansible.builtin.wait_for:
+    host: "{{ item }}"
+    port: "{{ postgres_port }}"
+    timeout: 3
+    connect_timeout: 3
+  delegate_to: "{{ postgres_inventory_host }}"
+  loop: "{{ _postgres_cm_db_tcp_probe_hosts }}"
+  register: _postgres_tcp_probe_results
+  failed_when: false
+
+- name: Record PostgreSQL TCP probe reachability
+  ansible.builtin.set_fact:
+    _postgres_port_already_listening: >-
+      {{
+        (
+          _postgres_tcp_probe_results.results | default([])
+          | selectattr('state', 'defined')
+          | selectattr('state', 'equalto', 'started')
+          | list
+          | length
+        ) > 0
+      }}
+    _postgres_cm_db_tcp_host_reachable: >-
+      {{
+        (
+          _postgres_tcp_probe_results.results | default([])
+          | selectattr('state', 'defined')
+          | selectattr('state', 'equalto', 'started')
+          | map(attribute='item')
+          | list
+          | first
+          | default('')
+        )
+      }}
+  delegate_to: localhost
+  run_once: true
+
+- name: Align CM database psql host with reachable TCP probe target
+  ansible.builtin.set_fact:
+    postgres_ensure_cm_db_psql_host_effective: "{{ _postgres_cm_db_tcp_host_reachable }}"
+  delegate_to: localhost
+  run_once: true
+  when:
+    - _postgres_port_already_listening | bool
+    - _postgres_cm_db_tcp_host_reachable | length > 0
+    - _postgres_cm_db_tcp_host_reachable != postgres_ensure_cm_db_psql_host_effective
+
+- name: Gather distribution facts on PostgreSQL DB host
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - distribution
+  delegate_to: "{{ postgres_inventory_host }}"
+  delegate_facts: true
+  when: not (_postgres_port_already_listening | bool)
+
+- name: Gather service facts on PostgreSQL DB host
+  ansible.builtin.service_facts:
+  delegate_to: "{{ postgres_inventory_host }}"
+  delegate_facts: true
+  become: true
+  when: not (_postgres_port_already_listening | bool)
+
+- name: Build PostgreSQL systemd unit candidate list
+  vars:
+    _pg_db_host: "{{ hostvars[postgres_inventory_host] }}"
+    _pg_os_family: "{{ _pg_db_host.ansible_os_family | default('RedHat') }}"
+    _pg_probe_versions: "{{ postgres_db_host_psql_probe_versions | map('int') | list }}"
+    _pg_versioned_redhat_units: >-
+      {{
+        (
+          _pg_probe_versions
+          | map('string')
+          | map('regex_replace', '^', 'postgresql-')
+          | list
+        )
+        + (
+          _pg_probe_versions
+          | map('string')
+          | map('regex_replace', '^', 'postgresql')
+          | list
+        )
+      }}
+    _postgres_systemd_unit_candidates: >-
+      {{
+        (
+          [_pg_db_host.os.postgres_service | default('')]
+          + (
+            _pg_versioned_redhat_units + ['postgresql']
+            if _pg_os_family == 'RedHat'
+            else ['postgresql@' ~ (postgresql_version | string) ~ '-main', 'postgresql']
+          )
+        ) | reject('equalto', '') | unique | list
+      }}
+  ansible.builtin.set_fact:
+    _postgres_systemd_unit_candidates: "{{ _postgres_systemd_unit_candidates }}"
+  when: not (_postgres_port_already_listening | bool)
+
+- name: Resolve installed PostgreSQL systemd unit on DB host
+  ansible.builtin.set_fact:
+    _postgres_systemd_unit: "{{ item }}"
+  loop: "{{ _postgres_systemd_unit_candidates | default([]) }}"
+  when:
+    - not (_postgres_port_already_listening | bool)
+    - _postgres_systemd_unit is not defined
+    - (item ~ '.service') in (hostvars[postgres_inventory_host].ansible_facts.services | default({}))
+
+- name: Fail when PostgreSQL systemd unit cannot be resolved on DB host
+  ansible.builtin.fail:
+    msg: >-
+      Could not find a PostgreSQL systemd unit on {{ postgres_inventory_host }}.
+      Tried: {{ _postgres_systemd_unit_candidates | default([]) | join(', ') }}.
+      Re-run play 23_setup_postgres.yml on the DB host or set postgres_service on that host.
+  when:
+    - not (_postgres_port_already_listening | bool)
+    - _postgres_systemd_unit is not defined
+
+- name: Ensure PostgreSQL service is started on DB host
+  ansible.builtin.systemd:
+    name: "{{ _postgres_systemd_unit }}"
+    state: started
+    enabled: true
+    daemon_reload: true
+  delegate_to: "{{ postgres_inventory_host }}"
+  become: true
+  when: not (_postgres_port_already_listening | bool)
+
+- name: Wait for PostgreSQL on primary CM database psql target
+  ansible.builtin.wait_for:
+    host: "{{ postgres_ensure_cm_db_psql_host_effective }}"
+    port: "{{ postgres_port }}"
+    delay: 2
+    timeout: 120
+  delegate_to: "{{ postgres_inventory_host }}"
+  register: _postgres_wait_primary
+  failed_when: false
+
+- name: Wait for PostgreSQL on alternate CM database psql targets
+  ansible.builtin.wait_for:
+    host: "{{ item }}"
+    port: "{{ postgres_port }}"
+    delay: 2
+    timeout: 60
+  delegate_to: "{{ postgres_inventory_host }}"
+  loop: >-
+    {{
+      _postgres_cm_db_tcp_probe_hosts
+      | reject('equalto', postgres_ensure_cm_db_psql_host_effective)
+      | list
+    }}
+  register: _postgres_wait_alternate_results
+  failed_when: false
+  when: (_postgres_wait_primary.state | default('')) != 'started'
+
+- name: Record PostgreSQL TCP host after post-start wait
+  ansible.builtin.set_fact:
+    _postgres_cm_db_tcp_host_reachable: >-
+      {{
+        postgres_ensure_cm_db_psql_host_effective
+        if ((_postgres_wait_primary.state | default('')) == 'started')
+        else (
+          (
+            _postgres_wait_alternate_results.results | default([])
+            | selectattr('state', 'defined')
+            | selectattr('state', 'equalto', 'started')
+            | map(attribute='item')
+            | list
+            | first
+            | default('')
+          )
+        )
+      }}
+  delegate_to: localhost
+  run_once: true
+
+- name: Align CM database psql host after post-start wait
+  ansible.builtin.set_fact:
+    postgres_ensure_cm_db_psql_host_effective: "{{ _postgres_cm_db_tcp_host_reachable }}"
+  delegate_to: localhost
+  run_once: true
+  when:
+    - _postgres_cm_db_tcp_host_reachable | length > 0
+    - _postgres_cm_db_tcp_host_reachable != postgres_ensure_cm_db_psql_host_effective
+
+- name: Fail when PostgreSQL did not accept TCP on any CM database psql target
+  ansible.builtin.fail:
+    msg: >-
+      Timed out waiting for PostgreSQL on {{ postgres_inventory_host }}:{{ postgres_port }}.
+      Probed hosts: {{ _postgres_cm_db_tcp_probe_hosts | join(', ') }}.
+      Check play 23 listen_addresses (expected '*' or an address matching CM JDBC
+      {{ postgres_host_fqdn }}), systemd status, and logs on the DB host.
+  when: _postgres_cm_db_tcp_host_reachable | default('') | length == 0
