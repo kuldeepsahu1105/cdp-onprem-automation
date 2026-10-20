@@ -1,0 +1,36 @@
+---
+- name: Resolve deployment portal Caddy gate (portal + caddy_vhost flags)
+  ansible.builtin.import_tasks: resolve_deployment_portal_caddy_enabled.yml
+
+- name: Resolve deployment portal install host group (play hosts line when Caddy skipped)
+  ansible.builtin.import_tasks: resolve_deployment_portal_host.yml
+
+- name: Register deployment portal runtime host
+  ansible.builtin.add_host:
+    name: "{{ groups[deployment_portal_host_group_effective][0] }}"
+    groups: deployment_portal_runtime
+  changed_when: false
+
+- name: Validate SSH reachability of portal target host before connecting
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/validate_ansible_ssh_reachability.yml"
+  vars:
+    ansible_ssh_reachability_check_group: "{{ deployment_portal_host_group_effective }}"
+
+- name: "SKIPPED PORTAL — Caddy stack disabled (see Report deployment portal Caddy gate above)"
+  ansible.builtin.debug:
+    msg: >-
+      SKIPPED PORTAL: deployment_portal_caddy_effective=false
+      (deployment_portal_enabled={{ deployment_portal_enabled | default(true) | bool }},
+      caddy_vhost_enabled={{ caddy_vhost_enabled | default(true) | bool }}).
+      No portal install or Tier B verify will run in this playbook.
+  when: not (deployment_portal_caddy_effective | default(false) | bool)
+
+- name: "SKIPPED PORTAL — end localhost play (Caddy stack disabled)"
+  ansible.builtin.meta: end_play
+  when: not (deployment_portal_caddy_effective | default(false) | bool)
+
+- name: Build deployment portal context from inventory
+  ansible.builtin.import_tasks: build_deployment_portal_facts.yml
+
+- name: Resolve monitoring exporter enrollment gate
+  ansible.builtin.import_tasks: resolve_monitoring_exporter_enroll_enabled.yml

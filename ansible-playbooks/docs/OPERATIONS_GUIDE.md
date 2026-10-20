@@ -253,6 +253,13 @@ use `DEPLOY_PHASE=1 ./pvc_setup.sh`; do not replace those calls with ad hoc
 role-only playbooks because the wrappers preserve host targeting, privilege
 escalation, and multi-play ordering.
 
+The same rule applies to PORTAL: invoke
+`10_setup_deployment_portal.yml` for bootstrap and
+`35_refresh_deployment_portal.yml` for refresh. Both orchestrate
+`roles/deployment_portal` while retaining the controller, exporter, ops-host,
+and Tier B verification play boundaries expected by Jenkins and
+`pvc_setup.sh`.
+
 Playbooks resolve SSH keys and Auto-TLS material on the **control machine** via `ANSIBLE_PRIVATE_KEY`, files under `ansible-playbooks/`, or `group_vars` (`cm_private_key_path`, `cm_node_sudo_password`). Wrappers only set the same env vars and `--private-key` for convenience.
 
 | Target OS | CM repo mode | Notes |

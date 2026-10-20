@@ -9,40 +9,10 @@
   connection: local
   gather_facts: true
   tasks:
-    - name: Resolve deployment portal Caddy gate (portal + caddy_vhost flags)
-      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_caddy_enabled.yml
-
-    - name: Resolve deployment portal install host group (play hosts line when Caddy skipped)
-      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
-
-    - name: Register deployment portal runtime host
-      ansible.builtin.add_host:
-        name: "{{ groups[deployment_portal_host_group_effective][0] }}"
-        groups: deployment_portal_runtime
-      changed_when: false
-
-    - name: Validate SSH reachability of portal target host before connecting
-      ansible.builtin.import_tasks: common_tasks/validate_ansible_ssh_reachability.yml
-      vars:
-        ansible_ssh_reachability_check_group: "{{ deployment_portal_host_group_effective }}"
-
-    - name: "SKIPPED PORTAL refresh — Caddy stack disabled (see gate report above)"
-      ansible.builtin.debug:
-        msg: >-
-          SKIPPED PORTAL refresh: deployment_portal_caddy_effective=false
-          (deployment_portal_enabled={{ deployment_portal_enabled | default(true) | bool }},
-          caddy_vhost_enabled={{ caddy_vhost_enabled | default(true) | bool }}).
-      when: not (deployment_portal_caddy_effective | default(false) | bool)
-
-    - name: "SKIPPED PORTAL refresh — end localhost play (Caddy stack disabled)"
-      ansible.builtin.meta: end_play
-      when: not (deployment_portal_caddy_effective | default(false) | bool)
-
-    - name: Build deployment portal context from inventory
-      ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
-
-    - name: Resolve monitoring exporter enrollment gate
-      ansible.builtin.import_tasks: common_tasks/resolve_monitoring_exporter_enroll_enabled.yml
+    - name: Rebuild deployment portal facts
+      ansible.builtin.import_role:
+        name: deployment_portal
+        tasks_from: refresh_controller
 
 - import_playbook: enroll_monitoring_exporters.yml
   when: hostvars['localhost'].monitoring_exporter_enrollment_enabled | default(false) | bool
@@ -52,38 +22,10 @@
   become: true
   gather_facts: true
   tasks:
-    - name: "SKIPPED PORTAL refresh — end ops host (Caddy stack disabled on controller)"
-      ansible.builtin.meta: end_host
-      when: not (hostvars['localhost'].deployment_portal_caddy_effective | default(false) | bool)
-
-    - name: Load portal context from localhost
-      ansible.builtin.import_tasks: common_tasks/deployment_portal_load_host_facts.yml
-
-    - name: Check whether portal stack was bootstrapped
-      ansible.builtin.stat:
-        path: "{{ deployment_portal_config_dir }}/docker-compose.yml"
-      register: portal_compose_stat
-
-    - name: Require bootstrap before refresh-only run
-      ansible.builtin.fail:
-        msg: >-
-          Deployment portal not installed on {{ inventory_hostname }}
-          (missing {{ deployment_portal_config_dir }}/docker-compose.yml).
-          Run 10_setup_deployment_portal.yml or re-run PORTAL deploy phase.
-      when: not portal_compose_stat.stat.exists
-
-    - name: Sync portal templates and stacks
-      ansible.builtin.import_tasks: common_tasks/sync_deployment_portal_content.yml
-      vars:
-        deployment_portal_verify_post_cm: true
-
-    - name: Print deployment portal URLs
-      ansible.builtin.import_tasks: common_tasks/print_deployment_portal_urls.yml
-      vars:
-        deployment_portal_urls_print_prefix: "(refreshed) "
-
-    - name: Print full access URL report (pipeline log / email)
-      ansible.builtin.import_tasks: common_tasks/print_deployment_access_urls.yml
+    - name: Refresh deployment portal content on ops host
+      ansible.builtin.import_role:
+        name: deployment_portal
+        tasks_from: refresh
 
 - name: Verify external deployment portal URLs from Ansible controller (Tier B)
   hosts: localhost
@@ -92,10 +34,9 @@
   vars:
     deployment_portal_verify_post_cm: true
   tasks:
-    - name: Skip Tier B when deployment portal is disabled
-      ansible.builtin.meta: end_play
-      when: not (deployment_portal_caddy_effective | default(false) | bool)
-
-    - name: External URL verify from Ansible controller (opt-in)
-      ansible.builtin.import_tasks: common_tasks/verify_deployment_portal_external_from_controller.yml
-      when: deployment_portal_verify_tier_b_enabled | default(false) | bool
+    - name: Verify external deployment portal URLs from Ansible controller
+      ansible.builtin.import_role:
+        name: deployment_portal
+        tasks_from: verify_external
+      vars:
+        deployment_portal_tier_b_skip_task_name: "Skip Tier B when deployment portal is disabled"

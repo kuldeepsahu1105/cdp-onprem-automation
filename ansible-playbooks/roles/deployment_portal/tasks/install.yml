@@ -1,0 +1,37 @@
+---
+- name: "SKIPPED PORTAL — end ops host (Caddy stack disabled on controller)"
+  ansible.builtin.meta: end_host
+  when: not (hostvars['localhost'].deployment_portal_caddy_effective | default(false) | bool)
+
+- name: Install deployment portal stack
+  when: deployment_portal_enabled | default(true) | bool
+  block:
+    - name: Load deployment portal context from localhost
+      ansible.builtin.import_tasks: deployment_portal_load_host_facts.yml
+
+    - name: Install container runtime for portal stacks
+      ansible.builtin.import_tasks: install_portal_container_runtime.yml
+
+    - name: Install or update portal and monitoring stacks
+      ansible.builtin.import_tasks: sync_deployment_portal_content.yml
+
+    - name: Stat portal compose after mandated install
+      ansible.builtin.stat:
+        path: "{{ deployment_portal_config_dir }}/docker-compose.yml"
+      register: portal_compose_post_install
+      when: deployment_portal_install_required | default(false) | bool
+
+    - name: Fail when mandated PORTAL install did not lay down compose on ops host
+      ansible.builtin.fail:
+        msg: >-
+          deployment_portal_install_required=true but {{ deployment_portal_config_dir }}/docker-compose.yml
+          is missing on {{ inventory_hostname }} after sync (install may have been skipped).
+      when:
+        - deployment_portal_install_required | default(false) | bool
+        - not (portal_compose_post_install.stat.exists | default(false) | bool)
+
+    - name: Print deployment portal URLs
+      ansible.builtin.import_tasks: print_deployment_portal_urls.yml
+
+    - name: Print full access URL report (pipeline log / email)
+      ansible.builtin.import_tasks: print_deployment_access_urls.yml

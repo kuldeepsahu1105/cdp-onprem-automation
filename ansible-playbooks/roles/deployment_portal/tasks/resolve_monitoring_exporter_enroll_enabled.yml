@@ -1,0 +1,11 @@
+---
+# Whether enroll_monitoring_exporters.yml should run (cluster node_exporter / process_exporter / host cAdvisor).
+# Aligns play 10 with 35: enroll when monitoring install is requested OR routes are already active.
+
+- name: Set monitoring exporter enrollment gate
+  ansible.builtin.set_fact:
+    monitoring_exporter_enrollment_enabled: >-
+      {{
+        (monitoring_stack_enabled | default(false) | bool)
+        or (deployment_portal_monitoring_routes_enabled | default(false) | bool)
+      }}

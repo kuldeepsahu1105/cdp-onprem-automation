@@ -64,7 +64,7 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 
 | # | Playbook | Notes |
 |---|----------|--------|
-| 10 | `10_setup_deployment_portal.yml` | Ops portal bootstrap (Caddy edge `deployment_portal_http_port`, default **81** — portal, pgAdmin, monitoring, IPA; not CM/ECS) |
+| 10 | `10_setup_deployment_portal.yml` | Ops portal bootstrap via `roles/deployment_portal` (Caddy edge `deployment_portal_http_port`, default **81** — portal, pgAdmin, monitoring, IPA; not CM/ECS) |
 | 11 | `11_identity_setup.yml` | Identity **router** |
 | 12 | `12_setup_freeipa_server.yml` | FreeIPA server (skipped for AD) |
 | — | `ipa_deep_recovery.yml` | Optional IPA detect/recover/sanitize before **12** (`ipa_server_deep_recovery: true`) |
@@ -91,7 +91,7 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 | 32 | `32_setup_monitoring_stack.yml` | Grafana / Prometheus |
 | 33 | `33_setup_ecs_cluster.yml` | ECS cluster |
 | 34 | `34_setup_ecs_data_services.yml` | CDW / CDE / CAI (optional) |
-| 35 | `35_refresh_deployment_portal.yml` | Portal re-render only |
+| 35 | `35_refresh_deployment_portal.yml` | Portal re-render only via `roles/deployment_portal` |
 | 36 | `36_install_ipaserver_ec2_startstop.yml` | EC2 start/stop script on ipaserver (end of IDENTITY / `pvc_setup` phase 2) |
 | 37 | `37_run_ipaserver_ec2_startstop.yml` | Run start/stop/describe via script (Jenkins `STARTSTOP_AUTOMATION`) |
 
@@ -120,6 +120,14 @@ Multi-play sequencing remains visible in the wrappers. In particular,
 `04_setup_autossh.yml` keeps generate/fetch/distribute as three plays and
 `07_prereq_setup_002.yml` keeps each original host-targeting boundary while
 selecting task files from `prereq_system_tuning`.
+
+The PORTAL implementation is organized under `roles/deployment_portal`.
+Playbooks `10_setup_deployment_portal.yml` and
+`35_refresh_deployment_portal.yml` remain compatibility orchestrators and
+retain the localhost fact build, optional exporter playbook import, ops-host
+sync, and localhost Tier B verification as distinct plays. Legacy
+`common_tasks/<portal-task>.yml` paths remain as role-import compatibility
+shims for monitoring, identity, ECS, and manual callers.
 
 ## Migration: renumbering duplicate prefixes (2026-09)
 

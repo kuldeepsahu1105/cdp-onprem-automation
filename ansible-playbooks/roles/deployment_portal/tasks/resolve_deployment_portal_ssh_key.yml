@@ -1,0 +1,229 @@
+---
+# Resolve EC2 (Ansible/Jenkins PEM) and optional distinct Auto-TLS key on the Ansible controller.
+
+- name: Resolve Terraform EC2 keypair name for portal SSH file naming
+  ansible.builtin.set_fact:
+    _portal_kp_from_env: "{{ lookup('env', 'KEYPAIR_NAME') | default('', true) | trim }}"
+    _portal_kp_from_group: "{{ terraform_ec2_keypair_name | default('', true) | trim }}"
+    _portal_kp_prefix: "{{ deployment_name_prefix | default('', true) | trim }}"
+
+- name: Derive EC2 keypair name from deployment prefix when unset
+  ansible.builtin.set_fact:
+    _portal_kp_from_prefix: >-
+      {{
+        (
+          (_portal_kp_prefix | default('', true) | trim)
+          ~ '-'
+          ~ (terraform_ec2_keypair_name_suffix | default('pvc-new-keypair', true) | trim)
+        )
+        if (
+          (_portal_kp_prefix | default('', true) | trim | length > 0)
+          and ((_portal_kp_prefix | default('', true) | trim | lower) != 'development')
+        )
+        else ''
+      }}
+
+- name: Set portal Terraform keypair name for SSH download/commands
+  ansible.builtin.set_fact:
+    deployment_portal_terraform_keypair_name: >-
+      {{
+        _portal_kp_from_env
+        if (_portal_kp_from_env | default('', true) | trim | length > 0)
+        else (
+          _portal_kp_from_group
+          if (_portal_kp_from_group | default('', true) | trim | length > 0)
+          else (_portal_kp_from_prefix | default('', true) | trim)
+        )
+      }}
+
+- name: Resolve portal EC2 cluster SSH private key (PEM)
+  ansible.builtin.set_fact:
+    deployment_portal_ssh_ec2_key_path: "{{ lookup('ansible.builtin.first_found', _ec2_key_lookup, errors='ignore') | default('', true) }}"
+  vars:
+    _terraform_kp: "{{ deployment_portal_terraform_keypair_name | default('', true) | trim }}"
+    _terraform_kp_pem: "{{ (_terraform_kp ~ '.pem') if (_terraform_kp | length > 0) else '' }}"
+    _pem_explicit: >-
+      {{
+        (
+          deployment_portal_ssh_pem_path
+          | default(deployment_portal_ssh_private_key_path_override, true)
+          | default('', true)
+        ) | trim
+      }}
+    _env_key: "{{ lookup('env', 'ANSIBLE_PRIVATE_KEY') | default('', true) | trim | expanduser }}"
+    _env_pem: "{{ _env_key if (_env_key | length > 0 and (_env_key | basename | regex_search('(?i)\\.pem$'))) else '' }}"
+    _ansible_key_rel: "{{ ansible_ssh_private_key_file | default('') | regex_replace('^\\./', '') | trim }}"
+    _ansible_pem: "{{ _ansible_key_rel if (_ansible_key_rel | length > 0 and (_ansible_key_rel | basename | regex_search('(?i)\\.pem$'))) else '' }}"
+    _repo_root: "{{ lookup('env', 'REPO_ROOT') | default('', true) | trim }}"
+    _hol_ansible_state: "{{ lookup('env', 'HOL_ANSIBLE_STATE_DIR') | default('', true) | trim }}"
+    _search_paths: >-
+      {{
+        ([_pem_explicit | dirname] if (_pem_explicit | length > 0 and (_pem_explicit is search('/'))) else [])
+        + ([_repo_root ~ '/ansible-playbooks'] if (_repo_root | length > 0) else [])
+        + ([_repo_root ~ '/jenkins/artifacts'] if (_repo_root | length > 0) else [])
+        + ([_env_key | dirname] if (_env_key | length > 0 and (_env_key is search('/'))) else [])
+        + ([_hol_ansible_state] if (_hol_ansible_state | length > 0) else [])
+        + [playbook_dir, playbook_dir | dirname, lookup('env', 'HOME') | default('/root', true) ~ '/.ssh']
+      }}
+    _file_candidates: >-
+      {{
+        ([_pem_explicit | basename] if (_pem_explicit | length > 0 and (_pem_explicit is search('/'))) else [])
+        + ([_pem_explicit] if (_pem_explicit | length > 0 and not (_pem_explicit is search('/'))) else [])
+        + ([_terraform_kp_pem] if (_terraform_kp_pem | length > 0) else [])
+        + ['sshkey.pem']
+        + ([_env_pem] if (_env_pem | length > 0) else [])
+        + ([_env_key | basename] if (_env_key | length > 0 and (_env_pem | length == 0)) else [])
+        + ['id_rsa']
+        + ([_ansible_pem] if (_ansible_pem | length > 0) else [])
+        + (
+          [_ansible_key_rel]
+          if (
+            (_ansible_key_rel | length > 0)
+            and (_ansible_pem | length == 0)
+            and (_ansible_key_rel not in ['sshkey.pem', 'id_rsa'])
+          )
+          else []
+        )
+      }}
+    _ec2_key_lookup:
+      files: "{{ _file_candidates }}"
+      paths: "{{ _search_paths }}"
+      skip: true
+
+- name: Resolve portal Auto-TLS / CM SSH private key on controller
+  ansible.builtin.set_fact:
+    deployment_portal_ssh_autotls_key_path: "{{ lookup('ansible.builtin.first_found', _autotls_key_lookup, errors='ignore') | default('', true) }}"
+  vars:
+    _autotls_explicit: >-
+      {{
+        (
+          deployment_portal_ssh_autotls_key_path
+          | default(autotls_private_key_path, true)
+          | default(cm_private_key_path, true)
+          | default('', true)
+        ) | trim
+      }}
+    _env_key: "{{ lookup('env', 'ANSIBLE_PRIVATE_KEY') | default('', true) | trim | expanduser }}"
+    _rel_keys:
+      - "{{ ansible_ssh_private_key_file | default('id_rsa') | regex_replace('^\\./', '') }}"
+      - "sshkey.pem"
+      - "id_rsa"
+    _repo_root: "{{ lookup('env', 'REPO_ROOT') | default('', true) | trim }}"
+    _hol_ansible_state: "{{ lookup('env', 'HOL_ANSIBLE_STATE_DIR') | default('', true) | trim }}"
+    _search_paths: >-
+      {{
+        ([_autotls_explicit | dirname] if (_autotls_explicit | length > 0 and (_autotls_explicit is search('/'))) else [])
+        + ([_repo_root ~ '/ansible-playbooks'] if (_repo_root | length > 0) else [])
+        + ([_repo_root ~ '/jenkins/artifacts'] if (_repo_root | length > 0) else [])
+        + ([_hol_ansible_state] if (_hol_ansible_state | length > 0) else [])
+        + [playbook_dir, playbook_dir | dirname, lookup('env', 'HOME') | default('/root', true) ~ '/.ssh']
+      }}
+    _file_candidates: >-
+      {{
+        ([_autotls_explicit | basename] if (_autotls_explicit | length > 0 and (_autotls_explicit is search('/'))) else [])
+        + ([_autotls_explicit] if (_autotls_explicit | length > 0 and not (_autotls_explicit is search('/'))) else [])
+        + ([_env_key | basename] if (_env_key | length > 0) else [])
+        + _rel_keys
+      }}
+    _autotls_key_lookup:
+      files: "{{ _file_candidates }}"
+      paths: "{{ _search_paths }}"
+      skip: true
+
+- name: Derive portal EC2 SSH download basename (match Terraform {keypair_name}.pem)
+  ansible.builtin.set_fact:
+    deployment_portal_ssh_ec2_download_basename: "{{ _portal_ec2_basename }}"
+  vars:
+    _kp: "{{ deployment_portal_terraform_keypair_name | default('', true) | trim }}"
+    _src_base: "{{ deployment_portal_ssh_ec2_key_path | basename }}"
+    _portal_ec2_basename: >-
+      {{
+        (_kp ~ '.pem')
+        if (
+          (_kp | length > 0)
+          and (_src_base in ['sshkey.pem', _kp ~ '.pem'])
+        )
+        else (
+          _src_base
+          if (_src_base | regex_search('(?i)\\.pem$'))
+          else ('cluster-access-' ~ _src_base)
+        )
+      }}
+  when: deployment_portal_ssh_ec2_key_path | default('') | length > 0
+
+- name: Derive portal Auto-TLS SSH download basename
+  ansible.builtin.set_fact:
+    deployment_portal_ssh_autotls_download_basename: >-
+      {{
+        'cluster-autotls-id_rsa'
+        if (deployment_portal_ssh_autotls_key_path | basename | regex_search('(?i)^id_rsa$'))
+        else ('autotls-' ~ (deployment_portal_ssh_autotls_key_path | basename))
+      }}
+  when: deployment_portal_ssh_autotls_key_path | default('') | length > 0
+
+- name: Build deduplicated portal SSH export manifest
+  ansible.builtin.set_fact:
+    deployment_portal_ssh_export_keys: "{{ _export_keys }}"
+  vars:
+    _ec2_path: "{{ deployment_portal_ssh_ec2_key_path | default('') }}"
+    _autotls_path: "{{ deployment_portal_ssh_autotls_key_path | default('') }}"
+    _export_keys: >-
+      {{
+        ([{
+          'controller_path': _ec2_path,
+          'basename': deployment_portal_ssh_ec2_download_basename | default('cluster-access.pem', true),
+          'label': 'EC2 cluster SSH (' ~ (deployment_portal_ssh_ec2_download_basename | default('cluster-access.pem', true)) ~ ')',
+          'note': 'Terraform EC2 key pair PEM (same as ansible-playbooks/sshkey.pem); chmod 400 after download; ' ~ (ansible_user | default('ec2-user')) ~ '@ cluster nodes'
+        }] if (_ec2_path | length > 0) else [])
+        + ([{
+          'controller_path': _autotls_path,
+          'basename': deployment_portal_ssh_autotls_download_basename | default('cluster-autotls-id_rsa', true),
+          'label': 'Auto-TLS / CM key (' ~ (deployment_portal_ssh_autotls_download_basename | default('cluster-autotls-id_rsa', true)) ~ ')',
+          'note': 'chmod 600 after download; CM Auto-TLS / root on CM when distinct from EC2 PEM'
+        }] if (
+          (_autotls_path | length > 0)
+          and (_autotls_path != _ec2_path)
+        ) else [])
+      }}
+
+- name: Stat portal SSH export keys on Ansible controller
+  ansible.builtin.stat:
+    path: "{{ item.controller_path }}"
+  loop: "{{ deployment_portal_ssh_export_keys | default([]) }}"
+  register: _portal_ssh_export_key_stats
+  when: deployment_portal_ssh_export_keys | default([]) | length > 0
+
+- name: Drop missing and duplicate SSH export keys
+  ansible.builtin.set_fact:
+    deployment_portal_ssh_export_keys: "{{ _validated_exports }}"
+  vars:
+    _validated_exports: >-
+      {%- set ns = namespace(keys=[], checksums=[]) -%}
+      {%- for r in _portal_ssh_export_key_stats.results | default([]) -%}
+      {%- if r.stat is defined and r.stat.exists | default(false) and r.stat.isreg | default(false) -%}
+      {%- set identity = r.stat.checksum | default(r.stat.path) -%}
+      {%- if identity not in ns.checksums -%}
+      {%- set _ = ns.keys.append(r.item | combine({'controller_path': r.stat.path})) -%}
+      {%- set _ = ns.checksums.append(identity) -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ ns.keys }}
+  when:
+    - _portal_ssh_export_key_stats is defined
+    - _portal_ssh_export_key_stats.results is defined
+
+- name: Legacy single-key facts for older task references
+  ansible.builtin.set_fact:
+    deployment_portal_ssh_private_key_path: >-
+      {{
+        deployment_portal_ssh_ec2_key_path
+        | default(deployment_portal_ssh_autotls_key_path, true)
+        | default('', true)
+      }}
+    deployment_portal_ssh_download_basename: >-
+      {{
+        deployment_portal_ssh_ec2_download_basename
+        | default(deployment_portal_ssh_autotls_download_basename, true)
+        | default('cluster-access.pem', true)
+      }}

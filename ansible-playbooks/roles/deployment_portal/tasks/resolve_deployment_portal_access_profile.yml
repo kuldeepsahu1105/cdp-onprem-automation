@@ -1,0 +1,44 @@
+---
+# private = bare metal / no public IP (single FQDN or management IP). cloud = public + VPC private.
+
+- name: Resolve effective deployment environment for portal (group_vars or inventory)
+  ansible.builtin.set_fact:
+    deployment_portal_effective_env: >-
+      {{
+        deployment_environment | default('auto')
+        if (deployment_environment | default('auto')) in ['aws', 'baremetal']
+        else (
+          'baremetal'
+          if (deployment_portal_ops_private_ip == deployment_portal_ops_public_ip)
+          else 'aws'
+        )
+      }}
+
+- name: Resolve deployment portal access profile
+  ansible.builtin.set_fact:
+    deployment_portal_access_profile_effective: >-
+      {{
+        deployment_portal_access_profile | default('auto')
+        if (deployment_portal_access_profile | default('auto')) in ['cloud', 'private']
+        else (
+          'private'
+          if (
+            deployment_portal_effective_env == 'baremetal'
+            or deployment_portal_use_private_network_only | default(false) | bool
+            or (deployment_portal_ops_private_ip == deployment_portal_ops_public_ip)
+          )
+          else 'cloud'
+        )
+      }}
+
+- name: Set portal URL target host (FQDN on private networks, else management IPs)
+  ansible.builtin.set_fact:
+    deployment_portal_ops_client_host: >-
+      {{
+        deployment_portal_anchor_fqdn
+        if (
+          deployment_portal_access_profile_effective == 'private'
+          and (deployment_portal_prefer_fqdn_urls | default(true) | bool)
+        )
+        else deployment_portal_ops_private_ip
+      }}

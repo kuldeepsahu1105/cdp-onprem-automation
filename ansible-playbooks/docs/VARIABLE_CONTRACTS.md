@@ -11,7 +11,8 @@ Automated checks: `jenkins/scripts/validate-ansible-contracts.sh` (runs from Jen
 Numbered compatibility playbooks own orchestration: play order, `hosts`,
 `connection`, `remote_user`, `become`, play vars, and collection bootstrap.
 Roles own reusable task implementation. The PREREQS wrappers `00`–`09`
-therefore import `roles/prereq_*` without introducing role defaults or vars;
+therefore import `roles/prereq_*`, while PORTAL wrappers `10` and `35` import
+`roles/deployment_portal`, without introducing role defaults or vars;
 inventory, `group_vars`, config, Jenkins values, and extra-vars retain their
 existing precedence.
 
@@ -22,11 +23,25 @@ not change which shared task file executes. Multi-play facts such as the
 AutoSSH key material and controller-fetched files retain their original play
 boundaries in the numbered wrappers.
 
+Portal-specific shared task implementations and their templates/files live in
+`roles/deployment_portal`. The same filenames under `common_tasks/` are
+compatibility shims that statically import the role task so existing
+monitoring, ECS, identity, and manual imports preserve conditions, tags,
+delegation, and caller-supplied vars. Generic shared tasks such as
+`validate_ansible_ssh_reachability.yml`,
+`detect_ansible_control_reachability.yml`, and
+`resolve_cm_connect_host.yml` remain in `common_tasks/` and are imported from
+the role through `{{ playbook_dir }}`.
+
+Both validation gates scan role task YAML. Contract setter/index checks must
+continue to include `roles/*/tasks/*.yml`; otherwise moving a `set_fact` into a
+role would make the static contract report incomplete.
+
 ---
 
 ## Playbook import order (portal verify chain)
 
-End-to-end order inside `sync_deployment_portal_content.yml` (used by `10_setup_deployment_portal.yml` and `35_refresh_deployment_portal.yml`):
+End-to-end order inside `roles/deployment_portal/tasks/sync_deployment_portal_content.yml` (used by `10_setup_deployment_portal.yml` and `35_refresh_deployment_portal.yml`; legacy `common_tasks` path is a compatibility shim):
 
 | Step | Task file | Purpose |
 |------|-----------|---------|

@@ -1,0 +1,118 @@
+{# YAML: links (portal index) + endpoints for CDP Runtime base cluster (play 31). #}
+{% set _fqdn = deployment_portal_base_master_fqdn | default('') | trim %}
+{% set _svc = base_cluster_install_services | default({}) %}
+{% set _knox = _svc.knox | default(false) | bool %}
+{% set _kport = base_cluster_knox_gateway_https_port | default(8443) %}
+{% set _kproxy = 'https://' ~ _fqdn ~ ':' ~ (_kport | string) ~ (base_cluster_knox_cdp_proxy_path | default('/gateway/cdp-proxy')) %}
+{% set ns = namespace(links=[], endpoints=[]) %}
+{% if _fqdn | length > 0 %}
+{% if _svc.hdfs | default(true) | bool %}
+{% if _knox %}
+{% set _url = _kproxy ~ '/hdfs/' %}
+{% set ns.links = ns.links + [{'name': 'HDFS NameNode UI', 'url': _url, 'description': 'Knox cdp-proxy (Kerberos SSO when cluster is secure)'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'HDFS NameNode (Knox)', 'url': _url, 'hostname': _fqdn, 'note': 'Knox cdp-proxy topology hdfs', 'port': (_kport | string), 'scheme': 'https'}] %}
+{% else %}
+{% set _url = 'http://' ~ _fqdn ~ ':' ~ (base_cluster_hdfs_namenode_ui_port | default(9870) | string) ~ '/' %}
+{% set ns.links = ns.links + [{'name': 'HDFS NameNode UI', 'url': _url, 'description': 'Direct NameNode HTTP UI on base master'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'HDFS NameNode UI', 'url': _url, 'hostname': _fqdn, 'note': 'Direct :' ~ (base_cluster_hdfs_namenode_ui_port | default(9870) | string), 'port': (base_cluster_hdfs_namenode_ui_port | default(9870) | string), 'scheme': 'http'}] %}
+{% endif %}
+{% endif %}
+{% if _svc.yarn | default(true) | bool %}
+{% if _knox %}
+{% set _url = _kproxy ~ '/yarn/' %}
+{% set ns.links = ns.links + [{'name': 'YARN ResourceManager UI', 'url': _url, 'description': 'Knox cdp-proxy'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'YARN RM (Knox)', 'url': _url, 'hostname': _fqdn, 'note': 'Knox cdp-proxy topology yarn', 'port': (_kport | string), 'scheme': 'https'}] %}
+{% else %}
+{% set _url = 'http://' ~ _fqdn ~ ':' ~ (base_cluster_yarn_rm_ui_port | default(8088) | string) ~ '/cluster' %}
+{% set ns.links = ns.links + [{'name': 'YARN ResourceManager UI', 'url': _url, 'description': 'Direct RM web UI on base master'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'YARN ResourceManager UI', 'url': _url, 'hostname': _fqdn, 'note': 'Direct :' ~ (base_cluster_yarn_rm_ui_port | default(8088) | string), 'port': (base_cluster_yarn_rm_ui_port | default(8088) | string), 'scheme': 'http'}] %}
+{% endif %}
+{% endif %}
+{% if _svc.hue | default(false) | bool %}
+{% if _knox %}
+{% set _url = _kproxy ~ '/hue/' %}
+{% set ns.links = ns.links + [{'name': 'Hue', 'url': _url, 'description': 'Knox cdp-proxy (also direct :' ~ (base_cluster_hue_ui_port | default(8888) | string) ~ ')'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'Hue (Knox)', 'url': _url, 'hostname': _fqdn, 'note': 'Knox cdp-proxy; direct Hue :' ~ (base_cluster_hue_ui_port | default(8888) | string), 'port': (_kport | string), 'scheme': 'https'}] %}
+{% endif %}
+{% set _url = 'http://' ~ _fqdn ~ ':' ~ (base_cluster_hue_ui_port | default(8888) | string) ~ '/' %}
+{% set ns.links = ns.links + [{'name': 'Hue (direct)', 'url': _url, 'description': 'Hue UI on base master'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'Hue (direct)', 'url': _url, 'hostname': _fqdn, 'note': 'Direct Hue :' ~ (base_cluster_hue_ui_port | default(8888) | string), 'port': (base_cluster_hue_ui_port | default(8888) | string), 'scheme': 'http'}] %}
+{% endif %}
+{% if _svc.hive | default(false) | bool and _knox %}
+{% set _url = _kproxy ~ '/hive/' %}
+{% set ns.links = ns.links + [{'name': 'Hive', 'url': _url, 'description': 'Knox cdp-proxy (HiveServer2 / JDBC via gateway)'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'Hive (Knox)', 'url': _url, 'hostname': _fqdn, 'note': 'Knox cdp-proxy topology hive', 'port': (_kport | string), 'scheme': 'https'}] %}
+{% endif %}
+{% if _svc.hbase | default(false) | bool %}
+{% if _knox %}
+{% set _url = _kproxy ~ '/hbase/' %}
+{% set ns.links = ns.links + [{'name': 'HBase Master UI', 'url': _url, 'description': 'Knox cdp-proxy'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'HBase Master (Knox)', 'url': _url, 'hostname': _fqdn, 'note': 'Knox cdp-proxy topology hbase', 'port': (_kport | string), 'scheme': 'https'}] %}
+{% else %}
+{% set _url = 'http://' ~ _fqdn ~ ':' ~ (base_cluster_hbase_master_ui_port | default(16010) | string) ~ '/master-status' %}
+{% set ns.links = ns.links + [{'name': 'HBase Master UI', 'url': _url, 'description': 'Direct HBase Master status UI'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'HBase Master UI', 'url': _url, 'hostname': _fqdn, 'note': 'Direct :' ~ (base_cluster_hbase_master_ui_port | default(16010) | string), 'port': (base_cluster_hbase_master_ui_port | default(16010) | string), 'scheme': 'http'}] %}
+{% endif %}
+{% endif %}
+{% if _svc.ozone | default(false) | bool %}
+{% if _knox %}
+{% set _url = _kproxy ~ '/ozone/' %}
+{% set ns.links = ns.links + [{'name': 'Ozone Recon UI', 'url': _url, 'description': 'Knox cdp-proxy'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'Ozone Recon (Knox)', 'url': _url, 'hostname': _fqdn, 'note': 'Knox cdp-proxy topology ozone', 'port': (_kport | string), 'scheme': 'https'}] %}
+{% else %}
+{% set _url = 'http://' ~ _fqdn ~ ':' ~ (base_cluster_ozone_recon_ui_port | default(9888) | string) ~ '/' %}
+{% set ns.links = ns.links + [{'name': 'Ozone Recon UI', 'url': _url, 'description': 'Direct Ozone Recon on base master'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'Ozone Recon UI', 'url': _url, 'hostname': _fqdn, 'note': 'Direct :' ~ (base_cluster_ozone_recon_ui_port | default(9888) | string), 'port': (base_cluster_ozone_recon_ui_port | default(9888) | string), 'scheme': 'http'}] %}
+{% endif %}
+{% endif %}
+{% if _svc.atlas | default(false) | bool %}
+{% if _knox %}
+{% set _url = _kproxy ~ '/atlas/' %}
+{% set ns.links = ns.links + [{'name': 'Atlas UI', 'url': _url, 'description': 'Knox cdp-proxy'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'Atlas (Knox)', 'url': _url, 'hostname': _fqdn, 'note': 'Knox cdp-proxy topology atlas', 'port': (_kport | string), 'scheme': 'https'}] %}
+{% else %}
+{% set _url = 'http://' ~ _fqdn ~ ':' ~ (base_cluster_atlas_ui_port | default(21000) | string) ~ '/' %}
+{% set ns.links = ns.links + [{'name': 'Atlas UI', 'url': _url, 'description': 'Direct Atlas UI on base master'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'Atlas UI', 'url': _url, 'hostname': _fqdn, 'note': 'Direct :' ~ (base_cluster_atlas_ui_port | default(21000) | string), 'port': (base_cluster_atlas_ui_port | default(21000) | string), 'scheme': 'http'}] %}
+{% endif %}
+{% endif %}
+{% if _svc.impala | default(false) | bool %}
+{% if _knox %}
+{% set _url = _kproxy ~ '/impala/' %}
+{% set ns.links = ns.links + [{'name': 'Impala', 'url': _url, 'description': 'Knox cdp-proxy'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'Impala (Knox)', 'url': _url, 'hostname': _fqdn, 'note': 'Knox cdp-proxy topology impala', 'port': (_kport | string), 'scheme': 'https'}] %}
+{% else %}
+{% set _url = 'http://' ~ _fqdn ~ ':' ~ (base_cluster_impala_debug_ui_port | default(25000) | string) ~ '/' %}
+{% set ns.links = ns.links + [{'name': 'Impala debug UI', 'url': _url, 'description': 'Impala daemon debug web UI (lab)'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'Impala debug UI', 'url': _url, 'hostname': _fqdn, 'note': 'Direct :' ~ (base_cluster_impala_debug_ui_port | default(25000) | string), 'port': (base_cluster_impala_debug_ui_port | default(25000) | string), 'scheme': 'http'}] %}
+{% endif %}
+{% endif %}
+{% if _svc.solr | default(false) | bool %}
+{% if _knox %}
+{% set _url = _kproxy ~ '/solr/' %}
+{% set ns.links = ns.links + [{'name': 'Solr Admin', 'url': _url, 'description': 'Knox cdp-proxy'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'Solr (Knox)', 'url': _url, 'hostname': _fqdn, 'note': 'Knox cdp-proxy topology solr', 'port': (_kport | string), 'scheme': 'https'}] %}
+{% else %}
+{% set _url = 'http://' ~ _fqdn ~ ':' ~ (base_cluster_solr_admin_port | default(8983) | string) ~ '/solr/' %}
+{% set ns.links = ns.links + [{'name': 'Solr Admin', 'url': _url, 'description': 'Direct Solr Admin UI'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'Solr Admin', 'url': _url, 'hostname': _fqdn, 'note': 'Direct :' ~ (base_cluster_solr_admin_port | default(8983) | string), 'port': (base_cluster_solr_admin_port | default(8983) | string), 'scheme': 'http'}] %}
+{% endif %}
+{% endif %}
+{% if _svc.ranger | default(false) | bool %}
+{% set _rport = base_cluster_ranger_admin_port | default(6182) %}
+{% set _url = 'http://' ~ _fqdn ~ ':' ~ (_rport | string) ~ '/' %}
+{% set ns.links = ns.links + [{'name': 'Ranger Admin', 'url': _url, 'description': 'Direct Ranger Admin (not Knox gateway)'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'Ranger Admin', 'url': _url, 'hostname': _fqdn, 'note': 'Direct Ranger Admin :' ~ (_rport | string), 'port': (_rport | string), 'scheme': 'http'}] %}
+{% if _knox %}
+{% set _url = _kproxy ~ '/ranger/' %}
+{% set ns.links = ns.links + [{'name': 'Ranger Admin (Knox)', 'url': _url, 'description': 'Knox cdp-proxy (optional SSO path)'}] %}
+{% endif %}
+{% endif %}
+{% if _knox %}
+{% set _url = 'https://' ~ _fqdn ~ ':' ~ (_kport | string) ~ '/gateway/homepage/home' %}
+{% set ns.links = ns.links + [{'name': 'Knox Gateway', 'url': _url, 'description': 'Knox home (CDP proxy topologies)'}] %}
+{% set ns.endpoints = ns.endpoints + [{'name': 'Knox Gateway', 'url': _url, 'hostname': _fqdn, 'note': 'HTTPS :' ~ (_kport | string) ~ ' gateway homepage', 'port': (_kport | string), 'scheme': 'https'}] %}
+{% endif %}
+{% endif %}
+links: {{ ns.links | to_json }}
+endpoints: {{ ns.endpoints | to_json }}

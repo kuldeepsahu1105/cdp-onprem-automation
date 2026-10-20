@@ -8,6 +8,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMMON_TASKS = REPO_ROOT / "ansible-playbooks" / "common_tasks"
+ROLES = REPO_ROOT / "ansible-playbooks" / "roles"
 PLAYBOOKS = REPO_ROOT / "ansible-playbooks"
 GROUP_VARS = REPO_ROOT / "ansible-playbooks" / "group_vars"
 
@@ -157,6 +158,7 @@ def extract_when_lines(text: str) -> list[str]:
 
 def check_verify_when_setters() -> list[str]:
     verify_files = sorted(COMMON_TASKS.glob("verify_*.yml"))
+    verify_files.extend(sorted(ROLES.glob("*/tasks/verify_*.yml")))
     roots = [COMMON_TASKS, PLAYBOOKS, GROUP_VARS]
     setters = index_setters(roots)
     allow_no_setter = {
@@ -226,7 +228,9 @@ def main() -> int:
         print("validate-ansible-contracts: common_tasks missing", file=sys.stderr)
         return 1
 
-    for path in sorted(COMMON_TASKS.glob("*.yml")):
+    task_files = sorted(COMMON_TASKS.glob("*.yml"))
+    task_files.extend(sorted(ROLES.glob("*/tasks/*.yml")))
+    for path in task_files:
         warnings.extend(check_same_task_set_fact(path))
 
     warnings.extend(check_verify_when_setters())
@@ -239,7 +243,7 @@ def main() -> int:
 
     n_warn = len(set(warnings))
     print(
-        f"[validate-ansible-contracts] OK: scanned common_tasks set_fact heuristics "
+        f"[validate-ansible-contracts] OK: scanned common_tasks and roles set_fact heuristics "
         f"({n_warn} warning(s))"
     )
     return 0 if not errors else 1

@@ -1,0 +1,88 @@
+# Host publishes: Caddy HTTP edge (default 81), IPA HTTPS edge (default 9443), and pgAdmin (default 5050).
+# Values live in {{ deployment_portal_config_dir }}/.env (Ansible template deployment_portal_docker-compose.env.j2).
+# Grafana/Prometheus/Alertmanager join network deployment_portal via monitoring compose under {{ monitoring_config_dir | default('/opt/cldr-monitoring') }}.
+# After changing ports, re-run PORTAL or: cd {{ deployment_portal_config_dir }} && docker compose up -d --force-recreate caddy
+services:
+  caddy:
+    image: ${DEPLOYMENT_PORTAL_CADDY_IMAGE}
+    container_name: ${DEPLOYMENT_PORTAL_CADDY_CONTAINER}
+    restart: unless-stopped
+    depends_on:
+      pgadmin:
+        condition: service_healthy
+{% if deployment_portal_basic_auth_enabled | default(false) | bool %}
+      portal-auth:
+        condition: service_healthy
+{% endif %}
+    ports:
+      - "0.0.0.0:${DEPLOYMENT_PORTAL_HTTP_PORT}:${DEPLOYMENT_PORTAL_HTTP_PORT}/tcp"
+{% if deployment_portal_ipa_https_enabled | default(true) | bool %}
+      - "0.0.0.0:${DEPLOYMENT_PORTAL_IPA_HTTPS_PORT}:${DEPLOYMENT_PORTAL_IPA_HTTPS_PORT}/tcp"
+{% endif %}
+    volumes:
+      - ${DEPLOYMENT_PORTAL_CONFIG_DIR}/Caddyfile:/etc/caddy/Caddyfile:ro,z
+      - ${DEPLOYMENT_PORTAL_WWW_DIR}:/srv:ro,z
+{% if deployment_portal_ipa_https_enabled | default(true) | bool %}
+      - caddy_data:/data
+      - caddy_config:/config
+{% endif %}
+    networks:
+      - deployment_portal
+
+{% if deployment_portal_basic_auth_enabled | default(false) | bool %}
+  portal-auth:
+    image: ${DEPLOYMENT_PORTAL_AUTH_IMAGE}
+    container_name: ${DEPLOYMENT_PORTAL_AUTH_CONTAINER}
+    restart: unless-stopped
+    command: ["python3", "/app/deployment_portal_auth_server.py"]
+    environment:
+      PORTAL_SESSION_TTL_SECONDS: ${DEPLOYMENT_PORTAL_SESSION_TTL_SECONDS}
+    volumes:
+      - ${DEPLOYMENT_PORTAL_CONFIG_DIR}/deployment_portal_auth_server.py:/app/deployment_portal_auth_server.py:ro,z
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - deployment_portal
+
+{% endif %}
+  pgadmin:
+    image: ${DEPLOYMENT_PORTAL_PGADMIN_IMAGE}
+    container_name: ${DEPLOYMENT_PORTAL_PGADMIN_CONTAINER}
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:${DEPLOYMENT_PORTAL_PGADMIN_HOST_PORT}:80/tcp"
+    extra_hosts:
+      - "{{ deployment_portal_context.postgresql.host_fqdn }}:{{ deployment_portal_context.postgresql.connect_host }}"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_REPLACE_SERVERS_ON_STARTUP: "True"
+    volumes:
+      - ${DEPLOYMENT_PORTAL_CONFIG_DIR}/pgadmin-servers.json:/pgadmin4/servers.json:ro,z
+      - ${DEPLOYMENT_PORTAL_CONFIG_DIR}/pgadmin-pgpass:/var/lib/pgadmin/.pgpass:ro,z
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/misc/ping || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+    networks:
+      - deployment_portal
+
+networks:
+  deployment_portal:
+    name: deployment_portal
+{% if deployment_portal_ipa_https_enabled | default(true) | bool %}
+
+volumes:
+  caddy_data:
+    name: cldr_portal_caddy_data
+  caddy_config:
+    name: cldr_portal_caddy_config
+{% endif %}

@@ -1,0 +1,341 @@
+---
+# Optional ipaserver httpd tweaks when deployment_portal_ipa_httpd_proxy_enabled (default false).
+# Default IPA UI path uses ops Caddy only (header_up Host/Referer). Enable for mod_substitute HTML rewrites + ipa-rewrite patches.
+# Tasks that touch ipaserver files or systemd must set delegate_to (play may run on cldr-mngr).
+# After conf.d / ipa-rewrite edits: on a configured IPA server (ipactl present), configtest + systemd reload
+# of the IPA-managed httpd unit — not ipactl restart (full stack) and not ipactl restart httpd (unsupported).
+
+- name: Resolve IPA HTTPD delegate paths on ipaserver for Caddy proxy apply
+  ansible.builtin.import_tasks: resolve_ipa_httpd_delegate_on_ipaserver.yml
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+
+- name: Ensure Apache/httpd package is present on ipaserver for Caddy proxy snippets
+  ansible.builtin.package:
+    name: "{{ ipa_httpd_package_names }}"
+    state: present
+  register: ipa_httpd_package_install
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
+
+- name: Ensure IPA web server is enabled after package install
+  ansible.builtin.service:
+    name: "{{ ipa_httpd_service_name }}"
+    state: started
+    enabled: true
+  register: ipa_httpd_service_start
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  failed_when: false
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
+    - ipa_httpd_package_install is defined
+    - not (ipa_httpd_package_install.skipped | default(false))
+
+- name: Ensure FreeIPA Apache conf.d directory exists on ipaserver
+  ansible.builtin.file:
+    path: "{{ ipa_httpd_conf_d_effective }}"
+    state: directory
+    mode: "0755"
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
+    - ipa_httpd_conf_d_effective is defined
+    - ipa_httpd_conf_d_effective | length > 0
+
+- name: Render expected zz-ipa-caddy-proxy.conf content for checksum compare
+  ansible.builtin.set_fact:
+    ipa_httpd_caddy_proxy_expected_content: "{{ lookup('template', 'ipa_httpd_caddy_proxy.conf.j2') }}"
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
+    - ipa_httpd_conf_d_effective is defined
+    - ipa_httpd_conf_d_effective | length > 0
+
+- name: Slurp installed zz-ipa-caddy-proxy.conf on ipaserver
+  ansible.builtin.slurp:
+    path: "{{ ipa_httpd_conf_d_effective }}/zz-ipa-caddy-proxy.conf"
+  register: ipa_httpd_caddy_proxy_slurp
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  failed_when: false
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
+    - ipa_httpd_conf_d_effective is defined
+    - ipa_httpd_conf_d_effective | length > 0
+    - ipa_httpd_caddy_proxy_expected_content is defined
+
+- name: Set whether on-disk zz-ipa-caddy-proxy differs from Ansible template
+  ansible.builtin.set_fact:
+    ipa_httpd_caddy_proxy_content_differs: >-
+      {{
+        (
+          (
+            (ipa_httpd_caddy_proxy_slurp.content | b64decode)
+            if (
+              ipa_httpd_caddy_proxy_slurp is defined
+              and not (ipa_httpd_caddy_proxy_slurp.skipped | default(false))
+              and ipa_httpd_caddy_proxy_slurp.content is defined
+            )
+            else ''
+          )
+          != ipa_httpd_caddy_proxy_expected_content
+        )
+      }}
+  when:
+    - ipa_httpd_caddy_proxy_expected_content is defined
+
+- name: Detect legacy zz-ipa-caddy-proxy broad Location /ipa (breaks /ipa/json gzip JSON-RPC)
+  ansible.builtin.shell: |
+    set -o pipefail
+    test -f "{{ ipa_httpd_conf_d_effective }}/zz-ipa-caddy-proxy.conf" || exit 0
+    grep -E '<Location\s+/ipa' "{{ ipa_httpd_conf_d_effective }}/zz-ipa-caddy-proxy.conf" \
+      | grep -vE '<Location\s+/ipa/(ui|modern-ui)' || true
+  args:
+    executable: /bin/bash
+  register: ipa_httpd_caddy_proxy_legacy_lines
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
+    - ipa_httpd_conf_d_effective is defined
+    - ipa_httpd_conf_d_effective | length > 0
+
+- name: Fail early when zz-ipa-caddy-proxy has legacy broad /ipa Location and snippet install will not run
+  ansible.builtin.fail:
+    msg: >-
+      {{ ipa_httpd_conf_d_effective }}/zz-ipa-caddy-proxy.conf contains a broad <Location /ipa> block
+      (mod_substitute must be limited to /ipa/ui and /ipa/modern-ui only).
+      Offending lines: {{ ipa_httpd_caddy_proxy_legacy_lines.stdout | default('') | trim }}.
+      Enable portal Caddy facts (playbook 10 or 16 localhost play) and re-run configure_ipa_httpd_behind_caddy.yml,
+      or replace the file from ansible-playbooks/templates/ipa_httpd_caddy_proxy.conf.j2 and reload httpd.
+  when:
+    - ipa_httpd_caddy_proxy_legacy_lines is defined
+    - not (ipa_httpd_caddy_proxy_legacy_lines.skipped | default(false))
+    - ipa_httpd_caddy_proxy_legacy_lines.stdout | default('') | trim | length > 0
+    - not (
+        (deployment_portal_has_ipa | default(false) | bool)
+        and (ipa_caddy_public_hostname | default('') | length > 0)
+        and (ipa_server_configured is defined)
+        and (ipa_server_configured.stat.exists | default(false) | bool)
+        and (ipa_httpd_conf_d_effective is defined)
+        and (ipa_httpd_conf_d_effective | length > 0)
+      )
+
+- name: Install FreeIPA HTTPD snippet for deployment portal Caddy proxy
+  ansible.builtin.template:
+    src: ipa_httpd_caddy_proxy.conf.j2
+    dest: "{{ ipa_httpd_conf_d_effective }}/zz-ipa-caddy-proxy.conf"
+    mode: "0644"
+    force: "{{ ipa_httpd_caddy_proxy_content_differs | default(true) | bool }}"
+  register: ipa_httpd_caddy_proxy_conf
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
+    - ipa_httpd_conf_d_effective is defined
+    - ipa_httpd_conf_d_effective | length > 0
+
+- name: Assert zz-ipa-caddy-proxy no longer uses legacy broad Location /ipa after template
+  ansible.builtin.shell: |
+    set -o pipefail
+    grep -E '<Location\s+/ipa' "{{ ipa_httpd_conf_d_effective }}/zz-ipa-caddy-proxy.conf" \
+      | grep -vE '<Location\s+/ipa/(ui|modern-ui)' || true
+  args:
+    executable: /bin/bash
+  register: ipa_httpd_caddy_proxy_legacy_after
+  changed_when: false
+  failed_when: ipa_httpd_caddy_proxy_legacy_after.stdout | default('') | trim | length > 0
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - ipa_httpd_caddy_proxy_conf is defined
+    - not (ipa_httpd_caddy_proxy_conf.skipped | default(false))
+
+- name: Stat FreeIPA ipa-rewrite.conf for HTTPS redirect tweaks
+  ansible.builtin.stat:
+    path: "{{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+  register: ipa_rewrite_conf
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_conf_d_effective is defined
+
+- name: Check whether FreeIPA ipa-rewrite HTTPS redirect is already disabled for Caddy
+  ansible.builtin.command:
+    cmd: "grep -q 'ANSIBLE_CADDY_HTTP_UPSTREAM' {{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+  register: ipa_rewrite_caddy_marker
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_rewrite_conf is defined
+    - ipa_rewrite_conf.stat.exists | default(false) | bool
+
+- name: Disable FreeIPA ipa-rewrite forced HTTPS redirect for HTTP Caddy upstream
+  ansible.builtin.replace:
+    path: "{{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+    after: '# Redirect to the secure port if not displaying an error or retrieving'
+    before: '# Rewrite for plugin'
+    regexp: '^RewriteCond %\{SERVER_PORT\}  !\^443\$'
+    replace: '# ANSIBLE_CADDY_HTTP_UPSTREAM — keep /ipa on HTTP when proxied from Caddy\n# RewriteCond %{SERVER_PORT}  !^443$'
+  register: ipa_rewrite_https_cond
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_rewrite_conf is defined
+    - ipa_rewrite_conf.stat.exists | default(false) | bool
+    - ipa_rewrite_caddy_marker is defined
+    - ipa_rewrite_caddy_marker.rc != 0
+
+- name: Comment remaining lines in ipa-rewrite HTTPS redirect block for Caddy
+  ansible.builtin.replace:
+    path: "{{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+    after: '# ANSIBLE_CADDY_HTTP_UPSTREAM'
+    before: '# Rewrite for plugin'
+    regexp: '^(RewriteCond %\{REQUEST_URI\}|RewriteRule \^/ipa/)'
+    replace: '# \1'
+  register: ipa_rewrite_https_block
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_rewrite_conf is defined
+    - ipa_rewrite_conf.stat.exists | default(false) | bool
+    - ipa_rewrite_https_cond is defined
+    - ipa_rewrite_https_cond.changed | default(false) | bool
+
+- name: Check whether FreeIPA ipa-rewrite HTTP_HOST redirect already patched for Caddy/TLS
+  ansible.builtin.command:
+    cmd: "grep -q 'ANSIBLE_CADDY_HTTP_HOST_REDIRECT' {{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+  register: ipa_rewrite_http_host_marker
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_rewrite_conf is defined
+    - ipa_rewrite_conf.stat.exists | default(false) | bool
+    - deployment_portal_ipa_fqdn | default('') | length > 0
+    - ipa_caddy_public_hostname | default('') | length > 0
+
+- name: Patch FreeIPA ipa-rewrite HTTP_HOST redirect (Caddy vhost + https Location on TLS)
+  ansible.builtin.replace:
+    path: "{{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+    after: '# Redirect to the fully-qualified hostname'
+    before: '# Redirect to the secure port'
+    regexp: >-
+      (?m)^RewriteCond %\{HTTP_HOST\}\s+!\^({{ deployment_portal_ipa_fqdn | regex_escape }})\$\s+\[NC\]\s*\nRewriteRule \^/ipa/\(\.\*\)\s+http://\1/ipa/\$1 \[L,R=301\]
+    replace: |-
+      # ANSIBLE_CADDY_HTTP_HOST_REDIRECT — allow Caddy vhost Host; https Location on :443 for /ipa/json clients
+      RewriteCond %{HTTP_HOST}    !^{{ deployment_portal_ipa_fqdn }}$ [NC]
+      RewriteCond %{HTTP_HOST}    !^{{ ipa_caddy_public_hostname }}$ [NC]
+      RewriteCond %{SERVER_PORT}  ^443$
+      RewriteRule ^/ipa/(.*)      https://{{ deployment_portal_ipa_fqdn }}/ipa/$1 [L,R=301]
+      RewriteCond %{HTTP_HOST}    !^{{ deployment_portal_ipa_fqdn }}$ [NC]
+      RewriteCond %{HTTP_HOST}    !^{{ ipa_caddy_public_hostname }}$ [NC]
+      RewriteCond %{SERVER_PORT}  !^443$
+      RewriteRule ^/ipa/(.*)      http://{{ deployment_portal_ipa_fqdn }}/ipa/$1 [L,R=301]
+  register: ipa_rewrite_http_host_block
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_rewrite_conf is defined
+    - ipa_rewrite_conf.stat.exists | default(false) | bool
+    - deployment_portal_ipa_fqdn | default('') | length > 0
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_rewrite_http_host_marker is defined
+    - ipa_rewrite_http_host_marker.rc != 0
+
+- name: Track whether IPA HTTPD Caddy proxy tasks changed configuration
+  ansible.builtin.set_fact:
+    ipa_httpd_config_changed: "{{ _ipa_httpd_config_tasks_changed | bool }}"
+  vars:
+    _ipa_httpd_config_tasks_changed: >-
+      {{
+        (
+          (ipa_httpd_caddy_proxy_conf is defined)
+          and (ipa_httpd_caddy_proxy_conf.changed | default(false))
+          and not (ipa_httpd_caddy_proxy_conf.skipped | default(false))
+        )
+        or (ipa_httpd_caddy_proxy_content_differs | default(false) | bool)
+        or (
+          (ipa_rewrite_https_cond is defined)
+          and (ipa_rewrite_https_cond.changed | default(false))
+          and not (ipa_rewrite_https_cond.skipped | default(false))
+        )
+        or (
+          (ipa_rewrite_https_block is defined)
+          and (ipa_rewrite_https_block.changed | default(false))
+          and not (ipa_rewrite_https_block.skipped | default(false))
+        )
+        or (
+          (ipa_rewrite_http_host_block is defined)
+          and (ipa_rewrite_http_host_block.changed | default(false))
+          and not (ipa_rewrite_http_host_block.skipped | default(false))
+        )
+      }}
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+
+- name: Reload httpd after zz-ipa-caddy-proxy apply even when template reported unchanged
+  ansible.builtin.set_fact:
+    ipa_httpd_config_changed: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_httpd_caddy_proxy_conf is defined
+    - not (ipa_httpd_caddy_proxy_conf.skipped | default(false))
+    - not (ipa_httpd_config_changed | default(false) | bool)
+
+- name: Default IPA HTTPD config changed flag when snippet/rewrite tasks did not run
+  ansible.builtin.set_fact:
+    ipa_httpd_config_changed: false
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_caddy_public_hostname | default('') | length > 0
+    - ipa_httpd_config_changed is not defined
+
+- name: Reload httpd after Caddy proxy apply on ipaserver
+  ansible.builtin.import_tasks: reload_ipa_httpd_on_ipaserver_after_change.yml
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+
+- name: Preflight /ipa/json JSON-RPC from ipaserver after HTTPD Caddy proxy apply
+  ansible.builtin.import_tasks: preflight_ipa_json_on_ipaserver.yml
+  when:
+    - deployment_portal_ipa_fqdn | default('') | length > 0

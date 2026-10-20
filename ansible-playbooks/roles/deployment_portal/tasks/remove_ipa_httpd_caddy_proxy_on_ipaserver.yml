@@ -1,0 +1,152 @@
+---
+# Idempotent cleanup when deployment_portal_ipa_httpd_proxy_enabled is false (default).
+# Removes zz-ipa-caddy-proxy.conf and reverts ipa-rewrite Caddy markers; reloads httpd when changed.
+
+- name: Resolve IPA HTTPD delegate paths on ipaserver for Caddy proxy cleanup
+  ansible.builtin.import_tasks: resolve_ipa_httpd_delegate_on_ipaserver.yml
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - groups.get('ipaserver', []) | length > 0
+
+- name: Resolve IPA FQDN for ipa-rewrite revert when portal facts are unset
+  ansible.builtin.set_fact:
+    ipa_httpd_cleanup_ipa_fqdn: >-
+      {{
+        deployment_portal_ipa_fqdn
+        | default(hostvars[ipa_httpd_delegate_host].ansible_fqdn | default(''))
+        | default(groups['ipaserver'][0])
+        | trim
+      }}
+  when:
+    - ipa_httpd_delegate_host is defined
+    - deployment_portal_has_ipa | default(false) | bool
+
+- name: Stat zz-ipa-caddy-proxy.conf before removal
+  ansible.builtin.stat:
+    path: "{{ ipa_httpd_conf_d_effective }}/zz-ipa-caddy-proxy.conf"
+  register: ipa_httpd_caddy_proxy_stat
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
+    - ipa_httpd_conf_d_effective is defined
+    - ipa_httpd_conf_d_effective | length > 0
+
+- name: Remove zz-ipa-caddy-proxy.conf (Caddy-only IPA UI path)
+  ansible.builtin.file:
+    path: "{{ ipa_httpd_conf_d_effective }}/zz-ipa-caddy-proxy.conf"
+    state: absent
+  register: ipa_httpd_caddy_proxy_removed
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - ipa_httpd_caddy_proxy_stat is defined
+    - not (ipa_httpd_caddy_proxy_stat.skipped | default(false))
+    - ipa_httpd_caddy_proxy_stat.stat.exists | default(false) | bool
+
+- name: Stat FreeIPA ipa-rewrite.conf for Caddy patch revert
+  ansible.builtin.stat:
+    path: "{{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+  register: ipa_rewrite_conf_cleanup
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
+    - ipa_httpd_conf_d_effective is defined
+
+- name: Detect ANSIBLE_CADDY_HTTP_UPSTREAM marker in ipa-rewrite.conf
+  ansible.builtin.command:
+    cmd: "grep -q 'ANSIBLE_CADDY_HTTP_UPSTREAM' {{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+  register: ipa_rewrite_upstream_marker_cleanup
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - ipa_rewrite_conf_cleanup is defined
+    - ipa_rewrite_conf_cleanup.stat.exists | default(false) | bool
+
+- name: Revert ipa-rewrite Caddy HTTPS upstream patch to stock redirect lines
+  ansible.builtin.replace:
+    path: "{{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+    regexp: '# ANSIBLE_CADDY_HTTP_UPSTREAM — keep /ipa on HTTP when proxied from Caddy\n# RewriteCond %\{SERVER_PORT\}  !\^443\$'
+    replace: 'RewriteCond %{SERVER_PORT}  !^443$'
+  register: ipa_rewrite_upstream_revert
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - ipa_rewrite_upstream_marker_cleanup is defined
+    - ipa_rewrite_upstream_marker_cleanup.rc | default(1) == 0
+
+- name: Uncomment ipa-rewrite redirect lines after reverted HTTPS port block
+  ansible.builtin.replace:
+    path: "{{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+    after: 'RewriteCond %{SERVER_PORT}  !^443$'
+    before: '# Rewrite for plugin'
+    regexp: '^# (RewriteCond %\{REQUEST_URI\}|RewriteRule \^/ipa/)'
+    replace: '\1'
+  register: ipa_rewrite_upstream_uncomment
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - ipa_rewrite_upstream_revert is defined
+    - ipa_rewrite_upstream_revert.changed | default(false) | bool
+
+- name: Detect ANSIBLE_CADDY_HTTP_HOST_REDIRECT marker in ipa-rewrite.conf
+  ansible.builtin.command:
+    cmd: "grep -q 'ANSIBLE_CADDY_HTTP_HOST_REDIRECT' {{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+  register: ipa_rewrite_http_host_marker_cleanup
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - ipa_rewrite_conf_cleanup is defined
+    - ipa_rewrite_conf_cleanup.stat.exists | default(false) | bool
+    - ipa_httpd_cleanup_ipa_fqdn | default('') | length > 0
+
+- name: Revert ipa-rewrite HTTP_HOST Caddy patch to stock FreeIPA redirect
+  ansible.builtin.replace:
+    path: "{{ ipa_httpd_conf_d_effective }}/ipa-rewrite.conf"
+    after: '# Redirect to the fully-qualified hostname'
+    before: '# Redirect to the secure port'
+    regexp: '(?ms)^# ANSIBLE_CADDY_HTTP_HOST_REDIRECT.*?(?=^# Redirect to the secure port)'
+    replace: |-
+      RewriteCond %{HTTP_HOST}    !^{{ ipa_httpd_cleanup_ipa_fqdn }}$ [NC]
+      RewriteRule ^/ipa/(.*)      http://{{ ipa_httpd_cleanup_ipa_fqdn }}/ipa/$1 [L,R=301]
+  register: ipa_rewrite_http_host_revert
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - ipa_rewrite_http_host_marker_cleanup is defined
+    - ipa_rewrite_http_host_marker_cleanup.rc | default(1) == 0
+    - ipa_httpd_cleanup_ipa_fqdn | default('') | length > 0
+
+- name: Track whether IPA HTTPD Caddy proxy cleanup changed configuration
+  ansible.builtin.set_fact:
+    ipa_httpd_config_changed: "{{ _ipa_httpd_cleanup_changed | bool }}"
+  vars:
+    _ipa_httpd_cleanup_changed: >-
+      {{
+        (ipa_httpd_caddy_proxy_removed is defined and ipa_httpd_caddy_proxy_removed.changed | default(false))
+        or (ipa_rewrite_upstream_revert is defined and ipa_rewrite_upstream_revert.changed | default(false))
+        or (ipa_rewrite_upstream_uncomment is defined and ipa_rewrite_upstream_uncomment.changed | default(false))
+        or (ipa_rewrite_http_host_revert is defined and ipa_rewrite_http_host_revert.changed | default(false))
+      }}
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+
+- name: Default IPA HTTPD config changed flag when cleanup tasks did not run
+  ansible.builtin.set_fact:
+    ipa_httpd_config_changed: false
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed is not defined
+
+- name: Reload httpd after Caddy proxy cleanup on ipaserver
+  ansible.builtin.import_tasks: reload_ipa_httpd_on_ipaserver_after_change.yml
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool

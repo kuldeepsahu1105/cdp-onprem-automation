@@ -1,0 +1,106 @@
+{
+  "id": null,
+  "uid": "cldr-cdp-ops-overview",
+  "title": "CDP Ops Overview",
+  "description": "Single-pane health for node/process metrics, blackbox probes, ops containers, and firing alerts. Provisioned by Ansible playbook 32.",
+  "tags": ["cloudera", "overview"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Firing alerts",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }]
+          }
+        }
+      },
+      "targets": [{ "expr": "count(ALERTS{alertstate=\"firing\"}) OR on() vector(0)", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "title": "Hosts up (node_exporter)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "targets": [{ "expr": "count(up{job=\"node_exporter\"} == 1)", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "title": "Blackbox probes OK",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "targets": [{ "expr": "count(probe_success{job=~\"blackbox_.*\"} == 1)", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "title": "Ops containers",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "targets": [{ "expr": "count(count by (name) (container_last_seen{job=\"cadvisor\",name=~\"cldr-mon-.*|cldr-portal-.*\"}))", "refId": "A" }]
+    },
+    {
+      "id": 5,
+      "title": "Max host CPU %",
+      "type": "gauge",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } },
+      "targets": [{
+        "expr": "max(100 - (avg by (instance) (rate(node_cpu_seconds_total{job=\"node_exporter\",mode=\"idle\"}[5m])) * 100))",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 6,
+      "title": "Max host memory %",
+      "type": "gauge",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } },
+      "targets": [{
+        "expr": "max(100 - (node_memory_MemAvailable_bytes{job=\"node_exporter\"} / node_memory_MemTotal_bytes{job=\"node_exporter\"} * 100))",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 7,
+      "title": "Failed probes",
+      "type": "table",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 4 },
+      "targets": [{
+        "expr": "probe_success{job=~\"blackbox_.*\"} == 0",
+        "format": "table",
+        "instant": true,
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 8,
+      "title": "Top host CPU %",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } },
+      "targets": [{
+        "expr": "topk(5, 100 - (avg by (instance) (rate(node_cpu_seconds_total{job=\"node_exporter\",mode=\"idle\"}[5m])) * 100))",
+        "legendFormat": "{{instance}}",
+        "refId": "A"
+      }]
+    }
+  ]
+}

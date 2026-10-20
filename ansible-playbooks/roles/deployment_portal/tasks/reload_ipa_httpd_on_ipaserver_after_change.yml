@@ -1,0 +1,103 @@
+---
+# Reload IPA-managed httpd after conf.d or ipa-rewrite edits. Requires ipa_httpd_config_changed true.
+
+- name: Probe ipactl on ipaserver (IPA owns httpd start order; no per-service ipactl reload)
+  ansible.builtin.stat:
+    path: /usr/sbin/ipactl
+  register: ipa_ipactl_bin
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
+
+- name: Resolve whether to use IPA-managed HTTPD reload path (ipactl present and server configured)
+  ansible.builtin.set_fact:
+    ipa_httpd_reload_via_ipactl: >-
+      {{
+        (ipa_ipactl_bin.stat.exists | default(false))
+        and (ipa_server_configured is defined)
+        and (ipa_server_configured.stat.exists | default(false))
+      }}
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+    - ipa_ipactl_bin is defined
+
+- name: Gather service facts on ipaserver before IPA HTTPD reload
+  ansible.builtin.service_facts:
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  delegate_facts: true
+  become: true
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+
+- name: Resolve installed IPA web server systemd unit (httpd vs apache2)
+  ansible.builtin.set_fact:
+    ipa_httpd_reload_service_name: "{{ item }}"
+  loop: "{{ [ipa_httpd_service_name, 'httpd', 'apache2'] | unique }}"
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+    - ipa_httpd_reload_service_name is not defined
+    - (item ~ '.service') in (hostvars[ipa_httpd_delegate_host].ansible_facts.services | default({}))
+
+- name: Skip IPA HTTPD reload when web server unit is not present
+  ansible.builtin.debug:
+    msg: >-
+      Skipping IPA HTTPD reload on {{ ipa_httpd_delegate_host }}:
+      Apache configuration changed but no httpd or apache2 systemd unit is present.
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+    - ipa_httpd_reload_service_name is not defined
+
+- name: Validate Apache configuration before IPA HTTPD reload (ipactl-managed ipaserver)
+  ansible.builtin.command:
+    cmd: "{{ 'apachectl' if ipa_httpd_os_family == 'RedHat' else 'apache2ctl' }} configtest"
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  register: ipa_httpd_configtest
+  changed_when: false
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+    - ipa_httpd_reload_via_ipactl | default(false) | bool
+    - ipa_httpd_reload_service_name is defined
+    - ipa_httpd_reload_service_name | length > 0
+
+- name: Reload IPA-managed Apache after HTTPD configuration change
+  ansible.builtin.service:
+    name: "{{ ipa_httpd_reload_service_name }}"
+    state: reloaded
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  register: ipa_httpd_reload_result
+  changed_when: ipa_httpd_reload_result is succeeded
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+    - ipa_httpd_reload_via_ipactl | default(false) | bool
+    - ipa_httpd_reload_service_name is defined
+    - ipa_httpd_reload_service_name | length > 0
+    - ipa_httpd_configtest is not skipped
+    - ipa_httpd_configtest.rc | default(1) == 0
+
+- name: Reload Apache when ipactl is unavailable (httpd not IPA-managed on this host)
+  ansible.builtin.service:
+    name: "{{ ipa_httpd_reload_service_name }}"
+    state: reloaded
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  become: true
+  register: ipa_httpd_reload_fallback
+  failed_when: false
+  changed_when: ipa_httpd_reload_fallback is succeeded
+  when:
+    - deployment_portal_has_ipa | default(false) | bool
+    - ipa_httpd_config_changed | default(false) | bool
+    - not (ipa_httpd_reload_via_ipactl | default(false) | bool)
+    - ipa_httpd_reload_service_name is defined
+    - ipa_httpd_reload_service_name | length > 0

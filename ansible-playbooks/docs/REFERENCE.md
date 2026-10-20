@@ -373,16 +373,23 @@ CMS (Management Service) and CDP base cluster are **separate**:
 | **Hosts: Tags column empty** | Tags are optional; not set at agent install | Enable `cm_host_tags_enabled` (default true) — **28** applies inventory role/env/owner tags via API |
 | `31_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
 | `33_setup_ecs_cluster.yml` | ECS cluster | Phased DOCKER + ECS + embedded control plane — see [CDP_ECS_INSTALL.md](CDP_ECS_INSTALL.md) |
-| `10_setup_deployment_portal.yml` | Ops portal bootstrap | Caddy, pgAdmin, optional monitoring on ops host (`auto` → ipaserver else cldr-mngr); run early in phase 1 |
+| `10_setup_deployment_portal.yml` | Ops portal bootstrap | Compatibility orchestrator for `roles/deployment_portal`: Caddy, pgAdmin, optional monitoring on ops host (`auto` → ipaserver else cldr-mngr); run early in phase 1 |
 | `32_setup_monitoring_stack.yml` | Monitoring only | Add monitoring after 28 (requires portal network): Prometheus/Grafana/Alertmanager/cAdvisor/blackbox_exporter stack + node_exporter/process_exporter/host cAdvisor on cluster hosts + HTTP/TCP blackbox probes + Grafana provisioning + Prometheus alert rules |
 | `34_setup_ecs_data_services.yml` | ECS data services | CDW/CDE/CAI/Model Registry via `cloudera.cloud` + Caddy — see [CDP_ECS_DATA_SERVICES.md](CDP_ECS_DATA_SERVICES.md) |
 
 **ECS API keys (automation):** IAM `createMachineUserAccessKey` requires a **signed** request. Password-only console login is not enough. After ECS is up, either set `ecs_api_access_key_id` / `ecs_api_private_key`, or set a **one-time** bootstrap admin key (`ecs_iam_bootstrap_*` or Jenkins `ECS_IAM_BOOTSTRAP_*` credentials) and enable `ecs_auto_provision_api_access_key` (default `true`) to create machine user `ecs_automation_machine_user` via CDP CLI; keys are cached at `ecs_api_credentials_cache_path`.
-| `35_refresh_deployment_portal.yml` | Portal refresh | Re-render index/Caddy after CM, base, ECS, or DS changes (no full reinstall) |
+| `35_refresh_deployment_portal.yml` | Portal refresh | Compatibility orchestrator for `roles/deployment_portal`: re-render index/Caddy after CM, base, ECS, or DS changes (no full reinstall) |
 
 Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-masters` / `ecs-workers` inventory groups. Skipped when `ecs_deploy_enabled: auto` and ECS groups are empty.
 
 ### Deployment portal & monitoring (`group_vars/all.yml`)
+
+Portal task implementation, templates, static web assets, authentication
+service, and Grafana dashboards live under `roles/deployment_portal/`.
+Numbered playbooks `10` and `35` remain the supported entry points. Existing
+portal-related `common_tasks/*.yml` filenames are compatibility shims that
+import the corresponding role task file, so playbooks outside the PORTAL
+phase keep their established imports without duplicated implementation.
 
 | Variable | Default | Description |
 |---|---|---|
