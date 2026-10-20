@@ -19,8 +19,10 @@
   vars_files:
     - group_vars/all.yml
   tasks:
-    - name: Install packages required by the selected identity provider
-      ansible.builtin.import_tasks: common_tasks/install_identity_client_packages.yml
+    - name: Router client packages
+      ansible.builtin.import_role:
+        name: identity
+        tasks_from: router_client_packages
 
 - name: DNS and resolv.conf
   ansible.builtin.import_playbook: 13_update_resolv_conf.yml

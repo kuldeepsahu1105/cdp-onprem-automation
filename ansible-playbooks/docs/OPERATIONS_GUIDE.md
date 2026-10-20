@@ -260,6 +260,13 @@ The same rule applies to PORTAL: invoke
 and Tier B verification play boundaries expected by Jenkins and
 `pvc_setup.sh`.
 
+For IDENTITY, invoke `11_identity_setup.yml` for the routed phase or the
+existing numbered/manual entry point for targeted recovery. The router and
+standalone playbooks retain FreeIPA/AD detection, play order, host selection,
+and cross-play facts while delegating task implementation to
+`roles/identity`; do not construct an ad hoc role-only playbook as a
+replacement.
+
 Playbooks resolve SSH keys and Auto-TLS material on the **control machine** via `ANSIBLE_PRIVATE_KEY`, files under `ansible-playbooks/`, or `group_vars` (`cm_private_key_path`, `cm_node_sudo_password`). Wrappers only set the same env vars and `--private-key` for convenience.
 
 | Target OS | CM repo mode | Notes |

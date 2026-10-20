@@ -129,6 +129,16 @@ sync, and localhost Tier B verification as distinct plays. Legacy
 `common_tasks/<portal-task>.yml` paths remain as role-import compatibility
 shims for monitoring, identity, ECS, and manual callers.
 
+The IDENTITY implementation is organized under `roles/identity`. Router
+`11_identity_setup.yml` preserves its literal imported-playbook order, while
+numbered playbooks `12`–`19`, `detect_identity.yml`, and
+`ipa_deep_recovery.yml` retain their original play definitions and delegate
+only task implementation to the role. Identity-owned `common_tasks` paths
+remain static compatibility shims for CM security, ECS, portal, and manual
+callers. FreeIPA/AD routing, localhost facts, client host expressions,
+delegation, and `vars_files` therefore remain owned by the compatibility
+entry points.
+
 ## Migration: renumbering duplicate prefixes (2026-09)
 
 Four playbooks previously duplicated a numeric prefix with another, unrelated playbook (`00_*` had three files, `25_*` had two, and `12_*`/`12b_*` used a letter suffix that **sorts before** its own `12_` file under common UTF-8 locales — `ls` in `en_US.UTF-8` prints `12b_ipa_deep_recovery.yml` before `12_setup_freeipa_server.yml`, inverting the intended order). None of the four own a distinct mainline `pvc_setup.sh` sequence slot (they are either always-imported libraries or optional/manual helpers), so they were **de-numbered** rather than assigned a new colliding or ambiguous number. This is a **rename only** — no task/behavior changes, no cascading renumber of any other playbook.

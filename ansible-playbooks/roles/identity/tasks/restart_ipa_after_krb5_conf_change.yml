@@ -1,0 +1,30 @@
+---
+# ipaserver only — after krb5.conf / krb5.conf.d edits. Workers use ipa-client krb5.conf; do not import on clients.
+# Playbooks 12 and 28 call this via configure_ipa_krb_enc_types.yml when the enctypes snippet changes.
+
+- name: Kerberos — probe FreeIPA server configuration before krb5 reload
+  ansible.builtin.stat:
+    path: /etc/ipa/default.conf
+  register: ipa_krb5_restart_default_conf
+
+- name: Kerberos — probe ipactl on ipaserver
+  ansible.builtin.stat:
+    path: /usr/sbin/ipactl
+  register: ipa_krb5_restart_ipactl_bin
+
+- name: Kerberos — restart IPA stack after krb5 configuration change (ipactl)
+  ansible.builtin.command: ipactl restart
+  register: ipa_krb5_ipactl_restart
+  changed_when: ipa_krb5_ipactl_restart.rc == 0
+  failed_when: ipa_krb5_ipactl_restart.rc != 0
+  when:
+    - ipa_krb5_restart_default_conf.stat.exists | default(false)
+    - ipa_krb5_restart_ipactl_bin.stat.exists | default(false)
+
+- name: Kerberos — restart krb5kdc when IPA is not configured (edge case before install)
+  ansible.builtin.systemd:
+    name: krb5kdc
+    state: restarted
+  when:
+    - not (ipa_krb5_restart_default_conf.stat.exists | default(false))
+    - not (ipa_krb5_restart_ipactl_bin.stat.exists | default(false))

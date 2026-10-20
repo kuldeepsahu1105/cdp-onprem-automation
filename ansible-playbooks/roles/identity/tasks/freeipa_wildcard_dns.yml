@@ -1,0 +1,77 @@
+---
+
+- block:
+
+    - name: Get ECS Master IP dynamically
+      set_fact:
+        ecs_master_ip: "{{ hostvars[groups['ecs-masters'][0]]['ansible_host'] | default(hostvars[groups['ecs-masters'][0]]['ansible_default_ipv4']['address']) }}"
+
+    - name: Debug ECS Master IP
+      debug:
+        msg: "ECS Master IP is {{ ecs_master_ip }}"
+
+    - name: Add wildcard DNS record for ECS
+      freeipa.ansible_freeipa.ipadnsrecord:
+        ipaadmin_password: "{{ ipaadmin_password }}"
+        zone_name: "{{ ipaserver_domain }}"
+        record_name: "{{ wildcard_dns_record }}"
+        record_type: "A"
+        record_value: "{{ ecs_master_ip }}"
+        state: present
+
+    - name: Ensure Kerberos ticket and show klist before IPA DNS verification
+      ansible.builtin.import_tasks: ensure_ipa_kerberos_ticket_with_klist.yml
+
+    - name: Probe IPA CLI with Kerberos FILE ccache before DNS verification
+      ansible.builtin.import_tasks: verify_ipa_cli_krb5_ccache.yml
+
+    - name: Verify Created Wildcard DNS Records in FreeIPA
+      ansible.builtin.include_tasks: run_ipa_cli.yml
+      vars:
+        ipa_cli_task_name: Verify Created Wildcard DNS Records in FreeIPA
+        ipa_cli_argv:
+          - dnsrecord-find
+          - "{{ ipaserver_domain }}"
+          - "--name=*.apps"
+
+    - name: Print Wildcard FreeIPA DNS Records
+      debug:
+        msg: "{{ ipa_cli_run.stdout_lines }}"
+
+    - name: Validate Wildcard DNS resolution using nslookup
+      command: "nslookup console-cdp.apps.{{ ipaserver_domain }}"
+      register: nslookup_wildcard
+      changed_when: false
+
+    - name: Display nslookup output for Wildcard DNS lookup
+      debug:
+        msg: "{{ nslookup_wildcard.stdout.split('\n') }}"
+
+    - name: Validate IP resolution using nslookup
+      command: "nslookup {{ ecs_master_ip }}"
+      register: nslookup_ip
+      changed_when: false
+
+    - name: Display nslookup output for IP
+      debug:
+        msg: "{{ nslookup_ip.stdout.split('\n') }}"
+
+    - name: Validate DNS resolution using dig
+      command: "dig console-cdp.apps.{{ ipaserver_domain }} A"
+      register: dig_output
+      changed_when: false
+
+    - name: Display dig output
+      debug:
+        msg: "{{ dig_output.stdout.split('\n') }}"
+
+    - name: Reverse lookup validation
+      command: "dig -x {{ ecs_master_ip }}"
+      register: reverse_lookup
+      changed_when: false
+
+    - name: Display reverse lookup result
+      debug:
+        msg: "{{ reverse_lookup.stdout.split('\n') }}"
+
+  when: groups.get('ecs-masters', []) | length > 0

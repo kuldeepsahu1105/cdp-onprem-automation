@@ -1,0 +1,49 @@
+---
+- name: Select external DNS name required by identity clients
+  ansible.builtin.set_fact:
+    identity_dns_external_probe_host_effective: >-
+      {{
+        ''
+        if identity_dns_external_probe_host | default('') | string | trim | lower in ['none', 'off', 'disabled', 'false', '0']
+        else identity_dns_external_probe_host
+        if identity_dns_external_probe_host | default('') | string | trim | length > 0
+        else (
+          'rhui.' + effective_aws_region + '.aws.ce.redhat.com'
+          if (
+            effective_deployment_env | default('') == 'aws'
+            and ansible_os_family == 'RedHat'
+            and effective_aws_region | default('') | length > 0
+          )
+          else (
+            'archive.cloudera.com'
+            if effective_deployment_env | default('') == 'aws'
+            else ''
+          )
+        )
+      }}
+
+- name: Wait for external DNS through the configured resolver chain
+  ansible.builtin.command:
+    argv:
+      - getent
+      - ahostsv4
+      - "{{ identity_dns_external_probe_host_effective }}"
+  register: identity_dns_external_probe
+  changed_when: false
+  retries: "{{ identity_dns_verify_retries | default(12) | int }}"
+  delay: "{{ identity_dns_verify_delay | default(5) | int }}"
+  until: identity_dns_external_probe.rc == 0
+  when: identity_dns_external_probe_host_effective | length > 0
+
+- name: Wait for FreeIPA DNS name on identity clients
+  ansible.builtin.command:
+    argv:
+      - getent
+      - ahostsv4
+      - "ipaserver.{{ ipaserver_domain }}"
+  register: identity_dns_ipa_probe
+  changed_when: false
+  retries: "{{ identity_dns_verify_retries | default(12) | int }}"
+  delay: "{{ identity_dns_verify_delay | default(5) | int }}"
+  until: identity_dns_ipa_probe.rc == 0
+  when: identity_provider_effective == 'freeipa'

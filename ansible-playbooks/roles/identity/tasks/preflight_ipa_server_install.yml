@@ -1,0 +1,118 @@
+---
+# Compact checks before ipa-server-install (playbook 12). Verbose detect/recover lives behind ipa_server_deep_recovery.
+
+- name: Preflight IPA install — ensure IPA server RPM dependencies (RHEL family)
+  ansible.builtin.package:
+    name: "{{ ipa_server_preflight_rpm_packages }}"
+    state: present
+  when: ansible_os_family == 'RedHat'
+
+- name: Preflight IPA install — ensure IPA state directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /etc/ipa
+    - /var/lib/ipa
+    - /var/log/ipa
+
+- name: Preflight IPA install — ensure standard /etc/ipa subdirectories (IPA 4.13 paths)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ ipa_server_etc_ipa_subdirs }}"
+
+- name: Preflight IPA install — ensure standard /var/lib/ipa subdirectories (IPA 4.13 paths)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ ipa_server_var_lib_subdirs }}"
+
+- name: Preflight IPA install — stat openldap client config (install_check paths)
+  ansible.builtin.stat:
+    path: /etc/openldap/ldap.conf
+  register: ipa_preflight_openldap_conf
+  when: ansible_os_family == 'RedHat'
+
+- name: Preflight IPA install — assert openldap config directory exists on RHEL
+  ansible.builtin.assert:
+    that:
+      - ipa_preflight_openldap_conf.stat.exists | default(false) | bool
+    fail_msg: >-
+      /etc/openldap/ldap.conf is missing. Install openldap (dnf install -y openldap)
+      and re-run playbook 12.
+  when: ansible_os_family == 'RedHat'
+
+- name: Preflight IPA install — read hostname -f for install FQDN comparison
+  ansible.builtin.command: hostname -f
+  register: ipa_preflight_hostname_f
+  changed_when: false
+
+- name: Preflight IPA install — assert hostname -f matches Ansible FQDN (--hostname)
+  ansible.builtin.assert:
+    that:
+      - (ipa_preflight_hostname_f.stdout | default('') | trim) == (ansible_fqdn | trim)
+    fail_msg: >-
+      hostname -f is "{{ ipa_preflight_hostname_f.stdout | default('') | trim }}" but
+      automation uses ansible_fqdn="{{ ansible_fqdn }}" for --hostname.
+      Re-run 02_set_hostname.yml and 03_create_etc_hosts.yml.
+
+- name: Preflight IPA install — resolve install FQDN via getent hosts
+  ansible.builtin.command: getent hosts {{ ansible_fqdn }}
+  register: ipa_preflight_getent_fqdn
+  changed_when: false
+  failed_when: false
+
+- name: Preflight IPA install — assert FQDN maps to this host primary IPv4
+  ansible.builtin.assert:
+    that:
+      - ipa_preflight_getent_fqdn.rc == 0
+      - ansible_default_ipv4.address in ipa_preflight_getent_fqdn.stdout
+    fail_msg: >-
+      {{ ansible_fqdn }} must resolve to {{ ansible_default_ipv4.address }} via /etc/hosts or DNS
+      before ipa-server-install (re-run 02_set_hostname.yml and 03_create_etc_hosts.yml).
+      getent hosts: rc={{ ipa_preflight_getent_fqdn.rc }}
+      stdout={{ ipa_preflight_getent_fqdn.stdout | default('') | trim }}
+      stderr={{ ipa_preflight_getent_fqdn.stderr | default('') | trim }}
+
+- name: Preflight IPA install — ensure chronyd is running when NTP option is enabled
+  ansible.builtin.service:
+    name: "{{ os_vars[ansible_os_family].chrony_service }}"
+    state: started
+  when: chrony_enabled | default('yes') == 'yes'
+  failed_when: false
+
+- name: Preflight IPA install — detect listeners on LDAP ports 389 and 636
+  ansible.builtin.shell: |
+    set -euo pipefail
+    out=""
+    if ss -tlnH 'sport = :389' 2>/dev/null | grep -q .; then out="${out}389 "; fi
+    if ss -tlnH 'sport = :636' 2>/dev/null | grep -q .; then out="${out}636 "; fi
+    printf '%s' "${out}" | sed 's/ $//'
+  args:
+    executable: /bin/bash
+  register: ipa_preflight_ldap_ports_in_use
+  changed_when: false
+
+- name: Preflight IPA install — capture ss listeners on 389/636 for diagnostics
+  ansible.builtin.shell: ss -tlnp 2>/dev/null | grep -E ':389|:636' || true
+  register: ipa_preflight_ldap_ss_lines
+  changed_when: false
+  when: ipa_preflight_ldap_ports_in_use.stdout | default('') | trim | length > 0
+
+- name: Preflight IPA install — fail when LDAP ports are in use but IPA is not configured
+  ansible.builtin.fail:
+    msg: >-
+      LDAP port(s) {{ ipa_preflight_ldap_ports_in_use.stdout | default('') | trim }} already in use on
+      {{ inventory_hostname }} (typical leftover 389-ds / slapd from a partial ipa-server-install) while
+      ipactl reports IPA is not configured. Free ipa-server-install port 389/636 before re-running playbook 12:
+      ss -tlnp | grep -E ':389|:636'
+      {{ ipa_preflight_ldap_ss_lines.stdout | default('(run ss -tlnp on ipaserver)') }}
+      On ipaserver as root: stop stale dirsrv units, remove /etc/dirsrv/slapd-* when ipactl is not configured,
+      or run ipa_deep_recovery.yml with ipa_server_deep_recovery: true (see RUNBOOK — port 389 conflict).
+  when:
+    - ipa_preflight_ldap_ports_in_use.stdout | default('') | trim | length > 0
+    - ipa_ipactl_not_configured | default(false) | bool

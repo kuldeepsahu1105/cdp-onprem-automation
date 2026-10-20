@@ -1,0 +1,14 @@
+# Managed by Ansible - Cloudera DNS configuration
+network:
+  version: 2
+  ethernets:
+    {{ ansible_default_ipv4.interface }}:
+      nameservers:
+        addresses:
+{% for ns in dns_nameservers %}
+          - {{ ns }}
+{% endfor %}
+        search:
+{% for domain in dns_search_domains %}
+          - {{ domain }}
+{% endfor %}

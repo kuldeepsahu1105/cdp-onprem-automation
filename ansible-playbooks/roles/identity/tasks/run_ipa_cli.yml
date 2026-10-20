@@ -1,0 +1,25 @@
+---
+# Run `ipa` on ipaserver with FILE Kerberos ccache (required vars: ipa_cli_argv list, without "ipa").
+- name: "{{ ipa_cli_task_name | default('Run ipa CLI') }}"
+  ansible.builtin.command:
+    argv: "{{ ['ipa'] + ipa_cli_argv }}"
+  register: ipa_cli_run
+  changed_when: false
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+  failed_when: >-
+    (ipa_cli_run.rc | default(1) | int != 0)
+    or (
+      (ipa_cli_fail_on_kerberos_errors | default(true) | bool)
+      and (
+        ('Credential cache is empty' in (
+          (ipa_cli_run.stderr | default('')) ~ (ipa_cli_run.stdout | default(''))
+        ))
+        or ('did not receive Kerberos credentials' in (
+          (ipa_cli_run.stderr | default('')) ~ (ipa_cli_run.stdout | default(''))
+        ))
+        or ('Unauthorized' in (
+          (ipa_cli_run.stderr | default('')) ~ (ipa_cli_run.stdout | default(''))
+        ))
+      )
+    )

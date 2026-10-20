@@ -12,7 +12,8 @@ Numbered compatibility playbooks own orchestration: play order, `hosts`,
 `connection`, `remote_user`, `become`, play vars, and collection bootstrap.
 Roles own reusable task implementation. The PREREQS wrappers `00`–`09`
 therefore import `roles/prereq_*`, while PORTAL wrappers `10` and `35` import
-`roles/deployment_portal`, without introducing role defaults or vars;
+`roles/deployment_portal`, and IDENTITY entry points import `roles/identity`,
+without introducing role defaults or vars;
 inventory, `group_vars`, config, Jenkins values, and extra-vars retain their
 existing precedence.
 
@@ -32,6 +33,15 @@ delegation, and caller-supplied vars. Generic shared tasks such as
 `detect_ansible_control_reachability.yml`, and
 `resolve_cm_connect_host.yml` remain in `common_tasks/` and are imported from
 the role through `{{ playbook_dir }}`.
+
+Identity-owned shared implementations and templates live in `roles/identity`.
+Their `common_tasks` filenames are static compatibility shims. The role does
+not own play orchestration: router import order, FreeIPA/AD skip plays,
+localhost identity facts, `identity_client_hosts`, delegation, and
+cross-play facts remain in `11`–`19`, `detect_identity.yml`, and
+`ipa_deep_recovery.yml`. Portal interactions from identity continue through
+the deployment portal compatibility shims rather than duplicating portal
+implementation.
 
 Both validation gates scan role task YAML. Contract setter/index checks must
 continue to include `roles/*/tasks/*.yml`; otherwise moving a `set_fact` into a

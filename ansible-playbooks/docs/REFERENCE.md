@@ -319,18 +319,23 @@ ordering.
 
 ### Phase 2 — Identity & DNS
 
-| Playbook | Description |
-|---|---|
-| `detect_identity.yml` | Detect FreeIPA vs AD |
-| `11_identity_setup.yml` | Phase 2 router (all of 10–15) |
-| `12_setup_freeipa_server.yml` | FreeIPA server (skipped for AD) |
-| `ipa_deep_recovery.yml` | Optional IPA detect/recover/sanitize before playbook 12 |
-| `13_update_resolv_conf.yml` | DNS (netplan or resolv.conf) |
-| `14_setup_dns_records.yml` | FreeIPA DNS records (skipped for AD) |
-| `16_setup_identity_client.yml` | FreeIPA client or AD realm join |
-| `18_setup_ad_client.yml` | AD realm join only |
-| `17_setup_freeipa_client.yml` | FreeIPA client only |
-| `19_setup_wildcard.yml` | `*.apps` wildcard DNS (FreeIPA only) |
+All listed playbooks remain supported standalone compatibility entry points.
+Their task implementations and identity-specific templates live in
+`roles/identity`; the router still imports the same playbooks in the same
+order.
+
+| Playbook | Role | Description |
+|---|---|---|
+| `detect_identity.yml` | `identity` | Detect FreeIPA vs AD |
+| `11_identity_setup.yml` | `identity` + imported compatibility playbooks | Phase 2 router |
+| `12_setup_freeipa_server.yml` | `identity` | FreeIPA server (skipped for AD) |
+| `ipa_deep_recovery.yml` | `identity` | Optional IPA detect/recover/sanitize before playbook 12 |
+| `13_update_resolv_conf.yml` | `identity` | DNS (netplan or resolv.conf) |
+| `14_setup_dns_records.yml` | `identity` | FreeIPA DNS records (skipped for AD) |
+| `16_setup_identity_client.yml` | `identity` | FreeIPA client or AD realm join |
+| `18_setup_ad_client.yml` | `identity` | AD realm join only |
+| `17_setup_freeipa_client.yml` | `identity` | FreeIPA client only |
+| `19_setup_wildcard.yml` | `identity` | `*.apps` wildcard DNS (FreeIPA only) |
 
 ### Phase 3 — Cloudera Manager
 

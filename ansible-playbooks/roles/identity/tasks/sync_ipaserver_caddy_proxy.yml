@@ -1,0 +1,4 @@
+---
+- name: Apply or remove IPA HTTPD Caddy snippets and preflight JSON-RPC
+  ansible.builtin.import_tasks: sync_ipa_httpd_caddy_proxy_state_on_ipaserver.yml
+  when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'

@@ -1,0 +1,8 @@
+---
+- name: Configure DNS (netplan or resolv.conf)
+  ansible.builtin.import_tasks: configure_resolv_conf.yml
+  when: not (identity_dns_configured_by_router | default(false) | bool)
+
+- name: Verify identity and external DNS after resolver cutover
+  ansible.builtin.import_tasks: verify_identity_dns.yml
+  when: not (identity_dns_configured_by_router | default(false) | bool)

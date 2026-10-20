@@ -1,0 +1,39 @@
+---
+- name: FreeIPA client CA — check enrollment configuration
+  ansible.builtin.stat:
+    path: /etc/ipa/default.conf
+  register: freeipa_client_ca_default_conf
+
+- name: FreeIPA client CA — check CA bundle
+  ansible.builtin.stat:
+    path: /etc/ipa/ca.crt
+  register: freeipa_client_ca_bundle
+
+- name: FreeIPA client CA — restore missing CA bundle
+  ansible.builtin.command: ipa-certupdate
+  register: freeipa_client_ca_update
+  changed_when: freeipa_client_ca_update.rc == 0
+  failed_when: false
+  when:
+    - freeipa_client_ca_default_conf.stat.exists | default(false) | bool
+    - not (freeipa_client_ca_bundle.stat.exists | default(false) | bool)
+
+- name: FreeIPA client CA — verify CA bundle after repair
+  ansible.builtin.stat:
+    path: /etc/ipa/ca.crt
+  register: freeipa_client_ca_bundle_after
+
+- name: FreeIPA client CA — require complete enrollment and CA bundle
+  ansible.builtin.assert:
+    that:
+      - freeipa_client_ca_default_conf.stat.exists | default(false) | bool
+      - freeipa_client_ca_bundle_after.stat.exists | default(false) | bool
+      - freeipa_client_ca_bundle_after.stat.isreg | default(false) | bool
+      - freeipa_client_ca_bundle_after.stat.size | default(0) | int > 0
+    fail_msg: >-
+      FreeIPA client state is incomplete on {{ inventory_hostname }}:
+      /etc/ipa/default.conf exists={{ freeipa_client_ca_default_conf.stat.exists | default(false) }},
+      /etc/ipa/ca.crt exists={{ freeipa_client_ca_bundle_after.stat.exists | default(false) }}.
+      ipa-certupdate rc={{ freeipa_client_ca_update.rc | default('not-run') }},
+      stderr={{ freeipa_client_ca_update.stderr | default('') | trim | truncate(600, true) }}.
+      Verify DNS/time and FreeIPA reachability, then rerun 16_setup_identity_client.yml.

@@ -1,0 +1,18 @@
+---
+- name: Kerberos — validate ticket lifetime settings
+  ansible.builtin.assert:
+    that:
+      - krb5_ticket_lifetime | string | trim | length > 0
+      - krb5_renew_lifetime | string | trim | length > 0
+    fail_msg: >-
+      krb5_ticket_lifetime and krb5_renew_lifetime must be non-empty
+      MIT Kerberos duration values such as 24h and 7d.
+
+- name: Kerberos — deploy renewable ticket defaults
+  ansible.builtin.template:
+    src: krb5_ticket_lifetimes.conf.j2
+    dest: /etc/krb5.conf.d/cldr-ticket-lifetimes.conf
+    owner: root
+    group: root
+    mode: "0644"
+

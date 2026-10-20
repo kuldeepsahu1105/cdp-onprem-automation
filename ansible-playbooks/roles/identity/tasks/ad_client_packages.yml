@@ -1,0 +1,3 @@
+---
+- name: Install packages required by Active Directory
+  ansible.builtin.import_tasks: install_identity_client_packages.yml

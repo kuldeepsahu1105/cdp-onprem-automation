@@ -12,4 +12,6 @@
   gather_facts: no
   tasks:
     - name: Detect and validate identity provider
-      ansible.builtin.import_tasks: common_tasks/detect_identity_provider.yml
+      ansible.builtin.import_role:
+        name: identity
+        tasks_from: detect_and_validate_identity_provider

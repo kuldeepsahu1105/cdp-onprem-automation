@@ -1,0 +1,4 @@
+---
+- name: Resolve portal facts before IPA client enrollment
+  ansible.builtin.import_tasks: ensure_ipa_httpd_behind_caddy_before_client.yml
+  when: identity_provider_effective == 'freeipa'

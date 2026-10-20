@@ -1,0 +1,4 @@
+---
+- name: Install packages required by the selected identity provider
+  ansible.builtin.import_tasks: install_identity_client_packages.yml
+  when: not (identity_client_packages_preinstalled | default(false) | bool)
