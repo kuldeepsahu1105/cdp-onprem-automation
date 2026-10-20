@@ -1,7 +1,7 @@
 -- ##### Generated using ansible
 {% for db in databases %}
-DO $$ 
-BEGIN 
+DO $$
+BEGIN
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ db.user }}') THEN
         CREATE ROLE {{ db.user }} LOGIN PASSWORD '{{ db.password }}';
         RAISE NOTICE 'Role % created successfully.', '{{ db.user }}';
