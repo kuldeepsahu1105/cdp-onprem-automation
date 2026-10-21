@@ -1,0 +1,10 @@
+---
+- name: Skip CM API gate when Auto-TLS did not require agent restart this run
+  ansible.builtin.meta: end_play
+  when: >-
+    cm_autotls_noop_this_run | default(false) | bool
+    or not (cm_agent_mandatory_restart_after_autotls_this_run | default(false) | bool)
+
+- name: CM API — must be healthy before mass agent restart
+  ansible.builtin.import_tasks: common_tasks/assert_cm_api_healthy_for_agent_reconcile.yml
+

@@ -8,430 +8,77 @@
   connection: local
   gather_facts: no
   tasks:
-    - name: Require PostgreSQL before CM security configuration
-      ansible.builtin.import_tasks: common_tasks/assert_postgresql_installed.yml
-
-    - name: Clear Auto-TLS applied / restart flags for this run
-      ansible.builtin.set_fact:
-        autotls_applied_this_run: false
-        cm_restart_after_autotls_this_run: false
-        cm_autotls_generate_cmca_ran: false
-        cm_agents_restarted_after_autotls_this_run: false
-        cm_agent_mandatory_restart_after_autotls_this_run: false
-
-    - name: Capture Auto-TLS setup intent from inventory (before HTTPS probes may set autotls_enabled)
-      ansible.builtin.set_fact:
-        cm_autotls_setup_intent: "{{ autotls_enabled | default(true) | bool }}"
-
-    - name: CM API — set connection context
-      ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
-
-    - name: Align Cloudera Manager admin password with group_vars (before Auto-TLS API)
-      ansible.builtin.import_tasks: common_tasks/ensure_cm_admin_password.yml
-
-    - name: Set up Cloudera Manager API URL
-      ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
-
-    - name: CM API — read Auto-TLS state from CM configuration
-      ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
-
-    - name: Auto-TLS — inspect CM agent identity-change markers
-      ansible.builtin.stat:
-        path: "{{ cm_agent_reported_hostname_change_marker_path }}"
-      delegate_to: "{{ item }}"
-      become: true
-      loop: "{{ groups['all'] | difference(groups.get('ipaserver', [])) }}"
-      register: cm_agent_reported_hostname_marker_stats
-      changed_when: false
-      when:
-        - cm_autotls_api_enabled | default(false) | bool
-        - not (cm_autotls_force_run | default(false) | bool)
-
-    - name: Auto-TLS — collect hosts requiring certificate regeneration
-      ansible.builtin.set_fact:
-        cm_agent_reported_hostname_changed_hosts: >-
-          {{
-            (
-              cm_agent_reported_hostname_marker_stats.results
-              | selectattr('stat.exists', 'defined')
-              | selectattr('stat.exists')
-              | map(attribute='item')
-              | list
-            )
-            if (
-              cm_autotls_api_enabled | default(false) | bool
-              and not (cm_autotls_force_run | default(false) | bool)
-            )
-            else []
-          }}
-
-    - name: Auto-TLS — require explicit certificate regeneration after agent identity change
-      ansible.builtin.assert:
-        that:
-          - cm_autotls_force_run | default(false) | bool
-        fail_msg: >-
-          CM Auto-TLS is already enabled, but reported_hostname changed on:
-          {{ cm_agent_reported_hostname_changed_hosts | join(', ') }}.
-          Existing certificates may contain the previous or DNS-derived identity.
-          Re-run 27_setup_cm_autotls.yml once with -e cm_autotls_force_run=true
-          to intentionally regenerate the CMCA/certificates. This safety gate prevents
-          silent CA replacement on an existing deployment.
-      when:
-        - cm_autotls_api_enabled | default(false) | bool
-        - cm_agent_reported_hostname_changed_hosts | length > 0
-
-    - name: Auto-TLS — require authoritative CM state before enablement
-      ansible.builtin.assert:
-        that:
-          - cm_autotls_state_known | default(false) | bool
-        fail_msg: >-
-          CM /cm/config?view=full did not return AUTO_TLS_TYPE, so Auto-TLS state
-          cannot be determined safely. Refusing to run generateCmca because replaying
-          it replaces the existing CMCA. Verify the CM API response or use
-          cm_autotls_force_run=true only for intentional CA regeneration.
-      when:
-        - cm_autotls_setup_intent | default(false) | bool
-        - not (cm_autotls_force_run | default(false) | bool)
-
-    - name: Auto-TLS — CM HTTPS port active (manual TLS skip helper; not Auto-TLS in CM config)
-      ansible.builtin.set_fact:
-        cm_api_https_on_cm_port: >-
-          {{
-            (
-              (cm_api_https_active | default(false) | bool)
-              or (cm_api_controller_https_reachable | default(false) | bool)
-            )
-            and ((cm_api_port | default(cm_https_port | default(7183)) | int) == (cm_https_port | default(7183) | int))
-          }}
-
-    - name: Auto-TLS — skip generateCmca when CM Auto-TLS is complete or manual HTTPS only
-      ansible.builtin.set_fact:
-        cm_autotls_generate_cmca_skip: >-
-          {{
-            (
-              (
-                not (cm_autotls_force_run | default(false) | bool)
-                and (cm_autotls_api_enabled | default(false) | bool)
-              )
-              or (
-                not (cm_autotls_api_enabled | default(false) | bool)
-                and not (cm_autotls_setup_intent | default(false) | bool)
-                and (cm_api_https_on_cm_port | default(false) | bool)
-              )
-            )
-          }}
-
-    - name: Auto-TLS — no mutating work when CM Auto-TLS is already complete
-      ansible.builtin.set_fact:
-        cm_autotls_noop_this_run: >-
-          {{
-            (cm_autotls_generate_cmca_skip | default(false) | bool)
-            and not (cm_autotls_force_run | default(false) | bool)
-            and (cm_autotls_api_enabled | default(false) | bool)
-          }}
-
-    - name: Auto-TLS — already enabled (skip generateCmca, restart, and agent/CMS churn)
-      ansible.builtin.debug:
-        msg: >-
-          Auto-TLS already enabled in CM configuration
-          (AUTO_TLS_TYPE={{ cm_autotls_type | default('unknown') }})
-          — skipping generateCmca, CM restart, and downstream agent/CMS reconcile.
-      when: cm_autotls_noop_this_run | default(false) | bool
-
-    - name: Auto-TLS — print existing Cloudera Manager access URLs
-      ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
-      when: cm_autotls_noop_this_run | default(false) | bool
-
-    - name: Auto-TLS — finish healthy no-op play
-      ansible.builtin.meta: end_play
-      when: cm_autotls_noop_this_run | default(false) | bool
-
-    - name: Auto-TLS — enable path (generateCmca and CM restart when applied)
-      when: not (cm_autotls_noop_this_run | default(false) | bool)
-      block:
-        - name: Perform Auto-TLS setup (generateCmca) unless skip gate
-          when: >-
-            (cm_autotls_force_run | default(false) | bool)
-            or not (cm_autotls_generate_cmca_skip | default(false) | bool)
-          block:
-            - name: Auto-TLS — mark generateCmca block entered this run
-              ansible.builtin.set_fact:
-                cm_autotls_generate_cmca_ran: true
-
-            - name: Auto-TLS — running generateCmca (creating or updating CM TLS)
-              ansible.builtin.debug:
-                msg: >-
-                  {{
-                    'CM reports AUTO_TLS_TYPE='
-                    + (cm_autotls_type | default('NONE'))
-                    + '; running generateCmca to enable Auto-TLS.'
-                    if not (cm_autotls_force_run | default(false) | bool)
-                    else
-                    'cm_autotls_force_run=true; running generateCmca for intentional CA regeneration.'
-                  }}
-
-            - name: Auto-TLS — resolve trusted CA bundle for generateCmca (Cloudera Labs cm_autotls trustedCaCerts)
-              ansible.builtin.import_tasks: common_tasks/resolve_cm_autotls_trusted_ca.yml
-
-            - name: Auto-TLS — select password or SSH key provisioning
-              ansible.builtin.set_fact:
-                use_password: "{{ cm_node_sudo_password is defined and cm_node_sudo_password | trim | length > 0 }}"
-
-            - name: Auto-TLS — resolve controller SSH key for key-based provisioning
-              ansible.builtin.import_tasks: common_tasks/resolve_cm_autotls_private_key.yml
-              when: not use_password
-
-            - name: Auto-TLS — build generateCmca request
-              ansible.builtin.set_fact:
-                cm_autotls_generate_cmca_request: >-
-                  {{
-                    {
-                      'customCA': false,
-                      'configureAllServices': true,
-                      'sshPort': 22,
-                      'userName': cm_srvr_sudo_user | default('root')
-                    }
-                    | combine(
-                        {
-                          'password': cm_node_sudo_password
-                        }
-                        if use_password
-                        else {
-                          'privateKey': lookup('file', autotls_controller_key_path),
-                          'passphrase': cm_priv_key_passphrase | default('')
-                        }
-                      )
-                    | combine(
-                        {
-                          'trustedCaCerts': cm_autotls_freeipa_ca_cert_path | default('/etc/ipa/ca.crt')
-                        }
-                        if (cm_autotls_trust_freeipa_ca_effective | bool)
-                        else {}
-                      )
-                  }}
-              no_log: true
-
-            - name: Submit Auto-TLS generateCmca command
-              ansible.builtin.uri:
-                url: "{{ cm_api_url }}/cm/commands/generateCmca"
-                method: POST
-                user: "{{ cm_admin_user }}"
-                password: "{{ cm_admin_pass }}"
-                force_basic_auth: yes
-                body: "{{ cm_autotls_generate_cmca_request }}"
-                body_format: json
-                timeout: 360
-                status_code: [200, 201, 202]
-                return_content: true
-                validate_certs: no
-                follow_redirects: none
-              delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
-              register: auto_tls_response
-              failed_when: false
-              changed_when: auto_tls_response.status | default(0) | int in [200, 201, 202]
-              no_log: true
-
-            - name: Report generateCmca rejection without exposing credentials
-              ansible.builtin.fail:
-                msg: >-
-                  Cloudera Manager rejected generateCmca with HTTP
-                  {{ auto_tls_response.status | default('unavailable') }}:
-                  {{
-                    (
-                      auto_tls_response.json.message
-                      | default(auto_tls_response.json.error, true)
-                      | default(auto_tls_response.msg, true)
-                      | default('No diagnostic message was returned; inspect cloudera-scm-server.log.', true)
-                    )
-                    | regex_replace(
-                        '(?s)-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----',
-                        '[private key redacted]'
-                      )
-                  }}
-                  Provisioning mode={{ 'password' if use_password else 'private-key' }},
-                  SSH user={{ cm_srvr_sudo_user | default('root') }},
-                  trustedCaCerts={{
-                    cm_autotls_freeipa_ca_cert_path | default('/etc/ipa/ca.crt')
-                    if (cm_autotls_trust_freeipa_ca_effective | bool)
-                    else 'omitted'
-                  }}.
-              when: auto_tls_response.status | default(0) | int not in [200, 201, 202]
-
-            - name: Require generateCmca command id
-              ansible.builtin.assert:
-                that:
-                  - auto_tls_response.json.id is defined
-                fail_msg: >-
-                  generateCmca returned HTTP {{ auto_tls_response.status | default('unknown') }}
-                  without an ApiCommand id. Provisioning mode={{
-                  'password' if use_password else 'private-key' }}.
-
-            - name: Wait for generateCmca command to finish successfully
-              ansible.builtin.import_tasks: common_tasks/wait_cm_api_command.yml
-              vars:
-                cm_krb_api_url: "{{ cm_api_url }}"
-                cm_api_command_id: "{{ auto_tls_response.json.id }}"
-
-            - name: Mark Auto-TLS applied after generateCmca command success
-              ansible.builtin.set_fact:
-                autotls_applied_this_run: true
-
-        - name: Auto-TLS — require CM server restart after generateCmca
-          ansible.builtin.set_fact:
-            cm_restart_after_autotls_this_run: true
-          when: autotls_applied_this_run | default(false) | bool
-
-        - name: Auto-TLS — skip generateCmca / CM restart (manual TLS or already configured without truststore gate)
-          ansible.builtin.debug:
-            msg: >-
-              HTTPS CM API on :{{ cm_https_port | default(7183) }}
-              without Auto-TLS in CM config — skipping generateCmca (manual TLS; autotls_enabled=false).
-              Set autotls_enabled=true or -e cm_autotls_force_run=true to enable Cloudera Auto-TLS.
-          when:
-            - not (cm_autotls_force_run | default(false) | bool)
-            - not (cm_restart_after_autotls_this_run | default(false) | bool)
-            - cm_autotls_generate_cmca_skip | default(false) | bool
-            - not (cm_autotls_api_enabled | default(false) | bool)
-
-        - name: Restart Cloudera Manager after Auto-TLS when generateCmca applied
-          ansible.builtin.import_tasks: common_tasks/apply_cm_restart_after_config.yml
-          when: cm_restart_after_autotls_this_run | default(false) | bool
-
-    - name: CM API — allow fresh /cm/config read after generateCmca and CM health wait
-      ansible.builtin.set_fact:
-        cm_autotls_config_fetched_this_play: false
-      when: >-
-        (autotls_applied_this_run | default(false) | bool)
-        or (cm_restart_after_autotls_this_run | default(false) | bool)
-
-    - name: CM API — refresh Auto-TLS state after generateCmca / CM restart (before access URLs)
-      ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
-      when: >-
-        (autotls_applied_this_run | default(false) | bool)
-        or (cm_restart_after_autotls_this_run | default(false) | bool)
-
-    - name: Print Cloudera Manager Access URLs
-      ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
-
-    - name: Set CM agent TLS reconcile flag from CM API (for agent play)
-      ansible.builtin.set_fact:
-        cm_agent_use_tls: >-
-          {{
-            (cm_restart_after_autotls_this_run | default(false) | bool)
-            or (autotls_applied_this_run | default(false) | bool)
-            or (cm_agent_use_tls | default(false) | bool)
-          }}
-
-    - name: Require mandatory cluster CM agent restart after Auto-TLS mutating work
-      ansible.builtin.set_fact:
-        cm_agent_mandatory_restart_after_autotls_this_run: >-
-          {{
-            (cm_restart_after_autotls_this_run | default(false) | bool)
-            or (autotls_applied_this_run | default(false) | bool)
-          }}
+    - name: Run CM security enable autotls tasks
+      ansible.builtin.import_role:
+        name: cm_security
+        tasks_from: enable_autotls
 
 - name: Require healthy CM API before cluster-wide agent reconcile after Auto-TLS
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Skip CM API gate when Auto-TLS did not require agent restart this run
-      ansible.builtin.meta: end_play
-      when: >-
-        cm_autotls_noop_this_run | default(false) | bool
-        or not (cm_agent_mandatory_restart_after_autotls_this_run | default(false) | bool)
-
-    - name: CM API — must be healthy before mass agent restart
-      ansible.builtin.import_tasks: common_tasks/assert_cm_api_healthy_for_agent_reconcile.yml
+    - name: Run CM security require healthy api before agent reconcile tasks
+      ansible.builtin.import_role:
+        name: cm_security
+        tasks_from: require_healthy_api_before_agent_reconcile
 
 - name: Reconcile CM agents after Auto-TLS (server_host / use_tls / restart)
   hosts: all:!ipaserver
   become: true
   serial: "{{ cm_agent_reconcile_serial | default('100%') }}"
   tasks:
-    - name: Skip agent reconcile when Auto-TLS unchanged this run
-      ansible.builtin.meta: end_play
-      when: cm_autotls_noop_this_run | default(false) | bool
-
-    - name: Set OS-specific facts
-      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
-
-    - name: Reconcile CM agent configuration and service
-      ansible.builtin.import_tasks: common_tasks/reconcile_cm_agents.yml
-      when: cm_agent_reconcile_after_autotls | default(true) | bool
+    - name: Run CM security reconcile agents after autotls tasks
+      ansible.builtin.import_role:
+        name: cm_security
+        tasks_from: reconcile_agents_after_autotls
 
 - name: Mandatory Cloudera SCM agent restart after Auto-TLS (all cluster agents)
   hosts: all:!ipaserver
   become: true
   serial: "{{ cm_agent_reconcile_serial | default('100%') }}"
   tasks:
-    - name: Skip separate agent restart when it is unnecessary
-      ansible.builtin.meta: end_play
-      when: >-
-        (cm_autotls_noop_this_run | default(false) | bool)
-        or not (cm_agent_mandatory_restart_after_autotls_this_run | default(false) | bool)
-        or (cm_agent_reconcile_after_autotls | default(true) | bool)
-
-    - name: Set OS-specific facts
-      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
-
-    - name: Mandatory restart Cloudera Manager agent after Auto-TLS
-      ansible.builtin.import_tasks: common_tasks/mandatory_restart_cm_agent_after_autotls.yml
+    - name: Run CM security mandatory agent restart after autotls tasks
+      ansible.builtin.import_role:
+        name: cm_security
+        tasks_from: mandatory_agent_restart_after_autotls
 
 - name: Record CM agent Auto-TLS restart wave completed (once per playbook run)
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Skip agent restart marker when no restart wave ran
-      ansible.builtin.meta: end_play
-      when: >-
-        (cm_autotls_noop_this_run | default(false) | bool)
-        or not (cm_agent_mandatory_restart_after_autotls_this_run | default(false) | bool)
-
-    - name: Mark cluster CM agents restarted after Auto-TLS for this run
-      ansible.builtin.set_fact:
-        cm_agents_restarted_after_autotls_this_run: true
+    - name: Run CM security record agent restart wave tasks
+      ansible.builtin.import_role:
+        name: cm_security
+        tasks_from: record_agent_restart_wave
 
 - name: Clear CM agent identity-change marker after successful certificate regeneration
   hosts: all:!ipaserver
   become: true
   gather_facts: false
   tasks:
-    - name: Remove reported_hostname certificate-remediation marker
-      ansible.builtin.file:
-        path: "{{ cm_agent_reported_hostname_change_marker_path }}"
-        state: absent
-      when: hostvars['localhost'].autotls_applied_this_run | default(false) | bool
+    - name: Run CM security clear agent identity change marker tasks
+      ansible.builtin.import_role:
+        name: cm_security
+        tasks_from: clear_agent_identity_change_marker
 
 - name: Ensure Auto-TLS agent truststore on CM host after agent reconcile
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Skip truststore ensure when Auto-TLS unchanged this run
-      ansible.builtin.meta: end_play
-      when: cm_autotls_noop_this_run | default(false) | bool
-
-    - name: Auto-TLS — ensure agent truststore on manager (restart agent if needed)
-      ansible.builtin.import_tasks: common_tasks/ensure_cm_autotls_agent_truststore.yml
-      when: cm_autotls_api_enabled | default(false) | bool
+    - name: Run CM security ensure agent truststore after reconcile tasks
+      ansible.builtin.import_role:
+        name: cm_security
+        tasks_from: ensure_agent_truststore_after_reconcile
 
 - name: Reconcile CMS TLS trust and restart after Auto-TLS (Cloudera Labs cm_autotls → cm_service)
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Skip CMS reconciliation when it is unnecessary
-      ansible.builtin.meta: end_play
-      when: >-
-        not (cm_cms_reconcile_trust_after_autotls | default(true) | bool)
-        or (cm_autotls_noop_this_run | default(false) | bool)
-        or (
-          not (cm_restart_after_autotls_this_run | default(false) | bool)
-          and not (autotls_applied_this_run | default(false) | bool)
-          and not (cm_autotls_api_enabled | default(false) | bool)
-        )
-
-    - name: Reconcile MGMT truststore and restart CMS when already deployed
-      ansible.builtin.import_tasks: common_tasks/reconcile_cm_cms_after_autotls.yml
+    - name: Run CM security reconcile cms after autotls tasks
+      ansible.builtin.import_role:
+        name: cm_security
+        tasks_from: reconcile_cms_after_autotls

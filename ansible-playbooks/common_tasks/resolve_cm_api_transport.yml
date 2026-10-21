@@ -1,37 +1,5 @@
 ---
-# License (26) and verify (25) run before Auto-TLS (27): default CM REST to HTTP :7180 until TLS is applied.
-# Set cm_autotls_complete: true (or cm_api_use_https: true) after Auto-TLS for re-runs that must use :7183.
-
-- name: CM API — derive whether REST probes should use HTTPS (:7183)
-  ansible.builtin.set_fact:
-    _cm_api_use_https_effective: >-
-      {{
-        (cm_api_use_https | default(false) | bool)
-        or (cm_autotls_complete | default(false) | bool)
-        or (hostvars.get('localhost', {}).get('cm_autotls_complete', false) | bool)
-      }}
-
-- name: CM API — apply transport facts for probes and URL assembly
-  ansible.builtin.set_fact:
-    cm_api_use_https: "{{ _cm_api_use_https_effective | bool }}"
-    cm_api_probe_https_first: "{{ _cm_api_use_https_effective | bool }}"
-    cm_api_port: >-
-      {{
-        cm_https_port | default(7183)
-        if (_cm_api_use_https_effective | bool)
-        else cm_http_port | default(7180)
-      }}
-
-# When true, skip all /api/version probes from the public Jenkins controller (:7180 and :7183);
-# probe on cldr-mngr instead (see resolve_cm_connect_host.yml).
-- name: CM API — skip doomed HTTP/HTTPS probes from public Jenkins controller after Auto-TLS
-  ansible.builtin.set_fact:
-    cm_api_probe_skip_controller_http: >-
-      {{
-        (cm_api_probe_skip_controller_http_when_autotls | default(true) | bool)
-        and (
-          (cm_autotls_complete | default(false) | bool)
-          or (hostvars.get('localhost', {}).get('cm_autotls_complete', false) | bool)
-          or (_cm_api_use_https_effective | default(false) | bool)
-        )
-      }}
+- name: Compatibility entry point for CM security resolve cm api transport
+  ansible.builtin.import_role:
+    name: cm_security
+    tasks_from: resolve_cm_api_transport

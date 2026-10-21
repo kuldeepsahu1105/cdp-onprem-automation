@@ -1,0 +1,11 @@
+---
+- name: Skip agent restart marker when no restart wave ran
+  ansible.builtin.meta: end_play
+  when: >-
+    (cm_autotls_noop_this_run | default(false) | bool)
+    or not (cm_agent_mandatory_restart_after_autotls_this_run | default(false) | bool)
+
+- name: Mark cluster CM agents restarted after Auto-TLS for this run
+  ansible.builtin.set_fact:
+    cm_agents_restarted_after_autotls_this_run: true
+

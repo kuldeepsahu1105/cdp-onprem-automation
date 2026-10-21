@@ -274,6 +274,14 @@ routing, PostgreSQL host/service discovery, delegation, and CM API localhost
 facts. In particular, keep plays `25` and `26` in the wrapper's combined
 invocation; splitting them loses the intentional in-process API fact reuse.
 
+For CM security, continue invoking `27_setup_cm_autotls.yml` through
+`30_setup_cm_krbs.yml` directly, or use the existing `cm_tls` phase/Jenkins
+stage. Their task implementation lives in `roles/cm_security`, while the
+numbered wrappers preserve Auto-TLS's agent restart play boundaries and
+serial setting, CMS/LDAP/Kerberos localhost fact reuse, and the FreeIPA KDC
+host play. Keep `27` in its existing separate process and `28`–`30` in the
+wrapper's combined process.
+
 Playbooks resolve SSH keys and Auto-TLS material on the **control machine** via `ANSIBLE_PRIVATE_KEY`, files under `ansible-playbooks/`, or `group_vars` (`cm_private_key_path`, `cm_node_sudo_password`). Wrappers only set the same env vars and `--private-key` for convenience.
 
 | Target OS | CM repo mode | Notes |

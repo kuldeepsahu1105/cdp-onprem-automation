@@ -1,0 +1,9 @@
+---
+- name: Skip truststore ensure when Auto-TLS unchanged this run
+  ansible.builtin.meta: end_play
+  when: cm_autotls_noop_this_run | default(false) | bool
+
+- name: Auto-TLS — ensure agent truststore on manager (restart agent if needed)
+  ansible.builtin.import_tasks: common_tasks/ensure_cm_autotls_agent_truststore.yml
+  when: cm_autotls_api_enabled | default(false) | bool
+

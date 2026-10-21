@@ -144,11 +144,19 @@ Repository router `20_setup_cm_repos.yml` continues to import compatibility
 playbooks `21` and `22` literally; playbooks `23`–`26` retain every original
 play boundary and delegate task bodies to the role. Install-owned
 `common_tasks` paths remain static compatibility shims for CM security and
-CDH callers. The shared CM API discovery/transport chain remains in
-`common_tasks` because it is jointly owned by CM_INSTALL and security phases.
-The wrapper still invokes `25_verify_cm.yml` and
+CDH callers. The wrapper still invokes `25_verify_cm.yml` and
 `26_setup_cm_license.yml` in one `ansible-playbook` process so localhost API
 facts are reused.
+
+The CM security implementation is organized under `roles/cm_security`.
+Playbooks `27`–`30` retain all twelve original play boundaries, including
+Auto-TLS agent restart waves, serial execution, the FreeIPA KDC play, and
+localhost fact reuse. The shared CM API discovery/transport, restart, TLS,
+CMS, LDAP, and Kerberos implementations now live in this role; their
+`common_tasks` paths remain static compatibility shims for CM_INSTALL, CDH,
+ECS, cleanup, and manual callers. Generic OS facts, inventory validation,
+controller reachability, identity-owned KDC tasks, and install-owned package
+or PostgreSQL tasks remain in their existing shared/owning locations.
 
 ## Migration: renumbering duplicate prefixes (2026-09)
 

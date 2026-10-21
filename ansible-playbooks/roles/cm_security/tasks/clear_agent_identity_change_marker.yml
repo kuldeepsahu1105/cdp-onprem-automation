@@ -1,0 +1,7 @@
+---
+- name: Remove reported_hostname certificate-remediation marker
+  ansible.builtin.file:
+    path: "{{ cm_agent_reported_hostname_change_marker_path }}"
+    state: absent
+  when: hostvars['localhost'].autotls_applied_this_run | default(false) | bool
+

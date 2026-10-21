@@ -1,41 +1,5 @@
 ---
-# Downstream CM/CDH phases require play 23 to have installed and initialized PostgreSQL.
-
-- name: Discover installed PostgreSQL systemd units
-  ansible.builtin.shell:
-    cmd: >-
-      set -o pipefail;
-      systemctl list-unit-files --type=service --no-legend --no-pager
-      | awk '$1 ~ /^(postgresql|postgres|pgsql)([-@.][^ ]*)?\.service$/ {
-          print $1
-        }'
-    executable: /bin/bash
-  register: postgresql_prerequisite_units
-  changed_when: false
-  become: true
-  delegate_to: "{{ postgres_inventory_host }}"
-
-- name: Discover initialized PostgreSQL data directories
-  ansible.builtin.shell:
-    cmd: >-
-      find /var/lib/pgsql /var/lib/postgresql
-      -type f -name PG_VERSION -print 2>/dev/null
-  register: postgresql_prerequisite_data
-  changed_when: false
-  failed_when: false
-  become: true
-  delegate_to: "{{ postgres_inventory_host }}"
-
-- name: Require PostgreSQL installation before downstream CM phases
-  ansible.builtin.assert:
-    that:
-      - postgresql_prerequisite_units.stdout_lines | default([]) | length > 0
-      - postgresql_prerequisite_data.stdout_lines | default([]) | length > 0
-    fail_msg: >-
-      PostgreSQL is not installed and initialized on {{ postgres_inventory_host }}.
-      Installed units: {{ postgresql_prerequisite_units.stdout_lines | default([]) | join(', ') | default('(none)', true) }}.
-      Data clusters: {{ postgresql_prerequisite_data.stdout_lines | default([]) | join(', ') | default('(none)', true) }}.
-      CM_TLS_KRB_LDAP and CDH_INSTALL require CM_INSTALL first.
-      Run Jenkins stage CM_INSTALL or standalone:
-      ansible-playbook -i inventory.ini 23_setup_postgres.yml
-      followed by 24_start_cm.yml.
+- name: Compatibility entry point for CM security assert postgresql installed
+  ansible.builtin.import_role:
+    name: cm_security
+    tasks_from: assert_postgresql_installed

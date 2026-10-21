@@ -1,0 +1,14 @@
+---
+- name: Skip separate agent restart when it is unnecessary
+  ansible.builtin.meta: end_play
+  when: >-
+    (cm_autotls_noop_this_run | default(false) | bool)
+    or not (cm_agent_mandatory_restart_after_autotls_this_run | default(false) | bool)
+    or (cm_agent_reconcile_after_autotls | default(true) | bool)
+
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
+
+- name: Mandatory restart Cloudera Manager agent after Auto-TLS
+  ansible.builtin.import_tasks: common_tasks/mandatory_restart_cm_agent_after_autotls.yml
+

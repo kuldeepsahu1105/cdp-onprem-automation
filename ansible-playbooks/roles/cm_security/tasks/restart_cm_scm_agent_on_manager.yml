@@ -1,0 +1,21 @@
+---
+# Restart only cloudera-scm-agent on the CM host (after CM Server is API-healthy).
+
+- name: Restart Cloudera Manager agent on CM host after server is healthy
+  ansible.builtin.shell: |
+    set -euo pipefail
+    systemctl daemon-reload 2>/dev/null || true
+    unit=cloudera-scm-agent
+    if systemctl cat "${unit}" >/dev/null 2>&1; then
+      systemctl restart "${unit}"
+      echo "restarted ${unit}"
+    else
+      echo "WARN: systemd unit ${unit} not found — skip"
+      exit 0
+    fi
+  args:
+    executable: /bin/bash
+  become: true
+  delegate_to: "{{ cm_manager_inventory_host | default('cldr-mngr') }}"
+  register: cm_scm_agent_restart_cmd
+  changed_when: "'restarted' in cm_scm_agent_restart_cmd.stdout"

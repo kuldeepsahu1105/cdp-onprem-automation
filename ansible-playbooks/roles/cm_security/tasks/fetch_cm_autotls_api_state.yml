@@ -1,0 +1,254 @@
+---
+# Ask Cloudera Manager whether Auto-TLS is configured (GET /cm/config; do not infer Auto-TLS from :7183 alone).
+
+- name: CM API — select configuration endpoint
+  ansible.builtin.set_fact:
+    _cm_autotls_config_api_base_url: >-
+      {{
+        cm_krb_api_url
+        if (
+          cm_security_api_https_required | default(false) | bool
+          and (cm_krb_api_url | default('') | length > 0)
+        )
+        else cm_api_url
+      }}
+
+- name: CM API — GET CM global configuration
+  ansible.builtin.uri:
+    url: "{{ _cm_autotls_config_api_base_url }}/cm/config?view=full"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: _cm_autotls_config_api
+  failed_when: false
+  delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
+
+- name: CM API — GET CM global configuration over HTTPS when HTTP config failed
+  ansible.builtin.uri:
+    url: >-
+      {{
+        'https://' + (
+          '127.0.0.1'
+          if (cm_api_uri_delegate_to | default('')) == (cm_manager_inventory_host | default(''))
+          else cm_api_client_host
+        ) + ':' + (cm_https_port | string) + '/api/' + cm_api_version + '/cm/config?view=full'
+      }}
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 301, 303]
+  register: _cm_autotls_config_api_https_retry
+  failed_when: false
+  delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
+  when:
+    - _cm_autotls_config_api.status | default(0) not in [200, 301, 303]
+    - cm_api_version | default('') | length > 0
+    - not (_cm_autotls_config_api_base_url is match('^https://'))
+
+- name: CM API — adopt HTTPS config response when HTTP config was unreachable
+  ansible.builtin.set_fact:
+    _cm_autotls_config_api: "{{ _cm_autotls_config_api_https_retry }}"
+    cm_protocol: https
+    cm_api_port: "{{ cm_https_port }}"
+    cm_api_https_active: true
+  when:
+    - _cm_autotls_config_api_https_retry is defined
+    - _cm_autotls_config_api_https_retry is succeeded
+    - _cm_autotls_config_api_https_retry.status | default(0) in [200, 301, 303]
+
+- name: CM API — require readable CM global configuration
+  ansible.builtin.assert:
+    that:
+      - _cm_autotls_config_api.status | default(0) in [200, 301, 303]
+    fail_msg: >-
+      Cloudera Manager global configuration is not reachable from
+      {{ cm_api_uri_delegate_to | default('localhost') }} at
+      {{ _cm_autotls_config_api_base_url }}.
+
+- name: CM API — read authoritative Auto-TLS type
+  ansible.builtin.set_fact:
+    cm_autotls_type: >-
+      {{
+        (
+          _cm_config_items
+          | selectattr('name', 'defined')
+          | selectattr('name', 'equalto', 'AUTO_TLS_TYPE')
+          | map(attribute='value', default='')
+          | first
+          | default('', true)
+        )
+        | string
+        | upper
+      }}
+    cm_autotls_state_known: >-
+      {{
+        _cm_config_items
+        | selectattr('name', 'defined')
+        | selectattr('name', 'equalto', 'AUTO_TLS_TYPE')
+        | list
+        | length > 0
+      }}
+  vars:
+    _cm_config_items: "{{ _cm_autotls_config_api.json['items'] | default([]) }}"
+
+- name: CM API — set Auto-TLS enabled from CM configuration
+  ansible.builtin.set_fact:
+    cm_autotls_api_enabled: >-
+      {{
+        (cm_autotls_state_known | default(false) | bool)
+        and (cm_autotls_type | default('NONE') | upper) != 'NONE'
+        and (cm_autotls_type | default('') | trim | length) > 0
+      }}
+    cm_autotls_config_flags_unreported: false
+    cm_autotls_parsed_from_cm_config: "{{ cm_autotls_state_known | default(false) | bool }}"
+
+- name: CM API — resolve public URL host when Auto-TLS is enabled
+  ansible.builtin.include_tasks: resolve_cm_api_url_host.yml
+  when: cm_autotls_api_enabled | default(false) | bool
+
+- name: CM API — require HTTPS URL inputs when Auto-TLS is enabled
+  ansible.builtin.assert:
+    that:
+      - _cm_api_url_host_resolved | default('') | length > 0
+      - cm_api_version | default('') | length > 0
+    fail_msg: >-
+      AUTO_TLS_TYPE={{ cm_autotls_type | default('unknown') }}, but the CM API
+      public host or version could not be resolved for the HTTPS URL.
+  when: cm_autotls_api_enabled | default(false) | bool
+
+- name: CM API — announce bounded HTTPS check for enabled Auto-TLS
+  ansible.builtin.debug:
+    msg: >-
+      AUTO_TLS_TYPE={{ cm_autotls_type }}; checking port
+      {{ cm_https_port | default(7183) }} on
+      {{ cm_manager_inventory_host | default('cldr-mngr') }} for up to
+      {{ cm_autotls_existing_https_probe_timeout | default(30) }} seconds.
+  when:
+    - cm_autotls_api_enabled | default(false) | bool
+    - not (cm_api_https_listener_verified | default(false) | bool)
+
+- name: CM API — require HTTPS listener when Auto-TLS is enabled
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ cm_https_port | default(7183) }}"
+    state: started
+    connect_timeout: 3
+    sleep: 5
+    timeout: "{{ cm_autotls_existing_https_probe_timeout | default(30) | int }}"
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  when:
+    - cm_autotls_api_enabled | default(false) | bool
+    - not (cm_api_https_listener_verified | default(false) | bool)
+
+- name: CM API — record verified HTTPS listener
+  ansible.builtin.set_fact:
+    cm_api_https_listener_verified: true
+  when: cm_autotls_api_enabled | default(false) | bool
+
+- name: CM API — use HTTPS URL when Auto-TLS is enabled
+  ansible.builtin.set_fact:
+    cm_protocol: https
+    cm_api_port: "{{ cm_https_port | default(7183) }}"
+    cm_api_https_active: true
+    cm_api_use_https: true
+    cm_autotls_complete: true
+    cm_api_url: >-
+      {{
+        'https://'
+        ~ _cm_api_url_host_resolved
+        ~ ':'
+        ~ (cm_https_port | default(7183) | string)
+        ~ '/api/'
+        ~ cm_api_version
+      }}
+  when: cm_autotls_api_enabled | default(false) | bool
+
+- name: CM API — debug sample /cm/config item names when AUTO_TLS_TYPE is missing after generateCmca
+  ansible.builtin.debug:
+    msg: >-
+      CM /cm/config did not report AUTO_TLS_TYPE after successful generateCmca this run.
+      Sample config item names:
+      {{ _cm_autotls_config_name_sample | join(', ') }}
+  vars:
+    _cm_autotls_config_name_sample: >-
+      {{
+        (
+          _cm_autotls_config_api.json['items'] | default([])
+          | selectattr('name', 'defined')
+          | map(attribute='name')
+          | list
+        )[:20]
+      }}
+  when:
+    - autotls_applied_this_run | default(false) | bool
+    - not (cm_autotls_parsed_from_cm_config | default(false) | bool)
+  run_once: true
+
+- name: CM API — check agent truststore when generateCmca applied but CM config omits Auto-TLS flags
+  ansible.builtin.stat:
+    path: "{{ cm_cms_autotls_truststore_path }}"
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true
+  register: _cm_autotls_truststore_post_generate
+  when:
+    - autotls_applied_this_run | default(false) | bool
+    - not (cm_autotls_parsed_from_cm_config | default(false) | bool)
+    - cm_manager_inventory_host | default('') | length > 0
+
+- name: CM API — treat Auto-TLS as enabled when generateCmca succeeded and truststore exists (not HTTPS alone)
+  ansible.builtin.set_fact:
+    cm_autotls_api_enabled: true
+    cm_autotls_config_flags_unreported: true
+  when:
+    - autotls_applied_this_run | default(false) | bool
+    - not (cm_autotls_parsed_from_cm_config | default(false) | bool)
+    - _cm_autotls_truststore_post_generate is defined
+    - _cm_autotls_truststore_post_generate.stat.exists | default(false) | bool
+
+- name: CM API — set HTTPS active from probes and CM config fetch
+  ansible.builtin.set_fact:
+    cm_api_https_active: >-
+      {{
+        cm_api_https_active | default(false) | bool
+        or (cm_protocol | default('http')) == 'https'
+        or ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+        or (_cm_autotls_config_api is succeeded and (_cm_autotls_config_api.status | default(0) in [200, 301, 303])
+            and (cm_protocol | default('http')) == 'https')
+      }}
+
+- name: CM API — set TLS mode from CM config and working API protocol
+  ansible.builtin.set_fact:
+    cm_tls_mode: >-
+      {{
+        'auto_tls'
+        if (cm_autotls_api_enabled | default(false) | bool)
+        else (
+          'https'
+          if (cm_api_https_active | default(false) | bool)
+          else 'http'
+        )
+      }}
+
+- name: CM API — set agent use_tls from working HTTPS API (not Auto-TLS flags alone)
+  ansible.builtin.set_fact:
+    cm_agent_use_tls: >-
+      {{
+        (cm_api_https_active | default(false) | bool)
+        or (cm_autotls_api_enabled | default(false) | bool)
+      }}
+
+- name: CM API — mark Auto-TLS config fetched for this play
+  ansible.builtin.set_fact:
+    cm_autotls_config_fetched_this_play: true
+
+- name: CM API — realign mutation endpoint after reading live Auto-TLS state
+  ansible.builtin.include_tasks: resolve_cm_krb_api_url_from_facts.yml
+  when: cm_api_version | default('') | length > 0
+
+- name: CM API — print TLS / Auto-TLS summary (single line)
+  ansible.builtin.include_tasks: print_cm_tls_status.yml

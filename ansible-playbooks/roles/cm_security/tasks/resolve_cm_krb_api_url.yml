@@ -1,0 +1,14 @@
+---
+# Prepare the CM API and add the Kerberos account-manager principal.
+
+- name: Kerberos — prepare CM security API
+  ansible.builtin.import_tasks: prepare_cm_security_api.yml
+
+- name: Kerberos — build KDC admin principal for CM import
+  ansible.builtin.set_fact:
+    cm_krb_kdc_admin_principal: >-
+      {{
+        krb5_kdc_admin_user
+        if ('@' in (krb5_kdc_admin_user | string))
+        else (krb5_kdc_admin_user ~ '@' ~ cluster_realm)
+      }}

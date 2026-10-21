@@ -1,0 +1,72 @@
+---
+- name: Clear CM restart flag for this play
+  ansible.builtin.set_fact:
+    cm_restart_after_config_change: false
+    cm_krb_api_url: ""
+
+- name: Skip LDAP configuration when disabled
+  ansible.builtin.meta: end_play
+  when: not cm_ldap_enabled | default(false)
+
+- name: LDAP — prepare Cloudera Manager API
+  ansible.builtin.import_tasks: common_tasks/prepare_cm_security_api.yml
+
+- name: LDAP — resolve configured directory endpoint
+  ansible.builtin.set_fact:
+    cm_ldap_effective_host: "{{ cm_ldap_url | urlsplit('hostname') | default('', true) }}"
+    cm_ldap_effective_port: >-
+      {{
+        cm_ldap_url | urlsplit('port')
+        | default(636 if (cm_ldap_url | urlsplit('scheme')) == 'ldaps' else 389, true)
+      }}
+
+- name: LDAP — validate directory URL
+  ansible.builtin.assert:
+    that:
+      - (cm_ldap_url | urlsplit('scheme')) in ['ldap', 'ldaps']
+      - cm_ldap_effective_host | length > 0
+      - cm_ldap_effective_port | int > 0
+      - cm_ldap_effective_port | int <= 65535
+    fail_msg: >-
+      cm_ldap_url={{ cm_ldap_url }} is invalid. Use ldap://host:389 or
+      ldaps://host:636 (custom ports are allowed).
+
+- name: LDAP — require directory service port from the CM host
+  ansible.builtin.wait_for:
+    host: "{{ cm_ldap_effective_host }}"
+    port: "{{ cm_ldap_effective_port }}"
+    timeout: "{{ cm_ldap_connect_timeout | default(30) }}"
+    connect_timeout: 5
+  delegate_to: "{{ cm_manager_inventory_host }}"
+
+- name: Print LDAP integration targets
+  ansible.builtin.debug:
+    msg:
+      - "Identity provider: {{ identity_provider_effective }}"
+      - "LDAP URL: {{ cm_ldap_url }}"
+      - "LDAP bind DN: {{ cm_ldap_bind_dn }}"
+      - "User search base: {{ cm_ldap_user_search_base }}"
+      - "User search filter: {{ cm_ldap_user_search_filter }}"
+      - "Group search base: {{ cm_ldap_group_search_base }}"
+      - "Group search filter: {{ cm_ldap_group_search_filter }}"
+      - "Authentication backend order: {{ cm_ldap_auth_backend_order }}"
+
+- name: Configure Cloudera Manager LDAP settings (REST API)
+  ansible.builtin.import_tasks: common_tasks/configure_cm_ldap_api.yml
+
+- name: LDAP — print existing Cloudera Manager access URLs
+  ansible.builtin.include_tasks: common_tasks/print_cm_urls.yml
+  when: not (cm_ldap_config_changed | bool)
+
+- name: LDAP — finish matching configuration no-op play
+  ansible.builtin.meta: end_play
+  when: not (cm_ldap_config_changed | bool)
+
+- name: Restart Cloudera Manager after LDAP configuration change
+  ansible.builtin.include_tasks: common_tasks/apply_cm_restart_after_ldap.yml
+  when: cm_restart_after_config_change | default(false) | bool
+
+- name: Print LDAP configuration result
+  ansible.builtin.debug:
+    msg: LDAP authentication configured in Cloudera Manager (CM restarted when settings changed).
+  when: cm_ldap_result is defined and cm_ldap_result is changed

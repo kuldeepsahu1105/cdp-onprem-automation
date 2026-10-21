@@ -1,0 +1,14 @@
+---
+- name: Skip CMS reconciliation when it is unnecessary
+  ansible.builtin.meta: end_play
+  when: >-
+    not (cm_cms_reconcile_trust_after_autotls | default(true) | bool)
+    or (cm_autotls_noop_this_run | default(false) | bool)
+    or (
+      not (cm_restart_after_autotls_this_run | default(false) | bool)
+      and not (autotls_applied_this_run | default(false) | bool)
+      and not (cm_autotls_api_enabled | default(false) | bool)
+    )
+
+- name: Reconcile MGMT truststore and restart CMS when already deployed
+  ansible.builtin.import_tasks: common_tasks/reconcile_cm_cms_after_autotls.yml

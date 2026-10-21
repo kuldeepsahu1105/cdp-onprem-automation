@@ -14,6 +14,7 @@ Roles own reusable task implementation. The PREREQS wrappers `00`–`09`
 therefore import `roles/prereq_*`, while PORTAL wrappers `10` and `35` import
 `roles/deployment_portal`, and IDENTITY entry points import `roles/identity`,
 while CM_INSTALL entry points `20`–`26` import `roles/cm_install`, without
+and CM security entry points `27`–`30` import `roles/cm_security`, without
 introducing role defaults or vars;
 inventory, `group_vars`, config, Jenkins values, and extra-vars retain their
 existing precedence.
@@ -31,9 +32,8 @@ compatibility shims that statically import the role task so existing
 monitoring, ECS, identity, and manual imports preserve conditions, tags,
 delegation, and caller-supplied vars. Generic shared tasks such as
 `validate_ansible_ssh_reachability.yml`,
-`detect_ansible_control_reachability.yml`, and
-`resolve_cm_connect_host.yml` remain in `common_tasks/` and are imported from
-the role through `{{ playbook_dir }}`.
+`detect_ansible_control_reachability.yml`, and inventory validation remain in
+`common_tasks/` and are imported from roles through `{{ playbook_dir }}`.
 
 Identity-owned shared implementations and templates live in `roles/identity`.
 Their `common_tasks` filenames are static compatibility shims. The role does
@@ -48,11 +48,18 @@ CM-install-owned repository, PostgreSQL, package, agent, license, and
 verification implementations live in `roles/cm_install`; their legacy
 `common_tasks` paths are static compatibility shims for later phases. The
 shared CM API chain (`resolve_cm_api_probe_context.yml`,
-`set_cm_api_url.yml`, transport/host selection, Auto-TLS state reads) remains
-in `common_tasks` and is imported through `{{ playbook_dir }}`. This preserves
-the private/public/delegated endpoint contract and lets the wrapper's combined
+`set_cm_api_url.yml`, transport/host selection, Auto-TLS state reads) lives
+in `roles/cm_security`; its `common_tasks` compatibility shims preserve the
+private/public/delegated endpoint contract and let the wrapper's combined
 `25_verify_cm.yml 26_setup_cm_license.yml` invocation reuse localhost facts
 without creating role defaults or vars that alter precedence.
+
+CM security playbooks `27`–`30` keep orchestration and cross-play facts in
+their compatibility wrappers. `roles/cm_security` owns the task bodies and
+the shared API/restart/TLS/CMS/LDAP/Kerberos implementations. Identity-owned
+KDC service/encryption tasks and CM-install-owned agent/PostgreSQL helpers are
+still reached through their existing static shims, avoiding duplicated
+implementation or a change in variable precedence.
 
 Both validation gates scan role task YAML. Contract setter/index checks must
 continue to include `roles/*/tasks/*.yml`; otherwise moving a `set_fact` into a

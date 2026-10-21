@@ -1,5 +1,5 @@
 ---
-# Run on localhost after LDAP CM config changes.
-
-- name: Restart Cloudera Manager server and wait for API health
-  ansible.builtin.import_tasks: apply_cm_restart_after_config.yml
+- name: Compatibility entry point for CM security apply cm restart after ldap
+  ansible.builtin.import_role:
+    name: cm_security
+    tasks_from: apply_cm_restart_after_ldap

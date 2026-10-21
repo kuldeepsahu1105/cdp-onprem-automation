@@ -345,7 +345,8 @@ CM install task implementation and PostgreSQL/repository templates live in
 `roles/cm_install`. Playbooks `20`–`26` remain the standalone compatibility
 entry points and retain router imports, host groups, delegation, privilege
 escalation, and localhost fact reuse. CM API transport/discovery stays in
-shared `common_tasks` because plays `27`–`30` use the same contract.
+`roles/cm_security`; compatibility shims preserve the same contract for
+playbooks `20`–`26`.
 
 | Playbook | Description |
 |---|---|
@@ -362,6 +363,13 @@ shared `common_tasks` because plays `27`–`30` use the same contract.
 | `28_setup_cm_cms.yml` | CMS — run **before** LDAP/Kerberos in `cm_tls` phase |
 | `29_setup_cm_ldap.yml` | LDAP auth (FreeIPA or AD) — run **before** **30** |
 | `30_setup_cm_krbs.yml` | Kerberos (FreeIPA or AD KDC); PUT `/cm/config`, `POST /cm/commands/importAdminCredentials` (query params), CM restart; bounded wait on `kerberosInfo.kerberized` |
+
+Playbooks `27`–`30` remain the standalone CM security compatibility entry
+points and delegate only task implementation to `roles/cm_security`.
+Auto-TLS's eight plays, CMS and LDAP localhost plays, and Kerberos's
+FreeIPA/localhost split remain unchanged. Shared CM API and security
+`common_tasks` filenames are role-import shims so CDH, ECS, cleanup, and
+manual entry points continue to resolve the same implementations.
 
 ### Phase 4 — CMS & base cluster
 
