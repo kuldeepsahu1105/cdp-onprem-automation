@@ -36,6 +36,7 @@
       ansible.builtin.import_tasks: common_tasks/install_cm_packages.yml
       vars:
         cm_package_list: "{{ cldr_mngr_packages.server }}"
+        cm_package_role_label: Cloudera Manager Server
 
     - name: Create PostgreSQL SSL directory
       ansible.builtin.file:
@@ -246,6 +247,7 @@
       ansible.builtin.import_tasks: common_tasks/install_cm_packages.yml
       vars:
         cm_package_list: "{{ cldr_mngr_packages.client }}"
+        cm_package_role_label: Cloudera Manager Agent
 
     - name: Configure CM agent server_host to cldr-mngr FQDN
       ansible.builtin.import_tasks: common_tasks/configure_cm_agent.yml
