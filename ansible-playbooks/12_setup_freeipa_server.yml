@@ -28,9 +28,18 @@
     - group_vars/all.yml
 
   tasks:
+    - name: Restore managed resolver before FreeIPA package operations
+      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
+
+    - name: Verify external DNS before FreeIPA package operations
+      ansible.builtin.import_tasks: common_tasks/verify_identity_dns.yml
+      vars:
+        identity_dns_skip_provider_probe: true
+
     - name: Refresh Red Hat package metadata before FreeIPA update
       ansible.builtin.dnf:
         update_cache: true
+        disablerepo: "{{ ipa_server_disabled_repositories | default([]) }}"
       changed_when: false
       when: ansible_os_family == 'RedHat'
 
@@ -41,23 +50,45 @@
       changed_when: false
       when: ansible_os_family == 'Debian'
 
-    - name: Install or update required FreeIPA packages
-      ansible.builtin.package:
+    - name: Install or update required FreeIPA packages on Red Hat
+      ansible.builtin.dnf:
         name: "{{ os_vars[ansible_os_family].freeipa_server_packages }}"
         state: "{{ ipa_server_packages_state | default('latest') }}"
-      register: ipa_server_packages_update
+        disablerepo: "{{ ipa_server_disabled_repositories | default([]) }}"
+      register: ipa_server_packages_update_redhat
+      when: ansible_os_family == 'RedHat'
 
-    - name: Install DNS lookup tools required by ipa-server-install (dig)
-      ansible.builtin.package:
+    - name: Install or update required FreeIPA packages on Debian
+      ansible.builtin.apt:
+        name: "{{ os_vars[ansible_os_family].freeipa_server_packages }}"
+        state: "{{ ipa_server_packages_state | default('latest') }}"
+      register: ipa_server_packages_update_debian
+      when: ansible_os_family == 'Debian'
+
+    - name: Record FreeIPA package update state
+      ansible.builtin.set_fact:
+        ipa_server_packages_changed: >-
+          {{
+            (ipa_server_packages_update_redhat is changed)
+            or (ipa_server_packages_update_debian is changed)
+          }}
+
+    - name: Install DNS lookup tools required by ipa-server-install on Red Hat
+      ansible.builtin.dnf:
         name: "{{ os_vars[ansible_os_family].ipa_install_dns_packages }}"
         state: present
+        disablerepo: "{{ ipa_server_disabled_repositories | default([]) }}"
+      when: ansible_os_family == 'RedHat'
+
+    - name: Install DNS lookup tools required by ipa-server-install on Debian
+      ansible.builtin.apt:
+        name: "{{ os_vars[ansible_os_family].ipa_install_dns_packages }}"
+        state: present
+      when: ansible_os_family == 'Debian'
 
     - name: Extract NetBIOS name from realm
       ansible.builtin.set_fact:
         netbios_name: "{{ ipaserver_realm.split('.')[0] }}"
-
-    - name: Resolve deployment DNS facts for IPA install
-      ansible.builtin.import_tasks: common_tasks/set_dns_facts.yml
 
     - name: Resolve ipa-server-install DNS forwarder flags
       ansible.builtin.import_tasks: common_tasks/resolve_ipa_install_dns_forwarders.yml
@@ -154,7 +185,7 @@
       register: ipa_server_upgrade
       changed_when: true
       when:
-        - ipa_server_packages_update is changed
+        - ipa_server_packages_changed | bool
         - ipa_server_configured_healthy | bool
 
     - name: Restart configured FreeIPA after package upgrade

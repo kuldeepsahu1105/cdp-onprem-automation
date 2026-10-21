@@ -46,4 +46,6 @@
   retries: "{{ identity_dns_verify_retries | default(12) | int }}"
   delay: "{{ identity_dns_verify_delay | default(5) | int }}"
   until: identity_dns_ipa_probe.rc == 0
-  when: identity_provider_effective == 'freeipa'
+  when:
+    - identity_provider_effective == 'freeipa'
+    - not (identity_dns_skip_provider_probe | default(false) | bool)

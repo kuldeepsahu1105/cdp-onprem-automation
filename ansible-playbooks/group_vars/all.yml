@@ -137,6 +137,9 @@ ipa_server_deep_recovery: false
 ipa_server_install_force: false
 # Keep FreeIPA packages current from the configured supported OS repositories.
 ipa_server_packages_state: latest
+# Do not let unrelated third-party repositories block identity package updates.
+ipa_server_disabled_repositories:
+  - docker-ce-stable
 # Optional strict gate for distributions that package the React UI separately.
 # The supported /ipa/ui/ application is selected automatically when this is false.
 ipa_server_require_modern_ui: false
