@@ -124,7 +124,13 @@
   ansible.builtin.command:
     argv:
       - "{{ base_cluster_hue_python_interpreter_effective }}"
-      - --version
+      - -c
+      - "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
   register: base_cluster_hue_python_runtime_verify
   changed_when: false
   failed_when: base_cluster_hue_python_runtime_verify.rc | int != 0
+
+- name: Record discovered Hue parcel Python runtime version
+  ansible.builtin.set_fact:
+    base_cluster_hue_python_runtime_version: >-
+      {{ base_cluster_hue_python_runtime_verify.stdout | trim }}

@@ -469,6 +469,9 @@ base_cluster_hue_parcel_hue_root: /opt/cloudera/parcels/CDH/lib/hue
 base_cluster_hue_python_version: "{{ python_version }}"
 base_cluster_hue_venv_wait_retries: 24
 base_cluster_hue_venv_wait_delay: 15
+# Empty installs the current compatible psycopg 3 binary release when psycopg2
+# alone cannot load Django's PostgreSQL backend; set an exact version to pin it.
+base_cluster_hue_psycopg_binary_version: ""
 base_cluster_ranger_database_name: ranger
 base_cluster_ranger_database_user: rangeradmin
 base_cluster_ranger_database_password: rangeradmin

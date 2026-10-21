@@ -53,9 +53,10 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | Area | Behavior |
 |---|---|
 | Ansible on targets | `ansible.cfg` sets `interpreter_python = /usr/bin/python3`; remote modules use that unless you set `ansible_python_interpreter` in inventory or host vars |
-| **06** / **23** / **31** psycopg2 | `psycopg2` is installed and verified in Ansible's target interpreter (`/usr/bin/python3` by default), the configured `python{{ python_version }}` interpreter, and before First Run in Hue's isolated parcel virtual environment when Hue is enabled; duplicate executable names are installed only once |
+| **06** / **23** / **31** PostgreSQL Python driver | `psycopg2` is installed and verified in Ansible's target interpreter (`/usr/bin/python3` by default), the configured `python{{ python_version }}` interpreter, and before First Run in Hue's isolated parcel virtual environment when Hue is enabled; playbook 31 discovers Hue's actual interpreter and version, imports its Django PostgreSQL backend, and installs a psycopg 3 binary fallback through that interpreter's own pip only when needed |
 | Debian pip upgrade | `os_vars.Debian.pip_executable` is `pip3`; **06** pip upgrade uses it even when `python_version` changes |
 | `psycopg2_binary_version` | Pins the **library** for every interpreter fallback (`psycopg2-binary==…` when set); interpreter selection remains independent |
+| `base_cluster_hue_psycopg_binary_version` | Empty by default, selecting the current compatible `psycopg[binary]>=3.1.8,<4` fallback when Hue's Django backend cannot load; set an exact psycopg 3 library version to pin the Hue-only repair. This does not select Python—the active Hue parcel interpreter does |
 
 ### Cluster names
 

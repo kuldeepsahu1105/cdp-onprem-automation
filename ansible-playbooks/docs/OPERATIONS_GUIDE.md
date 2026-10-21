@@ -743,7 +743,13 @@ that the parcel interpreter itself starts. If its ELF loader reports a missing
 (`pythonX.Y-libs` on Red Hat family or `libpythonX.Y` on Debian family) and
 rechecks the interpreter. The loader parser checks both stdout and stderr; an
 unrelated interpreter failure stops with its rc/stdout/stderr instead of being
-misreported as a missing libpython package.
+misreported as a missing libpython package. The pre-First-Run check then imports
+Django's PostgreSQL backend, not only `psycopg2`. If that backend cannot load,
+the play installs the supported psycopg 3 binary extra in the same parcel
+environment and verifies the backend again. This is rerun-safe: pip is skipped
+once the backend imports successfully. No Python minor version is hardcoded:
+the play reads the version from the discovered parcel interpreter and invokes
+that interpreter's own `-m pip` for any compatible runtime shipped by Hue.
 
 For an existing cluster, playbook **31** also detects stale Hive Metastore
 catalogs whose names begin with

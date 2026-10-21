@@ -1,0 +1,90 @@
+---
+- name: Check Hue Django PostgreSQL backend
+  ansible.builtin.command:
+    argv:
+      - "{{ base_cluster_hue_python_interpreter_effective }}"
+      - -c
+      - |
+        import importlib
+        import sys
+        import traceback
+
+        for module_name in ("psycopg", "psycopg2"):
+            try:
+                module = importlib.import_module(module_name)
+                print(f"{module_name}={getattr(module, '__version__', 'unknown')}")
+            except Exception as exc:
+                print(
+                    f"{module_name} import failed: {type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
+
+        try:
+            importlib.import_module("django.db.backends.postgresql.base")
+        except Exception:
+            traceback.print_exc()
+            raise
+  register: base_cluster_hue_postgresql_backend_check
+  changed_when: false
+  failed_when: false
+
+- name: Install psycopg 3 binary fallback for discovered Hue Python
+  ansible.builtin.command:
+    argv:
+      - "{{ base_cluster_hue_python_interpreter_effective }}"
+      - -m
+      - pip
+      - install
+      - --upgrade
+      - >-
+        {{
+          'psycopg[binary]==' ~ base_cluster_hue_psycopg_binary_version
+          if base_cluster_hue_psycopg_binary_version | default('') | length > 0
+          else 'psycopg[binary]>=3.1.8,<4'
+        }}
+  environment:
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+  register: base_cluster_hue_psycopg_install
+  changed_when: true
+  when: base_cluster_hue_postgresql_backend_check.rc | int != 0
+
+- name: Verify Hue Django PostgreSQL backend
+  ansible.builtin.command:
+    argv:
+      - "{{ base_cluster_hue_python_interpreter_effective }}"
+      - -c
+      - |
+        import importlib
+        import sys
+        import traceback
+
+        for module_name in ("psycopg", "psycopg2"):
+            try:
+                module = importlib.import_module(module_name)
+                print(f"{module_name}={getattr(module, '__version__', 'unknown')}")
+            except Exception as exc:
+                print(
+                    f"{module_name} import failed: {type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
+
+        try:
+            importlib.import_module("django.db.backends.postgresql.base")
+        except Exception:
+            traceback.print_exc()
+            raise
+  register: base_cluster_hue_postgresql_backend_verify
+  changed_when: false
+  failed_when: false
+
+- name: Require working Hue Django PostgreSQL backend
+  ansible.builtin.assert:
+    that:
+      - base_cluster_hue_postgresql_backend_verify.rc | int == 0
+    fail_msg: >-
+      Hue parcel Python {{ base_cluster_hue_python_runtime_version | default('unknown') }}
+      at {{ base_cluster_hue_python_interpreter_effective }} cannot load Django's
+      PostgreSQL backend after driver reconciliation.
+      Initial stderr={{ base_cluster_hue_postgresql_backend_check.stderr | default('') | trim }};
+      final stdout={{ base_cluster_hue_postgresql_backend_verify.stdout | default('') | trim }};
+      final stderr={{ base_cluster_hue_postgresql_backend_verify.stderr | default('') | trim }}.

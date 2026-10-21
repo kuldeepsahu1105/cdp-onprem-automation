@@ -2033,6 +2033,9 @@
           vars:
             python_psycopg2_additional_interpreters:
               - "{{ base_cluster_hue_python_interpreter_effective }}"
+
+        - name: Ensure Hue Django can load its PostgreSQL backend
+          ansible.builtin.import_tasks: common_tasks/ensure_hue_postgresql_backend.yml
       become: true
       connection: ssh
       delegate_to: "{{ groups[base_cluster_master_group][0] }}"
