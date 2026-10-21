@@ -26,7 +26,9 @@
   ansible.builtin.set_fact:
     cm_api_probe_host: "{{ cm_host_private }}"
   when:
-    - cm_api_uri_delegate_to | default('') | length > 0
+    - >-
+      (cm_api_probe_delegate_to | default('') | length > 0)
+      or (cm_api_uri_delegate_to | default('') | length > 0)
     - not (cm_api_controller_probe_succeeded | default(false) | bool)
     - cm_host_private | default('') | length > 0
 
@@ -34,7 +36,9 @@
   ansible.builtin.set_fact:
     cm_api_client_host: "{{ cm_host_private }}"
   when:
-    - cm_api_uri_delegate_to | default('') | length > 0
+    - >-
+      (cm_api_probe_delegate_to | default('') | length > 0)
+      or (cm_api_uri_delegate_to | default('') | length > 0)
     - not (cm_api_controller_probe_succeeded | default(false) | bool)
     - cm_host_private | default('') | length > 0
 
@@ -42,7 +46,9 @@
   ansible.builtin.set_fact:
     cm_host: "{{ cm_host_private }}"
   when:
-    - cm_api_uri_delegate_to | default('') | length > 0
+    - >-
+      (cm_api_probe_delegate_to | default('') | length > 0)
+      or (cm_api_uri_delegate_to | default('') | length > 0)
     - not (cm_api_controller_probe_succeeded | default(false) | bool)
     - cm_host_private | default('') | length > 0
 

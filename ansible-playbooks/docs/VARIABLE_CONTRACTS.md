@@ -151,8 +151,10 @@ controller probe failed. That delegated request must not use loopback or the
 manager public EIP.
 Likewise, `set_cm_api_url.yml` may select the manager public host only when
 the public-controller profile is active, the controller probe actually
-succeeded, and `cm_api_uri_delegate_to` is empty. A delegated API path must
-never be overwritten by the public-host fact task.
+succeeded, and both `cm_api_probe_delegate_to` and `cm_api_uri_delegate_to`
+are empty. Before its full probe, either delegation mode resolves a temporary
+private-host fact and aligns all three host facts to it. A delegated API path
+must never be overwritten by the public-host fact task.
 
 **Version variable names:** `cm_version` is the configured Cloudera Manager product/package version from `config.yml` and can have extra-var precedence in Jenkins. Never use it as a `register` target. Play **25** stores `GET /cm/version` in `cm_version_response` and parses the payload into `cm_version_info`; the API slug remains `cm_api_version`.
 
