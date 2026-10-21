@@ -1,0 +1,26 @@
+---
+# REST calls that delegate_to cldr-mngr must use the manager bind address (private IP / FQDN),
+# not the Jenkins-facing public EIP in cm_api_url (hairpin / closed :7180 from cldr-mngr).
+
+- name: CM API — prefer delegated URL when REST runs on cldr-mngr
+  ansible.builtin.set_fact:
+    cm_api_effective_url: "{{ cm_api_url_delegated }}"
+  when:
+    - cm_api_url_delegated | default('') | length > 0
+    - cm_api_uri_delegate_to | default('') | length > 0
+    - cm_api_uri_delegate_to == cm_manager_inventory_host
+    - cm_api_probe_host | default('') | length > 0
+    - cm_api_probe_host not in ['127.0.0.1', 'localhost']
+    - (
+        (cm_api_url | default('') | length == 0)
+        or (cm_api_probe_host not in (cm_api_url | default('')))
+        or (
+          (cm_host_public | default('') | length > 0)
+          and (cm_host_public in (cm_api_url | default('')))
+        )
+      )
+
+- name: CM API — use assembled API URL for REST
+  ansible.builtin.set_fact:
+    cm_api_effective_url: "{{ cm_api_url }}"
+  when: cm_api_effective_url | default('') | length == 0
