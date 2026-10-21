@@ -1,7 +1,8 @@
 ---
 # Fresh Base install in the same phase order as the working Cloudera Labs reference.
-# cloudera.cluster.service is available in pinned v4.4.0. Host-template modules were
-# added in v5, so the equivalent CM API is used for template creation/application.
+# cloudera.cluster.service in pinned v4.4.0 creates services only; service and role
+# config use the dedicated v4 modules. Host-template modules were added in v5, so
+# the equivalent CM API is used for template creation/application.
 
 - name: Establish Base cluster shell
   cloudera.cluster.cluster:
@@ -39,19 +40,32 @@
     password: "{{ cm_admin_pass }}"
     verify_tls: false
     cluster: "{{ cdh_basecluster_name }}"
-    name: "{{ base_cluster_reference_core_settings.name }}"
+    service: "{{ base_cluster_reference_core_settings.name }}"
     display_name: >-
       {{
         base_cluster_reference_core_settings.display_name
         | default(base_cluster_reference_core_settings.name)
       }}
     type: "{{ base_cluster_reference_core_settings.type }}"
-    config: "{{ base_cluster_reference_core_settings.config | default(omit) }}"
-    role_config_groups: >-
-      {{ base_cluster_reference_core_settings.role_groups | default(omit) }}
-    skip_redacted: true
     state: present
   when: base_cluster_reference_core_settings | length > 0
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Configure Core Settings before attaching hosts
+  cloudera.cluster.service_config:
+    host: "{{ cm_cluster_module_host }}"
+    port: "{{ cm_cluster_module_port }}"
+    version: "{{ cm_api_version }}"
+    force_tls: "{{ cm_cluster_module_force_tls }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    cluster: "{{ cdh_basecluster_name }}"
+    service: "{{ base_cluster_reference_core_settings.name }}"
+    parameters: "{{ base_cluster_reference_core_settings.config }}"
+  when:
+    - base_cluster_reference_core_settings | length > 0
+    - base_cluster_reference_core_settings.config | default({}) | length > 0
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Attach Base cluster hosts
@@ -63,8 +77,10 @@
     username: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
     verify_tls: false
-    name: "{{ item.name }}"
-    cluster: "{{ cdh_basecluster_name }}"
+    cluster_hostname: "{{ item.name }}"
+    host_ip: "{{ item.host_ip }}"
+    name: "{{ cdh_basecluster_name }}"
+    state: attached
   loop: "{{ base_cluster_hosts }}"
   loop_control:
     label: "{{ item.name }}"
@@ -116,16 +132,32 @@
     password: "{{ cm_admin_pass }}"
     verify_tls: false
     cluster: "{{ cdh_basecluster_name }}"
-    name: "{{ item.name }}"
+    service: "{{ item.name }}"
     display_name: "{{ item.display_name | default(item.name) }}"
     type: "{{ item.type }}"
-    config: "{{ item.config | default(omit) }}"
-    role_config_groups: "{{ item.role_groups | default(omit) }}"
-    skip_redacted: true
     state: present
   loop: "{{ base_cluster_reference_services }}"
   loop_control:
     label: "{{ item.name }} ({{ item.type }})"
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Configure Base cluster services in dependency order
+  cloudera.cluster.service_config:
+    host: "{{ cm_cluster_module_host }}"
+    port: "{{ cm_cluster_module_port }}"
+    version: "{{ cm_api_version }}"
+    force_tls: "{{ cm_cluster_module_force_tls }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    cluster: "{{ cdh_basecluster_name }}"
+    service: "{{ item.name }}"
+    parameters: "{{ item.config }}"
+  loop: "{{ base_cluster_reference_services }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.config | default({}) | length > 0
+  no_log: "{{ item.name in ['hue'] }}"
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Query Base service role config groups
@@ -159,6 +191,69 @@
         {%- endfor -%}
       {%- endfor -%}
       {{ groups }}
+
+- name: Build Base role config group configuration plan
+  ansible.builtin.set_fact:
+    base_cluster_reference_role_configs: >-
+      {%- set configs = [] -%}
+      {%- for service in base_cluster_spec.services -%}
+        {%- for role in service.role_groups | default([])
+            if role.config | default({}) | length > 0 -%}
+          {%- set key = service.type ~ ':' ~ role.type -%}
+          {%- if key in base_cluster_reference_rcg_names -%}
+            {%- set _ = configs.append({
+              'service': service.name,
+              'service_type': service.type,
+              'role_type': role.type,
+              'role_config_group': base_cluster_reference_rcg_names[key],
+              'config': role.config
+            }) -%}
+          {%- endif -%}
+        {%- endfor -%}
+      {%- endfor -%}
+      {{ configs }}
+
+- name: Count configured Base role config groups
+  ansible.builtin.set_fact:
+    base_cluster_reference_expected_role_config_count: >-
+      {%- set expected = namespace(count=0) -%}
+      {%- for service in base_cluster_spec.services -%}
+        {%- for role in service.role_groups | default([])
+            if role.config | default({}) | length > 0 -%}
+          {%- set expected.count = expected.count + 1 -%}
+        {%- endfor -%}
+      {%- endfor -%}
+      {{ expected.count }}
+
+- name: Require complete Base role config group configuration mappings
+  ansible.builtin.assert:
+    that:
+      - >-
+        base_cluster_reference_role_configs | length
+        == base_cluster_reference_expected_role_config_count | int
+    fail_msg: >-
+      Could not map every configured Base role config group with cloudera.cluster
+      v4.4.0. Expected {{ base_cluster_reference_expected_role_config_count }},
+      resolved {{ base_cluster_reference_role_configs | length }}.
+
+- name: Configure Base role config groups
+  cloudera.cluster.service_role_config_group_config:
+    host: "{{ cm_cluster_module_host }}"
+    port: "{{ cm_cluster_module_port }}"
+    version: "{{ cm_api_version }}"
+    force_tls: "{{ cm_cluster_module_force_tls }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    cluster: "{{ cdh_basecluster_name }}"
+    service: "{{ item.service }}"
+    role_config_group: "{{ item.role_config_group }}"
+    parameters: "{{ item.config }}"
+  loop: "{{ base_cluster_reference_role_configs }}"
+  loop_control:
+    label: "{{ item.service }}/{{ item.role_type }}"
+  no_log: "{{ item.service == 'ranger' and item.role_type == 'RANGER_USERSYNC' }}"
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Build v4-compatible Base host-template payloads
   ansible.builtin.set_fact:

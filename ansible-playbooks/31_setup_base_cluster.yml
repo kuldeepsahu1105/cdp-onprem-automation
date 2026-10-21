@@ -156,12 +156,35 @@
 
     - name: Build worker assignments
       ansible.builtin.set_fact:
-        base_worker_host_entries: "{{ base_worker_host_entries | default([]) + [{'name': item, 'host_template': 'Worker'}] }}"
-      loop: "{{ base_worker_fqdns }}"
+        base_worker_host_entries: >-
+          {%- set hostname = hostvars[item].cldr_hostname -%}
+          {%- set fqdn = hostname if hostname.endswith('.' ~ cluster_domain)
+              else hostname ~ '.' ~ cluster_domain -%}
+          {{
+            base_worker_host_entries | default([])
+            + [{
+              'name': fqdn,
+              'host_ip': hostvars[item].private_ip
+                         | default(hostvars[item].ansible_host, true),
+              'host_template': 'Worker'
+            }]
+          }}
+      loop: "{{ groups[base_cluster_worker_group] }}"
+      loop_control:
+        label: "{{ item }}"
 
     - name: Build cluster hosts
       ansible.builtin.set_fact:
-        base_cluster_hosts: "{{ [{'name': base_master_fqdn, 'host_template': 'Master'}] + base_worker_host_entries }}"
+        base_cluster_hosts: >-
+          {{
+            [{
+              'name': base_master_fqdn,
+              'host_ip': hostvars[groups[base_cluster_master_group][0]].private_ip
+                         | default(hostvars[groups[base_cluster_master_group][0]].ansible_host, true),
+              'host_template': 'Master'
+            }]
+            + base_worker_host_entries
+          }}
 
     - name: Show cluster targets
       ansible.builtin.debug:
