@@ -33,5 +33,7 @@
           (cm_autotls_complete | default(false) | bool)
           or (hostvars.get('localhost', {}).get('cm_autotls_complete', false) | bool)
           or (_cm_api_use_https_effective | default(false) | bool)
+          or (cm_autotls_setup_intent | default(false) | bool)
+          or (hostvars.get('localhost', {}).get('cm_autotls_setup_intent', false) | bool)
         )
       }}
