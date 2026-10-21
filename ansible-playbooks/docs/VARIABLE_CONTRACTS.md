@@ -77,12 +77,15 @@ causing a false HTTPS fallback and red ignored failure after HTTP succeeded.
 Controller results are copied to the effective `cm_tls_probe_*` facts only
 when the controller task actually executes.
 
-**PostgreSQL prerequisite:** CM security and CDH phases verify the configured
+**PostgreSQL prerequisite:** CDH play **31** verifies the configured external
 database host by connecting from `postgres_inventory_host` to the same
-FQDN/private address candidates used by CM JDBC and delegated `psql`, with
-loopback only as a final candidate. Systemd-unit and `PG_VERSION` searches are
-diagnostics only because supported PGDG, distro, container, and custom data
-layouts do not share one unit name or filesystem path.
+FQDN/private address candidates used by service JDBC and delegated `psql`,
+with loopback only as a final candidate. Systemd-unit and `PG_VERSION`
+searches are diagnostics only because supported PGDG, distro, container, and
+custom data layouts do not share one unit name or filesystem path. Auto-TLS
+play **27** does not apply this gate: Cloudera Manager can be healthy on its
+configured embedded SCM database, and Auto-TLS depends on CM API health rather
+than an external service-database listener on port 5432.
 
 When Jenkins cannot reach a CM API port directly and discovery falls back to a
 request delegated to `cldr-mngr`, `cm_api_client_host`, `cm_host`, and the
