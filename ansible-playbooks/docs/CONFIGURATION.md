@@ -173,7 +173,7 @@ entries must be complete `.jar` URLs. See
 | `hive_on_tez` | `true` | Configures Hive to use Tez; requires Hive and Tez. |
 | `hbase` | `true` | Installs HBase; requires ZooKeeper and HDFS. |
 | `hue` | `true` | Installs the Hue web application. |
-| `iceberg` | `true` | Validates the Hive, Impala, and Spark 3 services that provide Iceberg support in CDP 7.3.x; Iceberg is not a standalone CM service. |
+| `iceberg` | `true` | Validates the Hive, Impala, and Spark3 services that provide Iceberg support in CDP 7.3.x; Iceberg is not a standalone CM service. |
 | `replication` | `false` | Enables replication service roles. |
 | `impala` | `true` | Installs Impala query services. |
 | `kafka` | `true` | Installs Kafka brokers. |

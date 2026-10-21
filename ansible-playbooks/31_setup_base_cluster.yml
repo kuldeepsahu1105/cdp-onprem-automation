@@ -197,6 +197,13 @@
           Services to install:
           {{ base_cluster_spec.services | map(attribute='name') | list | join(', ') }}
 
+    - name: Show enabled Iceberg engine capability
+      ansible.builtin.debug:
+        msg: >-
+          Iceberg is enabled through Hive, Impala, and Spark3. CDP 7.3.2 and the
+          cloudera.cluster service catalog do not expose a standalone ICEBERG service.
+      when: base_cluster_install_services.iceberg | default(true) | bool
+
     - name: Find invalid role mappings
       ansible.builtin.set_fact:
         base_cluster_invalid_role_groups: >-

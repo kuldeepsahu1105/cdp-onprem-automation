@@ -12,7 +12,7 @@ Authoritative matrix: [Service Dependencies in Cloudera Manager](https://docs.cl
 | HDFS | `zookeeper_service`, `core_connector` |
 | YARN | `hdfs_service`, `zookeeper_service`; optional `ranger_service` |
 | Tez | `yarn_service` only |
-| Spark 3 | `yarn_service`; bundled CDH 7.3.1+ service type `SPARK3` (legacy releases use `SPARK3_ON_YARN`), with roles `SPARK3_YARN_HISTORY_SERVER` and `GATEWAY` |
+| Spark3 | `yarn_service`; bundled CDH 7.3.1+ service type `SPARK3` (legacy releases use `SPARK3_ON_YARN`), with roles `SPARK3_YARN_HISTORY_SERVER` and `GATEWAY` |
 | Hive | `hdfs_service`, `zookeeper_service`, `mapreduce_yarn_service`; PostgreSQL metastore host, port, name, user, and password; optional `ranger_service`, `hbase_service`, `atlas_service` |
 | Hive on Tez | `hdfs_service`, `hms_connector`, `tez_service`, `mapreduce_yarn_service`, `zookeeper_service`; optional ranger/hbase/atlas |
 | HBase | `hdfs_service`, `zookeeper_service` |

@@ -68,7 +68,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `base_cluster_adopt_existing_ozone_ha` | `true` — preserve adopted Ozone identity and recover an existing odd-sized SCM HA quorum without topology mutation; new clusters remain single-SCM |
 | `base_cluster_enable_kerberos` | `true` | Kerberize new base clusters before First Run, converge existing unsecure clusters, and verify HDFS authentication |
 | `base_cluster_restart_cms_after_start` | `true` | Permit CMS restart after First Run or an actual cluster TLS/Kerberos transition; healthy and service-recovery reruns skip it |
-| `base_cluster_install_services` | see `all.yml` | Per-service booleans for `31_setup_base_cluster.yml` (Spark 3, Knox, and Solr default `true`; NiFi, NiFi Registry, DataViz, and Phoenix default `false`; Iceberg validates its engine services) |
+| `base_cluster_install_services` | see `all.yml` | Per-service booleans for `31_setup_base_cluster.yml` (Spark3, Knox, and Solr default `true`; NiFi, NiFi Registry, DataViz, and Phoenix default `false`; Iceberg validates its engine services) |
 | `base_cluster_kafka_metadata_store` | `Zookeeper` | Kafka Broker metadata backend; accepted values are `Zookeeper` and `KRaft` |
 | `base_cluster_knox_cdp_proxy_topology_retries` / `base_cluster_knox_cdp_proxy_topology_delay` | `60` / `10` | Poll Knox `gateway-status` until CDP proxy topologies deploy (~10 min default) |
 | `base_cluster_knox_gateway_https_port` | `8443` | HTTPS port for Knox topology readiness probes on the gateway host |

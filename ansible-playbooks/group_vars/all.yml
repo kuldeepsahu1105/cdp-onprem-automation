@@ -542,7 +542,7 @@ base_cluster_install_services:
   hive_on_tez: true
   hbase: true
   hue: true
-  # Iceberg is provided through Hive, Impala, and Spark 3 in CDP 7.3.x (no standalone CM service).
+  # Iceberg is provided through Hive, Impala, and Spark3 in CDP 7.3.x (no standalone CM service).
   iceberg: true
   # Replication Manager is not on CDH 7.3.2; enable when the parcel supports REPLICATION_MANAGER.
   replication: false
