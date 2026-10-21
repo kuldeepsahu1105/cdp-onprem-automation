@@ -1,0 +1,81 @@
+---
+# Poll every enabled service with a non-gateway role before recording successful initialization.
+# Requires base_cluster_runtime_service_names from 31_setup_base_cluster.yml.
+
+- name: Wait for enabled base cluster runtime services to become healthy
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_service_health_poll
+  changed_when: false
+  failed_when: false
+  retries: "{{ base_cluster_service_health_retries }}"
+  delay: "{{ base_cluster_service_health_delay }}"
+  until:
+    - base_cluster_service_health_poll.status | default(0) | int == 200
+    - >-
+      (
+        base_cluster_runtime_service_names
+        | difference(
+            base_cluster_service_health_poll.json['items'] | default([])
+            | selectattr('serviceState', 'equalto', 'STARTED')
+            | map(attribute='name')
+            | list
+          )
+        | length
+      ) == 0
+    - >-
+      (
+        base_cluster_runtime_service_names
+        | difference(
+            base_cluster_service_health_poll.json['items'] | default([])
+            | selectattr('healthSummary', 'in', base_cluster_accepted_health_summaries)
+            | map(attribute='name')
+            | list
+          )
+        | length
+      ) == 0
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Collect unhealthy base cluster runtime services
+  ansible.builtin.set_fact:
+    base_cluster_unhealthy_runtime_service_details: >-
+      {%- set unhealthy = [] -%}
+      {%- for service_name in base_cluster_runtime_service_names -%}
+        {%- set service =
+          base_cluster_service_health_poll.json['items'] | default([])
+          | selectattr('name', 'equalto', service_name)
+          | first
+          | default({})
+        -%}
+        {%- if
+          service.get('serviceState', '') != 'STARTED'
+          or service.get('healthSummary', '') not in base_cluster_accepted_health_summaries
+        -%}
+          {%- set _ = unhealthy.append(
+            service_name
+            ~ '(state=' ~ service.get('serviceState', 'MISSING')
+            ~ ', health=' ~ service.get('healthSummary', 'MISSING') ~ ')'
+          ) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ unhealthy }}
+
+- name: Refuse to record initialization while base cluster services are unhealthy
+  ansible.builtin.assert:
+    that:
+      - base_cluster_service_health_poll.status | default(0) | int == 200
+      - base_cluster_unhealthy_runtime_service_details | length == 0
+    fail_msg: >-
+      Base cluster initialization/start command completed, but enabled runtime services did not
+      converge within {{ (base_cluster_service_health_retries | int) * (base_cluster_service_health_delay | int) }}s:
+      {{ base_cluster_unhealthy_runtime_service_details | join(', ') }}.
+      The initialization marker was not written. Fix the reported service health checks and rerun
+      31_setup_base_cluster.yml; the rerun will retain interrupted-initialization recovery.

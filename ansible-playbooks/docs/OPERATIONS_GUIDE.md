@@ -282,6 +282,12 @@ serial setting, CMS/LDAP/Kerberos localhost fact reuse, and the FreeIPA KDC
 host play. Keep `27` in its existing separate process and `28`–`30` in the
 wrapper's combined process.
 
+For CDH, continue invoking `31_setup_base_cluster.yml` directly or through
+the existing CDH Jenkins/`pvc_setup.sh` phase. Its implementation lives in
+`roles/cdh_base_cluster`, but the numbered wrapper retains the collection
+bootstrap boundary and the single localhost orchestration scope required for
+CM API facts, First Run recovery, markers, retries, and service ordering.
+
 Playbooks resolve SSH keys and Auto-TLS material on the **control machine** via `ANSIBLE_PRIVATE_KEY`, files under `ansible-playbooks/`, or `group_vars` (`cm_private_key_path`, `cm_node_sudo_password`). Wrappers only set the same env vars and `--private-key` for convenience.
 
 | Target OS | CM repo mode | Notes |
@@ -497,7 +503,7 @@ ansible-playbook -i inventory.ini 31_setup_base_cluster.yml
 ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml
 ```
 
-`31_setup_base_cluster.yml` builds the cluster from `templates/base_cluster_cluster_spec.j2`. Toggle services with `base_cluster_install_services` in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`). Cluster **create** runs only when the cluster does not exist in CM; adding services to an existing cluster requires CM UI/API changes.
+`31_setup_base_cluster.yml` builds the cluster from `roles/cdh_base_cluster/templates/base_cluster_cluster_spec.j2`. Toggle services with `base_cluster_install_services` in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`). Cluster **create** runs only when the cluster does not exist in CM; adding services to an existing cluster requires CM UI/API changes.
 
 Cluster creation is split into a create/configure phase and a First Run phase. The
 `cloudera.cluster` module can spend up to two hours activating parcels or waiting

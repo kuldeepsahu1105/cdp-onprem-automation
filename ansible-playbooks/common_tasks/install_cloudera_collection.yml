@@ -88,4 +88,4 @@
   failed_when: cloudera_cluster_api_verify.rc != 0
 
 - name: Install controller Python deps (urllib3 1.x pin + cm_client)
-  ansible.builtin.import_tasks: install_cm_client_python.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/install_cm_client_python.yml"

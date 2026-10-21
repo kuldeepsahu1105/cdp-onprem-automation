@@ -1,0 +1,4 @@
+---
+- name: Install cloudera.cluster collection
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/install_cloudera_collection.yml"
+

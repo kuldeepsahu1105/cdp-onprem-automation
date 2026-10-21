@@ -378,6 +378,12 @@ CMS (Management Service) and CDP base cluster are **separate**:
 | Playbook | Component | Deploys |
 |---|---|---|
 | `28_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. Run **after** `27_setup_cm_autotls.yml` when Auto-TLS is on. |
+| `31_setup_base_cluster.yml` | CDP base cluster | Thin compatibility wrapper over `roles/cdh_base_cluster`; preserves collection bootstrap and localhost orchestration plays |
+
+Base-cluster task implementation and role-relative cluster/Knox templates
+live in `roles/cdh_base_cluster`. CDH-owned legacy `common_tasks` paths are
+static role-import shims for manual or later callers. The numbered playbook
+remains the supported standalone/Jenkins/`pvc_setup.sh` entry point.
 
 **CMS troubleshooting (Service Monitor / Avro `Connection refused`):**
 

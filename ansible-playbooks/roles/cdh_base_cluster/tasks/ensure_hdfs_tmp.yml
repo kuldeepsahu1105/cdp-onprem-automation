@@ -1,0 +1,102 @@
+---
+# Creates HDFS namespace /tmp through the supported CM command when available,
+# then verifies and repairs it through an available base-node HDFS client.
+
+- name: Read authoritative HDFS authentication mode for temporary-directory repair
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/hdfs/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_hdfs_tmp_auth_config
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Resolve authoritative HDFS authentication mode for temporary-directory repair
+  ansible.builtin.set_fact:
+    base_cluster_hdfs_tmp_authentication: >-
+      {{
+        (
+          base_cluster_hdfs_tmp_auth_config.json['items'] | default([])
+          | selectattr('name', 'equalto', 'hadoop_security_authentication')
+          | map(attribute='value')
+          | first
+        )
+        | default(
+            (
+              base_cluster_hdfs_tmp_auth_config.json['items'] | default([])
+              | selectattr('name', 'equalto', 'hadoop_security_authentication')
+              | map(attribute='default')
+              | first
+            ),
+            true
+          )
+        | default('simple', true)
+        | lower
+      }}
+
+- name: Resolve a base-node HDFS client
+  ansible.builtin.include_tasks: resolve_hdfs_client.yml
+
+- name: Submit CM HDFS temporary-directory command
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/hdfs/commands/hdfsCreateTmpDir
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 400]
+    follow_redirects: none
+  register: base_cluster_hdfs_tmp_command
+  failed_when: >-
+    base_cluster_hdfs_tmp_command.status | int == 400
+    and 'command not valid for' not in (
+      base_cluster_hdfs_tmp_command.json.message
+      | default(base_cluster_hdfs_tmp_command.msg | default(''))
+      | lower
+    )
+    and 'already exists' not in (
+      base_cluster_hdfs_tmp_command.json.message
+      | default(base_cluster_hdfs_tmp_command.msg | default(''))
+      | lower
+    )
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Wait for CM HDFS temporary-directory command
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/common_tasks/wait_cm_api_command.yml"
+  vars:
+    cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+    cm_api_command_id: "{{ base_cluster_hdfs_tmp_command.json.id }}"
+    cm_api_command_allow_already_exists: true
+    cm_api_command_allow_not_valid: true
+    cm_api_uri_delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when:
+    - base_cluster_hdfs_tmp_command.status | int == 200
+    - base_cluster_hdfs_tmp_command.json.id is defined
+
+- name: Note CM HDFS temporary-directory fallback
+  ansible.builtin.debug:
+    msg: >-
+      CM could not run hdfsCreateTmpDir for this service layout:
+      {{
+        base_cluster_hdfs_tmp_command.json.message
+        | default(base_cluster_hdfs_tmp_command.msg | default('command unavailable'))
+      }}.
+      Verifying and repairing HDFS /tmp through the discovered base-node client
+      on {{ base_cluster_hdfs_client_host }}.
+  when: base_cluster_hdfs_tmp_command.status | int == 400
+
+- name: Ensure HDFS temporary directory and sticky permissions
+  ansible.builtin.include_tasks: reconcile_hdfs_directory.yml
+  vars:
+    hdfs_directory_path: /tmp
+    hdfs_directory_mode: "1777"

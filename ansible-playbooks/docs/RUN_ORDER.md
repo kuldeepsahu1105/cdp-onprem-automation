@@ -158,6 +158,16 @@ ECS, cleanup, and manual callers. Generic OS facts, inventory validation,
 controller reachability, identity-owned KDC tasks, and install-owned package
 or PostgreSQL tasks remain in their existing shared/owning locations.
 
+The CDH/base-cluster implementation is organized under
+`roles/cdh_base_cluster`. Playbook `31_setup_base_cluster.yml` retains its
+collection-bootstrap play and localhost cluster-orchestration play as
+separate boundaries. The role owns the cluster specification, Knox safety
+valve, service dependency/configuration, First Run and recovery, HDFS,
+Kerberos, Auto-TLS, Ranger, Ozone, and health-verification tasks. CDH-owned
+`common_tasks` names remain static compatibility shims; generic collection
+installation and CM module endpoint helpers continue in `common_tasks`, while
+CM security/install helpers continue through their owning role shims.
+
 ## Migration: renumbering duplicate prefixes (2026-09)
 
 Four playbooks previously duplicated a numeric prefix with another, unrelated playbook (`00_*` had three files, `25_*` had two, and `12_*`/`12b_*` used a letter suffix that **sorts before** its own `12_` file under common UTF-8 locales — `ls` in `en_US.UTF-8` prints `12b_ipa_deep_recovery.yml` before `12_setup_freeipa_server.yml`, inverting the intended order). None of the four own a distinct mainline `pvc_setup.sh` sequence slot (they are either always-imported libraries or optional/manual helpers), so they were **de-numbered** rather than assigned a new colliding or ambiguous number. This is a **rename only** — no task/behavior changes, no cascading renumber of any other playbook.

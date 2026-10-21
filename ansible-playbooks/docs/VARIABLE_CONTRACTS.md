@@ -13,9 +13,9 @@ Numbered compatibility playbooks own orchestration: play order, `hosts`,
 Roles own reusable task implementation. The PREREQS wrappers `00`–`09`
 therefore import `roles/prereq_*`, while PORTAL wrappers `10` and `35` import
 `roles/deployment_portal`, and IDENTITY entry points import `roles/identity`,
-while CM_INSTALL entry points `20`–`26` import `roles/cm_install`, without
-and CM security entry points `27`–`30` import `roles/cm_security`, without
-introducing role defaults or vars;
+CM_INSTALL entry points `20`–`26` import `roles/cm_install`, CM security entry
+points `27`–`30` import `roles/cm_security`, and CDH entry point `31` imports
+`roles/cdh_base_cluster`. None introduces role defaults or vars;
 inventory, `group_vars`, config, Jenkins values, and extra-vars retain their
 existing precedence.
 
@@ -60,6 +60,13 @@ the shared API/restart/TLS/CMS/LDAP/Kerberos implementations. Identity-owned
 KDC service/encryption tasks and CM-install-owned agent/PostgreSQL helpers are
 still reached through their existing static shims, avoiding duplicated
 implementation or a change in variable precedence.
+
+CDH playbook `31` keeps its two plays, CM API localhost facts, async/poll
+settings, retries, and First Run markers in the same scopes while delegating
+task implementation to `roles/cdh_base_cluster`. CDH-owned shared helpers are
+static compatibility shims. Generic collection/module endpoint tasks and
+CM-security/CM-install-owned helpers remain at their existing shared paths or
+role shims, preserving service dependency ordering and caller-supplied vars.
 
 Both validation gates scan role task YAML. Contract setter/index checks must
 continue to include `roles/*/tasks/*.yml`; otherwise moving a `set_fact` into a
