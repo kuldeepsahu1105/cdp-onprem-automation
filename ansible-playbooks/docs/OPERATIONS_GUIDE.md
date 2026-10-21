@@ -743,18 +743,19 @@ that the parcel interpreter itself starts. If its ELF loader reports a missing
 (`pythonX.Y-libs` on Red Hat family or `libpythonX.Y` on Debian family) and
 rechecks the interpreter. The loader parser checks both stdout and stderr; an
 unrelated interpreter failure stops with its rc/stdout/stderr instead of being
-misreported as a missing libpython package. The pre-First-Run check then imports
-Django's PostgreSQL backend, not only `psycopg2`. If that backend cannot load,
-the play installs the supported psycopg 3 binary extra in the same parcel
-environment and verifies the backend again. This is rerun-safe: pip is skipped
-once the backend imports successfully. No Python minor version is hardcoded:
+misreported as a missing libpython package. Before First Run, the play requires
+the psycopg 3 binary driver in the same parcel environment and verifies both
+that driver and Django's PostgreSQL backend as the `hue` account. This avoids
+Hue bootstrap failures that can occur even when a standalone `psycopg2` import
+succeeds. The step is rerun-safe: pip is skipped once `psycopg` imports
+successfully. No Python minor version is hardcoded:
 the play reads the version from the discovered parcel interpreter and invokes
 that interpreter's own `-m pip` for any compatible runtime shipped by Hue.
 Discovery targets the repository-resolved versioned parcel directory rather
-than the mutable `CDH` symlink. Backend checks run as the `hue` service account,
-matching CM role execution; fallback installation uses a `0022` umask and a
-forced reinstall so packages previously written with root-only permissions are
-repaired on rerun.
+than the mutable `CDH` symlink. Driver and backend checks run as the `hue`
+service account, matching CM role execution; installation uses a `0022` umask
+and a forced reinstall when import fails so incomplete or root-only packages
+are repaired on rerun.
 
 For an existing cluster, playbook **31** also detects stale Hive Metastore
 catalogs whose names begin with
