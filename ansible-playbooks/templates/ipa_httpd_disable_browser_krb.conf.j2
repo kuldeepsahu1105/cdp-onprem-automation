@@ -7,4 +7,6 @@
 # a late broad location overrides the public Directory exceptions for /ipa/ui and
 # /ipa/modern-ui (when installed), causing static login applications to return HTTP 401.
 
-SetEnvIf Request_URI "^/ipa(/|$)" gssapi-no-negotiate=1
+# mod_auth_gssapi documents BrowserMatch as the supported way to set its
+# request environment hook before authentication emits response challenges.
+BrowserMatch ".*" gssapi-no-negotiate

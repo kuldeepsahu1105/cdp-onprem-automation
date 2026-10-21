@@ -112,6 +112,9 @@
               true
             )
         }}
+      User-Agent: >-
+        Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
+        Chrome/120.0 Safari/537.36
     status_code: [200, 401, 403]
     follow_redirects: none
     validate_certs: false
@@ -136,7 +139,8 @@
     fail_msg: >-
       FreeIPA still advertises WWW-Authenticate: Negotiate to browsers after
       installing zz-ipa-disable-browser-krb.conf. Browser authentication must use
-      the password form only. Observed header={{
+      the password form only. The probe uses a Chromium browser User-Agent.
+      Observed header={{
       ipa_httpd_browser_krb_probe.www_authenticate | default('(none)') }}.
   when:
     - ipa_httpd_browser_krb_probe is defined
