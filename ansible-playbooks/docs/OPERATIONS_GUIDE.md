@@ -750,6 +750,11 @@ environment and verifies the backend again. This is rerun-safe: pip is skipped
 once the backend imports successfully. No Python minor version is hardcoded:
 the play reads the version from the discovered parcel interpreter and invokes
 that interpreter's own `-m pip` for any compatible runtime shipped by Hue.
+Discovery targets the repository-resolved versioned parcel directory rather
+than the mutable `CDH` symlink. Backend checks run as the `hue` service account,
+matching CM role execution; fallback installation uses a `0022` umask and a
+forced reinstall so packages previously written with root-only permissions are
+repaired on rerun.
 
 For an existing cluster, playbook **31** also detects stale Hive Metastore
 catalogs whose names begin with
