@@ -249,27 +249,26 @@
         validate_certs: no
         status_code: [200]
         follow_redirects: safe
+        return_content: true
         timeout: 60
       register: base_cluster_cdh_manifest
       changed_when: false
       failed_when: false
-      until:
-        - base_cluster_cdh_manifest.status | default(0) == 200
-        - >-
-          (
-            (base_cluster_cdh_manifest.json | default({})).get('parcels', [])
-            | map(attribute='parcelName')
-            | select(
-                'match',
-                '^CDH-' ~ (cdh_parcel_version | regex_escape) ~ '-.*\\.parcel$'
-              )
-            | list
-            | length
-          )
-          > 0
+      until: base_cluster_cdh_manifest.status | default(0) == 200
       retries: 5
       delay: 10
       delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
+
+    - name: Parse configured CDH parcel repository manifest
+      ansible.builtin.set_fact:
+        base_cluster_cdh_manifest_data: "{{ base_cluster_cdh_manifest.content | from_json }}"
+      no_log: true
+      when: base_cluster_cdh_manifest.status | default(0) == 200
+
+    - name: Default unavailable CDH parcel repository manifest
+      ansible.builtin.set_fact:
+        base_cluster_cdh_manifest_data: {}
+      when: base_cluster_cdh_manifest_data is not defined
 
     - name: Require requested CDH parcel before cluster mutation
       ansible.builtin.assert:
@@ -277,7 +276,7 @@
           - base_cluster_cdh_manifest.status | default(0) == 200
           - >-
             (
-              (base_cluster_cdh_manifest.json | default({})).get('parcels', [])
+              base_cluster_cdh_manifest_data.get('parcels', [])
               | map(attribute='parcelName')
               | select(
                   'match',
@@ -294,7 +293,7 @@
           {{ base_cluster_cdh_manifest.status | default('unknown') }}.
           Response: {{ base_cluster_cdh_manifest.msg | default('none') }}.
           Published parcel files: {{
-            (base_cluster_cdh_manifest.json | default({})).get('parcels', [])
+            base_cluster_cdh_manifest_data.get('parcels', [])
             | map(attribute='parcelName')
             | join(', ')
           }}. Verify parcel_repo/REMOTE_PARCEL_REPO_URLS, archive credentials,
