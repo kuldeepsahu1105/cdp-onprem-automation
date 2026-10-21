@@ -98,8 +98,11 @@ identity_client_hosts: "{{ 'all:!ipaserver' if ipa_server_in_inventory | bool el
 cluster_domain: "{{ ad_domain if identity_provider_effective == 'ad' else ipaserver_domain }}"
 cluster_realm: "{{ cluster_domain | upper }}"
 
-# FreeIPA
-ipaserver_domain: cldrsetup.local
+# FreeIPA — default lab.example.com (RFC 2606) for Ozone/Netty IANA hostname checks (HDDS-16034).
+# Alternatives: cldr.lab.example.com, cluster.home.arpa (RFC 8375). Avoid .local/.internal/.lan/.corp/.home/.test/.localdomain.
+# Brownfield stacks still on a legacy suffix: cluster_domain_skip_ozone_hostname_validation: true in Jenkins/tfvars overrides.
+cluster_domain_skip_ozone_hostname_validation: false
+ipaserver_domain: lab.example.com
 ipaserver_realm: "{{ ipaserver_domain | upper }}"
 ipaadmin_principal: "admin"
 ipaadmin_password: "PseTeam@123"
@@ -191,7 +194,7 @@ cert_state: "Santa Clara"
 cert_locality: "Raleigh"
 cert_organization: "Cloudera Inc"
 cert_organizational_unit: "CLDR"
-# cert_common_name: "cldr-mngr.cldrsetup.local"
+# cert_common_name: "cldr-mngr.lab.example.com"
 
 # The certificate CN is the current host FQDN.
 cert_subj: "/C={{ cert_country }}/ST={{ cert_state }}/L={{ cert_locality }}/O={{ cert_organization }}/OU={{ cert_organizational_unit }}/CN={{ ansible_fqdn }}"
@@ -1307,7 +1310,7 @@ deployment_portal_pgadmin_container: cldr-portal-pgadmin
 deployment_portal_pgadmin_postgres_sslmode: prefer
 # When true, print docker logs for pgAdmin after successful PORTAL sync (troubleshooting).
 deployment_portal_pgadmin_debug_logs: false
-# pgAdmin validates PGADMIN_DEFAULT_EMAIL; IPA/cluster .local domains (e.g. cldrsetup.local) fail at container start.
+# pgAdmin validates PGADMIN_DEFAULT_EMAIL; legacy .local cluster domains fail at container start (default domain is lab.example.com).
 pgadmin_default_email: "admin@{{ caddy_vhost_public_base }}"
 pgadmin_default_password: "{{ postgres_password }}"
 deployment_portal_inventory_groups:

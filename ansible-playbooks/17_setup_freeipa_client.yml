@@ -1,6 +1,6 @@
 ### ansible-playbook -i inventory.ini 17_setup_freeipa_client.yml
 # vars:
-#   ipaserver_domain: cldrsetup.local
+#   ipaserver_domain: lab.example.com
 #   ipaserver_realm: "{{ ipaserver_domain | upper }}"
 #   ipaadmin_principal: "admin"
 #   ipaadmin_password: "vmware123"

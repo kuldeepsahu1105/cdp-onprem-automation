@@ -204,7 +204,8 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
       name: 'ANSIBLE_GROUP_VARS_YAML',
       defaultValue: '''# Ansible group_vars overrides (any valid key: value mapping)
 # Example:
-# ipaserver_domain: cldrsetup.local
+# ipaserver_domain: lab.example.com
+# cluster_domain_skip_ozone_hostname_validation: true   # legacy brownfield .local only
 # cdh_version: "7.3.2.0"
 # ecs_pvc_ds_version: "1.5.5-h3300"
 # monitoring_stack_enabled: false   # optional — prefer MONITORING_STACK_ENABLED checkbox above

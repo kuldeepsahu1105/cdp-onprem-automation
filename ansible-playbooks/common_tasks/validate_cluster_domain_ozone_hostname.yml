@@ -1,0 +1,28 @@
+---
+# Fail early when cluster_domain uses suffixes Ozone/Netty reject (HDDS-16034).
+# Skipped when cluster_domain_skip_ozone_hostname_validation is true (brownfield).
+- name: Evaluate cluster domain for Ozone Netty hostname rules
+  run_once: true
+  delegate_to: localhost
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python | default(ansible_python_interpreter | default('python3')) }}"
+      - "{{ playbook_dir }}/../scripts/lib/validate_cluster_domain.py"
+      - --domain
+      - "{{ cluster_domain }}"
+  register: _cluster_domain_ozone_validate
+  changed_when: false
+  failed_when: _cluster_domain_ozone_validate.rc != 0
+  when:
+    - not (cluster_domain_skip_ozone_hostname_validation | default(false) | bool)
+    - cluster_domain | default('') | length > 0
+
+- name: Surface Ozone cluster-domain validation warnings
+  run_once: true
+  delegate_to: localhost
+  ansible.builtin.debug:
+    msg: "{{ _cluster_domain_ozone_validate.stderr_lines | default([]) | select('search', '^WARNING:') | list }}"
+  when:
+    - _cluster_domain_ozone_validate is defined
+    - not (_cluster_domain_ozone_validate.skipped | default(false) | bool)
+    - (_cluster_domain_ozone_validate.stderr_lines | default([]) | select('search', '^WARNING:') | list | length) > 0

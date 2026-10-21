@@ -2,7 +2,7 @@
 # vars:
 #   ipaadmin_password: "vmware123"
 #   ipaadmin_principal: "admin"
-#   ipaserver_domain: cldrsetup.local
+#   ipaserver_domain: lab.example.com
 
 ---
 - import_playbook: ensure_collections.yml

@@ -2,7 +2,7 @@
 # vars:
 #   ansible_user: ec2-user
 #   cldr_hostname: ipaserver
-#   ipaserver_domain: cldrsetup.local
+#   ipaserver_domain: lab.example.com
 
 ---
 - import_playbook: ensure_collections.yml
@@ -12,6 +12,9 @@
   become: yes
   remote_user: "{{ ansible_user }}" # Specify the SSH user
   tasks:
+    - name: Validate cluster domain for Ozone Netty hostname rules (HDDS-16034)
+      ansible.builtin.import_tasks: common_tasks/validate_cluster_domain_ozone_hostname.yml
+
     - name: Verify connectivity to all hosts
       ping:
 

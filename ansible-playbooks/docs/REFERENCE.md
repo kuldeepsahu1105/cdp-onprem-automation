@@ -221,7 +221,8 @@ Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` 
 
 | Variable | Description |
 |---|---|
-| `ipaserver_domain` | DNS domain |
+| `ipaserver_domain` | DNS domain (default `lab.example.com`; IANA suffix for Ozone HDDS-16034) |
+| `cluster_domain_skip_ozone_hostname_validation` | Skip HDDS-16034 domain preflight (brownfield legacy `.local` / `.internal` only) |
 | `ipaserver_realm` | Kerberos realm (uppercase domain) |
 | `ipaadmin_principal` | IPA admin user |
 | `ipaadmin_password` | IPA admin password |

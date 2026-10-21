@@ -73,6 +73,14 @@ if should_validate "${VALIDATE_TFVARS:-true}" "TFVARS" && [[ -n "${TFVARS_FILE:-
   log "  infra: vpc_mode=${VPC_MODE:-USE_DEFAULT} create_vpc=${CREATE_VPC:-false} sg_mode=${SG_MODE:-USE_EXISTING} create_new_sg=${CREATE_NEW_SG:-false}"
   log "  names: keypair=${KEYPAIR_NAME:-n/a} sg=${EXISTING_SG_NAME:-${SG_NAME:-n/a}}"
 
+  if should_validate "${VALIDATE_CLUSTER_DOMAIN:-true}" "CLUSTER_DOMAIN"; then
+    log "Cluster domain (Ozone/Netty HDDS-16034) — user-supplied domains only"
+    "$REPO_ROOT/jenkins/scripts/validate-cluster-domain.sh" | tee -a "$LOG_FILE" \
+      || fail "Cluster domain failed Ozone/Netty hostname validation — use lab.example.com, home.arpa, or set cluster_domain_skip_ozone_hostname_validation for legacy brownfield"
+  else
+    log "Skipping cluster domain validation (VALIDATION_CHECKS)"
+  fi
+
   if is_enabled "${REQUIRE_TERRAFORM:-false}"; then
     # shellcheck source=jenkins/scripts/aws-credential-check.sh
     source "$REPO_ROOT/jenkins/scripts/aws-credential-check.sh"

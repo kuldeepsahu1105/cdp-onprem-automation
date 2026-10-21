@@ -1,4 +1,7 @@
 ---
+- name: Validate cluster domain for Ozone Netty hostname rules (HDDS-16034)
+  ansible.builtin.import_tasks: validate_cluster_domain_ozone_hostname.yml
+
 - name: Validate detected identity provider configuration
   ansible.builtin.assert:
     that:

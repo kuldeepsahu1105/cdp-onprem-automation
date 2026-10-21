@@ -164,7 +164,7 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 
 | Checkbox | What runs |
 |---|---|
-| `VALIDATE` | `validate-prereqs.sh` — standard tool, AWS, tfvars, Ansible syntax, and inventory checks (no deploy) |
+| `VALIDATE` | `validate-prereqs.sh` — standard tool, AWS, tfvars, Ozone/Netty cluster-domain check for user-set `ipaserver_domain` / `cluster_domain` in tfvars or `ANSIBLE_GROUP_VARS_YAML` (`VALIDATE_CLUSTER_DOMAIN` / `CLUSTER_DOMAIN`), Ansible syntax, and inventory checks (no deploy) |
 | `TERRAFORM` | EC2/VPC/SG/EIP via Terraform; `inventory.ini` + `.pem` key |
 | `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 |
 | `PORTAL` | Bootstrap Caddy/pgAdmin/index (`10`); before CM when `DEPLOYMENT_PORTAL_ENABLED` |

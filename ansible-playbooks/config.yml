@@ -25,7 +25,8 @@
 # -----------------------------------------------------------------------------
 identity_provider: auto                 # auto | freeipa | ad
 deployment_environment: auto            # auto | aws | baremetal
-ipaserver_domain: cldrsetup.local
+# lab.example.com — RFC 2606; required for Ozone Netty hostname verification (HDDS-16034). See group_vars/all.yml.
+ipaserver_domain: lab.example.com
 # Detect and pin each host's current RHEL minor release before any DNF operation.
 rhel_release_pin: auto                  # auto | major.minor
 

@@ -114,6 +114,18 @@ See also: `docs/OPERATIONS_GUIDE.md` (URL verification tiers), `docs/REFERENCE.m
 
 ---
 
+## Cluster domain / Ozone hostname (HDDS-16034)
+
+| Fact / var | Set by | Notes |
+|------------|--------|-------|
+| `cluster_domain` | `group_vars/all.yml` | `ipaserver_domain` or `ad_domain` via `identity_provider_effective` |
+| `cluster_domain_skip_ozone_hostname_validation` | `group_vars/all.yml` (default **`false`**) | Brownfield opt-out from `validate_cluster_domain_ozone_hostname.yml` |
+| `_cluster_domain_ozone_validate` | `validate_cluster_domain_ozone_hostname.yml` | Ephemeral `command` result on **localhost** (`run_once`); not consumed downstream |
+
+Import **`validate_cluster_domain_ozone_hostname.yml`** from **`detect_identity_provider.yml`** and playbook **02** before hostnames are applied.
+
+---
+
 ## FreeIPA client enrollment (playbook 16)
 
 | Fact | Set by | Notes |

@@ -2,7 +2,8 @@
 # Any valid Ansible group_vars key is accepted. Dedicated Jenkins parameters,
 # when set, take precedence over matching values here.
 #
-# ipaserver_domain: cldrsetup.local
+# ipaserver_domain: lab.example.com
+# cluster_domain_skip_ozone_hostname_validation: true   # only for existing .local / .internal brownfield
 # ipaadmin_password: "ChangeMe@123"
 # cm_version: "7.13.2.6"
 # autotls_enabled: true   # default in group_vars — Cloudera Auto-TLS (playbook 27, CM HTTPS :7183); false = manual TLS only

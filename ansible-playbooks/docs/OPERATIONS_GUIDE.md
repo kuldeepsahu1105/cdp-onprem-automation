@@ -232,7 +232,9 @@ flowchart LR
 
 **pgAdmin connection prompt:** Read the red error below the password box. The server preset uses `postgres_host_fqdn`, matching the original pgAdmin configuration and the PostgreSQL certificate identity. Because the container does not necessarily use the cluster/IPA resolver, Compose adds an `extra_hosts` entry that maps this FQDN to the database host's `private_ip`, then `ansible_host`, with the FQDN only as a final fallback. Passwords cannot be imported in `servers.json`, so Ansible renders `{{ deployment_portal_config_dir }}/pgadmin-pgpass` from the effective `postgres_password` with mode **0600** and Compose mounts it read-only as `/var/lib/pgadmin/.pgpass`; its host field uses the same FQDN. A direct mount is required because the image's `PGPASS_FILE` entrypoint copy runs only while initially creating `pgadmin4.db`, but Docker retains the image's anonymous `/var/lib/pgadmin` volume across ordinary container recreation. The default `deployment_portal_pgadmin_postgres_sslmode: prefer` preserves the original SSL-preferred behavior. On a new deployment, PORTAL precedes CM_INSTALL, so verification skips database login while no PostgreSQL unit exists; play 23 in CM_INSTALL remains the sole database installer. Once installed, the gate resolves the unit matching `postgresql_version` and starts it when stopped; it never restarts a running database. Startup and login failures include the exact unit status and journal. Ambiguous units also include listener and process evidence. If startup fails, repair the database or re-run PostgreSQL play **23**; DNS failures do not require password rotation.
 
-**pgAdmin restart loop / invalid email:** pgAdmin rejects `PGADMIN_DEFAULT_EMAIL` values like `admin@cldrsetup.local` (from `admin@{{ cluster_domain }}`). Set `pgadmin_default_email` to a real TLD (default `admin@pvc.cloudera-labs.com`), re-render compose, then on the portal host: `cd /opt/cldr-deployment-portal && docker compose up -d --force-recreate pgadmin`.
+**pgAdmin restart loop / invalid email:** pgAdmin rejects `PGADMIN_DEFAULT_EMAIL` values like `admin@cldrsetup.local` (legacy clusters using `admin@{{ cluster_domain }}`). Set `pgadmin_default_email` to a real TLD (default `admin@pvc.cloudera-labs.com`), re-render compose, then on the portal host: `cd /opt/cldr-deployment-portal && docker compose up -d --force-recreate pgadmin`.
+
+**Cluster domain / Ozone TLS (HDDS-16034):** Default FreeIPA domain is `lab.example.com` (RFC 2606). Ozone and Netty hostname verification reject private suffixes (`.local`, `.internal`, `.lan`, `.corp`, `.home`, `.test`, `.localdomain`) with errors such as `Invalid domain` during Auto-TLS or `CertificateSignRequest`. Validation runs in playbook **02** and `detect_identity.yml` (`validate_cluster_domain_ozone_hostname.yml`), and Jenkins `validate-prereqs.sh` checks domains you set in `ANSIBLE_GROUP_VARS_YAML` or tfvars. Grandfathered legacy values `cldrsetup.local` and `cldr.internal` warn only when explicitly overridden. Brownfield stacks that cannot rename DNS yet: `cluster_domain_skip_ozone_hostname_validation: true` in Jenkins/tfvars. Greenfield: use `lab.example.com`, `cldr.lab.example.com`, or `*.home.arpa`.
 
 When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-playbooks/`, the wrapper prompts you to choose. Override with `ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, or `CM_INFO_FILE`.
 
@@ -335,11 +337,11 @@ rm -rf /etc/dirsrv/slapd-*
 mkdir -p /etc/ipa/custodia /var/log/ipa /var/lib/ipa/{sysupgrade,sysrestore,backup,dnssec}
 
 # 4) Fresh install — use lab/Jenkins passwords (default admin + DS: PseTeam@123 unless rotated)
-FQDN="$(hostname -f)"   # must match inventory FQDN, e.g. ipaserver.cldrsetup.local
+FQDN="$(hostname -f)"   # must match inventory FQDN, e.g. ipaserver.lab.example.com
 IP="$(hostname -I | awk '{print $1}')"
 ipa-server-install --setup-dns --unattended \
   --hostname="${FQDN}" --ip-address="${IP}" \
-  --domain=cldrsetup.local --realm=CLDRSETUP.LOCAL \
+  --domain=lab.example.com --realm=LAB.EXAMPLE.COM \
   --ds-password='PseTeam@123' --admin-password='PseTeam@123' \
   --no-dnssec-validation --no-reverse \
   --forwarder=172.31.0.2
@@ -636,7 +638,7 @@ services. Without that dependency CM's Ozone CSD receives no `core-site.xml`; it
 For new clusters, playbook **31** sets `ozone.scm.primordial.node.id` and
 attaches the single `Master` host template to
 **`groups[base_cluster_master_group][0]`** only (`cldr_hostname` +
-`cluster_domain`, e.g. `pvcbase-master.cldrsetup.local`). Workers receive
+`cluster_domain`, e.g. `pvcbase-master.lab.example.com`). Workers receive
 `OZONE_DATANODE` only; OM/SCM/Recon/S3 Gateway run on that one master. When
 adopting a populated cluster, **31** preserves its initialized
 `ozone.service.id` and primordial node. With
@@ -670,10 +672,11 @@ registered`, OM/DN cert enrollment retries, `RAFT closed`, or
    stops unhealthy Ozone, starts the single SCM or all preserved HA SCM roles,
    waits for `ozone admin scm roles` `LEADER`, then starts remaining Ozone roles
    (see recovery section above).
-5. **`.local` cluster domains** — IPA default `cldrsetup.local` is valid for
-   hostnames but some Ozone/Auto-TLS cert validators log `Invalid domain` for
-   internal TLDs. Confirm SANs on signed certs match the CM host FQDN; for
-   production labs consider a resolvable suffix consistent with CM Auto-TLS.
+5. **Non-IANA cluster domains** — Legacy `.local` / `.internal` suffixes (former
+   default `cldrsetup.local`) break Ozone/Netty hostname verification (HDDS-16034).
+   Greenfield defaults use `lab.example.com`. Confirm SANs on signed certs match
+   the CM host FQDN; migrate DNS or set
+   `cluster_domain_skip_ozone_hostname_validation: true` only for brownfield.
 
 **Operator checks:** SCM role logs under
 `/var/log/cloudera-scm-agent/process/*-ozone-STORAGE_CONTAINER_MANAGER/`; Ratis
@@ -827,7 +830,7 @@ portal01 ansible_host=203.0.113.10 private_ip=10.20.0.10 cldr_hostname=portal01
 Keep secrets out of the inventory and command line. Create a local, uncommitted `portal-vars.yml`:
 
 ```yaml
-cluster_domain: example.internal
+cluster_domain: lab.example.com
 deployment_environment: baremetal
 deployment_portal_access_profile: private
 
@@ -917,7 +920,7 @@ sudo sed -n '1,220p' /opt/cldr-deployment-portal/Caddyfile
 **`ipa-client-install` / `zlib.error` on `/ipa/json` schema RPC** (log shows session cookie OK, then `invalid code lengths set`): **`ipa-client-install`** talks to **`https://ipaserver.<domain>/ipa/json`** on the IPA server (not the Caddy `:81` UI vhost). A broken **`zz-ipa-caddy-proxy.conf`** that runs **`mod_substitute`** on **`application/json`** under **`/ipa`** corrupts **gzip** JSON-RPC bodies. From a failing worker (replace FQDNs):
 
 ```bash
-IPA=ipaserver.cldrsetup.local
+IPA=ipaserver.lab.example.com
 # Use the IPA server FQDN (not https://localhost) — ipa-client-install does. localhost with TLS often 301s to http://<FQDN>/ipa/... (HTML if followed).
 # Direct HTTPS to IPA — expect HTTP 401 (or 200) with Content-Encoding: gzip; body must gunzip (not HTML starting with <!)
 curl -vk -H 'Accept-Encoding: gzip' -H 'Content-Type: application/json' \
@@ -1075,7 +1078,7 @@ For FreeIPA:
 
 ```yaml
 identity_provider: freeipa
-ipaserver_domain: cldrsetup.example.com
+ipaserver_domain: lab.example.com
 dns_forwarders: no-forwarders
 ```
 
