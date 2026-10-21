@@ -684,8 +684,10 @@ registered`, OM/DN cert enrollment retries, `RAFT closed`, or
    pinned `cloudera.cluster` v4.4.0 cluster module does not reconcile host
    templates or role assignments after a cluster already exists.
    Before deleting or creating a partial cluster, playbook **31** forces a CM
-   parcel-repository refresh and verifies that the exact configured CDH parcel is
-   available. A missing parcel therefore fails before cluster topology mutation.
+   parcel-repository refresh, reads the configured CDH repository's
+   `manifest.json`, and verifies that it publishes the exact configured CDH parcel
+   version. A missing parcel, inaccessible manifest, invalid archive credential,
+   or version/build mismatch therefore fails before cluster topology mutation.
 3. **Security phase skipped** — Run **CM_TLS_KRB_LDAP** (plays **27** → **30**)
    before **31**. Starting Ozone before `configureForKerberos` /
    `configureAutoTlsServices` causes cert/Kerberos mismatches.

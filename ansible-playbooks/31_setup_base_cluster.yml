@@ -239,53 +239,66 @@
         cm_parcel_repo_force_refresh: true
       when: parcel_repo is defined
 
-    - name: Wait for requested CDH parcel to become available
+    - name: Read configured CDH parcel repository manifest
       ansible.builtin.uri:
-        url: "{{ cm_parcel_api_url }}/parcels/products/CDH/versions"
+        url: "{{ parcel_repo | regex_replace('/+$', '') }}/manifest.json"
         method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: yes
+        user: "{{ cm_repo_username if (cm_repo_source | default('public')) == 'public' else omit }}"
+        password: "{{ cm_repo_password if (cm_repo_source | default('public')) == 'public' else omit }}"
+        force_basic_auth: "{{ (cm_repo_source | default('public')) == 'public' }}"
         validate_certs: no
         status_code: [200]
-        follow_redirects: none
+        follow_redirects: safe
         timeout: 60
-      register: base_cluster_cdh_parcel_versions
+      register: base_cluster_cdh_manifest
       changed_when: false
       failed_when: false
       until:
-        - base_cluster_cdh_parcel_versions.status | default(0) == 200
+        - base_cluster_cdh_manifest.status | default(0) == 200
         - >-
-          cdh_parcel_version
-          in (
-            base_cluster_cdh_parcel_versions.json['items'] | default([])
-            | map(attribute='version')
+          (
+            (base_cluster_cdh_manifest.json | default({})).get('parcels', [])
+            | map(attribute='parcelName')
+            | select(
+                'match',
+                '^CDH-' ~ (cdh_parcel_version | regex_escape) ~ '-.*\\.parcel$'
+              )
             | list
+            | length
           )
-      retries: 12
+          > 0
+      retries: 5
       delay: 10
       delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
 
     - name: Require requested CDH parcel before cluster mutation
       ansible.builtin.assert:
         that:
-          - base_cluster_cdh_parcel_versions.status | default(0) == 200
+          - base_cluster_cdh_manifest.status | default(0) == 200
           - >-
-            cdh_parcel_version
-            in (
-              base_cluster_cdh_parcel_versions.json['items'] | default([])
-              | map(attribute='version')
+            (
+              (base_cluster_cdh_manifest.json | default({})).get('parcels', [])
+              | map(attribute='parcelName')
+              | select(
+                  'match',
+                  '^CDH-' ~ (cdh_parcel_version | regex_escape) ~ '-.*\\.parcel$'
+                )
               | list
+              | length
             )
+            > 0
         fail_msg: >-
-          Requested CDH parcel {{ cdh_parcel_version }} is not available from the
-          configured Cloudera Manager parcel repositories after refresh. Available CDH
-          versions: {{
-            base_cluster_cdh_parcel_versions.json['items'] | default([])
-            | map(attribute='version')
+          Requested CDH parcel {{ cdh_parcel_version }} is not published by
+          {{ parcel_repo | regex_replace('/+$', '') }}/manifest.json after the
+          Cloudera Manager repository refresh. Repository HTTP status:
+          {{ base_cluster_cdh_manifest.status | default('unknown') }}.
+          Response: {{ base_cluster_cdh_manifest.msg | default('none') }}.
+          Published parcel files: {{
+            (base_cluster_cdh_manifest.json | default({})).get('parcels', [])
+            | map(attribute='parcelName')
             | join(', ')
-          }}. Verify parcel_repo/REMOTE_PARCEL_REPO_URLS, archive credentials, and the
-          configured cdh_version/cdh_numeric_version before cluster mutation.
+          }}. Verify parcel_repo/REMOTE_PARCEL_REPO_URLS, archive credentials,
+          cdh_version, and cdh_numeric_version before cluster mutation.
 
     - name: Prepare cluster module connection
       ansible.builtin.import_tasks: common_tasks/resolve_cm_cluster_module_endpoint.yml

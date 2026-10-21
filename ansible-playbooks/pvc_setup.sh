@@ -381,8 +381,14 @@ run_phase_cm_tls() {
 
 run_phase_cdh() {
   local _phase="CDH base cluster"
+  local cm_user="${CM_REPO_USERID:-${CM_REPO_USERNAME:-}}"
+  local cm_pass="${CM_REPO_PASSWD:-${CM_REPO_PASSWORD:-}}"
+  local cm_extra=()
   ui_phase_header "$_phase"
-  run_playbook 31_setup_base_cluster.yml
+  if [[ -n "$cm_user" && -n "$cm_pass" ]]; then
+    cm_extra=(-e "cm_repo_username=$cm_user" -e "cm_repo_password=$cm_pass")
+  fi
+  run_playbook 31_setup_base_cluster.yml "${cm_extra[@]}"
   _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh"
   ui_phase_footer "$_phase"
 }
