@@ -1,6 +1,18 @@
 ---
 # Downstream CM/CDH phases require play 23 to have installed and initialized PostgreSQL.
 
+- name: Verify PostgreSQL listener on database host
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ postgres_port | default(5432) | int }}"
+    connect_timeout: 3
+    timeout: 10
+    state: started
+  register: postgresql_prerequisite_listener
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ postgres_inventory_host }}"
+
 - name: Discover installed PostgreSQL systemd units
   ansible.builtin.shell:
     cmd: >-
@@ -29,10 +41,10 @@
 - name: Require PostgreSQL installation before downstream CM phases
   ansible.builtin.assert:
     that:
-      - postgresql_prerequisite_units.stdout_lines | default([]) | length > 0
-      - postgresql_prerequisite_data.stdout_lines | default([]) | length > 0
+      - postgresql_prerequisite_listener.state | default('') == 'started'
     fail_msg: >-
-      PostgreSQL is not installed and initialized on {{ postgres_inventory_host }}.
+      PostgreSQL is not accepting TCP connections on
+      {{ postgres_inventory_host }}:{{ postgres_port | default(5432) }}.
       Installed units: {{ postgresql_prerequisite_units.stdout_lines | default([]) | join(', ') | default('(none)', true) }}.
       Data clusters: {{ postgresql_prerequisite_data.stdout_lines | default([]) | join(', ') | default('(none)', true) }}.
       CM_TLS_KRB_LDAP and CDH_INSTALL require CM_INSTALL first.

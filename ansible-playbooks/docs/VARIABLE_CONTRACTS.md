@@ -77,6 +77,12 @@ causing a false HTTPS fallback and red ignored failure after HTTP succeeded.
 Controller results are copied to the effective `cm_tls_probe_*` facts only
 when the controller task actually executes.
 
+**PostgreSQL prerequisite:** CM security and CDH phases verify the configured
+database host by connecting to `127.0.0.1:postgres_port` on
+`postgres_inventory_host`. Systemd-unit and `PG_VERSION` searches are
+diagnostics only because supported PGDG, distro, container, and custom data
+layouts do not share one unit name or filesystem path.
+
 When Jenkins cannot reach a CM API port directly and discovery falls back to a
 request delegated to `cldr-mngr`, `cm_api_client_host`, `cm_host`, and the
 assembled API URL must remain aligned with the manager-local bind address.
