@@ -758,9 +758,11 @@ refreshed and CMS is restarted. Existing initialized clusters managed by
 playbook **31** receive guarded Auto-TLS/Kerberos convergence without requiring
 a rebuild.
 
-New deployments use the default cluster name `CDP-base-cluster`. When that
-default is unchanged, playbook **31** first adopts a pre-V2 `CDH-Cluster`.
-If neither default name exists, `base_cluster_adopt_by_master_host: true`
+New deployments use `<deployment_name_prefix>-base-cluster` (or `base-cluster`
+when the prefix is empty). When that default is unchanged, playbook **31**
+adopts legacy `CDP-base-cluster` and pre-V2 `CDH-Cluster` registrations through
+the same guarded host-ownership discovery. If no configured name exists,
+`base_cluster_adopt_by_master_host: true`
 adopts the single CM cluster containing the configured base master only when
 that cluster also contains every configured base host. Multiple or partial
 matches fail before mutation. Explicit custom cluster names never use these

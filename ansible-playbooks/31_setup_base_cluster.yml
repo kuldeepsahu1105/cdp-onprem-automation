@@ -361,7 +361,7 @@
       register: base_cluster_legacy_lookup
       when:
         - base_cluster_requested_lookup.status == 404
-        - cdh_basecluster_name == 'CDP-base-cluster'
+        - cdh_basecluster_name == base_cluster_default_name
         - base_cluster_legacy_name | default('') | length > 0
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
@@ -387,7 +387,7 @@
       when:
         - base_cluster_requested_lookup.status == 404
         - base_cluster_legacy_lookup.status | default(404) == 404
-        - cdh_basecluster_name == 'CDP-base-cluster'
+        - cdh_basecluster_name == base_cluster_default_name
         - base_cluster_adopt_by_master_host | default(true) | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
@@ -489,7 +489,7 @@
     - name: Report adopted cluster discovered from host ownership
       ansible.builtin.debug:
         msg: >-
-          Requested default cluster CDP-base-cluster is absent, but all configured base hosts
+          Requested default cluster {{ base_cluster_default_name }} is absent, but all configured base hosts
           already belong to CM cluster {{ cdh_basecluster_name }}. Adopting that cluster for
           idempotent reconciliation instead of attempting duplicate host assignment.
       when: base_cluster_host_matches | length == 1

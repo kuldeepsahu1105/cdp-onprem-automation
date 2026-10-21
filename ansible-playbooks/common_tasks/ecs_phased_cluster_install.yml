@@ -155,6 +155,11 @@
     service: ecs
     parameters:
       app_domain: "{{ ecs_app_domain }}"
+      cluster_cidr: "{{ ecs_cluster_cidr }}"
+      service_cidr: "{{ ecs_service_cidr }}"
+      image_basepath: "{{ ecs_image_basepath }}"
+      docker_registry: "{{ ecs_docker_registry }}"
+      external_registry_enabled: "{{ ecs_external_registry_enabled | bool }}"
       docker: docker
       cp_prometheus_ingress_user: "{{ ecs_cp_prometheus_ingress_user }}"
       infra_prometheus_ingress_user: "{{ ecs_infra_prometheus_ingress_user }}"

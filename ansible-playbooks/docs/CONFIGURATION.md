@@ -142,7 +142,7 @@ entries must be complete `.jar` URLs. See
 
 | Variable | Accepted values/default | What it does |
 |---|---|---|
-| `cdh_basecluster_name` | Name; `CDP-base-cluster` | Cluster name created in CM. The unchanged default safely adopts an existing legacy `CDH-Cluster` or the single CM cluster that already owns every configured base host. |
+| `cdh_basecluster_name` | Name; `<deployment_name_prefix>-base-cluster` | Cluster name created in CM (`base-cluster` when the prefix is empty). The unchanged default safely adopts legacy `CDP-base-cluster` / `CDH-Cluster` registrations by configured base-host ownership. |
 | `base_cluster_adopt_by_master_host` | Boolean; `true` | When the unchanged default name is absent, adopt the single existing cluster containing the configured base master only if it contains all expected base hosts; ambiguous or partial matches fail safely. |
 | `base_cluster_adopt_existing_ozone_ha` | Boolean; `true` | Preserve an adopted populated cluster's initialized Ozone service ID and recover an existing odd-sized SCM HA quorum (at least three roles) without adding/removing SCM roles; new clusters retain the single-SCM topology. |
 | `base_cluster_enable_kerberos` | Boolean; `true` | Configures newly created base clusters for Kerberos before First Run; safely converges existing unsecure clusters and verifies HDFS authentication. |
@@ -216,7 +216,7 @@ Auto-TLS provisioning uses password mode when secret
 | Variable | Accepted values/default | What it does |
 |---|---|---|
 | `ecs_deploy_enabled` | `auto`, `true`, `false` | `auto` deploys when ECS inventory groups contain hosts; `true` requires them; `false` skips ECS. |
-| `ecs_cluster_name` | Name; `ECS-Cluster` | ECS cluster name created in CM. |
+| `ecs_cluster_name` | Name; `<deployment_name_prefix>-ecs-cluster` | ECS cluster name created in CM (`ecs-cluster` when the prefix is empty). The unchanged default adopts an existing legacy `ECS-Cluster`. |
 | `ecs_cluster_master_group` | Inventory group; `ecs-masters` | Hosts assigned ECS master/control-plane roles. |
 | `ecs_cluster_worker_group` | Inventory group; `ecs-workers` | Hosts assigned ECS worker roles. |
 | `ecs_data_services_deploy_enabled` | Boolean; `false` | Master gate for playbook 34 data-service deployment. |

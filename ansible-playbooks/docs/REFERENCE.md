@@ -63,7 +63,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 
 | Variable | Default |
 |---|---|
-| `cdh_basecluster_name` | `CDP-base-cluster` (adopts an existing legacy `CDH-Cluster`, or a single full host-ownership match when enabled) |
+| `cdh_basecluster_name` | `<deployment_name_prefix>-base-cluster` (`base-cluster` with an empty prefix; default-name reruns adopt legacy `CDP-base-cluster` / `CDH-Cluster` registrations by host ownership) |
 | `base_cluster_adopt_by_master_host` | `true` — with the unchanged default name, adopt one existing CM cluster only when it owns the configured base master and every expected base host |
 | `base_cluster_adopt_existing_ozone_ha` | `true` — preserve adopted Ozone identity and recover an existing odd-sized SCM HA quorum without topology mutation; new clusters remain single-SCM |
 | `base_cluster_enable_kerberos` | `true` | Kerberize new base clusters before First Run, converge existing unsecure clusters, and verify HDFS authentication |
@@ -80,7 +80,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `base_cluster_accepted_health_summaries` | `[GOOD]` | Health summaries accepted by the final base-cluster service gate |
 | `cm_admin_bootstrap_pass` | `admin` | Factory CM password; when `cm_admin_pass` differs, `ensure_cm_admin_password.yml` runs in **24_start_cm** / **27_setup_cm_autotls** only |
 | `base_cluster_yarn_*` | `4096` / `4` | YARN RM/NM memory and vcore limits in cluster spec template |
-| `ecs_cluster_name` | `ECS-Cluster` |
+| `ecs_cluster_name` | `<deployment_name_prefix>-ecs-cluster` (`ecs-cluster` with an empty prefix; adopts legacy `ECS-Cluster`) |
 | `ecs_deploy_enabled` | `auto` | `auto`, `true`, or `false` — deploy ECS when ecs inventory groups exist |
 | `ecs_pvc_ds_version` | `1.5.5-h40000` | CDS repo tag (default `1.5.5-h40000`; older: `1.5.5-h3300` SP3 CHF3, `1.5.5-h2000` SP2, `1.5.5-h2100` SP2 CHF1) |
 | `ecs_parcel_version` | `""` | Optional override; auto-discovered from CM after parcel repo refresh |

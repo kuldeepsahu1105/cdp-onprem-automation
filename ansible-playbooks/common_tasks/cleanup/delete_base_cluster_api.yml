@@ -1,7 +1,7 @@
 ---
 - name: Check whether base cluster exists
   ansible.builtin.uri:
-    url: "{{ cm_api_url }}/clusters/{{ cdh_basecluster_name }}"
+    url: "{{ cm_api_url }}/clusters/{{ cdh_basecluster_name | urlencode }}"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -11,9 +11,9 @@
     follow_redirects: none
   register: base_cluster_before_delete
 
-- name: Check legacy base cluster when the new default is absent
+- name: Check legacy base clusters when the prefixed default is absent
   ansible.builtin.uri:
-    url: "{{ cm_api_url }}/clusters/{{ base_cluster_legacy_name }}"
+    url: "{{ cm_api_url }}/clusters/{{ item | urlencode }}"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -21,36 +21,74 @@
     validate_certs: no
     status_code: [200, 404]
     follow_redirects: none
-  register: legacy_base_cluster_before_delete
+  loop: >-
+    {{
+      base_cluster_legacy_names
+      | default([base_cluster_legacy_name | default('')])
+      | reject('equalto', '')
+      | reject('equalto', cdh_basecluster_name)
+      | list
+    }}
+  loop_control:
+    label: "{{ item }}"
+  register: legacy_base_cluster_delete_lookups
   when:
     - base_cluster_before_delete.status == 404
-    - cdh_basecluster_name == 'CDP-base-cluster'
-    - base_cluster_legacy_name | default('') | length > 0
-    - base_cluster_legacy_name != cdh_basecluster_name
+    - cdh_basecluster_name == base_cluster_default_name
+
+- name: Require one unambiguous legacy base cluster for cleanup
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          legacy_base_cluster_delete_lookups.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'equalto', 200)
+          | list
+          | length
+        ) <= 1
+    fail_msg: >-
+      Multiple legacy base clusters exist:
+      {{
+        legacy_base_cluster_delete_lookups.results | default([])
+        | selectattr('status', 'defined')
+        | selectattr('status', 'equalto', 200)
+        | map(attribute='item')
+        | join(', ')
+      }}. Set cdh_basecluster_name explicitly before cleanup.
+
+- name: Select legacy base cluster cleanup lookup
+  ansible.builtin.set_fact:
+    legacy_base_cluster_before_delete: >-
+      {{
+        (
+          legacy_base_cluster_delete_lookups.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'equalto', 200)
+          | first
+        )
+        | default({'status': 404}, true)
+      }}
 
 - name: Resolve base cluster API cleanup name
   ansible.builtin.set_fact:
     cleanup_base_cluster_api_name: >-
       {{
-        base_cluster_legacy_name
-        if (
-          legacy_base_cluster_before_delete is defined
-          and legacy_base_cluster_before_delete.status | default(404) == 200
-        )
+        legacy_base_cluster_before_delete.item
+        if (legacy_base_cluster_before_delete.status | default(404) == 200)
         else cdh_basecluster_name
       }}
     cleanup_base_cluster_api_exists: >-
       {{
         base_cluster_before_delete.status == 200
         or (
-          legacy_base_cluster_before_delete is defined
-          and legacy_base_cluster_before_delete.status | default(404) == 200
+          legacy_base_cluster_before_delete.status | default(404) == 200
         )
       }}
 
 - name: Stop base cluster services via API
   ansible.builtin.uri:
-    url: "{{ cm_api_url }}/clusters/{{ cleanup_base_cluster_api_name }}/commands/stop"
+    url: "{{ cm_api_url }}/clusters/{{ cleanup_base_cluster_api_name | urlencode }}/commands/stop"
     method: POST
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -65,8 +103,7 @@
       (
         legacy_base_cluster_before_delete.json.clusterState
         if (
-          legacy_base_cluster_before_delete is defined
-          and legacy_base_cluster_before_delete.status | default(404) == 200
+          legacy_base_cluster_before_delete.status | default(404) == 200
         )
         else base_cluster_before_delete.json.clusterState
       ) | default('') != 'STOPPED'
@@ -87,7 +124,7 @@
 
 - name: Delete base cluster via API
   ansible.builtin.uri:
-    url: "{{ cm_api_url }}/clusters/{{ cleanup_base_cluster_api_name }}"
+    url: "{{ cm_api_url }}/clusters/{{ cleanup_base_cluster_api_name | urlencode }}"
     method: DELETE
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -100,7 +137,7 @@
 
 - name: Confirm base cluster is absent
   ansible.builtin.uri:
-    url: "{{ cm_api_url }}/clusters/{{ cleanup_base_cluster_api_name }}"
+    url: "{{ cm_api_url }}/clusters/{{ cleanup_base_cluster_api_name | urlencode }}"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"

@@ -104,7 +104,16 @@ cm_parcel_repo_include_cfm_parcel: true
 # -----------------------------------------------------------------------------
 # 3. Base cluster
 # -----------------------------------------------------------------------------
-cdh_basecluster_name: CDP-base-cluster
+base_cluster_default_name: >-
+  {{
+    (
+      (deployment_name_prefix | default('', true) | trim) ~ '-'
+      if (deployment_name_prefix | default('', true) | trim | length > 0)
+      else ''
+    )
+    ~ 'base-cluster'
+  }}
+cdh_basecluster_name: "{{ base_cluster_default_name }}"
 base_cluster_adopt_by_master_host: true
 base_cluster_adopt_existing_ozone_ha: true
 base_cluster_master_group: base-masters
@@ -201,7 +210,17 @@ cm_cms_update_autotls_truststore_password: false
 # 5. ECS
 # -----------------------------------------------------------------------------
 ecs_deploy_enabled: auto                # auto | true | false
-ecs_cluster_name: ECS-Cluster
+ecs_cluster_default_name: >-
+  {{
+    (
+      (deployment_name_prefix | default('', true) | trim) ~ '-'
+      if (deployment_name_prefix | default('', true) | trim | length > 0)
+      else ''
+    )
+    ~ 'ecs-cluster'
+  }}
+ecs_cluster_name: "{{ ecs_cluster_default_name }}"
+ecs_cluster_legacy_name: ECS-Cluster
 ecs_cluster_master_group: ecs-masters
 ecs_cluster_worker_group: ecs-workers
 ecs_data_services_deploy_enabled: false

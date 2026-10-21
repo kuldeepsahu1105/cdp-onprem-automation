@@ -29,10 +29,14 @@ If the cluster already exists (`GET` returns 200), only **start** runs, then con
 
 | Variable | Purpose |
 |----------|---------|
-| `ecs_cluster_name` | CM cluster name (default `ECS-Cluster`) |
+| `ecs_cluster_name` | CM cluster name (default `<deployment_name_prefix>-ecs-cluster`; `ecs-cluster` with an empty prefix) |
 | `ecs_app_domain` | ECS `app_domain` / console DNS base (default `apps.<cluster_domain>`) |
 | `ecs_pvc_ds_version` / `ecs_parcel_repo_url` | CDS private repo and parcel URL |
 | `ecs_console_admin_password` | UMS bootstrap admin for embedded control plane (complexity rules enforced) |
+| `ecs_cluster_cidr` / `ecs_service_cidr` | Kubernetes pod and service networks (`172.42.0.0/16` / `172.43.0.0/16`) |
+| `ecs_docker_registry` / `ecs_image_basepath` | External Cloudera image registry and repository base path |
+| `ecs_control_plane_embedded_db_storage_gb` / `ecs_control_plane_embedded_vault_storage_gb` | Embedded control-plane database and Vault storage (`200` / `20`) |
+| `ecs_reconcile_coredns` | Enforce sequential `/etc/resolv.conf` forwarding in RKE2 CoreDNS after control-plane startup |
 | `ecs_deploy_enabled` | `auto` \| `true` \| `false` |
 | `ecs_deploy_on_arm64` | Default `false`; set true for Graviton ECS |
 

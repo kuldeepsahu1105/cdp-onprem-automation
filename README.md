@@ -95,7 +95,7 @@ Terraform generates `inventory.ini` with these groups when you run `clone_and_ru
 |---|---|---|
 | `cdh_version` | `7.3.2.0` | CDH Runtime parcel version |
 | `cdh_numeric_version` | `77083870` | Parcel build number (used to build full parcel name) |
-| `cdh_basecluster_name` | `CDP-base-cluster` | Cluster name in Cloudera Manager; the default adopts an existing legacy `CDH-Cluster` |
+| `cdh_basecluster_name` | `<deployment_name_prefix>-base-cluster` | Cluster name in Cloudera Manager (`base-cluster` when the prefix is empty); default-name reruns safely adopt legacy `CDP-base-cluster` / `CDH-Cluster` registrations by host ownership |
 | `base_cluster_master_group` | `base-masters` | Inventory group for master host |
 | `base_cluster_worker_group` | `base-workers` | Inventory group for worker hosts |
 | `base_cluster_install_services` | see `all.yml` | Per-service booleans for base cluster create |
@@ -176,7 +176,7 @@ Set `PVCECS_*_COUNT=0` in tfvars to skip ECS infrastructure entirely, or leave g
 | Variable | Default | Description |
 |---|---|---|
 | `ecs_deploy_enabled` | `auto` | `auto` = deploy when ecs inventory groups exist; `true` / `false` to force |
-| `ecs_cluster_name` | `ECS-Cluster` | ECS cluster name in Cloudera Manager |
+| `ecs_cluster_name` | `<deployment_name_prefix>-ecs-cluster` | ECS cluster name in Cloudera Manager (`ecs-cluster` when the prefix is empty); reruns adopt legacy `ECS-Cluster` |
 | `ecs_cluster_master_group` | `ecs-masters` | Inventory group for ECS master |
 | `ecs_cluster_worker_group` | `ecs-workers` | Inventory group for ECS workers |
 | `ecs_pvc_ds_version` | `1.5.5-h40000` | CDS repo tag (CDS 1.5.5) |

@@ -13,6 +13,19 @@
     - name: Install cloudera.cluster collection
       ansible.builtin.import_tasks: common_tasks/install_cloudera_collection.yml
 
+- name: Ensure ECS hosts are reachable and collect standalone facts
+  hosts: ecs-masters:ecs-workers
+  gather_facts: no
+  tasks:
+    - name: Wait for ECS host connection
+      ansible.builtin.wait_for_connection:
+        timeout: 60
+      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
+
+    - name: Gather ECS host facts
+      ansible.builtin.setup:
+      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
+
 - name: Install ECS (Cloudera Data Services) cluster via Cloudera Manager
   hosts: localhost
   connection: local
@@ -98,7 +111,7 @@
 
     - name: Verify base cluster exists before ECS install
       ansible.builtin.uri:
-        url: "{{ cm_krb_api_url }}/clusters/{{ cdh_basecluster_name }}"
+        url: "{{ cm_krb_api_url }}/clusters/{{ cdh_basecluster_name | urlencode }}"
         method: GET
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
@@ -193,9 +206,9 @@
     - name: Resolve CM API endpoint for cloudera.cluster modules
       ansible.builtin.import_tasks: common_tasks/resolve_cm_cluster_module_endpoint.yml
 
-    - name: Check if ECS cluster already exists
+    - name: Check if requested ECS cluster already exists
       ansible.builtin.uri:
-        url: "{{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_name }}"
+        url: "{{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_name | urlencode }}"
         method: GET
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
@@ -203,8 +216,45 @@
         validate_certs: no
         status_code: [200, 404]
         follow_redirects: none
-      register: existing_ecs_cluster
+      register: requested_ecs_cluster
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Check legacy ECS cluster when the prefixed default is absent
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_legacy_name | urlencode }}"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200, 404]
+        follow_redirects: none
+      register: legacy_ecs_cluster
+      when:
+        - requested_ecs_cluster.status == 404
+        - ecs_cluster_name == ecs_cluster_default_name
+        - ecs_cluster_legacy_name | default('') | length > 0
+        - ecs_cluster_legacy_name != ecs_cluster_name
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Preserve existing legacy ECS cluster name
+      ansible.builtin.set_fact:
+        ecs_cluster_name: "{{ ecs_cluster_legacy_name }}"
+      when:
+        - requested_ecs_cluster.status == 404
+        - legacy_ecs_cluster.status | default(404) == 200
+
+    - name: Select existing ECS cluster lookup
+      ansible.builtin.set_fact:
+        existing_ecs_cluster: >-
+          {{
+            legacy_ecs_cluster
+            if (
+              requested_ecs_cluster.status == 404
+              and legacy_ecs_cluster.status | default(404) == 200
+            )
+            else requested_ecs_cluster
+          }}
 
     - name: Phased ECS cluster install (reference-aligned)
       ansible.builtin.import_tasks: common_tasks/ecs_phased_cluster_install.yml
@@ -228,7 +278,15 @@
       ansible.builtin.import_tasks: common_tasks/ecs_wait_control_plane_console.yml
       when:
         - ecs_deploy_effective | default(false) | bool
-        - ecs_auto_provision_api_access_key | default(true) | bool
+        - >-
+          (ecs_auto_provision_api_access_key | default(true) | bool)
+          or (ecs_reconcile_coredns | default(true) | bool)
+
+    - name: Reconcile ECS CoreDNS forwarding order
+      ansible.builtin.import_tasks: common_tasks/ecs_reconcile_coredns.yml
+      when:
+        - ecs_deploy_effective | default(false) | bool
+        - ecs_reconcile_coredns | default(true) | bool
 
     - name: Provision ECS automation IAM access key after console is up
       ansible.builtin.import_tasks: common_tasks/ecs_provision_iam_machine_access_key.yml

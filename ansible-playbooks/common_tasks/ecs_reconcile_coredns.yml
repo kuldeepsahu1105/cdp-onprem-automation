@@ -1,0 +1,96 @@
+---
+# Keep ECS DNS forwarding deterministic without requiring kubernetes.core or controller-side kubeconfig.
+
+- name: Check ECS kubectl binary
+  ansible.builtin.stat:
+    path: "{{ ecs_coredns_kubectl_path }}"
+  register: ecs_coredns_kubectl
+  become: yes
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Require ECS kubectl binary
+  ansible.builtin.assert:
+    that:
+      - ecs_coredns_kubectl.stat.exists | default(false)
+      - ecs_coredns_kubectl.stat.executable | default(false)
+    fail_msg: >-
+      ECS CoreDNS reconciliation requires {{ ecs_coredns_kubectl_path }} on
+      {{ groups[ecs_cluster_master_group][0] }} after control-plane installation.
+
+- name: Read ECS CoreDNS Corefile
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - get
+      - configmap
+      - "{{ ecs_coredns_configmap_name }}"
+      - --output
+      - jsonpath={.data.Corefile}
+  register: ecs_coredns_corefile
+  changed_when: false
+  become: yes
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Build sequential ECS CoreDNS Corefile
+  ansible.builtin.set_fact:
+    ecs_coredns_corefile_sequential: >-
+      {{
+        ecs_coredns_corefile.stdout
+        | regex_replace(
+            'forward\\s+\\.\\s+/etc/resolv\\.conf',
+            'forward  . /etc/resolv.conf {\\n      policy sequential\\n    }'
+          )
+      }}
+  when: "'policy sequential' not in ecs_coredns_corefile.stdout"
+
+- name: Require ECS CoreDNS forward stanza
+  ansible.builtin.assert:
+    that:
+      - ecs_coredns_corefile_sequential != ecs_coredns_corefile.stdout
+    fail_msg: >-
+      CoreDNS ConfigMap {{ ecs_coredns_configmap_name }} does not contain the expected
+      'forward . /etc/resolv.conf' stanza; refusing an unsafe replacement.
+  when: ecs_coredns_corefile_sequential is defined
+
+- name: Apply sequential ECS CoreDNS forwarding policy
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - patch
+      - configmap
+      - "{{ ecs_coredns_configmap_name }}"
+      - --type
+      - merge
+      - --patch
+      - "{{ {'data': {'Corefile': ecs_coredns_corefile_sequential}} | to_json }}"
+  register: ecs_coredns_patch
+  changed_when: ecs_coredns_patch.rc == 0
+  become: yes
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  when: ecs_coredns_corefile_sequential is defined
+
+- name: Restart ECS CoreDNS pods after configuration change
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - delete
+      - pods
+      - --selector
+      - k8s-app=kube-dns
+  register: ecs_coredns_restart
+  changed_when: ecs_coredns_restart.rc == 0
+  become: yes
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  when: ecs_coredns_patch is changed

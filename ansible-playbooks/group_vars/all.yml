@@ -456,8 +456,20 @@ cm_admin_user: "admin"
 cm_admin_pass: "admin"
 # Factory CM login password on first boot (used to reset to cm_admin_pass when different)
 cm_admin_bootstrap_pass: "admin"
-cdh_basecluster_name: "CDP-base-cluster"
+base_cluster_default_name: >-
+  {{
+    (
+      (deployment_name_prefix | default('', true) | trim) ~ '-'
+      if (deployment_name_prefix | default('', true) | trim | length > 0)
+      else ''
+    )
+    ~ 'base-cluster'
+  }}
+cdh_basecluster_name: "{{ base_cluster_default_name }}"
 base_cluster_legacy_name: "CDH-Cluster"
+base_cluster_legacy_names:
+  - "CDP-base-cluster"
+  - "{{ base_cluster_legacy_name }}"
 # When the unchanged default name is absent, safely adopt the single CM cluster
 # containing the configured base master only when it also contains every base host.
 base_cluster_adopt_by_master_host: true
@@ -1019,7 +1031,17 @@ cleanup_ecs_run_rke2_killall: true
 cleanup_reboot_hosts: false
 
 # Cluster names for API deletion
-ecs_cluster_name: "ECS-Cluster"
+ecs_cluster_default_name: >-
+  {{
+    (
+      (deployment_name_prefix | default('', true) | trim) ~ '-'
+      if (deployment_name_prefix | default('', true) | trim | length > 0)
+      else ''
+    )
+    ~ 'ecs-cluster'
+  }}
+ecs_cluster_name: "{{ ecs_cluster_default_name }}"
+ecs_cluster_legacy_name: "ECS-Cluster"
 
 # When CM itself is removed, clear schemas/tables from all configured databases
 # while preserving the database objects and login roles for the next install.
@@ -1044,21 +1066,32 @@ ecs_app_domain: "apps.{{ cluster_domain }}"
 # ECS Management Console DNS label (FQDN {{ ecs_console_host_prefix }}.{{ ecs_app_domain }})
 ecs_console_host_prefix: "console-cdp"
 ecs_docker_data_path: "/mnt/docker"
-ecs_lso_data_path: "/ecs/local"
+ecs_cluster_cidr: "172.42.0.0/16"
+ecs_service_cidr: "172.43.0.0/16"
+ecs_image_basepath: "cdp-private"
+ecs_docker_registry: "container.repository.cloudera.com"
+ecs_external_registry_enabled: true
+ecs_lso_data_path: "/ecs/local-storage"
 ecs_longhorn_data_path: "/ecs/longhorn-storage"
 ecs_longhorn_replication: 2
 ecs_nfs_over_provisioning: 800
 ecs_k8s_webui_secret_admin_token: "ChangeMe@ECS-WebUI"
-ecs_cp_prometheus_ingress_user: "{{ cm_admin_user }}"
-ecs_cp_prometheus_ingress_password: "{{ cm_admin_pass }}"
-ecs_infra_prometheus_ingress_user: "{{ cm_admin_user }}"
-ecs_infra_prometheus_ingress_password: "{{ cm_admin_pass }}"
+ecs_prometheus_ingress_password: "{{ common_password | default(ipaadmin_password, true) }}"
+ecs_cp_prometheus_ingress_user: "cloudera-manager"
+ecs_cp_prometheus_ingress_password: "{{ ecs_prometheus_ingress_password }}"
+ecs_infra_prometheus_ingress_user: "cloudera-manager"
+ecs_infra_prometheus_ingress_password: "{{ ecs_prometheus_ingress_password }}"
 # ECS Management Console bootstrap admin (UMS); must meet CDP complexity rules
 ecs_console_admin_password: "{{ common_password | default(ipaadmin_password, true) }}"
 ecs_control_plane_database_mode: embedded  # embedded | existing (existing needs full control_plane_config)
 ecs_control_plane_vault_mode: embedded
-ecs_control_plane_embedded_db_storage_gb: 50
-ecs_control_plane_embedded_vault_storage_gb: 2
+ecs_control_plane_embedded_db_storage_gb: 200
+ecs_control_plane_embedded_vault_storage_gb: 20
+ecs_reconcile_coredns: true
+ecs_coredns_kubeconfig_path: /etc/rancher/rke2/rke2.yaml
+ecs_coredns_kubectl_path: /var/lib/rancher/rke2/bin/kubectl
+ecs_coredns_configmap_name: rke2-coredns-rke2-coredns
+ecs_coredns_namespace: kube-system
 
 # ECS Data Services (CDW, CDE, CAI) — 34_setup_ecs_data_services.yml
 # IAM access keys are signed API credentials — automation can CREATE machine-user keys after ECS
