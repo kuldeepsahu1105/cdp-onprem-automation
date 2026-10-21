@@ -13,13 +13,28 @@
   hosts: localhost
   gather_facts: true
   tasks:
+    - name: Capture Auto-TLS setup intent from inventory (before API discovery)
+      ansible.builtin.set_fact:
+        cm_autotls_setup_intent: "{{ autotls_enabled | default(true) | bool }}"
+      when: cm_api_url | default('') | length == 0
+
+    - name: CM API — set connection context when URL not yet resolved
+      ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
+      when:
+        - cm_api_url | default('') | length == 0
+        - not (cm_api_context_resolved_this_play | default(false) | bool)
+
     - name: Set up Cloudera Manager API URL when not already resolved in this run
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
       when: cm_api_url | default('') | length == 0
 
+    - name: CM API — align REST URL when calls delegate to cldr-mngr
+      ansible.builtin.import_tasks: common_tasks/resolve_cm_api_effective_url.yml
+      when: cm_api_url | default('') | length > 0
+
     - name: Check existing Cloudera Manager license
       ansible.builtin.uri:
-        url: "{{ cm_api_url }}/cm/license"
+        url: "{{ cm_api_effective_url | default(cm_api_url) }}/cm/license"
         method: GET
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
@@ -77,7 +92,7 @@
 
     - name: Upload license file to Cloudera Manager (if license is not already uploaded)
       ansible.builtin.uri:
-        url: "{{ cm_api_url }}/cm/license"
+        url: "{{ cm_api_effective_url | default(cm_api_url) }}/cm/license"
         method: POST
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
@@ -94,7 +109,7 @@
 
     - name: Activate Cloudera Manager trial license (if license file not provided by user)
       uri:
-        url: "{{ cm_api_url }}/cm/trial/begin"
+        url: "{{ cm_api_effective_url | default(cm_api_url) }}/cm/trial/begin"
         method: POST
         status_code: [200, 204, 301, 303, 400]
         force_basic_auth: yes

@@ -1,7 +1,19 @@
 ---
+- name: Capture Auto-TLS setup intent from inventory (before probe context and HTTPS probes)
+  ansible.builtin.set_fact:
+    cm_autotls_setup_intent: "{{ autotls_enabled | default(true) | bool }}"
+
+- name: CM API — set connection context when not resolved this play
+  ansible.builtin.import_tasks: resolve_cm_api_probe_context.yml
+  when: not (cm_api_context_resolved_this_play | default(false) | bool)
+
 - name: CM API — discover active endpoint and API version
   ansible.builtin.include_tasks: set_cm_api_url.yml
   when: cm_api_url | default('') | length == 0
+
+- name: CM API — align REST URL when calls delegate to cldr-mngr
+  ansible.builtin.import_tasks: resolve_cm_api_effective_url.yml
+  when: cm_api_url | default('') | length > 0
 
 - name: CM API — select mutation-safe URL and execution host
   ansible.builtin.import_tasks: resolve_cm_krb_api_url_from_facts.yml

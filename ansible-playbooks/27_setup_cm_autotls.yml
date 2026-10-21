@@ -32,6 +32,9 @@
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
 
+    - name: CM API — align REST URL when calls delegate to cldr-mngr
+      ansible.builtin.import_tasks: common_tasks/resolve_cm_api_effective_url.yml
+
     - name: CM API — read Auto-TLS state from CM configuration
       ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
 
@@ -213,7 +216,7 @@
 
             - name: Submit Auto-TLS generateCmca command
               ansible.builtin.uri:
-                url: "{{ cm_api_url }}/cm/commands/generateCmca"
+                url: "{{ cm_api_effective_url | default(cm_api_url) }}/cm/commands/generateCmca"
                 method: POST
                 user: "{{ cm_admin_user }}"
                 password: "{{ cm_admin_pass }}"
@@ -269,7 +272,7 @@
             - name: Wait for generateCmca command to finish successfully
               ansible.builtin.import_tasks: common_tasks/wait_cm_api_command.yml
               vars:
-                cm_krb_api_url: "{{ cm_api_url }}"
+                cm_krb_api_url: "{{ cm_api_effective_url | default(cm_api_url) }}"
                 cm_api_command_id: "{{ auto_tls_response.json.id }}"
 
             - name: Mark Auto-TLS applied after generateCmca command success
