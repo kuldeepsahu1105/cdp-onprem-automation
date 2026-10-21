@@ -741,7 +741,9 @@ layouts) instead of hardcoding a full venv path. Before invoking pip, it verifie
 that the parcel interpreter itself starts. If its ELF loader reports a missing
 `libpythonX.Y.so`, the play installs the matching OS runtime package
 (`pythonX.Y-libs` on Red Hat family or `libpythonX.Y` on Debian family) and
-rechecks the interpreter.
+rechecks the interpreter. The loader parser checks both stdout and stderr; an
+unrelated interpreter failure stops with its rc/stdout/stderr instead of being
+misreported as a missing libpython package.
 
 For an existing cluster, playbook **31** also detects stale Hive Metastore
 catalogs whose names begin with

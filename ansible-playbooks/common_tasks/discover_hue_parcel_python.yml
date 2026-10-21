@@ -60,14 +60,28 @@
     base_cluster_hue_missing_python_runtime_version: >-
       {{
         (
-          base_cluster_hue_python_runtime_check.stderr
-          | default('')
-          | regex_search('libpython([0-9]+\\.[0-9]+)\\.so', '\\1')
-          | default([])
+          (
+            base_cluster_hue_python_runtime_check.stderr | default('')
+            ~ '\n'
+            ~ base_cluster_hue_python_runtime_check.stdout | default('')
+          )
+          | regex_findall('libpython([0-9]+[.][0-9]+)[.]so')
           | first
           | default('')
         )
       }}
+  when: base_cluster_hue_python_runtime_check.rc | default(1) | int != 0
+
+- name: Require diagnosable Hue parcel Python runtime failure
+  ansible.builtin.assert:
+    that:
+      - base_cluster_hue_missing_python_runtime_version | default('') | length > 0
+    fail_msg: >-
+      Hue parcel Python {{ base_cluster_hue_python_interpreter_effective }} failed
+      with rc={{ base_cluster_hue_python_runtime_check.rc | default('unknown') }},
+      but its output did not identify a missing libpythonX.Y.so runtime.
+      stdout={{ base_cluster_hue_python_runtime_check.stdout | default('') | trim }};
+      stderr={{ base_cluster_hue_python_runtime_check.stderr | default('') | trim }}.
   when: base_cluster_hue_python_runtime_check.rc | default(1) | int != 0
 
 - name: Gather Hue host distribution facts for missing libpython repair
