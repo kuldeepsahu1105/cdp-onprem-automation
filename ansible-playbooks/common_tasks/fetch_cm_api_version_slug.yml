@@ -1,6 +1,24 @@
 ---
 # GET /api/version and set cm_api_version (v58, v59, …) from the response body.
 
+- name: CM API — resolve private address for delegated version discovery
+  ansible.builtin.set_fact:
+    _cm_api_delegated_private_host: "{{ cm_host_private }}"
+  when:
+    - cm_api_uri_delegate_to | default('') | length > 0
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
+    - cm_host_private | default('') | length > 0
+
+- name: CM API — align delegated version discovery with manager private address
+  ansible.builtin.set_fact:
+    cm_api_probe_host: "{{ _cm_api_delegated_private_host }}"
+    cm_api_client_host: "{{ _cm_api_delegated_private_host }}"
+    cm_host: "{{ _cm_api_delegated_private_host }}"
+  when:
+    - cm_api_uri_delegate_to | default('') | length > 0
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
+    - _cm_api_delegated_private_host | default('') | length > 0
+
 - name: CM API — GET /api/version on cldr-mngr
   ansible.builtin.uri:
     url: "{{ cm_protocol }}://{{ cm_api_probe_host }}:{{ cm_api_port }}/api/version"
