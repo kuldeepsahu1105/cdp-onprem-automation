@@ -572,12 +572,17 @@ the default ~10 minutes.
 `base_cluster_enable_kerberos: true` makes playbook **31** Kerberize every base
 cluster it manages. Auto-TLS and CM KDC/account-manager integration must already
 be active before cluster creation. For a newly created cluster, playbook **31**
-refuses First Run unless the KDC is reachable and CM's matching credential
-marker exists; it then runs `configureForKerberos`, generates credentials, and
-verifies HDFS authentication **before any cluster service is started**. This
-avoids initializing service state in SIMPLE mode and retrofitting security
-afterward. Interrupted pre-First-Run attempts repeat credential generation and
-verification before any retry starts the cluster.
+renders the same coordinated security settings used by the Cloudera Labs Ozone
+Base reference for Core Settings, ZooKeeper, HDFS, YARN, Ozone, Kafka, HBase,
+Atlas, Knox, and Solr. It refuses First Run unless the KDC is reachable and CM's
+matching credential marker exists, generates credentials, and verifies every
+enabled security-sensitive service **before any cluster service is started**.
+Every new or unfinished cluster first runs CM's `configureForKerberos` command
+and waits for it to succeed; HDFS reporting Kerberos alone is not considered
+proof that Ozone and the other services completed the transition. Interrupted
+pre-First-Run attempts reconcile the complete security matrix, rerun
+`configureForKerberos`, repeat credential generation, and repeat verification
+before retrying.
 
 For an existing initialized cluster, the playbook checks HDFS authentication.
 A cluster still using `simple` authentication is stopped, configured through

@@ -834,8 +834,124 @@
         cm_config_desired:
           ozone.service.id: "{{ base_cluster_ozone_service_id_effective }}"
           ozone.scm.primordial.node.id: "{{ base_cluster_ozone_primordial_node_effective }}"
-          hdfs_service: "{{ 'hdfs' if base_cluster_install_services.hdfs | default(true) else '' }}"
+          ozone.security.enabled: >-
+            {{ 'true' if base_cluster_enable_kerberos | default(true) | bool else 'false' }}
+          solr_service: "{{ 'solr' if base_cluster_install_services.solr | default(true) else '' }}"
       when: base_cluster_install_services.ozone | default(true) | bool
+
+    - name: Configure Core Settings security
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Core Settings security
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/core-settings/config
+        cm_config_desired:
+          hadoop_security_authorization: >-
+            {{ 'true' if base_cluster_enable_kerberos | default(true) | bool else 'false' }}
+          hadoop_security_authentication: >-
+            {{ 'kerberos' if base_cluster_enable_kerberos | default(true) | bool else 'simple' }}
+      when: base_cluster_install_services.core_settings | default(true) | bool
+
+    - name: Configure ZooKeeper security
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: ZooKeeper security
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/zookeeper/config
+        cm_config_desired:
+          quorum_auth_enable_sasl: >-
+            {{ 'true' if base_cluster_enable_kerberos | default(true) | bool else 'false' }}
+          enableSecurity: >-
+            {{ 'true' if base_cluster_enable_kerberos | default(true) | bool else 'false' }}
+      when: base_cluster_install_services.zookeeper | default(true) | bool
+
+    - name: Configure HDFS security
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: HDFS security
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/hdfs/config
+        cm_config_desired:
+          dfs_encrypt_data_transfer_algorithm: AES/CTR/NoPadding
+          hadoop_secure_web_ui: >-
+            {{ 'true' if base_cluster_enable_kerberos | default(true) | bool else 'false' }}
+      when: base_cluster_install_services.hdfs | default(true) | bool
+
+    - name: Configure YARN security
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: YARN security
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/yarn/config
+        cm_config_desired:
+          hadoop_secure_web_ui: >-
+            {{ 'true' if base_cluster_enable_kerberos | default(true) | bool else 'false' }}
+      when: base_cluster_install_services.yarn | default(true) | bool
+
+    - name: Configure Kafka security and ZooKeeper chroot
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Kafka security
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/kafka/config
+        cm_config_desired: >-
+          {{
+            {
+              'kerberos.auth.enable':
+                ('true' if base_cluster_enable_kerberos | default(true) | bool else 'false')
+            }
+            | combine(
+                {'zookeeper.chroot': '/kafka'}
+                if base_cluster_kafka_metadata_store_effective == 'Zookeeper'
+                else {}
+              )
+          }}
+      when: base_cluster_install_services.kafka | default(true) | bool
+
+    - name: Configure HBase security
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: HBase security
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/hbase/config
+        cm_config_desired:
+          hbase_thriftserver_security_authentication: >-
+            {{ 'auth-conf' if base_cluster_enable_kerberos | default(true) | bool else 'none' }}
+          hbase_security_authentication: >-
+            {{ 'kerberos' if base_cluster_enable_kerberos | default(true) | bool else 'simple' }}
+          hbase_security_authorization: >-
+            {{ 'true' if base_cluster_enable_kerberos | default(true) | bool else 'false' }}
+      when: base_cluster_install_services.hbase | default(true) | bool
+
+    - name: Configure Atlas security
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Atlas security
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/atlas/config
+        cm_config_desired:
+          kerberos.auth.enable: >-
+            {{ 'true' if base_cluster_enable_kerberos | default(true) | bool else 'false' }}
+      when: base_cluster_install_services.atlas | default(true) | bool
+
+    - name: Configure Solr security
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Solr security
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/solr/config
+        cm_config_desired:
+          solr_security_authentication: >-
+            {{ 'kerberos' if base_cluster_enable_kerberos | default(true) | bool else 'none' }}
+      when: base_cluster_install_services.solr | default(true) | bool
 
     - name: Configure Hive database
       ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml

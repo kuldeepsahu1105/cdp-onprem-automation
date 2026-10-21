@@ -46,6 +46,15 @@
         | length > 0
       }}
 
+- name: Decide whether the complete pre-start Kerberos workflow must run
+  ansible.builtin.set_fact:
+    base_cluster_pre_start_kerberos_workflow_required: >-
+      {{
+        base_cluster_pre_start_hdfs_authentication != 'kerberos'
+        or base_cluster_create_required | default(false) | bool
+        or base_cluster_pending_first_run | default(false) | bool
+      }}
+
 - name: Resolve pre-start KDC credential marker
   ansible.builtin.set_fact:
     base_cluster_pre_start_kdc_admin_principal: >-
@@ -112,7 +121,7 @@
   register: base_cluster_pre_start_stop_command
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
   when:
-    - base_cluster_pre_start_hdfs_authentication != 'kerberos'
+    - base_cluster_pre_start_kerberos_workflow_required | bool
     - base_cluster_pre_start_has_running_services | bool
 
 - name: Wait for partially running cluster to stop
@@ -141,7 +150,7 @@
     follow_redirects: none
   register: base_cluster_pre_start_kerberos_configure_command
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
-  when: base_cluster_pre_start_hdfs_authentication != 'kerberos'
+  when: base_cluster_pre_start_kerberos_workflow_required | bool
 
 - name: Wait for pre-start Kerberos configuration
   ansible.builtin.include_tasks: wait_cm_api_command.yml
@@ -150,7 +159,7 @@
     cm_api_command_id: "{{ base_cluster_pre_start_kerberos_configure_command.json.id }}"
     cm_api_command_allow_already_exists: false
   when:
-    - base_cluster_pre_start_hdfs_authentication != 'kerberos'
+    - base_cluster_pre_start_kerberos_workflow_required | bool
     - base_cluster_pre_start_kerberos_configure_command.json.id is defined
 
 - name: Generate Kerberos credentials for the initial cluster transition
@@ -165,7 +174,7 @@
     follow_redirects: none
   register: base_cluster_pre_start_kerberos_credentials_command
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
-  when: base_cluster_pre_start_hdfs_authentication != 'kerberos'
+  when: base_cluster_pre_start_kerberos_workflow_required | bool
 
 - name: Wait for pre-start Kerberos credentials
   ansible.builtin.include_tasks: wait_cm_api_command.yml
@@ -174,14 +183,53 @@
     cm_api_command_id: "{{ base_cluster_pre_start_kerberos_credentials_command.json.id }}"
     cm_api_command_allow_already_exists: false
   when:
-    - base_cluster_pre_start_hdfs_authentication != 'kerberos'
+    - base_cluster_pre_start_kerberos_workflow_required | bool
     - base_cluster_pre_start_kerberos_credentials_command.json.id is defined
 
-- name: Verify Kerberos configuration before service start
+- name: Build pre-start Kerberos configuration checks
+  ansible.builtin.set_fact:
+    base_cluster_pre_start_security_checks: >-
+      {%- set checks = [] -%}
+      {%- if base_cluster_install_services.core_settings | default(true) | bool -%}
+        {%- set _ = checks.append({'service': 'core-settings', 'name': 'hadoop_security_authentication', 'value': 'kerberos'}) -%}
+        {%- set _ = checks.append({'service': 'core-settings', 'name': 'hadoop_security_authorization', 'value': 'true'}) -%}
+      {%- endif -%}
+      {%- if base_cluster_install_services.zookeeper | default(true) | bool -%}
+        {%- set _ = checks.append({'service': 'zookeeper', 'name': 'quorum_auth_enable_sasl', 'value': 'true'}) -%}
+        {%- set _ = checks.append({'service': 'zookeeper', 'name': 'enableSecurity', 'value': 'true'}) -%}
+      {%- endif -%}
+      {%- if base_cluster_install_services.hdfs | default(true) | bool -%}
+        {%- set _ = checks.append({'service': 'hdfs', 'name': 'hadoop_security_authentication', 'value': 'kerberos'}) -%}
+      {%- endif -%}
+      {%- if base_cluster_install_services.ozone | default(true) | bool -%}
+        {%- set _ = checks.append({'service': 'ozone', 'name': 'ozone.security.enabled', 'value': 'true'}) -%}
+      {%- endif -%}
+      {%- if base_cluster_install_services.yarn | default(true) | bool -%}
+        {%- set _ = checks.append({'service': 'yarn', 'name': 'hadoop_secure_web_ui', 'value': 'true'}) -%}
+      {%- endif -%}
+      {%- if base_cluster_install_services.kafka | default(true) | bool -%}
+        {%- set _ = checks.append({'service': 'kafka', 'name': 'kerberos.auth.enable', 'value': 'true'}) -%}
+      {%- endif -%}
+      {%- if base_cluster_install_services.hbase | default(true) | bool -%}
+        {%- set _ = checks.append({'service': 'hbase', 'name': 'hbase_security_authentication', 'value': 'kerberos'}) -%}
+        {%- set _ = checks.append({'service': 'hbase', 'name': 'hbase_security_authorization', 'value': 'true'}) -%}
+      {%- endif -%}
+      {%- if base_cluster_install_services.atlas | default(true) | bool -%}
+        {%- set _ = checks.append({'service': 'atlas', 'name': 'kerberos.auth.enable', 'value': 'true'}) -%}
+      {%- endif -%}
+      {%- if base_cluster_install_services.knox | default(true) | bool -%}
+        {%- set _ = checks.append({'service': 'knox', 'name': 'kerberos.auth.enabled', 'value': 'true'}) -%}
+      {%- endif -%}
+      {%- if base_cluster_install_services.solr | default(true) | bool -%}
+        {%- set _ = checks.append({'service': 'solr', 'name': 'solr_security_authentication', 'value': 'kerberos'}) -%}
+      {%- endif -%}
+      {{ checks }}
+
+- name: Read security-sensitive service configuration before First Run
   ansible.builtin.uri:
     url: >-
       {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
-      }}/services/hdfs/config?view=full
+      }}/services/{{ item.service }}/config?view=full
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -189,22 +237,39 @@
     validate_certs: no
     status_code: [200]
     follow_redirects: none
-  register: base_cluster_pre_start_hdfs_auth
+  loop: "{{ base_cluster_pre_start_security_checks }}"
+  loop_control:
+    label: "{{ item.service }}.{{ item.name }}"
+  register: base_cluster_pre_start_security_config
   changed_when: false
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-- name: Require Kerberos before starting cluster services
+- name: Require complete Kerberos configuration before First Run
   ansible.builtin.assert:
     that:
       - >-
         (
-          base_cluster_pre_start_hdfs_auth.json['items'] | default([])
-          | selectattr('name', 'equalto', 'hadoop_security_authentication')
+          item.json['items'] | default([])
+          | selectattr('name', 'equalto', item.item.name)
           | map(attribute='value')
           | first
+          | default(
+              (
+                item.json['items'] | default([])
+                | selectattr('name', 'equalto', item.item.name)
+                | map(attribute='default')
+                | first
+              ),
+              true
+            )
           | default('', true)
+          | string
           | lower
-        ) == 'kerberos'
+        ) == item.item.value
     fail_msg: >-
-      CM completed configureForKerberos, but HDFS is not configured for
-      Kerberos. Refusing to start cluster services.
+      {{ item.item.service }}.{{ item.item.name }} is not {{ item.item.value }}
+      after Kerberos reconciliation. Refusing CM First Run to prevent a
+      partially secured cluster.
+  loop: "{{ base_cluster_pre_start_security_config.results }}"
+  loop_control:
+    label: "{{ item.item.service }}.{{ item.item.name }}"
