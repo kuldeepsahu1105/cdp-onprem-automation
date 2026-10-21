@@ -137,6 +137,15 @@ Never replace that address with the manager public IP while
 `cm_api_uri_delegate_to` is set; AWS instances may not hairpin to their own
 public EIP. URL assembly must run again after delegation is selected, even
 when an existing public `cm_api_url` is otherwise syntactically valid.
+Immediately before a delegated `GET /api/version`,
+`fetch_cm_api_version_slug.yml` pins `cm_api_probe_host`,
+`cm_api_client_host`, and `cm_host` to nonempty `cm_host_private` when the
+controller probe failed. That delegated request must not use loopback or the
+manager public EIP.
+Likewise, `set_cm_api_url.yml` may select the manager public host only when
+the public-controller profile is active, the controller probe actually
+succeeded, and `cm_api_uri_delegate_to` is empty. A delegated API path must
+never be overwritten by the public-host fact task.
 
 **Version variable names:** `cm_version` is the configured Cloudera Manager product/package version from `config.yml` and can have extra-var precedence in Jenkins. Never use it as a `register` target. Play **25** stores `GET /cm/version` in `cm_version_response` and parses the payload into `cm_version_info`; the API slug remains `cm_api_version`.
 

@@ -22,6 +22,30 @@
     - cm_api_uri_delegate_to | default('') | length == 0
     - not (cm_api_controller_probe_succeeded | default(false) | bool)
 
+- name: CM API — pin delegated version probe host to manager private address
+  ansible.builtin.set_fact:
+    cm_api_probe_host: "{{ cm_host_private }}"
+  when:
+    - cm_api_uri_delegate_to | default('') | length > 0
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
+    - cm_host_private | default('') | length > 0
+
+- name: CM API — pin delegated version client host to manager private address
+  ansible.builtin.set_fact:
+    cm_api_client_host: "{{ cm_host_private }}"
+  when:
+    - cm_api_uri_delegate_to | default('') | length > 0
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
+    - cm_host_private | default('') | length > 0
+
+- name: CM API — pin delegated version canonical host to manager private address
+  ansible.builtin.set_fact:
+    cm_host: "{{ cm_host_private }}"
+  when:
+    - cm_api_uri_delegate_to | default('') | length > 0
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
+    - cm_host_private | default('') | length > 0
+
 - name: CM API — GET /api/version on cldr-mngr (API calls via manager)
   ansible.builtin.uri:
     url: "{{ cm_protocol }}://{{ cm_api_probe_host }}:{{ cm_api_port }}/api/version"
