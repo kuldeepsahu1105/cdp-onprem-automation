@@ -14,6 +14,7 @@
   ansible.builtin.import_tasks: install_cm_packages.yml
   vars:
     cm_package_list: "{{ cldr_mngr_packages.server }}"
+    cm_package_task_subject: Cloudera Manager Server
 
 - name: Create PostgreSQL SSL directory
   ansible.builtin.file:

@@ -6,6 +6,7 @@
   ansible.builtin.import_tasks: install_cm_packages.yml
   vars:
     cm_package_list: "{{ cldr_mngr_packages.client }}"
+    cm_package_task_subject: Cloudera Manager Agent
 
 - name: Configure CM agent server_host to cldr-mngr FQDN
   ansible.builtin.import_tasks: configure_cm_agent.yml
