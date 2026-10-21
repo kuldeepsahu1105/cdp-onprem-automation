@@ -17,7 +17,7 @@
     path: /controlPlanes/commands/installEmbeddedControlPlane
     method: POST
     body:
-      remoteRepoUrl: "{{ ecs_pvc_repository_url }}"
+      remoteRepoUrl: "{{ ecs_pvc_repository_url | regex_replace('/?parcels/.*$', '') }}"
       experienceClusterName: "{{ ecs_cluster_name }}"
       datalakeClusterName: "{{ cdh_basecluster_name }}"
       valuesYaml: "{{ ecs_control_plane_values_yaml }}"

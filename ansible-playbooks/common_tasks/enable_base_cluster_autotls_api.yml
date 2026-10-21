@@ -19,21 +19,63 @@
   changed_when: false
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+- name: Read HDFS TLS and secure DataNode configuration
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/hdfs/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_hdfs_tls_config
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: base_cluster_install_services.hdfs | default(true) | bool
+
 - name: Resolve base cluster Auto-TLS enabled flag
   ansible.builtin.set_fact:
     base_cluster_tls_already_enabled: >-
       {{
-        base_cluster_is_tls_enabled.json
-        if (base_cluster_is_tls_enabled.json is boolean)
-        else (base_cluster_is_tls_enabled.json | default(false) | bool)
+        (
+          base_cluster_is_tls_enabled.json
+          if (base_cluster_is_tls_enabled.json is boolean)
+          else (base_cluster_is_tls_enabled.json | default(false) | bool)
+        )
+        and (
+          not (base_cluster_install_services.hdfs | default(true) | bool)
+          or (
+            (
+              base_cluster_hdfs_tls_config.json['items'] | default([])
+              | selectattr('name', 'equalto', 'hdfs_hadoop_ssl_enabled')
+              | map(attribute='value')
+              | first
+              | default(false, true)
+              | bool
+            )
+            and (
+              base_cluster_hdfs_tls_config.json['items'] | default([])
+              | selectattr('name', 'equalto', 'dfs_data_transfer_protection')
+              | map(attribute='value')
+              | first
+              | default('', true)
+              | lower
+              in ['authentication', 'integrity', 'privacy']
+            )
+          )
+        )
       }}
 
 - name: Show base cluster Auto-TLS state
   ansible.builtin.debug:
     msg: >-
       Cluster {{ cdh_basecluster_name }} isTlsEnabled={{
-      base_cluster_tls_already_enabled | default(false) }} (CM Auto-TLS configured={{
-      cm_autotls_api_enabled | default(false) }}).
+      base_cluster_is_tls_enabled.json | default(false) }}, complete HDFS secure
+      DataNode TLS={{ base_cluster_tls_already_enabled | default(false) }}
+      (CM Auto-TLS configured={{ cm_autotls_api_enabled | default(false) }}).
 
 - name: Require CM Auto-TLS before enabling cluster services TLS
   ansible.builtin.assert:
@@ -78,3 +120,47 @@
   when:
     - base_cluster_configure_autotls_services is defined
     - base_cluster_configure_autotls_services.json.id is defined
+
+- name: Read final HDFS secure DataNode configuration
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/hdfs/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_final_hdfs_tls_config
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: base_cluster_install_services.hdfs | default(true) | bool
+
+- name: Require valid secure DataNode TLS configuration
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          base_cluster_final_hdfs_tls_config.json['items'] | default([])
+          | selectattr('name', 'equalto', 'hdfs_hadoop_ssl_enabled')
+          | map(attribute='value')
+          | first
+          | default(false, true)
+          | bool
+        )
+      - >-
+        (
+          base_cluster_final_hdfs_tls_config.json['items'] | default([])
+          | selectattr('name', 'equalto', 'dfs_data_transfer_protection')
+          | map(attribute='value')
+          | first
+          | default('', true)
+          | lower
+        ) in ['authentication', 'integrity', 'privacy']
+    fail_msg: >-
+      HDFS secure DataNode mode is incomplete after configureAutoTlsServices.
+      Refusing First Run until Hadoop TLS is enabled and Data Transfer
+      Protection is set.
+  when: base_cluster_install_services.hdfs | default(true) | bool

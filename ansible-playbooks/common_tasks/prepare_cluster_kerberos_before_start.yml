@@ -51,8 +51,6 @@
     base_cluster_pre_start_kerberos_workflow_required: >-
       {{
         base_cluster_pre_start_hdfs_authentication != 'kerberos'
-        or base_cluster_create_required | default(false) | bool
-        or base_cluster_pending_first_run | default(false) | bool
       }}
 
 - name: Resolve pre-start KDC credential marker

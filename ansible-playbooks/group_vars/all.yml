@@ -1063,7 +1063,7 @@ ecs_docker_registry: "container.repository.cloudera.com"
 ecs_external_registry_enabled: true
 ecs_lso_data_path: "/ecs/local-storage"
 ecs_longhorn_data_path: "/ecs/longhorn-storage"
-ecs_longhorn_replication: 2
+ecs_longhorn_replication: 1
 ecs_nfs_over_provisioning: 800
 ecs_k8s_webui_secret_admin_token: "ChangeMe@ECS-WebUI"
 ecs_prometheus_ingress_password: "{{ common_password | default(ipaadmin_password, true) }}"

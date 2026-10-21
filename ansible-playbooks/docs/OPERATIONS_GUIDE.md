@@ -572,17 +572,21 @@ the default ~10 minutes.
 `base_cluster_enable_kerberos: true` makes playbook **31** Kerberize every base
 cluster it manages. Auto-TLS and CM KDC/account-manager integration must already
 be active before cluster creation. For a newly created cluster, playbook **31**
-renders the same coordinated security settings used by the Cloudera Labs Ozone
-Base reference for Core Settings, ZooKeeper, HDFS, YARN, Ozone, Kafka, HBase,
-Atlas, Knox, and Solr. It refuses First Run unless the KDC is reachable and CM's
-matching credential marker exists, generates credentials, and verifies every
-enabled security-sensitive service **before any cluster service is started**.
-Every new or unfinished cluster first runs CM's `configureForKerberos` command
-and waits for it to succeed; HDFS reporting Kerberos alone is not considered
-proof that Ozone and the other services completed the transition. Interrupted
-pre-First-Run attempts reconcile the complete security matrix, rerun
-`configureForKerberos`, repeat credential generation, and repeat verification
-before retrying.
+renders the complete declarative security configuration from the working
+Cloudera Labs Ozone Base reference for Core Settings, ZooKeeper, HDFS, YARN,
+Ozone, Kafka, HBase, Atlas, Knox, and Solr. It requires the KDC and CM
+account-manager credential marker and verifies every enabled security-sensitive
+service **before any cluster service is started**. `configureForKerberos` and
+credential generation are used only to converge a cluster that still reports
+SIMPLE authentication; an already declaratively secured cluster proceeds to
+Auto-TLS and CM First Run without repeating that wizard.
+
+Before First Run, cluster Auto-TLS is considered complete only when CM reports
+the cluster TLS flag **and** HDFS reports `hdfs_hadoop_ssl_enabled=true` with
+`dfs_data_transfer_protection` set. Playbook **31** reruns CM's
+`configureAutoTlsServices` command when that DataNode tuple is incomplete and
+refuses First Run if CM still reports a configuration that would fail secure
+DataNode validation.
 
 For an existing initialized cluster, the playbook checks HDFS authentication.
 A cluster still using `simple` authentication is stopped, configured through
