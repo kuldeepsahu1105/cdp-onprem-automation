@@ -83,9 +83,13 @@ FQDN/private address candidates used by service JDBC and delegated `psql`,
 with loopback only as a final candidate. Systemd-unit and `PG_VERSION`
 searches are diagnostics only because supported PGDG, distro, container, and
 custom data layouts do not share one unit name or filesystem path. Auto-TLS
-play **27** does not apply this gate: Cloudera Manager can be healthy on its
-configured embedded SCM database, and Auto-TLS depends on CM API health rather
-than an external service-database listener on port 5432.
+play **27** does not apply this duplicate listener gate: this automation
+configures Cloudera Manager with `scm_prepare_database.sh` against the external
+PostgreSQL deployment on the CM database host. A successful authenticated CM
+API request is the authoritative proof that CM can use that configured
+database path before Auto-TLS changes CM transport. Play **31** retains the
+direct external PostgreSQL check for the additional CDH service databases it
+creates and configures.
 
 When Jenkins cannot reach a CM API port directly and discovery falls back to a
 request delegated to `cldr-mngr`, `cm_api_client_host`, `cm_host`, and the
