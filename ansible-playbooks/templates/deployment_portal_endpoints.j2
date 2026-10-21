@@ -40,14 +40,16 @@
   note: "Ops host :{{ deployment_portal_pgadmin_host_port }}; CM DB on {{ deployment_portal_postgres_fqdn | default('') }}"
 {% endif %}
 {% if deployment_portal_has_ipa | bool and caddy_vhost_urls_external.ipa.url | default('') | length > 0 %}
-- name: "FreeIPA (modern UI)"
-  url: "{{ (caddy_vhost_urls_external.ipa.url | trim | regex_replace('/+$', '')) ~ '/ipa/modern-ui/' }}"
+- name: "FreeIPA ({{ 'modern' if deployment_portal_ipa_modern_ui_available | default(false) | bool else 'legacy' }} UI)"
+  url: "{{ (caddy_vhost_urls_external.ipa.url | trim | regex_replace('/+$', '')) ~ deployment_portal_ipa_ui_path | default('/ipa/ui/') }}"
   hostname: "{{ deployment_portal_ipa_fqdn | default('') }}"
   note: "Caddy vhost {{ caddy_vhost_urls_external.ipa.hostname | default('') }}"
+{% if deployment_portal_ipa_modern_ui_available | default(false) | bool %}
 - name: "FreeIPA (legacy UI)"
   url: "{{ (caddy_vhost_urls_external.ipa.url | trim | regex_replace('/+$', '')) ~ '/ipa/ui' }}"
   hostname: "{{ deployment_portal_ipa_fqdn | default('') }}"
   note: "Caddy vhost {{ caddy_vhost_urls_external.ipa.hostname | default('') }}"
+{% endif %}
 {% elif deployment_portal_ipa_fqdn | default('') | length > 0 %}
 {% set _ipa_inv = groups['ipaserver'][0] if ('ipaserver' in groups and groups['ipaserver'] | default([]) | length > 0) else (groups['ipa_server'][0] if ('ipa_server' in groups and groups['ipa_server'] | default([]) | length > 0) else '') %}
 {% set _ipa_priv = hostvars[_ipa_inv].private_ip | default('') if (_ipa_inv | length > 0) else '' %}

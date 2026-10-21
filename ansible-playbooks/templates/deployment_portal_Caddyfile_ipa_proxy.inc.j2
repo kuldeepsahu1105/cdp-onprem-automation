@@ -4,7 +4,7 @@
 
   request_header @ipa_json_rpc Referer "https://{{ deployment_portal_ipa_fqdn }}/ipa"
   request_header @ipa_json_rpc Accept-Encoding identity
-  request_header @ipa_session Referer "https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/"
+  request_header @ipa_session Referer "https://{{ deployment_portal_ipa_fqdn }}{{ deployment_portal_ipa_ui_path | default('/ipa/ui/') }}"
   request_header @ipa_ui Referer "https://{{ deployment_portal_ipa_fqdn }}{http.request.uri.path}"
 
   request_header -Authorization

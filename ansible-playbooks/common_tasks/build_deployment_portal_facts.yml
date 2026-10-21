@@ -144,10 +144,41 @@
       }}
   when: deployment_portal_has_ipa | bool
 
+- name: Detect FreeIPA modern UI application
+  ansible.builtin.stat:
+    path: /usr/share/ipa/modern-ui/index.html
+  register: deployment_portal_ipa_modern_ui
+  changed_when: false
+  failed_when: false
+  become: true
+  connection: ssh
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  when: deployment_portal_has_ipa | bool
+
+- name: Select installed FreeIPA UI application
+  ansible.builtin.set_fact:
+    deployment_portal_ipa_modern_ui_available: >-
+      {{
+        deployment_portal_ipa_modern_ui.stat.exists | default(false) | bool
+        and deployment_portal_ipa_modern_ui.stat.isreg | default(false) | bool
+      }}
+    deployment_portal_ipa_ui_path: >-
+      {{
+        '/ipa/modern-ui/'
+        if (
+          deployment_portal_ipa_modern_ui.stat.exists | default(false) | bool
+          and deployment_portal_ipa_modern_ui.stat.isreg | default(false) | bool
+        )
+        else '/ipa/ui/'
+      }}
+  when: deployment_portal_has_ipa | bool
+
 - name: Clear FreeIPA hosts when not in inventory
   ansible.builtin.set_fact:
     deployment_portal_ipa_fqdn: ""
     deployment_portal_ipa_upstream_host: ""
+    deployment_portal_ipa_modern_ui_available: false
+    deployment_portal_ipa_ui_path: /ipa/ui/
   when: not deployment_portal_has_ipa | bool
 
 - name: Detect ECS inventory
@@ -467,7 +498,12 @@
         index_url_vpc: "{{ deployment_portal_access_urls.vpc.portal | default('') }}"
         pgadmin_url_vpc: "{{ deployment_portal_access_urls.vpc.pgadmin | default('') }}"
       identity:
-        ipa_ui_url: "{{ ('https://' + deployment_portal_ipa_fqdn) if deployment_portal_has_ipa | bool else '' }}"
+        ipa_ui_url: >-
+          {{
+            ('https://' + deployment_portal_ipa_fqdn + deployment_portal_ipa_ui_path)
+            if deployment_portal_has_ipa | bool
+            else ''
+          }}
         ipa_caddy_url: >-
           {{
             caddy_vhost_urls_external.ipa.url | default('')
@@ -486,6 +522,7 @@
             if (
               caddy_vhost_enabled | default(false) | bool
               and deployment_portal_has_ipa | bool
+              and deployment_portal_ipa_modern_ui_available | bool
             )
             else ''
           }}

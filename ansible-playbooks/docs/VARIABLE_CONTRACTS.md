@@ -120,7 +120,8 @@ either form of delegation.
 | `cm_frontend_url_effective` | `resolve_caddy_service_public_urls.yml` — optional `cm_external_url` override only |
 | `deployment_portal_public_host` | `resolve_caddy_service_public_urls.yml` — Caddy lab hostname for the deployment index (`portal.<ops-ip-dashed>.<base>`) |
 | `pgadmin_caddy_public_url` | `resolve_caddy_service_public_urls.yml` — preferred browser URL for pgAdmin on Caddy port `deployment_portal_http_port` (default **81**) |
-| `ipa_caddy_public_url`, `ipa_caddy_modern_public_url`, `ipa_caddy_legacy_public_url` | `resolve_caddy_service_public_urls.yml` — FreeIPA Caddy vhost base, modern (`/ipa/modern-ui/`), and legacy (`/ipa/ui`) browser URLs |
+| `deployment_portal_ipa_modern_ui_available`, `deployment_portal_ipa_ui_path` | `build_deployment_portal_facts.yml` — SSH `stat` of `/usr/share/ipa/modern-ui/index.html`; selects modern UI only when installed, otherwise `/ipa/ui/` |
+| `ipa_caddy_public_url`, `ipa_caddy_preferred_public_url`, `ipa_caddy_modern_public_url`, `ipa_caddy_legacy_public_url` | `resolve_caddy_service_public_urls.yml` — FreeIPA Caddy vhost base, installed/preferred UI, optional modern (`/ipa/modern-ui/`), and legacy (`/ipa/ui/`) browser URLs |
 | `deployment_tier_b_url_checks` | `build_deployment_tier_b_url_checks.yml` on **localhost** — Tier B reads via `hostvars['localhost']` in `verify_service_urls_from_controller.yml` |
 | `ecs_control_plane_url_effective` | `resolve_ecs_control_plane_url.yml` — `ecs_control_plane_url` or `https://<ecs_console_host_prefix>.<ecs_app_domain>` (default prefix `console-cdp`; no Caddy) |
 
@@ -158,7 +159,8 @@ Import **`validate_cluster_domain_ozone_hostname.yml`** from **`detect_identity_
 | Fact | Set by | Notes |
 |------|--------|-------|
 | `ipa_kerberos_ccache_path` | `group_vars/all.yml` | Ansible **`KRB5CCNAME=FILE:…`** for **`ipa`/`kinit`** in automation — not **`default_ccache_name`** in krb5.conf |
-| `ipa_httpd_disable_browser_krb_negotiate` | `group_vars/all.yml` (default **`true`**) | **`zz-ipa-disable-browser-krb.conf`** on ipaserver (`SetEnv gssapi-no-negotiate` on protected API/session routes only; static `/ipa/modern-ui` and `/ipa/ui` remain public); play **12** + **manage_ipa_httpd_caddy_proxy_on_ipaserver** |
+| `ipa_httpd_disable_browser_krb_negotiate` | `group_vars/all.yml` (default **`true`**) | **`zz-ipa-disable-browser-krb.conf`** uses server-scope `SetEnvIf` to suppress browser Negotiate on every `/ipa` request without overriding static UI directory authorization; play **12** + **manage_ipa_httpd_caddy_proxy_on_ipaserver** verifies no Negotiate response header |
+| `ipa_server_packages_state`, `ipa_server_require_modern_ui` | `group_vars/all.yml` (defaults **`latest`**, **`true`**) | Play **12** refreshes package metadata, upgrades configured IPA with `ipa-server-upgrade` when packages change, and requires the packaged modern UI |
 | `krb5_comment_default_ccache_on_ipaserver` | `group_vars/all.yml` (default **`false`**) | When **`false`**, **ipaserver** keeps active **`default_ccache_name = KEYRING:persistent:%{uid}`**; clients stay commented |
 | `krb5_libdefaults_default_ccache_commented_line` | `group_vars/all.yml` | Target commented line on **clients** (`ensure_krb5_default_ccache_commented.yml`) |
 | `krb5_cm_managed_krb5_conf` | `group_vars/all.yml` (default **`true`**) | CM **`KRB_MANAGE_KRB5_CONF`** — CM regenerates **`/etc/krb5.conf`** on cluster hosts; set **`false`** to keep host/IPA-managed krb5 |

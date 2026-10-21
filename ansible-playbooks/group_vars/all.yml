@@ -135,6 +135,10 @@ chrony_enabled: "yes"
 ipa_server_deep_recovery: false
 # Playbook 12 — when true, run ipa-server-install even if default.conf + healthy ipactl (re-install; rare)
 ipa_server_install_force: false
+# Keep FreeIPA packages current from the configured supported OS repositories.
+ipa_server_packages_state: latest
+# Current deployments require the packaged React UI at /ipa/modern-ui.
+ipa_server_require_modern_ui: true
 # Playbook 16 — hostname/DNS asserts before ipa-client-install (see RUNBOOK identity troubleshooting)
 ipa_client_preflight_enabled: false
 # Playbook 12 preflight — explicit RPMs probed before ipa-server-install (RHEL; also in freeipa_server_packages)
@@ -924,74 +928,6 @@ cleanup_remove_service_lib_dirs: false
 
 # Service-owned /var/lib directory names. Removal requires the explicit
 # cleanup_remove_service_lib_dirs=true opt-in, including during E2E cleanup.
-cleanup_base_service_path_names:
-  - accumulo
-  - atlas
-  - cruisecontrol
-  - dataviz
-  - dpprofiler
-  - druid
-  - flink
-  - flume
-  - hadoop
-  - hadoop-hdfs
-  - hadoop-kms
-  - hadoop-mapreduce
-  - hadoop-ozone
-  - hadoop-yarn
-  - hbase
-  - hbase-solr
-  - hive
-  - hive-hcatalog
-  - hive-webhcat
-  - httpfs
-  - hue
-  - impala
-  - kafka
-  - knox
-  - kraft
-  - kudu
-  - livy
-  - kms
-  - mapred
-  - nifi
-  - nifi-registry
-  - nifiregistry
-  - omid
-  - oozie
-  - ozone
-  - phoenix
-  - ranger
-  - rangerraz
-  - rangerrms
-  - replication-manager
-  - schemaregistry
-  - solr
-  - spark
-  - spark3
-  - sqoop
-  - streams
-  - streamsmsgmgr
-  - streamsrepmgr
-  - superset
-  - tez
-  - yarn
-  - zeppelin
-  - zookeeper
-
-cleanup_ecs_service_library_paths:
-  - /var/lib/cni
-  - /var/lib/containerd
-  - /var/lib/docker
-  - /var/lib/docker_server
-  - /var/lib/kubelet
-  - /var/lib/longhorn
-  - /var/lib/rancher
-  - /var/lib/rke2
-
-# Service-owned /var/lib directories removed whenever base-cluster cleanup runs,
-# in both scoped and end-to-end cleanup modes. Infrastructure services such as
-# PostgreSQL, FreeIPA, and Cloudera Manager are intentionally controlled separately.
 cleanup_base_service_path_names:
   - accumulo
   - atlas

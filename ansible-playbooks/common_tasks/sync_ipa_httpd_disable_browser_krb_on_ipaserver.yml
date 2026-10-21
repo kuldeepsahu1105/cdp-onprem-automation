@@ -97,3 +97,47 @@
 - name: Reload httpd on ipaserver when browser krb snippet changed
   ansible.builtin.import_tasks: reload_ipa_httpd_on_ipaserver_after_change.yml
   when: ipa_httpd_browser_krb_config_changed | default(false) | bool
+
+- name: Verify browser Kerberos negotiation is disabled on ipaserver
+  ansible.builtin.uri:
+    url: https://127.0.0.1/ipa/session/login_kerberos
+    method: GET
+    headers:
+      Host: >-
+        {{
+          deployment_portal_ipa_fqdn
+          | default(
+              hostvars[ipa_httpd_delegate_host].cldr_hostname
+              ~ '.' ~ cluster_domain,
+              true
+            )
+        }}
+    status_code: [200, 401, 403]
+    follow_redirects: none
+    validate_certs: false
+  register: ipa_httpd_browser_krb_probe
+  changed_when: false
+  delegate_to: "{{ ipa_httpd_delegate_host }}"
+  when:
+    - ipa_httpd_disable_browser_krb_negotiate | default(true) | bool
+    - groups.get('ipaserver', []) | length > 0
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
+
+- name: Require password-only browser authentication
+  ansible.builtin.assert:
+    that:
+      - >-
+        'negotiate' not in (
+          ipa_httpd_browser_krb_probe.www_authenticate
+          | default('')
+          | lower
+        )
+    fail_msg: >-
+      FreeIPA still advertises WWW-Authenticate: Negotiate to browsers after
+      installing zz-ipa-disable-browser-krb.conf. Browser authentication must use
+      the password form only. Observed header={{
+      ipa_httpd_browser_krb_probe.www_authenticate | default('(none)') }}.
+  when:
+    - ipa_httpd_browser_krb_probe is defined
+    - not (ipa_httpd_browser_krb_probe.skipped | default(false) | bool)

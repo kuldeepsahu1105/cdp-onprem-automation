@@ -8,6 +8,7 @@
   until: base_cluster_hue_env_python.stat.exists | default(false) | bool
   retries: "{{ base_cluster_hue_venv_wait_retries }}"
   delay: "{{ base_cluster_hue_venv_wait_delay }}"
+  failed_when: false
   become: true
   connection: ssh
 
