@@ -19,7 +19,9 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
 2. **Hosts** — `cloudera.cluster.host` `state: attached` for master and workers (FQDN = `cldr_hostname.cluster_domain`).
 3. **Parcel** — `cloudera.cluster.parcel` `state: activated` for product `ECS`.
 4. **Services** — `cloudera.cluster.service` + `service_config` for `docker` and `ecs` (credentials in a separate `service_config` task with `no_log`).
-5. **Host templates** — `common_tasks/ecs_apply_host_templates.yml` (`ecs_master`, `ecs_workers`).
+5. **Host templates** — `common_tasks/ecs_apply_host_templates.yml`
+   (`ECSMaster`, `ECSWorker`) through the v4-compatible CM API, applied with
+   `startRoles=false`.
 6. **Control plane** — `common_tasks/ecs_install_control_plane.yml` with `valuesYaml` from `templates/ecs_control_plane_values.yaml.j2`.
 7. **Start** — `cloudera.cluster.cluster` `state: started`.
 

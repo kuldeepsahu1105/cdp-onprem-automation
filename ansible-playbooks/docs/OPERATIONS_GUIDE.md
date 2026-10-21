@@ -474,12 +474,21 @@ ansible-playbook -i inventory.ini 31_setup_base_cluster.yml
 ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml
 ```
 
-`31_setup_base_cluster.yml` builds the cluster from `templates/base_cluster_cluster_spec.j2`. Toggle services with `base_cluster_install_services` in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`). Cluster **create** runs only when the cluster does not exist in CM; adding services to an existing cluster requires CM UI/API changes.
+`31_setup_base_cluster.yml` builds the cluster from
+`templates/base_cluster_cluster_spec.j2`. Toggle services with
+`base_cluster_install_services` in `group_vars/all.yml` or Jenkins
+`ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`).
+Cluster **create** runs only when the cluster does not exist in CM; adding
+services to an existing cluster requires CM UI/API changes.
 
-Cluster creation is split into a create/configure phase and a First Run phase. The
-`cloudera.cluster` module can spend up to two hours activating parcels or waiting
-for CM commands; Ansible runs it asynchronously and Jenkins prints a poll update
-every `base_cluster_module_poll_interval` seconds instead of appearing frozen.
+Fresh cluster creation follows the working Labs sequence rather than one
+monolithic cluster-module request: cluster shell, Core Settings, host attachment,
+CDH parcel activation, dependency-ordered services, role config groups, Master
+and Worker host templates, role assignment without starting roles, Kerberos,
+Auto-TLS, then one CM First Run. The repository pins `cloudera.cluster` v4.4.0:
+its `service` module is used for services, while host-template creation and
+application use the exact CM API through `cm_resource` because the standalone
+`host_template` module was added in v5.
 
 When a base cluster with the configured name already exists, playbook **31**
 reads its current state, assigned hosts, and service types. A zero-host partial
@@ -583,10 +592,11 @@ Auto-TLS and CM First Run without repeating that wizard.
 
 Before First Run, cluster Auto-TLS is considered complete only when CM reports
 the cluster TLS flag **and** HDFS reports `hdfs_hadoop_ssl_enabled=true` with
-`dfs_data_transfer_protection` set. Playbook **31** reruns CM's
-`configureAutoTlsServices` command when that DataNode tuple is incomplete and
-refuses First Run if CM still reports a configuration that would fail secure
-DataNode validation.
+`dfs_data_transfer_protection` set, DataNode transceiver port at least 1024, and
+DataNode HTTPS port at least 1024. Playbook **31** reruns CM's
+`configureAutoTlsServices` command when that complete DataNode tuple is
+incomplete and refuses First Run if CM still reports a configuration that would
+fail secure DataNode validation.
 
 For an existing initialized cluster, the playbook checks HDFS authentication.
 A cluster still using `simple` authentication is stopped, configured through

@@ -1,6 +1,7 @@
 ---
-# Phased ECS install aligned with Cloudera Labs reference (cloudera.cluster v4.4.0).
-# v4 has no control_plane or host_template modules — control plane uses cm_resource; templates use CM REST.
+# Phased ECS install aligned with the supplied Cloudera Labs reference.
+# Pinned v4.4 lacks host_template and control_plane modules, so those phases use
+# their exact CM API equivalents through cm_resource.
 
 - name: Assert ECS console admin password meets complexity requirements
   ansible.builtin.assert:

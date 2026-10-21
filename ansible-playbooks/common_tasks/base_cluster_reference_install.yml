@@ -1,0 +1,283 @@
+---
+# Fresh Base install in the same phase order as the working Cloudera Labs reference.
+# cloudera.cluster.service is available in pinned v4.4.0. Host-template modules were
+# added in v5, so the equivalent CM API is used for template creation/application.
+
+- name: Establish Base cluster shell
+  cloudera.cluster.cluster:
+    host: "{{ cm_cluster_module_host }}"
+    port: "{{ cm_cluster_module_port }}"
+    version: "{{ cm_api_version }}"
+    force_tls: "{{ cm_cluster_module_force_tls }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    name: "{{ cdh_basecluster_name }}"
+    display_name: "{{ cdh_basecluster_name }}"
+    cluster_version: "{{ base_cluster_cdh_parcel_version_effective }}"
+    type: BASE_CLUSTER
+    state: present
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Resolve Core Settings service specification
+  ansible.builtin.set_fact:
+    base_cluster_reference_core_settings: >-
+      {{
+        base_cluster_spec.services
+        | selectattr('name', 'equalto', 'core-settings')
+        | first
+        | default({})
+      }}
+
+- name: Establish Core Settings before attaching hosts
+  cloudera.cluster.service:
+    host: "{{ cm_cluster_module_host }}"
+    port: "{{ cm_cluster_module_port }}"
+    version: "{{ cm_api_version }}"
+    force_tls: "{{ cm_cluster_module_force_tls }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    cluster: "{{ cdh_basecluster_name }}"
+    name: "{{ base_cluster_reference_core_settings.name }}"
+    display_name: >-
+      {{
+        base_cluster_reference_core_settings.display_name
+        | default(base_cluster_reference_core_settings.name)
+      }}
+    type: "{{ base_cluster_reference_core_settings.type }}"
+    config: "{{ base_cluster_reference_core_settings.config | default(omit) }}"
+    role_config_groups: >-
+      {{ base_cluster_reference_core_settings.role_groups | default(omit) }}
+    skip_redacted: true
+    state: present
+  when: base_cluster_reference_core_settings | length > 0
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Attach Base cluster hosts
+  cloudera.cluster.host:
+    host: "{{ cm_cluster_module_host }}"
+    port: "{{ cm_cluster_module_port }}"
+    version: "{{ cm_api_version }}"
+    force_tls: "{{ cm_cluster_module_force_tls }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    name: "{{ item.name }}"
+    cluster: "{{ cdh_basecluster_name }}"
+  loop: "{{ base_cluster_hosts }}"
+  loop_control:
+    label: "{{ item.name }}"
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Activate CDH parcel on Base cluster
+  cloudera.cluster.parcel:
+    host: "{{ cm_cluster_module_host }}"
+    port: "{{ cm_cluster_module_port }}"
+    version: "{{ cm_api_version }}"
+    force_tls: "{{ cm_cluster_module_force_tls }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    cluster: "{{ cdh_basecluster_name }}"
+    name: CDH
+    parcel_version: "{{ base_cluster_cdh_parcel_version_effective }}"
+    state: activated
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Order Base services by dependency
+  ansible.builtin.set_fact:
+    base_cluster_reference_services: >-
+      {%- set ordered = [] -%}
+      {%- set names = [
+        'zookeeper', 'hdfs', 'solr', 'ranger', 'yarn',
+        'tez', 'ozone', 'kafka', 'hbase', 'atlas', 'hive', 'hive_on_tez',
+        base_cluster_spark3_service_name, 'impala', 'hue', 'knox',
+        'phoenix', 'nifi', 'nifi_registry', 'replication', 'dataviz'
+      ] -%}
+      {%- for name in names -%}
+        {%- for service in base_cluster_spec.services if service.name == name -%}
+          {%- set _ = ordered.append(service) -%}
+        {%- endfor -%}
+      {%- endfor -%}
+      {%- for service in base_cluster_spec.services
+          if service.name not in names and service.name != 'core-settings' -%}
+        {%- set _ = ordered.append(service) -%}
+      {%- endfor -%}
+      {{ ordered }}
+
+- name: Establish Base cluster services in dependency order
+  cloudera.cluster.service:
+    host: "{{ cm_cluster_module_host }}"
+    port: "{{ cm_cluster_module_port }}"
+    version: "{{ cm_api_version }}"
+    force_tls: "{{ cm_cluster_module_force_tls }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    cluster: "{{ cdh_basecluster_name }}"
+    name: "{{ item.name }}"
+    display_name: "{{ item.display_name | default(item.name) }}"
+    type: "{{ item.type }}"
+    config: "{{ item.config | default(omit) }}"
+    role_config_groups: "{{ item.role_groups | default(omit) }}"
+    skip_redacted: true
+    state: present
+  loop: "{{ base_cluster_reference_services }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.type }})"
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Query Base service role config groups
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/{{ item.name }}/roleConfigGroups
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  loop: "{{ base_cluster_spec.services }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: base_cluster_reference_rcg_responses
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Index Base role config group names
+  ansible.builtin.set_fact:
+    base_cluster_reference_rcg_names: >-
+      {%- set groups = {} -%}
+      {%- for result in base_cluster_reference_rcg_responses.results -%}
+        {%- for group in result.json['items'] | default([])
+            if group.base | default(false) | bool -%}
+          {%- set key = result.item.type ~ ':' ~ group.roleType -%}
+          {%- set _ = groups.update({key: group.name}) -%}
+        {%- endfor -%}
+      {%- endfor -%}
+      {{ groups }}
+
+- name: Build v4-compatible Base host-template payloads
+  ansible.builtin.set_fact:
+    base_cluster_reference_host_templates: >-
+      {%- set templates = [] -%}
+      {%- for template in base_cluster_spec.host_templates -%}
+        {%- set refs = [] -%}
+        {%- for role in template.role_groups -%}
+          {%- set key = role.service ~ ':' ~ role.type -%}
+          {%- if key in base_cluster_reference_rcg_names -%}
+            {%- set _ = refs.append({
+              'roleConfigGroupName': base_cluster_reference_rcg_names[key]
+            }) -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- set _ = templates.append({
+          'name': template.name,
+          'roleConfigGroupRefs': refs,
+          'expected_role_count': template.role_groups | length
+        }) -%}
+      {%- endfor -%}
+      {{ templates }}
+
+- name: Require complete Base host-template role mappings
+  ansible.builtin.assert:
+    that:
+      - item.roleConfigGroupRefs | length == item.expected_role_count
+    fail_msg: >-
+      Could not map all {{ item.name }} role config groups with cloudera.cluster
+      v4.4.0. Expected {{ item.expected_role_count }}, resolved
+      {{ item.roleConfigGroupRefs | length }}.
+  loop: "{{ base_cluster_reference_host_templates }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Establish Base cluster host templates through CM API
+  cloudera.cluster.cm_resource:
+    host: "{{ cm_cluster_module_host }}"
+    port: "{{ cm_cluster_module_port }}"
+    version: "{{ cm_api_version }}"
+    force_tls: "{{ cm_cluster_module_force_tls }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    path: "/clusters/{{ cdh_basecluster_name }}/hostTemplates"
+    method: POST
+    body:
+      items:
+        - name: "{{ item.name }}"
+          roleConfigGroupRefs: "{{ item.roleConfigGroupRefs }}"
+  loop: "{{ base_cluster_reference_host_templates }}"
+  loop_control:
+    label: "{{ item.name }}"
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Resolve Base host IDs for template application
+  ansible.builtin.uri:
+    url: "{{ cm_cluster_module_api_url }}/hosts/{{ item | urlencode }}"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  loop: "{{ [base_master_fqdn] + base_worker_fqdns }}"
+  loop_control:
+    label: "{{ item }}"
+  register: base_cluster_reference_host_lookups
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Apply Master host template without starting roles
+  cloudera.cluster.cm_resource:
+    host: "{{ cm_cluster_module_host }}"
+    port: "{{ cm_cluster_module_port }}"
+    version: "{{ cm_api_version }}"
+    force_tls: "{{ cm_cluster_module_force_tls }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    path: >-
+      /clusters/{{ cdh_basecluster_name
+      }}/hostTemplates/Master/commands/hostTemplateApply
+    method: POST
+    query:
+      startRoles: "false"
+    body:
+      items:
+        - hostId: "{{ base_cluster_reference_host_lookups.results[0].json.hostId }}"
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Build Worker host references
+  ansible.builtin.set_fact:
+    base_cluster_reference_worker_refs: >-
+      {{
+        base_cluster_reference_worker_refs | default([])
+        + [{'hostId': item.json.hostId}]
+      }}
+  loop: "{{ base_cluster_reference_host_lookups.results[1:] }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Apply Worker host template without starting roles
+  cloudera.cluster.cm_resource:
+    host: "{{ cm_cluster_module_host }}"
+    port: "{{ cm_cluster_module_port }}"
+    version: "{{ cm_api_version }}"
+    force_tls: "{{ cm_cluster_module_force_tls }}"
+    username: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    verify_tls: false
+    path: >-
+      /clusters/{{ cdh_basecluster_name
+      }}/hostTemplates/Worker/commands/hostTemplateApply
+    method: POST
+    query:
+      startRoles: "false"
+    body:
+      items: "{{ base_cluster_reference_worker_refs }}"
+  when: base_worker_fqdns | length > 0
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"

@@ -33,14 +33,14 @@ def parse_set_fact_blocks(text: str) -> list[tuple[str, dict[str, str]]]:
     task_name = ""
     while i < len(lines):
         line = lines[i]
-        if re.match(r"^\s+- name:", line):
+        if re.match(r"^\s*-\s+name:", line):
             task_name = line.split(":", 1)[1].strip()
         if SET_FACT_MODULE.match(line):
             keys: dict[str, str] = {}
             i += 1
             while i < len(lines):
                 ln = lines[i]
-                if re.match(r"^\s+- name:", ln) or TASK_MODULE_LINE.match(ln):
+                if re.match(r"^\s*-\s+name:", ln) or TASK_MODULE_LINE.match(ln):
                     break
                 m = SET_FACT_KEY.match(ln)
                 if m:
@@ -51,7 +51,7 @@ def parse_set_fact_blocks(text: str) -> list[tuple[str, dict[str, str]]]:
                         nxt = lines[i]
                         if (
                             SET_FACT_KEY.match(nxt)
-                            or re.match(r"^\s+- name:", nxt)
+                            or re.match(r"^\s*-\s+name:", nxt)
                             or TASK_MODULE_LINE.match(nxt)
                         ):
                             break

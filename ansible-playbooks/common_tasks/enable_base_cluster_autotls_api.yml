@@ -36,6 +36,65 @@
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
   when: base_cluster_install_services.hdfs | default(true) | bool
 
+- name: Read HDFS role config groups before Auto-TLS
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/hdfs/roleConfigGroups
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_hdfs_role_groups_before_tls
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: base_cluster_install_services.hdfs | default(true) | bool
+
+- name: Resolve DataNode base role config group
+  ansible.builtin.set_fact:
+    base_cluster_hdfs_datanode_base_group: >-
+      {{
+        base_cluster_hdfs_role_groups_before_tls.json['items'] | default([])
+        | selectattr('roleType', 'equalto', 'DATANODE')
+        | selectattr('base', 'equalto', true)
+        | map(attribute='name')
+        | first
+        | default('')
+      }}
+  when: base_cluster_install_services.hdfs | default(true) | bool
+
+- name: Require DataNode base role config group before Auto-TLS
+  ansible.builtin.assert:
+    that:
+      - base_cluster_hdfs_datanode_base_group | length > 0
+    fail_msg: >-
+      HDFS has no DataNode base role config group. Refusing Auto-TLS and First
+      Run because CM cannot validate the secure DataNode port tuple.
+  when: base_cluster_install_services.hdfs | default(true) | bool
+
+- name: Read DataNode ports before Auto-TLS
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/hdfs/roleConfigGroups/{{ base_cluster_hdfs_datanode_base_group
+      }}/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_hdfs_datanode_config_before_tls
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when:
+    - base_cluster_install_services.hdfs | default(true) | bool
+    - base_cluster_hdfs_datanode_base_group | length > 0
+
 - name: Resolve base cluster Auto-TLS enabled flag
   ansible.builtin.set_fact:
     base_cluster_tls_already_enabled: >-
@@ -64,6 +123,42 @@
               | default('', true)
               | lower
               in ['authentication', 'integrity', 'privacy']
+            )
+            and (
+              base_cluster_hdfs_datanode_config_before_tls.json['items'] | default([])
+              | selectattr('name', 'equalto', 'dfs_datanode_port')
+              | map(attribute='value')
+              | first
+              | default(
+                  (
+                    base_cluster_hdfs_datanode_config_before_tls.json['items'] | default([])
+                    | selectattr('name', 'equalto', 'dfs_datanode_port')
+                    | map(attribute='default')
+                    | first
+                  ),
+                  true
+                )
+              | default(0, true)
+              | int
+              >= 1024
+            )
+            and (
+              base_cluster_hdfs_datanode_config_before_tls.json['items'] | default([])
+              | selectattr('name', 'equalto', 'dfs_datanode_https_port')
+              | map(attribute='value')
+              | first
+              | default(
+                  (
+                    base_cluster_hdfs_datanode_config_before_tls.json['items'] | default([])
+                    | selectattr('name', 'equalto', 'dfs_datanode_https_port')
+                    | map(attribute='default')
+                    | first
+                  ),
+                  true
+                )
+              | default(0, true)
+              | int
+              >= 1024
             )
           )
         )
@@ -138,6 +233,26 @@
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
   when: base_cluster_install_services.hdfs | default(true) | bool
 
+- name: Read final DataNode port configuration
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/hdfs/roleConfigGroups/{{ base_cluster_hdfs_datanode_base_group
+      }}/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_final_hdfs_datanode_config
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when:
+    - base_cluster_install_services.hdfs | default(true) | bool
+    - base_cluster_hdfs_datanode_base_group | length > 0
+
 - name: Require valid secure DataNode TLS configuration
   ansible.builtin.assert:
     that:
@@ -159,8 +274,44 @@
           | default('', true)
           | lower
         ) in ['authentication', 'integrity', 'privacy']
+      - >-
+        (
+          base_cluster_final_hdfs_datanode_config.json['items'] | default([])
+          | selectattr('name', 'equalto', 'dfs_datanode_port')
+          | map(attribute='value')
+          | first
+          | default(
+              (
+                base_cluster_final_hdfs_datanode_config.json['items'] | default([])
+                | selectattr('name', 'equalto', 'dfs_datanode_port')
+                | map(attribute='default')
+                | first
+              ),
+              true
+            )
+          | default(0, true)
+          | int
+        ) >= 1024
+      - >-
+        (
+          base_cluster_final_hdfs_datanode_config.json['items'] | default([])
+          | selectattr('name', 'equalto', 'dfs_datanode_https_port')
+          | map(attribute='value')
+          | first
+          | default(
+              (
+                base_cluster_final_hdfs_datanode_config.json['items'] | default([])
+                | selectattr('name', 'equalto', 'dfs_datanode_https_port')
+                | map(attribute='default')
+                | first
+              ),
+              true
+            )
+          | default(0, true)
+          | int
+        ) >= 1024
     fail_msg: >-
       HDFS secure DataNode mode is incomplete after configureAutoTlsServices.
       Refusing First Run until Hadoop TLS is enabled and Data Transfer
-      Protection is set.
+      Protection is set, with DataNode transceiver and HTTPS ports >= 1024.
   when: base_cluster_install_services.hdfs | default(true) | bool

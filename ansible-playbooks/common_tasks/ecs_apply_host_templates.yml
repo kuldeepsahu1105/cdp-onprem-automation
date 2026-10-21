@@ -1,9 +1,12 @@
 ---
-# Create ECS host templates and assign roles (v4.4.0 cluster module only applies templates at create time).
+# cloudera.cluster.host_template was added in v5. Use the equivalent CM API
+# with pinned cloudera.cluster v4.4.0, preserving the reference lifecycle.
 
 - name: Query Docker role config groups
   ansible.builtin.uri:
-    url: "{{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_name }}/services/docker/roleConfigGroups"
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_name
+      }}/services/docker/roleConfigGroups
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -13,24 +16,29 @@
     follow_redirects: none
   register: ecs_docker_rcg_response
   changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Query ECS role config groups
   ansible.builtin.uri:
-    url: "{{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_name }}/services/ecs/roleConfigGroups"
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_name
+      }}/services/ecs/roleConfigGroups
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
     force_basic_auth: yes
     validate_certs: no
     status_code: [200]
+    follow_redirects: none
   register: ecs_service_rcg_response
   changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-- name: Resolve base role config group names for host templates
+- name: Resolve ECS base role config group names
   ansible.builtin.set_fact:
     ecs_rcg_docker_server: >-
       {{
-        ecs_docker_rcg_response.json.items
+        ecs_docker_rcg_response.json['items']
         | selectattr('roleType', 'equalto', 'DOCKER_SERVER')
         | selectattr('base', 'equalto', true)
         | map(attribute='name')
@@ -38,7 +46,7 @@
       }}
     ecs_rcg_ecs_server: >-
       {{
-        ecs_service_rcg_response.json.items
+        ecs_service_rcg_response.json['items']
         | selectattr('roleType', 'equalto', 'ECS_SERVER')
         | selectattr('base', 'equalto', true)
         | map(attribute='name')
@@ -46,7 +54,7 @@
       }}
     ecs_rcg_ecs_agent: >-
       {{
-        ecs_service_rcg_response.json.items
+        ecs_service_rcg_response.json['items']
         | selectattr('roleType', 'equalto', 'ECS_AGENT')
         | selectattr('base', 'equalto', true)
         | map(attribute='name')
@@ -60,10 +68,10 @@
       - ecs_rcg_ecs_server | default('') | length > 0
       - ecs_rcg_ecs_agent | default('') | length > 0
     fail_msg: >-
-      Could not resolve base role config groups for docker/ecs on cluster {{ ecs_cluster_name }}.
-      Ensure docker and ecs services exist before applying host templates.
+      Could not resolve base role config groups for Docker and ECS on
+      {{ ecs_cluster_name }}.
 
-- name: Ensure ECS master host template exists
+- name: Establish ECSMaster host template through CM API
   cloudera.cluster.cm_resource:
     host: "{{ cm_cluster_module_host }}"
     port: "{{ cm_cluster_module_port }}"
@@ -76,17 +84,13 @@
     method: POST
     body:
       items:
-        - name: ecs_master
+        - name: ECSMaster
           roleConfigGroupRefs:
             - roleConfigGroupName: "{{ ecs_rcg_docker_server }}"
             - roleConfigGroupName: "{{ ecs_rcg_ecs_server }}"
-  register: ecs_ht_master_create
-  failed_when: >-
-    ecs_ht_master_create is failed
-    and 'already exists' not in (ecs_ht_master_create.msg | default('') | lower)
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-- name: Ensure ECS worker host template exists
+- name: Establish ECSWorker host template through CM API
   cloudera.cluster.cm_resource:
     host: "{{ cm_cluster_module_host }}"
     port: "{{ cm_cluster_module_port }}"
@@ -99,17 +103,13 @@
     method: POST
     body:
       items:
-        - name: ecs_workers
+        - name: ECSWorker
           roleConfigGroupRefs:
             - roleConfigGroupName: "{{ ecs_rcg_docker_server }}"
             - roleConfigGroupName: "{{ ecs_rcg_ecs_agent }}"
-  register: ecs_ht_worker_create
-  failed_when: >-
-    ecs_ht_worker_create is failed
-    and 'already exists' not in (ecs_ht_worker_create.msg | default('') | lower)
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-- name: Resolve host IDs for ECS cluster nodes
+- name: Resolve ECS host IDs for template application
   ansible.builtin.uri:
     url: "{{ cm_cluster_module_api_url }}/hosts/{{ item | urlencode }}"
     method: GET
@@ -118,6 +118,7 @@
     force_basic_auth: yes
     validate_certs: no
     status_code: [200]
+    follow_redirects: none
   loop: "{{ [ecs_master_fqdn] + ecs_worker_fqdns }}"
   loop_control:
     label: "{{ item }}"
@@ -125,7 +126,7 @@
   changed_when: false
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-- name: Apply ECS master host template
+- name: Apply ECSMaster template without starting roles
   cloudera.cluster.cm_resource:
     host: "{{ cm_cluster_module_host }}"
     port: "{{ cm_cluster_module_port }}"
@@ -134,26 +135,30 @@
     username: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
     verify_tls: false
-    path: "/clusters/{{ ecs_cluster_name }}/hostTemplates/ecs_master/commands/hostTemplateApply"
+    path: >-
+      /clusters/{{ ecs_cluster_name
+      }}/hostTemplates/ECSMaster/commands/hostTemplateApply
     method: POST
     query:
       startRoles: "false"
     body:
       items:
         - hostId: "{{ ecs_host_id_lookups.results[0].json.hostId }}"
-  register: ecs_ht_master_apply
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-- name: Build host refs for ECS worker template apply
+- name: Build ECSWorker host references
   ansible.builtin.set_fact:
-    ecs_worker_host_apply_items: "{{ ecs_worker_host_apply_items | default([]) + [{'hostId': item.json.hostId}] }}"
+    ecs_worker_host_apply_items: >-
+      {{
+        ecs_worker_host_apply_items | default([])
+        + [{'hostId': item.json.hostId}]
+      }}
   loop: "{{ ecs_host_id_lookups.results[1:] }}"
   loop_control:
-    label: "{{ item.item | default('') }}"
+    label: "{{ item.item }}"
   when: ecs_worker_fqdns | length > 0
 
-- name: Apply ECS worker host template
-  when: ecs_worker_fqdns | length > 0
+- name: Apply ECSWorker template without starting roles
   cloudera.cluster.cm_resource:
     host: "{{ cm_cluster_module_host }}"
     port: "{{ cm_cluster_module_port }}"
@@ -162,10 +167,13 @@
     username: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
     verify_tls: false
-    path: "/clusters/{{ ecs_cluster_name }}/hostTemplates/ecs_workers/commands/hostTemplateApply"
+    path: >-
+      /clusters/{{ ecs_cluster_name
+      }}/hostTemplates/ECSWorker/commands/hostTemplateApply
     method: POST
     query:
       startRoles: "false"
     body:
       items: "{{ ecs_worker_host_apply_items }}"
+  when: ecs_worker_fqdns | length > 0
   delegate_to: "{{ cm_cluster_module_delegate_to }}"

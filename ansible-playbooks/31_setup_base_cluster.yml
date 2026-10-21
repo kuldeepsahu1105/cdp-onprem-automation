@@ -601,15 +601,32 @@
         label: "{{ item.item.name | default('unknown') }}"
       when: not (item.skipped | default(false) | bool)
 
-    # cloudera.cluster v4.4.0 does not reapply host templates to an existing cluster.
-    - name: Detect uninitialized roleless cluster topology
+    - name: Calculate expected Base cluster role count
       ansible.builtin.set_fact:
-        base_cluster_roleless_uninitialized: >-
+        base_cluster_expected_role_count: >-
+          {%- set expected = namespace(count=0) -%}
+          {%- for template in base_cluster_spec.host_templates -%}
+            {%- set multiplier = (
+              base_worker_fqdns | length
+              if template.name == 'Worker'
+              else 1
+            ) -%}
+            {%- set expected.count = expected.count
+              + (template.role_groups | length * multiplier) -%}
+          {%- endfor -%}
+          {{ expected.count }}
+
+    # With startRoles=false no role can initialize storage before the complete
+    # topology exists. An interrupted phased install is therefore safe to
+    # recreate, while a complete topology that later entered First Run is kept.
+    - name: Detect incomplete never-started cluster topology
+      ansible.builtin.set_fact:
+        base_cluster_never_started_topology_incomplete: >-
           {{
             existing_cluster.status == 200
             and base_cluster_initialization_incomplete | bool
-            and existing_cluster_services.json['items'] | default([]) | length > 0
-            and base_cluster_existing_role_count | int == 0
+            and base_cluster_existing_role_count | int
+                < base_cluster_expected_role_count | int
             and existing_cluster.json.clusterState | default('') != 'STARTED'
             and (
               existing_cluster_services.json['items'] | default([])
@@ -627,7 +644,7 @@
             existing_cluster.status == 200
             and (
               existing_cluster_hosts.json['items'] | default([]) | length == 0
-              or base_cluster_roleless_uninitialized | bool
+              or base_cluster_never_started_topology_incomplete | bool
             )
           }}
         base_cluster_missing_service_types: >-
@@ -663,8 +680,9 @@
             'zero assigned hosts'
             if (existing_cluster_hosts.json['items'] | default([]) | length == 0)
             else (
-              existing_cluster_services.json['items'] | default([]) | length | string
-              ~ ' services and zero assigned roles'
+              base_cluster_existing_role_count | string
+              ~ '/' ~ base_cluster_expected_role_count | string
+              ~ ' assigned roles'
             )
           }}), indicating interrupted module creation. Deleting only this never-started
           partial cluster before recreating its complete service and role topology.
@@ -721,35 +739,13 @@
     - name: Show cluster creation wait
       ansible.builtin.debug:
         msg: >-
-          Creating the CM cluster, services, host templates, host assignments, and activating
-          parcels. Jenkins will poll every {{ base_cluster_module_poll_interval }}s; the
-          cloudera.cluster collection allows up to 7200s for CM parcel and command operations.
+          Creating the CM cluster in reference order: cluster shell, hosts, parcel,
+          dependency-ordered services, host templates, and role assignments.
       when: base_cluster_create_required | bool
 
-    - name: Create base cluster with name {{ cdh_basecluster_name }}
-      cloudera.cluster.cluster:
-        host: "{{ cm_cluster_module_host }}"
-        port: "{{ cm_cluster_module_port }}"
-        version: "{{ cm_api_version }}"
-        force_tls: "{{ cm_cluster_module_force_tls }}"
-        username: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        verify_tls: false
-        name: "{{ cdh_basecluster_name }}"
-        display_name: "{{ cdh_basecluster_name }}"
-        cluster_version: "{{ base_cluster_cdh_parcel_version_effective }}"
-        type: BASE_CLUSTER
-        state: present
-        parcels:
-          CDH: "{{ base_cluster_cdh_parcel_version_effective }}"
-        services: "{{ base_cluster_spec.services }}"
-        host_templates: "{{ base_cluster_spec.host_templates }}"
-        hosts: "{{ base_cluster_hosts }}"
-      register: base_cluster_create_result
+    - name: Install fresh Base cluster in working reference sequence
+      ansible.builtin.include_tasks: common_tasks/base_cluster_reference_install.yml
       when: base_cluster_create_required | bool
-      delegate_to: "{{ cm_cluster_module_delegate_to }}"
-      async: "{{ base_cluster_module_async_timeout }}"
-      poll: "{{ base_cluster_module_poll_interval }}"
 
     - name: Reset required configuration change state
       ansible.builtin.set_fact:
