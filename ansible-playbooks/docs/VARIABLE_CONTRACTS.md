@@ -71,7 +71,10 @@ public EIP. URL assembly must run again after delegation is selected, even
 when an existing public `cm_api_url` is otherwise syntactically valid.
 `fetch_cm_api_version_slug.yml` enforces the same alignment before its
 pre-assembly `/api/version` request so version discovery cannot reuse a stale
-public `cm_api_probe_host` on `cldr-mngr`.
+public `cm_api_probe_host` on `cldr-mngr`. The full-probe block may select the
+manager public address only after a successful controller probe and only while
+`cm_api_uri_delegate_to` is empty; it must not overwrite a manager-local probe
+host before delegated HTTP/HTTPS discovery.
 
 **Version variable names:** `cm_version` is the configured Cloudera Manager product/package version from `config.yml` and can have extra-var precedence in Jenkins. Never use it as a `register` target. Play **25** stores `GET /cm/version` in `cm_version_response` and parses the payload into `cm_version_info`; the API slug remains `cm_api_version`.
 
