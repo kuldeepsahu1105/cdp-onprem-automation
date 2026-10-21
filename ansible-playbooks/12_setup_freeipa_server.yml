@@ -383,13 +383,25 @@
         - ipa_install_result is defined
         - ipa_install_result.rc | default(0) != 0
 
-    - name: Check required FreeIPA modern UI application
+    - name: Check optional FreeIPA modern UI application
       ansible.builtin.stat:
         path: /usr/share/ipa/modern-ui/index.html
       register: ipa_server_modern_ui
       changed_when: false
 
-    - name: Require current FreeIPA modern UI application
+    - name: Show FreeIPA legacy UI fallback
+      ansible.builtin.debug:
+        msg: >-
+          FreeIPA {{ (ipa_cli_version.stdout | default('') ~ ipa_cli_version.stderr | default(''))
+          | trim | default('unknown version', true) }} does not package
+          /usr/share/ipa/modern-ui/index.html. Continuing with the supported
+          /ipa/ui/ application; portal and Caddy discovery select this route
+          automatically.
+      when:
+        - not (ipa_server_modern_ui.stat.isreg | default(false) | bool)
+        - not (ipa_server_require_modern_ui | default(false) | bool)
+
+    - name: Require FreeIPA modern UI when explicitly requested
       ansible.builtin.assert:
         that:
           - ipa_server_modern_ui.stat.exists | default(false) | bool
@@ -404,7 +416,7 @@
           Confirm the host is on a supported current OS release and that its official
           BaseOS/AppStream repositories are enabled; automation will not install an
           unsupported upstream/COPR build over a configured identity server.
-      when: ipa_server_require_modern_ui | default(true) | bool
+      when: ipa_server_require_modern_ui | default(false) | bool
 
     - name: Validate IPA Services
       ansible.builtin.command: ipactl status
