@@ -2,4 +2,3 @@
 - name: Install process_exporter (per-process metrics for Prometheus)
   ansible.builtin.import_tasks: install_process_exporter.yml
   when: monitoring_process_exporter_enabled | default(true) | bool
-

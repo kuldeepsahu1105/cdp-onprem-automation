@@ -21,4 +21,3 @@
   ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/build_deployment_portal_facts.yml"
 
 - import_playbook: enroll_monitoring_exporters.yml
-
