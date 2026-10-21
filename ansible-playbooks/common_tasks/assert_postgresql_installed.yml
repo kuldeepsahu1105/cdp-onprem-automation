@@ -1,14 +1,34 @@
 ---
 # Downstream CM/CDH phases require play 23 to have installed and initialized PostgreSQL.
 
-- name: Verify PostgreSQL listener on database host
+- name: Resolve PostgreSQL connection address used by CM databases
+  ansible.builtin.import_tasks: resolve_postgres_ensure_cm_db_psql_host.yml
+
+- name: Build PostgreSQL prerequisite probe addresses
+  ansible.builtin.set_fact:
+    postgresql_prerequisite_probe_hosts: >-
+      {{
+        [
+          postgres_ensure_cm_db_psql_host_effective | default(''),
+          postgres_host_fqdn | default(''),
+          hostvars[postgres_inventory_host].private_ip | default(''),
+          '127.0.0.1'
+        ]
+        | map('trim')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+
+- name: Verify PostgreSQL listener on database host addresses
   ansible.builtin.wait_for:
-    host: 127.0.0.1
+    host: "{{ item }}"
     port: "{{ postgres_port | default(5432) | int }}"
     connect_timeout: 3
-    timeout: 10
+    timeout: 5
     state: started
-  register: postgresql_prerequisite_listener
+  loop: "{{ postgresql_prerequisite_probe_hosts }}"
+  register: postgresql_prerequisite_listeners
   changed_when: false
   failed_when: false
   delegate_to: "{{ postgres_inventory_host }}"
@@ -41,10 +61,18 @@
 - name: Require PostgreSQL installation before downstream CM phases
   ansible.builtin.assert:
     that:
-      - postgresql_prerequisite_listener.state | default('') == 'started'
+      - >-
+        (
+          postgresql_prerequisite_listeners.results | default([])
+          | selectattr('state', 'defined')
+          | selectattr('state', 'equalto', 'started')
+          | list
+          | length
+        ) > 0
     fail_msg: >-
-      PostgreSQL is not accepting TCP connections on
-      {{ postgres_inventory_host }}:{{ postgres_port | default(5432) }}.
+      PostgreSQL is not accepting TCP connections on {{ postgres_inventory_host }}
+      port {{ postgres_port | default(5432) }} at any configured CM database address:
+      {{ postgresql_prerequisite_probe_hosts | join(', ') }}.
       Installed units: {{ postgresql_prerequisite_units.stdout_lines | default([]) | join(', ') | default('(none)', true) }}.
       Data clusters: {{ postgresql_prerequisite_data.stdout_lines | default([]) | join(', ') | default('(none)', true) }}.
       CM_TLS_KRB_LDAP and CDH_INSTALL require CM_INSTALL first.

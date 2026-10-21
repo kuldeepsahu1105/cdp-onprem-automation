@@ -78,8 +78,9 @@ Controller results are copied to the effective `cm_tls_probe_*` facts only
 when the controller task actually executes.
 
 **PostgreSQL prerequisite:** CM security and CDH phases verify the configured
-database host by connecting to `127.0.0.1:postgres_port` on
-`postgres_inventory_host`. Systemd-unit and `PG_VERSION` searches are
+database host by connecting from `postgres_inventory_host` to the same
+FQDN/private address candidates used by CM JDBC and delegated `psql`, with
+loopback only as a final candidate. Systemd-unit and `PG_VERSION` searches are
 diagnostics only because supported PGDG, distro, container, and custom data
 layouts do not share one unit name or filesystem path.
 
