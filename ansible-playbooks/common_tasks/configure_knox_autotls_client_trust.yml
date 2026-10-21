@@ -2,6 +2,12 @@
 # Knox KNOX_GATEWAY ssl_client_truststore_* for CM HTTPS discovery (CDP cdp-proxy* topologies).
 # Run after cluster configureAutoTlsServices so the in-cluster truststore and password exist.
 
+- name: Use SSH for Knox host delegation from localhost play
+  ansible.builtin.add_host:
+    name: "{{ groups[base_cluster_master_group][0] }}"
+    ansible_connection: ssh
+  changed_when: false
+
 - name: Read Knox Gateway Auto-TLS client truststore schema
   ansible.builtin.uri:
     url: >-
