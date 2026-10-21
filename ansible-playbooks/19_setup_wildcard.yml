@@ -1,6 +1,6 @@
 ### ansible-playbook -i inventory.ini 19_setup_wildcard.yml
 # vars:
-#   ipaserver_domain: lab.example.com
+#   ipaserver_domain: cldr.internal.arpa
 #   ipaadmin_password: "vmware123"
 #   wildcard_dns_record: "*.apps"
 #   postgres_jdbc_version: "42.7.5"

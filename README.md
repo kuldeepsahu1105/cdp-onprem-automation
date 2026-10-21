@@ -4,7 +4,7 @@ End-to-end automation for provisioning infrastructure and deploying **Cloudera P
 
 Supports **RHEL/Rocky/Alma** and **Ubuntu 22.04/24.04**, with **FreeIPA** or **Active Directory** for identity, and **public or internal** Cloudera archive repositories (RPM mirror on RHEL, apt mirror on Ubuntu).
 
-**Cluster DNS domain:** greenfield FreeIPA defaults use **`lab.example.com`** (RFC 2606) so Ozone/Netty hostname verification (HDDS-16034) accepts CM and Ozone FQDNs. Avoid `.local` / `.internal` lab suffixes; override via `ipaserver_domain` in `config.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML`. See [OPERATIONS_GUIDE.md](ansible-playbooks/docs/OPERATIONS_GUIDE.md) for validation and brownfield opt-out (`cluster_domain_skip_ozone_hostname_validation`).
+**Cluster DNS domain:** greenfield FreeIPA defaults use **`cldr.internal.arpa`** (private zone under the IANA `.arpa` infrastructure TLD). Validation allows `*.internal.arpa`, `*.local.arpa`, and `*.home.arpa` (RFC 8375) while blocking bare `.local` / `.internal` suffixes. Ozone acceptance of `*.internal.arpa` is not confirmed — see [OPERATIONS_GUIDE.md](ansible-playbooks/docs/OPERATIONS_GUIDE.md). Override via `ipaserver_domain` in `config.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML`; brownfield opt-out: `cluster_domain_skip_ozone_hostname_validation`.
 
 ## Quick start (AWS)
 

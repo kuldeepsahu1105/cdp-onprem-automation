@@ -2,7 +2,7 @@
 # vars:
 #   ansible_user: ec2-user
 #   cldr_hostname: ipaserver
-#   ipaserver_domain: lab.example.com
+#   ipaserver_domain: cldr.internal.arpa
 
 ---
 - import_playbook: ensure_collections.yml

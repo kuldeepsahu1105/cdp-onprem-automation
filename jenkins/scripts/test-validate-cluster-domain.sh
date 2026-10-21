@@ -6,8 +6,14 @@ PY="$REPO_ROOT/scripts/lib/validate_cluster_domain.py"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-"$PY" --domain lab.example.com --quiet-warnings
+"$PY" --domain cldr.internal.arpa --quiet-warnings
 "$PY" --domain cluster.home.arpa --quiet-warnings
+"$PY" --domain host.local.arpa --quiet-warnings
+"$PY" --domain internal.arpa --quiet-warnings
+
+if "$PY" --domain bad.internal --quiet-warnings 2>/dev/null; then
+  fail "expected bare bad.internal (no .arpa) to fail"
+fi
 
 if "$PY" --domain pvc.lab.local --quiet-warnings 2>/dev/null; then
   fail "expected pvc.lab.local to fail"

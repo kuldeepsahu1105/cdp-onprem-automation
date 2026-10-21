@@ -5,8 +5,10 @@ Ozone DomainValidator (allowLocal=false) accepts hostnames whose public suffix i
 the IANA root zone. Private / mDNS-style suffixes (.local, .internal, …) fail TLS and
 cert signing with errors such as ``Invalid domain`` in CertificateSignRequest.
 
-Greenfield defaults use lab.example.com (RFC 2606 documentation zone) or home.arpa
-(RFC 8375). Brownfield stacks that still use a legacy suffix may set
+Greenfield defaults use cldr.internal.arpa (private zone under the IANA
+infrastructure TLD) or cluster.home.arpa (RFC 8375). Names ending in ``.arpa``
+pass blocked-suffix checks; ``.local`` / ``.internal`` (without ``.arpa``), etc.
+still fail. Brownfield stacks that still use a legacy suffix may set
 ``cluster_domain_skip_ozone_hostname_validation: true`` in Ansible group vars.
 """
 from __future__ import annotations
@@ -17,7 +19,7 @@ import sys
 from typing import Iterable, Sequence
 
 # Repo default after HDDS-16034 alignment (must match group_vars/all.yml).
-DEFAULT_FREEIPA_CLUSTER_DOMAIN = "lab.example.com"
+DEFAULT_FREEIPA_CLUSTER_DOMAIN = "cldr.internal.arpa"
 
 # Suffixes that fail Ozone/Netty IANA-style checks (match domain or any parent label).
 BLOCKED_DOMAIN_SUFFIXES: tuple[str, ...] = (
@@ -36,6 +38,13 @@ LEGACY_GRANDFATHER_DOMAINS: frozenset[str] = frozenset(
         "cldrsetup.local",
         "cldr.internal",
     }
+)
+
+# Private zones under .arpa (less standard than home.arpa; Ozone acceptance not confirmed).
+PRIVATE_ARPA_ZONE_SUFFIXES: tuple[str, ...] = (
+    ".internal.arpa",
+    ".local.arpa",
+    ".home.arpa",
 )
 
 # Common IANA TLDs for optional warn-only heuristic (not exhaustive).
@@ -83,7 +92,22 @@ def _normalize(domain: str) -> str:
     return domain.strip().lower().rstrip(".")
 
 
+def _is_iana_arpa_domain(domain: str) -> bool:
+    """True for names under the IANA infrastructure TLD (allows *.internal.arpa, etc.)."""
+    return domain == "arpa" or domain.endswith(".arpa")
+
+
+def _private_arpa_zone(domain: str) -> str | None:
+    for suffix in PRIVATE_ARPA_ZONE_SUFFIXES:
+        bare = suffix.lstrip(".")
+        if domain == bare or domain.endswith(suffix):
+            return bare
+    return None
+
+
 def _blocked_suffix_reason(domain: str) -> str | None:
+    if _is_iana_arpa_domain(domain):
+        return None
     for suffix in BLOCKED_DOMAIN_SUFFIXES:
         bare = suffix.lstrip(".")
         if domain == bare or domain.endswith(suffix):
@@ -117,8 +141,8 @@ def validate_cluster_domain(
         msg = (
             f"cluster domain '{domain}' uses suffix '{blocked}' which Ozone/Netty "
             "hostname verification rejects (HDDS-16034 / DomainValidator allowLocal=false). "
-            "Use a subdomain of an IANA TLD (e.g. lab.example.com, cldr.lab.example.com) "
-            "or home.arpa (RFC 8375). "
+            "Use an IANA suffix (e.g. cldr.internal.arpa, cluster.home.arpa, lab.example.com) "
+            "— not bare .local/.internal labels. "
             "Brownfield: set cluster_domain_skip_ozone_hostname_validation: true to opt out."
         )
         if grandfather_legacy and normalized in LEGACY_GRANDFATHER_DOMAINS:
@@ -126,10 +150,19 @@ def validate_cluster_domain(
         else:
             result.errors.append(msg)
 
+    if not result.errors:
+        private_arpa = _private_arpa_zone(normalized)
+        if private_arpa:
+            result.warnings.append(
+                f"cluster domain '{domain}' uses private zone '{private_arpa}' under .arpa; "
+                "Ozone HDDS-16034 acceptance of *.internal.arpa / *.local.arpa is not confirmed "
+                "in community threads (home.arpa is RFC 8375). Operator accepts risk or uses "
+                "cluster_domain_skip_ozone_hostname_validation."
+            )
+
     if warn_non_iana_tld and not result.errors:
         tld = _public_suffix_label(normalized)
-        # home.arpa is two-label public suffix; last label alone is misleading — allow arpa.
-        if normalized.endswith(".home.arpa") or normalized == "home.arpa":
+        if _is_iana_arpa_domain(normalized):
             pass
         elif tld and tld not in COMMON_IANA_TLDS and len(tld) >= 2:
             result.warnings.append(

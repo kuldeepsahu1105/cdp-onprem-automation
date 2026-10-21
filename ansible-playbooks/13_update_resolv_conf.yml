@@ -1,6 +1,6 @@
 ### ansible-playbook -i inventory.ini 13_update_resolv_conf.yml
 # vars:
-#   ipaserver_domain: lab.example.com
+#   ipaserver_domain: cldr.internal.arpa
 
 ---
 - import_playbook: ensure_collections.yml
@@ -9,7 +9,7 @@
   hosts: all
   become: yes
   vars:
-    ipa_domain: "{{ ipaserver_domain | default('lab.example.com') }}"
+    ipa_domain: "{{ ipaserver_domain | default('cldr.internal.arpa') }}"
 
   tasks:
     - name: Configure resolv.conf for identity provider

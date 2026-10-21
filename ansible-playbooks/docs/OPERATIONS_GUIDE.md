@@ -234,7 +234,7 @@ flowchart LR
 
 **pgAdmin restart loop / invalid email:** pgAdmin rejects `PGADMIN_DEFAULT_EMAIL` values like `admin@cldrsetup.local` (legacy clusters using `admin@{{ cluster_domain }}`). Set `pgadmin_default_email` to a real TLD (default `admin@pvc.cloudera-labs.com`), re-render compose, then on the portal host: `cd /opt/cldr-deployment-portal && docker compose up -d --force-recreate pgadmin`.
 
-**Cluster domain / Ozone TLS (HDDS-16034):** Default FreeIPA domain is `lab.example.com` (RFC 2606). Ozone and Netty hostname verification reject private suffixes (`.local`, `.internal`, `.lan`, `.corp`, `.home`, `.test`, `.localdomain`) with errors such as `Invalid domain` during Auto-TLS or `CertificateSignRequest`. Validation runs in playbook **02** and `detect_identity.yml` (`validate_cluster_domain_ozone_hostname.yml`), and Jenkins `validate-prereqs.sh` checks domains you set in `ANSIBLE_GROUP_VARS_YAML` or tfvars. Grandfathered legacy values `cldrsetup.local` and `cldr.internal` warn only when explicitly overridden. Brownfield stacks that cannot rename DNS yet: `cluster_domain_skip_ozone_hostname_validation: true` in Jenkins/tfvars. Greenfield: use `lab.example.com`, `cldr.lab.example.com`, or `*.home.arpa`.
+**Cluster domain / Ozone TLS (HDDS-16034):** Default FreeIPA domain is `cldr.internal.arpa` (realm `CLDR.INTERNAL.ARPA`). Names under the IANA `.arpa` infrastructure TLD pass automation validation, including `*.internal.arpa`, `*.local.arpa`, and `*.home.arpa` (RFC 8375). Bare private suffixes (`.local`, `.internal`, `.lan`, `.corp`, `.home`, `.test`, `.localdomain` without a trailing `.arpa`) still fail with errors such as `Invalid domain` during Auto-TLS or `CertificateSignRequest`. **Ozone acceptance of `*.internal.arpa` / `*.local.arpa` is not confirmed** in community threads — operators accept that risk or choose `cluster.home.arpa` / `lab.example.com`. Validation runs in playbook **02** and `detect_identity.yml` (`validate_cluster_domain_ozone_hostname.yml`), and Jenkins `validate-prereqs.sh` checks domains you set in `ANSIBLE_GROUP_VARS_YAML` or tfvars. Grandfathered legacy values `cldrsetup.local` and `cldr.internal` warn only when explicitly overridden. Brownfield stacks that cannot rename DNS yet: `cluster_domain_skip_ozone_hostname_validation: true` in Jenkins/tfvars.
 
 When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-playbooks/`, the wrapper prompts you to choose. Override with `ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, or `CM_INFO_FILE`.
 
@@ -337,11 +337,11 @@ rm -rf /etc/dirsrv/slapd-*
 mkdir -p /etc/ipa/custodia /var/log/ipa /var/lib/ipa/{sysupgrade,sysrestore,backup,dnssec}
 
 # 4) Fresh install — use lab/Jenkins passwords (default admin + DS: PseTeam@123 unless rotated)
-FQDN="$(hostname -f)"   # must match inventory FQDN, e.g. ipaserver.lab.example.com
+FQDN="$(hostname -f)"   # must match inventory FQDN, e.g. ipaserver.cldr.internal.arpa
 IP="$(hostname -I | awk '{print $1}')"
 ipa-server-install --setup-dns --unattended \
   --hostname="${FQDN}" --ip-address="${IP}" \
-  --domain=lab.example.com --realm=LAB.EXAMPLE.COM \
+  --domain=cldr.internal.arpa --realm=CLDR.INTERNAL.ARPA \
   --ds-password='PseTeam@123' --admin-password='PseTeam@123' \
   --no-dnssec-validation --no-reverse \
   --forwarder=172.31.0.2
@@ -638,7 +638,7 @@ services. Without that dependency CM's Ozone CSD receives no `core-site.xml`; it
 For new clusters, playbook **31** sets `ozone.scm.primordial.node.id` and
 attaches the single `Master` host template to
 **`groups[base_cluster_master_group][0]`** only (`cldr_hostname` +
-`cluster_domain`, e.g. `pvcbase-master.lab.example.com`). Workers receive
+`cluster_domain`, e.g. `pvcbase-master.cldr.internal.arpa`). Workers receive
 `OZONE_DATANODE` only; OM/SCM/Recon/S3 Gateway run on that one master. When
 adopting a populated cluster, **31** preserves its initialized
 `ozone.service.id` and primordial node. With
@@ -674,7 +674,7 @@ registered`, OM/DN cert enrollment retries, `RAFT closed`, or
    (see recovery section above).
 5. **Non-IANA cluster domains** — Legacy `.local` / `.internal` suffixes (former
    default `cldrsetup.local`) break Ozone/Netty hostname verification (HDDS-16034).
-   Greenfield defaults use `lab.example.com`. Confirm SANs on signed certs match
+   Greenfield defaults use `cldr.internal.arpa`. Confirm SANs on signed certs match
    the CM host FQDN; migrate DNS or set
    `cluster_domain_skip_ozone_hostname_validation: true` only for brownfield.
 
@@ -830,7 +830,7 @@ portal01 ansible_host=203.0.113.10 private_ip=10.20.0.10 cldr_hostname=portal01
 Keep secrets out of the inventory and command line. Create a local, uncommitted `portal-vars.yml`:
 
 ```yaml
-cluster_domain: lab.example.com
+cluster_domain: cldr.internal.arpa
 deployment_environment: baremetal
 deployment_portal_access_profile: private
 
@@ -920,7 +920,7 @@ sudo sed -n '1,220p' /opt/cldr-deployment-portal/Caddyfile
 **`ipa-client-install` / `zlib.error` on `/ipa/json` schema RPC** (log shows session cookie OK, then `invalid code lengths set`): **`ipa-client-install`** talks to **`https://ipaserver.<domain>/ipa/json`** on the IPA server (not the Caddy `:81` UI vhost). A broken **`zz-ipa-caddy-proxy.conf`** that runs **`mod_substitute`** on **`application/json`** under **`/ipa`** corrupts **gzip** JSON-RPC bodies. From a failing worker (replace FQDNs):
 
 ```bash
-IPA=ipaserver.lab.example.com
+IPA=ipaserver.cldr.internal.arpa
 # Use the IPA server FQDN (not https://localhost) — ipa-client-install does. localhost with TLS often 301s to http://<FQDN>/ipa/... (HTML if followed).
 # Direct HTTPS to IPA — expect HTTP 401 (or 200) with Content-Encoding: gzip; body must gunzip (not HTML starting with <!)
 curl -vk -H 'Accept-Encoding: gzip' -H 'Content-Type: application/json' \
@@ -1078,7 +1078,7 @@ For FreeIPA:
 
 ```yaml
 identity_provider: freeipa
-ipaserver_domain: lab.example.com
+ipaserver_domain: cldr.internal.arpa
 dns_forwarders: no-forwarders
 ```
 

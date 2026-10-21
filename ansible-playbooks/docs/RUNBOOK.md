@@ -117,7 +117,7 @@ Add one identity configuration:
 ```yaml
 # FreeIPA
 identity_provider: freeipa
-ipaserver_domain: lab.example.com
+ipaserver_domain: cldr.internal.arpa
 dns_forwarders: no-forwarders
 ```
 

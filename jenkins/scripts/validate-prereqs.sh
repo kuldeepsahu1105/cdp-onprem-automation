@@ -76,7 +76,7 @@ if should_validate "${VALIDATE_TFVARS:-true}" "TFVARS" && [[ -n "${TFVARS_FILE:-
   if should_validate "${VALIDATE_CLUSTER_DOMAIN:-true}" "CLUSTER_DOMAIN"; then
     log "Cluster domain (Ozone/Netty HDDS-16034) — user-supplied domains only"
     "$REPO_ROOT/jenkins/scripts/validate-cluster-domain.sh" | tee -a "$LOG_FILE" \
-      || fail "Cluster domain failed Ozone/Netty hostname validation — use lab.example.com, home.arpa, or set cluster_domain_skip_ozone_hostname_validation for legacy brownfield"
+      || fail "Cluster domain failed Ozone/Netty hostname validation — use cldr.internal.arpa, *.home.arpa, or set cluster_domain_skip_ozone_hostname_validation for legacy brownfield"
   else
     log "Skipping cluster domain validation (VALIDATION_CHECKS)"
   fi

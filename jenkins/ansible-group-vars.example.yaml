@@ -2,7 +2,7 @@
 # Any valid Ansible group_vars key is accepted. Dedicated Jenkins parameters,
 # when set, take precedence over matching values here.
 #
-# ipaserver_domain: lab.example.com
+# ipaserver_domain: cldr.internal.arpa
 # cluster_domain_skip_ozone_hostname_validation: true   # only for existing .local / .internal brownfield
 # ipaadmin_password: "ChangeMe@123"
 # cm_version: "7.13.2.6"

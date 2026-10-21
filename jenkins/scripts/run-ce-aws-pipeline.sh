@@ -115,7 +115,7 @@ config = {
     "deployment_portal_install_required": True,
     "deployment_portal_verify_tier_b_enabled": False,
     "caddy_vhost_enabled": True,
-    "cluster_domain": "lab.example.com",
+    "cluster_domain": "cldr.internal.arpa",
     "identity_provider": "freeipa",
     "ipaadmin_password": password,
     "common_password": password,
