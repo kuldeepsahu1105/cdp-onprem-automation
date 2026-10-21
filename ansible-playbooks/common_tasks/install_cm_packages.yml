@@ -20,7 +20,7 @@
 - name: Apply Debian-family CM install prerequisites
   ansible.builtin.import_tasks: prepare_debian_cm_install.yml
 
-- name: Install Cloudera Manager packages
+- name: "Install {{ cm_package_role_label | default('Cloudera Manager') }} packages"
   ansible.builtin.package:
     name: "{{ cm_package_list }}"
     state: present
