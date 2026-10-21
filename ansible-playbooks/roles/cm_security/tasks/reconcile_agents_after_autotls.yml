@@ -9,4 +9,3 @@
 - name: Reconcile CM agent configuration and service
   ansible.builtin.import_tasks: common_tasks/reconcile_cm_agents.yml
   when: cm_agent_reconcile_after_autotls | default(true) | bool
-

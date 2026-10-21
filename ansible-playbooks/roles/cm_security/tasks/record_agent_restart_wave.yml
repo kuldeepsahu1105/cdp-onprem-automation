@@ -8,4 +8,3 @@
 - name: Mark cluster CM agents restarted after Auto-TLS for this run
   ansible.builtin.set_fact:
     cm_agents_restarted_after_autotls_this_run: true
-

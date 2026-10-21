@@ -7,4 +7,3 @@
 
 - name: CM API — must be healthy before mass agent restart
   ansible.builtin.import_tasks: common_tasks/assert_cm_api_healthy_for_agent_reconcile.yml
-

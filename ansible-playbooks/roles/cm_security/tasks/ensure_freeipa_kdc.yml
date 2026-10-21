@@ -8,4 +8,3 @@
 
 - name: Configure FreeIPA KDC encryption types (AES)
   ansible.builtin.import_tasks: common_tasks/configure_ipa_krb_enc_types.yml
-

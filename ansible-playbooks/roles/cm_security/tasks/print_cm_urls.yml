@@ -95,12 +95,12 @@
     msg_content: |
       ✅ **Cloudera Manager Access Details**
 
-      ♻️  **Private Access (Recommended for Internal Use)**  
-      ➡️  UI URL: [Cloudera Manager]({{ cm_private_ui_url }})  
-      ⚠️  API URL: [CM API]({{ cm_private_api_url }})  
+      ♻️  **Private Access (Recommended for Internal Use)**
+      ➡️  UI URL: [Cloudera Manager]({{ cm_private_ui_url }})
+      ⚠️  API URL: [CM API]({{ cm_private_api_url }})
 
       {% if cm_public_ip != 'N/A' %}
-      ♻️  **Public Access (If Public IP is Configured)**  
-      ➡️  UI URL: [Cloudera Manager]({{ cm_public_ui_url }})  
-      ⚠️  API URL: [CM API]({{ cm_public_api_url }})  
+      ♻️  **Public Access (If Public IP is Configured)**
+      ➡️  UI URL: [Cloudera Manager]({{ cm_public_ui_url }})
+      ⚠️  API URL: [CM API]({{ cm_public_api_url }})
       {% endif %}

@@ -11,4 +11,3 @@
 
 - name: Mandatory restart Cloudera Manager agent after Auto-TLS
   ansible.builtin.import_tasks: common_tasks/mandatory_restart_cm_agent_after_autotls.yml
-
