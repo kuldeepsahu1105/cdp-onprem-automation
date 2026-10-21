@@ -1372,61 +1372,12 @@
         - base_cluster_install_services.kafka | default(true) | bool
         - base_cluster_kafka_metadata_store_effective == 'KRaft'
 
-    - name: Read existing initialization service states
+    - name: Read existing Ozone service state
       ansible.builtin.set_fact:
         base_cluster_existing_ozone_service: >-
           {{
             existing_cluster_services.json['items'] | default([])
             | selectattr('name', 'equalto', 'ozone')
-            | first
-            | default({})
-          }}
-        base_cluster_existing_hdfs_service: >-
-          {{
-            existing_cluster_services.json['items'] | default([])
-            | selectattr('name', 'equalto', 'hdfs')
-            | first
-            | default({})
-          }}
-        base_cluster_existing_solr_service: >-
-          {{
-            existing_cluster_services.json['items'] | default([])
-            | selectattr('name', 'equalto', 'solr')
-            | first
-            | default({})
-          }}
-        base_cluster_existing_hbase_service: >-
-          {{
-            existing_cluster_services.json['items'] | default([])
-            | selectattr('name', 'equalto', 'hbase')
-            | first
-            | default({})
-          }}
-        base_cluster_existing_yarn_service: >-
-          {{
-            existing_cluster_services.json['items'] | default([])
-            | selectattr('name', 'equalto', 'yarn')
-            | first
-            | default({})
-          }}
-        base_cluster_existing_spark3_service: >-
-          {{
-            existing_cluster_services.json['items'] | default([])
-            | selectattr('name', 'equalto', base_cluster_spark3_service_name)
-            | first
-            | default({})
-          }}
-        base_cluster_existing_hive_service: >-
-          {{
-            existing_cluster_services.json['items'] | default([])
-            | selectattr('name', 'equalto', 'hive')
-            | first
-            | default({})
-          }}
-        base_cluster_existing_impala_service: >-
-          {{
-            existing_cluster_services.json['items'] | default([])
-            | selectattr('name', 'equalto', 'impala')
             | first
             | default({})
           }}
@@ -1441,11 +1392,6 @@
               existing_cluster.status == 200
               and not (base_cluster_partial_empty | bool)
               and base_cluster_initialization_incomplete | default(false) | bool
-              and not (
-                base_cluster_install_services.hdfs | default(true) | bool
-                and base_cluster_existing_hdfs_service.serviceState | default('') == 'STARTED'
-                and base_cluster_existing_hdfs_service.healthSummary | default('') == 'GOOD'
-              )
             )
           }}
       when: existing_cluster.status == 200
@@ -1453,85 +1399,10 @@
     - name: Show pending CM First Run on existing cluster
       ansible.builtin.debug:
         msg: >-
-          Base cluster exists but First Run never completed (no initialization marker and HDFS
-          is not STARTED/GOOD). Playbook will submit CM First Run instead of interrupted-run
-          recovery or a normal cluster start.
+          Base cluster exists but First Run never completed (the cluster UUID initialization
+          marker is absent). Playbook will resubmit CM First Run so Cloudera Manager owns
+          service initialization and dependency ordering.
       when: base_cluster_pending_first_run | default(false) | bool
-
-    - name: Determine whether interrupted First Run recovery is required
-      ansible.builtin.set_fact:
-        base_cluster_recovery_required: >-
-          {{
-            existing_cluster.status == 200
-            and not (base_cluster_partial_empty | bool)
-            and not (base_cluster_pending_first_run | default(false) | bool)
-            and not (
-              existing_cluster.json.uuid is defined
-              and base_cluster_initialization_marker.content is defined
-              and (
-                'uuid=' ~ existing_cluster.json.uuid
-                in (base_cluster_initialization_marker.content | b64decode)
-              )
-            )
-            and not (
-              (
-                not (base_cluster_install_services.ozone | default(true) | bool)
-                or (
-                  base_cluster_existing_ozone_service.serviceState | default('') == 'STARTED'
-                  and base_cluster_existing_ozone_service.healthSummary | default('') == 'GOOD'
-                )
-              )
-              and (
-                not (base_cluster_install_services.hdfs | default(true) | bool)
-                or (
-                  base_cluster_existing_hdfs_service.serviceState | default('') == 'STARTED'
-                  and base_cluster_existing_hdfs_service.healthSummary | default('') == 'GOOD'
-                )
-              )
-              and (
-                not (base_cluster_install_services.solr | default(false) | bool)
-                or (
-                  base_cluster_existing_solr_service.serviceState | default('') == 'STARTED'
-                  and base_cluster_existing_solr_service.healthSummary | default('') == 'GOOD'
-                )
-              )
-              and (
-                not (base_cluster_install_services.hbase | default(true) | bool)
-                or (
-                  base_cluster_existing_hbase_service.serviceState | default('') == 'STARTED'
-                  and base_cluster_existing_hbase_service.healthSummary | default('') == 'GOOD'
-                )
-              )
-              and (
-                not (base_cluster_install_services.yarn | default(true) | bool)
-                or (
-                  base_cluster_existing_yarn_service.serviceState | default('') == 'STARTED'
-                  and base_cluster_existing_yarn_service.healthSummary | default('') == 'GOOD'
-                )
-              )
-              and (
-                not (base_cluster_install_services.spark3 | default(true) | bool)
-                or (
-                  base_cluster_existing_spark3_service.serviceState | default('') == 'STARTED'
-                  and base_cluster_existing_spark3_service.healthSummary | default('') == 'GOOD'
-                )
-              )
-              and (
-                not (base_cluster_install_services.hive | default(true) | bool)
-                or (
-                  base_cluster_existing_hive_service.serviceState | default('') == 'STARTED'
-                  and base_cluster_existing_hive_service.healthSummary | default('') == 'GOOD'
-                )
-              )
-              and (
-                not (base_cluster_install_services.impala | default(true) | bool)
-                or (
-                  base_cluster_existing_impala_service.serviceState | default('') == 'STARTED'
-                  and base_cluster_existing_impala_service.healthSummary | default('') == 'GOOD'
-                )
-              )
-            )
-          }}
 
     - name: Determine whether ordered Ozone recovery is required
       ansible.builtin.set_fact:
@@ -1539,32 +1410,21 @@
           {{
             existing_cluster.status == 200
             and not (base_cluster_partial_empty | bool)
+            and not (base_cluster_pending_first_run | default(false) | bool)
             and base_cluster_install_services.ozone | default(true) | bool
+            and existing_cluster.json.clusterState | default('') == 'STARTED'
             and (
-              (
-                base_cluster_recovery_required | bool
-                and (
-                  base_cluster_existing_ozone_service.serviceState | default('') != 'STARTED'
-                  or base_cluster_existing_ozone_service.healthSummary | default('') != 'GOOD'
-                )
-              )
-              or (
-                existing_cluster.json.clusterState | default('') == 'STARTED'
-                and (
-                  base_cluster_existing_ozone_service.serviceState | default('') != 'STARTED'
-                  or base_cluster_existing_ozone_service.healthSummary | default('') == 'BAD'
-                )
-              )
+              base_cluster_existing_ozone_service.serviceState | default('') != 'STARTED'
+              or base_cluster_existing_ozone_service.healthSummary | default('') == 'BAD'
             )
           }}
 
-    - name: Prepare Kerberos before any new or recovery cluster service start
+    - name: Prepare Kerberos before CM First Run or Ozone repair
       ansible.builtin.include_tasks: common_tasks/prepare_cluster_kerberos_before_start.yml
       when:
         - base_cluster_enable_kerberos | default(true) | bool
         - >-
           base_cluster_create_required | bool
-          or base_cluster_recovery_required | bool
           or base_cluster_ozone_ordered_recovery_required | bool
           or base_cluster_pending_first_run | default(false) | bool
 
@@ -1596,15 +1456,6 @@
         - base_cluster_knox_gateway_group is defined
         - base_cluster_knox_gateway_group | length > 0
 
-    - name: Show interrupted First Run recovery
-      ansible.builtin.debug:
-        msg: >-
-          The populated cluster has no matching initialization marker. Starting ZooKeeper, HDFS,
-          and Ranger prerequisites, then reconciling only non-destructive HDFS and dependent
-          service initialization artifacts. NameNode format and cluster First Run will not be
-          invoked.
-      when: base_cluster_recovery_required | bool
-
     - name: Show ordered Ozone recovery
       ansible.builtin.debug:
         msg: >-
@@ -1622,266 +1473,6 @@
       when:
         - base_cluster_ozone_ordered_recovery_required | bool
         - base_cluster_existing_ozone_service.serviceState | default('') == 'STARTED'
-
-    - name: Stop partially running services before initialization recovery
-      ansible.builtin.include_tasks: common_tasks/run_cm_service_setup_command.yml
-      loop: >-
-        {{
-          (
-            [{'service': 'solr', 'command': 'stop'}]
-            if (
-              base_cluster_install_services.solr | default(false) | bool
-              and base_cluster_existing_solr_service.serviceState | default('') == 'STARTED'
-              and base_cluster_existing_solr_service.healthSummary | default('') != 'GOOD'
-            )
-            else []
-          )
-          + (
-            [{'service': 'hbase', 'command': 'stop'}]
-            if (
-              base_cluster_install_services.hbase | default(true) | bool
-              and base_cluster_existing_hbase_service.serviceState | default('') == 'STARTED'
-              and base_cluster_existing_hbase_service.healthSummary | default('') != 'GOOD'
-            )
-            else []
-          )
-          + (
-            [{'service': 'yarn', 'command': 'stop'}]
-            if (
-              base_cluster_install_services.yarn | default(true) | bool
-              and base_cluster_existing_yarn_service.serviceState | default('') == 'STARTED'
-              and base_cluster_existing_yarn_service.healthSummary | default('') != 'GOOD'
-            )
-            else []
-          )
-        }}
-      loop_control:
-        loop_var: base_cluster_setup_command
-        label: "{{ base_cluster_setup_command.service }}:{{ base_cluster_setup_command.command }}"
-      when: base_cluster_recovery_required | bool
-
-    - name: Start recovery prerequisite services
-      ansible.builtin.include_tasks: common_tasks/run_cm_service_setup_command.yml
-      loop: >-
-        {{
-          (
-            [{'service': 'zookeeper', 'command': 'start'}]
-            if (base_cluster_install_services.zookeeper | default(true) | bool)
-            else []
-          )
-          + (
-            [{'service': 'hdfs', 'command': 'start'}]
-            if (base_cluster_install_services.hdfs | default(true) | bool)
-            else []
-          )
-          + (
-            [{'service': 'ranger', 'command': 'start'}]
-            if (base_cluster_install_services.ranger | default(true) | bool)
-            else []
-          )
-        }}
-      loop_control:
-        loop_var: base_cluster_setup_command
-        label: "{{ base_cluster_setup_command.service }}:{{ base_cluster_setup_command.command }}"
-      when: base_cluster_recovery_required | bool
-
-    - name: Read YARN initialization paths
-      ansible.builtin.uri:
-        url: >-
-          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
-          }}/services/yarn/config?view=full
-        method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: yes
-        validate_certs: no
-        status_code: [200]
-        follow_redirects: none
-      register: base_cluster_yarn_recovery_config
-      changed_when: false
-      when:
-        - base_cluster_recovery_required | bool
-        - base_cluster_install_services.yarn | default(true) | bool
-      delegate_to: "{{ cm_cluster_module_delegate_to }}"
-
-    - name: Resolve YARN node labels directory
-      ansible.builtin.set_fact:
-        base_cluster_yarn_node_labels_dir: >-
-          {{
-            (
-              base_cluster_yarn_recovery_config.json['items'] | default([])
-              | selectattr('name', 'equalto', 'node_labels_root_dir')
-              | map(attribute='value')
-              | first
-            )
-            | default('/yarn/node-labels', true)
-          }}
-      when:
-        - base_cluster_recovery_required | bool
-        - base_cluster_install_services.yarn | default(true) | bool
-
-    - name: Read Hive initialization paths
-      ansible.builtin.uri:
-        url: >-
-          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
-          }}/services/hive/config?view=full
-        method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: yes
-        validate_certs: no
-        status_code: [200]
-        follow_redirects: none
-      register: base_cluster_hive_recovery_config
-      changed_when: false
-      when:
-        - base_cluster_recovery_required | bool
-        - base_cluster_install_services.hive | default(true) | bool
-      delegate_to: "{{ cm_cluster_module_delegate_to }}"
-
-    - name: Resolve Hive external warehouse directory
-      ansible.builtin.set_fact:
-        base_cluster_hive_external_warehouse_dir: >-
-          {{
-            (
-              base_cluster_hive_recovery_config.json['items'] | default([])
-              | selectattr('name', 'equalto', 'hive_warehouse_external_directory')
-              | map(attribute='value')
-              | first
-            )
-            | default('/warehouse/tablespace/external/hive', true)
-          }}
-      when:
-        - base_cluster_recovery_required | bool
-        - base_cluster_install_services.hive | default(true) | bool
-
-    - name: Recover HDFS temporary directory
-      ansible.builtin.include_tasks: common_tasks/ensure_hdfs_tmp.yml
-      when:
-        - base_cluster_recovery_required | bool
-        - base_cluster_install_services.hdfs | default(true) | bool
-
-    - name: Recover YARN node-label directory
-      ansible.builtin.include_tasks: common_tasks/reconcile_hdfs_directory.yml
-      vars:
-        hdfs_directory_path: "{{ base_cluster_yarn_node_labels_dir }}"
-        hdfs_directory_mode: "700"
-        hdfs_directory_owner: "yarn:yarn"
-      when:
-        - base_cluster_recovery_required | bool
-        - base_cluster_install_services.hdfs | default(true) | bool
-        - base_cluster_install_services.yarn | default(true) | bool
-
-    - name: Build safe service initialization recovery commands
-      ansible.builtin.set_fact:
-        base_cluster_recovery_commands: >-
-          {{
-            (
-              [{'service': 'ranger', 'command': 'SetupPluginServices'}]
-              if (base_cluster_install_services.ranger | default(true) | bool)
-              else []
-            )
-            + (
-              [
-                {'service': 'solr', 'command': 'createSolrHdfsHomeDir'},
-                {'service': 'solr', 'command': 'initSolr'}
-              ]
-              if (
-                base_cluster_install_services.solr | default(false) | bool
-                and (
-                  base_cluster_existing_solr_service.serviceState | default('') != 'STARTED'
-                  or base_cluster_existing_solr_service.healthSummary | default('') != 'GOOD'
-                )
-              )
-              else []
-            )
-            + (
-              [
-                {'service': 'hbase', 'command': 'hbaseCreateRoot'},
-                {'service': 'hbase', 'command': 'hbaseCreateUserDirectory'}
-              ]
-              if (
-                base_cluster_install_services.hbase | default(true) | bool
-                and (
-                  base_cluster_existing_hbase_service.serviceState | default('') != 'STARTED'
-                  or base_cluster_existing_hbase_service.healthSummary | default('') != 'GOOD'
-                )
-              )
-              else []
-            )
-            + (
-              [
-                {'service': 'yarn', 'command': 'yarnCreateJobHistoryDirCommand'},
-                {'service': 'yarn', 'command': 'installMrFrameworkJars'}
-              ]
-              if (
-                base_cluster_install_services.yarn | default(true) | bool
-                and (
-                  base_cluster_existing_yarn_service.serviceState | default('') != 'STARTED'
-                  or base_cluster_existing_yarn_service.healthSummary | default('') != 'GOOD'
-                )
-              )
-              else []
-            )
-            + (
-              [
-                {'service': base_cluster_spark3_service_name, 'command': 'CreateSparkHistoryDirCommand'},
-                {'service': base_cluster_spark3_service_name, 'command': 'CreateSparkUserDirCommand'},
-                {'service': base_cluster_spark3_service_name, 'command': 'CreateSparkDriverLogDirCommand'}
-              ]
-              if (
-                base_cluster_install_services.spark3 | default(true) | bool
-                and (
-                  base_cluster_existing_spark3_service.serviceState | default('') != 'STARTED'
-                  or base_cluster_existing_spark3_service.healthSummary | default('') != 'GOOD'
-                )
-              )
-              else []
-            )
-            + (
-              [
-                {'service': 'hive', 'command': 'hiveCreateHiveUserDir'},
-                {'service': 'hive', 'command': 'hiveCreateHiveWarehouse'},
-                {
-                  'service': 'hive',
-                  'command': 'hiveCreateHiveWarehouseExternal',
-                  'query': 'directory=' ~ (
-                    base_cluster_hive_external_warehouse_dir
-                    | regex_replace('^/warehouse/?', '')
-                    | urlencode
-                  )
-                }
-              ]
-              if (
-                base_cluster_install_services.hive | default(true) | bool
-                and (
-                  base_cluster_existing_hive_service.serviceState | default('') != 'STARTED'
-                  or base_cluster_existing_hive_service.healthSummary | default('') != 'GOOD'
-                )
-              )
-              else []
-            )
-            + (
-              [{'service': 'impala', 'command': 'impalaCreateUserDir'}]
-              if (
-                base_cluster_install_services.impala | default(true) | bool
-                and (
-                  base_cluster_existing_impala_service.serviceState | default('') != 'STARTED'
-                  or base_cluster_existing_impala_service.healthSummary | default('') != 'GOOD'
-                )
-              )
-              else []
-            )
-          }}
-      when: base_cluster_recovery_required | bool
-
-    - name: Recover interrupted First Run service initialization
-      ansible.builtin.include_tasks: common_tasks/run_cm_service_setup_command.yml
-      loop: "{{ base_cluster_recovery_commands }}"
-      loop_control:
-        loop_var: base_cluster_setup_command
-        label: "{{ base_cluster_setup_command.service }}:{{ base_cluster_setup_command.command }}"
-      when: base_cluster_recovery_required | bool
 
     - name: Read Ozone SCM state before cluster startup
       ansible.builtin.uri:
@@ -2070,7 +1661,6 @@
             and not (base_cluster_partial_empty | bool)
             and existing_cluster.json.clusterState | default('') == 'STARTED'
             and not (base_cluster_pending_first_run | default(false) | bool)
-            and not (base_cluster_recovery_required | default(false) | bool)
             and not (base_cluster_ozone_ordered_recovery_required | default(false) | bool)
             and (
               base_cluster_required_config_changed | default(false) | bool
@@ -2130,6 +1720,8 @@
 
     - name: Start {{ 'new' if base_cluster_create_required | bool else 'existing' }} base cluster with name {{ cdh_basecluster_name }}
       block:
+        # cloudera.cluster v4.4.0 predates cluster.force; this is the equivalent
+        # CM operation and preserves the command tree for failure diagnostics.
         - name: Submit cluster First Run or start
           ansible.builtin.uri:
             url: >-
@@ -2205,114 +1797,6 @@
           changed_when: false
           delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-        - name: Collect failed First Run service details
-          ansible.builtin.set_fact:
-            base_cluster_failed_service_details: >-
-              {{
-                base_cluster_failed_service_commands.results
-                | default([])
-                | selectattr('json', 'defined')
-                | map(attribute='json')
-                | list
-              }}
-
-        - name: Detect recoverable Knox readiness timeout
-          ansible.builtin.set_fact:
-            base_cluster_knox_readiness_recovery_candidate: >-
-              {{
-                base_cluster_first_run_required | bool
-                and base_cluster_failed_service_details | length == 1
-                and base_cluster_failed_service_details[0]
-                  .get('serviceRef', {}).get('serviceName', '') == 'knox'
-                and (
-                  base_cluster_failed_service_details[0]
-                  .get('children', {}).get('items', [])
-                  | rejectattr('success', 'equalto', true)
-                  | map(attribute='name')
-                  | list
-                ) == ['WaitForKnoxGatewayReadyToServe']
-              }}
-
-        - name: Wait for Knox after transient First Run readiness timeout
-          ansible.builtin.uri:
-            url: >-
-              {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
-              }}/services/knox?view=full
-            method: GET
-            user: "{{ cm_admin_user }}"
-            password: "{{ cm_admin_pass }}"
-            force_basic_auth: yes
-            validate_certs: no
-            status_code: [200]
-            follow_redirects: none
-          register: base_cluster_knox_readiness_recovery
-          until:
-            - base_cluster_knox_readiness_recovery.json.serviceState | default('') == 'STARTED'
-            - base_cluster_knox_readiness_recovery.json.healthSummary | default('') == 'GOOD'
-          retries: "{{ base_cluster_knox_readiness_recovery_retries | default(30) }}"
-          delay: "{{ base_cluster_knox_readiness_recovery_delay | default(10) }}"
-          failed_when: false
-          changed_when: false
-          delegate_to: "{{ cm_cluster_module_delegate_to }}"
-          when: base_cluster_knox_readiness_recovery_candidate | bool
-
-        - name: Wait for Knox CDP proxy topologies after readiness recovery
-          ansible.builtin.include_tasks: common_tasks/wait_knox_cdp_proxy_topology_readiness.yml
-          when:
-            - base_cluster_knox_readiness_recovery_candidate | bool
-            - base_cluster_knox_readiness_recovery is defined
-            - base_cluster_knox_readiness_recovery.status | default(0) == 200
-            - base_cluster_knox_readiness_recovery.json.serviceState | default('') == 'STARTED'
-            - base_cluster_knox_readiness_recovery.json.healthSummary | default('') == 'GOOD'
-
-        - name: Confirm recoverable Knox readiness timeout
-          ansible.builtin.set_fact:
-            base_cluster_knox_readiness_recovered: >-
-              {{
-                base_cluster_knox_readiness_recovery_candidate | bool
-                and base_cluster_knox_readiness_recovery.status | default(0) == 200
-                and base_cluster_knox_readiness_recovery.json.serviceState | default('') == 'STARTED'
-                and base_cluster_knox_readiness_recovery.json.healthSummary | default('') == 'GOOD'
-              }}
-
-        - name: Start full cluster after Knox readiness recovery
-          ansible.builtin.uri:
-            url: >-
-              {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/commands/start
-            method: POST
-            user: "{{ cm_admin_user }}"
-            password: "{{ cm_admin_pass }}"
-            force_basic_auth: yes
-            validate_certs: no
-            status_code: [200]
-            follow_redirects: none
-          register: base_cluster_post_knox_recovery_start
-          delegate_to: "{{ cm_cluster_module_delegate_to }}"
-          when: base_cluster_knox_readiness_recovered | bool
-
-        - name: Require post-Knox recovery cluster start command
-          ansible.builtin.assert:
-            that:
-              - base_cluster_post_knox_recovery_start.json.id is defined
-            fail_msg: >-
-              CM did not return a command ID while starting the cluster after
-              Knox readiness recovery.
-          when: base_cluster_knox_readiness_recovered | bool
-
-        - name: Wait for full cluster start after Knox readiness recovery
-          ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
-          vars:
-            cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
-            cm_api_command_id: "{{ base_cluster_post_knox_recovery_start.json.id }}"
-          when: base_cluster_knox_readiness_recovered | bool
-
-        - name: Report recovered Knox First Run readiness timeout
-          ansible.builtin.debug:
-            msg: >-
-              Knox became STARTED/GOOD after CM First Run timed out waiting for
-              readiness. The full cluster start then completed successfully.
-          when: base_cluster_knox_readiness_recovered | bool
-
         - name: Report failed First Run services
           ansible.builtin.fail:
             msg: |-
@@ -2324,13 +1808,6 @@
               {% endfor %}
               {% endfor %}
               Original error: {{ ansible_failed_result.msg | default('unknown') }}
-          when: not (base_cluster_knox_readiness_recovered | default(false) | bool)
-
-    - name: Ensure HDFS temporary directory after fresh First Run
-      ansible.builtin.include_tasks: common_tasks/ensure_hdfs_tmp.yml
-      when:
-        - base_cluster_first_run_required | bool
-        - base_cluster_install_services.hdfs | default(true) | bool
 
     - name: Wait for Knox CDP proxy topologies after cluster startup
       ansible.builtin.include_tasks: common_tasks/wait_knox_cdp_proxy_topology_readiness.yml
@@ -2424,7 +1901,7 @@
               or base_cluster_cluster_autotls_applied_this_run | default(false) | bool
             )
             and existing_cluster.status == 200
-            and not (base_cluster_recovery_required | bool)
+            and not (base_cluster_pending_first_run | default(false) | bool)
             and (
               not (base_cluster_enable_kerberos | default(true) | bool)
               or base_cluster_hdfs_authentication | default('simple') == 'kerberos'

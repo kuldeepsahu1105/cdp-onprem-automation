@@ -492,14 +492,25 @@ the cluster is started if necessary, and CM runs
 First Run failures are expanded from the parent CM command into failed service
 commands and their child validation messages in Jenkins. First Run is submitted
 for a newly created cluster and for an existing populated cluster when the
-initialization marker is absent **and** HDFS is not yet `STARTED/GOOD` (typical
-when playbook **31** failed during Knox or other pre-First-Run configuration
-before CM ever formatted the NameNode). In that case **31** skips interrupted-run
-recovery and calls `POST .../commands/firstRun` instead of `commands/start`.
-Once HDFS is healthy, reruns use interrupted First Run recovery or a normal
-cluster start so an already formatted NameNode is never formatted again. Set
-`base_cluster_force_first_run: true` only when CM support directs a deliberate
-First Run retry. Database and initial service
+matching cluster-UUID initialization marker is absent. This remains true when
+an earlier First Run formatted and started HDFS but failed later on Hue, Knox,
+HBase, YARN, Spark, or another service. Playbook **31** resubmits
+`POST .../commands/firstRun` and lets Cloudera Manager detect completed steps,
+initialize the remaining services, and enforce dependency ordering. It does not
+replace First Run with hand-built per-service setup commands or direct HDFS
+namespace mutations. This matches the cloudera-labs lifecycle pattern of
+starting the cluster with forced First Run.
+
+The matching marker is recorded only after First Run, startup,
+client-configuration refresh, ZooKeeper role validation, and every enabled
+service with a non-gateway role reports `STARTED` with an accepted health
+summary (default: `GOOD`). A normal initialized rerun uses cluster Start or a
+controlled restart only when configuration or runtime health requires it. Set
+`base_cluster_force_first_run: true` to deliberately resubmit First Run even
+when the marker exists. The repository pins `cloudera.cluster` v4.4.0, which
+predates the module's `force` option shown in newer cloudera-labs examples, so
+playbook **31** calls the equivalent CM `firstRun` endpoint directly and retains
+the composite command tree for diagnostics. Database and initial service
 passwords use the `base_cluster_*` variables and should be overridden through
 `ANSIBLE_GROUP_VARS_YAML` or an Ansible vault. Ranger initial passwords must
 contain letters and numbers and be at least eight characters long. By default,
@@ -507,80 +518,32 @@ contain letters and numbers and be at least eight characters long. By default,
 the FreeIPA administrator password. The Ranger Admin UI username is `admin`;
 `rangeradmin` is the separate PostgreSQL database account.
 
-An interrupted First Run can leave HDFS formatted and running while later
-service setup never occurred. When a populated cluster has no matching
-cluster-UUID marker at `base_cluster_initialization_marker_path`, playbook **31**
-performs only non-destructive recovery before normal Start: it starts ZooKeeper
-and HDFS, creates HDFS `/tmp` plus the configured YARN node-label store with
-the required permissions, starts Ranger and initializes its plugin services
-(which populate their local policy caches), initializes Solr's HDFS home and ZooKeeper state,
-creates the HBase root and user directories, creates the YARN JobHistory
-directory and installs MapReduce framework JARs, creates the Spark history,
-user, and driver-log directories, and creates the Hive and Impala HDFS
-directories. Ozone recovery starts the SCM role alone, waits until an
-authenticated `ozone admin scm roles` check reports `LEADER`, and only then
-starts the remaining Ozone roles. This prevents DataNodes from exhausting
-certificate-enrollment retries against a running but not-yet-leader SCM and
-leaving SCM in safe mode with no healthy pipeline. CM First Run retains
-responsibility for initializing SCM on a new cluster; if that initial run is
-interrupted, the next Base Cluster phase applies the ordered recovery without
-deleting Ozone metadata. The same ordered recovery runs for an initialized
-existing cluster when the cluster remains started but Ozone is stopped or has
-`BAD` health, so a later SCM or DataNode failure does not depend on the
-initialization marker being absent. A deliberately stopped whole cluster uses
-the normal cluster start path, and an initialized cluster does not restart
-Ozone for a transient `CONCERNING` health state. Interrupted First Run recovery
-continues to recover any non-`GOOD` Ozone state. The optional YARN
-container-usage directory command is not part of automatic recovery; run it
-only after enabling container-usage aggregation and configuring its MapReduce
-job user. Recovery never invokes NameNode format or cluster First Run.
+Ordered Ozone repair is reserved for a cluster that already has the matching
+completion marker and later reports Ozone stopped or `BAD`. In that post-
+initialization repair path, automation starts SCM alone, waits for authenticated
+SCM leadership, and then starts the remaining Ozone roles. An interrupted First
+Run never enters that repair path; CM First Run owns Ozone initialization along
+with HDFS, Ranger, Solr, HBase, YARN, Spark, Hive, and Impala.
 
-HDFS `/tmp` reconciliation first calls CM's documented
-`hdfsCreateTmpDir` service command. Some CM 7.13/CDP 7.3.2 layouts return
-`Command not valid for ...`; in that case Ansible probes every base master and
-worker, then uses the first available HDFS client to create the namespace path
-and verify mode `1777` (world-writable with sticky bit). The probe checks
-`PATH`, the active `/opt/cloudera/parcels/CDH/bin/hdfs` link, and executable
-versioned `/opt/cloudera/parcels/CDH-*/bin/hdfs` clients. These delegated
-commands explicitly use SSH so the localhost CM orchestration play cannot run
-them on the Jenkins controller. The fallback reads the authoritative
-`hadoop_security_authentication` setting from CM rather than trusting
-`/etc/hadoop/conf`, which can remain stale after a security transition. In
-SIMPLE mode it uses `HADOOP_USER_NAME=hdfs`; after Kerberos enablement it
-selects the newest CM-generated `hdfs.keytab`, uses that keytab's CM process
-directory as `HADOOP_CONF_DIR`, obtains an `hdfs/*` ticket in an isolated
-temporary credential cache, performs the same `/tmp` verification, and
-destroys the cache on exit.
-The same verification runs after a fresh First Run, so the HDFS canary can
-create `/tmp/.cloudera_health_monitoring_canary_files`. This is not the local
-Linux `/tmp` directory on each DataNode.
-The marker is recorded only after startup, client-configuration refresh,
-ZooKeeper role validation, and every enabled service with a non-gateway role
-reports `STARTED` with an accepted health summary (default: `GOOD`). The bounded
-poll uses `base_cluster_service_health_retries`,
+The bounded final poll uses `base_cluster_service_health_retries`,
 `base_cluster_service_health_delay`, and
-`base_cluster_accepted_health_summaries`. On a rerun, reconciled service
-configuration or an existing runtime service that is stopped/BAD triggers one
-controlled cluster stop/start before this gate, so already-running roles do not
-retain stale Hive, Ranger, Knox, Kafka, or Ozone configuration. CM can report a one-time setup command as
-`Command not valid for ...` when that artifact is already initialized; recovery
-reports that exact response as a skip and continues, but all other HTTP or
-command failures remain fatal.
+`base_cluster_accepted_health_summaries`. On an initialized rerun, reconciled
+service configuration or an existing runtime service that is stopped/BAD
+triggers one controlled cluster stop/start before this gate so running roles do
+not retain stale Hive, Ranger, Knox, Kafka, or Ozone configuration.
 
 CM can occasionally fail First Run at `WaitForKnoxGatewayReadyToServe` even
-though the Knox process subsequently reaches `STARTED/GOOD`. When that is the
-only failed First Run child, playbook **31** performs a bounded Knox health
-poll, then starts and polls the full cluster. It does not suppress other Knox
-failures or continue while the remaining services are stopped.
+though the Knox process subsequently reaches `STARTED/GOOD`. Playbook **31**
+reports that failed child command and leaves the completion marker absent; the
+next rerun resubmits CM First Run rather than replacing the failed composite
+command with a normal cluster Start.
 
 `KNOX_GATEWAY=STARTED` only confirms the Java process is running. CM's
 `checkTopologyDeployment.sh` separately polls
 `/gateway/health/v1/gateway-status`; HTTP 200 with body `PENDING` means topology
 deployment is not ready yet. The CSD's default bounded wait is 600 seconds.
-Playbook **31** does not falsely convert `PENDING` to success. It applies the
-recovery above only after CM ends First Run with the single
-`WaitForKnoxGatewayReadyToServe` failure and Knox subsequently reports
-`STARTED/GOOD`.
+Playbook **31** does not falsely convert `PENDING` to success or bypass the
+failed First Run.
 
 When `gateway.log` reports `Failed to configure truststore` followed by a
 `PKIX path building failed` error while discovering the CM API, waiting cannot

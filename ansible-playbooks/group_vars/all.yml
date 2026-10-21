@@ -523,10 +523,10 @@ base_cluster_adopt_existing_ozone_ha: true
 base_cluster_kafka_metadata_store: Zookeeper
 # Set true only when intentionally rotating redacted Hive/Ranger/Knox secrets.
 base_cluster_force_secret_update: false
-# Records completion of non-destructive service initialization used to recover an interrupted First Run.
+# Records successful CM First Run plus final service-health verification for this cluster UUID.
 base_cluster_initialization_marker_path: /var/lib/cloudera-scm-server/.ansible-base-cluster-initialized
-# When true, submit CM First Run even on an existing cluster (normally auto-detected when the marker
-# is missing and HDFS is not STARTED/GOOD — e.g. playbook failed on Knox config before First Run).
+# When true, submit CM First Run even when the matching completion marker exists.
+# Without the marker, reruns automatically resubmit First Run and let CM reconcile completed steps.
 base_cluster_force_first_run: false
 
 # CDP base cluster services (31_setup_base_cluster.yml). Override per key in Ansible controller via base_cluster_install_services.
@@ -574,16 +574,12 @@ base_cluster_service_health_retries: 90
 base_cluster_service_health_delay: 10
 base_cluster_accepted_health_summaries:
   - GOOD
-# CM can time out its Knox readiness subcommand shortly before the gateway
-# reaches healthy state. Bound the narrow First Run recovery wait.
-base_cluster_knox_readiness_recovery_retries: 30
-base_cluster_knox_readiness_recovery_delay: 10
 # Poll Knox /gateway/health/v1/gateway-status until cdp-proxy* topologies leave the wait list.
 base_cluster_knox_cdp_proxy_topology_retries: 60
 base_cluster_knox_cdp_proxy_topology_delay: 10
 base_cluster_knox_gateway_https_port: 8443
-# During interrupted First Run recovery, start SCM alone and wait for its
-# authenticated HA status to report LEADER before starting Ozone DataNodes.
+# For a previously initialized cluster whose Ozone service later becomes BAD,
+# start SCM alone and wait for authenticated HA leadership before other roles.
 base_cluster_ozone_scm_leader_retries: 60
 base_cluster_ozone_scm_leader_delay: 5
 # New clusters are Kerberized before First Run; existing unsecure clusters use

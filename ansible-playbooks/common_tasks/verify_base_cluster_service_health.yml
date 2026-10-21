@@ -78,4 +78,4 @@
       converge within {{ (base_cluster_service_health_retries | int) * (base_cluster_service_health_delay | int) }}s:
       {{ base_cluster_unhealthy_runtime_service_details | join(', ') }}.
       The initialization marker was not written. Fix the reported service health checks and rerun
-      31_setup_base_cluster.yml; the rerun will retain interrupted-initialization recovery.
+      31_setup_base_cluster.yml; the rerun will resubmit CM First Run.
