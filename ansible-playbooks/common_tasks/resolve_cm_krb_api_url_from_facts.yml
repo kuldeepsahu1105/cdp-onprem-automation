@@ -8,8 +8,6 @@
         (cm_api_use_https | default(false) | bool)
         or (cm_api_https_active | default(false) | bool)
         or (cm_autotls_api_enabled | default(false) | bool)
-        or (cm_autotls_setup_intent | default(false) | bool)
-        or (autotls_enabled | default(false) | bool)
       }}
 
 - name: CM API — delegate HTTPS REST when the controller cannot reach CM TLS
@@ -93,4 +91,4 @@
 - name: CM API — use discovered API URL when HTTPS is not required
   ansible.builtin.set_fact:
     cm_krb_api_url: "{{ cm_api_effective_url | default(cm_api_url) }}"
-  when: cm_krb_api_url | default('') | length == 0
+  when: not (cm_security_api_https_required | bool)

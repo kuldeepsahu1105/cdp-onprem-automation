@@ -59,7 +59,16 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 
 **Admin password API reset:** `ensure_cm_admin_password.yml` runs in **`24_start_cm.yml`** (after first server start) and **`27_setup_cm_autotls.yml`** (before Auto-TLS API). It is **not** imported from portal playbooks or from read-only API probes.
 
-**Probe context:** `resolve_cm_api_probe_context.yml` → **`resolve_cm_api_transport.yml`** (`cm_api_use_https`, `cm_api_probe_https_first`, `cm_api_probe_skip_controller_http`, default `cm_api_port`) → `resolve_cm_connect_host.yml` + `select_cm_api_probe_host.yml`. Plays **25–26** default **`cm_api_use_https: false`** (HTTP **:7180**); set **`cm_autotls_complete: true`** or **`cm_api_use_https: true`** after **27** or for HTTPS-only re-runs. When **`cm_autotls_setup_intent`** is set before probe context (plays **25**, **27**, **28**, and **`prepare_cm_security_api.yml`** for **29–31**), public-controller `http://<EIP>:7180` auth/probes delegate to **cldr-mngr** (private bind / HTTPS **:7183**).
+**Probe context:** `resolve_cm_api_probe_context.yml` → **`resolve_cm_api_transport.yml`** (`cm_api_use_https`, `cm_api_probe_https_first`, `cm_api_probe_skip_controller_http`, default `cm_api_port`) → `resolve_cm_connect_host.yml` + `select_cm_api_probe_host.yml`. Plays **25–26** default **`cm_api_use_https: false`** (HTTP **:7180**); set **`cm_autotls_complete: true`** or **`cm_api_use_https: true`** after **27** or for HTTPS-only re-runs. When **`cm_autotls_setup_intent`** is set before probe context (plays **25**, **27**, **28**, and **`prepare_cm_security_api.yml`** for **29–31**), public-controller `http://<EIP>:7180` auth/probes delegate to **cldr-mngr** on its private bind.
+
+**Mutation protocol selection:** `resolve_cm_krb_api_url_from_facts.yml`
+selects HTTPS only from observed runtime state (`cm_api_use_https`,
+`cm_api_https_active`, or `cm_autotls_api_enabled`). Requested configuration
+(`cm_autotls_setup_intent` / `autotls_enabled`) is not proof that the HTTPS
+listener exists. When live CM configuration reports Auto-TLS disabled, the
+resolver replaces any stale HTTPS mutation URL with the working discovered
+HTTP endpoint so play **25** can configure parcel repositories before play
+**27** enables Auto-TLS.
 
 When Jenkins cannot reach a CM API port directly and discovery falls back to a
 request delegated to `cldr-mngr`, `cm_api_client_host`, `cm_host`, and the
