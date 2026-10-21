@@ -13,42 +13,68 @@
   hosts: localhost
   gather_facts: no
   tasks:
+    - name: Capture requested Auto-TLS state before API discovery
+      ansible.builtin.set_fact:
+        cm_autotls_setup_intent: "{{ autotls_enabled | default(true) | bool }}"
+
     - name: CM API — set connection context
       ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
 
     - name: Align Cloudera Manager admin password with group_vars after CM server start
       ansible.builtin.import_tasks: common_tasks/ensure_cm_admin_password.yml
 
-    - name: Capture requested Auto-TLS state before API discovery
-      ansible.builtin.set_fact:
-        cm_autotls_setup_intent: "{{ autotls_enabled | default(true) | bool }}"
-
     - name: Set up Cloudera Manager API URL
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
       become: false
+
+    - name: CM API — align REST URL when calls delegate to cldr-mngr
+      ansible.builtin.import_tasks: common_tasks/resolve_cm_api_effective_url.yml
 
     - name: CM API — read TLS / Auto-TLS state (aligned status messaging)
       ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
 
     - name: Authenticate with Cloudera Manager API
       ansible.builtin.uri:
-        url: "{{ cm_api_url }}/cm/version"
+        url: "{{ cm_api_effective_url | default(cm_api_url) }}/cm/version"
         method: GET
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
         force_basic_auth: yes
         status_code: [200, 301, 303]
+        return_content: yes
         validate_certs: no
-      register: cm_version
+        timeout: "{{ cm_api_authenticated_uri_timeout | default(45) | int }}"
+      register: cm_version_response
       delegate_to: "{{ cm_api_uri_delegate_to if (cm_api_uri_delegate_to | default('') | length > 0) else omit }}"
 
-    # - name: Print Cloudera Manager API Version Response
-    #   ansible.builtin.debug:
-    #     msg: "Cloudera Manager API Version: {{ cm_version.json }}"
+    - name: Parse Cloudera Manager version response
+      ansible.builtin.set_fact:
+        cm_version_info: "{{ cm_version_response.content | from_json }}"
+      when: cm_version_response.status | default(0) in [200, 301, 303]
+
+    - name: Validate Cloudera Manager version response
+      ansible.builtin.assert:
+        that:
+          - cm_version_response.status | default(0) in [200, 301, 303]
+          - cm_version_info is defined
+          - cm_version_info is mapping
+          - cm_version_info.version | default('') | length > 0
+        fail_msg: >-
+          Cloudera Manager API authentication failed at
+          {{ cm_api_effective_url | default(cm_api_url) }}/cm/version
+          (delegate={{ cm_api_uri_delegate_to | default('localhost') }}, HTTP
+          {{ cm_version_response.status | default('timeout/unreachable') }}).
+          Assembled URL={{ cm_api_url | default('unset') }};
+          manager bind={{ cm_api_probe_host | default('unset') }}.
+          Delegated calls must not use the public EIP when :7180 is closed or hairpinned;
+          expect https://{{ cm_host_private | default('172.x') }}:{{ cm_https_port | default(7183) }}
+          after Auto-TLS (playbook 27) or HTTP on the private bind before TLS.
 
     - name: Print Cloudera Manager API Version and Build Timestamp
       ansible.builtin.debug:
-        msg: "Cloudera Manager Version: {{ cm_version.json.version }}, Build Timestamp: {{ cm_version.json.buildTimestamp }}"
+        msg: >-
+          Cloudera Manager Version: {{ cm_version_info.version }},
+          Build Timestamp: {{ cm_version_info.buildTimestamp | default('not reported') }}
 
     - name: Apply remote parcel repository URLs in Cloudera Manager (scrub wizard defaults)
       ansible.builtin.import_tasks: common_tasks/configure_cm_parcel_repo_api.yml
@@ -89,7 +115,7 @@
 
     - name: Check Cloudera Management Services Status
       ansible.builtin.uri:
-        url: "{{ cm_api_url }}/cm/service"
+        url: "{{ cm_api_effective_url | default(cm_api_url) }}/cm/service"
         method: GET
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
@@ -117,7 +143,7 @@
 
     - name: List available clusters in Cloudera Manager
       ansible.builtin.uri:
-        url: "{{ cm_api_url }}/clusters"
+        url: "{{ cm_api_effective_url | default(cm_api_url) }}/clusters"
         method: GET
         user: "{{ cm_admin_user }}"
         password: "{{ cm_admin_pass }}"
