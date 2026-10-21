@@ -144,7 +144,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 
 On RHEL 9 CM hosts, CDV JAR paths may still use `redhat8/yum` (`cdv_redhat_yum_repo: auto`); CFM uses `redhat9/yum/…` from `csd_redhat_repo: auto`. Parcel repo scrub in `configure_cm_parcel_repo_api.yml` drops any candidate URL matching `\.jar`.
 
-**Spark parcel:** For CDH `>= 7.3.1`, Spark is bundled in the CDH parcel — a separate SPARK3 download is skipped automatically (`cdh_spark_bundled_min_version`). Set `spark_version` only for older CDH releases that need a standalone Spark parcel.
+**Spark parcel and service type:** For CDH `>= 7.3.1`, Spark3 is bundled in the CDH parcel, so a separate download is skipped automatically (`cdh_spark_bundled_min_version`). Cloudera Manager still exposes the service descriptor as `SPARK3_ON_YARN`; the automation uses the no-space CM service name `spark3`.
 
 ```yaml
 # Public (default) — no local download
