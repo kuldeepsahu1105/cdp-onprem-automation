@@ -385,6 +385,15 @@ live in `roles/cdh_base_cluster`. CDH-owned legacy `common_tasks` paths are
 static role-import shims for manual or later callers. The numbered playbook
 remains the supported standalone/Jenkins/`pvc_setup.sh` entry point.
 
+### Monitoring
+
+`32_setup_monitoring_stack.yml` remains the supported compatibility entry
+point and delegates implementation to `roles/monitoring`. It preserves the
+portal-context and deployment play boundaries plus the literal exporter
+playbook import. `enroll_monitoring_exporters.yml` remains directly runnable
+and retains separate node_exporter, process_exporter, cAdvisor, and localhost
+scrape-target plays. Exporter service templates are role-relative.
+
 **CMS troubleshooting (Service Monitor / Avro `Connection refused`):**
 
 | Symptom | Likely cause | Operator checks |

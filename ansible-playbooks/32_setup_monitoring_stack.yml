@@ -9,28 +9,10 @@
   connection: local
   gather_facts: true
   tasks:
-    - name: Resolve portal install host
-      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
-
-    - name: Register deployment portal runtime host
-      ansible.builtin.add_host:
-        name: "{{ groups[deployment_portal_host_group_effective][0] }}"
-        groups: deployment_portal_runtime
-      changed_when: false
-
-    - name: Validate SSH reachability of monitoring/Caddy target host before connecting
-      ansible.builtin.import_tasks: common_tasks/validate_ansible_ssh_reachability.yml
-      vars:
-        ansible_ssh_reachability_check_group: "{{ deployment_portal_host_group_effective }}"
-
-    - name: Enable monitoring in portal context for this run
-      ansible.builtin.set_fact:
-        monitoring_stack_enabled: true
-
-    - name: Build deployment portal context from inventory
-      ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
-
-- import_playbook: enroll_monitoring_exporters.yml
+    - name: Run monitoring build portal context tasks
+      ansible.builtin.import_role:
+        name: monitoring
+        tasks_from: build_portal_context
 
 - name: Deploy monitoring stack and update Caddy routes
   hosts: deployment_portal_runtime
@@ -43,32 +25,7 @@
       - ipa
       - monitoring
   tasks:
-    - name: Load deployment portal context from localhost
-      ansible.builtin.import_tasks: common_tasks/deployment_portal_load_host_facts.yml
-
-    - name: Ensure container runtime is available
-      ansible.builtin.import_tasks: common_tasks/install_portal_container_runtime.yml
-
-    - name: Ensure deployment portal network exists
-      ansible.builtin.command:
-        cmd: docker network inspect deployment_portal
-      register: portal_network
-      failed_when: false
-      changed_when: false
-
-    - name: Fail when deployment portal stack is not installed
-      ansible.builtin.fail:
-        msg: >-
-          Docker network 'deployment_portal' not found. Run 10_setup_deployment_portal.yml first.
-      when: portal_network.rc != 0
-
-    - name: Sync monitoring stack and Caddy routes
-      ansible.builtin.import_tasks: common_tasks/sync_deployment_portal_content.yml
-
-    - name: Print monitoring URLs
-      ansible.builtin.debug:
-        msg:
-          - "Grafana: {{ deployment_portal_context.monitoring.grafana_url }}"
-          - "Prometheus: {{ deployment_portal_context.monitoring.prometheus_url }}"
-          - "Alertmanager: {{ deployment_portal_context.monitoring.alertmanager_url }}"
-          - "cAdvisor: {{ deployment_portal_context.monitoring.cadvisor_url }}"
+    - name: Run monitoring deploy stack tasks
+      ansible.builtin.import_role:
+        name: monitoring
+        tasks_from: deploy_stack

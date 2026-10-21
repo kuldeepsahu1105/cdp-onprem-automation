@@ -15,7 +15,8 @@ therefore import `roles/prereq_*`, while PORTAL wrappers `10` and `35` import
 `roles/deployment_portal`, and IDENTITY entry points import `roles/identity`,
 CM_INSTALL entry points `20`–`26` import `roles/cm_install`, CM security entry
 points `27`–`30` import `roles/cm_security`, and CDH entry point `31` imports
-`roles/cdh_base_cluster`. None introduces role defaults or vars;
+`roles/cdh_base_cluster`, while monitoring entry points import
+`roles/monitoring`. None introduces role defaults or vars;
 inventory, `group_vars`, config, Jenkins values, and extra-vars retain their
 existing precedence.
 
@@ -67,6 +68,12 @@ task implementation to `roles/cdh_base_cluster`. CDH-owned shared helpers are
 static compatibility shims. Generic collection/module endpoint tasks and
 CM-security/CM-install-owned helpers remain at their existing shared paths or
 role shims, preserving service dependency ordering and caller-supplied vars.
+
+Monitoring playbook `32` and `enroll_monitoring_exporters.yml` retain their
+original play scopes while delegating implementation to `roles/monitoring`.
+Exporter task shims preserve manual callers; portal host/context/content and
+scrape-target facts still come through `roles/deployment_portal`, so
+`deployment_portal_context` and localhost fact propagation are unchanged.
 
 Both validation gates scan role task YAML. Contract setter/index checks must
 continue to include `roles/*/tasks/*.yml`; otherwise moving a `set_fact` into a

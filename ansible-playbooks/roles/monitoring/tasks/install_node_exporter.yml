@@ -1,0 +1,130 @@
+---
+# Install node_exporter as a systemd service on cluster hosts for host-level metrics
+# (CPU/mem/disk/net) — imported from 32_setup_monitoring_stack.yml, gated by
+# monitoring_node_exporter_enabled. Idempotent: skips the download when the pinned version is
+# already installed; the systemd unit is templated and the service is only restarted when the
+# binary or unit file actually changed. Firewall port is opened only when firewalld is active
+# (same pattern as ensure_deployment_portal_firewall_ports.yml).
+
+- name: Set node_exporter release architecture suffix
+  ansible.builtin.set_fact:
+    _node_exporter_arch: >-
+      {{
+        'arm64'
+        if ansible_architecture | default('x86_64') in ['aarch64', 'arm64']
+        else 'amd64'
+      }}
+
+- name: Set node_exporter release and binary path facts
+  ansible.builtin.set_fact:
+    _node_exporter_release_name: "node_exporter-{{ monitoring_node_exporter_version }}.linux-{{ _node_exporter_arch }}"
+    _node_exporter_bin_path: "{{ monitoring_node_exporter_bin_dir }}/node_exporter"
+
+- name: Check installed node_exporter version
+  ansible.builtin.command:
+    argv: ["{{ _node_exporter_bin_path }}", "--version"]
+  register: _node_exporter_installed_version
+  changed_when: false
+  failed_when: false
+
+- name: Create node_exporter system group
+  ansible.builtin.group:
+    name: "{{ monitoring_node_exporter_group }}"
+    system: true
+    state: present
+
+- name: Create node_exporter system user
+  ansible.builtin.user:
+    name: "{{ monitoring_node_exporter_user }}"
+    group: "{{ monitoring_node_exporter_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    state: present
+
+- name: Download and install pinned node_exporter binary
+  when: >-
+    _node_exporter_installed_version.rc != 0
+    or (
+      monitoring_node_exporter_version
+      not in ((_node_exporter_installed_version.stdout | default('')) ~ (_node_exporter_installed_version.stderr | default('')))
+    )
+  block:
+    - name: Create temporary download directory for node_exporter
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: node_exporter
+      register: _node_exporter_tmp_dir
+
+    - name: Download node_exporter release archive
+      ansible.builtin.get_url:
+        url: >-
+          {{ monitoring_node_exporter_download_base_url }}/v{{ monitoring_node_exporter_version }}/{{ _node_exporter_release_name }}.tar.gz
+        dest: "{{ _node_exporter_tmp_dir.path }}/{{ _node_exporter_release_name }}.tar.gz"
+        mode: "0644"
+
+    - name: Extract node_exporter release archive
+      ansible.builtin.unarchive:
+        src: "{{ _node_exporter_tmp_dir.path }}/{{ _node_exporter_release_name }}.tar.gz"
+        dest: "{{ _node_exporter_tmp_dir.path }}"
+        remote_src: true
+
+    - name: Install node_exporter binary
+      ansible.builtin.copy:
+        src: "{{ _node_exporter_tmp_dir.path }}/{{ _node_exporter_release_name }}/node_exporter"
+        dest: "{{ _node_exporter_bin_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+        remote_src: true
+      register: _node_exporter_binary_install
+
+    - name: Clean up node_exporter temporary download directory
+      ansible.builtin.file:
+        path: "{{ _node_exporter_tmp_dir.path }}"
+        state: absent
+
+- name: Render node_exporter systemd unit
+  ansible.builtin.template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: _node_exporter_unit_render
+
+- name: Reload systemd daemon when node_exporter unit changed
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: _node_exporter_unit_render is changed
+
+- name: Enable and start node_exporter service
+  ansible.builtin.systemd:
+    name: node_exporter
+    state: started
+    enabled: true
+
+- name: Restart node_exporter when binary or unit changed
+  ansible.builtin.systemd:
+    name: node_exporter
+    state: restarted
+  when: >-
+    (_node_exporter_binary_install is defined and _node_exporter_binary_install is changed)
+    or _node_exporter_unit_render is changed
+
+- name: Check firewalld service state on cluster host
+  ansible.builtin.systemd:
+    name: firewalld
+  register: _node_exporter_firewalld_svc
+  failed_when: false
+  changed_when: false
+
+- name: Allow node_exporter port in firewalld
+  ansible.posix.firewalld:
+    port: "{{ monitoring_node_exporter_port }}/tcp"
+    permanent: true
+    state: enabled
+    immediate: true
+  when:
+    - _node_exporter_firewalld_svc is succeeded
+    - (_node_exporter_firewalld_svc.status.ActiveState | default('inactive')) == 'active'

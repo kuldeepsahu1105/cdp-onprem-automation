@@ -1,0 +1,5 @@
+---
+- name: Install cAdvisor container (per-host container metrics for Prometheus)
+  ansible.builtin.import_tasks: install_cadvisor_host.yml
+  when: monitoring_cadvisor_host_enabled | default(true) | bool
+

@@ -168,6 +168,15 @@ Kerberos, Auto-TLS, Ranger, Ozone, and health-verification tasks. CDH-owned
 installation and CM module endpoint helpers continue in `common_tasks`, while
 CM security/install helpers continue through their owning role shims.
 
+The MONITORING implementation is organized under `roles/monitoring`.
+Playbook `32_setup_monitoring_stack.yml` retains its localhost portal-context
+play, literal `enroll_monitoring_exporters.yml` import, and ops-host deployment
+play. The exporter helper keeps its four host/play boundaries and
+`vars_files`. Monitoring owns node_exporter, process_exporter, and host
+cAdvisor implementations and service templates; deployment-portal context,
+content sync, and scrape-target rendering continue through portal-role
+compatibility shims.
+
 ## Migration: renumbering duplicate prefixes (2026-09)
 
 Four playbooks previously duplicated a numeric prefix with another, unrelated playbook (`00_*` had three files, `25_*` had two, and `12_*`/`12b_*` used a letter suffix that **sorts before** its own `12_` file under common UTF-8 locales — `ls` in `en_US.UTF-8` prints `12b_ipa_deep_recovery.yml` before `12_setup_freeipa_server.yml`, inverting the intended order). None of the four own a distinct mainline `pvc_setup.sh` sequence slot (they are either always-imported libraries or optional/manual helpers), so they were **de-numbered** rather than assigned a new colliding or ambiguous number. This is a **rename only** — no task/behavior changes, no cascading renumber of any other playbook.

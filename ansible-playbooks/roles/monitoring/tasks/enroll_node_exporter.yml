@@ -1,0 +1,5 @@
+---
+- name: Install node_exporter (host metrics for Prometheus)
+  ansible.builtin.import_tasks: install_node_exporter.yml
+  when: monitoring_node_exporter_enabled | default(true) | bool
+
