@@ -89,9 +89,9 @@ services:
       - type: GATEWAY
 {% endif %}
 {% if svc.spark3 | default(true) %}
-  - name: spark3_on_yarn
-    type: SPARK3_ON_YARN
-    display_name: Spark 3 on YARN
+  - name: "{{ base_cluster_spark3_service_name }}"
+    type: "{{ base_cluster_spark3_service_type }}"
+    display_name: Spark 3
     config:
       yarn_service: "{{ 'yarn' if svc.yarn | default(true) else '' }}"
 {% if svc.hbase | default(true) %}
@@ -385,7 +385,7 @@ host_templates:
         type: JOBHISTORY
 {% endif %}
 {% if svc.spark3 | default(true) %}
-      - service: SPARK3_ON_YARN
+      - service: "{{ base_cluster_spark3_service_type }}"
         type: SPARK3_YARN_HISTORY_SERVER
 {% endif %}
 {% if svc.hive | default(true) %}
@@ -505,7 +505,7 @@ host_templates:
         type: GATEWAY
 {% endif %}
 {% if svc.spark3 | default(true) %}
-      - service: SPARK3_ON_YARN
+      - service: "{{ base_cluster_spark3_service_type }}"
         type: GATEWAY
 {% endif %}
 {% if svc.nifi | default(false) %}

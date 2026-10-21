@@ -1412,7 +1412,7 @@
         base_cluster_existing_spark3_service: >-
           {{
             existing_cluster_services.json['items'] | default([])
-            | selectattr('name', 'equalto', 'spark3_on_yarn')
+            | selectattr('name', 'equalto', base_cluster_spark3_service_name)
             | first
             | default({})
           }}
@@ -1825,9 +1825,9 @@
             )
             + (
               [
-                {'service': 'spark3_on_yarn', 'command': 'CreateSparkHistoryDirCommand'},
-                {'service': 'spark3_on_yarn', 'command': 'CreateSparkUserDirCommand'},
-                {'service': 'spark3_on_yarn', 'command': 'CreateSparkDriverLogDirCommand'}
+                {'service': base_cluster_spark3_service_name, 'command': 'CreateSparkHistoryDirCommand'},
+                {'service': base_cluster_spark3_service_name, 'command': 'CreateSparkUserDirCommand'},
+                {'service': base_cluster_spark3_service_name, 'command': 'CreateSparkDriverLogDirCommand'}
               ]
               if (
                 base_cluster_install_services.spark3 | default(true) | bool

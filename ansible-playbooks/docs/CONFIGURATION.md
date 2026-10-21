@@ -170,7 +170,7 @@ entries must be complete `.jar` URLs. See
 | `ozone` | `true` | Installs Ozone object storage roles. |
 | `yarn` | `true` | Installs YARN resource management. |
 | `tez` | `true` | Enables the Tez execution engine. |
-| `spark3` | `true` | Installs Spark 3 on YARN with a History Server and client gateways. |
+| `spark3` | `true` | Installs the bundled `SPARK3` service with a History Server and client gateways on CDH 7.3.1+; older releases retain the legacy `SPARK3_ON_YARN` service type. |
 | `hive` | `true` | Installs Hive services and metadata integration. |
 | `hive_on_tez` | `true` | Configures Hive to use Tez; requires Hive and Tez. |
 | `hbase` | `true` | Installs HBase; requires ZooKeeper and HDFS. |

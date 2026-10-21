@@ -260,6 +260,18 @@ cdh_version: "7.3.2.0"
 cdh_numeric_version: "77083870"
 # Spark is bundled in the CDH parcel for 7.3.1+ — separate SPARK3 parcel not required
 cdh_spark_bundled_min_version: "7.3.1"
+base_cluster_spark3_service_name: >-
+  {{
+    'spark3'
+    if cdh_version is version(cdh_spark_bundled_min_version, '>=')
+    else 'spark3_on_yarn'
+  }}
+base_cluster_spark3_service_type: >-
+  {{
+    'SPARK3'
+    if cdh_version is version(cdh_spark_bundled_min_version, '>=')
+    else 'SPARK3_ON_YARN'
+  }}
 
 # spark_version: "3.3.1.7.3.1.700"
 # spark_minor_version: "3.3.1.7.3.1.700"
