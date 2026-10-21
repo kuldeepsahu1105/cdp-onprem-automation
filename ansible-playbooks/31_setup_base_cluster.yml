@@ -167,7 +167,7 @@
       ansible.builtin.debug:
         msg:
           - "Cluster name: {{ cdh_basecluster_name }}"
-          - "CDH parcel version: {{ cdh_parcel_version }}"
+          - "Configured CDH parcel version: {{ cdh_parcel_version }}"
           - "Master host: {{ base_master_fqdn }}"
           - "Worker hosts: {{ base_worker_fqdns }}"
 
@@ -270,26 +270,41 @@
         base_cluster_cdh_manifest_data: {}
       when: base_cluster_cdh_manifest_data is not defined
 
-    - name: Require requested CDH parcel before cluster mutation
+    - name: Select published CDH parcel versions for configured release
+      ansible.builtin.set_fact:
+        base_cluster_cdh_parcel_versions_available: >-
+          {{
+            base_cluster_cdh_manifest_data.get('parcels', [])
+            | map(attribute='parcelName')
+            | select(
+                'match',
+                '^CDH-'
+                ~ (
+                    cdh_parcel_version
+                    .split('.')[:-1]
+                    | join('.')
+                    | regex_escape
+                  )
+                ~ '[.][0-9]+-.*[.]parcel$'
+              )
+            | map('regex_replace', '^CDH-', '')
+            | map('regex_replace', '-[^-]+[.]parcel$', '')
+            | unique
+            | list
+          }}
+
+    - name: Require unambiguous CDH parcel before cluster mutation
       ansible.builtin.assert:
         that:
           - base_cluster_cdh_manifest.status | default(0) == 200
-          - >-
-            (
-              base_cluster_cdh_manifest_data.get('parcels', [])
-              | map(attribute='parcelName')
-              | select(
-                  'match',
-                  '^CDH-' ~ (cdh_parcel_version | regex_escape) ~ '-.*\\.parcel$'
-                )
-              | list
-              | length
-            )
-            > 0
+          - base_cluster_cdh_parcel_versions_available | length == 1
         fail_msg: >-
-          Requested CDH parcel {{ cdh_parcel_version }} is not published by
-          {{ parcel_repo | regex_replace('/+$', '') }}/manifest.json after the
-          Cloudera Manager repository refresh. Repository HTTP status:
+          Could not resolve one CDH parcel for configured release {{ cdh_version }}
+          from {{ parcel_repo | regex_replace('/+$', '') }}/manifest.json after
+          the Cloudera Manager repository refresh. Configured parcel version:
+          {{ cdh_parcel_version }}. Matching published versions:
+          {{ base_cluster_cdh_parcel_versions_available | join(', ') | default('(none)', true) }}.
+          Repository HTTP status:
           {{ base_cluster_cdh_manifest.status | default('unknown') }}.
           Response: {{ base_cluster_cdh_manifest.msg | default('none') }}.
           Published parcel files: {{
@@ -298,6 +313,17 @@
             | join(', ')
           }}. Verify parcel_repo/REMOTE_PARCEL_REPO_URLS, archive credentials,
           cdh_version, and cdh_numeric_version before cluster mutation.
+
+    - name: Use CDH parcel version published by configured repository
+      ansible.builtin.set_fact:
+        base_cluster_cdh_parcel_version_effective: >-
+          {{ base_cluster_cdh_parcel_versions_available | first }}
+
+    - name: Show resolved CDH parcel version
+      ansible.builtin.debug:
+        msg:
+          - "Configured CDH parcel version: {{ cdh_parcel_version }}"
+          - "Repository CDH parcel version: {{ base_cluster_cdh_parcel_version_effective }}"
 
     - name: Prepare cluster module connection
       ansible.builtin.import_tasks: common_tasks/resolve_cm_cluster_module_endpoint.yml
@@ -704,11 +730,11 @@
         verify_tls: false
         name: "{{ cdh_basecluster_name }}"
         display_name: "{{ cdh_basecluster_name }}"
-        cluster_version: "{{ cdh_parcel_version }}"
+        cluster_version: "{{ base_cluster_cdh_parcel_version_effective }}"
         type: BASE_CLUSTER
         state: present
         parcels:
-          CDH: "{{ cdh_parcel_version }}"
+          CDH: "{{ base_cluster_cdh_parcel_version_effective }}"
         services: "{{ base_cluster_spec.services }}"
         host_templates: "{{ base_cluster_spec.host_templates }}"
         hosts: "{{ base_cluster_hosts }}"

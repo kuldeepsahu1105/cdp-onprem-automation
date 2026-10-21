@@ -120,7 +120,7 @@ Ansible values. The Ansible deployment banner prints both values when they diffe
 | `cm_version` | `"7.13.2.6"` | Cloudera Manager package/repository version. |
 | `cm_numeric_version` | `"713200006"` | Numeric CM build path used by archive URLs; update with `cm_version`. |
 | `cdh_version` | `"7.3.2.0"` | Runtime parcel version. |
-| `cdh_numeric_version` | `"77083870"` | CDH parcel build identifier; update with `cdh_version`. |
+| `cdh_numeric_version` | `"77083870"` | Expected CDH parcel build identifier. Playbook 31 resolves the effective numeric build from the configured repository manifest for the selected `cdh_version`. |
 | `cdv_version` | `"8.0.7"` | Data Visualization CSD/parcel release. |
 | `cfm_version` | `"2.1.7.3004"` | Flow Management CSD/parcel release. |
 | `cfm_nifi_app_version` | `"1.28.1"` | NiFi application segment used in CSD filenames. |
