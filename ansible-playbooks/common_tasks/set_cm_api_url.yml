@@ -112,8 +112,8 @@
         return_content: no
         validate_certs: no
         status_code: [200, 301, 303, 401, 403]
-      register: cm_tls_probe_https
-      until: cm_tls_probe_https is succeeded
+      register: cm_tls_probe_https_controller
+      until: cm_tls_probe_https_controller is succeeded
       retries: 2
       delay: 3
       timeout: 15
@@ -125,6 +125,13 @@
         - not (cm_api_probe_on_manager_local | default(false) | bool)
         - not (cm_api_probe_skip_controller_http | default(false) | bool)
         - not (cm_api_discovery_succeeded | default(false) | bool)
+
+    - name: CM API — retain executed controller HTTPS probe result
+      ansible.builtin.set_fact:
+        cm_tls_probe_https: "{{ cm_tls_probe_https_controller }}"
+      when:
+        - cm_tls_probe_https_controller is defined
+        - not (cm_tls_probe_https_controller.skipped | default(false) | bool)
 
     - name: CM API — GET /api/version (HTTP) on cldr-mngr
       ansible.builtin.uri:
@@ -166,8 +173,8 @@
         return_content: no
         validate_certs: no
         status_code: [200, 301, 303, 401, 403]
-      register: cm_tls_probe_http
-      until: cm_tls_probe_http is succeeded
+      register: cm_tls_probe_http_controller
+      until: cm_tls_probe_http_controller is succeeded
       retries: 2
       delay: 3
       timeout: 15
@@ -183,6 +190,13 @@
             and (cm_tls_probe_https.status | default(0) in [200, 301, 303, 401, 403])
           )
         - not (cm_api_discovery_succeeded | default(false) | bool)
+
+    - name: CM API — retain executed controller HTTP probe result
+      ansible.builtin.set_fact:
+        cm_tls_probe_http: "{{ cm_tls_probe_http_controller }}"
+      when:
+        - cm_tls_probe_http_controller is defined
+        - not (cm_tls_probe_http_controller.skipped | default(false) | bool)
 
     - name: CM API — GET /api/version (HTTPS) on cldr-mngr after HTTP failed
       ansible.builtin.uri:
@@ -218,8 +232,8 @@
         return_content: no
         validate_certs: no
         status_code: [200, 301, 303, 401, 403]
-      register: cm_tls_probe_https
-      until: cm_tls_probe_https is succeeded
+      register: cm_tls_probe_https_controller
+      until: cm_tls_probe_https_controller is succeeded
       retries: 2
       delay: 3
       timeout: 15
@@ -232,6 +246,13 @@
         - not (cm_api_probe_on_manager_local | default(false) | bool)
         - not (cm_api_probe_skip_controller_http | default(false) | bool)
         - not (cm_api_discovery_succeeded | default(false) | bool)
+
+    - name: CM API — retain executed controller HTTPS fallback result
+      ansible.builtin.set_fact:
+        cm_tls_probe_https: "{{ cm_tls_probe_https_controller }}"
+      when:
+        - cm_tls_probe_https_controller is defined
+        - not (cm_tls_probe_https_controller.skipped | default(false) | bool)
 
     - name: CM API — set protocol and port from /api/version results (cldr-mngr address scan)
       ansible.builtin.set_fact:

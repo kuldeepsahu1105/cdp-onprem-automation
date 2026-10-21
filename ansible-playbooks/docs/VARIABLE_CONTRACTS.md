@@ -70,6 +70,13 @@ resolver replaces any stale HTTPS mutation URL with the working discovered
 HTTP endpoint so play **25** can configure parcel repositories before play
 **27** enables Auto-TLS.
 
+**Probe result isolation:** delegated-manager and controller HTTP/HTTPS tasks
+must not share a `register` target when one task is expected to skip. Ansible
+records a skipped result and would overwrite the preceding successful probe,
+causing a false HTTPS fallback and red ignored failure after HTTP succeeded.
+Controller results are copied to the effective `cm_tls_probe_*` facts only
+when the controller task actually executes.
+
 When Jenkins cannot reach a CM API port directly and discovery falls back to a
 request delegated to `cldr-mngr`, `cm_api_client_host`, `cm_host`, and the
 assembled API URL must remain aligned with the manager-local bind address.
