@@ -664,7 +664,15 @@ registered`, OM/DN cert enrollment retries, `RAFT closed`, or
 2. **SCM topology** — New clusters deploy one `STORAGE_CONTAINER_MANAGER` on
    the first `[base-masters]` host. Adopted clusters may retain an initialized
    odd-sized HA quorum (three or more) when the primordial node is a member.
-   Even-sized, two-node, or primordial-missing topologies fail before mutation.
+   An interrupted, uninitialized cluster that has services but no roles at all is
+   safely recreated from the complete cluster specification before topology
+   validation. Clusters with any assigned or started role are never deleted by
+   this recovery. If an interrupted cluster has other roles but is missing only
+   SCM, playbook **31** adds SCM on the configured primordial/master host before
+   validating topology. Even-sized, two-node, or primordial-missing SCM
+   topologies fail before mutation. This explicit repair is required because the
+   pinned `cloudera.cluster` v4.4.0 cluster module does not reconcile host
+   templates or role assignments after a cluster already exists.
 3. **Security phase skipped** — Run **CM_TLS_KRB_LDAP** (plays **27** → **30**)
    before **31**. Starting Ozone before `configureForKerberos` /
    `configureAutoTlsServices` causes cert/Kerberos mismatches.

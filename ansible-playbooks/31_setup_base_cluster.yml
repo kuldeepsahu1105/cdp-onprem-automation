@@ -445,12 +445,95 @@
       when: existing_cluster.status == 200
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+    - name: Read base cluster initialization marker
+      ansible.builtin.slurp:
+        src: "{{ base_cluster_initialization_marker_path }}"
+      register: base_cluster_initialization_marker
+      failed_when: false
+      changed_when: false
+      become: true
+      delegate_to: "{{ cm_manager_inventory_host }}"
+      when: existing_cluster.status == 200
+
+    - name: Detect incomplete cluster initialization
+      ansible.builtin.set_fact:
+        base_cluster_initialization_incomplete: >-
+          {{
+            existing_cluster.status == 200
+            and not (
+              existing_cluster.json.uuid is defined
+              and base_cluster_initialization_marker.content is defined
+              and (
+                'uuid=' ~ existing_cluster.json.uuid
+                in (base_cluster_initialization_marker.content | b64decode)
+              )
+            )
+          }}
+
+    - name: Read roles assigned to existing cluster services
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/{{ item.name }}/roles?view=summary
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      loop: "{{ existing_cluster_services.json['items'] | default([]) }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: base_cluster_existing_service_roles
+      changed_when: false
+      when: existing_cluster.status == 200
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Initialize existing cluster role count
+      ansible.builtin.set_fact:
+        base_cluster_existing_role_count: 0
+
+    - name: Count roles assigned to existing cluster services
+      ansible.builtin.set_fact:
+        base_cluster_existing_role_count: >-
+          {{
+            base_cluster_existing_role_count | int
+            + (item.json['items'] | default([]) | length)
+          }}
+      loop: "{{ base_cluster_existing_service_roles.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.name | default('unknown') }}"
+      when: not (item.skipped | default(false) | bool)
+
+    # cloudera.cluster v4.4.0 does not reapply host templates to an existing cluster.
+    - name: Detect uninitialized roleless cluster topology
+      ansible.builtin.set_fact:
+        base_cluster_roleless_uninitialized: >-
+          {{
+            existing_cluster.status == 200
+            and base_cluster_initialization_incomplete | bool
+            and existing_cluster_services.json['items'] | default([]) | length > 0
+            and base_cluster_existing_role_count | int == 0
+            and existing_cluster.json.clusterState | default('') != 'STARTED'
+            and (
+              existing_cluster_services.json['items'] | default([])
+              | selectattr('serviceState', 'defined')
+              | selectattr('serviceState', 'equalto', 'STARTED')
+              | list
+              | length
+            ) == 0
+          }}
+
     - name: Detect incomplete cluster
       ansible.builtin.set_fact:
         base_cluster_partial_empty: >-
           {{
             existing_cluster.status == 200
-            and (existing_cluster_hosts.json['items'] | default([]) | length == 0)
+            and (
+              existing_cluster_hosts.json['items'] | default([]) | length == 0
+              or base_cluster_roleless_uninitialized | bool
+            )
           }}
         base_cluster_missing_service_types: >-
           {{
@@ -480,8 +563,16 @@
     - name: Show incomplete cluster recovery
       ansible.builtin.debug:
         msg: >-
-          Base cluster '{{ cdh_basecluster_name }}' exists with zero assigned hosts, indicating
-          an interrupted module creation; deleting only this empty partial cluster before recreation.
+          Base cluster '{{ cdh_basecluster_name }}' is an uninitialized partial topology
+          ({{
+            'zero assigned hosts'
+            if (existing_cluster_hosts.json['items'] | default([]) | length == 0)
+            else (
+              existing_cluster_services.json['items'] | default([]) | length | string
+              ~ ' services and zero assigned roles'
+            )
+          }}), indicating interrupted module creation. Deleting only this never-started
+          partial cluster before recreating its complete service and role topology.
       when: base_cluster_partial_empty | bool
 
     - name: Delete incomplete base cluster with name {{ cdh_basecluster_name }}
@@ -897,31 +988,6 @@
         - base_cluster_install_services.knox | default(true) | bool
         - base_cluster_knox_configure_kerberos | default(true) | bool
 
-    - name: Read base cluster initialization marker before Knox trust repair
-      ansible.builtin.slurp:
-        src: "{{ base_cluster_initialization_marker_path }}"
-      register: base_cluster_initialization_marker
-      failed_when: false
-      changed_when: false
-      become: true
-      delegate_to: "{{ cm_manager_inventory_host }}"
-      when: existing_cluster.status == 200
-
-    - name: Detect incomplete initialization before Knox trust repair
-      ansible.builtin.set_fact:
-        base_cluster_initialization_incomplete: >-
-          {{
-            existing_cluster.status == 200
-            and not (
-              existing_cluster.json.uuid is defined
-              and base_cluster_initialization_marker.content is defined
-              and (
-                'uuid=' ~ existing_cluster.json.uuid
-                in (base_cluster_initialization_marker.content | b64decode)
-              )
-            )
-          }}
-
     - name: Read CM hosts for required service roles
       ansible.builtin.uri:
         url: "{{ cm_cluster_module_api_url }}/hosts?view=summary"
@@ -994,55 +1060,26 @@
           }}
       when: base_cluster_install_services.ozone | default(true) | bool
 
-    - name: Require Ozone SCM role
-      ansible.builtin.assert:
-        that:
-          - base_cluster_ozone_scm_role.name | default('') | length > 0
-        fail_msg: >-
-          Ozone is enabled but CM has no STORAGE_CONTAINER_MANAGER role on
-          {{ base_master_fqdn }}. Correct the Ozone role assignment before cluster startup.
-      when: base_cluster_install_services.ozone | default(true) | bool
-
-    - name: Require supported Ozone SCM topology including primordial host
-      ansible.builtin.assert:
-        that:
-          - >-
-            (
-              base_cluster_ozone_scm_roles | length == 1
-              or (
-                base_cluster_adopt_existing_ozone_ha | default(true) | bool
-                and existing_cluster.status == 200
-                and not (base_cluster_partial_empty | bool)
-                and base_cluster_ozone_scm_roles | length >= 3
-                and (base_cluster_ozone_scm_roles | length) % 2 == 1
-              )
-            )
-          - >-
-            base_cluster_ozone_primordial_node_effective
-            in (
-              base_cluster_ozone_scm_roles
-              | map(attribute='hostRef')
-              | map(attribute='hostname')
-              | list
-            )
-        fail_msg: >-
-          Unsupported existing Ozone SCM topology. CM reports
-          {{
-            base_cluster_ozone_scm_roles
-            | map(attribute='hostRef')
-            | map(attribute='hostname')
-            | list
-            | join(', ')
-          }}, with primordial node {{ base_cluster_ozone_primordial_node_effective }}.
-          New clusters require one SCM; adopted clusters may retain an existing odd-sized
-          HA quorum of at least three SCMs when base_cluster_adopt_existing_ozone_ha=true.
-      when: base_cluster_install_services.ozone | default(true) | bool
-
     - name: Find missing Ozone roles
       ansible.builtin.set_fact:
         base_cluster_missing_ozone_roles: >-
           {{
-            ['OZONE_RECON', 'S3_GATEWAY']
+            (
+              ['STORAGE_CONTAINER_MANAGER']
+              if (
+                base_cluster_ozone_scm_roles | length == 0
+                and base_cluster_initialization_incomplete | default(false) | bool
+                and (
+                  existing_cluster_services.json['items'] | default([])
+                  | selectattr('name', 'equalto', 'ozone')
+                  | map(attribute='serviceState')
+                  | first
+                  | default('')
+                ) != 'STARTED'
+              )
+              else []
+            )
+            + ['OZONE_RECON', 'S3_GATEWAY']
             | difference(
                 base_cluster_ozone_roles.json['items']
                 | map(attribute='type')
@@ -1085,6 +1122,86 @@
             base_cluster_required_config_changed | bool
             or base_cluster_ozone_role_create.changed | default(false) | bool
           }}
+
+    - name: Refresh Ozone roles after reconciliation
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/ozone/roles?view=summary
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_ozone_roles_reconciled
+      changed_when: false
+      when: base_cluster_install_services.ozone | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Select reconciled Ozone SCM roles and control host
+      ansible.builtin.set_fact:
+        base_cluster_ozone_scm_roles: >-
+          {{
+            base_cluster_ozone_roles_reconciled.json['items']
+            | selectattr('type', 'equalto', 'STORAGE_CONTAINER_MANAGER')
+            | list
+          }}
+        base_cluster_ozone_scm_role: >-
+          {{
+            base_cluster_ozone_roles_reconciled.json['items']
+            | selectattr('type', 'equalto', 'STORAGE_CONTAINER_MANAGER')
+            | selectattr('hostRef.hostname', 'equalto', base_master_fqdn)
+            | first
+            | default({})
+          }}
+      when: base_cluster_install_services.ozone | default(true) | bool
+
+    - name: Require Ozone SCM role after reconciliation
+      ansible.builtin.assert:
+        that:
+          - base_cluster_ozone_scm_role.name | default('') | length > 0
+        fail_msg: >-
+          Ozone is enabled but CM has no STORAGE_CONTAINER_MANAGER role on
+          {{ base_master_fqdn }} after safe incomplete-cluster reconciliation.
+          Correct the Ozone role assignment before cluster startup.
+      when: base_cluster_install_services.ozone | default(true) | bool
+
+    - name: Require supported Ozone SCM topology including primordial host
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              base_cluster_ozone_scm_roles | length == 1
+              or (
+                base_cluster_adopt_existing_ozone_ha | default(true) | bool
+                and existing_cluster.status == 200
+                and not (base_cluster_partial_empty | bool)
+                and base_cluster_ozone_scm_roles | length >= 3
+                and (base_cluster_ozone_scm_roles | length) % 2 == 1
+              )
+            )
+          - >-
+            base_cluster_ozone_primordial_node_effective
+            in (
+              base_cluster_ozone_scm_roles
+              | map(attribute='hostRef')
+              | map(attribute='hostname')
+              | list
+            )
+        fail_msg: >-
+          Unsupported existing Ozone SCM topology. CM reports
+          {{
+            base_cluster_ozone_scm_roles
+            | map(attribute='hostRef')
+            | map(attribute='hostname')
+            | list
+            | join(', ')
+          }}, with primordial node {{ base_cluster_ozone_primordial_node_effective }}.
+          New clusters require one SCM; adopted clusters may retain an existing odd-sized
+          HA quorum of at least three SCMs when base_cluster_adopt_existing_ozone_ha=true.
+      when: base_cluster_install_services.ozone | default(true) | bool
 
     - name: Read Kafka roles
       ansible.builtin.uri:
