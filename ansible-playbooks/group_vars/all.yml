@@ -1078,7 +1078,7 @@ cleanup_reset_service_databases: true
 ecs_deploy_enabled: auto  # auto | true | false — auto runs when ecs-masters/workers exist
 ecs_cluster_master_group: ecs-masters
 ecs_cluster_worker_group: ecs-workers
-ecs_pvc_ds_version: "1.5.5-h3300"  # CDS 1.5.5 SP3 CHF3 repo tag
+ecs_pvc_ds_version: "1.5.5-h40000"  # CDS 1.5.5 repo tag
 ecs_pvc_repository_url: "{{ cm_repo_public_base_url }}/cdp-pvc-ds/{{ ecs_pvc_ds_version }}"
 ecs_parcel_repo_url: "{{ ecs_pvc_repository_url }}/parcels/"
 ecs_parcel_repo_latest_url: "{{ cm_repo_public_base_url }}/cdp-pvc-ds/{{ cm_parcel_repo_latest_segment }}/parcels/"

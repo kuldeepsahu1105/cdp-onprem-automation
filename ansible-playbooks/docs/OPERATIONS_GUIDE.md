@@ -439,7 +439,7 @@ CSD JARs for DataViz / NiFi / NiFi Registry are listed in `scm_csds_effective` d
 
 ```text
 https://archive.cloudera.com/p/cdh7/7.3.2.0/parcels/
-https://archive.cloudera.com/p/cdp-pvc-ds/1.5.5-h3300/parcels/
+https://archive.cloudera.com/p/cdp-pvc-ds/1.5.5-h40000/parcels/
 https://archive.cloudera.com/p/cdv/8.0.7/parcels/
 https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel
 ```

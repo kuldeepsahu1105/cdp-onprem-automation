@@ -81,7 +81,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `base_cluster_yarn_*` | `4096` / `4` | YARN RM/NM memory and vcore limits in cluster spec template |
 | `ecs_cluster_name` | `ECS-Cluster` |
 | `ecs_deploy_enabled` | `auto` | `auto`, `true`, or `false` — deploy ECS when ecs inventory groups exist |
-| `ecs_pvc_ds_version` | `1.5.5-h3300` | CDS repo tag (`1.5.5-h3300` = SP3 CHF3; older: `1.5.5-h2000` SP2, `1.5.5-h2100` SP2 CHF1) |
+| `ecs_pvc_ds_version` | `1.5.5-h40000` | CDS repo tag (default `1.5.5-h40000`; older: `1.5.5-h3300` SP3 CHF3, `1.5.5-h2000` SP2, `1.5.5-h2100` SP2 CHF1) |
 | `ecs_parcel_version` | `""` | Optional override; auto-discovered from CM after parcel repo refresh |
 | `ecs_app_domain` | `apps.<domain>` | Application domain for ECS services |
 | `ecs_console_host_prefix` | `console-cdp` | DNS label for ECS management console (`https://<prefix>.<ecs_app_domain>`) |

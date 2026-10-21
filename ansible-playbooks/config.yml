@@ -76,7 +76,7 @@ cdh_numeric_version: "77083870"
 cdv_version: "8.0.7"
 cfm_version: "2.1.7.3004"
 cfm_nifi_app_version: "1.28.1"
-ecs_pvc_ds_version: "1.5.5-h3300"
+ecs_pvc_ds_version: "1.5.5-h40000"
 
 cm_repo_source: public                  # public | internal
 

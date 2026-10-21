@@ -88,7 +88,7 @@ ansible-playbook -i inventory.ini 31_setup_base_cluster.yml \
 | `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/; `internal` = local mirror on cldr-mngr |
 | `deployment_environment` | `auto` | AWS vs bare-metal DNS behavior |
 | `ecs_deploy_enabled` | `auto` | Deploy ECS when `[ecs-masters]` / `[ecs-workers]` exist in inventory |
-| `ecs_pvc_ds_version` | `1.5.5-h3300` | CDS repo tag (CDS 1.5.5 SP3 CHF3) |
+| `ecs_pvc_ds_version` | `1.5.5-h40000` | CDS repo tag (CDS 1.5.5) |
 | `ecs_cluster_name` | `ECS-Cluster` | ECS cluster name in Cloudera Manager |
 
 Spark is bundled in the CDH parcel for `>= 7.3.1` — separate SPARK3 download is skipped automatically. See [REFERENCE.md — Spark parcel](docs/REFERENCE.md#cmcdh-repository-source).

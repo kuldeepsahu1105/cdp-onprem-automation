@@ -207,7 +207,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
 # ipaserver_domain: cldr.internal.arpa
 # cluster_domain_skip_ozone_hostname_validation: true   # legacy brownfield .local only
 # cdh_version: "7.3.2.0"
-# ecs_pvc_ds_version: "1.5.5-h3300"
+# ecs_pvc_ds_version: "1.5.5-h40000"
 # monitoring_stack_enabled: false   # optional — prefer MONITORING_STACK_ENABLED checkbox above
 # cm_autotls_force_run: true       # CM_TLS_KRB_LDAP — force generateCmca when CM already has Auto-TLS
 ''',

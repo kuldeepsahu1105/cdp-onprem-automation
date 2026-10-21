@@ -123,7 +123,7 @@ Ansible values. The Ansible deployment banner prints both values when they diffe
 | `cdv_version` | `"8.0.7"` | Data Visualization CSD/parcel release. |
 | `cfm_version` | `"2.1.7.3004"` | Flow Management CSD/parcel release. |
 | `cfm_nifi_app_version` | `"1.28.1"` | NiFi application segment used in CSD filenames. |
-| `ecs_pvc_ds_version` | `"1.5.5-h3300"` | ECS/CDP Private Cloud Data Services repository tag. |
+| `ecs_pvc_ds_version` | `"1.5.5-h40000"` | ECS/CDP Private Cloud Data Services repository tag. |
 | `cm_repo_source` | `public` or `internal` | `public` installs from the Cloudera archive; `internal` builds/uses the CM-host mirror. |
 | `cm_parcel_repo_urls_override` | `[]` or list of directory URLs | Non-empty **replaces the entire** CM parcel repository list. Include every CDH/CDV/CFM/ECS repository required. |
 | `cm_csd_urls_override` | `[]` or list of `.jar` URLs | Non-empty replaces generated CSD downloads. Include every required CSD JAR. |

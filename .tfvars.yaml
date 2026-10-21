@@ -57,7 +57,7 @@ allowed_ports: '[22,443,80,7180,7183,7182]'
 cm_version: "7.13.2.6"
 # autotls_enabled: true   # Ansible-only (group_vars/all.yml default); false = manual TLS :7183, skip generateCmca in playbook 27
 # cdh_version: "7.3.2.0"
-# ecs_pvc_ds_version: "1.5.5-h3300"
+# ecs_pvc_ds_version: "1.5.5-h40000"
 
 # --- AMI (shared by all groups) ----------------------------------------------
 ami_id: ami-030a276b398df7eb7
