@@ -48,6 +48,24 @@
         and (cm_api_client_host | default('') | length > 0)
       )
 
+- name: CM API — resolve private address before delegated full probe
+  ansible.builtin.set_fact:
+    _cm_api_delegated_probe_private_host: "{{ cm_host_private }}"
+  when:
+    - cm_api_probe_delegate_to | default('') | length > 0
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
+    - cm_host_private | default('') | length > 0
+
+- name: CM API — align delegated full probe with manager private address
+  ansible.builtin.set_fact:
+    cm_api_probe_host: "{{ _cm_api_delegated_probe_private_host }}"
+    cm_api_client_host: "{{ _cm_api_delegated_probe_private_host }}"
+    cm_host: "{{ _cm_api_delegated_probe_private_host }}"
+  when:
+    - cm_api_probe_delegate_to | default('') | length > 0
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
+    - _cm_api_delegated_probe_private_host | default('') | length > 0
+
 - name: CM API — full /api/version probe and URL build
   when: _cm_api_url_full_probe_required | default(true) | bool
   block:
@@ -58,6 +76,7 @@
       when:
         - cm_api_probe_from_controller_public | default(false) | bool
         - cm_api_controller_probe_succeeded | default(false) | bool
+        - cm_api_probe_delegate_to | default('') | length == 0
         - cm_api_uri_delegate_to | default('') | length == 0
 
     - name: CM API — GET /api/version (HTTPS) on cldr-mngr
