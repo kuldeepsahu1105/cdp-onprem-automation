@@ -371,6 +371,16 @@ mkdir -p /etc/ipa/custodia /var/log/ipa /var/lib/ipa/{sysupgrade,sysrestore,back
 
 If **`ipa-server-install`** fails with **port 389 already in use** in **`ipaserver-install.log`**, use the same steps before retrying.
 
+**Existing public/upstream DNS zone:** Prefer setting `ipaserver_domain` to a
+delegated internal subdomain such as `cldr.example.com`. If FreeIPA must use a
+zone that already exists publicly, explicitly set
+`ipa_server_install_allow_zone_overlap: true`; playbook **12** then passes
+`--allow-zone-overlap`. This is intentionally opt-in because IPA becomes
+authoritative for the whole zone on enrolled clients. Public records are not
+merged automatically and must also be created in IPA DNS when internal clients
+need them. The setting affects only a fresh `ipa-server-install`; healthy
+existing IPA servers remain untouched on reruns.
+
 ### 3. Detect identity provider
 
 ```bash
@@ -673,6 +683,9 @@ registered`, OM/DN cert enrollment retries, `RAFT closed`, or
    topologies fail before mutation. This explicit repair is required because the
    pinned `cloudera.cluster` v4.4.0 cluster module does not reconcile host
    templates or role assignments after a cluster already exists.
+   Before deleting or creating a partial cluster, playbook **31** forces a CM
+   parcel-repository refresh and verifies that the exact configured CDH parcel is
+   available. A missing parcel therefore fails before cluster topology mutation.
 3. **Security phase skipped** — Run **CM_TLS_KRB_LDAP** (plays **27** → **30**)
    before **31**. Starting Ozone before `configureForKerberos` /
    `configureAutoTlsServices` causes cert/Kerberos mismatches.

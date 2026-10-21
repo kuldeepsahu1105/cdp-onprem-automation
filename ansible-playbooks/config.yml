@@ -27,6 +27,9 @@ identity_provider: auto                 # auto | freeipa | ad
 deployment_environment: auto            # auto | aws | baremetal
 # cldr.internal.arpa — private zone under IANA .arpa; see group_vars/all.yml and OPERATIONS_GUIDE.md (Ozone risk note).
 ipaserver_domain: cldr.internal.arpa
+# Leave false unless this IPA DNS zone intentionally exists in public/upstream DNS.
+# Prefer a delegated internal subdomain.
+ipa_server_install_allow_zone_overlap: false
 # Detect and pin each host's current RHEL minor release before any DNF operation.
 rhel_release_pin: auto                  # auto | major.minor
 

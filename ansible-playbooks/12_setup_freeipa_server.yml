@@ -209,6 +209,43 @@
         msg: "DNS: {{ ipa_install_dns_mode_label | default('(unset)') | trim }}"
       when: ipa_server_should_run_install | bool
 
+    - name: Warn when allowing an overlapping IPA DNS zone
+      ansible.builtin.debug:
+        msg: >-
+          ipa_server_install_allow_zone_overlap=true: FreeIPA will become authoritative
+          for {{ ipaserver_domain }} on IPA-enrolled clients even though that zone already
+          exists in upstream/public DNS. Internal clients will not automatically see public
+          records from the shadowed zone; prefer a delegated internal subdomain or replicate
+          every required public record into IPA DNS.
+      when:
+        - ipa_server_should_run_install | bool
+        - ipa_server_install_allow_zone_overlap | default(false) | bool
+
+    - name: Check whether ipa-server-install supports overlapping DNS zones
+      ansible.builtin.command: ipa-server-install --help
+      register: ipa_server_install_help
+      changed_when: false
+      when:
+        - ipa_server_should_run_install | bool
+        - ipa_server_install_allow_zone_overlap | default(false) | bool
+
+    - name: Require ipa-server-install zone-overlap support
+      ansible.builtin.assert:
+        that:
+          - >-
+            '--allow-zone-overlap'
+            in (
+              (ipa_server_install_help.stdout | default(''))
+              ~ (ipa_server_install_help.stderr | default(''))
+            )
+        fail_msg: >-
+          ipa_server_install_allow_zone_overlap=true, but this host's
+          ipa-server-install does not support --allow-zone-overlap. Use a delegated
+          non-overlapping ipaserver_domain or install a FreeIPA version that supports it.
+      when:
+        - ipa_server_should_run_install | bool
+        - ipa_server_install_allow_zone_overlap | default(false) | bool
+
     - name: Unattended ipa-server-install uninstall before fresh install (broken/partial/force only)
       ansible.builtin.command: ipa-server-install --uninstall --unattended
       register: ipa_server_preflight_uninstall
@@ -258,6 +295,9 @@
           --admin-password="${IPA_ADMIN_PASSWORD}" \
           --no-dnssec-validation \
           --netbios-name="{{ netbios_name }}" \
+          {% if ipa_server_install_allow_zone_overlap | default(false) | bool %}
+          --allow-zone-overlap \
+          {% endif %}
           {% if ipa_install_dns_use_vpc_forwarder | default(false) | bool %}
           --forwarder="{{ effective_vpc_dns_resolver }}" \
           {% elif ipa_install_dns_no_forwarders | default(false) | bool %}

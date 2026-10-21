@@ -227,6 +227,7 @@ Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` 
 | `ipaadmin_principal` | IPA admin user |
 | `ipaadmin_password` | IPA admin password |
 | `ipa_kdc_host` | `ipaserver.<domain>` |
+| `ipa_server_install_allow_zone_overlap` | `false` by default; explicitly pass `--allow-zone-overlap` when intentionally using an IPA DNS zone that already exists in public/upstream DNS |
 | `krb5_enc_types` | Space-separated CM `KRB_ENC_TYPES` (default `aes256-cts aes128-cts`) |
 | `krb5_cm_managed_krb5_conf` | CM `KRB_MANAGE_KRB5_CONF` (default `true`); `false` leaves `/etc/krb5.conf` to IPA/Ansible |
 | `krb5_cm_libdefaults_safety_valve` | CM `KRB_LIBDEFAULTS_SAFETY_VALVE` — preserves commented KEYRING `default_ccache_name` when CM deploys krb5.conf |

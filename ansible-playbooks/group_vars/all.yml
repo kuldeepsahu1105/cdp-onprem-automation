@@ -126,6 +126,9 @@ ipaserver_setup_dns: yes
 dns_forwarders: "no"
 # When dns_forwarders is no, use AWS VPC DNS at ipa-server-install (default true on AWS)
 ipa_server_install_use_vpc_dns_forwarder: true
+# Opt in only when intentionally creating an IPA authoritative zone that already
+# exists in public or upstream DNS. A delegated internal subdomain is safer.
+ipa_server_install_allow_zone_overlap: false
 reverse_zones: "no"
 chrony_enabled: "yes"
 # Playbook ipa_deep_recovery.yml — detect / recover / sanitize (verbose; not in Jenkins IDENTITY by default)

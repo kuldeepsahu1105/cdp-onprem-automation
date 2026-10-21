@@ -235,7 +235,57 @@
 
     - name: Configure parcel repository
       ansible.builtin.include_tasks: common_tasks/configure_cm_parcel_repo_api.yml
+      vars:
+        cm_parcel_repo_force_refresh: true
       when: parcel_repo is defined
+
+    - name: Wait for requested CDH parcel to become available
+      ansible.builtin.uri:
+        url: "{{ cm_parcel_api_url }}/parcels/products/CDH/versions"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+        timeout: 60
+      register: base_cluster_cdh_parcel_versions
+      changed_when: false
+      failed_when: false
+      until:
+        - base_cluster_cdh_parcel_versions.status | default(0) == 200
+        - >-
+          cdh_parcel_version
+          in (
+            base_cluster_cdh_parcel_versions.json['items'] | default([])
+            | map(attribute='version')
+            | list
+          )
+      retries: 12
+      delay: 10
+      delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
+
+    - name: Require requested CDH parcel before cluster mutation
+      ansible.builtin.assert:
+        that:
+          - base_cluster_cdh_parcel_versions.status | default(0) == 200
+          - >-
+            cdh_parcel_version
+            in (
+              base_cluster_cdh_parcel_versions.json['items'] | default([])
+              | map(attribute='version')
+              | list
+            )
+        fail_msg: >-
+          Requested CDH parcel {{ cdh_parcel_version }} is not available from the
+          configured Cloudera Manager parcel repositories after refresh. Available CDH
+          versions: {{
+            base_cluster_cdh_parcel_versions.json['items'] | default([])
+            | map(attribute='version')
+            | join(', ')
+          }}. Verify parcel_repo/REMOTE_PARCEL_REPO_URLS, archive credentials, and the
+          configured cdh_version/cdh_numeric_version before cluster mutation.
 
     - name: Prepare cluster module connection
       ansible.builtin.import_tasks: common_tasks/resolve_cm_cluster_module_endpoint.yml

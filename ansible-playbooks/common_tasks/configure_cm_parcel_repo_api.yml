@@ -317,7 +317,10 @@
     timeout: 60
   when:
     - cm_parcel_repo_urls_effective | length > 0
-    - (cm_parcel_repo_config_changed | bool) or (cm_parcel_install_csd_repo_config_changed | bool)
+    - >-
+      (cm_parcel_repo_config_changed | bool)
+      or (cm_parcel_install_csd_repo_config_changed | bool)
+      or (cm_parcel_repo_force_refresh | default(false) | bool)
   register: cm_parcel_refresh
   delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
   changed_when: true
