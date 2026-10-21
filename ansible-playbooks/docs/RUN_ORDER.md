@@ -177,6 +177,13 @@ cAdvisor implementations and service templates; deployment-portal context,
 content sync, and scrape-target rendering continue through portal-role
 compatibility shims.
 
+The ECS implementation is organized under `roles/ecs`. Playbooks `33` and
+`34` retain their three original play boundaries and delegate only task
+implementation. ECS-owned phased cluster, IAM, control-plane, LDAP, data
+service, and Caddy-sync helpers retain static `common_tasks` shims. Generic
+Cloudera collection/module helpers and portal/CM role shims remain externally
+owned.
+
 ## Migration: renumbering duplicate prefixes (2026-09)
 
 Four playbooks previously duplicated a numeric prefix with another, unrelated playbook (`00_*` had three files, `25_*` had two, and `12_*`/`12b_*` used a letter suffix that **sorts before** its own `12_` file under common UTF-8 locales — `ls` in `en_US.UTF-8` prints `12b_ipa_deep_recovery.yml` before `12_setup_freeipa_server.yml`, inverting the intended order). None of the four own a distinct mainline `pvc_setup.sh` sequence slot (they are either always-imported libraries or optional/manual helpers), so they were **de-numbered** rather than assigned a new colliding or ambiguous number. This is a **rename only** — no task/behavior changes, no cascading renumber of any other playbook.

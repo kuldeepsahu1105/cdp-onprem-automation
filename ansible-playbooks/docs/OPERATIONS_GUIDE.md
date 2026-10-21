@@ -294,6 +294,11 @@ For monitoring, continue invoking `32_setup_monitoring_stack.yml` or
 fact construction, exporter host groups, privilege escalation, `vars_files`,
 and the ops-host content-sync boundary.
 
+For ECS, continue invoking `33_setup_ecs_cluster.yml` and
+`34_setup_ecs_data_services.yml`. Their implementation lives in `roles/ecs`,
+while the wrappers preserve controller-local facts, CM API delegation,
+phased control-plane ordering, and standalone/Jenkins entry points.
+
 Playbooks resolve SSH keys and Auto-TLS material on the **control machine** via `ANSIBLE_PRIVATE_KEY`, files under `ansible-playbooks/`, or `group_vars` (`cm_private_key_path`, `cm_node_sudo_password`). Wrappers only set the same env vars and `--private-key` for convenience.
 
 | Target OS | CM repo mode | Notes |

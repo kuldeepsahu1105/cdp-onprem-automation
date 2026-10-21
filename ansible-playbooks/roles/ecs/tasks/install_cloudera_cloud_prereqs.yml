@@ -1,0 +1,9 @@
+---
+- name: Install CDPy and CDP CLI for cloudera.cloud modules
+  ansible.builtin.pip:
+    name:
+      - cdpy>=0.2.7
+      - cdpcli>=0.9.160
+    state: present
+    extra_args: --user
+  become: false

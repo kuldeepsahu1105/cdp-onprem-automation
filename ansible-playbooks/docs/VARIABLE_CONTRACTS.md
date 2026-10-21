@@ -16,7 +16,8 @@ therefore import `roles/prereq_*`, while PORTAL wrappers `10` and `35` import
 CM_INSTALL entry points `20`–`26` import `roles/cm_install`, CM security entry
 points `27`–`30` import `roles/cm_security`, and CDH entry point `31` imports
 `roles/cdh_base_cluster`, while monitoring entry points import
-`roles/monitoring`. None introduces role defaults or vars;
+`roles/monitoring` and ECS entry points `33`–`34` import `roles/ecs`. None
+introduces role defaults or vars;
 inventory, `group_vars`, config, Jenkins values, and extra-vars retain their
 existing precedence.
 
@@ -74,6 +75,11 @@ original play scopes while delegating implementation to `roles/monitoring`.
 Exporter task shims preserve manual callers; portal host/context/content and
 scrape-target facts still come through `roles/deployment_portal`, so
 `deployment_portal_context` and localhost fact propagation are unchanged.
+
+ECS playbooks `33`–`34` retain controller-local facts and their original play
+boundaries while importing `roles/ecs`. ECS-owned shared helpers use static
+shims; portal context/Caddy assets and CM API/module helpers remain with their
+existing owners, preserving delegation and extra-var precedence.
 
 Both validation gates scan role task YAML. Contract setter/index checks must
 continue to include `roles/*/tasks/*.yml`; otherwise moving a `set_fact` into a

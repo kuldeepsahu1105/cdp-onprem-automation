@@ -1,9 +1,5 @@
 ---
-- name: Install CDPy and CDP CLI for cloudera.cloud modules
-  ansible.builtin.pip:
-    name:
-      - cdpy>=0.2.7
-      - cdpcli>=0.9.160
-    state: present
-    extra_args: --user
-  become: false
+- name: Compatibility entry point for ECS install cloudera cloud prereqs
+  ansible.builtin.import_role:
+    name: ecs
+    tasks_from: install_cloudera_cloud_prereqs

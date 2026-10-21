@@ -1,0 +1,103 @@
+---
+# Optional ECS control plane LDAP (FreeIPA or AD). Requires ecs_ds_cdp_profile_dir + ecs_cdp_cli_environment.
+
+- name: LDAP | Sync identity provider to ECS control plane
+  when: ecs_ldap_sync_effective | default(false) | bool
+  block:
+    - name: LDAP | Resolve FreeIPA CA URL
+      ansible.builtin.set_fact:
+        ecs_freeipa_ca_url: >-
+          {{
+            'https://' + (caddy_vhost_urls_external.ipa.hostname | default(''))
+            + '/ipa/config/ca.crt'
+            if (
+              caddy_vhost_urls_external is defined
+              and (caddy_vhost_urls_external.ipa.hostname | default('') | length > 0)
+            )
+            else ('https://' + ipa_kdc_host + '/ipa/config/ca.crt')
+          }}
+      when: identity_provider_effective == 'freeipa'
+
+    - name: LDAP | Fetch FreeIPA CA certificate
+      ansible.builtin.uri:
+        url: "{{ ecs_freeipa_ca_url }}"
+        method: GET
+        validate_certs: false
+        return_content: true
+      register: ecs_freeipa_ca_cert
+      when: identity_provider_effective == 'freeipa'
+
+    - name: LDAP | Write FreeIPA CA to temp file for CDP CLI
+      ansible.builtin.copy:
+        dest: "{{ ecs_ds_cdp_profile_dir.path }}/freeipa-ca.crt"
+        mode: "0600"
+        content: "{{ ecs_freeipa_ca_cert.content }}"
+      when:
+        - identity_provider_effective == 'freeipa'
+        - ecs_freeipa_ca_cert.content is defined
+
+    - name: LDAP | Set provider argv for FreeIPA
+      ansible.builtin.set_fact:
+        ecs_ldap_provider_argv_extra: >-
+          {{
+            [
+              '--url', 'ldaps://' + ipa_kdc_host + ':636',
+              '--user-search-base', 'cn=users,cn=accounts,' + ipa_ldap_dc_suffix,
+              '--user-search-filter', '(uid={0})',
+              '--group-search-base', 'cn=groups,cn=accounts,' + ipa_ldap_dc_suffix,
+              '--group-search-filter', '(&(member={0})(objectClass=posixgroup)(!(|(cn=admins)(cn=ipausers))))',
+              '--username-mapping-attribute', 'uid',
+              '--bind-dn', 'uid=' + ipaadmin_principal + ',cn=users,cn=accounts,' + ipa_ldap_dc_suffix,
+              '--bind-password', ipaadmin_password,
+              '--tls-ca-certificates', 'file://' + ecs_ds_cdp_profile_dir.path + '/freeipa-ca.crt',
+              '--skip-group-sync-on-login'
+            ]
+          }}
+      when: identity_provider_effective == 'freeipa'
+      no_log: true
+
+    - name: LDAP | Set provider argv for Active Directory
+      ansible.builtin.set_fact:
+        ecs_ldap_provider_argv_extra: >-
+          {{
+            [
+              '--url', cm_ldap_url,
+              '--user-search-base', cm_ldap_user_search_base,
+              '--user-search-filter', cm_ldap_user_search_filter,
+              '--group-search-base', cm_ldap_group_search_base,
+              '--group-search-filter', cm_ldap_group_search_filter,
+              '--username-mapping-attribute', 'sAMAccountName',
+              '--bind-dn', cm_ldap_bind_dn,
+              '--bind-password', cm_ldap_bind_password,
+              '--skip-group-sync-on-login'
+            ]
+          }}
+      when: identity_provider_effective == 'ad'
+      no_log: true
+
+    - name: LDAP | Update control plane LDAP provider
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ['cdp', '--profile', 'default', 'iam', 'update-ldap-provider',
+             '--ldap-provider-name', ecs_ldap_provider_name]
+            + ecs_ldap_provider_argv_extra
+          }}
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_ldap_update
+      failed_when: >-
+        ecs_ldap_update.rc != 0
+        and ('not found' not in (ecs_ldap_update.stderr | default('') | lower))
+
+    - name: LDAP | Create control plane LDAP provider when missing
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ['cdp', '--profile', 'default', 'iam', 'create-ldap-provider',
+             '--ldap-provider-name', ecs_ldap_provider_name]
+            + ecs_ldap_provider_argv_extra
+          }}
+      environment: "{{ ecs_cdp_cli_environment }}"
+      when:
+        - ecs_ldap_update.rc != 0
+        - "'not found' in (ecs_ldap_update.stderr | default('') | lower)"

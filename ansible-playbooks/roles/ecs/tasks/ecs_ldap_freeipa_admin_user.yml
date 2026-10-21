@@ -1,0 +1,23 @@
+---
+- name: ECS LDAP admin | Require FreeIPA identity provider
+  ansible.builtin.assert:
+    that:
+      - identity_provider_effective == 'freeipa'
+    fail_msg: >-
+      ecs_ldap_admin_user_enabled requires FreeIPA (identity_provider_effective=freeipa).
+
+- name: ECS LDAP admin | Set login username
+  ansible.builtin.set_fact:
+    ecs_ldap_admin_username: "{{ ecs_ldap_admin_user_prefix }}admin"
+
+- name: ECS LDAP admin | Ensure FreeIPA user exists
+  freeipa.ansible_freeipa.ipauser:
+    ipaadmin_password: "{{ ipaadmin_password }}"
+    name: "{{ ecs_ldap_admin_username }}"
+    givenname: ECS
+    sn: Admin
+    password: "{{ ecs_ldap_admin_password }}"
+    update_password: always
+    state: present
+  delegate_to: "{{ groups['ipaserver'] | first }}"
+  become: true

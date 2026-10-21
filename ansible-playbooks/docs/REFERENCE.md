@@ -394,6 +394,14 @@ playbook import. `enroll_monitoring_exporters.yml` remains directly runnable
 and retains separate node_exporter, process_exporter, cAdvisor, and localhost
 scrape-target plays. Exporter service templates are role-relative.
 
+### ECS
+
+Playbooks `33_setup_ecs_cluster.yml` and `34_setup_ecs_data_services.yml`
+remain standalone compatibility entry points over `roles/ecs`. The role owns
+ECS phased installation, control-plane/IAM/LDAP/data-service tasks and its
+control-plane values template; portal and CM integrations continue through
+their owning role shims.
+
 **CMS troubleshooting (Service Monitor / Avro `Connection refused`):**
 
 | Symptom | Likely cause | Operator checks |
