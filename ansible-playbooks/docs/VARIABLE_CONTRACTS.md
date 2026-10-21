@@ -156,7 +156,7 @@ Import **`validate_cluster_domain_ozone_hostname.yml`** from **`detect_identity_
 | Fact | Set by | Notes |
 |------|--------|-------|
 | `ipa_kerberos_ccache_path` | `group_vars/all.yml` | Ansible **`KRB5CCNAME=FILE:…`** for **`ipa`/`kinit`** in automation — not **`default_ccache_name`** in krb5.conf |
-| `ipa_httpd_disable_browser_krb_negotiate` | `group_vars/all.yml` (default **`true`**) | **`zz-ipa-disable-browser-krb.conf`** on ipaserver (`SetEnv gssapi-no-negotiate`); play **12** + **manage_ipa_httpd_caddy_proxy_on_ipaserver** |
+| `ipa_httpd_disable_browser_krb_negotiate` | `group_vars/all.yml` (default **`true`**) | **`zz-ipa-disable-browser-krb.conf`** on ipaserver (`SetEnv gssapi-no-negotiate` on protected API/session routes only; static `/ipa/modern-ui` and `/ipa/ui` remain public); play **12** + **manage_ipa_httpd_caddy_proxy_on_ipaserver** |
 | `krb5_comment_default_ccache_on_ipaserver` | `group_vars/all.yml` (default **`false`**) | When **`false`**, **ipaserver** keeps active **`default_ccache_name = KEYRING:persistent:%{uid}`**; clients stay commented |
 | `krb5_libdefaults_default_ccache_commented_line` | `group_vars/all.yml` | Target commented line on **clients** (`ensure_krb5_default_ccache_commented.yml`) |
 | `krb5_cm_managed_krb5_conf` | `group_vars/all.yml` (default **`true`**) | CM **`KRB_MANAGE_KRB5_CONF`** — CM regenerates **`/etc/krb5.conf`** on cluster hosts; set **`false`** to keep host/IPA-managed krb5 |
