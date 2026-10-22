@@ -378,6 +378,12 @@
         - not (ecs_phased_install_required | bool)
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+    - name: Configure kubectl, kubeconfig, and k9s on ECS master
+      ansible.builtin.import_tasks: common_tasks/ecs_configure_cli_tools.yml
+      when:
+        - ecs_deploy_effective | default(false) | bool
+        - ecs_cli_tools_enabled | default(true) | bool
+
     - name: Wait for ECS Management Console when auto-provisioning API keys
       ansible.builtin.import_tasks: common_tasks/ecs_wait_control_plane_console.yml
       when:

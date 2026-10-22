@@ -1,0 +1,208 @@
+---
+# Expose the RKE2 client installed by ECS and provide an operator-friendly k9s binary.
+
+- name: Resolve ECS CLI target users
+  ansible.builtin.set_fact:
+    _ecs_cli_users_effective: >-
+      {{
+        ecs_cli_users
+        | default(['root', ansible_user | default('ec2-user')])
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+
+- name: Wait for ECS kubectl binary
+  ansible.builtin.stat:
+    path: "{{ ecs_coredns_kubectl_path }}"
+  register: _ecs_cli_kubectl
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  until:
+    - _ecs_cli_kubectl.stat.exists | default(false)
+    - _ecs_cli_kubectl.stat.executable | default(false)
+  retries: "{{ ecs_control_plane_install_poll_retries | default(240) }}"
+  delay: "{{ ecs_control_plane_install_poll_delay | default(15) }}"
+
+- name: Wait for ECS kubeconfig
+  ansible.builtin.stat:
+    path: "{{ ecs_coredns_kubeconfig_path }}"
+  register: _ecs_cli_kubeconfig
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  until:
+    - _ecs_cli_kubeconfig.stat.exists | default(false)
+    - _ecs_cli_kubeconfig.stat.isreg | default(false)
+  retries: "{{ ecs_control_plane_install_poll_retries | default(240) }}"
+  delay: "{{ ecs_control_plane_install_poll_delay | default(15) }}"
+
+- name: Expose ECS kubectl in the system path
+  ansible.builtin.file:
+    src: "{{ ecs_coredns_kubectl_path }}"
+    dest: "{{ ecs_kubectl_install_path }}"
+    state: link
+    owner: root
+    group: root
+    force: true
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Read ECS master user accounts
+  ansible.builtin.getent:
+    database: passwd
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Require ECS CLI target users
+  ansible.builtin.assert:
+    that:
+      - item in ansible_facts.getent_passwd
+    fail_msg: >-
+      ECS CLI target user '{{ item }}' does not exist on
+      {{ groups[ecs_cluster_master_group][0] }}. Update ecs_cli_users.
+  loop: "{{ _ecs_cli_users_effective }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Create ECS user kubeconfig directories
+  ansible.builtin.file:
+    path: "{{ ansible_facts.getent_passwd[item][4] }}/.kube"
+    state: directory
+    owner: "{{ item }}"
+    group: "{{ ansible_facts.getent_passwd[item][2] }}"
+    mode: "0700"
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  loop: "{{ _ecs_cli_users_effective }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Configure ECS kubeconfig for operator users
+  ansible.builtin.copy:
+    src: "{{ ecs_coredns_kubeconfig_path }}"
+    dest: "{{ ansible_facts.getent_passwd[item][4] }}/.kube/config"
+    owner: "{{ item }}"
+    group: "{{ ansible_facts.getent_passwd[item][2] }}"
+    mode: "0600"
+    remote_src: true
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  loop: "{{ _ecs_cli_users_effective }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Resolve k9s release architecture
+  ansible.builtin.set_fact:
+    _ecs_k9s_arch: >-
+      {{
+        'arm64'
+        if (
+          hostvars[groups[ecs_cluster_master_group][0]].ansible_architecture
+          | default('x86_64')
+        ) in ['aarch64', 'arm64']
+        else 'amd64'
+      }}
+
+- name: Resolve k9s release artifact
+  ansible.builtin.set_fact:
+    _ecs_k9s_archive: "k9s_Linux_{{ _ecs_k9s_arch }}.tar.gz"
+    _ecs_k9s_checksum: "{{ ecs_k9s_checksums[_ecs_k9s_arch] }}"
+
+- name: Check installed k9s version
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_k9s_install_path }}"
+      - version
+  register: _ecs_k9s_installed_version
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Download and install pinned k9s binary
+  when: >-
+    _ecs_k9s_installed_version.rc != 0
+    or (
+      ecs_k9s_version
+      not in (
+        (_ecs_k9s_installed_version.stdout | default(''))
+        ~ (_ecs_k9s_installed_version.stderr | default(''))
+      )
+    )
+  block:
+    - name: Create temporary k9s download directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: k9s
+      register: _ecs_k9s_tmp_dir
+      become: true
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+    - name: Download checksum-verified k9s release
+      ansible.builtin.get_url:
+        url: >-
+          {{ ecs_k9s_download_base_url }}/v{{ ecs_k9s_version }}/{{ _ecs_k9s_archive }}
+        dest: "{{ _ecs_k9s_tmp_dir.path }}/{{ _ecs_k9s_archive }}"
+        checksum: "sha256:{{ _ecs_k9s_checksum }}"
+        mode: "0644"
+      become: true
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+    - name: Extract k9s binary
+      ansible.builtin.unarchive:
+        src: "{{ _ecs_k9s_tmp_dir.path }}/{{ _ecs_k9s_archive }}"
+        dest: "{{ _ecs_k9s_tmp_dir.path }}"
+        include:
+          - k9s
+        remote_src: true
+      become: true
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+    - name: Install k9s binary
+      ansible.builtin.copy:
+        src: "{{ _ecs_k9s_tmp_dir.path }}/k9s"
+        dest: "{{ ecs_k9s_install_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+        remote_src: true
+      become: true
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  always:
+    - name: Clean up temporary k9s download directory
+      ansible.builtin.file:
+        path: "{{ _ecs_k9s_tmp_dir.path }}"
+        state: absent
+      become: true
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+      when: _ecs_k9s_tmp_dir.path | default('') | length > 0
+
+- name: Verify ECS kubectl access for operator users
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_kubectl_install_path }}"
+      - --kubeconfig
+      - "{{ ansible_facts.getent_passwd[item][4] }}/.kube/config"
+      - get
+      - nodes
+      - --request-timeout=30s
+      - --output=name
+  register: _ecs_cli_kubectl_access
+  changed_when: false
+  become: true
+  become_user: "{{ item }}"
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  loop: "{{ _ecs_cli_users_effective }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Verify installed k9s version
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_k9s_install_path }}"
+      - version
+  register: _ecs_k9s_verified_version
+  changed_when: false
+  failed_when: ecs_k9s_version not in _ecs_k9s_verified_version.stdout
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"

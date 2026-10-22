@@ -25,6 +25,7 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
 6. **Control plane** — `common_tasks/ecs_install_control_plane.yml` with `valuesYaml` from `templates/ecs_control_plane_values.yaml.j2`.
 7. **CoreDNS** — after CM First Run completes, enforce sequential resolver forwarding and restart CoreDNS only when changed.
 8. **Start** — `cloudera.cluster.cluster` `state: started`.
+9. **Operator CLI** — expose the RKE2 `kubectl` binary, copy a user-owned kubeconfig for `root` and the SSH user, install checksum-verified `k9s`, and verify that each user can list Kubernetes nodes.
 
 An existing cluster that is missing required services or is not fully `STARTED`
 re-enters the idempotent phased installer, allowing failed control-plane
@@ -47,6 +48,9 @@ competing install or cluster-start command.
 | `ecs_docker_registry` / `ecs_image_basepath` | External Cloudera image registry and repository base path |
 | `ecs_control_plane_embedded_db_storage_gb` / `ecs_control_plane_embedded_vault_storage_gb` | Embedded control-plane database and Vault storage (`200` / `20`) |
 | `ecs_reconcile_coredns` | Enforce sequential `/etc/resolv.conf` forwarding in RKE2 CoreDNS after control-plane startup |
+| `ecs_cli_tools_enabled` | Configure `kubectl`, kubeconfig, and `k9s` on the ECS master for fresh installs and reruns |
+| `ecs_cli_users` | Accounts receiving `~/.kube/config` (default `root` and `ansible_user`) |
+| `ecs_k9s_version` / `ecs_k9s_checksums` | Pinned, checksum-verified k9s release and architecture checksums |
 | `ecs_deploy_enabled` | `auto` \| `true` \| `false` |
 | `ecs_deploy_on_arm64` | Default `false`; set true for Graviton ECS |
 

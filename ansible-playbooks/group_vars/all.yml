@@ -1098,6 +1098,17 @@ ecs_coredns_kubeconfig_path: /etc/rancher/rke2/rke2.yaml
 ecs_coredns_kubectl_path: /var/lib/rancher/rke2/bin/kubectl
 ecs_coredns_configmap_name: rke2-coredns-rke2-coredns
 ecs_coredns_namespace: kube-system
+ecs_cli_tools_enabled: true
+ecs_cli_users:
+  - root
+  - "{{ ansible_user | default('ec2-user') }}"
+ecs_kubectl_install_path: /usr/local/bin/kubectl
+ecs_k9s_version: "0.51.0"
+ecs_k9s_download_base_url: https://github.com/derailed/k9s/releases/download
+ecs_k9s_install_path: /usr/local/bin/k9s
+ecs_k9s_checksums:
+  amd64: c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7
+  arm64: 3ee05c82e5f9198928a4e86133608ba6a2c10a2244d6a7789e820f78319d640c
 
 # ECS Data Services (CDW, CDE, CAI) — 34_setup_ecs_data_services.yml
 # IAM access keys are signed API credentials — automation can CREATE machine-user keys after ECS
