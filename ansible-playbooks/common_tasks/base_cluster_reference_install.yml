@@ -30,6 +30,47 @@
         | default({})
       }}
 
+- name: Discover Core Settings created with the Base cluster shell
+  ansible.builtin.uri:
+    url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services?view=summary"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_reference_shell_services
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Select existing Core Settings singleton
+  ansible.builtin.set_fact:
+    base_cluster_reference_existing_core_settings: >-
+      {{
+        base_cluster_reference_shell_services.json['items'] | default([])
+        | selectattr('type', 'equalto', 'CORE_SETTINGS')
+        | list
+      }}
+
+- name: Require at most one Core Settings service
+  ansible.builtin.assert:
+    that:
+      - base_cluster_reference_existing_core_settings | length <= 1
+    fail_msg: >-
+      Cluster {{ cdh_basecluster_name }} unexpectedly has
+      {{ base_cluster_reference_existing_core_settings | length }} CORE_SETTINGS
+      services; refusing to choose one implicitly.
+
+- name: Resolve effective Core Settings service name
+  ansible.builtin.set_fact:
+    base_cluster_core_settings_service_name: >-
+      {{
+        base_cluster_reference_existing_core_settings[0].name
+        if base_cluster_reference_existing_core_settings | length == 1
+        else base_cluster_reference_core_settings.name
+      }}
+
 - name: Establish Core Settings before attaching hosts
   cloudera.cluster.service:
     host: "{{ cm_cluster_module_host }}"
@@ -40,7 +81,7 @@
     password: "{{ cm_admin_pass }}"
     verify_tls: false
     cluster: "{{ cdh_basecluster_name }}"
-    service: "{{ base_cluster_reference_core_settings.name }}"
+    service: "{{ base_cluster_core_settings_service_name }}"
     display_name: >-
       {{
         base_cluster_reference_core_settings.display_name
@@ -48,7 +89,9 @@
       }}
     type: "{{ base_cluster_reference_core_settings.type }}"
     state: present
-  when: base_cluster_reference_core_settings | length > 0
+  when:
+    - base_cluster_reference_core_settings | length > 0
+    - base_cluster_reference_existing_core_settings | length == 0
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Configure Core Settings before attaching hosts
@@ -61,7 +104,7 @@
     password: "{{ cm_admin_pass }}"
     verify_tls: false
     cluster: "{{ cdh_basecluster_name }}"
-    service: "{{ base_cluster_reference_core_settings.name }}"
+    service: "{{ base_cluster_core_settings_service_name }}"
     parameters: "{{ base_cluster_reference_core_settings.config }}"
   when:
     - base_cluster_reference_core_settings | length > 0
@@ -152,7 +195,15 @@
     verify_tls: false
     cluster: "{{ cdh_basecluster_name }}"
     service: "{{ item.name }}"
-    parameters: "{{ item.config }}"
+    parameters: >-
+      {{
+        item.config
+        | combine(
+            {'core_connector': base_cluster_core_settings_service_name}
+            if 'core_connector' in item.config
+            else {}
+          )
+      }}
   loop: "{{ base_cluster_reference_services }}"
   loop_control:
     label: "{{ item.name }}"
@@ -164,7 +215,11 @@
   ansible.builtin.uri:
     url: >-
       {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
-      }}/services/{{ item.name }}/roleConfigGroups
+      }}/services/{{
+        base_cluster_core_settings_service_name
+        if item.type == 'CORE_SETTINGS'
+        else item.name
+      }}/roleConfigGroups
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -202,7 +257,11 @@
           {%- set key = service.type ~ ':' ~ role.type -%}
           {%- if key in base_cluster_reference_rcg_names -%}
             {%- set _ = configs.append({
-              'service': service.name,
+              'service': (
+                base_cluster_core_settings_service_name
+                if service.type == 'CORE_SETTINGS'
+                else service.name
+              ),
               'service_type': service.type,
               'role_type': role.type,
               'role_config_group': base_cluster_reference_rcg_names[key],

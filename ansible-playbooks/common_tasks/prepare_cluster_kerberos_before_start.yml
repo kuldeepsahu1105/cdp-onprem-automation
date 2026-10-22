@@ -189,8 +189,8 @@
     base_cluster_pre_start_security_checks: >-
       {%- set checks = [] -%}
       {%- if base_cluster_install_services.core_settings | default(true) | bool -%}
-        {%- set _ = checks.append({'service': 'core-settings', 'name': 'hadoop_security_authentication', 'value': 'kerberos'}) -%}
-        {%- set _ = checks.append({'service': 'core-settings', 'name': 'hadoop_security_authorization', 'value': 'true'}) -%}
+        {%- set _ = checks.append({'service': base_cluster_core_settings_service_name | default('core-settings'), 'name': 'hadoop_security_authentication', 'value': 'kerberos'}) -%}
+        {%- set _ = checks.append({'service': base_cluster_core_settings_service_name | default('core-settings'), 'name': 'hadoop_security_authorization', 'value': 'true'}) -%}
       {%- endif -%}
       {%- if base_cluster_install_services.zookeeper | default(true) | bool -%}
         {%- set _ = checks.append({'service': 'zookeeper', 'name': 'quorum_auth_enable_sasl', 'value': 'true'}) -%}

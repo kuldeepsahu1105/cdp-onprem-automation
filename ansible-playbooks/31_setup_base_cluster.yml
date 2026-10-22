@@ -563,6 +563,32 @@
       when: existing_cluster.status == 200
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+    - name: Select existing Core Settings service
+      ansible.builtin.set_fact:
+        base_cluster_existing_core_settings: >-
+          {{
+            (existing_cluster_services.json | default({})).get('items', [])
+            | selectattr('type', 'equalto', 'CORE_SETTINGS')
+            | list
+          }}
+
+    - name: Require at most one existing Core Settings service
+      ansible.builtin.assert:
+        that:
+          - base_cluster_existing_core_settings | length <= 1
+        fail_msg: >-
+          Cluster {{ cdh_basecluster_name }} unexpectedly has
+          {{ base_cluster_existing_core_settings | length }} CORE_SETTINGS services.
+
+    - name: Resolve existing Core Settings service name
+      ansible.builtin.set_fact:
+        base_cluster_core_settings_service_name: >-
+          {{
+            base_cluster_existing_core_settings[0].name
+            if base_cluster_existing_core_settings | length == 1
+            else 'core-settings'
+          }}
+
     - name: Read base cluster initialization marker
       ansible.builtin.slurp:
         src: "{{ base_cluster_initialization_marker_path }}"
@@ -864,7 +890,7 @@
         cm_config_display_name: Core Settings security
         cm_config_endpoint: >-
           {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
-          }}/services/core-settings/config
+          }}/services/{{ base_cluster_core_settings_service_name | default('core-settings') }}/config
         cm_config_desired:
           hadoop_security_authorization: >-
             {{ 'true' if base_cluster_enable_kerberos | default(true) | bool else 'false' }}
