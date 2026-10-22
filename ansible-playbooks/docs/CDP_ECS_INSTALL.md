@@ -22,17 +22,19 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
 5. **Host templates** — `common_tasks/ecs_apply_host_templates.yml`
    (`ECSMaster`, `ECSWorker`) through the v4-compatible CM API, applied with
    `startRoles=false`.
-6. **Control plane** — `common_tasks/ecs_install_control_plane.yml` with `valuesYaml` from `templates/ecs_control_plane_values.yaml.j2`.
-7. **CoreDNS** — after CM First Run completes, enforce sequential resolver forwarding and restart CoreDNS only when changed.
-8. **Start** — `cloudera.cluster.cluster` `state: started`.
-9. **Operator CLI** — expose the RKE2 `kubectl` binary, copy a user-owned kubeconfig for `root` and the SSH user, install checksum-verified `k9s`, and verify that each user can list Kubernetes nodes.
+6. **Control plane submission/adoption** — `common_tasks/ecs_install_control_plane.yml` submits First Run or adopts its durable `/controlPlanes` record without blocking on completion.
+7. **CoreDNS during First Run** — as soon as RKE2 and the CoreDNS ConfigMap exist, enforce sequential resolver forwarding and restart CoreDNS only when changed.
+8. **First Run completion** — wait for the submitted CM command, or for an adopted installation to reach `STARTED`, only after CoreDNS is repaired.
+9. **Start** — `cloudera.cluster.cluster` `state: started`.
+10. **Operator CLI** — expose the RKE2 `kubectl` binary, copy a user-owned kubeconfig for `root` and the SSH user, install checksum-verified `k9s`, and verify that each user can list Kubernetes nodes.
 
 An existing cluster that is missing required services or is not fully `STARTED`
 re-enters the idempotent phased installer, allowing failed control-plane
 installation to resume without deleting the ECS cluster.
 When CM already has a matching `/controlPlanes` record, reruns adopt that
-installation and wait for the existing First Run instead of submitting a
-competing install or cluster-start command.
+installation, repair CoreDNS while the existing First Run is active, and then
+wait for completion instead of submitting a competing install or cluster-start
+command.
 
 ## Key variables
 

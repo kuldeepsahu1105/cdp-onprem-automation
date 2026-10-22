@@ -1,0 +1,45 @@
+---
+# Wait only after the CoreDNS forwarding policy is corrected. During ECS First
+# Run, RKE2 and CoreDNS become available before the parent CM command completes.
+
+- name: Wait for submitted ECS control plane First Run command
+  ansible.builtin.import_tasks: wait_cm_api_command.yml
+  vars:
+    cm_api_command_id: "{{ ecs_control_plane_install_command_id }}"
+    cm_api_command_poll_retries: "{{ ecs_control_plane_install_poll_retries }}"
+    cm_api_command_poll_delay: "{{ ecs_control_plane_install_poll_delay }}"
+  when:
+    - not (ecs_control_plane_existing | bool)
+    - ecs_control_plane_install is succeeded
+    - ecs_control_plane_install_command_id | string | length > 0
+
+- name: Wait for adopted ECS First Run after CoreDNS repair
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{
+      ecs_cluster_name | urlencode }}
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: ecs_adopted_first_run_cluster
+  changed_when: false
+  until: ecs_adopted_first_run_cluster.json.serviceState | default('') == 'STARTED'
+  retries: "{{ ecs_control_plane_install_poll_retries }}"
+  delay: "{{ ecs_control_plane_install_poll_delay }}"
+  when: ecs_control_plane_existing | bool
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Require adopted ECS First Run to complete
+  ansible.builtin.assert:
+    that:
+      - ecs_adopted_first_run_cluster.json.serviceState | default('') == 'STARTED'
+    fail_msg: >-
+      The adopted ECS control-plane First Run did not bring cluster
+      '{{ ecs_cluster_name }}' to STARTED state after the CoreDNS repair.
+      Do not submit another First Run; inspect the active command and its failed
+      child commands in Cloudera Manager.
+  when: ecs_control_plane_existing | bool
