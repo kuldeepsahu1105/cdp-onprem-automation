@@ -37,7 +37,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | `cm_tls` | **Mandatory for Kerberos/LDAP-secured clusters**; skippable only for throwaway/manual-TLS clusters | Requires **CM_INSTALL** / play 23 to have installed and initialized PostgreSQL. Order inside this phase (`27→28→29→30`) is fixed — do not reorder or split without re-reading `VARIABLE_CONTRACTS.md` |
 | `cdh` | **Mandatory** | Requires **CM_INSTALL** / play 23 to have installed and initialized PostgreSQL; installs the base CDH cluster (HDFS/YARN/ZK) |
 | `monitoring` | Optional | Gated by `MONITORING_STACK_ENABLED` (default true); safe to skip |
-| `5` / `ecs` | Optional | Only when ECS is part of the deployment |
+| `5` / `ecs` | Optional | Only when ECS is part of the deployment; does not require the optional portal phase |
 | `6` / `portal_refresh` | Optional, idempotent | Re-render/re-verify portal content; safe to run repeatedly |
 | `7` / `dataservices` | Optional | CDW/CDE/CAI on top of ECS |
 | `destroy_stack` | Manual only | Never part of `all`/`full` |

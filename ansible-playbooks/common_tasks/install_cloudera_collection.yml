@@ -24,6 +24,43 @@
     msg: "{{ cloudera_cluster_list_before.stdout_lines | default(['(not installed)']) }}"
   when: cloudera_cluster_list_before.stdout_lines is defined
 
+- name: Check active cloudera.cluster API compatibility
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python | default('python3') }}"
+      - -c
+      - |
+        import pathlib
+        import sys
+        roots = [
+            pathlib.Path.home() / ".ansible/collections/ansible_collections/cloudera/cluster",
+            pathlib.Path("/usr/share/ansible/collections/ansible_collections/cloudera/cluster"),
+        ]
+        found = [p for p in roots if (p / "plugins/module_utils/cm_utils.py").is_file()]
+        if not found:
+            sys.exit(1)
+        text = (found[0] / "plugins/module_utils/cm_utils.py").read_text()
+        cluster_mod = found[0] / "plugins/modules/cluster.py"
+        if "ApiClient(configuration=" in text or not cluster_mod.is_file():
+            sys.exit(1)
+  register: cloudera_cluster_api_before
+  changed_when: false
+  failed_when: false
+
+- name: Determine whether pinned cloudera.cluster installation is required
+  ansible.builtin.set_fact:
+    cloudera_collection_install_required: >-
+      {{
+        cloudera_cluster_api_before.rc != 0
+        or (
+          cloudera_cluster_collection_git_ref | regex_replace('^v', '')
+          not in (
+            cloudera_cluster_list_before.stdout | default('')
+            | regex_findall('(?m)^cloudera\\.cluster\\s+(\\S+)\\s*$')
+          )
+        )
+      }}
+
 - name: Remove cloudera.cluster collection (drop devel/v5 before pinned v4 install)
   ansible.builtin.command:
     argv:
@@ -34,6 +71,7 @@
   register: cloudera_collection_remove
   failed_when: false
   changed_when: cloudera_collection_remove.rc == 0
+  when: cloudera_collection_install_required | bool
 
 - name: Install cloudera.cluster collection (pinned for PyPI cm_client)
   ansible.builtin.shell:
@@ -45,6 +83,7 @@
   delay: 5
   until: cloudera_collection_result.rc == 0
   changed_when: cloudera_collection_result.rc == 0
+  when: cloudera_collection_install_required | bool
 
 - name: List cloudera.cluster after pinned install
   ansible.builtin.command:

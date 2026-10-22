@@ -65,13 +65,7 @@
     - name: Prepare Cloudera Manager API
       ansible.builtin.import_tasks: common_tasks/prepare_cm_security_api.yml
 
-    - name: Build deployment portal Caddy URL facts for ECS console
-      ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
-      when:
-        - deployment_portal_enabled | default(true) | bool
-        - caddy_vhost_enabled | default(false) | bool
-
-    - name: Resolve ECS control plane console URL (Caddy vhost when configured)
+    - name: Resolve ECS control plane console URL
       ansible.builtin.import_tasks: common_tasks/resolve_ecs_control_plane_url.yml
 
     - name: Validate ECS inventory groups
@@ -419,10 +413,6 @@
 
         - name: Configure CDP CLI profile for ECS IAM
           ansible.builtin.import_tasks: common_tasks/ecs_data_services_runtime.yml
-
-        - name: Build portal facts for IPA LDAP CA URL
-          ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
-          when: identity_provider_effective == 'freeipa'
 
         - name: Configure ECS LDAP and admin user
           ansible.builtin.import_tasks: common_tasks/ecs_control_plane_ldap_and_admin.yml
