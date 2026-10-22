@@ -2340,40 +2340,10 @@
           or base_cluster_partial_first_run_recovery_required | bool
         - base_cluster_install_services.hue | default(true) | bool
 
-    - name: Validate all service client configurations before First Run
-      ansible.builtin.uri:
-        url: >-
-          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
-          }}/commands/deployClientConfig
-        method: POST
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: yes
-        validate_certs: no
-        status_code: [200]
-        follow_redirects: none
-      register: base_cluster_pre_first_run_client_config
-      when: >-
-        base_cluster_first_run_required | bool
-        or base_cluster_partial_first_run_recovery_required | bool
-      delegate_to: "{{ cm_cluster_module_delegate_to }}"
-
-    - name: Wait for pre-First-Run service configuration validation
-      ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
-      vars:
-        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
-        cm_api_command_id: "{{ base_cluster_pre_first_run_client_config.json.id }}"
-        cm_api_command_allow_already_exists: false
-      when:
-        - >-
-          base_cluster_first_run_required | bool
-          or base_cluster_partial_first_run_recovery_required | bool
-        - base_cluster_pre_first_run_client_config.json.id is defined
-
     - name: Show cluster startup wait
       ansible.builtin.debug:
         msg: >-
-          Cluster configuration and pre-First-Run security convergence are complete.
+          Cluster topology and pre-First-Run security convergence are complete.
           Starting CM First Run; Jenkins will poll every
           {{ base_cluster_module_poll_interval }}s until CM finishes or the bounded wait expires.
       when: base_cluster_first_run_required | bool

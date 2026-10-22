@@ -514,11 +514,17 @@ directory, playbook **31** removes only an otherwise-empty filesystem's
 `lost+found` entry. Any other contents fail the preflight with their names before
 First Run; they are never deleted implicitly.
 
-Before submitting First Run, playbook **31** runs CM's cluster-wide
-`deployClientConfig` command as a native validation gate. This validates every
-enabled service and role topology after all automation-owned configuration and
-role repairs have been applied, while roles are still stopped. A validation
-error therefore blocks First Run before any additional service initialization.
+Before submitting First Run, playbook **31** performs deterministic topology,
+Hue role-colocation, Kerberos, NameNode-directory, and service-dependency
+assertions that do not require running cluster services. It deliberately does
+not run CM's cluster-wide `deployClientConfig` command while roles are stopped:
+CM 7.13 client generators resolve runtime values from a commissioned healthy
+ResourceManager and healthy role hosts, so that command fails on a valid fresh
+cluster before First Run can start those prerequisites. CM First Run remains the
+authoritative runtime configuration validation, with expanded failed-service
+diagnostics. After startup, playbook **31** runs
+`deployClientConfigsAndRefresh`, when the required services and hosts are
+healthy.
 
 The matching marker is recorded only after First Run, startup,
 client-configuration refresh, ZooKeeper role validation, and every enabled
