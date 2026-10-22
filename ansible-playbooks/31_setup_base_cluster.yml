@@ -2453,7 +2453,7 @@
         - base_cluster_knox_gateway_group is defined
         - base_cluster_knox_gateway_group | length > 0
 
-    - name: Refresh existing base cluster with name {{ cdh_basecluster_name }}
+    - name: Refresh base cluster client and monitoring configuration after startup
       ansible.builtin.uri:
         url: >-
           {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
@@ -2467,8 +2467,12 @@
         follow_redirects: none
       register: base_cluster_refresh_command
       when:
-        - existing_cluster.status == 200
-        - not (base_cluster_partial_empty | bool)
+        - >-
+          base_cluster_create_required | bool
+          or (
+            existing_cluster.status == 200
+            and not (base_cluster_partial_empty | bool)
+          )
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Wait for base cluster refresh
@@ -2922,6 +2926,7 @@
             base_cluster_restart_cms_after_start | default(true) | bool
             and (
               base_cluster_first_run_required | default(false) | bool
+              or base_cluster_partial_first_run_recovery_required | default(false) | bool
               or base_cluster_cluster_autotls_applied_this_run | default(false) | bool
               or (
                 base_cluster_pre_start_kerberos_configure_command is defined
