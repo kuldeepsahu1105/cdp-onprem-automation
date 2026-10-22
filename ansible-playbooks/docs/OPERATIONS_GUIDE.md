@@ -1452,6 +1452,89 @@ cluster-node service state. Even with `cleanup_e2e=true`, PostgreSQL data and
 packages are preserved unless the separate `cleanup_remove_postgres_*` toggles
 are explicitly enabled.
 
+### Fast destructive Base First Run retest while preserving parcels
+
+Use this only for an empty test cluster when the objective is to run CM First
+Run again without downloading or distributing parcels again. This is not a
+recovery procedure and destroys all Base service data. Do **not** delete the
+Base cluster registration in CM: retaining it preserves the complete
+service/role topology and parcel state.
+
+1. Stop the Base cluster from the CM UI and wait for the command to finish.
+2. Run the following as `root` on **every Base master and Base worker**, never
+   on CM, FreeIPA, PostgreSQL, or ECS hosts:
+
+   ```bash
+   set -euxo pipefail
+   systemctl stop cloudera-scm-agent
+
+   rm -rf -- \
+     /dfs /hdfs /hadoop /hadoop-ozone /impala /yarn /data/ozone \
+     /var/local/kafka /var/log/nm /var/run/cloudera-scm-agent/process \
+     /tmp/.scm_prepare_node.lock /tmp/kafka-logs
+
+   for service in \
+     atlas hadoop hadoop-hdfs hadoop-ozone hadoop-yarn hbase hive hue impala \
+     kafka knox kraft nifi nifi-registry nifiregistry ozone phoenix ranger \
+     schemaregistry solr spark spark3 tez yarn zookeeper
+   do
+     rm -rf -- \
+       "/var/lib/${service}" "/var/log/${service}" \
+       "/var/run/${service}" "/etc/${service}"
+   done
+
+   find /tmp -maxdepth 1 \
+     \( -name 'hadoop*' -o -name 'yarn*' -o -name 'hsperfdata_*' \
+        -o -name 'nm-*' -o -name 'scm_prepare_node.*' \) \
+     -exec rm -rf -- {} +
+
+   install -d -o cloudera-scm -g cloudera-scm -m 0755 \
+     /var/run/cloudera-scm-agent/process
+   systemctl start cloudera-scm-agent
+   ```
+
+3. On the PostgreSQL host, reset the Hive, Hue, Ranger, and Knox schemas while
+   preserving their database containers and login roles:
+
+   ```bash
+   set -euxo pipefail
+   for target in hive:hive hue:hue ranger:rangeradmin knox:knox
+   do
+     db="${target%%:*}"
+     owner="${target##*:}"
+     sudo -u postgres psql --dbname="${db}" --set=ON_ERROR_STOP=1 <<SQL
+   DO \$reset\$
+   DECLARE schema_record record;
+   BEGIN
+     FOR schema_record IN
+       SELECT nspname FROM pg_namespace
+       WHERE nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema'
+     LOOP
+       EXECUTE format('DROP SCHEMA %I CASCADE', schema_record.nspname);
+     END LOOP;
+   END
+   \$reset\$;
+   CREATE SCHEMA public AUTHORIZATION "${owner}";
+   GRANT ALL ON SCHEMA public TO "${owner}";
+   SQL
+   done
+   ```
+
+4. On the CM host, remove only Ansible's successful-initialization marker:
+
+   ```bash
+   rm -f /var/lib/cloudera-scm-server/.ansible-base-cluster-initialized
+   ```
+
+5. Rerun playbook **31**. Because the CM cluster and `/opt/cloudera/parcels`
+   remain, parcel download and distribution are retained. Because
+   `{{ base_cluster_hdfs_name_dir }}/current/VERSION` is absent, playbook **31**
+   submits one clean CM First Run.
+
+For routine automated rebuilds, continue to use
+`cleanup-cluster-services.sh`; this manual shortcut intentionally retains the
+CM cluster registration and is limited to controlled First Run testing.
+
 ### Manual PostgreSQL reset of the CM `scm` schema
 
 Service-only reset (`98_cleanup_cluster_services.yml`) **does not** change the
