@@ -130,19 +130,11 @@
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Activate CDH parcel on Base cluster
-  cloudera.cluster.parcel:
-    host: "{{ cm_cluster_module_host }}"
-    port: "{{ cm_cluster_module_port }}"
-    version: "{{ cm_api_version }}"
-    force_tls: "{{ cm_cluster_module_force_tls }}"
-    username: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    verify_tls: false
-    cluster: "{{ cdh_basecluster_name }}"
-    name: CDH
-    parcel_version: "{{ base_cluster_cdh_parcel_version_effective }}"
-    state: activated
-  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  ansible.builtin.include_tasks: activate_cluster_parcel.yml
+  vars:
+    cluster_parcel_cluster: "{{ cdh_basecluster_name }}"
+    cluster_parcel_product: CDH
+    cluster_parcel_version: "{{ base_cluster_cdh_parcel_version_effective }}"
 
 - name: Order Base services by dependency
   ansible.builtin.set_fact:

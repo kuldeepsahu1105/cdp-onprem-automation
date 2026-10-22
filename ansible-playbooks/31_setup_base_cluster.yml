@@ -589,6 +589,21 @@
             else 'core-settings'
           }}
 
+    - name: Check existing cluster host templates
+      ansible.builtin.uri:
+        url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/hostTemplates"
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_existing_host_templates
+      changed_when: false
+      when: existing_cluster.status == 200
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
     - name: Read base cluster initialization marker
       ansible.builtin.slurp:
         src: "{{ base_cluster_initialization_marker_path }}"
@@ -665,9 +680,32 @@
           {%- endfor -%}
           {{ expected.count }}
 
+    # Before templates or roles exist, every phased operation is idempotent and
+    # an interrupted install can resume in place (including parcel download).
+    - name: Detect resumable pre-template cluster topology
+      ansible.builtin.set_fact:
+        base_cluster_pre_template_resume_safe: >-
+          {{
+            existing_cluster.status == 200
+            and base_cluster_initialization_incomplete | bool
+            and base_cluster_existing_role_count | int == 0
+            and (
+              (base_cluster_existing_host_templates.json | default({})).get('items', [])
+              | length
+            ) == 0
+            and existing_cluster.json.clusterState | default('') != 'STARTED'
+            and (
+              existing_cluster_services.json['items'] | default([])
+              | selectattr('serviceState', 'defined')
+              | selectattr('serviceState', 'equalto', 'STARTED')
+              | list
+              | length
+            ) == 0
+          }}
+
     # With startRoles=false no role can initialize storage before the complete
-    # topology exists. An interrupted phased install is therefore safe to
-    # recreate, while a complete topology that later entered First Run is kept.
+    # topology exists. A later malformed partial topology is safe to recreate,
+    # while a complete topology that entered First Run must be preserved.
     - name: Detect incomplete never-started cluster topology
       ansible.builtin.set_fact:
         base_cluster_never_started_topology_incomplete: >-
@@ -691,6 +729,7 @@
         base_cluster_partial_empty: >-
           {{
             existing_cluster.status == 200
+            and not (base_cluster_pre_template_resume_safe | bool)
             and (
               existing_cluster_hosts.json['items'] | default([]) | length == 0
               or base_cluster_never_started_topology_incomplete | bool
@@ -737,6 +776,14 @@
           partial cluster before recreating its complete service and role topology.
       when: base_cluster_partial_empty | bool
 
+    - name: Show resumable phased cluster recovery
+      ansible.builtin.debug:
+        msg: >-
+          Base cluster '{{ cdh_basecluster_name }}' stopped before host templates or
+          roles were created. Resuming the phased install in place and preserving
+          any active or completed parcel download/distribution.
+      when: base_cluster_pre_template_resume_safe | bool
+
     - name: Delete incomplete base cluster with name {{ cdh_basecluster_name }}
       ansible.builtin.uri:
         url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}"
@@ -771,7 +818,11 @@
     - name: Set cluster creation state
       ansible.builtin.set_fact:
         base_cluster_create_required: >-
-          {{ existing_cluster.status == 404 or (base_cluster_partial_empty | bool) }}
+          {{
+            existing_cluster.status == 404
+            or (base_cluster_partial_empty | bool)
+            or (base_cluster_pre_template_resume_safe | bool)
+          }}
 
     - name: Check existing cluster services
       ansible.builtin.assert:
@@ -783,7 +834,7 @@
           cannot safely reconcile service topology on an existing populated cluster.
       when:
         - existing_cluster.status == 200
-        - not (base_cluster_partial_empty | bool)
+        - not (base_cluster_create_required | bool)
 
     - name: Show cluster creation wait
       ansible.builtin.debug:

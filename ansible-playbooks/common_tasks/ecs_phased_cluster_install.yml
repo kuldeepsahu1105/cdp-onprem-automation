@@ -64,19 +64,11 @@
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Activate ECS parcel on cluster
-  cloudera.cluster.parcel:
-    host: "{{ cm_cluster_module_host }}"
-    port: "{{ cm_cluster_module_port }}"
-    version: "{{ cm_api_version }}"
-    force_tls: "{{ cm_cluster_module_force_tls }}"
-    username: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    verify_tls: false
-    cluster: "{{ ecs_cluster_name }}"
-    name: ECS
-    parcel_version: "{{ ecs_parcel_version_effective }}"
-    state: activated
-  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  ansible.builtin.include_tasks: activate_cluster_parcel.yml
+  vars:
+    cluster_parcel_cluster: "{{ ecs_cluster_name }}"
+    cluster_parcel_product: ECS
+    cluster_parcel_version: "{{ ecs_parcel_version_effective }}"
 
 - name: Create Docker service on ECS cluster
   cloudera.cluster.service:

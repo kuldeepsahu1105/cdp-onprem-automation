@@ -574,6 +574,10 @@ base_cluster_yarn_nm_vcores: 4
 # Run it asynchronously so Jenkins emits a poll update instead of appearing frozen.
 base_cluster_module_async_timeout: 7500
 base_cluster_module_poll_interval: 15
+# Parcel transitions are polled through CM so interrupted downloads/distributions resume.
+# Defaults allow up to two hours for each stage on slower repositories or links.
+cluster_parcel_poll_retries: 480
+cluster_parcel_poll_delay: 15
 # Do not persist the initialization marker until every enabled service with a
 # runtime role is STARTED and reports one of these health summaries.
 base_cluster_service_health_retries: 90
