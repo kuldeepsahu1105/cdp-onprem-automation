@@ -1098,6 +1098,8 @@ ecs_coredns_kubeconfig_path: /etc/rancher/rke2/rke2.yaml
 ecs_coredns_kubectl_path: /var/lib/rancher/rke2/bin/kubectl
 ecs_coredns_configmap_name: rke2-coredns-rke2-coredns
 ecs_coredns_namespace: kube-system
+# Empty = FreeIPA private IP, or ad_dns_servers for Active Directory.
+ecs_coredns_forwarders: []
 ecs_cli_tools_enabled: true
 ecs_cli_users:
   - root
