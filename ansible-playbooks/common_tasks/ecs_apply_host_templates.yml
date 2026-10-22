@@ -71,42 +71,79 @@
       Could not resolve base role config groups for Docker and ECS on
       {{ ecs_cluster_name }}.
 
-- name: Establish ECSMaster host template through CM API
-  cloudera.cluster.cm_resource:
-    host: "{{ cm_cluster_module_host }}"
-    port: "{{ cm_cluster_module_port }}"
-    version: "{{ cm_api_version }}"
-    force_tls: "{{ cm_cluster_module_force_tls }}"
-    username: "{{ cm_admin_user }}"
+- name: Build ECS host template payloads
+  ansible.builtin.set_fact:
+    ecs_host_template_payloads:
+      - name: ECSMaster
+        roleConfigGroupRefs:
+          - roleConfigGroupName: "{{ ecs_rcg_docker_server }}"
+          - roleConfigGroupName: "{{ ecs_rcg_ecs_server }}"
+      - name: ECSWorker
+        roleConfigGroupRefs:
+          - roleConfigGroupName: "{{ ecs_rcg_docker_server }}"
+          - roleConfigGroupName: "{{ ecs_rcg_ecs_agent }}"
+
+- name: Read existing ECS host templates
+  ansible.builtin.uri:
+    url: "{{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_name }}/hostTemplates"
+    method: GET
+    user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
-    verify_tls: false
-    path: "/clusters/{{ ecs_cluster_name }}/hostTemplates"
-    method: POST
-    body:
-      items:
-        - name: ECSMaster
-          roleConfigGroupRefs:
-            - roleConfigGroupName: "{{ ecs_rcg_docker_server }}"
-            - roleConfigGroupName: "{{ ecs_rcg_ecs_server }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: ecs_existing_host_templates
+  changed_when: false
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-- name: Establish ECSWorker host template through CM API
-  cloudera.cluster.cm_resource:
-    host: "{{ cm_cluster_module_host }}"
-    port: "{{ cm_cluster_module_port }}"
-    version: "{{ cm_api_version }}"
-    force_tls: "{{ cm_cluster_module_force_tls }}"
-    username: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    verify_tls: false
-    path: "/clusters/{{ ecs_cluster_name }}/hostTemplates"
+- name: Index existing ECS host templates
+  ansible.builtin.set_fact:
+    ecs_existing_host_template_names: >-
+      {{
+        ecs_existing_host_templates.json['items'] | default([])
+        | map(attribute='name')
+        | list
+      }}
+
+- name: Create missing ECS host templates
+  ansible.builtin.uri:
+    url: "{{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_name }}/hostTemplates"
     method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+    body_format: json
     body:
       items:
-        - name: ECSWorker
-          roleConfigGroupRefs:
-            - roleConfigGroupName: "{{ ecs_rcg_docker_server }}"
-            - roleConfigGroupName: "{{ ecs_rcg_ecs_agent }}"
+        - "{{ item }}"
+  loop: "{{ ecs_host_template_payloads }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name not in ecs_existing_host_template_names
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Reconcile existing ECS host templates
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_name
+      }}/hostTemplates/{{ item.name | urlencode }}
+    method: PUT
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+    body_format: json
+    body: "{{ item }}"
+  loop: "{{ ecs_host_template_payloads }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name in ecs_existing_host_template_names
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Resolve ECS host IDs for template application
@@ -127,23 +164,26 @@
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Apply ECSMaster template without starting roles
-  cloudera.cluster.cm_resource:
-    host: "{{ cm_cluster_module_host }}"
-    port: "{{ cm_cluster_module_port }}"
-    version: "{{ cm_api_version }}"
-    force_tls: "{{ cm_cluster_module_force_tls }}"
-    username: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    verify_tls: false
-    path: >-
-      /clusters/{{ ecs_cluster_name
-      }}/hostTemplates/ECSMaster/commands/hostTemplateApply
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_name
+      }}/hostTemplates/ECSMaster/commands/applyHostTemplate?startRoles=false&runConfigRules=false
     method: POST
-    query:
-      startRoles: "false"
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+    body_format: json
     body:
       items:
         - hostId: "{{ ecs_host_id_lookups.results[0].json.hostId }}"
+  register: ecs_master_template_apply
+  changed_when: true
+  failed_when: >-
+    ecs_master_template_apply.status != 200
+    or not (ecs_master_template_apply.json.success | default(false) | bool)
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Build ECSWorker host references
@@ -159,21 +199,24 @@
   when: ecs_worker_fqdns | length > 0
 
 - name: Apply ECSWorker template without starting roles
-  cloudera.cluster.cm_resource:
-    host: "{{ cm_cluster_module_host }}"
-    port: "{{ cm_cluster_module_port }}"
-    version: "{{ cm_api_version }}"
-    force_tls: "{{ cm_cluster_module_force_tls }}"
-    username: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    verify_tls: false
-    path: >-
-      /clusters/{{ ecs_cluster_name
-      }}/hostTemplates/ECSWorker/commands/hostTemplateApply
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_name
+      }}/hostTemplates/ECSWorker/commands/applyHostTemplate?startRoles=false&runConfigRules=false
     method: POST
-    query:
-      startRoles: "false"
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+    body_format: json
     body:
       items: "{{ ecs_worker_host_apply_items }}"
+  register: ecs_worker_template_apply
+  changed_when: true
+  failed_when: >-
+    ecs_worker_template_apply.status != 200
+    or not (ecs_worker_template_apply.json.success | default(false) | bool)
   when: ecs_worker_fqdns | length > 0
   delegate_to: "{{ cm_cluster_module_delegate_to }}"

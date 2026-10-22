@@ -753,7 +753,16 @@
             and base_cluster_initialization_incomplete | bool
             and base_cluster_existing_role_count | int == 0
             and (
-              (base_cluster_existing_host_templates.json | default({})).get('items', [])
+              (
+                (base_cluster_existing_host_templates.json | default({})).get('items', [])
+                | map(attribute='name')
+                | list
+              )
+              | difference(
+                  base_cluster_spec.host_templates
+                  | map(attribute='name')
+                  | list
+                )
               | length
             ) == 0
             and existing_cluster.json.clusterState | default('') != 'STARTED'
@@ -842,9 +851,9 @@
     - name: Show resumable phased cluster recovery
       ansible.builtin.debug:
         msg: >-
-          Base cluster '{{ cdh_basecluster_name }}' stopped before host templates or
-          roles were created. Resuming the phased install in place and preserving
-          any active or completed parcel download/distribution.
+          Base cluster '{{ cdh_basecluster_name }}' stopped before roles were created.
+          Existing host templates are absent or match the requested topology. Resuming
+          the phased install in place and preserving parcel download/distribution.
       when: base_cluster_pre_template_resume_safe | bool
 
     - name: Delete incomplete base cluster with name {{ cdh_basecluster_name }}

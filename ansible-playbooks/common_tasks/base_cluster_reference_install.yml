@@ -348,17 +348,40 @@
   loop_control:
     label: "{{ item.name }}"
 
-- name: Establish Base cluster host templates through CM API
-  cloudera.cluster.cm_resource:
-    host: "{{ cm_cluster_module_host }}"
-    port: "{{ cm_cluster_module_port }}"
-    version: "{{ cm_api_version }}"
-    force_tls: "{{ cm_cluster_module_force_tls }}"
-    username: "{{ cm_admin_user }}"
+- name: Read existing Base cluster host templates
+  ansible.builtin.uri:
+    url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/hostTemplates"
+    method: GET
+    user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
-    verify_tls: false
-    path: "/clusters/{{ cdh_basecluster_name }}/hostTemplates"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_reference_existing_templates
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Index existing Base cluster host templates
+  ansible.builtin.set_fact:
+    base_cluster_reference_existing_template_names: >-
+      {{
+        base_cluster_reference_existing_templates.json['items'] | default([])
+        | map(attribute='name')
+        | list
+      }}
+
+- name: Create missing Base cluster host templates
+  ansible.builtin.uri:
+    url: "{{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/hostTemplates"
     method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+    body_format: json
     body:
       items:
         - name: "{{ item.name }}"
@@ -366,6 +389,29 @@
   loop: "{{ base_cluster_reference_host_templates }}"
   loop_control:
     label: "{{ item.name }}"
+  when: item.name not in base_cluster_reference_existing_template_names
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Reconcile existing Base cluster host templates
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/hostTemplates/{{ item.name | urlencode }}
+    method: PUT
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+    body_format: json
+    body:
+      name: "{{ item.name }}"
+      roleConfigGroupRefs: "{{ item.roleConfigGroupRefs }}"
+  loop: "{{ base_cluster_reference_host_templates }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name in base_cluster_reference_existing_template_names
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Resolve Base host IDs for template application
@@ -386,23 +432,26 @@
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Apply Master host template without starting roles
-  cloudera.cluster.cm_resource:
-    host: "{{ cm_cluster_module_host }}"
-    port: "{{ cm_cluster_module_port }}"
-    version: "{{ cm_api_version }}"
-    force_tls: "{{ cm_cluster_module_force_tls }}"
-    username: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    verify_tls: false
-    path: >-
-      /clusters/{{ cdh_basecluster_name
-      }}/hostTemplates/Master/commands/hostTemplateApply
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/hostTemplates/Master/commands/applyHostTemplate?startRoles=false&runConfigRules=false
     method: POST
-    query:
-      startRoles: "false"
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+    body_format: json
     body:
       items:
         - hostId: "{{ base_cluster_reference_host_lookups.results[0].json.hostId }}"
+  register: base_cluster_reference_master_template_apply
+  changed_when: true
+  failed_when: >-
+    base_cluster_reference_master_template_apply.status != 200
+    or not (base_cluster_reference_master_template_apply.json.success | default(false) | bool)
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Build Worker host references
@@ -417,21 +466,24 @@
     label: "{{ item.item }}"
 
 - name: Apply Worker host template without starting roles
-  cloudera.cluster.cm_resource:
-    host: "{{ cm_cluster_module_host }}"
-    port: "{{ cm_cluster_module_port }}"
-    version: "{{ cm_api_version }}"
-    force_tls: "{{ cm_cluster_module_force_tls }}"
-    username: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    verify_tls: false
-    path: >-
-      /clusters/{{ cdh_basecluster_name
-      }}/hostTemplates/Worker/commands/hostTemplateApply
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/hostTemplates/Worker/commands/applyHostTemplate?startRoles=false&runConfigRules=false
     method: POST
-    query:
-      startRoles: "false"
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+    body_format: json
     body:
       items: "{{ base_cluster_reference_worker_refs }}"
+  register: base_cluster_reference_worker_template_apply
+  changed_when: true
+  failed_when: >-
+    base_cluster_reference_worker_template_apply.status != 200
+    or not (base_cluster_reference_worker_template_apply.json.success | default(false) | bool)
   when: base_worker_fqdns | length > 0
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
