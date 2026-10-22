@@ -108,8 +108,64 @@
     validate_certs: no
     status_code: [200, 202]
     follow_redirects: none
+  register: cluster_parcel_distribution_command
+  changed_when: true
   when: cluster_parcel_download_status.json.stage == 'DOWNLOADED'
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Require cluster parcel distribution command id
+  ansible.builtin.assert:
+    that:
+      - cluster_parcel_distribution_command.json.id is defined
+    fail_msg: >-
+      Cloudera Manager accepted the parcel distribution request but did not
+      return a command id. Response={{ cluster_parcel_distribution_command.json
+      | default(cluster_parcel_distribution_command.content | default('unknown')) }}.
+  when: cluster_parcel_download_status.json.stage == 'DOWNLOADED'
+
+- name: Wait for cluster parcel distribution command
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/commands/{{
+      cluster_parcel_distribution_command.json.id }}
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: cluster_parcel_distribution_command_status
+  changed_when: false
+  until: >-
+    (
+      cluster_parcel_distribution_command_status.json.active is defined
+      and not (cluster_parcel_distribution_command_status.json.active | bool)
+    )
+    or (
+      lookup('pipe', 'date +%s') | int
+      >= cluster_parcel_deadline_epoch | int
+    )
+  retries: "{{ cluster_parcel_poll_retries_effective }}"
+  delay: "{{ cluster_parcel_poll_delay | default(15) }}"
+  when: cluster_parcel_download_status.json.stage == 'DOWNLOADED'
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Require successful cluster parcel distribution command
+  ansible.builtin.assert:
+    that:
+      - cluster_parcel_distribution_command_status.json.active is defined
+      - not (cluster_parcel_distribution_command_status.json.active | bool)
+      - cluster_parcel_distribution_command_status.json.success | default(false) | bool
+    fail_msg: >-
+      Cloudera Manager parcel distribution command {{
+      cluster_parcel_distribution_command.json.id }} did not succeed.
+      active={{ cluster_parcel_distribution_command_status.json.active | default('unknown') }};
+      success={{ cluster_parcel_distribution_command_status.json.success | default('unknown') }};
+      result={{ cluster_parcel_distribution_command_status.json.resultMessage
+      | default(cluster_parcel_distribution_command_status.json.result_message
+      | default('unknown')) }}.
+  when: cluster_parcel_download_status.json.stage == 'DOWNLOADED'
 
 - name: Wait for cluster parcel distribution
   ansible.builtin.uri:
