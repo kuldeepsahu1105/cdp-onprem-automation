@@ -13,6 +13,13 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
 | Parcel repo | `ecs_parcel_repo_url` merged via `configure_cm_parcel_repo_api.yml` |
 | CM API auth | `resolve_cm_cluster_module_endpoint.yml` (HTTPS when Auto-TLS) |
 
+The ECS wildcard DNS record must resolve to the ECS master **private IP** from
+the ECS nodes. Playbook `19_setup_wildcard.yml` prefers the inventory
+`private_ip` and verifies `console-cdp.<ecs_app_domain>` after updating FreeIPA.
+Playbook 33 repeats the lookup from the ECS master and fails before First Run if
+the hostname resolves to a public address, preventing `helm-install-all` from
+hanging on a self-connection through the public IP.
+
 ## Phased steps (new cluster)
 
 1. **Cluster shell** — `cloudera.cluster.cluster` `state: present`, `type: EXPERIENCE_CLUSTER`, `cluster_version` from `ecs_parcel_version` or the pinned ECS repository manifest.

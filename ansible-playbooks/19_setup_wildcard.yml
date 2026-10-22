@@ -29,7 +29,19 @@
 
         - name: Get ECS Master IP dynamically
           set_fact:
-            ecs_master_ip: "{{ hostvars[groups['ecs-masters'][0]]['ansible_host'] | default(hostvars[groups['ecs-masters'][0]]['ansible_default_ipv4']['address']) }}"
+            ecs_master_ip: >-
+              {{
+                hostvars[groups['ecs-masters'][0]].private_ip
+                | default(
+                    hostvars[groups['ecs-masters'][0]]
+                    .get('ansible_default_ipv4', {})
+                    .get(
+                      'address',
+                      hostvars[groups['ecs-masters'][0]].ansible_host
+                    ),
+                    true
+                  )
+              }}
 
         - name: Debug ECS Master IP
           debug:
@@ -82,13 +94,22 @@
             msg: "{{ nslookup_ip.stdout.split('\n') }}"
 
         - name: Validate DNS resolution using dig
-          command: "dig console-cdp.apps.{{ ipaserver_domain }} A"
+          command: "dig +short console-cdp.apps.{{ ipaserver_domain }} A"
           register: dig_output
           changed_when: false
 
         - name: Display dig output
           debug:
             msg: "{{ dig_output.stdout.split('\n') }}"
+
+        - name: Require wildcard DNS to resolve to the ECS master private IP
+          ansible.builtin.assert:
+            that:
+              - ecs_master_ip in dig_output.stdout_lines
+            fail_msg: >-
+              console-cdp.apps.{{ ipaserver_domain }} resolves to
+              {{ dig_output.stdout_lines | default([]) | join(', ') }}, but ECS
+              First Run requires the ECS master private IP {{ ecs_master_ip }}.
 
         - name: Reverse lookup validation
           command: "dig -x {{ ecs_master_ip }}"
