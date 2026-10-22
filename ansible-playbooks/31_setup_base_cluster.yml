@@ -355,6 +355,69 @@
           - "Configured CDH parcel version: {{ cdh_parcel_version }}"
           - "Repository CDH parcel version: {{ base_cluster_cdh_parcel_version_effective }}"
 
+    - name: Resolve whether the CFM parcel is required
+      ansible.builtin.set_fact:
+        base_cluster_cfm_parcel_required: >-
+          {{
+            base_cluster_install_services.nifi | default(false) | bool
+            or base_cluster_install_services.nifi_registry | default(false) | bool
+          }}
+
+    - name: Read configured CFM parcel repository manifest
+      ansible.builtin.uri:
+        url: "{{ cfm_parcel_yum_tars_repo_url | regex_replace('/+$', '') }}/manifest.json"
+        method: GET
+        user: "{{ cm_repo_username if (cm_repo_source | default('public')) == 'public' else omit }}"
+        password: "{{ cm_repo_password if (cm_repo_source | default('public')) == 'public' else omit }}"
+        force_basic_auth: "{{ (cm_repo_source | default('public')) == 'public' }}"
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: safe
+        return_content: true
+        timeout: 60
+      register: base_cluster_cfm_manifest
+      changed_when: false
+      no_log: true
+      when: base_cluster_cfm_parcel_required | bool
+      delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
+
+    - name: Parse configured CFM parcel repository manifest
+      ansible.builtin.set_fact:
+        base_cluster_cfm_manifest_data: "{{ base_cluster_cfm_manifest.content | from_json }}"
+      no_log: true
+      when: base_cluster_cfm_parcel_required | bool
+
+    - name: Select published CFM parcel version
+      ansible.builtin.set_fact:
+        base_cluster_cfm_parcel_versions_available: >-
+          {{
+            base_cluster_cfm_manifest_data.get('parcels', [])
+            | map(attribute='parcelName')
+            | select('match', '^CFM-.*[.]parcel$')
+            | map('regex_replace', '^CFM-', '')
+            | map('regex_replace', '-[^-]+[.]parcel$', '')
+            | unique
+            | list
+          }}
+      when: base_cluster_cfm_parcel_required | bool
+
+    - name: Require unambiguous CFM parcel before cluster mutation
+      ansible.builtin.assert:
+        that:
+          - base_cluster_cfm_parcel_versions_available | length == 1
+        fail_msg: >-
+          Could not resolve one CFM parcel from
+          {{ cfm_parcel_yum_tars_repo_url | regex_replace('/+$', '') }}/manifest.json.
+          Matching versions:
+          {{ base_cluster_cfm_parcel_versions_available | default([]) | join(', ') | default('(none)', true) }}.
+      when: base_cluster_cfm_parcel_required | bool
+
+    - name: Use CFM parcel version published by configured repository
+      ansible.builtin.set_fact:
+        base_cluster_cfm_parcel_version_effective: >-
+          {{ base_cluster_cfm_parcel_versions_available | first }}
+      when: base_cluster_cfm_parcel_required | bool
+
     - name: Prepare cluster module connection
       ansible.builtin.import_tasks: common_tasks/resolve_cm_cluster_module_endpoint.yml
 

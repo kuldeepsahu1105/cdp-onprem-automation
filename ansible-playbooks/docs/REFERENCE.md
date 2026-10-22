@@ -95,7 +95,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `cm_repo_public_base_url` | `https://archive.cloudera.com/p` | Public archive base URL |
 | `cm_repo_mirror_host` | cldr-mngr IP | Internal mirror HTTP host |
 | `parcel_repo` | computed | Public or internal CDH parcel URL (`…/p/cdh7/<cdh_version>/parcels/`) |
-| `cluster_parcel_timeout_seconds` | `3600` | Shared maximum duration for parcel download, distribution, and activation |
+| `cluster_parcel_timeout_seconds` | `3600` | Per-parcel maximum across download, distribution, and activation; dependent CDH/CFM parcels each receive this budget |
 | `cluster_parcel_poll_delay` | `15` | Seconds between CM parcel-stage polls |
 | `parcel_repo_latest_public` | computed | `…/p/cdh7/latest/parcels/` when `cm_parcel_repo_include_latest` (literal segment `latest` — **not** `{latest}`) |
 | `ecs_parcel_repo_url` | computed | `…/p/cdp-pvc-ds/<ecs_pvc_ds_version>/parcels/` (see `ecs_pvc_ds_version` in ECS table above) |

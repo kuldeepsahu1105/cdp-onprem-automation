@@ -136,6 +136,14 @@
     cluster_parcel_product: CDH
     cluster_parcel_version: "{{ base_cluster_cdh_parcel_version_effective }}"
 
+- name: Activate CFM parcel after CDH
+  ansible.builtin.include_tasks: activate_cluster_parcel.yml
+  vars:
+    cluster_parcel_cluster: "{{ cdh_basecluster_name }}"
+    cluster_parcel_product: CFM
+    cluster_parcel_version: "{{ base_cluster_cfm_parcel_version_effective }}"
+  when: base_cluster_cfm_parcel_required | default(false) | bool
+
 - name: Order Base services by dependency
   ansible.builtin.set_fact:
     base_cluster_reference_services: >-
