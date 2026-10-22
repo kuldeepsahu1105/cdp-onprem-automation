@@ -333,23 +333,27 @@
             or (
               existing_ecs_cluster.status == 200
               and (
-                ['docker', 'ecs']
-                | difference(
-                    existing_ecs_services.json['items'] | default([])
-                    | map(attribute='name')
-                    | list
-                  )
-                | length
-              ) > 0
+                (
+                  ['docker', 'ecs']
+                  | difference(
+                      existing_ecs_services.json['items'] | default([])
+                      | map(attribute='name')
+                      | list
+                    )
+                  | length
+                ) > 0
+                or existing_ecs_cluster.json.serviceState | default('')
+                   != 'STARTED'
+              )
             )
           }}
 
     - name: Report partial ECS cluster recovery
       ansible.builtin.debug:
         msg: >-
-          ECS cluster shell '{{ ecs_cluster_name }}' exists but is missing one or
-          more required services (docker, ecs). Resuming the reference-aligned
-          host attachment, parcel activation, service, role, and control-plane phases.
+          ECS cluster '{{ ecs_cluster_name }}' exists but is incomplete or not
+          fully started. Resuming the reference-aligned host attachment, parcel
+          activation, service, role, and control-plane phases.
       when:
         - existing_ecs_cluster.status == 200
         - ecs_phased_install_required | bool
