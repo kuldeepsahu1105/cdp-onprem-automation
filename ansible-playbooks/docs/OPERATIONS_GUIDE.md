@@ -500,15 +500,19 @@ the cluster is started if necessary, and CM runs
 
 First Run failures are expanded from the parent CM command into failed service
 commands and their child validation messages in Jenkins. First Run is submitted
-for a newly created cluster and for an existing populated cluster when the
-matching cluster-UUID initialization marker is absent. This remains true when
-an earlier First Run formatted and started HDFS but failed later on Hue, Knox,
-HBase, YARN, Spark, or another service. Playbook **31** resubmits
-`POST .../commands/firstRun` and lets Cloudera Manager detect completed steps,
-initialize the remaining services, and enforce dependency ordering. It does not
-replace First Run with hand-built per-service setup commands or direct HDFS
-namespace mutations. This matches the cloudera-labs lifecycle pattern of
-starting the cluster with forced First Run.
+for a newly created cluster or an existing cluster only while both the matching
+cluster-UUID completion marker and the HDFS
+`{{ base_cluster_hdfs_name_dir }}/current/VERSION` file are absent. CM may format
+HDFS successfully and then report a later Hue, Knox, HBase, YARN, Spark, or
+other service failure. On that rerun, playbook **31** preserves the formatted
+namespace, runs only idempotent service initialization commands, and uses normal
+cluster Start. It never resubmits First Run or formats the NameNode once the
+HDFS VERSION file exists. A newly created CM cluster that finds an existing
+VERSION file fails immediately rather than adopting or destroying unknown data.
+For a new unformatted filesystem mounted directly at the configured NameNode
+directory, playbook **31** removes only an otherwise-empty filesystem's
+`lost+found` entry. Any other contents fail the preflight with their names before
+First Run; they are never deleted implicitly.
 
 Before submitting First Run, playbook **31** runs CM's cluster-wide
 `deployClientConfig` command as a native validation gate. This validates every

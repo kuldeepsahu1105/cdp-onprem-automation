@@ -508,6 +508,7 @@ base_cluster_ranger_usersync_password: "{{ base_cluster_ranger_admin_password }}
 base_cluster_ranger_admin_port: 6182
 # Direct web UI ports on base-masters (used when Knox is disabled; Knox uses cdp-proxy below)
 base_cluster_hdfs_namenode_ui_port: 9870
+base_cluster_hdfs_name_dir: /dfs/nn
 base_cluster_yarn_rm_ui_port: 8088
 base_cluster_hue_ui_port: 8888
 base_cluster_hbase_master_ui_port: 16010
@@ -532,7 +533,8 @@ base_cluster_force_secret_update: false
 # Records successful CM First Run plus final service-health verification for this cluster UUID.
 base_cluster_initialization_marker_path: /var/lib/cloudera-scm-server/.ansible-base-cluster-initialized
 # When true, submit CM First Run even when the matching completion marker exists.
-# Without the marker, reruns automatically resubmit First Run and let CM reconcile completed steps.
+# The NameNode storage must still be unformatted; automation never reformats an
+# existing HDFS namespace.
 base_cluster_force_first_run: false
 
 # CDP base cluster services (31_setup_base_cluster.yml). Override per key in Ansible controller via base_cluster_install_services.

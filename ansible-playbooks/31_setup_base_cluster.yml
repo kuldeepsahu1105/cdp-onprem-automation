@@ -1821,26 +1821,154 @@
           }}
       when: existing_cluster.status == 200
 
+    - name: Check whether the HDFS NameNode namespace is already formatted
+      ansible.builtin.stat:
+        path: "{{ base_cluster_hdfs_name_dir }}/current/VERSION"
+      register: base_cluster_hdfs_version_file
+      become: true
+      connection: ssh
+      delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+      when: base_cluster_install_services.hdfs | default(true) | bool
+
+    - name: Inspect existing HDFS NameNode directory contents
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          if test -d {{ base_cluster_hdfs_name_dir | quote }}; then
+            find {{ base_cluster_hdfs_name_dir | quote }} \
+              -mindepth 1 -maxdepth 1 -printf '%f\n' | sort
+          fi
+        executable: /bin/bash
+      register: base_cluster_hdfs_name_dir_contents
+      changed_when: false
+      become: true
+      connection: ssh
+      delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+      when: base_cluster_install_services.hdfs | default(true) | bool
+
+    - name: Read existing HDFS namespace identity
+      ansible.builtin.slurp:
+        src: "{{ base_cluster_hdfs_name_dir }}/current/VERSION"
+      register: base_cluster_hdfs_version
+      become: true
+      connection: ssh
+      delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+      when:
+        - base_cluster_install_services.hdfs | default(true) | bool
+        - base_cluster_hdfs_version_file.stat.exists | default(false) | bool
+
+    - name: Resolve HDFS namespace state
+      ansible.builtin.set_fact:
+        base_cluster_hdfs_formatted: >-
+          {{
+            base_cluster_install_services.hdfs | default(true) | bool
+            and base_cluster_hdfs_version_file.stat.exists | default(false) | bool
+          }}
+        base_cluster_hdfs_namespace_identity: >-
+          {{
+            (
+              base_cluster_hdfs_version.content | b64decode
+              | regex_findall('(?m)^(?:clusterID|namespaceID)=.*$')
+              | join(', ')
+            )
+            if (
+              base_cluster_hdfs_version.content is defined
+            )
+            else 'unformatted'
+          }}
+
+    - name: Remove only filesystem lost+found from unformatted NameNode storage
+      ansible.builtin.file:
+        path: "{{ base_cluster_hdfs_name_dir }}/lost+found"
+        state: absent
+      become: true
+      connection: ssh
+      delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+      when:
+        - base_cluster_install_services.hdfs | default(true) | bool
+        - not (base_cluster_hdfs_formatted | bool)
+        - base_cluster_hdfs_name_dir_contents.stdout_lines | default([]) == ['lost+found']
+
+    - name: Refuse First Run over unexplained NameNode directory contents
+      ansible.builtin.assert:
+        that:
+          - >-
+            base_cluster_hdfs_name_dir_contents.stdout_lines | default([])
+            | difference(['lost+found'])
+            | length == 0
+        fail_msg: >-
+          Refusing CM First Run because unformatted NameNode directory
+          {{ base_cluster_hdfs_name_dir }} is not empty on
+          {{ groups[base_cluster_master_group][0] }}. Unexpected entries:
+          {{
+            base_cluster_hdfs_name_dir_contents.stdout_lines | default([])
+            | difference(['lost+found'])
+            | join(', ')
+          }}. Use the explicit cleanup workflow after confirming these are not
+          HDFS data; automation will not delete unexplained storage contents.
+      when:
+        - base_cluster_install_services.hdfs | default(true) | bool
+        - not (base_cluster_hdfs_formatted | bool)
+
+    - name: Refuse a fresh CM cluster over an existing HDFS namespace
+      ansible.builtin.assert:
+        that:
+          - not (base_cluster_hdfs_formatted | bool)
+        fail_msg: >-
+          Refusing destructive First Run for newly created CM cluster
+          {{ cdh_basecluster_name }} because
+          {{ base_cluster_hdfs_name_dir }}/current/VERSION already exists on
+          {{ groups[base_cluster_master_group][0] }}
+          ({{ base_cluster_hdfs_namespace_identity }}). Clean the host through the
+          explicit cluster cleanup workflow or adopt the CM cluster that owns this
+          namespace; automation will never reformat existing HDFS data.
+      when:
+        - base_cluster_create_required | bool
+        - existing_cluster.status == 404
+        - base_cluster_install_services.hdfs | default(true) | bool
+
     - name: Determine whether CM First Run still needs to run
       ansible.builtin.set_fact:
         base_cluster_pending_first_run: >-
           {{
-            base_cluster_force_first_run | default(false) | bool
-            or (
-              existing_cluster.status == 200
-              and not (base_cluster_partial_empty | bool)
-              and base_cluster_initialization_incomplete | default(false) | bool
+            not (base_cluster_hdfs_formatted | bool)
+            and (
+              base_cluster_force_first_run | default(false) | bool
+              or (
+                existing_cluster.status == 200
+                and not (base_cluster_partial_empty | bool)
+                and base_cluster_initialization_incomplete | default(false) | bool
+              )
             )
           }}
       when: existing_cluster.status == 200
+
+    - name: Detect partial First Run with formatted HDFS
+      ansible.builtin.set_fact:
+        base_cluster_partial_first_run_recovery_required: >-
+          {{
+            existing_cluster.status == 200
+            and not (base_cluster_partial_empty | bool)
+            and base_cluster_initialization_incomplete | default(false) | bool
+            and base_cluster_hdfs_formatted | bool
+          }}
 
     - name: Show pending CM First Run on existing cluster
       ansible.builtin.debug:
         msg: >-
           Base cluster exists but First Run never completed (the cluster UUID initialization
-          marker is absent). Playbook will resubmit CM First Run so Cloudera Manager owns
-          service initialization and dependency ordering.
+          marker and HDFS VERSION file are absent). Playbook will submit CM First Run so
+          Cloudera Manager owns service initialization and dependency ordering.
       when: base_cluster_pending_first_run | default(false) | bool
+
+    - name: Show partial First Run recovery
+      ansible.builtin.debug:
+        msg: >-
+          Base cluster First Run did not complete, but HDFS is already formatted
+          ({{ base_cluster_hdfs_namespace_identity }}). Preserving the namespace,
+          reconciling only idempotent service initialization commands, and using
+          normal cluster Start. CM First Run and NameNode format will not run again.
+      when: base_cluster_partial_first_run_recovery_required | bool
 
     - name: Determine whether ordered Ozone recovery is required
       ansible.builtin.set_fact:
@@ -1850,14 +1978,19 @@
             and not (base_cluster_partial_empty | bool)
             and not (base_cluster_pending_first_run | default(false) | bool)
             and base_cluster_install_services.ozone | default(true) | bool
-            and existing_cluster.json.clusterState | default('') == 'STARTED'
             and (
-              base_cluster_existing_ozone_service.serviceState | default('') != 'STARTED'
-              or base_cluster_existing_ozone_service.healthSummary | default('') == 'BAD'
+              base_cluster_partial_first_run_recovery_required | bool
+              or (
+                existing_cluster.json.clusterState | default('') == 'STARTED'
+                and (
+                  base_cluster_existing_ozone_service.serviceState | default('') != 'STARTED'
+                  or base_cluster_existing_ozone_service.healthSummary | default('') == 'BAD'
+                )
+              )
             )
           }}
 
-    - name: Prepare Kerberos before CM First Run or Ozone repair
+    - name: Prepare Kerberos before CM First Run or recovery
       ansible.builtin.include_tasks: common_tasks/prepare_cluster_kerberos_before_start.yml
       when:
         - base_cluster_enable_kerberos | default(true) | bool
@@ -1865,6 +1998,7 @@
           base_cluster_create_required | bool
           or base_cluster_ozone_ordered_recovery_required | bool
           or base_cluster_pending_first_run | default(false) | bool
+          or base_cluster_partial_first_run_recovery_required | bool
 
     - name: Refresh Cloudera Manager Auto-TLS state before cluster Auto-TLS
       ansible.builtin.include_tasks: common_tasks/fetch_cm_autotls_api_state.yml
@@ -1893,6 +2027,10 @@
         - base_cluster_install_services.knox | default(true) | bool
         - base_cluster_knox_gateway_group is defined
         - base_cluster_knox_gateway_group | length > 0
+
+    - name: Recover services after partial First Run
+      ansible.builtin.include_tasks: common_tasks/recover_partial_base_first_run.yml
+      when: base_cluster_partial_first_run_recovery_required | bool
 
     - name: Show ordered Ozone recovery
       ansible.builtin.debug:
@@ -2163,7 +2301,9 @@
       register: base_cluster_hue_roles_before_first_run
       changed_when: false
       when:
-        - base_cluster_first_run_required | bool
+        - >-
+          base_cluster_first_run_required | bool
+          or base_cluster_partial_first_run_recovery_required | bool
         - base_cluster_install_services.hue | default(true) | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
@@ -2181,7 +2321,9 @@
           {%- endfor -%}
           {{ data_hosts | unique | difference(renewer_hosts | unique) }}
       when:
-        - base_cluster_first_run_required | bool
+        - >-
+          base_cluster_first_run_required | bool
+          or base_cluster_partial_first_run_recovery_required | bool
         - base_cluster_install_services.hue | default(true) | bool
 
     - name: Require Hue Kerberos Ticket Renewer colocation before First Run
@@ -2193,7 +2335,9 @@
           hosts lack a colocated KT_RENEWER:
           {{ base_cluster_hue_hosts_without_kt_renewer | join(', ') }}.
       when:
-        - base_cluster_first_run_required | bool
+        - >-
+          base_cluster_first_run_required | bool
+          or base_cluster_partial_first_run_recovery_required | bool
         - base_cluster_install_services.hue | default(true) | bool
 
     - name: Validate all service client configurations before First Run
@@ -2209,7 +2353,9 @@
         status_code: [200]
         follow_redirects: none
       register: base_cluster_pre_first_run_client_config
-      when: base_cluster_first_run_required | bool
+      when: >-
+        base_cluster_first_run_required | bool
+        or base_cluster_partial_first_run_recovery_required | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Wait for pre-First-Run service configuration validation
@@ -2219,7 +2365,9 @@
         cm_api_command_id: "{{ base_cluster_pre_first_run_client_config.json.id }}"
         cm_api_command_allow_already_exists: false
       when:
-        - base_cluster_first_run_required | bool
+        - >-
+          base_cluster_first_run_required | bool
+          or base_cluster_partial_first_run_recovery_required | bool
         - base_cluster_pre_first_run_client_config.json.id is defined
 
     - name: Show cluster startup wait

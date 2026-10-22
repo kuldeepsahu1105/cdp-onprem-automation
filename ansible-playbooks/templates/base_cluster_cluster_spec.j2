@@ -41,7 +41,7 @@ services:
           dfs_data_dir_list: /dfs/dn
       - type: NAMENODE
         config:
-          dfs_name_dir_list: /dfs/nn
+          dfs_name_dir_list: "{{ base_cluster_hdfs_name_dir }}"
       - type: SECONDARYNAMENODE
         config:
           fs_checkpoint_dir_list: /dfs/snn

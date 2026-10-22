@@ -1,0 +1,176 @@
+---
+# Resume a cluster whose earlier CM First Run formatted HDFS but failed later.
+# Every command here is non-destructive and tolerates an already-created artifact.
+
+- name: Start partial First Run recovery prerequisites
+  ansible.builtin.include_tasks: run_cm_service_setup_command.yml
+  loop: >-
+    {{
+      (
+        [{'service': 'zookeeper', 'command': 'start'}]
+        if (base_cluster_install_services.zookeeper | default(true) | bool)
+        else []
+      )
+      + (
+        [{'service': 'hdfs', 'command': 'start'}]
+        if (base_cluster_install_services.hdfs | default(true) | bool)
+        else []
+      )
+      + (
+        [{'service': 'ranger', 'command': 'start'}]
+        if (base_cluster_install_services.ranger | default(true) | bool)
+        else []
+      )
+    }}
+  loop_control:
+    loop_var: base_cluster_setup_command
+    label: "{{ base_cluster_setup_command.service }}:{{ base_cluster_setup_command.command }}"
+
+- name: Read YARN initialization paths
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/yarn/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_yarn_recovery_config
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: base_cluster_install_services.yarn | default(true) | bool
+
+- name: Resolve YARN node-label directory
+  ansible.builtin.set_fact:
+    base_cluster_yarn_node_labels_dir: >-
+      {{
+        (
+          base_cluster_yarn_recovery_config.json['items'] | default([])
+          | selectattr('name', 'equalto', 'node_labels_root_dir')
+          | map(attribute='value')
+          | first
+        )
+        | default('/yarn/node-labels', true)
+      }}
+  when: base_cluster_install_services.yarn | default(true) | bool
+
+- name: Read Hive initialization paths
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/hive/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_hive_recovery_config
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: base_cluster_install_services.hive | default(true) | bool
+
+- name: Resolve Hive external warehouse directory
+  ansible.builtin.set_fact:
+    base_cluster_hive_external_warehouse_dir: >-
+      {{
+        (
+          base_cluster_hive_recovery_config.json['items'] | default([])
+          | selectattr('name', 'equalto', 'hive_warehouse_external_directory')
+          | map(attribute='value')
+          | first
+        )
+        | default('/warehouse/tablespace/external/hive', true)
+      }}
+  when: base_cluster_install_services.hive | default(true) | bool
+
+- name: Recover HDFS temporary directory
+  ansible.builtin.include_tasks: ensure_hdfs_tmp.yml
+  when: base_cluster_install_services.hdfs | default(true) | bool
+
+- name: Recover YARN node-label directory
+  ansible.builtin.include_tasks: reconcile_hdfs_directory.yml
+  vars:
+    hdfs_directory_path: "{{ base_cluster_yarn_node_labels_dir }}"
+    hdfs_directory_mode: "700"
+    hdfs_directory_owner: "yarn:yarn"
+  when:
+    - base_cluster_install_services.hdfs | default(true) | bool
+    - base_cluster_install_services.yarn | default(true) | bool
+
+- name: Build partial First Run recovery commands
+  ansible.builtin.set_fact:
+    base_cluster_partial_first_run_commands: >-
+      {{
+        (
+          [{'service': 'ranger', 'command': 'SetupPluginServices'}]
+          if (base_cluster_install_services.ranger | default(true) | bool)
+          else []
+        )
+        + (
+          [
+            {'service': 'solr', 'command': 'createSolrHdfsHomeDir'},
+            {'service': 'solr', 'command': 'initSolr'}
+          ]
+          if (base_cluster_install_services.solr | default(false) | bool)
+          else []
+        )
+        + (
+          [
+            {'service': 'hbase', 'command': 'hbaseCreateRoot'},
+            {'service': 'hbase', 'command': 'hbaseCreateUserDirectory'}
+          ]
+          if (base_cluster_install_services.hbase | default(true) | bool)
+          else []
+        )
+        + (
+          [
+            {'service': 'yarn', 'command': 'yarnCreateJobHistoryDirCommand'},
+            {'service': 'yarn', 'command': 'installMrFrameworkJars'}
+          ]
+          if (base_cluster_install_services.yarn | default(true) | bool)
+          else []
+        )
+        + (
+          [
+            {'service': 'spark3_on_yarn', 'command': 'CreateSparkHistoryDirCommand'},
+            {'service': 'spark3_on_yarn', 'command': 'CreateSparkUserDirCommand'},
+            {'service': 'spark3_on_yarn', 'command': 'CreateSparkDriverLogDirCommand'}
+          ]
+          if (base_cluster_install_services.spark3 | default(true) | bool)
+          else []
+        )
+        + (
+          [
+            {'service': 'hive', 'command': 'hiveCreateHiveUserDir'},
+            {'service': 'hive', 'command': 'hiveCreateHiveWarehouse'},
+            {
+              'service': 'hive',
+              'command': 'hiveCreateHiveWarehouseExternal',
+              'query': 'directory=' ~ (
+                base_cluster_hive_external_warehouse_dir
+                | regex_replace('^/warehouse/?', '')
+                | urlencode
+              )
+            }
+          ]
+          if (base_cluster_install_services.hive | default(true) | bool)
+          else []
+        )
+        + (
+          [{'service': 'impala', 'command': 'impalaCreateUserDir'}]
+          if (base_cluster_install_services.impala | default(true) | bool)
+          else []
+        )
+      }}
+
+- name: Reconcile partial First Run service initialization
+  ansible.builtin.include_tasks: run_cm_service_setup_command.yml
+  loop: "{{ base_cluster_partial_first_run_commands }}"
+  loop_control:
+    loop_var: base_cluster_setup_command
+    label: "{{ base_cluster_setup_command.service }}:{{ base_cluster_setup_command.command }}"

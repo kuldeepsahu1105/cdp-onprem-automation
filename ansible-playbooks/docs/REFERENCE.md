@@ -75,7 +75,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `base_cluster_ranger_admin_port` | `6182` | Direct Ranger Admin UI on the base cluster master (deployment portal links; Knox uses its own gateway URL) |
 | `base_cluster_*_ui_port` | see `all.yml` | Direct HTTP UI ports on `base-masters` when Knox is off (`hdfs` 9870, `yarn` 8088, `hue` 8888, `hbase` 16010, `atlas` 21000, `ozone` Recon 9888, `solr` 8983, `impala` debug 25000) |
 | `base_cluster_knox_cdp_proxy_path` | `/gateway/cdp-proxy` | Knox topology prefix for portal links when `base_cluster_install_services.knox` is true (`deployment_portal_base_cluster_portal_urls.j2`) |
-| `base_cluster_force_first_run` | `false` | Force `POST .../commands/firstRun` even when the matching cluster-UUID completion marker exists; a missing marker automatically resubmits First Run |
+| `base_cluster_hdfs_name_dir` | `/dfs/nn` | NameNode storage inspected before First Run; an existing `current/VERSION` selects non-destructive partial-First-Run recovery |
+| `base_cluster_force_first_run` | `false` | Force `POST .../commands/firstRun` despite the completion marker; existing HDFS namespace metadata still blocks destructive reformatting |
 | `base_cluster_service_health_retries` / `base_cluster_service_health_delay` | `90` / `10` | Bounded final poll for every enabled service with a non-gateway role before initialization is recorded |
 | `base_cluster_accepted_health_summaries` | `[GOOD]` | Health summaries accepted by the final base-cluster service gate |
 | `cm_admin_bootstrap_pass` | `admin` | Factory CM password; when `cm_admin_pass` differs, `ensure_cm_admin_password.yml` runs in **24_start_cm** / **27_setup_cm_autotls** only |
