@@ -23,7 +23,7 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
    (`ECSMaster`, `ECSWorker`) through the v4-compatible CM API, applied with
    `startRoles=false`.
 6. **Control plane submission/adoption** — `common_tasks/ecs_install_control_plane.yml` submits First Run or adopts its durable `/controlPlanes` record without blocking on completion.
-7. **CoreDNS during First Run** — as soon as RKE2 and the CoreDNS ConfigMap exist, replace `/etc/resolv.conf` in its `forward` stanza with the FreeIPA private IP (or AD DNS servers), retain `policy sequential`, and restart CoreDNS only when changed.
+7. **CoreDNS during First Run** — as soon as RKE2 and the CoreDNS ConfigMap exist, replace `/etc/resolv.conf` in its `forward` stanza with the FreeIPA private IP (or AD DNS servers) and restart CoreDNS only when changed.
 8. **First Run completion** — wait for the submitted CM command, or for an adopted installation to reach `STARTED`, only after CoreDNS is repaired.
 9. **Start** — `cloudera.cluster.cluster` `state: started`.
 10. **Operator CLI** — expose the RKE2 `kubectl` binary, copy a user-owned kubeconfig for `root` and the SSH user, install checksum-verified `k9s`, and verify that each user can list Kubernetes nodes.

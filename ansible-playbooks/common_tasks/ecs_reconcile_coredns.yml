@@ -38,10 +38,8 @@
 
 - name: Build ECS CoreDNS forward stanza
   ansible.builtin.set_fact:
-    ecs_coredns_forward_stanza: |-
-      forward . {{ ecs_coredns_forwarders_effective | join(' ') }} {
-        policy sequential
-      }
+    ecs_coredns_forward_stanza: >-
+      forward . {{ ecs_coredns_forwarders_effective | join(' ') }}
 
 - name: Check ECS kubectl binary
   ansible.builtin.stat:
