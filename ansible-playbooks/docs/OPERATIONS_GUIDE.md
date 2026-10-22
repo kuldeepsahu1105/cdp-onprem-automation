@@ -510,6 +510,12 @@ replace First Run with hand-built per-service setup commands or direct HDFS
 namespace mutations. This matches the cloudera-labs lifecycle pattern of
 starting the cluster with forced First Run.
 
+Before submitting First Run, playbook **31** runs CM's cluster-wide
+`deployClientConfig` command as a native validation gate. This validates every
+enabled service and role topology after all automation-owned configuration and
+role repairs have been applied, while roles are still stopped. A validation
+error therefore blocks First Run before any additional service initialization.
+
 The matching marker is recorded only after First Run, startup,
 client-configuration refresh, ZooKeeper role validation, and every enabled
 service with a non-gateway role reports `STARTED` with an accepted health
@@ -607,6 +613,11 @@ transition. This leaves playbook **30** responsible for CM-wide KDC integration
 and account-manager credential import.
 
 Hue's `KT_RENEWER` requires its initial keytab login to receive a renewable TGT.
+The Base master host template colocates `KT_RENEWER` with Hue's server roles,
+and playbook **31** adds the role when adopting an interrupted cluster created
+before that mapping existed. This auxiliary repair is excluded from destructive
+partial-topology classification, so a missing renewer never causes cluster
+recreation.
 Playbook **12** reconciles the FreeIPA global policy to a 24-hour maximum ticket
 life and 7-day maximum renewable life. Playbook **16** deploys matching
 `ticket_lifetime` and `renew_lifetime` defaults under `/etc/krb5.conf.d` on

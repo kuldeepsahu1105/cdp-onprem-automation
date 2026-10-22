@@ -769,8 +769,19 @@
               if template.name == 'Worker'
               else 1
             ) -%}
+            {%- set required_roles =
+              template.role_groups
+              | rejectattr('service', 'equalto', 'HUE')
+              | list
+            -%}
+            {%- set hue_required_roles =
+              template.role_groups
+              | selectattr('service', 'equalto', 'HUE')
+              | rejectattr('type', 'equalto', 'KT_RENEWER')
+              | list
+            -%}
             {%- set expected.count = expected.count
-              + (template.role_groups | length * multiplier) -%}
+              + ((required_roles + hue_required_roles) | length * multiplier) -%}
           {%- endfor -%}
           {{ expected.count }}
 
@@ -1035,7 +1046,8 @@
           ozone.scm.primordial.node.id: "{{ base_cluster_ozone_primordial_node_effective }}"
           ozone.security.enabled: >-
             {{ 'true' if base_cluster_enable_kerberos | default(true) | bool else 'false' }}
-          solr_service: "{{ 'solr' if base_cluster_install_services.solr | default(true) else '' }}"
+          hdfs_service: "{{ 'hdfs' if base_cluster_install_services.hdfs | default(true) else '' }}"
+          solr_service: "{{ 'solr' if base_cluster_install_services.solr | default(false) else '' }}"
       when: base_cluster_install_services.ozone | default(true) | bool
 
     - name: Configure Core Settings security
@@ -1414,11 +1426,12 @@
       when: >-
         base_cluster_install_services.ozone | default(true) | bool
         or base_cluster_install_services.kafka | default(true) | bool
+        or base_cluster_install_services.hue | default(true) | bool
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
-    - name: Select Ozone service host
+    - name: Select Base master CM host
       ansible.builtin.set_fact:
-        base_cluster_ozone_service_host_id: >-
+        base_cluster_master_cm_host_id: >-
           {{
             base_cluster_cm_hosts.json['items']
             | selectattr('hostname', 'equalto', base_master_fqdn)
@@ -1426,15 +1439,117 @@
             | first
             | default('')
           }}
-      when: base_cluster_install_services.ozone | default(true) | bool
 
-    - name: Check Ozone service host
+    - name: Check Base master CM host
       ansible.builtin.assert:
         that:
-          - base_cluster_ozone_service_host_id | length > 0
+          - base_cluster_master_cm_host_id | length > 0
         fail_msg: >-
-          CM has no host matching base master {{ base_master_fqdn }} for required Ozone roles.
-      when: base_cluster_install_services.ozone | default(true) | bool
+          CM has no host matching base master {{ base_master_fqdn }} for required
+          service roles.
+      when: >-
+        base_cluster_install_services.ozone | default(true) | bool
+        or base_cluster_install_services.kafka | default(true) | bool
+        or base_cluster_install_services.hue | default(true) | bool
+
+    - name: Read Hue roles
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/hue/roles?view=summary
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_hue_roles
+      changed_when: false
+      when: base_cluster_install_services.hue | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Find Hue hosts missing Kerberos Ticket Renewer
+      ansible.builtin.set_fact:
+        base_cluster_missing_hue_kt_renewer_hosts: >-
+          {%- set required_hosts = [] -%}
+          {%- set renewer_hosts = [] -%}
+          {%- for role in base_cluster_hue_roles.json['items'] | default([]) -%}
+            {%- if role.type in ['HUE_SERVER', 'HUE_DATA_EXPLORER'] -%}
+              {%- set _ = required_hosts.append(role.hostRef.hostname) -%}
+            {%- elif role.type == 'KT_RENEWER' -%}
+              {%- set _ = renewer_hosts.append(role.hostRef.hostname) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- set missing = required_hosts | unique | difference(renewer_hosts | unique) -%}
+          {%- set host_refs = [] -%}
+          {%- for host in base_cluster_cm_hosts.json['items'] | default([]) -%}
+            {%- if host.hostname in missing -%}
+              {%- set _ = host_refs.append({
+                'hostId': host.hostId,
+                'hostname': host.hostname
+              }) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ host_refs }}
+      when: base_cluster_install_services.hue | default(true) | bool
+
+    - name: Require CM host references for Hue Ticket Renewers
+      ansible.builtin.assert:
+        that:
+          - >-
+            base_cluster_missing_hue_kt_renewer_hosts | length
+            == (
+              base_cluster_hue_roles.json['items'] | default([])
+              | selectattr('type', 'in', ['HUE_SERVER', 'HUE_DATA_EXPLORER'])
+              | map(attribute='hostRef.hostname')
+              | unique
+              | difference(
+                  base_cluster_hue_roles.json['items'] | default([])
+                  | selectattr('type', 'equalto', 'KT_RENEWER')
+                  | map(attribute='hostRef.hostname')
+                  | unique
+                )
+              | length
+            )
+        fail_msg: >-
+          CM host inventory does not contain every Hue host that requires a
+          colocated KT_RENEWER role.
+      when: base_cluster_install_services.hue | default(true) | bool
+
+    - name: Add missing Hue Kerberos Ticket Renewer roles
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/hue/roles
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          items:
+            - type: KT_RENEWER
+              hostRef: "{{ item }}"
+        status_code: [200, 201, 204]
+        follow_redirects: none
+      loop: "{{ base_cluster_missing_hue_kt_renewer_hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      register: base_cluster_hue_kt_renewer_create
+      when: base_cluster_install_services.hue | default(true) | bool
+      changed_when: true
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Track Hue Kerberos Ticket Renewer role changes
+      ansible.builtin.set_fact:
+        base_cluster_required_config_changed: >-
+          {{
+            base_cluster_required_config_changed | bool
+            or base_cluster_hue_kt_renewer_create.changed | default(false) | bool
+          }}
+      when: base_cluster_install_services.hue | default(true) | bool
 
     - name: Read Ozone roles
       ansible.builtin.uri:
@@ -1514,7 +1629,7 @@
           items:
             - type: "{{ item }}"
               hostRef:
-                hostId: "{{ base_cluster_ozone_service_host_id }}"
+                hostId: "{{ base_cluster_master_cm_host_id }}"
                 hostname: "{{ base_master_fqdn }}"
         status_code: [200, 201, 204]
         follow_redirects: none
@@ -2032,6 +2147,80 @@
             (base_cluster_create_required | bool)
             or (base_cluster_pending_first_run | default(false) | bool)
           }}
+
+    - name: Re-read Hue roles before First Run
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/hue/roles?view=summary
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_hue_roles_before_first_run
+      changed_when: false
+      when:
+        - base_cluster_first_run_required | bool
+        - base_cluster_install_services.hue | default(true) | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Find invalid Hue role colocation before First Run
+      ansible.builtin.set_fact:
+        base_cluster_hue_hosts_without_kt_renewer: >-
+          {%- set data_hosts = [] -%}
+          {%- set renewer_hosts = [] -%}
+          {%- for role in base_cluster_hue_roles_before_first_run.json['items'] | default([]) -%}
+            {%- if role.type in ['HUE_SERVER', 'HUE_DATA_EXPLORER'] -%}
+              {%- set _ = data_hosts.append(role.hostRef.hostname) -%}
+            {%- elif role.type == 'KT_RENEWER' -%}
+              {%- set _ = renewer_hosts.append(role.hostRef.hostname) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ data_hosts | unique | difference(renewer_hosts | unique) }}
+      when:
+        - base_cluster_first_run_required | bool
+        - base_cluster_install_services.hue | default(true) | bool
+
+    - name: Require Hue Kerberos Ticket Renewer colocation before First Run
+      ansible.builtin.assert:
+        that:
+          - base_cluster_hue_hosts_without_kt_renewer | length == 0
+        fail_msg: >-
+          Refusing CM First Run because Hue server/Data Explorer roles on these
+          hosts lack a colocated KT_RENEWER:
+          {{ base_cluster_hue_hosts_without_kt_renewer | join(', ') }}.
+      when:
+        - base_cluster_first_run_required | bool
+        - base_cluster_install_services.hue | default(true) | bool
+
+    - name: Validate all service client configurations before First Run
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/commands/deployClientConfig
+        method: POST
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: base_cluster_pre_first_run_client_config
+      when: base_cluster_first_run_required | bool
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Wait for pre-First-Run service configuration validation
+      ansible.builtin.include_tasks: common_tasks/wait_cm_api_command.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_command_id: "{{ base_cluster_pre_first_run_client_config.json.id }}"
+        cm_api_command_allow_already_exists: false
+      when:
+        - base_cluster_first_run_required | bool
+        - base_cluster_pre_first_run_client_config.json.id is defined
 
     - name: Show cluster startup wait
       ansible.builtin.debug:
