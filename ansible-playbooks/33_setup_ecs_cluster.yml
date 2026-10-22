@@ -127,14 +127,34 @@
         ecs_master_fqdn: >-
           {%- set hostname = hostvars[groups[ecs_cluster_master_group][0]].cldr_hostname -%}
           {{ hostname if hostname.endswith('.' ~ cluster_domain) else hostname ~ '.' ~ cluster_domain }}
+        ecs_master_ip: >-
+          {{
+            hostvars[groups[ecs_cluster_master_group][0]].private_ip
+            | default(
+                hostvars[groups[ecs_cluster_master_group][0]].ansible_host,
+                true
+              )
+          }}
 
-    - name: Build ECS worker FQDNs
+    - name: Build ECS worker assignments
       ansible.builtin.set_fact:
         ecs_worker_fqdns: >-
           {%- set hostname = hostvars[item].cldr_hostname -%}
           {{
             ecs_worker_fqdns | default([])
             + [hostname if hostname.endswith('.' ~ cluster_domain) else hostname ~ '.' ~ cluster_domain]
+          }}
+        ecs_worker_host_entries: >-
+          {%- set hostname = hostvars[item].cldr_hostname -%}
+          {%- set fqdn = hostname if hostname.endswith('.' ~ cluster_domain)
+              else hostname ~ '.' ~ cluster_domain -%}
+          {{
+            ecs_worker_host_entries | default([])
+            + [{
+              'name': fqdn,
+              'host_ip': hostvars[item].private_ip
+                         | default(hostvars[item].ansible_host, true)
+            }]
           }}
       loop: "{{ groups[ecs_cluster_worker_group] }}"
       loop_control:
@@ -294,9 +314,55 @@
             else requested_ecs_cluster
           }}
 
+    - name: Read existing ECS cluster services
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{
+          ecs_cluster_name | urlencode }}/services
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: existing_ecs_services
+      changed_when: false
+      when: existing_ecs_cluster.status == 200
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+    - name: Determine whether phased ECS installation is required
+      ansible.builtin.set_fact:
+        ecs_phased_install_required: >-
+          {{
+            existing_ecs_cluster.status == 404
+            or (
+              existing_ecs_cluster.status == 200
+              and (
+                ['docker', 'ecs']
+                | difference(
+                    existing_ecs_services.json['items'] | default([])
+                    | map(attribute='name')
+                    | list
+                  )
+                | length
+              ) > 0
+            )
+          }}
+
+    - name: Report partial ECS cluster recovery
+      ansible.builtin.debug:
+        msg: >-
+          ECS cluster shell '{{ ecs_cluster_name }}' exists but is missing one or
+          more required services (docker, ecs). Resuming the reference-aligned
+          host attachment, parcel activation, service, role, and control-plane phases.
+      when:
+        - existing_ecs_cluster.status == 200
+        - ecs_phased_install_required | bool
+
     - name: Phased ECS cluster install (reference-aligned)
       ansible.builtin.import_tasks: common_tasks/ecs_phased_cluster_install.yml
-      when: existing_ecs_cluster.status == 404
+      when: ecs_phased_install_required | bool
 
     - name: Start existing ECS cluster services
       cloudera.cluster.cluster:
@@ -309,7 +375,9 @@
         verify_tls: false
         name: "{{ ecs_cluster_name }}"
         state: started
-      when: existing_ecs_cluster.status == 200
+      when:
+        - existing_ecs_cluster.status == 200
+        - not (ecs_phased_install_required | bool)
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
     - name: Wait for ECS Management Console when auto-provisioning API keys

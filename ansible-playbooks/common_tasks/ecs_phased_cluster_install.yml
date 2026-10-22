@@ -42,6 +42,7 @@
     password: "{{ cm_admin_pass }}"
     verify_tls: false
     cluster_hostname: "{{ ecs_master_fqdn }}"
+    host_ip: "{{ ecs_master_ip }}"
     name: "{{ ecs_cluster_name }}"
     state: attached
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
@@ -55,12 +56,13 @@
     username: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
     verify_tls: false
-    cluster_hostname: "{{ item }}"
+    cluster_hostname: "{{ item.name }}"
+    host_ip: "{{ item.host_ip }}"
     name: "{{ ecs_cluster_name }}"
     state: attached
-  loop: "{{ ecs_worker_fqdns }}"
+  loop: "{{ ecs_worker_host_entries }}"
   loop_control:
-    label: "{{ item }}"
+    label: "{{ item.name }}"
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Activate ECS parcel on cluster
