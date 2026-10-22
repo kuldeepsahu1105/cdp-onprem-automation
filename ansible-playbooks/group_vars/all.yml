@@ -1129,6 +1129,10 @@ ecs_automation_assign_all_tenant_roles: true
 ecs_automation_assign_all_resource_roles_on_env: true
 ecs_automation_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|environment)'
 ecs_automation_resource_role_name_regex: '(?i)(admin|owner|power|environment|de|dw|ml|data)'
+ecs_iam_use_installer_credentials: true
+ecs_iam_installer_secret_namespace: cdp
+ecs_iam_installer_secret_name: cm.creds
+ecs_iam_installer_secret_key: cdp_keys.json
 ecs_iam_bootstrap_access_key_id: ""
 ecs_iam_bootstrap_private_key: ""
 ecs_api_credentials_cache_path: "{{ lookup('env', 'CDP_ARTIFACTS_DIR') | default(lookup('env', 'WORKSPACE') | default('/tmp', true) ~ '/artifacts', true) }}/ecs-automation-api-credentials.yml"

@@ -24,14 +24,21 @@ Playbook `34_setup_ecs_data_services.yml` enables Cloudera Data Services on an e
 
 Turn on **`ecs_data_services_deploy_enabled`** (or **`ECS_DATA_SERVICES_DEPLOY_ENABLED`**) for the phase, or set any **`ECS_DEPLOY_*`** flag — playbook 34 runs when at least one service is selected.
 
-For the first run, create one administrator access key in Management Console
-and store it in Jenkins as a **Username with password** credential:
+On a healthy ECS control plane, automation reads the installer-generated signed
+credential from Kubernetes secret `cdp/cm.creds`, field `cdp_keys.json`, and
+uses it only to bootstrap the dedicated automation machine user. Secret values
+are protected with Ansible `no_log`.
+
+If that installer secret is unavailable, create one administrator access key in
+Management Console and store it in Jenkins as a **Username with password**
+credential:
 
 - username: access-key ID
 - password: private key
 
-Set `ECS_IAM_BOOTSTRAP_CREDENTIAL_ID` to that Jenkins credential ID. Playbook
-34 uses it only to create `cldr-automation-sa`, grants that machine user tenant
+Set `ECS_IAM_BOOTSTRAP_CREDENTIAL_ID` to that fallback Jenkins credential ID.
+Playbook 34 uses the installer or fallback key only to create
+`cldr-automation-sa`, grants that machine user tenant
 and effective-environment resource roles, creates its V2 access key, and caches
 the generated credential with mode `0600`. Subsequent runs use the automation
 key and do not require the administrator key. Running playbook 34 with
