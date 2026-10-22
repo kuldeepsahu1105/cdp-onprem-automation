@@ -53,6 +53,8 @@ configured CM cluster and credentials.
 
 Generated machine-user credentials appear in the portal's authenticated
 **Operator access** panel and remain in the controller cache with mode `0600`.
+The portal entry identifies the machine user and environment and maps the
+displayed username/password fields to `cdp_access_key_id`/`cdp_private_key`.
 They are not attached to Jenkins email. Data-service URLs are persisted to the
 catalog cache, restored during portal refresh, and included in the normal
 portal/access-URL email report.

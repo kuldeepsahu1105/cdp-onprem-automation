@@ -135,7 +135,7 @@
 {% elif auth_on and deployment_portal_ecs_api_cache | default({}) | length > 0 %}
 {% set _cache = deployment_portal_ecs_api_cache %}
 {% if _cache.access_key_id | default('') | length > 0 %}
-{% set ecs_creds = ecs_creds + [{'label': 'ECS automation machine-user key', 'username': _cache.access_key_id, 'password': _cache.private_key | default(''), 'url': '', 'note': ecs_automation_machine_user ~ '; from protected local credential cache'}] %}
+{% set ecs_creds = ecs_creds + [{'label': 'ECS automation machine-user key', 'username': _cache.access_key_id, 'password': _cache.private_key | default(''), 'url': 'https://' ~ ecs_console_host_prefix ~ '.' ~ ecs_app_domain, 'note': 'Machine user ' ~ ecs_automation_machine_user ~ '; environment ' ~ ecs_cdp_environment_name ~ '; username = cdp_access_key_id, password = cdp_private_key'}] %}
 {% endif %}
 {% endif %}
 {% set ns.sections = ns.sections + [{'id': 'ecs', 'title': 'ECS / Data Services', 'intro': 'Control plane and automation API credentials when present.', 'downloads': [], 'credentials': ecs_creds}] %}
