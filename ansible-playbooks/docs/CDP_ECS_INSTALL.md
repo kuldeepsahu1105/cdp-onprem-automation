@@ -23,7 +23,7 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
    (`ECSMaster`, `ECSWorker`) through the v4-compatible CM API, applied with
    `startRoles=false`.
 6. **Control plane submission/adoption** — `common_tasks/ecs_install_control_plane.yml` submits First Run or adopts its durable `/controlPlanes` record without blocking on completion.
-7. **CoreDNS during First Run** — as soon as RKE2 and the CoreDNS ConfigMap exist, replace `/etc/resolv.conf` in its `forward` stanza with the FreeIPA private IP (or AD DNS servers) and restart CoreDNS only when changed.
+7. **CoreDNS during First Run** — as soon as RKE2 and the CoreDNS ConfigMap exist, retain `/etc/resolv.conf` in its `forward` stanza, add `policy sequential` exactly as in the shared reference, and restart CoreDNS only when changed.
 8. **First Run completion** — wait for the submitted CM command, or for an adopted installation to reach `STARTED`, only after CoreDNS is repaired.
 9. **Start** — `cloudera.cluster.cluster` `state: started`.
 10. **Operator CLI** — expose the RKE2 `kubectl` binary, copy a user-owned kubeconfig for `root` and the SSH user, install checksum-verified `k9s`, and verify that each user can list Kubernetes nodes.
@@ -49,8 +49,7 @@ command.
 | `ecs_cluster_cidr` / `ecs_service_cidr` | Kubernetes pod and service networks (`172.42.0.0/16` / `172.43.0.0/16`) |
 | `ecs_docker_registry` / `ecs_image_basepath` | External Cloudera image registry and repository base path |
 | `ecs_control_plane_embedded_db_storage_gb` / `ecs_control_plane_embedded_vault_storage_gb` | Embedded control-plane database and Vault storage (`200` / `20`) |
-| `ecs_reconcile_coredns` | Replace the RKE2 CoreDNS `/etc/resolv.conf` upstream with direct identity-provider DNS servers during First Run |
-| `ecs_coredns_forwarders` | Optional direct CoreDNS upstream override; defaults to the FreeIPA private IP or `ad_dns_servers` |
+| `ecs_reconcile_coredns` | Enforce sequential `/etc/resolv.conf` forwarding in RKE2 CoreDNS during control-plane First Run |
 | `ecs_cli_tools_enabled` | Configure `kubectl`, kubeconfig, and `k9s` on the ECS master for fresh installs and reruns |
 | `ecs_cli_users` | Accounts receiving `~/.kube/config` (default `root` and `ansible_user`) |
 | `ecs_k9s_version` / `ecs_k9s_checksums` | Pinned, checksum-verified k9s release and architecture checksums |
