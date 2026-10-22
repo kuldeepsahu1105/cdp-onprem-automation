@@ -242,6 +242,11 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
       defaultValue: false,
       description: 'Run 34_setup_ecs_data_services.yml after ECS phase 5 when checked (or when any ECS_DEPLOY_* service box below is checked). Requires ECS API access key (console or ecs_iam_bootstrap_*).'
     )
+    string(
+      name: 'ECS_IAM_BOOTSTRAP_CREDENTIAL_ID',
+      defaultValue: '',
+      description: 'Optional Jenkins Username/Password credential: username = one-time ECS admin access-key ID, password = private key. Automation creates and uses cldr-automation-sa instead of retaining this admin key.'
+    )
     booleanParam(
       name: 'ECS_DEPLOY_CDW',
       defaultValue: false,
@@ -1002,8 +1007,6 @@ def runAnsibleDeployPhase(String phase) {
     export ECS_DEPLOY_CAI_REGISTRY='${params.ECS_DEPLOY_CAI_REGISTRY}'
     export ECS_LDAP_ENABLED='${params.ECS_LDAP_ENABLED}'
     export ECS_LDAP_ADMIN_USER_ENABLED='${params.ECS_LDAP_ADMIN_USER_ENABLED}'
-    export ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID='${shellEscape(env.ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID ?: '')}'
-    export ECS_IAM_BOOTSTRAP_PRIVATE_KEY='${shellEscape(env.ECS_IAM_BOOTSTRAP_PRIVATE_KEY ?: '')}'
     export REQUIRE_INVENTORY=true
     export ANSIBLE_GROUP_VARS_FILE='${env.WORKSPACE}/jenkins/artifacts/ansible-group-vars-fragment.yaml'
     export CM_REPO_USERNAME='${shellEscape(params.CM_REPO_USERNAME?.trim())}'
@@ -1014,12 +1017,29 @@ def runAnsibleDeployPhase(String phase) {
     export CM_LICENSE_CONTENT_FILE='${licenseFile ? shellEscape(licenseFile) : ''}'
   """
   echo "Running Ansible DEPLOY_PHASE=${phase}"
-  if (!secretEnv.isEmpty()) {
-    withEnv(secretEnv) {
+  def runAnsiblePhase = {
+    if (!secretEnv.isEmpty()) {
+      withEnv(secretEnv) {
+        sh prefix + './jenkins/scripts/run-ansible.sh'
+      }
+    } else {
       sh prefix + './jenkins/scripts/run-ansible.sh'
     }
+  }
+  def ecsBootstrapCredentialId =
+    params.ECS_IAM_BOOTSTRAP_CREDENTIAL_ID?.toString()?.trim()
+  if (ecsBootstrapCredentialId && phase == 'ecs') {
+    withCredentials([
+      usernamePassword(
+        credentialsId: ecsBootstrapCredentialId,
+        usernameVariable: 'ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID',
+        passwordVariable: 'ECS_IAM_BOOTSTRAP_PRIVATE_KEY',
+      ),
+    ]) {
+      runAnsiblePhase()
+    }
   } else {
-    sh prefix + './jenkins/scripts/run-ansible.sh'
+    runAnsiblePhase()
   }
 }
 

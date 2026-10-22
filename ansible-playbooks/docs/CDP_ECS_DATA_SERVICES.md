@@ -24,6 +24,32 @@ Playbook `34_setup_ecs_data_services.yml` enables Cloudera Data Services on an e
 
 Turn on **`ecs_data_services_deploy_enabled`** (or **`ECS_DATA_SERVICES_DEPLOY_ENABLED`**) for the phase, or set any **`ECS_DEPLOY_*`** flag — playbook 34 runs when at least one service is selected.
 
+For the first run, create one administrator access key in Management Console
+and store it in Jenkins as a **Username with password** credential:
+
+- username: access-key ID
+- password: private key
+
+Set `ECS_IAM_BOOTSTRAP_CREDENTIAL_ID` to that Jenkins credential ID. Playbook
+34 uses it only to create `cldr-automation-sa`, grants that machine user tenant
+and effective-environment resource roles, creates its V2 access key, and caches
+the generated credential with mode `0600`. Subsequent runs use the automation
+key and do not require the administrator key. Running playbook 34 with
+`ECS_DATA_SERVICES_DEPLOY_ENABLED=true` and no service selected performs only
+this IAM bootstrap.
+
+The preferred environment name is the first IPA/domain label. If the healthy
+control plane already contains exactly one environment (for example the
+vendor-created `apps` environment), automation adopts it. If no environment
+exists, automation creates the preferred private-cloud environment using the
+configured CM cluster and credentials.
+
+Generated machine-user credentials appear in the portal's authenticated
+**Operator access** panel and remain in the controller cache with mode `0600`.
+They are not attached to Jenkins email. Data-service URLs are persisted to the
+catalog cache, restored during portal refresh, and included in the normal
+portal/access-URL email report.
+
 **List form** (unioned with flags):
 
 ```yaml
@@ -59,7 +85,7 @@ Re-run `35_refresh_deployment_portal.yml` after changing catalog URLs if you ski
 
 ## Variables
 
-See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_registry_*`, `ecs_cdp_environment_name`).
+See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_registry_*`, `ecs_cdp_environment_name`). The preferred environment name is derived from the first IPA/domain label (for example, `cldrsetup.example` becomes `cldrsetup`). A healthy cluster with one existing vendor-created environment such as `apps` adopts that environment instead of creating a duplicate.
 
 ## Not automated (Labs reference gaps)
 

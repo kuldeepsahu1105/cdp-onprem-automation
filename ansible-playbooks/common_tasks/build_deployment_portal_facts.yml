@@ -301,6 +301,27 @@
 - name: Render blackbox_exporter probe targets (after Caddy vhost URL facts)
   ansible.builtin.import_tasks: refresh_monitoring_blackbox_probe_targets.yml
 
+- name: Check cached ECS data-service catalog
+  ansible.builtin.stat:
+    path: "{{ ecs_data_services_catalog_cache_path }}"
+  register: deployment_portal_ecs_ds_catalog_cache
+  when: ecs_data_services_catalog_cache_path | default('') | length > 0
+
+- name: Load cached ECS data-service catalog
+  ansible.builtin.set_fact:
+    ecs_data_services_catalog: >-
+      {{
+        ecs_data_services_catalog
+        | combine(
+            lookup('file', ecs_data_services_catalog_cache_path)
+            | from_yaml | default({}, true),
+            recursive=True
+          )
+      }}
+  when:
+    - ecs_data_services_catalog_cache_path | default('') | length > 0
+    - deployment_portal_ecs_ds_catalog_cache.stat.exists | default(false) | bool
+
 - name: Initialize ECS data service portal links
   ansible.builtin.set_fact:
     deployment_portal_ecs_ds_links: []

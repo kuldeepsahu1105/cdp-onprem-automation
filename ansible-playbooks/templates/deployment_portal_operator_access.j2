@@ -130,12 +130,12 @@
 {% if ecs_ldap_admin_user_enabled | default(false) | bool %}
 {% set ecs_creds = ecs_creds + [{'label': 'ECS LDAP admin', 'username': ecs_ldap_admin_username, 'password': ecs_ldap_admin_password, 'url': '', 'note': ''}] %}
 {% endif %}
-{% if ecs_api_access_key_id | default('') | length > 0 and ecs_api_private_key | default('') | length > 0 %}
+{% if auth_on and ecs_api_access_key_id | default('') | length > 0 and ecs_api_private_key | default('') | length > 0 %}
 {% set ecs_creds = ecs_creds + [{'label': 'ECS API key', 'username': ecs_api_access_key_id, 'password': ecs_api_private_key, 'url': '', 'note': 'From group_vars'}] %}
-{% elif deployment_portal_ecs_api_cache | default({}) | length > 0 %}
+{% elif auth_on and deployment_portal_ecs_api_cache | default({}) | length > 0 %}
 {% set _cache = deployment_portal_ecs_api_cache %}
 {% if _cache.access_key_id | default('') | length > 0 %}
-{% set ecs_creds = ecs_creds + [{'label': 'ECS API key', 'username': _cache.access_key_id, 'password': _cache.private_key | default(''), 'url': '', 'note': 'From ecs_api_credentials_cache_path'}] %}
+{% set ecs_creds = ecs_creds + [{'label': 'ECS automation machine-user key', 'username': _cache.access_key_id, 'password': _cache.private_key | default(''), 'url': '', 'note': ecs_automation_machine_user ~ '; from protected local credential cache'}] %}
 {% endif %}
 {% endif %}
 {% set ns.sections = ns.sections + [{'id': 'ecs', 'title': 'ECS / Data Services', 'intro': 'Control plane and automation API credentials when present.', 'downloads': [], 'credentials': ecs_creds}] %}
