@@ -676,6 +676,8 @@ cm_cms_update_reports_manager_password: false
 # After 27_setup_cm_autotls.yml, point CMS Java clients (firehose/headlamp) at agent Auto-TLS truststore.
 cm_cms_configure_autotls_trust: true
 cm_cms_autotls_truststore_path: /var/lib/cloudera-scm-agent/agent-cert/cm-auto-global_truststore.jks
+cm_cms_autotls_keystore_path: /var/lib/cloudera-scm-agent/agent-cert/cm-auto-host_keystore.jks
+cm_cms_autotls_keystore_password_path: /var/lib/cloudera-scm-agent/agent-cert/cm-auto-host_key.pw
 # CM redacts this secret on reads; set true only for an explicit truststore password repair.
 cm_cms_update_autotls_truststore_password: false
 # Knox service discovery calls CM over HTTPS and must use the Auto-TLS truststore.

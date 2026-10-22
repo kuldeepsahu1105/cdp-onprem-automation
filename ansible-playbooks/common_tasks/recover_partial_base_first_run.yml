@@ -113,14 +113,6 @@
         )
         + (
           [
-            {'service': 'solr', 'command': 'createSolrHdfsHomeDir'},
-            {'service': 'solr', 'command': 'initSolr'}
-          ]
-          if (base_cluster_install_services.solr | default(false) | bool)
-          else []
-        )
-        + (
-          [
             {'service': 'hbase', 'command': 'hbaseCreateRoot'},
             {'service': 'hbase', 'command': 'hbaseCreateUserDirectory'}
           ]

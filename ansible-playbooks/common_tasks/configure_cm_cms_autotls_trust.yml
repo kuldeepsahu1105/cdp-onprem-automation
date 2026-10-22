@@ -75,6 +75,22 @@
   no_log: true
   when: cms_autotls_trust_required | default(false) | bool
 
+- name: CMS — read Auto-TLS host keystore password
+  ansible.builtin.slurp:
+    src: "{{ cm_cms_autotls_keystore_password_path }}"
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  become: true
+  register: cms_keystore_password_file
+  no_log: true
+  when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — normalize Auto-TLS host keystore password
+  ansible.builtin.set_fact:
+    cms_keystore_password: >-
+      {{ cms_keystore_password_file.content | b64decode | trim }}
+  no_log: true
+  when: cms_autotls_trust_required | default(false) | bool
+
 - name: CMS — fail when truststore password is empty under Auto-TLS
   ansible.builtin.fail:
     msg: >-
@@ -85,6 +101,18 @@
   when:
     - cms_autotls_trust_required | default(false) | bool
     - (cms_truststore_password | default('') | trim) | length == 0
+
+- name: CMS — require Auto-TLS client keystore material
+  ansible.builtin.assert:
+    that:
+      - cms_keystore_password | default('') | trim | length > 0
+      - cm_cms_autotls_keystore_path | default('') | trim | length > 0
+    fail_msg: >-
+      Service Monitor requires the CM Auto-TLS host keystore and password to
+      authenticate to mutual-TLS JMX endpoints such as ZooKeeper port 9010.
+      Re-run 27_setup_cm_autotls.yml so the CM agent recreates its host key material.
+  no_log: true
+  when: cms_autotls_trust_required | default(false) | bool
 
 - name: CMS — ensure agent truststore on CM host before MGMT ssl_client_truststore_* update
   ansible.builtin.import_tasks: ensure_cm_autotls_agent_truststore.yml
@@ -130,6 +158,45 @@
       }}
   when: cms_autotls_trust_required | default(false) | bool
 
+- name: CMS — detect obsolete service-level client keystore safety valve
+  ansible.builtin.set_fact:
+    cms_legacy_client_keystore_safety_valve_present: >-
+      {{
+        (
+          cms_service_config_get.json['items'] | default([])
+          | selectattr('name', 'equalto', 'mgmt_ssl_client_safety_valve')
+          | map(attribute='value')
+          | first
+          | default('', true)
+        )
+        is search(
+          'com\\.cloudera\\.enterprise\\.ssl\\.client\\.keystore\\.location'
+        )
+      }}
+  when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — clear obsolete Reports Manager-only client keystore safety valve
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/config"
+    method: PUT
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body:
+      items:
+        - name: mgmt_ssl_client_safety_valve
+          value: null
+    status_code: [200, 204]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
+  register: cms_legacy_client_keystore_safety_valve_put
+  changed_when: true
+  when:
+    - cms_autotls_trust_required | default(false) | bool
+    - cms_legacy_client_keystore_safety_valve_present | default(false) | bool
+
 - name: CMS — configure MGMT service Auto-TLS client truststore for firehose/headlamp
   ansible.builtin.uri:
     url: "{{ cm_krb_api_url }}/cm/service/config"
@@ -158,8 +225,170 @@
 - name: CMS — note MGMT truststore already matches Auto-TLS agent paths
   ansible.builtin.debug:
     msg: >-
-      CMS TLS client truststore already set to {{ cm_cms_autotls_truststore_path }}
-      (Service Monitor can trust CM HTTPS).
+      CMS TLS client truststore already uses CM Auto-TLS material.
   when:
     - cms_autotls_trust_required | default(false) | bool
     - not (cms_truststore_needs_update | default(true) | bool)
+
+- name: CMS — list management role config groups for Service Monitor TLS
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/cm/service/roleConfigGroups"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
+  register: cms_tls_role_config_groups
+  changed_when: false
+  when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — resolve Service Monitor base role config group
+  ansible.builtin.set_fact:
+    cms_tls_servicemonitor_group: >-
+      {{
+        cms_tls_role_config_groups.json['items'] | default([])
+        | selectattr('roleType', 'equalto', 'SERVICEMONITOR')
+        | selectattr('base', 'equalto', true)
+        | map(attribute='name')
+        | first
+        | default('', true)
+      }}
+  when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — require Service Monitor role config group
+  ansible.builtin.assert:
+    that:
+      - cms_tls_servicemonitor_group | length > 0
+    fail_msg: >-
+      Cloudera Management Service has no base SERVICEMONITOR role config group.
+      Service Monitor cannot be configured with the Auto-TLS client identity
+      required for mutual-TLS JMX monitoring.
+  when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — read Service Monitor Java options
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_krb_api_url }}/cm/service/roleConfigGroups/{{
+      cms_tls_servicemonitor_group }}/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
+  register: cms_servicemonitor_tls_config
+  changed_when: false
+  no_log: true
+  when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — build Service Monitor Auto-TLS JVM options
+  ansible.builtin.set_fact:
+    cms_servicemonitor_existing_java_opts: >-
+      {{
+        cms_servicemonitor_tls_config.json['items'] | default([])
+        | selectattr('name', 'equalto', 'firehose_java_opts')
+        | map(attribute='value')
+        | first
+        | default('', true)
+        | trim
+      }}
+    cms_servicemonitor_tls_java_opts: >-
+      -Djavax.net.ssl.keyStore={{ cm_cms_autotls_keystore_path }}
+      -Djavax.net.ssl.keyStorePassword={{ cms_keystore_password }}
+      -Djavax.net.ssl.keyStoreType=JKS
+      -Djavax.net.ssl.trustStore={{ cm_cms_autotls_truststore_path }}
+      -Djavax.net.ssl.trustStorePassword={{ cms_keystore_password }}
+      -Djavax.net.ssl.trustStoreType=JKS
+  no_log: true
+  when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — detect Service Monitor Auto-TLS JVM option drift
+  ansible.builtin.set_fact:
+    cms_servicemonitor_tls_needs_update: >-
+      {{
+        cms_servicemonitor_existing_java_opts
+        is not search(
+          '-Djavax\\.net\\.ssl\\.keyStore='
+          ~ (cm_cms_autotls_keystore_path | regex_escape)
+        )
+        or cms_servicemonitor_existing_java_opts
+        is not search('-Djavax\\.net\\.ssl\\.keyStorePassword=')
+        or cms_servicemonitor_existing_java_opts
+        is not search('-Djavax\\.net\\.ssl\\.keyStoreType=JKS')
+        or cms_servicemonitor_existing_java_opts
+        is not search(
+          '-Djavax\\.net\\.ssl\\.trustStore='
+          ~ (cm_cms_autotls_truststore_path | regex_escape)
+        )
+        or cms_servicemonitor_existing_java_opts
+        is not search('-Djavax\\.net\\.ssl\\.trustStorePassword=')
+        or cms_servicemonitor_existing_java_opts
+        is not search('-Djavax\\.net\\.ssl\\.trustStoreType=JKS')
+        or (cm_cms_update_autotls_truststore_password | default(false) | bool)
+      }}
+  no_log: true
+  when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — remove managed TLS options from existing Service Monitor Java options
+  ansible.builtin.set_fact:
+    cms_servicemonitor_java_opts_without_managed_tls: >-
+      {{
+        cms_servicemonitor_existing_java_opts
+        | regex_replace(
+            '(^|\\s)-Djavax\\.net\\.ssl\\.(keyStore|keyStorePassword|keyStoreType|trustStore|trustStorePassword|trustStoreType)=\\S+',
+            ' '
+          )
+        | regex_replace('\\s+', ' ')
+        | trim
+      }}
+  no_log: true
+  when:
+    - cms_autotls_trust_required | default(false) | bool
+    - cms_servicemonitor_tls_needs_update | default(false) | bool
+
+- name: CMS — configure Service Monitor Auto-TLS JVM client identity
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_krb_api_url }}/cm/service/roleConfigGroups/{{
+      cms_tls_servicemonitor_group }}/config
+    method: PUT
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    body_format: json
+    body:
+      items:
+        - name: firehose_java_opts
+          value: >-
+            {{
+              (
+                cms_servicemonitor_java_opts_without_managed_tls
+                ~ ' '
+                ~ cms_servicemonitor_tls_java_opts
+              )
+              | trim
+            }}
+    status_code: [200, 204]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to }}"
+  register: cms_servicemonitor_tls_put
+  changed_when: true
+  no_log: true
+  when:
+    - cms_autotls_trust_required | default(false) | bool
+    - cms_servicemonitor_tls_needs_update | default(false) | bool
+
+- name: CMS — note Service Monitor Auto-TLS JVM identity is current
+  ansible.builtin.debug:
+    msg: >-
+      Service Monitor Java SSL client identity already uses the CM Auto-TLS
+      host keystore and global truststore for mutual-TLS JMX monitoring.
+  when:
+    - cms_autotls_trust_required | default(false) | bool
+    - not (cms_servicemonitor_tls_needs_update | default(true) | bool)

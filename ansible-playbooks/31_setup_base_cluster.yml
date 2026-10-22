@@ -2030,7 +2030,9 @@
 
     - name: Recover services after partial First Run
       ansible.builtin.include_tasks: common_tasks/recover_partial_base_first_run.yml
-      when: base_cluster_partial_first_run_recovery_required | bool
+      when:
+        - base_cluster_partial_first_run_recovery_required | bool
+        - existing_cluster.json.clusterState | default('') != 'STARTED'
 
     - name: Show ordered Ozone recovery
       ansible.builtin.debug:
@@ -2919,6 +2921,15 @@
           configureAutoTlsServices. Do not record the cluster initialization marker.
       when: base_cluster_enable_autotls | default(true) | bool
 
+    - name: Reconcile CMS Auto-TLS client identity for service monitoring
+      ansible.builtin.include_tasks: common_tasks/configure_cm_cms_autotls_trust.yml
+      vars:
+        cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+        cm_api_uri_delegate_to: "{{ cm_cluster_module_delegate_to }}"
+      when:
+        - base_cluster_enable_autotls | default(true) | bool
+        - autotls_enabled | default(true) | bool
+
     - name: Determine whether Cloudera Management Service restart is required
       ansible.builtin.set_fact:
         base_cluster_cms_restart_required: >-
@@ -2928,6 +2939,18 @@
               base_cluster_first_run_required | default(false) | bool
               or base_cluster_partial_first_run_recovery_required | default(false) | bool
               or base_cluster_cluster_autotls_applied_this_run | default(false) | bool
+              or (
+                cms_service_truststore_put is defined
+                and cms_service_truststore_put is changed
+              )
+              or (
+                cms_legacy_client_keystore_safety_valve_put is defined
+                and cms_legacy_client_keystore_safety_valve_put is changed
+              )
+              or (
+                cms_servicemonitor_tls_put is defined
+                and cms_servicemonitor_tls_put is changed
+              )
               or (
                 base_cluster_pre_start_kerberos_configure_command is defined
                 and base_cluster_pre_start_kerberos_configure_command.json.id is defined

@@ -206,7 +206,7 @@ template validation rather than being silently ignored.
 | `cm_ldap_update_bind_password` | Boolean; `false` | Set true only to rotate the existing LDAP bind DN/password pair. CM may redact both credential values on reads, so ordinary reruns verify their presence rather than comparing an unavailable value. |
 | `cm_krb_update_libdefaults_safety_valve` | Boolean; `false` | Set true only to intentionally rewrite `KRB_LIBDEFAULTS_SAFETY_VALVE`. CM returns this setting as `REDACTED`, so ordinary reruns verify presence and do not treat the redaction token as drift. |
 | `cm_cms_update_reports_manager_password` | Boolean; `false` | Set true only to rotate the CMS Reports Manager database password. |
-| `cm_cms_update_autotls_truststore_password` | Boolean; `false` | Set true only to rotate the CMS Auto-TLS truststore password. |
+| `cm_cms_update_autotls_truststore_password` | Boolean; `false` | Set true only to rotate the CMS Auto-TLS truststore and Service Monitor JVM key/trust-store passwords. |
 
 Auto-TLS provisioning uses password mode when secret
 `cm_node_sudo_password` is provided; otherwise it uses SSH-key mode.
