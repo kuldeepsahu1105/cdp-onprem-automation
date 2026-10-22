@@ -8,7 +8,7 @@ services:
     type: CORE_SETTINGS
     display_name: Core Settings
     config:
-      hadoop_security_authorization: {{ base_cluster_enable_kerberos | default(true) | bool | lower }}
+      hadoop_security_authorization: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
       hadoop_security_authentication: "{{ 'kerberos' if base_cluster_enable_kerberos | default(true) | bool else 'simple' }}"
     role_groups:
       - type: GATEWAY
@@ -18,9 +18,9 @@ services:
     type: ZOOKEEPER
     display_name: ZooKeeper
     config:
-      zookeeper_datadir_autocreate: true
-      quorum_auth_enable_sasl: {{ base_cluster_enable_kerberos | default(true) | bool | lower }}
-      enableSecurity: {{ base_cluster_enable_kerberos | default(true) | bool | lower }}
+      zookeeper_datadir_autocreate: "true"
+      quorum_auth_enable_sasl: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
+      enableSecurity: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
     role_groups:
       - type: SERVER
         config:
@@ -34,7 +34,7 @@ services:
     config:
       core_connector: "{{ 'core-settings' if svc.core_settings | default(true) else '' }}"
       dfs_encrypt_data_transfer_algorithm: AES/CTR/NoPadding
-      hadoop_secure_web_ui: {{ base_cluster_enable_kerberos | default(true) | bool | lower }}
+      hadoop_secure_web_ui: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
     role_groups:
       - type: DATANODE
         config:
@@ -55,7 +55,7 @@ services:
     config:
       ozone.service.id: "{{ base_cluster_ozone_service_id }}"
       ozone.scm.primordial.node.id: "{{ base_master_fqdn }}"
-      ozone.security.enabled: {{ base_cluster_enable_kerberos | default(true) | bool | lower }}
+      ozone.security.enabled: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
 {% if svc.solr | default(false) %}
       solr_service: solr
 {% endif %}
@@ -79,7 +79,7 @@ services:
     display_name: YARN
     config:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
-      hadoop_secure_web_ui: {{ base_cluster_enable_kerberos | default(true) | bool | lower }}
+      hadoop_secure_web_ui: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
     role_groups:
       - type: RESOURCEMANAGER
         config:
@@ -177,7 +177,7 @@ services:
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
       hbase_thriftserver_security_authentication: "{{ 'auth-conf' if base_cluster_enable_kerberos | default(true) | bool else 'none' }}"
       hbase_security_authentication: "{{ 'kerberos' if base_cluster_enable_kerberos | default(true) | bool else 'simple' }}"
-      hbase_security_authorization: {{ base_cluster_enable_kerberos | default(true) | bool | lower }}
+      hbase_security_authorization: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
 {% if svc.ranger | default(true) %}
       ranger_service: ranger
 {% endif %}
@@ -265,7 +265,7 @@ services:
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
       zookeeper.chroot: /kafka
 {% endif %}
-      kerberos.auth.enable: {{ base_cluster_enable_kerberos | default(true) | bool | lower }}
+      kerberos.auth.enable: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
     role_groups:
       - type: KAFKA_BROKER
         config:
@@ -280,7 +280,7 @@ services:
     type: ATLAS
     display_name: Atlas
     config:
-      kerberos.auth.enable: {{ base_cluster_enable_kerberos | default(true) | bool | lower }}
+      kerberos.auth.enable: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
       kafka_service: "{{ 'kafka' if svc.kafka | default(true) else '' }}"
 {% if svc.hbase | default(true) %}
@@ -375,7 +375,7 @@ services:
       knox_gateway_database_type: postgresql
       knox_gateway_database_name: "{{ base_cluster_knox_database_name }}"
       knox_gateway_database_user: "{{ base_cluster_knox_database_user }}"
-      kerberos.auth.enabled: {{ base_cluster_enable_kerberos | default(true) | bool | lower }}
+      kerberos.auth.enabled: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
 {% if svc.ranger | default(true) %}
       ranger_service: ranger
 {% endif %}

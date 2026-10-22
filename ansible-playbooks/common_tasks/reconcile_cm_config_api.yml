@@ -30,6 +30,11 @@
         -%}
         {%- set current = matches[0] if matches | length > 0 else {} -%}
         {%- set secret = desired.key in (cm_config_secret_names | default([])) -%}
+        {%- set desired_value =
+          (desired.value | bool | lower)
+          if desired.value is boolean
+          else (desired.value | string)
+        -%}
         {%- if
           (
             secret
@@ -41,10 +46,10 @@
           )
           or (
             not secret
-            and current.get('value', '') | string != desired.value | string
+            and current.get('value', '') | string != desired_value
           )
         -%}
-          {%- set _ = updates.append({'name': desired.key, 'value': desired.value | string}) -%}
+          {%- set _ = updates.append({'name': desired.key, 'value': desired_value}) -%}
         {%- endif -%}
       {%- endfor -%}
       {{ updates }}

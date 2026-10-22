@@ -198,6 +198,37 @@
       ansible.builtin.set_fact:
         base_cluster_spec: "{{ lookup('template', 'base_cluster_cluster_spec.j2') | from_yaml }}"
 
+    - name: Find native booleans incompatible with collection v4 configuration modules
+      ansible.builtin.set_fact:
+        base_cluster_native_boolean_configs: >-
+          {%- set invalid = [] -%}
+          {%- for service in base_cluster_spec.services -%}
+            {%- for config in service.config | default({}) | dict2items -%}
+              {%- if config.value is boolean -%}
+                {%- set _ = invalid.append(service.name ~ '.config.' ~ config.key) -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- for role_group in service.role_groups | default([]) -%}
+              {%- for config in role_group.config | default({}) | dict2items -%}
+                {%- if config.value is boolean -%}
+                  {%- set _ = invalid.append(
+                    service.name ~ '.' ~ role_group.type ~ '.config.' ~ config.key
+                  ) -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endfor -%}
+          {%- endfor -%}
+          {{ invalid }}
+
+    - name: Require string values for boolean CM configurations
+      ansible.builtin.assert:
+        that:
+          - base_cluster_native_boolean_configs | length == 0
+        fail_msg: >-
+          cloudera.cluster v4.4.0 converts native booleans to capitalized strings
+          that CM cannot parse. Quote these configuration values as lowercase strings:
+          {{ base_cluster_native_boolean_configs | join(', ') }}.
+
     - name: Select runtime services requiring health verification
       ansible.builtin.set_fact:
         base_cluster_runtime_service_names: >-
@@ -1029,6 +1060,7 @@
           {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
           }}/services/zookeeper/config
         cm_config_desired:
+          zookeeper_datadir_autocreate: "true"
           quorum_auth_enable_sasl: >-
             {{ 'true' if base_cluster_enable_kerberos | default(true) | bool else 'false' }}
           enableSecurity: >-
