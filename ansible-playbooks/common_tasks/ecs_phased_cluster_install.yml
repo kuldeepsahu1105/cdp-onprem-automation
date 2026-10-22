@@ -84,6 +84,7 @@
     cluster: "{{ ecs_cluster_name }}"
     service: docker
     name: docker
+    display_name: DOCKER
     type: DOCKER
     state: present
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
@@ -115,6 +116,7 @@
     cluster: "{{ ecs_cluster_name }}"
     service: ecs
     name: ecs
+    display_name: ECS
     type: ECS
     state: present
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
