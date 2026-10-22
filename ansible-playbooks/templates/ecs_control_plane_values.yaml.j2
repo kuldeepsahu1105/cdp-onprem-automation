@@ -2,7 +2,8 @@
 ContainerInfo:
   Mode: public
   CopyDocker: false
-  Uid: "{{ ecs_control_plane_container_uid_effective }}"
+Container:
+  Id: "{{ ecs_control_plane_container_id }}"
 Database:
   Mode: {{ ecs_control_plane_database_mode }}
   EmbeddedDbStorage: {{ ecs_control_plane_embedded_db_storage_gb }}

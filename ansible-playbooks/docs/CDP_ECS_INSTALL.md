@@ -25,7 +25,9 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
 6. **Control plane** — `common_tasks/ecs_install_control_plane.yml` with `valuesYaml` from `templates/ecs_control_plane_values.yaml.j2`.
 7. **Start** — `cloudera.cluster.cluster` `state: started`.
 
-If the cluster already exists (`GET` returns 200), only **start** runs, then console wait and optional IAM access-key provisioning.
+An existing cluster that is missing required services or is not fully `STARTED`
+re-enters the idempotent phased installer, allowing failed control-plane
+installation to resume without deleting the ECS cluster.
 
 ## Key variables
 
@@ -35,6 +37,7 @@ If the cluster already exists (`GET` returns 200), only **start** runs, then con
 | `ecs_app_domain` | ECS `app_domain` / console DNS base (default `apps.<cluster_domain>`) |
 | `ecs_pvc_ds_version` / `ecs_parcel_repo_url` | CDS private repo and parcel URL |
 | `ecs_console_admin_password` | UMS bootstrap admin for embedded control plane (complexity rules enforced) |
+| `ecs_control_plane_container_id` | Runtime container user ID written as `Container.Id` in `valuesYaml` (CM 7.13.2 default `1000001`) |
 | `ecs_cluster_cidr` / `ecs_service_cidr` | Kubernetes pod and service networks (`172.42.0.0/16` / `172.43.0.0/16`) |
 | `ecs_docker_registry` / `ecs_image_basepath` | External Cloudera image registry and repository base path |
 | `ecs_control_plane_embedded_db_storage_gb` / `ecs_control_plane_embedded_vault_storage_gb` | Embedded control-plane database and Vault storage (`200` / `20`) |
