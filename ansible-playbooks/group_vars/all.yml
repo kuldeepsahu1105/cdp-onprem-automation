@@ -1062,7 +1062,7 @@ ecs_pvc_ds_version: "1.5.5-h40000"  # CDS 1.5.5 repo tag
 ecs_pvc_repository_url: "{{ cm_repo_public_base_url }}/cdp-pvc-ds/{{ ecs_pvc_ds_version }}"
 ecs_parcel_repo_url: "{{ ecs_pvc_repository_url }}/parcels/"
 ecs_parcel_repo_latest_url: "{{ cm_repo_public_base_url }}/cdp-pvc-ds/{{ cm_parcel_repo_latest_segment }}/parcels/"
-# Optional override; when empty the playbook discovers the latest ECS parcel from CM after refresh
+# Optional override; when empty the playbook resolves the single ECS parcel from the pinned repository manifest
 ecs_parcel_version: ""
 ecs_app_domain: "apps.{{ cluster_domain }}"
 # ECS Management Console DNS label (FQDN {{ ecs_console_host_prefix }}.{{ ecs_app_domain }})

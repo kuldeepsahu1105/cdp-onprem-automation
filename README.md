@@ -182,7 +182,7 @@ Set `PVCECS_*_COUNT=0` in tfvars to skip ECS infrastructure entirely, or leave g
 | `ecs_pvc_ds_version` | `1.5.5-h40000` | CDS repo tag (CDS 1.5.5) |
 | `ecs_pvc_repository_url` | computed | `https://archive.cloudera.com/p/cdp-pvc-ds/<version>` |
 | `ecs_parcel_repo_url` | computed | ECS parcel repo under CDS path |
-| `ecs_parcel_version` | `""` | Optional override; auto-discovered from CM when empty |
+| `ecs_parcel_version` | `""` | Optional override; resolved from the pinned ECS repository manifest when empty |
 | `ecs_app_domain` | `apps.<cluster_domain>` | Application domain for ECS services |
 | `ecs_docker_data_path` | `/mnt/docker` | Docker data directory |
 | `ecs_lso_data_path` | `/ecs/local` | Local storage operator path |

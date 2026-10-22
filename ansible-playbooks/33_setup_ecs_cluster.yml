@@ -155,21 +155,55 @@
       ansible.builtin.import_tasks: common_tasks/configure_cm_parcel_repo_api.yml
       when: parcel_repo is defined
 
-    - name: Discover available ECS parcel versions
+    - name: Read configured ECS parcel repository manifest
       ansible.builtin.uri:
-        url: "{{ cm_krb_api_url }}/parcels/products/ECS/versions"
+        url: "{{ ecs_parcel_repo_url | regex_replace('/+$', '') }}/manifest.json"
         method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: yes
+        user: "{{ cm_repo_username if (cm_repo_source | default('public')) == 'public' else omit }}"
+        password: "{{ cm_repo_password if (cm_repo_source | default('public')) == 'public' else omit }}"
+        force_basic_auth: "{{ (cm_repo_source | default('public')) == 'public' }}"
         validate_certs: no
         status_code: [200]
-        follow_redirects: none
-      register: ecs_parcel_versions
+        follow_redirects: safe
+        return_content: true
+        timeout: 60
+      register: ecs_parcel_manifest
+      changed_when: false
+      failed_when: false
       retries: 5
       delay: 10
-      until: ecs_parcel_versions is succeeded
+      until: ecs_parcel_manifest.status | default(0) == 200
       delegate_to: "{{ cm_api_uri_delegate_to }}"
+      when: ecs_parcel_version | default('') | length == 0
+
+    - name: Parse configured ECS parcel repository manifest
+      ansible.builtin.set_fact:
+        ecs_parcel_manifest_data: "{{ ecs_parcel_manifest.content | from_json }}"
+      no_log: true
+      when:
+        - ecs_parcel_version | default('') | length == 0
+        - ecs_parcel_manifest.status | default(0) == 200
+
+    - name: Default unavailable ECS parcel repository manifest
+      ansible.builtin.set_fact:
+        ecs_parcel_manifest_data: {}
+      when:
+        - ecs_parcel_version | default('') | length == 0
+        - ecs_parcel_manifest_data is not defined
+
+    - name: Select published ECS parcel versions
+      ansible.builtin.set_fact:
+        ecs_parcel_versions_available: >-
+          {{
+            ecs_parcel_manifest_data.get('parcels', [])
+            | map(attribute='parcelName')
+            | select('match', '^ECS-.*[.]parcel$')
+            | map('regex_replace', '^ECS-', '')
+            | map('regex_replace', '-[^-]+[.]parcel$', '')
+            | unique
+            | list
+          }}
+      when: ecs_parcel_version | default('') | length == 0
 
     - name: Resolve ECS parcel version
       ansible.builtin.set_fact:
@@ -178,16 +212,7 @@
             ecs_parcel_version
             if ecs_parcel_version | default('') | length > 0
             else (
-              ecs_parcel_versions.json.items
-              | default([])
-              | selectattr('version', 'search', ecs_pvc_ds_version)
-              | map(attribute='version')
-              | list
-              | last
-              | default(
-                ecs_parcel_versions.json['items'] | default([]) | map(attribute='version') | list | last,
-                true
-              )
+              ecs_parcel_versions_available | default([]) | first | default('', true)
             )
           }}
 
@@ -195,9 +220,22 @@
       ansible.builtin.assert:
         that:
           - ecs_parcel_version_effective | default('') | length > 0
+          - >-
+            ecs_parcel_version | default('') | length > 0
+            or ecs_parcel_versions_available | default([]) | length == 1
         fail_msg: >-
-          Could not determine ECS parcel version. Set ecs_parcel_version in config.yml
-          or verify archive credentials and ecs_pvc_ds_version ({{ ecs_pvc_ds_version }}).
+          Could not resolve one ECS parcel from
+          {{ ecs_parcel_repo_url | regex_replace('/+$', '') }}/manifest.json.
+          Repository HTTP status={{
+            (ecs_parcel_manifest | default({})).get('status', 'not requested')
+          }};
+          response={{
+            (ecs_parcel_manifest | default({})).get('msg', 'none')
+          }};
+          published ECS versions={{
+            ecs_parcel_versions_available | default([]) | join(', ') | default('(none)', true)
+          }}. Set ecs_parcel_version explicitly only when the repository intentionally
+          publishes multiple ECS parcels.
 
     - name: Print selected ECS parcel version
       ansible.builtin.debug:

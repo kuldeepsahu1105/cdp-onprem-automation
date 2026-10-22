@@ -15,7 +15,7 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
 
 ## Phased steps (new cluster)
 
-1. **Cluster shell** — `cloudera.cluster.cluster` `state: present`, `type: EXPERIENCE_CLUSTER`, `cluster_version` from `ecs_parcel_version` or CM discovery.
+1. **Cluster shell** — `cloudera.cluster.cluster` `state: present`, `type: EXPERIENCE_CLUSTER`, `cluster_version` from `ecs_parcel_version` or the pinned ECS repository manifest.
 2. **Hosts** — `cloudera.cluster.host` `state: attached` for master and workers (FQDN = `cldr_hostname.cluster_domain`).
 3. **Parcel** — `cloudera.cluster.parcel` `state: activated` for product `ECS`.
 4. **Services** — `cloudera.cluster.service` + `service_config` for `docker` and `ecs` (credentials in a separate `service_config` task with `no_log`).
