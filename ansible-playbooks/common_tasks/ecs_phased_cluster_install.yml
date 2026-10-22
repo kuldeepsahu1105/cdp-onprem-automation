@@ -156,7 +156,8 @@
       service_cidr: "{{ ecs_service_cidr }}"
       image_basepath: "{{ ecs_image_basepath }}"
       docker_registry: "{{ ecs_docker_registry }}"
-      external_registry_enabled: "{{ ecs_external_registry_enabled | bool }}"
+      external_registry_enabled: >-
+        {{ 'true' if ecs_external_registry_enabled | bool else 'false' }}
       docker: docker
       cp_prometheus_ingress_user: "{{ ecs_cp_prometheus_ingress_user }}"
       infra_prometheus_ingress_user: "{{ ecs_infra_prometheus_ingress_user }}"
@@ -165,6 +166,44 @@
       defaultDataPath: "{{ ecs_longhorn_data_path }}"
       nfs_over_provisioning: "{{ ecs_nfs_over_provisioning }}"
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Read rendered ECS service configuration
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{
+      ecs_cluster_name | urlencode }}/services/ecs/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: ecs_service_config_check
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Require lowercase ECS external registry Boolean
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          ecs_service_config_check.json['items']
+          | selectattr('name', 'equalto', 'external_registry_enabled')
+          | map(attribute='value')
+          | first
+          | default('')
+        ) == ('true' if ecs_external_registry_enabled | bool else 'false')
+    fail_msg: >-
+      Cloudera Manager must store ECS external_registry_enabled as lowercase
+      '{{ 'true' if ecs_external_registry_enabled | bool else 'false' }}';
+      received {{
+        ecs_service_config_check.json['items']
+        | selectattr('name', 'equalto', 'external_registry_enabled')
+        | map(attribute='value')
+        | first
+        | default('(missing)')
+      }}.
 
 - name: Apply ECS host templates and role assignments
   ansible.builtin.import_tasks: ecs_apply_host_templates.yml

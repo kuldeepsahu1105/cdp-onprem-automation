@@ -26,6 +26,9 @@ hanging on a self-connection through the public IP.
 2. **Hosts** — `cloudera.cluster.host` `state: attached` for master and workers (FQDN = `cldr_hostname.cluster_domain`).
 3. **Parcel** — `cloudera.cluster.parcel` `state: activated` for product `ECS`.
 4. **Services** — `cloudera.cluster.service` + `service_config` for `docker` and `ecs` (credentials in a separate `service_config` task with `no_log`).
+   Boolean CM parameters such as `external_registry_enabled` are sent and
+   verified as lowercase strings because `cloudera.cluster` v4.4 otherwise
+   serializes Python booleans as invalid `True`/`False` values.
 5. **Host templates** — `common_tasks/ecs_apply_host_templates.yml`
    (`ECSMaster`, `ECSWorker`) through the v4-compatible CM API, applied with
    `startRoles=false`.
