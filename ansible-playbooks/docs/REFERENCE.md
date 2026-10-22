@@ -85,7 +85,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `ecs_deploy_enabled` | `auto` | `auto`, `true`, or `false` — deploy ECS when ecs inventory groups exist |
 | `ecs_pvc_ds_version` | `1.5.5-h40000` | CDS repo tag (default `1.5.5-h40000`; older: `1.5.5-h3300` SP3 CHF3, `1.5.5-h2000` SP2, `1.5.5-h2100` SP2 CHF1) |
 | `ecs_parcel_version` | `""` | Optional override; when empty, resolved from the pinned ECS repository `manifest.json` |
-| `ecs_app_domain` | `apps.<domain>` | Application domain for ECS services |
+| `ecs_application_domain` | `<domain>` | Parent domain passed to CM `app_domain` and embedded-control-plane `ApplicationDomain` |
+| `ecs_app_domain` | `apps.<ecs_application_domain>` | Effective ingress suffix for ECS console and service hostnames |
 | `ecs_console_host_prefix` | `console-cdp` | DNS label for ECS management console (`https://<prefix>.<ecs_app_domain>`) |
 
 ### CM/CDH repository source

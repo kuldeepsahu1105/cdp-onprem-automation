@@ -151,7 +151,7 @@
     cluster: "{{ ecs_cluster_name }}"
     service: ecs
     parameters:
-      app_domain: "{{ ecs_app_domain }}"
+      app_domain: "{{ ecs_application_domain }}"
       cluster_cidr: "{{ ecs_cluster_cidr }}"
       service_cidr: "{{ ecs_service_cidr }}"
       image_basepath: "{{ ecs_image_basepath }}"

@@ -46,12 +46,20 @@ installation, repair CoreDNS while the existing First Run is active, and then
 wait for completion instead of submitting a competing install or cluster-start
 command.
 
+`ApplicationDomain` must not contain the ECS-generated `apps.` label. The
+Cloudera reference uses the same parent domain for CM `app_domain` and control
+plane `ApplicationDomain`; ECS then creates hostnames beneath
+`apps.<ApplicationDomain>`. A durable control-plane record created with the
+prefixed ingress suffix is rejected before a rerun can submit a competing
+installation.
+
 ## Key variables
 
 | Variable | Purpose |
 |----------|---------|
 | `ecs_cluster_name` | CM cluster name (default `<deployment_name_prefix>-ecs-cluster`; `ecs-cluster` with an empty prefix) |
-| `ecs_app_domain` | ECS `app_domain` / console DNS base (default `apps.<cluster_domain>`) |
+| `ecs_application_domain` | Parent domain passed to CM `app_domain` and embedded-control-plane `ApplicationDomain` (default `<cluster_domain>`) |
+| `ecs_app_domain` | ECS-generated ingress DNS suffix used by console and data-service URLs (must be `apps.<ecs_application_domain>`) |
 | `ecs_pvc_ds_version` / `ecs_parcel_repo_url` | CDS private repo and parcel URL |
 | `ecs_console_admin_password` | UMS bootstrap admin for embedded control plane (complexity rules enforced) |
 | `ecs_control_plane_container_id` | Runtime container user ID written as `Container.Id` in `valuesYaml` (CM 7.13.2 default `1000001`) |

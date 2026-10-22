@@ -1064,7 +1064,10 @@ ecs_parcel_repo_url: "{{ ecs_pvc_repository_url }}/parcels/"
 ecs_parcel_repo_latest_url: "{{ cm_repo_public_base_url }}/cdp-pvc-ds/{{ cm_parcel_repo_latest_segment }}/parcels/"
 # Optional override; when empty the playbook resolves the single ECS parcel from the pinned repository manifest
 ecs_parcel_version: ""
-ecs_app_domain: "apps.{{ cluster_domain }}"
+# ECS/CM parent application domain. ECS adds the "apps." ingress label.
+ecs_application_domain: "{{ cluster_domain }}"
+# Effective ingress DNS suffix for console and data-service hostnames.
+ecs_app_domain: "apps.{{ ecs_application_domain }}"
 # ECS Management Console DNS label (FQDN {{ ecs_console_host_prefix }}.{{ ecs_app_domain }})
 ecs_console_host_prefix: "console-cdp"
 ecs_docker_data_path: "/mnt/docker"

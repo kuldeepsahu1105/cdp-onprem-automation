@@ -988,7 +988,7 @@ On **ipaserver**, remove or fix a stale **`zz-ipa-caddy-proxy.conf`** (SUBSTITUT
 
 **Cloudera Manager (not via Caddy):** Use direct **`https://<cldr-mngr-fqdn>:7183`** (or `:7180` before Auto-TLS) from browsers and Jenkins Tier **B**. Caddy on the ops host serves portal, pgAdmin, monitoring, and IPA only. Optional `cm_external_url` sets a custom published CM URL in portal facts; it does not configure Caddy.
 
-**ECS console (not via Caddy):** Published console URL is **`https://<ecs_console_host_prefix>.<ecs_app_domain>`** (default prefix **`console-cdp`**; `ecs_control_plane_url_effective`). Override with `ecs_control_plane_url` when needed. Internal ECS **`ApplicationDomain`** stays `ecs_app_domain`.
+**ECS console (not via Caddy):** Published console URL is **`https://<ecs_console_host_prefix>.<ecs_app_domain>`** (default prefix **`console-cdp`**; `ecs_control_plane_url_effective`). Override with `ecs_control_plane_url` when needed. CM `app_domain` and embedded-control-plane `ApplicationDomain` use the parent **`ecs_application_domain`**; ECS adds the `apps.` label represented by `ecs_app_domain`.
 
 **Bare metal / private network (no public IP):** Set `deployment_environment: baremetal` (or `deployment_portal_access_profile: private`). The portal index shows only private-network URLs — typically `http://<ops-fqdn>:81/` when `deployment_portal_prefer_fqdn_urls: true`, or `http://<management-ip>:81/` otherwise. pgAdmin stays on port `5050` on the same ops host; database is **cldr-mngr** PostgreSQL. Caddy lab hostnames use the ops management IP (often `caddy_vhost_dns_mode: flat` with IPA/AD DNS).
 

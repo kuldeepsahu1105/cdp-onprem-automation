@@ -15,27 +15,66 @@
   changed_when: false
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+- name: Select current and legacy ECS control plane installations
+  ansible.builtin.set_fact:
+    ecs_control_plane_matching_records: >-
+      {{
+        ecs_control_planes.json['items'] | default([])
+        | selectattr('dnsSuffix', 'equalto', ecs_application_domain)
+        | selectattr(
+            'remoteRepoUrl',
+            'equalto',
+            ecs_pvc_repository_url | regex_replace('/?parcels/.*$', '')
+          )
+        | list
+      }}
+    ecs_control_plane_legacy_prefixed_records: >-
+      {{
+        ecs_control_planes.json['items'] | default([])
+        | selectattr('dnsSuffix', 'equalto', ecs_app_domain)
+        | selectattr(
+            'remoteRepoUrl',
+            'equalto',
+            ecs_pvc_repository_url | regex_replace('/?parcels/.*$', '')
+          )
+        | list
+      }}
+
 - name: Detect existing ECS control plane installation
   ansible.builtin.set_fact:
     ecs_control_plane_existing: >-
-      {{
-        (
-          ecs_control_planes.json['items'] | default([])
-          | selectattr('dnsSuffix', 'equalto', ecs_app_domain)
-          | selectattr(
-              'remoteRepoUrl',
-              'equalto',
-              ecs_pvc_repository_url | regex_replace('/?parcels/.*$', '')
-            )
-          | list
-          | length
-        ) > 0
-      }}
+      {{ ecs_control_plane_matching_records | length > 0 }}
+
+- name: Reject a control plane installed with the ingress suffix
+  ansible.builtin.assert:
+    that:
+      - ecs_control_plane_legacy_prefixed_records | length == 0
+    fail_msg: >-
+      CM already contains an ECS control plane whose dnsSuffix is
+      {{ ecs_app_domain }}. That value includes the ECS-generated "apps."
+      label, so the installed control plane constructs hostnames such as
+      {{ ecs_console_host_prefix }}.apps.{{ ecs_app_domain }}. Remove that
+      failed control plane before reinstalling with ApplicationDomain
+      {{ ecs_application_domain }}; automation will not submit a competing
+      installation.
+  when: not (ecs_control_plane_existing | bool)
+
+- name: Validate ECS application-domain relationship
+  ansible.builtin.assert:
+    that:
+      - ecs_application_domain | string | trim | length > 0
+      - ecs_app_domain == 'apps.' ~ ecs_application_domain
+    fail_msg: >-
+      ecs_application_domain must be the parent domain passed to CM and the
+      embedded control plane, while ecs_app_domain must be exactly
+      apps.<ecs_application_domain>. Current values are
+      {{ ecs_application_domain }} and {{ ecs_app_domain }}.
 
 - name: Report adopted ECS control plane First Run
   ansible.builtin.debug:
     msg: >-
-      An ECS control-plane record already exists for {{ ecs_app_domain }}.
+      An ECS control-plane record already exists for
+      {{ ecs_application_domain }}.
       Adopting the existing installation and waiting for its CM First Run
       instead of submitting competing install or cluster-start commands.
   when: ecs_control_plane_existing | bool
@@ -63,9 +102,15 @@
         (
           (ecs_control_plane_values_yaml | from_yaml).Container.Id | string
         ) == (ecs_control_plane_container_id | string)
+      - >-
+        (
+          (ecs_control_plane_values_yaml | from_yaml).ApplicationDomain
+          | string
+        ) == (ecs_application_domain | string)
     fail_msg: >-
       Rendered ECS control plane values must contain Container.Id={{
-      ecs_control_plane_container_id }}.
+      ecs_control_plane_container_id }} and ApplicationDomain={{
+      ecs_application_domain }}.
   no_log: true
   when: not (ecs_control_plane_existing | bool)
 

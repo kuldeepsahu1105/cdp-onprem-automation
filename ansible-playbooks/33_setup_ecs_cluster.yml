@@ -180,6 +180,7 @@
         msg:
           - "Cluster name: {{ ecs_cluster_name }}"
           - "PVC DS repo: {{ ecs_pvc_repository_url }}"
+          - "Application domain: {{ ecs_application_domain }}"
           - "App domain: {{ ecs_app_domain }}"
           - "Control plane URL (automation): {{ ecs_control_plane_url_effective | default('') }}"
           - "Datalake cluster: {{ cdh_basecluster_name }}"
