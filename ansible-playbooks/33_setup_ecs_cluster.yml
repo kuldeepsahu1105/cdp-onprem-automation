@@ -26,6 +26,19 @@
       ansible.builtin.setup:
       when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
 
+- name: Reconcile ECS host DNS before control-plane installation
+  hosts: ecs-masters:ecs-workers
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Configure ECS resolvers for the selected identity provider
+      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
+      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
+
+    - name: Verify ECS identity and external DNS
+      ansible.builtin.import_tasks: common_tasks/verify_identity_dns.yml
+      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
+
 - name: Install ECS (Cloudera Data Services) cluster via Cloudera Manager
   hosts: localhost
   connection: local

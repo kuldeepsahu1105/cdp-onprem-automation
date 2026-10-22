@@ -13,20 +13,26 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
 | Parcel repo | `ecs_parcel_repo_url` merged via `configure_cm_parcel_repo_api.yml` |
 | CM API auth | `resolve_cm_cluster_module_endpoint.yml` (HTTPS when Auto-TLS) |
 
+Before contacting Cloudera Manager, the standalone ECS playbook reconciles DNS
+on every ECS node using the selected identity provider. FreeIPA clients receive
+the IPA private IP as the first nameserver; AD clients use `ad_dns_servers`.
+CoreDNS later forwards through that host resolver chain with `policy sequential`.
+
 ## Phased steps (new cluster)
 
-1. **Cluster shell** — `cloudera.cluster.cluster` `state: present`, `type: EXPERIENCE_CLUSTER`, `cluster_version` from `ecs_parcel_version` or the pinned ECS repository manifest.
-2. **Hosts** — `cloudera.cluster.host` `state: attached` for master and workers (FQDN = `cldr_hostname.cluster_domain`).
-3. **Parcel** — `cloudera.cluster.parcel` `state: activated` for product `ECS`.
-4. **Services** — `cloudera.cluster.service` + `service_config` for `docker` and `ecs` (credentials in a separate `service_config` task with `no_log`).
-5. **Host templates** — `common_tasks/ecs_apply_host_templates.yml`
+1. **Host DNS** — reconcile `/etc/resolv.conf`/netplan and verify identity plus external DNS before ECS First Run.
+2. **Cluster shell** — `cloudera.cluster.cluster` `state: present`, `type: EXPERIENCE_CLUSTER`, `cluster_version` from `ecs_parcel_version` or the pinned ECS repository manifest.
+3. **Hosts** — `cloudera.cluster.host` `state: attached` for master and workers (FQDN = `cldr_hostname.cluster_domain`).
+4. **Parcel** — `cloudera.cluster.parcel` `state: activated` for product `ECS`.
+5. **Services** — `cloudera.cluster.service` + `service_config` for `docker` and `ecs` (credentials in a separate `service_config` task with `no_log`).
+6. **Host templates** — `common_tasks/ecs_apply_host_templates.yml`
    (`ECSMaster`, `ECSWorker`) through the v4-compatible CM API, applied with
    `startRoles=false`.
-6. **Control plane submission/adoption** — `common_tasks/ecs_install_control_plane.yml` submits First Run or adopts its durable `/controlPlanes` record without blocking on completion.
-7. **CoreDNS during First Run** — as soon as RKE2 and the CoreDNS ConfigMap exist, enforce sequential resolver forwarding and restart CoreDNS only when changed.
-8. **First Run completion** — wait for the submitted CM command, or for an adopted installation to reach `STARTED`, only after CoreDNS is repaired.
-9. **Start** — `cloudera.cluster.cluster` `state: started`.
-10. **Operator CLI** — expose the RKE2 `kubectl` binary, copy a user-owned kubeconfig for `root` and the SSH user, install checksum-verified `k9s`, and verify that each user can list Kubernetes nodes.
+7. **Control plane submission/adoption** — `common_tasks/ecs_install_control_plane.yml` submits First Run or adopts its durable `/controlPlanes` record without blocking on completion.
+8. **CoreDNS during First Run** — as soon as RKE2 and the CoreDNS ConfigMap exist, enforce sequential resolver forwarding and restart CoreDNS only when changed.
+9. **First Run completion** — wait for the submitted CM command, or for an adopted installation to reach `STARTED`, only after CoreDNS is repaired.
+10. **Start** — `cloudera.cluster.cluster` `state: started`.
+11. **Operator CLI** — expose the RKE2 `kubectl` binary, copy a user-owned kubeconfig for `root` and the SSH user, install checksum-verified `k9s`, and verify that each user can list Kubernetes nodes.
 
 An existing cluster that is missing required services or is not fully `STARTED`
 re-enters the idempotent phased installer, allowing failed control-plane
