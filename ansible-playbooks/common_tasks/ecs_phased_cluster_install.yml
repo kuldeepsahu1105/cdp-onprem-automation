@@ -172,6 +172,10 @@
 - name: Install ECS embedded control plane
   ansible.builtin.import_tasks: ecs_install_control_plane.yml
 
+- name: Reconcile ECS CoreDNS immediately after control-plane installation
+  ansible.builtin.import_tasks: ecs_reconcile_coredns.yml
+  when: ecs_reconcile_coredns | default(true) | bool
+
 - name: Start ECS cluster services and roles
   cloudera.cluster.cluster:
     host: "{{ cm_cluster_module_host }}"

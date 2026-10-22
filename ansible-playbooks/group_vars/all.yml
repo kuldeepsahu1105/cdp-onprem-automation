@@ -1091,6 +1091,8 @@ ecs_control_plane_embedded_db_storage_gb: 200
 ecs_control_plane_embedded_vault_storage_gb: 20
 # CM 7.13.2 EcsUtils.getContainerId requires valuesYaml Container.Id.
 ecs_control_plane_container_id: "1000001"
+ecs_control_plane_install_poll_retries: 240
+ecs_control_plane_install_poll_delay: 15
 ecs_reconcile_coredns: true
 ecs_coredns_kubeconfig_path: /etc/rancher/rke2/rke2.yaml
 ecs_coredns_kubectl_path: /var/lib/rancher/rke2/bin/kubectl

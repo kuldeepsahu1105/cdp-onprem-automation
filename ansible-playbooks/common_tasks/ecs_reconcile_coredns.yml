@@ -7,6 +7,11 @@
   register: ecs_coredns_kubectl
   become: yes
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  until:
+    - ecs_coredns_kubectl.stat.exists | default(false)
+    - ecs_coredns_kubectl.stat.executable | default(false)
+  retries: "{{ ecs_control_plane_install_poll_retries | default(240) }}"
+  delay: "{{ ecs_control_plane_install_poll_delay | default(15) }}"
 
 - name: Require ECS kubectl binary
   ansible.builtin.assert:
@@ -34,6 +39,9 @@
   changed_when: false
   become: yes
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  until: ecs_coredns_corefile.rc == 0
+  retries: "{{ ecs_control_plane_wait_retries | default(40) }}"
+  delay: "{{ ecs_control_plane_wait_delay | default(15) }}"
 
 - name: Build sequential ECS CoreDNS Corefile
   ansible.builtin.set_fact:
@@ -94,3 +102,7 @@
   become: yes
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   when: ecs_coredns_patch is changed
+
+- name: Record ECS CoreDNS reconciliation for this run
+  ansible.builtin.set_fact:
+    ecs_coredns_reconciled_this_run: true

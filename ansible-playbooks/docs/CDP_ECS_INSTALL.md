@@ -23,11 +23,15 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
    (`ECSMaster`, `ECSWorker`) through the v4-compatible CM API, applied with
    `startRoles=false`.
 6. **Control plane** — `common_tasks/ecs_install_control_plane.yml` with `valuesYaml` from `templates/ecs_control_plane_values.yaml.j2`.
-7. **Start** — `cloudera.cluster.cluster` `state: started`.
+7. **CoreDNS** — after CM First Run completes, enforce sequential resolver forwarding and restart CoreDNS only when changed.
+8. **Start** — `cloudera.cluster.cluster` `state: started`.
 
 An existing cluster that is missing required services or is not fully `STARTED`
 re-enters the idempotent phased installer, allowing failed control-plane
 installation to resume without deleting the ECS cluster.
+When CM already has a matching `/controlPlanes` record, reruns adopt that
+installation and wait for the existing First Run instead of submitting a
+competing install or cluster-start command.
 
 ## Key variables
 
@@ -38,6 +42,7 @@ installation to resume without deleting the ECS cluster.
 | `ecs_pvc_ds_version` / `ecs_parcel_repo_url` | CDS private repo and parcel URL |
 | `ecs_console_admin_password` | UMS bootstrap admin for embedded control plane (complexity rules enforced) |
 | `ecs_control_plane_container_id` | Runtime container user ID written as `Container.Id` in `valuesYaml` (CM 7.13.2 default `1000001`) |
+| `ecs_control_plane_install_poll_retries` / `ecs_control_plane_install_poll_delay` | Wait bound for the asynchronous CM First Run command (`240 × 15s`, one hour) |
 | `ecs_cluster_cidr` / `ecs_service_cidr` | Kubernetes pod and service networks (`172.42.0.0/16` / `172.43.0.0/16`) |
 | `ecs_docker_registry` / `ecs_image_basepath` | External Cloudera image registry and repository base path |
 | `ecs_control_plane_embedded_db_storage_gb` / `ecs_control_plane_embedded_vault_storage_gb` | Embedded control-plane database and Vault storage (`200` / `20`) |

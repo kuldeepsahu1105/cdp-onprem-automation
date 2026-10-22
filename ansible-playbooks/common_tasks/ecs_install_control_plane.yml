@@ -1,6 +1,45 @@
 ---
 # Install ECS embedded control plane (cloudera.cluster v4 has no control_plane module).
 
+- name: Read existing ECS control planes
+  ansible.builtin.uri:
+    url: "{{ cm_cluster_module_api_url }}/controlPlanes?view=full"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: ecs_control_planes
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Detect existing ECS control plane installation
+  ansible.builtin.set_fact:
+    ecs_control_plane_existing: >-
+      {{
+        (
+          ecs_control_planes.json['items'] | default([])
+          | selectattr('dnsSuffix', 'equalto', ecs_app_domain)
+          | selectattr(
+              'remoteRepoUrl',
+              'equalto',
+              ecs_pvc_repository_url | regex_replace('/?parcels/.*$', '')
+            )
+          | list
+          | length
+        ) > 0
+      }}
+
+- name: Report adopted ECS control plane First Run
+  ansible.builtin.debug:
+    msg: >-
+      An ECS control-plane record already exists for {{ ecs_app_domain }}.
+      Adopting the existing installation and waiting for its CM First Run
+      instead of submitting competing install or cluster-start commands.
+  when: ecs_control_plane_existing | bool
+
 - name: Require ECS container ID for control plane installation
   ansible.builtin.assert:
     that:
@@ -9,11 +48,13 @@
       The embedded control plane requires Container.Id in valuesYaml.
       Set ecs_control_plane_container_id to the runtime container user ID
       required by the installed ECS release.
+  when: not (ecs_control_plane_existing | bool)
 
 - name: Build ECS control plane values YAML
   ansible.builtin.set_fact:
     ecs_control_plane_values_yaml: "{{ lookup('template', 'ecs_control_plane_values.yaml.j2') }}"
   no_log: true
+  when: not (ecs_control_plane_existing | bool)
 
 - name: Validate ECS control plane container ID in rendered values
   ansible.builtin.assert:
@@ -26,6 +67,7 @@
       Rendered ECS control plane values must contain Container.Id={{
       ecs_control_plane_container_id }}.
   no_log: true
+  when: not (ecs_control_plane_existing | bool)
 
 - name: Install ECS embedded control plane via CM API
   cloudera.cluster.cm_resource:
@@ -45,12 +87,79 @@
       valuesYaml: "{{ ecs_control_plane_values_yaml }}"
   register: ecs_control_plane_install
   ignore_errors: true
+  changed_when: ecs_control_plane_install is succeeded
+  when: not (ecs_control_plane_existing | bool)
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Fail when ECS control plane install returned an unexpected error
   ansible.builtin.fail:
     msg: "{{ ecs_control_plane_install.msg | default(ecs_control_plane_install) }}"
   when:
+    - not (ecs_control_plane_existing | bool)
     - ecs_control_plane_install is failed
     - "'already' not in (ecs_control_plane_install.msg | default('') | lower)"
     - "'409' not in (ecs_control_plane_install.msg | default(''))"
+
+- name: Resolve ECS control plane First Run command id
+  ansible.builtin.set_fact:
+    ecs_control_plane_install_command_id: >-
+      {{
+        ecs_control_plane_install.resources[0].id
+        | default('', true)
+      }}
+  when:
+    - not (ecs_control_plane_existing | bool)
+    - ecs_control_plane_install is succeeded
+
+- name: Require ECS control plane First Run command id
+  ansible.builtin.assert:
+    that:
+      - ecs_control_plane_install_command_id | string | length > 0
+    fail_msg: >-
+      Cloudera Manager accepted the embedded control-plane installation but did
+      not return its asynchronous First Run command id.
+  when:
+    - not (ecs_control_plane_existing | bool)
+    - ecs_control_plane_install is succeeded
+
+- name: Wait for ECS control plane First Run command
+  ansible.builtin.import_tasks: wait_cm_api_command.yml
+  vars:
+    cm_api_command_id: "{{ ecs_control_plane_install_command_id }}"
+    cm_api_command_poll_retries: "{{ ecs_control_plane_install_poll_retries }}"
+    cm_api_command_poll_delay: "{{ ecs_control_plane_install_poll_delay }}"
+  when:
+    - not (ecs_control_plane_existing | bool)
+    - ecs_control_plane_install is succeeded
+    - ecs_control_plane_install_command_id | string | length > 0
+
+- name: Wait for adopted ECS First Run to start the cluster
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{
+      ecs_cluster_name | urlencode }}
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: ecs_adopted_first_run_cluster
+  changed_when: false
+  until: ecs_adopted_first_run_cluster.json.serviceState | default('') == 'STARTED'
+  retries: "{{ ecs_control_plane_install_poll_retries }}"
+  delay: "{{ ecs_control_plane_install_poll_delay }}"
+  when: ecs_control_plane_existing | bool
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Require adopted ECS First Run to complete
+  ansible.builtin.assert:
+    that:
+      - ecs_adopted_first_run_cluster.json.serviceState | default('') == 'STARTED'
+    fail_msg: >-
+      The existing ECS control-plane First Run did not bring cluster
+      '{{ ecs_cluster_name }}' to STARTED state within the configured wait.
+      Do not submit another First Run; inspect the active command in Cloudera
+      Manager and its failed child commands.
+  when: ecs_control_plane_existing | bool
