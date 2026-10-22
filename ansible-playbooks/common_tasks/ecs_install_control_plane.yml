@@ -1,6 +1,40 @@
 ---
 # Install ECS embedded control plane (cloudera.cluster v4 has no control_plane module).
 
+- name: Read ECS cluster identity for control plane values
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{
+      ecs_cluster_name | urlencode }}?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: ecs_control_plane_cluster
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Resolve ECS container UID for control plane values
+  ansible.builtin.set_fact:
+    ecs_control_plane_container_uid_effective: >-
+      {{
+        ecs_control_plane_container_uid
+        | default(ecs_control_plane_cluster.json.uuid | default(''), true)
+        | trim
+      }}
+
+- name: Require ECS container UID for control plane installation
+  ansible.builtin.assert:
+    that:
+      - ecs_control_plane_container_uid_effective | length > 0
+    fail_msg: >-
+      Cloudera Manager did not return the UUID for ECS cluster
+      '{{ ecs_cluster_name }}'. The embedded control plane requires this value
+      as Container.Uid in valuesYaml.
+
 - name: Build ECS control plane values YAML
   ansible.builtin.set_fact:
     ecs_control_plane_values_yaml: "{{ lookup('template', 'ecs_control_plane_values.yaml.j2') }}"
