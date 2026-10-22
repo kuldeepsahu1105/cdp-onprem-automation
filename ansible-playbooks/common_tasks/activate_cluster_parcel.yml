@@ -17,6 +17,24 @@
       }}/parcels/products/{{ cluster_parcel_product | urlencode
       }}/versions/{{ cluster_parcel_version | urlencode }}
 
+- name: Set cluster parcel workflow deadline
+  ansible.builtin.set_fact:
+    cluster_parcel_deadline_epoch: >-
+      {{
+        lookup('pipe', 'date +%s') | int
+        + (cluster_parcel_timeout_seconds | default(3600) | int)
+      }}
+
+- name: Resolve cluster parcel poll count
+  ansible.builtin.set_fact:
+    cluster_parcel_poll_retries_effective: >-
+      {{
+        (
+          (cluster_parcel_timeout_seconds | default(3600) | int)
+          / (cluster_parcel_poll_delay | default(15) | int)
+        ) | round(0, 'ceil') | int
+      }}
+
 - name: Read cluster parcel stage
   ansible.builtin.uri:
     url: "{{ cluster_parcel_api_url }}"
@@ -59,7 +77,11 @@
   until: >-
     cluster_parcel_download_status.json.stage
     in ['DOWNLOADED', 'DISTRIBUTING', 'DISTRIBUTED', 'ACTIVATING', 'ACTIVATED']
-  retries: "{{ cluster_parcel_poll_retries | default(480) }}"
+    or (
+      lookup('pipe', 'date +%s') | int
+      >= cluster_parcel_deadline_epoch | int
+    )
+  retries: "{{ cluster_parcel_poll_retries_effective }}"
   delay: "{{ cluster_parcel_poll_delay | default(15) }}"
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
@@ -104,7 +126,11 @@
   until: >-
     cluster_parcel_distribution_status.json.stage
     in ['DISTRIBUTED', 'ACTIVATING', 'ACTIVATED']
-  retries: "{{ cluster_parcel_poll_retries | default(480) }}"
+    or (
+      lookup('pipe', 'date +%s') | int
+      >= cluster_parcel_deadline_epoch | int
+    )
+  retries: "{{ cluster_parcel_poll_retries_effective }}"
   delay: "{{ cluster_parcel_poll_delay | default(15) }}"
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
@@ -146,8 +172,13 @@
     follow_redirects: none
   register: cluster_parcel_activation_status
   changed_when: false
-  until: cluster_parcel_activation_status.json.stage == 'ACTIVATED'
-  retries: "{{ cluster_parcel_poll_retries | default(480) }}"
+  until: >-
+    cluster_parcel_activation_status.json.stage == 'ACTIVATED'
+    or (
+      lookup('pipe', 'date +%s') | int
+      >= cluster_parcel_deadline_epoch | int
+    )
+  retries: "{{ cluster_parcel_poll_retries_effective }}"
   delay: "{{ cluster_parcel_poll_delay | default(15) }}"
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
