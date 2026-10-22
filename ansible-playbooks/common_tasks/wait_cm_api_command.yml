@@ -35,29 +35,96 @@
     or cm_api_command_poll.json.active is not defined
     or (cm_api_command_poll.json.active | bool)
 
+- name: Resolve CM API command failure state
+  ansible.builtin.set_fact:
+    cm_api_command_failed: >-
+      {{
+        cm_api_command_poll.json.active is defined
+        and not (cm_api_command_poll.json.active | bool)
+        and cm_api_command_poll.json.success is defined
+        and not (cm_api_command_poll.json.success | bool)
+      }}
+    cm_api_command_failure_allowed: >-
+      {{
+        (
+          cm_api_command_allow_already_exists | default(false) | bool
+          and 'already exists' in (
+            cm_api_command_poll.json.resultMessage
+            | default(cm_api_command_poll.json.result_message | default(''))
+            | lower
+          )
+        )
+        or (
+          cm_api_command_allow_not_valid | default(false) | bool
+          and 'command not valid for' in (
+            cm_api_command_poll.json.resultMessage
+            | default(cm_api_command_poll.json.result_message | default(''))
+            | lower
+          )
+        )
+      }}
+
+- name: Read failed CM API command details
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/commands/{{ cm_api_command_id }}?view=full"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
+  register: cm_api_failed_command_details
+  changed_when: false
+  when:
+    - cm_api_command_failed | bool
+    - not (cm_api_command_failure_allowed | bool)
+
+- name: Read failed CM API child command details
+  ansible.builtin.uri:
+    url: "{{ cm_krb_api_url }}/commands/{{ item.id }}?view=full"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  loop: >-
+    {{
+      (cm_api_failed_command_details | default({})).get('json', {})
+      .get('children', {}).get('items', [])
+      | rejectattr('success', 'equalto', true)
+      | list
+    }}
+  loop_control:
+    label: >-
+      {{
+        item.get('serviceRef', {}).get(
+          'serviceDisplayName',
+          item.name | default(item.id | string)
+        )
+      }}
+  delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
+  register: cm_api_failed_child_commands
+  changed_when: false
+  when:
+    - cm_api_command_failed | bool
+    - not (cm_api_command_failure_allowed | bool)
+    - cm_api_failed_command_details.status | default(0) | int == 200
+
 - name: Fail when CM API command did not succeed
   ansible.builtin.fail:
-    msg: >-
+    msg: |-
       CM API command {{ cm_api_command_id }} failed:
-      {{ cm_api_command_poll.json.resultMessage | default(cm_api_command_poll.json.result_message | default('unknown')) }}
+      {{ cm_api_failed_command_details.json.resultMessage | default(cm_api_command_poll.json.resultMessage | default(cm_api_command_poll.json.result_message | default('unknown'))) }}
+      {% for result in cm_api_failed_child_commands.results | default([]) %}
+      - {{ result.json.get('serviceRef', {}).get('serviceDisplayName', result.json.name | default(result.item.name | default('unknown'))) }}: {{ result.json.resultMessage | default('unknown') }}
+      {% for child in result.json.get('children', {}).get('items', []) if not (child.success | default(false) | bool) %}
+        - {{ child.name | default(child.id | string) }}: {{ child.resultMessage | default('unknown') }}
+      {% endfor %}
+      {% endfor %}
   when:
-    - cm_api_command_poll.json.active is defined
-    - not (cm_api_command_poll.json.active | bool)
-    - cm_api_command_poll.json.success is defined
-    - not (cm_api_command_poll.json.success | bool)
-    - not (
-        cm_api_command_allow_already_exists | default(false) | bool
-        and 'already exists' in (
-          cm_api_command_poll.json.resultMessage
-          | default(cm_api_command_poll.json.result_message | default(''))
-          | lower
-        )
-      )
-    - not (
-        cm_api_command_allow_not_valid | default(false) | bool
-        and 'command not valid for' in (
-          cm_api_command_poll.json.resultMessage
-          | default(cm_api_command_poll.json.result_message | default(''))
-          | lower
-        )
-      )
+    - cm_api_command_failed | bool
+    - not (cm_api_command_failure_allowed | bool)
