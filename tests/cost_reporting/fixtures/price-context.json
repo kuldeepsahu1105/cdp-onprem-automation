@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "source": "SYNTHETIC AWS bulk pricing fixture; NOT a real provider quote",
+    "as_of": "2026-10-01T00:00:00Z"
+  },
+  "selections": [
+    {
+      "provider_sku": "SYNTHETIC-SKU",
+      "rate_code": "SYNTHETIC-RATE",
+      "region": "fixture-region",
+      "sku": "fixture-instance",
+      "unit": "instance-hour",
+      "provider_unit": "Hrs",
+      "currency": "USD",
+      "unit_hours": "1"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "source": "SYNTHETIC CUR export fixture, not a real AWS invoice",
+    "as_of": "2026-10-03T00:00:00Z",
+    "period": {"start": "2026-10-01T00:00:00Z", "end": "2026-10-02T00:00:00Z"},
+    "scope": "fixture-account test project plus unattributed credit",
+    "metric": "UnblendedCost",
+    "completeness": "partial"
+  }
+}
