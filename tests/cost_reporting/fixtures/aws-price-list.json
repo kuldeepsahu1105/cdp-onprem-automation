@@ -1,0 +1,35 @@
+{
+  "formatVersion": "v1.0",
+  "publicationDate": "2026-10-01T00:00:00Z",
+  "products": {
+    "SYNTHETIC-SKU": {
+      "sku": "SYNTHETIC-SKU",
+      "productFamily": "Compute Instance",
+      "attributes": {
+        "regionCode": "fixture-region",
+        "instanceType": "fixture-instance",
+        "operatingSystem": "Linux",
+        "tenancy": "Shared"
+      }
+    }
+  },
+  "terms": {
+    "OnDemand": {
+      "SYNTHETIC-SKU": {
+        "SYNTHETIC-TERM": {
+          "effectiveDate": "2026-10-01T00:00:00Z",
+          "priceDimensions": {
+            "SYNTHETIC-RATE": {
+              "unit": "Hrs",
+              "beginRange": "0",
+              "endRange": "Inf",
+              "appliesTo": [],
+              "description": "SYNTHETIC fixture, NOT A REAL AWS QUOTE",
+              "pricePerUnit": {"USD": "0.12345"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

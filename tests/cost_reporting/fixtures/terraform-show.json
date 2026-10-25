@@ -1,0 +1,29 @@
+{
+  "format_version": "1.2",
+  "planned_values": {
+    "root_module": {
+      "child_modules": [
+        {
+          "address": "module.ec2_instances",
+          "resources": [
+            {
+              "address": "module.ec2_instances.aws_instance.group_instances[\"pvcbase_worker-1\"]",
+              "mode": "managed",
+              "type": "aws_instance",
+              "values": {
+                "instance_type": "fixture-instance",
+                "root_block_device": [{"volume_size": 100, "volume_type": "gp3"}]
+              }
+            },
+            {
+              "address": "module.elastic-ip.aws_eip.this[0]",
+              "mode": "managed",
+              "type": "aws_eip",
+              "values": {}
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

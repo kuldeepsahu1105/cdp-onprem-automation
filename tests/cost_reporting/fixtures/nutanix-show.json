@@ -1,0 +1,15 @@
+{
+  "format_version": "1.0",
+  "values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "nutanix_virtual_machine.dev[0]",
+          "mode": "managed",
+          "type": "nutanix_virtual_machine",
+          "values": {"id": "fixture-vm-uuid", "num_vcpus_per_socket": 2, "num_sockets": 1, "memory_size_mib": 1024}
+        }
+      ]
+    }
+  }
+}

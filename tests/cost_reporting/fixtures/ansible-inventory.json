@@ -1,0 +1,5 @@
+{
+  "_meta": {"hostvars": {"worker": {"ansible_host": "192.0.2.10"}, "worker-alias": {"ansible_host": "192.0.2.10"}}},
+  "base-workers": {"hosts": ["worker"]},
+  "monitoring": {"hosts": ["worker", "worker-alias"]}
+}

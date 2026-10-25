@@ -33,6 +33,15 @@ In `vi`, press `i` to edit, then `Esc` and `:wq` + Enter to save/quit;
 AMI IDs, domains, and lab passwords; never commit credentials, private keys,
 licenses, Terraform state, or plan files.
 
+## Offline infrastructure cost reporting
+
+Use [the cost reporting guide](docs/COST_REPORTING.md) for offline Terraform or
+Ansible inventory imports, evidenced AWS prices or operator-supplied
+Nutanix/bare-metal rate cards, and a **separate** billing-export ledger.
+`make cost-report` writes reconciled TXT, JSON, and CSV artifacts without
+credentials, provider API calls, provisioning, or changes to deployment workflows.
+Unknown prices stay `null`; estimates are never presented as invoices.
+
 ## Configuration files
 
 Use **either** `.tfvars.env` (shell) **or** `.tfvars.yaml` (structured YAML) in your working directory:

@@ -30,5 +30,9 @@ jenkins/artifacts/*
 !jenkins/artifacts/.gitkeep
 .ce-aws/
 
+# Offline cost inputs/exports and generated reports may contain account data.
+/cost-inputs/
+/artifacts/cost/
+
 # Local inventory overrides (keep inventory.ini as template if needed)
 ansible-playbooks/inventory.ini.bak
