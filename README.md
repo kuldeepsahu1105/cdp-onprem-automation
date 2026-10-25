@@ -16,12 +16,22 @@ wget https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/ref
 # wget https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/refs/heads/main/.tfvars.yaml
 
 chmod +x clone_and_run_*.sh
-# Edit .tfvars.env or .tfvars.yaml, add license + archive credentials, then:
+# Choose ONE config; YAML wins when both are present.
+vi .tfvars.env
+# Or: vi .tfvars.yaml
+# Complete the configuration checklists linked below before running:
 ./clone_and_run_terraform.sh      # provision EC2 + inventory
 ./clone_and_run_pvc_automation.sh # run Ansible deployment
 ```
 
 Wrapper scripts clone this repo and handle dependencies automatically. See [READme.adoc](READme.adoc) for the full AWS/Terraform workflow, instance sizing, and configuration options.
+
+**Before running:** follow the [AWS file/parameter checklist](READme.adoc#operator-editing-checklist)
+and the [Ansible configuration checklist](ansible-playbooks/docs/CONFIGURATION.md#operator-editing-checklist).
+In `vi`, press `i` to edit, then `Esc` and `:wq` + Enter to save/quit;
+`:q!` + Enter discards unsaved edits. Replace example accounts, addresses,
+AMI IDs, domains, and lab passwords; never commit credentials, private keys,
+licenses, Terraform state, or plan files.
 
 ## Configuration files
 

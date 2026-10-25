@@ -2,6 +2,43 @@
 
 Declarative pipeline with **checkbox stage selection**, standard prerequisite validation, and **REFRESH_JENKINSFILE** support.
 
+## Before running: editable inputs
+
+The main job uses repository `.tfvars.yaml` (or `.tfvars.env`), Ansible
+`config.yml`, and **Build with Parameters**; it does not have an operator
+dotenv file. From a local repository checkout:
+
+```bash
+vi .tfvars.yaml
+# Alternative: vi .tfvars.env
+vi ansible-playbooks/config.yml
+```
+
+Use `i` to edit, then `Esc`, `:wq`, Enter to save/quit, or `:q!`, Enter
+to discard unsaved edits. Follow the
+[AWS parameter checklist](../READme.adoc#operator-editing-checklist) and
+[Ansible parameter checklist](../ansible-playbooks/docs/CONFIGURATION.md#operator-editing-checklist).
+Local edits do not automatically reach a remote Jenkins checkout: use the
+intended reviewed configuration ref or job overrides. Do not edit the agent's
+generated files to make settings persist.
+
+Verify these actual job parameters before starting:
+
+| Requirement | Parameters / checks |
+|---|---|
+| Always | `EXECUTION_BRANCH`, `TFVARS_FILE`, `PIPELINE_STAGES`, `AWS_REGION`, `ENVIRONMENT`, `OWNER`; confirm branch/config, target account credentials, environment/workspace and intended stages |
+| Terraform selected | `VPC_MODE`, `SG_MODE`, `EXISTING_SG_NAME`, `ALLOW_ALL`, `ALLOWED_CIDRS`; verify create/reuse intent and restricted ingress. `ALLOWED_PORTS` does not restrict ingress in the current Terraform module. The job forces new-keypair naming, so do not assume local wrapper reuse behavior. |
+| Ansible selected | Existing/generated `ansible-playbooks/inventory.ini`, matching private key, `ANSIBLE_GROUP_VARS_YAML` for non-secret overrides, `CM_REPO_USERNAME` / masked `CM_REPO_PASSWORD` for authenticated downloads |
+| AD selected | `AD_JOIN_USER`, masked `AD_JOIN_PASSWORD`, conditional `AD_KDC_ADMIN_USER` / `AD_KDC_ADMIN_PASSWORD`, `AD_LDAP_BIND_DN` / `AD_LDAP_BIND_PASSWORD`; topology/search-base keys belong in config or non-secret YAML overrides |
+| Optional / deliberate | `MONITORING_STACK_ENABLED`, `DRY_RUN`; validate stage selection before enabling deployment or destructive stages. Dry-run/check mode is not a guarantee of no side effects or no secret output. |
+
+Use the `VALIDATE` stage before deployment (details below); it is not an
+offline doc check and may contact AWS/install dependencies. Never edit
+`ansible-playbooks/jenkins_override.yml`, generated inventory, rendered remote
+`.env` / compose / Caddy files, Terraform output, plan or state. Change the
+source config/job inputs, then regenerate through the owning stage.
+Keep passwords out of multiline text inputs, Git and logs.
+
 ## cloudera-ce-aws pipeline
 
 `Jenkinsfile.ce-aws` defines a separate job that keeps
@@ -35,6 +72,17 @@ Use `CE_AWS_CONFIG_OVERRIDES_YAML` for upstream options from
 precedence. Use `ADDON_OVERRIDES_YAML` when an upstream per-service password
 differs from `COMMON_PASSWORD`, so portal credentials and monitoring
 configuration match the deployed service.
+
+This separate job is **not configured by this repository's `.tfvars.env`**.
+Before running, verify `NAME_PREFIX`, `AWS_REGION`, masked `COMMON_PASSWORD`,
+`OWNER_EMAIL`, `JENKINS_IP`, `CE_AWS_REF`, and `CE_AWS_STAGES` in its job UI.
+`JENKINS_IP` must be a single IPv4 address, not CIDR; replace all sample names
+and emails. Review `CE_AWS_CONFIG_OVERRIDES_YAML` against the selected upstream
+`config-template.yml`, and `ADDON_OVERRIDES_YAML` for enabled add-ons; do not
+assume this repo's Ansible variable names are upstream config keys.
+Do not `vi` generated `.ce-aws` configuration or the artifacts override YAML:
+the pipeline regenerates/cleans these. Supply secrets via masked job inputs,
+not committed files or plain multiline override text.
 
 ## Required Jenkins plugins
 

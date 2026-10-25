@@ -22,7 +22,10 @@ cd ansible-playbooks
 | **Single playbook** | `./run-playbook.sh 10_setup_deployment_portal.yml` **or** `ansible-playbook …` (each playbook imports `ensure_collections.yml`) **or** once manually: `ansible-galaxy collection install -r requirements.yml` |
 
 2. Prepare `inventory.ini` with your hosts (see [REFERENCE.md](REFERENCE.md#inventory-groups)).
-3. Configure `group_vars/all.yml` (domain, passwords, AD vars if needed).
+3. Run `vi config.yml` for deployment choices and complete the
+   [operator editing checklist](CONFIGURATION.md#operator-editing-checklist).
+   Keep `group_vars/all.yml` as the defaults reference and passwords in protected
+   extra vars/Vault, not tracked YAML.
 4. Place `license.txt` and an SSH private key in `ansible-playbooks/` (or use `~/.ssh/id_rsa`):
    - `*.pem` (e.g. `sshkey.pem` copied from Terraform output)
    - `id_rsa` in `ansible-playbooks/`
@@ -33,9 +36,13 @@ cd ansible-playbooks
    - `*info.txt` in `ansible-playbooks/` with `login:` and `password:` lines
    - `CM_INFO_FILE=/path/to/info.txt`
    - `CM_REPO_USERNAME` + `CM_REPO_PASSWORD` environment variables
-   - `cm_repo_username` / `cm_repo_password` in `group_vars/all.yml`
+   - `cm_repo_username` / `cm_repo_password` in protected Vault/extra vars
 
    If an info file or env vars are set, the wrapper passes them as Ansible extra vars; you do **not** also need credentials in `all.yml` or manual `-e` flags.
+   Direct `ansible-playbook` and `run-playbook.sh` do not translate the wrapper's
+   archive environment variables: use `-e @/secure/path/deployment-secrets.vault.yml`
+   and Vault password input. For direct SSH use `--private-key /secure/path/key`
+   or `ansible_ssh_private_key_file`, not just the wrapper's `ANSIBLE_PRIVATE_KEY`.
 
 ## Control node and OS support
 

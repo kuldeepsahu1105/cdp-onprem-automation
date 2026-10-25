@@ -17,6 +17,103 @@ An empty string normally means "derive or use the stable default." An empty
 list means "do not add an override." Do not replace a generated URL list
 unless the table below says the list is a complete replacement.
 
+## Operator editing checklist
+
+Ansible does **not** use a project `.env` file for these settings. From the
+repository root, edit the deployment YAML, not the derived defaults:
+
+```bash
+cd ansible-playbooks
+vi config.yml
+# Ansible-only hosts: copy once, then edit your operator-owned inventory.
+cp inventory.example.ini inventory.ini
+vi inventory.ini
+```
+
+Do not copy over an existing deployment inventory. For AWS/Terraform runs,
+`inventory.ini` is generated: inspect it, but **never edit it**; fix Terraform
+inputs/state and regenerate it instead. In `vi`, use `i` to edit, `Esc` then
+`:wq` + Enter to save/quit, or `:q!` + Enter to discard unsaved changes.
+Keep `group_vars/all.yml` as the defaults/derived-value reference; any
+documented override below can be added to `config.yml` even if absent there.
+Extra vars (including Jenkins fields) can override your saved choices.
+
+Before deployment, verify/update every applicable row:
+
+| Requirement | Actual parameters / what to check |
+|---|---|
+| Always: environment and access | `deployment_environment` (`aws` or `baremetal`, or verified `auto`), `ansible_control_reachability` (`auto`, `public`, `private`), `ansible_user`, `ansible_ssh_private_key_file`; optional `ansible_ssh_common_args` for a real bastion route. Use the target OS SSH account and a matching protected key, not the shipped `./id_rsa` assumption. |
+| Always: inventory | `[cldr-mngr]`, `[base-masters]`, `[base-workers]`; each active host's `ansible_host` (controller-reachable), `private_ip` (cluster traffic), `cldr_hostname` (unique short name), optional `public_ip` (public links). Keep both `[ecs-masters]` and `[ecs-workers]` headers even when empty; do not populate `[deployment_portal_runtime]` manually. `[postgres]` (legacy `[db]`) is optional; omit its hosts to use the manager database. |
+| FreeIPA only | `identity_provider: freeipa` (or verified `auto`), `[ipaserver]` host, `ipaserver_domain`, `dns_forwarders`; supply `ipaadmin_password` securely. Domain must match the intended DNS/Kerberos namespace; do not reuse the lab domain/password. |
+| AD only | `identity_provider: ad`, `ad_domain`, `ad_kdc_host`, `ad_dns_servers`, `ad_join_user`, optional `ad_computer_ou`, `ad_kdc_admin_user`, `ad_ldap_bind_dn`, `ad_ldap_user_search_base`, `ad_ldap_group_search_base`; remove the FreeIPA host. Replace example DNs and supply AD secrets as described below. |
+| Conditional DNS | `extra_dns_search_domains`, `extra_dns_nameservers`, `identity_dns_external_probe_host`, `dns_manage_networkmanager_resolv_conf`; verify forward/reverse resolution and approved DNS forwarding. Restricted networks may need an internal probe hostname or explicit `"off"`. |
+| Always: product/artifact compatibility | `cm_version`, `cm_numeric_version`, `cdh_version`, `cdh_numeric_version`, `java_version`, `python_version`, `postgresql_version`, `postgres_jdbc_version`, `cm_repo_source`; ensure versions/build IDs exist for your OS and entitlement. On RHEL review `rhel_release_pin` (`auto` or the intended `major.minor`). Supply `cm_repo_username` and `cm_repo_password` securely. `cm_repo_source: internal` selects a mirror on the manager, not an arbitrary URL or an automatic offline deployment. |
+| Conditional parcel/CSD choices | `cdh_parcel_os_suffix`, `cm_parcel_repo_urls_override`, `cm_parcel_repo_extra_urls`, `cm_csd_urls_override`, `cm_parcel_repo_include_ecs_parcel`, `cm_parcel_repo_include_cdv_parcel`, `cm_parcel_repo_include_cfm_parcel`, `csd_respect_service_toggles`; review `cdv_version`, `cfm_version`, `cfm_nifi_app_version` for those artifacts. Empty override lists retain generated URLs; full replacement lists must contain every required repo/CSD. |
+| Base cluster | `cdh_basecluster_name`, `base_cluster_master_group`, `base_cluster_worker_group`, every boolean in `base_cluster_install_services`, `base_cluster_kafka_metadata_store`, `base_cluster_enable_kerberos`, `base_cluster_enable_autotls`; choose Kafka's metadata store before first start, and verify placement/sizing for enabled services. |
+| Always: credentials/security | Replace lab/default values via protected extra vars: `cm_admin_user`, `cm_admin_pass`, `postgres_password`, `scm_db_password`, `common_password`, and enabled services' `base_cluster_hive_database_password`, `base_cluster_hue_database_password`, `base_cluster_ranger_database_password`, `base_cluster_ranger_admin_password`, `base_cluster_knox_database_password`, `base_cluster_knox_master_secret`. Review database names/users and `cm_cms_reports_manager_db_password` for consistency. This is not an exhaustive secret inventory: inspect the defaults for every enabled service. |
+| TLS / LDAP | `autotls_enabled`, `use_freeipa_for_crt_mgmt`, `cm_srvr_sudo_user`, `cm_private_key_path`; conditional secret `cm_priv_key_passphrase` or `cm_node_sudo_password` for the chosen authentication mode. Verify `cm_ldap_enabled`, `cm_ldap_scheme`, `cm_ldap_port`, `cm_ldap_auth_backend_order`. Do not enable force/secret-update toggles unless deliberately rotating existing state. |
+| ECS only | `ecs_deploy_enabled`, populated ECS groups, `ecs_cluster_master_group`, `ecs_cluster_worker_group`, `ecs_cluster_name`, `ecs_pvc_ds_version`, `ecs_app_domain`, `ecs_docker_data_path`, `ecs_lso_data_path`, `ecs_longhorn_data_path`, `ecs_longhorn_replication`; verify wildcard DNS/storage/sizing. Review `ecs_control_plane_database_mode` and `ecs_control_plane_vault_mode`; do not switch away from embedded defaults without the complete external-service configuration required by the selected ECS release. Replace `ecs_k8s_webui_secret_admin_token` securely. |
+| Optional ECS services | `ecs_data_services_deploy_enabled`, `ecs_deploy_cdw`, `ecs_deploy_cde`, `ecs_deploy_cai`, `ecs_deploy_cai_registry`, `ecs_ldap_enabled`; leave off unless prerequisites and service-specific credentials are supplied. Verify `ecs_control_plane_url` (or its domain-derived URL) and protected `ecs_api_access_key_id`, `ecs_api_private_key` when supplying API credentials rather than automatic provisioning. |
+| Optional portal / monitoring | `deployment_portal_enabled`, `deployment_portal_host_group`, `deployment_portal_postgres_host_group`, `deployment_portal_access_profile`, `caddy_vhost_enabled`, `caddy_vhost_public_base`, `deployment_portal_http_port`, `monitoring_stack_enabled`; review listener access/SGs. Verify `pgadmin_default_email` (valid TLD), protected `pgadmin_default_password`, `deployment_portal_basic_auth_password`, `monitoring_grafana_admin_password`. Keep authentication enabled; set `deployment_portal_expose_credentials` and `deployment_portal_expose_ssh_keys` false when publishing credentials/keys is not intended. |
+
+### Secrets and generated files
+
+Never paste real passwords into tracked config, example commands, Git, build
+logs or shared terminal history. Use a secret manager/Jenkins masked fields,
+or create an encrypted extra-vars file **outside the checkout**:
+
+```bash
+umask 077
+EDITOR=vi ansible-vault create /secure/path/deployment-secrets.vault.yml
+# Later edits (opens vi and re-encrypts on save):
+EDITOR=vi ansible-vault edit /secure/path/deployment-secrets.vault.yml
+```
+
+Replace `/secure/path` with an existing private directory. The vault editor
+contains YAML keys from the checklist, not shell `export` statements.
+`<username>`, `<password>`, `replace-me`, `ChangeMe...`, `corp.example.com`,
+sample service accounts, and template IP addresses are placeholders or lab
+defaults, not usable production inputs. Do not assume `.gitignore` excludes
+all local secret/config files.
+
+`pvc_setup.sh` / the clone wrapper translate `CM_REPO_USERNAME` and
+`CM_REPO_PASSWORD` (or `CM_INFO_FILE` with `login:` / `password:` lines) into
+Ansible extra vars. **Direct `ansible-playbook` does not perform that
+translation**: pass `cm_repo_username` / `cm_repo_password` in the Vault file.
+Similarly `ANSIBLE_EXTRA_VARS` is a `pvc_setup.sh` input; for direct playbooks
+use `-e @/secure/path/deployment-secrets.vault.yml --ask-vault-pass`.
+Use `--private-key /secure/path/key` for direct Ansible/ad-hoc commands, or
+set `ansible_ssh_private_key_file` explicitly; exporting `ANSIBLE_PRIVATE_KEY`
+alone is a repository wrapper input, not Ansible's standard CLI setting.
+
+Never edit generated `jenkins_override.yml`, remote portal/monitoring `.env`,
+`docker-compose.yml`, Caddyfile, rendered repository files, or runtime facts.
+Change `config.yml` / protected extra vars / Jenkins inputs and rerun the
+owning phase. The remote `.env` files are template outputs, not operator
+deployment inputs. License/key files are supplied artifacts, not files to
+edit in `vi`.
+
+### Pre-run checks in order
+
+1. Complete the checklist and select the intended inventory/key/credential
+   source. For AWS, first review the Terraform plan using the
+   [AWS checklist](../../READme.adoc#operator-editing-checklist); inspect the
+   inventory generated after provisioning.
+2. From the repository root, run local static checks:
+   `./jenkins/scripts/validate-ansible-yaml.sh` and
+   `./jenkins/scripts/validate-ansible-contracts.sh` (Python 3 + PyYAML).
+   These do not connect to hosts, but do not validate all deployment values.
+3. With Ansible and required collections already available, from
+   `ansible-playbooks/` run
+   `ansible-playbook -i inventory.ini 11_identity_setup.yml --syntax-check`.
+   Supply Vault extra vars if required. This parses the playbook, not a
+   deployment; missing collections must be resolved before proceeding.
+4. When ready to contact hosts, follow the
+   [runbook validation/deployment sequence](RUNBOOK.md). Ansible `--check`
+   is **not** a no-side-effect validator: tasks may explicitly run outside
+   check mode, wrappers may install tools/collections, and `--diff` can expose
+   secrets. Do not substitute a full `DRY_RUN=true` deployment for static checks.
+
 ## Required choices by deployment type
 
 | Deployment | Required input |
@@ -25,7 +122,7 @@ unless the table below says the list is a complete replacement.
 | Active Directory | Set `identity_provider: ad`, `ad_domain`, `ad_kdc_host`, DNS servers, AD account names/DNs, and the secrets described below |
 | Terraform/AWS | Keep `deployment_environment: auto` or set `aws`; Terraform generates `inventory.ini` |
 | Existing/bare-metal hosts | Set `deployment_environment: baremetal`; copy `inventory.example.ini` to `inventory.ini` and replace every example host/address |
-| Base CDH only | Configure base inventory groups and `base_cluster_install_services`; leave ECS disabled or omit ECS groups |
+| Base CDH only | Configure base inventory groups and `base_cluster_install_services`; set `ecs_deploy_enabled: false` or leave both ECS groups empty (keep headers) |
 | ECS | Provide ECS inventory groups and enable `ecs_deploy_enabled`; enable individual data services only when required |
 
 ## Active Directory credentials
