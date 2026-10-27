@@ -966,6 +966,26 @@ sudo sed -n '1,220p' /opt/cldr-deployment-portal/Caddyfile
 
 **Running Ansible from ipaserver:** Playbook **06** copies an operator inventory, SSH key, and Ansible configuration to `/root`. Unlike the Jenkins/controller inventory, `/root/inventory.ini` rewrites each `ansible_host` to its `private_ip`, because connections originating inside the VPC should not hairpin through public addresses. `/root/ansible.cfg` selects that inventory and `/root/sshkey.pem`, and suppresses warnings for the established hyphenated group names. After rerunning **PREREQS**, root can run commands directly, for example `ansible cm-node -b -m ping`.
 
+**Existing FreeIPA domain protection and stale DNS cleanup:** Brownfield runs read
+`/etc/ipa/default.conf` from the configured IPA server before changing hostnames,
+DNS, wildcard records, or portal links. If the installed domain differs from
+`ipaserver_domain`, the run fails before mutation. Use the installed domain in
+`ANSIBLE_GROUP_VARS_YAML`; changing an existing IPA realm/domain is a migration,
+not a rerun. To clean records accidentally created under a wrong domain while
+preserving the installed zone, run the identity flow once with:
+
+```yaml
+ipaserver_domain: cldrsetup.local
+cluster_domain_skip_ozone_hostname_validation: true
+ipa_dns_cleanup_stale_domain: cldr.internal.arpa
+ipa_dns_cleanup_stale_domain_confirm: true
+```
+
+Playbook **14** removes only matching inventory-host A/PTR values from the stale
+domain and recreates correct PTR values. Playbook **19** removes the stale ECS
+wildcard value and ensures `*.apps.<installed-domain>` points to the ECS master
+private IP. The stale forward zone itself is not deleted automatically.
+
 **Auto-TLS reports `/etc/ipa/ca.crt` missing:** FreeIPA trust is optional for `generateCmca`; CM Auto-TLS can use its own generated CA. When `use_freeipa_for_crt_mgmt=true`, automation first checks cldr-mngr and then tries to copy the authoritative CA from the inventory `ipaserver`. If neither has a non-empty CA file, playbook **27** warns and continues without `trustedCaCerts` instead of blocking Auto-TLS. The **IDENTITY** phase remains strict: every FreeIPA client must have the remote FQDN, non-empty `/etc/ipa/default.conf` and CA bundle, `/etc/krb5.keytab`, the matching `host/<fqdn>@REALM` principal, host-keytab `kinit`, and authenticated `ipa ping`. Rerun **IDENTITY** before LDAP/Kerberos integration to repair the current IPA deployment.
 
 **`ipa-client-install` / `zlib.error` on `/ipa/json` schema RPC** (log shows session cookie OK, then `invalid code lengths set`): **`ipa-client-install`** talks to **`https://ipaserver.<domain>/ipa/json`** on the IPA server (not the Caddy `:81` UI vhost). A broken **`zz-ipa-caddy-proxy.conf`** that runs **`mod_substitute`** on **`application/json`** under **`/ipa`** corrupts **gzip** JSON-RPC bodies. From a failing worker (replace FQDNs):

@@ -1,0 +1,64 @@
+---
+# Prevent a brownfield FreeIPA deployment from being reconciled with a different
+# inventory domain. On a fresh host, default.conf is absent and installation proceeds.
+
+- name: Check existing FreeIPA server configuration for domain protection
+  ansible.builtin.stat:
+    path: /etc/ipa/default.conf
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  become: true
+  register: existing_ipa_domain_default_conf
+  run_once: true
+  when:
+    - identity_provider_effective == 'freeipa'
+    - ipa_server_in_inventory | default(false) | bool
+
+- name: Read existing FreeIPA server configuration for domain protection
+  ansible.builtin.slurp:
+    path: /etc/ipa/default.conf
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  become: true
+  register: existing_ipa_domain_default_conf_content
+  run_once: true
+  when:
+    - identity_provider_effective == 'freeipa'
+    - ipa_server_in_inventory | default(false) | bool
+    - existing_ipa_domain_default_conf.stat.exists | default(false) | bool
+
+- name: Extract existing FreeIPA domain
+  ansible.builtin.set_fact:
+    existing_ipa_domain: >-
+      {{
+        (
+          existing_ipa_domain_default_conf_content.content
+          | b64decode
+          | regex_findall('(?im)^domain\\s*=\\s*([^\\s#]+)')
+          | first
+          | default('')
+        )
+        | trim
+        | lower
+      }}
+  run_once: true
+  when:
+    - identity_provider_effective == 'freeipa'
+    - ipa_server_in_inventory | default(false) | bool
+    - existing_ipa_domain_default_conf.stat.exists | default(false) | bool
+
+- name: Refuse FreeIPA domain drift on an existing deployment
+  ansible.builtin.assert:
+    that:
+      - existing_ipa_domain | default('') | length > 0
+      - existing_ipa_domain == (ipaserver_domain | trim | lower)
+    fail_msg: >-
+      Existing FreeIPA is configured for domain
+      "{{ existing_ipa_domain | default('unknown') }}", but this run requests
+      ipaserver_domain="{{ ipaserver_domain }}". Refusing to change hostnames,
+      DNS records, wildcard records, or portal links across identity domains.
+      Use the installed domain in ANSIBLE_GROUP_VARS_YAML. A domain migration
+      requires a separate explicit migration procedure.
+  run_once: true
+  when:
+    - identity_provider_effective == 'freeipa'
+    - ipa_server_in_inventory | default(false) | bool
+    - existing_ipa_domain_default_conf.stat.exists | default(false) | bool

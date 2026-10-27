@@ -213,6 +213,14 @@ cert_organizational_unit: "CLDR"
 cert_subj: "/C={{ cert_country }}/ST={{ cert_state }}/L={{ cert_locality }}/O={{ cert_organization }}/OU={{ cert_organizational_unit }}/CN={{ ansible_fqdn }}"
 
 wildcard_dns_record: "*.apps"
+# Opt-in brownfield cleanup for records accidentally added under a wrong domain.
+# Example:
+#   ipa_dns_cleanup_stale_domain: cldr.internal.arpa
+#   ipa_dns_cleanup_stale_domain_confirm: true
+# Playbooks 14 and 19 remove only matching inventory-host A/PTR values and the
+# ECS wildcard value; they never delete the whole stale zone.
+ipa_dns_cleanup_stale_domain: ""
+ipa_dns_cleanup_stale_domain_confirm: false
 
 # -----------------------------------------------------------------------------
 # 03. PostgreSQL
