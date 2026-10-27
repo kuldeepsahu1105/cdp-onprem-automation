@@ -13,10 +13,33 @@
     - name: Pin RHEL release before full package upgrade
       ansible.builtin.import_tasks: common_tasks/pin_rhel_release_before_upgrade.yml
 
+    - name: Find PGDG repository files on non-database RHEL hosts
+      ansible.builtin.find:
+        paths: /etc/yum.repos.d
+        patterns: "pgdg*.repo"
+        file_type: file
+      register: system_update_pgdg_repo_files
+      when:
+        - ansible_os_family == "RedHat"
+        - inventory_hostname != postgres_inventory_host
+
+    - name: Disable PGDG repositories on non-database RHEL hosts
+      ansible.builtin.replace:
+        path: "{{ item.path }}"
+        regexp: '^(enabled\s*=\s*)1\s*$'
+        replace: '\g<1>0'
+      loop: "{{ system_update_pgdg_repo_files.files | default([]) }}"
+      loop_control:
+        label: "{{ item.path }}"
+      when:
+        - ansible_os_family == "RedHat"
+        - inventory_hostname != postgres_inventory_host
+
     - name: Ensure package manager utilities are installed (RHEL)
-      ansible.builtin.package:
+      ansible.builtin.dnf:
         name: "{{ os.pkg_utils }}"
         state: present
+        disablerepo: "{{ os.prereq_disabled_repositories | default([]) }}"
       when: ansible_os_family == "RedHat"
 
     - name: Read RHEL release before DNF upgrade
@@ -39,6 +62,7 @@
         name: "*"
         state: latest
         releasever: "{{ rhel_release_pin_effective }}"
+        disablerepo: "{{ os.prereq_disabled_repositories | default([]) }}"
       when: ansible_distribution == "RedHat"
 
     - name: Refresh RHEL version facts after DNF upgrade
@@ -64,9 +88,10 @@
       when: ansible_distribution == "RedHat"
 
     - name: Update all packages (other RedHat-family distributions)
-      ansible.builtin.package:
+      ansible.builtin.dnf:
         name: "*"
         state: latest
+        disablerepo: "{{ os.prereq_disabled_repositories | default([]) }}"
       when:
         - ansible_os_family == "RedHat"
         - ansible_distribution != "RedHat"

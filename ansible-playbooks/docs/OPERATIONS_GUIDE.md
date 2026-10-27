@@ -1578,9 +1578,11 @@ PostgreSQL's PGDG repository is needed only on the resolved PostgreSQL database
 host. Generic RHEL prerequisite, Python, and Java package transactions disable
 `pgdg*`, so an unavailable PGDG mirror does not block adding or reconciling
 unrelated cluster nodes. Prerequisite setup also disables previously installed
-PGDG repository definitions on non-database hosts. Playbook 08 installs the
-PostgreSQL client only on the database host, and playbooks 08/23 skip repository
-refresh when the required PostgreSQL binaries are already installed.
+PGDG repository definitions on non-database hosts. This quarantine runs before
+playbook 01's package-manager installation and full update, and every phase-1
+DNF transaction excludes `pgdg*`. Playbook 08 installs the PostgreSQL client
+only on the database host, and playbooks 08/23 skip repository refresh when the
+required PostgreSQL binaries are already installed.
 
 **FreeIPA `ipa-server-install` `FileNotFoundError` [Errno 2] — diagnostic bundle (run on ipaserver as root, paste output):**
 
