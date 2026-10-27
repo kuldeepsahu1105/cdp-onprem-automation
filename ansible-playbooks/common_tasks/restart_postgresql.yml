@@ -2,6 +2,47 @@
 - name: Set OS-specific facts
   ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
+- name: Decide whether PostgreSQL requires a restart
+  ansible.builtin.set_fact:
+    postgres_restart_required: >-
+      {{
+        postgres_force_restart | default(false) | bool
+        or not (postgresql_server_binary.stat.exists | default(false) | bool)
+        or not (pg_data_stat.stat.exists | default(false) | bool)
+        or (postgres_config_deploy is defined and postgres_config_deploy is changed)
+        or (
+          postgres_root_key_generation is defined
+          and postgres_root_key_generation is changed
+        )
+        or (
+          postgres_root_ca_generation is defined
+          and postgres_root_ca_generation is changed
+        )
+        or (
+          postgres_server_key_generation is defined
+          and postgres_server_key_generation is changed
+        )
+        or (
+          postgres_server_cert_generation is defined
+          and postgres_server_cert_generation is changed
+        )
+      }}
+
+- name: Report PostgreSQL restart decision
+  ansible.builtin.debug:
+    msg: >-
+      PostgreSQL restart required={{ postgres_restart_required | bool }}
+      (force={{ postgres_force_restart | default(false) | bool }},
+      new_install={{ not (postgresql_server_binary.stat.exists | default(false) | bool) }},
+      new_cluster={{ not (pg_data_stat.stat.exists | default(false) | bool) }},
+      config_changed={{ postgres_config_deploy is defined and postgres_config_deploy is changed }},
+      tls_changed={{
+        (postgres_root_key_generation is defined and postgres_root_key_generation is changed)
+        or (postgres_root_ca_generation is defined and postgres_root_ca_generation is changed)
+        or (postgres_server_key_generation is defined and postgres_server_key_generation is changed)
+        or (postgres_server_cert_generation is defined and postgres_server_cert_generation is changed)
+      }}).
+
 # CM holds JDBC pools to Postgres; restart CM on the manager host (not necessarily the Postgres host).
 - name: Check if Cloudera Manager Server is running before PostgreSQL restart
   ansible.builtin.command: systemctl is-active cloudera-scm-server
@@ -11,6 +52,7 @@
   become: true
   delegate_to: "{{ cm_manager_inventory_host }}"
   when:
+    - postgres_restart_required | bool
     - cm_manager_inventory_host | default('') | length > 0
     - cm_manager_inventory_host in hostvars
 
@@ -20,14 +62,26 @@
     state: restarted
     enabled: true
     daemon_reload: true
-  when: ansible_os_family == "RedHat"
+  when:
+    - ansible_os_family == "RedHat"
+    - postgres_restart_required | bool
 
 - name: Restart PostgreSQL cluster to apply configuration (Ubuntu/Debian)
   ansible.builtin.command: "pg_ctlcluster {{ postgresql_version }} main restart"
-  when: ansible_os_family == "Debian"
+  when:
+    - ansible_os_family == "Debian"
+    - postgres_restart_required | bool
   register: pg_cluster_restart
   changed_when: pg_cluster_restart.rc == 0
   failed_when: pg_cluster_restart.rc != 0
+
+- name: Ensure PostgreSQL is enabled and started when restart is unnecessary
+  ansible.builtin.systemd:
+    name: "{{ os.postgres_service }}"
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: not (postgres_restart_required | bool)
 
 - name: Wait for PostgreSQL on localhost
   ansible.builtin.wait_for:
@@ -73,6 +127,7 @@
 - name: Restart Cloudera Manager after PostgreSQL restart (refresh DB connections)
   ansible.builtin.import_tasks: common_tasks/restart_cm_scm_server.yml
   when:
+    - postgres_restart_required | bool
     - cm_manager_inventory_host | default('') | length > 0
     - cm_manager_inventory_host in hostvars
     - cm_active_before_pg_restart is defined
@@ -83,6 +138,7 @@
   delegate_to: "{{ cm_manager_inventory_host }}"
   become: true
   when:
+    - postgres_restart_required | bool
     - cm_manager_inventory_host | default('') | length > 0
     - cm_manager_inventory_host in hostvars
     - cm_active_before_pg_restart is defined

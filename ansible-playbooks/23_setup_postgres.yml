@@ -199,6 +199,7 @@
           -subj "{{ cert_subj }}"
       args:
         creates: "{{ postgres_data_dir }}/root.key"
+      register: postgres_root_key_generation
 
     - name: Set permissions on root key
       ansible.builtin.file:
@@ -213,6 +214,7 @@
           -signkey {{ postgres_data_dir }}/root.key -out {{ postgres_data_dir }}/root.crt
       args:
         creates: "{{ postgres_data_dir }}/root.crt"
+      register: postgres_root_ca_generation
 
     - name: Generate server key and CSR
       ansible.builtin.command:
@@ -223,6 +225,7 @@
           -subj "/CN={{ postgres_host_fqdn }}"
       args:
         creates: "{{ postgres_data_dir }}/server.key"
+      register: postgres_server_key_generation
 
     - name: Set permissions on server key
       ansible.builtin.file:
@@ -237,6 +240,7 @@
           -out {{ postgres_data_dir }}/server.crt
       args:
         creates: "{{ postgres_data_dir }}/server.crt"
+      register: postgres_server_cert_generation
 
     - name: Set correct ownership for certificates
       ansible.builtin.file:
@@ -297,7 +301,12 @@
     ##### Verify CRT
     - name: Verify CRT
       ansible.builtin.command:
-        cmd: openssl x509 -req -in "{{ postgres_data_dir }}/server.csr" -text -days 3650 -CA "{{ postgres_data_dir }}/root.crt" -CAkey "{{ postgres_data_dir }}/root.key" -CAcreateserial -out "{{ postgres_data_dir }}/server.crt"
+        argv:
+          - openssl
+          - verify
+          - -CAfile
+          - "{{ postgres_data_dir }}/root.crt"
+          - "{{ postgres_data_dir }}/server.crt"
       register: csr_check_result
       changed_when: false
 
@@ -316,23 +325,49 @@
         msg: "{{ csr_check_result.stdout.replace('\t', '    ').split('\n') }}"
 
     - name: Verify Key
-      ansible.builtin.shell: openssl rsa -noout -text -in "{{ postgres_data_dir }}/server.key" | head -20
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - pkey
+          - -in
+          - "{{ postgres_data_dir }}/server.key"
+          - -check
+          - -noout
       register: csr_check_result
       changed_when: false
 
     - name: Display Key Verification Output
       ansible.builtin.debug:
-        msg: "{{ csr_check_result.stdout.replace('\t', '    ').split('\n') }}"
+        msg: >-
+          {{
+            (
+              csr_check_result.stdout | default('')
+              ~ csr_check_result.stderr | default('')
+            ).replace('\t', '    ').split('\n')
+          }}
 
     ##### Verify Private Key
     - name: Verify Private Key
-      ansible.builtin.shell: openssl rsa -in "{{ postgres_data_dir }}/server.key" -check | head -20
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - rsa
+          - -in
+          - "{{ postgres_data_dir }}/server.key"
+          - -check
+          - -noout
       register: key_check_result
       changed_when: false
 
     - name: Display Private Key Verification Output
       ansible.builtin.debug:
-        msg: "{{ key_check_result.stdout.replace('\t', '    ').split('\n') }}"
+        msg: >-
+          {{
+            (
+              key_check_result.stdout | default('')
+              ~ key_check_result.stderr | default('')
+            ).replace('\t', '    ').split('\n')
+          }}
 
     ##### Verify Certificate
     - name: Verify Certificate

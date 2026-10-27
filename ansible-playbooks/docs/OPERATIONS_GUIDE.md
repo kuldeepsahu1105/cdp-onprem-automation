@@ -1626,6 +1626,13 @@ installs the PostgreSQL client only on the database host, and playbooks 08/23
 skip repository refresh when the required PostgreSQL binaries are already
 installed.
 
+PostgreSQL and Cloudera Manager are not restarted on a healthy playbook 23
+rerun merely because the CA certificate is copied to newly added hosts.
+PostgreSQL restarts only after a new installation/cluster initialization,
+PostgreSQL configuration change, server TLS material creation, or an explicit
+`postgres_force_restart: true`. Cloudera Manager restarts only when PostgreSQL
+was actually restarted and CM was active beforehand.
+
 **FreeIPA `ipa-server-install` `FileNotFoundError` [Errno 2] — diagnostic bundle (run on ipaserver as root, paste output):**
 
 ```bash
