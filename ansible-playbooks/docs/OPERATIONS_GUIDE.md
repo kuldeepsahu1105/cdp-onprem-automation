@@ -986,6 +986,26 @@ domain and recreates correct PTR values. Playbook **19** removes the stale ECS
 wildcard value and ensures `*.apps.<installed-domain>` points to the ECS master
 private IP. The stale forward zone itself is not deleted automatically.
 
+For manual repair on the IPA server, use the repository utility. Review its
+derived host map in dry-run mode before applying:
+
+```bash
+cd ansible-playbooks
+sudo ./fix-ipa-dns-domain.sh \
+  --good-domain cldrsetup.local \
+  --bad-domain cldr.internal.arpa
+
+sudo ./fix-ipa-dns-domain.sh \
+  --good-domain cldrsetup.local \
+  --bad-domain cldr.internal.arpa \
+  --apply \
+  --delete-stale-zone
+```
+
+The utility requires an IPA admin Kerberos ticket (and prompts with `kinit admin`
+when needed). It reconciles known inventory A/PTR records and the ECS wildcard,
+but intentionally does not delete host principals or re-enroll clients.
+
 **Auto-TLS reports `/etc/ipa/ca.crt` missing:** FreeIPA trust is optional for `generateCmca`; CM Auto-TLS can use its own generated CA. When `use_freeipa_for_crt_mgmt=true`, automation first checks cldr-mngr and then tries to copy the authoritative CA from the inventory `ipaserver`. If neither has a non-empty CA file, playbook **27** warns and continues without `trustedCaCerts` instead of blocking Auto-TLS. The **IDENTITY** phase remains strict: every FreeIPA client must have the remote FQDN, non-empty `/etc/ipa/default.conf` and CA bundle, `/etc/krb5.keytab`, the matching `host/<fqdn>@REALM` principal, host-keytab `kinit`, and authenticated `ipa ping`. Rerun **IDENTITY** before LDAP/Kerberos integration to repair the current IPA deployment.
 
 **`ipa-client-install` / `zlib.error` on `/ipa/json` schema RPC** (log shows session cookie OK, then `invalid code lengths set`): **`ipa-client-install`** talks to **`https://ipaserver.<domain>/ipa/json`** on the IPA server (not the Caddy `:81` UI vhost). A broken **`zz-ipa-caddy-proxy.conf`** that runs **`mod_substitute`** on **`application/json`** under **`/ipa`** corrupts **gzip** JSON-RPC bodies. From a failing worker (replace FQDNs):
