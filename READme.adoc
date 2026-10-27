@@ -130,6 +130,125 @@ WARNING: Do *NOT* commit license, credentials, or SSH key files to GitHub.
 
 == ⚙️ Configuration
 
+[[operator-editing-checklist]]
+=== Operator editing checklist
+
+These are *wrapper inputs*, not a dotenv file for Ansible or native Terraform
+tfvars. From the download directory, select one file explicitly:
+
+[source,bash]
+----
+vi .tfvars.yaml
+export TFVARS_FILE="$PWD/.tfvars.yaml"
+# Shell alternative (do not edit the loader at the bottom):
+# vi .tfvars.env
+# export TFVARS_FILE="$PWD/.tfvars.env"
+----
+
+In `vi`, press `i`, edit, then `Esc`, `:wq`, Enter to save/quit;
+`Esc`, `:q!`, Enter quits without saving. `.tfvars.env` is executable shell
+configuration: use only trusted files. YAML keys are lowercase; shell keys
+are uppercase. Check every applicable row before provisioning:
+
+[cols="2,3,3", options="header"]
+|===
+| Requirement | YAML keys | Shell keys / action
+
+| Always verify account, region, ownership
+| `aws_region`, `owner`, `environment`
+| `AWS_REGION`, `OWNER`, `ENVIRONMENT`; select the intended `AWS_PROFILE` externally. Environment also selects the Terraform workspace.
+
+| Always choose resource modes
+| `create_vpc`, `create_new_sg`, `create_keypair`, `create_eip`
+| `CREATE_VPC`, `CREATE_NEW_SG`, `CREATE_KEYPAIR`, `CREATE_EIP`; `create_vpc: false` means the account's *default* VPC, not an arbitrary VPC ID.
+
+| Existing SG / key pair (conditional)
+| `existing_sg_name`, `existing_keypair_name`
+| `EXISTING_SG_NAME` (SG ID or name in the target VPC), `EXISTING_KEYPAIR_NAME` when corresponding create flags are false. Verify actual resources, not default example names; an existing key pair also requires its matching private key for Ansible.
+
+| New VPC (conditional)
+| `vpc_name`, `vpc_cidr_block`, `vpc_azs`, `vpc_public_subnets_cidr`, `vpc_private_subnets_cidr`, `enable_nat_gateway`, `enable_vpn_gateway`
+| `VPC_NAME`, `VPC_CIDR_BLOCK`, `VPC_AZS`, `VPC_PUBLIC_SUBNETS_CIDR`, `VPC_PRIVATE_SUBNETS_CIDR`, `ENABLE_NAT_GATEWAY`, `ENABLE_VPN_GATEWAY`; match AZs to the selected region and review overlapping CIDRs.
+
+| New SG (conditional)
+| `sg_name` or `sg_name_suffix`, `allow_all`, `allowed_cidrs`
+| `SG_NAME` / `SG_NAME_SUFFIX`, `ALLOW_ALL`, `ALLOWED_CIDRS`; use your approved controller/client CIDRs, not the shipped addresses. Keep `allow_all` false. The module allows *all traffic* from allowed CIDRs; `allowed_ports` / `ALLOWED_PORTS` is deprecated and *ignored*, not a port restriction.
+
+| New key pair / EIP (conditional)
+| `keypair_name` or `keypair_name_suffix`, `cldr_eip_name`
+| `KEYPAIR_NAME` / `KEYPAIR_NAME_SUFFIX`, `CLDR_EIP_NAME`; verify naming and avoid accidental collisions.
+
+| Always verify image and capacity
+| `ami_id`; `instance_groups` entries `cldr_mngr`, `ipa_server`, `pvcbase_master`, `pvcbase_worker`, `pvcecs_master`, `pvcecs_worker`, each with `count`, `instance_type`, `volume_size`
+| `AMI_ID`; prefixes `CLDR_MNGR`, `IPA_SERVER`, `PVCBASE_MASTER`, `PVCBASE_WORKER`, `PVCECS_MASTER`, `PVCECS_WORKER`, each with `_COUNT`, `_INSTANCE_TYPE`, `_VOLUME_SIZE`. Verify region, OS, architecture, quota and disk requirements; example AMIs/sizing are not portable. For AD without FreeIPA set IPA count to zero; base-only deployments set both ECS counts to zero.
+
+| Optional architecture / tooling
+| `cpu_architecture`, `apply_graviton_defaults`, `auto_resolve_arm64_ami`, `ecs_deploy_on_arm64`, `terraform_version`
+| `CPU_ARCHITECTURE`, `APPLY_GRAVITON_DEFAULTS`, `AUTO_RESOLVE_ARM64_AMI`, `ECS_DEPLOY_ON_ARM64`, `TERRAFORM_VERSION`; ARM64 ECS is experimental and off by default.
+|===
+
+`cm_version` / `CM_VERSION` here is a wrapper reference, not an Ansible
+deployment override. Set product versions, domain, identity and service choices
+using `vi config.yml` from `cdp-onprem-automation/ansible-playbooks/` and the
+link:ansible-playbooks/docs/CONFIGURATION.md#operator-editing-checklist[Ansible checklist].
+If configuring a pre-cloned checkout, use `pvc_setup.sh` there after editing;
+clone wrappers fetch/checkout/pull the selected branch and may conflict with
+local tracked edits. Do not rely on edits surviving a checkout refresh.
+
+Validate in order: check syntax locally (`bash -n .tfvars.env` for the shell
+format), confirm the AWS identity, then review a plan before any apply:
+
+[source,bash]
+----
+aws sts get-caller-identity
+DRY_RUN=true SHOW_TF_PLAN_OUTPUT=true ./clone_and_run_terraform.sh
+----
+
+The wrapper dry run does *not* apply infrastructure or copy inventory, but can
+install tools, update the checkout, initialize Terraform, select/create a local
+workspace and reconcile state. It is not an offline/no-write validator.
+Protect plan/state/log files; plans can contain sensitive data. Only after plan
+review run the normal provisioning command, then review generated inventory
+without editing it and complete the Ansible checks before deployment.
+
+=== Standalone AWS Terraform (without wrappers)
+
+From the repository root:
+
+[source,bash]
+----
+cd terraform-code/cloudera-pvc-terraform
+vi terraform.tfvars
+terraform init
+terraform validate
+terraform plan
+----
+
+This file is *HCL*, not shell/YAML; the root module does not read `.tfvars.yaml`
+or `.tfvars.env` itself. Review `aws_region`, `pvc_cluster_tags`, `vpc_tags`,
+`create_vpc`, `vpc_name`, `vpc_cidr_block`, `azs`, `public_subnets_cidr`,
+`private_subnets_cidr`, `enable_nat_gateway`, `enable_vpn_gateway`,
+`create_new_sg`, `sg_name`, `existing_sg`, `allow_all`, `allowed_cidrs`,
+`create_keypair`, `keypair_name`, `existing_keypair_name`, `create_eip`,
+`cldr_eip_name`, and `ipaserver_ec2_startstop_iam_enabled`.
+`keypair_name` and `cldr_eip_name` have no defaults in `variables.tf`.
+For every `instance_groups` entry review `count`, `ami`, `instance_type`,
+`volume_size`, `tags`, and optional `user_data`. The checked-in HCL sample uses
+small example instances and permissive ingress: replace these, especially
+`allow_all` / `allowed_cidrs`, before a plan.
+
+Do not edit `modules/*/terraform.tfvars` for a root-module run; Terraform does
+not automatically load child-module tfvars. `init` downloads dependencies and
+initializes the backend; `validate` checks configuration; `plan` queries AWS
+but does not apply changes. Neither replaces account/network/size review.
+Keep the same backend/workspace when switching entry points to avoid managing
+the same resources in independent states.
+
+Never edit generated `ansible_inventory.ini`, AWS-generated `inventory.ini`,
+`terraform_output.json`, `tfplan.out`, `.terraform/`, or Terraform state.
+Correct source inputs and regenerate inventory from the intended state.
+Ansible-only inventories copied from the template are operator-owned instead.
+
 === Key Terraform Variables
 
 [cols="2,4,2", options="header"]
@@ -152,34 +271,36 @@ WARNING: Do *NOT* commit license, credentials, or SSH key files to GitHub.
 | Cloudera Manager version
 | `7.13.2.6`
 
-| `create_vpc`
+| `CREATE_VPC`
 | Create a new VPC or use an existing one
 | `false`
 
-| `create_new_sg`
+| `CREATE_NEW_SG`
 | Create a new security group or use an existing one
 | `false`
 
-| `existing_sg`
+| `EXISTING_SG_NAME`
 | Existing security group ID to use (if not creating new)
 | `sg-0dbb6f79cba5ef701`
 
-| `create_new_keypair`
+| `CREATE_KEYPAIR`
 | Create a new EC2 key pair
 | `true`
 
-| `existing_keypair_name`
+| `EXISTING_KEYPAIR_NAME`
 | Name of existing key pair (if not creating new)
 | `kuldeep-pvc-session`
 
-| `create_eip`
+| `CREATE_EIP`
 | Allocate and associate Elastic IPs
 | `true`
 |===
 
 === Instance Groups
 
-All nodes use AMI `ami-0fbbafe729d214f98` (RHEL 9.7, ap-southeast-1).
+The wrapper templates currently specify `ami-030a276b398df7eb7`.
+Verify image availability, region and architecture rather than assuming this
+example AMI is suitable for your account.
 
 [cols="2,1,2,2", options="header"]
 |===

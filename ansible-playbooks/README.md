@@ -6,7 +6,8 @@ Automation for deploying and cleaning up Cloudera Private Cloud on **RHEL** and 
 
 ```bash
 cd ansible-playbooks
-# Edit config.yml for this deployment; keep secrets in Vault or an extra-vars file.
+vi config.yml
+# Complete docs/CONFIGURATION.md's operator checklist; keep secrets outside Git.
 ./run-playbook.sh detect_identity.yml    # or: ansible-playbook … (imports ensure_collections.yml)
 DEPLOY_PHASE=all ./pvc_setup.sh             # or repo clone_and_run_pvc_automation.sh
 ```
@@ -19,13 +20,21 @@ cp inventory.example.ini inventory.ini
 vi inventory.ini
 vi config.yml
 ansible all -i inventory.ini -m ping -e @config.yml
-DEPLOY_PHASE=all ./pvc_setup.sh
+# Follow docs/RUNBOOK.md for the correct AWS or bare-metal deployment sequence.
 ```
 
 Use `ansible_host` for the controller-reachable address, `private_ip` for
 cluster traffic, and optional `public_ip` for public portal links. Deployment
 playbooks load `config.yml` automatically. Add `-e @config.yml` to direct
 ad-hoc `ansible` commands that need deployment variables.
+Set the matching SSH key with `--private-key /secure/path/key` for direct
+commands. Before running, complete the
+[file/parameter checklist](docs/CONFIGURATION.md#operator-editing-checklist),
+including identity/domain, host addresses, versions, enabled services and
+protected secrets. Terraform-generated inventory is read-only to operators;
+only the copied Ansible-only inventory is manually edited.
+For bare metal, do not use the AWS `all` phase: follow the runbook's explicit
+identity/phase sequence to avoid EC2 helper playbooks.
 
 Supported execution paths:
 
@@ -65,6 +74,9 @@ product versions, services, parcel/CSD overrides, ECS, and portal settings.
 [`group_vars/all.yml`](group_vars/all.yml) contains stable defaults, derived
 values, compatibility aliases, and OS package maps; it normally does not need
 editing. Jenkins and command-line extra vars take precedence over both files.
+From this directory use `vi config.yml` (and `vi inventory.ini` only for an
+operator-owned inventory). Press `i` to edit, `Esc` then `:wq` + Enter to
+save/quit, or `:q!` + Enter to discard unsaved edits.
 
 Keep passwords out of Git and provide them through Ansible Vault, Jenkins
 credentials, or an extra-vars file:
@@ -83,7 +95,7 @@ ansible-playbook -i inventory.ini 31_setup_base_cluster.yml \
 | `cdh_parcel_os_suffix` | `auto` | `noble`, `jammy`, `el8`, `el9`, or `auto` from worker OS |
 | `java_version` | `17` | OpenJDK |
 | `python_version` | `3.11` | System Python |
-| `postgresql_version` | `18` | External DB for CM |
+| `postgresql_version` | `17` | Configured deployment version; overrides stable defaults |
 | `identity_provider` | `auto` | FreeIPA if `[ipaserver]` in inventory; AD if `ad_kdc_host` set |
 | `cm_repo_source` | `public` | `public` = archive.cloudera.com/p/; `internal` = local mirror on cldr-mngr |
 | `deployment_environment` | `auto` | AWS vs bare-metal DNS behavior |
@@ -104,7 +116,12 @@ Spark is bundled in the CDH parcel for `>= 7.3.1` — separate SPARK3 download i
 | 5 — ECS (Data Services) | `33` (+ optional `34`) | `DEPLOY_PHASE=5 ./pvc_setup.sh` |
 | Cleanup | `99` | `99_cleanup.yml` |
 
-**Dry run:** `DRY_RUN=true ./pvc_setup.sh` or `./pvc_setup.sh --dry-run` — runs Ansible with `--check --diff`. Terraform wrapper: `DRY_RUN=true ./clone_and_run_terraform.sh` (plan only).
+**Dry run:** `DRY_RUN=true ./pvc_setup.sh` or `./pvc_setup.sh --dry-run` runs
+Ansible with `--check --diff`; this can contact hosts, execute tasks explicitly
+outside check mode, and expose secrets in diffs. Prefer the
+[static pre-run checks](docs/CONFIGURATION.md#pre-run-checks-in-order) first.
+Terraform wrapper: `DRY_RUN=true ./clone_and_run_terraform.sh` is plan-only,
+but may install tools, update the checkout and initialize/reconcile state.
 
 See [docs/RUNBOOK.md](docs/RUNBOOK.md) for the operator quick path,
 [docs/OPERATIONS_GUIDE.md](docs/OPERATIONS_GUIDE.md) for detailed procedures,

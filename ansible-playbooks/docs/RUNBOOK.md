@@ -15,6 +15,10 @@ Provide:
 
 Keep passwords outside Git in environment variables, Vault, Jenkins
 credentials, or a protected extra-vars file.
+Use the [operator editing checklist](CONFIGURATION.md#operator-editing-checklist)
+for exact keys, required/conditional values, safe secret inputs and static
+pre-run checks. In `vi`, press `i` to edit, `Esc` then `:wq` + Enter to
+save/quit, or `:q!` + Enter to discard edits.
 
 ## AWS deployment
 
@@ -31,33 +35,69 @@ chmod +x clone_and_run_*.sh
 vi .tfvars.yaml
 
 export AWS_PROFILE=my-aws-profile
-export CM_REPO_USERNAME='archive-user'
-export CM_REPO_PASSWORD='archive-password'
 cp /secure/path/license.txt .   # optional for trial deployments
 ```
 
-Review region, environment, versions, instance groups, sizing, volumes, key
-pair, VPC, and allowed CIDRs in `.tfvars.yaml`.
+Complete the [AWS parameter checklist](../../READme.adoc#operator-editing-checklist):
+at minimum verify `aws_region`, `owner`, `environment`, `ami_id`,
+`create_vpc`, `create_new_sg`, `create_keypair`, `create_eip`,
+`existing_sg_name` / `existing_keypair_name` when reusing resources, and every
+`instance_groups` entry's `count`, `instance_type`, `volume_size`.
+For a new SG review `allow_all` and `allowed_cidrs` (`allowed_ports` is
+ignored). The sample AMI, CIDRs, names and region are not universal defaults.
+
+Check account and review a plan before provisioning:
+
+```bash
+aws sts get-caller-identity
+DRY_RUN=true SHOW_TF_PLAN_OUTPUT=true ./clone_and_run_terraform.sh
+```
+
+This is plan-only, not offline: the wrapper may install tools, update its
+checkout and initialize/reconcile Terraform state. It does not generate the
+deployment inventory until a real apply.
 
 ### 2. Provision and deploy
 
 ```bash
 ./clone_and_run_terraform.sh
-DEPLOY_PHASE=all ./clone_and_run_pvc_automation.sh
+# The Terraform wrapper has now cloned the repository and generated inventory.
+cd cdp-onprem-automation/ansible-playbooks
+vi config.yml
 ```
 
-For phased execution:
+Complete the [Ansible checklist](CONFIGURATION.md#operator-editing-checklist)
+for identity/domain, versions/build IDs, services, credentials, TLS and optional
+ECS/portal/monitoring. Inspect generated `inventory.ini` but never edit it.
+Use an encrypted file outside the checkout for archive and deployment secrets:
 
 ```bash
-DEPLOY_PHASE=1          ./clone_and_run_pvc_automation.sh # prerequisites
-DEPLOY_PHASE=portal     ./clone_and_run_pvc_automation.sh # portal/pgAdmin
-DEPLOY_PHASE=2          ./clone_and_run_pvc_automation.sh # identity/DNS
-DEPLOY_PHASE=3          ./clone_and_run_pvc_automation.sh # PostgreSQL/CM
-DEPLOY_PHASE=cm_tls     ./clone_and_run_pvc_automation.sh # TLS/CMS/LDAP/Kerberos
-DEPLOY_PHASE=cdh        ./clone_and_run_pvc_automation.sh # base CDH
-DEPLOY_PHASE=monitoring ./clone_and_run_pvc_automation.sh # monitoring
-DEPLOY_PHASE=ecs        ./clone_and_run_pvc_automation.sh # optional ECS
+umask 077
+EDITOR=vi ansible-vault create /secure/path/deployment-secrets.vault.yml
+export ANSIBLE_EXTRA_VARS='@/secure/path/deployment-secrets.vault.yml'
+export ANSIBLE_VAULT_PASSWORD_FILE=/secure/path/vault-password
+export ANSIBLE_PRIVATE_KEY=/secure/path/matching-private-key
 ```
+
+Supply real paths; the protected Vault password file must already exist.
+In the vault include `cm_repo_username`, `cm_repo_password` and applicable
+password keys from the checklist. Do not put passwords directly in shell
+commands. Run the static pre-run checks linked above before deployment.
+Run `DEPLOY_PHASE=all ./pvc_setup.sh` for AWS, or use phased execution:
+
+```bash
+DEPLOY_PHASE=1          ./pvc_setup.sh # prerequisites
+DEPLOY_PHASE=portal     ./pvc_setup.sh # portal/pgAdmin
+DEPLOY_PHASE=2          ./pvc_setup.sh # identity/DNS
+DEPLOY_PHASE=3          ./pvc_setup.sh # PostgreSQL/CM
+DEPLOY_PHASE=cm_tls     ./pvc_setup.sh # TLS/CMS/LDAP/Kerberos
+DEPLOY_PHASE=cdh        ./pvc_setup.sh # base CDH
+DEPLOY_PHASE=monitoring ./pvc_setup.sh # monitoring
+DEPLOY_PHASE=ecs        ./pvc_setup.sh # optional ECS
+```
+
+Use this local entry point after editing tracked `config.yml`; clone wrappers
+fetch/checkout/pull a branch and can conflict with local edits.
 
 ## Bare-metal deployment
 
@@ -132,16 +172,30 @@ ad_join_user: svc-cloudera-join
 
 ### 3. Validate
 
+First run the [static pre-run checks](CONFIGURATION.md#pre-run-checks-in-order).
+Then, from `ansible-playbooks/`, set the matching key and Vault inputs.
+The following commands contact hosts; the check-mode command is not guaranteed
+side-effect-free and is not part of the offline checks:
+
 ```bash
 export ANSIBLE_PRIVATE_KEY=/secure/path/id_rsa
-export CM_REPO_USERNAME='archive-user'
-export CM_REPO_PASSWORD='archive-password'
+export ANSIBLE_EXTRA_VARS='@/secure/path/deployment-secrets.vault.yml'
+export ANSIBLE_VAULT_PASSWORD_FILE=/secure/path/vault-password
 cp /secure/path/license.txt .   # optional for trial deployments
 
-ansible all -i inventory.ini -m ping -e @config.yml
-ansible-playbook -i inventory.ini detect_identity.yml -e @config.yml
-./run-playbook.sh 00_setup_ssh_preqs.yml --check
+ansible all -i inventory.ini -m ping -e @config.yml --private-key "$ANSIBLE_PRIVATE_KEY"
+ansible-playbook -i inventory.ini detect_identity.yml -e @config.yml \
+  -e @/secure/path/deployment-secrets.vault.yml --private-key "$ANSIBLE_PRIVATE_KEY"
+./run-playbook.sh 00_setup_ssh_preqs.yml --check \
+  -e @/secure/path/deployment-secrets.vault.yml --private-key "$ANSIBLE_PRIVATE_KEY"
 ```
+
+Create the encrypted file as shown in the AWS section and include applicable
+AD/FreeIPA, archive and service credentials from the checklist. The direct
+playbook commands below also need
+`-e @/secure/path/deployment-secrets.vault.yml --private-key "$ANSIBLE_PRIVATE_KEY"`
+when those settings are not otherwise configured; `ANSIBLE_EXTRA_VARS` is
+consumed by `pvc_setup.sh`, not by direct `ansible-playbook` or `run-playbook.sh`.
 
 ### 4. Deploy
 
