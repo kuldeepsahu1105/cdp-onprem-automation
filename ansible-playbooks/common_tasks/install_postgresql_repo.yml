@@ -15,10 +15,12 @@
   failed_when: false
 
 - name: Install PostgreSQL PGDG repository (RHEL family)
-  ansible.builtin.package:
+  ansible.builtin.dnf:
     name: "{{ os_vars[ansible_os_family].postgres_repo_url }}"
     state: present
     disable_gpg_check: true
+    disablerepo:
+      - "pgdg*"
   when: ansible_os_family == "RedHat"
 
 - name: Install PostgreSQL APT repository key (Debian family)

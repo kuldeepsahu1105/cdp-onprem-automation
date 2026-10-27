@@ -88,13 +88,20 @@
     - name: Set OS-specific facts
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
+    - name: Check whether PostgreSQL server is already installed
+      ansible.builtin.stat:
+        path: "{{ os.postgres_bin_dir }}/postgres"
+      register: postgresql_server_binary
+
     - name: Install PostgreSQL repository
       ansible.builtin.import_tasks: common_tasks/install_postgresql_repo.yml
+      when: not (postgresql_server_binary.stat.exists | bool)
 
     - name: "Install PostgreSQL {{ postgresql_version }}"
       ansible.builtin.package:
         name: "{{ os.postgres_server_packages }}"
         state: present
+      when: not (postgresql_server_binary.stat.exists | bool)
 
     - name: Initialize PostgreSQL database
       ansible.builtin.import_tasks: common_tasks/init_postgresql.yml

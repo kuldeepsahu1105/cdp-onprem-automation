@@ -1,12 +1,28 @@
 ---
-- name: Install PostgreSQL Python driver packages
-  ansible.builtin.package:
+- name: Install PostgreSQL Python driver packages (RHEL family)
+  ansible.builtin.dnf:
     name: >-
       {{
         ['python3-pip', 'python3-psycopg2']
         + (python_psycopg2_runtime_packages | default([]))
       }}
     state: present
+    disablerepo: >-
+      {{
+        python_psycopg2_disabled_repositories
+        | default(os.prereq_disabled_repositories | default([]))
+      }}
+  when: ansible_os_family == "RedHat"
+
+- name: Install PostgreSQL Python driver packages (Debian family)
+  ansible.builtin.apt:
+    name: >-
+      {{
+        ['python3-pip', 'python3-psycopg2']
+        + (python_psycopg2_runtime_packages | default([]))
+      }}
+    state: present
+  when: ansible_os_family == "Debian"
 
 - name: Resolve Python interpreters requiring psycopg2
   ansible.builtin.set_fact:

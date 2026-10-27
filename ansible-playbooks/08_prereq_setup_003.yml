@@ -4,20 +4,34 @@
 - import_playbook: ensure_collections.yml
 
 - name: Enable Repositories and Install Packages
-  hosts: all
+  hosts: "{{ postgres_inventory_group_resolved | default('cldr-mngr') }}"
   become: yes
 
   tasks:
+    - name: Resolve PostgreSQL install host from inventory
+      ansible.builtin.import_tasks: common_tasks/resolve_postgres_inventory.yml
+
     - name: Set OS-specific facts
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
+    - name: Check whether PostgreSQL client is already installed
+      ansible.builtin.command:
+        argv:
+          - psql
+          - --version
+      register: existing_psql_version
+      changed_when: false
+      failed_when: false
+
     - name: Install PostgreSQL repository
       ansible.builtin.import_tasks: common_tasks/install_postgresql_repo.yml
+      when: existing_psql_version.rc != 0
 
     - name: Install PostgreSQL client (psql)
       ansible.builtin.package:
         name: "{{ os.postgres_client_packages }}"
         state: present
+      when: existing_psql_version.rc != 0
 
     - name: Verify PostgreSQL(psql) installation
       ansible.builtin.command: psql --version

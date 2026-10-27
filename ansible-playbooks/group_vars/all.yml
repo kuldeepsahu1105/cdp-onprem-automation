@@ -1683,6 +1683,8 @@ cleanup_cm_packages:
 os_vars:
   RedHat:
     pkg_mgr: dnf
+    prereq_disabled_repositories:
+      - "pgdg*"
     prereq_packages:
       - wget
       - telnet
