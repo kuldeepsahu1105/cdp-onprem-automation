@@ -13,17 +13,15 @@
     - name: Pin RHEL release before full package upgrade
       ansible.builtin.import_tasks: common_tasks/pin_rhel_release_before_upgrade.yml
 
-    - name: Find PGDG repository files on non-database RHEL hosts
+    - name: Find PGDG repository files on RHEL hosts
       ansible.builtin.find:
         paths: /etc/yum.repos.d
         patterns: "pgdg*.repo"
         file_type: file
       register: system_update_pgdg_repo_files
-      when:
-        - ansible_os_family == "RedHat"
-        - inventory_hostname != postgres_inventory_host
+      when: ansible_os_family == "RedHat"
 
-    - name: Disable PGDG repositories on non-database RHEL hosts
+    - name: Disable PGDG repositories by default on RHEL hosts
       ansible.builtin.replace:
         path: "{{ item.path }}"
         regexp: '^(enabled\s*=\s*)1\s*$'
@@ -33,7 +31,6 @@
         label: "{{ item.path }}"
       when:
         - ansible_os_family == "RedHat"
-        - inventory_hostname != postgres_inventory_host
 
     - name: Ensure package manager utilities are installed (RHEL)
       ansible.builtin.dnf:

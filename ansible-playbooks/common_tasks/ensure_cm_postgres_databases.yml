@@ -263,13 +263,37 @@
             name: /tmp/pgdg-redhat-repo-latest.noarch.rpm
             state: present
             disable_gpg_check: true
+            disablerepo:
+              - "pgdg*"
+          delegate_to: "{{ postgres_inventory_host }}"
+          become: true
+
+        - name: Find PostgreSQL PGDG repository definitions on DB host
+          ansible.builtin.find:
+            paths: /etc/yum.repos.d
+            patterns: "pgdg*.repo"
+            file_type: file
+          delegate_to: "{{ postgres_inventory_host }}"
+          become: true
+          register: postgres_db_host_pgdg_repo_files
+
+        - name: Keep PostgreSQL PGDG repositories disabled by default on DB host
+          ansible.builtin.replace:
+            path: "{{ item.path }}"
+            regexp: '^(enabled\s*=\s*)1\s*$'
+            replace: '\g<1>0'
+          loop: "{{ postgres_db_host_pgdg_repo_files.files | default([]) }}"
+          loop_control:
+            label: "{{ item.path }}"
           delegate_to: "{{ postgres_inventory_host }}"
           become: true
 
         - name: Ensure PostgreSQL PGDG client package on DB host
-          ansible.builtin.package:
+          ansible.builtin.dnf:
             name: "postgresql{{ postgresql_version }}"
             state: present
+            enablerepo:
+              - "pgdg*"
           delegate_to: "{{ postgres_inventory_host }}"
           become: true
 

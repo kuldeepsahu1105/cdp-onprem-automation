@@ -1577,12 +1577,14 @@ when your install expects the `scm` role to own the schema). Restart
 PostgreSQL's PGDG repository is needed only on the resolved PostgreSQL database
 host. Generic RHEL prerequisite, Python, and Java package transactions disable
 `pgdg*`, so an unavailable PGDG mirror does not block adding or reconciling
-unrelated cluster nodes. Prerequisite setup also disables previously installed
-PGDG repository definitions on non-database hosts. This quarantine runs before
-playbook 01's package-manager installation and full update, and every phase-1
-DNF transaction excludes `pgdg*`. Playbook 08 installs the PostgreSQL client
-only on the database host, and playbooks 08/23 skip repository refresh when the
-required PostgreSQL binaries are already installed.
+unrelated cluster nodes. PGDG repository definitions remain disabled by default
+on every RHEL host, including the PostgreSQL host. This quarantine runs before
+playbook 01's package-manager installation and full update, and identity-client
+installation also excludes `pgdg*`. PostgreSQL client/server package
+transactions explicitly enable PGDG only for that transaction. Playbook 08
+installs the PostgreSQL client only on the database host, and playbooks 08/23
+skip repository refresh when the required PostgreSQL binaries are already
+installed.
 
 **FreeIPA `ipa-server-install` `FileNotFoundError` [Errno 2] — diagnostic bundle (run on ipaserver as root, paste output):**
 

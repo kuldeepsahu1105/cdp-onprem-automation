@@ -2,22 +2,52 @@
 - name: Resolve identity client package names
   ansible.builtin.import_tasks: set_os_facts.yml
 
-- name: Install FreeIPA client packages
-  ansible.builtin.package:
+- name: Install FreeIPA client packages (RHEL family)
+  ansible.builtin.dnf:
     name: "{{ os_vars[ansible_os_family].freeipa_client_packages }}"
     state: present
+    disablerepo: "{{ os.prereq_disabled_repositories | default([]) }}"
   register: freeipa_client_package_install
   retries: 3
   delay: 10
   until: freeipa_client_package_install is succeeded
-  when: identity_provider_effective == 'freeipa'
+  when:
+    - ansible_os_family == "RedHat"
+    - identity_provider_effective == 'freeipa'
 
-- name: Install Active Directory join packages
-  ansible.builtin.package:
+- name: Install FreeIPA client packages (Debian family)
+  ansible.builtin.apt:
+    name: "{{ os_vars[ansible_os_family].freeipa_client_packages }}"
+    state: present
+  register: freeipa_client_package_install_debian
+  retries: 3
+  delay: 10
+  until: freeipa_client_package_install_debian is succeeded
+  when:
+    - ansible_os_family == "Debian"
+    - identity_provider_effective == 'freeipa'
+
+- name: Install Active Directory join packages (RHEL family)
+  ansible.builtin.dnf:
     name: "{{ os.ad_join_packages }}"
     state: present
+    disablerepo: "{{ os.prereq_disabled_repositories | default([]) }}"
   register: ad_client_package_install
   retries: 3
   delay: 10
   until: ad_client_package_install is succeeded
-  when: identity_provider_effective == 'ad'
+  when:
+    - ansible_os_family == "RedHat"
+    - identity_provider_effective == 'ad'
+
+- name: Install Active Directory join packages (Debian family)
+  ansible.builtin.apt:
+    name: "{{ os.ad_join_packages }}"
+    state: present
+  register: ad_client_package_install_debian
+  retries: 3
+  delay: 10
+  until: ad_client_package_install_debian is succeeded
+  when:
+    - ansible_os_family == "Debian"
+    - identity_provider_effective == 'ad'

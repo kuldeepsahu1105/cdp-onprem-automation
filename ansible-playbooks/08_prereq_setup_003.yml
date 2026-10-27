@@ -28,10 +28,22 @@
       when: existing_psql_version.rc != 0
 
     - name: Install PostgreSQL client (psql)
-      ansible.builtin.package:
+      ansible.builtin.dnf:
         name: "{{ os.postgres_client_packages }}"
         state: present
-      when: existing_psql_version.rc != 0
+        enablerepo:
+          - "pgdg*"
+      when:
+        - ansible_os_family == "RedHat"
+        - existing_psql_version.rc != 0
+
+    - name: Install PostgreSQL client (psql) on Debian
+      ansible.builtin.apt:
+        name: "{{ os.postgres_client_packages }}"
+        state: present
+      when:
+        - ansible_os_family == "Debian"
+        - existing_psql_version.rc != 0
 
     - name: Verify PostgreSQL(psql) installation
       ansible.builtin.command: psql --version

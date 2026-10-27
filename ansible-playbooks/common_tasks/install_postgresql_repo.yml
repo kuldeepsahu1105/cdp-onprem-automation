@@ -23,6 +23,24 @@
       - "pgdg*"
   when: ansible_os_family == "RedHat"
 
+- name: Find installed PostgreSQL PGDG repository definitions
+  ansible.builtin.find:
+    paths: /etc/yum.repos.d
+    patterns: "pgdg*.repo"
+    file_type: file
+  register: postgresql_pgdg_repo_files
+  when: ansible_os_family == "RedHat"
+
+- name: Keep PostgreSQL PGDG repositories disabled by default
+  ansible.builtin.replace:
+    path: "{{ item.path }}"
+    regexp: '^(enabled\s*=\s*)1\s*$'
+    replace: '\g<1>0'
+  loop: "{{ postgresql_pgdg_repo_files.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: ansible_os_family == "RedHat"
+
 - name: Install PostgreSQL APT repository key (Debian family)
   ansible.builtin.get_url:
     url: "{{ os_vars[ansible_os_family].postgres_apt_key_url }}"
