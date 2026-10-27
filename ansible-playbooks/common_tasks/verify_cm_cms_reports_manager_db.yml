@@ -15,6 +15,7 @@
   delegate_to: "{{ cm_manager_inventory_host }}"
   become: true
   vars:
+    python_psycopg2_target_host: "{{ cm_manager_inventory_host }}"
     python_psycopg2_interpreter: >-
       {{
         hostvars[cm_manager_inventory_host].ansible_python_interpreter

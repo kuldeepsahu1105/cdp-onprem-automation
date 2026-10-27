@@ -1,4 +1,35 @@
 ---
+- name: Resolve psycopg2 target host
+  ansible.builtin.set_fact:
+    python_psycopg2_target_host_effective: >-
+      {{ python_psycopg2_target_host | default(inventory_hostname) }}
+
+- name: Gather distribution facts for psycopg2 target host when unavailable
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - distribution
+  delegate_to: "{{ python_psycopg2_target_host_effective }}"
+  delegate_facts: true
+  when: hostvars[python_psycopg2_target_host_effective].ansible_os_family is not defined
+
+- name: Resolve psycopg2 target OS family
+  ansible.builtin.set_fact:
+    python_psycopg2_os_family_effective: >-
+      {{
+        hostvars[python_psycopg2_target_host_effective].ansible_os_family
+        | default(ansible_os_family | default(''))
+      }}
+
+- name: Require a supported psycopg2 target OS family
+  ansible.builtin.assert:
+    that:
+      - python_psycopg2_os_family_effective in ['RedHat', 'Debian']
+    fail_msg: >-
+      Could not resolve a supported OS family for psycopg2 target
+      {{ python_psycopg2_target_host_effective }}
+      (resolved={{ python_psycopg2_os_family_effective | default('unknown') }}).
+
 - name: Install PostgreSQL Python driver packages (RHEL family)
   ansible.builtin.dnf:
     name: >-
@@ -10,9 +41,13 @@
     disablerepo: >-
       {{
         python_psycopg2_disabled_repositories
-        | default(os.prereq_disabled_repositories | default([]))
+        | default(
+            os_vars[python_psycopg2_os_family_effective].prereq_disabled_repositories
+            | default([])
+          )
       }}
-  when: ansible_os_family == "RedHat"
+  delegate_to: "{{ python_psycopg2_target_host_effective }}"
+  when: python_psycopg2_os_family_effective == "RedHat"
 
 - name: Install PostgreSQL Python driver packages (Debian family)
   ansible.builtin.apt:
@@ -22,7 +57,8 @@
         + (python_psycopg2_runtime_packages | default([]))
       }}
     state: present
-  when: ansible_os_family == "Debian"
+  delegate_to: "{{ python_psycopg2_target_host_effective }}"
+  when: python_psycopg2_os_family_effective == "Debian"
 
 - name: Resolve Python interpreters requiring psycopg2
   ansible.builtin.set_fact:
@@ -31,7 +67,10 @@
         (
           [
             python_psycopg2_interpreter
-            | default(ansible_python_interpreter | default('/usr/bin/python3')),
+            | default(
+                hostvars[python_psycopg2_target_host_effective].ansible_python_interpreter
+                | default('/usr/bin/python3')
+              ),
             python_psycopg2_versioned_interpreter
             | default('/usr/bin/python' ~ (python_version | string))
           ]
@@ -53,6 +92,7 @@
   loop: "{{ python_psycopg2_interpreters }}"
   loop_control:
     label: "{{ item }}"
+  delegate_to: "{{ python_psycopg2_target_host_effective }}"
   register: python_psycopg2_import
   changed_when: false
   failed_when: false
@@ -81,6 +121,7 @@
       - "{{ 'psycopg2-binary==' + psycopg2_binary_version if psycopg2_binary_version | default('') | length > 0 else 'psycopg2-binary' }}"
   environment:
     PIP_BREAK_SYSTEM_PACKAGES: "1"
+  delegate_to: "{{ python_psycopg2_target_host_effective }}"
   loop: "{{ python_psycopg2_import.results }}"
   loop_control:
     label: "{{ item.item }}"
@@ -99,5 +140,6 @@
   loop: "{{ python_psycopg2_interpreters }}"
   loop_control:
     label: "{{ item }}"
+  delegate_to: "{{ python_psycopg2_target_host_effective }}"
   register: python_psycopg2_verify
   changed_when: false

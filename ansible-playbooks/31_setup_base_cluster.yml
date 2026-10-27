@@ -2200,6 +2200,7 @@
         - name: Ensure psycopg2 is installed for Hue
           ansible.builtin.import_tasks: common_tasks/ensure_python_psycopg2.yml
           vars:
+            python_psycopg2_target_host: "{{ groups[base_cluster_master_group][0] }}"
             python_psycopg2_additional_interpreters:
               - "{{ base_cluster_hue_python_interpreter_effective }}"
 
