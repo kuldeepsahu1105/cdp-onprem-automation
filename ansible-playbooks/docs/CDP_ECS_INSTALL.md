@@ -24,7 +24,10 @@ hanging on a self-connection through the public IP.
 
 1. **Cluster shell** — `cloudera.cluster.cluster` `state: present`, `type: EXPERIENCE_CLUSTER`, `cluster_version` from `ecs_parcel_version` or the pinned ECS repository manifest.
 2. **Hosts** — `cloudera.cluster.host` `state: attached` for master and workers (FQDN = `cldr_hostname.cluster_domain`).
-3. **Parcel** — `cloudera.cluster.parcel` `state: activated` for product `ECS`.
+3. **Parcel** — the local CM API parcel helper downloads, distributes, and
+   activates product `ECS` with an enforced deadline and transient-command
+   retries. It uses the same list-capable path as Base parcels while preserving
+   the single-parcel ECS call.
 4. **Services** — `cloudera.cluster.service` + `service_config` for `docker` and `ecs` (credentials in a separate `service_config` task with `no_log`).
    Boolean CM parameters such as `external_registry_enabled` are sent and
    verified as lowercase strings because `cloudera.cluster` v4.4 otherwise

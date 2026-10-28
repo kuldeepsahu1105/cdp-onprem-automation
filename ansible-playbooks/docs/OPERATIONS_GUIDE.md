@@ -1633,6 +1633,19 @@ PostgreSQL configuration change, server TLS material creation, or an explicit
 `postgres_force_restart: true`. Cloudera Manager restarts only when PostgreSQL
 was actually restarted and CM was active beforehand.
 
+**Parallel parcel processing:** The deployment remains pinned to
+`cloudera.cluster` v4.4.0; upstream PR
+[`cloudera-labs/cloudera.cluster#355`](https://github.com/cloudera-labs/cloudera.cluster/pull/355)
+is unmerged and its public parameter/return contract is still under review.
+The local `activate_cluster_parcels.yml` helper provides the useful behavior
+without consuming that unstable API: a list of `{name, parcel_version}` targets,
+bounded parallel processing, one timeout per parcel, transient HTTP 400 command
+retries, aggregate failures, and backward-compatible single-parcel calls.
+Base CDH and CFM parcels run concurrently when CFM is enabled; ECS uses the same
+helper with one item. Tune `cluster_parcel_max_workers`,
+`cluster_parcel_timeout_seconds`, and the command retry variables in
+`group_vars/all.yml`.
+
 **FreeIPA `ipa-server-install` `FileNotFoundError` [Errno 2] — diagnostic bundle (run on ipaserver as root, paste output):**
 
 ```bash

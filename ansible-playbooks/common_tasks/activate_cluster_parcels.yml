@@ -1,0 +1,89 @@
+---
+# Required vars:
+#   cluster_parcel_cluster
+#   cluster_parcels: [{name: CDH, parcel_version: ...}, ...]
+#
+# The controller-side helper keeps single-parcel compatibility while allowing
+# Cloudera Manager to download, distribute, and activate independent parcels in
+# parallel. It waits for all in-flight parcels before reporting failures.
+
+- name: Normalize cluster parcel activation list
+  ansible.builtin.set_fact:
+    cluster_parcels_effective: "{{ cluster_parcels }}"
+  when: cluster_parcels is defined
+
+- name: Normalize legacy single cluster parcel activation target
+  ansible.builtin.set_fact:
+    cluster_parcels_effective:
+      - name: "{{ cluster_parcel_product }}"
+        parcel_version: "{{ cluster_parcel_version }}"
+  when: cluster_parcels is not defined
+
+- name: Require cluster parcel activation inputs
+  ansible.builtin.assert:
+    that:
+      - cluster_parcel_cluster | string | trim | length > 0
+      - cluster_parcels_effective | length > 0
+      - cluster_parcels_effective | map(attribute='name') | map('string') | map('trim') | reject('equalto', '') | list | length == cluster_parcels_effective | length
+      - cluster_parcels_effective | map(attribute='parcel_version') | map('string') | map('trim') | reject('equalto', '') | list | length == cluster_parcels_effective | length
+
+- name: Activate cluster parcels with bounded parallel processing
+  ansible.builtin.script:
+    cmd: "{{ playbook_dir }}/../scripts/lib/activate_cm_parcels.py"
+    executable: python3
+  environment:
+    CM_API_URL: "{{ cm_cluster_module_api_url }}"
+    CM_USERNAME: "{{ cm_admin_user }}"
+    CM_PASSWORD: "{{ cm_admin_pass }}"
+    CM_CLUSTER: "{{ cluster_parcel_cluster }}"
+    CM_PARCELS_JSON: "{{ cluster_parcels_effective | to_json }}"
+    CM_PARCEL_MAX_WORKERS: "{{ cluster_parcel_max_workers | default(2) | string }}"
+    CM_PARCEL_TIMEOUT: "{{ cluster_parcel_timeout_seconds | default(3600) | string }}"
+    CM_PARCEL_POLL_DELAY: "{{ cluster_parcel_poll_delay | default(15) | string }}"
+    CM_PARCEL_COMMAND_RETRIES: "{{ cluster_parcel_command_retries | default(3) | string }}"
+    CM_PARCEL_COMMAND_RETRY_DELAY: "{{ cluster_parcel_command_retry_delay | default(10) | string }}"
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  register: cluster_parcels_activation_command
+  changed_when: >-
+    (
+      cluster_parcels_activation_command.stdout
+      | default('{"changed":false}')
+      | trim
+      | from_json
+    ).changed | default(false) | bool
+  failed_when: false
+  no_log: true
+
+- name: Parse cluster parcel activation result
+  ansible.builtin.set_fact:
+    cluster_parcels_activation_result: >-
+      {{
+        cluster_parcels_activation_command.stdout
+        | default('{"changed":false,"parcels":[],"failures":[{"error":"no output"}]}')
+        | trim
+        | from_json
+      }}
+
+- name: Require successful cluster parcel activation
+  ansible.builtin.assert:
+    that:
+      - cluster_parcels_activation_command.rc | int == 0
+      - cluster_parcels_activation_result.failures | default([]) | length == 0
+      - cluster_parcels_activation_result.parcels | default([]) | length == cluster_parcels_effective | length
+      - cluster_parcels_activation_result.parcels | map(attribute='stage') | reject('equalto', 'ACTIVATED') | list | length == 0
+    fail_msg: >-
+      Parcel activation failed for cluster {{ cluster_parcel_cluster }}:
+      {{ cluster_parcels_activation_result.failures | default([]) | to_nice_json }}
+
+- name: Report cluster parcel activation result
+  ansible.builtin.debug:
+    msg: >-
+      Cluster {{ cluster_parcel_cluster }} parcels:
+      {{
+        cluster_parcels_activation_result.parcels
+        | map(attribute='name')
+        | zip(cluster_parcels_activation_result.parcels | map(attribute='stage'))
+        | map('join', '=')
+        | join(', ')
+      }}
+      (parallel workers={{ [cluster_parcel_max_workers | default(2) | int, cluster_parcels_effective | length] | min }}).

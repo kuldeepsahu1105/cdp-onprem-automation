@@ -585,10 +585,13 @@ base_cluster_yarn_nm_vcores: 4
 # Run it asynchronously so Jenkins emits a poll update instead of appearing frozen.
 base_cluster_module_async_timeout: 7500
 base_cluster_module_poll_interval: 15
-# Each parcel gets one shared workflow deadline across download, distribution, and
-# activation. Dependent parcels (CDH then CFM) receive independent deadlines.
+# Each parcel gets its own workflow deadline across download, distribution, and
+# activation. Base CDH/CFM parcels are processed concurrently when both are enabled.
 cluster_parcel_timeout_seconds: 3600
 cluster_parcel_poll_delay: 15
+cluster_parcel_max_workers: 2
+cluster_parcel_command_retries: 3
+cluster_parcel_command_retry_delay: 10
 # Do not persist the initialization marker until every enabled service with a
 # runtime role is STARTED and reports one of these health summaries.
 base_cluster_service_health_retries: 90
