@@ -20,4 +20,5 @@
     update_password: always
     state: present
   delegate_to: "{{ groups['ipaserver'] | first }}"
+  connection: ssh
   become: true
