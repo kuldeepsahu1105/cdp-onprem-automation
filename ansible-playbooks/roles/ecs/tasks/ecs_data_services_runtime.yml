@@ -37,7 +37,8 @@
     mode: "0600"
     content: |
       [default]
-      cdp_endpoint_url = {{ ecs_cdp_console_api_url_effective }}
+      cdp_endpoint_url = {{ ecs_cdp_console_api_url_effective | regex_replace('/+$', '') }}
+      endpoint_url = {{ ecs_cdp_console_api_url_effective | regex_replace('/+$', '') }}/api/v1
       form_factor = private
 
 - name: Write CDP credentials for data services automation user

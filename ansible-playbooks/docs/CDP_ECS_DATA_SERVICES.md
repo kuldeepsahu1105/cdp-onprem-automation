@@ -80,6 +80,11 @@ ecs_data_services_install: [cdw, cde, cai]  # model_registry for registry only
 
 Signed API calls and the management console UI use **`https://<ecs_console_host_prefix>.<ecs_app_domain>`** (default **`console-cdp`**; `ecs_control_plane_url_effective` / `ecs_cdp_console_api_url_effective`). Override with `ecs_control_plane_url` or `ecs_cdp_console_api_url` when needed.
 
+Generated CDP CLI profiles set `cdp_endpoint_url` to that console root and
+set the legacy/Altus `endpoint_url` to the same root plus `/api/v1`. The latter
+is required for private-cloud IAM commands; without it, CDP CLI falls back to
+the public `iamapi.us-west-1.altus.cloudera.com` endpoint.
+
 ## Optional ECS LDAP and admin user
 
 | Variable | Jenkins | Purpose |
