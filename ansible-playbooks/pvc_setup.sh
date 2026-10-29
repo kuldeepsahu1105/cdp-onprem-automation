@@ -52,7 +52,7 @@ Options:
   --help, -h       Show this help
 
 Environment:
-  DEPLOY_PHASE     1|2|3|cm_tls|cdh|portal|monitoring|ecs|6|7|4|5|all|destroy_stack
+  DEPLOY_PHASE     1|2|3|cm_tls|cdh|portal|monitoring|ecs|6|7|8|4|5|all|destroy_stack
   DESTROY_STACK_CONFIRM   true — required for terraform destroy (DRY_RUN=true = destroy plan only)
   CLEANUP_BEFORE_DESTROY  true — run 99_cleanup.yml (cleanup_e2e) before terraform destroy
   ANSIBLE_RUN_SSH_PREQS   auto|true|false (default auto) — 00_setup_ssh_preqs on phase 1/all only
@@ -60,6 +60,7 @@ Environment:
   MONITORING_STACK_ENABLED  true|false (default true) — portal + Grafana/Prometheus bootstrap
   DEPLOYMENT_PORTAL_ENABLED true|false (default true)
   ECS_DATA_SERVICES_DEPLOY_ENABLED true|false — run 34_setup_ecs_data_services.yml (phase 5/7)
+  ECS post-install phase 8 — machine user/API key, IAM/LDAP roles, portal refresh (rechecks console)
   ECS_DEPLOY_CDW / ECS_DEPLOY_CDE / ECS_DEPLOY_CAI / ECS_DEPLOY_CAI_REGISTRY — select services for playbook 34
   ECS_LDAP_ENABLED / ECS_LDAP_ADMIN_USER_ENABLED — optional ECS control plane LDAP + <prefix>admin IAM user
   DRY_RUN          true|false
@@ -518,6 +519,11 @@ _run_ecs_data_services() {
   _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
 }
 
+_run_ecs_post_install() {
+  run_playbook 34_setup_ecs_post_install.yml
+  _run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
+}
+
 run_phase_6() {
   local _phase="6 — Deployment portal refresh (playbook 35)"
   ui_phase_header "$_phase"
@@ -532,13 +538,29 @@ run_phase_7() {
   ui_phase_footer "$_phase"
 }
 
+run_phase_8() {
+  local _phase="8 — ECS post-install tasks"
+  ui_phase_header "$_phase"
+  _run_ecs_post_install
+  ui_phase_footer "$_phase"
+}
+
 run_phase_5() {
   local _phase="5 — ECS cluster install"
+  local ecs_extra=()
   ui_phase_header "$_phase"
-  run_playbook 33_setup_ecs_cluster.yml
-  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
+  if _pipeline_stage_selected "ECS_POST_INSTALL_TASKS"; then
+    ecs_extra+=(-e ecs_run_post_install_inline=false)
+    ui_info "Deferring IAM/LDAP, credentials, and portal refresh to ECS_POST_INSTALL_TASKS"
+  fi
+  run_playbook 33_setup_ecs_cluster.yml "${ecs_extra[@]}"
+  if ! _pipeline_stage_selected "ECS_POST_INSTALL_TASKS"; then
+    _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
+  fi
   if _pipeline_stage_selected "ECS_DATA_SERVICES"; then
-    ui_info "Deferring playbook 34 to the selected ECS_DATA_SERVICES stage"
+    ui_info "Deferring playbook 34 data services to the selected ECS_DATA_SERVICES stage"
+  elif _pipeline_stage_selected "ECS_POST_INSTALL_TASKS"; then
+    ui_info "Skipping legacy inline playbook 34; select ECS_DATA_SERVICES when data services are required"
   else
     # Preserve standalone/backward-compatible phase-5 behavior.
     _run_ecs_data_services
@@ -558,6 +580,7 @@ case "$DEPLOY_PHASE" in
   5|ecs|phase5) run_phase_5 ;;
   6|portal_refresh|phase6) run_phase_6 ;;
   7|dataservices|ds|phase7) run_phase_7 ;;
+  8|ecs_post_install|post_install|phase8) run_phase_8 ;;
   all|full)
     run_phase_1
     sleep 5
@@ -580,7 +603,7 @@ case "$DEPLOY_PHASE" in
     run_phase_5
     ;;
   *)
-    ui_err "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|cm_tls|cdh|portal|monitoring|ecs|all|destroy_stack or prereq|identity|cm_install|…)"
+    ui_err "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|cm_tls|cdh|portal|monitoring|ecs|6|7|8|all|destroy_stack or prereq|identity|cm_install|…)"
     exit 1
     ;;
 esac

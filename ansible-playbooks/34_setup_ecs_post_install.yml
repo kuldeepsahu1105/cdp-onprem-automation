@@ -1,0 +1,17 @@
+### ansible-playbook -i inventory.ini 34_setup_ecs_post_install.yml
+#
+# ECS post-install convergence after playbook 33 confirms the Management Console is healthy:
+# Automation machine-user/API credentials, IAM role assignments, and optional
+# LDAP provider/admin-user configuration.
+---
+- import_playbook: ensure_collections.yml
+
+- name: Converge ECS post-install configuration
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Run ECS post-install tasks
+      ansible.builtin.import_role:
+        name: ecs
+        tasks_from: setup_post_install

@@ -556,8 +556,8 @@
     dest: "{{ ecs_api_credentials_cache_path }}"
     mode: "0600"
     content: |
-      access_key_id: "{{ ecs_api_access_key_id }}"
-      private_key: "{{ ecs_api_private_key }}"
+      access_key_id: {{ ecs_api_access_key_id | to_json }}
+      private_key: {{ ecs_api_private_key | to_json }}
   no_log: true
   when: ecs_api_credentials_cache_path | default('') | length > 0
 

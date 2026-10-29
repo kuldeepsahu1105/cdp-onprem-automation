@@ -34,15 +34,48 @@
   register: _deployment_portal_ecs_api_cache_stat
   when: ecs_api_credentials_cache_path | default('') | length > 0
 
-- name: Load ECS API credentials cache from controller when present
-  ansible.builtin.set_fact:
-    deployment_portal_ecs_api_cache: "{{ lookup('file', ecs_api_credentials_cache_path) | from_yaml | default({}, true) }}"
-  no_log: true
+- name: Load ECS API credentials cache for authenticated portal access
+  block:
+    - name: Parse ECS API credentials cache for portal
+      ansible.builtin.set_fact:
+        deployment_portal_ecs_api_cache: >-
+          {{
+            lookup('file', ecs_api_credentials_cache_path)
+            | from_yaml
+            | default({}, true)
+          }}
+      no_log: true
+
+    - name: Validate ECS API credentials cache for portal
+      ansible.builtin.assert:
+        that:
+          - deployment_portal_ecs_api_cache is mapping
+          - deployment_portal_ecs_api_cache.access_key_id | default('') | length > 0
+          - deployment_portal_ecs_api_cache.private_key | default('') | length > 0
+          - >-
+            not (
+              deployment_portal_ecs_api_cache.private_key
+              | default('')
+              | regex_search('^-----BEGIN [^-]+----- ')
+            )
+        fail_msg: ECS API credential cache is incomplete or uses the legacy folded PEM format.
+      no_log: true
+  rescue:
+    - name: Ignore unreadable ECS API credentials cache during portal refresh
+      ansible.builtin.set_fact:
+        deployment_portal_ecs_api_cache: {}
+
+    - name: Report unreadable ECS API credentials cache
+      ansible.builtin.debug:
+        msg: >-
+          ECS API credential cache {{ ecs_api_credentials_cache_path }} is unreadable.
+          Portal refresh will continue without displaying the cached API key.
   when:
+    - deployment_portal_basic_auth_enabled | default(false) | bool
     - ecs_api_credentials_cache_path | default('') | length > 0
     - _deployment_portal_ecs_api_cache_stat.stat.exists | default(false) | bool
 
-- name: Default empty ECS API cache when file missing
+- name: Default empty ECS API cache when unavailable
   ansible.builtin.set_fact:
     deployment_portal_ecs_api_cache: {}
   when: deployment_portal_ecs_api_cache is not defined
