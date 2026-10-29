@@ -1147,7 +1147,7 @@ ecs_artifacts_dir: >-
         true
       )
   }}
-ecs_cdp_cli_venv_path: "{{ ecs_artifacts_dir }}/.tools/cdpcli-0.9.164"
+ecs_cdp_cli_venv_path: ""  # blank = controller checkout owner's home state directory
 ecs_api_credentials_cache_path: "{{ ecs_artifacts_dir }}/ecs-automation-api-credentials.yml"
 ecs_data_services_catalog_cache_path: "{{ ecs_artifacts_dir }}/ecs-data-services-catalog.yml"
 ecs_control_plane_wait_retries: 40
