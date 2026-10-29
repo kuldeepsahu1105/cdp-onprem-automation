@@ -1,8 +1,19 @@
 ---
+- name: Inspect controller workspace ownership for CDP CLI state
+  ansible.builtin.stat:
+    path: >-
+      {{
+        lookup('env', 'WORKSPACE')
+        | default(playbook_dir, true)
+      }}
+  register: ecs_cdp_cli_workspace_stat
+
 - name: Create persistent CDP CLI state directory
   ansible.builtin.file:
     path: "{{ ecs_cdp_cli_venv_path | dirname }}"
     state: directory
+    owner: "{{ ecs_cdp_cli_workspace_stat.stat.pw_name }}"
+    group: "{{ ecs_cdp_cli_workspace_stat.stat.gr_name }}"
     mode: "0700"
 
 - name: Install isolated CDP CLI for cloudera.cloud modules
