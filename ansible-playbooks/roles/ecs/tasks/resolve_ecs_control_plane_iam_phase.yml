@@ -26,6 +26,8 @@
     ecs_ldap_admin_user_effective: "{{ ecs_ldap_admin_user_enabled | default(false) | bool }}"
     ecs_control_plane_iam_phase_enabled: >-
       {{
+        (ecs_auto_provision_api_access_key | default(true) | bool)
+        or
         (ecs_ldap_enabled | default(false) | bool)
         or (ecs_ldap_admin_user_enabled | default(false) | bool)
         or (

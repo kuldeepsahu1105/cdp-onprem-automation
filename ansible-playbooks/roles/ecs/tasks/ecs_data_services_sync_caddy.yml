@@ -1,7 +1,7 @@
 ---
 - name: Caddy | Re-render deployment portal Caddyfile with ECS data service routes
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/templates/deployment_portal_Caddyfile.j2"
+    src: deployment_portal_Caddyfile.j2
     dest: "{{ deployment_portal_config_dir }}/Caddyfile"
     mode: "0644"
   register: ecs_ds_caddyfile_render

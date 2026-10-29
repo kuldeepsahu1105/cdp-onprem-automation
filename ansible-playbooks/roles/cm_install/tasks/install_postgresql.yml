@@ -25,7 +25,7 @@
     - ansible_os_family == "RedHat"
     - not (postgresql_server_binary.stat.exists | bool)
 
-- name: "Install PostgreSQL {{ postgresql_version }} on RHEL"
+- name: "Install PostgreSQL {{ postgresql_version }}"
   ansible.builtin.dnf:
     name: "{{ os.postgres_server_packages }}"
     state: present

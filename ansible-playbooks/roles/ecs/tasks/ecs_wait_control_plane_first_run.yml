@@ -3,7 +3,7 @@
 # Run, RKE2 and CoreDNS become available before the parent CM command completes.
 
 - name: Wait for submitted ECS control plane First Run command
-  ansible.builtin.import_tasks: wait_cm_api_command.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/wait_cm_api_command.yml"
   vars:
     cm_api_command_id: "{{ ecs_control_plane_install_command_id }}"
     cm_api_command_poll_retries: "{{ ecs_control_plane_install_poll_retries }}"

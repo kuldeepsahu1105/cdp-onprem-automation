@@ -33,13 +33,7 @@
 - name: Prepare Cloudera Manager API
   ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/prepare_cm_security_api.yml"
 
-- name: Build deployment portal Caddy URL facts for ECS console
-  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/build_deployment_portal_facts.yml"
-  when:
-    - deployment_portal_enabled | default(true) | bool
-    - caddy_vhost_enabled | default(false) | bool
-
-- name: Resolve ECS control plane console URL (Caddy vhost when configured)
+- name: Resolve ECS control plane console URL
   ansible.builtin.import_tasks: resolve_ecs_control_plane_url.yml
 
 - name: Validate ECS inventory groups
@@ -85,7 +79,7 @@
 
 - name: Verify base cluster exists before ECS install
   ansible.builtin.uri:
-    url: "{{ cm_krb_api_url }}/clusters/{{ cdh_basecluster_name }}"
+    url: "{{ cm_krb_api_url }}/clusters/{{ cdh_basecluster_name | urlencode }}"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -115,7 +109,7 @@
           )
       }}
 
-- name: Build ECS worker FQDNs
+- name: Build ECS worker assignments
   ansible.builtin.set_fact:
     ecs_worker_fqdns: >-
       {%- set hostname = hostvars[item].cldr_hostname -%}
@@ -123,25 +117,21 @@
         ecs_worker_fqdns | default([])
         + [hostname if hostname.endswith('.' ~ cluster_domain) else hostname ~ '.' ~ cluster_domain]
       }}
+    ecs_worker_host_entries: >-
+      {%- set hostname = hostvars[item].cldr_hostname -%}
+      {%- set fqdn = hostname if hostname.endswith('.' ~ cluster_domain)
+          else hostname ~ '.' ~ cluster_domain -%}
+      {{
+        ecs_worker_host_entries | default([])
+        + [{
+          'name': fqdn,
+          'host_ip': hostvars[item].private_ip
+                     | default(hostvars[item].ansible_host, true)
+        }]
+      }}
   loop: "{{ groups[ecs_cluster_worker_group] }}"
   loop_control:
     label: "{{ item }}"
-
-- name: Resolve ECS console DNS from the ECS master
-  ansible.builtin.command:
-    argv:
-      - getent
-      - ahostsv4
-      - "{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}"
-  register: ecs_console_dns_from_master
-  changed_when: false
-  failed_when: false
-  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
-  retries: "{{ ecs_console_dns_wait_retries | default(24) }}"
-  delay: "{{ ecs_console_dns_wait_delay | default(5) }}"
-  until:
-    - ecs_console_dns_from_master.rc | int == 0
-    - ecs_master_ip in ecs_console_dns_from_master.stdout
 
 - name: Resolve ECS console DNS directly from FreeIPA
   ansible.builtin.command:
@@ -191,6 +181,22 @@
   changed_when: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
 
+- name: Resolve ECS console DNS from the ECS master
+  ansible.builtin.command:
+    argv:
+      - getent
+      - ahostsv4
+      - "{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}"
+  register: ecs_console_dns_from_master
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  retries: "{{ ecs_console_dns_wait_retries | default(24) }}"
+  delay: "{{ ecs_console_dns_wait_delay | default(5) }}"
+  until:
+    - ecs_console_dns_from_master.rc | int == 0
+    - ecs_master_ip in ecs_console_dns_from_master.stdout
+
 - name: Require ECS console DNS to use the master private IP
   ansible.builtin.assert:
     that:
@@ -213,6 +219,7 @@
     msg:
       - "Cluster name: {{ ecs_cluster_name }}"
       - "PVC DS repo: {{ ecs_pvc_repository_url }}"
+      - "Application domain: {{ ecs_application_domain }}"
       - "App domain: {{ ecs_app_domain }}"
       - "Control plane URL (automation): {{ ecs_control_plane_url_effective | default('') }}"
       - "Datalake cluster: {{ cdh_basecluster_name }}"
@@ -223,21 +230,55 @@
   ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/configure_cm_parcel_repo_api.yml"
   when: parcel_repo is defined
 
-- name: Discover available ECS parcel versions
+- name: Read configured ECS parcel repository manifest
   ansible.builtin.uri:
-    url: "{{ cm_krb_api_url }}/parcels/products/ECS/versions"
+    url: "{{ ecs_parcel_repo_url | regex_replace('/+$', '') }}/manifest.json"
     method: GET
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: yes
+    user: "{{ cm_repo_username if (cm_repo_source | default('public')) == 'public' else omit }}"
+    password: "{{ cm_repo_password if (cm_repo_source | default('public')) == 'public' else omit }}"
+    force_basic_auth: "{{ (cm_repo_source | default('public')) == 'public' }}"
     validate_certs: no
     status_code: [200]
-    follow_redirects: none
-  register: ecs_parcel_versions
+    follow_redirects: safe
+    return_content: true
+    timeout: 60
+  register: ecs_parcel_manifest
+  changed_when: false
+  failed_when: false
   retries: 5
   delay: 10
-  until: ecs_parcel_versions is succeeded
+  until: ecs_parcel_manifest.status | default(0) == 200
   delegate_to: "{{ cm_api_uri_delegate_to }}"
+  when: ecs_parcel_version | default('') | length == 0
+
+- name: Parse configured ECS parcel repository manifest
+  ansible.builtin.set_fact:
+    ecs_parcel_manifest_data: "{{ ecs_parcel_manifest.content | from_json }}"
+  no_log: true
+  when:
+    - ecs_parcel_version | default('') | length == 0
+    - ecs_parcel_manifest.status | default(0) == 200
+
+- name: Default unavailable ECS parcel repository manifest
+  ansible.builtin.set_fact:
+    ecs_parcel_manifest_data: {}
+  when:
+    - ecs_parcel_version | default('') | length == 0
+    - ecs_parcel_manifest_data is not defined
+
+- name: Select published ECS parcel versions
+  ansible.builtin.set_fact:
+    ecs_parcel_versions_available: >-
+      {{
+        ecs_parcel_manifest_data.get('parcels', [])
+        | map(attribute='parcelName')
+        | select('match', '^ECS-.*[.]parcel$')
+        | map('regex_replace', '^ECS-', '')
+        | map('regex_replace', '-[^-]+[.]parcel$', '')
+        | unique
+        | list
+      }}
+  when: ecs_parcel_version | default('') | length == 0
 
 - name: Resolve ECS parcel version
   ansible.builtin.set_fact:
@@ -246,16 +287,7 @@
         ecs_parcel_version
         if ecs_parcel_version | default('') | length > 0
         else (
-          ecs_parcel_versions.json.items
-          | default([])
-          | selectattr('version', 'search', ecs_pvc_ds_version)
-          | map(attribute='version')
-          | list
-          | last
-          | default(
-            ecs_parcel_versions.json['items'] | default([]) | map(attribute='version') | list | last,
-            true
-          )
+          ecs_parcel_versions_available | default([]) | first | default('', true)
         )
       }}
 
@@ -263,9 +295,22 @@
   ansible.builtin.assert:
     that:
       - ecs_parcel_version_effective | default('') | length > 0
+      - >-
+        ecs_parcel_version | default('') | length > 0
+        or ecs_parcel_versions_available | default([]) | length == 1
     fail_msg: >-
-      Could not determine ECS parcel version. Set ecs_parcel_version in config.yml
-      or verify archive credentials and ecs_pvc_ds_version ({{ ecs_pvc_ds_version }}).
+      Could not resolve one ECS parcel from
+      {{ ecs_parcel_repo_url | regex_replace('/+$', '') }}/manifest.json.
+      Repository HTTP status={{
+        (ecs_parcel_manifest | default({})).get('status', 'not requested')
+      }};
+      response={{
+        (ecs_parcel_manifest | default({})).get('msg', 'none')
+      }};
+      published ECS versions={{
+        ecs_parcel_versions_available | default([]) | join(', ') | default('(none)', true)
+      }}. Set ecs_parcel_version explicitly only when the repository intentionally
+      publishes multiple ECS parcels.
 
 - name: Print selected ECS parcel version
   ansible.builtin.debug:
@@ -274,9 +319,9 @@
 - name: Resolve CM API endpoint for cloudera.cluster modules
   ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/resolve_cm_cluster_module_endpoint.yml"
 
-- name: Check if ECS cluster already exists
+- name: Check if requested ECS cluster already exists
   ansible.builtin.uri:
-    url: "{{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_name }}"
+    url: "{{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_name | urlencode }}"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -284,12 +329,98 @@
     validate_certs: no
     status_code: [200, 404]
     follow_redirects: none
-  register: existing_ecs_cluster
+  register: requested_ecs_cluster
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Check legacy ECS cluster when the prefixed default is absent
+  ansible.builtin.uri:
+    url: "{{ cm_cluster_module_api_url }}/clusters/{{ ecs_cluster_legacy_name | urlencode }}"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 404]
+    follow_redirects: none
+  register: legacy_ecs_cluster
+  when:
+    - requested_ecs_cluster.status == 404
+    - ecs_cluster_name == ecs_cluster_default_name
+    - ecs_cluster_legacy_name | default('') | length > 0
+    - ecs_cluster_legacy_name != ecs_cluster_name
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Preserve existing legacy ECS cluster name
+  ansible.builtin.set_fact:
+    ecs_cluster_name: "{{ ecs_cluster_legacy_name }}"
+  when:
+    - requested_ecs_cluster.status == 404
+    - legacy_ecs_cluster.status | default(404) == 200
+
+- name: Select existing ECS cluster lookup
+  ansible.builtin.set_fact:
+    existing_ecs_cluster: >-
+      {{
+        legacy_ecs_cluster
+        if (
+          requested_ecs_cluster.status == 404
+          and legacy_ecs_cluster.status | default(404) == 200
+        )
+        else requested_ecs_cluster
+      }}
+
+- name: Read existing ECS cluster services
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{
+      ecs_cluster_name | urlencode }}/services
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: existing_ecs_services
+  changed_when: false
+  when: existing_ecs_cluster.status == 200
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Determine whether phased ECS installation is required
+  ansible.builtin.set_fact:
+    ecs_phased_install_required: >-
+      {{
+        existing_ecs_cluster.status == 404
+        or (
+          existing_ecs_cluster.status == 200
+          and (
+            (
+              ['docker', 'ecs']
+              | difference(
+                  existing_ecs_services.json['items'] | default([])
+                  | selectattr('serviceState', 'equalto', 'STARTED')
+                  | map(attribute='name')
+                  | list
+                )
+              | length
+            ) > 0
+          )
+        )
+      }}
+
+- name: Report partial ECS cluster recovery
+  ansible.builtin.debug:
+    msg: >-
+      ECS cluster '{{ ecs_cluster_name }}' exists but is incomplete or not
+      fully started. Resuming the reference-aligned host attachment, parcel
+      activation, service, role, and control-plane phases.
+  when:
+    - existing_ecs_cluster.status == 200
+    - ecs_phased_install_required | bool
 
 - name: Phased ECS cluster install (reference-aligned)
   ansible.builtin.import_tasks: ecs_phased_cluster_install.yml
-  when: existing_ecs_cluster.status == 404
+  when: ecs_phased_install_required | bool
 
 - name: Start existing ECS cluster services
   cloudera.cluster.cluster:
@@ -302,14 +433,31 @@
     verify_tls: false
     name: "{{ ecs_cluster_name }}"
     state: started
-  when: existing_ecs_cluster.status == 200
+  when:
+    - existing_ecs_cluster.status == 200
+    - not (ecs_phased_install_required | bool)
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Configure kubectl, kubeconfig, and k9s on ECS master
+  ansible.builtin.import_tasks: ecs_configure_cli_tools.yml
+  when:
+    - ecs_deploy_effective | default(false) | bool
+    - ecs_cli_tools_enabled | default(true) | bool
 
 - name: Wait for ECS Management Console when auto-provisioning API keys
   ansible.builtin.import_tasks: ecs_wait_control_plane_console.yml
   when:
     - ecs_deploy_effective | default(false) | bool
-    - ecs_auto_provision_api_access_key | default(true) | bool
+    - >-
+      (ecs_auto_provision_api_access_key | default(true) | bool)
+      or (ecs_reconcile_coredns | default(true) | bool)
+
+- name: Reconcile ECS CoreDNS forwarding order
+  ansible.builtin.import_tasks: ecs_reconcile_coredns.yml
+  when:
+    - ecs_deploy_effective | default(false) | bool
+    - ecs_reconcile_coredns | default(true) | bool
+    - not (ecs_coredns_reconciled_this_run | default(false) | bool)
 
 - name: Load existing ECS automation API credentials
   ansible.builtin.import_tasks: ecs_load_api_credentials.yml
@@ -345,10 +493,6 @@
 
     - name: Configure CDP CLI profile for ECS IAM
       ansible.builtin.import_tasks: ecs_data_services_runtime.yml
-
-    - name: Build portal facts for IPA LDAP CA URL
-      ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/build_deployment_portal_facts.yml"
-      when: identity_provider_effective == 'freeipa'
 
     - name: Configure ECS LDAP and admin user
       ansible.builtin.import_tasks: ecs_control_plane_ldap_and_admin.yml

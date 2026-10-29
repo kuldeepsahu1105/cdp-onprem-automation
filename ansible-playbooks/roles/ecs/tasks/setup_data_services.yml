@@ -17,6 +17,9 @@
       ECS masters group '{{ ecs_cluster_master_group }}' is empty.
       Run 33_setup_ecs_cluster.yml first.
 
+- name: Resolve Cloudera Manager endpoint for environment creation
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/resolve_cm_cluster_module_endpoint.yml"
+
 - name: Initialize Caddy route list for data service ingress
   ansible.builtin.set_fact:
     ecs_caddy_data_service_routes: []
@@ -38,8 +41,15 @@
 - name: Wait for ECS Management Console after cluster install
   ansible.builtin.import_tasks: ecs_wait_control_plane_console.yml
 
+- name: Load existing ECS automation API credentials
+  ansible.builtin.import_tasks: ecs_load_api_credentials.yml
+
 - name: Provision automation machine-user API access key when needed
-  ansible.builtin.import_tasks: ecs_provision_iam_machine_access_key.yml
+  ansible.builtin.include_tasks: ecs_provision_iam_machine_access_key.yml
+  when:
+    - >-
+      ecs_api_access_key_id | default('') | length == 0
+      or ecs_api_private_key | default('') | length == 0
 
 - name: Validate control plane credentials
   ansible.builtin.import_tasks: ecs_validate_control_plane_credentials.yml
@@ -68,6 +78,24 @@
 
 - name: Install Model Registry when selected
   ansible.builtin.import_tasks: ecs_data_service_model_registry.yml
+
+- name: Create ECS data-service catalog cache directory
+  ansible.builtin.file:
+    path: "{{ ecs_data_services_catalog_cache_path | dirname }}"
+    state: directory
+    mode: "0700"
+  when:
+    - ecs_data_services_catalog_cache_path | default('') | length > 0
+    - ecs_data_services_install_names | default([]) | length > 0
+
+- name: Persist ECS data-service catalog for portal refresh and email URLs
+  ansible.builtin.copy:
+    dest: "{{ ecs_data_services_catalog_cache_path }}"
+    mode: "0600"
+    content: "{{ ecs_data_services_catalog | to_nice_yaml(indent=2) }}"
+  when:
+    - ecs_data_services_catalog_cache_path | default('') | length > 0
+    - ecs_data_services_install_names | default([]) | length > 0
 
 - name: Resolve deployment portal Caddy gate for ECS ingress sync
   ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/resolve_deployment_portal_caddy_enabled.yml"

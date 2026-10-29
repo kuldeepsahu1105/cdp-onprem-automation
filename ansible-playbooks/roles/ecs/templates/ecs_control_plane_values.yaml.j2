@@ -2,15 +2,17 @@
 ContainerInfo:
   Mode: public
   CopyDocker: false
+Container:
+  Id: "{{ ecs_control_plane_container_id }}"
 Database:
   Mode: {{ ecs_control_plane_database_mode }}
   EmbeddedDbStorage: {{ ecs_control_plane_embedded_db_storage_gb }}
 Vault:
   Mode: {{ ecs_control_plane_vault_mode }}
-  EmbeddedStorage: {{ ecs_control_plane_embedded_vault_storage_gb }}
+  EmbeddedDbStorage: {{ ecs_control_plane_embedded_vault_storage_gb }}
 Platform:
   Name: standard
-ApplicationDomain: "{{ ecs_app_domain }}"
+ApplicationDomain: "{{ ecs_application_domain }}"
 SecurityContext:
   Enabled: true
 Services:

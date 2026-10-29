@@ -1,4 +1,7 @@
 ---
+- name: Resolve PostgreSQL install host from inventory
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/resolve_postgres_inventory.yml"
+
 - name: Set OS-specific facts
   ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/set_os_facts.yml"
 
@@ -65,7 +68,7 @@
     - ansible_os_family == "RedHat"
     - existing_psql_command | length == 0
 
-- name: Install PostgreSQL client (psql) on RHEL
+- name: Install PostgreSQL client (psql)
   ansible.builtin.dnf:
     name: "{{ os.postgres_client_packages }}"
     state: present
@@ -86,6 +89,7 @@
   when:
     - ansible_os_family == "Debian"
     - existing_psql_command | length == 0
+  register: postgresql_client_install_debian
 
 - name: Resolve PostgreSQL client path after installation
   ansible.builtin.set_fact:

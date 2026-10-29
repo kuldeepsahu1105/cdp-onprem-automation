@@ -4,7 +4,7 @@
 - import_playbook: ensure_collections.yml
 
 - name: Enable Repositories and Install Packages
-  hosts: all
+  hosts: "{{ postgres_inventory_group_resolved | default('cldr-mngr') }}"
   become: yes
   roles:
     - role: prereq_postgres_client

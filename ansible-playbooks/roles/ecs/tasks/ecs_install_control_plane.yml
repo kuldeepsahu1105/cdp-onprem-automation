@@ -1,9 +1,118 @@
 ---
 # Install ECS embedded control plane (cloudera.cluster v4 has no control_plane module).
 
+- name: Read existing ECS control planes
+  ansible.builtin.uri:
+    url: "{{ cm_cluster_module_api_url }}/controlPlanes?view=full"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: ecs_control_planes
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Select current and legacy ECS control plane installations
+  ansible.builtin.set_fact:
+    ecs_control_plane_matching_records: >-
+      {{
+        ecs_control_planes.json['items'] | default([])
+        | selectattr('dnsSuffix', 'equalto', ecs_application_domain)
+        | selectattr(
+            'remoteRepoUrl',
+            'equalto',
+            ecs_pvc_repository_url | regex_replace('/?parcels/.*$', '')
+          )
+        | list
+      }}
+    ecs_control_plane_legacy_prefixed_records: >-
+      {{
+        ecs_control_planes.json['items'] | default([])
+        | selectattr('dnsSuffix', 'equalto', ecs_app_domain)
+        | selectattr(
+            'remoteRepoUrl',
+            'equalto',
+            ecs_pvc_repository_url | regex_replace('/?parcels/.*$', '')
+          )
+        | list
+      }}
+
+- name: Detect existing ECS control plane installation
+  ansible.builtin.set_fact:
+    ecs_control_plane_existing: >-
+      {{ ecs_control_plane_matching_records | length > 0 }}
+
+- name: Reject a control plane installed with the ingress suffix
+  ansible.builtin.assert:
+    that:
+      - ecs_control_plane_legacy_prefixed_records | length == 0
+    fail_msg: >-
+      CM already contains an ECS control plane whose dnsSuffix is
+      {{ ecs_app_domain }}. That value includes the ECS-generated "apps."
+      label, so the installed control plane constructs hostnames such as
+      {{ ecs_console_host_prefix }}.apps.{{ ecs_app_domain }}. Remove that
+      failed control plane before reinstalling with ApplicationDomain
+      {{ ecs_application_domain }}; automation will not submit a competing
+      installation.
+  when: not (ecs_control_plane_existing | bool)
+
+- name: Validate ECS application-domain relationship
+  ansible.builtin.assert:
+    that:
+      - ecs_application_domain | string | trim | length > 0
+      - ecs_app_domain == 'apps.' ~ ecs_application_domain
+    fail_msg: >-
+      ecs_application_domain must be the parent domain passed to CM and the
+      embedded control plane, while ecs_app_domain must be exactly
+      apps.<ecs_application_domain>. Current values are
+      {{ ecs_application_domain }} and {{ ecs_app_domain }}.
+
+- name: Report adopted ECS control plane First Run
+  ansible.builtin.debug:
+    msg: >-
+      An ECS control-plane record already exists for
+      {{ ecs_application_domain }}.
+      Adopting the existing installation and waiting for its CM First Run
+      instead of submitting competing install or cluster-start commands.
+  when: ecs_control_plane_existing | bool
+
+- name: Require ECS container ID for control plane installation
+  ansible.builtin.assert:
+    that:
+      - ecs_control_plane_container_id | string | trim | length > 0
+    fail_msg: >-
+      The embedded control plane requires Container.Id in valuesYaml.
+      Set ecs_control_plane_container_id to the runtime container user ID
+      required by the installed ECS release.
+  when: not (ecs_control_plane_existing | bool)
+
 - name: Build ECS control plane values YAML
   ansible.builtin.set_fact:
     ecs_control_plane_values_yaml: "{{ lookup('template', 'ecs_control_plane_values.yaml.j2') }}"
+  no_log: true
+  when: not (ecs_control_plane_existing | bool)
+
+- name: Validate ECS control plane container ID in rendered values
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          (ecs_control_plane_values_yaml | from_yaml).Container.Id | string
+        ) == (ecs_control_plane_container_id | string)
+      - >-
+        (
+          (ecs_control_plane_values_yaml | from_yaml).ApplicationDomain
+          | string
+        ) == (ecs_application_domain | string)
+    fail_msg: >-
+      Rendered ECS control plane values must contain Container.Id={{
+      ecs_control_plane_container_id }} and ApplicationDomain={{
+      ecs_application_domain }}.
+  no_log: true
+  when: not (ecs_control_plane_existing | bool)
 
 - name: Install ECS embedded control plane via CM API
   cloudera.cluster.cm_resource:
@@ -17,18 +126,43 @@
     path: /controlPlanes/commands/installEmbeddedControlPlane
     method: POST
     body:
-      remoteRepoUrl: "{{ ecs_pvc_repository_url }}"
+      remoteRepoUrl: "{{ ecs_pvc_repository_url | regex_replace('/?parcels/.*$', '') }}"
       experienceClusterName: "{{ ecs_cluster_name }}"
       datalakeClusterName: "{{ cdh_basecluster_name }}"
       valuesYaml: "{{ ecs_control_plane_values_yaml }}"
   register: ecs_control_plane_install
   ignore_errors: true
+  changed_when: ecs_control_plane_install is succeeded
+  when: not (ecs_control_plane_existing | bool)
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Fail when ECS control plane install returned an unexpected error
   ansible.builtin.fail:
     msg: "{{ ecs_control_plane_install.msg | default(ecs_control_plane_install) }}"
   when:
+    - not (ecs_control_plane_existing | bool)
     - ecs_control_plane_install is failed
     - "'already' not in (ecs_control_plane_install.msg | default('') | lower)"
     - "'409' not in (ecs_control_plane_install.msg | default(''))"
+
+- name: Resolve ECS control plane First Run command id
+  ansible.builtin.set_fact:
+    ecs_control_plane_install_command_id: >-
+      {{
+        ecs_control_plane_install.resources[0].id
+        | default('', true)
+      }}
+  when:
+    - not (ecs_control_plane_existing | bool)
+    - ecs_control_plane_install is succeeded
+
+- name: Require ECS control plane First Run command id
+  ansible.builtin.assert:
+    that:
+      - ecs_control_plane_install_command_id | string | length > 0
+    fail_msg: >-
+      Cloudera Manager accepted the embedded control-plane installation but did
+      not return its asynchronous First Run command id.
+  when:
+    - not (ecs_control_plane_existing | bool)
+    - ecs_control_plane_install is succeeded

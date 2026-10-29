@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for ECS ecs configure cli tools
+  ansible.builtin.import_role:
+    name: ecs
+    tasks_from: ecs_configure_cli_tools

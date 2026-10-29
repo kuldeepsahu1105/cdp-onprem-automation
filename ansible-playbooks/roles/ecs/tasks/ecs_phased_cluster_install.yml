@@ -1,6 +1,7 @@
 ---
-# Phased ECS install aligned with Cloudera Labs reference (cloudera.cluster v4.4.0).
-# v4 has no control_plane or host_template modules — control plane uses cm_resource; templates use CM REST.
+# Phased ECS install aligned with the supplied Cloudera Labs reference.
+# Pinned v4.4 lacks host_template and control_plane modules, so those phases use
+# their exact CM API equivalents through cm_resource.
 
 - name: Assert ECS console admin password meets complexity requirements
   ansible.builtin.assert:
@@ -41,6 +42,7 @@
     password: "{{ cm_admin_pass }}"
     verify_tls: false
     cluster_hostname: "{{ ecs_master_fqdn }}"
+    host_ip: "{{ ecs_master_ip }}"
     name: "{{ ecs_cluster_name }}"
     state: attached
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
@@ -54,28 +56,21 @@
     username: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
     verify_tls: false
-    cluster_hostname: "{{ item }}"
+    cluster_hostname: "{{ item.name }}"
+    host_ip: "{{ item.host_ip }}"
     name: "{{ ecs_cluster_name }}"
     state: attached
-  loop: "{{ ecs_worker_fqdns }}"
+  loop: "{{ ecs_worker_host_entries }}"
   loop_control:
-    label: "{{ item }}"
+    label: "{{ item.name }}"
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Activate ECS parcel on cluster
-  cloudera.cluster.parcel:
-    host: "{{ cm_cluster_module_host }}"
-    port: "{{ cm_cluster_module_port }}"
-    version: "{{ cm_api_version }}"
-    force_tls: "{{ cm_cluster_module_force_tls }}"
-    username: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    verify_tls: false
-    cluster: "{{ ecs_cluster_name }}"
-    name: ECS
-    parcel_version: "{{ ecs_parcel_version_effective }}"
-    state: activated
-  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  ansible.builtin.include_tasks: activate_cluster_parcel.yml
+  vars:
+    cluster_parcel_cluster: "{{ ecs_cluster_name }}"
+    cluster_parcel_product: ECS
+    cluster_parcel_version: "{{ ecs_parcel_version_effective }}"
 
 - name: Create Docker service on ECS cluster
   cloudera.cluster.service:
@@ -89,6 +84,7 @@
     cluster: "{{ ecs_cluster_name }}"
     service: docker
     name: docker
+    display_name: DOCKER
     type: DOCKER
     state: present
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
@@ -120,6 +116,7 @@
     cluster: "{{ ecs_cluster_name }}"
     service: ecs
     name: ecs
+    display_name: ECS
     type: ECS
     state: present
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
@@ -154,7 +151,13 @@
     cluster: "{{ ecs_cluster_name }}"
     service: ecs
     parameters:
-      app_domain: "{{ ecs_app_domain }}"
+      app_domain: "{{ ecs_application_domain }}"
+      cluster_cidr: "{{ ecs_cluster_cidr }}"
+      service_cidr: "{{ ecs_service_cidr }}"
+      image_basepath: "{{ ecs_image_basepath }}"
+      docker_registry: "{{ ecs_docker_registry }}"
+      external_registry_enabled: >-
+        {{ 'true' if ecs_external_registry_enabled | bool else 'false' }}
       docker: docker
       cp_prometheus_ingress_user: "{{ ecs_cp_prometheus_ingress_user }}"
       infra_prometheus_ingress_user: "{{ ecs_infra_prometheus_ingress_user }}"
@@ -164,17 +167,55 @@
       nfs_over_provisioning: "{{ ecs_nfs_over_provisioning }}"
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+- name: Read rendered ECS service configuration
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{
+      ecs_cluster_name | urlencode }}/services/ecs/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: ecs_service_config_check
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Require lowercase ECS external registry Boolean
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          ecs_service_config_check.json['items']
+          | selectattr('name', 'equalto', 'external_registry_enabled')
+          | map(attribute='value')
+          | first
+          | default('')
+        ) == ('true' if ecs_external_registry_enabled | bool else 'false')
+    fail_msg: >-
+      Cloudera Manager must store ECS external_registry_enabled as lowercase
+      '{{ 'true' if ecs_external_registry_enabled | bool else 'false' }}';
+      received {{
+        ecs_service_config_check.json['items']
+        | selectattr('name', 'equalto', 'external_registry_enabled')
+        | map(attribute='value')
+        | first
+        | default('(missing)')
+      }}.
+
 - name: Apply ECS host templates and role assignments
   ansible.builtin.import_tasks: ecs_apply_host_templates.yml
 
 - name: Install ECS embedded control plane
   ansible.builtin.import_tasks: ecs_install_control_plane.yml
 
-- name: Reconcile ECS CoreDNS after control-plane installation
+- name: Reconcile ECS CoreDNS while control-plane First Run is active
   ansible.builtin.import_tasks: ecs_reconcile_coredns.yml
   when: ecs_reconcile_coredns | default(true) | bool
 
-- name: Wait for adopted ECS First Run after CoreDNS reconciliation
+- name: Wait for ECS control-plane First Run after CoreDNS reconciliation
   ansible.builtin.import_tasks: ecs_wait_control_plane_first_run.yml
 
 - name: Start ECS cluster services and roles
