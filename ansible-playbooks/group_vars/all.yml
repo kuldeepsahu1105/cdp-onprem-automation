@@ -1098,6 +1098,8 @@ ecs_lso_data_path: "/ecs/local"
 ecs_longhorn_data_path: "/ecs/longhorn-storage"
 ecs_longhorn_replication: 2
 ecs_nfs_over_provisioning: 800
+# Internal ECS Kubernetes WebUI service token passed during installation.
+# This is not a username/password login and is intentionally omitted from the portal.
 ecs_k8s_webui_secret_admin_token: "ChangeMe@ECS-WebUI"
 ecs_cp_prometheus_ingress_user: "{{ cm_admin_user }}"
 ecs_cp_prometheus_ingress_password: "{{ cm_admin_pass }}"
