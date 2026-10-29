@@ -142,15 +142,39 @@
     argv:
       - dig
       - +short
+      - +time=2
+      - +tries=1
       - "@{{ hostvars[groups['ipaserver'][0]].private_ip | default(hostvars[groups['ipaserver'][0]].ansible_host, true) }}"
       - "{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}"
       - A
   register: ecs_console_dns_from_ipa
   changed_when: false
+  failed_when: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
-  retries: "{{ ecs_console_dns_wait_retries | default(24) }}"
-  delay: "{{ ecs_console_dns_wait_delay | default(5) }}"
-  until: ecs_master_ip in ecs_console_dns_from_ipa.stdout_lines
+  when:
+    - identity_provider_effective == 'freeipa'
+    - groups.get('ipaserver', []) | length > 0
+
+- name: Require authoritative ECS console DNS from FreeIPA
+  ansible.builtin.assert:
+    that:
+      - ecs_console_dns_from_ipa.rc | int == 0
+      - ecs_master_ip in ecs_console_dns_from_ipa.stdout_lines
+    fail_msg: >-
+      Direct FreeIPA DNS validation from
+      {{ groups[ecs_cluster_master_group][0] }} failed immediately.
+      Expected ECS master private IP {{ ecs_master_ip }}; dig rc={{
+      ecs_console_dns_from_ipa.rc | default('unknown') }}, returned={{
+      ecs_console_dns_from_ipa.stdout_lines | default([]) | join(', ') }},
+      stderr={{ ecs_console_dns_from_ipa.stderr | default('') | trim }}.
+      ECS master gathered IPv4={{
+      hostvars[groups[ecs_cluster_master_group][0]]
+      .get('ansible_default_ipv4', {}).get('address', 'unknown') }},
+      inventory private_ip={{
+      hostvars[groups[ecs_cluster_master_group][0]].private_ip
+      | default('undefined') }}, ansible_host={{
+      hostvars[groups[ecs_cluster_master_group][0]].ansible_host
+      | default('undefined') }}.
   when:
     - identity_provider_effective == 'freeipa'
     - groups.get('ipaserver', []) | length > 0
