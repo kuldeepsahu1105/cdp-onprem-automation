@@ -467,6 +467,14 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
             done < <(find ansible-playbooks -type d -name __pycache__ -print0 2>/dev/null || true)
           fi
           ws="${WORKSPACE:-$PWD}"
+          cdp_cli_tools="$ws/jenkins/artifacts/.tools"
+          if [[ -d "$cdp_cli_tools" ]]; then
+            chmod -R u+w "$cdp_cli_tools" 2>/dev/null || true
+            if ! rm -rf "$cdp_cli_tools" 2>/dev/null; then
+              sudo -n rm -rf "$cdp_cli_tools"
+              pycache_sudo=1
+            fi
+          fi
           if [[ "$pycache_sudo" == 1 ]] || { [[ -d "$ws/.git/objects" ]] && ! [[ -w "$ws/.git/objects" ]]; }; then
             bash jenkins/scripts/clean-workspace-pycache.sh --restore-workspace-owner
           fi
