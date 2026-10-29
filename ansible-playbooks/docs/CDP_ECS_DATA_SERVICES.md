@@ -40,8 +40,11 @@ Set `ECS_IAM_BOOTSTRAP_CREDENTIAL_ID` to that fallback Jenkins credential ID.
 Playbook 34 uses the installer or fallback key only to create
 `cldr-automation-sa`, grants that machine user tenant
 and effective-environment resource roles, creates its V2 access key, and caches
-the generated credential with mode `0600`. Subsequent runs use the automation
-key and do not require the administrator key. Running playbook 34 with
+the generated credential with mode `0600`. Signed bootstrap CDP CLI calls and
+their temporary profile run on the ECS master so private Management Console DNS
+and ingress remain reachable from an external Jenkins controller; only the
+resulting automation credential cache is written on the controller. Subsequent
+runs use the automation key and do not require the administrator key. Running playbook 34 with
 `ECS_DATA_SERVICES_DEPLOY_ENABLED=true` and no service selected performs only
 this IAM bootstrap.
 
