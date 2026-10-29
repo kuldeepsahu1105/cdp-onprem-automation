@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for ECS First Run wait
+  ansible.builtin.import_role:
+    name: ecs
+    tasks_from: ecs_wait_control_plane_first_run
