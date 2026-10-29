@@ -89,7 +89,7 @@
       {{
         ecs_coredns_corefile.stdout
         | regex_replace(
-            '(?s)forward\\s+\\.\\s+[^\\n{]+(?:\\s*\\{.*?\\})?',
+            '(?s)forward\s+\.\s+[^\n{]+(?:\s*\{.*?\})?',
             ecs_coredns_forward_stanza
           )
       }}
