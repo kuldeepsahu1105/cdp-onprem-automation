@@ -37,7 +37,13 @@ hanging on a self-connection through the public IP.
    `startRoles=false`.
 6. **Control plane submission/adoption** — `common_tasks/ecs_install_control_plane.yml` submits First Run or adopts its durable `/controlPlanes` record without blocking on completion.
 7. **CoreDNS during First Run** — as soon as RKE2 and the CoreDNS ConfigMap exist, replace its `/etc/resolv.conf` upstream with the FreeIPA private IP (or AD DNS servers), omit the ineffective `policy sequential` block, and restart CoreDNS only when changed. This repository intentionally differs from the shared reference because runtime ECS environment creation could not resolve the CM hostname through RKE2's `/etc/resolv.conf` forwarding.
-8. **First Run completion** — wait for the submitted CM command, or for an adopted installation to reach `STARTED`, only after CoreDNS is repaired.
+
+On rerun, playbook 33 enters the phased recovery path only when the required
+`docker` or `ecs` service is missing or not `STARTED`. Healthy clusters skip
+service-secret and host-template reconciliation. Cached automation API
+credentials are loaded before IAM bootstrap, so an existing cache also skips
+temporary profile creation and access-key generation.
+8. **First Run completion** — wait for the submitted CM command, or for every service in an adopted installation to reach `STARTED`, only after CoreDNS is repaired.
 9. **Start** — `cloudera.cluster.cluster` `state: started`.
 10. **Operator CLI** — expose the RKE2 `kubectl` binary, copy a user-owned kubeconfig for `root` and the SSH user, install checksum-verified `k9s`, and verify that each user can list Kubernetes nodes.
 
