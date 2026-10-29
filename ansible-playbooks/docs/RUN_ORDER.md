@@ -12,7 +12,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 2 | TERRAFORM | — | inventory generation |
 | 3 | PREREQS | `1` / `prereq` | SSH: `00_setup_ssh_preqs` → `01`–`09` (`00` only on PREREQS / `all`; override with `ANSIBLE_RUN_SSH_PREQS`) |
 | 4 | PORTAL | `portal` | `10_setup_deployment_portal`; defers monitoring/exporter work when MONITORING is also selected |
-| 5 | IDENTITY | `2` / `identity` | `11_identity_setup` (imports `detect_identity.yml` as its own first play — `pvc_setup.sh` no longer runs `detect_identity.yml` separately; see [Avoiding duplicate work](#avoiding-duplicate-work-within-a-run)) |
+| 5 | IDENTITY | `2` / `identity` | `11_identity_setup` (`12` → packages → `13` → `14` DNS records → `19` wildcard → `16` clients; imports `detect_identity.yml` first) |
 | 6 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
 | 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `28` → `29` → `30` (requires `04_setup_autossh` from PREREQS) |
 | 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` (see [RUNBOOK.md](RUNBOOK.md) — CM First Run sub-step order inside **31**) |
