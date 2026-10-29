@@ -143,9 +143,18 @@ the public `iamapi.us-west-1.altus.cloudera.com` endpoint.
 | `ecs_data_services_configure_ldap` | (group_vars) | Also sync LDAP when installing CDW/CDE/CAI in playbook 34 |
 | `ecs_ldap_admin_user_enabled` | `ECS_LDAP_ADMIN_USER_ENABLED` | Create FreeIPA user **`{{ ecs_ldap_admin_user_prefix }}admin`** (default `cldradmin`) |
 | `ecs_ldap_admin_user_prefix` | (group_vars) | Prefix before `admin` in the username |
+| `ecs_ldap_admin_email` | (group_vars) | IAM display/lookup email for the LDAP admin; defaults to `<username>@<IPA domain>` |
 | `ecs_ldap_admin_password` | (group_vars) | FreeIPA password (default `common_password`) |
 
-LDAP admin IAM: by default assigns **all tenant IAM roles** (`ecs_ldap_admin_assign_all_tenant_roles: true`) and **all resource roles** on the ECS environment (`ecs_ldap_admin_assign_all_resource_roles_on_env: true`). Narrow with `ecs_ldap_admin_tenant_role_name_regex` / `ecs_ldap_admin_resource_role_name_regex` when those flags are false.
+LDAP admin IAM ensures the LDAP provider is the default identity provider,
+creates or resolves the matching control-plane user record, and assigns roles
+using its stable user CRN rather than the LDAP login name. Defaults select
+administrative tenant and environment roles using
+`ecs_ldap_admin_tenant_role_name_regex` and
+`ecs_ldap_admin_resource_role_name_regex`; this excludes machine-user-only
+tenant roles. Set `ecs_ldap_admin_assign_all_tenant_roles` or
+`ecs_ldap_admin_assign_all_resource_roles_on_env` only when the target control
+plane explicitly supports every returned role for human users.
 
 Runs at the end of **`33_setup_ecs_cluster.yml`** when `ecs_ldap_*` is enabled, and in **`34_setup_ecs_data_services.yml`** (LDAP-only is allowed without CDW/CDE/CAI).
 

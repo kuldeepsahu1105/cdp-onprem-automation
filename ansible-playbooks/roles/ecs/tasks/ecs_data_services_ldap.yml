@@ -37,6 +37,10 @@
               '--group-search-base', 'cn=groups,cn=accounts,' + ipa_ldap_dc_suffix,
               '--group-search-filter', '(&(member={0})(objectClass=posixgroup)(!(|(cn=admins)(cn=ipausers))))',
               '--username-mapping-attribute', 'uid',
+              '--email-mapping-attribute', 'mail',
+              '--first-name-mapping-attribute', 'givenName',
+              '--last-name-mapping-attribute', 'sn',
+              '--group-name-mapping-attribute', 'cn',
               '--bind-dn', 'uid=' + ipaadmin_principal + ',cn=users,cn=accounts,' + ipa_ldap_dc_suffix,
               '--bind-password', ipaadmin_password,
               '--tls-ca-certificates', ecs_freeipa_ca_pem,
@@ -120,3 +124,45 @@
         - ecs_ldap_create is defined
         - not (ecs_ldap_create.skipped | default(false))
         - ecs_ldap_create.rc | default(0) != 0
+
+    - name: LDAP | Resolve configured provider CRN
+      ansible.builtin.set_fact:
+        ecs_ldap_provider_crn: >-
+          {{
+            (
+              (
+                ecs_ldap_update.stdout
+                if ecs_ldap_update.rc == 0
+                else ecs_ldap_create.stdout
+              )
+              | from_json
+            ).ldapProvider.crn
+          }}
+
+    - name: LDAP | Read default identity provider
+      ansible.builtin.command:
+        argv: "{{ ecs_remote_cdp_cli_prefix + ['iam', 'get-default-identity-provider'] }}"
+      environment: "{{ ecs_remote_cdp_cli_environment }}"
+      register: ecs_ldap_default_identity_provider
+      changed_when: false
+      become: false
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+      connection: ssh
+
+    - name: LDAP | Set LDAP provider as default identity provider
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_remote_cdp_cli_prefix
+            + [
+              'iam', 'set-default-identity-provider',
+              '--name-or-crn', ecs_ldap_provider_crn
+            ]
+          }}
+      environment: "{{ ecs_remote_cdp_cli_environment }}"
+      when: >-
+        (ecs_ldap_default_identity_provider.stdout | from_json).crn
+        != ecs_ldap_provider_crn
+      become: false
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+      connection: ssh

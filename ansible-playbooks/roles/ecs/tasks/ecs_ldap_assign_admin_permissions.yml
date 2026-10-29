@@ -31,6 +31,79 @@
     ecs_ldap_admin_environment_crn: >-
       {{ (ecs_ldap_admin_env_info.stdout | from_json).environment.crn }}
 
+- name: ECS LDAP admin | List control plane users
+  ansible.builtin.command:
+    argv: "{{ ecs_remote_cdp_cli_prefix + ['iam', 'list-users', '--no-paginate'] }}"
+  environment: "{{ ecs_remote_cdp_cli_environment }}"
+  register: ecs_ldap_admin_users_before
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS LDAP admin | Find existing control plane user
+  ansible.builtin.set_fact:
+    ecs_ldap_admin_user_matches_before: >-
+      {{
+        (ecs_ldap_admin_users_before.stdout | from_json).users
+        | default([])
+        | selectattr('email', 'defined')
+        | selectattr('email', 'equalto', ecs_ldap_admin_email)
+        | list
+      }}
+
+- name: ECS LDAP admin | Create control plane user record when missing
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_remote_cdp_cli_prefix
+        + [
+          'iam', 'create-user',
+          '--identity-provider-user-id', ecs_ldap_admin_username,
+          '--email', ecs_ldap_admin_email,
+          '--first-name', 'ECS',
+          '--last-name', 'Admin'
+        ]
+      }}
+  environment: "{{ ecs_remote_cdp_cli_environment }}"
+  when: ecs_ldap_admin_user_matches_before | length == 0
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS LDAP admin | Refresh control plane users
+  ansible.builtin.command:
+    argv: "{{ ecs_remote_cdp_cli_prefix + ['iam', 'list-users', '--no-paginate'] }}"
+  environment: "{{ ecs_remote_cdp_cli_environment }}"
+  register: ecs_ldap_admin_users_after
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS LDAP admin | Resolve unique control plane user
+  ansible.builtin.set_fact:
+    ecs_ldap_admin_user_matches: >-
+      {{
+        (ecs_ldap_admin_users_after.stdout | from_json).users
+        | default([])
+        | selectattr('email', 'defined')
+        | selectattr('email', 'equalto', ecs_ldap_admin_email)
+        | list
+      }}
+
+- name: ECS LDAP admin | Require unique control plane user
+  ansible.builtin.assert:
+    that:
+      - ecs_ldap_admin_user_matches | length == 1
+    fail_msg: >-
+      Expected exactly one ECS IAM user with email {{ ecs_ldap_admin_email }},
+      found {{ ecs_ldap_admin_user_matches | length }}.
+
+- name: ECS LDAP admin | Set control plane user CRN
+  ansible.builtin.set_fact:
+    ecs_ldap_admin_user_crn: "{{ ecs_ldap_admin_user_matches[0].crn }}"
+
 - name: ECS LDAP admin | List tenant IAM roles
   ansible.builtin.command:
     argv:
@@ -67,7 +140,7 @@
         ecs_remote_cdp_cli_prefix
         + [
           'iam', 'assign-user-role',
-          '--user', ecs_ldap_admin_username,
+          '--user', ecs_ldap_admin_user_crn,
           '--role', item
         ]
       }}
@@ -128,7 +201,7 @@
         ecs_remote_cdp_cli_prefix
         + [
           'iam', 'assign-user-resource-role',
-          '--user', ecs_ldap_admin_username,
+          '--user', ecs_ldap_admin_user_crn,
           '--resource-role-crn', item,
           '--resource-crn', ecs_ldap_admin_environment_crn
         ]
