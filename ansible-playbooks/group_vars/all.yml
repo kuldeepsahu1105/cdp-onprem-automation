@@ -39,6 +39,10 @@ postgres_force_restart: false
 # Do not use pgdg*: that also enables pgdg-common and makes fresh installs fail
 # when its metadata endpoint is unavailable even though pgdg17 is healthy.
 postgres_pgdg_package_repository: "pgdg{{ postgresql_version }}"
+postgres_pgdg_metadata_retries: 3
+postgres_pgdg_metadata_retry_delay: 10
+postgres_pgdg_package_retries: 3
+postgres_pgdg_package_retry_delay: 10
 # Amazon Linux: distro ships postgresql15–17 only. CM DB client install uses native packages;
 # set postgresql_version: 17 on AL2023 if the server is 17, or rely on cap vars below.
 postgres_amazon_linux_2023_native_client_version_cap: 17

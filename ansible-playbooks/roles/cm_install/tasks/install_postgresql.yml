@@ -14,6 +14,17 @@
   ansible.builtin.import_tasks: install_postgresql_repo.yml
   when: not (postgresql_server_binary.stat.exists | bool)
 
+- name: Verify versioned PostgreSQL server repository
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/verify_postgresql_pgdg_repository.yml"
+  vars:
+    postgres_pgdg_required_packages:
+      - "postgresql{{ postgresql_version }}"
+      - "postgresql{{ postgresql_version }}-server"
+      - "postgresql{{ postgresql_version }}-libs"
+  when:
+    - ansible_os_family == "RedHat"
+    - not (postgresql_server_binary.stat.exists | bool)
+
 - name: "Install PostgreSQL {{ postgresql_version }} on RHEL"
   ansible.builtin.dnf:
     name: "{{ os.postgres_server_packages }}"
@@ -23,6 +34,10 @@
   when:
     - ansible_os_family == "RedHat"
     - not (postgresql_server_binary.stat.exists | bool)
+  register: postgresql_server_install_redhat
+  retries: "{{ postgres_pgdg_package_retries }}"
+  delay: "{{ postgres_pgdg_package_retry_delay }}"
+  until: postgresql_server_install_redhat is succeeded
 
 - name: "Install PostgreSQL {{ postgresql_version }} on Debian"
   ansible.builtin.apt:
@@ -34,6 +49,20 @@
 
 - name: Initialize PostgreSQL database
   ansible.builtin.import_tasks: init_postgresql.yml
+
+- name: Verify PostgreSQL server binary after installation
+  ansible.builtin.stat:
+    path: "{{ os.postgres_bin_dir }}/postgres"
+  register: postgresql_server_binary_after_install
+
+- name: Require PostgreSQL server binary
+  ansible.builtin.assert:
+    that:
+      - postgresql_server_binary_after_install.stat.exists | default(false) | bool
+      - postgresql_server_binary_after_install.stat.executable | default(false) | bool
+    fail_msg: >-
+      PostgreSQL {{ postgresql_version }} package transaction completed but
+      {{ os.postgres_bin_dir }}/postgres is not an executable file.
 
 - name: Verify PostgreSQL version
   ansible.builtin.command: "cat {{ postgres_data_dir }}/PG_VERSION"

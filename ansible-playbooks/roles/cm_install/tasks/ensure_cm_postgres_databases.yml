@@ -266,6 +266,13 @@
           delegate_to: "{{ postgres_inventory_host }}"
           become: true
 
+        - name: Verify versioned PostgreSQL client repository on DB host
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/common_tasks/verify_postgresql_pgdg_repository.yml"
+          vars:
+            postgres_pgdg_target_host: "{{ postgres_inventory_host }}"
+            postgres_pgdg_required_packages:
+              - "postgresql{{ postgresql_version }}"
+
         - name: Ensure PostgreSQL PGDG client package on DB host
           ansible.builtin.dnf:
             name: "postgresql{{ postgresql_version }}"
@@ -274,6 +281,27 @@
               - "{{ postgres_pgdg_package_repository }}"
           delegate_to: "{{ postgres_inventory_host }}"
           become: true
+          register: postgres_db_host_pgdg_client_install
+          retries: "{{ postgres_pgdg_package_retries }}"
+          delay: "{{ postgres_pgdg_package_retry_delay }}"
+          until: postgres_db_host_pgdg_client_install is succeeded
+
+        - name: Verify psql path after PGDG client install
+          ansible.builtin.stat:
+            path: "/usr/pgsql-{{ postgresql_version }}/bin/psql"
+          delegate_to: "{{ postgres_inventory_host }}"
+          become: true
+          register: postgres_db_host_pgdg_psql_after_install
+
+        - name: Require psql path after PGDG client install
+          ansible.builtin.assert:
+            that:
+              - postgres_db_host_pgdg_psql_after_install.stat.exists | default(false) | bool
+              - postgres_db_host_pgdg_psql_after_install.stat.executable | default(false) | bool
+            fail_msg: >-
+              PostgreSQL client package installation completed on
+              {{ postgres_inventory_host }}, but
+              /usr/pgsql-{{ postgresql_version }}/bin/psql is not executable.
 
         - name: Record PostgreSQL DB host psql path after PGDG client install
           ansible.builtin.set_fact:

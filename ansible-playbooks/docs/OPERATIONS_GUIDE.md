@@ -1544,7 +1544,11 @@ Fresh PostgreSQL package transactions enable only the versioned repository
 `pgdg<postgresql_version>` (default `pgdg17`). They do not enable the broad
 `pgdg*` pattern, because that also enables `pgdg-common`; an unavailable
 `pgdg-common` metadata endpoint must not block packages supplied entirely by
-the versioned PostgreSQL repository.
+the versioned PostgreSQL repository. Before installing, automation refreshes
+only that exact repository and verifies every requested package is listed.
+Metadata and package operations retry with bounded delays, then installation
+must produce an executable versioned `psql` or `postgres` binary. This provides
+the same fail-fast contract in playbooks 08 and 23 and the CM database fallback.
 
 Playbook **08** detects PostgreSQL clients by their configured versioned binary
 path (for example `/usr/pgsql/17/bin/psql`), `/usr/bin/psql`, and supported
