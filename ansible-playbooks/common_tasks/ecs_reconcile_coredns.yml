@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for ECS reconcile CoreDNS
+  ansible.builtin.import_role:
+    name: ecs
+    tasks_from: ecs_reconcile_coredns
