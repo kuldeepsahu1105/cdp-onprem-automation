@@ -172,7 +172,13 @@ for CLI/Vault input and the complete option reference.
 VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL
 ```
 
-Optional tail stages (not in the line above): `STARTSTOP_AUTOMATION`, `DESTROY_STACK`. Default job checkboxes remain `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION` (see table below).
+To continue through selected ECS Data Services:
+
+```text
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_DATA_SERVICES
+```
+
+Optional tail stages (not in the line above): `ECS_DATA_SERVICES`, `STARTSTOP_AUTOMATION`, `DESTROY_STACK`. Default job checkboxes remain `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION` (see table below).
 
 Each run also prints a **quick reference** in the console at **Resolve Stages** (see `echoPipelineStagesQuickReference` in the Jenkinsfile).
 
@@ -206,9 +212,9 @@ If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALI
 
 Select one or more stage checkboxes. Fixed run order (each Ansible step is its own Jenkins stage in the UI):
 
-`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL` → `STARTSTOP_AUTOMATION` → `DESTROY_STACK`
+`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL` → `ECS_DATA_SERVICES` → `STARTSTOP_AUTOMATION` → `DESTROY_STACK`
 
-**Copy-paste (matches Jenkinsfile checkbox names):** `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL` — also at the top of **Build with Parameters** → `PIPELINE_STAGES` description and `PIPELINE_STAGES_REFERENCE` default text. Append `STARTSTOP_AUTOMATION` or `DESTROY_STACK` when needed.
+**Copy-paste (matches Jenkinsfile checkbox names):** `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL` — also at the top of **Build with Parameters** → `PIPELINE_STAGES` description and `PIPELINE_STAGES_REFERENCE` default text. Append `ECS_DATA_SERVICES`, `STARTSTOP_AUTOMATION`, or `DESTROY_STACK` when needed.
 
 | Checkbox | What runs |
 |---|---|
@@ -221,7 +227,8 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | `CM_TLS_KRB_LDAP` | Auto-TLS, CMS, LDAP, Kerberos (27→28→29→30); portal refresh. **Checkout `EXECUTION_BRANCH=main` at commit `b03af5a` or newer** — older trees fail in `realign_cm_api_url_after_autotls_restart.yml` with task *CM API — derive API host from existing cm_api_url* (`NoneType` `.group` when `cm_api_url` has no hostname match). |
 | `CDH_INSTALL` | CDH base cluster (`31_setup_base_cluster.yml`); portal refresh |
 | `MONITORING` | `32_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
-| `ECS_INSTALL` | ECS cluster (`33`); optional `34_setup_ecs_data_services.yml` when `ECS_DATA_SERVICES_DEPLOY_ENABLED` |
+| `ECS_INSTALL` | ECS cluster installation/reconciliation (`33_setup_ecs_cluster.yml`) |
+| `ECS_DATA_SERVICES` | Data services only (`34_setup_ecs_data_services.yml`) against an existing healthy ECS cluster; does not rerun playbook 33 |
 | `STARTSTOP_AUTOMATION` | `run-ec2-startstop-automation.sh` — Ansible playbook **36** deploys/updates the helper on **ipaserver**. Running operations from Jenkins is disabled. |
 | `DESTROY_STACK` | `run-destroy-stack.sh` — optional `99_cleanup.yml` (`CLEANUP_BEFORE_DESTROY`) then `terraform destroy` |
 
@@ -255,11 +262,13 @@ Full teardown steps are also in the **`PIPELINE_STAGES_REFERENCE`** text area on
 | Greenfield CDH base cluster | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL` |
 | Greenfield CDH plus monitoring | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING` |
 | Full stack through ECS | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL` |
+| Full stack through selected ECS Data Services | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_DATA_SERVICES` |
 | Existing hosts through Cloudera Manager | `VALIDATE,PREREQS,PORTAL,IDENTITY,CM_INSTALL` |
 | Apply CM security to an existing CM | `VALIDATE,CM_TLS_KRB_LDAP` |
 | Install CDH on an existing secured CM | `VALIDATE,CDH_INSTALL` |
 | Install monitoring on existing CDH | `VALIDATE,PORTAL,MONITORING` |
 | Install ECS on existing CDH | `VALIDATE,ECS_INSTALL` |
+| Install or update data services on existing ECS | `VALIDATE,ECS_DATA_SERVICES` |
 | Install/update EC2 start/stop helper | `VALIDATE,STARTSTOP_AUTOMATION` |
 
 Ansible-only stages (no `TERRAFORM`) require existing `ansible-playbooks/inventory.ini`.
