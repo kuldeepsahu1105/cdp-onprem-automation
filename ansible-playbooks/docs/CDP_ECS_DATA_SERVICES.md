@@ -72,6 +72,19 @@ They are not attached to Jenkins email. Data-service URLs are persisted to the
 catalog cache, restored during portal refresh, and included in the normal
 portal/access-URL email report.
 
+The controller cache location is selected automatically:
+
+- Jenkins/wrappers: `$CDP_ARTIFACTS_DIR`, normally
+  `jenkins/artifacts/ecs-automation-api-credentials.yml`.
+- Manual runs with `WORKSPACE`: `$WORKSPACE/artifacts/`.
+- Other manual runs: `$XDG_STATE_HOME/cdp-onprem-automation/`, or
+  `$HOME/.local/state/cdp-onprem-automation/` when `XDG_STATE_HOME` is unset.
+
+Set `CDP_ARTIFACTS_DIR` or override `ecs_artifacts_dir` when another persistent
+location is required. The playbook reports the path when it creates or reuses
+the credential cache and does not generate a replacement key while valid
+cached credentials are available.
+
 **List form** (unioned with flags):
 
 ```yaml
