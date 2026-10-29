@@ -1,117 +1,39 @@
 ---
-- name: Resolve controller Python user base
-  ansible.builtin.command:
-    argv:
-      - "{{ ansible_playbook_python }}"
-      - -m
-      - site
-      - --user-base
-  register: ecs_cdp_cli_user_base
-  changed_when: false
+- name: Create persistent CDP CLI state directory
+  ansible.builtin.file:
+    path: "{{ ecs_cdp_cli_venv_path | dirname }}"
+    state: directory
+    mode: "0700"
 
-- name: Publish controller CDP CLI paths
-  ansible.builtin.set_fact:
-    ecs_cdp_cli_user_bin: "{{ ecs_cdp_cli_user_base.stdout | trim }}/bin"
-    ecs_cdp_cli_executable: "{{ ecs_cdp_cli_user_base.stdout | trim }}/bin/cdp"
-
-- name: Check controller user CDP CLI executable
-  ansible.builtin.stat:
-    path: "{{ ecs_cdp_cli_executable }}"
-  register: ecs_cdp_cli_user_executable_stat
-
-- name: Check controller user CDP CLI version
-  ansible.builtin.command:
-    argv:
-      - "{{ ecs_cdp_cli_executable }}"
-      - --version
-  register: ecs_cdp_cli_existing_version
-  changed_when: false
-  failed_when: false
-  when: ecs_cdp_cli_user_executable_stat.stat.exists | default(false) | bool
-
-- name: Check controller user CDP CLI private-cloud LDAP commands
-  ansible.builtin.command:
-    argv:
-      - "{{ ecs_cdp_cli_executable }}"
-      - --form-factor
-      - private
-      - iam
-      - "{{ item }}"
-      - help
-  register: ecs_cdp_cli_existing_private_ldap_help
-  changed_when: false
-  failed_when: false
-  loop:
-    - update-ldap-provider
-    - create-ldap-provider
-  when:
-    - ecs_cdp_cli_user_executable_stat.stat.exists | default(false) | bool
-    - >-
-      (ecs_ldap_enabled | default(false) | bool)
-      or (ecs_ldap_admin_user_enabled | default(false) | bool)
-
-- name: Resolve whether controller user CDP CLI must be installed
-  ansible.builtin.set_fact:
-    ecs_cdp_cli_install_required: >-
-      {{
-        not (ecs_cdp_cli_user_executable_stat.stat.exists | default(false) | bool)
-        or (ecs_cdp_cli_existing_version.rc | default(1) != 0)
-        or (ecs_cdp_cli_existing_version.stdout | default('') | trim != '0.9.164')
-        or (
-          (
-            (ecs_ldap_enabled | default(false) | bool)
-            or (ecs_ldap_admin_user_enabled | default(false) | bool)
-          )
-          and (
-            ecs_cdp_cli_existing_private_ldap_help.results | default([]) | length != 2
-            or (
-              ecs_cdp_cli_existing_private_ldap_help.results
-              | default([])
-              | selectattr('rc', 'defined')
-              | rejectattr('rc', 'equalto', 0)
-              | list
-              | length > 0
-            )
-          )
-        )
-      }}
-
-- name: Install pinned CDP CLI into controller Python user base
+- name: Install isolated CDP CLI for cloudera.cloud modules
   ansible.builtin.pip:
     name: cdpcli==0.9.164
     state: present
-    extra_args: --user --force-reinstall
+    virtualenv: "{{ ecs_cdp_cli_venv_path }}"
+    virtualenv_command: "{{ ansible_playbook_python }} -m venv"
   become: false
-  when: ecs_cdp_cli_install_required | bool
 
-- name: Verify controller user CDP CLI executable exists
+- name: Inspect installed CDP CLI executable
   ansible.builtin.stat:
-    path: "{{ ecs_cdp_cli_executable }}"
-  register: ecs_cdp_cli_installed_executable_stat
+    path: "{{ ecs_cdp_cli_venv_path }}/bin/cdp"
+  register: ecs_cdp_cli_executable_stat
 
-- name: Require controller user CDP CLI executable
+- name: Publish installed CDP CLI executable
+  ansible.builtin.set_fact:
+    ecs_cdp_cli_executable: "{{ ecs_cdp_cli_venv_path }}/bin/cdp"
+    ecs_cdp_cli_bin: "{{ ecs_cdp_cli_venv_path }}/bin"
+  when:
+    - ecs_cdp_cli_executable_stat.stat.exists | default(false)
+    - ecs_cdp_cli_executable_stat.stat.executable | default(false)
+
+- name: Require installed CDP CLI executable
   ansible.builtin.assert:
     that:
-      - ecs_cdp_cli_installed_executable_stat.stat.exists | default(false) | bool
-      - ecs_cdp_cli_installed_executable_stat.stat.executable | default(false) | bool
+      - ecs_cdp_cli_executable is defined
+      - ecs_cdp_cli_executable | length > 0
     fail_msg: >-
-      cdpcli 0.9.164 was installed but {{ ecs_cdp_cli_executable }} is not executable.
-
-- name: Verify controller user CDP CLI version
-  ansible.builtin.command:
-    argv:
-      - "{{ ecs_cdp_cli_executable }}"
-      - --version
-  register: ecs_cdp_cli_installed_version
-  changed_when: false
-
-- name: Require pinned controller user CDP CLI version
-  ansible.builtin.assert:
-    that:
-      - ecs_cdp_cli_installed_version.stdout | trim == '0.9.164'
-    fail_msg: >-
-      Expected {{ ecs_cdp_cli_executable }} version 0.9.164, got
-      {{ ecs_cdp_cli_installed_version.stdout | default('(no output)') | trim }}.
+      cdpcli 0.9.164 was installed into {{ ecs_cdp_cli_venv_path }}, but its
+      dedicated cdp executable is missing or not executable.
 
 - name: Verify private-cloud LDAP commands are available
   ansible.builtin.command:

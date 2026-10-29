@@ -4,13 +4,12 @@ Playbook `34_setup_ecs_data_services.yml` enables Cloudera Data Services on an e
 
 The controller prerequisite task pins `cdpcli==0.9.164` from the configured
 Python package index because that release exposes the private-cloud LDAP IAM
-operations used by post-install automation. It resolves and verifies the exact
-executable under the controller Python user base before making LDAP changes.
-If pip considers an older system installation sufficient and does not create
-the user executable, automation force-installs the pinned release into the user
-base; the system `cdp` can never shadow it. Cloudera Labs `cdpy` is pinned to Git tag
-`v2.1.0` with `--no-deps`, avoiding similarly named or stale packages in private
-indexes.
+operations used by post-install automation. It installs the CLI in the dedicated
+versioned virtual environment `ecs_cdp_cli_venv_path` (by default
+`<ecs_local_state_dir>/cdpcli-0.9.164`) and verifies that exact executable
+before making LDAP changes, so an older or inconsistent system-wide `cdp`
+cannot be selected. Cloudera Labs `cdpy` is pinned to Git tag `v2.1.0` with
+`--no-deps`, avoiding similarly named or stale packages in private indexes.
 
 ## Prerequisites
 
