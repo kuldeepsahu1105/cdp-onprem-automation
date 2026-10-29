@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for identity assert existing IPA domain
+  ansible.builtin.import_role:
+    name: identity
+    tasks_from: assert_existing_ipa_domain
