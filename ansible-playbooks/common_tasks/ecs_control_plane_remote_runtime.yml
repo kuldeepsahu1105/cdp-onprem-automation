@@ -1,0 +1,128 @@
+---
+# CDP CLI runtime on the ECS master, where private control-plane DNS is reachable.
+
+- name: ECS remote CLI | Resolve control plane URL
+  ansible.builtin.import_tasks: resolve_ecs_control_plane_url.yml
+
+- name: ECS remote CLI | Set API base URL
+  ansible.builtin.set_fact:
+    ecs_cdp_console_api_url_effective: >-
+      {{
+        ecs_cdp_console_api_url | trim
+        if (ecs_cdp_console_api_url | default('') | length > 0)
+        else ('https://' + ecs_console_host_prefix + '.' + ecs_app_domain)
+      }}
+
+- name: ECS remote CLI | Resolve execution home on ECS master
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "import os; print(os.path.expanduser('~'))"
+  register: ecs_remote_cdp_home
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS remote CLI | Set isolated runtime paths
+  ansible.builtin.set_fact:
+    ecs_remote_cdp_venv_path: >-
+      {{ ecs_remote_cdp_home.stdout | trim }}/.local/state/cdp-onprem-automation/cdpcli-0.9.164
+    ecs_remote_cdp_executable: >-
+      {{ ecs_remote_cdp_home.stdout | trim }}/.local/state/cdp-onprem-automation/cdpcli-0.9.164/bin/cdp
+
+- name: ECS remote CLI | Create persistent state directory
+  ansible.builtin.file:
+    path: "{{ ecs_remote_cdp_venv_path | dirname }}"
+    state: directory
+    mode: "0700"
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS remote CLI | Install isolated CDP CLI
+  ansible.builtin.pip:
+    name: cdpcli==0.9.164
+    state: present
+    virtualenv: "{{ ecs_remote_cdp_venv_path }}"
+    virtualenv_command: python3 -m venv
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS remote CLI | Verify private-cloud LDAP commands
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_remote_cdp_executable }}"
+      - --form-factor
+      - private
+      - iam
+      - "{{ item }}"
+      - help
+  loop:
+    - update-ldap-provider
+    - create-ldap-provider
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS remote CLI | Create temporary profile directory
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: cdp_ecs_post_install_
+  register: ecs_remote_cdp_profile_dir
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS remote CLI | Write private-cloud configuration
+  ansible.builtin.copy:
+    dest: "{{ ecs_remote_cdp_profile_dir.path }}/config"
+    mode: "0600"
+    content: |
+      [default]
+      cdp_endpoint_url = {{ ecs_cdp_console_api_url_effective | regex_replace('/+$', '') }}
+      endpoint_url = {{ ecs_cdp_console_api_url_effective | regex_replace('/+$', '') }}/api/v1
+      form_factor = private
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS remote CLI | Write automation credentials
+  ansible.builtin.copy:
+    dest: "{{ ecs_remote_cdp_profile_dir.path }}/credentials"
+    mode: "0600"
+    content: |
+      [default]
+      cdp_access_key_id = {{ ecs_api_access_key_id }}
+      cdp_private_key = {{ ecs_api_private_key | trim }}
+  no_log: true
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS remote CLI | Publish invocation and environment
+  ansible.builtin.set_fact:
+    ecs_remote_cdp_cli_prefix: >-
+      {{
+        [ecs_remote_cdp_executable, '--profile', 'default', '--form-factor', 'private']
+        + (
+          ['--ca-bundle', ecs_control_plane_ca_bundle]
+          if ecs_control_plane_ca_bundle | default('') | length > 0
+          else (
+            []
+            if ecs_control_plane_validate_certs | default(false) | bool
+            else ['--no-verify-tls']
+          )
+        )
+        + ['--cli-connect-timeout', '10', '--cli-read-timeout', '60']
+      }}
+    ecs_remote_cdp_cli_environment:
+      CDP_CONFIG_FILE: "{{ ecs_remote_cdp_profile_dir.path }}/config"
+      CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_remote_cdp_profile_dir.path }}/credentials"
+      HOME: "{{ ecs_remote_cdp_home.stdout | trim }}"

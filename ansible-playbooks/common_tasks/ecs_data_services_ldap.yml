@@ -1,5 +1,5 @@
 ---
-# Optional ECS control plane LDAP (FreeIPA or AD). Requires ecs_ds_cdp_profile_dir + ecs_cdp_cli_environment.
+# Optional ECS control plane LDAP (FreeIPA or AD). Runs from the ECS master.
 
 - name: LDAP | Sync identity provider to ECS control plane
   when: ecs_ldap_sync_effective | default(false) | bool
@@ -15,9 +15,12 @@
 
     - name: LDAP | Write FreeIPA CA to temp file for CDP CLI
       ansible.builtin.copy:
-        dest: "{{ ecs_ds_cdp_profile_dir.path }}/freeipa-ca.crt"
+        dest: "{{ ecs_remote_cdp_profile_dir.path }}/freeipa-ca.crt"
         mode: "0600"
         content: "{{ ecs_freeipa_ca_cert.content | b64decode }}"
+      become: false
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+      connection: ssh
       when:
         - identity_provider_effective == 'freeipa'
         - ecs_freeipa_ca_cert.content is defined
@@ -35,7 +38,7 @@
               '--username-mapping-attribute', 'uid',
               '--bind-dn', 'uid=' + ipaadmin_principal + ',cn=users,cn=accounts,' + ipa_ldap_dc_suffix,
               '--bind-password', ipaadmin_password,
-              '--tls-ca-certificates', 'file://' + ecs_ds_cdp_profile_dir.path + '/freeipa-ca.crt',
+              '--tls-ca-certificates', 'file://' + ecs_remote_cdp_profile_dir.path + '/freeipa-ca.crt',
               '--skip-group-sync-on-login'
             ]
           }}
@@ -65,27 +68,54 @@
       ansible.builtin.command:
         argv: >-
           {{
-            [ecs_cdp_cli_executable, '--profile', 'default', '--form-factor', 'private',
-             'iam', 'update-ldap-provider',
+            ecs_remote_cdp_cli_prefix
+            + ['iam', 'update-ldap-provider',
              '--ldap-provider-name', ecs_ldap_provider_name]
             + ecs_ldap_provider_argv_extra
           }}
-      environment: "{{ ecs_cdp_cli_environment }}"
+      environment: "{{ ecs_remote_cdp_cli_environment }}"
       register: ecs_ldap_update
-      failed_when: >-
-        ecs_ldap_update.rc != 0
-        and ('not found' not in (ecs_ldap_update.stderr | default('') | lower))
+      failed_when: false
+      no_log: true
+      become: false
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+      connection: ssh
+
+    - name: LDAP | Report provider update failure
+      ansible.builtin.fail:
+        msg: >-
+          ECS LDAP provider update failed from the ECS master (rc={{ ecs_ldap_update.rc }}):
+          {{ ecs_ldap_update.stderr | default(ecs_ldap_update.stdout) }}
+      when:
+        - ecs_ldap_update.rc != 0
+        - "'not found' not in (ecs_ldap_update.stderr | default('') | lower)"
 
     - name: LDAP | Create control plane LDAP provider when missing
       ansible.builtin.command:
         argv: >-
           {{
-            [ecs_cdp_cli_executable, '--profile', 'default', '--form-factor', 'private',
-             'iam', 'create-ldap-provider',
+            ecs_remote_cdp_cli_prefix
+            + ['iam', 'create-ldap-provider',
              '--ldap-provider-name', ecs_ldap_provider_name]
             + ecs_ldap_provider_argv_extra
           }}
-      environment: "{{ ecs_cdp_cli_environment }}"
+      environment: "{{ ecs_remote_cdp_cli_environment }}"
+      register: ecs_ldap_create
+      failed_when: false
+      no_log: true
       when:
         - ecs_ldap_update.rc != 0
         - "'not found' in (ecs_ldap_update.stderr | default('') | lower)"
+      become: false
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+      connection: ssh
+
+    - name: LDAP | Report provider create failure
+      ansible.builtin.fail:
+        msg: >-
+          ECS LDAP provider creation failed from the ECS master (rc={{ ecs_ldap_create.rc }}):
+          {{ ecs_ldap_create.stderr | default(ecs_ldap_create.stdout) }}
+      when:
+        - ecs_ldap_create is defined
+        - not (ecs_ldap_create.skipped | default(false))
+        - ecs_ldap_create.rc | default(0) != 0
