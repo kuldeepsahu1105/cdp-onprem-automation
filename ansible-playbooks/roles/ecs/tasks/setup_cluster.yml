@@ -311,11 +311,20 @@
     - ecs_deploy_effective | default(false) | bool
     - ecs_auto_provision_api_access_key | default(true) | bool
 
-- name: Provision ECS automation IAM access key after console is up
-  ansible.builtin.import_tasks: ecs_provision_iam_machine_access_key.yml
+- name: Load existing ECS automation API credentials
+  ansible.builtin.import_tasks: ecs_load_api_credentials.yml
   when:
     - ecs_deploy_effective | default(false) | bool
     - ecs_auto_provision_api_access_key | default(true) | bool
+
+- name: Provision ECS automation IAM access key after console is up
+  ansible.builtin.include_tasks: ecs_provision_iam_machine_access_key.yml
+  when:
+    - ecs_deploy_effective | default(false) | bool
+    - ecs_auto_provision_api_access_key | default(true) | bool
+    - >-
+      ecs_api_access_key_id | default('') | length == 0
+      or ecs_api_private_key | default('') | length == 0
 
 - name: Print ECS cluster result
   ansible.builtin.debug:

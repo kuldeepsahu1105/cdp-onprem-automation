@@ -19,9 +19,23 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
 2. **Hosts** — `cloudera.cluster.host` `state: attached` for master and workers (FQDN = `cldr_hostname.cluster_domain`).
 3. **Parcel** — `cloudera.cluster.parcel` `state: activated` for product `ECS`.
 4. **Services** — `cloudera.cluster.service` + `service_config` for `docker` and `ecs` (credentials in a separate `service_config` task with `no_log`).
-5. **Host templates** — `common_tasks/ecs_apply_host_templates.yml` (`ecs_master`, `ecs_workers`).
-6. **Control plane** — `common_tasks/ecs_install_control_plane.yml` with `valuesYaml` from `templates/ecs_control_plane_values.yaml.j2`.
-7. **Start** — `cloudera.cluster.cluster` `state: started`.
+   Boolean CM parameters such as `external_registry_enabled` are sent and
+   verified as lowercase strings because `cloudera.cluster` v4.4 otherwise
+   serializes Python booleans as invalid `True`/`False` values.
+5. **Host templates** — `common_tasks/ecs_apply_host_templates.yml`
+   (`ECSMaster`, `ECSWorker`) through the v4-compatible CM API, applied with
+   `startRoles=false`.
+6. **Control plane submission/adoption** — `common_tasks/ecs_install_control_plane.yml` submits First Run or adopts its durable `/controlPlanes` record without blocking on completion.
+7. **CoreDNS during First Run** — as soon as RKE2 and the CoreDNS ConfigMap exist, replace its `/etc/resolv.conf` upstream with the FreeIPA private IP (or AD DNS servers), omit the ineffective `policy sequential` block, and restart CoreDNS only when changed. This repository intentionally differs from the shared reference because runtime ECS environment creation could not resolve the CM hostname through RKE2's `/etc/resolv.conf` forwarding.
+
+On rerun, playbook 33 enters the phased recovery path only when the required
+`docker` or `ecs` service is missing or not `STARTED`. Healthy clusters skip
+service-secret and host-template reconciliation. Cached automation API
+credentials are loaded before IAM bootstrap, so an existing cache also skips
+temporary profile creation and access-key generation.
+8. **First Run completion** — wait for the submitted CM command, or for every service in an adopted installation to reach `STARTED`, only after CoreDNS is repaired.
+9. **Start** — `cloudera.cluster.cluster` `state: started`.
+10. **Operator CLI** — expose the RKE2 `kubectl` binary, copy a user-owned kubeconfig for `root` and the SSH user, install checksum-verified `k9s`, and verify that each user can list Kubernetes nodes.
 
 If the cluster already exists (`GET` returns 200), only **start** runs, then console wait and optional IAM access-key provisioning.
 

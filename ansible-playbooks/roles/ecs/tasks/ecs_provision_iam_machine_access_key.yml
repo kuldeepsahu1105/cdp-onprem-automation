@@ -164,6 +164,7 @@
     state: directory
     prefix: cdp_ecs_iam_
   register: ecs_cdp_profile_dir
+  changed_when: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
 
 - name: Write CDP private cloud config for IAM calls
@@ -174,6 +175,7 @@
       [default]
       cdp_endpoint_url = {{ ecs_control_plane_url_effective }}
       form_factor = private
+  changed_when: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
 
 - name: Write bootstrap CDP credentials for IAM calls
@@ -185,6 +187,7 @@
       cdp_access_key_id = {{ ecs_iam_bootstrap_access_key_id_effective }}
       cdp_private_key = {{ ecs_iam_bootstrap_private_key_effective | trim }}
   no_log: true
+  changed_when: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
 
 - name: List existing ECS environments
@@ -563,4 +566,5 @@
     path: "{{ ecs_cdp_profile_dir.path }}"
     state: absent
   no_log: true
+  changed_when: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
