@@ -29,6 +29,10 @@
       ansible.builtin.setup:
       when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
 
+    - name: Restore managed DNS resolver configuration on ECS hosts
+      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
+      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
+
 - name: Install ECS (Cloudera Data Services) cluster via Cloudera Manager
   hosts: localhost
   connection: local
@@ -157,6 +161,30 @@
       loop_control:
         label: "{{ item }}"
 
+    - name: Resolve ECS console DNS directly from FreeIPA
+      ansible.builtin.command:
+        argv:
+          - dig
+          - +short
+          - "@{{ hostvars[groups['ipaserver'][0]].private_ip | default(hostvars[groups['ipaserver'][0]].ansible_host, true) }}"
+          - "{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}"
+          - A
+      register: ecs_console_dns_from_ipa
+      changed_when: false
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+      retries: "{{ ecs_console_dns_wait_retries | default(24) }}"
+      delay: "{{ ecs_console_dns_wait_delay | default(5) }}"
+      until: ecs_master_ip in ecs_console_dns_from_ipa.stdout_lines
+      when:
+        - identity_provider_effective == 'freeipa'
+        - groups.get('ipaserver', []) | length > 0
+
+    - name: Read ECS master resolver configuration
+      ansible.builtin.command: cat /etc/resolv.conf
+      register: ecs_master_resolv_conf
+      changed_when: false
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
     - name: Resolve ECS console DNS from the ECS master
       ansible.builtin.command:
         argv:
@@ -165,6 +193,7 @@
           - "{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}"
       register: ecs_console_dns_from_master
       changed_when: false
+      failed_when: false
       delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
       retries: "{{ ecs_console_dns_wait_retries | default(24) }}"
       delay: "{{ ecs_console_dns_wait_delay | default(5) }}"
@@ -180,8 +209,14 @@
           {{ ecs_console_host_prefix }}.{{ ecs_app_domain }} resolves from the
           ECS master as {{ ecs_console_dns_from_master.stdout_lines | default([])
           | join(', ') }}, but First Run requires private IP {{ ecs_master_ip }}.
-          Re-run 19_setup_wildcard.yml or correct the external DNS record before
-          installing the control plane.
+          ECS master /etc/resolv.conf:
+          {{ ecs_master_resolv_conf.stdout_lines | default([]) | join('; ') }}.
+          {% if identity_provider_effective == 'freeipa' %}
+          Direct FreeIPA response:
+          {{ ecs_console_dns_from_ipa.stdout_lines | default([]) | join(', ') }}.
+          {% endif %}
+          Re-run playbook 13 to repair managed resolvers and playbook 19 to
+          reconcile wildcard DNS before installing the control plane.
 
     - name: Print ECS cluster targets
       ansible.builtin.debug:
