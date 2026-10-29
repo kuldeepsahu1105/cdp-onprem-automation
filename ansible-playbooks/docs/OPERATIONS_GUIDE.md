@@ -1626,6 +1626,18 @@ installs the PostgreSQL client only on the database host, and playbooks 08/23
 skip repository refresh when the required PostgreSQL binaries are already
 installed.
 
+Fresh PostgreSQL package transactions enable only the versioned repository
+`pgdg<postgresql_version>` (default `pgdg17`). They do not enable the broad
+`pgdg*` pattern, because that also enables `pgdg-common`; an unavailable
+`pgdg-common` metadata endpoint must not block packages supplied entirely by
+the versioned PostgreSQL repository.
+
+Playbook **08** detects PostgreSQL clients by their configured versioned binary
+path (for example `/usr/pgsql/17/bin/psql`), `/usr/bin/psql`, and supported
+alternate versioned paths. It does not rely on the remote login `PATH`.
+Therefore an existing client skips both PGDG repository installation and the
+PGDG package transaction, even when `psql --version` would fail from the shell.
+
 PostgreSQL and Cloudera Manager are not restarted on a healthy playbook 23
 rerun merely because the CA certificate is copied to newly added hosts.
 PostgreSQL restarts only after a new installation/cluster initialization,

@@ -14,28 +14,71 @@
     - name: Set OS-specific facts
       ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
 
-    - name: Check whether PostgreSQL client is already installed
-      ansible.builtin.command:
-        argv:
-          - psql
-          - --version
-      register: existing_psql_version
-      changed_when: false
-      failed_when: false
+    - name: Check configured versioned PostgreSQL client path
+      ansible.builtin.stat:
+        path: "{{ os.postgres_bin_dir }}/psql"
+      register: existing_psql_configured_path
+
+    - name: Check unversioned PostgreSQL client path
+      ansible.builtin.stat:
+        path: /usr/bin/psql
+      register: existing_psql_unversioned_path
+      when: not (existing_psql_configured_path.stat.exists | default(false) | bool)
+
+    - name: Check supported versioned PostgreSQL client paths
+      ansible.builtin.stat:
+        path: "/usr/pgsql-{{ item }}/bin/psql"
+      loop: "{{ postgres_db_host_psql_probe_versions | default([]) | unique | list }}"
+      register: existing_psql_versioned_paths
+      when:
+        - ansible_os_family == "RedHat"
+        - not (existing_psql_configured_path.stat.exists | default(false) | bool)
+        - not (existing_psql_unversioned_path.stat.exists | default(false) | bool)
+
+    - name: Resolve installed PostgreSQL client path
+      ansible.builtin.set_fact:
+        existing_psql_command: >-
+          {{
+            os.postgres_bin_dir ~ '/psql'
+            if (existing_psql_configured_path.stat.exists | default(false) | bool)
+            else (
+              '/usr/bin/psql'
+              if (existing_psql_unversioned_path.stat.exists | default(false) | bool)
+              else ''
+            )
+          }}
+
+    - name: Resolve installed PostgreSQL client from alternate versioned path
+      ansible.builtin.set_fact:
+        existing_psql_command: "/usr/pgsql-{{ item.item }}/bin/psql"
+      loop: "{{ existing_psql_versioned_paths.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item | default('unknown') }}"
+      when:
+        - existing_psql_command | length == 0
+        - item.stat.exists | default(false) | bool
+
+    - name: Report existing PostgreSQL client
+      ansible.builtin.debug:
+        msg: >-
+          PostgreSQL client already installed at {{ existing_psql_command }};
+          skipping PGDG repository and package operations.
+      when: existing_psql_command | length > 0
 
     - name: Install PostgreSQL repository
       ansible.builtin.import_tasks: common_tasks/install_postgresql_repo.yml
-      when: existing_psql_version.rc != 0
+      when: existing_psql_command | length == 0
 
     - name: Install PostgreSQL client (psql)
       ansible.builtin.dnf:
         name: "{{ os.postgres_client_packages }}"
         state: present
         enablerepo:
-          - "pgdg*"
+          - "{{ postgres_pgdg_package_repository }}"
       when:
         - ansible_os_family == "RedHat"
-        - existing_psql_version.rc != 0
+        - existing_psql_command | length == 0
+      register: postgresql_client_install_redhat
 
     - name: Install PostgreSQL client (psql) on Debian
       ansible.builtin.apt:
@@ -43,10 +86,24 @@
         state: present
       when:
         - ansible_os_family == "Debian"
-        - existing_psql_version.rc != 0
+        - existing_psql_command | length == 0
+      register: postgresql_client_install_debian
+
+    - name: Resolve PostgreSQL client path after installation
+      ansible.builtin.set_fact:
+        existing_psql_command: >-
+          {{
+            os.postgres_bin_dir ~ '/psql'
+            if ansible_os_family == 'RedHat'
+            else '/usr/bin/psql'
+          }}
+      when: existing_psql_command | length == 0
 
     - name: Verify PostgreSQL(psql) installation
-      ansible.builtin.command: psql --version
+      ansible.builtin.command:
+        argv:
+          - "{{ existing_psql_command }}"
+          - --version
       register: psql_version
       changed_when: false
 

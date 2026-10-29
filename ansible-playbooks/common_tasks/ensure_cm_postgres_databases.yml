@@ -293,7 +293,7 @@
             name: "postgresql{{ postgresql_version }}"
             state: present
             enablerepo:
-              - "pgdg*"
+              - "{{ postgres_pgdg_package_repository }}"
           delegate_to: "{{ postgres_inventory_host }}"
           become: true
 
