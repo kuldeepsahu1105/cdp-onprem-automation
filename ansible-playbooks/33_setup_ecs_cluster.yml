@@ -18,6 +18,23 @@
         name: ecs
         tasks_from: install_collection
 
+- name: Ensure ECS hosts are reachable and collect standalone facts
+  hosts: ecs-masters:ecs-workers
+  gather_facts: no
+  tasks:
+    - name: Wait for ECS host connection
+      ansible.builtin.wait_for_connection:
+        timeout: 60
+      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
+
+    - name: Gather ECS host facts
+      ansible.builtin.setup:
+      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
+
+    - name: Restore managed DNS resolver configuration on ECS hosts
+      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
+      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
+
 - name: Install ECS (Cloudera Data Services) cluster via Cloudera Manager
   hosts: localhost
   connection: local
