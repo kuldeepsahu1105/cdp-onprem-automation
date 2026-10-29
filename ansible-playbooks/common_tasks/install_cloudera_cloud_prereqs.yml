@@ -1,10 +1,63 @@
 ---
 - name: Install CDP CLI for cloudera.cloud modules
   ansible.builtin.pip:
-    name: cdpcli>=0.9.160
+    name: cdpcli==0.9.164
     state: present
     extra_args: --user
   become: false
+
+- name: Resolve controller Python user base
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python }}"
+      - -m
+      - site
+      - --user-base
+  register: ecs_cdp_cli_user_base
+  changed_when: false
+
+- name: Resolve installed CDP CLI executable
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python }}"
+      - -c
+      - "import shutil; print(shutil.which('cdp') or '')"
+  environment:
+    PATH: "{{ ecs_cdp_cli_user_base.stdout | trim }}/bin:{{ ansible_env.PATH }}"
+  register: ecs_cdp_cli_executable_result
+  changed_when: false
+
+- name: Require installed CDP CLI executable
+  ansible.builtin.assert:
+    that:
+      - ecs_cdp_cli_executable_result.stdout | trim | length > 0
+    fail_msg: >-
+      cdpcli 0.9.164 was installed but the cdp executable could not be resolved
+      from the controller Python user base or PATH.
+
+- name: Publish installed CDP CLI executable
+  ansible.builtin.set_fact:
+    ecs_cdp_cli_executable: "{{ ecs_cdp_cli_executable_result.stdout | trim }}"
+    ecs_cdp_cli_user_bin: "{{ ecs_cdp_cli_user_base.stdout | trim }}/bin"
+
+- name: Verify private-cloud LDAP commands are available
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_cdp_cli_executable }}"
+      - --form-factor
+      - private
+      - iam
+      - "{{ item }}"
+      - help
+  register: ecs_cdp_cli_private_ldap_help
+  changed_when: false
+  loop:
+    - update-ldap-provider
+    - create-ldap-provider
+  when:
+    - >-
+      (ecs_ldap_enabled | default(false) | bool)
+      or (ecs_ldap_admin_user_enabled | default(false) | bool)
 
 - name: Install Cloudera Labs CDPy for cloudera.cloud modules
   ansible.builtin.pip:

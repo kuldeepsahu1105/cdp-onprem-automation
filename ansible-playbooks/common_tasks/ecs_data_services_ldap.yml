@@ -65,7 +65,7 @@
       ansible.builtin.command:
         argv: >-
           {{
-            ['cdp', '--profile', 'default', '--form-factor', 'private',
+            [ecs_cdp_cli_executable, '--profile', 'default', '--form-factor', 'private',
              'iam', 'update-ldap-provider',
              '--ldap-provider-name', ecs_ldap_provider_name]
             + ecs_ldap_provider_argv_extra
@@ -80,7 +80,7 @@
       ansible.builtin.command:
         argv: >-
           {{
-            ['cdp', '--profile', 'default', '--form-factor', 'private',
+            [ecs_cdp_cli_executable, '--profile', 'default', '--form-factor', 'private',
              'iam', 'create-ldap-provider',
              '--ldap-provider-name', ecs_ldap_provider_name]
             + ecs_ldap_provider_argv_extra

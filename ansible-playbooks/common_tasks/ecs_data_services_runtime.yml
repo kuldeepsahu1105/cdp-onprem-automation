@@ -57,4 +57,8 @@
       CDP_CONFIG_FILE: "{{ ecs_ds_cdp_profile_dir.path }}/config"
       CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_ds_cdp_profile_dir.path }}/credentials"
       HOME: "{{ ecs_ds_cdp_profile_dir.path }}"
-      PATH: "{{ ansible_env.PATH }}:{{ ansible_env.HOME | default('/home/ubuntu') }}/.local/bin"
+      PATH: >-
+        {{
+          ecs_cdp_cli_user_bin
+          | default((ansible_env.HOME | default('/home/ubuntu')) + '/.local/bin')
+        }}:{{ ansible_env.PATH }}
