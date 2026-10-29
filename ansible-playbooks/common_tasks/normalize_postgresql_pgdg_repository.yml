@@ -1,0 +1,55 @@
+---
+# Normalize the exact versioned PGDG repository after installing its repository RPM.
+# The current PGDG RPM uses a major.minor base URL that is not published consistently.
+# Package GPG verification remains enabled; only broken repomd.xml signature checking is disabled.
+
+- name: Resolve PostgreSQL PGDG repository normalization target
+  ansible.builtin.set_fact:
+    postgres_pgdg_normalize_target_effective: >-
+      {{ postgres_pgdg_target_host | default(inventory_hostname) }}
+
+- name: Resolve PostgreSQL PGDG repository platform
+  ansible.builtin.set_fact:
+    postgres_pgdg_el_major_effective: >-
+      {{
+        hostvars[postgres_pgdg_normalize_target_effective].ansible_distribution_major_version
+        | default(ansible_distribution_major_version | default(''))
+        | string
+        | trim
+      }}
+    postgres_pgdg_basearch_effective: >-
+      {{
+        'aarch64'
+        if (
+          hostvars[postgres_pgdg_normalize_target_effective].ansible_architecture
+          | default(ansible_architecture | default('x86_64'))
+        ) in ['aarch64', 'arm64']
+        else 'x86_64'
+      }}
+
+- name: Require supported PostgreSQL PGDG repository platform
+  ansible.builtin.assert:
+    that:
+      - postgres_pgdg_el_major_effective in ['8', '9']
+      - postgres_pgdg_package_repository == ('pgdg' ~ (postgresql_version | string))
+    fail_msg: >-
+      Cannot normalize {{ postgres_pgdg_package_repository | default('undefined') }}
+      on {{ postgres_pgdg_normalize_target_effective }}: expected EL 8/9 and the
+      exact repository pgdg{{ postgresql_version }}, resolved EL major
+      {{ postgres_pgdg_el_major_effective | default('unknown') }}.
+
+- name: Configure exact versioned PostgreSQL PGDG repository
+  ansible.builtin.yum_repository:
+    name: "{{ postgres_pgdg_package_repository }}"
+    file: pgdg-redhat-all
+    description: >-
+      PostgreSQL {{ postgresql_version }} for EL
+      {{ postgres_pgdg_el_major_effective }} - $basearch
+    baseurl: "https://download.postgresql.org/pub/repos/yum/{{ postgresql_version }}/redhat/rhel-{{ postgres_pgdg_el_major_effective }}-{{ postgres_pgdg_basearch_effective }}"
+    enabled: false
+    gpgcheck: true
+    gpgkey: file:///etc/pki/rpm-gpg/PGDG-RPM-GPG-KEY-RHEL
+    repo_gpgcheck: false
+    module_hotfixes: true
+  delegate_to: "{{ postgres_pgdg_normalize_target_effective }}"
+  become: true

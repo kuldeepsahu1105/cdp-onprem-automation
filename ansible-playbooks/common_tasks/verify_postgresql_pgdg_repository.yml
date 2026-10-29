@@ -27,6 +27,7 @@
       - -q
       - "--disablerepo=pgdg*"
       - "--enablerepo={{ postgres_pgdg_package_repository }}"
+      - --refresh
       - makecache
   delegate_to: "{{ postgres_pgdg_target_host_effective }}"
   become: true
