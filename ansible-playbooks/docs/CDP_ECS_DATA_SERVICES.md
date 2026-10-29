@@ -24,6 +24,44 @@ Playbook `34_setup_ecs_data_services.yml` enables Cloudera Data Services on an e
 
 Turn on **`ecs_data_services_deploy_enabled`** (or **`ECS_DATA_SERVICES_DEPLOY_ENABLED`**) for the phase, or set any **`ECS_DEPLOY_*`** flag — playbook 34 runs when at least one service is selected.
 
+On a healthy ECS control plane, automation reads the installer-generated signed
+credential from Kubernetes secret `cdp/cm.creds`, field `cdp_keys.json`, and
+uses it only to bootstrap the dedicated automation machine user. Secret values
+are protected with Ansible `no_log`.
+
+If that installer secret is unavailable, create one administrator access key in
+Management Console and store it in Jenkins as a **Username with password**
+credential:
+
+- username: access-key ID
+- password: private key
+
+Set `ECS_IAM_BOOTSTRAP_CREDENTIAL_ID` to that fallback Jenkins credential ID.
+Playbook 34 uses the installer or fallback key only to create
+`cldr-automation-sa`, grants that machine user tenant
+and effective-environment resource roles, creates its V2 access key, and caches
+the generated credential with mode `0600`. Signed bootstrap CDP CLI calls and
+their temporary profile run on the ECS master so private Management Console DNS
+and ingress remain reachable from an external Jenkins controller; only the
+resulting automation credential cache is written on the controller. Subsequent
+runs use the automation key and do not require the administrator key. Running playbook 34 with
+`ECS_DATA_SERVICES_DEPLOY_ENABLED=true` and no service selected performs only
+this IAM bootstrap.
+
+The preferred environment name is the first IPA/domain label. If the healthy
+control plane already contains exactly one environment (for example the
+vendor-created `apps` environment), automation adopts it. If no environment
+exists, automation creates the preferred private-cloud environment using the
+configured CM cluster and credentials.
+
+Generated machine-user credentials appear in the portal's authenticated
+**Operator access** panel and remain in the controller cache with mode `0600`.
+The portal entry identifies the machine user and environment and maps the
+displayed username/password fields to `cdp_access_key_id`/`cdp_private_key`.
+They are not attached to Jenkins email. Data-service URLs are persisted to the
+catalog cache, restored during portal refresh, and included in the normal
+portal/access-URL email report.
+
 **List form** (unioned with flags):
 
 ```yaml

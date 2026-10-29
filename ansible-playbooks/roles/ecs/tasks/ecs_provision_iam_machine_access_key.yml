@@ -5,39 +5,14 @@
 - name: Resolve ECS control plane URL
   ansible.builtin.import_tasks: resolve_ecs_control_plane_url.yml
 
-- name: Skip API key provisioning when automation keys already configured
-  ansible.builtin.meta: end_host
-  when:
-    - (ecs_api_access_key_id | default('') | length > 0)
-    - (ecs_api_private_key | default('') | length > 0)
-
-- name: Load cached ECS API credentials from controller file when present
-  ansible.builtin.slurp:
-    src: "{{ ecs_api_credentials_cache_path }}"
-  register: ecs_api_credentials_cache_slurp
-  failed_when: false
-  when:
-    - (ecs_api_access_key_id | default('') | length == 0)
-    - (ecs_api_credentials_cache_path | default('') | length > 0)
-
-- name: Apply cached ECS API credentials
-  ansible.builtin.set_fact:
-    ecs_api_access_key_id: "{{ (ecs_api_credentials_cache_slurp.content | b64decode | from_yaml).access_key_id }}"
-    ecs_api_private_key: "{{ (ecs_api_credentials_cache_slurp.content | b64decode | from_yaml).private_key }}"
-  no_log: true
-  when:
-    - ecs_api_credentials_cache_slurp is defined
-    - ecs_api_credentials_cache_slurp.content is defined
-
-- name: Skip provisioning when credentials loaded from cache
-  ansible.builtin.meta: end_host
-  when:
-    - (ecs_api_access_key_id | default('') | length > 0)
-    - (ecs_api_private_key | default('') | length > 0)
-
-- name: Skip when auto-provision is disabled
-  ansible.builtin.meta: end_host
-  when: not (ecs_auto_provision_api_access_key | default(true) | bool)
+- name: Require automatic ECS API key provisioning
+  ansible.builtin.assert:
+    that:
+      - ecs_auto_provision_api_access_key | default(true) | bool
+    fail_msg: >-
+      ECS API credentials are not configured or cached and automatic
+      provisioning is disabled. Set ecs_api_access_key_id and
+      ecs_api_private_key, or enable ecs_auto_provision_api_access_key.
 
 - name: Set IAM bootstrap access key from env or group_vars
   ansible.builtin.set_fact:
@@ -54,32 +29,125 @@
         | default(lookup('env', 'ECS_IAM_BOOTSTRAP_PRIVATE_KEY'), true)
         | default('', true)
       }}
+  no_log: true
+
+- name: Read installer-generated IAM credentials from ECS
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - -n
+      - "{{ ecs_iam_installer_secret_namespace }}"
+      - get
+      - secret
+      - "{{ ecs_iam_installer_secret_name }}"
+      - -o
+      - json
+  register: ecs_iam_installer_secret
+  changed_when: false
+  failed_when: false
+  no_log: true
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  when:
+    - ecs_iam_use_installer_credentials | default(true) | bool
+    - >-
+      ecs_iam_bootstrap_access_key_id_effective | length == 0
+      or ecs_iam_bootstrap_private_key_effective | length == 0
+
+- name: Apply installer-generated IAM bootstrap credentials
+  ansible.builtin.set_fact:
+    ecs_iam_bootstrap_access_key_id_effective: >-
+      {{
+        (
+          (
+            (ecs_iam_installer_secret.stdout | from_json).data[
+              ecs_iam_installer_secret_key
+            ]
+            | b64decode
+            | from_json
+          ).access_key_id
+        )
+      }}
+    ecs_iam_bootstrap_private_key_effective: >-
+      {{
+        (
+          (
+            (ecs_iam_installer_secret.stdout | from_json).data[
+              ecs_iam_installer_secret_key
+            ]
+            | b64decode
+            | from_json
+          ).private_key
+        )
+      }}
+  no_log: true
+  when:
+    - ecs_iam_installer_secret is defined
+    - ecs_iam_installer_secret.rc | default(1) == 0
+    - ecs_iam_installer_secret.stdout | default('') | length > 0
+    - >-
+      ecs_iam_installer_secret_key
+      in ((ecs_iam_installer_secret.stdout | from_json).data | default({}))
 
 - name: Require bootstrap admin API key for first-time IAM automation
   ansible.builtin.fail:
     msg: >-
       Cannot create ECS API access keys without an existing signed IAM credential.
-      After ECS is up, generate ONE admin access key in Management Console (User Management),
-      then set ecs_iam_bootstrap_access_key_id / ecs_iam_bootstrap_private_key (or pipeline override
-      ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID / ECS_IAM_BOOTSTRAP_PRIVATE_KEY) and re-run.
+      The installer credential was not available from
+      {{ ecs_iam_installer_secret_namespace }}/{{ ecs_iam_installer_secret_name }}.
+      As a fallback, set ecs_iam_bootstrap_access_key_id /
+      ecs_iam_bootstrap_private_key or Jenkins
+      ECS_IAM_BOOTSTRAP_CREDENTIAL_ID and re-run.
       Automation will create machine user '{{ ecs_automation_machine_user }}' and store keys
       in {{ ecs_api_credentials_cache_path | default('(set ecs_api_credentials_cache_path)') }}.
   when:
-    - ecs_iam_bootstrap_access_key_id_effective | length == 0
-    - ecs_iam_bootstrap_private_key_effective | length == 0
+    - >-
+      ecs_iam_bootstrap_access_key_id_effective | length == 0
+      or ecs_iam_bootstrap_private_key_effective | length == 0
 
-- name: Ensure CDP CLI is available on Ansible controller
+- name: Ensure CDP CLI is available on ECS master
   ansible.builtin.pip:
     name: cdpcli
     state: present
     extra_args: --user
   become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Resolve CDP CLI user installation path on ECS master
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -m
+      - site
+      - --user-base
+  register: ecs_cdp_user_base
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Resolve CDP CLI user home on ECS master
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "import os; print(os.path.expanduser('~'))"
+  register: ecs_cdp_user_home
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Set ECS master CDP CLI path
+  ansible.builtin.set_fact:
+    ecs_cdp_cli_path: "{{ ecs_cdp_user_base.stdout | trim }}/bin/cdp"
 
 - name: Create temporary CDP profile directory for bootstrap IAM
   ansible.builtin.tempfile:
     state: directory
     prefix: cdp_ecs_iam_
   register: ecs_cdp_profile_dir
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
 
 - name: Write CDP private cloud config for IAM calls
   ansible.builtin.copy:
@@ -89,6 +157,7 @@
       [default]
       cdp_endpoint_url = {{ ecs_control_plane_url_effective }}
       form_factor = private
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
 
 - name: Write bootstrap CDP credentials for IAM calls
   ansible.builtin.copy:
@@ -98,11 +167,122 @@
       [default]
       cdp_access_key_id = {{ ecs_iam_bootstrap_access_key_id_effective }}
       cdp_private_key = {{ ecs_iam_bootstrap_private_key_effective | trim }}
+  no_log: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: List existing ECS environments
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_cdp_cli_path }}"
+      - --profile
+      - default
+      - environments
+      - list-environments
+  environment:
+    CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
+    CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
+    HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
+  register: ecs_existing_environments_command
+  changed_when: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Parse existing ECS environments
+  ansible.builtin.set_fact:
+    ecs_existing_environments: >-
+      {{
+        (ecs_existing_environments_command.stdout | from_json).environments
+        | default([])
+      }}
+
+- name: Select requested ECS environment
+  ansible.builtin.set_fact:
+    ecs_requested_environment_matches: >-
+      {{
+        ecs_existing_environments
+        | selectattr('environmentName', 'equalto', ecs_cdp_environment_name)
+        | list
+      }}
+
+- name: Resolve existing ECS environment name
+  ansible.builtin.set_fact:
+    ecs_cdp_environment_name_effective: >-
+      {{
+        ecs_requested_environment_matches[0].environmentName
+        if (ecs_requested_environment_matches | length > 0)
+        else (
+          ecs_existing_environments[0].environmentName
+          if (
+            ecs_cdp_environment_adopt_single_existing | default(true) | bool
+            and ecs_existing_environments | length == 1
+          )
+          else ''
+        )
+      }}
+
+- name: Reject ambiguous ECS environment selection
+  ansible.builtin.assert:
+    that:
+      - >-
+        ecs_cdp_environment_name_effective | length > 0
+        or ecs_existing_environments | length == 0
+    fail_msg: >-
+      Environment {{ ecs_cdp_environment_name }} does not exist and multiple
+      environments are present: {{
+      ecs_existing_environments | map(attribute='environmentName') | list }}.
+      Set ecs_cdp_environment_name explicitly; automation will not guess.
+
+- name: Require permission to create a missing ECS environment
+  ansible.builtin.assert:
+    that:
+      - ecs_cdp_environment_create_if_missing | default(true) | bool
+    fail_msg: >-
+      No ECS environment exists and automatic creation is disabled. Set
+      ecs_cdp_environment_create_if_missing=true or create
+      {{ ecs_cdp_environment_name }} in Management Console.
+  when: ecs_cdp_environment_name_effective | length == 0
+
+- name: Create missing ECS private-cloud environment
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_cdp_cli_path }}"
+      - --profile
+      - default
+      - environments
+      - create-private-environment
+      - --environment-name
+      - "{{ ecs_cdp_environment_name }}"
+      - --address
+      - "https://{{ cm_host_fqdn }}:{{ cm_https_port }}"
+      - --user
+      - "{{ cm_admin_user }}"
+      - --authentication-token
+      - "{{ cm_admin_pass }}"
+      - --cluster-names
+      - "{{ cdh_basecluster_name }}"
+      - --domain
+      - "{{ ecs_app_domain }}"
+  environment:
+    CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
+    CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
+    HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
+  register: ecs_create_environment
+  no_log: true
+  when: ecs_cdp_environment_name_effective | length == 0
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Use created ECS environment name
+  ansible.builtin.set_fact:
+    ecs_cdp_environment_name_effective: "{{ ecs_cdp_environment_name }}"
+  when: ecs_cdp_environment_name_effective | length == 0
+
+- name: Publish effective ECS environment name
+  ansible.builtin.set_fact:
+    ecs_cdp_environment_name: "{{ ecs_cdp_environment_name_effective }}"
 
 - name: Create ECS automation machine user (ignore if exists)
   ansible.builtin.command:
     argv:
-      - cdp
+      - "{{ ecs_cdp_cli_path }}"
       - --profile
       - default
       - iam
@@ -112,17 +292,189 @@
   environment:
     CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
     CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
-    HOME: "{{ ecs_cdp_profile_dir.path }}"
+    HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
   register: ecs_create_machine_user
   failed_when: >-
     ecs_create_machine_user.rc != 0
     and ('already exists' not in (ecs_create_machine_user.stderr | default('') | lower))
     and ('alreadyexists' not in (ecs_create_machine_user.stderr | default('') | lower))
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Read ECS environment for automation permissions
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_cdp_cli_path }}"
+      - --profile
+      - default
+      - environments
+      - describe-environment
+      - --environment-name
+      - "{{ ecs_cdp_environment_name }}"
+  environment:
+    CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
+    CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
+    HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
+  register: ecs_automation_environment
+  changed_when: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Resolve ECS environment CRN for automation permissions
+  ansible.builtin.set_fact:
+    ecs_automation_environment_crn: >-
+      {{ (ecs_automation_environment.stdout | from_json).environment.crn }}
+
+- name: List tenant IAM roles for ECS automation user
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_cdp_cli_path }}"
+      - --profile
+      - default
+      - iam
+      - list-roles
+      - --no-paginate
+  environment:
+    CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
+    CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
+    HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
+  register: ecs_automation_list_roles
+  changed_when: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Select tenant IAM roles for ECS automation user
+  ansible.builtin.set_fact:
+    ecs_automation_tenant_roles: >-
+      {{
+        (
+          (ecs_automation_list_roles.stdout | from_json).roles | default([])
+          if ecs_automation_assign_all_tenant_roles | default(true) | bool
+          else (
+            (ecs_automation_list_roles.stdout | from_json).roles | default([])
+            | selectattr(
+                'roleName',
+                'match',
+                ecs_automation_tenant_role_name_regex
+              )
+            | list
+          )
+        )
+      }}
+
+- name: Assign tenant IAM roles to ECS automation user
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_cdp_cli_path }}"
+      - --profile
+      - default
+      - iam
+      - assign-machine-user-role
+      - --machine-user-name
+      - "{{ ecs_automation_machine_user }}"
+      - --role
+      - "{{ item.roleName }}"
+  environment:
+    CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
+    CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
+    HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
+  loop: "{{ ecs_automation_tenant_roles }}"
+  loop_control:
+    label: "{{ item.roleName }}"
+  register: ecs_automation_assign_tenant_roles
+  failed_when: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Report tenant IAM role assignment failures
+  ansible.builtin.fail:
+    msg: >-
+      assign-machine-user-role failed for {{ item.item.roleName }}:
+      {{ item.stderr | default(item.stdout) }}
+  loop: "{{ ecs_automation_assign_tenant_roles.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.roleName | default('role') }}"
+  when:
+    - item.rc | default(0) != 0
+    - "'already' not in (item.stderr | default('') | lower)"
+
+- name: List resource IAM roles for ECS automation user
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_cdp_cli_path }}"
+      - --profile
+      - default
+      - iam
+      - list-resource-roles
+      - --no-paginate
+  environment:
+    CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
+    CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
+    HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
+  register: ecs_automation_list_resource_roles
+  changed_when: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Select environment resource roles for ECS automation user
+  ansible.builtin.set_fact:
+    ecs_automation_resource_roles: >-
+      {{
+        (
+          (ecs_automation_list_resource_roles.stdout | from_json).resourceRoles
+          | default([])
+          if ecs_automation_assign_all_resource_roles_on_env
+             | default(true) | bool
+          else (
+            (ecs_automation_list_resource_roles.stdout | from_json).resourceRoles
+            | default([])
+            | selectattr(
+                'resourceRoleName',
+                'match',
+                ecs_automation_resource_role_name_regex
+              )
+            | list
+          )
+        )
+      }}
+
+- name: Assign environment resource roles to ECS automation user
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_cdp_cli_path }}"
+      - --profile
+      - default
+      - iam
+      - assign-machine-user-resource-role
+      - --machine-user-name
+      - "{{ ecs_automation_machine_user }}"
+      - --resource-role-crn
+      - "{{ item.resourceRoleCrn | default(item.crn) }}"
+      - --resource-crn
+      - "{{ ecs_automation_environment_crn }}"
+  environment:
+    CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
+    CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
+    HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
+  loop: "{{ ecs_automation_resource_roles }}"
+  loop_control:
+    label: "{{ item.resourceRoleName | default(item.crn) }}"
+  register: ecs_automation_assign_resource_roles
+  failed_when: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Report environment resource role assignment failures
+  ansible.builtin.fail:
+    msg: >-
+      assign-machine-user-resource-role failed for
+      {{ item.item.resourceRoleName | default(item.item.crn) }}:
+      {{ item.stderr | default(item.stdout) }}
+  loop: "{{ ecs_automation_assign_resource_roles.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.resourceRoleName | default('resource-role') }}"
+  when:
+    - item.rc | default(0) != 0
+    - "'already' not in (item.stderr | default('') | lower)"
 
 - name: Create access key for ECS automation machine user
   ansible.builtin.command:
     argv:
-      - cdp
+      - "{{ ecs_cdp_cli_path }}"
       - --profile
       - default
       - iam
@@ -134,9 +486,10 @@
   environment:
     CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
     CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
-    HOME: "{{ ecs_cdp_profile_dir.path }}"
+    HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
   register: ecs_create_access_key
   no_log: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
 
 - name: Parse new ECS automation API credentials
   ansible.builtin.set_fact:
@@ -162,6 +515,14 @@
       --machine-user-name {{ ecs_automation_machine_user }}
   when: ecs_api_access_key_id is not defined or (ecs_api_access_key_id | default('') | length == 0)
 
+- name: Create ECS API credential cache directory
+  ansible.builtin.file:
+    path: "{{ ecs_api_credentials_cache_path | dirname }}"
+    state: directory
+    mode: "0700"
+  no_log: true
+  when: ecs_api_credentials_cache_path | default('') | length > 0
+
 - name: Save ECS API credentials to controller cache file
   ansible.builtin.copy:
     dest: "{{ ecs_api_credentials_cache_path }}"
@@ -177,4 +538,13 @@
     msg:
       - "ECS automation machine user: {{ ecs_automation_machine_user }}"
       - "Access key id: {{ ecs_api_access_key_id }}"
+      - "Tenant roles assigned: {{ ecs_automation_tenant_roles | map(attribute='roleName') | list }}"
+      - "Environment resource roles assigned on {{ ecs_cdp_environment_name }}: {{ ecs_automation_resource_roles | map(attribute='resourceRoleName') | list }}"
       - "Private key saved to: {{ ecs_api_credentials_cache_path }} (restrict permissions; not re-displayed)"
+
+- name: Remove temporary bootstrap CDP profile
+  ansible.builtin.file:
+    path: "{{ ecs_cdp_profile_dir.path }}"
+    state: absent
+  no_log: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
