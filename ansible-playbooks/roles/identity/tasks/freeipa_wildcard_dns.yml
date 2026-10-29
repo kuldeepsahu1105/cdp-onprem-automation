@@ -1,14 +1,69 @@
 ---
 
 - block:
+    - name: Protect existing FreeIPA deployments from domain drift
+      ansible.builtin.import_tasks: assert_existing_ipa_domain.yml
 
     - name: Get ECS Master IP dynamically
       set_fact:
-        ecs_master_ip: "{{ hostvars[groups['ecs-masters'][0]]['ansible_host'] | default(hostvars[groups['ecs-masters'][0]]['ansible_default_ipv4']['address']) }}"
+        ecs_master_ip: >-
+          {{
+            hostvars[groups['ecs-masters'][0]].private_ip
+            | default(
+                hostvars[groups['ecs-masters'][0]]
+                .get('ansible_default_ipv4', {})
+                .get(
+                  'address',
+                  hostvars[groups['ecs-masters'][0]].ansible_host
+                ),
+                true
+              )
+          }}
 
     - name: Debug ECS Master IP
       debug:
         msg: "ECS Master IP is {{ ecs_master_ip }}"
+
+    - name: Validate requested stale wildcard cleanup
+      ansible.builtin.assert:
+        that:
+          - ipa_dns_cleanup_stale_domain_confirm | bool
+          - ipa_dns_cleanup_stale_domain | trim | lower != ipaserver_domain | trim | lower
+          - ipa_dns_cleanup_stale_domain | trim | length > 0
+        fail_msg: >-
+          Refusing stale IPA wildcard cleanup. Set
+          ipa_dns_cleanup_stale_domain to the incorrect domain, set
+          ipa_dns_cleanup_stale_domain_confirm=true, and ensure it differs
+          from the live ipaserver_domain.
+      when: ipa_dns_cleanup_stale_domain | default('') | trim | length > 0
+
+    - name: Check whether stale wildcard DNS zone exists
+      ansible.builtin.command:
+        argv:
+          - ipa
+          - dnszone-show
+          - "{{ ipa_dns_cleanup_stale_domain | trim | lower }}"
+      register: ipa_wildcard_cleanup_stale_zone_probe
+      changed_when: false
+      failed_when: false
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+      when:
+        - ipa_dns_cleanup_stale_domain | default('') | trim | length > 0
+        - ipa_dns_cleanup_stale_domain_confirm | bool
+
+    - name: Remove stale ECS wildcard DNS value
+      freeipa.ansible_freeipa.ipadnsrecord:
+        ipaadmin_password: "{{ ipaadmin_password }}"
+        zone_name: "{{ ipa_dns_cleanup_stale_domain | trim | lower }}"
+        record_name: "{{ wildcard_dns_record }}"
+        record_type: "A"
+        record_value: "{{ ecs_master_ip }}"
+        state: absent
+      when:
+        - ipa_dns_cleanup_stale_domain | default('') | trim | length > 0
+        - ipa_dns_cleanup_stale_domain_confirm | bool
+        - ipa_wildcard_cleanup_stale_zone_probe.rc | default(1) == 0
 
     - name: Add wildcard DNS record for ECS
       freeipa.ansible_freeipa.ipadnsrecord:
@@ -42,6 +97,11 @@
       command: "nslookup console-cdp.apps.{{ ipaserver_domain }}"
       register: nslookup_wildcard
       changed_when: false
+      retries: "{{ ecs_console_dns_wait_retries | default(24) }}"
+      delay: "{{ ecs_console_dns_wait_delay | default(5) }}"
+      until:
+        - nslookup_wildcard.rc | int == 0
+        - ecs_master_ip in nslookup_wildcard.stdout
 
     - name: Display nslookup output for Wildcard DNS lookup
       debug:
@@ -57,13 +117,25 @@
         msg: "{{ nslookup_ip.stdout.split('\n') }}"
 
     - name: Validate DNS resolution using dig
-      command: "dig console-cdp.apps.{{ ipaserver_domain }} A"
+      command: "dig +short console-cdp.apps.{{ ipaserver_domain }} A"
       register: dig_output
       changed_when: false
+      retries: "{{ ecs_console_dns_wait_retries | default(24) }}"
+      delay: "{{ ecs_console_dns_wait_delay | default(5) }}"
+      until: ecs_master_ip in dig_output.stdout_lines
 
     - name: Display dig output
       debug:
         msg: "{{ dig_output.stdout.split('\n') }}"
+
+    - name: Require wildcard DNS to resolve to the ECS master private IP
+      ansible.builtin.assert:
+        that:
+          - ecs_master_ip in dig_output.stdout_lines
+        fail_msg: >-
+          console-cdp.apps.{{ ipaserver_domain }} resolves to
+          {{ dig_output.stdout_lines | default([]) | join(', ') }}, but ECS
+          First Run requires the ECS master private IP {{ ecs_master_ip }}.
 
     - name: Reverse lookup validation
       command: "dig -x {{ ecs_master_ip }}"

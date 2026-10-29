@@ -1091,6 +1091,8 @@ ecs_parcel_version: ""
 ecs_app_domain: "apps.{{ cluster_domain }}"
 # ECS Management Console DNS label (FQDN {{ ecs_console_host_prefix }}.{{ ecs_app_domain }})
 ecs_console_host_prefix: "console-cdp"
+ecs_console_dns_wait_retries: 24
+ecs_console_dns_wait_delay: 5
 ecs_docker_data_path: "/mnt/docker"
 ecs_lso_data_path: "/ecs/local"
 ecs_longhorn_data_path: "/ecs/longhorn-storage"

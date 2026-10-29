@@ -5,6 +5,9 @@
 ---
 - import_playbook: ensure_collections.yml
 
+- name: Reconcile ECS wildcard DNS before control plane validation
+  ansible.builtin.import_playbook: 19_setup_wildcard.yml
+
 - name: Install cloudera.cluster collection on control node
   hosts: localhost
   connection: local

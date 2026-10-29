@@ -95,6 +95,19 @@
     ecs_master_fqdn: >-
       {%- set hostname = hostvars[groups[ecs_cluster_master_group][0]].cldr_hostname -%}
       {{ hostname if hostname.endswith('.' ~ cluster_domain) else hostname ~ '.' ~ cluster_domain }}
+    ecs_master_ip: >-
+      {{
+        hostvars[groups[ecs_cluster_master_group][0]].private_ip
+        | default(
+            hostvars[groups[ecs_cluster_master_group][0]]
+            .get('ansible_default_ipv4', {})
+            .get(
+              'address',
+              hostvars[groups[ecs_cluster_master_group][0]].ansible_host
+            ),
+            true
+          )
+      }}
 
 - name: Build ECS worker FQDNs
   ansible.builtin.set_fact:
@@ -107,6 +120,32 @@
   loop: "{{ groups[ecs_cluster_worker_group] }}"
   loop_control:
     label: "{{ item }}"
+
+- name: Resolve ECS console DNS from the ECS master
+  ansible.builtin.command:
+    argv:
+      - getent
+      - ahostsv4
+      - "{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}"
+  register: ecs_console_dns_from_master
+  changed_when: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  retries: "{{ ecs_console_dns_wait_retries | default(24) }}"
+  delay: "{{ ecs_console_dns_wait_delay | default(5) }}"
+  until:
+    - ecs_console_dns_from_master.rc | int == 0
+    - ecs_master_ip in ecs_console_dns_from_master.stdout
+
+- name: Require ECS console DNS to use the master private IP
+  ansible.builtin.assert:
+    that:
+      - ecs_master_ip in ecs_console_dns_from_master.stdout
+    fail_msg: >-
+      {{ ecs_console_host_prefix }}.{{ ecs_app_domain }} resolves from the
+      ECS master as {{ ecs_console_dns_from_master.stdout_lines | default([])
+      | join(', ') }}, but First Run requires private IP {{ ecs_master_ip }}.
+      Re-run 19_setup_wildcard.yml or correct the external DNS record before
+      installing the control plane.
 
 - name: Print ECS cluster targets
   ansible.builtin.debug:
