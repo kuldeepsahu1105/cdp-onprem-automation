@@ -5,13 +5,32 @@
 - name: Set OS-specific facts
   ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/set_os_facts.yml"
 
+- name: Check whether PostgreSQL server is already installed
+  ansible.builtin.stat:
+    path: "{{ os.postgres_bin_dir }}/postgres"
+  register: postgresql_server_binary
+
 - name: Install PostgreSQL repository
   ansible.builtin.import_tasks: install_postgresql_repo.yml
+  when: not (postgresql_server_binary.stat.exists | bool)
 
-- name: "Install PostgreSQL {{ postgresql_version }}"
-  ansible.builtin.package:
+- name: "Install PostgreSQL {{ postgresql_version }} on RHEL"
+  ansible.builtin.dnf:
     name: "{{ os.postgres_server_packages }}"
     state: present
+    enablerepo:
+      - "{{ postgres_pgdg_package_repository }}"
+  when:
+    - ansible_os_family == "RedHat"
+    - not (postgresql_server_binary.stat.exists | bool)
+
+- name: "Install PostgreSQL {{ postgresql_version }} on Debian"
+  ansible.builtin.apt:
+    name: "{{ os.postgres_server_packages }}"
+    state: present
+  when:
+    - ansible_os_family == "Debian"
+    - not (postgresql_server_binary.stat.exists | bool)
 
 - name: Initialize PostgreSQL database
   ansible.builtin.import_tasks: init_postgresql.yml

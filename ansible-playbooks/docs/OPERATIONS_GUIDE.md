@@ -1526,6 +1526,52 @@ when your install expects the `scm` role to own the schema). Restart
 
 ## Troubleshooting
 
+### PGDG metadata failure during prerequisite reruns
+
+PostgreSQL's PGDG repository is needed only on the resolved PostgreSQL database
+host. Generic RHEL prerequisite, Python, and Java package transactions disable
+`pgdg*`, so an unavailable PGDG mirror does not block adding or reconciling
+unrelated cluster nodes. PGDG repository definitions remain disabled by default
+on every RHEL host, including the PostgreSQL host. This quarantine runs before
+playbook 01's package-manager installation and full update, and identity-client
+installation also excludes `pgdg*`. PostgreSQL client/server package
+transactions explicitly enable PGDG only for that transaction. Playbook 08
+installs the PostgreSQL client only on the database host, and playbooks 08/23
+skip repository refresh when the required PostgreSQL binaries are already
+installed.
+
+Fresh PostgreSQL package transactions enable only the versioned repository
+`pgdg<postgresql_version>` (default `pgdg17`). They do not enable the broad
+`pgdg*` pattern, because that also enables `pgdg-common`; an unavailable
+`pgdg-common` metadata endpoint must not block packages supplied entirely by
+the versioned PostgreSQL repository.
+
+Playbook **08** detects PostgreSQL clients by their configured versioned binary
+path (for example `/usr/pgsql/17/bin/psql`), `/usr/bin/psql`, and supported
+alternate versioned paths. It does not rely on the remote login `PATH`.
+Therefore an existing client skips both PGDG repository installation and the
+PGDG package transaction, even when `psql --version` would fail from the shell.
+
+PostgreSQL and Cloudera Manager are not restarted on a healthy playbook 23
+rerun merely because the CA certificate is copied to newly added hosts.
+PostgreSQL restarts only after a new installation/cluster initialization,
+PostgreSQL configuration change, server TLS material creation, or an explicit
+`postgres_force_restart: true`. Cloudera Manager restarts only when PostgreSQL
+was actually restarted and CM was active beforehand.
+
+**Parallel parcel processing:** The deployment remains pinned to
+`cloudera.cluster` v4.4.0; upstream PR
+[`cloudera-labs/cloudera.cluster#355`](https://github.com/cloudera-labs/cloudera.cluster/pull/355)
+is unmerged and its public parameter/return contract is still under review.
+The local `activate_cluster_parcels.yml` helper provides the useful behavior
+without consuming that unstable API: a list of `{name, parcel_version}` targets,
+bounded parallel processing, one timeout per parcel, transient HTTP 400 command
+retries, aggregate failures, and backward-compatible single-parcel calls.
+Base CDH and CFM parcels run concurrently when CFM is enabled; ECS uses the same
+helper with one item. Tune `cluster_parcel_max_workers`,
+`cluster_parcel_timeout_seconds`, and the command retry variables in
+`group_vars/all.yml`.
+
 **FreeIPA `ipa-server-install` `FileNotFoundError` [Errno 2] — diagnostic bundle (run on ipaserver as root, paste output):**
 
 ```bash

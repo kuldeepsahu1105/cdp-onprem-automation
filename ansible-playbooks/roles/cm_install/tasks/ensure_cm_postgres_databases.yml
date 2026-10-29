@@ -267,9 +267,11 @@
           become: true
 
         - name: Ensure PostgreSQL PGDG client package on DB host
-          ansible.builtin.package:
+          ansible.builtin.dnf:
             name: "postgresql{{ postgresql_version }}"
             state: present
+            enablerepo:
+              - "{{ postgres_pgdg_package_repository }}"
           delegate_to: "{{ postgres_inventory_host }}"
           become: true
 
