@@ -537,7 +537,12 @@ run_phase_5() {
   ui_phase_header "$_phase"
   run_playbook 33_setup_ecs_cluster.yml
   _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
-  _run_ecs_data_services
+  if _pipeline_stage_selected "ECS_DATA_SERVICES"; then
+    ui_info "Deferring playbook 34 to the selected ECS_DATA_SERVICES stage"
+  else
+    # Preserve standalone/backward-compatible phase-5 behavior.
+    _run_ecs_data_services
+  fi
   ui_phase_footer "$_phase"
 }
 
