@@ -1,5 +1,5 @@
 ---
-- name: Compatibility entry point for ECS ecs wait control plane console
+- name: Compatibility entry point for ECS wait control plane console
   ansible.builtin.import_role:
     name: ecs
     tasks_from: ecs_wait_control_plane_console
