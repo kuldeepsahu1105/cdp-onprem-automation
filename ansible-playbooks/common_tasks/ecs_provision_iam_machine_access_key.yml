@@ -173,7 +173,8 @@
     mode: "0600"
     content: |
       [default]
-      cdp_endpoint_url = {{ ecs_control_plane_url_effective }}
+      cdp_endpoint_url = {{ ecs_control_plane_url_effective | regex_replace('/+$', '') }}
+      endpoint_url = {{ ecs_control_plane_url_effective | regex_replace('/+$', '') }}/api/v1
       form_factor = private
   changed_when: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
