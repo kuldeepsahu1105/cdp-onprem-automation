@@ -4,34 +4,20 @@
 - name: LDAP | Sync identity provider to ECS control plane
   when: ecs_ldap_sync_effective | default(false) | bool
   block:
-    - name: LDAP | Resolve FreeIPA CA URL
-      ansible.builtin.set_fact:
-        ecs_freeipa_ca_url: >-
-          {{
-            'https://' + (caddy_vhost_urls_external.ipa.hostname | default(''))
-            + '/ipa/config/ca.crt'
-            if (
-              caddy_vhost_urls_external is defined
-              and (caddy_vhost_urls_external.ipa.hostname | default('') | length > 0)
-            )
-            else ('https://' + ipa_kdc_host + '/ipa/config/ca.crt')
-          }}
-      when: identity_provider_effective == 'freeipa'
-
-    - name: LDAP | Fetch FreeIPA CA certificate
-      ansible.builtin.uri:
-        url: "{{ ecs_freeipa_ca_url }}"
-        method: GET
-        validate_certs: false
-        return_content: true
+    - name: LDAP | Read FreeIPA CA certificate from ipaserver
+      ansible.builtin.slurp:
+        src: /etc/ipa/ca.crt
       register: ecs_freeipa_ca_cert
+      delegate_to: "{{ ipaserver_inventory_host }}"
+      connection: ssh
+      become: true
       when: identity_provider_effective == 'freeipa'
 
     - name: LDAP | Write FreeIPA CA to temp file for CDP CLI
       ansible.builtin.copy:
         dest: "{{ ecs_ds_cdp_profile_dir.path }}/freeipa-ca.crt"
         mode: "0600"
-        content: "{{ ecs_freeipa_ca_cert.content }}"
+        content: "{{ ecs_freeipa_ca_cert.content | b64decode }}"
       when:
         - identity_provider_effective == 'freeipa'
         - ecs_freeipa_ca_cert.content is defined
