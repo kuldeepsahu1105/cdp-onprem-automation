@@ -3,7 +3,8 @@
 # Install: ansible-galaxy collection install -r requirements.yml
 #
 # Controller Python (not Galaxy): cm_client, urllib3<2 (install_cm_client_python.yml);
-#   cdpy, cdpcli (install_cloudera_cloud_prereqs.yml) for cloudera.cloud + ECS LDAP IAM.
+#   cdpcli from PyPI plus Cloudera Labs cdpy v2.1.0 from GitHub
+#   (install_cloudera_cloud_prereqs.yml) for cloudera.cloud + ECS LDAP IAM.
 
 collections:
   - name: community.general
