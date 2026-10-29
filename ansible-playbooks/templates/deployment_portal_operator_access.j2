@@ -126,7 +126,7 @@
 {% set ns.sections = ns.sections + [{'id': 'cdp_services', 'title': 'CDP Runtime services', 'intro': 'Configured service access credentials.', 'downloads': [], 'credentials': svc_creds}] %}
 {% endif %}
 {% if deployment_portal_ecs_present | default(false) | bool %}
-{% set ecs_creds = [{'label': 'ECS Console', 'username': 'admin', 'password': ecs_console_admin_password, 'url': 'https://' ~ ecs_console_host_prefix ~ '.' ~ ecs_app_domain, 'note': 'UMS bootstrap'}, {'label': 'ECS K8s WebUI token', 'username': '(token)', 'password': ecs_k8s_webui_secret_admin_token, 'url': '', 'note': 'When dashboard enabled'}] %}
+{% set ecs_creds = [{'label': 'ECS Console', 'username': 'admin', 'password': ecs_console_admin_password, 'url': 'https://' ~ ecs_console_host_prefix ~ '.' ~ ecs_app_domain, 'note': 'UMS bootstrap'}] %}
 {% if ecs_ldap_admin_user_enabled | default(false) | bool %}
 {% set ecs_creds = ecs_creds + [{'label': 'ECS LDAP admin', 'username': ecs_ldap_admin_username, 'password': ecs_ldap_admin_password, 'url': '', 'note': ''}] %}
 {% endif %}
@@ -138,7 +138,7 @@
 {% set ecs_creds = ecs_creds + [{'label': 'ECS automation machine-user key', 'username': _cache.access_key_id, 'password': _cache.private_key | default(''), 'url': 'https://' ~ ecs_console_host_prefix ~ '.' ~ ecs_app_domain, 'note': 'Machine user ' ~ ecs_automation_machine_user ~ '; environment ' ~ ecs_cdp_environment_name ~ '; username = cdp_access_key_id, password = cdp_private_key'}] %}
 {% endif %}
 {% endif %}
-{% set ns.sections = ns.sections + [{'id': 'ecs', 'title': 'ECS / Data Services', 'intro': 'Control plane and automation API credentials when present.', 'downloads': [], 'credentials': ecs_creds}] %}
+{% set ns.sections = ns.sections + [{'id': 'ecs', 'title': 'ECS / Data Services', 'intro': 'Control plane and automation API credentials when present. The internal Kubernetes WebUI installer token is not an end-user login and is intentionally not displayed.', 'downloads': [], 'credentials': ecs_creds}] %}
 {% endif %}
 {% if deployment_portal_jenkins_url | default('') | length > 0 %}
 {% set ns.sections = ns.sections + [{'id': 'jenkins', 'title': 'Jenkins', 'intro': 'Pipeline UI for this lab (optional).', 'downloads': [], 'credentials': [{'label': 'Jenkins', 'username': deployment_portal_jenkins_user | default('(Jenkins user)'), 'password': deployment_portal_jenkins_password | default('(stored in Jenkins)'), 'url': deployment_portal_jenkins_url, 'note': ''}]}] %}

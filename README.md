@@ -201,7 +201,7 @@ Set `PVCECS_*_COUNT=0` in tfvars to skip ECS infrastructure entirely, or leave g
 | `ecs_longhorn_replication` | `2` | Longhorn replica count |
 | `ecs_control_plane_database_mode` | `embedded` | `embedded` or `existing` (external DB needs full config) |
 | `ecs_control_plane_vault_mode` | `embedded` | Vault storage mode |
-| `ecs_k8s_webui_secret_admin_token` | `ChangeMe@ECS-WebUI` | K8s web UI admin token — change before deploy |
+| `ecs_k8s_webui_secret_admin_token` | `ChangeMe@ECS-WebUI` | Internal Kubernetes WebUI service token passed to ECS installation; not an end-user login and not displayed in the portal — change before deploy |
 
 Compatible with CDH 7.3.2: CDS 1.5.5+ (see Cloudera release matrix).
 
