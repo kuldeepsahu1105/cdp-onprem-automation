@@ -48,6 +48,11 @@ runs use the automation key and do not require the administrator key. Running pl
 `ECS_DATA_SERVICES_DEPLOY_ENABLED=true` and no service selected performs only
 this IAM bootstrap.
 
+CDP CLI TLS verification follows `ecs_control_plane_validate_certs`. The default
+`false` supports the installer-managed private console certificate. For strict
+verification, set it to `true` and set `ecs_control_plane_ca_bundle` to a CA
+bundle path available on the ECS master.
+
 The preferred environment name is the first IPA/domain label. If the healthy
 control plane already contains exactly one environment (for example the
 vendor-created `apps` environment), automation adopts it. If no environment
