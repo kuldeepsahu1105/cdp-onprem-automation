@@ -1,0 +1,67 @@
+### ansible-playbook -i inventory.ini 34_setup_ecs_post_install.yml
+#
+# ECS post-install convergence after playbook 33 confirms the Management Console is healthy:
+# Automation machine-user/API credentials, IAM role assignments, and optional
+# LDAP provider/admin-user configuration.
+---
+- import_playbook: ensure_collections.yml
+
+- name: Converge ECS post-install configuration
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Validate ECS inventory is present
+      ansible.builtin.assert:
+        that:
+          - groups.get(ecs_cluster_master_group, []) | length > 0
+        fail_msg: >-
+          ECS masters group '{{ ecs_cluster_master_group }}' is empty.
+          Run 33_setup_ecs_cluster.yml first.
+
+    - name: Initialize ECS post-install service selection
+      ansible.builtin.set_fact:
+        ecs_data_services_install_names: []
+
+    - name: Resolve ECS LDAP and IAM post-install flags
+      ansible.builtin.import_tasks: common_tasks/resolve_ecs_control_plane_iam_phase.yml
+
+    - name: Recheck healthy ECS Management Console before post-install mutations
+      ansible.builtin.import_tasks: common_tasks/ecs_wait_control_plane_console.yml
+
+    - name: Load existing ECS automation API credentials
+      ansible.builtin.import_tasks: common_tasks/ecs_load_api_credentials.yml
+      when: ecs_auto_provision_api_access_key | default(true) | bool
+
+    - name: Provision ECS automation machine user and IAM access key when needed
+      ansible.builtin.include_tasks: common_tasks/ecs_provision_iam_machine_access_key.yml
+      when:
+        - ecs_auto_provision_api_access_key | default(true) | bool
+        - >-
+          ecs_api_access_key_id | default('') | length == 0
+          or ecs_api_private_key | default('') | length == 0
+
+    - name: Validate ECS automation API credentials
+      ansible.builtin.import_tasks: common_tasks/ecs_validate_control_plane_credentials.yml
+      when:
+        - ecs_api_access_key_id | default('') | length > 0
+        - ecs_api_private_key | default('') | length > 0
+
+    - name: Configure optional ECS LDAP and LDAP admin permissions
+      when:
+        - >-
+          (ecs_ldap_enabled | default(false) | bool)
+          or (ecs_ldap_admin_user_enabled | default(false) | bool)
+      block:
+        - name: Install Cloudera Cloud prerequisites for ECS LDAP and IAM
+          ansible.builtin.import_tasks: common_tasks/install_cloudera_cloud_prereqs.yml
+
+        - name: Configure CDP CLI profile for ECS LDAP and IAM
+          ansible.builtin.import_tasks: common_tasks/ecs_data_services_runtime.yml
+
+        - name: Build deployment portal facts for IPA Caddy URL
+          ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
+          when: identity_provider_effective == 'freeipa'
+
+        - name: Configure ECS LDAP provider, admin user, and IAM permissions
+          ansible.builtin.import_tasks: common_tasks/ecs_control_plane_ldap_and_admin.yml

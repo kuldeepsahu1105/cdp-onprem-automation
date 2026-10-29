@@ -85,6 +85,22 @@ location is required. The playbook reports the path when it creates or reuses
 the credential cache and does not generate a replacement key while valid
 cached credentials are available.
 
+Credential values are serialized with JSON-compatible YAML quoting so
+multiline private keys remain intact. An unreadable legacy cache no longer
+blocks deployment portal refresh. ECS post-install/Data Services automation
+ignores an invalid cache and creates a replacement key only when no valid
+explicit or cached credentials remain.
+
+For ECS console revalidation, machine-user credentials, IAM/LDAP permissions,
+and portal refresh without reinstalling ECS, run:
+
+```bash
+DEPLOY_PHASE=8 ./pvc_setup.sh
+```
+
+The underlying standalone playbook is
+`34_setup_ecs_post_install.yml`; the wrapper adds `35_refresh_deployment_portal.yml`.
+
 **List form** (unioned with flags):
 
 ```yaml

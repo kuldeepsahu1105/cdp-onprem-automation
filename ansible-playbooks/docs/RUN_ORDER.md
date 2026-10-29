@@ -17,9 +17,11 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `28` → `29` → `30` (requires `04_setup_autossh` from PREREQS) |
 | 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` (see [RUNBOOK.md](RUNBOOK.md) — CM First Run sub-step order inside **31**) |
 | 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` (includes portal Caddy/index sync) |
-| 10 | ECS_INSTALL | `5` / `ecs` | `33_setup_ecs_cluster` (reconciles `19_setup_wildcard` first) → optional `34_setup_ecs_data_services` |
-| 11 | STARTSTOP_AUTOMATION | — | `37_run_ipaserver_ec2_startstop.yml` on ipaserver (script installed by `36` / IDENTITY phase) |
-| 12 | DESTROY_STACK | `destroy_stack` | optional `99_cleanup.yml` → `clone_and_run_terraform_destroy.sh` (`DESTROY_STACK_CONFIRM`) |
+| 10 | ECS_INSTALL | `5` / `ecs` | `33_setup_ecs_cluster` (reconciles `19_setup_wildcard` first) and requires a healthy Management Console before success; legacy standalone runs retain inline post-install behavior |
+| 11 | ECS_POST_INSTALL_TASKS | `8` / `ecs_post_install` | Recheck console health, then `34_setup_ecs_post_install` credentials/IAM/LDAP work → `35_refresh_deployment_portal` |
+| 12 | ECS_DATA_SERVICES | `7` / `dataservices` | `34_setup_ecs_data_services` (CDW/CDE/CAI/Model Registry only) |
+| 13 | STARTSTOP_AUTOMATION | — | `37_run_ipaserver_ec2_startstop.yml` on ipaserver (script installed by `36` / IDENTITY phase) |
+| 14 | DESTROY_STACK | `destroy_stack` | optional `99_cleanup.yml` → `clone_and_run_terraform_destroy.sh` (`DESTROY_STACK_CONFIRM`) |
 | — | (manual) | `6` / `portal_refresh` | `35_refresh_deployment_portal` (milestone URL verify / index refresh) |
 
 **Full local flow:** `DEPLOY_PHASE=all ./pvc_setup.sh` = phases 1 → portal (`10`) → identity → CM → cm_tls → CDH → monitoring (if enabled) → ECS.
@@ -90,7 +92,8 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 | 31 | `31_setup_base_cluster.yml` | CDH base cluster |
 | 32 | `32_setup_monitoring_stack.yml` | Grafana / Prometheus |
 | 33 | `33_setup_ecs_cluster.yml` | ECS cluster |
-| 34 | `34_setup_ecs_data_services.yml` | CDW / CDE / CAI (optional) |
+| 34 | `34_setup_ecs_post_install.yml` | ECS console recheck, IAM credentials/roles, optional LDAP/admin permissions |
+| 34 | `34_setup_ecs_data_services.yml` | CDW / CDE / CAI / Model Registry (optional) |
 | 35 | `35_refresh_deployment_portal.yml` | Portal re-render only |
 | 36 | `36_install_ipaserver_ec2_startstop.yml` | EC2 start/stop script on ipaserver (end of IDENTITY / `pvc_setup` phase 2) |
 | 37 | `37_run_ipaserver_ec2_startstop.yml` | Run start/stop/describe via script (Jenkins `STARTSTOP_AUTOMATION`) |

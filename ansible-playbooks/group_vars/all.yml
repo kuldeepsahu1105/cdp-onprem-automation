@@ -1140,6 +1140,7 @@ ecs_k9s_checksums:
 # ECS Data Services (CDW, CDE, CAI) — 34_setup_ecs_data_services.yml
 # IAM access keys are signed API credentials — automation can CREATE machine-user keys after ECS
 # is up only when a bootstrap admin key exists (one-time console key or ecs_iam_bootstrap_*).
+ecs_run_post_install_inline: true  # compatibility: playbook 33 performs post-install unless wrapper defers it
 ecs_data_services_deploy_enabled: false
 ecs_control_plane_url: ""  # blank = https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}
 ecs_api_access_key_id: ""

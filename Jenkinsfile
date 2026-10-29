@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-10-29.1 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-10-29.2 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -11,31 +11,31 @@ pipeline {
     extendedChoice(
       name: 'PIPELINE_STAGES',
       type: 'PT_CHECKBOX',
-      value: 'VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_DATA_SERVICES,STARTSTOP_AUTOMATION,DESTROY_STACK',
+      value: 'VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES,STARTSTOP_AUTOMATION,DESTROY_STACK',
       defaultValue: 'VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION',
       multiSelectDelimiter: ',',
-      visibleItemCount: 14,
+      visibleItemCount: 15,
       quoteValue: false,
       description: '''Stages to run (fixed order; select one or more). Full table: PIPELINE_STAGES_REFERENCE text parameter below.
 
 Copy-paste (full deploy path, no STARTSTOP/DESTROY):
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS
 
 Copy-paste (full deploy including selected ECS Data Services):
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_DATA_SERVICES
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES
 
 More copy-ready combinations: see PIPELINE_STAGES_REFERENCE below.
 
-Optional tail stages (append when needed): ECS_DATA_SERVICES, STARTSTOP_AUTOMATION, DESTROY_STACK
+Optional tail stages (append when needed): ECS_POST_INSTALL_TASKS, ECS_DATA_SERVICES, STARTSTOP_AUTOMATION, DESTROY_STACK
 
-Order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → ECS_DATA_SERVICES → STARTSTOP_AUTOMATION → DESTROY_STACK
+Order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → ECS_POST_INSTALL_TASKS → ECS_DATA_SERVICES → STARTSTOP_AUTOMATION → DESTROY_STACK
 
 CM_TLS_KRB_LDAP = playbooks 27→28→29→30 (Auto-TLS, CMS, LDAP, Kerberos). Legacy CDH_BASE → check CM_TLS_KRB_LDAP + CDH_INSTALL.
 
 DESTROY_STACK = terraform destroy (optional 99_cleanup via CLEANUP_BEFORE_DESTROY). Selecting the stage confirms destroy; DRY_RUN=true produces a destroy plan only.
 
 After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once, then re-run with your stage checkboxes.''',
-      descriptionPropertyValue: '''VALIDATE — standard prerequisite checks,TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→28→29→30 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — ECS cluster (33),ECS_DATA_SERVICES — data services only (34),STARTSTOP_AUTOMATION — deploy EC2 start/stop helper on ipaserver,DESTROY_STACK — terraform destroy or DRY_RUN plan'''
+      descriptionPropertyValue: '''VALIDATE — standard prerequisite checks,TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→28→29→30 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — install/CoreDNS/healthy console (33),ECS_POST_INSTALL_TASKS — API credentials/IAM/LDAP/portal after health,ECS_DATA_SERVICES — data services only (34),STARTSTOP_AUTOMATION — deploy EC2 start/stop helper on ipaserver,DESTROY_STACK — terraform destroy or DRY_RUN plan'''
     )
     string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Deployment name prefix + Terraform workspace (overrides tfvars when set)')
     text(
@@ -46,7 +46,7 @@ COPY-READY COMBINATIONS
 Copy only the comma-separated line below the required goal. Stages always execute in the fixed order.
 
 ALL SELECTABLE STAGES (reference; destructive and deployment stages should be selected intentionally):
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_DATA_SERVICES,STARTSTOP_AUTOMATION,DESTROY_STACK
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES,STARTSTOP_AUTOMATION,DESTROY_STACK
 
 Validation only:
 VALIDATE
@@ -64,10 +64,10 @@ Greenfield CDH plus monitoring:
 VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING
 
 Full stack through ECS:
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS
 
 Full stack through selected ECS Data Services:
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_DATA_SERVICES
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES
 
 Existing hosts — configure through Cloudera Manager (requires a valid inventory):
 VALIDATE,PREREQS,PORTAL,IDENTITY,CM_INSTALL
@@ -82,7 +82,10 @@ Existing CDH cluster — install monitoring:
 VALIDATE,PORTAL,MONITORING
 
 Existing CDH cluster — install ECS:
-VALIDATE,ECS_INSTALL
+VALIDATE,ECS_INSTALL,ECS_POST_INSTALL_TASKS
+
+Existing ECS cluster — reconcile console health, IAM/LDAP, credentials, CoreDNS, and portal:
+VALIDATE,ECS_POST_INSTALL_TASKS
 
 Existing ECS cluster — install or update data services only:
 VALIDATE,ECS_DATA_SERVICES
@@ -90,7 +93,7 @@ VALIDATE,ECS_DATA_SERVICES
 Install or update the EC2 start/stop helper:
 VALIDATE,STARTSTOP_AUTOMATION
 
-Optional tail stages (append when needed): ECS_DATA_SERVICES, STARTSTOP_AUTOMATION, DESTROY_STACK
+Optional tail stages (append when needed): ECS_POST_INSTALL_TASKS, ECS_DATA_SERVICES, STARTSTOP_AUTOMATION, DESTROY_STACK
 Job defaults (lighter): VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION
 
 Teardown — check PIPELINE_STAGES checkbox DESTROY_STACK, then:
@@ -98,7 +101,7 @@ Teardown — check PIPELINE_STAGES checkbox DESTROY_STACK, then:
   Destroy plan only (no apply):  DESTROY_STACK  +  DRY_RUN=true
   Optional: CLEANUP_BEFORE_DESTROY=true runs ansible-playbooks/99_cleanup.yml before terraform destroy
 
-Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → ECS_DATA_SERVICES → STARTSTOP_AUTOMATION → DESTROY_STACK
+Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → ECS_POST_INSTALL_TASKS → ECS_DATA_SERVICES → STARTSTOP_AUTOMATION → DESTROY_STACK
 
 | Checkbox | What runs |
 | VALIDATE | validate-prereqs.sh — standard tool, AWS, tfvars, Ansible syntax, and inventory checks |
@@ -110,7 +113,8 @@ Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INS
 | CM_TLS_KRB_LDAP | Auto-TLS, CMS, LDAP, Kerberos (27→28→29→30) |
 | CDH_INSTALL | CDH base cluster (31_setup_base_cluster.yml) |
 | MONITORING | Monitoring stack (32); needs PORTAL; MONITORING_STACK_ENABLED |
-| ECS_INSTALL | ECS cluster installation/reconciliation (33) |
+| ECS_INSTALL | ECS cluster installation/reconciliation (33), including CoreDNS; succeeds only after the Management Console is healthy |
+| ECS_POST_INSTALL_TASKS | Recheck console health, then automation machine user/key, IAM/LDAP role assignments, and portal refresh |
 | ECS_DATA_SERVICES | Data services only (34); requires an existing healthy ECS cluster |
 | STARTSTOP_AUTOMATION | run-ec2-startstop-automation.sh — deploy/update the helper on ipaserver (36); running operations remains disabled in this job |
 | DESTROY_STACK | run-destroy-stack.sh — optional 99_cleanup (CLEANUP_BEFORE_DESTROY) then terraform destroy for this ENVIRONMENT workspace. Selecting this stage confirms destroy; DRY_RUN produces a plan only. |
@@ -253,7 +257,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     booleanParam(
       name: 'ECS_DATA_SERVICES_DEPLOY_ENABLED',
       defaultValue: false,
-      description: 'Enable playbook 34 when ECS_DATA_SERVICES is selected (or legacy inline execution after ECS_INSTALL). Select one or more ECS_DEPLOY_* service boxes below. Requires ECS API credentials; automation reuses its cached key.'
+      description: 'Enable playbook 34 when ECS_DATA_SERVICES is selected. Select one or more ECS_DEPLOY_* service boxes below. ECS_POST_INSTALL_TASKS normally prepares/reuses the automation API key first.'
     )
     string(
       name: 'ECS_IAM_BOOTSTRAP_CREDENTIAL_ID',
@@ -283,12 +287,12 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     booleanParam(
       name: 'ECS_LDAP_ENABLED',
       defaultValue: false,
-      description: 'Sync FreeIPA/AD LDAP provider to ECS control plane (playbooks 33/34).'
+      description: 'ECS_POST_INSTALL_TASKS: sync the FreeIPA/AD LDAP provider to the healthy ECS control plane.'
     )
     booleanParam(
       name: 'ECS_LDAP_ADMIN_USER_ENABLED',
       defaultValue: false,
-      description: 'Create FreeIPA user <prefix>admin and assign ECS IAM admin roles (requires ECS_LDAP or LDAP sync).'
+      description: 'ECS_POST_INSTALL_TASKS: create FreeIPA user <prefix>admin and assign ECS IAM admin roles.'
     )
     // Hidden advanced inputs: full colored Ansible output; plain per-host lines disabled.
   }
@@ -585,7 +589,11 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
       when { expression { return shouldRunAnsibleStage('ECS_INSTALL') } }
       steps { script { runAnsibleDeployPhase('ecs') } }
     }
-    stage('Ansible 9 — ECS Data Services') {
+    stage('Ansible 9 — ECS Post-Install Tasks') {
+      when { expression { return shouldRunAnsibleStage('ECS_POST_INSTALL_TASKS') } }
+      steps { script { runAnsibleDeployPhase('8') } }
+    }
+    stage('Ansible 10 — ECS Data Services') {
       when { expression { return shouldRunAnsibleStage('ECS_DATA_SERVICES') } }
       steps { script { runAnsibleDeployPhase('7') } }
     }
@@ -801,7 +809,7 @@ def knownPipelineStages() {
   return [
     'VALIDATE', 'TERRAFORM', 'PREREQS', 'IDENTITY', 'CM_INSTALL',
     'CM_TLS_KRB_LDAP', 'CDH_INSTALL', 'PORTAL', 'MONITORING', 'ECS_INSTALL',
-    'ECS_DATA_SERVICES', 'CDH_BASE',
+    'ECS_POST_INSTALL_TASKS', 'ECS_DATA_SERVICES', 'CDH_BASE',
     'STARTSTOP_AUTOMATION', 'DESTROY_STACK',
   ]
 }
@@ -809,17 +817,18 @@ def knownPipelineStages() {
 def orderedAnsibleStageIds() {
   return [
     'PREREQS', 'PORTAL', 'IDENTITY', 'CM_INSTALL', 'CM_TLS_KRB_LDAP', 'CDH_INSTALL',
-    'MONITORING', 'ECS_INSTALL', 'ECS_DATA_SERVICES',
+    'MONITORING', 'ECS_INSTALL', 'ECS_POST_INSTALL_TASKS', 'ECS_DATA_SERVICES',
   ]
 }
 
 def echoPipelineStagesQuickReference() {
   echo '''PIPELINE_STAGES quick reference (full table: Build parameter PIPELINE_STAGES_REFERENCE or jenkins/README.md):
-  Copy-paste full path: VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL
-  Optional: ECS_DATA_SERVICES, STARTSTOP_AUTOMATION, DESTROY_STACK | Job defaults: VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION
+  Copy-paste full path: VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS
+  Optional: ECS_POST_INSTALL_TASKS, ECS_DATA_SERVICES, STARTSTOP_AUTOMATION, DESTROY_STACK | Job defaults: VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION
   VALIDATE → prereqs script | TERRAFORM → EC2/inventory | PREREQS → Ansible 01-09 | PORTAL → bootstrap (10)
   IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → 27→28→29→30 | CDH_INSTALL → base cluster (31)
-  MONITORING → (32) | ECS_INSTALL → (33) | ECS_DATA_SERVICES → (34 only) | STARTSTOP_AUTOMATION → ipaserver (EC2_STARTSTOP_DEPLOY_SCRIPT/ RUN_SCRIPT + OPERATION/GROUPS) | DESTROY_STACK → destroy (or DRY_RUN plan)
+  MONITORING → (32) | ECS_INSTALL → (33 + CoreDNS + healthy console) | ECS_POST_INSTALL_TASKS → credentials/IAM/LDAP/portal after health | ECS_DATA_SERVICES → (34 data services only)
+  STARTSTOP_AUTOMATION → ipaserver (EC2_STARTSTOP_DEPLOY_SCRIPT/ RUN_SCRIPT + OPERATION/GROUPS) | DESTROY_STACK → destroy (or DRY_RUN plan)
   Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. PORTAL may auto-insert when DEPLOYMENT_PORTAL_ENABLED and CM/CDH/ECS selected without PORTAL.'''
 }
 
@@ -833,6 +842,7 @@ def ansiblePhaseForStage(String stageId) {
     'CDH_INSTALL'     : 'cdh',
     'MONITORING'      : 'monitoring',
     'ECS_INSTALL'     : 'ecs',
+    'ECS_POST_INSTALL_TASKS': '8',
     'ECS_DATA_SERVICES': '7',
   ]
   return map[stageId]
@@ -843,6 +853,8 @@ def pipelineStageAliases() {
   return [
     'CDH'            : 'CDH_INSTALL',
     'ECS'            : 'ECS_INSTALL',
+    'ECS_POST_INSTALL': 'ECS_POST_INSTALL_TASKS',
+    'POST_INSTALL'   : 'ECS_POST_INSTALL_TASKS',
     'DATA_SERVICES'  : 'ECS_DATA_SERVICES',
     'DATASERVICES'   : 'ECS_DATA_SERVICES',
     'CM_TLS'         : 'CM_TLS_KRB_LDAP',
@@ -1049,7 +1061,7 @@ def runAnsibleDeployPhase(String phase) {
   }
   def ecsBootstrapCredentialId =
     params.ECS_IAM_BOOTSTRAP_CREDENTIAL_ID?.toString()?.trim()
-  if (ecsBootstrapCredentialId && phase == 'ecs') {
+  if (ecsBootstrapCredentialId && phase in ['ecs', '7', '8']) {
     withCredentials([
       usernamePassword(
         credentialsId: ecsBootstrapCredentialId,
@@ -1288,6 +1300,18 @@ def validatePipelineInputs() {
   }
   if (stages.contains('ECS_DATA_SERVICES') && !stages.contains('ECS_INSTALL')) {
     echo 'INFO: ECS_DATA_SERVICES runs playbook 34 only — ensure the ECS cluster is already healthy.'
+  }
+  if (stages.contains('ECS_POST_INSTALL_TASKS') && !stages.contains('ECS_INSTALL')) {
+    echo 'INFO: ECS_POST_INSTALL_TASKS requires an existing ECS cluster with a reachable Management Console.'
+  }
+  def dataServicesRequested =
+    isParamEnabled(params.ECS_DATA_SERVICES_DEPLOY_ENABLED) ||
+    isParamEnabled(params.ECS_DEPLOY_CDW) ||
+    isParamEnabled(params.ECS_DEPLOY_CDE) ||
+    isParamEnabled(params.ECS_DEPLOY_CAI) ||
+    isParamEnabled(params.ECS_DEPLOY_CAI_REGISTRY)
+  if (dataServicesRequested && !stages.contains('ECS_DATA_SERVICES')) {
+    echo 'WARN: ECS Data Services options are enabled but ECS_DATA_SERVICES is not selected; those options will not run.'
   }
   if (stages.contains('CM_INSTALL') && !stages.contains('PREREQS') && !stages.contains('TERRAFORM')) {
     echo 'WARN: CM_INSTALL without PREREQS — ensure prerequisites were applied previously.'
