@@ -53,6 +53,12 @@
       ECS inventory groups '{{ ecs_cluster_master_group }}' and
       '{{ ecs_cluster_worker_group }}' must exist and contain hosts.
 
+- name: Use SSH for ECS master delegation from localhost play
+  ansible.builtin.add_host:
+    name: "{{ groups[ecs_cluster_master_group][0] }}"
+    ansible_connection: ssh
+  changed_when: false
+
 - name: Detect ARM64 on ECS nodes
   ansible.builtin.set_fact:
     ecs_arm64_detected: >-
