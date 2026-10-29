@@ -75,8 +75,10 @@ configured CM cluster and credentials.
 LDAP provider mutations and LDAP-admin IAM assignments run through an isolated
 CDP CLI on the ECS master. This keeps the standalone playbook functional when
 the Ansible controller or Jenkins cannot resolve or route to the private
-`console-cdp` hostname. Temporary profiles, automation credentials, and the
-FreeIPA CA are removed from the ECS master after the post-install block.
+`console-cdp` hostname. The FreeIPA CA is supplied to the IAM API as a protected
+PEM certificate value, as required by the CLI array schema rather than as a
+controller or remote file URI. Temporary profiles and automation credentials
+are removed from the ECS master after the post-install block.
 
 Generated machine-user credentials appear in the portal's authenticated
 **Operator access** panel and remain in the controller cache with mode `0600`.

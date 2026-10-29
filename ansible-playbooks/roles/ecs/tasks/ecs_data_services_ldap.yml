@@ -13,17 +13,18 @@
       become: true
       when: identity_provider_effective == 'freeipa'
 
-    - name: LDAP | Write FreeIPA CA to temp file for CDP CLI
-      ansible.builtin.copy:
-        dest: "{{ ecs_remote_cdp_profile_dir.path }}/freeipa-ca.crt"
-        mode: "0600"
-        content: "{{ ecs_freeipa_ca_cert.content | b64decode }}"
-      become: false
-      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
-      connection: ssh
-      when:
-        - identity_provider_effective == 'freeipa'
-        - ecs_freeipa_ca_cert.content is defined
+    - name: LDAP | Decode FreeIPA CA certificate
+      ansible.builtin.set_fact:
+        ecs_freeipa_ca_pem: "{{ ecs_freeipa_ca_cert.content | b64decode | trim }}"
+      when: identity_provider_effective == 'freeipa'
+
+    - name: LDAP | Validate FreeIPA CA PEM
+      ansible.builtin.assert:
+        that:
+          - "'-----BEGIN CERTIFICATE-----' in ecs_freeipa_ca_pem"
+          - "'-----END CERTIFICATE-----' in ecs_freeipa_ca_pem"
+        fail_msg: /etc/ipa/ca.crt on the FreeIPA server is not a PEM certificate.
+      when: identity_provider_effective == 'freeipa'
 
     - name: LDAP | Set provider argv for FreeIPA
       ansible.builtin.set_fact:
@@ -38,7 +39,7 @@
               '--username-mapping-attribute', 'uid',
               '--bind-dn', 'uid=' + ipaadmin_principal + ',cn=users,cn=accounts,' + ipa_ldap_dc_suffix,
               '--bind-password', ipaadmin_password,
-              '--tls-ca-certificates', 'file://' + ecs_remote_cdp_profile_dir.path + '/freeipa-ca.crt',
+              '--tls-ca-certificates', ecs_freeipa_ca_pem,
               '--skip-group-sync-on-login'
             ]
           }}
