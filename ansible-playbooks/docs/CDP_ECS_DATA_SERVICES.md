@@ -2,6 +2,11 @@
 
 Playbook `34_setup_ecs_data_services.yml` enables Cloudera Data Services on an existing ECS private-cloud environment using **`cloudera.cloud`** (see `requirements.yml`, git `v2.5.1`) and the **CDP CLI** (`cdpcli` / `cdpy`).
 
+The controller prerequisite task installs `cdpcli>=0.9.160` from the configured
+Python package index and pins Cloudera Labs `cdpy` to Git tag `v2.1.0` with
+`--no-deps`. This avoids similarly named or stale `cdpy` packages in private
+indexes and uses the stable `cdpcli` distribution already required by ECS IAM.
+
 ## Prerequisites
 
 | Step | Playbook / action |
