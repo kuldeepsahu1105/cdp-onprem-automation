@@ -1090,6 +1090,8 @@ ecs_application_domain: "{{ cluster_domain }}"
 ecs_app_domain: "apps.{{ ecs_application_domain }}"
 # ECS Management Console DNS label (FQDN {{ ecs_console_host_prefix }}.{{ ecs_app_domain }})
 ecs_console_host_prefix: "console-cdp"
+ecs_console_dns_wait_retries: 24
+ecs_console_dns_wait_delay: 5
 ecs_docker_data_path: "/mnt/docker"
 ecs_cluster_cidr: "172.42.0.0/16"
 ecs_service_cidr: "172.43.0.0/16"

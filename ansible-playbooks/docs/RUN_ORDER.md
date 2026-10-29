@@ -17,7 +17,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `28` → `29` → `30` (requires `04_setup_autossh` from PREREQS) |
 | 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` (see [RUNBOOK.md](RUNBOOK.md) — CM First Run sub-step order inside **31**) |
 | 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` (includes portal Caddy/index sync) |
-| 10 | ECS_INSTALL | `5` / `ecs` | `33_setup_ecs_cluster` → optional `34_setup_ecs_data_services` |
+| 10 | ECS_INSTALL | `5` / `ecs` | `33_setup_ecs_cluster` (reconciles `19_setup_wildcard` first) → optional `34_setup_ecs_data_services` |
 | 11 | STARTSTOP_AUTOMATION | — | `37_run_ipaserver_ec2_startstop.yml` on ipaserver (script installed by `36` / IDENTITY phase) |
 | 12 | DESTROY_STACK | `destroy_stack` | optional `99_cleanup.yml` → `clone_and_run_terraform_destroy.sh` (`DESTROY_STACK_CONFIRM`) |
 | — | (manual) | `6` / `portal_refresh` | `35_refresh_deployment_portal` (milestone URL verify / index refresh) |

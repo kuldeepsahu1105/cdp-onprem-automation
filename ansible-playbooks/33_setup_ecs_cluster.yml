@@ -5,6 +5,9 @@
 ---
 - import_playbook: ensure_collections.yml
 
+- name: Reconcile ECS wildcard DNS before control plane validation
+  ansible.builtin.import_playbook: 19_setup_wildcard.yml
+
 - name: Install cloudera.cluster collection on control node
   hosts: localhost
   connection: local
@@ -163,6 +166,11 @@
       register: ecs_console_dns_from_master
       changed_when: false
       delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+      retries: "{{ ecs_console_dns_wait_retries | default(24) }}"
+      delay: "{{ ecs_console_dns_wait_delay | default(5) }}"
+      until:
+        - ecs_console_dns_from_master.rc | int == 0
+        - ecs_master_ip in ecs_console_dns_from_master.stdout
 
     - name: Require ECS console DNS to use the master private IP
       ansible.builtin.assert:

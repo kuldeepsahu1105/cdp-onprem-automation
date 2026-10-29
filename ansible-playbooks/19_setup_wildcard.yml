@@ -122,6 +122,11 @@
           command: "nslookup console-cdp.apps.{{ ipaserver_domain }}"
           register: nslookup_wildcard
           changed_when: false
+          retries: "{{ ecs_console_dns_wait_retries | default(24) }}"
+          delay: "{{ ecs_console_dns_wait_delay | default(5) }}"
+          until:
+            - nslookup_wildcard.rc | int == 0
+            - ecs_master_ip in nslookup_wildcard.stdout
 
         - name: Display nslookup output for Wildcard DNS lookup
           debug:
@@ -140,6 +145,9 @@
           command: "dig +short console-cdp.apps.{{ ipaserver_domain }} A"
           register: dig_output
           changed_when: false
+          retries: "{{ ecs_console_dns_wait_retries | default(24) }}"
+          delay: "{{ ecs_console_dns_wait_delay | default(5) }}"
+          until: ecs_master_ip in dig_output.stdout_lines
 
         - name: Display dig output
           debug:
