@@ -69,6 +69,14 @@
       ansible.builtin.import_tasks: common_tasks/install_postgresql_repo.yml
       when: existing_psql_command | length == 0
 
+    - name: Verify versioned PostgreSQL client repository
+      ansible.builtin.import_tasks: common_tasks/verify_postgresql_pgdg_repository.yml
+      vars:
+        postgres_pgdg_required_packages: "{{ os.postgres_client_packages }}"
+      when:
+        - ansible_os_family == "RedHat"
+        - existing_psql_command | length == 0
+
     - name: Install PostgreSQL client (psql)
       ansible.builtin.dnf:
         name: "{{ os.postgres_client_packages }}"
@@ -79,6 +87,9 @@
         - ansible_os_family == "RedHat"
         - existing_psql_command | length == 0
       register: postgresql_client_install_redhat
+      retries: "{{ postgres_pgdg_package_retries }}"
+      delay: "{{ postgres_pgdg_package_retry_delay }}"
+      until: postgresql_client_install_redhat is succeeded
 
     - name: Install PostgreSQL client (psql) on Debian
       ansible.builtin.apt:
@@ -106,6 +117,17 @@
           - --version
       register: psql_version
       changed_when: false
+
+    - name: Require working PostgreSQL client
+      ansible.builtin.assert:
+        that:
+          - psql_version.rc | int == 0
+          - "'psql (PostgreSQL)' in psql_version.stdout"
+        fail_msg: >-
+          PostgreSQL client verification failed at {{ existing_psql_command }}:
+          rc={{ psql_version.rc | default('unknown') }},
+          stdout={{ psql_version.stdout | default('') | trim }},
+          stderr={{ psql_version.stderr | default('') | trim }}.
 
     - name: Print PostgreSQL(psql) version
       ansible.builtin.debug:

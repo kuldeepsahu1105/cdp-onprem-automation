@@ -1,0 +1,63 @@
+---
+# Verify the exact versioned PGDG repository before a package transaction.
+# Required: postgres_pgdg_required_packages
+# Optional: postgres_pgdg_target_host (defaults to current inventory host)
+
+- name: Resolve PostgreSQL PGDG verification target
+  ansible.builtin.set_fact:
+    postgres_pgdg_target_host_effective: >-
+      {{ postgres_pgdg_target_host | default(inventory_hostname) }}
+
+- name: Validate versioned PostgreSQL PGDG repository request
+  ansible.builtin.assert:
+    that:
+      - postgres_pgdg_package_repository == ('pgdg' ~ (postgresql_version | string))
+      - "'*' not in postgres_pgdg_package_repository"
+      - postgres_pgdg_required_packages | length > 0
+    fail_msg: >-
+      PostgreSQL package verification requires the exact versioned repository
+      pgdg{{ postgresql_version }} and at least one package; received repository
+      {{ postgres_pgdg_package_repository | default('undefined') }} and packages
+      {{ postgres_pgdg_required_packages | default([]) }}.
+
+- name: Refresh only the versioned PostgreSQL PGDG repository metadata
+  ansible.builtin.command:
+    argv:
+      - dnf
+      - -q
+      - "--disablerepo=pgdg*"
+      - "--enablerepo={{ postgres_pgdg_package_repository }}"
+      - makecache
+  delegate_to: "{{ postgres_pgdg_target_host_effective }}"
+  become: true
+  register: postgres_pgdg_makecache
+  changed_when: false
+  retries: "{{ postgres_pgdg_metadata_retries | default(3) }}"
+  delay: "{{ postgres_pgdg_metadata_retry_delay | default(10) }}"
+  until: postgres_pgdg_makecache.rc | int == 0
+
+- name: Verify required PostgreSQL packages exist in the versioned repository
+  ansible.builtin.command:
+    argv:
+      - dnf
+      - -q
+      - "--disablerepo=pgdg*"
+      - "--enablerepo={{ postgres_pgdg_package_repository }}"
+      - list
+      - --showduplicates
+      - "{{ item }}"
+  loop: "{{ postgres_pgdg_required_packages }}"
+  loop_control:
+    label: "{{ item }}"
+  delegate_to: "{{ postgres_pgdg_target_host_effective }}"
+  become: true
+  register: postgres_pgdg_package_queries
+  changed_when: false
+
+- name: Report verified PostgreSQL PGDG repository
+  ansible.builtin.debug:
+    msg: >-
+      Verified {{ postgres_pgdg_package_repository }} on
+      {{ postgres_pgdg_target_host_effective }} for packages
+      {{ postgres_pgdg_required_packages | join(', ') }}; all other PGDG
+      repositories remain disabled.
