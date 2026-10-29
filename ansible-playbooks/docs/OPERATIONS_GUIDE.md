@@ -1636,6 +1636,14 @@ Metadata and package operations retry with bounded delays, then installation
 must produce an executable versioned `psql` or `postgres` binary. This provides
 the same fail-fast contract in playbooks 08 and 23 and the CM database fallback.
 
+The PGDG repository RPM is normalized after installation. Recent repository RPM
+versions generate a `rhel-$releasever_major.$releasever_minor-$basearch` URL,
+while the complete repository is published at the stable major-version path
+(`rhel-8-$basearch` or `rhel-9-$basearch`). Automation writes that tested path
+for the exact versioned repository, keeps package GPG verification enabled, and
+disables only `repomd.xml` signature verification because current upstream
+metadata signatures fail against the key bundled by the repository RPM.
+
 Playbook **08** detects PostgreSQL clients by their configured versioned binary
 path (for example `/usr/pgsql/17/bin/psql`), `/usr/bin/psql`, and supported
 alternate versioned paths. It does not rely on the remote login `PATH`.

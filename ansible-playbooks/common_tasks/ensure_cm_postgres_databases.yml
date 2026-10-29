@@ -288,6 +288,11 @@
           delegate_to: "{{ postgres_inventory_host }}"
           become: true
 
+        - name: Normalize versioned PostgreSQL PGDG repository on DB host
+          ansible.builtin.include_tasks: normalize_postgresql_pgdg_repository.yml
+          vars:
+            postgres_pgdg_target_host: "{{ postgres_inventory_host }}"
+
         - name: Verify versioned PostgreSQL client repository on DB host
           ansible.builtin.include_tasks: verify_postgresql_pgdg_repository.yml
           vars:
