@@ -1162,6 +1162,8 @@ ecs_data_services_catalog_cache_path: "{{ lookup('env', 'CDP_ARTIFACTS_DIR') | d
 ecs_control_plane_wait_retries: 40
 ecs_control_plane_wait_delay: 15
 ecs_control_plane_validate_certs: false
+# Optional CA bundle path on the ECS master for strict CDP CLI TLS verification.
+ecs_control_plane_ca_bundle: ""
 ecs_data_services_use_cdpcurl: true
 ecs_data_services_install: []  # optional list; unioned with per-service flags below
 # Per-service toggles (Jenkins: ECS_DEPLOY_CDW, ECS_DEPLOY_CDE, ECS_DEPLOY_CAI, ECS_DEPLOY_CAI_REGISTRY)

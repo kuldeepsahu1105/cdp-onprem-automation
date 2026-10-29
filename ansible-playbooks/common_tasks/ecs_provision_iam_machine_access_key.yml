@@ -142,6 +142,23 @@
   ansible.builtin.set_fact:
     ecs_cdp_cli_path: "{{ ecs_cdp_user_base.stdout | trim }}/bin/cdp"
 
+- name: Build ECS master CDP CLI invocation prefix
+  ansible.builtin.set_fact:
+    ecs_cdp_cli_prefix: >-
+      {{
+        [ecs_cdp_cli_path, '--profile', 'default']
+        + (
+          ['--ca-bundle', ecs_control_plane_ca_bundle]
+          if ecs_control_plane_ca_bundle | default('') | length > 0
+          else (
+            []
+            if ecs_control_plane_validate_certs | default(false) | bool
+            else ['--no-verify-ssl']
+          )
+        )
+        + ['--cli-connect-timeout', '10', '--cli-read-timeout', '30']
+      }}
+
 - name: Create temporary CDP profile directory for bootstrap IAM
   ansible.builtin.tempfile:
     state: directory
@@ -172,12 +189,7 @@
 
 - name: List existing ECS environments
   ansible.builtin.command:
-    argv:
-      - "{{ ecs_cdp_cli_path }}"
-      - --profile
-      - default
-      - environments
-      - list-environments
+    argv: "{{ ecs_cdp_cli_prefix + ['environments', 'list-environments'] }}"
   environment:
     CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
     CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
@@ -243,24 +255,26 @@
 
 - name: Create missing ECS private-cloud environment
   ansible.builtin.command:
-    argv:
-      - "{{ ecs_cdp_cli_path }}"
-      - --profile
-      - default
-      - environments
-      - create-private-environment
-      - --environment-name
-      - "{{ ecs_cdp_environment_name }}"
-      - --address
-      - "https://{{ cm_host_fqdn }}:{{ cm_https_port }}"
-      - --user
-      - "{{ cm_admin_user }}"
-      - --authentication-token
-      - "{{ cm_admin_pass }}"
-      - --cluster-names
-      - "{{ cdh_basecluster_name }}"
-      - --domain
-      - "{{ ecs_app_domain }}"
+    argv: >-
+      {{
+        ecs_cdp_cli_prefix
+        + [
+          'environments',
+          'create-private-environment',
+          '--environment-name',
+          ecs_cdp_environment_name,
+          '--address',
+          'https://' ~ cm_host_fqdn ~ ':' ~ (cm_https_port | string),
+          '--user',
+          cm_admin_user,
+          '--authentication-token',
+          cm_admin_pass,
+          '--cluster-names',
+          cdh_basecluster_name,
+          '--domain',
+          ecs_app_domain
+        ]
+      }}
   environment:
     CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
     CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
@@ -281,14 +295,16 @@
 
 - name: Create ECS automation machine user (ignore if exists)
   ansible.builtin.command:
-    argv:
-      - "{{ ecs_cdp_cli_path }}"
-      - --profile
-      - default
-      - iam
-      - create-machine-user
-      - --machine-user-name
-      - "{{ ecs_automation_machine_user }}"
+    argv: >-
+      {{
+        ecs_cdp_cli_prefix
+        + [
+          'iam',
+          'create-machine-user',
+          '--machine-user-name',
+          ecs_automation_machine_user
+        ]
+      }}
   environment:
     CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
     CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
@@ -302,14 +318,16 @@
 
 - name: Read ECS environment for automation permissions
   ansible.builtin.command:
-    argv:
-      - "{{ ecs_cdp_cli_path }}"
-      - --profile
-      - default
-      - environments
-      - describe-environment
-      - --environment-name
-      - "{{ ecs_cdp_environment_name }}"
+    argv: >-
+      {{
+        ecs_cdp_cli_prefix
+        + [
+          'environments',
+          'describe-environment',
+          '--environment-name',
+          ecs_cdp_environment_name
+        ]
+      }}
   environment:
     CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
     CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
@@ -325,13 +343,7 @@
 
 - name: List tenant IAM roles for ECS automation user
   ansible.builtin.command:
-    argv:
-      - "{{ ecs_cdp_cli_path }}"
-      - --profile
-      - default
-      - iam
-      - list-roles
-      - --no-paginate
+    argv: "{{ ecs_cdp_cli_prefix + ['iam', 'list-roles', '--no-paginate'] }}"
   environment:
     CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
     CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
@@ -361,16 +373,18 @@
 
 - name: Assign tenant IAM roles to ECS automation user
   ansible.builtin.command:
-    argv:
-      - "{{ ecs_cdp_cli_path }}"
-      - --profile
-      - default
-      - iam
-      - assign-machine-user-role
-      - --machine-user-name
-      - "{{ ecs_automation_machine_user }}"
-      - --role
-      - "{{ item.roleName }}"
+    argv: >-
+      {{
+        ecs_cdp_cli_prefix
+        + [
+          'iam',
+          'assign-machine-user-role',
+          '--machine-user-name',
+          ecs_automation_machine_user,
+          '--role',
+          item.roleName
+        ]
+      }}
   environment:
     CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
     CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
@@ -396,13 +410,11 @@
 
 - name: List resource IAM roles for ECS automation user
   ansible.builtin.command:
-    argv:
-      - "{{ ecs_cdp_cli_path }}"
-      - --profile
-      - default
-      - iam
-      - list-resource-roles
-      - --no-paginate
+    argv: >-
+      {{
+        ecs_cdp_cli_prefix
+        + ['iam', 'list-resource-roles', '--no-paginate']
+      }}
   environment:
     CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
     CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
@@ -435,18 +447,20 @@
 
 - name: Assign environment resource roles to ECS automation user
   ansible.builtin.command:
-    argv:
-      - "{{ ecs_cdp_cli_path }}"
-      - --profile
-      - default
-      - iam
-      - assign-machine-user-resource-role
-      - --machine-user-name
-      - "{{ ecs_automation_machine_user }}"
-      - --resource-role-crn
-      - "{{ item.resourceRoleCrn | default(item.crn) }}"
-      - --resource-crn
-      - "{{ ecs_automation_environment_crn }}"
+    argv: >-
+      {{
+        ecs_cdp_cli_prefix
+        + [
+          'iam',
+          'assign-machine-user-resource-role',
+          '--machine-user-name',
+          ecs_automation_machine_user,
+          '--resource-role-crn',
+          item.resourceRoleCrn | default(item.crn),
+          '--resource-crn',
+          ecs_automation_environment_crn
+        ]
+      }}
   environment:
     CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
     CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
@@ -473,16 +487,18 @@
 
 - name: Create access key for ECS automation machine user
   ansible.builtin.command:
-    argv:
-      - "{{ ecs_cdp_cli_path }}"
-      - --profile
-      - default
-      - iam
-      - create-machine-user-access-key
-      - --machine-user-name
-      - "{{ ecs_automation_machine_user }}"
-      - --type
-      - "{{ ecs_automation_access_key_type }}"
+    argv: >-
+      {{
+        ecs_cdp_cli_prefix
+        + [
+          'iam',
+          'create-machine-user-access-key',
+          '--machine-user-name',
+          ecs_automation_machine_user,
+          '--type',
+          ecs_automation_access_key_type
+        ]
+      }}
   environment:
     CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
     CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
