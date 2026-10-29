@@ -64,6 +64,16 @@
         | lower
         | regex_replace('\\.$', '')
       }}
+    existing_ipa_basedn_components: >-
+      {{
+        (
+          existing_ipa_default_conf_text
+          | regex_findall('(?im)(?:^|[=,])\\s*dc\\s*=\\s*([^,\\s#;]+)')
+        )
+        | map('trim')
+        | map('lower')
+        | list
+      }}
   run_once: true
   when:
     - identity_provider_effective == 'freeipa'
@@ -76,7 +86,11 @@
       {{
         existing_ipa_domain_from_config
         if existing_ipa_domain_from_config | length > 0
-        else existing_ipa_realm_from_config
+        else (
+          existing_ipa_realm_from_config
+          if existing_ipa_realm_from_config | length > 0
+          else (existing_ipa_basedn_components | join('.'))
+        )
       }}
     requested_ipa_domain_normalized: >-
       {{
@@ -91,21 +105,20 @@
     - ipa_server_in_inventory | default(false) | bool
     - existing_ipa_domain_default_conf.stat.exists | default(false) | bool
 
-- name: Require a readable domain from existing FreeIPA configuration
-  ansible.builtin.assert:
-    that:
-      - existing_ipa_domain | default('') | length > 0
-    fail_msg: >-
+- name: Defer domain protection for incomplete FreeIPA configuration
+  ansible.builtin.debug:
+    msg: >-
       /etc/ipa/default.conf exists on {{ ipaserver_inventory_host }}, but neither
-      a domain nor realm value could be read. This indicates an incomplete or
-      malformed FreeIPA configuration, not confirmed domain drift. Run the
-      FreeIPA recovery/install phase before hostname, DNS, wildcard, or portal
-      reconciliation.
+      domain, realm, nor base DN could be read. Domain drift is not confirmed,
+      so this guard will not block the fresh-install recovery path. Playbook 12
+      must validate and recover or install FreeIPA before identity DNS records
+      are reconciled.
   run_once: true
   when:
     - identity_provider_effective == 'freeipa'
     - ipa_server_in_inventory | default(false) | bool
     - existing_ipa_domain_default_conf.stat.exists | default(false) | bool
+    - existing_ipa_domain | default('') | length == 0
 
 - name: Refuse FreeIPA domain drift on an existing deployment
   ansible.builtin.assert:
