@@ -41,12 +41,6 @@
       (ecs_ldap_enabled | default(false) | bool)
       or (ecs_ldap_admin_user_enabled | default(false) | bool)
   block:
-    - name: Install Cloudera Cloud prerequisites for ECS LDAP and IAM
-      ansible.builtin.import_tasks: install_cloudera_cloud_prereqs.yml
-
-    - name: Configure CDP CLI profile for ECS LDAP and IAM
-      ansible.builtin.import_tasks: ecs_data_services_runtime.yml
-
     - name: Build deployment portal facts for IPA Caddy URL
       ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/build_deployment_portal_facts.yml"
       when: identity_provider_effective == 'freeipa'

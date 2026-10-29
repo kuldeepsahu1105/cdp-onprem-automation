@@ -1,14 +1,31 @@
 ---
 # Optional ECS control plane LDAP + LDAP admin user (controller + FreeIPA).
 
-- name: Sync LDAP provider to ECS control plane
-  ansible.builtin.import_tasks: ecs_data_services_ldap.yml
-  when: ecs_ldap_sync_effective | default(false) | bool
+- name: Converge ECS LDAP and LDAP admin IAM configuration
+  block:
+    - name: Prepare CDP CLI runtime on ECS master
+      ansible.builtin.import_tasks: ecs_control_plane_remote_runtime.yml
 
-- name: Create FreeIPA ECS admin user
-  ansible.builtin.import_tasks: ecs_ldap_freeipa_admin_user.yml
-  when: ecs_ldap_admin_user_effective | default(false) | bool
+    - name: Sync LDAP provider to ECS control plane
+      ansible.builtin.import_tasks: ecs_data_services_ldap.yml
+      when: ecs_ldap_sync_effective | default(false) | bool
 
-- name: Assign ECS control plane admin IAM roles to LDAP user
-  ansible.builtin.import_tasks: ecs_ldap_assign_admin_permissions.yml
-  when: ecs_ldap_admin_user_effective | default(false) | bool
+    - name: Create FreeIPA ECS admin user
+      ansible.builtin.import_tasks: ecs_ldap_freeipa_admin_user.yml
+      when: ecs_ldap_admin_user_effective | default(false) | bool
+
+    - name: Assign ECS control plane admin IAM roles to LDAP user
+      ansible.builtin.import_tasks: ecs_ldap_assign_admin_permissions.yml
+      when: ecs_ldap_admin_user_effective | default(false) | bool
+  always:
+    - name: Remove temporary CDP profile from ECS master
+      ansible.builtin.file:
+        path: "{{ ecs_remote_cdp_profile_dir.path }}"
+        state: absent
+      changed_when: false
+      become: false
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+      connection: ssh
+      when:
+        - ecs_remote_cdp_profile_dir is defined
+        - ecs_remote_cdp_profile_dir.path | default('') | length > 0

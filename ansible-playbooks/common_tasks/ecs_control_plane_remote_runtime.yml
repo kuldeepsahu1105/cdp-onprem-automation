@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for ECS control plane remote runtime
+  ansible.builtin.import_role:
+    name: ecs
+    tasks_from: ecs_control_plane_remote_runtime

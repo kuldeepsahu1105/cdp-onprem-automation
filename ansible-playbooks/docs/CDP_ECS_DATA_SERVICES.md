@@ -68,6 +68,12 @@ vendor-created `apps` environment), automation adopts it. If no environment
 exists, automation creates the preferred private-cloud environment using the
 configured CM cluster and credentials.
 
+LDAP provider mutations and LDAP-admin IAM assignments run through an isolated
+CDP CLI on the ECS master. This keeps the standalone playbook functional when
+the Ansible controller or Jenkins cannot resolve or route to the private
+`console-cdp` hostname. Temporary profiles, automation credentials, and the
+FreeIPA CA are removed from the ECS master after the post-install block.
+
 Generated machine-user credentials appear in the portal's authenticated
 **Operator access** panel and remain in the controller cache with mode `0600`.
 The portal entry identifies the machine user and environment and maps the
