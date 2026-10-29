@@ -509,21 +509,28 @@
   no_log: true
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
 
-- name: Parse new ECS automation API credentials
+- name: Parse new ECS automation API credential response
   ansible.builtin.set_fact:
-    ecs_api_access_key_id: "{{ (ecs_create_access_key.stdout | from_json).accessKey.accessKeyId }}"
-    ecs_api_private_key: "{{ (ecs_create_access_key.stdout | from_json).accessKey.privateKey }}"
+    ecs_create_access_key_payload: "{{ ecs_create_access_key.stdout | from_json }}"
   no_log: true
-  when: ecs_create_access_key.stdout is search('accessKey')
 
-- name: Parse new ECS automation API credentials (alternate JSON shape)
+- name: Set new ECS automation API credentials
   ansible.builtin.set_fact:
-    ecs_api_access_key_id: "{{ (ecs_create_access_key.stdout | from_json).accessKeyId }}"
-    ecs_api_private_key: "{{ (ecs_create_access_key.stdout | from_json).privateKey }}"
+    ecs_api_access_key_id: >-
+      {{
+        ecs_create_access_key_payload.get('accessKey', {}).get(
+          'accessKeyId',
+          ecs_create_access_key_payload.get('accessKeyId', '')
+        )
+      }}
+    ecs_api_private_key: >-
+      {{
+        ecs_create_access_key_payload.get(
+          'privateKey',
+          ecs_create_access_key_payload.get('accessKey', {}).get('privateKey', '')
+        )
+      }}
   no_log: true
-  when:
-    - ecs_api_access_key_id is not defined or (ecs_api_access_key_id | default('') | length == 0)
-    - ecs_create_access_key.stdout is search('privateKey')
 
 - name: Fail when access key JSON could not be parsed
   ansible.builtin.fail:
@@ -531,7 +538,10 @@
       create-machine-user-access-key succeeded but output was not recognized.
       Inspect ansible log (no_log) or run manually: cdp iam create-machine-user-access-key
       --machine-user-name {{ ecs_automation_machine_user }}
-  when: ecs_api_access_key_id is not defined or (ecs_api_access_key_id | default('') | length == 0)
+  when:
+    - >-
+      ecs_api_access_key_id | default('') | length == 0
+      or ecs_api_private_key | default('') | length == 0
 
 - name: Create ECS API credential cache directory
   ansible.builtin.file:
