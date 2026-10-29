@@ -27,7 +27,7 @@
     follow_redirects: none
   register: ecs_adopted_first_run_cluster
   changed_when: false
-  until: ecs_adopted_first_run_cluster.json.serviceState | default('') == 'STARTED'
+  until: ecs_adopted_first_run_cluster.json.clusterState | default('') == 'STARTED'
   retries: "{{ ecs_control_plane_install_poll_retries }}"
   delay: "{{ ecs_control_plane_install_poll_delay }}"
   when: ecs_control_plane_existing | bool
@@ -36,10 +36,14 @@
 - name: Require adopted ECS First Run to complete
   ansible.builtin.assert:
     that:
-      - ecs_adopted_first_run_cluster.json.serviceState | default('') == 'STARTED'
+      - ecs_adopted_first_run_cluster.json.clusterState | default('') == 'STARTED'
     fail_msg: >-
       The adopted ECS control-plane First Run did not bring cluster
       '{{ ecs_cluster_name }}' to STARTED state after the CoreDNS repair.
+      Last CM state: clusterState={{
+      ecs_adopted_first_run_cluster.json.clusterState | default('unknown') }},
+      entityStatus={{
+      ecs_adopted_first_run_cluster.json.entityStatus | default('unknown') }}.
       Do not submit another First Run; inspect the active command and its failed
       child commands in Cloudera Manager.
   when: ecs_control_plane_existing | bool
