@@ -1170,6 +1170,7 @@ ecs_local_state_dir: >-
         )
     ) ~ '/cdp-onprem-automation'
   }}
+ecs_cdp_cli_venv_path: "{{ ecs_local_state_dir }}/cdpcli-0.9.164"
 ecs_artifacts_dir: >-
   {{
     lookup('env', 'CDP_ARTIFACTS_DIR')

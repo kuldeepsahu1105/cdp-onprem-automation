@@ -1,44 +1,39 @@
 ---
-- name: Install CDP CLI for cloudera.cloud modules
+- name: Create persistent CDP CLI state directory
+  ansible.builtin.file:
+    path: "{{ ecs_cdp_cli_venv_path | dirname }}"
+    state: directory
+    mode: "0700"
+
+- name: Install isolated CDP CLI for cloudera.cloud modules
   ansible.builtin.pip:
     name: cdpcli==0.9.164
     state: present
-    extra_args: --user
+    virtualenv: "{{ ecs_cdp_cli_venv_path }}"
+    virtualenv_command: "{{ ansible_playbook_python }} -m venv"
   become: false
 
-- name: Resolve controller Python user base
-  ansible.builtin.command:
-    argv:
-      - "{{ ansible_playbook_python }}"
-      - -m
-      - site
-      - --user-base
-  register: ecs_cdp_cli_user_base
-  changed_when: false
+- name: Inspect installed CDP CLI executable
+  ansible.builtin.stat:
+    path: "{{ ecs_cdp_cli_venv_path }}/bin/cdp"
+  register: ecs_cdp_cli_executable_stat
 
-- name: Resolve installed CDP CLI executable
-  ansible.builtin.command:
-    argv:
-      - "{{ ansible_playbook_python }}"
-      - -c
-      - "import shutil; print(shutil.which('cdp') or '')"
-  environment:
-    PATH: "{{ ecs_cdp_cli_user_base.stdout | trim }}/bin:{{ ansible_env.PATH }}"
-  register: ecs_cdp_cli_executable_result
-  changed_when: false
+- name: Publish installed CDP CLI executable
+  ansible.builtin.set_fact:
+    ecs_cdp_cli_executable: "{{ ecs_cdp_cli_venv_path }}/bin/cdp"
+    ecs_cdp_cli_bin: "{{ ecs_cdp_cli_venv_path }}/bin"
+  when:
+    - ecs_cdp_cli_executable_stat.stat.exists | default(false)
+    - ecs_cdp_cli_executable_stat.stat.executable | default(false)
 
 - name: Require installed CDP CLI executable
   ansible.builtin.assert:
     that:
-      - ecs_cdp_cli_executable_result.stdout | trim | length > 0
+      - ecs_cdp_cli_executable is defined
+      - ecs_cdp_cli_executable | length > 0
     fail_msg: >-
-      cdpcli 0.9.164 was installed but the cdp executable could not be resolved
-      from the controller Python user base or PATH.
-
-- name: Publish installed CDP CLI executable
-  ansible.builtin.set_fact:
-    ecs_cdp_cli_executable: "{{ ecs_cdp_cli_executable_result.stdout | trim }}"
-    ecs_cdp_cli_user_bin: "{{ ecs_cdp_cli_user_base.stdout | trim }}/bin"
+      cdpcli 0.9.164 was installed into {{ ecs_cdp_cli_venv_path }}, but its
+      dedicated cdp executable is missing or not executable.
 
 - name: Verify private-cloud LDAP commands are available
   ansible.builtin.command:
