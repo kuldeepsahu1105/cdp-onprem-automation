@@ -29,10 +29,6 @@
       ansible.builtin.setup:
       when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
 
-    - name: Restore managed DNS resolver configuration on ECS hosts
-      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
-      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
-
 - name: Install ECS (Cloudera Data Services) cluster via Cloudera Manager
   hosts: localhost
   connection: local
