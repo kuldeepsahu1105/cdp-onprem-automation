@@ -362,14 +362,13 @@
       {{
         (
           (ecs_automation_list_roles.stdout | from_json).roles | default([])
+          | map(attribute='crn')
+          | list
           if ecs_automation_assign_all_tenant_roles | default(true) | bool
           else (
             (ecs_automation_list_roles.stdout | from_json).roles | default([])
-            | selectattr(
-                'roleName',
-                'match',
-                ecs_automation_tenant_role_name_regex
-              )
+            | map(attribute='crn')
+            | select('search', ecs_automation_tenant_role_name_regex)
             | list
           )
         )
@@ -386,7 +385,7 @@
           '--machine-user-name',
           ecs_automation_machine_user,
           '--role',
-          item.roleName
+          item
         ]
       }}
   environment:
@@ -395,7 +394,7 @@
     HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
   loop: "{{ ecs_automation_tenant_roles }}"
   loop_control:
-    label: "{{ item.roleName }}"
+    label: "{{ item }}"
   register: ecs_automation_assign_tenant_roles
   failed_when: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
@@ -403,11 +402,11 @@
 - name: Report tenant IAM role assignment failures
   ansible.builtin.fail:
     msg: >-
-      assign-machine-user-role failed for {{ item.item.roleName }}:
+      assign-machine-user-role failed for {{ item.item }}:
       {{ item.stderr | default(item.stdout) }}
   loop: "{{ ecs_automation_assign_tenant_roles.results | default([]) }}"
   loop_control:
-    label: "{{ item.item.roleName | default('role') }}"
+    label: "{{ item.item | default('role') }}"
   when:
     - item.rc | default(0) != 0
     - "'already' not in (item.stderr | default('') | lower)"
@@ -434,16 +433,15 @@
         (
           (ecs_automation_list_resource_roles.stdout | from_json).resourceRoles
           | default([])
+          | map(attribute='crn')
+          | list
           if ecs_automation_assign_all_resource_roles_on_env
              | default(true) | bool
           else (
             (ecs_automation_list_resource_roles.stdout | from_json).resourceRoles
             | default([])
-            | selectattr(
-                'resourceRoleName',
-                'match',
-                ecs_automation_resource_role_name_regex
-              )
+            | map(attribute='crn')
+            | select('search', ecs_automation_resource_role_name_regex)
             | list
           )
         )
@@ -460,7 +458,7 @@
           '--machine-user-name',
           ecs_automation_machine_user,
           '--resource-role-crn',
-          item.resourceRoleCrn | default(item.crn),
+          item,
           '--resource-crn',
           ecs_automation_environment_crn
         ]
@@ -471,7 +469,7 @@
     HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
   loop: "{{ ecs_automation_resource_roles }}"
   loop_control:
-    label: "{{ item.resourceRoleName | default(item.crn) }}"
+    label: "{{ item }}"
   register: ecs_automation_assign_resource_roles
   failed_when: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
@@ -480,11 +478,11 @@
   ansible.builtin.fail:
     msg: >-
       assign-machine-user-resource-role failed for
-      {{ item.item.resourceRoleName | default(item.item.crn) }}:
+      {{ item.item }}:
       {{ item.stderr | default(item.stdout) }}
   loop: "{{ ecs_automation_assign_resource_roles.results | default([]) }}"
   loop_control:
-    label: "{{ item.item.resourceRoleName | default('resource-role') }}"
+    label: "{{ item.item | default('resource-role') }}"
   when:
     - item.rc | default(0) != 0
     - "'already' not in (item.stderr | default('') | lower)"
@@ -558,8 +556,8 @@
     msg:
       - "ECS automation machine user: {{ ecs_automation_machine_user }}"
       - "Access key id: {{ ecs_api_access_key_id }}"
-      - "Tenant roles assigned: {{ ecs_automation_tenant_roles | map(attribute='roleName') | list }}"
-      - "Environment resource roles assigned on {{ ecs_cdp_environment_name }}: {{ ecs_automation_resource_roles | map(attribute='resourceRoleName') | list }}"
+      - "Tenant roles assigned: {{ ecs_automation_tenant_roles }}"
+      - "Environment resource roles assigned on {{ ecs_cdp_environment_name }}: {{ ecs_automation_resource_roles }}"
       - "Private key saved to: {{ ecs_api_credentials_cache_path }} (restrict permissions; not re-displayed)"
 
 - name: Remove temporary bootstrap CDP profile
