@@ -51,17 +51,8 @@
 - name: Validate control plane credentials
   ansible.builtin.import_tasks: ecs_validate_control_plane_credentials.yml
 
-- name: Install cloudera.cloud prerequisites (cdpy, cdpcli)
-  ansible.builtin.import_tasks: install_cloudera_cloud_prereqs.yml
-
 - name: Configure CDP CLI profile for data services API calls
   ansible.builtin.import_tasks: ecs_data_services_runtime.yml
-
-- name: Create persistent async result directory
-  ansible.builtin.file:
-    path: "{{ ecs_data_services_async_dir }}"
-    state: directory
-    mode: "0700"
 
 - name: Optional ECS LDAP provider sync and LDAP admin user
   ansible.builtin.import_tasks: ecs_control_plane_ldap_and_admin.yml
@@ -69,38 +60,55 @@
 - name: Start CDW when selected
   ansible.builtin.import_tasks: ecs_data_service_cdw_start.yml
   vars:
-    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
-    ansible_async_dir: "{{ ecs_data_services_async_dir }}"
+    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ ecs_data_services_remote_async_dir }}"
 
 - name: Start CDE when selected
   ansible.builtin.import_tasks: ecs_data_service_cde_start.yml
   vars:
-    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
-    ansible_async_dir: "{{ ecs_data_services_async_dir }}"
+    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ ecs_data_services_remote_async_dir }}"
 
 - name: Start CAI when selected
   ansible.builtin.import_tasks: ecs_data_service_cai_start.yml
   vars:
-    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
-    ansible_async_dir: "{{ ecs_data_services_async_dir }}"
+    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ ecs_data_services_remote_async_dir }}"
 
 - name: Complete CDW when selected
   ansible.builtin.import_tasks: ecs_data_service_cdw.yml
   vars:
-    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
-    ansible_async_dir: "{{ ecs_data_services_async_dir }}"
+    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ ecs_data_services_remote_async_dir }}"
 
 - name: Complete CDE when selected
   ansible.builtin.import_tasks: ecs_data_service_cde.yml
   vars:
-    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
-    ansible_async_dir: "{{ ecs_data_services_async_dir }}"
+    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ ecs_data_services_remote_async_dir }}"
 
 - name: Complete CAI when selected
   ansible.builtin.import_tasks: ecs_data_service_cai.yml
   vars:
-    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
-    ansible_async_dir: "{{ ecs_data_services_async_dir }}"
+    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ ecs_data_services_remote_async_dir }}"
+
+- name: Install Model Registry when selected
+  ansible.builtin.import_tasks: ecs_data_service_model_registry.yml
+  vars:
+    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
+
+- name: Remove temporary Data Services profile from ECS master
+  ansible.builtin.file:
+    path: "{{ ecs_ds_cdp_profile_dir.path }}"
+    state: absent
+  changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - ecs_ds_cdp_profile_dir is defined
+    - ecs_ds_cdp_profile_dir.path | default('') | length > 0
 
 - name: Report failed parallel Data Services provisioning
   ansible.builtin.assert:
@@ -119,11 +127,6 @@
       CDW={{ (ecs_cdw_cluster | default({})).msg | default(ecs_cdw_cluster | default({}) | to_json) }};
       CDE={{ (ecs_cde_service | default({})).msg | default(ecs_cde_service | default({}) | to_json) }};
       CAI={{ (ecs_cai_workspace | default({})).msg | default(ecs_cai_workspace | default({}) | to_json) }}.
-
-- name: Install Model Registry when selected
-  ansible.builtin.import_tasks: ecs_data_service_model_registry.yml
-  vars:
-    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
 
 - name: Create ECS data-service catalog cache directory
   ansible.builtin.file:

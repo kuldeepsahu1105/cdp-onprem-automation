@@ -10,6 +10,9 @@
       retries: "{{ ecs_data_services_async_poll_retries | default(480) }}"
       delay: "{{ ecs_data_services_async_poll_delay | default(30) }}"
       failed_when: false
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
 
     - name: Record Data Engineering provisioning result
       ansible.builtin.set_fact:
@@ -26,6 +29,9 @@
         mode: cleanup
       changed_when: false
       when: ecs_cde_service.finished | default(false) | bool
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
 
     - name: Derive service id for ingress hostname
       ansible.builtin.set_fact:

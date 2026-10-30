@@ -10,6 +10,9 @@
       retries: "{{ ecs_data_services_async_poll_retries | default(480) }}"
       delay: "{{ ecs_data_services_async_poll_delay | default(30) }}"
       failed_when: false
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
 
     - name: Record Data Warehouse provisioning result
       ansible.builtin.set_fact:
@@ -26,6 +29,9 @@
         mode: cleanup
       changed_when: false
       when: ecs_cdw_cluster.finished | default(false) | bool
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
 
     - name: Wait for default database catalog
       cloudera.cloud.dw_database_catalog_info:
@@ -38,6 +44,9 @@
         - ecs_cdw_dbc_info.database_catalogs[0].status == 'Running'
       retries: "{{ ecs_cdw_dbc_wait_retries | default(10) }}"
       delay: "{{ ecs_cdw_dbc_wait_delay | default(30) }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
       when:
         - ecs_cdw_cluster_succeeded | bool
 
@@ -57,6 +66,9 @@
         endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
         wait: true
       environment: "{{ ecs_cdp_cli_environment }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
       when:
         - ecs_cdw_cluster_succeeded | bool
 
@@ -70,6 +82,9 @@
         endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
         wait: true
       environment: "{{ ecs_cdp_cli_environment }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
       when:
         - ecs_cdw_cluster_succeeded | bool
 

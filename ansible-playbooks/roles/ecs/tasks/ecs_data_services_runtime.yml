@@ -13,6 +13,7 @@
 
 - name: Set ECS master FQDN for data service ingress backends
   ansible.builtin.set_fact:
+    ecs_data_services_delegate_host: "{{ groups[ecs_cluster_master_group][0] }}"
     ecs_master_fqdn: "{{ hostvars[groups[ecs_cluster_master_group][0]].cldr_hostname }}.{{ cluster_domain }}"
     ecs_master_ansible_host: "{{ hostvars[groups[ecs_cluster_master_group][0]].ansible_host }}"
 
@@ -25,11 +26,86 @@
       ECS data services need signed API credentials (ecs_api_access_key_id / ecs_api_private_key).
       Enable ecs_auto_provision_api_access_key with a bootstrap key, or set keys in group_vars.
 
-- name: Create temporary CDP profile for data services API calls
+- name: Resolve Data Services execution home on ECS master
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "import os; print(os.path.expanduser('~'))"
+  register: ecs_data_services_remote_home
+  changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Set remote Data Services runtime paths
+  ansible.builtin.set_fact:
+    ecs_data_services_remote_venv_path: >-
+      {{ ecs_data_services_remote_home.stdout | trim }}/.local/state/cdp-onprem-automation/cdpcli-0.9.164
+    ecs_data_services_remote_async_dir: >-
+      {{ ecs_data_services_remote_home.stdout | trim }}/.local/state/cdp-onprem-automation/ansible_async
+
+- name: Create remote Data Services state directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ ecs_data_services_remote_venv_path | dirname }}"
+    - "{{ ecs_data_services_remote_async_dir }}"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Install isolated CDP CLI on ECS master
+  ansible.builtin.pip:
+    name: cdpcli==0.9.164
+    state: present
+    virtualenv: "{{ ecs_data_services_remote_venv_path }}"
+    virtualenv_command: python3 -m venv
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Install CDPy on ECS master
+  ansible.builtin.pip:
+    name: git+https://github.com/cloudera-labs/cdpy.git@v2.1.0#egg=cdpy
+    state: present
+    virtualenv: "{{ ecs_data_services_remote_venv_path }}"
+    extra_args: --no-deps
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Install REST signing dependency on ECS master
+  ansible.builtin.pip:
+    name: cryptography
+    state: present
+    virtualenv: "{{ ecs_data_services_remote_venv_path }}"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Verify remote Data Services Python runtime
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_data_services_remote_venv_path }}/bin/python"
+      - -c
+      - "import cdpy; from cryptography.hazmat.primitives.asymmetric import ed25519"
+  changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Create temporary CDP profile on ECS master
   ansible.builtin.tempfile:
     state: directory
     prefix: cdp_ecs_ds_
   register: ecs_ds_cdp_profile_dir
+  changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
 
 - name: Write CDP private cloud config for data services
   ansible.builtin.copy:
@@ -40,6 +116,10 @@
       cdp_endpoint_url = {{ ecs_cdp_console_api_url_effective | regex_replace('/+$', '') }}
       endpoint_url = {{ ecs_cdp_console_api_url_effective | regex_replace('/+$', '') }}/api/v1
       form_factor = private
+  changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
 
 - name: Write CDP credentials for data services automation user
   ansible.builtin.copy:
@@ -50,8 +130,12 @@
       cdp_access_key_id = {{ ecs_api_access_key_id }}
       cdp_private_key = {{ ecs_api_private_key | trim }}
   no_log: true
+  changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
 
-- name: Publish CDP CLI environment for controller tasks
+- name: Publish CDP environment for ECS master tasks
   ansible.builtin.set_fact:
     ecs_cdp_cli_environment:
       CDP_CONFIG_FILE: "{{ ecs_ds_cdp_profile_dir.path }}/config"
@@ -61,7 +145,4 @@
       CDP_PROFILE: default
       HOME: "{{ ecs_ds_cdp_profile_dir.path }}"
       PATH: >-
-        {{
-          ecs_cdp_cli_bin
-          | default(ecs_cdp_cli_venv_path + '/bin')
-        }}:{{ ansible_env.PATH }}
+        {{ ecs_data_services_remote_venv_path }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
