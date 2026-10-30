@@ -129,60 +129,78 @@
         | default({})
       }}
 
-- name: Critical DNS | Require RKE2 NodeHosts integration
-  ansible.builtin.assert:
-    that:
-      - >-
-        'hosts /etc/coredns/NodeHosts'
-        in (ecs_data_services_coredns_config_data.Corefile | default(''))
-    fail_msg: >-
-      CoreDNS ConfigMap {{ ecs_coredns_configmap_name }} does not load
-      /etc/coredns/NodeHosts; refusing to claim deterministic Data Services
-      resolution without a supported local-host mapping path.
-
-- name: Critical DNS | Build deterministic CoreDNS host mappings
+- name: Critical DNS | Build deterministic CoreDNS private-zone policy
   ansible.builtin.command:
     argv:
       - python3
       - -c
       - |
         import json
+        import re
         import sys
 
-        existing = sys.argv[1].splitlines()
+        existing = sys.argv[1]
         records = json.loads(sys.argv[2])
-        managed = {
-            record["fqdn"].rstrip(".").lower()
-            for record in records
-            if record.get("address")
-        }
-        retained = []
-        for line in existing:
-            tokens = line.split()
-            names = {
-                token.rstrip(".").lower()
-                for token in tokens[1:]
-            } if tokens and not tokens[0].startswith("#") else set()
-            if managed.isdisjoint(names):
-                retained.append(line)
-
-        while retained and not retained[-1].strip():
-            retained.pop()
-        retained.extend(
-            f'{record["address"]} {record["fqdn"]}'
-            for record in records
-            if record.get("address")
+        forwarders = json.loads(sys.argv[3])
+        begin = "# BEGIN ANSIBLE DATA SERVICES PRIVATE DNS"
+        end = "# END ANSIBLE DATA SERVICES PRIVATE DNS"
+        managed = re.compile(
+            rf"(?ms)^{re.escape(begin)}\n.*?^{re.escape(end)}\n?"
         )
-        print("\n".join(retained) + "\n")
-      - "{{ ecs_data_services_coredns_config_data.NodeHosts | default('') }}"
+        corefile = managed.sub("", existing).rstrip()
+        zones = sorted({
+            record["zone"].rstrip(".").lower()
+            for record in records
+            if record.get("zone")
+        })
+        blocks = []
+        for zone in zones:
+            if re.search(rf"(?m)^\s*{re.escape(zone)}(?::53)?\s*\{{", corefile):
+                raise SystemExit(
+                    f"CoreDNS already has an unmanaged server block for {zone}"
+                )
+            zone_records = [
+                record for record in records
+                if record.get("address")
+                and record.get("zone", "").rstrip(".").lower() == zone
+            ]
+            lines = [
+                f"{zone}:53 {{",
+                "    errors",
+                "    hosts {",
+            ]
+            lines.extend(
+                f'        {record["address"]} {record["fqdn"]}'
+                for record in zone_records
+            )
+            lines.extend([
+                "        fallthrough",
+                "    }",
+                f'    forward . {" ".join(forwarders)}',
+                "    cache 30",
+                "}",
+            ])
+            blocks.append("\n".join(lines))
+        print(
+            corefile
+            + "\n\n"
+            + begin
+            + "\n"
+            + "\n\n".join(blocks)
+            + "\n"
+            + end
+            + "\n"
+        )
+      - "{{ ecs_data_services_coredns_config_data.Corefile | default('') }}"
       - "{{ ecs_data_services_critical_dns_records | to_json }}"
-  register: ecs_data_services_coredns_nodehosts
+      - "{{ ecs_coredns_forwarders_effective | to_json }}"
+  register: ecs_data_services_coredns_private_zone
   changed_when: false
   become: false
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
 
-- name: Critical DNS | Install deterministic CoreDNS host mappings
+- name: Critical DNS | Install deterministic CoreDNS private-zone policy
   ansible.builtin.command:
     argv:
       - "{{ ecs_coredns_kubectl_path }}"
@@ -196,11 +214,11 @@
       - --type
       - merge
       - --patch
-      - "{{ {'data': {'NodeHosts': ecs_data_services_coredns_nodehosts.stdout}} | to_json }}"
-  register: ecs_data_services_coredns_nodehosts_patch
+      - "{{ {'data': {'Corefile': ecs_data_services_coredns_private_zone.stdout}} | to_json }}"
+  register: ecs_data_services_coredns_private_zone_patch
   changed_when: >-
-    ecs_data_services_coredns_nodehosts.stdout
-    != (ecs_data_services_coredns_config_data.NodeHosts | default(''))
+    ecs_data_services_coredns_private_zone.stdout
+    != (ecs_data_services_coredns_config_data.Corefile | default(''))
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
