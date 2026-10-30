@@ -21,6 +21,11 @@ option. The former `v2.5.1` pin did not provide that option. If Jenkins has an
 older collection that merely provides the module name, automation
 force-installs the exact Git commit from `requirements.yml` instead of
 accepting the incompatible copy.
+The temporary runtime exports both the legacy CLI profile variables and the
+collection 3.3 REST-client variables (`CDP_CREDENTIALS_PATH` and
+`CDP_ENDPOINT_URL`). Without the latter pair, asynchronous CDW, CDE, and CAI
+workers exit before submitting requests because the new modules do not parse
+`CDP_CONFIG_FILE` or `CDP_SHARED_CREDENTIALS_FILE`.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
@@ -38,6 +43,9 @@ has separate Ozone and environment prerequisites. Tune the wait with
 `ecs_data_services_async_poll_delay`. Async job results use the absolute
 `ecs_data_services_async_dir` beneath persistent state so the temporary CDP
 profile's `HOME` override cannot make launch and polling use different paths.
+The launch tasks report `ok`, not `changed`, because queuing a local async
+worker is not proof that the control plane accepted a provisioning request.
+The collected module result is the authoritative change and failure status.
 
 ## Prerequisites
 

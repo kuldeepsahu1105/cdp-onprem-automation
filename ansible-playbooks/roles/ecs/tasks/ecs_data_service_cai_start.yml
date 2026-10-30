@@ -5,7 +5,7 @@
     name: "{{ ecs_cai_workspace_name }}"
     governance: "{{ ecs_cai_enable_governance | default(true) | bool }}"
     metrics: "{{ ecs_cai_enable_metrics | default(true) | bool }}"
-    tls: "{{ ecs_cai_enable_tls | default(true) | bool }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
     monitoring: "{{ ecs_cai_enable_monitoring | default(true) | bool }}"
     namespace: "{{ ecs_cai_k8s_namespace }}"
     resource_pool: "{{ ecs_cai_resource_pool }}"
@@ -16,4 +16,5 @@
   async: "{{ ecs_data_services_async_timeout | default(14400) }}"
   poll: 0
   register: ecs_cai_workspace_job
+  changed_when: false
   when: "'cai' in (ecs_data_services_install_names | default([]))"
