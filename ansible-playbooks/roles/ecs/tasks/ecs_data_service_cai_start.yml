@@ -1,0 +1,19 @@
+---
+- name: CAI | Start ML workspace provisioning
+  cloudera.cloud.ml:
+    environment: "{{ ecs_cdp_environment_name }}"
+    name: "{{ ecs_cai_workspace_name }}"
+    governance: "{{ ecs_cai_enable_governance | default(true) | bool }}"
+    metrics: "{{ ecs_cai_enable_metrics | default(true) | bool }}"
+    enable_tls: "{{ ecs_cai_enable_tls | default(true) | bool }}"
+    monitoring: "{{ ecs_cai_enable_monitoring | default(true) | bool }}"
+    namespace: "{{ ecs_cai_k8s_namespace }}"
+    resource_pool: "{{ ecs_cai_resource_pool }}"
+    verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+    wait: true
+    state: present
+  environment: "{{ ecs_cdp_cli_environment }}"
+  async: "{{ ecs_data_services_async_timeout | default(14400) }}"
+  poll: 0
+  register: ecs_cai_workspace_job
+  when: "'cai' in (ecs_data_services_install_names | default([]))"
