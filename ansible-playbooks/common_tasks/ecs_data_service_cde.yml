@@ -1,20 +1,35 @@
 ---
-- name: CDE | Enable Data Engineering on ECS
-  when: "'cde' in (ecs_data_services_install_names | default([]))"
+- name: CDE | Start Data Engineering provisioning
+  when:
+    - "'cde' in (ecs_data_services_install_names | default([]))"
+    - ecs_data_services_execution_phase == 'start'
+  cloudera.cloud.de:
+    environment: "{{ ecs_cdp_environment_name }}"
+    name: "{{ ecs_cde_service_name }}"
+    instance_type: "{{ ecs_cde_instance_type }}"
+    cpu_requests: "{{ ecs_cde_cpu_requests }}"
+    memory_requests: "{{ ecs_cde_memory_requests }}"
+    resource_pool: "{{ ecs_cde_resource_pool }}"
+    verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+    wait: true
+    state: present
+  environment: "{{ ecs_cdp_cli_environment }}"
+  async: "{{ ecs_data_services_async_timeout | default(14400) }}"
+  poll: 0
+  register: ecs_cde_service_job
+
+- name: CDE | Complete Data Engineering installation
+  when:
+    - "'cde' in (ecs_data_services_install_names | default([]))"
+    - ecs_data_services_execution_phase == 'finish'
   block:
-    - name: Enable Data Engineering service
-      cloudera.cloud.de:
-        environment: "{{ ecs_cdp_environment_name }}"
-        name: "{{ ecs_cde_service_name }}"
-        instance_type: "{{ ecs_cde_instance_type }}"
-        cpu_requests: "{{ ecs_cde_cpu_requests }}"
-        memory_requests: "{{ ecs_cde_memory_requests }}"
-        resource_pool: "{{ ecs_cde_resource_pool }}"
-        verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-        wait: true
-        state: present
-      environment: "{{ ecs_cdp_cli_environment }}"
+    - name: Wait for Data Engineering provisioning
+      ansible.builtin.async_status:
+        jid: "{{ ecs_cde_service_job.ansible_job_id }}"
       register: ecs_cde_service
+      until: ecs_cde_service.finished | bool
+      retries: "{{ ecs_data_services_async_poll_retries | default(480) }}"
+      delay: "{{ ecs_data_services_async_poll_delay | default(30) }}"
 
     - name: Derive service id for ingress hostname
       ansible.builtin.set_fact:

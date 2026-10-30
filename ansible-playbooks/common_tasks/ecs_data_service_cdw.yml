@@ -1,16 +1,31 @@
 ---
-- name: CDW | Install Data Warehouse on ECS
-  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+- name: CDW | Start Data Warehouse cluster provisioning
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_data_services_execution_phase == 'start'
+  cloudera.cloud.dw_cluster:
+    env: "{{ ecs_cdp_environment_name }}"
+    private_cloud: "{{ ecs_cdw_private_cloud_config | default({}) }}"
+    verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+    state: present
+    wait: true
+  environment: "{{ ecs_cdp_cli_environment }}"
+  async: "{{ ecs_data_services_async_timeout | default(14400) }}"
+  poll: 0
+  register: ecs_cdw_cluster_job
+
+- name: CDW | Complete Data Warehouse installation
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_data_services_execution_phase == 'finish'
   block:
-    - name: Create Data Warehouse cluster on ECS environment
-      cloudera.cloud.dw_cluster:
-        env: "{{ ecs_cdp_environment_name }}"
-        private_cloud: "{{ ecs_cdw_private_cloud_config | default({}) }}"
-        verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-        state: present
-        wait: true
-      environment: "{{ ecs_cdp_cli_environment }}"
+    - name: Wait for Data Warehouse cluster provisioning
+      ansible.builtin.async_status:
+        jid: "{{ ecs_cdw_cluster_job.ansible_job_id }}"
       register: ecs_cdw_cluster
+      until: ecs_cdw_cluster.finished | bool
+      retries: "{{ ecs_data_services_async_poll_retries | default(480) }}"
+      delay: "{{ ecs_data_services_async_poll_delay | default(30) }}"
 
     - name: Wait for default database catalog
       cloudera.cloud.dw_database_catalog_info:
