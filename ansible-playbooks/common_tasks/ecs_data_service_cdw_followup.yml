@@ -1,0 +1,120 @@
+---
+- name: Initialize Data Warehouse follow-up result
+  ansible.builtin.set_fact:
+    ecs_cdw_catalog_succeeded: false
+
+- name: CDW | Complete database catalog and Virtual Warehouses
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_cluster_succeeded | default(false) | bool
+  block:
+    - name: Wait for default database catalog
+      cloudera.cloud.dw_database_catalog_info:
+        cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
+        verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_dbc_info
+      until:
+        - ecs_cdw_dbc_info.database_catalogs | default([]) | length > 0
+        - ecs_cdw_dbc_info.database_catalogs[0].status == 'Running'
+      retries: "{{ ecs_cdw_dbc_wait_retries | default(40) }}"
+      delay: "{{ ecs_cdw_dbc_wait_delay | default(30) }}"
+      failed_when: false
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+
+    - name: Record default database catalog result
+      ansible.builtin.set_fact:
+        ecs_cdw_catalog_succeeded: >-
+          {{
+            ecs_cdw_dbc_info.database_catalogs | default([]) | length > 0
+            and ecs_cdw_dbc_info.database_catalogs[0].status | default('') == 'Running'
+          }}
+
+    - name: Report default database catalog failure
+      ansible.builtin.debug:
+        msg: >-
+          CDW database catalog did not reach Running:
+          {{ ecs_cdw_dbc_info.database_catalogs | default([]) | to_json }}
+      when: not (ecs_cdw_catalog_succeeded | bool)
+
+    - name: Collect CDW Kubernetes diagnostics after catalog failure
+      ansible.builtin.include_tasks: ecs_data_service_cdw_diagnostics.yml
+      when: not (ecs_cdw_catalog_succeeded | bool)
+
+    - name: Set default database catalog id
+      ansible.builtin.set_fact:
+        ecs_cdw_catalog_id: "{{ ecs_cdw_dbc_info.database_catalogs | map(attribute='id') | list | first }}"
+      when: ecs_cdw_catalog_succeeded | bool
+
+    - name: Create Impala Virtual Warehouse
+      cloudera.cloud.dw_virtual_warehouse:
+        name: "{{ ecs_cdw_impala_vw_name }}"
+        cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
+        catalog_id: "{{ ecs_cdw_catalog_id }}"
+        type: impala
+        tshirt_size: "{{ ecs_cdw_vw_tshirt_size }}"
+        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+        wait: true
+      environment: "{{ ecs_cdp_cli_environment }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when: ecs_cdw_catalog_succeeded | bool
+
+    - name: Create Hive Virtual Warehouse
+      cloudera.cloud.dw_virtual_warehouse:
+        name: "{{ ecs_cdw_hive_vw_name }}"
+        cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
+        catalog_id: "{{ ecs_cdw_catalog_id }}"
+        type: hive
+        tshirt_size: "{{ ecs_cdw_vw_tshirt_size }}"
+        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+        wait: true
+      environment: "{{ ecs_cdp_cli_environment }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when: ecs_cdw_catalog_succeeded | bool
+
+    - name: Register Hue ingress hostnames for Caddy
+      ansible.builtin.set_fact:
+        ecs_caddy_data_service_routes: >-
+          {{
+            (ecs_caddy_data_service_routes | default([]))
+            + [
+              {
+                'id': 'cdw-hive',
+                'external_hostname': 'hue-' + ecs_cdw_hive_vw_name + '.' + ecs_app_domain,
+                'backend_host': ecs_master_fqdn,
+                'backend_port': 443,
+                'backend_scheme': 'https'
+              },
+              {
+                'id': 'cdw-impala',
+                'external_hostname': 'hue-' + ecs_cdw_impala_vw_name + '.' + ecs_app_domain,
+                'backend_host': ecs_master_fqdn,
+                'backend_port': 443,
+                'backend_scheme': 'https'
+              }
+            ]
+          }}
+      when: ecs_cdw_catalog_succeeded | bool
+
+    - name: Update portal catalog URL for CDW
+      ansible.builtin.set_fact:
+        ecs_data_services_catalog: >-
+          {{
+            ecs_data_services_catalog | combine(
+              {
+                'cdw': ecs_data_services_catalog.cdw | default({}) | combine(
+                  {
+                    'url': 'https://hue-' + ecs_cdw_hive_vw_name + '.' + ecs_app_domain
+                  }
+                )
+              },
+              recursive=True
+            )
+          }}
+      when: ecs_cdw_catalog_succeeded | bool

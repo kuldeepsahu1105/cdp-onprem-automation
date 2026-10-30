@@ -1,0 +1,70 @@
+---
+- name: Collect failed CDW pod status
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_cdw_kubernetes_namespace }}"
+      - get
+      - pods
+      - --output
+      - wide
+  register: ecs_cdw_failed_pods
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Collect failed Hue query processor description
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_cdw_kubernetes_namespace }}"
+      - describe
+      - pod
+      - hue-query-processor-0
+  register: ecs_cdw_hue_query_processor_description
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Collect failed Hue query processor logs
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_cdw_kubernetes_namespace }}"
+      - logs
+      - hue-query-processor-0
+      - --all-containers=true
+      - --tail=200
+  register: ecs_cdw_hue_query_processor_logs
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Report failed CDW Kubernetes diagnostics
+  ansible.builtin.debug:
+    msg:
+      - "Namespace: {{ ecs_cdw_kubernetes_namespace }}"
+      - "Pods:\n{{ ecs_cdw_failed_pods.stdout | default(ecs_cdw_failed_pods.stderr, true) }}"
+      - >-
+        Hue query processor:
+        {{ ecs_cdw_hue_query_processor_description.stdout
+           | default(ecs_cdw_hue_query_processor_description.stderr, true) }}
+      - >-
+        Hue query processor logs:
+        {{ ecs_cdw_hue_query_processor_logs.stdout
+           | default(ecs_cdw_hue_query_processor_logs.stderr, true) }}

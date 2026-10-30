@@ -1,0 +1,117 @@
+---
+- name: Wait for next parallel Data Services job
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import pathlib
+        import sys
+        import time
+
+        async_dir = pathlib.Path(sys.argv[1])
+        pending = json.loads(sys.argv[2])
+        timeout = int(sys.argv[3])
+        delay = int(sys.argv[4])
+        deadline = time.monotonic() + timeout
+
+        if not pending:
+            print("{}")
+            raise SystemExit(0)
+
+        while True:
+            completed = []
+            for service, job_id in pending.items():
+                result_path = async_dir / job_id
+                try:
+                    result = json.loads(result_path.read_text())
+                except (FileNotFoundError, json.JSONDecodeError, OSError):
+                    continue
+                if result.get("finished", True):
+                    result["finished"] = True
+                    result["ansible_job_id"] = job_id
+                    try:
+                        completed_at = result_path.stat().st_mtime_ns
+                    except OSError:
+                        completed_at = time.time_ns()
+                    completed.append((completed_at, service, result))
+
+            if completed:
+                _, service, result = min(completed, key=lambda item: item[0])
+                print(json.dumps({service: result}))
+                break
+            if time.monotonic() >= deadline:
+                raise SystemExit(
+                    "Timed out waiting for Data Services jobs: "
+                    + ", ".join(sorted(pending))
+                )
+            time.sleep(delay)
+      - "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+      - "{{ ecs_data_services_pending_jobs | to_json }}"
+      - "{{ ecs_data_services_async_timeout | default(14400) }}"
+      - "{{ ecs_data_services_async_poll_delay | default(30) }}"
+  register: ecs_data_services_completed_command
+  changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Decode completed Data Services jobs
+  ansible.builtin.set_fact:
+    ecs_data_services_completed_batch: "{{ ecs_data_services_completed_command.stdout | from_json }}"
+
+- name: Record completed CDW job
+  ansible.builtin.set_fact:
+    ecs_cdw_cluster: "{{ ecs_data_services_completed_batch.cdw }}"
+  when: "'cdw' in ecs_data_services_completed_batch"
+
+- name: Record completed CDE job
+  ansible.builtin.set_fact:
+    ecs_cde_service: "{{ ecs_data_services_completed_batch.cde }}"
+  when: "'cde' in ecs_data_services_completed_batch"
+
+- name: Record completed CAI job
+  ansible.builtin.set_fact:
+    ecs_cai_workspace: "{{ ecs_data_services_completed_batch.cai }}"
+  when: "'cai' in ecs_data_services_completed_batch"
+
+- name: Complete CDW after its parallel job finishes
+  ansible.builtin.include_tasks: ecs_data_service_cdw.yml
+  vars:
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+  when: "'cdw' in ecs_data_services_completed_batch"
+
+- name: Complete CDE after its parallel job finishes
+  ansible.builtin.include_tasks: ecs_data_service_cde.yml
+  vars:
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+  when: "'cde' in ecs_data_services_completed_batch"
+
+- name: Complete CAI after its parallel job finishes
+  ansible.builtin.include_tasks: ecs_data_service_cai.yml
+  vars:
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+  when: "'cai' in ecs_data_services_completed_batch"
+
+- name: Remove completed jobs from pending Data Services list
+  ansible.builtin.set_fact:
+    ecs_data_services_pending_jobs: >-
+      {{
+        ecs_data_services_pending_jobs
+        | dict2items
+        | rejectattr('key', 'in', ecs_data_services_completed_batch.keys() | list)
+        | list
+        | items2dict
+      }}
+
+- name: Report completed parallel Data Services jobs
+  ansible.builtin.debug:
+    msg: >-
+      Completed Data Services jobs:
+      {{ ecs_data_services_completed_batch.keys() | list | sort | join(', ') }}.
+      Still running:
+      {{ ecs_data_services_pending_jobs.keys() | list | sort | join(', ') | default('none', true) }}.

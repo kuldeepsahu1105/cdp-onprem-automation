@@ -40,18 +40,24 @@ endpoint/client discovery chain because its `cloudera.cloud` modules communicate
 with the ECS control plane through the isolated CDP CLI profile.
 
 Selected CDW, CDE, and CAI top-level provisioning operations start
-asynchronously before Ansible waits for any one of them. Their dependent
-follow-up work runs after each asynchronous result is collected, reducing the
-combined installation duration to approximately the slowest selected service
-rather than the sum of all three. Model Registry remains sequential because it
-has separate Ozone and environment prerequisites. Tune the wait with
-`ecs_data_services_async_timeout`, `ecs_data_services_async_poll_retries`, and
-`ecs_data_services_async_poll_delay`. Async job results use the absolute
-the ECS master's persistent state directory so the temporary CDP profile's
-`HOME` override cannot make launch and polling use different paths. The launch
-tasks report `ok`, not `changed`, because queuing a remote async worker is not
-proof that the control plane accepted a provisioning request.
-The collected module result is the authoritative change and failure status.
+asynchronously before Ansible waits for any one of them. Ansible then waits for
+whichever job finishes next and immediately runs that service's result
+validation, cleanup, diagnostics, and dependent follow-up work. A slow or
+stalled CDW job therefore does not delay reporting a completed CDE or CAI job.
+The combined installation duration is approximately the slowest selected
+service rather than the sum of all three. Model Registry remains sequential
+because it has separate Ozone and environment prerequisites, but it runs before
+the potentially long CDW database-catalog and Virtual Warehouse follow-up.
+Tune the wait with
+`ecs_data_services_async_timeout` and `ecs_data_services_async_poll_delay`.
+Async job results use an absolute path in the ECS master's persistent state
+directory so the temporary CDP profile's `HOME` override cannot make launch and
+polling use different paths. The launch tasks report `ok`, not `changed`,
+because queuing a remote async worker is not proof that the control plane
+accepted a provisioning request. The collected module result is the
+authoritative change and failure status. Failed CDW provisioning also collects
+pod status, `hue-query-processor-0` description, and recent container logs from
+`warehouse-<environment>` on the ECS master.
 
 ## Prerequisites
 
