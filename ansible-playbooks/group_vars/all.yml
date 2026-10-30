@@ -119,6 +119,11 @@ freeipa_ansible_module_python_packages:
   - python3-netaddr
   - python3-gssapi
   - python3-ipalib
+freeipa_ansible_module_kerberos_packages:
+  RedHat:
+    - krb5-workstation
+  Debian:
+    - krb5-user
 # Clients: comment KEYRING in /etc/krb5.conf (ensure_krb5_default_ccache_commented.yml). ipaserver keeps active KEYRING by default.
 krb5_comment_default_ccache_on_ipaserver: false
 krb5_libdefaults_default_ccache_commented_line: "#default_ccache_name = KEYRING:persistent:%{uid}"

@@ -83,6 +83,45 @@
       }}
   when: ecs_data_services_ipa_inventory_host is defined
 
+- name: Critical DNS | Gather FreeIPA operating system facts
+  ansible.builtin.setup:
+    gather_subset:
+      - "!all"
+      - min
+  delegate_to: "{{ ecs_data_services_ipa_inventory_host }}"
+  delegate_facts: true
+  when: ecs_data_services_ipa_inventory_host is defined
+
+- name: Critical DNS | Ensure FreeIPA module Kerberos client dependency
+  ansible.builtin.package:
+    name: >-
+      {{
+        freeipa_ansible_module_kerberos_packages[
+          hostvars[ecs_data_services_ipa_inventory_host].ansible_os_family
+        ]
+      }}
+    state: present
+  become: true
+  delegate_to: "{{ ecs_data_services_ipa_inventory_host }}"
+  when: ecs_data_services_ipa_inventory_host is defined
+
+- name: Critical DNS | Verify FreeIPA module Kerberos client dependency
+  ansible.builtin.stat:
+    path: /usr/bin/kinit
+  register: ecs_data_services_ipa_kinit_binary
+  delegate_to: "{{ ecs_data_services_ipa_inventory_host }}"
+  when: ecs_data_services_ipa_inventory_host is defined
+
+- name: Critical DNS | Require FreeIPA module Kerberos client dependency
+  ansible.builtin.assert:
+    that:
+      - ecs_data_services_ipa_kinit_binary.stat.exists
+      - ecs_data_services_ipa_kinit_binary.stat.executable
+    fail_msg: >-
+      /usr/bin/kinit is required by FreeIPA Ansible modules but is not
+      installed or executable on {{ ecs_data_services_ipa_inventory_host }}.
+  when: ecs_data_services_ipa_inventory_host is defined
+
 - name: Critical DNS | Ensure FreeIPA module Python dependencies
   ansible.builtin.package:
     name: "{{ freeipa_ansible_module_python_packages }}"
