@@ -37,8 +37,44 @@
       ansible.builtin.set_fact:
         ecs_cdw_cluster_start: "{{ ansible_failed_result }}"
 
+    - name: CDW | Recover cluster after ambiguous submission timeout
+      cloudera.cloud.dw_cluster_info:
+        environment: "{{ ecs_cdp_environment_name }}"
+        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_submission_recovery_info
+      changed_when: false
+      failed_when: false
+      ignore_errors: true
+      retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
+      delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
+      until: ecs_cdw_submission_recovery_info.clusters | default([]) | length > 0
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when: >-
+        ecs_cdw_cluster_start.msg
+        | default('')
+        is search('(?i)(gateway time-out|gateway timeout|http error 504|\\[504\\]|timed out|timeout)')
+
+    - name: CDW | Record recovered timeout submission
+      ansible.builtin.set_fact:
+        ecs_cdw_cluster_start:
+          changed: false
+          failed: false
+          cluster: "{{ ecs_cdw_submission_recovery_info.clusters | first }}"
+          msg: >-
+            CDW create request timed out, but cluster
+            {{ (ecs_cdw_submission_recovery_info.clusters | first).id }}
+            was discovered in status
+            {{ (ecs_cdw_submission_recovery_info.clusters | first).status }}.
+      when:
+        - ecs_cdw_submission_recovery_info is defined
+        - ecs_cdw_submission_recovery_info.clusters | default([]) | length > 0
+
     - name: CDW | Report submission failure
       ansible.builtin.debug:
         msg: >-
           CDW submission failed before a cluster was created:
           {{ ecs_cdw_cluster_start.msg | default(ecs_cdw_cluster_start | to_json) }}
+      when: ecs_cdw_cluster_start.failed | default(false) | bool

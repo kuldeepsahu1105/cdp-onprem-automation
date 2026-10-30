@@ -51,10 +51,8 @@ submission and before installation polling. CDW and CDE use `wait: false` for
 submission, then `dw_cluster_info` and `de_info` for visible terminal-state
 polling, including CDE states such as `LoggingInstallationFailed`.
 
-The private CDE request follows the supplied example structure. This control
-plane requires at least 26 CPU and its existing scheduler parent is `root`, so
-those compatibility values override the example's 24 CPU and
-`root.<environment>.cde` defaults.
+The private CDE request uses the live API minimum of 26 CPU and 64 GiB with the
+environment-specific scheduler parent `root.<environment>.cde`.
 Model Registry obtains Ozone S3
 credentials from `ecs_model_registry_sdx_group` (default `sdx`) when that
 optional override group has hosts; otherwise it automatically uses the first
@@ -273,7 +271,9 @@ in-progress clusters are adopted and polled instead of calling
 `createPrivateCluster` again. The playbook does not create or delete CDW
 Kerberos hosts, services, or keytabs; the Private Cloud Data Warehouse control
 plane owns that lifecycle, matching the `cloudera.cloud.dw_cluster` contract
-and supplied example.
+and supplied example. A gateway timeout from `createPrivateCluster` is treated
+as ambiguous: automation briefly rediscovers the environment cluster and
+continues structured polling when the backend accepted the request.
 
 ## Not automated (Labs reference gaps)
 
