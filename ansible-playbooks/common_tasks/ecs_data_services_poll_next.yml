@@ -97,6 +97,19 @@
     ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
   when: "'cai' in ecs_data_services_completed_batch"
 
+- name: Configure CAI wildcard TLS as soon as its job finishes
+  ansible.builtin.include_tasks: ecs_data_service_cai_tls.yml
+  when: "'cai' in ecs_data_services_completed_batch"
+
+- name: Verify CAI UI as soon as its job finishes
+  ansible.builtin.include_tasks: ecs_data_service_cai_followup.yml
+  when: "'cai' in ecs_data_services_completed_batch"
+
+- name: Record completed CAI follow-up
+  ansible.builtin.set_fact:
+    ecs_cai_followup_completed_this_run: true
+  when: "'cai' in ecs_data_services_completed_batch"
+
 - name: Remove completed jobs from pending Data Services list
   ansible.builtin.set_fact:
     ecs_data_services_pending_jobs: >-

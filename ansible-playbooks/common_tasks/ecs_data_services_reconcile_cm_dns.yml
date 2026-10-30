@@ -83,6 +83,25 @@
       }}
   when: ecs_data_services_ipa_inventory_host is defined
 
+- name: Critical DNS | Build Kubernetes DNS verification records
+  ansible.builtin.set_fact:
+    ecs_data_services_dns_verification_records: >-
+      {{
+        ecs_data_services_critical_dns_records
+        + [
+          {
+            'label': 'ECS Management Console',
+            'fqdn': (
+              ecs_control_plane_url_effective
+              | regex_replace('^https?://', '')
+              | regex_replace('/.*$', '')
+              | regex_replace(':.*$', '')
+            ),
+            'address': ''
+          }
+        ]
+      }}
+
 - name: Critical DNS | Gather FreeIPA operating system facts
   ansible.builtin.setup:
     gather_subset:
@@ -170,6 +189,7 @@
     record_type: A
     record_value: "{{ item.address }}"
     state: present
+  register: ecs_data_services_critical_dns_reconcile
   delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
   connection: ssh
   loop: "{{ ecs_data_services_critical_dns_records }}"
@@ -178,6 +198,25 @@
   when:
     - identity_provider_effective | default('freeipa') == 'freeipa'
     - groups.get('ipaserver', []) | length > 0
+
+- name: Critical DNS | Restart ECS CoreDNS after record changes
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - delete
+      - pods
+      - --selector
+      - k8s-app=kube-dns
+  register: ecs_data_services_coredns_restart
+  changed_when: ecs_data_services_coredns_restart.rc == 0
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  when: ecs_data_services_critical_dns_reconcile is changed
 
 - name: Critical DNS | Resolve required names from ECS master
   ansible.builtin.command:
@@ -197,25 +236,101 @@
   become: false
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
-  loop: "{{ ecs_data_services_critical_dns_records }}"
+  loop: "{{ ecs_data_services_dns_verification_records }}"
   loop_control:
     label: "{{ item.label }}: {{ item.fqdn }}"
   retries: "{{ ecs_data_services_cm_dns_wait_retries | int }}"
   delay: "{{ ecs_data_services_cm_dns_wait_delay | int }}"
   until:
     - ecs_data_services_critical_dns_lookups.rc == 0
-    - item.address in ecs_data_services_critical_dns_lookups.stdout
+    - >-
+      item.address | length == 0
+      or item.address in ecs_data_services_critical_dns_lookups.stdout
 
 - name: Critical DNS | Require private service resolution
   ansible.builtin.assert:
     that:
       - item.rc == 0
-      - item.item.address in item.stdout
+      - >-
+        item.item.address | length == 0
+        or item.item.address in item.stdout
     fail_msg: >-
-      {{ item.item.label }} hostname {{ item.item.fqdn }} must resolve to
-      {{ item.item.address }} from the ECS master before enabling
-      CDE/CDW/CAI. Resolver output:
+      {{ item.item.label }} hostname {{ item.item.fqdn }} must resolve
+      {{ 'to ' + item.item.address if item.item.address | length > 0 else '' }}
+      from the ECS master before enabling CDE/CDW/CAI. Resolver output:
       {{ item.stdout | default(item.stderr, true) }}
   loop: "{{ ecs_data_services_critical_dns_lookups.results }}"
+  loop_control:
+    label: "{{ item.item.label }}: {{ item.item.fqdn }}"
+
+- name: Critical DNS | Remove stale Kubernetes DNS probe pods
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - delete
+      - pod
+      - "ansible-dns-check-{{ item }}"
+      - --ignore-not-found
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  loop: "{{ range(1, ecs_data_services_dns_verification_records | length + 1) | list }}"
+
+- name: Critical DNS | Resolve required names from Kubernetes pod DNS
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - run
+      - "ansible-dns-check-{{ ansible_loop.index }}"
+      - "--image={{ ecs_data_services_dns_probe_image }}"
+      - --restart=Never
+      - --rm
+      - --attach
+      - "--pod-running-timeout={{ ecs_data_services_dns_probe_start_timeout }}"
+      - --command
+      - --
+      - nslookup
+      - "{{ item.fqdn }}"
+  register: ecs_data_services_pod_dns_lookups
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  loop: "{{ ecs_data_services_dns_verification_records }}"
+  loop_control:
+    extended: true
+    label: "{{ item.label }}: {{ item.fqdn }}"
+  retries: "{{ ecs_data_services_cm_dns_wait_retries | int }}"
+  delay: "{{ ecs_data_services_cm_dns_wait_delay | int }}"
+  until:
+    - ecs_data_services_pod_dns_lookups.rc == 0
+    - >-
+      item.address | length == 0
+      or item.address in ecs_data_services_pod_dns_lookups.stdout
+
+- name: Critical DNS | Require Kubernetes pod service resolution
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - >-
+        item.item.address | length == 0
+        or item.item.address in item.stdout
+    fail_msg: >-
+      {{ item.item.label }} hostname {{ item.item.fqdn }} must resolve
+      {{ 'to ' + item.item.address if item.item.address | length > 0 else '' }}
+      through Kubernetes cluster DNS before enabling CDE/CDW/CAI.
+      Pod resolver output:
+      {{ item.stdout | default(item.stderr, true) }}
+  loop: "{{ ecs_data_services_pod_dns_lookups.results }}"
   loop_control:
     label: "{{ item.item.label }}: {{ item.item.fqdn }}"

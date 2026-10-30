@@ -5,12 +5,11 @@
     private_cloud: "{{ ecs_cdw_private_cloud_config | default({}) }}"
     endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
     state: present
-    wait: true
+    wait: false
   environment: "{{ ecs_cdp_cli_environment }}"
-  async: "{{ ecs_data_services_async_timeout | default(14400) }}"
-  poll: 0
-  register: ecs_cdw_cluster_job
+  register: ecs_cdw_cluster_start
   changed_when: false
+  failed_when: false
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh

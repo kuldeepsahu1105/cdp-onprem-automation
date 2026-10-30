@@ -9,6 +9,10 @@
             ecs_cde_service.finished | default(false) | bool
             and (ecs_cde_service.service | default({})) is mapping
             and (ecs_cde_service.service | default({})).clusterFqdn | default('') | length > 0
+            and (
+              (ecs_cde_service.service | default({})).status | default('')
+              == 'ClusterCreationCompleted'
+            )
           }}
 
     - name: Report Data Engineering provisioning failure
@@ -23,7 +27,9 @@
         jid: "{{ ecs_cde_service_job.ansible_job_id }}"
         mode: cleanup
       changed_when: false
-      when: ecs_cde_service.finished | default(false) | bool
+      when:
+        - ecs_cde_service_job is defined
+        - ecs_cde_service.finished | default(false) | bool
       become: false
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh

@@ -25,8 +25,8 @@ force-installs the exact Git commit from `requirements.yml` instead of
 accepting the incompatible copy.
 The temporary ECS-master runtime exports both the legacy CLI profile variables
 and the collection 3.3 REST-client variables (`CDP_CREDENTIALS_PATH` and
-`CDP_ENDPOINT_URL`). Without the latter pair, asynchronous CDW, CDE, and CAI
-workers exit before submitting requests because the new modules do not parse
+`CDP_ENDPOINT_URL`). Without the latter pair, CDW, CDE, and CAI module
+operations exit before submitting requests because the new modules do not parse
 `CDP_CONFIG_FILE` or `CDP_SHARED_CREDENTIALS_FILE`. Running these modules on
 the external Jenkins controller is unsupported because private names such as
 `console-cdp.apps.<cluster-domain>` resolve only inside the ECS network.
@@ -35,11 +35,15 @@ than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
 Before submitting any Data Services API request, playbook 34 reconciles ECS
 CoreDNS forwarding and the FreeIPA A records for both the Cloudera Manager FQDN
-and the FreeIPA LDAP hostname, then requires both names to resolve to their
-private addresses from the ECS master. CDE calls Cloudera Manager by FQDN, and
-CDW validates its LDAP bind through `ipa_kdc_host`; unresolved records otherwise
-surface later as `UnknownHostException` or LDAP result-code 200 network errors.
-The bounded resolver wait uses `ecs_data_services_cm_dns_wait_retries` and
+and the FreeIPA LDAP hostname. It restarts CoreDNS when those records change,
+then verifies the IPA LDAP hostname, Cloudera Manager hostname, and existing ECS
+console hostname through both the ECS host resolver and a disposable Kubernetes
+pod. The pod check uses the same cluster-DNS path as CDW/CDE/CAI workloads, so
+host-only DNS success cannot hide a `172.43.0.10` lookup failure. CDE calls
+Cloudera Manager by FQDN, and CDW validates its LDAP bind through
+`ipa_kdc_host`; unresolved records otherwise surface later as
+`UnknownHostException` or LDAP result-code 200 network errors. The bounded
+resolver wait uses `ecs_data_services_cm_dns_wait_retries` and
 `ecs_data_services_cm_dns_wait_delay`.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
@@ -48,14 +52,20 @@ stage does not repeat it. Data Services also no longer runs the Cloudera Manager
 endpoint/client discovery chain because its `cloudera.cloud` modules communicate
 with the ECS control plane through the isolated CDP CLI profile.
 
-Selected CDW, CDE, and CAI top-level provisioning operations start
-asynchronously before Ansible waits for any one of them. Ansible then waits for
-whichever job finishes next and immediately runs that service's result
-validation, cleanup, diagnostics, and dependent follow-up work. A slow or
-stalled CDW job therefore does not delay reporting a completed CDE or CAI job.
+Selected CDW, CDE, and CAI top-level provisioning operations are submitted
+before waiting for service completion. CAI remains an asynchronous job, and its
+wildcard TLS secret and UI readiness checks run immediately when that job
+finishes rather than waiting for CDW or CDE. CDW and CDE submit with
+`wait: false` and are polled through `dw_cluster_info` and `de_info`; this avoids
+Ansible async-wrapper JSON loss and recognizes terminal CDE states such as
+`LoggingInstallationFailed`, which the pinned collection's built-in waiter does
+not classify as a failure. Poll retries are visible in Jenkins every
+`ecs_data_services_status_wait_delay` seconds.
 
 The default private CDE service request is 26 CPU and 64 GiB because the
-private-cloud API rejects lower CPU capacity. Model Registry obtains Ozone S3
+private-cloud API rejects lower CPU capacity. Its parent resource pool defaults
+to the existing scheduler root (`ecs_cde_resource_pool: root`); deployments
+with a pre-created custom parent pool can override it. Model Registry obtains Ozone S3
 credentials from `ecs_model_registry_sdx_group` (default `sdx`) when that
 optional override group has hosts; otherwise it automatically uses the first
 host in `base_cluster_master_group`, where the standard base-cluster template
@@ -66,14 +76,11 @@ The combined installation duration is approximately the slowest selected
 service rather than the sum of all three. Model Registry remains sequential
 because it has separate Ozone and environment prerequisites, but it runs before
 the potentially long CDW database-catalog and Virtual Warehouse follow-up.
-Tune the wait with
-`ecs_data_services_async_timeout` and `ecs_data_services_async_poll_delay`.
-Async job results use an absolute path in the ECS master's persistent state
-directory so the temporary CDP profile's `HOME` override cannot make launch and
-polling use different paths. The launch tasks report `ok`, not `changed`,
-because queuing a remote async worker is not proof that the control plane
-accepted a provisioning request. The collected module result is the
-authoritative change and failure status. Failed CDW provisioning also collects
+Tune CDW/CDE polling with `ecs_data_services_status_wait_retries` and
+`ecs_data_services_status_wait_delay`; CAI's asynchronous upper bound remains
+`ecs_data_services_async_timeout`. CAI job results use an absolute path in the
+ECS master's persistent state directory so the temporary CDP profile's `HOME`
+override cannot make launch and polling use different paths. Failed CDW provisioning also collects
 pod status, `hue-query-processor-0` description, and recent container logs from
 `warehouse-<environment>` on the ECS master.
 

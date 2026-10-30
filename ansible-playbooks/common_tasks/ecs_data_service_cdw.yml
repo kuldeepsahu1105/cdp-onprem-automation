@@ -9,6 +9,7 @@
             ecs_cdw_cluster.finished | default(false) | bool
             and (ecs_cdw_cluster.cluster | default({})) is mapping
             and (ecs_cdw_cluster.cluster | default({})).id | default('') | length > 0
+            and (ecs_cdw_cluster.cluster | default({})).status | default('') == 'Running'
           }}
 
     - name: Report Data Warehouse provisioning failure
@@ -27,7 +28,9 @@
         jid: "{{ ecs_cdw_cluster_job.ansible_job_id }}"
         mode: cleanup
       changed_when: false
-      when: ecs_cdw_cluster.finished | default(false) | bool
+      when:
+        - ecs_cdw_cluster_job is defined
+        - ecs_cdw_cluster.finished | default(false) | bool
       become: false
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
