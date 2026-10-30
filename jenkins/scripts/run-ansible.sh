@@ -7,17 +7,34 @@ export REPO_ROOT
 LOG_DIR="${LOG_DIR:-$REPO_ROOT/jenkins/artifacts}"
 export CDP_ARTIFACTS_DIR="${CDP_ARTIFACTS_DIR:-$LOG_DIR}"
 mkdir -p "$LOG_DIR"
+export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
 
-if [[ -z "${CDP_STATE_DIR:-}" ]]; then
-  workspace_owner="$(stat -c '%U' "$REPO_ROOT")"
-  workspace_owner_home="$(getent passwd "$workspace_owner" | cut -d: -f6)"
-  if [[ -z "$workspace_owner_home" ]]; then
-    printf 'ERROR: Could not resolve home directory for workspace owner %s\n' "$workspace_owner" >&2
-    exit 1
+resolve_cdp_state_dir() {
+  local credentials_home probe
+
+  if [[ -z "${CDP_STATE_DIR:-}" ]]; then
+    credentials_home="${CREDENTIALS_HOME:-}"
+    if [[ -z "$credentials_home" ]]; then
+      credentials_home="$(getent passwd "$CREDENTIALS_USER" 2>/dev/null | cut -d: -f6 || true)"
+    fi
+    if [[ -z "$credentials_home" ]]; then
+      printf 'ERROR: Could not resolve home directory for credentials user %s\n' \
+        "$CREDENTIALS_USER" >&2
+      return 1
+    fi
+    export CDP_STATE_DIR="${credentials_home}/.local/state/cdp-onprem-automation"
   fi
-  export CDP_STATE_DIR="${workspace_owner_home}/.local/state/cdp-onprem-automation"
-fi
-mkdir -p "$CDP_STATE_DIR"
+
+  if ! mkdir -p "$CDP_STATE_DIR" 2>/dev/null ||
+     ! probe="$(mktemp "$CDP_STATE_DIR/.write-test.XXXXXX" 2>/dev/null)"; then
+    printf 'ERROR: Persistent CDP state directory is not writable: %s\n' \
+      "$CDP_STATE_DIR" >&2
+    return 1
+  fi
+  rm -f "$probe"
+}
+
+resolve_cdp_state_dir
 
 cd "$REPO_ROOT"
 export PATH="${HOME}/.local/bin:${PATH}"
@@ -31,7 +48,6 @@ if jenkins_plain_log_enabled; then
   export UI_COLOR="${UI_COLOR:-0}"
   export FORCE_COLOR="${FORCE_COLOR:-0}"
 fi
-export CREDENTIALS_USER="${CREDENTIALS_USER:-holautosa}"
 # shellcheck source=scripts/lib/holautosa_exec_dir.sh
 source "$REPO_ROOT/scripts/lib/holautosa_exec_dir.sh"
 prepare_holautosa_workdir || true

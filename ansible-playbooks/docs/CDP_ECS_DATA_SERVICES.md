@@ -96,9 +96,10 @@ portal/access-URL email report.
 The controller cache location is selected automatically:
 
 - Jenkins: `$CDP_STATE_DIR`, set by `jenkins/scripts/run-ansible.sh` beneath
-  the workspace owner's real home, outside the Git checkout. This prevents
-  `CleanBeforeCheckout` from deleting credentials and creating another access
-  key on every rerun.
+  `$CREDENTIALS_HOME` or the passwd home of `CREDENTIALS_USER` (default
+  `holautosa`), outside the Git checkout. The scripts verify this directory is
+  writable before use. This prevents `CleanBeforeCheckout` from deleting
+  credentials and creating another access key on every rerun.
 - Standalone runs: `$CDP_STATE_DIR` when explicitly set, otherwise
   `$XDG_STATE_HOME/cdp-onprem-automation/`, or
   `$HOME/.local/state/cdp-onprem-automation/` when `XDG_STATE_HOME` is unset.
