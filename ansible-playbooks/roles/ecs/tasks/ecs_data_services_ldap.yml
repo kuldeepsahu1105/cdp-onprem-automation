@@ -80,6 +80,7 @@
           }}
       environment: "{{ ecs_remote_cdp_cli_environment }}"
       register: ecs_ldap_update
+      changed_when: false
       failed_when: false
       no_log: true
       become: false
