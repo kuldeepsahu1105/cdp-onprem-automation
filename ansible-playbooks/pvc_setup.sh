@@ -498,6 +498,16 @@ _is_true() {
 _run_ecs_data_services() {
   local ds_enabled=false
   local ds_extra=()
+  local post_install_selected=false
+  if _pipeline_stage_selected "ECS_POST_INSTALL_TASKS"; then
+    post_install_selected=true
+    ds_extra+=(
+      -e ecs_ldap_enabled=false
+      -e ecs_ldap_admin_user_enabled=false
+      -e ecs_data_services_configure_ldap=false
+    )
+    ui_info "ECS LDAP/IAM convergence already belongs to ECS_POST_INSTALL_TASKS; Data Services will not repeat it."
+  fi
   if _is_true "${ECS_DATA_SERVICES_DEPLOY_ENABLED:-false}"; then
     ds_enabled=true
   fi
@@ -517,11 +527,11 @@ _run_ecs_data_services() {
     ds_enabled=true
     ds_extra+=(-e ecs_deploy_cai_registry=true)
   fi
-  if _is_true "${ECS_LDAP_ENABLED:-false}"; then
+  if ! $post_install_selected && _is_true "${ECS_LDAP_ENABLED:-false}"; then
     ds_enabled=true
     ds_extra+=(-e ecs_ldap_enabled=true)
   fi
-  if _is_true "${ECS_LDAP_ADMIN_USER_ENABLED:-false}"; then
+  if ! $post_install_selected && _is_true "${ECS_LDAP_ADMIN_USER_ENABLED:-false}"; then
     ds_enabled=true
     ds_extra+=(-e ecs_ldap_admin_user_enabled=true)
   fi

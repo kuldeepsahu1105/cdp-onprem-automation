@@ -1,41 +1,8 @@
 ---
-- name: Inspect controller workspace ownership for CDP CLI state
-  ansible.builtin.stat:
-    path: >-
-      {{
-        lookup('env', 'WORKSPACE')
-        | default(playbook_dir, true)
-      }}
-  register: ecs_cdp_cli_workspace_stat
-
-- name: Resolve controller checkout owner's home directory
-  ansible.builtin.command:
-    argv:
-      - "{{ ansible_playbook_python }}"
-      - -c
-      - "import pwd, sys; print(pwd.getpwnam(sys.argv[1]).pw_dir)"
-      - "{{ ecs_cdp_cli_workspace_stat.stat.pw_name }}"
-  register: ecs_cdp_cli_owner_home
-  changed_when: false
-
-- name: Resolve isolated CDP CLI path
-  ansible.builtin.set_fact:
-    ecs_cdp_cli_venv_path: >-
-      {{
-        ecs_cdp_cli_venv_path | trim
-        if (ecs_cdp_cli_venv_path | default('') | trim | length > 0)
-        else (
-          ecs_cdp_cli_owner_home.stdout | trim
-          + '/.local/state/cdp-onprem-automation/cdpcli-0.9.164'
-        )
-      }}
-
 - name: Create persistent CDP CLI state directory
   ansible.builtin.file:
     path: "{{ ecs_cdp_cli_venv_path | dirname }}"
     state: directory
-    owner: "{{ ecs_cdp_cli_workspace_stat.stat.pw_name }}"
-    group: "{{ ecs_cdp_cli_workspace_stat.stat.gr_name }}"
     mode: "0700"
 
 - name: Install isolated CDP CLI for cloudera.cloud modules
@@ -44,8 +11,6 @@
     state: present
     virtualenv: "{{ ecs_cdp_cli_venv_path }}"
     virtualenv_command: "{{ ansible_playbook_python }} -m venv"
-  become: "{{ ansible_user_id != ecs_cdp_cli_workspace_stat.stat.pw_name }}"
-  become_user: "{{ ecs_cdp_cli_workspace_stat.stat.pw_name }}"
 
 - name: Inspect installed CDP CLI executable
   ansible.builtin.stat:

@@ -35,9 +35,6 @@
           ECS masters group '{{ ecs_cluster_master_group }}' is empty.
           Run 33_setup_ecs_cluster.yml first.
 
-    - name: Resolve Cloudera Manager endpoint for environment creation
-      ansible.builtin.import_tasks: common_tasks/resolve_cm_cluster_module_endpoint.yml
-
     - name: Initialize Caddy route list for data service ingress
       ansible.builtin.set_fact:
         ecs_caddy_data_service_routes: []
@@ -77,10 +74,6 @@
 
     - name: Configure CDP CLI profile for data services API calls
       ansible.builtin.import_tasks: common_tasks/ecs_data_services_runtime.yml
-
-    - name: Build deployment portal facts for IPA Caddy URL (LDAP CA fetch)
-      ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
-      when: identity_provider_effective == 'freeipa'
 
     - name: Optional ECS LDAP provider sync and LDAP admin user
       ansible.builtin.import_tasks: common_tasks/ecs_control_plane_ldap_and_admin.yml

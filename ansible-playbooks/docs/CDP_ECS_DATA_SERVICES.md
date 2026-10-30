@@ -5,13 +5,19 @@ Playbook `34_setup_ecs_data_services.yml` enables Cloudera Data Services on an e
 The controller prerequisite task pins `cdpcli==0.9.164` from the configured
 Python package index because that release exposes the private-cloud LDAP IAM
 operations used by post-install automation. It installs the CLI in the dedicated
-versioned virtual environment `ecs_cdp_cli_venv_path`.
-The installation runs as that non-root owner and stays outside the Git checkout,
-so Jenkins cleanup cannot encounter root-owned virtual-environment files.
-Standalone runs naturally use the checkout owner's home. The task verifies that
-exact executable before API changes, so an older or inconsistent system-wide
-`cdp` cannot be selected. Cloudera Labs `cdpy` is pinned to Git tag `v2.1.0`
-with `--no-deps`, avoiding similarly named or stale packages in private indexes.
+versioned virtual environment `ecs_cdp_cli_venv_path`, which defaults beneath
+`ecs_persistent_state_dir` (`CDP_STATE_DIR` in Jenkins). This keeps the CLI in
+the same writable `holautosa` state location as the credential cache instead of
+deriving a path from workspace ownership. The task verifies that exact
+executable before API changes, so an older or inconsistent system-wide `cdp`
+cannot be selected. Cloudera Labs `cdpy` is pinned to Git tag `v2.1.0` with
+`--no-deps`, avoiding similarly named or stale packages in private indexes.
+
+When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
+provider/admin IAM convergence runs only in post-install. The Data Services
+stage does not repeat it. Data Services also no longer runs the Cloudera Manager
+endpoint/client discovery chain because its `cloudera.cloud` modules communicate
+with the ECS control plane through the isolated CDP CLI profile.
 
 ## Prerequisites
 
