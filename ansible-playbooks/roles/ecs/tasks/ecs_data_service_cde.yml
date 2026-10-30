@@ -16,7 +16,7 @@
         jid: "{{ ecs_cde_service_job.ansible_job_id }}"
         mode: cleanup
       changed_when: false
-        when: ecs_cde_service.finished | default(false) | bool
+      when: ecs_cde_service.finished | default(false) | bool
 
     - name: Derive service id for ingress hostname
       ansible.builtin.set_fact:

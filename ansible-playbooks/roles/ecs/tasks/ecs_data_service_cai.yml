@@ -16,7 +16,7 @@
         jid: "{{ ecs_cai_workspace_job.ansible_job_id }}"
         mode: cleanup
       changed_when: false
-        when: ecs_cai_workspace.finished | default(false) | bool
+      when: ecs_cai_workspace.finished | default(false) | bool
 
     - name: Derive workbench hostname token
       ansible.builtin.set_fact:
