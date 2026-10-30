@@ -5,7 +5,7 @@
     name: "{{ ecs_cai_workspace_name }}"
     governance: "{{ ecs_cai_enable_governance | default(true) | bool }}"
     metrics: "{{ ecs_cai_enable_metrics | default(true) | bool }}"
-    enable_tls: "{{ ecs_cai_enable_tls | default(true) | bool }}"
+    tls: "{{ ecs_cai_enable_tls | default(true) | bool }}"
     monitoring: "{{ ecs_cai_enable_monitoring | default(true) | bool }}"
     namespace: "{{ ecs_cai_k8s_namespace }}"
     resource_pool: "{{ ecs_cai_resource_pool }}"

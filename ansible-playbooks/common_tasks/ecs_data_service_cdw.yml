@@ -46,7 +46,7 @@
         cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
         catalog_id: "{{ ecs_cdw_catalog_id }}"
         type: impala
-        template: "{{ ecs_cdw_vw_tshirt_size }}"
+        tshirt_size: "{{ ecs_cdw_vw_tshirt_size }}"
         endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
         wait: true
       environment: "{{ ecs_cdp_cli_environment }}"
@@ -60,7 +60,7 @@
         cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
         catalog_id: "{{ ecs_cdw_catalog_id }}"
         type: hive
-        template: "{{ ecs_cdw_vw_tshirt_size }}"
+        tshirt_size: "{{ ecs_cdw_vw_tshirt_size }}"
         endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
         wait: true
       environment: "{{ ecs_cdp_cli_environment }}"
