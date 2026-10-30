@@ -35,6 +35,27 @@
     msg: "{{ item }} ansible_default_ipv4: {{ hostvars[item].ansible_default_ipv4 | default('MISSING') }}"
   loop: "{{ groups['all'] }}"
 
+- name: Add forward A records for inventory hosts
+  freeipa.ansible_freeipa.ipadnsrecord:
+    ipaadmin_password: "{{ ipaadmin_password }}"
+    name: "{{ hostvars[item]['cldr_hostname'] }}"
+    zone_name: "{{ ipaserver_domain }}"
+    record_type: A
+    record_value: >-
+      {{
+        hostvars[item].private_ip
+        | default(hostvars[item].ansible_default_ipv4.address, true)
+      }}
+    state: present
+  loop: "{{ groups['all'] }}"
+  when:
+    - hostvars[item].cldr_hostname | default('') | length > 0
+    - >-
+      hostvars[item].private_ip | default(
+        hostvars[item].ansible_default_ipv4.address | default(''),
+        true
+      ) | length > 0
+
 - name: Add PTR Records Dynamically
   freeipa.ansible_freeipa.ipadnsrecord:
     ipaadmin_password: "{{ ipaadmin_password }}"

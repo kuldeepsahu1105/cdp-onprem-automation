@@ -9,7 +9,7 @@
       ansible.builtin.include_role:
         name: cloudera.exe.freeipa_server_wildcard_profile
         apply:
-          delegate_to: "{{ groups['ipaserver'] | first }}"
+          delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
           become: true
       vars:
         ipaadmin_password: "{{ freeipa_password | default(lookup('env', 'IPA_PASSWORD'), true) }}"
@@ -19,7 +19,7 @@
       ansible.builtin.include_role:
         name: cloudera.exe.freeipa_server_unenrolled_tls
         apply:
-          delegate_to: "{{ groups['ipaserver'] | first }}"
+          delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
           become: true
       vars:
         ipaadmin_password: "{{ freeipa_password | default(lookup('env', 'IPA_PASSWORD'), true) }}"

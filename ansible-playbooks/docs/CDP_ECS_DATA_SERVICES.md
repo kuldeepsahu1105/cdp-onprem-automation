@@ -33,6 +33,14 @@ the external Jenkins controller is unsupported because private names such as
 The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
 than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
+Before submitting any Data Services API request, playbook 34 reconciles ECS
+CoreDNS forwarding and the FreeIPA A record for the Cloudera Manager FQDN, then
+requires that FQDN to resolve to the CM private address from the ECS master.
+CDE and the other control-plane services call Cloudera Manager by this FQDN;
+an unresolved record otherwise surfaces later as an `UnknownHostException`.
+The bounded resolver wait uses `ecs_data_services_cm_dns_wait_retries` and
+`ecs_data_services_cm_dns_wait_delay`.
+
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
 stage does not repeat it. Data Services also no longer runs the Cloudera Manager
