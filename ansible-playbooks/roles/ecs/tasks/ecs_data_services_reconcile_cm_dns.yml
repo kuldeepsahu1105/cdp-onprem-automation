@@ -372,6 +372,66 @@
     - identity_provider_effective | default('freeipa') == 'freeipa'
     - groups.get('ipaserver', []) | length > 0
 
+- name: Critical DNS | Wait for ECS CoreDNS rollout
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - rollout
+      - status
+      - "deployment/{{ ecs_coredns_deployment_name }}"
+      - "--timeout={{ ecs_data_services_cm_dns_wait_retries | int * ecs_data_services_cm_dns_wait_delay | int }}s"
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  when: ecs_data_services_coredns_restart is changed
+
+- name: Critical DNS | Read ECS CoreDNS service address
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - get
+      - service
+      - "{{ ecs_coredns_service_name }}"
+      - --output
+      - jsonpath={.spec.clusterIP}
+  register: ecs_data_services_coredns_service
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+
+- name: Critical DNS | Wait for ECS CoreDNS service routing
+  ansible.builtin.command:
+    argv:
+      - dig
+      - "@{{ ecs_data_services_coredns_service.stdout | trim }}"
+      - +short
+      - "{{ item.fqdn }}"
+      - A
+  register: ecs_data_services_coredns_service_lookups
+  changed_when: false
+  failed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  loop: "{{ ecs_data_services_dns_verification_records }}"
+  loop_control:
+    label: "{{ item.label }}: {{ item.fqdn }}"
+  retries: "{{ ecs_data_services_cm_dns_wait_retries | int }}"
+  delay: "{{ ecs_data_services_cm_dns_wait_delay | int }}"
+  until:
+    - ecs_data_services_coredns_service_lookups.rc == 0
+    - item.address in ecs_data_services_coredns_service_lookups.stdout_lines
+
 - name: Critical DNS | Resolve required names from ECS master
   ansible.builtin.command:
     argv:
