@@ -400,7 +400,8 @@ _ansible_requirements_git_collection_present() {
       if ! ansible-galaxy collection list cloudera.cloud 2>/dev/null | grep -qE 'cloudera\.cloud'; then
         return 1
       fi
-      _ansible_cloudera_cloud_module_path >/dev/null
+      _ansible_cloudera_cloud_module_path >/dev/null \
+        && _ansible_cloudera_cloud_supports_private_cloud
       ;;
     *)
       return 1
@@ -435,6 +436,19 @@ _ansible_cloudera_cluster_git_ref_from_requirements() {
   ' "$req"
 }
 
+_ansible_cloudera_cloud_git_ref_from_requirements() {
+  local req="${1:?requirements.yml path}"
+  awk '
+    /cloudera-labs\/cloudera\.cloud\.git/ {
+      line = $0
+      sub(/.*cloudera\.cloud\.git,?/, "", line)
+      gsub(/["[:space:]]+.*/, "", line)
+      print line
+      exit
+    }
+  ' "$req"
+}
+
 _ansible_cloudera_cluster_module_path() {
   local p
   for p in \
@@ -446,6 +460,11 @@ _ansible_cloudera_cluster_module_path() {
     fi
   done
   return 1
+}
+
+_ansible_cloudera_cloud_supports_private_cloud() {
+  ansible-doc -j cloudera.cloud.dw_cluster 2>/dev/null \
+    | grep -qE '"private_cloud"[[:space:]]*:'
 }
 
 # Jenkins may skip galaxy when 4.0.0 is listed but cluster.py is missing — force pinned git install.
@@ -471,12 +490,35 @@ _ansible_ensure_pinned_cloudera_cluster() {
   fi
 }
 
+# Older cloudera.cloud releases expose dw_cluster but reject the private_cloud
+# option required for ECS. Verify the effective module contract, not only that
+# some version of the collection is present.
+_ansible_ensure_pinned_cloudera_cloud() {
+  local req="${1:?requirements.yml path}"
+  local ref galaxy_bin
+  ref="$(_ansible_cloudera_cloud_git_ref_from_requirements "$req")"
+  [[ -n "$ref" ]] || return 0
+  galaxy_bin="$(command -v ansible-galaxy || true)"
+  [[ -n "$galaxy_bin" ]] || return 0
+  if _ansible_cloudera_cloud_supports_private_cloud; then
+    return 0
+  fi
+  printf '%s\n' "Installing pinned cloudera.cloud (${ref}) for ECS private-cloud Data Services"
+  "$galaxy_bin" collection remove cloudera.cloud 2>/dev/null || true
+  "$galaxy_bin" collection install --force "git+https://github.com/cloudera-labs/cloudera.cloud.git,${ref}"
+  if ! _ansible_cloudera_cloud_supports_private_cloud; then
+    printf '%s\n' "ERROR: cloudera.cloud dw_cluster still lacks the private_cloud option after install (${ref})." >&2
+    return 1
+  fi
+}
+
 # CI pipelines run one DEPLOY_PHASE per stage; each invokes pvc_setup.sh — install collections once.
 ansible_install_collections_if_needed() {
   local req="${1:?requirements.yml path}"
   case "${PVC_SKIP_GALAXY_INSTALL:-}" in
     1|true|yes|TRUE|YES|on|ON)
       _ansible_ensure_pinned_cloudera_cluster "$req"
+      _ansible_ensure_pinned_cloudera_cloud "$req"
       return 0
       ;;
   esac
@@ -485,6 +527,7 @@ ansible_install_collections_if_needed() {
     ansible-galaxy collection install -r "$req"
   fi
   _ansible_ensure_pinned_cloudera_cluster "$req"
+  _ansible_ensure_pinned_cloudera_cloud "$req"
 }
 
 # Jenkins / generic CI detection (Jenkins sets BUILD_NUMBER, JENKINS_URL, and usually CI=true).

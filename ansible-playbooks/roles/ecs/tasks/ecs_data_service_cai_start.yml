@@ -9,7 +9,7 @@
     monitoring: "{{ ecs_cai_enable_monitoring | default(true) | bool }}"
     namespace: "{{ ecs_cai_k8s_namespace }}"
     resource_pool: "{{ ecs_cai_resource_pool }}"
-    verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+    verify_endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
     wait: true
     state: present
   environment: "{{ ecs_cdp_cli_environment }}"

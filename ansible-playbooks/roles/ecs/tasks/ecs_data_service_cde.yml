@@ -9,16 +9,21 @@
       until: ecs_cde_service.finished | bool
       retries: "{{ ecs_data_services_async_poll_retries | default(480) }}"
       delay: "{{ ecs_data_services_async_poll_delay | default(30) }}"
+      failed_when: false
 
     - name: Remove Data Engineering async result
       ansible.builtin.async_status:
         jid: "{{ ecs_cde_service_job.ansible_job_id }}"
         mode: cleanup
       changed_when: false
+        when: ecs_cde_service.finished | default(false) | bool
 
     - name: Derive service id for ingress hostname
       ansible.builtin.set_fact:
         ecs_cde_service_id: "{{ ecs_cde_service.service.clusterFqdn | regex_replace('^service\\.', '') }}"
+      when:
+        - ecs_cde_service.finished | default(false) | bool
+        - not (ecs_cde_service.failed | default(false) | bool)
 
     - name: Register CDE ingress for Caddy
       ansible.builtin.set_fact:
@@ -35,6 +40,9 @@
               }
             ]
           }}
+      when:
+        - ecs_cde_service.finished | default(false) | bool
+        - not (ecs_cde_service.failed | default(false) | bool)
 
     - name: Update portal catalog URL for CDE
       ansible.builtin.set_fact:
@@ -51,3 +59,6 @@
               recursive=True
             )
           }}
+      when:
+        - ecs_cde_service.finished | default(false) | bool
+        - not (ecs_cde_service.failed | default(false) | bool)

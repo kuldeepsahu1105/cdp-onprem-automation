@@ -102,6 +102,33 @@
     ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
     ansible_async_dir: "{{ ecs_data_services_async_dir }}"
 
+- name: Report failed parallel Data Services provisioning
+  ansible.builtin.assert:
+    that:
+      - >-
+        'cdw' not in (ecs_data_services_install_names | default([]))
+        or (
+          (ecs_cdw_cluster | default({})).finished | default(false) | bool
+          and not ((ecs_cdw_cluster | default({})).failed | default(false) | bool)
+        )
+      - >-
+        'cde' not in (ecs_data_services_install_names | default([]))
+        or (
+          (ecs_cde_service | default({})).finished | default(false) | bool
+          and not ((ecs_cde_service | default({})).failed | default(false) | bool)
+        )
+      - >-
+        'cai' not in (ecs_data_services_install_names | default([]))
+        or (
+          (ecs_cai_workspace | default({})).finished | default(false) | bool
+          and not ((ecs_cai_workspace | default({})).failed | default(false) | bool)
+        )
+    fail_msg: >-
+      Parallel Data Services provisioning failed.
+      CDW={{ (ecs_cdw_cluster | default({})).msg | default('not selected or no error') }};
+      CDE={{ (ecs_cde_service | default({})).msg | default('not selected or no error') }};
+      CAI={{ (ecs_cai_workspace | default({})).msg | default('not selected or no error') }}.
+
 - name: Install Model Registry when selected
   ansible.builtin.import_tasks: ecs_data_service_model_registry.yml
   vars:

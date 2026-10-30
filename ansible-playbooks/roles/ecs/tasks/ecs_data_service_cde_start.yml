@@ -7,7 +7,7 @@
     cpu_requests: "{{ ecs_cde_cpu_requests }}"
     memory_requests: "{{ ecs_cde_memory_requests }}"
     resource_pool: "{{ ecs_cde_resource_pool }}"
-    verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
     wait: true
     state: present
   environment: "{{ ecs_cdp_cli_environment }}"

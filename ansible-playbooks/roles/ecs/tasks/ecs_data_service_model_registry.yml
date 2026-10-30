@@ -31,7 +31,7 @@
     - name: Resolve ECS environment CRN
       cloudera.cloud.env_info:
         name: "{{ ecs_cdp_environment_name }}"
-        verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+        verify_endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
       environment: "{{ ecs_cdp_cli_environment }}"
       register: ecs_mr_env_info
 
