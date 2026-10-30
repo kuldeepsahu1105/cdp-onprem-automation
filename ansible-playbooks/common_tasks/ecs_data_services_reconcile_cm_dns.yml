@@ -28,20 +28,79 @@
         | default(hostvars[ecs_data_services_cm_inventory_host].ansible_host, true)
       }}
 
-- name: CM DNS | Reconcile FreeIPA forward record
-  freeipa.ansible_freeipa.ipadnsrecord:
-    ipaadmin_password: "{{ freeipa_password | default(lookup('env', 'IPA_PASSWORD'), true) }}"
-    name: "{{ ecs_data_services_cm_hostname }}"
-    zone_name: "{{ ipaserver_domain }}"
-    record_type: A
-    record_value: "{{ ecs_data_services_cm_private_ip }}"
-    state: present
-  delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
+- name: Critical DNS | Initialize required Data Services records
+  ansible.builtin.set_fact:
+    ecs_data_services_critical_dns_records:
+      - label: Cloudera Manager
+        name: "{{ ecs_data_services_cm_hostname }}"
+        zone: "{{ ipaserver_domain | default(cluster_domain) }}"
+        fqdn: "{{ ecs_data_services_cm_fqdn }}"
+        address: "{{ ecs_data_services_cm_private_ip }}"
+
+- name: Critical DNS | Resolve FreeIPA inventory host
+  ansible.builtin.set_fact:
+    ecs_data_services_ipa_inventory_host: "{{ groups['ipaserver'] | first }}"
   when:
     - identity_provider_effective | default('freeipa') == 'freeipa'
     - groups.get('ipaserver', []) | length > 0
 
-- name: CM DNS | Resolve Cloudera Manager from ECS master
+- name: Critical DNS | Add FreeIPA LDAP record requirement
+  ansible.builtin.set_fact:
+    ecs_data_services_critical_dns_records: >-
+      {{
+        ecs_data_services_critical_dns_records
+        + [
+          {
+            'label': 'FreeIPA LDAP',
+            'name': (
+              ipa_kdc_host
+              | default(
+                  hostvars[ecs_data_services_ipa_inventory_host].cldr_hostname
+                  + '.'
+                  + cluster_domain,
+                  true
+                )
+              | regex_replace('\\..*$', '')
+            ),
+            'zone': ipaserver_domain,
+            'fqdn': (
+              ipa_kdc_host
+              | default(
+                  hostvars[ecs_data_services_ipa_inventory_host].cldr_hostname
+                  + '.'
+                  + cluster_domain,
+                  true
+                )
+            ),
+            'address': (
+              hostvars[ecs_data_services_ipa_inventory_host].private_ip
+              | default(
+                  hostvars[ecs_data_services_ipa_inventory_host].ansible_host,
+                  true
+                )
+            )
+          }
+        ]
+      }}
+  when: ecs_data_services_ipa_inventory_host is defined
+
+- name: Critical DNS | Reconcile FreeIPA forward records
+  freeipa.ansible_freeipa.ipadnsrecord:
+    ipaadmin_password: "{{ freeipa_password | default(lookup('env', 'IPA_PASSWORD'), true) }}"
+    name: "{{ item.name }}"
+    zone_name: "{{ item.zone }}"
+    record_type: A
+    record_value: "{{ item.address }}"
+    state: present
+  delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
+  loop: "{{ ecs_data_services_critical_dns_records }}"
+  loop_control:
+    label: "{{ item.label }}: {{ item.fqdn }} -> {{ item.address }}"
+  when:
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - groups.get('ipaserver', []) | length > 0
+
+- name: Critical DNS | Resolve required names from ECS master
   ansible.builtin.command:
     argv:
       - python3
@@ -52,26 +111,32 @@
         result[4][0] for result in
         socket.getaddrinfo(sys.argv[1], None, socket.AF_INET)
         })))
-      - "{{ ecs_data_services_cm_fqdn }}"
-  register: ecs_data_services_cm_dns_lookup
+      - "{{ item.fqdn }}"
+  register: ecs_data_services_critical_dns_lookups
   changed_when: false
   failed_when: false
   become: false
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
+  loop: "{{ ecs_data_services_critical_dns_records }}"
+  loop_control:
+    label: "{{ item.label }}: {{ item.fqdn }}"
   retries: "{{ ecs_data_services_cm_dns_wait_retries | int }}"
   delay: "{{ ecs_data_services_cm_dns_wait_delay | int }}"
   until:
-    - ecs_data_services_cm_dns_lookup.rc == 0
-    - ecs_data_services_cm_private_ip in ecs_data_services_cm_dns_lookup.stdout
+    - ecs_data_services_critical_dns_lookups.rc == 0
+    - item.address in ecs_data_services_critical_dns_lookups.stdout
 
-- name: CM DNS | Require private Cloudera Manager resolution
+- name: Critical DNS | Require private service resolution
   ansible.builtin.assert:
     that:
-      - ecs_data_services_cm_dns_lookup.rc == 0
-      - ecs_data_services_cm_private_ip in ecs_data_services_cm_dns_lookup.stdout
+      - item.rc == 0
+      - item.item.address in item.stdout
     fail_msg: >-
-      {{ ecs_data_services_cm_fqdn }} must resolve to
-      {{ ecs_data_services_cm_private_ip }} from the ECS master before enabling
+      {{ item.item.label }} hostname {{ item.item.fqdn }} must resolve to
+      {{ item.item.address }} from the ECS master before enabling
       CDE/CDW/CAI. Resolver output:
-      {{ ecs_data_services_cm_dns_lookup.stdout | default(ecs_data_services_cm_dns_lookup.stderr, true) }}
+      {{ item.stdout | default(item.stderr, true) }}
+  loop: "{{ ecs_data_services_critical_dns_lookups.results }}"
+  loop_control:
+    label: "{{ item.item.label }}: {{ item.item.fqdn }}"
