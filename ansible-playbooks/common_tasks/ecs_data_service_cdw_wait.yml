@@ -1,7 +1,7 @@
 ---
 - name: CDW | Poll cluster through structured status API
   cloudera.cloud.dw_cluster_info:
-    env: "{{ ecs_cdp_environment_name }}"
+    environment: "{{ ecs_cdp_environment_name }}"
     endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cdw_cluster_info
