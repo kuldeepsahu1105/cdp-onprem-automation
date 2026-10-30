@@ -11,6 +11,15 @@
       delay: "{{ ecs_data_services_async_poll_delay | default(30) }}"
       failed_when: false
 
+    - name: Record ML workspace provisioning result
+      ansible.builtin.set_fact:
+        ecs_cai_workspace_succeeded: >-
+          {{
+            ecs_cai_workspace.finished | default(false) | bool
+            and (ecs_cai_workspace.workspace | default({})) is mapping
+            and (ecs_cai_workspace.workspace | default({})).instanceUrl | default('') | length > 0
+          }}
+
     - name: Remove ML workspace async result
       ansible.builtin.async_status:
         jid: "{{ ecs_cai_workspace_job.ansible_job_id }}"
@@ -27,8 +36,7 @@
             | regex_replace('(\\..*$)', '')
           }}
       when:
-        - ecs_cai_workspace.finished | default(false) | bool
-        - not (ecs_cai_workspace.failed | default(false) | bool)
+        - ecs_cai_workspace_succeeded | bool
 
     - name: Register workbench ingress for Caddy
       ansible.builtin.set_fact:
@@ -46,8 +54,7 @@
             ]
           }}
       when:
-        - ecs_cai_workspace.finished | default(false) | bool
-        - not (ecs_cai_workspace.failed | default(false) | bool)
+        - ecs_cai_workspace_succeeded | bool
 
     - name: Update portal catalog URL for CAI
       ansible.builtin.set_fact:
@@ -65,5 +72,4 @@
             )
           }}
       when:
-        - ecs_cai_workspace.finished | default(false) | bool
-        - not (ecs_cai_workspace.failed | default(false) | bool)
+        - ecs_cai_workspace_succeeded | bool
