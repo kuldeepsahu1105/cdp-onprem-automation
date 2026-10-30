@@ -133,6 +133,35 @@
         )
       }}
 
+- name: ECS LDAP admin | Read assigned tenant roles
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_remote_cdp_cli_prefix
+        + [
+          'iam', 'list-user-assigned-roles',
+          '--user', ecs_ldap_admin_user_crn,
+          '--no-paginate'
+        ]
+      }}
+  environment: "{{ ecs_remote_cdp_cli_environment }}"
+  register: ecs_ldap_admin_assigned_tenant_roles
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS LDAP admin | Select missing tenant roles
+  ansible.builtin.set_fact:
+    ecs_ldap_admin_missing_tenant_roles: >-
+      {{
+        ecs_ldap_admin_tenant_roles
+        | difference(
+            (ecs_ldap_admin_assigned_tenant_roles.stdout | from_json).roleCrns
+            | default([])
+          )
+      }}
+
 - name: ECS LDAP admin | Assign tenant roles to user
   ansible.builtin.command:
     argv: >-
@@ -145,7 +174,7 @@
         ]
       }}
   environment: "{{ ecs_remote_cdp_cli_environment }}"
-  loop: "{{ ecs_ldap_admin_tenant_roles | default([]) }}"
+  loop: "{{ ecs_ldap_admin_missing_tenant_roles | default([]) }}"
   loop_control:
     label: "{{ item }}"
   register: ecs_ldap_admin_assign_tenant
@@ -194,6 +223,40 @@
         )
       }}
 
+- name: ECS LDAP admin | Read assigned resource roles
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_remote_cdp_cli_prefix
+        + [
+          'iam', 'list-user-assigned-resource-roles',
+          '--user', ecs_ldap_admin_user_crn,
+          '--no-paginate'
+        ]
+      }}
+  environment: "{{ ecs_remote_cdp_cli_environment }}"
+  register: ecs_ldap_admin_assigned_resource_roles
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS LDAP admin | Select missing environment resource roles
+  ansible.builtin.set_fact:
+    ecs_ldap_admin_missing_resource_roles: >-
+      {{
+        ecs_ldap_admin_resource_roles
+        | difference(
+            (
+              (ecs_ldap_admin_assigned_resource_roles.stdout | from_json).resourceAssignments
+              | default([])
+              | selectattr('resourceCrn', 'equalto', ecs_ldap_admin_environment_crn)
+              | map(attribute='resourceRoleCrn')
+              | list
+            )
+          )
+      }}
+
 - name: ECS LDAP admin | Assign resource roles on ECS environment
   ansible.builtin.command:
     argv: >-
@@ -207,7 +270,7 @@
         ]
       }}
   environment: "{{ ecs_remote_cdp_cli_environment }}"
-  loop: "{{ ecs_ldap_admin_resource_roles | default([]) }}"
+  loop: "{{ ecs_ldap_admin_missing_resource_roles | default([]) }}"
   loop_control:
     label: "{{ item }}"
   register: ecs_ldap_admin_assign_resource

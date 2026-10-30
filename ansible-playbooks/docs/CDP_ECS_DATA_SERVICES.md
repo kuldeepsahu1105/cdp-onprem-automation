@@ -72,6 +72,11 @@ vendor-created `apps` environment), automation adopts it. If no environment
 exists, automation creates the preferred private-cloud environment using the
 configured CM cluster and credentials.
 
+Machine-user and LDAP-admin IAM convergence reads existing tenant and
+environment resource-role assignments first. Reruns invoke assignment APIs only
+for missing roles, so already-converged users remain `ok` rather than producing
+misleading `changed` results.
+
 LDAP provider mutations and LDAP-admin IAM assignments run through an isolated
 CDP CLI on the ECS master. This keeps the standalone playbook functional when
 the Ansible controller or Jenkins cannot resolve or route to the private

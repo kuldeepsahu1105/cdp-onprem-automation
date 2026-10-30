@@ -297,7 +297,7 @@
   ansible.builtin.set_fact:
     ecs_cdp_environment_name: "{{ ecs_cdp_environment_name_effective }}"
 
-- name: Create ECS automation machine user (ignore if exists)
+- name: Ensure ECS automation machine user exists
   ansible.builtin.command:
     argv: >-
       {{
@@ -318,6 +318,7 @@
     ecs_create_machine_user.rc != 0
     and ('already exists' not in (ecs_create_machine_user.stderr | default('') | lower))
     and ('alreadyexists' not in (ecs_create_machine_user.stderr | default('') | lower))
+  changed_when: ecs_create_machine_user.rc == 0
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
 
 - name: Read ECS environment for automation permissions
@@ -374,6 +375,38 @@
         )
       }}
 
+- name: Read assigned tenant IAM roles for ECS automation user
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_cdp_cli_prefix
+        + [
+          'iam',
+          'list-machine-user-assigned-roles',
+          '--machine-user-name',
+          ecs_automation_machine_user,
+          '--no-paginate'
+        ]
+      }}
+  environment:
+    CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
+    CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
+    HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
+  register: ecs_automation_assigned_tenant_roles
+  changed_when: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Select missing tenant IAM roles for ECS automation user
+  ansible.builtin.set_fact:
+    ecs_automation_missing_tenant_roles: >-
+      {{
+        ecs_automation_tenant_roles
+        | difference(
+            (ecs_automation_assigned_tenant_roles.stdout | from_json).roleCrns
+            | default([])
+          )
+      }}
+
 - name: Assign tenant IAM roles to ECS automation user
   ansible.builtin.command:
     argv: >-
@@ -392,7 +425,7 @@
     CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
     CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
     HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
-  loop: "{{ ecs_automation_tenant_roles }}"
+  loop: "{{ ecs_automation_missing_tenant_roles }}"
   loop_control:
     label: "{{ item }}"
   register: ecs_automation_assign_tenant_roles
@@ -447,6 +480,43 @@
         )
       }}
 
+- name: Read assigned resource IAM roles for ECS automation user
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_cdp_cli_prefix
+        + [
+          'iam',
+          'list-machine-user-assigned-resource-roles',
+          '--machine-user-name',
+          ecs_automation_machine_user,
+          '--no-paginate'
+        ]
+      }}
+  environment:
+    CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
+    CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
+    HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
+  register: ecs_automation_assigned_resource_roles
+  changed_when: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Select missing environment resource roles for ECS automation user
+  ansible.builtin.set_fact:
+    ecs_automation_missing_resource_roles: >-
+      {{
+        ecs_automation_resource_roles
+        | difference(
+            (
+              (ecs_automation_assigned_resource_roles.stdout | from_json).resourceAssignments
+              | default([])
+              | selectattr('resourceCrn', 'equalto', ecs_automation_environment_crn)
+              | map(attribute='resourceRoleCrn')
+              | list
+            )
+          )
+      }}
+
 - name: Assign environment resource roles to ECS automation user
   ansible.builtin.command:
     argv: >-
@@ -467,7 +537,7 @@
     CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
     CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
     HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
-  loop: "{{ ecs_automation_resource_roles }}"
+  loop: "{{ ecs_automation_missing_resource_roles }}"
   loop_control:
     label: "{{ item }}"
   register: ecs_automation_assign_resource_roles
