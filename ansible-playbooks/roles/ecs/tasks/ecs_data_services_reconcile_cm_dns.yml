@@ -106,9 +106,21 @@
     - identity_provider_effective | default('freeipa') == 'freeipa'
     - groups.get('ipaserver', []) | length > 0
 
+- name: Critical DNS | Require FreeIPA administrator password
+  ansible.builtin.assert:
+    that:
+      - ipaadmin_password | default('') | string | length > 0
+    fail_msg: >-
+      ipaadmin_password must be set before reconciling critical Data Services
+      DNS records in FreeIPA.
+  no_log: true
+  when:
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - groups.get('ipaserver', []) | length > 0
+
 - name: Critical DNS | Reconcile FreeIPA forward records
   freeipa.ansible_freeipa.ipadnsrecord:
-    ipaadmin_password: "{{ freeipa_password | default(lookup('env', 'IPA_PASSWORD'), true) }}"
+    ipaadmin_password: "{{ ipaadmin_password }}"
     name: "{{ item.name }}"
     zone_name: "{{ item.zone }}"
     record_type: A

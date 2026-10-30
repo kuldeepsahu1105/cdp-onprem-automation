@@ -12,7 +12,6 @@
           delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
           become: true
       vars:
-        ipaadmin_password: "{{ freeipa_password | default(lookup('env', 'IPA_PASSWORD'), true) }}"
         freeipa_wildcard_profile_name: "{{ ecs_cai_wildcard_cert_profile }}"
 
     - name: CAI TLS | Issue workbench wildcard certificate
@@ -22,7 +21,6 @@
           delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
           become: true
       vars:
-        ipaadmin_password: "{{ freeipa_password | default(lookup('env', 'IPA_PASSWORD'), true) }}"
         unenrolled_hostname: "{{ ecs_cai_workbench_hostname }}"
         unenrolled_description: "Cloudera AI workbench wildcard certificate"
         unenrolled_cert_profile: "{{ ecs_cai_wildcard_cert_profile }}"
