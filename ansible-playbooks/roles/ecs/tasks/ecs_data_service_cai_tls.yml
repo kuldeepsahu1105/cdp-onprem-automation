@@ -1,7 +1,8 @@
 ---
 - name: CAI TLS | Configure wildcard certificate and Kubernetes secret
   when:
-    - ecs_cai_workspace_succeeded | default(false) | bool
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - ecs_cai_workbench_hostname | default('') | length > 0
     - ecs_cai_configure_wildcard_tls | default(true) | bool
     - groups.get('ipaserver', []) | length > 0
   block:
@@ -70,6 +71,7 @@
       is present. Ensure {{ ecs_cai_tls_secret_name }} exists in namespace
       {{ ecs_cai_k8s_namespace }} before using {{ ecs_cai_workspace_url }}.
   when:
-    - ecs_cai_workspace_succeeded | default(false) | bool
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - ecs_cai_workbench_hostname | default('') | length > 0
     - ecs_cai_configure_wildcard_tls | default(true) | bool
     - groups.get('ipaserver', []) | length == 0

@@ -1,0 +1,56 @@
+---
+- name: CAI | Poll workspace through structured status API
+  cloudera.cloud.ml_info:
+    environment: "{{ ecs_cdp_environment_name }}"
+    name: "{{ ecs_cai_workspace_name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cai_workspace_info
+  changed_when: false
+  failed_when: false
+  until: >-
+    (
+      ecs_cai_workspace_info.workspaces | default([])
+      | first | default({})
+    ).instanceStatus | default('')
+    in ['installation:finished', 'modify:finished', 'installation:failed']
+  retries: "{{ ecs_data_services_status_wait_retries | int }}"
+  delay: "{{ ecs_data_services_status_wait_delay | int }}"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - not (ecs_cai_workspace_start.failed | default(false) | bool)
+
+- name: CAI | Record structured workspace result
+  ansible.builtin.set_fact:
+    ecs_cai_workspace:
+      finished: true
+      workspace: >-
+        {{
+          (
+            ecs_cai_workspace_info.workspaces | default([])
+            | first | default({})
+          )
+          if not (ecs_cai_workspace_start.failed | default(false) | bool)
+          else {}
+        }}
+      msg: >-
+        {{
+          ecs_cai_workspace_start.msg
+          | default(
+              'CAI workspace status: '
+              + (
+                  (
+                    ecs_cai_workspace_info.workspaces | default([])
+                    | first | default({})
+                  ).instanceStatus | default('not returned')
+                )
+            )
+        }}
+  when: "'cai' in (ecs_data_services_install_names | default([]))"
+
+- name: CAI | Complete structured workspace result
+  ansible.builtin.include_tasks: ecs_data_service_cai.yml
+  when: "'cai' in (ecs_data_services_install_names | default([]))"

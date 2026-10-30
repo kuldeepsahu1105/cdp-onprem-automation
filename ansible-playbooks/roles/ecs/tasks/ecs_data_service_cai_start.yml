@@ -10,13 +10,12 @@
     namespace: "{{ ecs_cai_k8s_namespace }}"
     resource_pool: "{{ ecs_cai_resource_pool }}"
     endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-    wait: true
+    wait: false
     state: present
   environment: "{{ ecs_cdp_cli_environment }}"
-  async: "{{ ecs_data_services_async_timeout | default(14400) }}"
-  poll: 0
-  register: ecs_cai_workspace_job
+  register: ecs_cai_workspace_start
   changed_when: false
+  failed_when: false
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh

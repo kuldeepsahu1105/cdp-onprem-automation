@@ -82,22 +82,11 @@
     ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
     ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
-- name: Initialize pending parallel Data Services jobs
-  ansible.builtin.set_fact:
-    ecs_data_services_pending_jobs: {}
+- name: Discover CAI endpoint when selected
+  ansible.builtin.import_tasks: ecs_data_service_cai_endpoint.yml
 
-- name: Register pending CAI job
-  ansible.builtin.set_fact:
-    ecs_data_services_pending_jobs: >-
-      {{ ecs_data_services_pending_jobs | combine({'cai': ecs_cai_workspace_job.ansible_job_id}) }}
-  when: "'cai' in (ecs_data_services_install_names | default([]))"
-
-- name: Collect parallel Data Services jobs in completion order
-  ansible.builtin.include_tasks: ecs_data_services_poll_next.yml
-  loop: "{{ range(0, ecs_data_services_pending_jobs | length) | list }}"
-  loop_control:
-    label: "completion slot {{ item + 1 }}"
-  when: ecs_data_services_pending_jobs | length > 0
+- name: Configure CAI wildcard TLS before waiting for installation
+  ansible.builtin.import_tasks: ecs_data_service_cai_tls.yml
 
 - name: Wait for CDW through structured status API
   ansible.builtin.import_tasks: ecs_data_service_cdw_wait.yml
@@ -110,18 +99,16 @@
 - name: Wait for CDE through structured status API
   ansible.builtin.import_tasks: ecs_data_service_cde_wait.yml
 
+- name: Wait for CAI through structured status API
+  ansible.builtin.import_tasks: ecs_data_service_cai_wait.yml
+
 - name: Install Model Registry when selected
   ansible.builtin.import_tasks: ecs_data_service_model_registry.yml
   vars:
     ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
 
-- name: Configure CAI wildcard TLS from Cloudera Labs reference flow
-  ansible.builtin.import_tasks: ecs_data_service_cai_tls.yml
-  when: not (ecs_cai_followup_completed_this_run | default(false) | bool)
-
 - name: Verify CAI UI after independent services
   ansible.builtin.import_tasks: ecs_data_service_cai_followup.yml
-  when: not (ecs_cai_followup_completed_this_run | default(false) | bool)
 
 - name: Remove temporary Data Services profile from ECS master
   ansible.builtin.file:
