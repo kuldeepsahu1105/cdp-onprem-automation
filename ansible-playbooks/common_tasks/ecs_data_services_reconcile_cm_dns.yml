@@ -102,6 +102,109 @@
         ]
       }}
 
+- name: Critical DNS | Read ECS CoreDNS configuration
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - get
+      - configmap
+      - "{{ ecs_coredns_configmap_name }}"
+      - --output
+      - json
+  register: ecs_data_services_coredns_config
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+
+- name: Critical DNS | Decode ECS CoreDNS configuration
+  ansible.builtin.set_fact:
+    ecs_data_services_coredns_config_data: >-
+      {{
+        (ecs_data_services_coredns_config.stdout | from_json).data
+        | default({})
+      }}
+
+- name: Critical DNS | Require RKE2 NodeHosts integration
+  ansible.builtin.assert:
+    that:
+      - >-
+        'hosts /etc/coredns/NodeHosts'
+        in (ecs_data_services_coredns_config_data.Corefile | default(''))
+    fail_msg: >-
+      CoreDNS ConfigMap {{ ecs_coredns_configmap_name }} does not load
+      /etc/coredns/NodeHosts; refusing to claim deterministic Data Services
+      resolution without a supported local-host mapping path.
+
+- name: Critical DNS | Build deterministic CoreDNS host mappings
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        existing = sys.argv[1].splitlines()
+        records = json.loads(sys.argv[2])
+        managed = {
+            record["fqdn"].rstrip(".").lower()
+            for record in records
+            if record.get("address")
+        }
+        retained = []
+        for line in existing:
+            tokens = line.split()
+            names = {
+                token.rstrip(".").lower()
+                for token in tokens[1:]
+            } if tokens and not tokens[0].startswith("#") else set()
+            if managed.isdisjoint(names):
+                retained.append(line)
+
+        while retained and not retained[-1].strip():
+            retained.pop()
+        retained.extend(
+            f'{record["address"]} {record["fqdn"]}'
+            for record in records
+            if record.get("address")
+        )
+        print("\n".join(retained) + "\n")
+      - "{{ ecs_data_services_coredns_config_data.NodeHosts | default('') }}"
+      - "{{ ecs_data_services_critical_dns_records | to_json }}"
+  register: ecs_data_services_coredns_nodehosts
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+
+- name: Critical DNS | Install deterministic CoreDNS host mappings
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - patch
+      - configmap
+      - "{{ ecs_coredns_configmap_name }}"
+      - --type
+      - merge
+      - --patch
+      - "{{ {'data': {'NodeHosts': ecs_data_services_coredns_nodehosts.stdout}} | to_json }}"
+  register: ecs_data_services_coredns_nodehosts_patch
+  changed_when: >-
+    ecs_data_services_coredns_nodehosts.stdout
+    != (ecs_data_services_coredns_config_data.NodeHosts | default(''))
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+
 - name: Critical DNS | Gather FreeIPA operating system facts
   ansible.builtin.setup:
     gather_subset:
