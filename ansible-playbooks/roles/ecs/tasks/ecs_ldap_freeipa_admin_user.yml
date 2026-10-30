@@ -16,7 +16,7 @@
     name: "{{ ecs_ldap_admin_username }}"
     givenname: ECS
     sn: Admin
-    mail:
+    email:
       - "{{ ecs_ldap_admin_email }}"
     password: "{{ ecs_ldap_admin_password }}"
     update_password: always
