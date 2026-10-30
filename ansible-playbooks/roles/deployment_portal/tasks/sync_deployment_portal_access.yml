@@ -1,0 +1,27 @@
+---
+# Render only authenticated operator credential/access files into an existing portal.
+
+- name: Ensure portal downloads directory exists
+  ansible.builtin.file:
+    path: "{{ deployment_portal_www_dir }}/downloads"
+    state: directory
+    mode: "0750"
+    owner: root
+    group: root
+  when: deployment_portal_expose_credentials | default(true) | bool
+
+- name: Render operator credentials JSON
+  ansible.builtin.template:
+    src: deployment_portal_operator_credentials.json.j2
+    dest: "{{ deployment_portal_www_dir }}/downloads/operator-credentials.json"
+    mode: "0640"
+  when: deployment_portal_expose_credentials | default(true) | bool
+  no_log: true
+
+- name: Render protected operator access fragment
+  ansible.builtin.template:
+    src: deployment_portal_operator_access.html.j2
+    dest: "{{ deployment_portal_www_dir }}/downloads/operator-access.html"
+    mode: "0640"
+  when: deployment_portal_expose_credentials | default(true) | bool
+  no_log: true

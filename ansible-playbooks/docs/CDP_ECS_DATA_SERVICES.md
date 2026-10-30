@@ -5,9 +5,7 @@ Playbook `34_setup_ecs_data_services.yml` enables Cloudera Data Services on an e
 The controller prerequisite task pins `cdpcli==0.9.164` from the configured
 Python package index because that release exposes the private-cloud LDAP IAM
 operations used by post-install automation. It installs the CLI in the dedicated
-versioned virtual environment `ecs_cdp_cli_venv_path`. When that variable is
-blank, the path defaults to
-`<controller-checkout-owner-home>/.local/state/cdp-onprem-automation/cdpcli-0.9.164`.
+versioned virtual environment `ecs_cdp_cli_venv_path`.
 The installation runs as that non-root owner and stays outside the Git checkout,
 so Jenkins cleanup cannot encounter root-owned virtual-environment files.
 Standalone runs naturally use the checkout owner's home. The task verifies that
@@ -117,14 +115,18 @@ ignores an invalid cache and creates a replacement key only when no valid
 explicit or cached credentials remain.
 
 For ECS console revalidation, machine-user credentials, IAM/LDAP permissions,
-and portal refresh without reinstalling ECS, run:
+and portal credential synchronization without reinstalling ECS, run:
 
 ```bash
 DEPLOY_PHASE=8 ./pvc_setup.sh
 ```
 
 The underlying standalone playbook is
-`34_setup_ecs_post_install.yml`; the wrapper adds `35_refresh_deployment_portal.yml`.
+`34_setup_ecs_post_install.yml`; the wrapper then runs
+`35_sync_deployment_portal_access.yml`. The latter updates only
+`operator-credentials.json` and the protected operator-access HTML fragment in
+the existing portal. It does not run Docker Compose, pull images, recreate
+Caddy or pgAdmin, or modify monitoring.
 
 **List form** (unioned with flags):
 

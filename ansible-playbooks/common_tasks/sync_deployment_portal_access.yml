@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for deployment portal access sync
+  ansible.builtin.import_role:
+    name: deployment_portal
+    tasks_from: sync_deployment_portal_access
