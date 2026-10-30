@@ -51,28 +51,47 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
 
-- name: ECS remote CLI | Verify private-cloud LDAP commands
-  ansible.builtin.command:
-    argv:
-      - "{{ ecs_remote_cdp_executable }}"
-      - --form-factor
-      - private
-      - iam
-      - "{{ item }}"
-      - help
-  loop:
-    - update-ldap-provider
-    - create-ldap-provider
-  changed_when: false
-  become: false
-  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
-  connection: ssh
-
 - name: ECS remote CLI | Create temporary profile directory
   ansible.builtin.tempfile:
     state: directory
     prefix: cdp_ecs_post_install_
   register: ecs_remote_cdp_profile_dir
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS remote CLI | Resolve built-in IAM model path
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_remote_cdp_venv_path }}/bin/python"
+      - -c
+      - >-
+        import pathlib, cdpcli;
+        print(pathlib.Path(cdpcli.__file__).parent / 'data' / 'iam' / 'iam.yaml')
+  register: ecs_remote_cdp_iam_model_path
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS remote CLI | Copy IAM model compatibility patcher
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/files/patch_cdpcli_iam_model.py"
+    dest: "{{ ecs_remote_cdp_profile_dir.path }}/patch_cdpcli_iam_model.py"
+    mode: "0700"
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS remote CLI | Add private LDAP user provider field to temporary model
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_remote_cdp_venv_path }}/bin/python"
+      - "{{ ecs_remote_cdp_profile_dir.path }}/patch_cdpcli_iam_model.py"
+      - "{{ ecs_remote_cdp_iam_model_path.stdout | trim }}"
+      - "{{ ecs_remote_cdp_profile_dir.path }}/.cdp/models/iam/iam.yaml"
   changed_when: false
   become: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
@@ -106,6 +125,127 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
 
+- name: ECS remote CLI | Verify post-install command contracts
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_remote_cdp_executable }}"
+      - --form-factor
+      - private
+      - "{{ item.service }}"
+      - "{{ item.operation }}"
+      - help
+  environment:
+    HOME: "{{ ecs_remote_cdp_profile_dir.path }}"
+  loop:
+    - service: iam
+      operation: update-ldap-provider
+      expected_options:
+        - --ldap-provider-name
+        - --url
+        - --user-search-base
+        - --user-search-filter
+        - --group-search-base
+        - --group-search-filter
+        - --username-mapping-attribute
+        - --email-mapping-attribute
+        - --first-name-mapping-attribute
+        - --last-name-mapping-attribute
+        - --group-name-mapping-attribute
+        - --bind-dn
+        - --bind-password
+        - --tls-ca-certificates
+        - --skip-group-sync-on-login
+    - service: iam
+      operation: create-ldap-provider
+      expected_options:
+        - --ldap-provider-name
+        - --url
+        - --user-search-base
+        - --user-search-filter
+        - --group-search-base
+        - --group-search-filter
+        - --username-mapping-attribute
+        - --email-mapping-attribute
+        - --first-name-mapping-attribute
+        - --last-name-mapping-attribute
+        - --group-name-mapping-attribute
+        - --bind-dn
+        - --bind-password
+        - --tls-ca-certificates
+        - --skip-group-sync-on-login
+    - service: iam
+      operation: get-default-identity-provider
+      expected_options: []
+    - service: iam
+      operation: set-default-identity-provider
+      expected_options:
+        - --name-or-crn
+    - service: iam
+      operation: list-users
+      expected_options: []
+    - service: iam
+      operation: create-user
+      expected_options:
+        - --identity-provider-user-id
+        - --email
+        - --identity-provider-crn
+        - --first-name
+        - --last-name
+    - service: iam
+      operation: list-roles
+      expected_options: []
+    - service: iam
+      operation: list-user-assigned-roles
+      expected_options:
+        - --user
+    - service: iam
+      operation: assign-user-role
+      expected_options:
+        - --user
+        - --role
+    - service: iam
+      operation: list-resource-roles
+      expected_options: []
+    - service: iam
+      operation: list-user-assigned-resource-roles
+      expected_options:
+        - --user
+    - service: iam
+      operation: assign-user-resource-role
+      expected_options:
+        - --user
+        - --resource-role-crn
+        - --resource-crn
+    - service: environments
+      operation: describe-environment
+      expected_options:
+        - --environment-name
+  loop_control:
+    label: "{{ item.service }} {{ item.operation }}"
+  register: ecs_remote_cdp_command_help
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: ECS remote CLI | Verify post-install command options
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.item.expected_options
+        | difference(item.stdout | regex_findall('--[a-z0-9-]+'))
+        | length == 0
+    fail_msg: >-
+      CDP CLI {{ item.item.service }} {{ item.item.operation }} is missing required
+      options: {{
+        item.item.expected_options
+        | difference(item.stdout | regex_findall('--[a-z0-9-]+'))
+        | join(', ')
+      }}
+  loop: "{{ ecs_remote_cdp_command_help.results }}"
+  loop_control:
+    label: "{{ item.item.service }} {{ item.item.operation }}"
+
 - name: ECS remote CLI | Publish invocation and environment
   ansible.builtin.set_fact:
     ecs_remote_cdp_cli_prefix: >-
@@ -125,4 +265,4 @@
     ecs_remote_cdp_cli_environment:
       CDP_CONFIG_FILE: "{{ ecs_remote_cdp_profile_dir.path }}/config"
       CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_remote_cdp_profile_dir.path }}/credentials"
-      HOME: "{{ ecs_remote_cdp_home.stdout | trim }}"
+      HOME: "{{ ecs_remote_cdp_profile_dir.path }}"

@@ -61,7 +61,7 @@
           'iam', 'create-user',
           '--identity-provider-user-id', ecs_ldap_admin_username,
           '--email', ecs_ldap_admin_email,
-          '--saml-provider-name', ecs_ldap_provider_crn,
+          '--identity-provider-crn', ecs_ldap_provider_crn,
           '--first-name', 'ECS',
           '--last-name', 'Admin'
         ]
