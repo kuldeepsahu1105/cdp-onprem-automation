@@ -30,6 +30,8 @@ workers exit before submitting requests because the new modules do not parse
 `CDP_CONFIG_FILE` or `CDP_SHARED_CREDENTIALS_FILE`. Running these modules on
 the external Jenkins controller is unsupported because private names such as
 `console-cdp.apps.<cluster-domain>` resolve only inside the ECS network.
+The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
+than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
@@ -44,8 +46,8 @@ combined installation duration to approximately the slowest selected service
 rather than the sum of all three. Model Registry remains sequential because it
 has separate Ozone and environment prerequisites. Tune the wait with
 `ecs_data_services_async_timeout`, `ecs_data_services_async_poll_retries`, and
-`ecs_data_services_async_poll_delay`. Async job results use the absolute
-the ECS master's persistent state directory so the temporary CDP profile's
+`ecs_data_services_async_poll_delay`. Async job results use an absolute path beneath the ECS master's persistent
+state directory so the temporary CDP profile's
 `HOME` override cannot make launch and polling use different paths. The launch
 tasks report `ok`, not `changed`, because queuing a remote async worker is not
 proof that the control plane accepted a provisioning request.
