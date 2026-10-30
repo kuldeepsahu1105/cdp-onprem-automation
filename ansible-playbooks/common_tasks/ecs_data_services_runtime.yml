@@ -11,9 +11,18 @@
         else ('https://' + ecs_console_host_prefix + '.' + ecs_app_domain)
       }}
 
-- name: Set ECS master FQDN for data service ingress backends
+- name: Require IPA controller for private Data Services API execution
+  ansible.builtin.assert:
+    that:
+      - groups.get('ipaserver', []) | length > 0
+      - ipaserver_inventory_host | default('') | length > 0
+    fail_msg: >-
+      ECS Data Services API calls require an IPA controller host inside the
+      private DNS network. Add an active host under [ipaserver] in inventory.ini.
+
+- name: Set internal execution host and ECS ingress backend
   ansible.builtin.set_fact:
-    ecs_data_services_delegate_host: "{{ groups[ecs_cluster_master_group][0] }}"
+    ecs_data_services_delegate_host: "{{ ipaserver_inventory_host }}"
     ecs_master_fqdn: "{{ hostvars[groups[ecs_cluster_master_group][0]].cldr_hostname }}.{{ cluster_domain }}"
     ecs_master_ansible_host: "{{ hostvars[groups[ecs_cluster_master_group][0]].ansible_host }}"
 
@@ -26,7 +35,7 @@
       ECS data services need signed API credentials (ecs_api_access_key_id / ecs_api_private_key).
       Enable ecs_auto_provision_api_access_key with a bootstrap key, or set keys in group_vars.
 
-- name: Resolve Data Services execution home on ECS master
+- name: Resolve Data Services execution home on IPA controller
   ansible.builtin.command:
     argv:
       - python3
@@ -57,7 +66,7 @@
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
 
-- name: Install isolated CDP CLI on ECS master
+- name: Install isolated CDP CLI on IPA controller
   ansible.builtin.pip:
     name: cdpcli==0.9.164
     state: present
@@ -67,7 +76,7 @@
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
 
-- name: Install CDPy on ECS master
+- name: Install CDPy on IPA controller
   ansible.builtin.pip:
     name: https://github.com/cloudera-labs/cdpy/archive/refs/tags/v2.1.0.tar.gz
     state: present
@@ -77,7 +86,7 @@
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
 
-- name: Install REST signing dependency on ECS master
+- name: Install REST signing dependency on IPA controller
   ansible.builtin.pip:
     name: cryptography
     state: present
@@ -97,7 +106,7 @@
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
 
-- name: Create temporary CDP profile on ECS master
+- name: Create temporary CDP profile on IPA controller
   ansible.builtin.tempfile:
     state: directory
     prefix: cdp_ecs_ds_
@@ -135,7 +144,7 @@
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
 
-- name: Publish CDP environment for ECS master tasks
+- name: Publish CDP environment for IPA controller tasks
   ansible.builtin.set_fact:
     ecs_cdp_cli_environment:
       CDP_CONFIG_FILE: "{{ ecs_ds_cdp_profile_dir.path }}/config"

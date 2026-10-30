@@ -116,7 +116,7 @@
       vars:
         ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
 
-    - name: Remove temporary Data Services profile from ECS master
+    - name: Remove temporary Data Services profile from IPA controller
       ansible.builtin.file:
         path: "{{ ecs_ds_cdp_profile_dir.path }}"
         state: absent

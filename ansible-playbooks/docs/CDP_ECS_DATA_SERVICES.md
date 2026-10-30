@@ -13,7 +13,7 @@ executable before API changes, so an older or inconsistent system-wide `cdp`
 cannot be selected. Cloudera Labs `cdpy` is pinned to Git tag `v2.1.0` with
 `--no-deps` inside the same isolated virtual environment, avoiding similarly
 named or stale packages in private indexes. Data-service module imports run
-from an equivalent isolated runtime on the ECS master so `cloudera.cloud` can
+from an equivalent isolated runtime on the IPA controller so `cloudera.cloud` can
 always import `cdpy` and the REST client's `cryptography` signing dependency
 where private control-plane DNS is resolvable. The controller runtime remains
 available for standalone CLI and credential-bootstrap work.
@@ -23,15 +23,16 @@ option. The former `v2.5.1` pin did not provide that option. If Jenkins has an
 older collection that merely provides the module name, automation
 force-installs the exact Git commit from `requirements.yml` instead of
 accepting the incompatible copy.
-The temporary ECS-master runtime exports both the legacy CLI profile variables
+The temporary IPA-controller runtime exports both the legacy CLI profile variables
 and the collection 3.3 REST-client variables (`CDP_CREDENTIALS_PATH` and
 `CDP_ENDPOINT_URL`). Without the latter pair, asynchronous CDW, CDE, and CAI
 workers exit before submitting requests because the new modules do not parse
 `CDP_CONFIG_FILE` or `CDP_SHARED_CREDENTIALS_FILE`. Running these modules on
 the external Jenkins controller is unsupported because private names such as
 `console-cdp.apps.<cluster-domain>` resolve only inside the ECS network.
-The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
-than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
+The IPA-controller CDPy install uses the pinned GitHub tag archive over HTTPS
+rather than a `git+` URL, so the internal execution host does not require the
+`git` executable.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
@@ -47,7 +48,7 @@ rather than the sum of all three. Model Registry remains sequential because it
 has separate Ozone and environment prerequisites. Tune the wait with
 `ecs_data_services_async_timeout`, `ecs_data_services_async_poll_retries`, and
 `ecs_data_services_async_poll_delay`. Async job results use the absolute
-the ECS master's persistent state directory so the temporary CDP profile's
+the IPA controller's persistent state directory so the temporary CDP profile's
 `HOME` override cannot make launch and polling use different paths. The launch
 tasks report `ok`, not `changed`, because queuing a remote async worker is not
 proof that the control plane accepted a provisioning request.
