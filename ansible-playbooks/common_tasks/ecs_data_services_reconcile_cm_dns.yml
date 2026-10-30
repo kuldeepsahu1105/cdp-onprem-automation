@@ -155,7 +155,10 @@
         })
         blocks = []
         for zone in zones:
-            if re.search(rf"(?m)^\s*{re.escape(zone)}(?::53)?\s*\{{", corefile):
+            if re.search(
+                rf"(?m)^\s*{re.escape(zone)}(?::53)?\s*{chr(123)}",
+                corefile,
+            ):
                 raise SystemExit(
                     f"CoreDNS already has an unmanaged server block for {zone}"
                 )
@@ -165,7 +168,7 @@
                 and record.get("zone", "").rstrip(".").lower() == zone
             ]
             lines = [
-                f"{zone}:53 {{",
+                f"{zone}:53 " + chr(123),
                 "    errors",
                 "    hosts {",
             ]
