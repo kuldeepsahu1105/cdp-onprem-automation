@@ -46,11 +46,13 @@ validation, cleanup, diagnostics, and dependent follow-up work. A slow or
 stalled CDW job therefore does not delay reporting a completed CDE or CAI job.
 
 The default private CDE service request is 26 CPU and 64 GiB because the
-private-cloud API rejects lower CPU capacity. Model Registry requires at least
-one host in `ecs_model_registry_sdx_group` (default `sdx`) for Ozone S3
-credentials. A missing SDX prerequisite is reported immediately but deferred to
-the final aggregate assertion so CAI readiness and CDW follow-up diagnostics
-still run.
+private-cloud API rejects lower CPU capacity. Model Registry obtains Ozone S3
+credentials from `ecs_model_registry_sdx_group` (default `sdx`) when that
+optional override group has hosts; otherwise it automatically uses the first
+host in `base_cluster_master_group`, where the standard base-cluster template
+places the Ozone manager, SCM, and S3 Gateway roles. A missing Ozone-capable
+inventory host is reported immediately but deferred to the final aggregate
+assertion so CAI readiness and CDW follow-up diagnostics still run.
 The combined installation duration is approximately the slowest selected
 service rather than the sum of all three. Model Registry remains sequential
 because it has separate Ozone and environment prerequisites, but it runs before
@@ -84,7 +86,7 @@ pod status, `hue-query-processor-0` description, and recent container logs from
 | `ecs_deploy_cdw: true` | `ECS_DEPLOY_CDW` | CDW + Hive/Impala VWs |
 | `ecs_deploy_cde: true` | `ECS_DEPLOY_CDE` | CDE |
 | `ecs_deploy_cai: true` | `ECS_DEPLOY_CAI` | CAI (ML workspace) |
-| `ecs_deploy_cai_registry: true` | `ECS_DEPLOY_CAI_REGISTRY` | Model Registry (`[sdx]` required) |
+| `ecs_deploy_cai_registry: true` | `ECS_DEPLOY_CAI_REGISTRY` | Model Registry (uses `[sdx]` when populated, otherwise first base master) |
 
 Turn on **`ecs_data_services_deploy_enabled`** (or **`ECS_DATA_SERVICES_DEPLOY_ENABLED`**) for the phase, or set any **`ECS_DEPLOY_*`** flag — playbook 34 runs when at least one service is selected.
 
@@ -187,7 +189,10 @@ ecs_data_services_deploy_enabled: true
 ecs_data_services_install: [cdw, cde, cai]  # model_registry for registry only
 ```
 
-`model_registry` requires an **`[sdx]`** inventory group with Ozone S3 access (Kerberos `admin` / `common_password`).
+`model_registry` uses an Ozone-capable host for S3 credentials (Kerberos
+`admin` / `common_password`). It prefers the optional **`[sdx]`** inventory
+group when populated and otherwise selects the first host from
+`base_cluster_master_group`.
 
 ## API endpoint
 
@@ -237,11 +242,17 @@ Re-run `35_refresh_deployment_portal.yml` after changing catalog URLs if you ski
 
 CAI API completion only means the workspace reached `installation:finished`; it
 does not guarantee that the returned `instanceUrl` is already routable. Playbook
-34 probes that exact URL from the ECS master and accepts successful, redirect,
-authentication-required, or forbidden responses. A persistent ingress-default
-404 fails the final aggregate check and prints the `cml` namespace pods,
-services, ingresses, ingress description, and recent events. Tune the bounded
-wait with `ecs_cai_ui_wait_retries` and `ecs_cai_ui_wait_delay`.
+34 follows the Cloudera Labs private-cloud reference flow by ensuring the
+FreeIPA `wildcard` certificate profile, issuing a wildcard certificate for the
+returned workbench hostname, and installing it as `cml-tls-secret` before
+probing that exact URL from the ECS master. The probe accepts successful,
+redirect, authentication-required, or forbidden responses. A persistent
+ingress-default 404 fails the final aggregate check and prints the `cml`
+namespace pods, services, ingresses, ingress description, and recent events.
+Tune the bounded wait with `ecs_cai_ui_wait_retries` and
+`ecs_cai_ui_wait_delay`; disable certificate automation with
+`ecs_cai_configure_wildcard_tls: false` only when an external process manages
+the namespace secret.
 
 ## Variables
 
@@ -249,6 +260,6 @@ See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_regi
 
 ## Not automated (Labs reference gaps)
 
-- FreeIPA wildcard TLS for per-service domains (CDE/CAI) — upstream TLS verify is disabled on Caddy → ECS master only.
+- FreeIPA wildcard TLS for CDE-specific domains; CAI `cml-tls-secret` is automated.
 - CoreDNS / Prometheus ingress patches on ECS masters (reference `ecs_masters` plays).
 - CDE environment-role permissions for end users.

@@ -1,0 +1,75 @@
+---
+- name: CAI TLS | Configure wildcard certificate and Kubernetes secret
+  when:
+    - ecs_cai_workspace_succeeded | default(false) | bool
+    - ecs_cai_configure_wildcard_tls | default(true) | bool
+    - groups.get('ipaserver', []) | length > 0
+  block:
+    - name: CAI TLS | Ensure FreeIPA wildcard certificate profile
+      ansible.builtin.include_role:
+        name: cloudera.exe.freeipa_server_wildcard_profile
+        apply:
+          delegate_to: "{{ groups['ipaserver'] | first }}"
+          become: true
+      vars:
+        ipaadmin_password: "{{ freeipa_password | default(lookup('env', 'IPA_PASSWORD'), true) }}"
+        freeipa_wildcard_profile_name: "{{ ecs_cai_wildcard_cert_profile }}"
+
+    - name: CAI TLS | Issue workbench wildcard certificate
+      ansible.builtin.include_role:
+        name: cloudera.exe.freeipa_server_unenrolled_tls
+        apply:
+          delegate_to: "{{ groups['ipaserver'] | first }}"
+          become: true
+      vars:
+        ipaadmin_password: "{{ freeipa_password | default(lookup('env', 'IPA_PASSWORD'), true) }}"
+        unenrolled_hostname: "{{ ecs_cai_workbench_hostname }}"
+        unenrolled_description: "Cloudera AI workbench wildcard certificate"
+        unenrolled_cert_profile: "{{ ecs_cai_wildcard_cert_profile }}"
+
+    - name: CAI TLS | Ensure Kubernetes Python client is installed on ECS master
+      ansible.builtin.pip:
+        name: kubernetes
+        state: present
+      become: true
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+
+    - name: CAI TLS | Create workbench TLS secret
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ ecs_kubeconfig_path }}"
+        namespace: "{{ ecs_cai_k8s_namespace }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ ecs_cai_tls_secret_name }}"
+          type: kubernetes.io/tls
+          data:
+            tls.crt: "{{ lookup('file', ecs_cai_workbench_hostname + '.crt') | b64encode }}"
+            tls.key: "{{ lookup('file', ecs_cai_workbench_hostname + '.pem') | b64encode }}"
+      become: true
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+  always:
+    - name: CAI TLS | Remove fetched certificate material from controller
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ playbook_dir }}/{{ ecs_cai_workbench_hostname }}.crt"
+        - "{{ playbook_dir }}/{{ ecs_cai_workbench_hostname }}.pem"
+      when: ecs_cai_workbench_hostname | default('') | length > 0
+      no_log: true
+
+- name: CAI TLS | Report external certificate requirement
+  ansible.builtin.debug:
+    msg: >-
+      CAI wildcard TLS automation was skipped because no FreeIPA ipaserver host
+      is present. Ensure {{ ecs_cai_tls_secret_name }} exists in namespace
+      {{ ecs_cai_k8s_namespace }} before using {{ ecs_cai_workspace_url }}.
+  when:
+    - ecs_cai_workspace_succeeded | default(false) | bool
+    - ecs_cai_configure_wildcard_tls | default(true) | bool
+    - groups.get('ipaserver', []) | length == 0

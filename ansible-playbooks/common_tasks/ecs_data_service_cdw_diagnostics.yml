@@ -55,6 +55,44 @@
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
 
+- name: Collect previous failed Hue query processor logs
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_cdw_kubernetes_namespace }}"
+      - logs
+      - hue-query-processor-0
+      - --all-containers=true
+      - --previous
+      - --tail=200
+  register: ecs_cdw_hue_query_processor_previous_logs
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Collect recent failed CDW namespace events
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_cdw_kubernetes_namespace }}"
+      - get
+      - events
+      - --sort-by=.lastTimestamp
+  register: ecs_cdw_failed_events
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
 - name: Report failed CDW Kubernetes diagnostics
   ansible.builtin.debug:
     msg:
@@ -68,3 +106,11 @@
         Hue query processor logs:
         {{ ecs_cdw_hue_query_processor_logs.stdout
            | default(ecs_cdw_hue_query_processor_logs.stderr, true) }}
+      - >-
+        Hue query processor previous logs:
+        {{ ecs_cdw_hue_query_processor_previous_logs.stdout
+           | default(ecs_cdw_hue_query_processor_previous_logs.stderr, true) }}
+      - >-
+        Namespace events:
+        {{ ecs_cdw_failed_events.stdout
+           | default(ecs_cdw_failed_events.stderr, true) }}
