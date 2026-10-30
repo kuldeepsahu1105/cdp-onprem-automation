@@ -14,4 +14,5 @@
   async: "{{ ecs_data_services_async_timeout | default(14400) }}"
   poll: 0
   register: ecs_cde_service_job
+  changed_when: false
   when: "'cde' in (ecs_data_services_install_names | default([]))"

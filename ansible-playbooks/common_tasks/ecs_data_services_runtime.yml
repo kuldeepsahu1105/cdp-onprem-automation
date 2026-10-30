@@ -56,6 +56,9 @@
     ecs_cdp_cli_environment:
       CDP_CONFIG_FILE: "{{ ecs_ds_cdp_profile_dir.path }}/config"
       CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_ds_cdp_profile_dir.path }}/credentials"
+      CDP_CREDENTIALS_PATH: "{{ ecs_ds_cdp_profile_dir.path }}/credentials"
+      CDP_ENDPOINT_URL: "{{ ecs_cdp_console_api_url_effective | regex_replace('/+$', '') }}"
+      CDP_PROFILE: default
       HOME: "{{ ecs_ds_cdp_profile_dir.path }}"
       PATH: >-
         {{

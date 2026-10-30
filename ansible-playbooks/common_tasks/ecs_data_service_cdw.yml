@@ -30,7 +30,7 @@
     - name: Wait for default database catalog
       cloudera.cloud.dw_database_catalog_info:
         cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
-        verify_endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+        verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
       environment: "{{ ecs_cdp_cli_environment }}"
       register: ecs_cdw_dbc_info
       until:

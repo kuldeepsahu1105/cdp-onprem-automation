@@ -10,4 +10,5 @@
   async: "{{ ecs_data_services_async_timeout | default(14400) }}"
   poll: 0
   register: ecs_cdw_cluster_job
+  changed_when: false
   when: "'cdw' in (ecs_data_services_install_names | default([]))"

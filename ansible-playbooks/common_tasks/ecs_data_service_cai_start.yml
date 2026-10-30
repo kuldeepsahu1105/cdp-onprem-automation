@@ -9,11 +9,12 @@
     monitoring: "{{ ecs_cai_enable_monitoring | default(true) | bool }}"
     namespace: "{{ ecs_cai_k8s_namespace }}"
     resource_pool: "{{ ecs_cai_resource_pool }}"
-    verify_endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
     wait: true
     state: present
   environment: "{{ ecs_cdp_cli_environment }}"
   async: "{{ ecs_data_services_async_timeout | default(14400) }}"
   poll: 0
   register: ecs_cai_workspace_job
+  changed_when: false
   when: "'cai' in (ecs_data_services_install_names | default([]))"
