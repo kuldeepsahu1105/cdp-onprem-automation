@@ -11,6 +11,15 @@
       delay: "{{ ecs_data_services_async_poll_delay | default(30) }}"
       failed_when: false
 
+    - name: Record Data Warehouse provisioning result
+      ansible.builtin.set_fact:
+        ecs_cdw_cluster_succeeded: >-
+          {{
+            ecs_cdw_cluster.finished | default(false) | bool
+            and (ecs_cdw_cluster.cluster | default({})) is mapping
+            and (ecs_cdw_cluster.cluster | default({})).id | default('') | length > 0
+          }}
+
     - name: Remove Data Warehouse async result
       ansible.builtin.async_status:
         jid: "{{ ecs_cdw_cluster_job.ansible_job_id }}"
@@ -30,15 +39,13 @@
       retries: "{{ ecs_cdw_dbc_wait_retries | default(10) }}"
       delay: "{{ ecs_cdw_dbc_wait_delay | default(30) }}"
       when:
-        - ecs_cdw_cluster.finished | default(false) | bool
-        - not (ecs_cdw_cluster.failed | default(false) | bool)
+        - ecs_cdw_cluster_succeeded | bool
 
     - name: Set default database catalog id
       ansible.builtin.set_fact:
         ecs_cdw_catalog_id: "{{ ecs_cdw_dbc_info.database_catalogs | map(attribute='id') | list | first }}"
       when:
-        - ecs_cdw_cluster.finished | default(false) | bool
-        - not (ecs_cdw_cluster.failed | default(false) | bool)
+        - ecs_cdw_cluster_succeeded | bool
 
     - name: Create Impala Virtual Warehouse
       cloudera.cloud.dw_virtual_warehouse:
@@ -51,8 +58,7 @@
         wait: true
       environment: "{{ ecs_cdp_cli_environment }}"
       when:
-        - ecs_cdw_cluster.finished | default(false) | bool
-        - not (ecs_cdw_cluster.failed | default(false) | bool)
+        - ecs_cdw_cluster_succeeded | bool
 
     - name: Create Hive Virtual Warehouse
       cloudera.cloud.dw_virtual_warehouse:
@@ -65,8 +71,7 @@
         wait: true
       environment: "{{ ecs_cdp_cli_environment }}"
       when:
-        - ecs_cdw_cluster.finished | default(false) | bool
-        - not (ecs_cdw_cluster.failed | default(false) | bool)
+        - ecs_cdw_cluster_succeeded | bool
 
     - name: Register Hue ingress hostnames for Caddy
       ansible.builtin.set_fact:
@@ -91,8 +96,7 @@
             ]
           }}
       when:
-        - ecs_cdw_cluster.finished | default(false) | bool
-        - not (ecs_cdw_cluster.failed | default(false) | bool)
+        - ecs_cdw_cluster_succeeded | bool
 
     - name: Update portal catalog URL for CDW
       ansible.builtin.set_fact:
@@ -110,5 +114,4 @@
             )
           }}
       when:
-        - ecs_cdw_cluster.finished | default(false) | bool
-        - not (ecs_cdw_cluster.failed | default(false) | bool)
+        - ecs_cdw_cluster_succeeded | bool
