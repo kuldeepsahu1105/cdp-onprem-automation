@@ -14,7 +14,8 @@ cannot be selected. Cloudera Labs `cdpy` is pinned to Git tag `v2.1.0` with
 `--no-deps` inside the same isolated virtual environment, avoiding similarly
 named or stale packages in private indexes. Data-service module imports run
 with that virtual environment's Python so `cloudera.cloud` can always import
-`cdpy`, independent of the Jenkins user's Python user-site configuration.
+`cdpy` and the REST client's `cryptography` signing dependency, independent of
+the Jenkins user's Python user-site configuration.
 Collection bootstrap also verifies that the effective
 `cloudera.cloud.dw_cluster` module exposes the pinned commit's `private_cloud`
 option. The former `v2.5.1` pin did not provide that option. If Jenkins has an
