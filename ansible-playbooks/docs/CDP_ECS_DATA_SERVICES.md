@@ -39,13 +39,13 @@ ECS Management Console, FreeIPA LDAP hostname, and the `*.apps` wildcard used
 by dynamic CAI, CDE, and CDW endpoints. A managed CoreDNS block for the private
 zone serves the three fixed addresses locally and forwards every unmatched
 private name, including wildcard-backed application hosts, only to FreeIPA,
-avoiding fallback resolvers and stale negative answers. CoreDNS is flushed
-after every reconciliation, and automation waits for the CoreDNS deployment
-before starting pod probes. Each probe retries `nslookup` from its scheduled
-worker until the expected address is returned, preventing per-node
-service-routing convergence from producing a false `NXDOMAIN`. The earlier
-console readiness gate already covers ECS-master access, so DNS is not probed
-again from the host. The pod check
+avoiding fallback resolvers and stale negative answers. CoreDNS is restarted
+and its rollout awaited only when the managed Corefile actually changes;
+ordinary reruns reuse the ECS-install deployment without disruption. Each pod
+probe retries `nslookup` from its scheduled worker until the expected address
+is returned, preventing per-node service-routing convergence from producing a
+false `NXDOMAIN`. The earlier console readiness gate already covers ECS-master
+access, so DNS is not probed again from the host. The pod check
 requests IPv4 A records through the same cluster-DNS path as CDW/CDE/CAI
 workloads, so
 host-only DNS success cannot hide a `172.43.0.10` lookup failure. CDE calls
