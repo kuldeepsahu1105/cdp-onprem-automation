@@ -109,6 +109,9 @@
   vars:
     ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
 
+- name: Verify CAI UI after independent services
+  ansible.builtin.import_tasks: ecs_data_service_cai_followup.yml
+
 - name: Complete CDW dependent services after independent services
   ansible.builtin.import_tasks: ecs_data_service_cdw_followup.yml
   vars:
@@ -140,7 +143,10 @@
         or (ecs_cde_service_succeeded | default(false) | bool)
       - >-
         'cai' not in (ecs_data_services_install_names | default([]))
-        or (ecs_cai_workspace_succeeded | default(false) | bool)
+        or (
+          (ecs_cai_workspace_succeeded | default(false) | bool)
+          and (ecs_cai_ui_succeeded | default(false) | bool)
+        )
     fail_msg: >-
       Parallel Data Services provisioning failed.
       CDW={{ (ecs_cdw_cluster | default({})).msg
@@ -148,7 +154,11 @@
                        | default(ecs_cdw_cluster | default({}))
                        | to_json) }};
       CDE={{ (ecs_cde_service | default({})).msg | default(ecs_cde_service | default({}) | to_json) }};
-      CAI={{ (ecs_cai_workspace | default({})).msg | default(ecs_cai_workspace | default({}) | to_json) }}.
+      CAI={{ (ecs_cai_workspace | default({})).msg
+             | default(
+                 'workspace=' + (ecs_cai_workspace | default({}) | to_json)
+                 + ', ui_status=' + (ecs_cai_ui_probe.status | default('unavailable') | string)
+               ) }}.
 
 - name: Create ECS data-service catalog cache directory
   ansible.builtin.file:

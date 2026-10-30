@@ -1,0 +1,77 @@
+---
+- name: CAI | Verify ML workspace UI after independent services
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - ecs_cai_workspace_succeeded | default(false) | bool
+  block:
+    - name: Wait for ML workspace UI ingress
+      ansible.builtin.uri:
+        url: "{{ ecs_cai_workspace_url }}"
+        method: GET
+        validate_certs: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+        follow_redirects: none
+        return_content: false
+        status_code: [200, 301, 302, 303, 307, 308, 401, 403]
+      register: ecs_cai_ui_probe
+      until: ecs_cai_ui_probe.status | default(0) | int in [200, 301, 302, 303, 307, 308, 401, 403]
+      retries: "{{ ecs_cai_ui_wait_retries | int }}"
+      delay: "{{ ecs_cai_ui_wait_delay | int }}"
+      failed_when: false
+      changed_when: false
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+
+    - name: Record ML workspace UI readiness
+      ansible.builtin.set_fact:
+        ecs_cai_ui_succeeded: >-
+          {{
+            ecs_cai_ui_probe.status | default(0) | int
+            in [200, 301, 302, 303, 307, 308, 401, 403]
+          }}
+
+    - name: Report ML workspace UI readiness failure
+      ansible.builtin.debug:
+        msg: >-
+          CAI workspace {{ ecs_cai_workspace_url }} did not become routable after
+          {{ ecs_cai_ui_wait_retries }} attempts; final HTTP status
+          {{ ecs_cai_ui_probe.status | default('unavailable') }}.
+      when: not (ecs_cai_ui_succeeded | bool)
+
+    - name: Collect CAI Kubernetes diagnostics
+      ansible.builtin.include_tasks: ecs_data_service_cai_diagnostics.yml
+      when: not (ecs_cai_ui_succeeded | bool)
+
+    - name: Register workbench ingress for Caddy
+      ansible.builtin.set_fact:
+        ecs_caddy_data_service_routes: >-
+          {{
+            (ecs_caddy_data_service_routes | default([]))
+            + [
+              {
+                'id': 'cai-' + ecs_cai_workspace_name,
+                'external_hostname': ecs_cai_workbench_hostname,
+                'backend_host': ecs_master_fqdn,
+                'backend_port': 443,
+                'backend_scheme': 'https'
+              }
+            ]
+          }}
+      when: ecs_cai_ui_succeeded | bool
+
+    - name: Update portal catalog URL for CAI
+      ansible.builtin.set_fact:
+        ecs_data_services_catalog: >-
+          {{
+            ecs_data_services_catalog | combine(
+              {
+                'cai': ecs_data_services_catalog.cai | default({}) | combine(
+                  {
+                    'url': ecs_cai_workspace_url
+                  }
+                )
+              },
+              recursive=True
+            )
+          }}
+      when: ecs_cai_ui_succeeded | bool
