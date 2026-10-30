@@ -34,10 +34,11 @@ The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
 than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
 Before submitting any Data Services API request, playbook 34 reconciles ECS
-CoreDNS forwarding and the FreeIPA A record for the Cloudera Manager FQDN, then
-requires that FQDN to resolve to the CM private address from the ECS master.
-CDE and the other control-plane services call Cloudera Manager by this FQDN;
-an unresolved record otherwise surfaces later as an `UnknownHostException`.
+CoreDNS forwarding and the FreeIPA A records for both the Cloudera Manager FQDN
+and the FreeIPA LDAP hostname, then requires both names to resolve to their
+private addresses from the ECS master. CDE calls Cloudera Manager by FQDN, and
+CDW validates its LDAP bind through `ipa_kdc_host`; unresolved records otherwise
+surface later as `UnknownHostException` or LDAP result-code 200 network errors.
 The bounded resolver wait uses `ecs_data_services_cm_dns_wait_retries` and
 `ecs_data_services_cm_dns_wait_delay`.
 
