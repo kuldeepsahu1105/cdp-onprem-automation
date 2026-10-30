@@ -1,6 +1,6 @@
 # ECS data services (CDW, CDE, CAI, Model Registry)
 
-Playbook `34_setup_ecs_data_services.yml` enables Cloudera Data Services on an existing ECS private-cloud environment using **`cloudera.cloud`** (see `requirements.yml`, git `v2.5.1`) and the **CDP CLI** (`cdpcli` / `cdpy`).
+Playbook `34_setup_ecs_data_services.yml` enables Cloudera Data Services on an existing ECS private-cloud environment using **`cloudera.cloud`** (see `requirements.yml`, pinned commit reporting collection `3.3.0`) and the **CDP CLI** (`cdpcli` / `cdpy`).
 
 The controller prerequisite task pins `cdpcli==0.9.164` from the configured
 Python package index because that release exposes the private-cloud LDAP IAM
@@ -15,6 +15,12 @@ cannot be selected. Cloudera Labs `cdpy` is pinned to Git tag `v2.1.0` with
 named or stale packages in private indexes. Data-service module imports run
 with that virtual environment's Python so `cloudera.cloud` can always import
 `cdpy`, independent of the Jenkins user's Python user-site configuration.
+Collection bootstrap also verifies that the effective
+`cloudera.cloud.dw_cluster` module exposes the pinned commit's `private_cloud`
+option. The former `v2.5.1` pin did not provide that option. If Jenkins has an
+older collection that merely provides the module name, automation
+force-installs the exact Git commit from `requirements.yml` instead of
+accepting the incompatible copy.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services

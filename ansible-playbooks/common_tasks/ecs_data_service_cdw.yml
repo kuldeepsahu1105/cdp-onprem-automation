@@ -9,17 +9,19 @@
       until: ecs_cdw_cluster.finished | bool
       retries: "{{ ecs_data_services_async_poll_retries | default(480) }}"
       delay: "{{ ecs_data_services_async_poll_delay | default(30) }}"
+      failed_when: false
 
     - name: Remove Data Warehouse async result
       ansible.builtin.async_status:
         jid: "{{ ecs_cdw_cluster_job.ansible_job_id }}"
         mode: cleanup
       changed_when: false
+      when: ecs_cdw_cluster.finished | default(false) | bool
 
     - name: Wait for default database catalog
       cloudera.cloud.dw_database_catalog_info:
         cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
-        verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+        verify_endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
       environment: "{{ ecs_cdp_cli_environment }}"
       register: ecs_cdw_dbc_info
       until:
@@ -27,10 +29,16 @@
         - ecs_cdw_dbc_info.database_catalogs[0].status == 'Running'
       retries: "{{ ecs_cdw_dbc_wait_retries | default(10) }}"
       delay: "{{ ecs_cdw_dbc_wait_delay | default(30) }}"
+      when:
+        - ecs_cdw_cluster.finished | default(false) | bool
+        - not (ecs_cdw_cluster.failed | default(false) | bool)
 
     - name: Set default database catalog id
       ansible.builtin.set_fact:
         ecs_cdw_catalog_id: "{{ ecs_cdw_dbc_info.database_catalogs | map(attribute='id') | list | first }}"
+      when:
+        - ecs_cdw_cluster.finished | default(false) | bool
+        - not (ecs_cdw_cluster.failed | default(false) | bool)
 
     - name: Create Impala Virtual Warehouse
       cloudera.cloud.dw_virtual_warehouse:
@@ -39,9 +47,12 @@
         catalog_id: "{{ ecs_cdw_catalog_id }}"
         type: impala
         template: "{{ ecs_cdw_vw_tshirt_size }}"
-        verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
         wait: true
       environment: "{{ ecs_cdp_cli_environment }}"
+      when:
+        - ecs_cdw_cluster.finished | default(false) | bool
+        - not (ecs_cdw_cluster.failed | default(false) | bool)
 
     - name: Create Hive Virtual Warehouse
       cloudera.cloud.dw_virtual_warehouse:
@@ -50,9 +61,12 @@
         catalog_id: "{{ ecs_cdw_catalog_id }}"
         type: hive
         template: "{{ ecs_cdw_vw_tshirt_size }}"
-        verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
         wait: true
       environment: "{{ ecs_cdp_cli_environment }}"
+      when:
+        - ecs_cdw_cluster.finished | default(false) | bool
+        - not (ecs_cdw_cluster.failed | default(false) | bool)
 
     - name: Register Hue ingress hostnames for Caddy
       ansible.builtin.set_fact:
@@ -76,6 +90,9 @@
               }
             ]
           }}
+      when:
+        - ecs_cdw_cluster.finished | default(false) | bool
+        - not (ecs_cdw_cluster.failed | default(false) | bool)
 
     - name: Update portal catalog URL for CDW
       ansible.builtin.set_fact:
@@ -92,3 +109,6 @@
               recursive=True
             )
           }}
+      when:
+        - ecs_cdw_cluster.finished | default(false) | bool
+        - not (ecs_cdw_cluster.failed | default(false) | bool)

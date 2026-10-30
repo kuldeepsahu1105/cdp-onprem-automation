@@ -18,4 +18,4 @@ collections:
 
   # ECS control plane — CDW/CDE/CAI/Model Registry + LDAP IAM (env_info, dw_*, de, ml)
   # Modules: env_info, dw_cluster, dw_database_catalog_info, dw_virtual_warehouse, de, ml
-  - name: git+https://github.com/cloudera-labs/cloudera.cloud.git,v2.5.1
+  - name: git+https://github.com/cloudera-labs/cloudera.cloud.git,78e5bbfff1cad88dc9602f8026d65bc7e3c88781

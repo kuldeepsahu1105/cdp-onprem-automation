@@ -3,7 +3,7 @@
   cloudera.cloud.dw_cluster:
     env: "{{ ecs_cdp_environment_name }}"
     private_cloud: "{{ ecs_cdw_private_cloud_config | default({}) }}"
-    verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
     state: present
     wait: true
   environment: "{{ ecs_cdp_cli_environment }}"

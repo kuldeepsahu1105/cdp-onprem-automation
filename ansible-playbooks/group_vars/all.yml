@@ -858,8 +858,9 @@ cm_autotls_skip_verbose_probe_logs: true
 # cloudera.cluster devel/v5 expects cm_client ApiClient(configuration=); PyPI cm-client uses host=.
 # v4.0.0 dropped cluster/cm_config modules — pin v4.4.0 for 31/33 cloudera.cluster.cluster.
 cloudera_cluster_collection_git_ref: v4.4.0
-# ECS data services / LDAP IAM (cloudera.cloud.*); keep in sync with requirements.yml
-cloudera_cloud_collection_git_ref: v2.5.1
+# ECS data services / LDAP IAM (cloudera.cloud.*); main commit reporting collection 3.3.0.
+# Keep in sync with requirements.yml.
+cloudera_cloud_collection_git_ref: 78e5bbfff1cad88dc9602f8026d65bc7e3c88781
 
 # KDC integration for Cloudera Manager.
 # CM Administration → Settings: "Manage krb5.conf through Cloudera Manager" (KRB_MANAGE_KRB5_CONF).
