@@ -44,6 +44,13 @@ asynchronously before Ansible waits for any one of them. Ansible then waits for
 whichever job finishes next and immediately runs that service's result
 validation, cleanup, diagnostics, and dependent follow-up work. A slow or
 stalled CDW job therefore does not delay reporting a completed CDE or CAI job.
+
+The default private CDE service request is 26 CPU and 64 GiB because the
+private-cloud API rejects lower CPU capacity. Model Registry requires at least
+one host in `ecs_model_registry_sdx_group` (default `sdx`) for Ozone S3
+credentials. A missing SDX prerequisite is reported immediately but deferred to
+the final aggregate assertion so CAI readiness and CDW follow-up diagnostics
+still run.
 The combined installation duration is approximately the slowest selected
 service rather than the sum of all three. Model Registry remains sequential
 because it has separate Ozone and environment prerequisites, but it runs before
