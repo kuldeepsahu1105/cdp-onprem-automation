@@ -60,43 +60,43 @@
 - name: Start CDW when selected
   ansible.builtin.import_tasks: ecs_data_service_cdw_start.yml
   vars:
-    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
-    ansible_async_dir: "{{ ecs_data_services_remote_async_dir }}"
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
 - name: Start CDE when selected
   ansible.builtin.import_tasks: ecs_data_service_cde_start.yml
   vars:
-    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
-    ansible_async_dir: "{{ ecs_data_services_remote_async_dir }}"
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
 - name: Start CAI when selected
   ansible.builtin.import_tasks: ecs_data_service_cai_start.yml
   vars:
-    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
-    ansible_async_dir: "{{ ecs_data_services_remote_async_dir }}"
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
 - name: Complete CDW when selected
   ansible.builtin.import_tasks: ecs_data_service_cdw.yml
   vars:
-    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
-    ansible_async_dir: "{{ ecs_data_services_remote_async_dir }}"
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
 - name: Complete CDE when selected
   ansible.builtin.import_tasks: ecs_data_service_cde.yml
   vars:
-    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
-    ansible_async_dir: "{{ ecs_data_services_remote_async_dir }}"
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
 - name: Complete CAI when selected
   ansible.builtin.import_tasks: ecs_data_service_cai.yml
   vars:
-    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
-    ansible_async_dir: "{{ ecs_data_services_remote_async_dir }}"
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
 - name: Install Model Registry when selected
   ansible.builtin.import_tasks: ecs_data_service_model_registry.yml
   vars:
-    ansible_python_interpreter: "{{ ecs_data_services_remote_venv_path }}/bin/python"
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
 
 - name: Remove temporary Data Services profile from ECS master
   ansible.builtin.file:
