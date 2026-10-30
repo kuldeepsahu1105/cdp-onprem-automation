@@ -1216,6 +1216,8 @@ ecs_ldap_admin_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|envi
 ecs_ldap_admin_resource_role_name_regex: '(?i)(admin|owner|power|environment|de|dw|ml|data)'
 # CDW
 ecs_cdw_private_cloud_config: {}  # optional storage_class, db_client_certificate paths
+ecs_cdw_recreate_failed_cluster: true
+ecs_cdw_cleanup_orphaned_ipa_identity: true
 ecs_cdw_kubernetes_namespace: "warehouse-{{ ecs_cdp_environment_name }}"
 ecs_cdw_hive_vw_name: hive-vw
 ecs_cdw_impala_vw_name: impala-vw

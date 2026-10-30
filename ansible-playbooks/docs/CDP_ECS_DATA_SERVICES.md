@@ -280,6 +280,13 @@ the namespace secret.
 
 See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_registry_*`, `ecs_cdp_environment_name`).
 
+Before a CDW submission, the playbook queries the control plane.
+`ecs_cdw_recreate_failed_cluster` removes a cluster only when its terminal
+status is `Error` or `Failed`, then waits until it is absent.
+`ecs_cdw_cleanup_orphaned_ipa_identity` subsequently removes only the orphaned
+`hive/dwx-env-<environment>.cdp.local` service and matching FreeIPA host when
+no CDW cluster remains. Running and in-progress CDW clusters are preserved.
+
 ## Not automated (Labs reference gaps)
 
 - FreeIPA wildcard TLS for CDE-specific domains; CAI `cml-tls-secret` is automated.

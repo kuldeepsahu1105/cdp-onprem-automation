@@ -64,6 +64,9 @@
 - name: Optional ECS LDAP provider sync and LDAP admin user
   ansible.builtin.import_tasks: ecs_control_plane_ldap_and_admin.yml
 
+- name: Prepare CDW rerun when selected
+  ansible.builtin.import_tasks: ecs_data_service_cdw_preflight.yml
+
 - name: Start CDW when selected
   ansible.builtin.import_tasks: ecs_data_service_cdw_start.yml
   vars:
