@@ -34,13 +34,13 @@ The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
 than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
 Before submitting any Data Services API request, playbook 34 reconciles ECS
-CoreDNS forwarding and the FreeIPA A records for both the Cloudera Manager FQDN
-and the FreeIPA LDAP hostname. A managed CoreDNS block for the private zone
-serves those two fixed addresses locally and forwards every unmatched private
-name only to FreeIPA, avoiding fallback resolvers and stale negative answers.
-CoreDNS is flushed after every reconciliation, then the IPA LDAP hostname,
-Cloudera Manager hostname, and existing ECS console hostname are verified through
-both the ECS host resolver and a disposable Kubernetes pod. The pod check
+CoreDNS forwarding and the FreeIPA A records for the Cloudera Manager FQDN,
+ECS Management Console, and FreeIPA LDAP hostname. A managed CoreDNS block for
+the private zone serves those three fixed addresses locally and forwards every
+unmatched private name only to FreeIPA, avoiding fallback resolvers and stale
+negative answers. CoreDNS is flushed after every reconciliation, then all three
+hostnames are verified through both the ECS host resolver and a disposable
+Kubernetes pod. The pod check
 requests IPv4 A records through the same cluster-DNS path as CDW/CDE/CAI
 workloads, so
 host-only DNS success cannot hide a `172.43.0.10` lookup failure. CDE calls

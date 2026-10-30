@@ -28,6 +28,22 @@
         | default(hostvars[ecs_data_services_cm_inventory_host].ansible_host, true)
       }}
 
+- name: Critical DNS | Resolve ECS master private IP
+  ansible.builtin.set_fact:
+    ecs_data_services_ecs_master_private_ip: >-
+      {{
+        hostvars[groups[ecs_cluster_master_group] | first].private_ip
+        | default(
+            hostvars[groups[ecs_cluster_master_group] | first]
+            .get('ansible_default_ipv4', {})
+            .get(
+              'address',
+              hostvars[groups[ecs_cluster_master_group] | first].ansible_host
+            ),
+            true
+          )
+      }}
+
 - name: Critical DNS | Initialize required Data Services records
   ansible.builtin.set_fact:
     ecs_data_services_critical_dns_records:
@@ -36,6 +52,17 @@
         zone: "{{ ipaserver_domain | default(cluster_domain) }}"
         fqdn: "{{ ecs_data_services_cm_fqdn }}"
         address: "{{ ecs_data_services_cm_private_ip }}"
+      - label: ECS Management Console
+        name: "{{ ecs_console_host_prefix }}.apps"
+        zone: "{{ ipaserver_domain | default(cluster_domain) }}"
+        fqdn: >-
+          {{
+            ecs_control_plane_url_effective
+            | regex_replace('^https?://', '')
+            | regex_replace('/.*$', '')
+            | regex_replace(':.*$', '')
+          }}
+        address: "{{ ecs_data_services_ecs_master_private_ip }}"
 
 - name: Critical DNS | Resolve FreeIPA inventory host
   ansible.builtin.set_fact:
@@ -86,21 +113,7 @@
 - name: Critical DNS | Build Kubernetes DNS verification records
   ansible.builtin.set_fact:
     ecs_data_services_dns_verification_records: >-
-      {{
-        ecs_data_services_critical_dns_records
-        + [
-          {
-            'label': 'ECS Management Console',
-            'fqdn': (
-              ecs_control_plane_url_effective
-              | regex_replace('^https?://', '')
-              | regex_replace('/.*$', '')
-              | regex_replace(':.*$', '')
-            ),
-            'address': ''
-          }
-        ]
-      }}
+      {{ ecs_data_services_critical_dns_records }}
 
 - name: Critical DNS | Read ECS CoreDNS configuration
   ansible.builtin.command:
