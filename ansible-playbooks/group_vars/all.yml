@@ -1243,6 +1243,10 @@ ecs_ldap_admin_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|envi
 ecs_ldap_admin_resource_role_name_regex: '(?i)(admin|owner|power|environment|de|dw|ml|data)'
 # CDW
 ecs_cdw_private_cloud_config: {}  # optional storage_class, db_client_certificate paths
+# Override the vendor default dwx-env-<environment>.cdp.local principal with
+# the deployment identity domain used by FreeIPA/AD.
+ecs_cdw_kerberos_principal_hostname: >-
+  dwx-env-{{ ecs_cdp_environment_name }}.{{ cluster_domain }}
 ecs_cdw_hive_vw_name: hive-vw
 ecs_cdw_impala_vw_name: impala-vw
 ecs_cdw_vw_tshirt_size: xsmall
