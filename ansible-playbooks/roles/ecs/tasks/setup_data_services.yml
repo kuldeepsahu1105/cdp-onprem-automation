@@ -147,6 +147,9 @@
           (ecs_cai_workspace_succeeded | default(false) | bool)
           and (ecs_cai_ui_succeeded | default(false) | bool)
         )
+      - >-
+        'model_registry' not in (ecs_data_services_install_names | default([]))
+        or (ecs_model_registry_succeeded | default(false) | bool)
     fail_msg: >-
       Parallel Data Services provisioning failed.
       CDW={{ (ecs_cdw_cluster | default({})).msg
@@ -158,7 +161,8 @@
              | default(
                  'workspace=' + (ecs_cai_workspace | default({}) | to_json)
                  + ', ui_status=' + (ecs_cai_ui_probe.status | default('unavailable') | string)
-               ) }}.
+               ) }};
+      Model Registry={{ ecs_model_registry_failure_message | default('not selected') }}.
 
 - name: Create ECS data-service catalog cache directory
   ansible.builtin.file:
