@@ -85,11 +85,22 @@
 
 - name: Critical DNS | Ensure FreeIPA module Python dependencies
   ansible.builtin.package:
-    name:
-      - python3-netaddr
-      - python3-gssapi
+    name: "{{ freeipa_ansible_module_python_packages }}"
     state: present
   become: true
+  delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
+  when:
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - groups.get('ipaserver', []) | length > 0
+
+- name: Critical DNS | Verify FreeIPA module Python dependencies
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - import netaddr, gssapi, ipalib, ipapython, ipaplatform
+  changed_when: false
+  become: false
   delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
   when:
     - identity_provider_effective | default('freeipa') == 'freeipa'

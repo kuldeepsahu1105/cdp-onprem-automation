@@ -39,10 +39,16 @@
 
     - name: Ensure FreeIPA DNS module Python dependencies
       ansible.builtin.package:
-        name:
-          - python3-netaddr
-          - python3-gssapi
+        name: "{{ freeipa_ansible_module_python_packages }}"
         state: present
+
+    - name: Verify FreeIPA DNS module Python dependencies
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - import netaddr, gssapi, ipalib, ipapython, ipaplatform
+      changed_when: false
 
     - name: Extract Reverse DNS Zone from IP Address
       set_fact:
