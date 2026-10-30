@@ -351,7 +351,7 @@
     - identity_provider_effective | default('freeipa') == 'freeipa'
     - groups.get('ipaserver', []) | length > 0
 
-- name: Critical DNS | Flush ECS CoreDNS cache after record reconciliation
+- name: Critical DNS | Restart ECS CoreDNS after configuration change
   ansible.builtin.command:
     argv:
       - "{{ ecs_coredns_kubectl_path }}"
@@ -368,9 +368,7 @@
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
-  when:
-    - identity_provider_effective | default('freeipa') == 'freeipa'
-    - groups.get('ipaserver', []) | length > 0
+  when: ecs_data_services_coredns_private_zone_patch is changed
 
 - name: Critical DNS | Wait for ECS CoreDNS rollout
   ansible.builtin.command:
