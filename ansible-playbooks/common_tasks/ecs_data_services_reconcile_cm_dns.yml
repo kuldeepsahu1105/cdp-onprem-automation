@@ -281,7 +281,7 @@
   connection: ssh
   loop: "{{ range(1, ecs_data_services_dns_verification_records | length + 1) | list }}"
 
-- name: Critical DNS | Resolve required names from Kubernetes pod DNS
+- name: Critical DNS | Start Kubernetes DNS probe pods
   ansible.builtin.command:
     argv:
       - "{{ ecs_coredns_kubectl_path }}"
@@ -293,14 +293,11 @@
       - "ansible-dns-check-{{ ansible_loop.index }}"
       - "--image={{ ecs_data_services_dns_probe_image }}"
       - --restart=Never
-      - --rm
-      - --attach
-      - "--pod-running-timeout={{ ecs_data_services_dns_probe_start_timeout }}"
       - --command
       - --
       - nslookup
       - "{{ item.fqdn }}"
-  register: ecs_data_services_pod_dns_lookups
+  register: ecs_data_services_pod_dns_starts
   changed_when: false
   failed_when: false
   become: true
@@ -310,18 +307,82 @@
   loop_control:
     extended: true
     label: "{{ item.label }}: {{ item.fqdn }}"
-  retries: "{{ ecs_data_services_cm_dns_wait_retries | int }}"
-  delay: "{{ ecs_data_services_cm_dns_wait_delay | int }}"
+
+- name: Critical DNS | Wait for Kubernetes DNS probe pods
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - get
+      - pod
+      - "ansible-dns-check-{{ ansible_loop.index }}"
+      - --output
+      - jsonpath={.status.phase}
+  register: ecs_data_services_pod_dns_phases
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  loop: "{{ ecs_data_services_dns_verification_records }}"
+  loop_control:
+    extended: true
+    label: "{{ item.label }}: {{ item.fqdn }}"
+  retries: "{{ ecs_data_services_dns_probe_wait_retries | int }}"
+  delay: "{{ ecs_data_services_dns_probe_wait_delay | int }}"
   until:
-    - ecs_data_services_pod_dns_lookups.rc == 0
-    - >-
-      item.address | length == 0
-      or item.address in ecs_data_services_pod_dns_lookups.stdout
+    - ecs_data_services_pod_dns_phases.rc == 0
+    - ecs_data_services_pod_dns_phases.stdout in ['Succeeded', 'Failed']
+
+- name: Critical DNS | Read Kubernetes DNS probe output
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - logs
+      - "ansible-dns-check-{{ ansible_loop.index }}"
+  register: ecs_data_services_pod_dns_logs
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  loop: "{{ ecs_data_services_dns_verification_records }}"
+  loop_control:
+    extended: true
+    label: "{{ item.label }}: {{ item.fqdn }}"
+
+- name: Critical DNS | Remove completed Kubernetes DNS probe pods
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - delete
+      - pod
+      - "ansible-dns-check-{{ item }}"
+      - --ignore-not-found
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  loop: "{{ range(1, ecs_data_services_dns_verification_records | length + 1) | list }}"
 
 - name: Critical DNS | Require Kubernetes pod service resolution
   ansible.builtin.assert:
     that:
       - item.rc == 0
+      - >-
+        ecs_data_services_pod_dns_phases.results[ansible_loop.index0].stdout
+        == 'Succeeded'
       - >-
         item.item.address | length == 0
         or item.item.address in item.stdout
@@ -331,6 +392,7 @@
       through Kubernetes cluster DNS before enabling CDE/CDW/CAI.
       Pod resolver output:
       {{ item.stdout | default(item.stderr, true) }}
-  loop: "{{ ecs_data_services_pod_dns_lookups.results }}"
+  loop: "{{ ecs_data_services_pod_dns_logs.results }}"
   loop_control:
+    extended: true
     label: "{{ item.item.label }}: {{ item.item.fqdn }}"

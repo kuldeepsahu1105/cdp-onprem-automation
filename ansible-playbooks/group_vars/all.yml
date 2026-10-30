@@ -1264,7 +1264,8 @@ ecs_data_services_status_wait_retries: 480
 ecs_data_services_status_wait_delay: 30
 ecs_data_services_dns_probe_namespace: default
 ecs_data_services_dns_probe_image: busybox:1.36
-ecs_data_services_dns_probe_start_timeout: 2m
+ecs_data_services_dns_probe_wait_retries: 24
+ecs_data_services_dns_probe_wait_delay: 5
 # CDE
 ecs_cde_service_name: "{{ ecs_cluster_name | regex_replace('[^a-zA-Z0-9]+', '-') | lower }}-de"
 ecs_cde_instance_type: private
