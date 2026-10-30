@@ -1,0 +1,58 @@
+---
+- name: CAI | Discover generated workspace endpoint
+  cloudera.cloud.ml_info:
+    environment: "{{ ecs_cdp_environment_name }}"
+    name: "{{ ecs_cai_workspace_name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cai_workspace_endpoint_info
+  changed_when: false
+  failed_when: false
+  until: >-
+    (
+      ecs_cai_workspace_endpoint_info.workspaces | default([])
+      | first | default({})
+    ).instanceUrl | default('') | length > 0
+    or
+    (
+      ecs_cai_workspace_endpoint_info.workspaces | default([])
+      | first | default({})
+    ).instanceStatus | default('') == 'installation:failed'
+  retries: "{{ ecs_data_services_status_wait_retries | int }}"
+  delay: "{{ ecs_data_services_status_wait_delay | int }}"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - not (ecs_cai_workspace_start.failed | default(false) | bool)
+
+- name: CAI | Record generated workspace endpoint
+  ansible.builtin.set_fact:
+    ecs_cai_workspace_url: >-
+      {{
+        (
+          ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | first | default({})
+        ).instanceUrl
+        | default('')
+        | regex_replace('/+$', '')
+      }}
+    ecs_cai_workbench_hostname: >-
+      {{
+        (
+          ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | first | default({})
+        ).instanceUrl
+        | default('')
+        | regex_replace('^https?://', '')
+        | regex_replace('/.*$', '')
+        | regex_replace(':.*$', '')
+      }}
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - >-
+      (
+        ecs_cai_workspace_endpoint_info.workspaces | default([])
+        | first | default({})
+      ).instanceUrl | default('') | length > 0

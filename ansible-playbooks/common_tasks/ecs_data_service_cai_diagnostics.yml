@@ -43,6 +43,72 @@
   ansible.builtin.debug:
     msg: "{{ ecs_cai_ingress_description.stdout | default(ecs_cai_ingress_description.stderr | default('No CAI ingress description available')) }}"
 
+- name: CAI diagnostics | List Gateway API routes and listeners
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_kubeconfig_path }}"
+      - -n
+      - "{{ ecs_cai_k8s_namespace }}"
+      - get
+      - httproutes.gateway.networking.k8s.io,listenersets.gateway.networking.k8s.io
+      - -o
+      - wide
+  register: ecs_cai_gateway_resources
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CAI diagnostics | Report Gateway API routes and listeners
+  ansible.builtin.debug:
+    msg: "{{ ecs_cai_gateway_resources.stdout | default(ecs_cai_gateway_resources.stderr | default('No CAI Gateway API resource output')) }}"
+
+- name: CAI diagnostics | Describe Gateway API routes and listeners
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_kubeconfig_path }}"
+      - -n
+      - "{{ ecs_cai_k8s_namespace }}"
+      - describe
+      - httproutes.gateway.networking.k8s.io,listenersets.gateway.networking.k8s.io
+  register: ecs_cai_gateway_description
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CAI diagnostics | Report Gateway API route and listener status
+  ansible.builtin.debug:
+    msg: "{{ ecs_cai_gateway_description.stdout | default(ecs_cai_gateway_description.stderr | default('No CAI Gateway API description available')) }}"
+
+- name: CAI diagnostics | Check workbench TLS secret
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_kubeconfig_path }}"
+      - -n
+      - "{{ ecs_cai_k8s_namespace }}"
+      - get
+      - secret
+      - "{{ ecs_cai_tls_secret_name }}"
+  register: ecs_cai_tls_secret_status
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CAI diagnostics | Report workbench TLS secret status
+  ansible.builtin.debug:
+    msg: "{{ ecs_cai_tls_secret_status.stdout | default(ecs_cai_tls_secret_status.stderr | default('No CAI TLS secret output')) }}"
+
 - name: CAI diagnostics | List recent namespace events
   ansible.builtin.command:
     argv:

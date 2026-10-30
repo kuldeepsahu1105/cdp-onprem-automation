@@ -260,12 +260,13 @@ Service UIs are proxied from the **deployment portal** host to the ECS master HT
 
 Re-run `35_refresh_deployment_portal.yml` after changing catalog URLs if you skip the Caddy play in `34`.
 
-CAI API completion only means the workspace reached `installation:finished`; it
-does not guarantee that the returned `instanceUrl` is already routable. Playbook
-34 follows the Cloudera Labs private-cloud reference flow by ensuring the
-FreeIPA `wildcard` certificate profile, issuing a wildcard certificate for the
-returned workbench hostname, and installing it as `cml-tls-secret` before
-probing that exact URL from the ECS master. The probe accepts successful,
+CAI submission returns the generated `instanceUrl` before installation
+finishes. Playbook 34 immediately ensures the FreeIPA `wildcard` certificate
+profile, issues a wildcard certificate for that workbench hostname, and
+installs it as `cml-tls-secret` before polling the workspace to
+`installation:finished`. This prevents the Gateway API ListenerSet from
+remaining unprogrammed while the long-running module wait blocks TLS setup.
+The final probe accepts successful,
 redirect, authentication-required, or forbidden responses. A persistent
 ingress-default 404 fails the final aggregate check and prints the `cml`
 namespace pods, services, ingresses, ingress description, and recent events.

@@ -23,7 +23,9 @@
         jid: "{{ ecs_cai_workspace_job.ansible_job_id }}"
         mode: cleanup
       changed_when: false
-      when: ecs_cai_workspace.finished | default(false) | bool
+      when:
+        - ecs_cai_workspace_job is defined
+        - ecs_cai_workspace.finished | default(false) | bool
       become: false
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
