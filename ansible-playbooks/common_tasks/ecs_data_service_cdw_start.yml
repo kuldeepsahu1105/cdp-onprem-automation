@@ -1,16 +1,28 @@
 ---
-- name: CDW | Start Data Warehouse cluster provisioning
-  cloudera.cloud.dw_cluster:
-    env: "{{ ecs_cdp_environment_name }}"
-    private_cloud: "{{ ecs_cdw_private_cloud_config | default({}) }}"
-    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-    state: present
-    wait: false
-  environment: "{{ ecs_cdp_cli_environment }}"
-  register: ecs_cdw_cluster_start
-  changed_when: false
-  failed_when: false
-  become: false
-  delegate_to: "{{ ecs_data_services_delegate_host }}"
-  connection: ssh
+- name: CDW | Submit Data Warehouse cluster provisioning
   when: "'cdw' in (ecs_data_services_install_names | default([]))"
+  block:
+    - name: CDW | Start Data Warehouse cluster provisioning
+      cloudera.cloud.dw_cluster:
+        env: "{{ ecs_cdp_environment_name }}"
+        private_cloud: "{{ ecs_cdw_private_cloud_config | default({}) }}"
+        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+        state: present
+        wait: false
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_cluster_start
+      changed_when: false
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+
+  rescue:
+    - name: CDW | Record submission failure
+      ansible.builtin.set_fact:
+        ecs_cdw_cluster_start: "{{ ansible_failed_result }}"
+
+    - name: CDW | Report submission failure
+      ansible.builtin.debug:
+        msg: >-
+          CDW submission failed before a cluster was created:
+          {{ ecs_cdw_cluster_start.msg | default(ecs_cdw_cluster_start | to_json) }}
