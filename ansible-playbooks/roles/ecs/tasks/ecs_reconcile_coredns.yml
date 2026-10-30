@@ -47,6 +47,7 @@
   register: ecs_coredns_kubectl
   become: yes
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
   until:
     - ecs_coredns_kubectl.stat.exists | default(false)
     - ecs_coredns_kubectl.stat.executable | default(false)
@@ -79,6 +80,7 @@
   changed_when: false
   become: yes
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
   until: ecs_coredns_corefile.rc == 0
   retries: "{{ ecs_control_plane_wait_retries | default(40) }}"
   delay: "{{ ecs_control_plane_wait_delay | default(15) }}"
@@ -124,6 +126,7 @@
   changed_when: ecs_coredns_patch.rc == 0
   become: yes
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
   when: ecs_coredns_corefile_sequential is defined
 
 - name: Restart ECS CoreDNS pods after configuration change
@@ -142,6 +145,7 @@
   changed_when: ecs_coredns_restart.rc == 0
   become: yes
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
   when: ecs_coredns_patch is changed
 
 - name: Record ECS CoreDNS reconciliation for this run

@@ -201,6 +201,7 @@
 - name: Sync ECS data service routes on deployment portal Caddy
   ansible.builtin.import_tasks: ecs_data_services_sync_caddy.yml
   delegate_to: "{{ groups[deployment_portal_host_group_effective][0] }}"
+  connection: ssh
   become: true
   run_once: true
   when:
