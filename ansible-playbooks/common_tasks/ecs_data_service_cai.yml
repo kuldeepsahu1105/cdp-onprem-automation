@@ -10,6 +10,12 @@
       retries: "{{ ecs_data_services_async_poll_retries | default(480) }}"
       delay: "{{ ecs_data_services_async_poll_delay | default(30) }}"
 
+    - name: Remove ML workspace async result
+      ansible.builtin.async_status:
+        jid: "{{ ecs_cai_workspace_job.ansible_job_id }}"
+        mode: cleanup
+      changed_when: false
+
     - name: Derive workbench hostname token
       ansible.builtin.set_fact:
         ecs_cai_workbench_id: >-
