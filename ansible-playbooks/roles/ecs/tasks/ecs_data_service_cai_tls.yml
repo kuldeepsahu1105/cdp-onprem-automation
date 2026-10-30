@@ -11,6 +11,7 @@
         apply:
           delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
           become: true
+          connection: ssh
       vars:
         freeipa_wildcard_profile_name: "{{ ecs_cai_wildcard_cert_profile }}"
 
@@ -20,6 +21,7 @@
         apply:
           delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
           become: true
+          connection: ssh
       vars:
         unenrolled_hostname: "{{ ecs_cai_workbench_hostname }}"
         unenrolled_description: "Cloudera AI workbench wildcard certificate"
