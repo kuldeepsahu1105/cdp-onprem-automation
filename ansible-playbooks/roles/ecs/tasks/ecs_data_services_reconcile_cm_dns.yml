@@ -60,8 +60,7 @@
                   + cluster_domain,
                   true
                 )
-              | regex_replace('\\..*$', '')
-            ),
+            ).split('.')[0],
             'zone': ipaserver_domain,
             'fqdn': (
               ipa_kdc_host
@@ -83,6 +82,16 @@
         ]
       }}
   when: ecs_data_services_ipa_inventory_host is defined
+
+- name: Critical DNS | Ensure FreeIPA module Python dependency
+  ansible.builtin.package:
+    name: python3-netaddr
+    state: present
+  become: true
+  delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
+  when:
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - groups.get('ipaserver', []) | length > 0
 
 - name: Critical DNS | Reconcile FreeIPA forward records
   freeipa.ansible_freeipa.ipadnsrecord:
