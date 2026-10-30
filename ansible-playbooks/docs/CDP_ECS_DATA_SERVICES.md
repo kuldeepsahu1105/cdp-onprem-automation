@@ -227,15 +227,6 @@ Re-run `35_refresh_deployment_portal.yml` after changing catalog URLs if you ski
 
 See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_registry_*`, `ecs_cdp_environment_name`).
 
-For private-cloud CDW creation, `ecs_cdw_kerberos_principal_hostname`
-defaults to `dwx-env-<environment>.<cluster_domain>`. This overrides the
-vendor-generated `dwx-env-<environment>.cdp.local` principal so keytab
-validation uses the deployment's actual FreeIPA/AD identity domain. An
-explicit `custom_kerberos_principal_hostname` in
-`ecs_cdw_private_cloud_config` takes precedence. Because this value is used
-only by the CDW create request, remove an existing unhealthy CDW cluster
-before rerunning after changing the hostname.
-
 ## Not automated (Labs reference gaps)
 
 - FreeIPA wildcard TLS for per-service domains (CDE/CAI) — upstream TLS verify is disabled on Caddy → ECS master only.
