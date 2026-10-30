@@ -467,30 +467,31 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
             done < <(find ansible-playbooks -type d -name __pycache__ -print0 2>/dev/null || true)
           fi
           ws="${WORKSPACE:-$PWD}"
-          workspace_owner="$(stat -c '%U' "$ws")"
-          workspace_group="$(stat -c '%G' "$ws")"
-          workspace_owner_home="$(getent passwd "$workspace_owner" | cut -d: -f6)"
-          if [[ -z "$workspace_owner_home" ]]; then
-            echo "ERROR: Could not resolve home directory for workspace owner $workspace_owner" >&2
+          credentials_user="${CREDENTIALS_USER:-holautosa}"
+          credentials_home="${CREDENTIALS_HOME:-}"
+          if [[ -z "$credentials_home" ]]; then
+            credentials_home="$(getent passwd "$credentials_user" 2>/dev/null | cut -d: -f6 || true)"
+          fi
+          if [[ -z "$credentials_home" ]]; then
+            echo "ERROR: Could not resolve home directory for credentials user $credentials_user" >&2
             exit 1
           fi
-          cdp_state_dir="${CDP_STATE_DIR:-$workspace_owner_home/.local/state/cdp-onprem-automation}"
-          if ! mkdir -p "$cdp_state_dir" 2>/dev/null; then
-            sudo -n mkdir -p "$cdp_state_dir"
+          cdp_state_dir="${CDP_STATE_DIR:-$credentials_home/.local/state/cdp-onprem-automation}"
+          if ! mkdir -p "$cdp_state_dir" 2>/dev/null ||
+             ! probe="$(mktemp "$cdp_state_dir/.write-test.XXXXXX" 2>/dev/null)"; then
+            echo "ERROR: Persistent CDP state directory is not writable: $cdp_state_dir" >&2
+            exit 1
           fi
+          rm -f "$probe"
+          echo "Persistent ECS state directory: $cdp_state_dir"
           for state_file in ecs-automation-api-credentials.yml ecs-data-services-catalog.yml; do
             source_file="$ws/jenkins/artifacts/$state_file"
             target_file="$cdp_state_dir/$state_file"
             if [[ -f "$source_file" && ! -f "$target_file" ]]; then
-              if ! install -m 0600 "$source_file" "$target_file" 2>/dev/null; then
-                sudo -n install -m 0600 "$source_file" "$target_file"
-              fi
+              install -m 0600 "$source_file" "$target_file"
               echo "Migrated persistent ECS state outside Git checkout: $state_file"
             fi
           done
-          if ! chown -R "$workspace_owner:$workspace_group" "$cdp_state_dir" 2>/dev/null; then
-            sudo -n chown -R "$workspace_owner:$workspace_group" "$cdp_state_dir"
-          fi
           cdp_cli_tools="$ws/jenkins/artifacts/.tools"
           if [[ -d "$cdp_cli_tools" ]]; then
             chmod -R u+w "$cdp_cli_tools" 2>/dev/null || true
