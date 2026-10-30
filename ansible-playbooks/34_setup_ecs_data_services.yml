@@ -56,6 +56,13 @@
     - name: Wait for ECS Management Console after cluster install
       ansible.builtin.import_tasks: common_tasks/ecs_wait_control_plane_console.yml
 
+    - name: Reconcile ECS CoreDNS identity-provider forwarding
+      ansible.builtin.import_tasks: common_tasks/ecs_reconcile_coredns.yml
+      when: ecs_reconcile_coredns | default(true) | bool
+
+    - name: Reconcile Cloudera Manager DNS for Data Services
+      ansible.builtin.import_tasks: common_tasks/ecs_data_services_reconcile_cm_dns.yml
+
     - name: Load existing ECS automation API credentials
       ansible.builtin.import_tasks: common_tasks/ecs_load_api_credentials.yml
 

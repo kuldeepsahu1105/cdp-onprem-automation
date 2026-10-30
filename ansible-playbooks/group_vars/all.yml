@@ -1199,6 +1199,8 @@ ecs_control_plane_ca_bundle: ""
 ecs_data_services_use_cdpcurl: true
 ecs_data_services_install: []  # optional list; unioned with per-service flags below
 ecs_data_services_async_timeout: 14400
+ecs_data_services_cm_dns_wait_retries: 12
+ecs_data_services_cm_dns_wait_delay: 5
 ecs_data_services_async_poll_retries: 480
 ecs_data_services_async_poll_delay: 30
 ecs_data_services_async_dir: "{{ ecs_persistent_state_dir }}/ansible_async"

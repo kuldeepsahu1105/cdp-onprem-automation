@@ -1,0 +1,77 @@
+---
+- name: CM DNS | Require Cloudera Manager inventory host
+  ansible.builtin.assert:
+    that:
+      - groups.get('cldr-mngr', []) | length > 0
+    fail_msg: "Data Services require a host in the cldr-mngr inventory group."
+
+- name: CM DNS | Resolve Cloudera Manager inventory host
+  ansible.builtin.set_fact:
+    ecs_data_services_cm_inventory_host: "{{ groups['cldr-mngr'] | first }}"
+
+- name: CM DNS | Resolve Cloudera Manager hostname
+  ansible.builtin.set_fact:
+    ecs_data_services_cm_hostname: >-
+      {{ hostvars[ecs_data_services_cm_inventory_host].cldr_hostname }}
+    ecs_data_services_cm_fqdn: >-
+      {{
+        hostvars[ecs_data_services_cm_inventory_host].cldr_hostname
+        + (
+          '.' + cluster_domain
+          if cluster_domain | default('') | length > 0
+          else ''
+        )
+      }}
+    ecs_data_services_cm_private_ip: >-
+      {{
+        hostvars[ecs_data_services_cm_inventory_host].private_ip
+        | default(hostvars[ecs_data_services_cm_inventory_host].ansible_host, true)
+      }}
+
+- name: CM DNS | Reconcile FreeIPA forward record
+  freeipa.ansible_freeipa.ipadnsrecord:
+    ipaadmin_password: "{{ freeipa_password | default(lookup('env', 'IPA_PASSWORD'), true) }}"
+    name: "{{ ecs_data_services_cm_hostname }}"
+    zone_name: "{{ ipaserver_domain }}"
+    record_type: A
+    record_value: "{{ ecs_data_services_cm_private_ip }}"
+    state: present
+  delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
+  when:
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - groups.get('ipaserver', []) | length > 0
+
+- name: CM DNS | Resolve Cloudera Manager from ECS master
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - >-
+        import socket,sys;
+        print('\n'.join(sorted({
+        result[4][0] for result in
+        socket.getaddrinfo(sys.argv[1], None, socket.AF_INET)
+        })))
+      - "{{ ecs_data_services_cm_fqdn }}"
+  register: ecs_data_services_cm_dns_lookup
+  changed_when: false
+  failed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  retries: "{{ ecs_data_services_cm_dns_wait_retries | int }}"
+  delay: "{{ ecs_data_services_cm_dns_wait_delay | int }}"
+  until:
+    - ecs_data_services_cm_dns_lookup.rc == 0
+    - ecs_data_services_cm_private_ip in ecs_data_services_cm_dns_lookup.stdout
+
+- name: CM DNS | Require private Cloudera Manager resolution
+  ansible.builtin.assert:
+    that:
+      - ecs_data_services_cm_dns_lookup.rc == 0
+      - ecs_data_services_cm_private_ip in ecs_data_services_cm_dns_lookup.stdout
+    fail_msg: >-
+      {{ ecs_data_services_cm_fqdn }} must resolve to
+      {{ ecs_data_services_cm_private_ip }} from the ECS master before enabling
+      CDE/CDW/CAI. Resolver output:
+      {{ ecs_data_services_cm_dns_lookup.stdout | default(ecs_data_services_cm_dns_lookup.stderr, true) }}
