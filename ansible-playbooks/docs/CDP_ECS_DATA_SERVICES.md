@@ -33,27 +33,10 @@ the external Jenkins controller is unsupported because private names such as
 The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
 than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
-Before submitting any Data Services API request, playbook 34 reconciles ECS
-CoreDNS forwarding and the FreeIPA A records for the Cloudera Manager FQDN,
-ECS Management Console, FreeIPA LDAP hostname, and the `*.apps` wildcard used
-by dynamic CAI, CDE, and CDW endpoints. A managed CoreDNS block for the private
-zone serves the three fixed addresses locally and forwards every unmatched
-private name, including wildcard-backed application hosts, only to FreeIPA,
-avoiding fallback resolvers and stale negative answers. CoreDNS is restarted
-and its rollout awaited only when the managed Corefile actually changes;
-ordinary reruns reuse the ECS-install deployment without disruption. Each pod
-probe retries `nslookup` from its scheduled worker until the expected address
-is returned, preventing per-node service-routing convergence from producing a
-false `NXDOMAIN`. The earlier console readiness gate already covers ECS-master
-access, so DNS is not probed again from the host. The pod check
-requests IPv4 A records through the same cluster-DNS path as CDW/CDE/CAI
-workloads, so
-host-only DNS success cannot hide a `172.43.0.10` lookup failure. CDE calls
-Cloudera Manager by FQDN, and CDW validates its LDAP bind through
-`ipa_kdc_host`; unresolved records otherwise surface later as
-`UnknownHostException` or LDAP result-code 200 network errors. The bounded
-resolver wait uses `ecs_data_services_cm_dns_wait_retries` and
-`ecs_data_services_cm_dns_wait_delay`.
+ECS installation owns CoreDNS, private-zone forwarding, and wildcard DNS.
+Playbook 34 does not patch, restart, or probe CoreDNS again; it requires the
+existing Management Console readiness gate to pass and then submits Data
+Services through that installed control plane.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
@@ -61,20 +44,16 @@ stage does not repeat it. Data Services also no longer runs the Cloudera Manager
 endpoint/client discovery chain because its `cloudera.cloud` modules communicate
 with the ECS control plane through the isolated CDP CLI profile.
 
-Selected CDW, CDE, and CAI top-level provisioning operations are submitted
-before waiting for service completion. CAI remains an asynchronous job, and its
-wildcard TLS secret and UI readiness checks run immediately when that job
-finishes rather than waiting for CDW or CDE. CDW and CDE submit with
-`wait: false` and are polled through `dw_cluster_info` and `de_info`; this avoids
-Ansible async-wrapper JSON loss and recognizes terminal CDE states such as
-`LoggingInstallationFailed`, which the pinned collection's built-in waiter does
-not classify as a failure. Poll retries are visible in Jenkins every
-`ecs_data_services_status_wait_delay` seconds.
+CDW, CDE, and CAI use the same `cloudera.cloud` request fields as the supplied
+Cloudera Labs examples, adapted only for collection 3.3 option names. CAI
+endpoint discovery and wildcard TLS secret creation run immediately after its
+submission and before installation polling. CDW and CDE use `wait: false` for
+submission, then `dw_cluster_info` and `de_info` for visible terminal-state
+polling, including CDE states such as `LoggingInstallationFailed`.
 
-The default private CDE service request is 26 CPU and 64 GiB because the
-private-cloud API rejects lower CPU capacity. Its parent resource pool defaults
-to the existing scheduler root (`ecs_cde_resource_pool: root`); deployments
-with a pre-created custom parent pool can override it. Model Registry obtains Ozone S3
+The default private CDE service request follows the supplied working example:
+24 CPU, 64 GiB, and parent resource pool `root.<environment>.cde`.
+Model Registry obtains Ozone S3
 credentials from `ecs_model_registry_sdx_group` (default `sdx`) when that
 optional override group has hosts; otherwise it automatically uses the first
 host in `base_cluster_master_group`, where the standard base-cluster template
@@ -287,10 +266,11 @@ See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_regi
 
 Before a CDW submission, the playbook queries the control plane.
 `ecs_cdw_recreate_failed_cluster` removes a cluster only when its terminal
-status is `Error` or `Failed`, then waits until it is absent.
-`ecs_cdw_cleanup_orphaned_ipa_identity` subsequently removes only the orphaned
-`hive/dwx-env-<environment>.cdp.local` service and matching FreeIPA host when
-no CDW cluster remains. Running and in-progress CDW clusters are preserved.
+status is `Error` or `Failed`, then waits until it is absent. Running and
+in-progress clusters are preserved. The playbook does not create or delete CDW
+Kerberos hosts, services, or keytabs; the Private Cloud Data Warehouse control
+plane owns that lifecycle, matching the `cloudera.cloud.dw_cluster` contract
+and supplied example.
 
 ## Not automated (Labs reference gaps)
 
