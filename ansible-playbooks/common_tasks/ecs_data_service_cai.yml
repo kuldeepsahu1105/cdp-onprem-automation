@@ -23,6 +23,13 @@
             and (ecs_cai_workspace.workspace | default({})).instanceUrl | default('') | length > 0
           }}
 
+    - name: Report ML workspace provisioning failure
+      ansible.builtin.debug:
+        msg: >-
+          CAI provisioning did not return an activated workspace:
+          {{ ecs_cai_workspace.msg | default(ecs_cai_workspace | to_json) }}
+      when: not (ecs_cai_workspace_succeeded | bool)
+
     - name: Remove ML workspace async result
       ansible.builtin.async_status:
         jid: "{{ ecs_cai_workspace_job.ansible_job_id }}"

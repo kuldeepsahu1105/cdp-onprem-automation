@@ -23,6 +23,13 @@
             and (ecs_cde_service.service | default({})).clusterFqdn | default('') | length > 0
           }}
 
+    - name: Report Data Engineering provisioning failure
+      ansible.builtin.debug:
+        msg: >-
+          CDE provisioning did not return an activated service:
+          {{ ecs_cde_service.msg | default(ecs_cde_service | to_json) }}
+      when: not (ecs_cde_service_succeeded | bool)
+
     - name: Remove Data Engineering async result
       ansible.builtin.async_status:
         jid: "{{ ecs_cde_service_job.ansible_job_id }}"
