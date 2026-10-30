@@ -109,6 +109,9 @@
   vars:
     ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
 
+- name: Configure CAI wildcard TLS from Cloudera Labs reference flow
+  ansible.builtin.import_tasks: ecs_data_service_cai_tls.yml
+
 - name: Verify CAI UI after independent services
   ansible.builtin.import_tasks: ecs_data_service_cai_followup.yml
 

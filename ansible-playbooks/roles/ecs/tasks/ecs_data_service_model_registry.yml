@@ -7,17 +7,28 @@
         ecs_model_registry_succeeded: false
         ecs_model_registry_failure_message: ""
 
+    - name: Resolve Model Registry Ozone hosts
+      ansible.builtin.set_fact:
+        ecs_model_registry_ozone_hosts: >-
+          {{
+            groups.get(ecs_model_registry_sdx_group, [])
+            if (groups.get(ecs_model_registry_sdx_group, []) | length > 0)
+            else groups.get(base_cluster_master_group, [])
+          }}
+
     - name: Record Model Registry prerequisite result
       ansible.builtin.set_fact:
         ecs_model_registry_prerequisites_succeeded: >-
-          {{ groups.get(ecs_model_registry_sdx_group, []) | length > 0 }}
+          {{ ecs_model_registry_ozone_hosts | length > 0 }}
 
     - name: Report missing Model Registry prerequisites
       ansible.builtin.set_fact:
         ecs_model_registry_failure_message: >-
-          Model Registry needs Ozone S3 keys from SDX hosts (inventory group
-          {{ ecs_model_registry_sdx_group }}). Add SDX nodes or remove
-          model_registry from ecs_data_services_install.
+          Model Registry needs an Ozone-capable host. Neither the optional
+          inventory group {{ ecs_model_registry_sdx_group }} nor the base
+          cluster master group {{ base_cluster_master_group }} contains a host.
+          Add a host to one of those groups or remove model_registry from
+          ecs_data_services_install.
       when: not (ecs_model_registry_prerequisites_succeeded | bool)
 
     - name: Print missing Model Registry prerequisites
@@ -28,10 +39,10 @@
     - name: Provision Model Registry when prerequisites are available
       when: ecs_model_registry_prerequisites_succeeded | bool
       block:
-        - name: Retrieve Ozone S3 credentials from SDX
+        - name: Retrieve Ozone S3 credentials from selected host
           ansible.builtin.include_tasks: ecs_model_registry_ozone_credentials.yml
 
-        - name: Set Model Registry S3 endpoint from SDX host when not overridden
+        - name: Set Model Registry S3 endpoint from selected host when not overridden
           ansible.builtin.set_fact:
             ecs_model_registry_s3_endpoint_effective: >-
               {{
@@ -39,7 +50,7 @@
                 if (ecs_model_registry_s3_endpoint | default('') | length > 0)
                 else (
                   'https://'
-                  + hostvars[groups[ecs_model_registry_sdx_group][0]].cldr_hostname
+                  + hostvars[ecs_model_registry_ozone_hosts[0]].cldr_hostname
                   + '.'
                   + cluster_domain
                   + ':9879'
@@ -92,9 +103,9 @@
               - --model-registry-subdomain
               - "{{ ecs_model_registry_subdomain }}"
               - --s3-access-key
-              - "{{ hostvars[groups[ecs_model_registry_sdx_group][0]].ozone_s3_access_key }}"
+              - "{{ hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_access_key }}"
               - --s3-secret-key
-              - "{{ hostvars[groups[ecs_model_registry_sdx_group][0]].ozone_s3_secret_key }}"
+              - "{{ hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_secret_key }}"
               - --s3-bucket
               - "{{ ecs_model_registry_s3_bucket }}"
               - --s3-endpoint

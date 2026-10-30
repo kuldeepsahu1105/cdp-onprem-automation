@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for ECS data service CAI TLS
+  ansible.builtin.import_role:
+    name: ecs
+    tasks_from: ecs_data_service_cai_tls

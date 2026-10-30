@@ -12,6 +12,8 @@ collections:
   - name: ansible.posix
   - name: community.crypto
   - name: freeipa.ansible_freeipa
+  - name: kubernetes.core
+  - name: git+https://github.com/cloudera-labs/cloudera.exe.git,51d7636e743efab62e433fa060deadbbc0a2fb34
 
   # CM/CDP cluster API — 31_setup_base_cluster, 33_setup_ecs_cluster (cloudera.cluster.cluster)
   - name: git+https://github.com/cloudera-labs/cloudera.cluster.git,v4.4.0

@@ -1171,7 +1171,7 @@ ecs_data_services_async_dir: "{{ ecs_persistent_state_dir }}/ansible_async"
 ecs_deploy_cdw: false
 ecs_deploy_cde: false
 ecs_deploy_cai: false
-ecs_deploy_cai_registry: false  # Model Registry (requires [sdx]); install key model_registry
+ecs_deploy_cai_registry: false  # Model Registry; uses [sdx] override or first base master
 ecs_data_services_catalog:
   cdw:
     name: Cloudera Data Warehouse
@@ -1221,20 +1221,24 @@ ecs_cde_resource_pool: "root.{{ ecs_cdp_environment_name }}.cde"
 ecs_cai_workspace_name: "{{ ecs_cluster_name | regex_replace('[^a-zA-Z0-9]+', '-') | lower }}-ml"
 ecs_cai_k8s_namespace: cml
 ecs_cai_resource_pool:
-  cpu: "50"
-  memory: "46 Gi"
+  workspace_quota:
+    cpu_quota: "50"
+    memory_quota: "46 Gi"
 ecs_cai_enable_governance: true
 ecs_cai_enable_metrics: true
 ecs_cai_enable_tls: true
 ecs_cai_enable_monitoring: true
+ecs_cai_configure_wildcard_tls: true
+ecs_cai_wildcard_cert_profile: wildcard
+ecs_cai_tls_secret_name: cml-tls-secret
 ecs_cai_ui_wait_retries: 20
 ecs_cai_ui_wait_delay: 15
-# Model Registry (requires [sdx] inventory + Ozone)
+# Model Registry (prefers optional [sdx], otherwise uses first base master with Ozone)
 ecs_model_registry_sdx_group: sdx
 ecs_model_registry_service_name: "{{ ecs_cluster_name | regex_replace('[^a-zA-Z0-9]+', '-') | lower }}-registry"
 ecs_model_registry_subdomain: model-registry
 ecs_model_registry_s3_bucket: "{{ cdh_basecluster_name | lower }}-registry"
-ecs_model_registry_s3_endpoint: ""  # default https://<first-sdx-fqdn>:9879 when model_registry is selected
+ecs_model_registry_s3_endpoint: ""  # default https://<selected-ozone-host-fqdn>:9879
 ecs_model_registry_ozone_service_id: o3service1
 
 # -----------------------------------------------------------------------------
