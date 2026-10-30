@@ -35,13 +35,14 @@ than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
 Before submitting any Data Services API request, playbook 34 reconciles ECS
 CoreDNS forwarding and the FreeIPA A records for both the Cloudera Manager FQDN
-and the FreeIPA LDAP hostname. Those two fixed private addresses are also pinned
-in RKE2 CoreDNS `NodeHosts`; wildcard and other private names continue through
-the FreeIPA forwarder. It flushes CoreDNS after every reconciliation so reruns
-cannot retain stale negative answers, then verifies the IPA LDAP hostname,
-Cloudera Manager hostname, and existing ECS console hostname through both the ECS
-host resolver and a disposable Kubernetes pod. The pod check requests IPv4 A
-records through the same cluster-DNS path as CDW/CDE/CAI workloads, so
+and the FreeIPA LDAP hostname. A managed CoreDNS block for the private zone
+serves those two fixed addresses locally and forwards every unmatched private
+name only to FreeIPA, avoiding fallback resolvers and stale negative answers.
+CoreDNS is flushed after every reconciliation, then the IPA LDAP hostname,
+Cloudera Manager hostname, and existing ECS console hostname are verified through
+both the ECS host resolver and a disposable Kubernetes pod. The pod check
+requests IPv4 A records through the same cluster-DNS path as CDW/CDE/CAI
+workloads, so
 host-only DNS success cannot hide a `172.43.0.10` lookup failure. CDE calls
 Cloudera Manager by FQDN, and CDW validates its LDAP bind through
 `ipa_kdc_host`; unresolved records otherwise surface later as
