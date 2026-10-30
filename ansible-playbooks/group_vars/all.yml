@@ -1265,6 +1265,8 @@ ecs_cai_enable_governance: true
 ecs_cai_enable_metrics: true
 ecs_cai_enable_tls: true
 ecs_cai_enable_monitoring: true
+ecs_cai_ui_wait_retries: 20
+ecs_cai_ui_wait_delay: 15
 # Model Registry (requires [sdx] inventory + Ozone)
 ecs_model_registry_sdx_group: sdx
 ecs_model_registry_service_name: "{{ ecs_cluster_name | regex_replace('[^a-zA-Z0-9]+', '-') | lower }}-registry"

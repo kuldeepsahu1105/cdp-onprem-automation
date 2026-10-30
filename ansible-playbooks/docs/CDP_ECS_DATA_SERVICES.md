@@ -228,6 +228,14 @@ Service UIs are proxied from the **deployment portal** host to the ECS master HT
 
 Re-run `35_refresh_deployment_portal.yml` after changing catalog URLs if you skip the Caddy play in `34`.
 
+CAI API completion only means the workspace reached `installation:finished`; it
+does not guarantee that the returned `instanceUrl` is already routable. Playbook
+34 probes that exact URL from the ECS master and accepts successful, redirect,
+authentication-required, or forbidden responses. A persistent ingress-default
+404 fails the final aggregate check and prints the `cml` namespace pods,
+services, ingresses, ingress description, and recent events. Tune the bounded
+wait with `ecs_cai_ui_wait_retries` and `ecs_cai_ui_wait_delay`.
+
 ## Variables
 
 See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_registry_*`, `ecs_cdp_environment_name`). The preferred environment name is derived from the first IPA/domain label (for example, `cldrsetup.example` becomes `cldrsetup`). A healthy cluster with one existing vendor-created environment such as `apps` adopts that environment instead of creating a duplicate.

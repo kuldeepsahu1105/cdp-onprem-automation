@@ -28,49 +28,15 @@
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
 
-    - name: Derive workbench hostname token
+    - name: Record workbench endpoint
       ansible.builtin.set_fact:
-        ecs_cai_workbench_id: >-
+        ecs_cai_workspace_url: "{{ ecs_cai_workspace.workspace.instanceUrl | regex_replace('/+$', '') }}"
+        ecs_cai_workbench_hostname: >-
           {{
             ecs_cai_workspace.workspace.instanceUrl
-            | regex_replace('^https://', '')
-            | regex_replace('(\\..*$)', '')
-          }}
-      when:
-        - ecs_cai_workspace_succeeded | bool
-
-    - name: Register workbench ingress for Caddy
-      ansible.builtin.set_fact:
-        ecs_caddy_data_service_routes: >-
-          {{
-            (ecs_caddy_data_service_routes | default([]))
-            + [
-              {
-                'id': 'cai-' + ecs_cai_workspace_name,
-                'external_hostname': ecs_cai_workbench_id + '.' + ecs_app_domain,
-                'backend_host': ecs_master_fqdn,
-                'backend_port': 443,
-                'backend_scheme': 'https'
-              }
-            ]
-          }}
-      when:
-        - ecs_cai_workspace_succeeded | bool
-
-    - name: Update portal catalog URL for CAI
-      ansible.builtin.set_fact:
-        ecs_data_services_catalog: >-
-          {{
-            ecs_data_services_catalog | combine(
-              {
-                'cai': ecs_data_services_catalog.cai | default({}) | combine(
-                  {
-                    'url': 'https://' + ecs_cai_workbench_id + '.' + ecs_app_domain
-                  }
-                )
-              },
-              recursive=True
-            )
+            | regex_replace('^https?://', '')
+            | regex_replace('/.*$', '')
+            | regex_replace(':.*$', '')
           }}
       when:
         - ecs_cai_workspace_succeeded | bool

@@ -1,0 +1,66 @@
+---
+- name: CAI diagnostics | List namespace workloads and ingress
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_kubeconfig_path }}"
+      - -n
+      - "{{ ecs_cai_k8s_namespace }}"
+      - get
+      - pods,services,ingresses
+      - -o
+      - wide
+  register: ecs_cai_kubernetes_resources
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CAI diagnostics | Report namespace workloads and ingress
+  ansible.builtin.debug:
+    msg: "{{ ecs_cai_kubernetes_resources.stdout | default(ecs_cai_kubernetes_resources.stderr | default('No CAI Kubernetes resource output')) }}"
+
+- name: CAI diagnostics | Describe namespace ingress
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_kubeconfig_path }}"
+      - -n
+      - "{{ ecs_cai_k8s_namespace }}"
+      - describe
+      - ingress
+  register: ecs_cai_ingress_description
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CAI diagnostics | Report namespace ingress
+  ansible.builtin.debug:
+    msg: "{{ ecs_cai_ingress_description.stdout | default(ecs_cai_ingress_description.stderr | default('No CAI ingress description available')) }}"
+
+- name: CAI diagnostics | List recent namespace events
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_kubeconfig_path }}"
+      - -n
+      - "{{ ecs_cai_k8s_namespace }}"
+      - get
+      - events
+      - --sort-by=.lastTimestamp
+  register: ecs_cai_kubernetes_events
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CAI diagnostics | Report recent namespace events
+  ansible.builtin.debug:
+    msg: "{{ ecs_cai_kubernetes_events.stdout | default(ecs_cai_kubernetes_events.stderr | default('No CAI Kubernetes events available')) }}"
