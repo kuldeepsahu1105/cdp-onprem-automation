@@ -509,9 +509,25 @@
       - --restart=Never
       - --command
       - --
-      - nslookup
-      - -type=A
+      - sh
+      - -ec
+      - |
+        attempt=1
+        while [ "$attempt" -le "$1" ]; do
+          output="$(nslookup -type=A "$2" 2>&1)" || true
+          printf '%s\n' "$output"
+          if printf '%s\n' "$output" | grep -F "$3" >/dev/null; then
+            exit 0
+          fi
+          attempt=$((attempt + 1))
+          sleep "$4"
+        done
+        exit 1
+      - dns-probe
+      - "{{ ecs_data_services_dns_probe_wait_retries | int }}"
       - "{{ item.fqdn }}"
+      - "{{ item.address }}"
+      - "{{ ecs_data_services_dns_probe_wait_delay | int }}"
   register: ecs_data_services_pod_dns_starts
   changed_when: false
   failed_when: false
@@ -546,7 +562,7 @@
   loop_control:
     extended: true
     label: "{{ item.label }}: {{ item.fqdn }}"
-  retries: "{{ ecs_data_services_dns_probe_wait_retries | int }}"
+  retries: "{{ ecs_data_services_dns_probe_wait_retries | int + 6 }}"
   delay: "{{ ecs_data_services_dns_probe_wait_delay | int }}"
   until:
     - ecs_data_services_pod_dns_phases.rc == 0

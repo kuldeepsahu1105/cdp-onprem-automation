@@ -42,9 +42,11 @@ private name, including wildcard-backed application hosts, only to FreeIPA,
 avoiding fallback resolvers and stale negative answers. CoreDNS is flushed
 after every reconciliation. Automation waits for the CoreDNS deployment and
 service DNS path to return all expected fixed addresses before starting the
-one-shot pod probes, preventing a rollout endpoint race from producing a false
-`NXDOMAIN`. All three fixed hostnames are then verified through both the ECS
-host resolver and a disposable Kubernetes pod. The pod check
+pod probes. Each probe also retries `nslookup` from its scheduled worker until
+the expected address is returned, preventing per-node service-routing
+convergence from producing a false `NXDOMAIN`. All three fixed hostnames are
+then verified through both the ECS host resolver and a disposable Kubernetes
+pod. The pod check
 requests IPv4 A records through the same cluster-DNS path as CDW/CDE/CAI
 workloads, so
 host-only DNS success cannot hide a `172.43.0.10` lookup failure. CDE calls
