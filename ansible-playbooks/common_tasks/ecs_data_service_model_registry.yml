@@ -34,6 +34,9 @@
         verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
       environment: "{{ ecs_cdp_cli_environment }}"
       register: ecs_mr_env_info
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
 
     - name: Check if registry already exists
       ansible.builtin.command:
@@ -47,6 +50,9 @@
       register: ecs_mr_list
       changed_when: false
       failed_when: false
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
 
     - name: Set registry existence fact
       ansible.builtin.set_fact:
@@ -84,6 +90,9 @@
       environment: "{{ ecs_cdp_cli_environment }}"
       when: not ecs_mr_exists | bool
       no_log: true
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
 
     - name: Register Model Registry ingress for Caddy
       ansible.builtin.set_fact:

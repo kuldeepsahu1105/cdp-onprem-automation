@@ -15,4 +15,7 @@
   poll: 0
   register: ecs_cde_service_job
   changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
   when: "'cde' in (ecs_data_services_install_names | default([]))"

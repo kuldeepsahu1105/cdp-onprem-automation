@@ -17,4 +17,7 @@
   poll: 0
   register: ecs_cai_workspace_job
   changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
   when: "'cai' in (ecs_data_services_install_names | default([]))"
