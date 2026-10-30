@@ -58,5 +58,13 @@
   ansible.builtin.pip:
     name: git+https://github.com/cloudera-labs/cdpy.git@v2.1.0#egg=cdpy
     state: present
-    extra_args: --user --no-deps
-  become: false
+    virtualenv: "{{ ecs_cdp_cli_venv_path }}"
+    extra_args: --no-deps
+
+- name: Verify CDPy is importable from isolated runtime
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_cdp_cli_venv_path }}/bin/python"
+      - -c
+      - "import cdpy"
+  changed_when: false

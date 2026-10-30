@@ -60,17 +60,46 @@
 - name: Optional ECS LDAP provider sync and LDAP admin user
   ansible.builtin.import_tasks: ecs_control_plane_ldap_and_admin.yml
 
-- name: Install CDW when selected
+- name: Start CDW when selected
   ansible.builtin.import_tasks: ecs_data_service_cdw.yml
+  vars:
+    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
+    ecs_data_services_execution_phase: start
 
-- name: Install CDE when selected
+- name: Start CDE when selected
   ansible.builtin.import_tasks: ecs_data_service_cde.yml
+  vars:
+    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
+    ecs_data_services_execution_phase: start
 
-- name: Install CAI when selected
+- name: Start CAI when selected
   ansible.builtin.import_tasks: ecs_data_service_cai.yml
+  vars:
+    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
+    ecs_data_services_execution_phase: start
+
+- name: Complete CDW when selected
+  ansible.builtin.import_tasks: ecs_data_service_cdw.yml
+  vars:
+    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
+    ecs_data_services_execution_phase: finish
+
+- name: Complete CDE when selected
+  ansible.builtin.import_tasks: ecs_data_service_cde.yml
+  vars:
+    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
+    ecs_data_services_execution_phase: finish
+
+- name: Complete CAI when selected
+  ansible.builtin.import_tasks: ecs_data_service_cai.yml
+  vars:
+    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
+    ecs_data_services_execution_phase: finish
 
 - name: Install Model Registry when selected
   ansible.builtin.import_tasks: ecs_data_service_model_registry.yml
+  vars:
+    ansible_python_interpreter: "{{ ecs_cdp_cli_venv_path }}/bin/python"
 
 - name: Create ECS data-service catalog cache directory
   ansible.builtin.file:

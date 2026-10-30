@@ -11,13 +11,25 @@ the same writable `holautosa` state location as the credential cache instead of
 deriving a path from workspace ownership. The task verifies that exact
 executable before API changes, so an older or inconsistent system-wide `cdp`
 cannot be selected. Cloudera Labs `cdpy` is pinned to Git tag `v2.1.0` with
-`--no-deps`, avoiding similarly named or stale packages in private indexes.
+`--no-deps` inside the same isolated virtual environment, avoiding similarly
+named or stale packages in private indexes. Data-service module imports run
+with that virtual environment's Python so `cloudera.cloud` can always import
+`cdpy`, independent of the Jenkins user's Python user-site configuration.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
 stage does not repeat it. Data Services also no longer runs the Cloudera Manager
 endpoint/client discovery chain because its `cloudera.cloud` modules communicate
 with the ECS control plane through the isolated CDP CLI profile.
+
+Selected CDW, CDE, and CAI top-level provisioning operations start
+asynchronously before Ansible waits for any one of them. Their dependent
+follow-up work runs after each asynchronous result is collected, reducing the
+combined installation duration to approximately the slowest selected service
+rather than the sum of all three. Model Registry remains sequential because it
+has separate Ozone and environment prerequisites. Tune the wait with
+`ecs_data_services_async_timeout`, `ecs_data_services_async_poll_retries`, and
+`ecs_data_services_async_poll_delay`.
 
 ## Prerequisites
 
