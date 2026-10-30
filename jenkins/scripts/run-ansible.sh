@@ -8,6 +8,17 @@ LOG_DIR="${LOG_DIR:-$REPO_ROOT/jenkins/artifacts}"
 export CDP_ARTIFACTS_DIR="${CDP_ARTIFACTS_DIR:-$LOG_DIR}"
 mkdir -p "$LOG_DIR"
 
+if [[ -z "${CDP_STATE_DIR:-}" ]]; then
+  workspace_owner="$(stat -c '%U' "$REPO_ROOT")"
+  workspace_owner_home="$(getent passwd "$workspace_owner" | cut -d: -f6)"
+  if [[ -z "$workspace_owner_home" ]]; then
+    printf 'ERROR: Could not resolve home directory for workspace owner %s\n' "$workspace_owner" >&2
+    exit 1
+  fi
+  export CDP_STATE_DIR="${workspace_owner_home}/.local/state/cdp-onprem-automation"
+fi
+mkdir -p "$CDP_STATE_DIR"
+
 cd "$REPO_ROOT"
 export PATH="${HOME}/.local/bin:${PATH}"
 export ANSIBLE_CONFIG="${ANSIBLE_CONFIG:-$REPO_ROOT/ansible-playbooks/ansible.cfg}"

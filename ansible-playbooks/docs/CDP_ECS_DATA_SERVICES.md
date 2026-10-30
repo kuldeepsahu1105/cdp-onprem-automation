@@ -95,16 +95,19 @@ portal/access-URL email report.
 
 The controller cache location is selected automatically:
 
-- Jenkins/wrappers: `$CDP_ARTIFACTS_DIR`, normally
-  `jenkins/artifacts/ecs-automation-api-credentials.yml`.
-- Manual runs with `WORKSPACE`: `$WORKSPACE/artifacts/`.
-- Other manual runs: `$XDG_STATE_HOME/cdp-onprem-automation/`, or
+- Jenkins: `$CDP_STATE_DIR`, set by `jenkins/scripts/run-ansible.sh` beneath
+  the workspace owner's real home, outside the Git checkout. This prevents
+  `CleanBeforeCheckout` from deleting credentials and creating another access
+  key on every rerun.
+- Standalone runs: `$CDP_STATE_DIR` when explicitly set, otherwise
+  `$XDG_STATE_HOME/cdp-onprem-automation/`, or
   `$HOME/.local/state/cdp-onprem-automation/` when `XDG_STATE_HOME` is unset.
 
-Set `CDP_ARTIFACTS_DIR` or override `ecs_artifacts_dir` when another persistent
-location is required. The playbook reports the path when it creates or reuses
-the credential cache and does not generate a replacement key while valid
-cached credentials are available.
+Set `CDP_STATE_DIR` or override `ecs_persistent_state_dir` when another
+persistent location is required. `CDP_ARTIFACTS_DIR` remains the location for
+non-secret per-build logs and reports. The playbook reports the state path when
+it creates or reuses the credential cache and does not generate a replacement
+key while valid cached credentials are available.
 
 Credential values are serialized with JSON-compatible YAML quoting so
 multiline private keys remain intact. An unreadable legacy cache no longer
@@ -160,6 +163,11 @@ administrative tenant and environment roles using
 tenant roles. Set `ecs_ldap_admin_assign_all_tenant_roles` or
 `ecs_ldap_admin_assign_all_resource_roles_on_env` only when the target control
 plane explicitly supports every returned role for human users.
+
+`cdpcli==0.9.164` exposes the create-user provider selector as
+`--saml-provider-name`, whose contract accepts a provider name or CRN. The
+automation passes the resolved LDAP provider CRN through that compatibility
+field so the private control plane can associate the user with LDAP.
 
 Runs at the end of **`33_setup_ecs_cluster.yml`** when `ecs_ldap_*` is enabled, and in **`34_setup_ecs_data_services.yml`** (LDAP-only is allowed without CDW/CDE/CAI).
 
