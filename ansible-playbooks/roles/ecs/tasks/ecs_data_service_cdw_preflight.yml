@@ -64,35 +64,15 @@
     - ecs_cdw_recreate_failed_cluster | default(true) | bool
     - ecs_cdw_failed_clusters_for_recreation | default([]) | length > 0
 
-- name: CDW | Record clusters remaining after preflight
+- name: CDW | Record cluster inventory after optional cleanup
   ansible.builtin.set_fact:
-    ecs_cdw_clusters_after_preflight: >-
+    ecs_cdw_clusters_after_cleanup: >-
       {{
-        (
-          ecs_cdw_cluster_info_after_cleanup.clusters
-          | default([])
-        )
+        ecs_cdw_cluster_info_after_cleanup.clusters | default([])
         if (
-          ecs_cdw_cluster_info_after_cleanup is defined
-          and not (ecs_cdw_cluster_info_after_cleanup.skipped | default(false) | bool)
+          ecs_cdw_recreate_failed_cluster | default(true) | bool
+          and ecs_cdw_failed_clusters_for_recreation | default([]) | length > 0
         )
-        else (
-          ecs_cdw_preflight_cluster_info.clusters
-          | default([])
-          | rejectattr('status', 'in', ['Error', 'Failed'])
-          | list
-        )
+        else ecs_cdw_preflight_cluster_info.clusters | default([])
       }}
   when: "'cdw' in (ecs_data_services_install_names | default([]))"
-
-- name: CDW | Report existing cluster adoption
-  ansible.builtin.debug:
-    msg: >-
-      Reusing existing Data Warehouse cluster
-      {{ (ecs_cdw_clusters_after_preflight | first).id | default('unknown') }}
-      with status
-      {{ (ecs_cdw_clusters_after_preflight | first).status | default('unknown') }};
-      no activation request will be submitted.
-  when:
-    - "'cdw' in (ecs_data_services_install_names | default([]))"
-    - ecs_cdw_clusters_after_preflight | default([]) | length > 0

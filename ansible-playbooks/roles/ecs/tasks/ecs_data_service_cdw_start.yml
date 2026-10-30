@@ -1,8 +1,22 @@
 ---
+- name: CDW | Adopt existing Data Warehouse cluster
+  ansible.builtin.set_fact:
+    ecs_cdw_cluster_start:
+      changed: false
+      failed: false
+      cluster: "{{ ecs_cdw_clusters_after_cleanup | first }}"
+      msg: >-
+        Reusing existing Data Warehouse cluster
+        {{ (ecs_cdw_clusters_after_cleanup | first).id }}
+        in status {{ (ecs_cdw_clusters_after_cleanup | first).status }}.
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_clusters_after_cleanup | default([]) | length > 0
+
 - name: CDW | Submit Data Warehouse cluster provisioning
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
-    - ecs_cdw_clusters_after_preflight | default([]) | length == 0
+    - ecs_cdw_clusters_after_cleanup | default([]) | length == 0
   block:
     - name: CDW | Start Data Warehouse cluster provisioning
       cloudera.cloud.dw_cluster:
@@ -28,16 +42,3 @@
         msg: >-
           CDW submission failed before a cluster was created:
           {{ ecs_cdw_cluster_start.msg | default(ecs_cdw_cluster_start | to_json) }}
-
-- name: CDW | Record adopted cluster submission state
-  ansible.builtin.set_fact:
-    ecs_cdw_cluster_start:
-      failed: false
-      changed: false
-      skipped: true
-      msg: >-
-        Reusing existing Data Warehouse cluster
-        {{ (ecs_cdw_clusters_after_preflight | first).id | default('unknown') }}.
-  when:
-    - "'cdw' in (ecs_data_services_install_names | default([]))"
-    - ecs_cdw_clusters_after_preflight | default([]) | length > 0
