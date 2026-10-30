@@ -10,6 +10,12 @@
       retries: "{{ ecs_data_services_async_poll_retries | default(480) }}"
       delay: "{{ ecs_data_services_async_poll_delay | default(30) }}"
 
+    - name: Remove Data Warehouse async result
+      ansible.builtin.async_status:
+        jid: "{{ ecs_cdw_cluster_job.ansible_job_id }}"
+        mode: cleanup
+      changed_when: false
+
     - name: Wait for default database catalog
       cloudera.cloud.dw_database_catalog_info:
         cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"

@@ -29,7 +29,9 @@ combined installation duration to approximately the slowest selected service
 rather than the sum of all three. Model Registry remains sequential because it
 has separate Ozone and environment prerequisites. Tune the wait with
 `ecs_data_services_async_timeout`, `ecs_data_services_async_poll_retries`, and
-`ecs_data_services_async_poll_delay`.
+`ecs_data_services_async_poll_delay`. Async job results use the absolute
+`ecs_data_services_async_dir` beneath persistent state so the temporary CDP
+profile's `HOME` override cannot make launch and polling use different paths.
 
 ## Prerequisites
 

@@ -10,6 +10,12 @@
       retries: "{{ ecs_data_services_async_poll_retries | default(480) }}"
       delay: "{{ ecs_data_services_async_poll_delay | default(30) }}"
 
+    - name: Remove Data Engineering async result
+      ansible.builtin.async_status:
+        jid: "{{ ecs_cde_service_job.ansible_job_id }}"
+        mode: cleanup
+      changed_when: false
+
     - name: Derive service id for ingress hostname
       ansible.builtin.set_fact:
         ecs_cde_service_id: "{{ ecs_cde_service.service.clusterFqdn | regex_replace('^service\\.', '') }}"
