@@ -199,7 +199,7 @@
     - identity_provider_effective | default('freeipa') == 'freeipa'
     - groups.get('ipaserver', []) | length > 0
 
-- name: Critical DNS | Restart ECS CoreDNS after record changes
+- name: Critical DNS | Flush ECS CoreDNS cache after record reconciliation
   ansible.builtin.command:
     argv:
       - "{{ ecs_coredns_kubectl_path }}"
@@ -216,7 +216,9 @@
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
-  when: ecs_data_services_critical_dns_reconcile is changed
+  when:
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - groups.get('ipaserver', []) | length > 0
 
 - name: Critical DNS | Resolve required names from ECS master
   ansible.builtin.command:
@@ -296,6 +298,7 @@
       - --command
       - --
       - nslookup
+      - -type=A
       - "{{ item.fqdn }}"
   register: ecs_data_services_pod_dns_starts
   changed_when: false
