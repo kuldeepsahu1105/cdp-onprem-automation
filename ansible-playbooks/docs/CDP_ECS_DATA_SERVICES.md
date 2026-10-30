@@ -51,8 +51,8 @@ submission and before installation polling. CDW and CDE use `wait: false` for
 submission, then `dw_cluster_info` and `de_info` for visible terminal-state
 polling, including CDE states such as `LoggingInstallationFailed`.
 
-The default private CDE service request follows the supplied working example:
-24 CPU, 64 GiB, and parent resource pool `root.<environment>.cde`.
+The default private CDE service request uses the live API minimum:
+26 CPU, 64 GiB, and parent resource pool `root.<environment>.cde`.
 Model Registry obtains Ozone S3
 credentials from `ecs_model_registry_sdx_group` (default `sdx`) when that
 optional override group has hosts; otherwise it automatically uses the first
@@ -267,10 +267,9 @@ See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_regi
 Before a CDW submission, the playbook queries the control plane.
 `ecs_cdw_recreate_failed_cluster` removes a cluster only when its terminal
 status is `Error` or `Failed`, then waits until it is absent. Running and
-in-progress clusters are preserved. The playbook does not create or delete CDW
-Kerberos hosts, services, or keytabs; the Private Cloud Data Warehouse control
-plane owns that lifecycle, matching the `cloudera.cloud.dw_cluster` contract
-and supplied example.
+in-progress clusters are preserved and adopted without another activation
+request. The playbook does not create or delete CDW Kerberos hosts, services,
+or keytabs; the Private Cloud Data Warehouse control plane owns that lifecycle.
 
 ## Not automated (Labs reference gaps)
 
