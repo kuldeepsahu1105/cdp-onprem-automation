@@ -1,0 +1,68 @@
+### ansible-playbook -i inventory.ini 35_sync_deployment_portal_access.yml
+# Refresh only authenticated portal credentials/access metadata after a deployment phase.
+# The portal stack must already exist; this playbook never runs Docker Compose.
+---
+- import_playbook: ensure_collections.yml
+
+- name: Build deployment portal access context
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Resolve deployment portal Caddy gate
+      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_caddy_enabled.yml
+
+    - name: Resolve deployment portal install host
+      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
+
+    - name: Register deployment portal runtime host
+      ansible.builtin.add_host:
+        name: "{{ groups[deployment_portal_host_group_effective][0] }}"
+        groups: deployment_portal_runtime
+      changed_when: false
+
+    - name: Validate SSH reachability of portal target host
+      ansible.builtin.import_tasks: common_tasks/validate_ansible_ssh_reachability.yml
+      vars:
+        ansible_ssh_reachability_check_group: "{{ deployment_portal_host_group_effective }}"
+
+    - name: End credential sync when portal is disabled
+      ansible.builtin.meta: end_play
+      when: not (deployment_portal_caddy_effective | default(false) | bool)
+
+    - name: Build deployment portal context from inventory
+      ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
+
+- name: Sync credentials into existing deployment portal
+  hosts: deployment_portal_runtime
+  become: true
+  gather_facts: false
+  tasks:
+    - name: End credential sync when portal is disabled
+      ansible.builtin.meta: end_host
+      when: not (hostvars['localhost'].deployment_portal_caddy_effective | default(false) | bool)
+
+    - name: Load portal context from localhost
+      ansible.builtin.import_tasks: common_tasks/deployment_portal_load_host_facts.yml
+
+    - name: Check whether portal content was bootstrapped
+      ansible.builtin.stat:
+        path: "{{ deployment_portal_www_dir }}/index.html"
+      register: deployment_portal_access_index
+
+    - name: Require existing portal before credential-only sync
+      ansible.builtin.assert:
+        that:
+          - deployment_portal_access_index.stat.exists
+        fail_msg: >-
+          Deployment portal content is missing on {{ inventory_hostname }}.
+          Run the PORTAL stage once before credential-only synchronization.
+
+    - name: Sync operator credentials only
+      ansible.builtin.import_tasks: common_tasks/sync_deployment_portal_access.yml
+
+    - name: Report credential-only portal sync
+      ansible.builtin.debug:
+        msg: >-
+          Updated operator credentials in {{ deployment_portal_www_dir }}/downloads;
+          Caddy, pgAdmin, monitoring, and Docker Compose were not changed.

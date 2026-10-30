@@ -56,11 +56,11 @@ Environment:
   DESTROY_STACK_CONFIRM   true — required for terraform destroy (DRY_RUN=true = destroy plan only)
   CLEANUP_BEFORE_DESTROY  true — run 99_cleanup.yml (cleanup_e2e) before terraform destroy
   ANSIBLE_RUN_SSH_PREQS   auto|true|false (default auto) — 00_setup_ssh_preqs on phase 1/all only
-  DEPLOYMENT_PORTAL_REFRESH true|false (default false) — run 35_refresh from non-portal phases when true
+  DEPLOYMENT_PORTAL_REFRESH true|false (default false) — sync portal credentials/access from non-portal phases
   MONITORING_STACK_ENABLED  true|false (default true) — portal + Grafana/Prometheus bootstrap
   DEPLOYMENT_PORTAL_ENABLED true|false (default true)
   ECS_DATA_SERVICES_DEPLOY_ENABLED true|false — run 34_setup_ecs_data_services.yml (phase 5/7)
-  ECS post-install phase 8 — machine user/API key, IAM/LDAP roles, portal refresh (rechecks console)
+  ECS post-install phase 8 — machine user/API key, IAM/LDAP roles, portal credential sync (rechecks console)
   ECS_DEPLOY_CDW / ECS_DEPLOY_CDE / ECS_DEPLOY_CAI / ECS_DEPLOY_CAI_REGISTRY — select services for playbook 34
   ECS_LDAP_ENABLED / ECS_LDAP_ADMIN_USER_ENABLED — optional ECS control plane LDAP + <prefix>admin IAM user
   DRY_RUN          true|false
@@ -332,7 +332,7 @@ run_phase_2() {
   # run detect_identity.yml here too (was a duplicate assert+debug on every identity run).
   _install_ipaserver_ec2_startstop
   run_playbook 11_identity_setup.yml
-  _maybe_run_deployment_portal_refresh "portal,ipa,identity"
+  _maybe_sync_deployment_portal_access
   ui_phase_footer "$_phase"
 }
 
@@ -376,7 +376,7 @@ run_phase_cm_tls() {
   # Keep the post-Auto-TLS steps in one Ansible process so LDAP and Kerberos reuse
   # the stable API endpoint resolved by CMS. Each numbered playbook remains standalone.
   run_playbook 28_setup_cm_cms.yml 29_setup_cm_ldap.yml 30_setup_cm_krbs.yml
-  _maybe_run_deployment_portal_refresh "portal,ipa,identity"
+  _maybe_sync_deployment_portal_access
   ui_phase_footer "$_phase"
 }
 
@@ -390,7 +390,7 @@ run_phase_cdh() {
     cm_extra=(-e "cm_repo_username=$cm_user" -e "cm_repo_password=$cm_pass")
   fi
   run_playbook 31_setup_base_cluster.yml "${cm_extra[@]}"
-  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh"
+  _run_deployment_portal_access_sync
   ui_phase_footer "$_phase"
 }
 
@@ -401,9 +401,9 @@ run_phase_monitoring() {
   fi
   local _phase="Monitoring stack (Grafana / Prometheus)"
   ui_phase_header "$_phase"
-  # Playbook 32 syncs Caddy/index (sync_deployment_portal_content) — no separate 35_refresh here.
+  # Playbook 32 owns monitoring deployment; the optional follow-up syncs access files only.
   run_playbook 32_setup_monitoring_stack.yml
-  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring"
+  _maybe_sync_deployment_portal_access
   ui_phase_footer "$_phase"
 }
 
@@ -454,13 +454,12 @@ _portal_refresh_explicitly_enabled() {
   [[ "${DEPLOYMENT_PORTAL_REFRESH:-false}" == "true" || "${DEPLOYMENT_PORTAL_REFRESH:-false}" == "1" ]]
 }
 
-# Sync Caddy/index + portal/IPA/monitoring URL milestones only (never cm/cm_tls — see 25_verify_cm / 27_setup_cm_autotls).
-_maybe_run_deployment_portal_refresh() {
-  local milestones="${1:-}"
+# Sync credentials/access metadata only; deployed portal services remain untouched.
+_maybe_sync_deployment_portal_access() {
   if ! _portal_refresh_explicitly_enabled; then
     return 0
   fi
-  _run_deployment_portal_refresh "$milestones"
+  _run_deployment_portal_access_sync
 }
 
 _run_deployment_portal_refresh() {
@@ -478,6 +477,15 @@ _run_deployment_portal_refresh() {
   fi
   ui_warn "Portal refresh failed — running full portal bootstrap (10)."
   _run_deployment_portal_bootstrap
+}
+
+_run_deployment_portal_access_sync() {
+  if ! _portal_enabled; then
+    return 0
+  fi
+  local portal_extra=()
+  while IFS= read -r -d '' arg; do portal_extra+=("$arg"); done < <(_portal_extra_args)
+  run_playbook 35_sync_deployment_portal_access.yml "${portal_extra[@]}"
 }
 
 _is_true() {
@@ -522,12 +530,12 @@ _run_ecs_data_services() {
   fi
   ds_extra+=(-e ecs_data_services_deploy_enabled=true)
   run_playbook 34_setup_ecs_data_services.yml "${ds_extra[@]}"
-  _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
+  _maybe_sync_deployment_portal_access
 }
 
 _run_ecs_post_install() {
   run_playbook 34_setup_ecs_post_install.yml
-  _run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
+  _run_deployment_portal_access_sync
 }
 
 run_phase_6() {
@@ -561,7 +569,7 @@ run_phase_5() {
   fi
   run_playbook 33_setup_ecs_cluster.yml "${ecs_extra[@]}"
   if ! _pipeline_stage_selected "ECS_POST_INSTALL_TASKS"; then
-    _maybe_run_deployment_portal_refresh "portal,ipa,identity,cdh,monitoring,ecs"
+    _run_deployment_portal_access_sync
   fi
   if _pipeline_stage_selected "ECS_DATA_SERVICES"; then
     ui_info "Deferring playbook 34 data services to the selected ECS_DATA_SERVICES stage"
