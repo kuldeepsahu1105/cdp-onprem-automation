@@ -1,0 +1,54 @@
+---
+- name: CDW | Poll cluster through structured status API
+  cloudera.cloud.dw_cluster_info:
+    environment: "{{ ecs_cdp_environment_name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_cluster_info
+  changed_when: false
+  failed_when: false
+  until: >-
+    (
+      (ecs_cdw_cluster_info | default({})).clusters | default([])
+      | first | default({})
+    ).status | default('') in ['Running', 'Error', 'Failed']
+  retries: "{{ ecs_data_services_status_wait_retries | int }}"
+  delay: "{{ ecs_data_services_status_wait_delay | int }}"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - not (ecs_cdw_cluster_start.failed | default(false) | bool)
+
+- name: CDW | Record structured cluster result
+  ansible.builtin.set_fact:
+    ecs_cdw_cluster:
+      finished: true
+      cluster: >-
+        {{
+          (
+            (ecs_cdw_cluster_info | default({})).clusters | default([])
+            | first | default({})
+          )
+          if not (ecs_cdw_cluster_start.failed | default(false) | bool)
+          else {}
+        }}
+      msg: >-
+        {{
+          ecs_cdw_cluster_start.msg
+          | default(
+              'CDW cluster status: '
+              + (
+                  (
+                    ecs_cdw_cluster_info.clusters | default([])
+                    | first | default({})
+                  ).status | default('not returned')
+                )
+            )
+        }}
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
+- name: CDW | Complete structured cluster result
+  ansible.builtin.include_tasks: ecs_data_service_cdw.yml
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
