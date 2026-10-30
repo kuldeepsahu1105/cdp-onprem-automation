@@ -69,7 +69,7 @@
 
 - name: Install CDPy on ECS master
   ansible.builtin.pip:
-    name: git+https://github.com/cloudera-labs/cdpy.git@v2.1.0#egg=cdpy
+    name: https://github.com/cloudera-labs/cdpy/archive/refs/tags/v2.1.0.tar.gz
     state: present
     virtualenv: "{{ ecs_data_services_remote_venv_path }}"
     extra_args: --no-deps

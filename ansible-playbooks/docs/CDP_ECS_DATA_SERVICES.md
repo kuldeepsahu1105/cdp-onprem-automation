@@ -30,6 +30,8 @@ workers exit before submitting requests because the new modules do not parse
 `CDP_CONFIG_FILE` or `CDP_SHARED_CREDENTIALS_FILE`. Running these modules on
 the external Jenkins controller is unsupported because private names such as
 `console-cdp.apps.<cluster-domain>` resolve only inside the ECS network.
+The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
+than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
