@@ -23,6 +23,13 @@
             and (ecs_cdw_cluster.cluster | default({})).id | default('') | length > 0
           }}
 
+    - name: Report Data Warehouse provisioning failure
+      ansible.builtin.debug:
+        msg: >-
+          CDW provisioning did not return a cluster:
+          {{ ecs_cdw_cluster.msg | default(ecs_cdw_cluster | to_json) }}
+      when: not (ecs_cdw_cluster_succeeded | bool)
+
     - name: Remove Data Warehouse async result
       ansible.builtin.async_status:
         jid: "{{ ecs_cdw_cluster_job.ansible_job_id }}"
