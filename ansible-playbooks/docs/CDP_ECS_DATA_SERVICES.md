@@ -164,10 +164,13 @@ tenant roles. Set `ecs_ldap_admin_assign_all_tenant_roles` or
 `ecs_ldap_admin_assign_all_resource_roles_on_env` only when the target control
 plane explicitly supports every returned role for human users.
 
-`cdpcli==0.9.164` exposes the create-user provider selector as
-`--saml-provider-name`, whose contract accepts a provider name or CRN. The
-automation passes the resolved LDAP provider CRN through that compatibility
-field so the private control plane can associate the user with LDAP.
+The private control plane requires `identityProviderCrn` when creating an LDAP
+user record, while `cdpcli==0.9.164` omits that newer field from its bundled
+`CreateUserRequest` model. Automation creates a temporary per-run IAM model
+override that adds only this field, invokes `create-user` with
+`--identity-provider-crn`, and removes the override with the temporary profile.
+It also preflights every CDP CLI operation used by LDAP/IAM post-install before
+performing mutations.
 
 Runs at the end of **`33_setup_ecs_cluster.yml`** when `ecs_ldap_*` is enabled, and in **`34_setup_ecs_data_services.yml`** (LDAP-only is allowed without CDW/CDE/CAI).
 
