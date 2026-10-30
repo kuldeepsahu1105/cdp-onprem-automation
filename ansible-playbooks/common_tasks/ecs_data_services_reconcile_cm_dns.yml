@@ -83,9 +83,11 @@
       }}
   when: ecs_data_services_ipa_inventory_host is defined
 
-- name: Critical DNS | Ensure FreeIPA module Python dependency
+- name: Critical DNS | Ensure FreeIPA module Python dependencies
   ansible.builtin.package:
-    name: python3-netaddr
+    name:
+      - python3-netaddr
+      - python3-gssapi
     state: present
   become: true
   delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"

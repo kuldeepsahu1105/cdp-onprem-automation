@@ -37,9 +37,11 @@
       environment:
         KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
 
-    - name: Ensure FreeIPA DNS module Python dependency
+    - name: Ensure FreeIPA DNS module Python dependencies
       ansible.builtin.package:
-        name: python3-netaddr
+        name:
+          - python3-netaddr
+          - python3-gssapi
         state: present
 
     - name: Extract Reverse DNS Zone from IP Address
