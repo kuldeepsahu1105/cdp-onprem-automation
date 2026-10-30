@@ -35,12 +35,13 @@ than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
 Before submitting any Data Services API request, playbook 34 reconciles ECS
 CoreDNS forwarding and the FreeIPA A records for the Cloudera Manager FQDN,
-ECS Management Console, and FreeIPA LDAP hostname. A managed CoreDNS block for
-the private zone serves those three fixed addresses locally and forwards every
-unmatched private name only to FreeIPA, avoiding fallback resolvers and stale
-negative answers. CoreDNS is flushed after every reconciliation, then all three
-hostnames are verified through both the ECS host resolver and a disposable
-Kubernetes pod. The pod check
+ECS Management Console, FreeIPA LDAP hostname, and the `*.apps` wildcard used
+by dynamic CAI, CDE, and CDW endpoints. A managed CoreDNS block for the private
+zone serves the three fixed addresses locally and forwards every unmatched
+private name, including wildcard-backed application hosts, only to FreeIPA,
+avoiding fallback resolvers and stale negative answers. CoreDNS is flushed
+after every reconciliation, then all three fixed hostnames are verified through
+both the ECS host resolver and a disposable Kubernetes pod. The pod check
 requests IPv4 A records through the same cluster-DNS path as CDW/CDE/CAI
 workloads, so
 host-only DNS success cannot hide a `172.43.0.10` lookup failure. CDE calls

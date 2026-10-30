@@ -336,6 +336,21 @@
     - identity_provider_effective | default('freeipa') == 'freeipa'
     - groups.get('ipaserver', []) | length > 0
 
+- name: Critical DNS | Reconcile FreeIPA wildcard application record
+  freeipa.ansible_freeipa.ipadnsrecord:
+    ipaadmin_password: "{{ ipaadmin_password }}"
+    name: "{{ wildcard_dns_record | default('*.apps') }}"
+    zone_name: "{{ ipaserver_domain }}"
+    record_type: A
+    record_value: "{{ ecs_data_services_ecs_master_private_ip }}"
+    state: present
+  register: ecs_data_services_wildcard_dns_reconcile
+  delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
+  connection: ssh
+  when:
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - groups.get('ipaserver', []) | length > 0
+
 - name: Critical DNS | Flush ECS CoreDNS cache after record reconciliation
   ansible.builtin.command:
     argv:
