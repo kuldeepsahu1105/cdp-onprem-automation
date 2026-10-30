@@ -90,6 +90,7 @@
       - min
   delegate_to: "{{ ecs_data_services_ipa_inventory_host }}"
   delegate_facts: true
+  connection: ssh
   when: ecs_data_services_ipa_inventory_host is defined
 
 - name: Critical DNS | Ensure FreeIPA module Kerberos client dependency
@@ -103,6 +104,7 @@
     state: present
   become: true
   delegate_to: "{{ ecs_data_services_ipa_inventory_host }}"
+  connection: ssh
   when: ecs_data_services_ipa_inventory_host is defined
 
 - name: Critical DNS | Verify FreeIPA module Kerberos client dependency
@@ -110,6 +112,7 @@
     path: /usr/bin/kinit
   register: ecs_data_services_ipa_kinit_binary
   delegate_to: "{{ ecs_data_services_ipa_inventory_host }}"
+  connection: ssh
   when: ecs_data_services_ipa_inventory_host is defined
 
 - name: Critical DNS | Require FreeIPA module Kerberos client dependency
@@ -128,6 +131,7 @@
     state: present
   become: true
   delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
+  connection: ssh
   when:
     - identity_provider_effective | default('freeipa') == 'freeipa'
     - groups.get('ipaserver', []) | length > 0
@@ -141,6 +145,7 @@
   changed_when: false
   become: false
   delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
+  connection: ssh
   when:
     - identity_provider_effective | default('freeipa') == 'freeipa'
     - groups.get('ipaserver', []) | length > 0
@@ -166,6 +171,7 @@
     record_value: "{{ item.address }}"
     state: present
   delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
+  connection: ssh
   loop: "{{ ecs_data_services_critical_dns_records }}"
   loop_control:
     label: "{{ item.label }}: {{ item.fqdn }} -> {{ item.address }}"
