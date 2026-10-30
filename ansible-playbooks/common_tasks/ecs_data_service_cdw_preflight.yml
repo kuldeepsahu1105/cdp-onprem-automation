@@ -13,21 +13,6 @@
   connection: ssh
   when: "'cdw' in (ecs_data_services_install_names | default([]))"
 
-- name: CDW | Resolve effective Kerberos service hostname
-  ansible.builtin.set_fact:
-    ecs_cdw_kerberos_principal_hostname_effective: >-
-      {{
-        (
-          ecs_cdw_private_cloud_config
-          | default({})
-        ).custom_kerberos_principal_hostname
-        | default(
-            'dwx-env-' + ecs_cdp_environment_name + '.cdp.local',
-            true
-          )
-      }}
-  when: "'cdw' in (ecs_data_services_install_names | default([]))"
-
 - name: CDW | Select failed cluster records eligible for recreation
   ansible.builtin.set_fact:
     ecs_cdw_failed_clusters_for_recreation: >-
@@ -78,42 +63,3 @@
     - "'cdw' in (ecs_data_services_install_names | default([]))"
     - ecs_cdw_recreate_failed_cluster | default(true) | bool
     - ecs_cdw_failed_clusters_for_recreation | default([]) | length > 0
-
-- name: CDW | Record cluster inventory after optional cleanup
-  ansible.builtin.set_fact:
-    ecs_cdw_clusters_after_cleanup: >-
-      {{
-        (ecs_cdw_cluster_info_after_cleanup | default({})).clusters
-        | default(
-            ecs_cdw_preflight_cluster_info.clusters | default([]),
-            true
-          )
-      }}
-  when: "'cdw' in (ecs_data_services_install_names | default([]))"
-
-- name: CDW | Remove orphaned FreeIPA Hive service principal
-  freeipa.ansible_freeipa.ipaservice:
-    ipaadmin_password: "{{ ipaadmin_password }}"
-    name: >-
-      hive/{{ ecs_cdw_kerberos_principal_hostname_effective }}@{{ cluster_realm }}
-    state: absent
-  delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
-  connection: ssh
-  when:
-    - "'cdw' in (ecs_data_services_install_names | default([]))"
-    - groups.get('ipaserver', []) | length > 0
-    - ecs_cdw_cleanup_orphaned_ipa_identity | default(true) | bool
-    - ecs_cdw_clusters_after_cleanup | default([]) | length == 0
-
-- name: CDW | Remove orphaned FreeIPA principal host
-  freeipa.ansible_freeipa.ipahost:
-    ipaadmin_password: "{{ ipaadmin_password }}"
-    name: "{{ ecs_cdw_kerberos_principal_hostname_effective }}"
-    state: absent
-  delegate_to: "{{ groups.get('ipaserver', []) | default(['localhost'], true) | first }}"
-  connection: ssh
-  when:
-    - "'cdw' in (ecs_data_services_install_names | default([]))"
-    - groups.get('ipaserver', []) | length > 0
-    - ecs_cdw_cleanup_orphaned_ipa_identity | default(true) | bool
-    - ecs_cdw_clusters_after_cleanup | default([]) | length == 0
