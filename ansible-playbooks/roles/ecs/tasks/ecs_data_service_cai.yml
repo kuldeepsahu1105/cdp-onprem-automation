@@ -2,18 +2,6 @@
 - name: CAI | Complete ML workspace installation
   when: "'cai' in (ecs_data_services_install_names | default([]))"
   block:
-    - name: Wait for ML workspace provisioning
-      ansible.builtin.async_status:
-        jid: "{{ ecs_cai_workspace_job.ansible_job_id }}"
-      register: ecs_cai_workspace
-      until: ecs_cai_workspace.finished | bool
-      retries: "{{ ecs_data_services_async_poll_retries | default(480) }}"
-      delay: "{{ ecs_data_services_async_poll_delay | default(30) }}"
-      failed_when: false
-      become: false
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
-
     - name: Record ML workspace provisioning result
       ansible.builtin.set_fact:
         ecs_cai_workspace_succeeded: >-
