@@ -62,6 +62,11 @@
         - ecs_data_services_install_names | default([]) | length > 0
         - ecs_reconcile_coredns | default(true) | bool
 
+    - name: Verify Data Services DNS through Kubernetes pods
+      ansible.builtin.import_tasks: common_tasks/ecs_data_services_verify_dns.yml
+      when:
+        - ecs_data_services_install_names | default([]) | length > 0
+
     - name: Load existing ECS automation API credentials
       ansible.builtin.import_tasks: common_tasks/ecs_load_api_credentials.yml
 
@@ -127,6 +132,9 @@
     - name: Provision CDE without blocking subsequent services
       when: "'cde' in (ecs_data_services_install_names | default([]))"
       block:
+        - name: Prepare CDE rerun
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cde_preflight.yml
+
         - name: Launch CDE
           ansible.builtin.import_tasks: common_tasks/ecs_data_service_cde_start.yml
           vars:

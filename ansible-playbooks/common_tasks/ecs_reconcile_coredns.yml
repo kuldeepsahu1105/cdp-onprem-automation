@@ -1,40 +1,97 @@
 ---
-- name: Resolve ECS CoreDNS identity-provider forwarders
-  ansible.builtin.set_fact:
-    ecs_coredns_forwarders_effective: >-
-      {{
-        ecs_coredns_forwarders
-        if ecs_coredns_forwarders | default([]) | length > 0
-        else (
-          [
-            hostvars[groups['ipaserver'][0]].private_ip
-            | default(hostvars[groups['ipaserver'][0]].ansible_host, true)
-          ]
-          if (
-            identity_provider_effective | default('freeipa') == 'freeipa'
-            and groups.get('ipaserver', []) | length > 0
-          )
-          else (
-            ad_dns_servers | default([])
-            if identity_provider_effective | default('') == 'ad'
-            else []
-          )
-        )
-      }}
-
-- name: Require ECS CoreDNS identity-provider forwarders
+- name: Require Cloudera Manager inventory for ECS DNS reconciliation
   ansible.builtin.assert:
     that:
-      - ecs_coredns_forwarders_effective | length > 0
-      - >-
-        ecs_coredns_forwarders_effective
-        | reject('equalto', '')
-        | list
-        | length == ecs_coredns_forwarders_effective | length
+      - groups.get('cldr-mngr', []) | length > 0
     fail_msg: >-
-      ECS CoreDNS requires direct identity-provider DNS forwarders. Ensure the
-      FreeIPA inventory host has private_ip/ansible_host, configure
-      ad_dns_servers for AD, or set ecs_coredns_forwarders explicitly.
+      ECS CoreDNS reconciliation requires a Cloudera Manager host in the
+      cldr-mngr inventory group.
+
+- name: Resolve Cloudera Manager inventory host for ECS DNS
+  ansible.builtin.set_fact:
+    ecs_coredns_cm_inventory_host: "{{ groups['cldr-mngr'] | first }}"
+
+- name: Resolve required Cloudera Manager DNS answer
+  ansible.builtin.set_fact:
+    ecs_coredns_cm_fqdn: >-
+      {{
+        hostvars[ecs_coredns_cm_inventory_host].cldr_hostname
+        + '.'
+        + cluster_domain
+      }}
+    ecs_coredns_cm_private_ip: >-
+      {{
+        hostvars[ecs_coredns_cm_inventory_host].private_ip
+        | default(
+            hostvars[ecs_coredns_cm_inventory_host].ansible_host,
+            true
+          )
+      }}
+
+- name: Require FreeIPA inventory for ECS DNS reconciliation
+  ansible.builtin.assert:
+    that:
+      - groups.get('ipaserver', []) | length > 0
+      - ipaadmin_password | default('') | string | length > 0
+    fail_msg: >-
+      FreeIPA-backed ECS DNS reconciliation requires an ipaserver inventory
+      host and ipaadmin_password so the authoritative Cloudera Manager record
+      can be repaired before CoreDNS is changed.
+  when: identity_provider_effective | default('freeipa') == 'freeipa'
+
+- name: Resolve FreeIPA inventory host for ECS DNS reconciliation
+  ansible.builtin.set_fact:
+    ecs_coredns_ipa_inventory_host: "{{ groups['ipaserver'] | first }}"
+  when: identity_provider_effective | default('freeipa') == 'freeipa'
+
+- name: Reconcile authoritative FreeIPA Cloudera Manager record
+  freeipa.ansible_freeipa.ipadnsrecord:
+    ipaadmin_password: "{{ ipaadmin_password }}"
+    name: "{{ hostvars[ecs_coredns_cm_inventory_host].cldr_hostname }}"
+    zone_name: "{{ ipaserver_domain }}"
+    record_type: A
+    record_value:
+      - "{{ ecs_coredns_cm_private_ip }}"
+    state: present
+  delegate_to: "{{ ecs_coredns_ipa_inventory_host }}"
+  connection: ssh
+  when: identity_provider_effective | default('freeipa') == 'freeipa'
+
+- name: Resolve direct ECS CoreDNS forwarder candidates
+  ansible.builtin.set_fact:
+    ecs_coredns_direct_forwarder_candidates: >-
+      {{
+        (
+          ecs_coredns_forwarders
+          if ecs_coredns_forwarders | default([]) | length > 0
+          else (
+            [
+              hostvars[ecs_coredns_ipa_inventory_host].private_ip | default(''),
+              hostvars[ecs_coredns_ipa_inventory_host].ansible_host | default('')
+            ]
+            if identity_provider_effective | default('freeipa') == 'freeipa'
+            else (
+              ad_dns_servers | default([])
+              if identity_provider_effective | default('') == 'ad'
+              else []
+            )
+          )
+        )
+        | map('string')
+        | map('trim')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+
+- name: Require direct ECS CoreDNS forwarder candidates
+  ansible.builtin.assert:
+    that:
+      - ecs_coredns_direct_forwarder_candidates | length > 0
+    fail_msg: >-
+      ECS CoreDNS has no identity-provider DNS candidates. Set
+      ecs_coredns_forwarders explicitly, provide a FreeIPA inventory address,
+      or configure ad_dns_servers.
 
 - name: Check ECS kubectl binary
   ansible.builtin.stat:
@@ -58,6 +115,244 @@
       ECS CoreDNS reconciliation requires {{ ecs_coredns_kubectl_path }} on
       {{ groups[ecs_cluster_master_group][0] }} after control-plane installation.
 
+- name: Read ECS master resolver configuration
+  ansible.builtin.command:
+    argv:
+      - cat
+      - /etc/resolv.conf
+  register: ecs_coredns_node_resolver_config
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: Resolve fallback ECS node DNS candidates
+  ansible.builtin.set_fact:
+    ecs_coredns_node_forwarder_candidates: >-
+      {{
+        (
+          ecs_coredns_node_resolver_config.stdout
+          | regex_findall('(?m)^nameserver\\s+(\\S+)')
+          | reject('match', '^127\\.')
+          | reject('equalto', '::1')
+          | difference(ecs_coredns_direct_forwarder_candidates)
+          | unique
+          | list
+        )
+        if (
+          ecs_coredns_allow_node_resolver_fallback | default(true) | bool
+          and ecs_coredns_forwarders | default([]) | length == 0
+        )
+        else []
+      }}
+
+- name: Build ECS CoreDNS forwarder probe candidates
+  ansible.builtin.set_fact:
+    ecs_coredns_forwarder_probe_candidates: >-
+      {{
+        (
+          ecs_coredns_direct_forwarder_candidates
+          + ecs_coredns_node_forwarder_candidates
+        )
+        | unique
+        | list
+      }}
+
+- name: Remove stale ECS DNS upstream probe pods
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - delete
+      - pod
+      - "ansible-dns-upstream-{{ item }}"
+      - --ignore-not-found
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  loop: "{{ range(1, ecs_coredns_forwarder_probe_candidates | length + 1) | list }}"
+
+- name: Start direct ECS DNS upstream probes
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - run
+      - "ansible-dns-upstream-{{ ansible_loop.index }}"
+      - "--image={{ ecs_data_services_dns_probe_image }}"
+      - --restart=Never
+      - --command
+      - --
+      - sh
+      - -ec
+      - |
+        attempt=1
+        while [ "$attempt" -le "$1" ]; do
+          output="$(nslookup "$2" "$3" 2>&1)" || true
+          printf '%s\n' "$output"
+          if printf '%s\n' "$output" | grep -F "$4" >/dev/null; then
+            exit 0
+          fi
+          attempt=$((attempt + 1))
+          sleep "$5"
+        done
+        exit 1
+      - dns-upstream-probe
+      - "{{ ecs_coredns_upstream_probe_retries | int }}"
+      - "{{ ecs_coredns_cm_fqdn }}"
+      - "{{ item }}"
+      - "{{ ecs_coredns_cm_private_ip }}"
+      - "{{ ecs_coredns_upstream_probe_delay | int }}"
+  register: ecs_coredns_upstream_probe_starts
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  loop: "{{ ecs_coredns_forwarder_probe_candidates }}"
+  loop_control:
+    extended: true
+    label: "{{ item }}"
+
+- name: Wait for direct ECS DNS upstream probes
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - get
+      - pod
+      - "ansible-dns-upstream-{{ ansible_loop.index }}"
+      - --output
+      - jsonpath={.status.phase}
+  register: ecs_coredns_upstream_probe_phases
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  loop: "{{ ecs_coredns_forwarder_probe_candidates }}"
+  loop_control:
+    extended: true
+    label: "{{ item }}"
+  retries: "{{ ecs_coredns_upstream_probe_retries | int + 6 }}"
+  delay: "{{ ecs_coredns_upstream_probe_delay | int }}"
+  until:
+    - ecs_coredns_upstream_probe_phases.rc == 0
+    - ecs_coredns_upstream_probe_phases.stdout in ['Succeeded', 'Failed']
+
+- name: Read direct ECS DNS upstream probe output
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - logs
+      - "ansible-dns-upstream-{{ ansible_loop.index }}"
+  register: ecs_coredns_upstream_probe_logs
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  loop: "{{ ecs_coredns_forwarder_probe_candidates }}"
+  loop_control:
+    extended: true
+    label: "{{ item }}"
+
+- name: Initialize validated ECS DNS upstreams
+  ansible.builtin.set_fact:
+    ecs_coredns_validated_forwarders: []
+
+- name: Record validated ECS DNS upstreams
+  ansible.builtin.set_fact:
+    ecs_coredns_validated_forwarders: >-
+      {{ ecs_coredns_validated_forwarders + [item.item] }}
+  loop: "{{ ecs_coredns_upstream_probe_logs.results }}"
+  loop_control:
+    extended: true
+    label: "{{ item.item }}"
+  when:
+    - item.rc == 0
+    - >-
+      ecs_coredns_upstream_probe_phases.results[ansible_loop.index0].stdout
+      == 'Succeeded'
+    - ecs_coredns_cm_private_ip in item.stdout
+
+- name: Select validated direct and fallback ECS DNS upstreams
+  ansible.builtin.set_fact:
+    ecs_coredns_validated_direct_forwarders: >-
+      {{
+        ecs_coredns_direct_forwarder_candidates
+        | select('in', ecs_coredns_validated_forwarders)
+        | list
+      }}
+    ecs_coredns_validated_node_forwarders: >-
+      {{
+        ecs_coredns_node_forwarder_candidates
+        | select('in', ecs_coredns_validated_forwarders)
+        | list
+      }}
+
+- name: Select effective verified ECS DNS upstreams
+  ansible.builtin.set_fact:
+    ecs_coredns_forwarders_effective: >-
+      {{
+        ecs_coredns_validated_direct_forwarders
+        if ecs_coredns_validated_direct_forwarders | length > 0
+        else ecs_coredns_validated_node_forwarders
+      }}
+
+- name: Remove completed ECS DNS upstream probe pods
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - delete
+      - pod
+      - "ansible-dns-upstream-{{ item }}"
+      - --ignore-not-found
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  loop: "{{ range(1, ecs_coredns_forwarder_probe_candidates | length + 1) | list }}"
+
+- name: Require a verified ECS DNS upstream
+  ansible.builtin.assert:
+    that:
+      - ecs_coredns_forwarders_effective | length > 0
+    fail_msg: >-
+      Refusing to modify CoreDNS because none of the candidate upstreams
+      {{ ecs_coredns_forwarder_probe_candidates | join(', ') }} resolved
+      {{ ecs_coredns_cm_fqdn }} to its inventory private address
+      {{ ecs_coredns_cm_private_ip }}. Probe output:
+      {{ ecs_coredns_upstream_probe_logs.results | map(attribute='stdout') | list | to_json }}
+
+- name: Report ECS node resolver fallback
+  ansible.builtin.debug:
+    msg: >-
+      Direct identity-provider DNS candidates did not resolve
+      {{ ecs_coredns_cm_fqdn }} correctly. Using the verified ECS node
+      resolver fallback {{ ecs_coredns_forwarders_effective | join(', ') }}.
+  when:
+    - ecs_coredns_validated_direct_forwarders | length == 0
+    - ecs_coredns_validated_node_forwarders | length > 0
+
 - name: Read ECS CoreDNS Corefile
   ansible.builtin.command:
     argv:
@@ -80,7 +375,7 @@
   retries: "{{ ecs_control_plane_wait_retries | default(40) }}"
   delay: "{{ ecs_control_plane_wait_delay | default(15) }}"
 
-- name: Build identity-provider ECS CoreDNS forwarding policy
+- name: Build verified ECS CoreDNS forwarding policy
   ansible.builtin.command:
     argv:
       - python3
@@ -105,16 +400,7 @@
         if match is None:
             raise SystemExit("CoreDNS global forward stanza was not found")
         indent = match.group("indent")
-        replacement = (
-            indent
-            + "forward . "
-            + upstreams
-            + " {\n"
-            + indent
-            + "  policy sequential\n"
-            + indent
-            + "}"
-        )
+        replacement = indent + "forward . " + upstreams
         print(forward.sub(replacement, corefile, count=1), end="")
       - "{{ ecs_coredns_corefile.stdout }}"
       - "{{ ecs_coredns_forwarders_effective | join(' ') }}"
@@ -124,7 +410,7 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
 
-- name: Apply identity-provider ECS CoreDNS forwarding policy
+- name: Apply verified ECS CoreDNS forwarding policy
   ansible.builtin.command:
     argv:
       - "{{ ecs_coredns_kubectl_path }}"
@@ -182,6 +468,56 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   when: ecs_coredns_restart is changed
+
+- name: Read applied ECS CoreDNS Corefile
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - get
+      - configmap
+      - "{{ ecs_coredns_configmap_name }}"
+      - --output
+      - jsonpath={.data.Corefile}
+  register: ecs_coredns_applied_corefile
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: Require exact verified ECS CoreDNS forward stanza
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import re
+        import sys
+
+        corefile = sys.argv[1]
+        expected = "forward . " + sys.argv[2]
+        forward = re.compile(
+            r"(?ms)^(?P<indent>[ \t]*)forward\s+\.\s+[^\n{]+"
+            r"(?:\s*\{\n.*?^(?P=indent)\})?"
+        )
+        match = forward.search(corefile)
+        if match is None:
+            raise SystemExit("CoreDNS global forward stanza was not found")
+        actual = match.group(0).strip()
+        if actual != expected:
+            raise SystemExit(
+                f"CoreDNS forward stanza mismatch: expected {expected!r}, "
+                f"found {actual!r}"
+            )
+      - "{{ ecs_coredns_applied_corefile.stdout }}"
+      - "{{ ecs_coredns_forwarders_effective | join(' ') }}"
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
 
 - name: Record ECS CoreDNS reconciliation for this run
   ansible.builtin.set_fact:
