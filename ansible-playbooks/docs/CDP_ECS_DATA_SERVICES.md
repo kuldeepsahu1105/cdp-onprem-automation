@@ -34,17 +34,20 @@ The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
 than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
 ECS installation owns CoreDNS and wildcard DNS. Before changing the global
-forwarder, playbook 34 reconciles the authoritative FreeIPA Cloudera Manager A
-record and tests each configured FreeIPA or AD resolver directly from a
-Kubernetes pod. A candidate is accepted only when it resolves the exact
-Cloudera Manager FQDN to the inventory private IP. If no direct candidate
-passes, `ecs_coredns_allow_node_resolver_fallback` permits only ECS-node
-resolvers that pass the same test. The playbook refuses to modify CoreDNS when
-no candidate is proven. Verified upstreams replace the global stanza with the
-minimal existing-Corefile form `forward . <validated-upstreams>`, a changed
-CoreDNS deployment is rolled out, and new pod probes must then resolve
-Cloudera Manager, the Management Console, and FreeIPA (when used) to their
-expected private addresses before any Data Services API call.
+forwarder, playbook 34 idempotently ensures the authoritative FreeIPA A records
+for Cloudera Manager, the ECS Management Console, the FreeIPA LDAP endpoint,
+and the ECS application wildcard. It then tests each configured FreeIPA or AD
+resolver directly with explicit A-record queries. A candidate is accepted only
+when every required hostname returns its expected IPv4 answer. If no direct
+candidate passes, `ecs_coredns_allow_node_resolver_fallback` permits only
+ECS-node resolvers that pass the same tests. The playbook refuses to modify
+CoreDNS when no candidate is proven. Verified upstreams replace the global
+stanza with the minimal existing-Corefile form
+`forward . <validated-upstreams>`; this deployment renders exactly
+`forward . 172.31.76.102`. The applied ConfigMap is reread and asserted before
+fresh Python probe pods perform IPv4-only resolution and independent TCP checks
+for Cloudera Manager on 7183 and LDAP on 636. No Data Services API call occurs
+until those checks pass.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
@@ -56,29 +59,29 @@ CDW, CDE, and CAI use the same `cloudera.cloud` request fields as the supplied
 Cloudera Labs examples, adapted only for collection 3.3 option names. Matching
 the supplied separate Labs playbooks, playbook 34 completes each selected
 service before launching the next one: CDW and its catalog/Virtual Warehouses,
-then CDE, then CAI and its TLS/UI follow-up. CDW and CAI submit with
-`wait: false` and use their structured `dw_cluster_info` and `ml_info` APIs for
-bounded terminal-state polling. This avoids remote `async_wrapper` output
-corruption and exposes live service failures directly. CDE retains its existing
-bounded Ansible async wrapper on this integration branch. CAI adopts an existing
-healthy or in-progress workspace instead of calling `createWorkspace` again;
-after success it records the returned `instanceUrl` and creates the wildcard
-certificate and `cml-tls-secret`. If a prior UI deletion is still propagating,
-preflight waits for the backend record and name reservation to disappear before
-recreating the workspace.
+then CDE, then CAI and its TLS/UI follow-up. CDW and CAI submit with `wait: false` and use their structured
+`dw_cluster_info` and `ml_info` APIs for bounded polling. This avoids remote
+`async_wrapper` output corruption and exposes live service failures directly.
+CDE retains its existing bounded Ansible async wrapper on this integration
+branch. CAI adopts an existing healthy or in-progress workspace instead of
+calling `createWorkspace` again. Because the workspace `instanceUrl` and
+ListenerSet can appear before terminal installation status, automation first
+polls until the endpoint is available, issues the proper FreeIPA wildcard
+certificate, and creates `cml-tls-secret`; terminal workspace polling then
+continues. If a user-initiated deletion is still propagating, preflight waits
+for the backend record and name reservation to disappear. A terminal failed
+workspace is reported without deletion or recreation.
 
 The private CDE request uses the live API minimum of 26 CPU and 64 GiB with the
 environment-specific scheduler parent `root.<environment>.cde`.
-Before a rerun, CDE uses the signed `de list-services` API, whose summary does
-not contact Cloudera Manager, to identify an existing terminal `*Failed`
-service. It submits `de disable-service --force` by cluster ID and waits for the
-service to disappear before recreation. This deliberately avoids the
-collection module's name lookup, which calls `describeService` and cannot reach
-the force-disable endpoint when a failed backend is still reporting a
-Cloudera Manager DNS error. Cleanup submission is retried for a bounded period
-after DNS repair so existing JVM negative-cache entries can expire; automation
-does not restart an unidentified control-plane deployment or delete datastore
-state.
+Before a rerun, CDE uses the signed `de list-services` summary, which does not
+contact Cloudera Manager, to identify an existing terminal `*Failed` service.
+Automation reports that service and fails only the CDE boundary; it does not
+disable, delete, or recreate it. CDW and CAI apply the same non-destructive
+terminal-failure policy. Healthy and in-progress resources remain eligible for
+normal module adoption, and a user-initiated CAI deletion is allowed to finish
+before a new workspace is submitted. Automation does not restart IAM/Liftie
+deployments or delete control-plane datastore state.
 Model Registry obtains Ozone S3
 credentials from `ecs_model_registry_sdx_group` (default `sdx`) when that
 optional override group has hosts; otherwise it automatically uses the first
@@ -280,10 +283,12 @@ Ansible async-wrapper parsing failures for CDW/CAI and supports adoption of
 existing resources. One service failure is retained for the final aggregate
 report without preventing later selected services from running.
 
-For CAI, playbook 34 polls `ml_info` until the workspace reaches a successful
-or terminal `:failed` state, derives the workbench hostname from the returned
-`instanceUrl`, then ensures the FreeIPA `wildcard` certificate profile, issues
-a wildcard certificate, and installs it as `cml-tls-secret`.
+For CAI, playbook 34 first polls `ml_info` until `instanceUrl` appears or the
+workspace reaches terminal `:failed`. It derives the workbench hostname from
+that endpoint, ensures the FreeIPA `wildcard` certificate profile, issues a
+wildcard certificate, and installs it as `cml-tls-secret` before continuing
+bounded terminal-status polling. This ordering allows ListenerSet certificate
+validation to complete without relying on a temporary self-signed secret.
 The final probe accepts successful,
 redirect, authentication-required, or forbidden responses. A persistent
 ingress-default 404 fails the final aggregate check and prints the `cml`
@@ -299,8 +304,8 @@ See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_regi
 
 `ecs_coredns_forwarders` optionally overrides the direct DNS candidate list.
 When empty, FreeIPA tries the first `ipaserver` private and Ansible addresses,
-while AD uses `ad_dns_servers`. Every candidate must prove the Cloudera Manager
-answer before use. `ecs_coredns_upstream_probe_retries` and
+while AD uses `ad_dns_servers`. Every candidate must prove all required A
+answers before use. `ecs_coredns_upstream_probe_retries` and
 `ecs_coredns_upstream_probe_delay` bound that validation.
 The tracked deployment configuration in `config.yml` explicitly selects
 `172.31.76.102`; other deployments must replace or remove that deployment
@@ -310,23 +315,20 @@ override rather than changing the general empty default in
 nameservers from the ECS master's `/etc/resolv.conf` may be considered after
 all inventory-derived direct candidates fail; fallback is not used when
 `ecs_coredns_forwarders` is explicitly set. Every fallback candidate must pass
-the identical Cloudera Manager check.
+the identical A-record checks.
 
-`ecs_cde_recreate_failed_service` controls terminal failed-service cleanup.
-`ecs_cde_cleanup_submit_retries` and `ecs_cde_cleanup_submit_delay` bound
-signed force-disable retries after DNS repair. A persistent
-`UnknownHostException` fails the CDE boundary with the API response while later
-selected services still run and the final aggregate assertion reports the
-failure.
+Terminal failed CDE services are reported from `de list-services` without
+calling disable or delete. The CDE rescue boundary records the diagnostics,
+later selected services still run, and the final aggregate assertion reports
+the failure.
 
-Before launching CDW, the playbook queries the control plane.
-`ecs_cdw_recreate_failed_cluster` removes a cluster only when its terminal
-status is `Error` or `Failed`, then waits until it is absent. Running and
+Before launching CDW, the playbook queries the control plane. Running and
 in-progress clusters are adopted and monitored through `dw_cluster_info`
-instead of calling `createPrivateCluster` again. The playbook does not create
-or delete the CDW Hive service principal or its keytab; the Private Cloud Data
-Warehouse control plane owns `hive/<hostname>@<realm>` creation and key
-rotation.
+instead of calling `createPrivateCluster` again. Terminal `Error` or `Failed`
+clusters are reported without deletion or recreation. The playbook does not
+create or delete the CDW Hive service principal or its keytab; the Private
+Cloud Data Warehouse control plane owns `hive/<hostname>@<realm>` creation and
+key rotation.
 
 The product-standard private-cloud CDW hostname is
 `dwx-env-<environment>.cdp.local`, even when the deployment DNS domain and

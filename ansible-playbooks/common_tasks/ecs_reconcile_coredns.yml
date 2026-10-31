@@ -28,6 +28,33 @@
           )
       }}
 
+- name: Resolve ECS master address for authoritative DNS
+  ansible.builtin.set_fact:
+    ecs_coredns_ecs_master_private_ip: >-
+      {{
+        hostvars[groups[ecs_cluster_master_group] | first].private_ip
+        | default(
+            hostvars[groups[ecs_cluster_master_group] | first].ansible_host,
+            true
+          )
+      }}
+
+- name: Initialize required Data Services DNS records
+  ansible.builtin.set_fact:
+    ecs_coredns_required_dns_records:
+      - label: Cloudera Manager
+        name: "{{ hostvars[ecs_coredns_cm_inventory_host].cldr_hostname }}"
+        zone: "{{ ipaserver_domain | default(cluster_domain) }}"
+        fqdn: "{{ ecs_coredns_cm_fqdn }}"
+        address: "{{ ecs_coredns_cm_private_ip }}"
+        port: "{{ ecs_data_services_cm_probe_port | int }}"
+      - label: ECS Management Console
+        name: "{{ ecs_console_host_prefix }}.apps"
+        zone: "{{ ipaserver_domain | default(cluster_domain) }}"
+        fqdn: "{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}"
+        address: "{{ ecs_coredns_ecs_master_private_ip }}"
+        port: 0
+
 - name: Require FreeIPA inventory for ECS DNS reconciliation
   ansible.builtin.assert:
     that:
@@ -44,14 +71,83 @@
     ecs_coredns_ipa_inventory_host: "{{ groups['ipaserver'] | first }}"
   when: identity_provider_effective | default('freeipa') == 'freeipa'
 
-- name: Reconcile authoritative FreeIPA Cloudera Manager record
+- name: Require canonical FreeIPA LDAP hostname
+  ansible.builtin.assert:
+    that:
+      - ipa_kdc_host | default('') | length > 0
+      - ipa_kdc_host == ipaserver_domain or ipa_kdc_host.endswith('.' + ipaserver_domain)
+    fail_msg: >-
+      FreeIPA-backed Data Services require ipa_kdc_host to be a canonical
+      hostname in {{ ipaserver_domain }}; got {{ ipa_kdc_host | default('') }}.
+  when: identity_provider_effective | default('freeipa') == 'freeipa'
+
+- name: Add FreeIPA LDAP to required Data Services DNS records
+  ansible.builtin.set_fact:
+    ecs_coredns_required_dns_records: >-
+      {{
+        ecs_coredns_required_dns_records
+        + [
+          {
+            'label': 'FreeIPA LDAP',
+            'name': ipa_kdc_host | regex_replace(
+              '\\.' + (ipaserver_domain | regex_escape) + '$',
+              ''
+            ),
+            'zone': ipaserver_domain,
+            'fqdn': ipa_kdc_host,
+            'address': (
+              hostvars[ecs_coredns_ipa_inventory_host].private_ip
+              | default(
+                  hostvars[ecs_coredns_ipa_inventory_host].ansible_host,
+                  true
+                )
+            ),
+            'port': ecs_data_services_ldap_probe_port | int
+          }
+        ]
+      }}
+  when: identity_provider_effective | default('freeipa') == 'freeipa'
+
+- name: Add Active Directory LDAP to required Data Services DNS records
+  ansible.builtin.set_fact:
+    ecs_coredns_required_dns_records: >-
+      {{
+        ecs_coredns_required_dns_records
+        + [
+          {
+            'label': 'Active Directory LDAP',
+            'fqdn': cm_ldap_host,
+            'address': '',
+            'port': ecs_data_services_ldap_probe_port | int
+          }
+        ]
+      }}
+  when: identity_provider_effective | default('') == 'ad'
+
+- name: Reconcile authoritative FreeIPA Data Services A records
   freeipa.ansible_freeipa.ipadnsrecord:
     ipaadmin_password: "{{ ipaadmin_password }}"
-    name: "{{ hostvars[ecs_coredns_cm_inventory_host].cldr_hostname }}"
+    name: "{{ item.name }}"
+    zone_name: "{{ item.zone }}"
+    record_type: A
+    record_value:
+      - "{{ item.address }}"
+    state: present
+  delegate_to: "{{ ecs_coredns_ipa_inventory_host }}"
+  connection: ssh
+  loop: "{{ ecs_coredns_required_dns_records }}"
+  loop_control:
+    label: "{{ item.fqdn }} -> {{ item.address }}"
+  when: identity_provider_effective | default('freeipa') == 'freeipa'
+
+- name: Reconcile authoritative FreeIPA ECS wildcard A record
+  freeipa.ansible_freeipa.ipadnsrecord:
+    ipaadmin_password: "{{ ipaadmin_password }}"
+    name: "{{ wildcard_dns_record | default('*.apps') }}"
     zone_name: "{{ ipaserver_domain }}"
     record_type: A
     record_value:
-      - "{{ ecs_coredns_cm_private_ip }}"
+      - "{{ ecs_coredns_ecs_master_private_ip }}"
     state: present
   delegate_to: "{{ ecs_coredns_ipa_inventory_host }}"
   connection: ssh
@@ -186,29 +282,57 @@
       - "{{ ecs_data_services_dns_probe_namespace }}"
       - run
       - "ansible-dns-upstream-{{ ansible_loop.index }}"
-      - "--image={{ ecs_data_services_dns_probe_image }}"
+      - "--image={{ ecs_coredns_upstream_probe_image }}"
       - --restart=Never
       - --command
       - --
       - sh
       - -ec
       - |
-        attempt=1
-        while [ "$attempt" -le "$1" ]; do
-          output="$(nslookup "$2" "$3" 2>&1)" || true
-          printf '%s\n' "$output"
-          if printf '%s\n' "$output" | grep -F "$4" >/dev/null; then
-            exit 0
-          fi
-          attempt=$((attempt + 1))
-          sleep "$5"
-        done
-        exit 1
+        resolver="$1"
+        retries="$2"
+        delay="$3"
+        check_a_record() {
+          fqdn="$1"
+          expected="$2"
+          attempt=1
+          while [ "$attempt" -le "$retries" ]; do
+            output="$(nslookup -type=A "$fqdn" "$resolver" 2>&1)" || true
+            printf '%s\n' "$output"
+            answers="$(
+              printf '%s\n' "$output" |
+                awk '
+                  /^Name:[[:space:]]/ { answer_section = 1; next }
+                  answer_section && /^Address([[:space:]][0-9]+)?:[[:space:]]/ {
+                    line = $0
+                    sub(/^Address([[:space:]][0-9]+)?:[[:space:]]*/, "", line)
+                    sub(/[[:space:]].*$/, "", line)
+                    print line
+                  }
+                '
+            )"
+            if [ -n "$expected" ]; then
+              if [ "$(printf '%s\n' "$answers" | sed '/^$/d' | sort -u)" = "$expected" ]; then
+                printf 'DNS_A_OK %s %s\n' "$fqdn" "$expected"
+                return 0
+              fi
+            elif [ -n "$answers" ]; then
+              printf 'DNS_A_OK %s %s\n' "$fqdn" "$answers"
+              return 0
+            fi
+            attempt=$((attempt + 1))
+            sleep "$delay"
+          done
+          printf 'DNS_A_FAILED %s expected=%s resolver=%s\n' \
+            "$fqdn" "$expected" "$resolver" >&2
+          return 1
+        }
+        {% for record in ecs_coredns_required_dns_records %}
+        check_a_record {{ record.fqdn | quote }} {{ record.address | quote }}
+        {% endfor %}
       - dns-upstream-probe
-      - "{{ ecs_coredns_upstream_probe_retries | int }}"
-      - "{{ ecs_coredns_cm_fqdn }}"
       - "{{ item }}"
-      - "{{ ecs_coredns_cm_private_ip }}"
+      - "{{ ecs_coredns_upstream_probe_retries | int }}"
       - "{{ ecs_coredns_upstream_probe_delay | int }}"
   register: ecs_coredns_upstream_probe_starts
   changed_when: false
@@ -288,7 +412,6 @@
     - >-
       ecs_coredns_upstream_probe_phases.results[ansible_loop.index0].stdout
       == 'Succeeded'
-    - ecs_coredns_cm_private_ip in item.stdout
 
 - name: Select validated direct and fallback ECS DNS upstreams
   ansible.builtin.set_fact:
@@ -338,16 +461,16 @@
       - ecs_coredns_forwarders_effective | length > 0
     fail_msg: >-
       Refusing to modify CoreDNS because none of the candidate upstreams
-      {{ ecs_coredns_forwarder_probe_candidates | join(', ') }} resolved
-      {{ ecs_coredns_cm_fqdn }} to its inventory private address
-      {{ ecs_coredns_cm_private_ip }}. Probe output:
+      {{ ecs_coredns_forwarder_probe_candidates | join(', ') }} returned the
+      required A records
+      {{ ecs_coredns_required_dns_records | to_json }}. Probe output:
       {{ ecs_coredns_upstream_probe_logs.results | map(attribute='stdout') | list | to_json }}
 
 - name: Report ECS node resolver fallback
   ansible.builtin.debug:
     msg: >-
       Direct identity-provider DNS candidates did not resolve
-      {{ ecs_coredns_cm_fqdn }} correctly. Using the verified ECS node
+      every required Data Services hostname correctly. Using the verified ECS node
       resolver fallback {{ ecs_coredns_forwarders_effective | join(', ') }}.
   when:
     - ecs_coredns_validated_direct_forwarders | length == 0

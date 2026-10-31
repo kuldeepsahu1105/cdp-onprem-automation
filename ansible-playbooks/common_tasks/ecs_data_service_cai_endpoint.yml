@@ -17,7 +17,7 @@
     (
       ecs_cai_workspace_endpoint_info.workspaces | default([])
       | first | default({})
-    ).instanceStatus | default('') == 'installation:failed'
+    ).instanceStatus | default('') is search('(?i):failed$')
   retries: "{{ ecs_cai_endpoint_wait_retries | int }}"
   delay: "{{ ecs_cai_endpoint_wait_delay | int }}"
   ignore_errors: true

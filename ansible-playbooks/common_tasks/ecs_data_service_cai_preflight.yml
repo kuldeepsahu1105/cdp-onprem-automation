@@ -1,5 +1,5 @@
 ---
-- name: CAI | Check for an existing failed ML workspace
+- name: CAI | Check for an existing ML workspace
   cloudera.cloud.ml_info:
     environment: "{{ ecs_cdp_environment_name }}"
     name: "{{ ecs_cai_workspace_name }}"
@@ -12,44 +12,6 @@
   connection: ssh
   when: "'cai' in (ecs_data_services_install_names | default([]))"
 
-- name: CAI | Select failed workspace eligible for recreation
-  ansible.builtin.set_fact:
-    ecs_cai_failed_workspace_for_recreation: >-
-      {{
-        (
-          ecs_cai_preflight_workspace_info.workspaces | default([])
-          | first | default({})
-        )
-        if (
-          (
-            ecs_cai_preflight_workspace_info.workspaces | default([])
-            | first | default({})
-          ).instanceStatus | default('') is search('(?i):failed$')
-        )
-        else {}
-      }}
-  when: "'cai' in (ecs_data_services_install_names | default([]))"
-
-- name: CAI | Remove failed workspace before clean recreation
-  cloudera.cloud.ml:
-    environment: "{{ ecs_cdp_environment_name }}"
-    name: "{{ ecs_cai_workspace_name }}"
-    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-    state: absent
-    force: true
-    wait: true
-    timeout: "{{ ecs_data_services_module_wait_timeout | int }}"
-    delay: "{{ ecs_data_services_status_wait_delay | int }}"
-  environment: "{{ ecs_cdp_cli_environment }}"
-  register: ecs_cai_failed_workspace_removal
-  become: false
-  delegate_to: "{{ ecs_data_services_delegate_host }}"
-  connection: ssh
-  when:
-    - "'cai' in (ecs_data_services_install_names | default([]))"
-    - ecs_cai_recreate_failed_workspace | default(true) | bool
-    - ecs_cai_failed_workspace_for_recreation | default({}) | length > 0
-
 - name: CAI | Wait for backend deletion or a reusable workspace
   cloudera.cloud.ml_info:
     environment: "{{ ecs_cdp_environment_name }}"
@@ -61,6 +23,14 @@
   until: >-
     (
       ecs_cai_workspace_info_after_cleanup.workspaces | default([]) | length == 0
+    )
+    or
+    (
+      (
+        ecs_cai_workspace_info_after_cleanup.workspaces | default([])
+        | first | default({})
+      ).instanceStatus | default('')
+      is search('(?i):failed$')
     )
     or
     (
@@ -86,4 +56,18 @@
         ecs_cai_workspace_info_after_cleanup.workspaces | default([])
         | first | default({})
       }}
+  when: "'cai' in (ecs_data_services_install_names | default([]))"
+
+- name: CAI | Refuse to mutate a terminal failed workspace
+  ansible.builtin.assert:
+    that:
+      - >-
+        ecs_cai_existing_workspace.instanceStatus | default('')
+        is not search('(?i):failed$')
+    fail_msg: >-
+      Existing CAI workspace {{ ecs_cai_workspace_name }} is in terminal
+      status
+      {{ ecs_cai_existing_workspace.instanceStatus | default('unknown') }}.
+      Automation will not delete or recreate a failed workspace. Resolve or
+      remove it through the supported control-plane workflow, then rerun.
   when: "'cai' in (ecs_data_services_install_names | default([]))"

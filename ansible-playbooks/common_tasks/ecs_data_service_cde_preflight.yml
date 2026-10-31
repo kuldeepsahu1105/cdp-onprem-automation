@@ -29,84 +29,26 @@
         | default({})
       }}
 
-- name: CDE | Select terminal failed service for recreation
+- name: CDE | Select terminal failed service
   ansible.builtin.set_fact:
-    ecs_cde_failed_service_for_recreation: >-
+    ecs_cde_failed_service: >-
       {{
         ecs_cde_preflight_service
         if (
           ecs_cde_preflight_service.status | default('')
-          is search('Failed$')
+        is search('(?i)failed$')
         )
         else {}
       }}
 
-- name: CDE | Force-disable failed service through signed API
-  ansible.builtin.command:
-    argv:
-      - cdp
-      - --profile
-      - default
-      - de
-      - disable-service
-      - --cluster-id
-      - "{{ ecs_cde_failed_service_for_recreation.clusterId }}"
-      - --force
-  environment: "{{ ecs_cdp_cli_environment }}"
-  register: ecs_cde_failed_service_disable
-  changed_when: ecs_cde_failed_service_disable.rc == 0
-  failed_when: false
-  retries: "{{ ecs_cde_cleanup_submit_retries | int }}"
-  delay: "{{ ecs_cde_cleanup_submit_delay | int }}"
-  until: ecs_cde_failed_service_disable.rc == 0
-  become: false
-  delegate_to: "{{ ecs_data_services_delegate_host }}"
-  connection: ssh
-  when:
-    - ecs_cde_recreate_failed_service | default(true) | bool
-    - ecs_cde_failed_service_for_recreation | length > 0
-
-- name: CDE | Require failed-service cleanup submission
+- name: CDE | Refuse to mutate a terminal failed service
   ansible.builtin.assert:
     that:
-      - ecs_cde_failed_service_disable.rc == 0
+      - ecs_cde_failed_service | length == 0
     fail_msg: >-
-      CDE force-disable remained unsuccessful after DNS reconciliation and
-      bounded retries. The signed disableService API returned:
-      {{ ecs_cde_failed_service_disable.stderr
-         | default(ecs_cde_failed_service_disable.stdout, true) }}
-  when:
-    - ecs_cde_recreate_failed_service | default(true) | bool
-    - ecs_cde_failed_service_for_recreation | length > 0
-
-- name: CDE | Wait until failed service is absent
-  ansible.builtin.command:
-    argv:
-      - cdp
-      - --profile
-      - default
-      - de
-      - list-services
-  environment: "{{ ecs_cdp_cli_environment }}"
-  register: ecs_cde_failed_service_deletion
-  changed_when: false
-  retries: "{{ ecs_data_services_status_wait_retries | int }}"
-  delay: "{{ ecs_data_services_status_wait_delay | int }}"
-  until: >-
-    (
-      (ecs_cde_failed_service_deletion.stdout | from_json).services
-      | default([])
-      | selectattr(
-          'clusterId',
-          'equalto',
-          ecs_cde_failed_service_for_recreation.clusterId
-        )
-      | list
-      | length
-    ) == 0
-  become: false
-  delegate_to: "{{ ecs_data_services_delegate_host }}"
-  connection: ssh
-  when:
-    - ecs_cde_recreate_failed_service | default(true) | bool
-    - ecs_cde_failed_service_for_recreation | length > 0
+      Existing CDE service {{ ecs_cde_failed_service.name | default(ecs_cde_service_name) }}
+      (clusterId={{ ecs_cde_failed_service.clusterId | default('unknown') }})
+      is in terminal status
+      {{ ecs_cde_failed_service.status | default('unknown') }}. Automation will
+      not disable, delete, or recreate a failed service. Resolve or remove it
+      through the supported control-plane workflow, then rerun.

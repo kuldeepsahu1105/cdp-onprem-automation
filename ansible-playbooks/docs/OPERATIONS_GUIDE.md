@@ -300,18 +300,19 @@ For standalone Data Services recovery, run:
 ansible-playbook -i inventory.ini 34_setup_ecs_data_services.yml --private-key "$ANSIBLE_PRIVATE_KEY"
 ```
 
-Before any CDW/CDE/CAI API call, playbook 34 validates each CoreDNS upstream
-candidate by querying the exact Cloudera Manager FQDN and expected inventory
-private IP from a Kubernetes pod. Explicit `ecs_coredns_forwarders` are
-authoritative and do not fall back; inventory-derived candidates may use a
-proven ECS node resolver only when
+Before any CDW/CDE/CAI API call, playbook 34 ensures the authoritative FreeIPA
+A records for CM, the ECS console/wildcard, and LDAP, then validates each
+CoreDNS upstream candidate with explicit A queries. Explicit
+`ecs_coredns_forwarders` are authoritative and do not fall back;
+inventory-derived candidates may use a proven ECS node resolver only when
 `ecs_coredns_allow_node_resolver_fallback: true`. The applied Corefile must
-contain the exact minimal `forward . <validated-upstreams>` stanza, and fresh
-pod probes must resolve CM, the ECS console, and FreeIPA before provisioning.
-Failed CDE services are recovered through signed `de list-services` and
-`de disable-service --force` calls, bounded by
-`ecs_cde_cleanup_submit_retries` / `ecs_cde_cleanup_submit_delay`, without
-direct datastore deletion.
+contain the exact minimal `forward . <validated-upstreams>` stanza (this
+deployment: `forward . 172.31.76.102`). Fresh IPv4-only pod probes must resolve
+CM, the ECS console, and LDAP and independently connect to CM 7183 and LDAP 636
+before provisioning. Terminal failed CDW/CDE/CAI resources are reported
+without automated disable, deletion, recreation, backend restart, or datastore
+mutation; independent service boundaries still allow later selected services
+to run before the final aggregate failure.
 
 ---
 

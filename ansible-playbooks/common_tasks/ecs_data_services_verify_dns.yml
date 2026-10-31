@@ -56,6 +56,7 @@
       - label: Cloudera Manager
         fqdn: "{{ ecs_coredns_cm_fqdn }}"
         address: "{{ ecs_coredns_cm_private_ip }}"
+        port: "{{ ecs_data_services_cm_probe_port | int }}"
       - label: ECS Management Console
         fqdn: >-
           {{
@@ -72,6 +73,7 @@
                 true
               )
           }}
+        port: 0
 
 - name: Add FreeIPA to required Data Services DNS verification records
   ansible.builtin.set_fact:
@@ -96,11 +98,28 @@
                   hostvars[ecs_coredns_ipa_inventory_host].ansible_host,
                   true
                 )
-            )
+            ),
+            'port': ecs_data_services_ldap_probe_port | int
           }
         ]
       }}
   when: identity_provider_effective | default('freeipa') == 'freeipa'
+
+- name: Add Active Directory LDAP to required Data Services DNS verification records
+  ansible.builtin.set_fact:
+    ecs_data_services_dns_verification_records: >-
+      {{
+        ecs_data_services_dns_verification_records
+        + [
+          {
+            'label': 'Active Directory LDAP',
+            'fqdn': cm_ldap_host,
+            'address': '',
+            'port': ecs_data_services_ldap_probe_port | int
+          }
+        ]
+      }}
+  when: identity_provider_effective | default('') == 'ad'
 
 - name: Remove stale Data Services DNS verification pods
   ansible.builtin.command:
@@ -134,25 +153,70 @@
       - --restart=Never
       - --command
       - --
-      - sh
-      - -ec
+      - python3
+      - -c
       - |
-        attempt=1
-        while [ "$attempt" -le "$1" ]; do
-          output="$(nslookup -type=A "$2" 2>&1)" || true
-          printf '%s\n' "$output"
-          if printf '%s\n' "$output" | grep -F "$3" >/dev/null; then
-            exit 0
-          fi
-          attempt=$((attempt + 1))
-          sleep "$4"
-        done
-        exit 1
-      - dns-probe
+        import socket
+        import sys
+        import time
+
+        retries = int(sys.argv[1])
+        delay = int(sys.argv[2])
+        host = sys.argv[3]
+        expected = sys.argv[4]
+        port = int(sys.argv[5])
+        timeout = int(sys.argv[6])
+        last_error = "probe did not run"
+
+        for attempt in range(1, retries + 1):
+            try:
+                addresses = sorted({
+                    answer[4][0]
+                    for answer in socket.getaddrinfo(
+                        host,
+                        port or None,
+                        family=socket.AF_INET,
+                        type=socket.SOCK_STREAM,
+                    )
+                })
+                print("DNS_A_ADDRESSES=" + ",".join(addresses), flush=True)
+                if not addresses:
+                    raise RuntimeError("no IPv4 answers")
+                if expected and addresses != [expected]:
+                    raise RuntimeError(
+                        f"expected {expected}, resolved {','.join(addresses)}"
+                    )
+                print("DNS_A_OK", flush=True)
+                if port:
+                    with socket.create_connection(
+                        (host, port),
+                        timeout=timeout,
+                    ):
+                        pass
+                    print(f"TCP_OK={host}:{port}", flush=True)
+                raise SystemExit(0)
+            except Exception as exc:
+                last_error = repr(exc)
+                print(
+                    f"attempt {attempt}/{retries} failed: {last_error}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                if attempt < retries:
+                    time.sleep(delay)
+
+        print(
+            f"PROBE_FAILED host={host} expected={expected} "
+            f"port={port} error={last_error}",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
       - "{{ ecs_data_services_dns_probe_wait_retries | int }}"
+      - "{{ ecs_data_services_dns_probe_wait_delay | int }}"
       - "{{ item.fqdn }}"
       - "{{ item.address }}"
-      - "{{ ecs_data_services_dns_probe_wait_delay | int }}"
+      - "{{ item.port | default(0) | int }}"
+      - "{{ ecs_data_services_tcp_probe_timeout | int }}"
   register: ecs_data_services_dns_probe_starts
   changed_when: false
   failed_when: false
@@ -239,11 +303,25 @@
       - >-
         ecs_data_services_dns_probe_phases.results[ansible_loop.index0].stdout
         == 'Succeeded'
-      - item.item.address in item.stdout
+      - >-
+        item.item.address | default('') | length == 0
+        or item.item.address in item.stdout
+      - "'DNS_A_OK' in item.stdout"
+      - >-
+        item.item.port | default(0) | int == 0
+        or (
+          'TCP_OK=' + item.item.fqdn + ':'
+          + (item.item.port | default(0) | string)
+        ) in item.stdout
     fail_msg: >-
-      {{ item.item.label }} hostname {{ item.item.fqdn }} must resolve to
-      {{ item.item.address }} through a newly created Kubernetes pod before
-      Data Services API calls are allowed. Resolver output:
+      {{ item.item.label }} hostname {{ item.item.fqdn }} must return the
+      required IPv4 answer
+      {{ item.item.address | default('an address', true) }}
+      {% if item.item.port | default(0) | int > 0 %}
+      and accept TCP connections on port {{ item.item.port }}
+      {% endif %}
+      through a newly created Kubernetes pod before Data Services API calls
+      are allowed. Probe output:
       {{ item.stdout | default(item.stderr, true) }}
     quiet: true
   loop: "{{ ecs_data_services_dns_probe_logs.results }}"

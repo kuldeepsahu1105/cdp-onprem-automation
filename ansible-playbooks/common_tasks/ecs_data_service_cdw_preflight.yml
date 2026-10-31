@@ -42,56 +42,29 @@
     - identity_provider_effective | default('freeipa') == 'freeipa'
     - ecs_cdw_ensure_freeipa_principal_host | default(true) | bool
 
-- name: CDW | Select failed cluster records eligible for recreation
+- name: CDW | Select terminal failed cluster records
   ansible.builtin.set_fact:
-    ecs_cdw_failed_clusters_for_recreation: >-
+    ecs_cdw_failed_clusters: >-
       {{
         ecs_cdw_preflight_cluster_info.clusters
         | default([])
-        | selectattr('status', 'in', ['Error', 'Failed'])
+        | selectattr('status', 'defined')
+        | selectattr('status', 'search', '(?i)(error|failed)$')
         | list
       }}
   when: "'cdw' in (ecs_data_services_install_names | default([]))"
 
-- name: CDW | Remove failed cluster before clean recreation
-  cloudera.cloud.dw_cluster:
-    cluster_id: "{{ item.id }}"
-    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-    state: absent
-    wait: false
-  environment: "{{ ecs_cdp_cli_environment }}"
-  loop: "{{ ecs_cdw_failed_clusters_for_recreation | default([]) }}"
-  loop_control:
-    label: "{{ item.id }} ({{ item.status }})"
-  register: ecs_cdw_failed_cluster_removal
-  vars:
-    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-  become: false
-  delegate_to: "{{ ecs_data_services_delegate_host }}"
-  connection: ssh
+- name: CDW | Refuse to mutate terminal failed clusters
+  ansible.builtin.assert:
+    that:
+      - ecs_cdw_failed_clusters | default([]) | length == 0
+    fail_msg: >-
+      Existing CDW cluster records are terminally failed:
+      {{ ecs_cdw_failed_clusters | default([]) | to_json }}. Automation will
+      not delete or recreate failed clusters. Resolve or remove them through
+      the supported control-plane workflow, then rerun.
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
-    - ecs_cdw_recreate_failed_cluster | default(true) | bool
-
-- name: CDW | Wait for failed cluster removal
-  cloudera.cloud.dw_cluster_info:
-    environment: "{{ ecs_cdp_environment_name }}"
-    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-  environment: "{{ ecs_cdp_cli_environment }}"
-  register: ecs_cdw_cluster_info_after_cleanup
-  changed_when: false
-  until: ecs_cdw_cluster_info_after_cleanup.clusters | default([]) | length == 0
-  retries: "{{ ecs_data_services_status_wait_retries | int }}"
-  delay: "{{ ecs_data_services_status_wait_delay | int }}"
-  vars:
-    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-  become: false
-  delegate_to: "{{ ecs_data_services_delegate_host }}"
-  connection: ssh
-  when:
-    - "'cdw' in (ecs_data_services_install_names | default([]))"
-    - ecs_cdw_recreate_failed_cluster | default(true) | bool
-    - ecs_cdw_failed_clusters_for_recreation | default([]) | length > 0
 
 - name: CDW | Ensure FreeIPA host principal prerequisite
   freeipa.ansible_freeipa.ipahost:
