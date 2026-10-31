@@ -69,12 +69,11 @@
 
         - name: Check if registry already exists
           ansible.builtin.command:
-            argv:
-              - cdp
-              - --profile
-              - default
-              - ml
-              - list-model-registries
+            argv: >-
+              {{
+                ecs_data_services_cdp_cli_prefix
+                + ['ml', 'list-model-registries']
+              }}
           environment: "{{ ecs_cdp_cli_environment }}"
           register: ecs_mr_list
           changed_when: false
@@ -88,28 +87,33 @@
 
         - name: Create Model Registry
           ansible.builtin.command:
-            argv:
-              - cdp
-              - --profile
-              - default
-              - ml
-              - create-model-registry
-              - --environment-crn
-              - "{{ ecs_mr_env_info.environments | map(attribute='crn') | list | first }}"
-              - --environment-name
-              - "{{ ecs_cdp_environment_name }}"
-              - --model-registry-service-name
-              - "{{ ecs_model_registry_service_name }}"
-              - --model-registry-subdomain
-              - "{{ ecs_model_registry_subdomain }}"
-              - --s3-access-key
-              - "{{ hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_access_key }}"
-              - --s3-secret-key
-              - "{{ hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_secret_key }}"
-              - --s3-bucket
-              - "{{ ecs_model_registry_s3_bucket }}"
-              - --s3-endpoint
-              - "{{ ecs_model_registry_s3_endpoint_effective }}"
+            argv: >-
+              {{
+                ecs_data_services_cdp_cli_prefix
+                + [
+                  'ml',
+                  'create-model-registry',
+                  '--environment-crn',
+                  ecs_mr_env_info.environments
+                  | map(attribute='crn')
+                  | list
+                  | first,
+                  '--environment-name',
+                  ecs_cdp_environment_name,
+                  '--model-registry-service-name',
+                  ecs_model_registry_service_name,
+                  '--model-registry-subdomain',
+                  ecs_model_registry_subdomain,
+                  '--s3-access-key',
+                  hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_access_key,
+                  '--s3-secret-key',
+                  hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_secret_key,
+                  '--s3-bucket',
+                  ecs_model_registry_s3_bucket,
+                  '--s3-endpoint',
+                  ecs_model_registry_s3_endpoint_effective
+                ]
+              }}
           environment: "{{ ecs_cdp_cli_environment }}"
           register: ecs_mr_create
           when: not (ecs_mr_exists | bool)

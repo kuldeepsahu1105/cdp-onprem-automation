@@ -146,3 +146,24 @@
       HOME: "{{ ecs_ds_cdp_profile_dir.path }}"
       PATH: >-
         {{ ecs_data_services_remote_venv_path }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+- name: Publish CDP CLI invocation prefix for Data Services
+  ansible.builtin.set_fact:
+    ecs_data_services_cdp_cli_prefix: >-
+      {{
+        [
+          ecs_data_services_remote_venv_path + '/bin/cdp',
+          '--profile', 'default',
+          '--form-factor', 'private'
+        ]
+        + (
+          ['--ca-bundle', ecs_control_plane_ca_bundle]
+          if ecs_control_plane_ca_bundle | default('') | length > 0
+          else (
+            []
+            if ecs_control_plane_validate_certs | default(false) | bool
+            else ['--no-verify-tls']
+          )
+        )
+        + ['--cli-connect-timeout', '10', '--cli-read-timeout', '60']
+      }}

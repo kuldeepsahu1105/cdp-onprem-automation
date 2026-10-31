@@ -151,7 +151,11 @@ this IAM bootstrap.
 CDP CLI TLS verification follows `ecs_control_plane_validate_certs`. The default
 `false` supports the installer-managed private console certificate. For strict
 verification, set it to `true` and set `ecs_control_plane_ca_bundle` to a CA
-bundle path available on the ECS master.
+bundle path available on the ECS master. Raw signed Data Services calls,
+including CDE service discovery and Model Registry list/create, use the same
+isolated CLI prefix and TLS policy: a configured CA bundle takes precedence,
+strict validation without a bundle uses the system trust store, and the
+default non-strict mode passes `--no-verify-tls`.
 
 The preferred environment name is the first IPA/domain label. If the healthy
 control plane already contains exactly one environment (for example the
