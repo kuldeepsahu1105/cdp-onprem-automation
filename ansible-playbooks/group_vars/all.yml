@@ -1208,13 +1208,12 @@ ecs_control_plane_validate_certs: false
 ecs_control_plane_ca_bundle: ""
 ecs_data_services_use_cdpcurl: true
 ecs_data_services_install: []  # optional list; unioned with per-service flags below
-ecs_data_services_async_timeout: 14400
+ecs_data_services_async_timeout: 14400  # CDE async wrapper only
 ecs_data_services_module_wait_timeout: 13800
 ecs_data_services_cm_dns_wait_retries: 12
 ecs_data_services_cm_dns_wait_delay: 5
-ecs_data_services_async_poll_retries: 480
-ecs_data_services_async_poll_delay: 30
-ecs_data_services_async_dir: "{{ ecs_persistent_state_dir }}/ansible_async"
+ecs_data_services_async_poll_retries: 480  # CDE async wrapper only
+ecs_data_services_async_poll_delay: 30  # CDE async wrapper only
 # Per-service toggles (Jenkins: ECS_DEPLOY_CDW, ECS_DEPLOY_CDE, ECS_DEPLOY_CAI, ECS_DEPLOY_CAI_REGISTRY)
 ecs_deploy_cdw: false
 ecs_deploy_cde: false

@@ -56,6 +56,12 @@
     - name: Wait for ECS Management Console after cluster install
       ansible.builtin.import_tasks: common_tasks/ecs_wait_control_plane_console.yml
 
+    - name: Reconcile identity-provider ECS CoreDNS forwarding
+      ansible.builtin.import_tasks: common_tasks/ecs_reconcile_coredns.yml
+      when:
+        - ecs_data_services_install_names | default([]) | length > 0
+        - ecs_reconcile_coredns | default(true) | bool
+
     - name: Load existing ECS automation API credentials
       ansible.builtin.import_tasks: common_tasks/ecs_load_api_credentials.yml
 
@@ -72,81 +78,112 @@
     - name: Configure CDP CLI profile for data services API calls
       ansible.builtin.import_tasks: common_tasks/ecs_data_services_runtime.yml
 
-    - name: Validate Data Services async wait bounds
+    - name: Validate Data Services wait bounds
       ansible.builtin.assert:
         that:
           - ecs_data_services_module_wait_timeout | int > 0
+          - ecs_data_services_status_wait_retries | int > 0
+          - ecs_data_services_status_wait_delay | int > 0
           - ecs_data_services_async_timeout | int > ecs_data_services_module_wait_timeout | int
           - ecs_data_services_async_poll_retries | int > 0
           - ecs_data_services_async_poll_delay | int > 0
         fail_msg: >-
-          Data Services module/async bounds are invalid. Set a positive module wait,
-          make ecs_data_services_async_timeout greater than
-          ecs_data_services_module_wait_timeout, and use positive async poll values.
+          Data Services wait bounds are invalid. Set positive module timeout,
+          structured-status retry/delay, and CDE async timeout/poll values.
 
     - name: Optional ECS LDAP provider sync and LDAP admin user
       ansible.builtin.import_tasks: common_tasks/ecs_control_plane_ldap_and_admin.yml
 
-    - name: Prepare CDW rerun when selected
-      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw_preflight.yml
+    - name: Provision CDW without blocking subsequent services
+      when: "'cdw' in (ecs_data_services_install_names | default([]))"
+      block:
+        - name: Prepare CDW rerun
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw_preflight.yml
 
-    - name: Launch CDW when selected
-      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw_start.yml
-      vars:
-        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+        - name: Launch CDW
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw_start.yml
+          vars:
+            ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
 
-    - name: Launch CDE when selected
-      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cde_start.yml
-      vars:
-        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+        - name: Wait for CDW terminal status
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw_wait.yml
+          vars:
+            ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
 
-    - name: Launch CAI when selected
-      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_start.yml
-      vars:
-        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+        - name: Complete CDW dependent services
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw_followup.yml
+          vars:
+            ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+      rescue:
+        - name: Record uncaught CDW failure
+          ansible.builtin.set_fact:
+            ecs_cdw_cluster_succeeded: false
+            ecs_cdw_catalog_succeeded: false
+            ecs_cdw_cluster:
+              failed: true
+              finished: true
+              msg: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_json) }}"
 
-    - name: Discover CAI endpoint when selected
-      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_endpoint.yml
-      vars:
-        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+    - name: Provision CDE without blocking subsequent services
+      when: "'cde' in (ecs_data_services_install_names | default([]))"
+      block:
+        - name: Launch CDE
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cde_start.yml
+          vars:
+            ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+            ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
-    - name: Configure CAI wildcard TLS before waiting for installation
-      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_tls.yml
+        - name: Wait for CDE module job
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cde_wait.yml
+          vars:
+            ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+            ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+      rescue:
+        - name: Record uncaught CDE failure
+          ansible.builtin.set_fact:
+            ecs_cde_service_succeeded: false
+            ecs_cde_service:
+              failed: true
+              finished: true
+              msg: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_json) }}"
 
-    - name: Wait for CDW module job
-      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw_wait.yml
-      vars:
-        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+    - name: Provision CAI without blocking subsequent services
+      when: "'cai' in (ecs_data_services_install_names | default([]))"
+      block:
+        - name: Prepare CAI rerun
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_preflight.yml
+          vars:
+            ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
 
-    - name: Wait for CDE module job
-      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cde_wait.yml
-      vars:
-        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+        - name: Launch CAI
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_start.yml
+          vars:
+            ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
 
-    - name: Wait for CAI module job
-      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_wait.yml
-      vars:
-        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+        - name: Wait for CAI terminal status
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_wait.yml
+          vars:
+            ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
 
-    - name: Complete CDW dependent services after service jobs finish
-      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw_followup.yml
-      vars:
-        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+        - name: Configure CAI wildcard TLS after workspace installation
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_tls.yml
+
+        - name: Verify CAI UI
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_followup.yml
+      rescue:
+        - name: Record uncaught CAI failure
+          ansible.builtin.set_fact:
+            ecs_cai_workspace_succeeded: false
+            ecs_cai_ui_succeeded: false
+            ecs_cai_workspace:
+              failed: true
+              finished: true
+              msg: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_json) }}"
 
     - name: Install Model Registry when selected
       ansible.builtin.import_tasks: common_tasks/ecs_data_service_model_registry.yml
       vars:
         ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-
-    - name: Verify CAI UI after independent services
-      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_followup.yml
 
     - name: Remove temporary Data Services profile from ECS master
       ansible.builtin.file:
@@ -159,41 +196,6 @@
       when:
         - ecs_ds_cdp_profile_dir is defined
         - ecs_ds_cdp_profile_dir.path | default('') | length > 0
-
-    - name: Report failed parallel Data Services provisioning
-      ansible.builtin.assert:
-        that:
-          - >-
-            'cdw' not in (ecs_data_services_install_names | default([]))
-            or (
-              (ecs_cdw_cluster_succeeded | default(false) | bool)
-              and (ecs_cdw_catalog_succeeded | default(false) | bool)
-            )
-          - >-
-            'cde' not in (ecs_data_services_install_names | default([]))
-            or (ecs_cde_service_succeeded | default(false) | bool)
-          - >-
-            'cai' not in (ecs_data_services_install_names | default([]))
-            or (
-              (ecs_cai_workspace_succeeded | default(false) | bool)
-              and (ecs_cai_ui_succeeded | default(false) | bool)
-            )
-          - >-
-            'model_registry' not in (ecs_data_services_install_names | default([]))
-            or (ecs_model_registry_succeeded | default(false) | bool)
-        fail_msg: >-
-          Parallel Data Services provisioning failed.
-          CDW={{ (ecs_cdw_cluster | default({})).msg
-                 | default((ecs_cdw_dbc_info | default({})).database_catalogs
-                           | default(ecs_cdw_cluster | default({}))
-                           | to_json) }};
-          CDE={{ (ecs_cde_service | default({})).msg | default(ecs_cde_service | default({}) | to_json) }};
-          CAI={{ (ecs_cai_workspace | default({})).msg
-                 | default(
-                     'workspace=' + (ecs_cai_workspace | default({}) | to_json)
-                     + ', ui_status=' + (ecs_cai_ui_probe.status | default('unavailable') | string)
-                   ) }};
-          Model Registry={{ ecs_model_registry_failure_message | default('not selected') }}.
 
     - name: Create ECS data-service catalog cache directory
       ansible.builtin.file:
@@ -228,3 +230,39 @@
       when:
         - ecs_caddy_data_service_routes | default([]) | length > 0
         - deployment_portal_caddy_effective | default(false) | bool
+
+    - name: Report failed Data Services provisioning after all attempts
+      ansible.builtin.assert:
+        that:
+          - >-
+            'cdw' not in (ecs_data_services_install_names | default([]))
+            or (
+              (ecs_cdw_cluster_succeeded | default(false) | bool)
+              and (ecs_cdw_catalog_succeeded | default(false) | bool)
+            )
+          - >-
+            'cde' not in (ecs_data_services_install_names | default([]))
+            or (ecs_cde_service_succeeded | default(false) | bool)
+          - >-
+            'cai' not in (ecs_data_services_install_names | default([]))
+            or (
+              (ecs_cai_workspace_succeeded | default(false) | bool)
+              and (ecs_cai_ui_succeeded | default(false) | bool)
+            )
+          - >-
+            'model_registry' not in (ecs_data_services_install_names | default([]))
+            or (ecs_model_registry_succeeded | default(false) | bool)
+        fail_msg: >-
+          One or more selected Data Services failed after all selected services
+          and successful-service follow-up work were attempted.
+          CDW={{ (ecs_cdw_cluster | default({})).msg
+                 | default((ecs_cdw_dbc_info | default({})).database_catalogs
+                           | default(ecs_cdw_cluster | default({}))
+                           | to_json) }};
+          CDE={{ (ecs_cde_service | default({})).msg | default(ecs_cde_service | default({}) | to_json) }};
+          CAI={{ (ecs_cai_workspace | default({})).msg
+                 | default(
+                     'workspace=' + (ecs_cai_workspace | default({}) | to_json)
+                     + ', ui_status=' + (ecs_cai_ui_probe.status | default('unavailable') | string)
+                   ) }};
+          Model Registry={{ ecs_model_registry_failure_message | default('not selected') }}.

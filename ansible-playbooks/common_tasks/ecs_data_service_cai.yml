@@ -22,18 +22,6 @@
           {{ ecs_cai_workspace.msg | default(ecs_cai_workspace | to_json) }}
       when: not (ecs_cai_workspace_succeeded | bool)
 
-    - name: Remove ML workspace async result
-      ansible.builtin.async_status:
-        jid: "{{ ecs_cai_workspace_job.ansible_job_id }}"
-        mode: cleanup
-      changed_when: false
-      when:
-        - ecs_cai_workspace_job is defined
-        - ecs_cai_workspace.finished | default(false) | bool
-      become: false
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
-
     - name: Record workbench endpoint
       ansible.builtin.set_fact:
         ecs_cai_workspace_url: "{{ ecs_cai_workspace.workspace.instanceUrl | regex_replace('/+$', '') }}"

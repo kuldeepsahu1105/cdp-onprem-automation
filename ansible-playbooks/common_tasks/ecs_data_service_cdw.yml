@@ -22,15 +22,3 @@
     - name: Collect CDW Kubernetes diagnostics after cluster failure
       ansible.builtin.include_tasks: ecs_data_service_cdw_diagnostics.yml
       when: not (ecs_cdw_cluster_succeeded | bool)
-
-    - name: Remove Data Warehouse async result
-      ansible.builtin.async_status:
-        jid: "{{ ecs_cdw_cluster_job.ansible_job_id }}"
-        mode: cleanup
-      changed_when: false
-      when:
-        - ecs_cdw_cluster_job is defined
-        - ecs_cdw_cluster.finished | default(false) | bool
-      become: false
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh

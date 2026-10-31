@@ -1,5 +1,5 @@
 ---
-- name: CAI | Launch ML workspace provisioning
+- name: CAI | Start ML workspace provisioning when absent
   cloudera.cloud.ml:
     environment: "{{ ecs_cdp_environment_name }}"
     name: "{{ ecs_cai_workspace_name }}"
@@ -10,15 +10,27 @@
     namespace: "{{ ecs_cai_k8s_namespace }}"
     resource_pool: "{{ ecs_cai_resource_pool }}"
     endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-    wait: true
-    timeout: "{{ ecs_data_services_module_wait_timeout | int }}"
-    delay: "{{ ecs_data_services_status_wait_delay | int }}"
+    wait: false
     state: present
   environment: "{{ ecs_cdp_cli_environment }}"
-  async: "{{ ecs_data_services_async_timeout | int }}"
-  poll: 0
-  register: ecs_cai_workspace_job
+  register: ecs_cai_workspace_start
+  changed_when: false
+  failed_when: false
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
-  when: "'cai' in (ecs_data_services_install_names | default([]))"
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - ecs_cai_existing_workspace | default({}) | length == 0
+
+- name: CAI | Record adopted workspace submission state
+  ansible.builtin.set_fact:
+    ecs_cai_workspace_start:
+      failed: false
+      changed: false
+      msg: >-
+        Adopting existing workspace {{ ecs_cai_workspace_name }} in status
+        {{ ecs_cai_existing_workspace.instanceStatus | default('unknown') }}.
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - ecs_cai_existing_workspace | default({}) | length > 0
