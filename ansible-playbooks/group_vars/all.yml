@@ -1209,6 +1209,7 @@ ecs_control_plane_ca_bundle: ""
 ecs_data_services_use_cdpcurl: true
 ecs_data_services_install: []  # optional list; unioned with per-service flags below
 ecs_data_services_async_timeout: 14400
+ecs_data_services_module_wait_timeout: 13800
 ecs_data_services_cm_dns_wait_retries: 12
 ecs_data_services_cm_dns_wait_delay: 5
 ecs_data_services_async_poll_retries: 480
@@ -1290,6 +1291,8 @@ ecs_cai_enable_monitoring: true
 ecs_cai_configure_wildcard_tls: true
 ecs_cai_wildcard_cert_profile: wildcard
 ecs_cai_tls_secret_name: cml-tls-secret
+ecs_cai_endpoint_wait_retries: 60
+ecs_cai_endpoint_wait_delay: 10
 ecs_cai_ui_wait_retries: 20
 ecs_cai_ui_wait_delay: 15
 # Model Registry (prefers optional [sdx], otherwise uses first base master with Ozone)

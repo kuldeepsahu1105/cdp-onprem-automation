@@ -9,6 +9,10 @@
             ecs_cai_workspace.finished | default(false) | bool
             and (ecs_cai_workspace.workspace | default({})) is mapping
             and (ecs_cai_workspace.workspace | default({})).instanceUrl | default('') | length > 0
+            and (
+              (ecs_cai_workspace.workspace | default({})).instanceStatus | default('')
+              in ['installation:finished', 'modify:finished']
+            )
           }}
 
     - name: Report ML workspace provisioning failure

@@ -18,14 +18,14 @@
       ecs_cai_workspace_endpoint_info.workspaces | default([])
       | first | default({})
     ).instanceStatus | default('') == 'installation:failed'
-  retries: "{{ ecs_data_services_status_wait_retries | int }}"
-  delay: "{{ ecs_data_services_status_wait_delay | int }}"
+  retries: "{{ ecs_cai_endpoint_wait_retries | int }}"
+  delay: "{{ ecs_cai_endpoint_wait_delay | int }}"
+  ignore_errors: true
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
   when:
     - "'cai' in (ecs_data_services_install_names | default([]))"
-    - not (ecs_cai_workspace_start.failed | default(false) | bool)
 
 - name: CAI | Record generated workspace endpoint
   ansible.builtin.set_fact:

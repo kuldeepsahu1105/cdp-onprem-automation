@@ -72,25 +72,37 @@
     - name: Configure CDP CLI profile for data services API calls
       ansible.builtin.import_tasks: common_tasks/ecs_data_services_runtime.yml
 
+    - name: Validate Data Services async wait bounds
+      ansible.builtin.assert:
+        that:
+          - ecs_data_services_module_wait_timeout | int > 0
+          - ecs_data_services_async_timeout | int > ecs_data_services_module_wait_timeout | int
+          - ecs_data_services_async_poll_retries | int > 0
+          - ecs_data_services_async_poll_delay | int > 0
+        fail_msg: >-
+          Data Services module/async bounds are invalid. Set a positive module wait,
+          make ecs_data_services_async_timeout greater than
+          ecs_data_services_module_wait_timeout, and use positive async poll values.
+
     - name: Optional ECS LDAP provider sync and LDAP admin user
       ansible.builtin.import_tasks: common_tasks/ecs_control_plane_ldap_and_admin.yml
 
     - name: Prepare CDW rerun when selected
       ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw_preflight.yml
 
-    - name: Start CDW when selected
+    - name: Launch CDW when selected
       ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw_start.yml
       vars:
         ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
         ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
-    - name: Start CDE when selected
+    - name: Launch CDE when selected
       ansible.builtin.import_tasks: common_tasks/ecs_data_service_cde_start.yml
       vars:
         ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
         ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
-    - name: Start CAI when selected
+    - name: Launch CAI when selected
       ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_start.yml
       vars:
         ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
@@ -98,23 +110,35 @@
 
     - name: Discover CAI endpoint when selected
       ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_endpoint.yml
+      vars:
+        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
     - name: Configure CAI wildcard TLS before waiting for installation
       ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_tls.yml
 
-    - name: Wait for CDW through structured status API
+    - name: Wait for CDW module job
       ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw_wait.yml
+      vars:
+        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
-    - name: Complete CDW dependent services after cluster activation
+    - name: Wait for CDE module job
+      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cde_wait.yml
+      vars:
+        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+
+    - name: Wait for CAI module job
+      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_wait.yml
+      vars:
+        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+
+    - name: Complete CDW dependent services after service jobs finish
       ansible.builtin.import_tasks: common_tasks/ecs_data_service_cdw_followup.yml
       vars:
         ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-
-    - name: Wait for CDE through structured status API
-      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cde_wait.yml
-
-    - name: Wait for CAI through structured status API
-      ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_wait.yml
 
     - name: Install Model Registry when selected
       ansible.builtin.import_tasks: common_tasks/ecs_data_service_model_registry.yml
