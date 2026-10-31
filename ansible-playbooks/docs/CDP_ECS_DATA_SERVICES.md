@@ -63,8 +63,9 @@ then CDE, then CAI and its TLS/UI follow-up. CDW and CAI submit with `wait: fals
 and use their structured `dw_cluster_info` and `ml_info` APIs for bounded
 polling. Definitive submission errors fail their service boundary immediately
 with the original module/API message. Only documented ambiguous CDW responses
-(`already exists`, HTTP 504, or timeout) proceed to structured discovery so
-the control plane can prove whether the request landed. This avoids remote
+(`already exists`, `environment is already activated` with an existing cluster
+id, HTTP 504, or timeout) proceed to structured discovery so the control plane
+can prove whether the request landed. This avoids remote
 `async_wrapper` output corruption and exposes live service failures directly.
 CDE retains its existing bounded Ansible async wrapper on this integration
 branch, but a completed async job that reports a module/API failure fails the
