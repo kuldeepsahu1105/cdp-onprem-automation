@@ -1,5 +1,156 @@
 ---
-- name: Compatibility entry point for ECS ecs data service model registry
-  ansible.builtin.import_role:
-    name: ecs
-    tasks_from: ecs_data_service_model_registry
+- name: Model Registry | Install on ECS
+  when: "'model_registry' in (ecs_data_services_install_names | default([]))"
+  block:
+    - name: Initialize Model Registry result
+      ansible.builtin.set_fact:
+        ecs_model_registry_succeeded: false
+        ecs_model_registry_failure_message: ""
+
+    - name: Resolve Model Registry Ozone hosts
+      ansible.builtin.set_fact:
+        ecs_model_registry_ozone_hosts: >-
+          {{
+            groups.get(ecs_model_registry_sdx_group, [])
+            if (groups.get(ecs_model_registry_sdx_group, []) | length > 0)
+            else groups.get(base_cluster_master_group, [])
+          }}
+
+    - name: Record Model Registry prerequisite result
+      ansible.builtin.set_fact:
+        ecs_model_registry_prerequisites_succeeded: >-
+          {{ ecs_model_registry_ozone_hosts | length > 0 }}
+
+    - name: Report missing Model Registry prerequisites
+      ansible.builtin.set_fact:
+        ecs_model_registry_failure_message: >-
+          Model Registry needs an Ozone-capable host. Neither the optional
+          inventory group {{ ecs_model_registry_sdx_group }} nor the base
+          cluster master group {{ base_cluster_master_group }} contains a host.
+          Add a host to one of those groups or remove model_registry from
+          ecs_data_services_install.
+      when: not (ecs_model_registry_prerequisites_succeeded | bool)
+
+    - name: Print missing Model Registry prerequisites
+      ansible.builtin.debug:
+        msg: "{{ ecs_model_registry_failure_message }}"
+      when: not (ecs_model_registry_prerequisites_succeeded | bool)
+
+    - name: Provision Model Registry when prerequisites are available
+      when: ecs_model_registry_prerequisites_succeeded | bool
+      block:
+        - name: Retrieve Ozone S3 credentials from selected host
+          ansible.builtin.include_tasks: ecs_model_registry_ozone_credentials.yml
+
+        - name: Set Model Registry S3 endpoint from selected host when not overridden
+          ansible.builtin.set_fact:
+            ecs_model_registry_s3_endpoint_effective: >-
+              {{
+                ecs_model_registry_s3_endpoint | trim
+                if (ecs_model_registry_s3_endpoint | default('') | length > 0)
+                else (
+                  'https://'
+                  + hostvars[ecs_model_registry_ozone_hosts[0]].cldr_hostname
+                  + '.'
+                  + cluster_domain
+                  + ':9879'
+                )
+              }}
+
+        - name: Resolve ECS environment CRN
+          cloudera.cloud.env_info:
+            name: "{{ ecs_cdp_environment_name }}"
+            verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+          environment: "{{ ecs_cdp_cli_environment }}"
+          register: ecs_mr_env_info
+          become: false
+          delegate_to: "{{ ecs_data_services_delegate_host }}"
+          connection: ssh
+
+        - name: Check if registry already exists
+          ansible.builtin.command:
+            argv: >-
+              {{
+                ecs_data_services_cdp_cli_prefix
+                + ['ml', 'list-model-registries']
+              }}
+          environment: "{{ ecs_cdp_cli_environment }}"
+          register: ecs_mr_list
+          changed_when: false
+          become: false
+          delegate_to: "{{ ecs_data_services_delegate_host }}"
+          connection: ssh
+
+        - name: Set registry existence fact
+          ansible.builtin.set_fact:
+            ecs_mr_exists: "{{ ecs_mr_list.stdout is search(ecs_model_registry_service_name) }}"
+
+        - name: Create Model Registry
+          ansible.builtin.command:
+            argv: >-
+              {{
+                ecs_data_services_cdp_cli_prefix
+                + [
+                  'ml',
+                  'create-model-registry',
+                  '--environment-crn',
+                  ecs_mr_env_info.environments
+                  | map(attribute='crn')
+                  | list
+                  | first,
+                  '--environment-name',
+                  ecs_cdp_environment_name,
+                  '--model-registry-service-name',
+                  ecs_model_registry_service_name,
+                  '--model-registry-subdomain',
+                  ecs_model_registry_subdomain,
+                  '--s3-access-key',
+                  hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_access_key,
+                  '--s3-secret-key',
+                  hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_secret_key,
+                  '--s3-bucket',
+                  ecs_model_registry_s3_bucket,
+                  '--s3-endpoint',
+                  ecs_model_registry_s3_endpoint_effective
+                ]
+              }}
+          environment: "{{ ecs_cdp_cli_environment }}"
+          register: ecs_mr_create
+          when: not (ecs_mr_exists | bool)
+          no_log: true
+          become: false
+          delegate_to: "{{ ecs_data_services_delegate_host }}"
+          connection: ssh
+
+        - name: Record Model Registry provisioning success
+          ansible.builtin.set_fact:
+            ecs_model_registry_succeeded: true
+
+        - name: Register Model Registry ingress for Caddy
+          ansible.builtin.set_fact:
+            ecs_caddy_data_service_routes: >-
+              {{
+                (ecs_caddy_data_service_routes | default([]))
+                + [
+                  {
+                    'id': 'model-registry',
+                    'external_hostname': ecs_model_registry_subdomain + '.' + ecs_app_domain,
+                    'backend_host': ecs_master_fqdn,
+                    'backend_port': 443,
+                    'backend_scheme': 'https'
+                  }
+                ]
+              }}
+      rescue:
+        - name: Record Model Registry provisioning failure
+          ansible.builtin.set_fact:
+            ecs_model_registry_succeeded: false
+            ecs_model_registry_failure_message: >-
+              {{
+                ansible_failed_result.msg
+                | default(ansible_failed_result.stderr | default(ansible_failed_result | to_json))
+              }}
+
+        - name: Report Model Registry provisioning failure
+          ansible.builtin.debug:
+            msg: "Model Registry provisioning failed: {{ ecs_model_registry_failure_message }}"

@@ -1,12 +1,7 @@
 ---
 - name: CDE | List existing services without describing their CM cluster
   ansible.builtin.command:
-    argv:
-      - cdp
-      - --profile
-      - default
-      - de
-      - list-services
+    argv: "{{ ecs_data_services_cdp_cli_prefix + ['de', 'list-services'] }}"
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cde_preflight_service_list
   changed_when: false
