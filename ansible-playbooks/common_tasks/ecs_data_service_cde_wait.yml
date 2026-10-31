@@ -1,5 +1,33 @@
 ---
-- name: Compatibility entry point for ECS Data Engineering structured wait
-  ansible.builtin.import_role:
-    name: ecs
-    tasks_from: ecs_data_service_cde_wait
+- name: CDE | Wait for Data Engineering provisioning job
+  when: "'cde' in (ecs_data_services_install_names | default([]))"
+  block:
+    - name: CDE | Read Data Engineering provisioning result
+      ansible.builtin.async_status:
+        jid: "{{ ecs_cde_service_job.ansible_job_id }}"
+      register: ecs_cde_service
+      until: ecs_cde_service.finished | default(false) | bool
+      retries: "{{ ecs_data_services_async_poll_retries | int }}"
+      delay: "{{ ecs_data_services_async_poll_delay | int }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+
+  rescue:
+    - name: CDE | Record Data Engineering provisioning failure
+      ansible.builtin.set_fact:
+        ecs_cde_service: "{{ ansible_failed_result }}"
+
+- name: CDE | Complete Data Engineering provisioning
+  ansible.builtin.include_tasks: ecs_data_service_cde.yml
+  when: "'cde' in (ecs_data_services_install_names | default([]))"
+
+- name: CDE | Require successful Data Engineering provisioning
+  ansible.builtin.assert:
+    that:
+      - ecs_cde_service_succeeded | default(false) | bool
+    fail_msg: >-
+      CDE provisioning did not reach ClusterCreationCompleted.
+      Module/API response:
+      {{ ecs_cde_service.msg | default(ecs_cde_service | to_json) }}.
+  when: "'cde' in (ecs_data_services_install_names | default([]))"

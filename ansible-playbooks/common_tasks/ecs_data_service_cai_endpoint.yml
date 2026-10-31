@@ -27,6 +27,36 @@
   when:
     - "'cai' in (ecs_data_services_install_names | default([]))"
 
+- name: CAI | Require generated workspace endpoint
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | first | default({})
+        ).instanceStatus | default('') is not search('(?i):failed$')
+      - >-
+        (
+          ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | first | default({})
+        ).instanceUrl | default('') | length > 0
+    fail_msg: >-
+      CAI workspace {{ ecs_cai_workspace_name }} did not expose an endpoint.
+      Final status:
+      {{
+        (
+          ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | first | default({})
+        ).instanceStatus | default('not returned')
+      }}.
+      API response:
+      {{
+        ecs_cai_workspace_endpoint_info.msg
+        | default(ecs_cai_workspace_endpoint_info | to_json)
+      }}.
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+
 - name: CAI | Record generated workspace endpoint
   ansible.builtin.set_fact:
     ecs_cai_workspace_url: >-
@@ -51,8 +81,3 @@
       }}
   when:
     - "'cai' in (ecs_data_services_install_names | default([]))"
-    - >-
-      (
-        ecs_cai_workspace_endpoint_info.workspaces | default([])
-        | first | default({})
-      ).instanceUrl | default('') | length > 0
