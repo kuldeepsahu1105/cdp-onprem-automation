@@ -1,0 +1,51 @@
+---
+- name: CAI | Check for an existing failed ML workspace
+  cloudera.cloud.ml_info:
+    environment: "{{ ecs_cdp_environment_name }}"
+    name: "{{ ecs_cai_workspace_name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cai_preflight_workspace_info
+  changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: "'cai' in (ecs_data_services_install_names | default([]))"
+
+- name: CAI | Select failed workspace eligible for recreation
+  ansible.builtin.set_fact:
+    ecs_cai_failed_workspace_for_recreation: >-
+      {{
+        (
+          ecs_cai_preflight_workspace_info.workspaces | default([])
+          | first | default({})
+        )
+        if (
+          (
+            ecs_cai_preflight_workspace_info.workspaces | default([])
+            | first | default({})
+          ).instanceStatus | default('') == 'installation:failed'
+        )
+        else {}
+      }}
+  when: "'cai' in (ecs_data_services_install_names | default([]))"
+
+- name: CAI | Remove failed workspace before clean recreation
+  cloudera.cloud.ml:
+    environment: "{{ ecs_cdp_environment_name }}"
+    name: "{{ ecs_cai_workspace_name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+    state: absent
+    force: true
+    wait: true
+    timeout: "{{ ecs_data_services_module_wait_timeout | int }}"
+    delay: "{{ ecs_data_services_status_wait_delay | int }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cai_failed_workspace_removal
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - ecs_cai_recreate_failed_workspace | default(true) | bool
+    - ecs_cai_failed_workspace_for_recreation | default({}) | length > 0

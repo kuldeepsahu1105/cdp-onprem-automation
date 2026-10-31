@@ -33,10 +33,15 @@ the external Jenkins controller is unsupported because private names such as
 The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
 than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
-ECS installation owns CoreDNS, private-zone forwarding, and wildcard DNS.
-Playbook 34 does not patch, restart, or probe CoreDNS again; it requires the
-existing Management Console readiness gate to pass and then submits Data
-Services through that installed control plane.
+ECS installation owns CoreDNS and wildcard DNS. Following the supplied
+Cloudera Labs ECS playbook, CoreDNS forwards through each node's
+`/etc/resolv.conf` with `policy sequential`; automation does not hard-code an
+identity-provider address into the global forwarder. Playbook 34 re-applies
+that same idempotent ECS-owned policy so standalone Data Services runs repair
+older clusters, removes the former managed private-zone block when present,
+waits for a changed CoreDNS rollout, and verifies FreeIPA, Cloudera Manager,
+and the Management Console from retrying Kubernetes pods before submitting
+CDW, CDE, or CAI.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
@@ -55,6 +60,11 @@ with separate info modules.
 
 The private CDE request uses the live API minimum of 26 CPU and 64 GiB with the
 environment-specific scheduler parent `root.<environment>.cde`.
+When a prior CDE service ends in a terminal `*Failed` state,
+`ecs_cde_recreate_failed_service` removes it through `cloudera.cloud.de`
+before relaunch. Likewise, `ecs_cai_recreate_failed_workspace` removes an
+`installation:failed` workspace before a clean CAI launch. Healthy and
+in-progress resources are left untouched.
 Model Registry obtains Ozone S3
 credentials from `ecs_model_registry_sdx_group` (default `sdx`) when that
 optional override group has hosts; otherwise it automatically uses the first
@@ -304,5 +314,5 @@ backend received the request.
 ## Not automated (Labs reference gaps)
 
 - FreeIPA wildcard TLS for CDE-specific domains; CAI `cml-tls-secret` is automated.
-- CoreDNS / Prometheus ingress patches on ECS masters (reference `ecs_masters` plays).
+- Prometheus ingress patches on ECS masters (reference `ecs_masters` plays).
 - CDE environment-role permissions for end users.

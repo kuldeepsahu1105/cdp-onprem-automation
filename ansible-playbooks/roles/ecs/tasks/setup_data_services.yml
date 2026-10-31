@@ -38,6 +38,18 @@
 - name: Wait for ECS Management Console after cluster install
   ansible.builtin.import_tasks: ecs_wait_control_plane_console.yml
 
+- name: Reconcile reference-aligned ECS CoreDNS forwarding
+  ansible.builtin.import_tasks: ecs_reconcile_coredns.yml
+  when:
+    - ecs_data_services_install_names | default([]) | length > 0
+    - ecs_reconcile_coredns | default(true) | bool
+
+- name: Verify Data Services DNS through Kubernetes pods
+  ansible.builtin.import_tasks: ecs_data_services_verify_dns.yml
+  when:
+    - ecs_data_services_install_names | default([]) | length > 0
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+
 - name: Load existing ECS automation API credentials
   ansible.builtin.import_tasks: ecs_load_api_credentials.yml
 
@@ -68,6 +80,16 @@
 
 - name: Optional ECS LDAP provider sync and LDAP admin user
   ansible.builtin.import_tasks: ecs_control_plane_ldap_and_admin.yml
+
+- name: Prepare CDE rerun when selected
+  ansible.builtin.import_tasks: ecs_data_service_cde_preflight.yml
+  vars:
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+
+- name: Prepare CAI rerun when selected
+  ansible.builtin.import_tasks: ecs_data_service_cai_preflight.yml
+  vars:
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
 
 - name: Prepare CDW rerun when selected
   ansible.builtin.import_tasks: ecs_data_service_cdw_preflight.yml

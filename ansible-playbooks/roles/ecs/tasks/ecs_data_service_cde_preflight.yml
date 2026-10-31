@@ -1,0 +1,51 @@
+---
+- name: CDE | Check for an existing Data Engineering service
+  cloudera.cloud.de_info:
+    name: "{{ ecs_cde_service_name }}"
+    env_name: "{{ ecs_cdp_environment_name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cde_preflight_service_info
+  changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: "'cde' in (ecs_data_services_install_names | default([]))"
+
+- name: CDE | Select failed service eligible for recreation
+  ansible.builtin.set_fact:
+    ecs_cde_failed_service_for_recreation: >-
+      {{
+        (
+          ecs_cde_preflight_service_info.services | default([])
+          | first | default({})
+        )
+        if (
+          (
+            ecs_cde_preflight_service_info.services | default([])
+            | first | default({})
+          ).status | default('') is search('Failed$')
+        )
+        else {}
+      }}
+  when: "'cde' in (ecs_data_services_install_names | default([]))"
+
+- name: CDE | Remove failed service before clean recreation
+  cloudera.cloud.de:
+    environment: "{{ ecs_cdp_environment_name }}"
+    name: "{{ ecs_cde_service_name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+    state: absent
+    force: true
+    wait: true
+    timeout: "{{ ecs_data_services_module_wait_timeout | int }}"
+    delay: "{{ ecs_data_services_status_wait_delay | int }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cde_failed_service_removal
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - "'cde' in (ecs_data_services_install_names | default([]))"
+    - ecs_cde_recreate_failed_service | default(true) | bool
+    - ecs_cde_failed_service_for_recreation | default({}) | length > 0
