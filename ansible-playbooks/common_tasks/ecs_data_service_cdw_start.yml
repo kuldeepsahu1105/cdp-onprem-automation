@@ -1,5 +1,16 @@
 ---
-- name: Compatibility entry point for ECS ecs data service cdw start
-  ansible.builtin.import_role:
-    name: ecs
-    tasks_from: ecs_data_service_cdw_start
+- name: CDW | Start Data Warehouse cluster provisioning
+  cloudera.cloud.dw_cluster:
+    env: "{{ ecs_cdp_environment_name }}"
+    private_cloud: "{{ ecs_cdw_private_cloud_config | default({}) }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+    state: present
+    wait: false
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_cluster_start
+  changed_when: false
+  failed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
