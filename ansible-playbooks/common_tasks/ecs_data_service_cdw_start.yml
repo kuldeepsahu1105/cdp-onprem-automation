@@ -2,7 +2,7 @@
 - name: CDW | Define ambiguous submission error pattern
   ansible.builtin.set_fact:
     ecs_cdw_cluster_start_ambiguous_error_pattern: >-
-      (?i)(already exists|gateway time-out|gateway timeout|http error 504|\[504\]|timed out|timeout)
+      (?i)(already exists|environment\s+is\s+already\s+activated|existing\s+clusterid\s*:|gateway time-out|gateway timeout|http error 504|\[504\]|timed out|timeout)
   when: "'cdw' in (ecs_data_services_install_names | default([]))"
 
 - name: CDW | Start Data Warehouse cluster provisioning
