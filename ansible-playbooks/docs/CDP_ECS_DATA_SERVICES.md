@@ -46,8 +46,8 @@ stanza with the minimal existing-Corefile form
 `forward . <validated-upstreams>`; this deployment renders exactly
 `forward . 172.31.76.102`. The applied ConfigMap is reread and asserted before
 fresh Python probe pods perform IPv4-only resolution and independent TCP checks
-for Cloudera Manager on 7183 and LDAP on 636. No Data Services API call occurs
-until those checks pass.
+to the already validated IPv4 address for Cloudera Manager on 7183 and LDAP on
+636. No Data Services API call occurs until those checks pass.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
