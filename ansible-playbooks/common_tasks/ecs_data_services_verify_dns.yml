@@ -186,14 +186,24 @@
                     raise RuntimeError(
                         f"expected {expected}, resolved {','.join(addresses)}"
                     )
+                if not expected and len(addresses) != 1:
+                    raise RuntimeError(
+                        "expected one IPv4 answer, resolved "
+                        + ",".join(addresses)
+                    )
+                connect_address = expected or addresses[0]
                 print("DNS_A_OK", flush=True)
                 if port:
                     with socket.create_connection(
-                        (host, port),
+                        (connect_address, port),
                         timeout=timeout,
                     ):
                         pass
-                    print(f"TCP_OK={host}:{port}", flush=True)
+                    print(
+                        f"TCP_OK fqdn={host} ipv4={connect_address} "
+                        f"port={port}",
+                        flush=True,
+                    )
                 raise SystemExit(0)
             except Exception as exc:
                 last_error = repr(exc)
@@ -310,8 +320,7 @@
       - >-
         item.item.port | default(0) | int == 0
         or (
-          'TCP_OK=' + item.item.fqdn + ':'
-          + (item.item.port | default(0) | string)
+          'TCP_OK fqdn=' + item.item.fqdn + ' ipv4='
         ) in item.stdout
     fail_msg: >-
       {{ item.item.label }} hostname {{ item.item.fqdn }} must return the

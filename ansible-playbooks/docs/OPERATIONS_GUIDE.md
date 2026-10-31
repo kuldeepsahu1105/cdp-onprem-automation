@@ -308,11 +308,12 @@ inventory-derived candidates may use a proven ECS node resolver only when
 `ecs_coredns_allow_node_resolver_fallback: true`. The applied Corefile must
 contain the exact minimal `forward . <validated-upstreams>` stanza (this
 deployment: `forward . 172.31.76.102`). Fresh IPv4-only pod probes must resolve
-CM, the ECS console, and LDAP and independently connect to CM 7183 and LDAP 636
-before provisioning. Terminal failed CDW/CDE/CAI resources are reported
-without automated disable, deletion, recreation, backend restart, or datastore
-mutation; independent service boundaries still allow later selected services
-to run before the final aggregate failure.
+CM, the ECS console, and LDAP and independently connect to the validated IPv4
+addresses on CM 7183 and LDAP 636 before provisioning. Terminal failed
+CDW/CDE/CAI resources are reported without automated disable, deletion,
+recreation, backend restart, or datastore mutation; independent service
+boundaries still allow later selected services to run before the final
+aggregate failure.
 
 For FreeIPA-backed CDW, preflight ensures the product-standard
 `host/dwx-env-<environment>.cdp.local@<realm>` host exists and has initialized
