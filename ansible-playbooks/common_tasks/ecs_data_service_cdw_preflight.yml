@@ -1,5 +1,108 @@
 ---
-- name: Compatibility entry point for ECS ecs data service cdw preflight
-  ansible.builtin.import_role:
-    name: ecs
-    tasks_from: ecs_data_service_cdw_preflight
+- name: CDW | Check for an existing Data Warehouse cluster
+  cloudera.cloud.dw_cluster_info:
+    environment: "{{ ecs_cdp_environment_name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_preflight_cluster_info
+  changed_when: false
+  vars:
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
+- name: CDW | Resolve effective Kerberos service hostname
+  ansible.builtin.set_fact:
+    ecs_cdw_kerberos_principal_hostname_effective: >-
+      {{
+        (
+          ecs_cdw_private_cloud_config
+          | default({})
+        ).custom_kerberos_principal_hostname
+        | default(
+            'dwx-env-' + ecs_cdp_environment_name + '.cdp.local',
+            true
+          )
+      }}
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
+- name: CDW | Require FreeIPA server for principal host preparation
+  ansible.builtin.assert:
+    that:
+      - ipa_server_in_inventory | bool
+      - ipaserver_inventory_host | default('') | length > 0
+    fail_msg: >-
+      CDW FreeIPA principal-host preparation requires an ipaserver or
+      ipa_server inventory host. Set ecs_cdw_ensure_freeipa_principal_host=false
+      only when that host object is managed externally.
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ecs_cdw_ensure_freeipa_principal_host | default(true) | bool
+
+- name: CDW | Select failed cluster records eligible for recreation
+  ansible.builtin.set_fact:
+    ecs_cdw_failed_clusters_for_recreation: >-
+      {{
+        ecs_cdw_preflight_cluster_info.clusters
+        | default([])
+        | selectattr('status', 'in', ['Error', 'Failed'])
+        | list
+      }}
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
+- name: CDW | Remove failed cluster before clean recreation
+  cloudera.cloud.dw_cluster:
+    cluster_id: "{{ item.id }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+    state: absent
+    wait: false
+  environment: "{{ ecs_cdp_cli_environment }}"
+  loop: "{{ ecs_cdw_failed_clusters_for_recreation | default([]) }}"
+  loop_control:
+    label: "{{ item.id }} ({{ item.status }})"
+  register: ecs_cdw_failed_cluster_removal
+  vars:
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_recreate_failed_cluster | default(true) | bool
+
+- name: CDW | Wait for failed cluster removal
+  cloudera.cloud.dw_cluster_info:
+    environment: "{{ ecs_cdp_environment_name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_cluster_info_after_cleanup
+  changed_when: false
+  until: ecs_cdw_cluster_info_after_cleanup.clusters | default([]) | length == 0
+  retries: "{{ ecs_data_services_status_wait_retries | int }}"
+  delay: "{{ ecs_data_services_status_wait_delay | int }}"
+  vars:
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_recreate_failed_cluster | default(true) | bool
+    - ecs_cdw_failed_clusters_for_recreation | default([]) | length > 0
+
+- name: CDW | Ensure FreeIPA host principal prerequisite
+  freeipa.ansible_freeipa.ipahost:
+    ipaadmin_password: "{{ ipaadmin_password }}"
+    name: "{{ ecs_cdw_kerberos_principal_hostname_effective }}"
+    force: true
+    state: present
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ipa_server_in_inventory | bool
+    - ecs_cdw_ensure_freeipa_principal_host | default(true) | bool
