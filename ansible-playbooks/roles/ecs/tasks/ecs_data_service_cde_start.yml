@@ -1,32 +1,22 @@
 ---
-- name: CDE | Submit Data Engineering provisioning
+- name: CDE | Launch Data Engineering provisioning
+  cloudera.cloud.de:
+    environment: "{{ ecs_cdp_environment_name }}"
+    name: "{{ ecs_cde_service_name }}"
+    instance_type: "{{ ecs_cde_instance_type }}"
+    cpu_requests: "{{ ecs_cde_cpu_requests }}"
+    memory_requests: "{{ ecs_cde_memory_requests }}"
+    resource_pool: "{{ ecs_cde_resource_pool }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+    wait: true
+    timeout: "{{ ecs_data_services_module_wait_timeout | int }}"
+    delay: "{{ ecs_data_services_status_wait_delay | int }}"
+    state: present
+  environment: "{{ ecs_cdp_cli_environment }}"
+  async: "{{ ecs_data_services_async_timeout | int }}"
+  poll: 0
+  register: ecs_cde_service_job
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
   when: "'cde' in (ecs_data_services_install_names | default([]))"
-  block:
-    - name: CDE | Start Data Engineering provisioning
-      cloudera.cloud.de:
-        environment: "{{ ecs_cdp_environment_name }}"
-        name: "{{ ecs_cde_service_name }}"
-        instance_type: "{{ ecs_cde_instance_type }}"
-        cpu_requests: "{{ ecs_cde_cpu_requests }}"
-        memory_requests: "{{ ecs_cde_memory_requests }}"
-        resource_pool: "{{ ecs_cde_resource_pool }}"
-        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-        wait: false
-        state: present
-      environment: "{{ ecs_cdp_cli_environment }}"
-      register: ecs_cde_service_start
-      changed_when: false
-      become: false
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
-
-  rescue:
-    - name: CDE | Record submission failure
-      ansible.builtin.set_fact:
-        ecs_cde_service_start: "{{ ansible_failed_result }}"
-
-    - name: CDE | Report submission failure
-      ansible.builtin.debug:
-        msg: >-
-          CDE submission failed before a service was created:
-          {{ ecs_cde_service_start.msg | default(ecs_cde_service_start | to_json) }}

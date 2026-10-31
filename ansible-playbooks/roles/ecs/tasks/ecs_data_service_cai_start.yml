@@ -1,5 +1,5 @@
 ---
-- name: CAI | Start ML workspace provisioning
+- name: CAI | Launch ML workspace provisioning
   cloudera.cloud.ml:
     environment: "{{ ecs_cdp_environment_name }}"
     name: "{{ ecs_cai_workspace_name }}"
@@ -10,12 +10,14 @@
     namespace: "{{ ecs_cai_k8s_namespace }}"
     resource_pool: "{{ ecs_cai_resource_pool }}"
     endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-    wait: false
+    wait: true
+    timeout: "{{ ecs_data_services_module_wait_timeout | int }}"
+    delay: "{{ ecs_data_services_status_wait_delay | int }}"
     state: present
   environment: "{{ ecs_cdp_cli_environment }}"
-  register: ecs_cai_workspace_start
-  changed_when: false
-  failed_when: false
+  async: "{{ ecs_data_services_async_timeout | int }}"
+  poll: 0
+  register: ecs_cai_workspace_job
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
