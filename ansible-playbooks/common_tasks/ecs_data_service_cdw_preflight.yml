@@ -33,10 +33,14 @@
     that:
       - ipa_server_in_inventory | bool
       - ipaserver_inventory_host | default('') | length > 0
+      - ecs_cdw_freeipa_keytab_admin_principal | default('') | length > 0
+      - ecs_cdw_freeipa_keytab_admin_password | default('') | length > 0
     fail_msg: >-
       CDW FreeIPA principal-host preparation requires an ipaserver or
-      ipa_server inventory host. Set ecs_cdw_ensure_freeipa_principal_host=false
-      only when that host object is managed externally.
+      ipa_server inventory host plus
+      ecs_cdw_freeipa_keytab_admin_principal/password. Set
+      ecs_cdw_ensure_freeipa_principal_host=false only when the complete host
+      object and key initialization are managed externally.
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
     - identity_provider_effective | default('freeipa') == 'freeipa'
@@ -69,6 +73,7 @@
 - name: CDW | Ensure FreeIPA host principal prerequisite
   freeipa.ansible_freeipa.ipahost:
     ipaadmin_password: "{{ ipaadmin_password }}"
+    ipaadmin_principal: "{{ ipaadmin_principal }}"
     name: "{{ ecs_cdw_kerberos_principal_hostname_effective }}"
     force: true
     state: present
@@ -79,3 +84,188 @@
     - identity_provider_effective | default('freeipa') == 'freeipa'
     - ipa_server_in_inventory | bool
     - ecs_cdw_ensure_freeipa_principal_host | default(true) | bool
+
+- name: CDW | Resolve FreeIPA keytab administrator user
+  ansible.builtin.set_fact:
+    ecs_cdw_freeipa_keytab_admin_user: >-
+      {{
+        ecs_cdw_freeipa_keytab_admin_principal
+        | regex_replace('/.*$', '')
+        | regex_replace('@.*$', '')
+      }}
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ipa_server_in_inventory | bool
+    - ecs_cdw_ensure_freeipa_principal_host | default(true) | bool
+
+- name: CDW | Allow administrator to initialize and retrieve host key
+  freeipa.ansible_freeipa.ipahost:
+    ipaadmin_password: "{{ ipaadmin_password }}"
+    ipaadmin_principal: "{{ ipaadmin_principal }}"
+    action: member
+    name: "{{ ecs_cdw_kerberos_principal_hostname_effective }}"
+    allow_create_keytab_user:
+      - "{{ ecs_cdw_freeipa_keytab_admin_user }}"
+    allow_retrieve_keytab_user:
+      - "{{ ecs_cdw_freeipa_keytab_admin_user }}"
+    state: present
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ipa_server_in_inventory | bool
+    - ecs_cdw_ensure_freeipa_principal_host | default(true) | bool
+
+- name: CDW | Obtain FreeIPA administrator ticket for host key inspection
+  ansible.builtin.command:
+    argv:
+      - kinit
+      - -c
+      - "FILE:{{ ipa_kerberos_ccache_path }}"
+      - "{{ ecs_cdw_freeipa_keytab_admin_principal }}"
+    stdin: "{{ ecs_cdw_freeipa_keytab_admin_password }}"
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+  changed_when: false
+  no_log: true
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ipa_server_in_inventory | bool
+    - ecs_cdw_ensure_freeipa_principal_host | default(true) | bool
+
+- name: CDW | Inspect FreeIPA host key state
+  ansible.builtin.command:
+    argv:
+      - ipa
+      - host-show
+      - "{{ ecs_cdw_kerberos_principal_hostname_effective }}"
+      - --all
+      - --raw
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+  register: ecs_cdw_freeipa_host_show_before
+  changed_when: false
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ipa_server_in_inventory | bool
+    - ecs_cdw_ensure_freeipa_principal_host | default(true) | bool
+
+- name: CDW | Resolve whether FreeIPA host key is initialized
+  ansible.builtin.set_fact:
+    ecs_cdw_freeipa_host_has_keytab_before: >-
+      {{
+        (
+          ecs_cdw_freeipa_host_show_before.stdout
+          | regex_search(
+              '(?im)^\\s*(?:has_keytab|Keytab):\\s*(?:TRUE|True)\\s*$'
+            )
+        )
+        is not none
+      }}
+  when:
+    - ecs_cdw_freeipa_host_show_before is not skipped
+
+- name: CDW | Require readable FreeIPA host key state
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          ecs_cdw_freeipa_host_show_before.stdout
+          | regex_search(
+              '(?im)^\\s*(?:has_keytab|Keytab):\\s*'
+              + '(?:TRUE|FALSE|True|False)\\s*$'
+            )
+        )
+        is not none
+    fail_msg: >-
+      FreeIPA did not report the keytab state for
+      host/{{ ecs_cdw_kerberos_principal_hostname_effective }}.
+      ipa host-show output:
+      {{ ecs_cdw_freeipa_host_show_before.stdout | default('') }}
+  when:
+    - ecs_cdw_freeipa_host_show_before is not skipped
+
+- name: CDW | Initialize missing FreeIPA host key exactly once
+  when:
+    - ecs_cdw_freeipa_host_has_keytab_before is defined
+    - not (ecs_cdw_freeipa_host_has_keytab_before | bool)
+  block:
+    - name: CDW | Create temporary host keytab directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: ansible_cdw_host_keytab_
+      register: ecs_cdw_freeipa_temporary_keytab_dir
+      delegate_to: "{{ ipaserver_inventory_host }}"
+      connection: ssh
+
+    - name: CDW | Generate initial FreeIPA host key
+      ansible.builtin.command:
+        argv:
+          - ipa-getkeytab
+          - -p
+          - >-
+            host/{{ ecs_cdw_kerberos_principal_hostname_effective
+            }}@{{ ipaserver_realm }}
+          - -k
+          - "{{ ecs_cdw_freeipa_temporary_keytab_dir.path }}/host.keytab"
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+      changed_when: true
+      delegate_to: "{{ ipaserver_inventory_host }}"
+      connection: ssh
+  always:
+    - name: CDW | Remove temporary host keytab directory
+      ansible.builtin.file:
+        path: "{{ ecs_cdw_freeipa_temporary_keytab_dir.path }}"
+        state: absent
+      no_log: true
+      delegate_to: "{{ ipaserver_inventory_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_freeipa_temporary_keytab_dir is defined
+        - ecs_cdw_freeipa_temporary_keytab_dir.path | default('') | length > 0
+
+- name: CDW | Verify FreeIPA host key is initialized
+  ansible.builtin.command:
+    argv:
+      - ipa
+      - host-show
+      - "{{ ecs_cdw_kerberos_principal_hostname_effective }}"
+      - --all
+      - --raw
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+  register: ecs_cdw_freeipa_host_show_after
+  changed_when: false
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ipa_server_in_inventory | bool
+    - ecs_cdw_ensure_freeipa_principal_host | default(true) | bool
+
+- name: CDW | Require initialized FreeIPA host key
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          ecs_cdw_freeipa_host_show_after.stdout
+          | regex_search(
+              '(?im)^\\s*(?:has_keytab|Keytab):\\s*(?:TRUE|True)\\s*$'
+            )
+        )
+        is not none
+    fail_msg: >-
+      FreeIPA host/{{ ecs_cdw_kerberos_principal_hostname_effective }}
+      still reports Keytab: False after initialization.
+  when:
+    - ecs_cdw_freeipa_host_show_after is not skipped
