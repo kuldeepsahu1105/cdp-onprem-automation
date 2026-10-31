@@ -1,0 +1,112 @@
+---
+- name: CDE | List existing services without describing their CM cluster
+  ansible.builtin.command:
+    argv:
+      - cdp
+      - --profile
+      - default
+      - de
+      - list-services
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cde_preflight_service_list
+  changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CDE | Select existing service summary
+  ansible.builtin.set_fact:
+    ecs_cde_preflight_service: >-
+      {{
+        (
+          (ecs_cde_preflight_service_list.stdout | from_json).services
+          | default([])
+          | selectattr('name', 'equalto', ecs_cde_service_name)
+          | selectattr('environmentName', 'equalto', ecs_cdp_environment_name)
+          | list
+          | first
+        )
+        | default({})
+      }}
+
+- name: CDE | Select terminal failed service for recreation
+  ansible.builtin.set_fact:
+    ecs_cde_failed_service_for_recreation: >-
+      {{
+        ecs_cde_preflight_service
+        if (
+          ecs_cde_preflight_service.status | default('')
+          is search('Failed$')
+        )
+        else {}
+      }}
+
+- name: CDE | Force-disable failed service through signed API
+  ansible.builtin.command:
+    argv:
+      - cdp
+      - --profile
+      - default
+      - de
+      - disable-service
+      - --cluster-id
+      - "{{ ecs_cde_failed_service_for_recreation.clusterId }}"
+      - --force
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cde_failed_service_disable
+  changed_when: ecs_cde_failed_service_disable.rc == 0
+  failed_when: false
+  retries: "{{ ecs_cde_cleanup_submit_retries | int }}"
+  delay: "{{ ecs_cde_cleanup_submit_delay | int }}"
+  until: ecs_cde_failed_service_disable.rc == 0
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - ecs_cde_recreate_failed_service | default(true) | bool
+    - ecs_cde_failed_service_for_recreation | length > 0
+
+- name: CDE | Require failed-service cleanup submission
+  ansible.builtin.assert:
+    that:
+      - ecs_cde_failed_service_disable.rc == 0
+    fail_msg: >-
+      CDE force-disable remained unsuccessful after DNS reconciliation and
+      bounded retries. The signed disableService API returned:
+      {{ ecs_cde_failed_service_disable.stderr
+         | default(ecs_cde_failed_service_disable.stdout, true) }}
+  when:
+    - ecs_cde_recreate_failed_service | default(true) | bool
+    - ecs_cde_failed_service_for_recreation | length > 0
+
+- name: CDE | Wait until failed service is absent
+  ansible.builtin.command:
+    argv:
+      - cdp
+      - --profile
+      - default
+      - de
+      - list-services
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cde_failed_service_deletion
+  changed_when: false
+  retries: "{{ ecs_data_services_status_wait_retries | int }}"
+  delay: "{{ ecs_data_services_status_wait_delay | int }}"
+  until: >-
+    (
+      (ecs_cde_failed_service_deletion.stdout | from_json).services
+      | default([])
+      | selectattr(
+          'clusterId',
+          'equalto',
+          ecs_cde_failed_service_for_recreation.clusterId
+        )
+      | list
+      | length
+    ) == 0
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - ecs_cde_recreate_failed_service | default(true) | bool
+    - ecs_cde_failed_service_for_recreation | length > 0

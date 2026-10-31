@@ -1,0 +1,252 @@
+---
+- name: Require Cloudera Manager inventory for Data Services DNS verification
+  ansible.builtin.assert:
+    that:
+      - groups.get('cldr-mngr', []) | length > 0
+    fail_msg: >-
+      Data Services DNS verification requires a Cloudera Manager host in the
+      cldr-mngr inventory group.
+
+- name: Resolve Cloudera Manager inventory host for DNS verification
+  ansible.builtin.set_fact:
+    ecs_coredns_cm_inventory_host: >-
+      {{ ecs_coredns_cm_inventory_host | default(groups['cldr-mngr'] | first) }}
+
+- name: Resolve required Cloudera Manager DNS answer for verification
+  ansible.builtin.set_fact:
+    ecs_coredns_cm_fqdn: >-
+      {{
+        ecs_coredns_cm_fqdn
+        | default(
+            hostvars[ecs_coredns_cm_inventory_host].cldr_hostname
+            + '.'
+            + cluster_domain
+          )
+      }}
+    ecs_coredns_cm_private_ip: >-
+      {{
+        ecs_coredns_cm_private_ip
+        | default(
+            hostvars[ecs_coredns_cm_inventory_host].private_ip
+            | default(
+                hostvars[ecs_coredns_cm_inventory_host].ansible_host,
+                true
+              )
+          )
+      }}
+
+- name: Require FreeIPA inventory for Data Services DNS verification
+  ansible.builtin.assert:
+    that:
+      - groups.get('ipaserver', []) | length > 0
+    fail_msg: >-
+      FreeIPA-backed Data Services DNS verification requires an ipaserver
+      inventory host.
+  when: identity_provider_effective | default('freeipa') == 'freeipa'
+
+- name: Resolve FreeIPA inventory host for DNS verification
+  ansible.builtin.set_fact:
+    ecs_coredns_ipa_inventory_host: >-
+      {{ ecs_coredns_ipa_inventory_host | default(groups['ipaserver'] | first) }}
+  when: identity_provider_effective | default('freeipa') == 'freeipa'
+
+- name: Build required Data Services DNS verification records
+  ansible.builtin.set_fact:
+    ecs_data_services_dns_verification_records:
+      - label: Cloudera Manager
+        fqdn: "{{ ecs_coredns_cm_fqdn }}"
+        address: "{{ ecs_coredns_cm_private_ip }}"
+      - label: ECS Management Console
+        fqdn: >-
+          {{
+            ecs_control_plane_url_effective
+            | regex_replace('^https?://', '')
+            | regex_replace('/.*$', '')
+            | regex_replace(':.*$', '')
+          }}
+        address: >-
+          {{
+            hostvars[groups[ecs_cluster_master_group] | first].private_ip
+            | default(
+                hostvars[groups[ecs_cluster_master_group] | first].ansible_host,
+                true
+              )
+          }}
+
+- name: Add FreeIPA to required Data Services DNS verification records
+  ansible.builtin.set_fact:
+    ecs_data_services_dns_verification_records: >-
+      {{
+        ecs_data_services_dns_verification_records
+        + [
+          {
+            'label': 'FreeIPA LDAP',
+            'fqdn': (
+              ipa_kdc_host
+              | default(
+                  hostvars[ecs_coredns_ipa_inventory_host].cldr_hostname
+                  + '.'
+                  + cluster_domain,
+                  true
+                )
+            ),
+            'address': (
+              hostvars[ecs_coredns_ipa_inventory_host].private_ip
+              | default(
+                  hostvars[ecs_coredns_ipa_inventory_host].ansible_host,
+                  true
+                )
+            )
+          }
+        ]
+      }}
+  when: identity_provider_effective | default('freeipa') == 'freeipa'
+
+- name: Remove stale Data Services DNS verification pods
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - delete
+      - pod
+      - "ansible-dns-check-{{ item }}"
+      - --ignore-not-found
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  loop: "{{ range(1, ecs_data_services_dns_verification_records | length + 1) | list }}"
+
+- name: Start Data Services DNS verification pods
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - run
+      - "ansible-dns-check-{{ ansible_loop.index }}"
+      - "--image={{ ecs_data_services_dns_probe_image }}"
+      - --restart=Never
+      - --command
+      - --
+      - sh
+      - -ec
+      - |
+        attempt=1
+        while [ "$attempt" -le "$1" ]; do
+          output="$(nslookup -type=A "$2" 2>&1)" || true
+          printf '%s\n' "$output"
+          if printf '%s\n' "$output" | grep -F "$3" >/dev/null; then
+            exit 0
+          fi
+          attempt=$((attempt + 1))
+          sleep "$4"
+        done
+        exit 1
+      - dns-probe
+      - "{{ ecs_data_services_dns_probe_wait_retries | int }}"
+      - "{{ item.fqdn }}"
+      - "{{ item.address }}"
+      - "{{ ecs_data_services_dns_probe_wait_delay | int }}"
+  register: ecs_data_services_dns_probe_starts
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  loop: "{{ ecs_data_services_dns_verification_records }}"
+  loop_control:
+    extended: true
+    label: "{{ item.label }}: {{ item.fqdn }}"
+
+- name: Wait for Data Services DNS verification pods
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - get
+      - pod
+      - "ansible-dns-check-{{ ansible_loop.index }}"
+      - --output
+      - jsonpath={.status.phase}
+  register: ecs_data_services_dns_probe_phases
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  loop: "{{ ecs_data_services_dns_verification_records }}"
+  loop_control:
+    extended: true
+    label: "{{ item.label }}: {{ item.fqdn }}"
+  retries: "{{ ecs_data_services_dns_probe_wait_retries | int + 6 }}"
+  delay: "{{ ecs_data_services_dns_probe_wait_delay | int }}"
+  until:
+    - ecs_data_services_dns_probe_phases.rc == 0
+    - ecs_data_services_dns_probe_phases.stdout in ['Succeeded', 'Failed']
+
+- name: Read Data Services DNS verification output
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - logs
+      - "ansible-dns-check-{{ ansible_loop.index }}"
+  register: ecs_data_services_dns_probe_logs
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  loop: "{{ ecs_data_services_dns_verification_records }}"
+  loop_control:
+    extended: true
+    label: "{{ item.label }}: {{ item.fqdn }}"
+
+- name: Remove completed Data Services DNS verification pods
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - delete
+      - pod
+      - "ansible-dns-check-{{ item }}"
+      - --ignore-not-found
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+  loop: "{{ range(1, ecs_data_services_dns_verification_records | length + 1) | list }}"
+
+- name: Require Data Services DNS resolution through CoreDNS
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - >-
+        ecs_data_services_dns_probe_phases.results[ansible_loop.index0].stdout
+        == 'Succeeded'
+      - item.item.address in item.stdout
+    fail_msg: >-
+      {{ item.item.label }} hostname {{ item.item.fqdn }} must resolve to
+      {{ item.item.address }} through a newly created Kubernetes pod before
+      Data Services API calls are allowed. Resolver output:
+      {{ item.stdout | default(item.stderr, true) }}
+    quiet: true
+  loop: "{{ ecs_data_services_dns_probe_logs.results }}"
+  loop_control:
+    extended: true
+    label: "{{ item.item.label }}: {{ item.item.fqdn }}"

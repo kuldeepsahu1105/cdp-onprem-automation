@@ -1136,8 +1136,13 @@ ecs_coredns_kubectl_path: /var/lib/rancher/rke2/bin/kubectl
 ecs_coredns_configmap_name: rke2-coredns-rke2-coredns
 ecs_coredns_deployment_name: rke2-coredns-rke2-coredns
 ecs_coredns_namespace: kube-system
-# Empty = FreeIPA private IP, or ad_dns_servers for Active Directory.
+# Empty = verified FreeIPA inventory addresses, or ad_dns_servers for AD.
 ecs_coredns_forwarders: []
+# Node resolvers are considered only when no direct candidate proves that it
+# resolves the exact CM FQDN to the inventory private IP.
+ecs_coredns_allow_node_resolver_fallback: true
+ecs_coredns_upstream_probe_retries: 12
+ecs_coredns_upstream_probe_delay: 5
 ecs_cli_tools_enabled: true
 ecs_cli_users:
   - root
@@ -1278,6 +1283,11 @@ ecs_cde_instance_type: private
 ecs_cde_cpu_requests: "26"
 ecs_cde_memory_requests: 64Gi
 ecs_cde_resource_pool: "root.{{ ecs_cdp_environment_name }}.cde"
+ecs_cde_recreate_failed_service: true
+# Retries allow existing JVM DNS negative-cache entries to expire after
+# CoreDNS repair before deciding that an operator-selected restart is needed.
+ecs_cde_cleanup_submit_retries: 6
+ecs_cde_cleanup_submit_delay: 30
 # CAI / CML workspace
 ecs_cai_workspace_name: "{{ ecs_cluster_name | regex_replace('[^a-zA-Z0-9]+', '-') | lower }}-ml"
 ecs_cai_k8s_namespace: cml

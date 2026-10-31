@@ -33,12 +33,18 @@ the external Jenkins controller is unsupported because private names such as
 The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
 than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
-ECS installation owns CoreDNS and wildcard DNS. CoreDNS forwards directly to
-the configured FreeIPA or AD DNS servers with `policy sequential`, avoiding
-node resolver drift inside Data Services namespaces. Playbook 34 re-applies
-that same idempotent ECS-owned policy so standalone Data Services runs repair
-older clusters and waits for a changed CoreDNS rollout before service
-submission.
+ECS installation owns CoreDNS and wildcard DNS. Before changing the global
+forwarder, playbook 34 reconciles the authoritative FreeIPA Cloudera Manager A
+record and tests each configured FreeIPA or AD resolver directly from a
+Kubernetes pod. A candidate is accepted only when it resolves the exact
+Cloudera Manager FQDN to the inventory private IP. If no direct candidate
+passes, `ecs_coredns_allow_node_resolver_fallback` permits only ECS-node
+resolvers that pass the same test. The playbook refuses to modify CoreDNS when
+no candidate is proven. Verified upstreams replace the global stanza with the
+minimal existing-Corefile form `forward . <validated-upstreams>`, a changed
+CoreDNS deployment is rolled out, and new pod probes must then resolve
+Cloudera Manager, the Management Console, and FreeIPA (when used) to their
+expected private addresses before any Data Services API call.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
@@ -63,6 +69,16 @@ recreating the workspace.
 
 The private CDE request uses the live API minimum of 26 CPU and 64 GiB with the
 environment-specific scheduler parent `root.<environment>.cde`.
+Before a rerun, CDE uses the signed `de list-services` API, whose summary does
+not contact Cloudera Manager, to identify an existing terminal `*Failed`
+service. It submits `de disable-service --force` by cluster ID and waits for the
+service to disappear before recreation. This deliberately avoids the
+collection module's name lookup, which calls `describeService` and cannot reach
+the force-disable endpoint when a failed backend is still reporting a
+Cloudera Manager DNS error. Cleanup submission is retried for a bounded period
+after DNS repair so existing JVM negative-cache entries can expire; automation
+does not restart an unidentified control-plane deployment or delete datastore
+state.
 Model Registry obtains Ozone S3
 credentials from `ecs_model_registry_sdx_group` (default `sdx`) when that
 optional override group has hosts; otherwise it automatically uses the first
@@ -281,9 +297,27 @@ the namespace secret.
 
 See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_registry_*`, `ecs_cdp_environment_name`). The preferred environment name is derived from the first IPA/domain label (for example, `cldrsetup.example` becomes `cldrsetup`). A healthy cluster with one existing vendor-created environment such as `apps` adopts that environment instead of creating a duplicate.
 
-`ecs_coredns_forwarders` optionally overrides the direct DNS upstream list.
-When empty, FreeIPA uses the first `ipaserver` private address and AD uses
-`ad_dns_servers`.
+`ecs_coredns_forwarders` optionally overrides the direct DNS candidate list.
+When empty, FreeIPA tries the first `ipaserver` private and Ansible addresses,
+while AD uses `ad_dns_servers`. Every candidate must prove the Cloudera Manager
+answer before use. `ecs_coredns_upstream_probe_retries` and
+`ecs_coredns_upstream_probe_delay` bound that validation.
+The tracked deployment configuration in `config.yml` explicitly selects
+`172.31.76.102`; other deployments must replace or remove that deployment
+override rather than changing the general empty default in
+`group_vars/all.yml`.
+`ecs_coredns_allow_node_resolver_fallback` controls whether non-loopback
+nameservers from the ECS master's `/etc/resolv.conf` may be considered after
+all inventory-derived direct candidates fail; fallback is not used when
+`ecs_coredns_forwarders` is explicitly set. Every fallback candidate must pass
+the identical Cloudera Manager check.
+
+`ecs_cde_recreate_failed_service` controls terminal failed-service cleanup.
+`ecs_cde_cleanup_submit_retries` and `ecs_cde_cleanup_submit_delay` bound
+signed force-disable retries after DNS repair. A persistent
+`UnknownHostException` fails the CDE boundary with the API response while later
+selected services still run and the final aggregate assertion reports the
+failure.
 
 Before launching CDW, the playbook queries the control plane.
 `ecs_cdw_recreate_failed_cluster` removes a cluster only when its terminal

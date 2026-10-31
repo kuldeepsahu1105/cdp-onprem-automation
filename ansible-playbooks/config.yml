@@ -229,6 +229,10 @@ ecs_deploy_cde: false
 ecs_deploy_cai: false
 ecs_deploy_cai_registry: false
 ecs_ldap_enabled: false
+# This deployment's FreeIPA DNS service. Playbook 34 validates that it resolves
+# cldr-mngr.cldr.internal.arpa to the inventory private IP before CoreDNS is changed.
+ecs_coredns_forwarders:
+  - 172.31.76.102
 
 # -----------------------------------------------------------------------------
 # 6. Deployment portal and monitoring
