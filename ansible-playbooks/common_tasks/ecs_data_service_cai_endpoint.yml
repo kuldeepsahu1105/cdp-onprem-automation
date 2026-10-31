@@ -1,5 +1,0 @@
----
-- name: Compatibility entry point for ECS ecs data service cai endpoint
-  ansible.builtin.import_role:
-    name: ecs
-    tasks_from: ecs_data_service_cai_endpoint

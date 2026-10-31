@@ -1,23 +1,67 @@
 ---
-- name: CDE | Wait for Data Engineering provisioning job
+- name: CDE | Poll service through structured status API
+  cloudera.cloud.de_info:
+    name: "{{ ecs_cde_service_name }}"
+    env_name: "{{ ecs_cdp_environment_name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cde_service_info
+  changed_when: false
+  failed_when: false
+  until: >-
+    (
+      (
+        ecs_cde_service_info.services | default([])
+        | first | default({})
+      ).status | default('')
+      == 'ClusterCreationCompleted'
+    )
+    or
+    (
+      (
+        ecs_cde_service_info.services | default([])
+        | first | default({})
+      ).status | default('')
+      is search('Failed$')
+    )
+  retries: "{{ ecs_data_services_status_wait_retries | int }}"
+  delay: "{{ ecs_data_services_status_wait_delay | int }}"
+  ignore_errors: true
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - "'cde' in (ecs_data_services_install_names | default([]))"
+    - not (ecs_cde_service_start.failed | default(false) | bool)
+
+- name: CDE | Record structured service result
+  ansible.builtin.set_fact:
+    ecs_cde_service:
+      finished: true
+      service: >-
+        {{
+          (
+            (ecs_cde_service_info | default({})).services | default([])
+            | first | default({})
+          )
+          if not (ecs_cde_service_start.failed | default(false) | bool)
+          else {}
+        }}
+      msg: >-
+        {{
+          ecs_cde_service_start.msg
+          | default(
+              'CDE service status: '
+              + (
+                  (
+                    (ecs_cde_service_info | default({})).services | default([])
+                    | first | default({})
+                  ).status | default('not returned')
+                )
+            )
+        }}
   when: "'cde' in (ecs_data_services_install_names | default([]))"
-  block:
-    - name: CDE | Read Data Engineering provisioning result
-      ansible.builtin.async_status:
-        jid: "{{ ecs_cde_service_job.ansible_job_id }}"
-      register: ecs_cde_service
-      until: ecs_cde_service.finished | default(false) | bool
-      retries: "{{ ecs_data_services_async_poll_retries | int }}"
-      delay: "{{ ecs_data_services_async_poll_delay | int }}"
-      become: false
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
 
-  rescue:
-    - name: CDE | Record Data Engineering provisioning failure
-      ansible.builtin.set_fact:
-        ecs_cde_service: "{{ ansible_failed_result }}"
-
-- name: CDE | Complete Data Engineering provisioning
+- name: CDE | Complete structured service result
   ansible.builtin.include_tasks: ecs_data_service_cde.yml
   when: "'cde' in (ecs_data_services_install_names | default([]))"

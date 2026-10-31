@@ -183,12 +183,19 @@ Set `PVCECS_*_COUNT=0` in tfvars to skip ECS infrastructure entirely, or leave g
 | `ecs_parcel_version` | `""` | Optional override; auto-discovered from CM when empty |
 | `ecs_app_domain` | `apps.<cluster_domain>` | Application domain for ECS services |
 | `ecs_docker_data_path` | `/mnt/docker` | Docker data directory |
-| `ecs_lso_data_path` | `/ecs/local` | Local storage operator path |
+| `ecs_lso_data_path` | `/ecs/local-storage` | Local storage operator path |
 | `ecs_longhorn_data_path` | `/ecs/longhorn-storage` | Longhorn persistent volume path |
-| `ecs_longhorn_replication` | `2` | Longhorn replica count |
+| `ecs_longhorn_replication` | `1` | Longhorn replica count |
 | `ecs_control_plane_database_mode` | `embedded` | `embedded` or `existing` (external DB needs full config) |
 | `ecs_control_plane_vault_mode` | `embedded` | Vault storage mode |
+| `ecs_control_plane_embedded_db_storage_gb` | `200` | Embedded control-plane database storage |
+| `ecs_control_plane_embedded_vault_storage_gb` | `20` | Embedded control-plane Vault storage |
 | `ecs_k8s_webui_secret_admin_token` | `ChangeMe@ECS-WebUI` | Internal Kubernetes WebUI service token passed to ECS installation; not an end-user login and not displayed in the portal — change before deploy |
+
+Embedded database/Vault sizes are control-plane installation inputs. Changing
+them does not resize an already-installed embedded control plane; use the
+documented destructive ECS cleanup/rebuild flow when those install-time values
+must change.
 
 Compatible with CDH 7.3.2: CDS 1.5.5 SP3 CHF3+ (see Cloudera release matrix).
 

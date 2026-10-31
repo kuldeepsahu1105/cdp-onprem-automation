@@ -50,13 +50,19 @@ endpoint/client discovery chain because its `cloudera.cloud` modules communicate
 with the ECS control plane through the isolated CDP CLI profile.
 
 CDW, CDE, and CAI use the same `cloudera.cloud` request fields as the supplied
-Cloudera Labs examples, adapted only for collection 3.3 option names. CAI
-endpoint discovery and wildcard TLS secret creation run immediately after its
-asynchronous launch and before the `ml` module finishes waiting. All three
-service modules use `wait: true`, run as independent Ansible async jobs, and
-return their own terminal service objects. Playbook 34 then collects those jobs
-with `async_status`; it does not duplicate normal CDW/CDE/CAI lifecycle polling
-with separate info modules.
+Cloudera Labs examples, adapted only for collection 3.3 option names. Matching
+the supplied separate Labs playbooks, playbook 34 completes each selected
+service before launching the next one: CDW and its catalog/Virtual Warehouses,
+then CDE, then CAI and its TLS/UI follow-up. CDW and CAI retain module-owned
+`wait: true`; their Ansible async wrappers preserve failure capture without
+provisioning multiple Data Services concurrently. CDE is the bounded exception:
+the pinned collection does not classify the live
+`LoggingInstallationFailed` state as terminal, so CDE submits with
+`wait: false` and polls `de_info` until `ClusterCreationCompleted` or any
+`*Failed` status. CAI waits for the `ml` module result, records the returned
+`instanceUrl`, and only then creates the wildcard certificate and
+`cml-tls-secret`, so an empty workspace cannot leave the playbook polling
+`ml_info` before the actual module failure is collected.
 
 The private CDE request uses the live API minimum of 26 CPU and 64 GiB with the
 environment-specific scheduler parent `root.<environment>.cde`.
@@ -72,12 +78,11 @@ host in `base_cluster_master_group`, where the standard base-cluster template
 places the Ozone manager, SCM, and S3 Gateway roles. A missing Ozone-capable
 inventory host is reported immediately but deferred to the final aggregate
 assertion so CAI readiness and CDW follow-up diagnostics still run.
-The combined installation duration is approximately the slowest selected
-service rather than the sum of all three. Model Registry remains sequential
-because it has separate Ozone and environment prerequisites. Playbook 34
-collects all selected CDW, CDE, and CAI module jobs before starting CDW catalog
-and Virtual Warehouse follow-up, so a dependent-service failure cannot prevent
-collection and reporting of another service's provisioning result.
+The combined installation duration is the sum of the selected service
+lifecycles. This avoids racing shared ECS namespace and compute-resource-pool
+creation, which the separate reference playbooks never do. A failed service is
+recorded for the final aggregate assertion, and playbook 34 continues with the
+next selected service.
 `ecs_data_services_status_wait_delay` is passed to the collection modules as
 their API polling interval. The module, async, and async-status bounds are
 configured by `ecs_data_services_module_wait_timeout`,
@@ -262,25 +267,20 @@ Service UIs are proxied from the **deployment portal** host to the ECS master HT
 Re-run `35_refresh_deployment_portal.yml` after changing catalog URLs if you skip the Caddy play in `34`.
 
 The service lifecycle follows the Cloudera Labs patterns in
-`cloudera-ce-aws-template` and `cloudera.exe`: CDW, CDE, and CAI are launched
-as independent Ansible async jobs with their collection modules configured
-with `wait: true`. The collection therefore owns idempotent existing-service
-discovery, terminal-state handling, and the returned service object. Playbook
-34 collects each job with `async_status` instead of reconstructing module
-behavior with separate `*_info` polling loops. One service failure is retained
-for the final aggregate report without preventing the other already-running
-jobs from completing.
+`cloudera-ce-aws-template` and `cloudera.exe`: each selected service is
+completed before the next service starts. CDW and CAI use collection-owned
+`wait: true` and are collected with `async_status`. CDE uses `wait: false`
+followed by a bounded `de_info` poll because collection 3.3's internal failed
+status set omits `LoggingInstallationFailed`; treating every status ending in
+`Failed` as terminal prevents a known failure from waiting until the module's
+multi-hour timeout. One service failure is retained for the final aggregate
+report without preventing the next selected service from running.
 
-CAI is the private-cloud exception to the otherwise direct Labs flow. The
-`cloudera.cloud.ml` job runs in the background while playbook 34 queries
-`ml_info` only to discover the generated `instanceUrl`. It then ensures the
-FreeIPA `wildcard` certificate profile, issues a wildcard certificate for that
-workbench hostname, and installs it as `cml-tls-secret` before collecting the
-still-running module job. This preserves module-owned `wait: true` behavior
-without allowing the Gateway API ListenerSet to remain blocked on its missing
-certificate reference. Endpoint discovery is bounded by
-`ecs_cai_endpoint_wait_retries` and `ecs_cai_endpoint_wait_delay`.
-The final probe accepts successful,
+For CAI, playbook 34 follows the attached reference order: it collects the
+`cloudera.cloud.ml` result first, derives the workbench hostname from the
+returned `instanceUrl`, then ensures the FreeIPA `wildcard` certificate
+profile, issues the wildcard certificate, and installs it as
+`cml-tls-secret`. The final probe accepts successful,
 redirect, authentication-required, or forbidden responses. A persistent
 ingress-default 404 fails the final aggregate check and prints the `cml`
 namespace pods, services, ingresses, ingress description, and recent events.

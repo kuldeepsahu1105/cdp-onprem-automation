@@ -100,35 +100,29 @@
     ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
     ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
-- name: Launch CDE when selected
-  ansible.builtin.import_tasks: ecs_data_service_cde_start.yml
-  vars:
-    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-    ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
-
-- name: Launch CAI when selected
-  ansible.builtin.import_tasks: ecs_data_service_cai_start.yml
-  vars:
-    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-    ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
-
-- name: Discover CAI endpoint when selected
-  ansible.builtin.import_tasks: ecs_data_service_cai_endpoint.yml
-  vars:
-    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-    ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
-
-- name: Configure CAI wildcard TLS before waiting for installation
-  ansible.builtin.import_tasks: ecs_data_service_cai_tls.yml
-
 - name: Wait for CDW module job
   ansible.builtin.import_tasks: ecs_data_service_cdw_wait.yml
   vars:
     ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
     ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
-- name: Wait for CDE module job
+- name: Complete CDW dependent services before the next service
+  ansible.builtin.import_tasks: ecs_data_service_cdw_followup.yml
+  vars:
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+
+- name: Launch CDE when selected
+  ansible.builtin.import_tasks: ecs_data_service_cde_start.yml
+  vars:
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+
+- name: Wait for CDE terminal status
   ansible.builtin.import_tasks: ecs_data_service_cde_wait.yml
+  vars:
+    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+
+- name: Launch CAI when selected
+  ansible.builtin.import_tasks: ecs_data_service_cai_start.yml
   vars:
     ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
     ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
@@ -139,10 +133,8 @@
     ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
     ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
-- name: Complete CDW dependent services after service jobs finish
-  ansible.builtin.import_tasks: ecs_data_service_cdw_followup.yml
-  vars:
-    ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+- name: Configure CAI wildcard TLS after workspace installation
+  ansible.builtin.import_tasks: ecs_data_service_cai_tls.yml
 
 - name: Install Model Registry when selected
   ansible.builtin.import_tasks: ecs_data_service_model_registry.yml
@@ -164,7 +156,7 @@
     - ecs_ds_cdp_profile_dir is defined
     - ecs_ds_cdp_profile_dir.path | default('') | length > 0
 
-- name: Report failed parallel Data Services provisioning
+- name: Report failed Data Services provisioning
   ansible.builtin.assert:
     that:
       - >-

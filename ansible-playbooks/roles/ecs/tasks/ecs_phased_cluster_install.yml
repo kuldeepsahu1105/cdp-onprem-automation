@@ -205,6 +205,50 @@
         | default('(missing)')
       }}.
 
+- name: Require reference ECS storage configuration
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          ecs_service_config_check.json['items']
+          | selectattr('name', 'equalto', 'lsoDataPath')
+          | map(attribute='value')
+          | first
+          | default('')
+        ) == ecs_lso_data_path
+      - >-
+        (
+          ecs_service_config_check.json['items']
+          | selectattr('name', 'equalto', 'defaultDataPath')
+          | map(attribute='value')
+          | first
+          | default('')
+        ) == ecs_longhorn_data_path
+      - >-
+        (
+          ecs_service_config_check.json['items']
+          | selectattr('name', 'equalto', 'longhorn_replication')
+          | map(attribute='value')
+          | first
+          | default('')
+          | string
+        ) == (ecs_longhorn_replication | string)
+      - >-
+        (
+          ecs_service_config_check.json['items']
+          | selectattr('name', 'equalto', 'nfs_over_provisioning')
+          | map(attribute='value')
+          | first
+          | default('')
+          | string
+        ) == (ecs_nfs_over_provisioning | string)
+    fail_msg: >-
+      Cloudera Manager did not persist the supplied reference ECS storage
+      configuration. Expected lsoDataPath={{ ecs_lso_data_path }},
+      defaultDataPath={{ ecs_longhorn_data_path }},
+      longhorn_replication={{ ecs_longhorn_replication }}, and
+      nfs_over_provisioning={{ ecs_nfs_over_provisioning }}.
+
 - name: Apply ECS host templates and role assignments
   ansible.builtin.import_tasks: ecs_apply_host_templates.yml
 

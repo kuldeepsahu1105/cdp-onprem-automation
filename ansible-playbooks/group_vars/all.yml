@@ -1105,9 +1105,9 @@ ecs_coredns_deployment_name: rke2-coredns-rke2-coredns
 ecs_console_dns_wait_retries: 24
 ecs_console_dns_wait_delay: 5
 ecs_docker_data_path: "/mnt/docker"
-ecs_lso_data_path: "/ecs/local"
+ecs_lso_data_path: "/ecs/local-storage"
 ecs_longhorn_data_path: "/ecs/longhorn-storage"
-ecs_longhorn_replication: 2
+ecs_longhorn_replication: 1
 ecs_nfs_over_provisioning: 800
 # Internal ECS Kubernetes WebUI service token passed during installation.
 # This is not a username/password login and is intentionally omitted from the portal.
@@ -1120,8 +1120,8 @@ ecs_infra_prometheus_ingress_password: "{{ cm_admin_pass }}"
 ecs_console_admin_password: "{{ common_password | default(ipaadmin_password, true) }}"
 ecs_control_plane_database_mode: embedded  # embedded | existing (existing needs full control_plane_config)
 ecs_control_plane_vault_mode: embedded
-ecs_control_plane_embedded_db_storage_gb: 50
-ecs_control_plane_embedded_vault_storage_gb: 2
+ecs_control_plane_embedded_db_storage_gb: 200
+ecs_control_plane_embedded_vault_storage_gb: 20
 
 # ECS Data Services (CDW, CDE, CAI) — 34_setup_ecs_data_services.yml
 # IAM access keys are signed API credentials — automation can CREATE machine-user keys after ECS
@@ -1255,8 +1255,6 @@ ecs_cai_configure_wildcard_tls: true
 ecs_cai_recreate_failed_workspace: true
 ecs_cai_wildcard_cert_profile: wildcard
 ecs_cai_tls_secret_name: cml-tls-secret
-ecs_cai_endpoint_wait_retries: 60
-ecs_cai_endpoint_wait_delay: 10
 ecs_cai_ui_wait_retries: 20
 ecs_cai_ui_wait_delay: 15
 # Model Registry (prefers optional [sdx], otherwise uses first base master with Ozone)
