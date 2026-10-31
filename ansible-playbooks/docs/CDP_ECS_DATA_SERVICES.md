@@ -290,13 +290,27 @@ Before launching CDW, the playbook queries the control plane.
 status is `Error` or `Failed`, then waits until it is absent. Running and
 in-progress clusters are adopted and monitored through `dw_cluster_info`
 instead of calling `createPrivateCluster` again. The playbook does not create
-or delete CDW
-Kerberos hosts, services, or keytabs; the Private Cloud Data Warehouse control
-plane owns that lifecycle, matching the `cloudera.cloud.dw_cluster` contract
-and supplied example. A gateway timeout from `createPrivateCluster` is treated
-as ambiguous: automation continues structured discovery and accepts the
-recovered cluster when the backend received the request. An already-exists
-response follows the same adoption path.
+or delete the CDW Hive service principal or its keytab; the Private Cloud Data
+Warehouse control plane owns `hive/<hostname>@<realm>` creation and key
+rotation.
+
+The product-standard private-cloud CDW hostname is
+`dwx-env-<environment>.cdp.local`, even when the deployment DNS domain and
+Kerberos realm are different (for example, `cldr.internal.arpa` and
+`CLDR.INTERNAL.ARPA`). Before CDW submission in FreeIPA deployments,
+`ecs_cdw_ensure_freeipa_principal_host` idempotently ensures the external-name
+FreeIPA host object, which provides
+`host/dwx-env-<environment>.cdp.local@<cluster_realm>`. It deliberately does
+not create `hive/dwx-env-<environment>.cdp.local@<cluster_realm>` or retrieve a
+keytab, because pre-creating or rotating that credential would conflict with
+CDW ownership. Active Directory deployments skip this FreeIPA-only step. An
+explicit `custom_kerberos_principal_hostname` in
+`ecs_cdw_private_cloud_config` is honored by the same host prerequisite.
+
+A gateway timeout from `createPrivateCluster` is treated as ambiguous:
+automation continues structured discovery and accepts the recovered cluster
+when the backend received the request. An already-exists response follows the
+same adoption path.
 
 `ecs_data_services_module_wait_timeout` bounds cleanup calls that retain
 module-owned waits. `ecs_data_services_status_wait_retries` and

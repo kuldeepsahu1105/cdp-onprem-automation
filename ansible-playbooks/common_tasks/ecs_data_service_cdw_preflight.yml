@@ -13,6 +13,35 @@
   connection: ssh
   when: "'cdw' in (ecs_data_services_install_names | default([]))"
 
+- name: CDW | Resolve effective Kerberos service hostname
+  ansible.builtin.set_fact:
+    ecs_cdw_kerberos_principal_hostname_effective: >-
+      {{
+        (
+          ecs_cdw_private_cloud_config
+          | default({})
+        ).custom_kerberos_principal_hostname
+        | default(
+            'dwx-env-' + ecs_cdp_environment_name + '.cdp.local',
+            true
+          )
+      }}
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
+- name: CDW | Require FreeIPA server for principal host preparation
+  ansible.builtin.assert:
+    that:
+      - ipa_server_in_inventory | bool
+      - ipaserver_inventory_host | default('') | length > 0
+    fail_msg: >-
+      CDW FreeIPA principal-host preparation requires an ipaserver or
+      ipa_server inventory host. Set ecs_cdw_ensure_freeipa_principal_host=false
+      only when that host object is managed externally.
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ecs_cdw_ensure_freeipa_principal_host | default(true) | bool
+
 - name: CDW | Select failed cluster records eligible for recreation
   ansible.builtin.set_fact:
     ecs_cdw_failed_clusters_for_recreation: >-
@@ -63,3 +92,17 @@
     - "'cdw' in (ecs_data_services_install_names | default([]))"
     - ecs_cdw_recreate_failed_cluster | default(true) | bool
     - ecs_cdw_failed_clusters_for_recreation | default([]) | length > 0
+
+- name: CDW | Ensure FreeIPA host principal prerequisite
+  freeipa.ansible_freeipa.ipahost:
+    ipaadmin_password: "{{ ipaadmin_password }}"
+    name: "{{ ecs_cdw_kerberos_principal_hostname_effective }}"
+    force: true
+    state: present
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ipa_server_in_inventory | bool
+    - ecs_cdw_ensure_freeipa_principal_host | default(true) | bool

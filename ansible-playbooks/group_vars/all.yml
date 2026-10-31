@@ -1255,6 +1255,8 @@ ecs_ldap_admin_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|envi
 ecs_ldap_admin_resource_role_name_regex: '(?i)(admin|owner|power|environment|de|dw|ml|data)'
 # CDW
 ecs_cdw_private_cloud_config: {}  # optional storage_class, db_client_certificate paths
+# FreeIPA only: create the host/<dwx-env-*.cdp.local> prerequisite. CDW owns hive/ keytabs.
+ecs_cdw_ensure_freeipa_principal_host: true
 ecs_cdw_recreate_failed_cluster: true
 ecs_cdw_submission_recovery_retries: 24
 ecs_cdw_submission_recovery_delay: 5
