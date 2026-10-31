@@ -13,6 +13,35 @@
   connection: ssh
   when: "'cdw' in (ecs_data_services_install_names | default([]))"
 
+- name: CDW | Select deactivated cluster records
+  ansible.builtin.set_fact:
+    ecs_cdw_deactivated_clusters: >-
+      {{
+        ecs_cdw_preflight_cluster_info.clusters
+        | default([])
+        | selectattr('status', 'defined')
+        | selectattr('status', 'search', '(?i)^deactivated$')
+        | list
+      }}
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
+- name: CDW | Require manual activation of deactivated clusters
+  ansible.builtin.assert:
+    that:
+      - ecs_cdw_deactivated_clusters | default([]) | length == 0
+    fail_msg: >-
+      Existing CDW cluster records are Deactivated:
+      {{ ecs_cdw_deactivated_clusters | default([]) | to_json }}.
+      The pinned cloudera.cloud dw_cluster module does not reconcile or
+      reactivate an existing Deactivated private cluster. The observed DWX UI
+      activation flow also could not submit a request because the
+      cluster-specific
+      /dwx/api/v2/environments/<environment-crn>/<cluster-id>/t-shirt-sizes
+      request returned HTTP 404. Repair the supported DWX UI/backend activation
+      path and activate the existing cluster manually, then rerun automation.
+      Automation will not delete, recreate, or retry creation of this cluster.
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
 - name: CDW | Resolve effective Kerberos service hostname
   ansible.builtin.set_fact:
     ecs_cdw_kerberos_principal_hostname_effective: >-

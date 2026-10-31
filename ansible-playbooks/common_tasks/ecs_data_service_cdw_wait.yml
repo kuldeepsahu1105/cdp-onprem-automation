@@ -11,7 +11,8 @@
     (
       ecs_cdw_cluster_info.clusters | default([])
       | first | default({})
-    ).status | default('') in ['Running', 'Error', 'Failed']
+    ).status | default('')
+    is search('(?i)^(running|error|failed|deactivated)$')
   retries: "{{ ecs_data_services_status_wait_retries | int }}"
   delay: "{{ ecs_data_services_status_wait_delay | int }}"
   ignore_errors: true
