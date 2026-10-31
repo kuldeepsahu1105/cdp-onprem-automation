@@ -340,19 +340,19 @@ the failure.
 Before launching CDW, the playbook queries the control plane. Running and
 in-progress clusters are adopted and monitored through `dw_cluster_info`
 instead of calling `createPrivateCluster` again. Terminal `Error` or `Failed`
-clusters are reported without deletion or recreation. A `Deactivated` cluster
-fails preflight before FreeIPA principal mutation or submission because the
-pinned `cloudera.cloud` `dw_cluster` module does not reconcile or reactivate an
-existing private cluster. In the proven live case, the DWX UI emitted no
-activation request because its cluster-specific
-`/dwx/api/v2/environments/<environment-crn>/<cluster-id>/t-shirt-sizes` request
-returned HTTP 404. The operator must repair the supported DWX UI/backend
-activation path, activate the existing cluster manually, and rerun. Structured
-polling also treats `Deactivated` as terminal if the state changes
-concurrently, then the existing non-Running assertion fails immediately. The
-playbook does not create or delete the CDW Hive service principal or its
-keytab; the Private Cloud Data Warehouse control plane owns
-`hive/<hostname>@<realm>` creation and key rotation.
+clusters are reported without deletion or recreation. An existing cluster
+whose status is exactly `Deactivated` (case-insensitive) fails preflight before
+FreeIPA principal mutation or submission. The pinned `cloudera.cloud`
+`dw_cluster` module does not reconcile or reactivate that state. In the
+observed UI failure, the cluster-specific `t-shirt-sizes` endpoint returned
+HTTP 404 (`404 page not found` / `NOT_FOUND_ERROR`), so the UI did not submit
+the activation POST. Repair and use the supported DWX UI/backend activation
+path, activate the cluster manually, then rerun playbook 34. Automation does
+not attempt activation, deletion, recreation, or a control-plane restart.
+`Deactivated` is also a terminal structured polling status, while only
+`Running` is accepted as success. The playbook does not create or delete the
+CDW Hive service principal or its keytab; the Private Cloud Data Warehouse
+control plane owns `hive/<hostname>@<realm>` creation and key rotation.
 
 The product-standard private-cloud CDW hostname is
 `dwx-env-<environment>.cdp.local`, even when the deployment DNS domain and

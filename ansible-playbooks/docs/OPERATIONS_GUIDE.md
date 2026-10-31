@@ -315,6 +315,18 @@ recreation, backend restart, or datastore mutation; independent service
 boundaries still allow later selected services to run before the final
 aggregate failure.
 
+If CDW preflight finds an existing cluster in the exact case-insensitive
+`Deactivated` state, it stops before FreeIPA principal mutation or submission.
+The pinned `cloudera.cloud` `dw_cluster` module cannot reactivate an existing
+Deactivated cluster. In the observed UI failure, the cluster-specific
+`t-shirt-sizes` endpoint returned HTTP 404 (`404 page not found` /
+`NOT_FOUND_ERROR`), so the UI did not submit the activation POST. Repair and
+use the supported DWX UI/backend activation path, activate the cluster
+manually, then rerun playbook 34. Automation does not attempt activation,
+deletion, recreation, or a control-plane restart. A concurrent transition to
+`Deactivated` terminates structured polling promptly, but only `Running`
+passes the final success assertion.
+
 For FreeIPA-backed CDW, preflight ensures the product-standard
 `host/dwx-env-<environment>.cdp.local@<realm>` host exists and has initialized
 key material. The configured `ecs_cdw_freeipa_keytab_admin_principal` receives
