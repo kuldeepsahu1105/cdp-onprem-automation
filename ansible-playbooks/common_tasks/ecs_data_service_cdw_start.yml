@@ -1,4 +1,10 @@
 ---
+- name: CDW | Define ambiguous submission error pattern
+  ansible.builtin.set_fact:
+    ecs_cdw_cluster_start_ambiguous_error_pattern: >-
+      (?i)(already exists|gateway time-out|gateway timeout|http error 504|\[504\]|timed out|timeout)
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
 - name: CDW | Start Data Warehouse cluster provisioning
   cloudera.cloud.dw_cluster:
     env: "{{ ecs_cdp_environment_name }}"
@@ -8,8 +14,12 @@
     wait: false
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cdw_cluster_start
-  changed_when: false
-  failed_when: false
+  failed_when:
+    - ecs_cdw_cluster_start.failed | default(false) | bool
+    - >-
+      ecs_cdw_cluster_start.msg
+      | default('')
+      is not search(ecs_cdw_cluster_start_ambiguous_error_pattern)
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh

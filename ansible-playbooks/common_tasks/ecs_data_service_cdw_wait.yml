@@ -25,9 +25,7 @@
       or (
         ecs_cdw_cluster_start.msg
         | default('')
-        is search(
-          '(?i)(already exists|gateway time-out|gateway timeout|http error 504|\\[504\\]|timed out|timeout)'
-        )
+        is search(ecs_cdw_cluster_start_ambiguous_error_pattern)
       )
 
 - name: CDW | Record structured cluster result
@@ -58,4 +56,21 @@
 
 - name: CDW | Complete structured cluster result
   ansible.builtin.include_tasks: ecs_data_service_cdw.yml
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
+- name: CDW | Require successful structured cluster result
+  ansible.builtin.assert:
+    that:
+      - ecs_cdw_cluster_succeeded | default(false) | bool
+    fail_msg: >-
+      CDW submission did not produce a Running cluster.
+      Initial submission response:
+      {{ ecs_cdw_cluster_start.msg | default(ecs_cdw_cluster_start | to_json) }}.
+      Final structured status:
+      {{
+        (
+          (ecs_cdw_cluster_info | default({})).clusters | default([])
+          | first | default({})
+        ).status | default('not returned')
+      }}.
   when: "'cdw' in (ecs_data_services_install_names | default([]))"

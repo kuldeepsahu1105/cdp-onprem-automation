@@ -59,12 +59,18 @@ CDW, CDE, and CAI use the same `cloudera.cloud` request fields as the supplied
 Cloudera Labs examples, adapted only for collection 3.3 option names. Matching
 the supplied separate Labs playbooks, playbook 34 completes each selected
 service before launching the next one: CDW and its catalog/Virtual Warehouses,
-then CDE, then CAI and its TLS/UI follow-up. CDW and CAI submit with `wait: false` and use their structured
-`dw_cluster_info` and `ml_info` APIs for bounded polling. This avoids remote
+then CDE, then CAI and its TLS/UI follow-up. CDW and CAI submit with `wait: false`
+and use their structured `dw_cluster_info` and `ml_info` APIs for bounded
+polling. Definitive submission errors fail their service boundary immediately
+with the original module/API message. Only documented ambiguous CDW responses
+(`already exists`, HTTP 504, or timeout) proceed to structured discovery so
+the control plane can prove whether the request landed. This avoids remote
 `async_wrapper` output corruption and exposes live service failures directly.
 CDE retains its existing bounded Ansible async wrapper on this integration
-branch. CAI adopts an existing healthy or in-progress workspace instead of
-calling `createWorkspace` again. Because the workspace `instanceUrl` and
+branch, but a completed async job that reports a module/API failure fails the
+CDE boundary with that response before ingress or catalog registration. CAI
+adopts an existing healthy or in-progress workspace instead of calling
+`createWorkspace` again. Because the workspace `instanceUrl` and
 ListenerSet can appear before terminal installation status, automation first
 polls until the endpoint is available, issues the proper FreeIPA wildcard
 certificate, and creates `cml-tls-secret`; terminal workspace polling then
@@ -292,7 +298,11 @@ workspace reaches terminal `:failed`. It derives the workbench hostname from
 that endpoint, ensures the FreeIPA `wildcard` certificate profile, issues a
 wildcard certificate, and installs it as `cml-tls-secret` before continuing
 bounded terminal-status polling. This ordering allows ListenerSet certificate
-validation to complete without relying on a temporary self-signed secret.
+validation to complete without relying on a temporary self-signed secret. A
+failed create call, terminal failed status, or exhausted endpoint wait fails
+the CAI boundary before certificate or UI work while preserving the exact API
+diagnostic. Adopted healthy or in-progress workspaces skip creation and enter
+the same endpoint discovery path.
 The final probe accepts successful,
 redirect, authentication-required, or forbidden responses. A persistent
 ingress-default 404 fails the final aggregate check and prints the `cml`

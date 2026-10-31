@@ -21,3 +21,13 @@
 - name: CDE | Complete Data Engineering provisioning
   ansible.builtin.include_tasks: ecs_data_service_cde.yml
   when: "'cde' in (ecs_data_services_install_names | default([]))"
+
+- name: CDE | Require successful Data Engineering provisioning
+  ansible.builtin.assert:
+    that:
+      - ecs_cde_service_succeeded | default(false) | bool
+    fail_msg: >-
+      CDE provisioning did not reach ClusterCreationCompleted.
+      Module/API response:
+      {{ ecs_cde_service.msg | default(ecs_cde_service | to_json) }}.
+  when: "'cde' in (ecs_data_services_install_names | default([]))"

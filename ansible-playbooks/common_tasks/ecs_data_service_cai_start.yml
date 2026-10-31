@@ -14,8 +14,6 @@
     state: present
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cai_workspace_start
-  changed_when: false
-  failed_when: false
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
