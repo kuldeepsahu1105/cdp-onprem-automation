@@ -168,13 +168,18 @@
           vars:
             ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
 
+        - name: Discover CAI endpoint before terminal status
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_endpoint.yml
+          vars:
+            ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+
+        - name: Configure CAI wildcard TLS when endpoint appears
+          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_tls.yml
+
         - name: Wait for CAI terminal status
           ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_wait.yml
           vars:
             ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-
-        - name: Configure CAI wildcard TLS after workspace installation
-          ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_tls.yml
 
         - name: Verify CAI UI
           ansible.builtin.import_tasks: common_tasks/ecs_data_service_cai_followup.yml
