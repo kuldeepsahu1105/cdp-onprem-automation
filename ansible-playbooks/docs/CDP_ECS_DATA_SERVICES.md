@@ -336,11 +336,19 @@ Kerberos realm are different (for example, `cldr.internal.arpa` and
 `CLDR.INTERNAL.ARPA`). Before CDW submission in FreeIPA deployments,
 `ecs_cdw_ensure_freeipa_principal_host` idempotently ensures the external-name
 FreeIPA host object, which provides
-`host/dwx-env-<environment>.cdp.local@<cluster_realm>`. It deliberately does
-not create `hive/dwx-env-<environment>.cdp.local@<cluster_realm>` or retrieve a
-keytab, because pre-creating or rotating that credential would conflict with
-CDW ownership. Active Directory deployments skip this FreeIPA-only step. An
-explicit `custom_kerberos_principal_hostname` in
+`host/dwx-env-<environment>.cdp.local@<cluster_realm>`. The configured
+`ecs_cdw_freeipa_keytab_admin_principal` (default `ipaadmin_principal`) receives
+additive permission to create and retrieve that host key and authenticates with
+`ecs_cdw_freeipa_keytab_admin_password` (default
+`krb5_kdc_admin_password`). Automation inspects the FreeIPA `Keytab` state and
+invokes `ipa-getkeytab` without `-r` only when the host reports
+`Keytab: False`, deleting the temporary keytab immediately afterward. Reruns
+with `Keytab: True` do not invoke key generation, retrieval, or rotation. This
+prerequisite does not create
+`hive/dwx-env-<environment>.cdp.local@<cluster_realm>` or store a persistent
+keytab; the Private Cloud Data Warehouse control plane owns the Hive service
+principal and keytab lifecycle. Active Directory deployments skip this
+FreeIPA-only step. An explicit `custom_kerberos_principal_hostname` in
 `ecs_cdw_private_cloud_config` is honored by the same host prerequisite.
 
 A gateway timeout from `createPrivateCluster` is treated as ambiguous:
