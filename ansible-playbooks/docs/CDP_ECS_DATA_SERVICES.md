@@ -81,8 +81,11 @@ assertion so CAI readiness and CDW follow-up diagnostics still run.
 The combined installation duration is the sum of the selected service
 lifecycles. This avoids racing shared ECS namespace and compute-resource-pool
 creation, which the separate reference playbooks never do. A failed service is
-recorded for the final aggregate assertion, and playbook 34 continues with the
-next selected service.
+recorded by its service-level rescue boundary, and playbook 34 continues with
+the next selected service even when preflight cleanup, launch, wait, or
+service-specific follow-up fails. Successful-service catalog and Caddy follow-up
+also completes before one final aggregate assertion marks Jenkins failed when
+any selected service was unsuccessful.
 `ecs_data_services_status_wait_delay` is passed to the collection modules as
 their API polling interval. The module, async, and async-status bounds are
 configured by `ecs_data_services_module_wait_timeout`,
