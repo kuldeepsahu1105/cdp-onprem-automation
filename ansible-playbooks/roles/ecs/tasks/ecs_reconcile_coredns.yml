@@ -1,4 +1,41 @@
 ---
+- name: Resolve ECS CoreDNS identity-provider forwarders
+  ansible.builtin.set_fact:
+    ecs_coredns_forwarders_effective: >-
+      {{
+        ecs_coredns_forwarders
+        if ecs_coredns_forwarders | default([]) | length > 0
+        else (
+          [
+            hostvars[groups['ipaserver'][0]].private_ip
+            | default(hostvars[groups['ipaserver'][0]].ansible_host, true)
+          ]
+          if (
+            identity_provider_effective | default('freeipa') == 'freeipa'
+            and groups.get('ipaserver', []) | length > 0
+          )
+          else (
+            ad_dns_servers | default([])
+            if identity_provider_effective | default('') == 'ad'
+            else []
+          )
+        )
+      }}
+
+- name: Require ECS CoreDNS identity-provider forwarders
+  ansible.builtin.assert:
+    that:
+      - ecs_coredns_forwarders_effective | length > 0
+      - >-
+        ecs_coredns_forwarders_effective
+        | reject('equalto', '')
+        | list
+        | length == ecs_coredns_forwarders_effective | length
+    fail_msg: >-
+      ECS CoreDNS requires direct identity-provider DNS forwarders. Ensure the
+      FreeIPA inventory host has private_ip/ansible_host, configure
+      ad_dns_servers for AD, or set ecs_coredns_forwarders explicitly.
+
 - name: Check ECS kubectl binary
   ansible.builtin.stat:
     path: "{{ ecs_coredns_kubectl_path }}"
@@ -43,7 +80,7 @@
   retries: "{{ ecs_control_plane_wait_retries | default(40) }}"
   delay: "{{ ecs_control_plane_wait_delay | default(15) }}"
 
-- name: Build reference-aligned ECS CoreDNS forwarding policy
+- name: Build identity-provider ECS CoreDNS forwarding policy
   ansible.builtin.command:
     argv:
       - python3
@@ -53,6 +90,7 @@
         import sys
 
         corefile = sys.argv[1]
+        upstreams = sys.argv[2]
         begin = "# BEGIN ANSIBLE DATA SERVICES PRIVATE DNS"
         end = "# END ANSIBLE DATA SERVICES PRIVATE DNS"
         managed = re.compile(
@@ -69,7 +107,9 @@
         indent = match.group("indent")
         replacement = (
             indent
-            + "forward . /etc/resolv.conf {\n"
+            + "forward . "
+            + upstreams
+            + " {\n"
             + indent
             + "  policy sequential\n"
             + indent
@@ -77,13 +117,14 @@
         )
         print(forward.sub(replacement, corefile, count=1), end="")
       - "{{ ecs_coredns_corefile.stdout }}"
-  register: ecs_coredns_reference_corefile
+      - "{{ ecs_coredns_forwarders_effective | join(' ') }}"
+  register: ecs_coredns_identity_corefile
   changed_when: false
   become: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
 
-- name: Apply reference-aligned ECS CoreDNS forwarding policy
+- name: Apply identity-provider ECS CoreDNS forwarding policy
   ansible.builtin.command:
     argv:
       - "{{ ecs_coredns_kubectl_path }}"
@@ -97,13 +138,13 @@
       - --type
       - merge
       - --patch
-      - "{{ {'data': {'Corefile': ecs_coredns_reference_corefile.stdout}} | to_json }}"
+      - "{{ {'data': {'Corefile': ecs_coredns_identity_corefile.stdout}} | to_json }}"
   register: ecs_coredns_patch
-  changed_when: ecs_coredns_reference_corefile.stdout != ecs_coredns_corefile.stdout
+  changed_when: ecs_coredns_identity_corefile.stdout != ecs_coredns_corefile.stdout
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
-  when: ecs_coredns_reference_corefile.stdout != ecs_coredns_corefile.stdout
+  when: ecs_coredns_identity_corefile.stdout != ecs_coredns_corefile.stdout
 
 - name: Restart ECS CoreDNS pods after configuration change
   ansible.builtin.command:

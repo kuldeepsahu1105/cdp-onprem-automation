@@ -1102,6 +1102,8 @@ ecs_app_domain: "apps.{{ cluster_domain }}"
 # ECS Management Console DNS label (FQDN {{ ecs_console_host_prefix }}.{{ ecs_app_domain }})
 ecs_console_host_prefix: "console-cdp"
 ecs_coredns_deployment_name: rke2-coredns-rke2-coredns
+# Optional direct DNS upstream override; defaults to FreeIPA/AD inventory addresses.
+ecs_coredns_forwarders: []
 ecs_console_dns_wait_retries: 24
 ecs_console_dns_wait_delay: 5
 ecs_docker_data_path: "/mnt/docker"
@@ -1173,13 +1175,9 @@ ecs_control_plane_validate_certs: false
 ecs_control_plane_ca_bundle: ""
 ecs_data_services_use_cdpcurl: true
 ecs_data_services_install: []  # optional list; unioned with per-service flags below
-ecs_data_services_async_timeout: 14400
 ecs_data_services_module_wait_timeout: 13800
 ecs_data_services_cm_dns_wait_retries: 12
 ecs_data_services_cm_dns_wait_delay: 5
-ecs_data_services_async_poll_retries: 480
-ecs_data_services_async_poll_delay: 30
-ecs_data_services_async_dir: "{{ ecs_persistent_state_dir }}/ansible_async"
 # Per-service toggles (Jenkins: ECS_DEPLOY_CDW, ECS_DEPLOY_CDE, ECS_DEPLOY_CAI, ECS_DEPLOY_CAI_REGISTRY)
 ecs_deploy_cdw: false
 ecs_deploy_cde: false

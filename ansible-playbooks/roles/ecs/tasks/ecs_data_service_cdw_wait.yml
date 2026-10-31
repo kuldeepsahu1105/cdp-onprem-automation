@@ -1,82 +1,61 @@
 ---
-- name: CDW | Wait for Data Warehouse provisioning job
-  when: "'cdw' in (ecs_data_services_install_names | default([]))"
-  block:
-    - name: CDW | Read Data Warehouse provisioning result
-      ansible.builtin.async_status:
-        jid: "{{ ecs_cdw_cluster_job.ansible_job_id }}"
-      register: ecs_cdw_cluster
-      until: ecs_cdw_cluster.finished | default(false) | bool
-      retries: "{{ ecs_data_services_async_poll_retries | int }}"
-      delay: "{{ ecs_data_services_async_poll_delay | int }}"
-      become: false
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
-
-  rescue:
-    - name: CDW | Record Data Warehouse provisioning failure
-      ansible.builtin.set_fact:
-        ecs_cdw_cluster: "{{ ansible_failed_result }}"
-
-    - name: CDW | Recover cluster after ambiguous submission timeout
-      cloudera.cloud.dw_cluster_info:
-        environment: "{{ ecs_cdp_environment_name }}"
-        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-      environment: "{{ ecs_cdp_cli_environment }}"
-      register: ecs_cdw_submission_recovery_info
-      changed_when: false
-      failed_when: false
-      ignore_errors: true
-      retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
-      delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
-      until: ecs_cdw_submission_recovery_info.clusters | default([]) | length > 0
-      become: false
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
-      when: >-
-        ecs_cdw_cluster.msg
+- name: CDW | Poll cluster through structured status API
+  cloudera.cloud.dw_cluster_info:
+    environment: "{{ ecs_cdp_environment_name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_cluster_info
+  changed_when: false
+  failed_when: false
+  until: >-
+    (
+      ecs_cdw_cluster_info.clusters | default([])
+      | first | default({})
+    ).status | default('') in ['Running', 'Error', 'Failed']
+  retries: "{{ ecs_data_services_status_wait_retries | int }}"
+  delay: "{{ ecs_data_services_status_wait_delay | int }}"
+  ignore_errors: true
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - >-
+      not (ecs_cdw_cluster_start.failed | default(false) | bool)
+      or (
+        ecs_cdw_cluster_start.msg
         | default('')
-        is search('(?i)(gateway time-out|gateway timeout|http error 504|\\[504\\]|timed out|timeout)')
+        is search(
+          '(?i)(already exists|gateway time-out|gateway timeout|http error 504|\\[504\\]|timed out|timeout)'
+        )
+      )
 
-    - name: CDW | Wait for recovered timeout cluster
-      cloudera.cloud.dw_cluster_info:
-        environment: "{{ ecs_cdp_environment_name }}"
-        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-      environment: "{{ ecs_cdp_cli_environment }}"
-      register: ecs_cdw_submission_recovery_terminal
-      changed_when: false
-      failed_when: false
-      ignore_errors: true
-      retries: "{{ ecs_data_services_status_wait_retries | int }}"
-      delay: "{{ ecs_data_services_status_wait_delay | int }}"
-      until: >-
-        (
-          ecs_cdw_submission_recovery_terminal.clusters | default([])
-          | first | default({})
-        ).status | default('') in ['Running', 'Error', 'Failed']
-      become: false
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
-      when:
-        - ecs_cdw_submission_recovery_info is defined
-        - ecs_cdw_submission_recovery_info.clusters | default([]) | length > 0
+- name: CDW | Record structured cluster result
+  ansible.builtin.set_fact:
+    ecs_cdw_cluster:
+      finished: true
+      cluster: >-
+        {{
+          (
+            (ecs_cdw_cluster_info | default({})).clusters | default([])
+            | first | default({})
+          )
+        }}
+      msg: >-
+        {{
+          ecs_cdw_cluster_start.msg
+          | default(
+              'CDW cluster status: '
+              + (
+                  (
+                    (ecs_cdw_cluster_info | default({})).clusters | default([])
+                    | first | default({})
+                  ).status | default('not returned')
+                )
+            )
+        }}
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
 
-    - name: CDW | Record recovered timeout submission
-      ansible.builtin.set_fact:
-        ecs_cdw_cluster:
-          changed: false
-          failed: false
-          finished: true
-          cluster: "{{ ecs_cdw_submission_recovery_terminal.clusters | first }}"
-          msg: >-
-            CDW create request timed out, but cluster
-            {{ (ecs_cdw_submission_recovery_terminal.clusters | first).id }}
-            reached status
-            {{ (ecs_cdw_submission_recovery_terminal.clusters | first).status }}.
-      when:
-        - ecs_cdw_submission_recovery_terminal is defined
-        - ecs_cdw_submission_recovery_terminal.clusters | default([]) | length > 0
-
-- name: CDW | Complete Data Warehouse provisioning
+- name: CDW | Complete structured cluster result
   ansible.builtin.include_tasks: ecs_data_service_cdw.yml
   when: "'cdw' in (ecs_data_services_install_names | default([]))"

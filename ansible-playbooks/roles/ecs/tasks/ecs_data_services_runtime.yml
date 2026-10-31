@@ -42,17 +42,12 @@
   ansible.builtin.set_fact:
     ecs_data_services_remote_venv_path: >-
       {{ ecs_data_services_remote_home.stdout | trim }}/.local/state/cdp-onprem-automation/cdpcli-0.9.164
-    ecs_data_services_remote_async_dir: >-
-      {{ ecs_data_services_remote_home.stdout | trim }}/.local/state/cdp-onprem-automation/ansible_async
 
-- name: Create remote Data Services state directories
+- name: Create remote Data Services state directory
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: "{{ ecs_data_services_remote_venv_path | dirname }}"
     state: directory
     mode: "0700"
-  loop:
-    - "{{ ecs_data_services_remote_venv_path | dirname }}"
-    - "{{ ecs_data_services_remote_async_dir }}"
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh

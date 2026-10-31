@@ -33,10 +33,9 @@ the external Jenkins controller is unsupported because private names such as
 The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
 than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
-ECS installation owns CoreDNS and wildcard DNS. Following the supplied
-Cloudera Labs ECS playbook, CoreDNS forwards through each node's
-`/etc/resolv.conf` with `policy sequential`; automation does not hard-code an
-identity-provider address into the global forwarder. Playbook 34 re-applies
+ECS installation owns CoreDNS and wildcard DNS. CoreDNS forwards directly to
+the configured FreeIPA or AD DNS servers with `policy sequential`, avoiding
+node resolver drift inside Data Services namespaces. Playbook 34 re-applies
 that same idempotent ECS-owned policy so standalone Data Services runs repair
 older clusters, removes the former managed private-zone block when present,
 waits for a changed CoreDNS rollout, and verifies FreeIPA, Cloudera Manager,
@@ -53,16 +52,17 @@ CDW, CDE, and CAI use the same `cloudera.cloud` request fields as the supplied
 Cloudera Labs examples, adapted only for collection 3.3 option names. Matching
 the supplied separate Labs playbooks, playbook 34 completes each selected
 service before launching the next one: CDW and its catalog/Virtual Warehouses,
-then CDE, then CAI and its TLS/UI follow-up. CDW and CAI retain module-owned
-`wait: true`; their Ansible async wrappers preserve failure capture without
-provisioning multiple Data Services concurrently. CDE is the bounded exception:
-the pinned collection does not classify the live
-`LoggingInstallationFailed` state as terminal, so CDE submits with
-`wait: false` and polls `de_info` until `ClusterCreationCompleted` or any
-`*Failed` status. CAI waits for the `ml` module result, records the returned
-`instanceUrl`, and only then creates the wildcard certificate and
-`cml-tls-secret`, so an empty workspace cannot leave the playbook polling
-`ml_info` before the actual module failure is collected.
+then CDE, then CAI and its TLS/UI follow-up. All three submit with `wait: false`
+and use their structured `*_info` APIs for bounded terminal-state polling.
+This avoids remote `async_wrapper` output corruption and exposes live service
+failures directly. CDE treats `ClusterCreationCompleted` or any `*Failed`
+status as terminal because the pinned collection omits
+`LoggingInstallationFailed`. CAI adopts an existing healthy or in-progress
+workspace instead of calling `createWorkspace` again; after success it records
+the returned `instanceUrl` and creates the wildcard certificate and
+`cml-tls-secret`. If a prior UI deletion is still propagating, preflight waits
+for the backend record and name reservation to disappear before recreating the
+workspace.
 
 The private CDE request uses the live API minimum of 26 CPU and 64 GiB with the
 environment-specific scheduler parent `root.<environment>.cde`.
@@ -86,15 +86,12 @@ the next selected service even when preflight cleanup, launch, wait, or
 service-specific follow-up fails. Successful-service catalog and Caddy follow-up
 also completes before one final aggregate assertion marks Jenkins failed when
 any selected service was unsuccessful.
-`ecs_data_services_status_wait_delay` is passed to the collection modules as
-their API polling interval. The module, async, and async-status bounds are
-configured by `ecs_data_services_module_wait_timeout`,
-`ecs_data_services_async_timeout`, `ecs_data_services_async_poll_retries`, and
-`ecs_data_services_async_poll_delay`. Async job results use an absolute path in
-the ECS master's persistent state directory so the temporary CDP profile's
-`HOME` override cannot make launch and polling use different paths. Failed CDW
-provisioning also collects pod status, `hue-query-processor-0` description, and
-recent container logs from `warehouse-<environment>` on the ECS master.
+`ecs_data_services_status_wait_retries` and
+`ecs_data_services_status_wait_delay` bound structured service polling.
+`ecs_data_services_module_wait_timeout` remains the bound for cleanup calls
+that use module-owned waits. Failed CDW provisioning also collects pod status,
+`hue-query-processor-0` description, and recent container logs from
+`warehouse-<environment>` on the ECS master.
 
 ## Prerequisites
 
@@ -271,13 +268,13 @@ Re-run `35_refresh_deployment_portal.yml` after changing catalog URLs if you ski
 
 The service lifecycle follows the Cloudera Labs patterns in
 `cloudera-ce-aws-template` and `cloudera.exe`: each selected service is
-completed before the next service starts. CDW and CAI use collection-owned
-`wait: true` and are collected with `async_status`. CDE uses `wait: false`
-followed by a bounded `de_info` poll because collection 3.3's internal failed
-status set omits `LoggingInstallationFailed`; treating every status ending in
-`Failed` as terminal prevents a known failure from waiting until the module's
-multi-hour timeout. One service failure is retained for the final aggregate
-report without preventing the next selected service from running.
+completed before the next service starts. CDW, CDE, and CAI submit with
+`wait: false` and are observed through `dw_cluster_info`, `de_info`, and
+`ml_info`. This avoids remote Ansible async-wrapper parsing failures, supports
+adoption of existing resources, and lets CDE treat every status ending in
+`Failed` as terminal instead of waiting until a multi-hour module timeout.
+One service failure is retained for the final aggregate report without
+preventing the next selected service from running.
 
 For CAI, playbook 34 follows the attached reference order: it collects the
 `cloudera.cloud.ml` result first, derives the workbench hostname from the
@@ -296,23 +293,25 @@ the namespace secret.
 
 See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_registry_*`, `ecs_cdp_environment_name`).
 
-Before launching the CDW module job, the playbook queries the control plane.
+`ecs_coredns_forwarders` optionally overrides the direct DNS upstream list.
+When empty, FreeIPA uses the first `ipaserver` private address and AD uses
+`ad_dns_servers`.
+
+Before launching CDW, the playbook queries the control plane.
 `ecs_cdw_recreate_failed_cluster` removes a cluster only when its terminal
 status is `Error` or `Failed`, then waits until it is absent. Running and
-in-progress clusters are discovered and waited on by the idempotent
-`cloudera.cloud.dw_cluster` module instead of calling `createPrivateCluster`
-again. The playbook does not create or delete CDW
+in-progress clusters are adopted and monitored through `dw_cluster_info`
+instead of calling `createPrivateCluster` again. The playbook does not create
+or delete CDW
 Kerberos hosts, services, or keytabs; the Private Cloud Data Warehouse control
 plane owns that lifecycle, matching the `cloudera.cloud.dw_cluster` contract
 and supplied example. A gateway timeout from `createPrivateCluster` is treated
-as ambiguous: after the module job reports the timeout, automation briefly
-rediscovers the environment cluster and accepts the recovered cluster when the
-backend received the request.
+as ambiguous: automation continues structured discovery and accepts the
+recovered cluster when the backend received the request.
 
-`ecs_data_services_module_wait_timeout` is the collection-module wait bound.
-`ecs_data_services_async_timeout` must remain greater than that value.
-`ecs_data_services_async_poll_retries` and
-`ecs_data_services_async_poll_delay` bound `async_status` collection.
+`ecs_data_services_module_wait_timeout` bounds cleanup calls that retain
+module-owned waits. `ecs_data_services_status_wait_retries` and
+`ecs_data_services_status_wait_delay` bound service lifecycle polling.
 
 ## Not automated (Labs reference gaps)
 

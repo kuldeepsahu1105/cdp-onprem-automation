@@ -66,17 +66,15 @@
 - name: Configure CDP CLI profile for data services API calls
   ansible.builtin.import_tasks: ecs_data_services_runtime.yml
 
-- name: Validate Data Services async wait bounds
+- name: Validate Data Services wait bounds
   ansible.builtin.assert:
     that:
       - ecs_data_services_module_wait_timeout | int > 0
-      - ecs_data_services_async_timeout | int > ecs_data_services_module_wait_timeout | int
-      - ecs_data_services_async_poll_retries | int > 0
-      - ecs_data_services_async_poll_delay | int > 0
+      - ecs_data_services_status_wait_retries | int > 0
+      - ecs_data_services_status_wait_delay | int > 0
     fail_msg: >-
-      Data Services module/async bounds are invalid. Set a positive module wait,
-      make ecs_data_services_async_timeout greater than
-      ecs_data_services_module_wait_timeout, and use positive async poll values.
+      Data Services wait bounds are invalid. Set positive module timeout,
+      structured-status retry, and structured-status delay values.
 
 - name: Optional ECS LDAP provider sync and LDAP admin user
   ansible.builtin.import_tasks: ecs_control_plane_ldap_and_admin.yml
@@ -91,13 +89,11 @@
       ansible.builtin.import_tasks: ecs_data_service_cdw_start.yml
       vars:
         ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
-    - name: Wait for CDW module job
+    - name: Wait for CDW terminal status
       ansible.builtin.import_tasks: ecs_data_service_cdw_wait.yml
       vars:
         ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
     - name: Complete CDW dependent services
       ansible.builtin.import_tasks: ecs_data_service_cdw_followup.yml
@@ -151,13 +147,11 @@
       ansible.builtin.import_tasks: ecs_data_service_cai_start.yml
       vars:
         ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
-    - name: Wait for CAI module job
+    - name: Wait for CAI terminal status
       ansible.builtin.import_tasks: ecs_data_service_cai_wait.yml
       vars:
         ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
 
     - name: Configure CAI wildcard TLS after workspace installation
       ansible.builtin.import_tasks: ecs_data_service_cai_tls.yml
