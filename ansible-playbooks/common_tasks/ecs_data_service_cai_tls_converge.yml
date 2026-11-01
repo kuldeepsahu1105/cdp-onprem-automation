@@ -310,14 +310,18 @@
     - ecs_cai_tls_provider_effective == 'freeipa'
   block:
     - name: CAI TLS | Ensure FreeIPA wildcard certificate profile
-      ansible.builtin.include_role:
-        name: cloudera.exe.freeipa_server_wildcard_profile
-        apply:
-          delegate_to: "{{ groups.get('ipaserver', []) | first }}"
-          become: true
-          connection: ssh
-      vars:
-        freeipa_wildcard_profile_name: "{{ ecs_cai_wildcard_cert_profile }}"
+      ansible.builtin.include_tasks: ecs_cai_freeipa_wildcard_profile.yml
+
+    - name: CAI TLS | Remove stale certificate request artifacts
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/etc/pki/tls/private/{{ ecs_cai_expected_base_hostname }}.csr"
+        - "/etc/pki/tls/certs/{{ ecs_cai_expected_base_hostname }}.crt"
+      delegate_to: "{{ groups.get('ipaserver', []) | first }}"
+      become: true
+      connection: ssh
 
     - name: CAI TLS | Issue deterministic workbench wildcard certificate
       ansible.builtin.include_role:
