@@ -333,6 +333,10 @@ service through the Management Console before submitting a new service. This
 exercises the same Management Console-to-Cloudera Manager DNS/API path used by
 `enableService` and retries transient `UnknownHostException` failures after the
 CoreDNS negative-cache interval without restarting or rewriting CoreDNS.
+CDW and CAI retain their existing authoritative `dw_cluster_info` and
+`ml_info` preflight behavior, but those read-only calls use the same bounded
+retry interval so transient backend DNS/cache errors clear before any
+principal, cluster, TLS, or workspace mutation begins.
 
 Terminal failed
 CDW/CDE/CAI resources are reported without automated disable, deletion,

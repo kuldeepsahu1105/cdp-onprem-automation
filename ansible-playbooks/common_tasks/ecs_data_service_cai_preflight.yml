@@ -6,6 +6,9 @@
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cai_workspace_inventory
   changed_when: false
+  until: ecs_cai_workspace_inventory is succeeded
+  retries: "{{ ecs_data_services_dns_probe_attempts | default(3) | int }}"
+  delay: "{{ ecs_data_services_dns_probe_retry_delay | int }}"
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh

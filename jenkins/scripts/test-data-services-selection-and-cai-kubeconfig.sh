@@ -359,6 +359,16 @@ assert "Verify Management Console can describe healthy reference service" in cde
 assert "ecs_cde_reference_service_name" in cde_preflight_text
 assert "ecs_data_services_dns_probe_retry_delay" in cde_preflight_text
 assert "Existing CPU and memory capacity will not be resized" in cde_preflight_text
+cdw_preflight_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_preflight.yml"
+).read_text()
+assert "ecs_cdw_preflight_cluster_info is succeeded" in cdw_preflight_text
+assert "ecs_data_services_dns_probe_retry_delay" in cdw_preflight_text
+cai_preflight_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cai_preflight.yml"
+).read_text()
+assert "ecs_cai_workspace_inventory is succeeded" in cai_preflight_text
+assert "ecs_data_services_dns_probe_retry_delay" in cai_preflight_text
 cde_start_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cde_start.yml"
 ).read_text()

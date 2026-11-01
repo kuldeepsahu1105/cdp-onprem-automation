@@ -6,6 +6,9 @@
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cdw_preflight_cluster_info
   changed_when: false
+  until: ecs_cdw_preflight_cluster_info is succeeded
+  retries: "{{ ecs_data_services_dns_probe_attempts | default(3) | int }}"
+  delay: "{{ ecs_data_services_dns_probe_retry_delay | int }}"
   vars:
     ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
   become: false
