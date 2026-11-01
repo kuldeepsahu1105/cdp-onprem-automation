@@ -355,6 +355,9 @@ assert "ecs_cde_service_candidate_names" in cde_preflight_text
 assert "ecs_cde_service_name_effective" in cde_preflight_text
 assert "ecs_cde_service_green_statuses" in cde_preflight_text
 assert "ecs_cde_service_transitional_statuses" in cde_preflight_text
+assert "Verify Management Console can describe healthy reference service" in cde_preflight_text
+assert "ecs_cde_reference_service_name" in cde_preflight_text
+assert "ecs_data_services_dns_probe_retry_delay" in cde_preflight_text
 assert "Existing CPU and memory capacity will not be resized" in cde_preflight_text
 cde_start_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cde_start.yml"

@@ -326,7 +326,15 @@ reports each FQDN separately. DNS/TCP verification uses at most
 records wait `ecs_data_services_dns_probe_retry_delay` seconds (default `31`)
 between attempts so each retry occurs after the managed CoreDNS 30-second
 negative-cache TTL; successful records are not retried. The independent
-pod wait bound only covers scheduling and image startup. Terminal failed
+pod wait bound only covers scheduling and image startup.
+
+When a healthy CDE service already exists, CDE preflight also describes that
+service through the Management Console before submitting a new service. This
+exercises the same Management Console-to-Cloudera Manager DNS/API path used by
+`enableService` and retries transient `UnknownHostException` failures after the
+CoreDNS negative-cache interval without restarting or rewriting CoreDNS.
+
+Terminal failed
 CDW/CDE/CAI resources are reported without automated disable, deletion,
 recreation, backend restart, or datastore mutation; independent service
 boundaries still allow later selected services to run before the final

@@ -129,6 +129,8 @@
       block:
         - name: Prepare CDE rerun
           ansible.builtin.include_tasks: common_tasks/ecs_data_service_cde_preflight.yml
+          vars:
+            ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
 
         - name: Launch CDE
           ansible.builtin.include_tasks: common_tasks/ecs_data_service_cde_start.yml

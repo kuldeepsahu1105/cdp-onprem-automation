@@ -9,6 +9,44 @@
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
 
+- name: CDE | Resolve one healthy reference service for CM reachability
+  ansible.builtin.set_fact:
+    ecs_cde_reference_service_name: >-
+      {%- set services = (ecs_cde_preflight_service_list.stdout | from_json).services | default([]) -%}
+      {%- set ns = namespace(name='') -%}
+      {%- for service in services if ns.name | length == 0 -%}
+      {%- if (
+        service.environmentName | default('') == ecs_cdp_environment_name
+        and service.status | default('') | lower
+        in (ecs_cde_service_green_statuses | map('lower') | list)
+      ) -%}
+      {%- set ns.name = service.name -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ ns.name }}
+
+- name: CDE | Verify Management Console can describe healthy reference service
+  cloudera.cloud.de_info:
+    environment: "{{ ecs_cdp_environment_name }}"
+    name: "{{ ecs_cde_reference_service_name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cde_reference_service_info
+  until: ecs_cde_reference_service_info is succeeded
+  retries: "{{ ecs_data_services_dns_probe_attempts | default(3) | int }}"
+  delay: "{{ ecs_data_services_dns_probe_retry_delay | int }}"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cde_reference_service_name | length > 0
+
+- name: CDE | Report Management Console to CM reference probe
+  ansible.builtin.debug:
+    msg: >-
+      CDE Management Console successfully described healthy reference service
+      {{ ecs_cde_reference_service_name }} before new-service submission.
+  when: ecs_cde_reference_service_name | length > 0
+
 - name: CDE | Build bounded deterministic service names
   ansible.builtin.set_fact:
     ecs_cde_service_candidate_names: >-
