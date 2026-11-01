@@ -14,7 +14,6 @@
       when:
         - ecs_cai_tls_validation_dir is defined
         - ecs_cai_tls_validation_dir.path | default('') | length > 0
-      no_log: true
 
     - name: CAI TLS | Remove fetched certificate material from controller
       ansible.builtin.file:
@@ -23,4 +22,3 @@
       loop:
         - "{{ playbook_dir }}/{{ ecs_cai_expected_base_hostname | default('cai') }}.crt"
         - "{{ playbook_dir }}/{{ ecs_cai_expected_base_hostname | default('cai') }}.pem"
-      no_log: true

@@ -116,11 +116,30 @@
               }}
           environment: "{{ ecs_cdp_cli_environment }}"
           register: ecs_mr_create
+          failed_when: false
           when: not (ecs_mr_exists | bool)
           no_log: true
           become: false
           delegate_to: "{{ ecs_data_services_delegate_host }}"
           connection: ssh
+
+        - name: Require successful Model Registry creation
+          ansible.builtin.assert:
+            that:
+              - ecs_mr_create.rc | default(0) == 0
+            fail_msg: >-
+              Model Registry creation failed with rc
+              {{ ecs_mr_create.rc | default('unknown') }}:
+              {{
+                ecs_mr_create.stderr
+                | default('')
+                | regex_replace(
+                    '(?i)(awsAccessKey|awsSecret|password|secret|access[ _-]?key)(\\s*[=:]\\s*)\\S+',
+                    '\\1\\2<redacted>'
+                  )
+                | trim
+              }}
+          when: not (ecs_mr_exists | bool)
 
         - name: Record Model Registry provisioning success
           ansible.builtin.set_fact:

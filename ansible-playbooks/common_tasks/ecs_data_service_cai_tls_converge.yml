@@ -79,19 +79,42 @@
     name: "{{ ecs_cai_tls_secret_name }}"
     kubeconfig: "{{ ecs_coredns_kubeconfig_path }}"
   register: ecs_cai_existing_tls_secret
+  failed_when: false
   become: true
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
   no_log: true
 
+- name: CAI TLS | Require existing-secret lookup
+  ansible.builtin.assert:
+    that:
+      - not (ecs_cai_existing_tls_secret.failed | default(false) | bool)
+    fail_msg: >-
+      Failed to read {{ ecs_cai_tls_secret_name }} from namespace
+      {{ ecs_cai_k8s_namespace }} using kubeconfig
+      {{ ecs_coredns_kubeconfig_path }}:
+      {{ ecs_cai_existing_tls_secret.msg | default('unknown Kubernetes API error') }}.
+
 - name: CAI TLS | Read FreeIPA trust anchor
   ansible.builtin.slurp:
     src: /etc/ipa/ca.crt
   register: ecs_cai_freeipa_ca
+  failed_when: false
   delegate_to: "{{ groups.get('ipaserver', []) | first }}"
   become: true
   when: ecs_cai_tls_provider_effective == 'freeipa'
   no_log: true
+
+- name: CAI TLS | Require FreeIPA trust anchor
+  ansible.builtin.assert:
+    that:
+      - not (ecs_cai_freeipa_ca.failed | default(false) | bool)
+      - ecs_cai_freeipa_ca.content | default('') | length > 0
+    fail_msg: >-
+      Failed to read /etc/ipa/ca.crt from
+      {{ groups.get('ipaserver', []) | first }}:
+      {{ ecs_cai_freeipa_ca.msg | default('trust anchor was empty') }}.
+  when: ecs_cai_tls_provider_effective == 'freeipa'
 
 - name: CAI TLS | Require external trust anchor when FreeIPA is unavailable
   ansible.builtin.assert:
@@ -131,7 +154,6 @@
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
-  no_log: true
 
 - name: CAI TLS | Stage existing secret for validation
   ansible.builtin.copy:
@@ -159,6 +181,8 @@
             ).data | default({})
           )['tls.key'] | default('')
         }}
+  register: ecs_cai_existing_tls_stage
+  failed_when: false
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
@@ -169,6 +193,34 @@
         ecs_cai_existing_tls_secret.resources | first
       ).type | default('') == 'kubernetes.io/tls'
   no_log: true
+
+- name: CAI TLS | Require existing-secret staging
+  ansible.builtin.assert:
+    that:
+      - >-
+        ecs_cai_existing_tls_stage.results
+        | default([])
+        | selectattr('failed', 'defined')
+        | selectattr('failed')
+        | list
+        | length == 0
+    fail_msg: >-
+      Failed to stage existing CAI TLS material for validation:
+      {{
+        ecs_cai_existing_tls_stage.results
+        | default([])
+        | selectattr('failed', 'defined')
+        | selectattr('failed')
+        | map(attribute='msg')
+        | list
+        | join('; ')
+      }}.
+  when:
+    - ecs_cai_existing_tls_secret.resources | default([]) | length > 0
+    - >-
+      (
+        ecs_cai_existing_tls_secret.resources | first
+      ).type | default('') == 'kubernetes.io/tls'
 
 - name: CAI TLS | Validate existing secret certificate, key, hostname, and trust
   ansible.builtin.command:
@@ -212,7 +264,6 @@
       (
         ecs_cai_existing_tls_secret.resources | first
       ).type | default('') == 'kubernetes.io/tls'
-  no_log: true
 
 - name: CAI TLS | Record whether the existing secret is reusable
   ansible.builtin.set_fact:
@@ -266,10 +317,21 @@
           data:
             tls.crt: "{{ lookup('ansible.builtin.file', ecs_cai_expected_base_hostname + '.crt') | b64encode }}"
             tls.key: "{{ lookup('ansible.builtin.file', ecs_cai_expected_base_hostname + '.pem') | b64encode }}"
+      register: ecs_cai_freeipa_tls_install
+      failed_when: false
       become: true
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
       no_log: true
+
+    - name: CAI TLS | Require FreeIPA-issued TLS secret installation
+      ansible.builtin.assert:
+        that:
+          - not (ecs_cai_freeipa_tls_install.failed | default(false) | bool)
+        fail_msg: >-
+          Failed to install FreeIPA-issued {{ ecs_cai_tls_secret_name }} in
+          namespace {{ ecs_cai_k8s_namespace }}:
+          {{ ecs_cai_freeipa_tls_install.msg | default('unknown Kubernetes API error') }}.
 
 - name: CAI TLS | Require explicit external certificate material when secret is invalid
   ansible.builtin.assert:
@@ -302,6 +364,8 @@
       data:
         tls.crt: "{{ lookup('ansible.builtin.file', ecs_cai_tls_certificate_path) | b64encode }}"
         tls.key: "{{ lookup('ansible.builtin.file', ecs_cai_tls_private_key_path) | b64encode }}"
+  register: ecs_cai_external_tls_install
+  failed_when: false
   become: true
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
@@ -309,6 +373,18 @@
     - not (ecs_cai_existing_tls_secret_valid | bool)
     - ecs_cai_tls_provider_effective == 'external'
   no_log: true
+
+- name: CAI TLS | Require external TLS secret installation
+  ansible.builtin.assert:
+    that:
+      - not (ecs_cai_external_tls_install.failed | default(false) | bool)
+    fail_msg: >-
+      Failed to install externally managed {{ ecs_cai_tls_secret_name }} in
+      namespace {{ ecs_cai_k8s_namespace }}:
+      {{ ecs_cai_external_tls_install.msg | default('unknown Kubernetes API error') }}.
+  when:
+    - not (ecs_cai_existing_tls_secret_valid | bool)
+    - ecs_cai_tls_provider_effective == 'external'
 
 - name: CAI TLS | Read converged TLS secret
   kubernetes.core.k8s_info:
@@ -318,10 +394,20 @@
     name: "{{ ecs_cai_tls_secret_name }}"
     kubeconfig: "{{ ecs_coredns_kubeconfig_path }}"
   register: ecs_cai_converged_tls_secret
+  failed_when: false
   become: true
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
   no_log: true
+
+- name: CAI TLS | Require converged-secret lookup
+  ansible.builtin.assert:
+    that:
+      - not (ecs_cai_converged_tls_secret.failed | default(false) | bool)
+    fail_msg: >-
+      Failed to read converged {{ ecs_cai_tls_secret_name }} from namespace
+      {{ ecs_cai_k8s_namespace }}:
+      {{ ecs_cai_converged_tls_secret.msg | default('unknown Kubernetes API error') }}.
 
 - name: CAI TLS | Stage converged secret for final validation
   ansible.builtin.copy:
@@ -349,10 +435,34 @@
             ).data | default({})
           )['tls.key'] | default('')
         }}
+  register: ecs_cai_converged_tls_stage
+  failed_when: false
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
   no_log: true
+
+- name: CAI TLS | Require converged-secret staging
+  ansible.builtin.assert:
+    that:
+      - >-
+        ecs_cai_converged_tls_stage.results
+        | default([])
+        | selectattr('failed', 'defined')
+        | selectattr('failed')
+        | list
+        | length == 0
+    fail_msg: >-
+      Failed to stage converged CAI TLS material for final validation:
+      {{
+        ecs_cai_converged_tls_stage.results
+        | default([])
+        | selectattr('failed', 'defined')
+        | selectattr('failed')
+        | map(attribute='msg')
+        | list
+        | join('; ')
+      }}.
 
 - name: CAI TLS | Validate converged secret before createWorkspace
   ansible.builtin.command:
@@ -390,7 +500,6 @@
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
-  no_log: true
 
 - name: CAI TLS | Gate workspace creation on validated trusted secret
   ansible.builtin.set_fact:
@@ -413,3 +522,5 @@
       *.{{ ecs_cai_expected_base_hostname }} with a matching private key,
       configured trust anchor, and at least
       {{ ecs_cai_tls_minimum_validity_seconds }} seconds of remaining validity.
+      Validation rc={{ ecs_cai_converged_tls_validation.rc | default('unknown') }};
+      stderr={{ ecs_cai_converged_tls_validation.stderr | default('') | trim }}.
