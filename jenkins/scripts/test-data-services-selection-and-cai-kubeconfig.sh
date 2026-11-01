@@ -44,12 +44,22 @@ ozone_credentials = (
     / "ansible-playbooks/common_tasks/ecs_model_registry_ozone_credentials.yml"
 ).read_text()
 ozone_tasks = yaml.safe_load(ozone_credentials)
+assert "ansible.builtin.shell" not in ozone_credentials
+assert "/usr/bin/ozone" in ozone_credentials
 assert "/opt/cloudera/parcels/CDH/bin/ozone" in ozone_credentials
 assert "/etc/ozone/conf/ozone-site.xml" in ozone_credentials
 assert 'HADOOP_CONF_DIR: "{{ ecs_ozone_conf_dir }}"' in ozone_credentials
+assert 'KRB5CCNAME: "FILE:{{ ecs_ozone_krb5_cache.path }}"' in ozone_credentials
 assert 'OZONE_CONF_DIR: "{{ ecs_ozone_conf_dir }}"' in ozone_credentials
 assert "failed_when: false" in ozone_credentials
 assert "<redacted>" in ozone_credentials
+ozone_task_names = [task.get("name") for task in ozone_tasks]
+assert ozone_task_names.index(
+    "Ozone S3 | Remove isolated Kerberos credential cache"
+) < ozone_task_names.index("Ozone S3 | Require Kerberos authentication")
+assert ozone_task_names.index(
+    "Ozone S3 | Remove isolated Kerberos credential cache"
+) < ozone_task_names.index("Ozone S3 | Require successful secret retrieval")
 parsed_credentials_assert = next(
     task
     for task in ozone_tasks
@@ -75,6 +85,15 @@ cai_tls_tasks = list(
     )
 )
 cai_tls_by_name = {task.get("name"): task for task in cai_tls_tasks}
+kubernetes_dependency_task = cai_tls_by_name[
+    "CAI TLS | Ensure Kubernetes Python client is installed on ECS master"
+]
+assert kubernetes_dependency_task["ansible.builtin.pip"]["executable"] == "/usr/bin/pip3"
+assert "oauthlib>=3.2.2,<5" in kubernetes_dependency_task["ansible.builtin.pip"]["name"]
+assert "kubernetes" in kubernetes_dependency_task["ansible.builtin.pip"]["name"]
+assert cai_tls_by_name[
+    "CAI TLS | Verify Kubernetes Python client imports on ECS master"
+]["failed_when"] is False
 for task_name in (
     "CAI TLS | Read existing TLS secret",
     "CAI TLS | Read FreeIPA trust anchor",

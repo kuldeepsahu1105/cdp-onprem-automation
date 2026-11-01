@@ -52,11 +52,37 @@
 
 - name: CAI TLS | Ensure Kubernetes Python client is installed on ECS master
   ansible.builtin.pip:
-    name: kubernetes
+    name:
+      - "oauthlib>=3.2.2,<5"
+      - kubernetes
     state: present
+    executable: /usr/bin/pip3
   become: true
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
+
+- name: CAI TLS | Verify Kubernetes Python client imports on ECS master
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - import kubernetes
+  register: ecs_cai_kubernetes_import
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CAI TLS | Require usable Kubernetes Python client
+  ansible.builtin.assert:
+    that:
+      - ecs_cai_kubernetes_import.rc == 0
+    fail_msg: >-
+      Python /usr/bin/python3 on {{ ecs_data_services_delegate_host }} cannot
+      import the Kubernetes client after dependency convergence. rc={{
+      ecs_cai_kubernetes_import.rc }}; stderr={{
+      ecs_cai_kubernetes_import.stderr | default('') | trim }}.
 
 - name: CAI TLS | Ensure workspace namespace exists before createWorkspace
   kubernetes.core.k8s:
