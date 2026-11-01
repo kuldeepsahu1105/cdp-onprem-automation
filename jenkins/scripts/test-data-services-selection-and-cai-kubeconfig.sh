@@ -112,6 +112,7 @@ assert group_vars["ecs_coredns_kubeconfig_path"] == "/etc/rancher/rke2/rke2.yaml
 assert group_vars["ecs_cde_cpu_requests"] == "300"
 assert group_vars["ecs_cde_memory_requests"] == "1000Gi"
 assert group_vars["ecs_cde_resource_pool"] == "root.{{ ecs_cdp_environment_name }}.cde"
+assert group_vars["ecs_cde_creator_crn"] == ""
 assert group_vars["ecs_cde_service_name_attempts"] == 10
 assert group_vars["ecs_cde_service_name_max_length"] == 40
 assert "ClusterCreationCompleted" in group_vars["ecs_cde_service_green_statuses"]
@@ -382,9 +383,16 @@ assert 'name: "{{ ecs_cde_service_name_effective }}"' in cde_start_text
 assert 'cpu_requests: "{{ ecs_cde_cpu_requests_effective }}"' in cde_start_text
 assert 'memory_requests: "{{ ecs_cde_memory_requests_effective }}"' in cde_start_text
 assert 'resource_pool: "{{ ecs_cde_resource_pool_effective }}"' in cde_start_text
+assert "Require human service creator CRN" in cde_start_text
+assert "'create-user-access-key'" in cde_start_text
+assert "ecs_cde_creator_crn_effective" in cde_start_text
+assert "ecs_cde_creator_cli_environment" in cde_start_text
+assert 'environment: "{{ ecs_cde_creator_cli_environment }}"' in cde_start_text
 assert "Wait for adopted service without mutating its sizing" in cde_start_text
 assert "not (ecs_cde_service_existing | default(false) | bool)" in cde_start_text
 assert "not in (ecs_cde_service_transitional_statuses" in cde_start_text
+assert "Delete temporary CDE human creator access key" in playbook_text
+assert "Remove temporary CDE human creator credentials" in playbook_text
 cde_result_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cde.yml"
 ).read_text()

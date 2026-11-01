@@ -152,6 +152,39 @@
               failed: true
               finished: true
               msg: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_json) }}"
+      always:
+        - name: Delete temporary CDE human creator access key
+          ansible.builtin.command:
+            argv: >-
+              {{
+                ecs_data_services_cdp_cli_prefix
+                + [
+                  'iam',
+                  'delete-access-key',
+                  '--access-key-id',
+                  ecs_cde_creator_access_key.accessKeyId
+                ]
+              }}
+          environment: "{{ ecs_cdp_cli_environment }}"
+          register: ecs_cde_creator_access_key_delete
+          changed_when: ecs_cde_creator_access_key_delete.rc == 0
+          failed_when: false
+          no_log: true
+          become: false
+          delegate_to: "{{ ecs_data_services_delegate_host }}"
+          connection: ssh
+          when:
+            - ecs_cde_creator_access_key is defined
+            - ecs_cde_creator_access_key.accessKeyId | default('') | length > 0
+
+        - name: Remove temporary CDE human creator credentials
+          ansible.builtin.file:
+            path: "{{ ecs_ds_cdp_profile_dir.path }}/cde-creator-credentials"
+            state: absent
+          changed_when: false
+          become: false
+          delegate_to: "{{ ecs_data_services_delegate_host }}"
+          connection: ssh
 
     - name: Provision CAI without blocking subsequent services
       when: "'cai' in (ecs_data_services_install_names | default([]))"

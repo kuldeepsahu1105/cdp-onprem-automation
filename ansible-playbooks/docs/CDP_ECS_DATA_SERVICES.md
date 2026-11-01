@@ -109,7 +109,15 @@ the final pool segment as `cde`, but private-cloud `enableService` rejects that
 display label unless the fully qualified scheduler path is submitted. These
 values apply only when creating a service; changing them does not resize an
 existing CDE service. Existing healthy or provisioning services are reused
-without resizing. Failed, deleted, or stale reserved names are retained and skipped;
+without resizing. Fresh creation uses a temporary V2 access key for
+`ecs_cde_creator_crn`, falling back to the resolved LDAP admin user CRN.
+Private-cloud CDE copies the authenticated workload username into the
+`Owner` Kubernetes label for the service's `base-services` pool. Machine-user
+workload usernames contain `/`, which is invalid in a Kubernetes label value
+and causes Resource Pool Manager to reject the child pool before processing.
+The automation machine user remains the bootstrap identity used to issue and
+delete the temporary human-user key. Failed, deleted, or stale reserved names
+are retained and skipped;
 the playbook selects the first available deterministic bounded name
 (`name`, `name-2`, and so on), and records that effective name in the catalog.
 After the service is ready, CDE also converges one default Virtual Cluster.
