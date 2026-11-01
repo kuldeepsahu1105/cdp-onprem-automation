@@ -116,12 +116,16 @@ host in `base_cluster_master_group`, where the standard base-cluster template
 places the Ozone manager, SCM, and S3 Gateway roles. A missing Ozone-capable
 inventory host is reported immediately but deferred to the final aggregate
 assertion so CAI readiness and CDW follow-up diagnostics still run.
-Creation also requires a human creator CRN because the automation request is
-signed by the `cldr-automation-sa` machine user. The effective creator is
+Creation also requires a human creator CRN because private-cloud CRP uses the
+request-signing actor for the downstream workspace creator even when the
+`createModelRegistry` payload contains `creatorCrn`. The effective creator is
 `ecs_model_registry_creator_crn` when explicitly set, otherwise the unique
 human `ecs_ldap_admin_user_crn` resolved by the LDAP admin lookup. Automation
-requires a nonempty CRN containing `:user:`, rejects `:machineUser:`, and sends
-the value through `ml create-model-registry --creator-crn`.
+requires a nonempty CRN containing `:user:`, rejects `:machineUser:`, creates a
+temporary V2 access key for that human, and signs only the
+`ml create-model-registry` request with it. The payload still includes
+`--creator-crn` for API consistency. The temporary credential file and access
+key are deleted in an Ansible `always` block after the request.
 Each CDW, CDE, and CAI attempt has an independent failure boundary. A failed
 service is recorded without preventing the next selected service from running,
 and the final aggregate assertion fails only after all selected services and

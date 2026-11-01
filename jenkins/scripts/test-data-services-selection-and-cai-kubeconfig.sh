@@ -161,8 +161,52 @@ model_registry_creator_assert = next(
 creator_assert_text = str(model_registry_creator_assert)
 assert "':user:'" in creator_assert_text
 assert "':machineuser:'" in creator_assert_text
+creator_key_create = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Create temporary access key for Model Registry creator"
+)
+creator_key_create_text = str(creator_key_create)
+assert "create-user-access-key" in creator_key_create_text
+assert "--user" in creator_key_create_text
+assert "--type" in creator_key_create_text
+assert "V2" in creator_key_create_text
+assert creator_key_create["environment"] == "{{ ecs_cdp_cli_environment }}"
+assert creator_key_create["no_log"] is True
+creator_key_parse = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Parse temporary Model Registry creator access key response"
+)
+assert "from_json" in str(creator_key_parse)
+assert creator_key_parse["no_log"] is True
+creator_key_resolve = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Resolve temporary Model Registry creator access key"
+)
+creator_key_resolve_text = str(creator_key_resolve)
+assert "accessKeyId" in creator_key_resolve_text
+assert "actorCrn" in creator_key_resolve_text
+assert "privateKey" in creator_key_resolve_text
+assert creator_key_resolve["no_log"] is True
+creator_credentials = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Write temporary Model Registry creator credentials"
+)
+assert creator_credentials["no_log"] is True
+creator_environment = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Resolve Model Registry creator CLI environment"
+)
+creator_environment_text = str(creator_environment)
+assert "CDP_SHARED_CREDENTIALS_FILE" in creator_environment_text
+assert "CDP_CREDENTIALS_PATH" in creator_environment_text
 assert model_registry_create["no_log"] is True
 assert model_registry_create["failed_when"] is False
+assert model_registry_create["environment"] == "{{ ecs_mr_creator_cli_environment }}"
 model_registry_create_text = str(model_registry_create)
 for expected_flag in (
     "--namespace",
@@ -182,6 +226,30 @@ for obsolete_flag in (
     "--s3-endpoint",
 ):
     assert obsolete_flag not in model_registry_create_text
+creator_key_delete = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Delete temporary Model Registry creator access key"
+)
+assert "delete-access-key" in str(creator_key_delete)
+assert "--access-key-id" in str(creator_key_delete)
+assert creator_key_delete["environment"] == "{{ ecs_cdp_cli_environment }}"
+assert creator_key_delete["no_log"] is True
+creator_credentials_remove = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Remove temporary Model Registry creator credentials"
+)
+assert creator_credentials_remove["ansible.builtin.file"]["state"] == "absent"
+human_create_block = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Create Model Registry as human creator"
+)
+assert human_create_block["always"]
+always_names = [task.get("name") for task in human_create_block["always"]]
+assert "Delete temporary Model Registry creator access key" in always_names
+assert "Remove temporary Model Registry creator credentials" in always_names
 model_registry_create_assert = next(
     task
     for task in model_registry_tasks

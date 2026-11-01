@@ -395,7 +395,7 @@ CAI TLS variables:
 | `ecs_cai_tls_private_key_path` | empty | Matching external PEM private key on the Ansible controller. |
 | `ecs_cai_tls_ca_bundle_path` | empty | PEM trust anchor used to validate external or pre-existing CAI TLS material. Required without FreeIPA. |
 | `ecs_cai_tls_minimum_validity_seconds` | `86400` | Minimum remaining certificate validity before submission. |
-| `ecs_model_registry_creator_crn` | empty | Optional human `:user:` CRN for Model Registry creation; defaults to the resolved `ecs_ldap_admin_user_crn`. Machine-user CRNs are rejected. |
+| `ecs_model_registry_creator_crn` | empty | Optional human `:user:` CRN used to sign Model Registry creation with a temporary access key; defaults to the resolved `ecs_ldap_admin_user_crn`. Machine-user CRNs are rejected. |
 
 ### Deployment portal & monitoring (`group_vars/all.yml`)
 
