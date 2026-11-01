@@ -172,6 +172,7 @@
       - -c
       - |
         import json
+        import ipaddress
         import socket
         import subprocess
         import sys
@@ -194,17 +195,29 @@
                 expected = record.get("address", "")
                 port = int(record.get("port", 0))
                 try:
-                    addresses = sorted({
-                        answer[4][0]
-                        for answer in socket.getaddrinfo(
-                            host,
-                            port or None,
-                            family=socket.AF_INET,
-                            type=socket.SOCK_STREAM,
-                        )
-                    })
+                    lookup = subprocess.run(
+                        ["nslookup", "-type=A", host],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout,
+                    )
+                    addresses = []
+                    for line in lookup.stdout.splitlines():
+                        if not line.startswith("Address:"):
+                            continue
+                        candidate = line.split()[-1]
+                        try:
+                            addresses.append(str(ipaddress.IPv4Address(candidate)))
+                        except ipaddress.AddressValueError:
+                            pass
+                    addresses = sorted(set(addresses))
                     if not addresses:
-                        raise RuntimeError("no IPv4 answers")
+                        raise RuntimeError(
+                            f"A lookup rc={lookup.returncode} returned no IPv4 "
+                            f"answers: {lookup.stdout.strip()} "
+                            f"{lookup.stderr.strip()}"
+                        )
                     if expected and addresses != [expected]:
                         raise RuntimeError(
                             f"expected {expected}, resolved {','.join(addresses)}"
@@ -251,7 +264,7 @@
         for host, record in pending.items():
             try:
                 lookup = subprocess.run(
-                    ["nslookup", host],
+                    ["nslookup", "-type=A", host],
                     check=False,
                     capture_output=True,
                     text=True,

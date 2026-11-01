@@ -8,8 +8,10 @@ group_vars_file="$repo_root/ansible-playbooks/group_vars/all.yml"
 python3 - "$probe_file" "$group_vars_file" <<'PY'
 from pathlib import Path
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import yaml
 
 path = Path(sys.argv[1])
@@ -23,8 +25,9 @@ assert "records = json.loads(sys.argv[4])" in text
 assert "pending = {record[\"fqdn\"]: record for record in records}" in text
 assert "RESOLV_CONF_BEGIN" in text
 assert "ALL_PROBES_OK" in text
-assert "socket.getaddrinfo(" in text
-assert "family=socket.AF_INET" in text
+assert '["nslookup", "-type=A", host]' in text
+assert "socket.getaddrinfo(" not in text
+assert "ipaddress.IPv4Address(candidate)" in text
 assert "(connect_address, port)" in text
 assert "NSLOOKUP_DIAGNOSTIC" in text
 assert "loop: \"{{ ecs_data_services_dns_verification_records }}\"" in text
@@ -60,54 +63,68 @@ start = next(
 argv = start["ansible.builtin.command"]["argv"]
 script = argv[argv.index("-c") + 1]
 
-success = subprocess.run(
-    [
-        sys.executable,
-        "-c",
-        script,
-        "1",
-        "0",
-        "1",
-        json.dumps([
-            {
-                "label": "Localhost",
-                "fqdn": "localhost",
-                "address": "127.0.0.1",
-                "port": 0,
-            }
-        ]),
-    ],
-    check=False,
-    capture_output=True,
-    text=True,
-)
-assert success.returncode == 0, success.stderr
-assert "DNS_A_OK fqdn=localhost ipv4=127.0.0.1" in success.stdout
-assert "ALL_PROBES_OK" in success.stdout
+with tempfile.TemporaryDirectory() as temp_dir:
+    nslookup = Path(temp_dir) / "nslookup"
+    nslookup.write_text(
+        "#!/bin/sh\n"
+        "printf 'Server:\\t172.43.0.10\\n"
+        "Address:\\t172.43.0.10:53\\n\\n"
+        "Name:\\t%s\\nAddress: 127.0.0.1\\n' \"$2\"\n"
+    )
+    nslookup.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = temp_dir + os.pathsep + env["PATH"]
 
-failure = subprocess.run(
-    [
-        sys.executable,
-        "-c",
-        script,
-        "1",
-        "0",
-        "1",
-        json.dumps([
-            {
-                "label": "Wrong localhost",
-                "fqdn": "localhost",
-                "address": "192.0.2.1",
-                "port": 0,
-            }
-        ]),
-    ],
-    check=False,
-    capture_output=True,
-    text=True,
-)
-assert failure.returncode == 1
-assert "PROBE_FAILED host=localhost expected=192.0.2.1" in failure.stderr
+    success = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            script,
+            "1",
+            "0",
+            "5",
+            json.dumps([
+                {
+                    "label": "Localhost",
+                    "fqdn": "localhost",
+                    "address": "127.0.0.1",
+                    "port": 0,
+                }
+            ]),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert success.returncode == 0, success.stderr
+    assert "DNS_A_OK fqdn=localhost ipv4=127.0.0.1" in success.stdout
+    assert "ALL_PROBES_OK" in success.stdout
+
+    failure = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            script,
+            "1",
+            "0",
+            "5",
+            json.dumps([
+                {
+                    "label": "Wrong localhost",
+                    "fqdn": "localhost",
+                    "address": "192.0.2.1",
+                    "port": 0,
+                }
+            ]),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert failure.returncode == 1
+    assert "PROBE_FAILED host=localhost expected=192.0.2.1" in failure.stderr
 
 print("Single-pod Data Services DNS probe checks passed")
 PY
