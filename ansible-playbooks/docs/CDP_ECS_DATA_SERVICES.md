@@ -97,11 +97,13 @@ gated on successful secret validation. If a user-initiated deletion is still pro
 for the backend record and name reservation to disappear. A terminal failed
 workspace is reported without deletion or recreation.
 
-Fresh private CDE services request 40 CPU and 64 GiB with the
-environment-specific scheduler parent `root.<environment>.cde`. These defaults
-apply only when creating a service; changing them does not resize an existing
-CDE service. Existing healthy or provisioning services are reused without
-resizing. Failed, deleted, or stale reserved names are retained and skipped;
+Fresh private CDE services request 300 CPU and 1000 GiB and select the existing
+CDE resource-pool dropdown value `cde`. The private-cloud API expects that
+display/selectable pool name rather than the fully qualified scheduler path
+`root.<environment>.cde`; CDE resolves the selected parent internally. These
+defaults apply only when creating a service; changing them does not resize an
+existing CDE service. Existing healthy or provisioning services are reused
+without resizing. Failed, deleted, or stale reserved names are retained and skipped;
 the playbook selects the first available deterministic bounded name
 (`name`, `name-2`, and so on), and records that effective name in the catalog.
 After the service is ready, CDE also converges one default Virtual Cluster.
