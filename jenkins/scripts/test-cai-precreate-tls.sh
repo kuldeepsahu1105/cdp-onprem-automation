@@ -16,7 +16,8 @@ tls_line=$(grep -n 'Converge and validate CAI TLS before workspace submission' "
 start_line=$(grep -n 'Launch CAI' "$playbook" | cut -d: -f1)
 test "$tls_line" -lt "$start_line"
 
-grep -q 'subdomain: "{{ ecs_cai_static_subdomain }}"' "$create_attempt"
+grep -q 'subdomain: "{{ ecs_cai_static_subdomain_effective }}"' "$create_attempt"
+grep -q 'ecs_cai_tls_subdomain_validated' "$create_attempt"
 grep -q 'ecs_cai_tls_secret_valid | default(false) | bool' "$start"
 grep -q "ecs_cai_tls_provider_effective == 'freeipa'" "$tls"
 grep -q "ecs_cai_tls_provider_effective == 'external'" "$tls"

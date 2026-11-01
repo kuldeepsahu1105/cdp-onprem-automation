@@ -446,7 +446,8 @@ active/provisioning workspace in that sequence. Failed, deleting, and reserved
 names are skipped without deletion. A create-time `already exists` response
 triggers a fresh authoritative list/describe lookup; a returned reusable object
 is adopted, while an invisible or unusable reservation is recorded and the
-next bounded name is attempted. `ecs_cai_static_subdomain` remains unchanged,
+next bounded workspace and endpoint pair is attempted (`name-2` with `cai-2`,
+and so on). `ecs_cai_static_subdomain` remains the configured base label,
 so name versioning does not alter the trusted TLS or native endpoint contract.
 Final diagnostics and the portal catalog carry the effective workspace name,
 current live status, and skipped unusable-name evidence. A reused healthy

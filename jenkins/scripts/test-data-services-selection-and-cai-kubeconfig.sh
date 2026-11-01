@@ -154,7 +154,9 @@ cai_attempt = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cai_create_attempt.yml"
 ).read_text()
 assert "ecs_cai_workspace_candidate_names" in cai_preflight
+assert "ecs_cai_subdomain_candidate_names" in cai_preflight
 assert "ecs_cai_workspace_name_effective" in cai_preflight
+assert "ecs_cai_static_subdomain_effective" in cai_preflight
 assert "range(1, (ecs_cai_workspace_name_attempts | int) + 1)" in cai_preflight
 assert "selectattr('instanceName', 'equalto', item)" in cai_preflight
 for cai_info_text in (cai_endpoint, cai_wait):
@@ -193,21 +195,30 @@ cai_create = next(
     if task.get("name") == "CAI attempt | Submit workspace creation for unused candidate"
 )
 assert cai_create["failed_when"] is False
-collision_lookup = next(
+reconcile_lookup = next(
     task
     for task in cai_attempt_tasks
-    if task.get("name") == "CAI attempt | Refresh inventory after already-exists response"
+    if task.get("name") == "CAI attempt | Refresh inventory after every submission"
 )
-assert "name" not in collision_lookup["cloudera.cloud.ml_info"]
+assert "name" not in reconcile_lookup["cloudera.cloud.ml_info"]
+assert "ecs_cai_workspace_reconcile_retries" in str(reconcile_lookup)
+assert "ecs_cai_workspace_candidate" in str(reconcile_lookup["until"])
 collision_record = next(
     task
     for task in cai_attempt_tasks
-    if task.get("name") == "CAI attempt | Record unresolved or unusable collision"
+    if task.get("name") == "CAI attempt | Classify unresolved collision"
 )
-assert "already exists but list/describe returned no workspace" in str(collision_record)
+assert "endpoint_owner" in str(collision_record)
 assert "ecs_cai_workspace_candidate" in str(collision_record)
+assert "subdomain: \"{{ ecs_cai_static_subdomain_effective }}\"" in cai_attempt
+assert "Adopt real submitted candidate regardless submission rc" in cai_attempt
+assert "Adopt real reusable endpoint owner" in cai_attempt
+assert "rc/output alone cannot prove absence" in cai_attempt
+assert "endpoint .*used by workbench" in cai_attempt
+assert "ecs_cai_tls_subdomain_validated" in cai_attempt
 assert group_vars["ecs_cai_workspace_name_attempts"] == 10
 assert group_vars["ecs_cai_workspace_name_max_length"] == 40
+assert group_vars["ecs_cai_workspace_reconcile_retries"] == 6
 assert "ecs_cai_workspace_name_effective" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cai_followup.yml"
 ).read_text()
@@ -329,7 +340,7 @@ cai_tls_by_name = {task.get("name"): task for task in cai_tls_tasks}
 hostname_validation = cai_tls_by_name[
     "CAI TLS | Validate deterministic hostname and external input pairing"
 ]["ansible.builtin.assert"]
-assert "ecs_cai_static_subdomain | length <= 15" in hostname_validation["that"]
+assert "ecs_cai_static_subdomain_effective | length <= 15" in hostname_validation["that"]
 assert "no longer than 15 characters" in hostname_validation["fail_msg"]
 kubernetes_dependency_task = cai_tls_by_name[
     "CAI TLS | Ensure Kubernetes Python client is installed on ECS master"

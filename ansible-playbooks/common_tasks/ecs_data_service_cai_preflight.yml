@@ -15,7 +15,9 @@
   ansible.builtin.set_fact:
     ecs_cai_live_workspaces: "{{ ecs_cai_workspace_inventory.workspaces | default([]) }}"
     ecs_cai_workspace_candidate_names: []
+    ecs_cai_subdomain_candidate_names: []
     ecs_cai_workspace_name_effective: ""
+    ecs_cai_static_subdomain_effective: ""
     ecs_cai_existing_workspace: {}
   when: "'cai' in (ecs_data_services_install_names | default([]))"
 
@@ -38,6 +40,28 @@
       }}
     _ecs_cai_candidate_name: >-
       {{ _ecs_cai_candidate_base + _ecs_cai_candidate_suffix }}
+  loop: "{{ range(1, (ecs_cai_workspace_name_attempts | int) + 1) | list }}"
+  when: "'cai' in (ecs_data_services_install_names | default([]))"
+
+- name: CAI | Build matching bounded endpoint candidates
+  ansible.builtin.set_fact:
+    ecs_cai_subdomain_candidate_names: >-
+      {{ ecs_cai_subdomain_candidate_names + [_ecs_cai_endpoint_candidate] }}
+  vars:
+    _ecs_cai_endpoint_suffix: "{{ '' if item == 1 else '-' + (item | string) }}"
+    _ecs_cai_endpoint_base: >-
+      {{
+        ecs_cai_static_subdomain[
+          0:
+          (
+            15
+            - (_ecs_cai_endpoint_suffix | length)
+          )
+        ]
+        | regex_replace('-+$', '')
+      }}
+    _ecs_cai_endpoint_candidate: >-
+      {{ _ecs_cai_endpoint_base + _ecs_cai_endpoint_suffix }}
   loop: "{{ range(1, (ecs_cai_workspace_name_attempts | int) + 1) | list }}"
   when: "'cai' in (ecs_data_services_install_names | default([]))"
 
@@ -97,7 +121,22 @@
       {{ ecs_cai_workspace_name }}.
   when: "'cai' in (ecs_data_services_install_names | default([]))"
 
+- name: CAI | Match initial endpoint to effective workspace candidate
+  ansible.builtin.set_fact:
+    ecs_cai_static_subdomain_effective: >-
+      {{
+        ecs_cai_subdomain_candidate_names[
+          ecs_cai_workspace_candidate_names.index(ecs_cai_workspace_name_effective)
+        ]
+      }}
+  when: "'cai' in (ecs_data_services_install_names | default([]))"
+
 - name: CAI | Preserve deterministic workspace create attempt order
   ansible.builtin.set_fact:
-    ecs_cai_workspace_create_candidates: "{{ ecs_cai_workspace_candidate_names }}"
+    ecs_cai_workspace_create_candidates: >-
+      {{
+        ecs_cai_workspace_candidate_names[
+          ecs_cai_workspace_candidate_names.index(ecs_cai_workspace_name_effective):
+        ]
+      }}
   when: "'cai' in (ecs_data_services_install_names | default([]))"

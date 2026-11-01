@@ -1,5 +1,5 @@
 ---
-- name: CAI attempt | Resolve live candidate workspace
+- name: CAI attempt | Resolve candidate workspace and endpoint
   ansible.builtin.set_fact:
     ecs_cai_candidate_workspace: >-
       {{
@@ -10,10 +10,17 @@
         | first
         | default({})
       }}
+    ecs_cai_candidate_subdomain: >-
+      {{
+        ecs_cai_subdomain_candidate_names[
+          ecs_cai_workspace_candidate_names.index(ecs_cai_workspace_candidate)
+        ]
+      }}
 
 - name: CAI attempt | Adopt reusable live candidate
   ansible.builtin.set_fact:
     ecs_cai_workspace_name_effective: "{{ ecs_cai_workspace_candidate }}"
+    ecs_cai_static_subdomain_effective: "{{ ecs_cai_candidate_subdomain }}"
     ecs_cai_existing_workspace: "{{ ecs_cai_candidate_workspace }}"
   when:
     - ecs_cai_candidate_workspace | length > 0
@@ -26,33 +33,35 @@
         '(?i)(progress|pending|creat|install|provision|start|running|ready|active|finished|modify)'
       )
 
-- name: CAI attempt | Record unavailable live candidate
+- name: CAI attempt | Record unusable live candidate
   ansible.builtin.set_fact:
     ecs_cai_workspace_collision_evidence: >-
       {{
         ecs_cai_workspace_collision_evidence
-        + [
-            {
-              'name': ecs_cai_workspace_candidate,
-              'status': ecs_cai_candidate_workspace.instanceStatus | default('unknown'),
-              'reason': 'live workspace is not reusable'
-            }
-          ]
+        + [{
+          'name': ecs_cai_workspace_candidate,
+          'subdomain': ecs_cai_candidate_subdomain,
+          'status': ecs_cai_candidate_workspace.instanceStatus | default('unknown'),
+          'reason': 'live workspace is terminal or unusable'
+        }]
       }}
   when:
     - ecs_cai_candidate_workspace | length > 0
+    - ecs_cai_existing_workspace | default({}) | length == 0
+
+- name: CAI attempt | Select unused candidate and matching endpoint
+  ansible.builtin.set_fact:
+    ecs_cai_workspace_name_effective: "{{ ecs_cai_workspace_candidate }}"
+    ecs_cai_static_subdomain_effective: "{{ ecs_cai_candidate_subdomain }}"
+  when: ecs_cai_candidate_workspace | length == 0
+
+- name: CAI attempt | Converge TLS for matching endpoint before submission
+  ansible.builtin.include_tasks: ecs_data_service_cai_tls.yml
+  when:
+    - ecs_cai_candidate_workspace | length == 0
     - >-
-      (
-        ecs_cai_candidate_workspace.instanceStatus | default('')
-        is search('(?i)(failed$|create_failed|deleted$|delet|remov|terminat)')
-      )
-      or
-      (
-        ecs_cai_candidate_workspace.instanceStatus | default('')
-        is not search(
-          '(?i)(progress|pending|creat|install|provision|start|running|ready|active|finished|modify)'
-        )
-      )
+      ecs_cai_tls_subdomain_validated | default('')
+      != ecs_cai_static_subdomain_effective
 
 - name: CAI attempt | Submit workspace creation for unused candidate
   cloudera.cloud.ml:
@@ -63,7 +72,7 @@
     tls: "{{ ecs_cai_enable_tls | default(true) | bool }}"
     monitoring: "{{ ecs_cai_enable_monitoring | default(true) | bool }}"
     namespace: "{{ ecs_cai_k8s_namespace }}"
-    subdomain: "{{ ecs_cai_static_subdomain }}"
+    subdomain: "{{ ecs_cai_static_subdomain_effective }}"
     resource_pool: "{{ ecs_cai_resource_pool }}"
     endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
     wait: false
@@ -76,113 +85,184 @@
   connection: ssh
   when: ecs_cai_candidate_workspace | length == 0
 
-- name: CAI attempt | Resolve submission error text
+- name: CAI attempt | Resolve submission error and endpoint owner
   ansible.builtin.set_fact:
     ecs_cai_workspace_attempt_error: >-
       {{
         ecs_cai_workspace_attempt.msg
         | default(ecs_cai_workspace_attempt.stderr | default(''))
       }}
+    ecs_cai_endpoint_collision_owner: >-
+      {{
+        (
+          ecs_cai_workspace_attempt.msg
+          | default(ecs_cai_workspace_attempt.stderr | default(''))
+          | regex_findall(
+              '(?i)endpoint\\s+[^ ]+.*used by workbench\\s+[\"'']?([^ \"'']+)'
+            )
+          | first
+        )
+        | default('')
+      }}
   when: ecs_cai_candidate_workspace | length == 0
 
-- name: CAI attempt | Reject non-collision submission error
-  ansible.builtin.assert:
-    that:
-      - ecs_cai_workspace_attempt.workspace is defined
-      - ecs_cai_workspace_attempt_error | length == 0
-    fail_msg: >-
-      CAI workspace creation failed for {{ ecs_cai_workspace_candidate }}:
-      {{ ecs_cai_workspace_attempt_error
-         | default(ecs_cai_workspace_attempt | to_json, true) }}.
-  when:
-    - ecs_cai_candidate_workspace | length == 0
-    - ecs_cai_workspace_attempt_error | lower is not search('already exists')
-
-- name: CAI attempt | Record successful submission
-  ansible.builtin.set_fact:
-    ecs_cai_workspace_name_effective: "{{ ecs_cai_workspace_candidate }}"
-    ecs_cai_workspace_start: "{{ ecs_cai_workspace_attempt }}"
-    ecs_cai_workspace_create_succeeded: true
-  when:
-    - ecs_cai_candidate_workspace | length == 0
-    - ecs_cai_workspace_attempt.workspace is defined
-    - ecs_cai_workspace_attempt_error | length == 0
-
-- name: CAI attempt | Refresh inventory after already-exists response
+- name: CAI attempt | Refresh inventory after every submission
   cloudera.cloud.ml_info:
     environment: "{{ ecs_cdp_environment_name }}"
     endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
   environment: "{{ ecs_cdp_cli_environment }}"
-  register: ecs_cai_collision_inventory
+  register: ecs_cai_reconcile_inventory
   changed_when: false
+  failed_when: false
+  until: >-
+    (
+      ecs_cai_reconcile_inventory.workspaces | default([])
+      | selectattr('instanceName', 'defined')
+      | selectattr('instanceName', 'equalto', ecs_cai_workspace_candidate)
+      | list
+      | length > 0
+    )
+    or (
+      ecs_cai_endpoint_collision_owner | length > 0
+      and (
+        ecs_cai_reconcile_inventory.workspaces | default([])
+        | selectattr('instanceName', 'defined')
+        | selectattr('instanceName', 'equalto', ecs_cai_endpoint_collision_owner)
+        | list
+        | length > 0
+      )
+    )
+  retries: "{{ ecs_cai_workspace_reconcile_retries | int }}"
+  delay: "{{ ecs_cai_workspace_reconcile_delay | int }}"
+  ignore_errors: true
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
-  when:
-    - ecs_cai_candidate_workspace | length == 0
-    - ecs_cai_workspace_attempt_error | lower is search('already exists')
+  when: ecs_cai_candidate_workspace | length == 0
 
-- name: CAI attempt | Update live inventory after collision
+- name: CAI attempt | Resolve submitted candidate and endpoint owner
   ansible.builtin.set_fact:
-    ecs_cai_live_workspaces: "{{ ecs_cai_collision_inventory.workspaces | default([]) }}"
-    ecs_cai_collision_workspace: >-
+    ecs_cai_live_workspaces: "{{ ecs_cai_reconcile_inventory.workspaces | default([]) }}"
+    ecs_cai_reconciled_workspace: >-
       {{
-        ecs_cai_collision_inventory.workspaces | default([])
+        ecs_cai_reconcile_inventory.workspaces | default([])
         | selectattr('instanceName', 'defined')
         | selectattr('instanceName', 'equalto', ecs_cai_workspace_candidate)
         | list
         | first
         | default({})
       }}
-  when:
-    - ecs_cai_candidate_workspace | length == 0
-    - ecs_cai_workspace_attempt_error | lower is search('already exists')
+    ecs_cai_endpoint_owner_workspace: >-
+      {{
+        ecs_cai_reconcile_inventory.workspaces | default([])
+        | selectattr('instanceName', 'defined')
+        | selectattr('instanceName', 'equalto', ecs_cai_endpoint_collision_owner)
+        | list
+        | first
+        | default({})
+      }}
+  when: ecs_cai_candidate_workspace | length == 0
 
-- name: CAI attempt | Adopt real workspace returned after collision
+- name: CAI attempt | Adopt real submitted candidate regardless submission rc
   ansible.builtin.set_fact:
     ecs_cai_workspace_name_effective: "{{ ecs_cai_workspace_candidate }}"
-    ecs_cai_existing_workspace: "{{ ecs_cai_collision_workspace }}"
+    ecs_cai_static_subdomain_effective: "{{ ecs_cai_candidate_subdomain }}"
+    ecs_cai_existing_workspace: "{{ ecs_cai_reconciled_workspace }}"
   when:
-    - ecs_cai_collision_workspace | default({}) | length > 0
+    - ecs_cai_reconciled_workspace | default({}) | length > 0
     - >-
-      ecs_cai_collision_workspace.instanceStatus | default('')
+      ecs_cai_reconciled_workspace.instanceStatus | default('')
       is not search('(?i)(failed$|create_failed|deleted$|delet|remov|terminat)')
     - >-
-      ecs_cai_collision_workspace.instanceStatus | default('')
+      ecs_cai_reconciled_workspace.instanceStatus | default('')
       is search(
         '(?i)(progress|pending|creat|install|provision|start|running|ready|active|finished|modify)'
       )
 
-- name: CAI attempt | Record unresolved or unusable collision
+- name: CAI attempt | Adopt real reusable endpoint owner
+  ansible.builtin.set_fact:
+    ecs_cai_workspace_name_effective: "{{ ecs_cai_endpoint_collision_owner }}"
+    ecs_cai_static_subdomain_effective: "{{ ecs_cai_candidate_subdomain }}"
+    ecs_cai_existing_workspace: "{{ ecs_cai_endpoint_owner_workspace }}"
+  when:
+    - ecs_cai_existing_workspace | default({}) | length == 0
+    - ecs_cai_endpoint_owner_workspace | default({}) | length > 0
+    - >-
+      ecs_cai_endpoint_owner_workspace.instanceStatus | default('')
+      is not search('(?i)(failed$|create_failed|deleted$|delet|remov|terminat)')
+    - >-
+      ecs_cai_endpoint_owner_workspace.instanceStatus | default('')
+      is search(
+        '(?i)(progress|pending|creat|install|provision|start|running|ready|active|finished|modify)'
+      )
+
+- name: CAI attempt | Classify unresolved collision
   ansible.builtin.set_fact:
     ecs_cai_workspace_collision_evidence: >-
       {{
         ecs_cai_workspace_collision_evidence
-        + [
-            {
-              'name': ecs_cai_workspace_candidate,
-              'status': ecs_cai_collision_workspace.instanceStatus
-                        | default('not returned'),
-              'reason': (
-                'already exists but list/describe returned no workspace'
-                if (ecs_cai_collision_workspace | default({}) | length == 0)
-                else 'already exists workspace is not reusable'
-              )
-            }
-          ]
+        + [{
+          'name': ecs_cai_workspace_candidate,
+          'subdomain': ecs_cai_candidate_subdomain,
+          'status': ecs_cai_reconciled_workspace.instanceStatus | default('not returned'),
+          'endpoint_owner': ecs_cai_endpoint_collision_owner | default(''),
+          'reason': 'explicit name/endpoint collision remained unusable or invisible'
+        }]
       }}
   when:
-    - ecs_cai_candidate_workspace | length == 0
-    - ecs_cai_workspace_attempt_error | lower is search('already exists')
+    - ecs_cai_existing_workspace | default({}) | length == 0
+    - not (ecs_cai_workspace_create_succeeded | bool)
     - >-
-      ecs_cai_collision_workspace | default({}) | length == 0
-      or (
-        ecs_cai_collision_workspace.instanceStatus | default('')
-        is search('(?i)(failed$|create_failed|deleted$|delet|remov|terminat)')
-      )
-      or (
-        ecs_cai_collision_workspace.instanceStatus | default('')
-        is not search(
-          '(?i)(progress|pending|creat|install|provision|start|running|ready|active|finished|modify)'
+      ecs_cai_workspace_attempt_error
+      is search('(?i)(already exists|endpoint .*used by workbench)')
+
+- name: CAI attempt | Record reconciled terminal candidate
+  ansible.builtin.set_fact:
+    ecs_cai_workspace_collision_evidence: >-
+      {{
+        ecs_cai_workspace_collision_evidence
+        + [{
+          'name': ecs_cai_workspace_candidate,
+          'subdomain': ecs_cai_candidate_subdomain,
+          'status': ecs_cai_reconciled_workspace.instanceStatus | default('unknown'),
+          'reason': 'create reconciled to a terminal unusable workspace'
+        }]
+      }}
+  when:
+    - ecs_cai_existing_workspace | default({}) | length == 0
+    - ecs_cai_reconciled_workspace | default({}) | length > 0
+    - >-
+      ecs_cai_reconciled_workspace.instanceStatus | default('')
+      is search('(?i)(failed$|create_failed|deleted$|delet|remov|terminat)')
+
+- name: CAI attempt | Reject ambiguous or unrelated submission error
+  ansible.builtin.assert:
+    that:
+      - >-
+        ecs_cai_workspace_attempt_error
+        is search('(?i)(already exists|endpoint .*used by workbench)')
+        or (
+          ecs_cai_reconciled_workspace | default({}) | length > 0
+          and (
+            ecs_cai_reconciled_workspace.instanceStatus | default('')
+            is search('(?i)(failed$|create_failed|deleted$|delet|remov|terminat)')
+          )
         )
-      )
+        or (
+          ecs_cai_endpoint_owner_workspace | default({}) | length > 0
+          and (
+            ecs_cai_endpoint_owner_workspace.instanceStatus | default('')
+            is search('(?i)(failed$|create_failed|deleted$|delet|remov|terminat)')
+          )
+        )
+    fail_msg: >-
+      CAI workspace creation returned an ambiguous/non-collision error for
+      {{ ecs_cai_workspace_candidate }} after authoritative reconciliation
+      returned no reusable workspace. create-workspace has no response object,
+      so rc/output alone cannot prove absence or justify advancing. Refusing
+      to advance to another name:
+      {{ ecs_cai_workspace_attempt_error
+         | default(ecs_cai_workspace_attempt | to_json, true) }}.
+  when:
+    - ecs_cai_existing_workspace | default({}) | length == 0
+    - not (ecs_cai_workspace_create_succeeded | bool)

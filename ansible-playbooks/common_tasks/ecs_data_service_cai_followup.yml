@@ -69,6 +69,7 @@
                   {
                     'url': ecs_cai_workspace_url,
                     'effective_name': ecs_cai_workspace_name_effective,
+                    'effective_subdomain': ecs_cai_static_subdomain_effective,
                     'status': (
                       (ecs_cai_workspace.workspace | default({})).instanceStatus
                       | default('unknown')
