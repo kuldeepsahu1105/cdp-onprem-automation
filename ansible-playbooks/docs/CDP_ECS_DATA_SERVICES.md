@@ -97,13 +97,19 @@ gated on successful secret validation. If a user-initiated deletion is still pro
 for the backend record and name reservation to disappear. A terminal failed
 workspace is reported without deletion or recreation.
 
-Fresh private CDE services request 300 CPU and 1000 GiB with the existing
-resource-pool API path `root.<environment>.cde`. The UI displays the final
-segment as `cde`, but private-cloud `enableService` rejects that display label
-unless the fully qualified scheduler path is submitted. These defaults apply
-only when creating a service; changing them does not resize an existing CDE
-service. Existing healthy or provisioning services are reused without
-resizing. Failed, deleted, or stale reserved names are retained and skipped;
+Fresh private CDE services default to 300 CPU and 1000 GiB with the existing
+resource-pool API path `root.<environment>.cde`. When the environment already
+has a healthy CDE service, automation reads its raw `de describe-service`
+response and reuses the exact `resourcePool`, `cpuRequests`, and
+`memoryRequests` strings accepted by that private-cloud control plane. This
+avoids relying on the collection's lossy `de_info` resource mapping or on a
+locally assumed memory-unit serialization. Explicit defaults remain the
+standalone fallback when no healthy reference service exists. The UI displays
+the final pool segment as `cde`, but private-cloud `enableService` rejects that
+display label unless the fully qualified scheduler path is submitted. These
+values apply only when creating a service; changing them does not resize an
+existing CDE service. Existing healthy or provisioning services are reused
+without resizing. Failed, deleted, or stale reserved names are retained and skipped;
 the playbook selects the first available deterministic bounded name
 (`name`, `name-2`, and so on), and records that effective name in the catalog.
 After the service is ready, CDE also converges one default Virtual Cluster.

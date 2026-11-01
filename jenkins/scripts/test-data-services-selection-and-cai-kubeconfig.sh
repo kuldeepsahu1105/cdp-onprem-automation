@@ -357,6 +357,12 @@ assert "ecs_cde_service_green_statuses" in cde_preflight_text
 assert "ecs_cde_service_transitional_statuses" in cde_preflight_text
 assert "Verify Management Console can describe healthy reference service" in cde_preflight_text
 assert "ecs_cde_reference_service_name" in cde_preflight_text
+assert "'describe-service'" in cde_preflight_text
+assert "'--cluster-id'" in cde_preflight_text
+assert "ecs_cde_reference_resources" in cde_preflight_text
+assert "ecs_cde_resource_pool_effective" in cde_preflight_text
+assert "ecs_cde_cpu_requests_effective" in cde_preflight_text
+assert "ecs_cde_memory_requests_effective" in cde_preflight_text
 assert "ecs_data_services_dns_probe_retry_delay" in cde_preflight_text
 assert "Existing CPU and memory capacity will not be resized" in cde_preflight_text
 cdw_preflight_text = (
@@ -373,6 +379,9 @@ cde_start_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cde_start.yml"
 ).read_text()
 assert 'name: "{{ ecs_cde_service_name_effective }}"' in cde_start_text
+assert 'cpu_requests: "{{ ecs_cde_cpu_requests_effective }}"' in cde_start_text
+assert 'memory_requests: "{{ ecs_cde_memory_requests_effective }}"' in cde_start_text
+assert 'resource_pool: "{{ ecs_cde_resource_pool_effective }}"' in cde_start_text
 assert "Wait for adopted service without mutating its sizing" in cde_start_text
 assert "not (ecs_cde_service_existing | default(false) | bool)" in cde_start_text
 assert "not in (ecs_cde_service_transitional_statuses" in cde_start_text

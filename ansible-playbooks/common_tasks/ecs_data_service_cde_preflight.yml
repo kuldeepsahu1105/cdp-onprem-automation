@@ -9,21 +9,26 @@
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
 
-- name: CDE | Resolve one healthy reference service for CM reachability
+- name: CDE | Resolve one healthy reference service
   ansible.builtin.set_fact:
-    ecs_cde_reference_service_name: >-
+    ecs_cde_reference_service: >-
       {%- set services = (ecs_cde_preflight_service_list.stdout | from_json).services | default([]) -%}
-      {%- set ns = namespace(name='') -%}
-      {%- for service in services if ns.name | length == 0 -%}
+      {%- set ns = namespace(service={}) -%}
+      {%- for service in services if ns.service | length == 0 -%}
       {%- if (
         service.environmentName | default('') == ecs_cdp_environment_name
         and service.status | default('') | lower
         in (ecs_cde_service_green_statuses | map('lower') | list)
       ) -%}
-      {%- set ns.name = service.name -%}
+      {%- set ns.service = service -%}
       {%- endif -%}
       {%- endfor -%}
-      {{ ns.name }}
+      {{ ns.service }}
+
+- name: CDE | Record healthy reference service identity
+  ansible.builtin.set_fact:
+    ecs_cde_reference_service_name: "{{ ecs_cde_reference_service.name | default('') }}"
+    ecs_cde_reference_service_cluster_id: "{{ ecs_cde_reference_service.clusterId | default('') }}"
 
 - name: CDE | Verify Management Console can describe healthy reference service
   cloudera.cloud.de_info:
@@ -40,11 +45,91 @@
   connection: ssh
   when: ecs_cde_reference_service_name | length > 0
 
+- name: CDE | Read raw healthy reference service configuration
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_data_services_cdp_cli_prefix
+        + [
+          'de',
+          'describe-service',
+          '--cluster-id',
+          ecs_cde_reference_service_cluster_id
+        ]
+      }}
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cde_reference_service_raw
+  changed_when: false
+  until: ecs_cde_reference_service_raw is succeeded
+  retries: "{{ ecs_data_services_dns_probe_attempts | default(3) | int }}"
+  delay: "{{ ecs_data_services_dns_probe_retry_delay | int }}"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cde_reference_service_cluster_id | length > 0
+
+- name: CDE | Record raw healthy reference resources
+  ansible.builtin.set_fact:
+    ecs_cde_reference_resources: >-
+      {{
+        (ecs_cde_reference_service_raw.stdout | from_json)
+        .get('service', {})
+        .get('resources', {})
+      }}
+  when: ecs_cde_reference_service_raw is not skipped
+
+- name: CDE | Resolve effective fresh-service capacity
+  ansible.builtin.set_fact:
+    ecs_cde_resource_pool_effective: >-
+      {{
+        ecs_cde_reference_resources.get('resourcePool')
+        | default(
+            ecs_cde_reference_resources.get('resource_pool')
+            | default(ecs_cde_resource_pool, true),
+            true
+          )
+      }}
+    ecs_cde_cpu_requests_effective: >-
+      {{
+        ecs_cde_reference_resources.get('cpuRequests')
+        | default(
+            ecs_cde_reference_resources.get('cpu_requests')
+            | default(ecs_cde_cpu_requests, true),
+            true
+          )
+      }}
+    ecs_cde_memory_requests_effective: >-
+      {{
+        ecs_cde_reference_resources.get('memoryRequests')
+        | default(
+            ecs_cde_reference_resources.get('memory_requests')
+            | default(ecs_cde_memory_requests, true),
+            true
+          )
+      }}
+  vars:
+    ecs_cde_reference_resources: "{{ ecs_cde_reference_resources | default({}) }}"
+
+- name: CDE | Require complete effective fresh-service capacity
+  ansible.builtin.assert:
+    that:
+      - ecs_cde_resource_pool_effective | string | length > 0
+      - ecs_cde_cpu_requests_effective | string | length > 0
+      - ecs_cde_memory_requests_effective | string | length > 0
+    fail_msg: >-
+      CDE fresh-service capacity is incomplete. Configure ecs_cde_resource_pool,
+      ecs_cde_cpu_requests, and ecs_cde_memory_requests, or retain one healthy
+      reference CDE service whose raw describe-service response includes them.
+
 - name: CDE | Report Management Console to CM reference probe
   ansible.builtin.debug:
     msg: >-
       CDE Management Console successfully described healthy reference service
       {{ ecs_cde_reference_service_name }} before new-service submission.
+      Fresh-service request will use resourcePool={{
+      ecs_cde_resource_pool_effective }}, cpuRequests={{
+      ecs_cde_cpu_requests_effective }}, memoryRequests={{
+      ecs_cde_memory_requests_effective }}.
   when: ecs_cde_reference_service_name | length > 0
 
 - name: CDE | Build bounded deterministic service names

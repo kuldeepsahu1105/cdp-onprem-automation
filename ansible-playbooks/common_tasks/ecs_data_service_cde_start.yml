@@ -4,9 +4,9 @@
     environment: "{{ ecs_cdp_environment_name }}"
     name: "{{ ecs_cde_service_name_effective }}"
     instance_type: "{{ ecs_cde_instance_type }}"
-    cpu_requests: "{{ ecs_cde_cpu_requests }}"
-    memory_requests: "{{ ecs_cde_memory_requests }}"
-    resource_pool: "{{ ecs_cde_resource_pool }}"
+    cpu_requests: "{{ ecs_cde_cpu_requests_effective }}"
+    memory_requests: "{{ ecs_cde_memory_requests_effective }}"
+    resource_pool: "{{ ecs_cde_resource_pool_effective }}"
     endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
     wait: true
     timeout: "{{ ecs_data_services_module_wait_timeout | int }}"
