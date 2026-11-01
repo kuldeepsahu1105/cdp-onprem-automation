@@ -124,6 +124,7 @@
           ansible.builtin.set_fact:
             ecs_cdw_cluster_succeeded: false
             ecs_cdw_catalog_succeeded: false
+            ecs_cdw_dataviz_succeeded: false
             ecs_cdw_cluster:
               failed: true
               finished: true
@@ -287,6 +288,7 @@
             or (
               (ecs_cdw_cluster_succeeded | default(false) | bool)
               and (ecs_cdw_catalog_succeeded | default(false) | bool)
+              and (ecs_cdw_dataviz_succeeded | default(false) | bool)
             )
           - >-
             'cde' not in (ecs_data_services_install_names | default([]))

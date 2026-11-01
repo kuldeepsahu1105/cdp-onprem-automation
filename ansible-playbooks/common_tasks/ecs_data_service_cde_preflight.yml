@@ -1,7 +1,7 @@
 ---
 - name: CDE | List existing services without describing their CM cluster
   ansible.builtin.command:
-    argv: "{{ ecs_data_services_cdp_cli_prefix + ['de', 'list-services'] }}"
+    argv: "{{ ecs_data_services_cdp_cli_prefix + ['de', 'list-services', '--no-remove-deleted'] }}"
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cde_preflight_service_list
   changed_when: false
@@ -9,41 +9,55 @@
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
 
-- name: CDE | Select existing service summary
+- name: CDE | Build bounded deterministic service names
   ansible.builtin.set_fact:
-    ecs_cde_preflight_service: >-
-      {{
-        (
-          (ecs_cde_preflight_service_list.stdout | from_json).services
-          | default([])
-          | selectattr('name', 'equalto', ecs_cde_service_name)
-          | selectattr('environmentName', 'equalto', ecs_cdp_environment_name)
-          | list
-          | first
-        )
-        | default({})
-      }}
+    ecs_cde_service_candidate_names: >-
+      {%- set result = [] -%}
+      {%- for attempt in range(1, (ecs_cde_service_name_attempts | int) + 1) -%}
+      {%- set suffix = '' if attempt == 1 else '-' + (attempt | string) -%}
+      {%- set stem_length = (ecs_cde_service_name_max_length | int) - (suffix | length) -%}
+      {%- set candidate = (ecs_cde_service_name[:stem_length] + suffix) -%}
+      {%- set _ = result.append(candidate) -%}
+      {%- endfor -%}
+      {{ result }}
 
-- name: CDE | Select terminal failed service
+- name: CDE | Select reusable or first unused service name
   ansible.builtin.set_fact:
-    ecs_cde_failed_service: >-
-      {{
-        ecs_cde_preflight_service
-        if (
-          ecs_cde_preflight_service.status | default('')
-        is search('(?i)failed$')
-        )
-        else {}
-      }}
+    ecs_cde_service_selection: >-
+      {%- set services = (ecs_cde_preflight_service_list.stdout | from_json).services | default([]) -%}
+      {%- set ns = namespace(selected={}) -%}
+      {%- for candidate in ecs_cde_service_candidate_names if ns.selected | length == 0 -%}
+      {%- set matches = services
+        | selectattr('name', 'equalto', candidate)
+        | selectattr('environmentName', 'equalto', ecs_cdp_environment_name)
+        | list -%}
+      {%- if matches | length == 0 -%}
+      {%- set ns.selected = {'name': candidate, 'existing': false, 'status': 'Absent'} -%}
+      {%- elif (
+        matches[0].status | default('')
+        is search('(?i)^(running|ready|created|accepted|starting|creating|waiting|updating|restarting|clustercreationcompleted|clustercreationinprogress)$')
+      ) -%}
+      {%- set ns.selected = {
+        'name': candidate,
+        'existing': true,
+        'status': matches[0].status | default('Unknown'),
+        'service': matches[0]
+      } -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ ns.selected }}
 
-- name: CDE | Refuse to mutate a terminal failed service
+- name: CDE | Require an available bounded service name
   ansible.builtin.assert:
     that:
-      - ecs_cde_failed_service | length == 0
+      - ecs_cde_service_selection | length > 0
     fail_msg: >-
-      Existing CDE service {{ ecs_cde_failed_service.name | default(ecs_cde_service_name) }}
-      (clusterId={{ ecs_cde_failed_service.clusterId | default('unknown') }})
-      is in terminal status
-      {{ ecs_cde_failed_service.status | default('unknown') }}. Automation will
-      not disable, delete, or recreate a failed service. Resolve or remove it
-      through the supported control-plane workflow, then rerun.
+      CDE could not find a reusable or unused name after
+      {{ ecs_cde_service_name_attempts }} bounded attempts. Failed, deleted, and
+      otherwise unusable services are not deleted automatically.
+
+- name: CDE | Record effective service name and prior state
+  ansible.builtin.set_fact:
+    ecs_cde_service_name_effective: "{{ ecs_cde_service_selection.name }}"
+    ecs_cde_service_existing: "{{ ecs_cde_service_selection.existing | bool }}"
+    ecs_cde_service_prior_status: "{{ ecs_cde_service_selection.status }}"

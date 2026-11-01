@@ -100,7 +100,10 @@ workspace is reported without deletion or recreation.
 Fresh private CDE services request 40 CPU and 64 GiB with the
 environment-specific scheduler parent `root.<environment>.cde`. These defaults
 apply only when creating a service; changing them does not resize an existing
-CDE service.
+CDE service. Existing healthy or provisioning services are reused without
+resizing. Failed, deleted, or stale reserved names are retained and skipped;
+the playbook selects the first available deterministic bounded name
+(`name`, `name-2`, and so on), and records that effective name in the catalog.
 Before a rerun, CDE uses the signed `de list-services` summary, which does not
 contact Cloudera Manager, to identify an existing terminal `*Failed` service.
 Automation reports that service and fails only the CDE boundary; it does not
@@ -362,6 +365,14 @@ the identical A-record checks.
 
 Terminal failed CDE services are reported from `de list-services` without
 calling disable or delete. The CDE rescue boundary records the diagnostics,
+
+When CDW is selected, the playbook also provisions one Data Visualization.
+`ecs_cdw_dataviz_name` controls its base name; `ecs_cdw_dataviz_user_groups`
+and `ecs_cdw_dataviz_admin_groups` supply the required access configuration.
+Private-cloud deployments may set `ecs_cdw_dataviz_resource_template` and
+`ecs_cdw_dataviz_resource_pool`. Running resources are reused, transitional
+resources are waited, and Failed, Error, or Deleting names are preserved while
+the next deterministic bounded name is selected.
 later selected services still run, and the final aggregate assertion reports
 the failure.
 

@@ -1,6 +1,8 @@
 ---
 - name: CDE | Wait for Data Engineering provisioning job
-  when: "'cde' in (ecs_data_services_install_names | default([]))"
+  when:
+    - "'cde' in (ecs_data_services_install_names | default([]))"
+    - not (ecs_cde_service_existing | default(false) | bool)
   block:
     - name: CDE | Read Data Engineering provisioning result
       ansible.builtin.async_status:

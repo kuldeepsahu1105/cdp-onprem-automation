@@ -93,6 +93,12 @@ group_vars = yaml.safe_load(
 assert group_vars["ecs_coredns_kubeconfig_path"] == "/etc/rancher/rke2/rke2.yaml"
 assert group_vars["ecs_cde_cpu_requests"] == "40"
 assert group_vars["ecs_cde_memory_requests"] == "64Gi"
+assert group_vars["ecs_cde_service_name_attempts"] == 10
+assert group_vars["ecs_cde_service_name_max_length"] == 40
+assert group_vars["ecs_cdw_dataviz_name_attempts"] == 10
+assert group_vars["ecs_cdw_vw_name_attempts"] == 10
+assert group_vars["ecs_cdw_dataviz_user_groups"] == []
+assert group_vars["ecs_cdw_dataviz_admin_groups"] == []
 assert group_vars["ecs_cai_static_subdomain"] == "cai"
 assert group_vars["ecs_model_registry_creator_crn"] == ""
 assert "playbook_dir" in group_vars["ecs_data_services_catalog_cache_path"]
@@ -221,6 +227,38 @@ assert "Existing (healthy)" in (
 assert "Created successfully" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
 ).read_text()
+
+cde_preflight_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cde_preflight.yml"
+).read_text()
+assert "--no-remove-deleted" in cde_preflight_text
+assert "ecs_cde_service_candidate_names" in cde_preflight_text
+assert "ecs_cde_service_name_effective" in cde_preflight_text
+assert "clustercreationcompleted" in cde_preflight_text.lower()
+cde_start_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cde_start.yml"
+).read_text()
+assert 'name: "{{ ecs_cde_service_name_effective }}"' in cde_start_text
+assert "Wait for adopted service without mutating its sizing" in cde_start_text
+assert "not (ecs_cde_service_existing | default(false) | bool)" in cde_start_text
+
+dataviz_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_dataviz.yml"
+).read_text()
+assert "list-data-visualizations" in dataviz_text
+assert "create-data-visualization" in dataviz_text
+assert "ecs_cdw_dataviz_candidate_names" in dataviz_text
+assert "Failed, Error, and Deleting" in dataviz_text
+assert "'userGroups': ecs_cdw_dataviz_user_groups" in dataviz_text
+assert "'adminGroups': ecs_cdw_dataviz_admin_groups" in dataviz_text
+cdw_followup_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_followup.yml"
+).read_text()
+assert "ecs_data_service_cdw_dataviz.yml" in cdw_followup_text
+assert "ecs_cdw_dataviz_succeeded: false" in cdw_followup_text
+assert "list-vws" in cdw_followup_text
+assert "ecs_cdw_hive_vw_name_effective" in cdw_followup_text
+assert "ecs_cdw_impala_vw_name_effective" in cdw_followup_text
 
 ozone_credentials = (
     root

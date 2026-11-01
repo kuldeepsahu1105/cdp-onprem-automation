@@ -47,7 +47,7 @@
             (ecs_caddy_data_service_routes | default([]))
             + [
               {
-                'id': 'cde-' + ecs_cde_service_name,
+                'id': 'cde-' + ecs_cde_service_name_effective,
                 'external_hostname': ecs_cde_service_id + '.' + ecs_app_domain,
                 'backend_host': ecs_master_fqdn,
                 'backend_port': 443,
@@ -66,7 +66,13 @@
               {
                 'cde': ecs_data_services_catalog.cde | default({}) | combine(
                   {
-                    'url': 'https://' + ecs_cde_service_id + '.' + ecs_app_domain
+                    'url': 'https://' + ecs_cde_service_id + '.' + ecs_app_domain,
+                    'effective_name': ecs_cde_service_name_effective,
+                    'status': (
+                      'Existing and running (green)'
+                      if ecs_cde_service_existing | default(false) | bool
+                      else 'Created successfully (green)'
+                    )
                   }
                 )
               },
