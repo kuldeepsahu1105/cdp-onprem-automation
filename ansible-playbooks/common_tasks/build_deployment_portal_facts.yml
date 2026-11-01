@@ -339,7 +339,8 @@
             | bool
           )
           else ''
-        )
+        ),
+        true
       }}
 
 - name: Read cached ECS data-service catalog with controller privileges
@@ -373,19 +374,57 @@
 
 - name: Add ECS data service URLs to portal when configured
   ansible.builtin.set_fact:
-    deployment_portal_ecs_ds_links: "{{ deployment_portal_ecs_ds_links + [item.link] }}"
+    deployment_portal_ecs_ds_links: "{{ deployment_portal_ecs_ds_links + [link] }}"
   loop:
     - key: cdw
     - key: cde
     - key: cai
   vars:
     _cat: "{{ ecs_data_services_catalog[item.key] | default({}) }}"
-    _url: "{{ _cat.url | default('') }}"
+    _url: >-
+      {{
+        _cat.url
+        | default(
+            _cat.endpoint
+            | default(
+                _cat.instanceUrl
+                | default(
+                    _cat.domain
+                    | default(
+                        (_cat.virtual_cluster | default({})).url
+                        | default(
+                            (_cat.data_visualization | default({})).url
+                            | default(
+                                (
+                                  _cat.link.url
+                                  if (
+                                    _cat.link | default({}) is mapping
+                                    and _cat.link.url | default('') | length > 0
+                                  )
+                                  else (
+                                    _cat.link
+                                    if _cat.link | default('') is string
+                                    else ''
+                                  )
+                                ),
+                                true
+                              ),
+                            true
+                          ),
+                        true
+                      ),
+                    true
+                  ),
+                true
+              ),
+            true
+          )
+      }}
     link:
       name: "{{ _cat.name | default(item.key | upper) }}"
       url: "{{ _url }}"
       description: "{{ _cat.description | default('ECS data service') }}"
-  when: _url | length > 0
+  when: _url | default('') | string | length > 0
 
 - name: Resolve Caddy pgAdmin public URL facts
   ansible.builtin.import_tasks: resolve_caddy_service_public_urls.yml

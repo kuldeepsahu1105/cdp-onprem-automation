@@ -163,6 +163,18 @@ catalog_load = next(
 assert "deployment_portal_ecs_ds_catalog_cache_effective" in str(catalog_load)
 assert "b64decode" in str(catalog_load)
 assert "lookup('file'" not in str(catalog_load)
+portal_link_task = next(
+    task
+    for task in portal_facts
+    if task.get("name") == "Add ECS data service URLs to portal when configured"
+)
+assert "item.link" not in str(portal_link_task["ansible.builtin.set_fact"])
+assert "deployment_portal_ecs_ds_links + [link]" in str(
+    portal_link_task["ansible.builtin.set_fact"]
+)
+assert "virtual_cluster" in str(portal_link_task["vars"]["_url"])
+assert "data_visualization" in str(portal_link_task["vars"]["_url"])
+assert "_url | default('') | string | length > 0" in portal_link_task["when"]
 
 cai_preflight = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cai_preflight.yml"
@@ -272,6 +284,12 @@ cai_followup_text = (
 assert "'effective_name': ecs_cai_workspace_name_effective" in cai_followup_text
 assert "'status': (" in cai_followup_text
 assert "ecs_model_registry_status" in playbook_text
+assert "success_msg:" in playbook_text
+assert "CAI Workbench:" in playbook_text
+assert "Model Registry:" in playbook_text
+assert "CDE Service:" in playbook_text
+assert "Virtual Cluster:" in playbook_text
+assert "DataViz status=" in playbook_text
 assert "Existing (healthy)" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
 ).read_text()

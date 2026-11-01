@@ -335,3 +335,56 @@
             ecs_model_registry_status
             | default(ecs_model_registry_failure_message | default('not selected'), true)
           }}.
+        success_msg: >-
+          {%- set lines = ['ECS Data Services provisioning succeeded.'] -%}
+          {%- if 'cdw' in (ecs_data_services_install_names | default([])) -%}
+          {%- set _ = lines.append(
+            'CDW: Running (cluster='
+            + ((ecs_cdw_cluster.cluster | default({})).name | default(ecs_cdp_environment_name))
+            + ', Hive VW=' + (ecs_cdw_hive_vw_name_effective | default('unknown'))
+            + ', Impala VW=' + (ecs_cdw_impala_vw_name_effective | default('unknown'))
+            + ', DataViz=' + (ecs_cdw_dataviz_name_effective | default('unknown'))
+            + ', DataViz status=' + (ecs_cdw_dataviz_status | default('unknown'))
+            + ')'
+          ) -%}
+          {%- endif -%}
+          {%- if 'cde' in (ecs_data_services_install_names | default([])) -%}
+          {%- set _ = lines.append(
+            'CDE Service: '
+            + (
+                'Existing and running'
+                if ecs_cde_service_existing | default(false) | bool
+                else 'Created successfully'
+              )
+            + ' (name=' + (ecs_cde_service_name_effective | default('unknown'))
+            + ', status='
+            + ((ecs_cde_service.service | default({})).status | default('unknown'))
+            + '); Virtual Cluster: '
+            + (ecs_cde_virtual_cluster_status | default('unknown'))
+            + ' (name=' + (ecs_cde_virtual_cluster_name_effective | default('unknown'))
+            + ', status=' + ((ecs_cde_virtual_cluster | default({})).status | default('unknown'))
+            + ')'
+          ) -%}
+          {%- endif -%}
+          {%- if 'cai' in (ecs_data_services_install_names | default([])) -%}
+          {%- set _ = lines.append(
+            'CAI Workbench: '
+            + (
+                'Existing and running'
+                if ecs_cai_existing_workspace | default({}) | length > 0
+                else 'Created successfully'
+              )
+            + ' (name=' + (ecs_cai_workspace_name_effective | default('unknown'))
+            + ', endpoint=' + (ecs_cai_workspace_url | default('unknown'))
+            + ', status='
+            + ((ecs_cai_workspace.workspace | default({})).instanceStatus | default('unknown'))
+            + ')'
+          ) -%}
+          {%- endif -%}
+          {%- if 'model_registry' in (ecs_data_services_install_names | default([])) -%}
+          {%- set _ = lines.append(
+            'Model Registry: ' + (ecs_model_registry_status | default('unknown'))
+            + ' (name=' + (ecs_model_registry_service_name | default('unknown')) + ')'
+          ) -%}
+          {%- endif -%}
+          {{ lines | join('\n') }}
