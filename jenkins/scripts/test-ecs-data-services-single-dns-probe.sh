@@ -25,9 +25,11 @@ assert "records = json.loads(sys.argv[4])" in text
 assert "pending = {record[\"fqdn\"]: record for record in records}" in text
 assert "RESOLV_CONF_BEGIN" in text
 assert "ALL_PROBES_OK" in text
-assert '["nslookup", "-type=A", host]' in text
+assert 'command = ["nslookup", "-type=A", query_host]' in text
 assert "socket.getaddrinfo(" not in text
 assert "ipaddress.IPv4Address(candidate)" in text
+assert "COREDNS_ENDPOINT_FALLBACK_OK" in text
+assert "ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK" in text
 assert "(connect_address, port)" in text
 assert "NSLOOKUP_DIAGNOSTIC" in text
 assert "loop: \"{{ ecs_data_services_dns_verification_records }}\"" in text
@@ -67,6 +69,10 @@ with tempfile.TemporaryDirectory() as temp_dir:
     nslookup = Path(temp_dir) / "nslookup"
     nslookup.write_text(
         "#!/bin/sh\n"
+        "if [ \"${FAKE_SERVICE_FAIL:-0}\" = 1 ] && [ \"$#\" -lt 3 ]; then\n"
+        "  echo '** server cannot find test name: NXDOMAIN'\n"
+        "  exit 1\n"
+        "fi\n"
         "printf 'Server:\\t172.43.0.10\\n"
         "Address:\\t172.43.0.10:53\\n\\n"
         "Name:\\t%s\\nAddress: 127.0.0.1\\n' \"$2\"\n"
@@ -91,6 +97,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
                     "port": 0,
                 }
             ]),
+            "172.42.1.96",
         ],
         check=False,
         capture_output=True,
@@ -117,6 +124,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
                     "port": 0,
                 }
             ]),
+            "172.42.1.96",
         ],
         check=False,
         capture_output=True,
@@ -125,6 +133,35 @@ with tempfile.TemporaryDirectory() as temp_dir:
     )
     assert failure.returncode == 1
     assert "PROBE_FAILED host=localhost expected=192.0.2.1" in failure.stderr
+
+    fallback_env = env.copy()
+    fallback_env["FAKE_SERVICE_FAIL"] = "1"
+    fallback = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            script,
+            "1",
+            "0",
+            "5",
+            json.dumps([
+                {
+                    "label": "Fallback localhost",
+                    "fqdn": "localhost",
+                    "address": "127.0.0.1",
+                    "port": 0,
+                }
+            ]),
+            "172.42.1.96",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=fallback_env,
+    )
+    assert fallback.returncode == 0, fallback.stderr
+    assert "COREDNS_ENDPOINT_FALLBACK_OK fqdn=localhost" in fallback.stdout
+    assert "ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK" in fallback.stdout
 
 print("Single-pod Data Services DNS probe checks passed")
 PY
