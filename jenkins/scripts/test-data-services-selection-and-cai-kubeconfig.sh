@@ -26,6 +26,8 @@ assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cdw_preflig
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cde_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cai_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_model_registry.yml" in playbook_text
+assert "common_tasks/ecs_reconcile_coredns.yml" not in playbook_text
+assert "common_tasks/ecs_data_services_verify_dns.yml" in playbook_text
 assert "when: \"'model_registry' in (ecs_data_services_install_names | default([]))\"" in playbook_text
 portal_facts_import = (
     "ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml"

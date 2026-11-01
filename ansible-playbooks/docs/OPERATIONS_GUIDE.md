@@ -311,18 +311,17 @@ pre-create a valid `kubernetes.io/tls` secret or set controller-side
 self-signed/untrusted, expired, wrong-SAN, or mismatched-key material before
 workspace submission and never creates a temporary certificate.
 
-Before any CDW/CDE/CAI API call, playbook 34 ensures the authoritative FreeIPA
-A records for CM, the ECS console/wildcard, and LDAP, then validates each
-CoreDNS upstream candidate with explicit A queries. Explicit
-`ecs_coredns_forwarders` are authoritative and do not fall back;
-inventory-derived candidates may use a proven ECS node resolver only when
-`ecs_coredns_allow_node_resolver_fallback: true`. The applied Corefile must
-contain the exact minimal `forward . <validated-upstreams>` stanza (this
-deployment: `forward . 172.31.76.102`). Fresh IPv4-only pod probes must resolve
-CM, the ECS console, and LDAP when LDAP sync/admin is selected from one newly
-created pod, then independently connect to the validated IPv4 addresses on CM
-7183 and selected LDAP 636 before provisioning. The pod logs its resolver
-configuration and reports each FQDN separately. DNS/TCP verification uses at most
+ECS install owns authoritative FreeIPA records and CoreDNS reconciliation.
+Playbook 34 does not rewrite or restart CoreDNS; before any CDW/CDE/CAI API
+call it verifies the DNS contract established by playbook 33. Fresh IPv4-only
+pod probes must resolve CM, the ECS console, and LDAP when LDAP sync/admin is
+selected through the normal Kubernetes CoreDNS Service, then independently
+connect to the validated IPv4 addresses on CM 7183 and selected LDAP 636.
+Direct queries to a ready CoreDNS endpoint are diagnostic only and cannot
+satisfy the gate, because Management Console workloads use the Service path.
+If endpoint-only resolution works, rerun ECS install to repair CoreDNS before
+Data Services provisioning. The pod logs its resolver configuration and
+reports each FQDN separately. DNS/TCP verification uses at most
 `ecs_data_services_dns_probe_attempts` attempts (default `3`). Failed DNS
 records wait `ecs_data_services_dns_probe_retry_delay` seconds (default `31`)
 between attempts so each retry occurs after the managed CoreDNS 30-second

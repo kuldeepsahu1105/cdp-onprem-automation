@@ -333,10 +333,10 @@
 
         if not pending:
             print(
-                "ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK",
+                "COREDNS_SERVICE_PATH_FAILED_ENDPOINT_ONLY",
                 flush=True,
             )
-            raise SystemExit(0)
+            raise SystemExit(2)
 
         for host, record in pending.items():
             try:
@@ -433,16 +433,17 @@
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
 
-- name: Report transient CoreDNS Service fallback
+- name: Report unusable CoreDNS Service path
   ansible.builtin.debug:
     msg: >-
-      CoreDNS Service DNS was transiently inconsistent, but ready CoreDNS
-      endpoint {{ ecs_data_services_coredns_endpoint.stdout | trim }} returned
-      every required A record and direct TCP validation succeeded. Continuing
-      without pinning workloads or modifying CoreDNS.
+      Kubernetes workloads could not resolve required Data Services names
+      through the CoreDNS Service, although ready CoreDNS endpoint
+      {{ ecs_data_services_coredns_endpoint.stdout | trim }} answered directly.
+      Playbook 34 does not mutate the ECS DNS configuration. Re-run ECS install
+      to reconcile CoreDNS before provisioning Data Services.
   when:
     - >-
-      'ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK'
+      'COREDNS_SERVICE_PATH_FAILED_ENDPOINT_ONLY'
       in ecs_data_services_dns_probe_logs.stdout
 
 - name: Require successful Data Services DNS verification pod
@@ -450,7 +451,7 @@
     that:
       - ecs_data_services_dns_probe_logs.rc == 0
       - ecs_data_services_dns_probe_phases.stdout == 'Succeeded'
-      - "'ALL_PROBES_OK' in ecs_data_services_dns_probe_logs.stdout"
+      - "'ALL_PROBES_OK' in ecs_data_services_dns_probe_logs.stdout_lines"
     fail_msg: >-
       One or more selected Data Services dependencies failed DNS or TCP
       verification through the newly created Kubernetes probe pod. Probe

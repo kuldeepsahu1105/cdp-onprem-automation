@@ -29,11 +29,12 @@ assert 'command = ["nslookup", "-type=A", query_host]' in text
 assert "socket.getaddrinfo(" not in text
 assert "ipaddress.IPv4Address(candidate)" in text
 assert "COREDNS_ENDPOINT_FALLBACK_OK" in text
-assert "ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK" in text
+assert "COREDNS_SERVICE_PATH_FAILED_ENDPOINT_ONLY" in text
 assert "(connect_address, port)" in text
 assert "NSLOOKUP_DIAGNOSTIC" in text
 assert "loop: \"{{ ecs_data_services_dns_verification_records }}\"" in text
 assert "ecs_data_services_dns_probe_phases.stdout == 'Succeeded'" in text
+assert "\"'ALL_PROBES_OK' in ecs_data_services_dns_probe_logs.stdout_lines\"" in text
 assert "ecs_data_services_dns_probe_attempts | default(3) | int" in text
 assert "ecs_data_services_dns_probe_retry_delay | int" in text
 assert group_vars["ecs_data_services_dns_probe_attempts"] == 3
@@ -159,9 +160,9 @@ with tempfile.TemporaryDirectory() as temp_dir:
         text=True,
         env=fallback_env,
     )
-    assert fallback.returncode == 0, fallback.stderr
+    assert fallback.returncode == 2, fallback.stderr
     assert "COREDNS_ENDPOINT_FALLBACK_OK fqdn=localhost" in fallback.stdout
-    assert "ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK" in fallback.stdout
+    assert "COREDNS_SERVICE_PATH_FAILED_ENDPOINT_ONLY" in fallback.stdout
 
 print("Single-pod Data Services DNS probe checks passed")
 PY
