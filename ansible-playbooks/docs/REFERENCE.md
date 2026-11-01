@@ -386,6 +386,16 @@ CMS (Management Service) and CDP base cluster are **separate**:
 
 Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-masters` / `ecs-workers` inventory groups. Skipped when `ecs_deploy_enabled: auto` and ECS groups are empty.
 
+CAI TLS variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ecs_cai_static_subdomain` | `ecs_cai_workspace_name` | Stable CAI endpoint label passed to `createWorkspace` and used for pre-create TLS validation. |
+| `ecs_cai_tls_certificate_path` | empty | External trusted PEM certificate/chain on the Ansible controller. |
+| `ecs_cai_tls_private_key_path` | empty | Matching external PEM private key on the Ansible controller. |
+| `ecs_cai_tls_ca_bundle_path` | empty | PEM trust anchor used to validate external or pre-existing CAI TLS material. Required without FreeIPA. |
+| `ecs_cai_tls_minimum_validity_seconds` | `86400` | Minimum remaining certificate validity before submission. |
+
 ### Deployment portal & monitoring (`group_vars/all.yml`)
 
 | Variable | Default | Description |
