@@ -217,7 +217,8 @@
       ansible.builtin.file:
         path: "{{ ecs_data_services_catalog_cache_path | dirname }}"
         state: directory
-        mode: "0700"
+        mode: "0755"
+      become: true
       when:
         - ecs_data_services_catalog_cache_path | default('') | length > 0
         - ecs_data_services_install_names | default([]) | length > 0
@@ -225,8 +226,9 @@
     - name: Persist ECS data-service catalog for portal refresh and email URLs
       ansible.builtin.copy:
         dest: "{{ ecs_data_services_catalog_cache_path }}"
-        mode: "0600"
+        mode: "0644"
         content: "{{ ecs_data_services_catalog | to_nice_yaml(indent=2) }}"
+      become: true
       when:
         - ecs_data_services_catalog_cache_path | default('') | length > 0
         - ecs_data_services_install_names | default([]) | length > 0

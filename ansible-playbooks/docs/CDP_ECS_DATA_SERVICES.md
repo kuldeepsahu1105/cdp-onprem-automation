@@ -239,6 +239,10 @@ running Ansible. Override it with `CDP_DATA_SERVICES_CATALOG_PATH` or
 `{{ ecs_persistent_state_dir }}/ecs-data-services-catalog.yml` path when the new
 path is absent and the legacy file is readable; inaccessible caches are skipped
 instead of failing portal refresh.
+The catalog is non-secret and is written with controller-readable permissions.
+Portal fact construction reads it with Ansible `slurp` under local privilege
+escalation, so a legacy/root-owned cache remains readable from Jenkins and
+direct `ansible-playbook` runs.
 
 Credential caches remain under `ecs_persistent_state_dir`: Jenkins uses
 `$CDP_STATE_DIR`, while standalone runs use `$CDP_STATE_DIR` when set,
@@ -448,7 +452,11 @@ triggers a fresh authoritative list/describe lookup; a returned reusable object
 is adopted, while an invisible or unusable reservation is recorded and the
 next bounded workspace and endpoint pair is attempted (`name-2` with `cai-2`,
 and so on). `ecs_cai_static_subdomain` remains the configured base label,
-so name versioning does not alter the trusted TLS or native endpoint contract.
+but an adopted workspace always derives the effective endpoint label from its
+authoritative `instanceUrl`. For example, adopting `name-2` at
+`https://cai.apps...` retains `cai`; automation never infers `cai-2` from the
+workspace name. Endpoint versioning and matching trusted TLS apply only when a
+new candidate must be created.
 Final diagnostics and the portal catalog carry the effective workspace name,
 current live status, and skipped unusable-name evidence. A reused healthy
 workspace reports `Existing and running (green)`; a newly submitted workspace

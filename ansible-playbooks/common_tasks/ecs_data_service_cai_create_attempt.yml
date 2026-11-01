@@ -20,7 +20,19 @@
 - name: CAI attempt | Adopt reusable live candidate
   ansible.builtin.set_fact:
     ecs_cai_workspace_name_effective: "{{ ecs_cai_workspace_candidate }}"
-    ecs_cai_static_subdomain_effective: "{{ ecs_cai_candidate_subdomain }}"
+    ecs_cai_static_subdomain_effective: >-
+      {{
+        (
+          ecs_cai_candidate_workspace.instanceUrl
+          | regex_replace('^https?://', '')
+          | regex_replace('/.*$', '')
+          | regex_replace(':.*$', '')
+          | split('.')
+          | first
+        )
+        if ecs_cai_candidate_workspace.instanceUrl | default('') | length > 0
+        else ecs_cai_candidate_subdomain
+      }}
     ecs_cai_existing_workspace: "{{ ecs_cai_candidate_workspace }}"
   when:
     - ecs_cai_candidate_workspace | length > 0
@@ -166,7 +178,19 @@
 - name: CAI attempt | Adopt real submitted candidate regardless submission rc
   ansible.builtin.set_fact:
     ecs_cai_workspace_name_effective: "{{ ecs_cai_workspace_candidate }}"
-    ecs_cai_static_subdomain_effective: "{{ ecs_cai_candidate_subdomain }}"
+    ecs_cai_static_subdomain_effective: >-
+      {{
+        (
+          ecs_cai_reconciled_workspace.instanceUrl
+          | regex_replace('^https?://', '')
+          | regex_replace('/.*$', '')
+          | regex_replace(':.*$', '')
+          | split('.')
+          | first
+        )
+        if ecs_cai_reconciled_workspace.instanceUrl | default('') | length > 0
+        else ecs_cai_candidate_subdomain
+      }}
     ecs_cai_existing_workspace: "{{ ecs_cai_reconciled_workspace }}"
   when:
     - ecs_cai_reconciled_workspace | default({}) | length > 0
@@ -182,7 +206,19 @@
 - name: CAI attempt | Adopt real reusable endpoint owner
   ansible.builtin.set_fact:
     ecs_cai_workspace_name_effective: "{{ ecs_cai_endpoint_collision_owner }}"
-    ecs_cai_static_subdomain_effective: "{{ ecs_cai_candidate_subdomain }}"
+    ecs_cai_static_subdomain_effective: >-
+      {{
+        (
+          ecs_cai_endpoint_owner_workspace.instanceUrl
+          | regex_replace('^https?://', '')
+          | regex_replace('/.*$', '')
+          | regex_replace(':.*$', '')
+          | split('.')
+          | first
+        )
+        if ecs_cai_endpoint_owner_workspace.instanceUrl | default('') | length > 0
+        else ecs_cai_candidate_subdomain
+      }}
     ecs_cai_existing_workspace: "{{ ecs_cai_endpoint_owner_workspace }}"
   when:
     - ecs_cai_existing_workspace | default({}) | length == 0
@@ -195,6 +231,15 @@
       is search(
         '(?i)(progress|pending|creat|install|provision|start|running|ready|active|finished|modify)'
       )
+
+- name: CAI attempt | Reconcile TLS to adopted authoritative endpoint
+  ansible.builtin.include_tasks: ecs_data_service_cai_tls.yml
+  when:
+    - ecs_cai_existing_workspace | default({}) | length > 0
+    - ecs_cai_static_subdomain_effective | length > 0
+    - >-
+      ecs_cai_tls_subdomain_validated | default('')
+      != ecs_cai_static_subdomain_effective
 
 - name: CAI attempt | Classify unresolved collision
   ansible.builtin.set_fact:

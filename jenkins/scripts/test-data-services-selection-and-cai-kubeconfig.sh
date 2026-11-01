@@ -71,6 +71,22 @@ assert (
     portal_refresh_task["rescue"][0]["name"]
     == "Report optional deployment portal route refresh failure"
 )
+playbook_tasks = yaml.safe_load(playbook.read_text())[1]["tasks"]
+catalog_dir_task = next(
+    task
+    for task in playbook_tasks
+    if task.get("name") == "Create ECS data-service catalog cache directory"
+)
+catalog_write_task = next(
+    task
+    for task in playbook_tasks
+    if task.get("name")
+    == "Persist ECS data-service catalog for portal refresh and email URLs"
+)
+assert catalog_dir_task["become"] is True
+assert catalog_dir_task["ansible.builtin.file"]["mode"] == "0755"
+assert catalog_write_task["become"] is True
+assert catalog_write_task["ansible.builtin.copy"]["mode"] == "0644"
 caddy_sync = (
     root / "ansible-playbooks/common_tasks/ecs_data_services_sync_caddy.yml"
 ).read_text()
@@ -130,13 +146,22 @@ catalog_path_resolve = next(
     for task in portal_facts
     if task.get("name") == "Resolve readable ECS data-service catalog cache"
 )
-assert "stat.readable" in str(catalog_path_resolve)
+assert "stat.exists" in str(catalog_path_resolve)
+catalog_read = next(
+    task
+    for task in portal_facts
+    if task.get("name") == "Read cached ECS data-service catalog with controller privileges"
+)
+assert "ansible.builtin.slurp" in catalog_read
+assert catalog_read["become"] is True
 catalog_load = next(
     task
     for task in portal_facts
     if task.get("name") == "Load cached ECS data-service catalog"
 )
 assert "deployment_portal_ecs_ds_catalog_cache_effective" in str(catalog_load)
+assert "b64decode" in str(catalog_load)
+assert "lookup('file'" not in str(catalog_load)
 
 cai_preflight = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cai_preflight.yml"
@@ -213,6 +238,9 @@ assert "ecs_cai_workspace_candidate" in str(collision_record)
 assert "subdomain: \"{{ ecs_cai_static_subdomain_effective }}\"" in cai_attempt
 assert "Adopt real submitted candidate regardless submission rc" in cai_attempt
 assert "Adopt real reusable endpoint owner" in cai_attempt
+assert "Reconcile TLS to adopted authoritative endpoint" in cai_attempt
+assert "instanceUrl" in cai_attempt
+assert "else ecs_cai_candidate_subdomain" in cai_attempt
 assert "rc/output alone cannot prove absence" in cai_attempt
 assert "endpoint .*used by workbench" in cai_attempt
 assert "ecs_cai_tls_subdomain_validated" in cai_attempt
@@ -220,6 +248,9 @@ assert group_vars["ecs_cai_workspace_name_attempts"] == 10
 assert group_vars["ecs_cai_workspace_name_max_length"] == 40
 assert group_vars["ecs_cai_workspace_reconcile_retries"] == 6
 assert "ecs_cai_workspace_name_effective" in (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cai_followup.yml"
+).read_text()
+assert "'effective_subdomain': ecs_cai_static_subdomain_effective" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cai_followup.yml"
 ).read_text()
 cai_result_text = (

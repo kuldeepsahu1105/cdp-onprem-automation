@@ -125,9 +125,23 @@
   ansible.builtin.set_fact:
     ecs_cai_static_subdomain_effective: >-
       {{
-        ecs_cai_subdomain_candidate_names[
-          ecs_cai_workspace_candidate_names.index(ecs_cai_workspace_name_effective)
-        ]
+        (
+          ecs_cai_existing_workspace.instanceUrl
+          | regex_replace('^https?://', '')
+          | regex_replace('/.*$', '')
+          | regex_replace(':.*$', '')
+          | split('.')
+          | first
+        )
+        if (
+          ecs_cai_existing_workspace | length > 0
+          and ecs_cai_existing_workspace.instanceUrl | default('') | length > 0
+        )
+        else (
+          ecs_cai_subdomain_candidate_names[
+            ecs_cai_workspace_candidate_names.index(ecs_cai_workspace_name_effective)
+          ]
+        )
       }}
   when: "'cai' in (ecs_data_services_install_names | default([]))"
 
