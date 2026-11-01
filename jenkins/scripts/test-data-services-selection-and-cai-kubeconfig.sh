@@ -110,6 +110,9 @@ for task_name in (
 assert "no_log" not in cai_tls_by_name[
     "CAI TLS | Validate converged secret before createWorkspace"
 ]
+freeipa_trust_read = cai_tls_by_name["CAI TLS | Read FreeIPA trust anchor"]
+assert freeipa_trust_read["ansible.builtin.raw"] == "base64 --wrap=0 /etc/ipa/ca.crt"
+assert freeipa_trust_read["no_log"] is True
 
 model_registry_tasks = list(
     flatten_tasks(
@@ -121,6 +124,12 @@ model_registry_tasks = list(
         )
     )
 )
+model_registry_ozone_include = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Retrieve Ozone S3 credentials from selected host"
+)
+assert model_registry_ozone_include["vars"]["ansible_python_interpreter"] == "/usr/bin/python3"
 model_registry_create = next(
     task
     for task in model_registry_tasks
