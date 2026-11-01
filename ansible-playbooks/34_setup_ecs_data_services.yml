@@ -232,18 +232,52 @@
     - name: Resolve deployment portal Caddy gate for ECS ingress sync
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_caddy_enabled.yml
 
-    - name: Resolve deployment portal target host group
-      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
-
-    - name: Sync ECS data service routes on deployment portal Caddy
-      ansible.builtin.import_tasks: common_tasks/ecs_data_services_sync_caddy.yml
-      delegate_to: "{{ groups[deployment_portal_host_group_effective][0] }}"
-      connection: ssh
-      become: true
-      run_once: true
+    - name: Refresh optional deployment portal routes for ECS data services
       when:
         - ecs_caddy_data_service_routes | default([]) | length > 0
         - deployment_portal_caddy_effective | default(false) | bool
+      block:
+        - name: Resolve deployment portal target host group
+          ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
+
+        - name: Check whether deployment portal was bootstrapped
+          ansible.builtin.stat:
+            path: "{{ deployment_portal_config_dir }}/docker-compose.yml"
+          register: ecs_ds_portal_compose
+          delegate_to: "{{ groups[deployment_portal_host_group_effective][0] }}"
+          connection: ssh
+          become: true
+          run_once: true
+
+        - name: Report skipped ECS route refresh when portal is not installed
+          ansible.builtin.debug:
+            msg: >-
+              Skipping optional ECS Data Services portal route refresh because
+              {{ deployment_portal_config_dir }}/docker-compose.yml is absent
+              on {{ groups[deployment_portal_host_group_effective][0] }}.
+              Native ECS application endpoints are unchanged.
+          when: not (ecs_ds_portal_compose.stat.exists | default(false) | bool)
+
+        - name: Build deployment portal facts for ECS ingress sync
+          ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
+          when: ecs_ds_portal_compose.stat.exists | default(false) | bool
+
+        - name: Sync ECS data service routes on deployment portal Caddy
+          ansible.builtin.import_tasks: common_tasks/ecs_data_services_sync_caddy.yml
+          delegate_to: "{{ groups[deployment_portal_host_group_effective][0] }}"
+          connection: ssh
+          become: true
+          run_once: true
+          when: ecs_ds_portal_compose.stat.exists | default(false) | bool
+      rescue:
+        - name: Report optional deployment portal route refresh failure
+          ansible.builtin.debug:
+            msg: >-
+              ECS Data Services provisioning completed, but the optional
+              deployment portal route refresh failed:
+              {{ ansible_failed_result.msg | default(ansible_failed_result | to_json) }}.
+              Native ECS application endpoints are unchanged. Re-run
+              35_refresh_deployment_portal.yml after repairing the portal.
 
     - name: Report failed Data Services provisioning after all attempts
       ansible.builtin.assert:

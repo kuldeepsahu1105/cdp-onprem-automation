@@ -27,6 +27,58 @@ assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cde_preflig
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cai_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_model_registry.yml" in playbook_text
 assert "when: \"'model_registry' in (ecs_data_services_install_names | default([]))\"" in playbook_text
+portal_facts_import = (
+    "ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml"
+)
+caddy_sync_import = (
+    "ansible.builtin.import_tasks: common_tasks/ecs_data_services_sync_caddy.yml"
+)
+assert portal_facts_import in playbook_text
+assert caddy_sync_import in playbook_text
+assert playbook_text.index(portal_facts_import) < playbook_text.index(caddy_sync_import)
+portal_refresh_task = next(
+    task
+    for task in yaml.safe_load(playbook.read_text())[1]["tasks"]
+    if task.get("name")
+    == "Refresh optional deployment portal routes for ECS data services"
+)
+assert portal_refresh_task["when"] == [
+    "ecs_caddy_data_service_routes | default([]) | length > 0",
+    "deployment_portal_caddy_effective | default(false) | bool",
+]
+portal_host_task = next(
+    task
+    for task in portal_refresh_task["block"]
+    if task.get("name") == "Resolve deployment portal target host group"
+)
+assert "when" not in portal_host_task
+portal_refresh_names = [task.get("name") for task in portal_refresh_task["block"]]
+assert portal_refresh_names.index(
+    "Build deployment portal facts for ECS ingress sync"
+) < portal_refresh_names.index(
+    "Sync ECS data service routes on deployment portal Caddy"
+)
+portal_facts_task = next(
+    task
+    for task in portal_refresh_task["block"]
+    if task.get("name") == "Build deployment portal facts for ECS ingress sync"
+)
+assert portal_facts_task["when"] == (
+    "ecs_ds_portal_compose.stat.exists | default(false) | bool"
+)
+assert portal_refresh_task["rescue"]
+assert (
+    portal_refresh_task["rescue"][0]["name"]
+    == "Report optional deployment portal route refresh failure"
+)
+caddy_sync = (
+    root / "ansible-playbooks/common_tasks/ecs_data_services_sync_caddy.yml"
+).read_text()
+assert "src: deployment_portal_Caddyfile.j2" in caddy_sync
+caddy_template = (
+    root / "ansible-playbooks/templates/deployment_portal_Caddyfile.j2"
+).read_text()
+assert "caddy_vhost_urls_external" in caddy_template
 
 cai_files = list(
     (root / "ansible-playbooks/common_tasks").glob("ecs_data_service_cai*.yml")
