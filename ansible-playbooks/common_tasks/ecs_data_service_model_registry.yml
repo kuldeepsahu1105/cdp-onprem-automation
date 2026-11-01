@@ -41,6 +41,8 @@
       block:
         - name: Retrieve Ozone S3 credentials from selected host
           ansible.builtin.include_tasks: ecs_model_registry_ozone_credentials.yml
+          vars:
+            ansible_python_interpreter: /usr/bin/python3
 
         - name: Set Model Registry S3 endpoint from selected host when not overridden
           ansible.builtin.set_fact:

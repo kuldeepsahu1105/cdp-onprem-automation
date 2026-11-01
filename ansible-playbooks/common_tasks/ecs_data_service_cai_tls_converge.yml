@@ -122,9 +122,9 @@
       {{ ecs_cai_existing_tls_secret.msg | default('unknown Kubernetes API error') }}.
 
 - name: CAI TLS | Read FreeIPA trust anchor
-  ansible.builtin.slurp:
-    src: /etc/ipa/ca.crt
+  ansible.builtin.raw: base64 --wrap=0 /etc/ipa/ca.crt
   register: ecs_cai_freeipa_ca
+  changed_when: false
   failed_when: false
   delegate_to: "{{ groups.get('ipaserver', []) | first }}"
   become: true
@@ -134,12 +134,13 @@
 - name: CAI TLS | Require FreeIPA trust anchor
   ansible.builtin.assert:
     that:
-      - not (ecs_cai_freeipa_ca.failed | default(false) | bool)
-      - ecs_cai_freeipa_ca.content | default('') | length > 0
+      - ecs_cai_freeipa_ca.rc | default(1) == 0
+      - ecs_cai_freeipa_ca.stdout | default('') | trim | length > 0
     fail_msg: >-
       Failed to read /etc/ipa/ca.crt from
-      {{ groups.get('ipaserver', []) | first }}:
-      {{ ecs_cai_freeipa_ca.msg | default('trust anchor was empty') }}.
+      {{ groups.get('ipaserver', []) | first }} with rc
+      {{ ecs_cai_freeipa_ca.rc | default('unknown') }}:
+      {{ ecs_cai_freeipa_ca.stderr | default('trust anchor was empty') | trim }}.
   when: ecs_cai_tls_provider_effective == 'freeipa'
 
 - name: CAI TLS | Require external trust anchor when FreeIPA is unavailable
@@ -173,7 +174,7 @@
     mode: "0600"
     content: >-
       {{
-        (ecs_cai_freeipa_ca.content | b64decode)
+        (ecs_cai_freeipa_ca.stdout | trim | b64decode)
         if ecs_cai_tls_provider_effective == 'freeipa'
         else lookup('ansible.builtin.file', ecs_cai_tls_ca_bundle_path)
       }}
