@@ -1279,6 +1279,7 @@ ecs_data_services_status_wait_delay: 30
 ecs_data_services_dns_probe_namespace: default
 ecs_data_services_dns_probe_image: python:3.11-alpine
 ecs_data_services_dns_probe_attempts: 3
+ecs_data_services_dns_probe_retry_delay: 31
 ecs_data_services_dns_probe_wait_retries: 24
 ecs_data_services_dns_probe_wait_delay: 5
 ecs_data_services_cm_probe_port: 7183
