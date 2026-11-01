@@ -58,5 +58,57 @@ parsed_credentials_assert = next(
 assert parsed_credentials_assert["run_once"] is True
 assert "run_once" not in parsed_credentials_assert["ansible.builtin.assert"]
 
+def flatten_tasks(tasks):
+    for task in tasks:
+        yield task
+        for section in ("block", "rescue", "always"):
+            yield from flatten_tasks(task.get(section, []))
+
+cai_tls_tasks = list(
+    flatten_tasks(
+        yaml.safe_load(
+            (
+                root
+                / "ansible-playbooks/common_tasks/ecs_data_service_cai_tls_converge.yml"
+            ).read_text()
+        )
+    )
+)
+cai_tls_by_name = {task.get("name"): task for task in cai_tls_tasks}
+for task_name in (
+    "CAI TLS | Read existing TLS secret",
+    "CAI TLS | Read FreeIPA trust anchor",
+    "CAI TLS | Stage existing secret for validation",
+    "CAI TLS | Install FreeIPA-issued TLS secret",
+    "CAI TLS | Install externally managed TLS secret when required",
+    "CAI TLS | Read converged TLS secret",
+    "CAI TLS | Stage converged secret for final validation",
+):
+    task = cai_tls_by_name[task_name]
+    assert task["no_log"] is True
+    assert task["failed_when"] is False
+
+assert "no_log" not in cai_tls_by_name[
+    "CAI TLS | Validate converged secret before createWorkspace"
+]
+
+model_registry_tasks = list(
+    flatten_tasks(
+        yaml.safe_load(
+            (
+                root
+                / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
+            ).read_text()
+        )
+    )
+)
+model_registry_create = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Create Model Registry"
+)
+assert model_registry_create["no_log"] is True
+assert model_registry_create["failed_when"] is False
+
 print("Data Services selection and CAI kubeconfig checks passed")
 PY

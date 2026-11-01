@@ -156,10 +156,36 @@
     stdin: "{{ ecs_cdw_freeipa_keytab_admin_password }}"
   environment:
     KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+  register: ecs_cdw_freeipa_kinit
   changed_when: false
+  failed_when: false
   no_log: true
   delegate_to: "{{ ipaserver_inventory_host }}"
   connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ipa_server_in_inventory | bool
+    - ecs_cdw_ensure_freeipa_principal_host | default(true) | bool
+
+- name: CDW | Require FreeIPA administrator ticket
+  ansible.builtin.assert:
+    that:
+      - ecs_cdw_freeipa_kinit.rc == 0
+    fail_msg: >-
+      FreeIPA Kerberos authentication for
+      {{ ecs_cdw_freeipa_keytab_admin_principal }} failed on
+      {{ ipaserver_inventory_host }} with rc
+      {{ ecs_cdw_freeipa_kinit.rc }}:
+      {{
+        ecs_cdw_freeipa_kinit.stderr
+        | default('')
+        | regex_replace(
+            '(?i)(password|secret|access[ _-]?key)(\\s*[=:]\\s*)\\S+',
+            '\\1\\2<redacted>'
+          )
+        | trim
+      }}
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
     - identity_provider_effective | default('freeipa') == 'freeipa'
@@ -254,7 +280,6 @@
       ansible.builtin.file:
         path: "{{ ecs_cdw_freeipa_temporary_keytab_dir.path }}"
         state: absent
-      no_log: true
       delegate_to: "{{ ipaserver_inventory_host }}"
       connection: ssh
       when:
