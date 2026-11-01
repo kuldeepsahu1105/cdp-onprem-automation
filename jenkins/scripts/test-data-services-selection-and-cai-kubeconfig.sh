@@ -160,9 +160,30 @@ catalog_load = next(
     for task in portal_facts
     if task.get("name") == "Load cached ECS data-service catalog"
 )
-assert "deployment_portal_ecs_ds_catalog_cache_effective" in str(catalog_load)
-assert "b64decode" in str(catalog_load)
 assert "lookup('file'" not in str(catalog_load)
+catalog_normalize = next(
+    task
+    for task in portal_facts
+    if task.get("name") == "Normalize cached ECS data-service catalog payload"
+)
+assert ".content" in str(catalog_normalize)
+assert "default('', true)" in str(catalog_normalize)
+catalog_missing_warning = next(
+    task
+    for task in portal_facts
+    if task.get("name") == "Report optional unreadable ECS data-service catalog"
+)
+assert "Continuing with the in-memory/default catalog" in str(
+    catalog_missing_warning
+)
+catalog_decode = next(
+    task
+    for task in portal_facts
+    if task.get("name") == "Decode optional ECS data-service catalog"
+)
+assert catalog_decode["rescue"]
+assert "b64decode" in str(catalog_decode)
+assert "deployment_portal_ecs_ds_catalog_parsed | default({})" in str(catalog_load)
 portal_link_task = next(
     task
     for task in portal_facts
