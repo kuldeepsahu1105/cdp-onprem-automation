@@ -4,7 +4,7 @@
     argv:
       - "{{ ecs_kubectl_path }}"
       - --kubeconfig
-      - "{{ ecs_kubeconfig_path }}"
+      - "{{ ecs_coredns_kubeconfig_path }}"
       - -n
       - "{{ ecs_cai_k8s_namespace }}"
       - get
@@ -27,7 +27,7 @@
     argv:
       - "{{ ecs_kubectl_path }}"
       - --kubeconfig
-      - "{{ ecs_kubeconfig_path }}"
+      - "{{ ecs_coredns_kubeconfig_path }}"
       - -n
       - "{{ ecs_cai_k8s_namespace }}"
       - describe
@@ -48,7 +48,7 @@
     argv:
       - "{{ ecs_kubectl_path }}"
       - --kubeconfig
-      - "{{ ecs_kubeconfig_path }}"
+      - "{{ ecs_coredns_kubeconfig_path }}"
       - -n
       - "{{ ecs_cai_k8s_namespace }}"
       - get
@@ -71,7 +71,7 @@
     argv:
       - "{{ ecs_kubectl_path }}"
       - --kubeconfig
-      - "{{ ecs_kubeconfig_path }}"
+      - "{{ ecs_coredns_kubeconfig_path }}"
       - -n
       - "{{ ecs_cai_k8s_namespace }}"
       - describe
@@ -92,7 +92,7 @@
     argv:
       - "{{ ecs_kubectl_path }}"
       - --kubeconfig
-      - "{{ ecs_kubeconfig_path }}"
+      - "{{ ecs_coredns_kubeconfig_path }}"
       - -n
       - "{{ ecs_cai_k8s_namespace }}"
       - get
@@ -114,7 +114,7 @@
     argv:
       - "{{ ecs_kubectl_path }}"
       - --kubeconfig
-      - "{{ ecs_kubeconfig_path }}"
+      - "{{ ecs_coredns_kubeconfig_path }}"
       - -n
       - "{{ ecs_cai_k8s_namespace }}"
       - get
