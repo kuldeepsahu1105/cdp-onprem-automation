@@ -3,8 +3,9 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 probe_file="$repo_root/ansible-playbooks/common_tasks/ecs_data_services_verify_dns.yml"
+group_vars_file="$repo_root/ansible-playbooks/group_vars/all.yml"
 
-python3 - "$probe_file" <<'PY'
+python3 - "$probe_file" "$group_vars_file" <<'PY'
 from pathlib import Path
 import json
 import subprocess
@@ -13,6 +14,7 @@ import yaml
 
 path = Path(sys.argv[1])
 text = path.read_text()
+group_vars = yaml.safe_load(Path(sys.argv[2]).read_text())
 
 assert text.count("- ansible-dns-check\n") == 5
 assert "ansible-dns-check-{{" not in text
@@ -27,6 +29,9 @@ assert "(connect_address, port)" in text
 assert "NSLOOKUP_DIAGNOSTIC" in text
 assert "loop: \"{{ ecs_data_services_dns_verification_records }}\"" in text
 assert "ecs_data_services_dns_probe_phases.stdout == 'Succeeded'" in text
+assert "ecs_data_services_dns_probe_attempts | default(3) | int" in text
+assert group_vars["ecs_data_services_dns_probe_attempts"] == 3
+assert group_vars["ecs_data_services_dns_probe_wait_retries"] == 24
 
 tasks = yaml.safe_load(path.read_text())
 start = next(
