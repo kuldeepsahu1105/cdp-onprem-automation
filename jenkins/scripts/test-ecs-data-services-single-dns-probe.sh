@@ -34,6 +34,23 @@ assert group_vars["ecs_data_services_dns_probe_attempts"] == 3
 assert group_vars["ecs_data_services_dns_probe_wait_retries"] == 24
 
 tasks = yaml.safe_load(path.read_text())
+tasks_by_name = {task.get("name"): task for task in tasks}
+probe_success = tasks_by_name[
+    "Require successful Data Services DNS verification pod"
+]
+record_results = tasks_by_name[
+    "Require selected Data Services DNS records in successful output"
+]
+assert "loop" not in probe_success
+assert record_results["loop"] == "{{ ecs_data_services_dns_verification_records }}"
+
+freeipa_record = tasks_by_name[
+    "Add FreeIPA to required Data Services DNS verification records"
+]
+freeipa_when = "\n".join(freeipa_record["when"])
+assert "ecs_ldap_sync_effective" in freeipa_when
+assert "ecs_ldap_admin_user_effective" in freeipa_when
+
 start = next(
     task for task in tasks
     if task.get("name") == "Start Data Services DNS verification pod"
