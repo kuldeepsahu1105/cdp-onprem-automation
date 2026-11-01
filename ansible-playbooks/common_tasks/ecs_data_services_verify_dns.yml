@@ -154,6 +154,33 @@
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
 
+- name: Resolve one ready CoreDNS endpoint for transient Service fallback
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - kube-system
+      - get
+      - endpoints
+      - rke2-coredns-rke2-coredns
+      - --output
+      - "jsonpath={.subsets[0].addresses[0].ip}"
+  register: ecs_data_services_coredns_endpoint
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
+  connection: ssh
+
+- name: Require one ready CoreDNS endpoint for DNS verification fallback
+  ansible.builtin.assert:
+    that:
+      - ecs_data_services_coredns_endpoint.stdout | trim | length > 0
+    fail_msg: >-
+      No ready CoreDNS endpoint is available behind service
+      rke2-coredns-rke2-coredns.
+
 - name: Start Data Services DNS verification pod
   ansible.builtin.command:
     argv:
@@ -182,8 +209,48 @@
         delay = int(sys.argv[2])
         timeout = int(sys.argv[3])
         records = json.loads(sys.argv[4])
+        coredns_endpoint = sys.argv[5]
         pending = {record["fqdn"]: record for record in records}
         last_errors = {}
+
+        def lookup_ipv4(host, server=""):
+            query_host = host.rstrip(".") + "."
+            command = ["nslookup", "-type=A", query_host]
+            if server:
+                command.append(server)
+            lookup = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            addresses = []
+            for line in lookup.stdout.splitlines():
+                if not line.startswith("Address:"):
+                    continue
+                candidate = line.split()[-1]
+                try:
+                    addresses.append(str(ipaddress.IPv4Address(candidate)))
+                except ipaddress.AddressValueError:
+                    pass
+            return sorted(set(addresses)), lookup
+
+        def validate_addresses(host, expected, addresses, lookup):
+            if not addresses:
+                raise RuntimeError(
+                    f"A lookup rc={lookup.returncode} returned no IPv4 "
+                    f"answers: {lookup.stdout.strip()} "
+                    f"{lookup.stderr.strip()}"
+                )
+            if expected and addresses != [expected]:
+                raise RuntimeError(
+                    f"expected {expected}, resolved {','.join(addresses)}"
+                )
+            if not expected and len(addresses) != 1:
+                raise RuntimeError(
+                    "expected one IPv4 answer, resolved " + ",".join(addresses)
+                )
 
         with open("/etc/resolv.conf", encoding="utf-8") as resolv_conf:
             print("RESOLV_CONF_BEGIN", flush=True)
@@ -195,38 +262,8 @@
                 expected = record.get("address", "")
                 port = int(record.get("port", 0))
                 try:
-                    lookup = subprocess.run(
-                        ["nslookup", "-type=A", host],
-                        check=False,
-                        capture_output=True,
-                        text=True,
-                        timeout=timeout,
-                    )
-                    addresses = []
-                    for line in lookup.stdout.splitlines():
-                        if not line.startswith("Address:"):
-                            continue
-                        candidate = line.split()[-1]
-                        try:
-                            addresses.append(str(ipaddress.IPv4Address(candidate)))
-                        except ipaddress.AddressValueError:
-                            pass
-                    addresses = sorted(set(addresses))
-                    if not addresses:
-                        raise RuntimeError(
-                            f"A lookup rc={lookup.returncode} returned no IPv4 "
-                            f"answers: {lookup.stdout.strip()} "
-                            f"{lookup.stderr.strip()}"
-                        )
-                    if expected and addresses != [expected]:
-                        raise RuntimeError(
-                            f"expected {expected}, resolved {','.join(addresses)}"
-                        )
-                    if not expected and len(addresses) != 1:
-                        raise RuntimeError(
-                            "expected one IPv4 answer, resolved "
-                            + ",".join(addresses)
-                        )
+                    addresses, lookup = lookup_ipv4(host)
+                    validate_addresses(host, expected, addresses, lookup)
                     connect_address = expected or addresses[0]
                     print(
                         f"DNS_A_OK fqdn={host} "
@@ -261,15 +298,49 @@
             if attempt < retries:
                 time.sleep(delay)
 
+        for host, record in list(pending.items()):
+            expected = record.get("address", "")
+            port = int(record.get("port", 0))
+            try:
+                addresses, lookup = lookup_ipv4(host, coredns_endpoint)
+                validate_addresses(host, expected, addresses, lookup)
+                connect_address = expected or addresses[0]
+                print(
+                    f"COREDNS_ENDPOINT_FALLBACK_OK fqdn={host} "
+                    f"endpoint={coredns_endpoint} ipv4={','.join(addresses)}",
+                    flush=True,
+                )
+                print(
+                    f"DNS_A_OK fqdn={host} ipv4={','.join(addresses)} "
+                    f"source=endpoint:{coredns_endpoint}",
+                    flush=True,
+                )
+                if port:
+                    with socket.create_connection(
+                        (connect_address, port),
+                        timeout=timeout,
+                    ):
+                        pass
+                    print(
+                        f"TCP_OK fqdn={host} ipv4={connect_address} "
+                        f"port={port}",
+                        flush=True,
+                    )
+                del pending[host]
+                last_errors.pop(host, None)
+            except Exception as exc:
+                last_errors[host] = repr(exc)
+
+        if not pending:
+            print(
+                "ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK",
+                flush=True,
+            )
+            raise SystemExit(0)
+
         for host, record in pending.items():
             try:
-                lookup = subprocess.run(
-                    ["nslookup", "-type=A", host],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
-                )
+                _, lookup = lookup_ipv4(host)
                 print(
                     f"NSLOOKUP_DIAGNOSTIC host={host} rc={lookup.returncode}",
                     file=sys.stderr,
@@ -295,6 +366,7 @@
       - "{{ ecs_data_services_dns_probe_retry_delay | int }}"
       - "{{ ecs_data_services_tcp_probe_timeout | int }}"
       - "{{ ecs_data_services_dns_verification_records | to_json }}"
+      - "{{ ecs_data_services_coredns_endpoint.stdout | trim }}"
   register: ecs_data_services_dns_probe_starts
   changed_when: false
   failed_when: false
@@ -360,6 +432,18 @@
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
+
+- name: Report transient CoreDNS Service fallback
+  ansible.builtin.debug:
+    msg: >-
+      CoreDNS Service DNS was transiently inconsistent, but ready CoreDNS
+      endpoint {{ ecs_data_services_coredns_endpoint.stdout | trim }} returned
+      every required A record and direct TCP validation succeeded. Continuing
+      without pinning workloads or modifying CoreDNS.
+  when:
+    - >-
+      'ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK'
+      in ecs_data_services_dns_probe_logs.stdout
 
 - name: Require successful Data Services DNS verification pod
   ansible.builtin.assert:
