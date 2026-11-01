@@ -207,6 +207,25 @@
       }}
   when: "'cai' in (ecs_data_services_install_names | default([]))"
 
+- name: CAI | Report authoritative reusable workspace
+  ansible.builtin.debug:
+    msg: >-
+      CAI Workbench: Existing workspace recognized and selected for reuse.
+      instanceName={{
+      ecs_cai_existing_workspace.instanceName
+      | default(ecs_cai_workspace_name_effective) }};
+      observed_status={{
+      ecs_cai_existing_workspace.instanceStatus | default('unknown') }};
+      endpoint={{
+      ecs_cai_existing_workspace.instanceUrl | default('not returned') }};
+      environment={{
+      ecs_cai_existing_workspace.environmentName
+      | default(ecs_cdp_environment_name) }}.
+      No rename or duplicate create is performed.
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - ecs_cai_existing_workspace | default({}) | length > 0
+
 - name: CAI | Preserve deterministic workspace create attempt order
   ansible.builtin.set_fact:
     ecs_cai_workspace_create_candidates: >-

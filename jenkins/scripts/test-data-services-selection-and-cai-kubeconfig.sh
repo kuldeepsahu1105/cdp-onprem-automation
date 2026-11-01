@@ -292,12 +292,18 @@ assert "ecs_cai_workspace_name_effective" in (
 assert "'effective_subdomain': ecs_cai_static_subdomain_effective" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cai_followup.yml"
 ).read_text()
+assert "CAI | Report authoritative reusable workspace" in cai_preflight
+assert "No rename or duplicate create is performed" in cai_preflight
 cai_result_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cai.yml"
 ).read_text()
 assert "Existing and running (green)" in cai_result_text
 assert "Created successfully (green)" in cai_result_text
 assert "effective_name=" in cai_result_text
+assert "Report CAI Workbench outcome" in cai_result_text
+assert "Existing and running; reused without create or rename" in cai_result_text
+for field in ("instanceName=", "observed_status=", "endpoint=", "environment="):
+    assert field in cai_result_text
 assert "create_failed" in cai_attempt.lower()
 cai_followup_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cai_followup.yml"
@@ -314,6 +320,14 @@ assert "DataViz status=" in playbook_text
 assert "Existing (healthy)" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
 ).read_text()
+model_registry_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
+).read_text()
+assert "Report existing healthy Model Registry" in model_registry_text
+assert "no create or credential mutation performed" in model_registry_text
+for field in ("serviceName=", "namespace=", "observed_status=", "environment=", "endpoint=", "crn="):
+    assert field in model_registry_text
+assert "success_msg:" in model_registry_text
 assert "installed|ready|running" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
 ).read_text()

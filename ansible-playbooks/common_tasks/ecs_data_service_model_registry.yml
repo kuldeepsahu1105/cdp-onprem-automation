@@ -130,6 +130,39 @@
               exists in non-healthy state
               {{ ecs_mr_existing_registry.status | default('unknown') }}.
               Automation will not treat it as healthy or create a duplicate.
+            success_msg: >-
+              Model Registry existing-resource health check passed:
+              serviceName={{
+              ecs_mr_existing_registry.serviceName
+              | default(ecs_model_registry_service_name) }},
+              namespace={{
+              ecs_mr_existing_registry.namespace
+              | default(ecs_model_registry_service_name) }},
+              status={{ ecs_mr_existing_registry.status | default('unknown') }},
+              environment={{
+              ecs_mr_existing_registry.environmentName
+              | default(ecs_cdp_environment_name) }}.
+          when: ecs_mr_exists | bool
+
+        - name: Report existing healthy Model Registry
+          ansible.builtin.debug:
+            msg: >-
+              Model Registry: Existing (healthy);
+              no create or credential mutation performed. serviceName={{
+              ecs_mr_existing_registry.serviceName
+              | default(ecs_model_registry_service_name) }};
+              namespace={{
+              ecs_mr_existing_registry.namespace
+              | default(ecs_model_registry_service_name) }};
+              observed_status={{
+              ecs_mr_existing_registry.status | default('unknown') }};
+              environment={{
+              ecs_mr_existing_registry.environmentName
+              | default(ecs_cdp_environment_name) }};
+              endpoint={{
+              ecs_mr_existing_registry.domain
+              | default(ecs_mr_existing_registry.endpoint | default('not returned')) }};
+              crn={{ ecs_mr_existing_registry.crn | default('not returned') }}.
           when: ecs_mr_exists | bool
 
         - name: Resolve Model Registry creator CRN

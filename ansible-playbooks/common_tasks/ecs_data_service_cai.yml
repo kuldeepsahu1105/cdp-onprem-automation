@@ -59,3 +59,20 @@
           }}
       when:
         - ecs_cai_workspace_succeeded | bool
+
+    - name: Report CAI Workbench outcome
+      ansible.builtin.debug:
+        msg: >-
+          CAI Workbench: {{
+          'Existing and running; reused without create or rename'
+          if ecs_cai_existing_workspace | default({}) | length > 0
+          else 'Created successfully'
+          }}. instanceName={{ ecs_cai_workspace_name_effective }};
+          observed_status={{
+          (ecs_cai_workspace.workspace | default({})).instanceStatus
+          | default('unknown') }};
+          endpoint={{ ecs_cai_workspace_url | default('not returned') }};
+          environment={{
+          (ecs_cai_workspace.workspace | default({})).environmentName
+          | default(ecs_cdp_environment_name) }}.
+      when: ecs_cai_workspace_succeeded | bool
