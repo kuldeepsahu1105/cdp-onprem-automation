@@ -322,7 +322,9 @@ deployment: `forward . 172.31.76.102`). Fresh IPv4-only pod probes must resolve
 CM, the ECS console, and LDAP from one newly created pod and independently
 connect to the validated IPv4 addresses on CM 7183 and LDAP 636 before
 provisioning. The pod logs its resolver configuration and reports each FQDN
-separately while keeping one global retry bound. Terminal failed
+separately. DNS/TCP verification uses at most
+`ecs_data_services_dns_probe_attempts` attempts (default `3`); the independent
+pod wait bound only covers scheduling and image startup. Terminal failed
 CDW/CDE/CAI resources are reported without automated disable, deletion,
 recreation, backend restart, or datastore mutation; independent service
 boundaries still allow later selected services to run before the final

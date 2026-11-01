@@ -48,8 +48,11 @@ stanza with the minimal existing-Corefile form
 one fresh Python probe pod performs IPv4-only resolution for CM, the ECS
 console, and LDAP in the same resolver context, plus independent TCP checks to
 the already validated IPv4 address for Cloudera Manager on 7183 and LDAP on
-636. The pod logs its `/etc/resolv.conf` and reports each FQDN separately. No
-Data Services API call occurs until all checks pass.
+636. The pod logs its `/etc/resolv.conf`, reports each FQDN separately, and
+uses at most `ecs_data_services_dns_probe_attempts` attempts (default `3`).
+The separate pod wait bound covers Kubernetes scheduling and image startup; it
+does not multiply DNS checks. No Data Services API call occurs until all checks
+pass.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
