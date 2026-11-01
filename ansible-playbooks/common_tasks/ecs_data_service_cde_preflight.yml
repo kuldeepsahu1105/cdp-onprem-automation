@@ -34,8 +34,15 @@
       {%- if matches | length == 0 -%}
       {%- set ns.selected = {'name': candidate, 'existing': false, 'status': 'Absent'} -%}
       {%- elif (
-        matches[0].status | default('')
-        is search('(?i)^(running|ready|created|accepted|starting|creating|waiting|updating|restarting|clustercreationcompleted|clustercreationinprogress)$')
+        matches[0].status | default('') | lower
+        in (
+          (
+            ecs_cde_service_green_statuses
+            + ecs_cde_service_transitional_statuses
+          )
+          | map('lower')
+          | list
+        )
       ) -%}
       {%- set ns.selected = {
         'name': candidate,
@@ -61,3 +68,18 @@
     ecs_cde_service_name_effective: "{{ ecs_cde_service_selection.name }}"
     ecs_cde_service_existing: "{{ ecs_cde_service_selection.existing | bool }}"
     ecs_cde_service_prior_status: "{{ ecs_cde_service_selection.status }}"
+
+- name: CDE | Report selected existing service without capacity mutation
+  ansible.builtin.debug:
+    msg: >-
+      CDE Service: Existing resource selected for mutation-free reuse.
+      name={{ ecs_cde_service_name_effective }};
+      observed_status={{ ecs_cde_service_prior_status }};
+      clusterId={{
+      (ecs_cde_service_selection.service | default({})).clusterId
+      | default('not returned') }};
+      environment={{
+      (ecs_cde_service_selection.service | default({})).environmentName
+      | default(ecs_cdp_environment_name) }}.
+      Existing CPU and memory capacity will not be resized.
+  when: ecs_cde_service_existing | bool

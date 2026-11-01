@@ -363,6 +363,7 @@
             + (ecs_cde_virtual_cluster_status | default('unknown'))
             + ' (name=' + (ecs_cde_virtual_cluster_name_effective | default('unknown'))
             + ', status=' + ((ecs_cde_virtual_cluster | default({})).status | default('unknown'))
+            + ', native_ui=' + (ecs_cde_virtual_cluster_ui_url | default('not returned', true))
             + ')'
           ) -%}
           {%- endif -%}

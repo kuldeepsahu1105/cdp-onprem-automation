@@ -29,7 +29,8 @@
     that:
       - ecs_cde_service_succeeded | default(false) | bool
     fail_msg: >-
-      CDE provisioning did not reach ClusterCreationCompleted.
+      CDE provisioning did not reach a configured healthy service status
+      ({{ ecs_cde_service_green_statuses | join(', ') }}).
       Module/API response:
       {{ ecs_cde_service.msg | default(ecs_cde_service | to_json) }}.
   when: "'cde' in (ecs_data_services_install_names | default([]))"

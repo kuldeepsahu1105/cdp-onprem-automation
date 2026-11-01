@@ -36,9 +36,16 @@
       {%- set matches = resources | selectattr('vcName', 'equalto', candidate) | list -%}
       {%- if matches | length == 0 -%}
       {%- set ns.selected = {'name': candidate, 'existing': false, 'status': 'Absent'} -%}
-      {%- elif not (
-        matches[0].status | default('')
-        is search('(?i)^(appdeleted|appnotdeletedfromdb|appdeletioninitiated|appdeletionfailed|appinstallationfailed|appresumefailed|appsuspendfailed)$')
+      {%- elif (
+        matches[0].status | default('') | lower
+        in (
+          (
+            ecs_cde_virtual_cluster_green_statuses
+            + ecs_cde_virtual_cluster_transitional_statuses
+          )
+          | map('lower')
+          | list
+        )
       ) -%}
       {%- set ns.selected = {
         'name': candidate,
@@ -64,6 +71,17 @@
     ecs_cde_virtual_cluster_name_effective: "{{ ecs_cde_vc_selection.name }}"
     ecs_cde_virtual_cluster_existing: "{{ ecs_cde_vc_selection.existing | bool }}"
     ecs_cde_virtual_cluster_prior_status: "{{ ecs_cde_vc_selection.status }}"
+
+- name: CDE VC | Report selected existing Virtual Cluster
+  ansible.builtin.debug:
+    msg: >-
+      CDE Virtual Cluster: Existing resource selected for mutation-free reuse.
+      name={{ ecs_cde_virtual_cluster_name_effective }};
+      observed_status={{ ecs_cde_virtual_cluster_prior_status }};
+      vcId={{ ecs_cde_vc_selection.id | default('not returned') }};
+      service={{ ecs_cde_service_name_effective }}.
+      Existing compute settings will not be updated.
+  when: ecs_cde_virtual_cluster_existing | bool
 
 - name: CDE VC | Create unused Virtual Cluster
   cloudera.cloud.de_virtual_cluster:
@@ -95,8 +113,15 @@
     (
       ecs_cde_vc_info.virtual_clusters | default([])
       | first | default({})
-    ).status | default('')
-    is search('(?i)^(appinstalled|appdeleted|appnotdeletedfromdb|appdeletionfailed|appinstallationfailed|appresumefailed|appsuspendfailed)$')
+    ).status | default('') | lower
+    in (ecs_cde_virtual_cluster_green_statuses | map('lower') | list)
+    or (
+      (
+        ecs_cde_vc_info.virtual_clusters | default([])
+        | first | default({})
+      ).status | default('') | lower
+      not in (ecs_cde_virtual_cluster_transitional_statuses | map('lower') | list)
+    )
   retries: "{{ ecs_data_services_status_wait_retries | int }}"
   delay: "{{ ecs_data_services_status_wait_delay | int }}"
   become: false
@@ -116,11 +141,40 @@
 - name: CDE VC | Require healthy terminal state
   ansible.builtin.assert:
     that:
-      - ecs_cde_virtual_cluster.status | default('') == 'AppInstalled'
+      - >-
+        ecs_cde_virtual_cluster.status | default('') | lower
+        in (ecs_cde_virtual_cluster_green_statuses | map('lower') | list)
     fail_msg: >-
       CDE Virtual Cluster {{ ecs_cde_virtual_cluster_name_effective }} reached
-      {{ ecs_cde_virtual_cluster.status | default('unknown') }} instead of
-      AppInstalled. Automation does not delete the failed resource.
+      {{ ecs_cde_virtual_cluster.status | default('unknown') }} instead of a
+      configured healthy status
+      ({{ ecs_cde_virtual_cluster_green_statuses | join(', ') }}).
+      Automation does not delete the failed resource.
+
+- name: CDE VC | Resolve native UI URL
+  ansible.builtin.set_fact:
+    ecs_cde_virtual_cluster_ui_url: >-
+      {{
+        ecs_cde_virtual_cluster.VcUiUrl
+        | default(
+            ecs_cde_virtual_cluster.vcUiUrl | default(''),
+            true
+          )
+        | regex_replace('/+$', '')
+      }}
+
+- name: CDE VC | Report Virtual Cluster convergence
+  ansible.builtin.debug:
+    msg: >-
+      CDE Virtual Cluster: {{
+      'Existing and healthy; reused without create or compute mutation'
+      if ecs_cde_virtual_cluster_existing | bool
+      else 'Created successfully'
+      }}. name={{ ecs_cde_virtual_cluster_name_effective }};
+      observed_status={{ ecs_cde_virtual_cluster.status | default('unknown') }};
+      vcId={{ ecs_cde_virtual_cluster.vcId | default('not returned') }};
+      native_ui={{ ecs_cde_virtual_cluster_ui_url | default('not returned', true) }};
+      service={{ ecs_cde_service_name_effective }}.
 
 - name: CDE VC | Record green result and catalog metadata
   ansible.builtin.set_fact:
@@ -141,7 +195,7 @@
                   'name': ecs_cde_virtual_cluster_name,
                   'effective_name': ecs_cde_virtual_cluster_name_effective,
                   'status': ecs_cde_virtual_cluster.status,
-                  'url': ecs_cde_virtual_cluster.VcUiUrl | default('')
+                  'url': ecs_cde_virtual_cluster_ui_url
                 }
               },
               recursive=True

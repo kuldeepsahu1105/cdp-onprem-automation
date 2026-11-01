@@ -112,12 +112,12 @@ reused/waited; failed, deleted, deleting, or stale-reserved names are retained
 and skipped in favor of the next deterministic suffix. The effective VC name,
 status, and native `VcUiUrl` are recorded in the service catalog.
 Before a rerun, CDE uses the signed `de list-services` summary, which does not
-contact Cloudera Manager, to identify an existing terminal `*Failed` service.
-Automation reports that service and fails only the CDE boundary; it does not
-disable, delete, or recreate it. CDW and CAI apply the same non-destructive
-terminal-failure policy. Healthy and in-progress resources remain eligible for
-normal module adoption, and a user-initiated CAI deletion is allowed to finish
-before a new workspace is submitted. Automation does not restart IAM/Liftie
+contact Cloudera Manager. Only explicit healthy or transitional service states
+are eligible for mutation-free adoption. Failed, deleted, deleting, reserved,
+or unknown-status names are retained without disable/delete and skipped in
+favor of the next deterministic bounded suffix. The same explicit allowlist
+policy applies to CDE Virtual Clusters. Existing adopted service capacity and
+VC compute settings are never updated. Automation does not restart IAM/Liftie
 deployments or delete control-plane datastore state.
 Model Registry obtains Ozone S3
 credentials from `ecs_model_registry_sdx_group` (default `sdx`) when that

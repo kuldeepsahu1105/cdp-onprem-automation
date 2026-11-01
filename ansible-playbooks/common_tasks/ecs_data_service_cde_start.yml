@@ -34,8 +34,15 @@
     (
       ecs_cde_existing_info.services | default([])
       | first | default({})
-    ).status | default('')
-    is search('(?i)^(clustercreationcompleted|failed|create_failed|deleted)$')
+    ).status | default('') | lower
+    in (ecs_cde_service_green_statuses | map('lower') | list)
+    or (
+      (
+        ecs_cde_existing_info.services | default([])
+        | first | default({})
+      ).status | default('') | lower
+      not in (ecs_cde_service_transitional_statuses | map('lower') | list)
+    )
   retries: "{{ ecs_data_services_status_wait_retries | int }}"
   delay: "{{ ecs_data_services_status_wait_delay | int }}"
   become: false
