@@ -311,6 +311,8 @@ cai_followup_text = (
 assert "'effective_name': ecs_cai_workspace_name_effective" in cai_followup_text
 assert "'status': (" in cai_followup_text
 assert "ecs_model_registry_status" in playbook_text
+assert "Report Data Services provisioning result after all attempts" in playbook_text
+assert "Report failed Data Services provisioning after all attempts" not in playbook_text
 assert "success_msg:" in playbook_text
 assert "CAI Workbench:" in playbook_text
 assert "Model Registry:" in playbook_text

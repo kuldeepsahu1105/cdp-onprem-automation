@@ -283,7 +283,7 @@
               Native ECS application endpoints are unchanged. Re-run
               35_refresh_deployment_portal.yml after repairing the portal.
 
-    - name: Report failed Data Services provisioning after all attempts
+    - name: Report Data Services provisioning result after all attempts
       ansible.builtin.assert:
         that:
           - >-
