@@ -43,11 +43,20 @@ ozone_credentials = (
     root
     / "ansible-playbooks/common_tasks/ecs_model_registry_ozone_credentials.yml"
 ).read_text()
+ozone_tasks = yaml.safe_load(ozone_credentials)
 assert "/opt/cloudera/parcels/CDH/bin/ozone" in ozone_credentials
-assert "*-ozone-STORAGE_CONTAINER_MANAGER" in ozone_credentials
+assert "/etc/ozone/conf/ozone-site.xml" in ozone_credentials
 assert 'HADOOP_CONF_DIR: "{{ ecs_ozone_conf_dir }}"' in ozone_credentials
 assert 'OZONE_CONF_DIR: "{{ ecs_ozone_conf_dir }}"' in ozone_credentials
 assert "failed_when: false" in ozone_credentials
+assert "<redacted>" in ozone_credentials
+parsed_credentials_assert = next(
+    task
+    for task in ozone_tasks
+    if task.get("name") == "Ozone S3 | Require parsed credentials"
+)
+assert parsed_credentials_assert["run_once"] is True
+assert "run_once" not in parsed_credentials_assert["ansible.builtin.assert"]
 
 print("Data Services selection and CAI kubeconfig checks passed")
 PY
