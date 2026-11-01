@@ -343,6 +343,17 @@ For standalone Data Services recovery, run:
 ansible-playbook -i inventory.ini 34_setup_ecs_data_services.yml --private-key "$ANSIBLE_PRIVATE_KEY"
 ```
 
+For CAI with TLS enabled, `cml-tls-secret` is validated before
+`createWorkspace`. FreeIPA deployments use the existing wildcard certificate
+profile. AD, external-PKI, and identity-provider-free deployments must either
+pre-create a valid `kubernetes.io/tls` secret or set controller-side
+`ecs_cai_tls_certificate_path`, `ecs_cai_tls_private_key_path`, and
+`ecs_cai_tls_ca_bundle_path`. The certificate must cover
+`<ecs_cai_static_subdomain>.<ecs_app_domain>` and
+`*.<ecs_cai_static_subdomain>.<ecs_app_domain>`. Automation rejects missing,
+self-signed/untrusted, expired, wrong-SAN, or mismatched-key material before
+workspace submission and never creates a temporary certificate.
+
 Before any CDW/CDE/CAI API call, playbook 34 ensures the authoritative FreeIPA
 A records for CM, the ECS console/wildcard, and LDAP, then validates each
 CoreDNS upstream candidate with explicit A queries. Explicit

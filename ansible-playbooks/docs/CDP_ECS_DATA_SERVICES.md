@@ -69,13 +69,19 @@ can prove whether the request landed. This avoids remote
 `async_wrapper` output corruption and exposes live service failures directly.
 CDE retains its existing bounded Ansible async wrapper on this integration
 branch, but a completed async job that reports a module/API failure fails the
-CDE boundary with that response before ingress or catalog registration. CAI
-adopts an existing healthy or in-progress workspace instead of calling
-`createWorkspace` again. Because the workspace `instanceUrl` and
-ListenerSet can appear before terminal installation status, automation first
-polls until the endpoint is available, issues the proper FreeIPA wildcard
-certificate, and creates `cml-tls-secret`; terminal workspace polling then
-continues. If a user-initiated deletion is still propagating, preflight waits
+CDE boundary with that response before ingress or catalog registration. CAI adopts an existing healthy or in-progress workspace instead of calling
+`createWorkspace` again. For TLS-enabled workspaces, automation derives the
+stable endpoint from `ecs_cai_static_subdomain` and `ecs_app_domain`, creates
+the namespace, and validates or converges `cml-tls-secret` **before**
+submission. FreeIPA deployments issue the trusted base-host plus wildcard
+certificate through the existing wildcard profile. AD, external-PKI, and
+identity-provider-free deployments reuse a valid trusted secret or require
+explicit controller-side certificate, key, and CA-bundle paths; automation
+never creates a temporary/self-signed fallback. The secret must be
+`kubernetes.io/tls`, the key must match, the certificate must be trusted,
+unexpired for the configured minimum, and cover both the base endpoint and its
+wildcard children. `createWorkspace` receives the same static subdomain and is
+gated on successful secret validation. If a user-initiated deletion is still propagating, preflight waits
 for the backend record and name reservation to disappear. A terminal failed
 workspace is reported without deletion or recreation.
 
@@ -295,16 +301,15 @@ Ansible async-wrapper parsing failures for CDW/CAI and supports adoption of
 existing resources. One service failure is retained for the final aggregate
 report without preventing later selected services from running.
 
-For CAI, playbook 34 first polls `ml_info` until `instanceUrl` appears or the
-workspace reaches terminal `:failed`. It derives the workbench hostname from
-that endpoint, ensures the FreeIPA `wildcard` certificate profile, issues a
-wildcard certificate, and installs it as `cml-tls-secret` before continuing
-bounded terminal-status polling. This ordering allows ListenerSet certificate
-validation to complete without relying on a temporary self-signed secret. A
-failed create call, terminal failed status, or exhausted endpoint wait fails
-the CAI boundary before certificate or UI work while preserving the exact API
-diagnostic. Adopted healthy or in-progress workspaces skip creation and enter
-the same endpoint discovery path.
+For CAI, playbook 34 first converges the trusted TLS secret for
+`<ecs_cai_static_subdomain>.<ecs_app_domain>` and its wildcard children, then
+submits `createWorkspace` with that same static subdomain. A valid existing
+secret is reused without rotation. Invalid or temporary material is replaced
+only through FreeIPA or explicitly configured external PKI inputs. Missing
+trusted material fails before submission. After submission or adoption,
+`ml_info` must return the same endpoint hostname before ListenerSet, terminal
+status, and UI verification continue. An adopted endpoint mismatch fails
+without changing the secret or recreating the workspace.
 The final probe accepts successful,
 redirect, authentication-required, or forbidden responses. A persistent
 ingress-default 404 fails the final aggregate check and prints the `cml`
@@ -385,6 +390,13 @@ same adoption path.
 module-owned waits. `ecs_data_services_status_wait_retries` and
 `ecs_data_services_status_wait_delay` bound CDW/CAI lifecycle polling. The
 `ecs_data_services_async_*` values apply only to CDE on this branch.
+
+CAI external-PKI variables are standalone Ansible controller paths:
+`ecs_cai_tls_certificate_path`, `ecs_cai_tls_private_key_path`, and
+`ecs_cai_tls_ca_bundle_path`. `ecs_cai_static_subdomain` defaults to the
+workspace name, and `ecs_cai_tls_minimum_validity_seconds` defaults to one day.
+AD and deployments without an in-inventory FreeIPA server must configure the
+CA bundle even when reusing a pre-existing secret so trust can be verified.
 
 ## Not automated (Labs reference gaps)
 

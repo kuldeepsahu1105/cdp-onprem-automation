@@ -1291,6 +1291,18 @@ ecs_cai_configure_wildcard_tls: true
 ecs_cai_recreate_failed_workspace: true
 ecs_cai_wildcard_cert_profile: wildcard
 ecs_cai_tls_secret_name: cml-tls-secret
+# Stable CAI ingress label. The resulting base hostname is
+# <static_subdomain>.<ecs_app_domain>; the TLS certificate must also cover
+# *.<static_subdomain>.<ecs_app_domain>.
+ecs_cai_static_subdomain: "{{ ecs_cai_workspace_name }}"
+# External/AD/no-identity-provider TLS inputs on the Ansible controller.
+# A trusted existing cml-tls-secret is reused when it validates against this CA.
+ecs_cai_tls_certificate_path: ""
+ecs_cai_tls_private_key_path: ""
+ecs_cai_tls_ca_bundle_path: ""
+ecs_cai_tls_minimum_validity_seconds: 86400
+ecs_cai_endpoint_wait_retries: 60
+ecs_cai_endpoint_wait_delay: 10
 ecs_cai_ui_wait_retries: 20
 ecs_cai_ui_wait_delay: 15
 # Model Registry (prefers optional [sdx], otherwise uses first base master with Ozone)

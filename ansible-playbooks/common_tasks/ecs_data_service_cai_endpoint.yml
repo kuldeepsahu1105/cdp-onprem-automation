@@ -57,6 +57,36 @@
   when:
     - "'cai' in (ecs_data_services_install_names | default([]))"
 
+- name: CAI | Require endpoint to match the pre-created TLS hostname
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          (
+            ecs_cai_workspace_endpoint_info.workspaces | default([])
+            | first | default({})
+          ).instanceUrl
+          | default('')
+          | regex_replace('^https?://', '')
+          | regex_replace('/.*$', '')
+          | regex_replace(':.*$', '')
+          | lower
+        )
+        == (ecs_cai_expected_base_hostname | lower)
+    fail_msg: >-
+      CAI returned endpoint
+      {{
+        (
+          ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | first | default({})
+        ).instanceUrl | default('not returned')
+      }}, but the pre-create TLS contract is
+      https://{{ ecs_cai_expected_base_hostname }}. Refusing to issue or install
+      a different certificate after workspace submission. Align
+      ecs_cai_static_subdomain with the supported workspace endpoint and rerun.
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+
 - name: CAI | Record generated workspace endpoint
   ansible.builtin.set_fact:
     ecs_cai_workspace_url: >-

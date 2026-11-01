@@ -1,5 +1,26 @@
 ---
-- name: Compatibility entry point for ECS data service CAI TLS
-  ansible.builtin.import_role:
-    name: ecs
-    tasks_from: ecs_data_service_cai_tls
+- name: CAI TLS | Converge trusted pre-create certificate
+  block:
+    - name: CAI TLS | Run provider-aware TLS convergence
+      ansible.builtin.include_tasks: ecs_data_service_cai_tls_converge.yml
+  always:
+    - name: CAI TLS | Remove remote validation material
+      ansible.builtin.file:
+        path: "{{ ecs_cai_tls_validation_dir.path }}"
+        state: absent
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cai_tls_validation_dir is defined
+        - ecs_cai_tls_validation_dir.path | default('') | length > 0
+      no_log: true
+
+    - name: CAI TLS | Remove fetched certificate material from controller
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ playbook_dir }}/{{ ecs_cai_expected_base_hostname | default('cai') }}.crt"
+        - "{{ playbook_dir }}/{{ ecs_cai_expected_base_hostname | default('cai') }}.pem"
+      no_log: true
