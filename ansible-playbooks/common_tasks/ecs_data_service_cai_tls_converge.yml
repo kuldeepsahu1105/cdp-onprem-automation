@@ -16,15 +16,17 @@
   ansible.builtin.assert:
     that:
       - ecs_cai_static_subdomain | length > 0
+      - ecs_cai_static_subdomain | length <= 15
       - ecs_cai_static_subdomain is match('^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$')
       - ecs_cai_tls_minimum_validity_seconds | int > 0
       - >-
         (ecs_cai_tls_certificate_path | default('') | length > 0)
         == (ecs_cai_tls_private_key_path | default('') | length > 0)
     fail_msg: >-
-      CAI TLS configuration is invalid. ecs_cai_static_subdomain must be one
-      DNS label, minimum validity must be positive, and external certificate
-      and private-key paths must be configured together.
+      CAI TLS configuration is invalid. ecs_cai_static_subdomain must be a
+      nonempty lowercase DNS label no longer than 15 characters, minimum
+      validity must be positive, and external certificate and private-key
+      paths must be configured together.
 
 - name: CAI TLS | Preserve adopted workspace endpoint contract
   ansible.builtin.assert:

@@ -39,6 +39,10 @@ group_vars = yaml.safe_load(
     (root / "ansible-playbooks/group_vars/all.yml").read_text()
 )
 assert group_vars["ecs_coredns_kubeconfig_path"] == "/etc/rancher/rke2/rke2.yaml"
+assert group_vars["ecs_cde_cpu_requests"] == "40"
+assert group_vars["ecs_cde_memory_requests"] == "64Gi"
+assert group_vars["ecs_cai_static_subdomain"] == "cai"
+assert group_vars["ecs_model_registry_creator_crn"] == ""
 
 ozone_credentials = (
     root
@@ -86,6 +90,11 @@ cai_tls_tasks = list(
     )
 )
 cai_tls_by_name = {task.get("name"): task for task in cai_tls_tasks}
+hostname_validation = cai_tls_by_name[
+    "CAI TLS | Validate deterministic hostname and external input pairing"
+]["ansible.builtin.assert"]
+assert "ecs_cai_static_subdomain | length <= 15" in hostname_validation["that"]
+assert "no longer than 15 characters" in hostname_validation["fail_msg"]
 kubernetes_dependency_task = cai_tls_by_name[
     "CAI TLS | Ensure Kubernetes Python client is installed on ECS master"
 ]
@@ -137,11 +146,27 @@ model_registry_create = next(
     for task in model_registry_tasks
     if task.get("name") == "Create Model Registry"
 )
+model_registry_creator = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Resolve Model Registry creator CRN"
+)
+assert "ecs_model_registry_creator_crn" in str(model_registry_creator)
+assert "ecs_ldap_admin_user_crn" in str(model_registry_creator)
+model_registry_creator_assert = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Require human Model Registry creator CRN"
+)
+creator_assert_text = str(model_registry_creator_assert)
+assert "':user:'" in creator_assert_text
+assert "':machineuser:'" in creator_assert_text
 assert model_registry_create["no_log"] is True
 assert model_registry_create["failed_when"] is False
 model_registry_create_text = str(model_registry_create)
 for expected_flag in (
     "--namespace",
+    "--creator-crn",
     "--s-3-access-key",
     "--s-3-secret-key",
     "--s-3-bucket",

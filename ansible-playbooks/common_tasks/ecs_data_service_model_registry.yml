@@ -87,6 +87,29 @@
           ansible.builtin.set_fact:
             ecs_mr_exists: "{{ ecs_mr_list.stdout is search(ecs_model_registry_service_name) }}"
 
+        - name: Resolve Model Registry creator CRN
+          ansible.builtin.set_fact:
+            ecs_model_registry_creator_crn_effective: >-
+              {{
+                ecs_model_registry_creator_crn | default('') | trim
+                if (ecs_model_registry_creator_crn | default('') | trim | length > 0)
+                else ecs_ldap_admin_user_crn | default('') | trim
+              }}
+          when: not (ecs_mr_exists | bool)
+
+        - name: Require human Model Registry creator CRN
+          ansible.builtin.assert:
+            that:
+              - ecs_model_registry_creator_crn_effective | length > 0
+              - "':user:' in ecs_model_registry_creator_crn_effective"
+              - "':machineuser:' not in (ecs_model_registry_creator_crn_effective | lower)"
+            fail_msg: >-
+              Model Registry creation requires a human user CRN containing
+              ':user:'. Set ecs_model_registry_creator_crn or enable the ECS
+              LDAP admin lookup so ecs_ldap_admin_user_crn is available.
+              Machine-user CRNs such as ':machineUser:' are not accepted.
+          when: not (ecs_mr_exists | bool)
+
         - name: Create Model Registry
           ansible.builtin.command:
             argv: >-
@@ -102,6 +125,8 @@
                   | first,
                   '--environment-name',
                   ecs_cdp_environment_name,
+                  '--creator-crn',
+                  ecs_model_registry_creator_crn_effective,
                   '--namespace',
                   ecs_model_registry_service_name,
                   '--s-3-access-key',

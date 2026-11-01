@@ -97,8 +97,10 @@ gated on successful secret validation. If a user-initiated deletion is still pro
 for the backend record and name reservation to disappear. A terminal failed
 workspace is reported without deletion or recreation.
 
-The private CDE request uses the live API minimum of 26 CPU and 64 GiB with the
-environment-specific scheduler parent `root.<environment>.cde`.
+Fresh private CDE services request 40 CPU and 64 GiB with the
+environment-specific scheduler parent `root.<environment>.cde`. These defaults
+apply only when creating a service; changing them does not resize an existing
+CDE service.
 Before a rerun, CDE uses the signed `de list-services` summary, which does not
 contact Cloudera Manager, to identify an existing terminal `*Failed` service.
 Automation reports that service and fails only the CDE boundary; it does not
@@ -114,6 +116,12 @@ host in `base_cluster_master_group`, where the standard base-cluster template
 places the Ozone manager, SCM, and S3 Gateway roles. A missing Ozone-capable
 inventory host is reported immediately but deferred to the final aggregate
 assertion so CAI readiness and CDW follow-up diagnostics still run.
+Creation also requires a human creator CRN because the automation request is
+signed by the `cldr-automation-sa` machine user. The effective creator is
+`ecs_model_registry_creator_crn` when explicitly set, otherwise the unique
+human `ecs_ldap_admin_user_crn` resolved by the LDAP admin lookup. Automation
+requires a nonempty CRN containing `:user:`, rejects `:machineUser:`, and sends
+the value through `ml create-model-registry --creator-crn`.
 Each CDW, CDE, and CAI attempt has an independent failure boundary. A failed
 service is recorded without preventing the next selected service from running,
 and the final aggregate assertion fails only after all selected services and
@@ -404,8 +412,9 @@ module-owned waits. `ecs_data_services_status_wait_retries` and
 
 CAI external-PKI variables are standalone Ansible controller paths:
 `ecs_cai_tls_certificate_path`, `ecs_cai_tls_private_key_path`, and
-`ecs_cai_tls_ca_bundle_path`. `ecs_cai_static_subdomain` defaults to the
-workspace name, and `ecs_cai_tls_minimum_validity_seconds` defaults to one day.
+`ecs_cai_tls_ca_bundle_path`. `ecs_cai_static_subdomain` defaults to `cai` and
+must be a valid lowercase DNS label no longer than 15 characters.
+`ecs_cai_tls_minimum_validity_seconds` defaults to one day.
 AD and deployments without an in-inventory FreeIPA server must configure the
 CA bundle even when reusing a pre-existing secret so trust can be verified.
 
