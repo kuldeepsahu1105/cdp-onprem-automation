@@ -30,7 +30,9 @@ assert "NSLOOKUP_DIAGNOSTIC" in text
 assert "loop: \"{{ ecs_data_services_dns_verification_records }}\"" in text
 assert "ecs_data_services_dns_probe_phases.stdout == 'Succeeded'" in text
 assert "ecs_data_services_dns_probe_attempts | default(3) | int" in text
+assert "ecs_data_services_dns_probe_retry_delay | int" in text
 assert group_vars["ecs_data_services_dns_probe_attempts"] == 3
+assert group_vars["ecs_data_services_dns_probe_retry_delay"] > 30
 assert group_vars["ecs_data_services_dns_probe_wait_retries"] == 24
 
 tasks = yaml.safe_load(path.read_text())

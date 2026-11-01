@@ -279,7 +279,7 @@
             )
         raise SystemExit(1)
       - "{{ ecs_data_services_dns_probe_attempts | default(3) | int }}"
-      - "{{ ecs_data_services_dns_probe_wait_delay | int }}"
+      - "{{ ecs_data_services_dns_probe_retry_delay | int }}"
       - "{{ ecs_data_services_tcp_probe_timeout | int }}"
       - "{{ ecs_data_services_dns_verification_records | to_json }}"
   register: ecs_data_services_dns_probe_starts

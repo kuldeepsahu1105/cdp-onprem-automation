@@ -46,10 +46,17 @@ stanza with the minimal existing-Corefile form
 `forward . <validated-upstreams>`; this deployment renders exactly
 `forward . 172.31.76.102`. The applied ConfigMap is reread and asserted before
 one fresh Python probe pod performs IPv4-only resolution for CM, the ECS
-console, and LDAP in the same resolver context, plus independent TCP checks to
-the already validated IPv4 address for Cloudera Manager on 7183 and LDAP on
-636. The pod logs its `/etc/resolv.conf`, reports each FQDN separately, and
+console, and LDAP when LDAP sync/admin is selected, all in the same resolver
+context. It also performs independent TCP checks to the already validated IPv4
+address for Cloudera Manager on 7183 and selected LDAP on 636. The pod logs its
+`/etc/resolv.conf`, reports each FQDN separately, and
 uses at most `ecs_data_services_dns_probe_attempts` attempts (default `3`).
+Failed hostnames are retried after `ecs_data_services_dns_probe_retry_delay`
+(default `31` seconds), which exceeds the managed CoreDNS `cache 30` negative
+TTL so an NXDOMAIN observed during authoritative record convergence is not
+replayed for every retry. Successful hostnames are removed from the pending
+set and are not checked again. Kubernetes pod lifecycle polling remains
+separate and uses `ecs_data_services_dns_probe_wait_delay`.
 The separate pod wait bound covers Kubernetes scheduling and image startup; it
 does not multiply DNS checks. No Data Services API call occurs until all checks
 pass.
