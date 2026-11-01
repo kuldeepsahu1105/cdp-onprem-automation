@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 python3 - "$repo_root" <<'PY'
 from pathlib import Path
+import re
 import sys
 import yaml
 
@@ -112,6 +113,7 @@ assert "no_log" not in cai_tls_by_name[
 ]
 freeipa_trust_read = cai_tls_by_name["CAI TLS | Read FreeIPA trust anchor"]
 assert freeipa_trust_read["ansible.builtin.raw"] == "base64 --wrap=0 /etc/ipa/ca.crt"
+assert freeipa_trust_read["connection"] == "ssh"
 assert freeipa_trust_read["no_log"] is True
 
 model_registry_tasks = list(
@@ -137,6 +139,42 @@ model_registry_create = next(
 )
 assert model_registry_create["no_log"] is True
 assert model_registry_create["failed_when"] is False
+model_registry_create_text = str(model_registry_create)
+for expected_flag in (
+    "--namespace",
+    "--s-3-access-key",
+    "--s-3-secret-key",
+    "--s-3-bucket",
+    "--s-3-endpoint",
+):
+    assert expected_flag in model_registry_create_text
+for obsolete_flag in (
+    "--model-registry-service-name",
+    "--model-registry-subdomain",
+    "--s3-access-key",
+    "--s3-secret-key",
+    "--s3-bucket",
+    "--s3-endpoint",
+):
+    assert obsolete_flag not in model_registry_create_text
+model_registry_create_assert = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Require successful Model Registry creation"
+)
+assert "--s-?3-" in model_registry_create_assert["ansible.builtin.assert"]["fail_msg"]
+sample_cli_error = (
+    "Unknown options: --s-3-access-key, access-value, "
+    "--s-3-secret-key, secret-value, --s-3-bucket, bucket"
+)
+redacted_cli_error = re.sub(
+    r"(?i)(--s-?3-(?:access|secret)-key(?:\s+|,\s*))([^,\s]+)",
+    r"\1<redacted>",
+    sample_cli_error,
+)
+assert "access-value" not in redacted_cli_error
+assert "secret-value" not in redacted_cli_error
+assert redacted_cli_error.count("<redacted>") == 2
 
 print("Data Services selection and CAI kubeconfig checks passed")
 PY

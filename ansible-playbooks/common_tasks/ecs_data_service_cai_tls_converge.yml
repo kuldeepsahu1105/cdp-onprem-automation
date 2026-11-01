@@ -127,6 +127,7 @@
   changed_when: false
   failed_when: false
   delegate_to: "{{ groups.get('ipaserver', []) | first }}"
+  connection: ssh
   become: true
   when: ecs_cai_tls_provider_effective == 'freeipa'
   no_log: true
