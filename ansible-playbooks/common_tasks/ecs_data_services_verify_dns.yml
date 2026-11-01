@@ -121,7 +121,7 @@
       }}
   when: identity_provider_effective | default('') == 'ad'
 
-- name: Remove stale Data Services DNS verification pods
+- name: Remove stale Data Services DNS verification pod
   ansible.builtin.command:
     argv:
       - "{{ ecs_coredns_kubectl_path }}"
@@ -131,15 +131,14 @@
       - "{{ ecs_data_services_dns_probe_namespace }}"
       - delete
       - pod
-      - "ansible-dns-check-{{ item }}"
+      - ansible-dns-check
       - --ignore-not-found
   changed_when: false
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
-  loop: "{{ range(1, ecs_data_services_dns_verification_records | length + 1) | list }}"
 
-- name: Start Data Services DNS verification pods
+- name: Start Data Services DNS verification pod
   ansible.builtin.command:
     argv:
       - "{{ ecs_coredns_kubectl_path }}"
@@ -148,7 +147,7 @@
       - --namespace
       - "{{ ecs_data_services_dns_probe_namespace }}"
       - run
-      - "ansible-dns-check-{{ ansible_loop.index }}"
+      - ansible-dns-check
       - "--image={{ ecs_data_services_dns_probe_image }}"
       - --restart=Never
       - --command
@@ -156,89 +155,125 @@
       - python3
       - -c
       - |
+        import json
         import socket
+        import subprocess
         import sys
         import time
 
         retries = int(sys.argv[1])
         delay = int(sys.argv[2])
-        host = sys.argv[3]
-        expected = sys.argv[4]
-        port = int(sys.argv[5])
-        timeout = int(sys.argv[6])
-        last_error = "probe did not run"
+        timeout = int(sys.argv[3])
+        records = json.loads(sys.argv[4])
+        pending = {record["fqdn"]: record for record in records}
+        last_errors = {}
+
+        with open("/etc/resolv.conf", encoding="utf-8") as resolv_conf:
+            print("RESOLV_CONF_BEGIN", flush=True)
+            print(resolv_conf.read().strip(), flush=True)
+            print("RESOLV_CONF_END", flush=True)
 
         for attempt in range(1, retries + 1):
-            try:
-                addresses = sorted({
-                    answer[4][0]
-                    for answer in socket.getaddrinfo(
-                        host,
-                        port or None,
-                        family=socket.AF_INET,
-                        type=socket.SOCK_STREAM,
-                    )
-                })
-                print("DNS_A_ADDRESSES=" + ",".join(addresses), flush=True)
-                if not addresses:
-                    raise RuntimeError("no IPv4 answers")
-                if expected and addresses != [expected]:
-                    raise RuntimeError(
-                        f"expected {expected}, resolved {','.join(addresses)}"
-                    )
-                if not expected and len(addresses) != 1:
-                    raise RuntimeError(
-                        "expected one IPv4 answer, resolved "
-                        + ",".join(addresses)
-                    )
-                connect_address = expected or addresses[0]
-                print("DNS_A_OK", flush=True)
-                if port:
-                    with socket.create_connection(
-                        (connect_address, port),
-                        timeout=timeout,
-                    ):
-                        pass
+            for host, record in list(pending.items()):
+                expected = record.get("address", "")
+                port = int(record.get("port", 0))
+                try:
+                    addresses = sorted({
+                        answer[4][0]
+                        for answer in socket.getaddrinfo(
+                            host,
+                            port or None,
+                            family=socket.AF_INET,
+                            type=socket.SOCK_STREAM,
+                        )
+                    })
+                    if not addresses:
+                        raise RuntimeError("no IPv4 answers")
+                    if expected and addresses != [expected]:
+                        raise RuntimeError(
+                            f"expected {expected}, resolved {','.join(addresses)}"
+                        )
+                    if not expected and len(addresses) != 1:
+                        raise RuntimeError(
+                            "expected one IPv4 answer, resolved "
+                            + ",".join(addresses)
+                        )
+                    connect_address = expected or addresses[0]
                     print(
-                        f"TCP_OK fqdn={host} ipv4={connect_address} "
-                        f"port={port}",
+                        f"DNS_A_OK fqdn={host} "
+                        f"ipv4={','.join(addresses)}",
                         flush=True,
                     )
-                raise SystemExit(0)
-            except Exception as exc:
-                last_error = repr(exc)
-                print(
-                    f"attempt {attempt}/{retries} failed: {last_error}",
-                    file=sys.stderr,
-                    flush=True,
-                )
-                if attempt < retries:
-                    time.sleep(delay)
+                    if port:
+                        with socket.create_connection(
+                            (connect_address, port),
+                            timeout=timeout,
+                        ):
+                            pass
+                        print(
+                            f"TCP_OK fqdn={host} ipv4={connect_address} "
+                            f"port={port}",
+                            flush=True,
+                        )
+                    del pending[host]
+                    last_errors.pop(host, None)
+                except Exception as exc:
+                    last_errors[host] = repr(exc)
+                    print(
+                        f"attempt {attempt}/{retries} host={host} "
+                        f"failed: {last_errors[host]}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
 
-        print(
-            f"PROBE_FAILED host={host} expected={expected} "
-            f"port={port} error={last_error}",
-            file=sys.stderr,
-        )
+            if not pending:
+                print("ALL_PROBES_OK", flush=True)
+                raise SystemExit(0)
+            if attempt < retries:
+                time.sleep(delay)
+
+        for host, record in pending.items():
+            try:
+                lookup = subprocess.run(
+                    ["nslookup", host],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+                print(
+                    f"NSLOOKUP_DIAGNOSTIC host={host} rc={lookup.returncode}",
+                    file=sys.stderr,
+                )
+                print(lookup.stdout.strip(), file=sys.stderr)
+                if lookup.stderr:
+                    print(lookup.stderr.strip(), file=sys.stderr)
+            except Exception as lookup_exc:
+                print(
+                    f"NSLOOKUP_DIAGNOSTIC_FAILED host={host} "
+                    f"error={lookup_exc!r}",
+                    file=sys.stderr,
+                )
+            print(
+                f"PROBE_FAILED host={host} "
+                f"expected={record.get('address', '')} "
+                f"port={record.get('port', 0)} "
+                f"error={last_errors.get(host, 'probe did not run')}",
+                file=sys.stderr,
+            )
         raise SystemExit(1)
       - "{{ ecs_data_services_dns_probe_wait_retries | int }}"
       - "{{ ecs_data_services_dns_probe_wait_delay | int }}"
-      - "{{ item.fqdn }}"
-      - "{{ item.address }}"
-      - "{{ item.port | default(0) | int }}"
       - "{{ ecs_data_services_tcp_probe_timeout | int }}"
+      - "{{ ecs_data_services_dns_verification_records | to_json }}"
   register: ecs_data_services_dns_probe_starts
   changed_when: false
   failed_when: false
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
-  loop: "{{ ecs_data_services_dns_verification_records }}"
-  loop_control:
-    extended: true
-    label: "{{ item.label }}: {{ item.fqdn }}"
 
-- name: Wait for Data Services DNS verification pods
+- name: Wait for Data Services DNS verification pod
   ansible.builtin.command:
     argv:
       - "{{ ecs_coredns_kubectl_path }}"
@@ -248,7 +283,7 @@
       - "{{ ecs_data_services_dns_probe_namespace }}"
       - get
       - pod
-      - "ansible-dns-check-{{ ansible_loop.index }}"
+      - ansible-dns-check
       - --output
       - jsonpath={.status.phase}
   register: ecs_data_services_dns_probe_phases
@@ -257,10 +292,6 @@
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
-  loop: "{{ ecs_data_services_dns_verification_records }}"
-  loop_control:
-    extended: true
-    label: "{{ item.label }}: {{ item.fqdn }}"
   retries: "{{ ecs_data_services_dns_probe_wait_retries | int + 6 }}"
   delay: "{{ ecs_data_services_dns_probe_wait_delay | int }}"
   until:
@@ -276,19 +307,15 @@
       - --namespace
       - "{{ ecs_data_services_dns_probe_namespace }}"
       - logs
-      - "ansible-dns-check-{{ ansible_loop.index }}"
+      - ansible-dns-check
   register: ecs_data_services_dns_probe_logs
   changed_when: false
   failed_when: false
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
-  loop: "{{ ecs_data_services_dns_verification_records }}"
-  loop_control:
-    extended: true
-    label: "{{ item.label }}: {{ item.fqdn }}"
 
-- name: Remove completed Data Services DNS verification pods
+- name: Remove completed Data Services DNS verification pod
   ansible.builtin.command:
     argv:
       - "{{ ecs_coredns_kubectl_path }}"
@@ -298,42 +325,45 @@
       - "{{ ecs_data_services_dns_probe_namespace }}"
       - delete
       - pod
-      - "ansible-dns-check-{{ item }}"
+      - ansible-dns-check
       - --ignore-not-found
   changed_when: false
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
-  loop: "{{ range(1, ecs_data_services_dns_verification_records | length + 1) | list }}"
 
 - name: Require Data Services DNS resolution through CoreDNS
   ansible.builtin.assert:
     that:
-      - item.rc == 0
+      - ecs_data_services_dns_probe_logs.rc == 0
+      - ecs_data_services_dns_probe_phases.stdout == 'Succeeded'
       - >-
-        ecs_data_services_dns_probe_phases.results[ansible_loop.index0].stdout
-        == 'Succeeded'
+        (
+          'DNS_A_OK fqdn=' + item.fqdn + ' ipv4='
+        ) in ecs_data_services_dns_probe_logs.stdout
       - >-
-        item.item.address | default('') | length == 0
-        or item.item.address in item.stdout
-      - "'DNS_A_OK' in item.stdout"
+        item.address | default('') | length == 0
+        or item.address in ecs_data_services_dns_probe_logs.stdout
       - >-
-        item.item.port | default(0) | int == 0
+        item.port | default(0) | int == 0
         or (
-          'TCP_OK fqdn=' + item.item.fqdn + ' ipv4='
-        ) in item.stdout
+          'TCP_OK fqdn=' + item.fqdn + ' ipv4='
+        ) in ecs_data_services_dns_probe_logs.stdout
+      - "'ALL_PROBES_OK' in ecs_data_services_dns_probe_logs.stdout"
     fail_msg: >-
-      {{ item.item.label }} hostname {{ item.item.fqdn }} must return the
+      {{ item.label }} hostname {{ item.fqdn }} must return the
       required IPv4 answer
-      {{ item.item.address | default('an address', true) }}
-      {% if item.item.port | default(0) | int > 0 %}
-      and accept TCP connections on port {{ item.item.port }}
+      {{ item.address | default('an address', true) }}
+      {% if item.port | default(0) | int > 0 %}
+      and accept TCP connections on port {{ item.port }}
       {% endif %}
-      through a newly created Kubernetes pod before Data Services API calls
+      through the newly created Kubernetes probe pod before Data Services API calls
       are allowed. Probe output:
-      {{ item.stdout | default(item.stderr, true) }}
+      {{
+        ecs_data_services_dns_probe_logs.stdout
+        | default(ecs_data_services_dns_probe_logs.stderr, true)
+      }}
     quiet: true
-  loop: "{{ ecs_data_services_dns_probe_logs.results }}"
+  loop: "{{ ecs_data_services_dns_verification_records }}"
   loop_control:
-    extended: true
-    label: "{{ item.item.label }}: {{ item.item.fqdn }}"
+    label: "{{ item.label }}: {{ item.fqdn }}"
