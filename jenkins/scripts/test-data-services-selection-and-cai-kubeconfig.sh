@@ -109,7 +109,7 @@ group_vars = yaml.safe_load(
 assert group_vars["ecs_coredns_kubeconfig_path"] == "/etc/rancher/rke2/rke2.yaml"
 assert group_vars["ecs_cde_cpu_requests"] == "300"
 assert group_vars["ecs_cde_memory_requests"] == "1000Gi"
-assert group_vars["ecs_cde_resource_pool"] == "cde"
+assert group_vars["ecs_cde_resource_pool"] == "root.{{ ecs_cdp_environment_name }}.cde"
 assert group_vars["ecs_cde_service_name_attempts"] == 10
 assert group_vars["ecs_cde_service_name_max_length"] == 40
 assert "ClusterCreationCompleted" in group_vars["ecs_cde_service_green_statuses"]
