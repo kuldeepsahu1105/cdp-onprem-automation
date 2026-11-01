@@ -42,7 +42,7 @@
         )
         == (ecs_cai_expected_base_hostname | lower)
     fail_msg: >-
-      Existing CAI workspace {{ ecs_cai_workspace_name }} uses endpoint
+      Existing CAI workspace {{ ecs_cai_workspace_name_effective }} uses endpoint
       {{ ecs_cai_existing_workspace.instanceUrl }}, but deterministic
       pre-create TLS is configured for {{ ecs_cai_expected_base_hostname }}.
       Refusing to replace the existing workspace secret with a certificate for

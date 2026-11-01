@@ -95,6 +95,132 @@ assert group_vars["ecs_cde_cpu_requests"] == "40"
 assert group_vars["ecs_cde_memory_requests"] == "64Gi"
 assert group_vars["ecs_cai_static_subdomain"] == "cai"
 assert group_vars["ecs_model_registry_creator_crn"] == ""
+assert "playbook_dir" in group_vars["ecs_data_services_catalog_cache_path"]
+assert (
+    group_vars["ecs_data_services_catalog_legacy_cache_path"]
+    == "{{ ecs_persistent_state_dir }}/ecs-data-services-catalog.yml"
+)
+
+portal_facts = yaml.safe_load(
+    (root / "ansible-playbooks/common_tasks/build_deployment_portal_facts.yml").read_text()
+)
+catalog_stat = next(
+    task
+    for task in portal_facts
+    if task.get("name") == "Check cached ECS data-service catalog"
+)
+assert catalog_stat["failed_when"] is False
+legacy_catalog_stat = next(
+    task
+    for task in portal_facts
+    if task.get("name") == "Check legacy cached ECS data-service catalog"
+)
+assert legacy_catalog_stat["failed_when"] is False
+catalog_path_resolve = next(
+    task
+    for task in portal_facts
+    if task.get("name") == "Resolve readable ECS data-service catalog cache"
+)
+assert "stat.readable" in str(catalog_path_resolve)
+catalog_load = next(
+    task
+    for task in portal_facts
+    if task.get("name") == "Load cached ECS data-service catalog"
+)
+assert "deployment_portal_ecs_ds_catalog_cache_effective" in str(catalog_load)
+
+cai_preflight = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cai_preflight.yml"
+).read_text()
+cai_start = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cai_start.yml"
+).read_text()
+cai_endpoint = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cai_endpoint.yml"
+).read_text()
+cai_wait = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cai_wait.yml"
+).read_text()
+cai_attempt = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cai_create_attempt.yml"
+).read_text()
+assert "ecs_cai_workspace_candidate_names" in cai_preflight
+assert "ecs_cai_workspace_name_effective" in cai_preflight
+assert "range(1, (ecs_cai_workspace_name_attempts | int) + 1)" in cai_preflight
+assert "selectattr('instanceName', 'equalto', item)" in cai_preflight
+for cai_info_text in (cai_endpoint, cai_wait):
+    assert (
+        "selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)"
+        in cai_info_text
+    )
+for cai_info_tasks in (
+    yaml.safe_load(cai_preflight),
+    yaml.safe_load(cai_attempt),
+    yaml.safe_load(cai_endpoint),
+    yaml.safe_load(cai_wait),
+):
+    for task in cai_info_tasks:
+        if "cloudera.cloud.ml_info" in task:
+            assert "name" not in task["cloudera.cloud.ml_info"]
+cai_start_tasks = yaml.safe_load(cai_start)
+cai_attempt_include = next(
+    task
+    for task in cai_start_tasks
+    if task.get("name") == "CAI | Try bounded workspace names until created or adopted"
+)
+assert "ecs_data_service_cai_create_attempt.yml" in str(cai_attempt_include)
+assert cai_attempt_include["loop"] == "{{ ecs_cai_workspace_create_candidates }}"
+exhausted_assert = next(
+    task
+    for task in cai_start_tasks
+    if task.get("name") == "CAI | Require a created or reusable workspace"
+)
+assert "bounded name attempts" in exhausted_assert["ansible.builtin.assert"]["fail_msg"]
+assert "does not delete" in exhausted_assert["ansible.builtin.assert"]["fail_msg"]
+cai_attempt_tasks = yaml.safe_load(cai_attempt)
+cai_create = next(
+    task
+    for task in cai_attempt_tasks
+    if task.get("name") == "CAI attempt | Submit workspace creation for unused candidate"
+)
+assert cai_create["failed_when"] is False
+collision_lookup = next(
+    task
+    for task in cai_attempt_tasks
+    if task.get("name") == "CAI attempt | Refresh inventory after already-exists response"
+)
+assert "name" not in collision_lookup["cloudera.cloud.ml_info"]
+collision_record = next(
+    task
+    for task in cai_attempt_tasks
+    if task.get("name") == "CAI attempt | Record unresolved or unusable collision"
+)
+assert "already exists but list/describe returned no workspace" in str(collision_record)
+assert "ecs_cai_workspace_candidate" in str(collision_record)
+assert group_vars["ecs_cai_workspace_name_attempts"] == 10
+assert group_vars["ecs_cai_workspace_name_max_length"] == 40
+assert "ecs_cai_workspace_name_effective" in (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cai_followup.yml"
+).read_text()
+cai_result_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cai.yml"
+).read_text()
+assert "Existing and running (green)" in cai_result_text
+assert "Created successfully (green)" in cai_result_text
+assert "effective_name=" in cai_result_text
+assert "create_failed" in cai_attempt.lower()
+cai_followup_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cai_followup.yml"
+).read_text()
+assert "'effective_name': ecs_cai_workspace_name_effective" in cai_followup_text
+assert "'status': (" in cai_followup_text
+assert "ecs_model_registry_status" in playbook_text
+assert "Existing (healthy)" in (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
+).read_text()
+assert "Created successfully" in (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
+).read_text()
 
 ozone_credentials = (
     root

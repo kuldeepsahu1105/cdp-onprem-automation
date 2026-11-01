@@ -221,21 +221,20 @@ They are not attached to Jenkins email. Data-service URLs are persisted to the
 catalog cache, restored during portal refresh, and included in the normal
 portal/access-URL email report.
 
-The controller cache location is selected automatically:
+The non-secret Data Services catalog defaults to
+`{{ playbook_dir }}/ecs-data-services-catalog.yml`, so Jenkins and direct
+`ansible-playbook` runs use a controller-local path readable by the account
+running Ansible. Override it with `CDP_DATA_SERVICES_CATALOG_PATH` or
+`ecs_data_services_catalog_cache_path`. Portal refresh also reads the legacy
+`{{ ecs_persistent_state_dir }}/ecs-data-services-catalog.yml` path when the new
+path is absent and the legacy file is readable; inaccessible caches are skipped
+instead of failing portal refresh.
 
-- Jenkins: `$CDP_STATE_DIR`, set by `jenkins/scripts/run-ansible.sh` beneath
-  the workspace owner's real home, outside the Git checkout. This prevents
-  `CleanBeforeCheckout` from deleting credentials and creating another access
-  key on every rerun.
-- Standalone runs: `$CDP_STATE_DIR` when explicitly set, otherwise
-  `$XDG_STATE_HOME/cdp-onprem-automation/`, or
-  `$HOME/.local/state/cdp-onprem-automation/` when `XDG_STATE_HOME` is unset.
-
-Set `CDP_STATE_DIR` or override `ecs_persistent_state_dir` when another
-persistent location is required. `CDP_ARTIFACTS_DIR` remains the location for
-non-secret per-build logs and reports. The playbook reports the state path when
-it creates or reuses the credential cache and does not generate a replacement
-key while valid cached credentials are available.
+Credential caches remain under `ecs_persistent_state_dir`: Jenkins uses
+`$CDP_STATE_DIR`, while standalone runs use `$CDP_STATE_DIR` when set,
+otherwise `$XDG_STATE_HOME/cdp-onprem-automation/` or
+`$HOME/.local/state/cdp-onprem-automation/`. `CDP_ARTIFACTS_DIR` remains the
+location for non-secret per-build logs and reports.
 
 Credential values are serialized with JSON-compatible YAML quoting so
 multiline private keys remain intact. An unreadable legacy cache no longer
@@ -421,6 +420,27 @@ must be a valid lowercase DNS label no longer than 15 characters.
 `ecs_cai_tls_minimum_validity_seconds` defaults to one day.
 AD and deployments without an in-inventory FreeIPA server must configure the
 CA bundle even when reusing a pre-existing secret so trust can be verified.
+CAI discovery lists the environment and selects the requested workbench by the
+API field `instanceName`. The effective name is selected deterministically from
+the bounded sequence `<ecs_cai_workspace_name>`, `-2`, `-3`, and so on (default
+10 attempts, maximum name length 40). Reruns reuse the first real
+active/provisioning workspace in that sequence. Failed, deleting, and reserved
+names are skipped without deletion. A create-time `already exists` response
+triggers a fresh authoritative list/describe lookup; a returned reusable object
+is adopted, while an invisible or unusable reservation is recorded and the
+next bounded name is attempted. `ecs_cai_static_subdomain` remains unchanged,
+so name versioning does not alter the trusted TLS or native endpoint contract.
+Final diagnostics and the portal catalog carry the effective workspace name,
+current live status, and skipped unusable-name evidence. A reused healthy
+workspace reports `Existing and running (green)`; a newly submitted workspace
+reports `Created successfully (green)`.
+
+Model Registry existence uses parsed `list-model-registries` JSON, matching
+`serviceName` or `namespace` within the requested environment. A same-name
+registry is accepted only in a known healthy terminal state and is reported as
+`Existing (healthy)` without creating human credentials or submitting another
+create request. New registries report `Created successfully`; unknown,
+nonterminal, or failed states are surfaced instead of treated as success.
 
 ## Not automated (Labs reference gaps)
 

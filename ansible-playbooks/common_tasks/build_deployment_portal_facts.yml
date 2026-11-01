@@ -305,7 +305,40 @@
   ansible.builtin.stat:
     path: "{{ ecs_data_services_catalog_cache_path }}"
   register: deployment_portal_ecs_ds_catalog_cache
+  failed_when: false
   when: ecs_data_services_catalog_cache_path | default('') | length > 0
+
+- name: Check legacy cached ECS data-service catalog
+  ansible.builtin.stat:
+    path: "{{ ecs_data_services_catalog_legacy_cache_path }}"
+  register: deployment_portal_ecs_ds_catalog_legacy_cache
+  failed_when: false
+  when:
+    - ecs_data_services_catalog_legacy_cache_path | default('') | length > 0
+    - >-
+      ecs_data_services_catalog_legacy_cache_path
+      != ecs_data_services_catalog_cache_path
+    - not (deployment_portal_ecs_ds_catalog_cache.stat.readable | default(false) | bool)
+
+- name: Resolve readable ECS data-service catalog cache
+  ansible.builtin.set_fact:
+    deployment_portal_ecs_ds_catalog_cache_effective: >-
+      {{
+        ecs_data_services_catalog_cache_path
+        if (deployment_portal_ecs_ds_catalog_cache.stat.readable | default(false) | bool)
+        else (
+          ecs_data_services_catalog_legacy_cache_path
+          if (
+            (
+              deployment_portal_ecs_ds_catalog_legacy_cache
+              | default({})
+            ).stat.readable
+            | default(false)
+            | bool
+          )
+          else ''
+        )
+      }}
 
 - name: Load cached ECS data-service catalog
   ansible.builtin.set_fact:
@@ -313,14 +346,13 @@
       {{
         ecs_data_services_catalog
         | combine(
-            lookup('file', ecs_data_services_catalog_cache_path)
+            lookup('file', deployment_portal_ecs_ds_catalog_cache_effective)
             | from_yaml | default({}, true),
             recursive=True
           )
       }}
   when:
-    - ecs_data_services_catalog_cache_path | default('') | length > 0
-    - deployment_portal_ecs_ds_catalog_cache.stat.exists | default(false) | bool
+    - deployment_portal_ecs_ds_catalog_cache_effective | length > 0
 
 - name: Initialize ECS data service portal links
   ansible.builtin.set_fact:

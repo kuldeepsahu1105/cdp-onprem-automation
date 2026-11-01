@@ -8,6 +8,7 @@ tls_wrapper="$root/ansible-playbooks/common_tasks/ecs_data_service_cai_tls.yml"
 wildcard_profile="$root/ansible-playbooks/common_tasks/ecs_cai_freeipa_wildcard_profile.yml"
 wildcard_template="$root/ansible-playbooks/templates/ecs_cai_freeipa_wildcard_profile.cfg.j2"
 start="$root/ansible-playbooks/common_tasks/ecs_data_service_cai_start.yml"
+create_attempt="$root/ansible-playbooks/common_tasks/ecs_data_service_cai_create_attempt.yml"
 endpoint="$root/ansible-playbooks/common_tasks/ecs_data_service_cai_endpoint.yml"
 ldap="$root/ansible-playbooks/common_tasks/ecs_control_plane_ldap_and_admin.yml"
 
@@ -15,7 +16,7 @@ tls_line=$(grep -n 'Converge and validate CAI TLS before workspace submission' "
 start_line=$(grep -n 'Launch CAI' "$playbook" | cut -d: -f1)
 test "$tls_line" -lt "$start_line"
 
-grep -q 'subdomain: "{{ ecs_cai_static_subdomain }}"' "$start"
+grep -q 'subdomain: "{{ ecs_cai_static_subdomain }}"' "$create_attempt"
 grep -q 'ecs_cai_tls_secret_valid | default(false) | bool' "$start"
 grep -q "ecs_cai_tls_provider_effective == 'freeipa'" "$tls"
 grep -q "ecs_cai_tls_provider_effective == 'external'" "$tls"

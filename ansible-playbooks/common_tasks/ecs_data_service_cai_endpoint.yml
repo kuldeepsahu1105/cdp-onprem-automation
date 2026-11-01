@@ -2,7 +2,6 @@
 - name: CAI | Discover generated workspace endpoint
   cloudera.cloud.ml_info:
     environment: "{{ ecs_cdp_environment_name }}"
-    name: "{{ ecs_cai_workspace_name }}"
     endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cai_workspace_endpoint_info
@@ -11,11 +10,17 @@
   until: >-
     (
       ecs_cai_workspace_endpoint_info.workspaces | default([])
+      | selectattr('instanceName', 'defined')
+      | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+      | list
       | first | default({})
     ).instanceUrl | default('') | length > 0
     or
     (
       ecs_cai_workspace_endpoint_info.workspaces | default([])
+      | selectattr('instanceName', 'defined')
+      | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+      | list
       | first | default({})
     ).instanceStatus | default('') is search('(?i):failed$')
   retries: "{{ ecs_cai_endpoint_wait_retries | int }}"
@@ -33,19 +38,28 @@
       - >-
         (
           ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | selectattr('instanceName', 'defined')
+          | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+          | list
           | first | default({})
         ).instanceStatus | default('') is not search('(?i):failed$')
       - >-
         (
           ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | selectattr('instanceName', 'defined')
+          | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+          | list
           | first | default({})
         ).instanceUrl | default('') | length > 0
     fail_msg: >-
-      CAI workspace {{ ecs_cai_workspace_name }} did not expose an endpoint.
+      CAI workspace {{ ecs_cai_workspace_name_effective }} did not expose an endpoint.
       Final status:
       {{
         (
           ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | selectattr('instanceName', 'defined')
+          | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+          | list
           | first | default({})
         ).instanceStatus | default('not returned')
       }}.
@@ -64,6 +78,9 @@
         (
           (
             ecs_cai_workspace_endpoint_info.workspaces | default([])
+            | selectattr('instanceName', 'defined')
+            | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+            | list
             | first | default({})
           ).instanceUrl
           | default('')
@@ -78,6 +95,9 @@
       {{
         (
           ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | selectattr('instanceName', 'defined')
+          | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+          | list
           | first | default({})
         ).instanceUrl | default('not returned')
       }}, but the pre-create TLS contract is
@@ -93,6 +113,9 @@
       {{
         (
           ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | selectattr('instanceName', 'defined')
+          | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+          | list
           | first | default({})
         ).instanceUrl
         | default('')
@@ -102,6 +125,9 @@
       {{
         (
           ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | selectattr('instanceName', 'defined')
+          | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+          | list
           | first | default({})
         ).instanceUrl
         | default('')

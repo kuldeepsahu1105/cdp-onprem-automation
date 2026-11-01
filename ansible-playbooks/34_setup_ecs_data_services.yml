@@ -308,9 +308,22 @@
                            | default(ecs_cdw_cluster | default({}))
                            | to_json) }};
           CDE={{ (ecs_cde_service | default({})).msg | default(ecs_cde_service | default({}) | to_json) }};
-          CAI={{ (ecs_cai_workspace | default({})).msg
-                 | default(
-                     'workspace=' + (ecs_cai_workspace | default({}) | to_json)
-                     + ', ui_status=' + (ecs_cai_ui_probe.status | default('unavailable') | string)
-                   ) }};
-          Model Registry={{ ecs_model_registry_failure_message | default('not selected') }}.
+          CAI={{
+            ecs_cai_status
+            if (
+              ecs_cai_workspace_succeeded | default(false) | bool
+              and ecs_cai_ui_succeeded | default(false) | bool
+            )
+            else (
+              (ecs_cai_workspace | default({})).msg
+              | default(
+                  'workspace=' + (ecs_cai_workspace | default({}) | to_json)
+                  + ', ui_status='
+                  + (ecs_cai_ui_probe.status | default('unavailable') | string)
+                )
+            )
+          }};
+          Model Registry={{
+            ecs_model_registry_status
+            | default(ecs_model_registry_failure_message | default('not selected'), true)
+          }}.

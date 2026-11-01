@@ -49,7 +49,7 @@
             (ecs_caddy_data_service_routes | default([]))
             + [
               {
-                'id': 'cai-' + ecs_cai_workspace_name,
+                'id': 'cai-' + ecs_cai_workspace_name_effective,
                 'external_hostname': ecs_cai_workbench_hostname,
                 'backend_host': ecs_master_fqdn,
                 'backend_port': 443,
@@ -67,7 +67,12 @@
               {
                 'cai': ecs_data_services_catalog.cai | default({}) | combine(
                   {
-                    'url': ecs_cai_workspace_url
+                    'url': ecs_cai_workspace_url,
+                    'effective_name': ecs_cai_workspace_name_effective,
+                    'status': (
+                      (ecs_cai_workspace.workspace | default({})).instanceStatus
+                      | default('unknown')
+                    )
                   }
                 )
               },

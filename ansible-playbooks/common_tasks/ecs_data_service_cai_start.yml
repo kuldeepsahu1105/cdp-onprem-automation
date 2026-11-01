@@ -1,27 +1,37 @@
 ---
-- name: CAI | Start ML workspace provisioning when absent
-  cloudera.cloud.ml:
-    environment: "{{ ecs_cdp_environment_name }}"
-    name: "{{ ecs_cai_workspace_name }}"
-    governance: "{{ ecs_cai_enable_governance | default(true) | bool }}"
-    metrics: "{{ ecs_cai_enable_metrics | default(true) | bool }}"
-    tls: "{{ ecs_cai_enable_tls | default(true) | bool }}"
-    monitoring: "{{ ecs_cai_enable_monitoring | default(true) | bool }}"
-    namespace: "{{ ecs_cai_k8s_namespace }}"
-    subdomain: "{{ ecs_cai_static_subdomain }}"
-    resource_pool: "{{ ecs_cai_resource_pool }}"
-    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-    wait: false
-    state: present
-  environment: "{{ ecs_cdp_cli_environment }}"
-  register: ecs_cai_workspace_start
-  become: false
-  delegate_to: "{{ ecs_data_services_delegate_host }}"
-  connection: ssh
+- name: CAI | Initialize bounded create attempts
+  ansible.builtin.set_fact:
+    ecs_cai_workspace_create_succeeded: false
+    ecs_cai_workspace_collision_evidence: []
+  when: "'cai' in (ecs_data_services_install_names | default([]))"
+
+- name: CAI | Try bounded workspace names until created or adopted
+  ansible.builtin.include_tasks: ecs_data_service_cai_create_attempt.yml
+  loop: "{{ ecs_cai_workspace_create_candidates }}"
+  loop_control:
+    loop_var: ecs_cai_workspace_candidate
+    label: "{{ ecs_cai_workspace_candidate }}"
   when:
     - "'cai' in (ecs_data_services_install_names | default([]))"
     - ecs_cai_existing_workspace | default({}) | length == 0
+    - not (ecs_cai_workspace_create_succeeded | bool)
     - ecs_cai_tls_secret_valid | default(false) | bool
+
+- name: CAI | Require a created or reusable workspace
+  ansible.builtin.assert:
+    that:
+      - >-
+        ecs_cai_existing_workspace | default({}) | length > 0
+        or (ecs_cai_workspace_create_succeeded | bool)
+    fail_msg: >-
+      CAI could not create or discover a reusable workspace after
+      {{ ecs_cai_workspace_name_attempts }} bounded name attempts derived from
+      {{ ecs_cai_workspace_name }}. Collision evidence:
+      {{ ecs_cai_workspace_collision_evidence | default([]) | to_json }}.
+      Automation does not delete failed, deleting, or unseen workspaces.
+      Inspect the Cloudera AI control-plane workflows and stale name
+      reservations, then rerun.
+  when: "'cai' in (ecs_data_services_install_names | default([]))"
 
 - name: CAI | Record adopted workspace submission state
   ansible.builtin.set_fact:
@@ -29,7 +39,8 @@
       failed: false
       changed: false
       msg: >-
-        Adopting existing workspace {{ ecs_cai_workspace_name }} in status
+        Adopting existing workspace {{ ecs_cai_workspace_name_effective }} in
+        status
         {{ ecs_cai_existing_workspace.instanceStatus | default('unknown') }}.
   when:
     - "'cai' in (ecs_data_services_install_names | default([]))"

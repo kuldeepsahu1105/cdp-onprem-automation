@@ -83,9 +83,54 @@
           delegate_to: "{{ ecs_data_services_delegate_host }}"
           connection: ssh
 
+        - name: Parse Model Registry list response
+          ansible.builtin.set_fact:
+            ecs_mr_list_response: "{{ ecs_mr_list.stdout | from_json }}"
+
+        - name: Resolve matching Model Registry
+          ansible.builtin.set_fact:
+            ecs_mr_existing_registry: >-
+              {{
+                (
+                  (
+                    ecs_mr_list_response.modelRegistries | default([])
+                    | selectattr('environmentName', 'defined')
+                    | selectattr('environmentName', 'equalto', ecs_cdp_environment_name)
+                    | selectattr('serviceName', 'defined')
+                    | selectattr('serviceName', 'equalto', ecs_model_registry_service_name)
+                    | list
+                  )
+                  + (
+                    ecs_mr_list_response.modelRegistries | default([])
+                    | selectattr('environmentName', 'defined')
+                    | selectattr('environmentName', 'equalto', ecs_cdp_environment_name)
+                    | selectattr('namespace', 'defined')
+                    | selectattr('namespace', 'equalto', ecs_model_registry_service_name)
+                    | list
+                  )
+                )
+                | first
+                | default({})
+              }}
+
         - name: Set registry existence fact
           ansible.builtin.set_fact:
-            ecs_mr_exists: "{{ ecs_mr_list.stdout is search(ecs_model_registry_service_name) }}"
+            ecs_mr_exists: "{{ ecs_mr_existing_registry | length > 0 }}"
+
+        - name: Require existing Model Registry to be healthy
+          ansible.builtin.assert:
+            that:
+              - >-
+                ecs_mr_existing_registry.status | default('')
+                is search(
+                  '(?i)^(ready|running|active|available|succeeded|success|healthy|created|installation:finished)$'
+                )
+            fail_msg: >-
+              Model Registry {{ ecs_model_registry_service_name }} already
+              exists in non-healthy state
+              {{ ecs_mr_existing_registry.status | default('unknown') }}.
+              Automation will not treat it as healthy or create a duplicate.
+          when: ecs_mr_exists | bool
 
         - name: Resolve Model Registry creator CRN
           ansible.builtin.set_fact:
@@ -322,6 +367,12 @@
         - name: Record Model Registry provisioning success
           ansible.builtin.set_fact:
             ecs_model_registry_succeeded: true
+            ecs_model_registry_status: >-
+              {{
+                'Existing (healthy)'
+                if (ecs_mr_exists | bool)
+                else 'Created successfully'
+              }}
 
         - name: Register Model Registry ingress for Caddy
           ansible.builtin.set_fact:
@@ -347,6 +398,7 @@
                 ansible_failed_result.msg
                 | default(ansible_failed_result.stderr | default(ansible_failed_result | to_json))
               }}
+            ecs_model_registry_status: Failed
 
         - name: Report Model Registry provisioning failure
           ansible.builtin.debug:
