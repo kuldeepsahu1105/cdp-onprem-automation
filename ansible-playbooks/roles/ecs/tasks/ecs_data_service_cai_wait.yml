@@ -32,13 +32,6 @@
   connection: ssh
   when:
     - "'cai' in (ecs_data_services_install_names | default([]))"
-    - >-
-      not (ecs_cai_workspace_start.failed | default(false) | bool)
-      or (
-        ecs_cai_workspace_start.msg
-        | default('')
-        is search('(?i)already exists')
-      )
 
 - name: CAI | Record structured workspace result
   ansible.builtin.set_fact:
@@ -68,4 +61,24 @@
 
 - name: CAI | Complete structured workspace result
   ansible.builtin.include_tasks: ecs_data_service_cai.yml
+  when: "'cai' in (ecs_data_services_install_names | default([]))"
+
+- name: CAI | Require successful structured workspace result
+  ansible.builtin.assert:
+    that:
+      - ecs_cai_workspace_succeeded | default(false) | bool
+    fail_msg: >-
+      CAI workspace {{ ecs_cai_workspace_name }} did not reach a successful
+      terminal status. Final status:
+      {{
+        (
+          (ecs_cai_workspace_info | default({})).workspaces | default([])
+          | first | default({})
+        ).instanceStatus | default('not returned')
+      }}.
+      API response:
+      {{
+        ecs_cai_workspace_info.msg
+        | default(ecs_cai_workspace_info | to_json)
+      }}.
   when: "'cai' in (ecs_data_services_install_names | default([]))"

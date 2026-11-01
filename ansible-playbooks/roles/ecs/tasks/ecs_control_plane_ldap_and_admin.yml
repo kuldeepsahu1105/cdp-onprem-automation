@@ -2,6 +2,10 @@
 # Optional ECS control plane LDAP + LDAP admin user (controller + FreeIPA).
 
 - name: Converge ECS LDAP and LDAP admin IAM configuration
+  when:
+    - >-
+      (ecs_ldap_sync_effective | default(false) | bool)
+      or (ecs_ldap_admin_user_effective | default(false) | bool)
   block:
     - name: Prepare CDP CLI runtime on ECS master
       ansible.builtin.import_tasks: ecs_control_plane_remote_runtime.yml

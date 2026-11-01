@@ -41,6 +41,8 @@
       block:
         - name: Retrieve Ozone S3 credentials from selected host
           ansible.builtin.include_tasks: ecs_model_registry_ozone_credentials.yml
+          vars:
+            ansible_python_interpreter: /usr/bin/python3
 
         - name: Set Model Registry S3 endpoint from selected host when not overridden
           ansible.builtin.set_fact:
@@ -69,12 +71,11 @@
 
         - name: Check if registry already exists
           ansible.builtin.command:
-            argv:
-              - cdp
-              - --profile
-              - default
-              - ml
-              - list-model-registries
+            argv: >-
+              {{
+                ecs_data_services_cdp_cli_prefix
+                + ['ml', 'list-model-registries']
+              }}
           environment: "{{ ecs_cdp_cli_environment }}"
           register: ecs_mr_list
           changed_when: false
@@ -86,37 +87,87 @@
           ansible.builtin.set_fact:
             ecs_mr_exists: "{{ ecs_mr_list.stdout is search(ecs_model_registry_service_name) }}"
 
+        - name: Resolve Model Registry creator user CRN
+          ansible.builtin.set_fact:
+            ecs_model_registry_creator_crn_effective: >-
+              {{
+                ecs_model_registry_creator_crn | default('') | trim
+                if (ecs_model_registry_creator_crn | default('') | trim | length > 0)
+                else ecs_ldap_admin_user_crn | default('') | trim
+              }}
+
+        - name: Require a human Model Registry creator
+          ansible.builtin.assert:
+            that:
+              - ecs_model_registry_creator_crn_effective | length > 0
+              - "':user:' in ecs_model_registry_creator_crn_effective"
+              - "':machineUser:' not in ecs_model_registry_creator_crn_effective"
+            fail_msg: >-
+              Model Registry creation requires a human IAM user CRN because
+              CRP namespace ownership rejects machine-user CRNs. Enable the
+              LDAP admin user phase so ecs_ldap_admin_user_crn is resolved, or
+              set ecs_model_registry_creator_crn to an existing user CRN.
+          when: not (ecs_mr_exists | bool)
+
         - name: Create Model Registry
           ansible.builtin.command:
-            argv:
-              - cdp
-              - --profile
-              - default
-              - ml
-              - create-model-registry
-              - --environment-crn
-              - "{{ ecs_mr_env_info.environments | map(attribute='crn') | list | first }}"
-              - --environment-name
-              - "{{ ecs_cdp_environment_name }}"
-              - --model-registry-service-name
-              - "{{ ecs_model_registry_service_name }}"
-              - --model-registry-subdomain
-              - "{{ ecs_model_registry_subdomain }}"
-              - --s3-access-key
-              - "{{ hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_access_key }}"
-              - --s3-secret-key
-              - "{{ hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_secret_key }}"
-              - --s3-bucket
-              - "{{ ecs_model_registry_s3_bucket }}"
-              - --s3-endpoint
-              - "{{ ecs_model_registry_s3_endpoint_effective }}"
+            argv: >-
+              {{
+                ecs_data_services_cdp_cli_prefix
+                + [
+                  'ml',
+                  'create-model-registry',
+                  '--environment-crn',
+                  ecs_mr_env_info.environments
+                  | map(attribute='crn')
+                  | list
+                  | first,
+                  '--environment-name',
+                  ecs_cdp_environment_name,
+                  '--namespace',
+                  ecs_model_registry_service_name,
+                  '--creator-crn',
+                  ecs_model_registry_creator_crn_effective,
+                  '--s-3-access-key',
+                  hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_access_key,
+                  '--s-3-secret-key',
+                  hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_secret_key,
+                  '--s-3-bucket',
+                  ecs_model_registry_s3_bucket,
+                  '--s-3-endpoint',
+                  ecs_model_registry_s3_endpoint_effective
+                ]
+              }}
           environment: "{{ ecs_cdp_cli_environment }}"
           register: ecs_mr_create
+          failed_when: false
           when: not (ecs_mr_exists | bool)
           no_log: true
           become: false
           delegate_to: "{{ ecs_data_services_delegate_host }}"
           connection: ssh
+
+        - name: Require successful Model Registry creation
+          ansible.builtin.assert:
+            that:
+              - ecs_mr_create.rc | default(0) == 0
+            fail_msg: >-
+              Model Registry creation failed with rc
+              {{ ecs_mr_create.rc | default('unknown') }}:
+              {{
+                ecs_mr_create.stderr
+                | default('')
+                | regex_replace(
+                    '(?i)(--s-?3-(?:access|secret)-key(?:\\s+|,\\s*))([^,\\s]+)',
+                    '\\1<redacted>'
+                  )
+                | regex_replace(
+                    '(?i)(awsAccessKey|awsSecret|password|secret|access[ _-]?key)(\\s*[=:]\\s*)\\S+',
+                    '\\1\\2<redacted>'
+                  )
+                | trim
+              }}
+          when: not (ecs_mr_exists | bool)
 
         - name: Record Model Registry provisioning success
           ansible.builtin.set_fact:

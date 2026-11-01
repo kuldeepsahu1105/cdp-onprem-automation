@@ -2,14 +2,14 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-playbook="$root/ansible-playbooks/34_setup_ecs_data_services.yml"
-tls="$root/ansible-playbooks/common_tasks/ecs_data_service_cai_tls_converge.yml"
-tls_wrapper="$root/ansible-playbooks/common_tasks/ecs_data_service_cai_tls.yml"
-wildcard_profile="$root/ansible-playbooks/common_tasks/ecs_cai_freeipa_wildcard_profile.yml"
-wildcard_template="$root/ansible-playbooks/templates/ecs_cai_freeipa_wildcard_profile.cfg.j2"
-start="$root/ansible-playbooks/common_tasks/ecs_data_service_cai_start.yml"
-endpoint="$root/ansible-playbooks/common_tasks/ecs_data_service_cai_endpoint.yml"
-ldap="$root/ansible-playbooks/common_tasks/ecs_control_plane_ldap_and_admin.yml"
+playbook="$root/ansible-playbooks/roles/ecs/tasks/setup_data_services.yml"
+tls="$root/ansible-playbooks/roles/ecs/tasks/ecs_data_service_cai_tls_converge.yml"
+tls_wrapper="$root/ansible-playbooks/roles/ecs/tasks/ecs_data_service_cai_tls.yml"
+wildcard_profile="$root/ansible-playbooks/roles/ecs/tasks/ecs_cai_freeipa_wildcard_profile.yml"
+wildcard_template="$root/ansible-playbooks/roles/ecs/templates/ecs_cai_freeipa_wildcard_profile.cfg.j2"
+start="$root/ansible-playbooks/roles/ecs/tasks/ecs_data_service_cai_start.yml"
+endpoint="$root/ansible-playbooks/roles/ecs/tasks/ecs_data_service_cai_endpoint.yml"
+ldap="$root/ansible-playbooks/roles/ecs/tasks/ecs_control_plane_ldap_and_admin.yml"
 
 tls_line=$(grep -n 'Converge and validate CAI TLS before workspace submission' "$playbook" | cut -d: -f1)
 start_line=$(grep -n 'Launch CAI' "$playbook" | cut -d: -f1)
@@ -25,6 +25,7 @@ grep -Fq 'openssl x509 -in "$cert" -noout -checkhost "probe.$host"' "$tls"
 grep -Fq 'openssl verify -CAfile "$ca" "$cert"' "$tls"
 grep -Fq 'openssl pkey -in "$key" -pubout' "$tls"
 grep -q 'ecs_cai_existing_tls_secret_valid' "$tls"
+grep -q 'ecs_cai_static_subdomain | length <= 15' "$tls"
 grep -q 'Preserve adopted workspace endpoint contract' "$tls"
 grep -q 'ecs_cai_freeipa_wildcard_profile.yml' "$tls"
 ! grep -q 'cloudera.exe.freeipa_server_wildcard_profile' "$tls"
@@ -48,7 +49,7 @@ grep -q 'ecs_ldap_admin_user_effective' "$ldap"
 
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
-host=ptgtyv1-ecs-cluster-ml.apps.cldr.internal.arpa
+host=cai.apps.cldr.internal.arpa
 
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
   -subj '/CN=CAI test root' \

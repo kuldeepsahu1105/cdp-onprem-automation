@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-probe_file="$repo_root/ansible-playbooks/common_tasks/ecs_data_services_verify_dns.yml"
+probe_file="$repo_root/ansible-playbooks/roles/ecs/tasks/ecs_data_services_verify_dns.yml"
 group_vars_file="$repo_root/ansible-playbooks/group_vars/all.yml"
 
 python3 - "$probe_file" "$group_vars_file" <<'PY'

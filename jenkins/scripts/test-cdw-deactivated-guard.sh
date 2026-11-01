@@ -10,13 +10,13 @@ import sys
 
 root = Path(sys.argv[1])
 preflight = (
-    root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_preflight.yml"
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_preflight.yml"
 ).read_text()
 wait = (
-    root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_wait.yml"
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_wait.yml"
 ).read_text()
 result = (
-    root / "ansible-playbooks/common_tasks/ecs_data_service_cdw.yml"
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw.yml"
 ).read_text()
 
 

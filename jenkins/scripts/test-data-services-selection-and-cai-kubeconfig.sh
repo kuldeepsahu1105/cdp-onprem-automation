@@ -10,7 +10,7 @@ import sys
 import yaml
 
 root = Path(sys.argv[1])
-playbook = root / "ansible-playbooks/34_setup_ecs_data_services.yml"
+playbook = root / "ansible-playbooks/roles/ecs/tasks/setup_data_services.yml"
 playbook_text = playbook.read_text()
 
 for service in ("cdw", "cde", "cai"):
@@ -21,15 +21,14 @@ for service in ("cdw", "cde", "cai"):
         marker = "- name: Provision CDE"
     assert marker in playbook_text
 
-assert "common_tasks/ecs_data_service_cdw_preflight.yml" in playbook_text
-assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cdw_preflight.yml" in playbook_text
-assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cde_preflight.yml" in playbook_text
-assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cai_preflight.yml" in playbook_text
-assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_model_registry.yml" in playbook_text
+assert "ansible.builtin.include_tasks: ecs_data_service_cdw_preflight.yml" in playbook_text
+assert "ansible.builtin.include_tasks: ecs_data_service_cde_preflight.yml" in playbook_text
+assert "ansible.builtin.include_tasks: ecs_data_service_cai_preflight.yml" in playbook_text
+assert "ansible.builtin.include_tasks: ecs_data_service_model_registry.yml" in playbook_text
 assert "when: \"'model_registry' in (ecs_data_services_install_names | default([]))\"" in playbook_text
 
 cai_files = list(
-    (root / "ansible-playbooks/common_tasks").glob("ecs_data_service_cai*.yml")
+    (root / "ansible-playbooks/roles/ecs/tasks").glob("ecs_data_service_cai*.yml")
 )
 combined = "\n".join(path.read_text() for path in cai_files)
 assert "ecs_kubeconfig_path" not in combined
@@ -39,10 +38,14 @@ group_vars = yaml.safe_load(
     (root / "ansible-playbooks/group_vars/all.yml").read_text()
 )
 assert group_vars["ecs_coredns_kubeconfig_path"] == "/etc/rancher/rke2/rke2.yaml"
+assert group_vars["ecs_cde_cpu_requests"] == "40"
+assert group_vars["ecs_cde_memory_requests"] == "64Gi"
+assert group_vars["ecs_cai_static_subdomain"] == "cai"
+assert len(group_vars["ecs_cai_static_subdomain"]) <= 15
 
 ozone_credentials = (
     root
-    / "ansible-playbooks/common_tasks/ecs_model_registry_ozone_credentials.yml"
+    / "ansible-playbooks/roles/ecs/tasks/ecs_model_registry_ozone_credentials.yml"
 ).read_text()
 ozone_tasks = yaml.safe_load(ozone_credentials)
 assert "ansible.builtin.shell" not in ozone_credentials
@@ -80,7 +83,7 @@ cai_tls_tasks = list(
         yaml.safe_load(
             (
                 root
-                / "ansible-playbooks/common_tasks/ecs_data_service_cai_tls_converge.yml"
+                / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cai_tls_converge.yml"
             ).read_text()
         )
     )
@@ -121,7 +124,7 @@ model_registry_tasks = list(
         yaml.safe_load(
             (
                 root
-                / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
+                / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_model_registry.yml"
             ).read_text()
         )
     )
@@ -142,6 +145,7 @@ assert model_registry_create["failed_when"] is False
 model_registry_create_text = str(model_registry_create)
 for expected_flag in (
     "--namespace",
+    "--creator-crn",
     "--s-3-access-key",
     "--s-3-secret-key",
     "--s-3-bucket",
@@ -157,6 +161,14 @@ for obsolete_flag in (
     "--s3-endpoint",
 ):
     assert obsolete_flag not in model_registry_create_text
+model_registry_creator_assert = next(
+    task
+    for task in model_registry_tasks
+    if task.get("name") == "Require a human Model Registry creator"
+)
+creator_assert_text = str(model_registry_creator_assert)
+assert ":user:" in creator_assert_text
+assert ":machineUser:" in creator_assert_text
 model_registry_create_assert = next(
     task
     for task in model_registry_tasks

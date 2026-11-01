@@ -97,8 +97,12 @@ gated on successful secret validation. If a user-initiated deletion is still pro
 for the backend record and name reservation to disappear. A terminal failed
 workspace is reported without deletion or recreation.
 
-The private CDE request uses the live API minimum of 26 CPU and 64 GiB with the
-environment-specific scheduler parent `root.<environment>.cde`.
+Fresh private CDE services request 40 CPU and 64 GiB by default with the
+environment-specific scheduler parent `root.<environment>.cde`. The 40-CPU
+default leaves capacity for a typical 22-CPU virtual cluster plus another
+virtual cluster requiring the 12-CPU minimum. Override
+`ecs_cde_cpu_requests` when a different fresh-service capacity is required;
+the collection API does not resize an existing private-cloud service quota.
 Before a rerun, CDE uses the signed `de list-services` summary, which does not
 contact Cloudera Manager, to identify an existing terminal `*Failed` service.
 Automation reports that service and fails only the CDE boundary; it does not
@@ -114,6 +118,11 @@ host in `base_cluster_master_group`, where the standard base-cluster template
 places the Ozone manager, SCM, and S3 Gateway roles. A missing Ozone-capable
 inventory host is reported immediately but deferred to the final aggregate
 assertion so CAI readiness and CDW follow-up diagnostics still run.
+The automation machine-user key signs the request, but CRP namespace ownership
+requires a human IAM user CRN. Model Registry therefore passes
+`ecs_model_registry_creator_crn`, or the LDAP admin user CRN resolved earlier
+in the same run, as `--creator-crn`; machine-user CRNs are rejected before
+submission.
 Each CDW, CDE, and CAI attempt has an independent failure boundary. A failed
 service is recorded without preventing the next selected service from running,
 and the final aggregate assertion fails only after all selected services and
@@ -340,10 +349,6 @@ When empty, FreeIPA tries the first `ipaserver` private and Ansible addresses,
 while AD uses `ad_dns_servers`. Every candidate must prove all required A
 answers before use. `ecs_coredns_upstream_probe_retries` and
 `ecs_coredns_upstream_probe_delay` bound that validation.
-The tracked deployment configuration in `config.yml` explicitly selects
-`172.31.76.102`; other deployments must replace or remove that deployment
-override rather than changing the general empty default in
-`group_vars/all.yml`.
 `ecs_coredns_allow_node_resolver_fallback` controls whether non-loopback
 nameservers from the ECS master's `/etc/resolv.conf` may be considered after
 all inventory-derived direct candidates fail; fallback is not used when
@@ -405,8 +410,9 @@ module-owned waits. `ecs_data_services_status_wait_retries` and
 
 CAI external-PKI variables are standalone Ansible controller paths:
 `ecs_cai_tls_certificate_path`, `ecs_cai_tls_private_key_path`, and
-`ecs_cai_tls_ca_bundle_path`. `ecs_cai_static_subdomain` defaults to the
-workspace name, and `ecs_cai_tls_minimum_validity_seconds` defaults to one day.
+`ecs_cai_tls_ca_bundle_path`. `ecs_cai_static_subdomain` defaults to `cai` and
+must remain a valid DNS label of at most 15 characters;
+`ecs_cai_tls_minimum_validity_seconds` defaults to one day.
 AD and deployments without an in-inventory FreeIPA server must configure the
 CA bundle even when reusing a pre-existing secret so trust can be verified.
 
