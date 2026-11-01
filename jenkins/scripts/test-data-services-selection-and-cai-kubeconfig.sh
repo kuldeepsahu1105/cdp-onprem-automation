@@ -95,6 +95,9 @@ assert group_vars["ecs_cde_cpu_requests"] == "40"
 assert group_vars["ecs_cde_memory_requests"] == "64Gi"
 assert group_vars["ecs_cde_service_name_attempts"] == 10
 assert group_vars["ecs_cde_service_name_max_length"] == 40
+assert group_vars["ecs_cde_virtual_cluster_name_attempts"] == 10
+assert group_vars["ecs_cde_virtual_cluster_cpu_requests"] == "20"
+assert group_vars["ecs_cde_virtual_cluster_memory_requests"] == "30Gi"
 assert group_vars["ecs_cdw_dataviz_name_attempts"] == 10
 assert group_vars["ecs_cdw_vw_name_attempts"] == 10
 assert group_vars["ecs_cdw_dataviz_user_groups"] == []
@@ -224,6 +227,9 @@ assert "ecs_model_registry_status" in playbook_text
 assert "Existing (healthy)" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
 ).read_text()
+assert "installed|ready|running" in (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
+).read_text()
 assert "Created successfully" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
 ).read_text()
@@ -241,6 +247,20 @@ cde_start_text = (
 assert 'name: "{{ ecs_cde_service_name_effective }}"' in cde_start_text
 assert "Wait for adopted service without mutating its sizing" in cde_start_text
 assert "not (ecs_cde_service_existing | default(false) | bool)" in cde_start_text
+cde_vc_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cde_virtual_cluster.yml"
+).read_text()
+assert "de', 'list-vcs'" in cde_vc_text
+assert "selectattr('vcName', 'equalto', candidate)" in cde_vc_text
+assert "ecs_cde_vc_candidate_names" in cde_vc_text
+assert "ecs_cde_virtual_cluster_name_effective" in cde_vc_text
+assert "AppInstalled" in cde_vc_text
+assert "appinstallationfailed" in cde_vc_text.lower()
+assert "wait: false" in cde_vc_text
+assert "Automation does not delete the failed resource" in cde_vc_text
+assert "ecs_data_service_cde_virtual_cluster.yml" in (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cde.yml"
+).read_text()
 
 dataviz_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_dataviz.yml"

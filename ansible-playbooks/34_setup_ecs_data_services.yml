@@ -151,6 +151,7 @@
         - name: Record uncaught CDE failure
           ansible.builtin.set_fact:
             ecs_cde_service_succeeded: false
+            ecs_cde_virtual_cluster_succeeded: false
             ecs_cde_service:
               failed: true
               finished: true
@@ -292,7 +293,10 @@
             )
           - >-
             'cde' not in (ecs_data_services_install_names | default([]))
-            or (ecs_cde_service_succeeded | default(false) | bool)
+            or (
+              (ecs_cde_service_succeeded | default(false) | bool)
+              and (ecs_cde_virtual_cluster_succeeded | default(false) | bool)
+            )
           - >-
             'cai' not in (ecs_data_services_install_names | default([]))
             or (

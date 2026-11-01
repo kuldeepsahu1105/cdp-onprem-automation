@@ -104,6 +104,13 @@ CDE service. Existing healthy or provisioning services are reused without
 resizing. Failed, deleted, or stale reserved names are retained and skipped;
 the playbook selects the first available deterministic bounded name
 (`name`, `name-2`, and so on), and records that effective name in the catalog.
+After the service is ready, CDE also converges one default Virtual Cluster.
+The base name, CPU, memory, and tier are configurable with
+`ecs_cde_virtual_cluster_*`. Discovery uses the authoritative `de list-vcs`
+`vcName` and `status` fields. `AppInstalled` and in-progress resources are
+reused/waited; failed, deleted, deleting, or stale-reserved names are retained
+and skipped in favor of the next deterministic suffix. The effective VC name,
+status, and native `VcUiUrl` are recorded in the service catalog.
 Before a rerun, CDE uses the signed `de list-services` summary, which does not
 contact Cloudera Manager, to identify an existing terminal `*Failed` service.
 Automation reports that service and fails only the CDE boundary; it does not

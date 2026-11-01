@@ -40,6 +40,11 @@
       when:
         - ecs_cde_service_succeeded | bool
 
+    - name: Converge default CDE Virtual Cluster
+      ansible.builtin.include_tasks: ecs_data_service_cde_virtual_cluster.yml
+      when:
+        - ecs_cde_service_succeeded | bool
+
     - name: Register CDE ingress for Caddy
       ansible.builtin.set_fact:
         ecs_caddy_data_service_routes: >-

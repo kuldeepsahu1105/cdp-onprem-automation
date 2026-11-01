@@ -123,7 +123,7 @@
               - >-
                 ecs_mr_existing_registry.status | default('')
                 is search(
-                  '(?i)^(ready|running|active|available|succeeded|success|healthy|created|installation:finished)$'
+                  '(?i)^(installed|ready|running|active|available|succeeded|success|healthy|created|installation:finished)$'
                 )
             fail_msg: >-
               Model Registry {{ ecs_model_registry_service_name }} already
