@@ -445,8 +445,10 @@ CA bundle even when reusing a pre-existing secret so trust can be verified.
 CAI discovery lists the environment and selects the requested workbench by the
 API field `instanceName`. The effective name is selected deterministically from
 the bounded sequence `<ecs_cai_workspace_name>`, `-2`, `-3`, and so on (default
-10 attempts, maximum name length 40). The default base is
-`<cluster>-ai-workbench`; `ecs_cai_workspace_name` remains an override.
+10 attempts, maximum name length 40). The default sequence is `cai-wb-1`,
+`cai-wb-2`, `cai-wb-3`, and so on. `ecs_cai_workspace_name` remains an
+override: a trailing number is incremented in place (`custom-7`, `custom-8`);
+an override without a trailing number uses `custom`, `custom-2`, `custom-3`.
 Existing workspaces are never renamed. Reruns first reuse a healthy or
 provisioning workspace that authoritatively owns the configured endpoint
 (including an older `-ml` name), then reuse the first real

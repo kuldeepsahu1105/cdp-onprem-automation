@@ -26,6 +26,13 @@
     ecs_cai_workspace_candidate_names: >-
       {{ ecs_cai_workspace_candidate_names + [_ecs_cai_candidate_name] }}
   vars:
+    _ecs_cai_numeric_suffix: >-
+      {{ ecs_cai_workspace_name | regex_search('([0-9]+)$') | default('', true) }}
+    _ecs_cai_numeric_prefix: >-
+      {{
+        ecs_cai_workspace_name
+        | regex_replace('[0-9]+$', '')
+      }}
     _ecs_cai_candidate_suffix: "{{ '' if item == 1 else '-' + (item | string) }}"
     _ecs_cai_candidate_base: >-
       {{
@@ -39,7 +46,30 @@
         | regex_replace('-+$', '')
       }}
     _ecs_cai_candidate_name: >-
-      {{ _ecs_cai_candidate_base + _ecs_cai_candidate_suffix }}
+      {{
+        (
+          _ecs_cai_numeric_prefix[
+            0:
+            (
+              ecs_cai_workspace_name_max_length | int
+              - (
+                  (
+                    _ecs_cai_numeric_suffix | int
+                    + item - 1
+                  ) | string | length
+                )
+            )
+          ]
+          + (
+              (
+                _ecs_cai_numeric_suffix | int
+                + item - 1
+              ) | string
+            )
+        )
+        if _ecs_cai_numeric_suffix | length > 0
+        else (_ecs_cai_candidate_base + _ecs_cai_candidate_suffix)
+      }}
   loop: "{{ range(1, (ecs_cai_workspace_name_attempts | int) + 1) | list }}"
   when: "'cai' in (ecs_data_services_install_names | default([]))"
 
