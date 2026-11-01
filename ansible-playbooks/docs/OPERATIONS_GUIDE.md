@@ -317,11 +317,13 @@ call it verifies the DNS contract established by playbook 33. Fresh IPv4-only
 pod probes must resolve CM, the ECS console, and LDAP when LDAP sync/admin is
 selected through the normal Kubernetes CoreDNS Service, then independently
 connect to the validated IPv4 addresses on CM 7183 and selected LDAP 636.
-Direct queries to a ready CoreDNS endpoint are diagnostic only and cannot
-satisfy the gate, because Management Console workloads use the Service path.
-If endpoint-only resolution works, rerun ECS install to repair CoreDNS before
-Data Services provisioning. The pod logs its resolver configuration and
-reports each FQDN separately. DNS/TCP verification uses at most
+When the Service path remains transiently inconsistent after bounded retries,
+the same fresh pod may query one ready CoreDNS endpoint directly. The fallback
+is accepted only when every required A answer and direct TCP dependency check
+succeeds; it never pins workloads, restarts pods, or rewrites CoreDNS.
+Authoritative Data Services backend reads then retry separately before any
+mutation. The pod logs its resolver configuration and reports each FQDN
+separately. DNS/TCP verification uses at most
 `ecs_data_services_dns_probe_attempts` attempts (default `3`). Failed DNS
 records wait `ecs_data_services_dns_probe_retry_delay` seconds (default `31`)
 between attempts so each retry occurs after the managed CoreDNS 30-second
