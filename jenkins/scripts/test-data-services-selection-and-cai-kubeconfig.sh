@@ -138,6 +138,28 @@ assert (
     == "{{ ecs_persistent_state_dir }}/ecs-data-services-catalog.yml"
 )
 
+cde_preflight = yaml.safe_load(
+    (root / "ansible-playbooks/common_tasks/ecs_data_service_cde_preflight.yml").read_text()
+)
+cde_reference_init_index = next(
+    index
+    for index, task in enumerate(cde_preflight)
+    if task.get("name") == "CDE | Initialize optional healthy reference resources"
+)
+cde_capacity_index = next(
+    index
+    for index, task in enumerate(cde_preflight)
+    if task.get("name") == "CDE | Resolve effective fresh-service capacity"
+)
+cde_reference_init = cde_preflight[cde_reference_init_index]
+cde_capacity = cde_preflight[cde_capacity_index]
+assert cde_reference_init_index < cde_capacity_index
+assert cde_reference_init["ansible.builtin.set_fact"]["ecs_cde_reference_resources"] == {}
+assert "vars" not in cde_capacity
+assert "default(ecs_cde_resource_pool, true)" in str(cde_capacity)
+assert "default(ecs_cde_cpu_requests, true)" in str(cde_capacity)
+assert "default(ecs_cde_memory_requests, true)" in str(cde_capacity)
+
 portal_facts = yaml.safe_load(
     (root / "ansible-playbooks/common_tasks/build_deployment_portal_facts.yml").read_text()
 )

@@ -30,6 +30,10 @@
     ecs_cde_reference_service_name: "{{ ecs_cde_reference_service.name | default('') }}"
     ecs_cde_reference_service_cluster_id: "{{ ecs_cde_reference_service.clusterId | default('') }}"
 
+- name: CDE | Initialize optional healthy reference resources
+  ansible.builtin.set_fact:
+    ecs_cde_reference_resources: {}
+
 - name: CDE | Verify Management Console can describe healthy reference service
   cloudera.cloud.de_info:
     environment: "{{ ecs_cdp_environment_name }}"
@@ -107,8 +111,6 @@
             true
           )
       }}
-  vars:
-    ecs_cde_reference_resources: "{{ ecs_cde_reference_resources | default({}) }}"
 
 - name: CDE | Require complete effective fresh-service capacity
   ansible.builtin.assert:
