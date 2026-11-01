@@ -42,13 +42,21 @@
     fail_msg: >-
       FreeIPA-backed Data Services DNS verification requires an ipaserver
       inventory host.
-  when: identity_provider_effective | default('freeipa') == 'freeipa'
+  when:
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - >-
+      (ecs_ldap_sync_effective | default(false) | bool)
+      or (ecs_ldap_admin_user_effective | default(false) | bool)
 
 - name: Resolve FreeIPA inventory host for DNS verification
   ansible.builtin.set_fact:
     ecs_coredns_ipa_inventory_host: >-
       {{ ecs_coredns_ipa_inventory_host | default(groups['ipaserver'] | first) }}
-  when: identity_provider_effective | default('freeipa') == 'freeipa'
+  when:
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - >-
+      (ecs_ldap_sync_effective | default(false) | bool)
+      or (ecs_ldap_admin_user_effective | default(false) | bool)
 
 - name: Build required Data Services DNS verification records
   ansible.builtin.set_fact:
@@ -103,7 +111,11 @@
           }
         ]
       }}
-  when: identity_provider_effective | default('freeipa') == 'freeipa'
+  when:
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - >-
+      (ecs_ldap_sync_effective | default(false) | bool)
+      or (ecs_ldap_admin_user_effective | default(false) | bool)
 
 - name: Add Active Directory LDAP to required Data Services DNS verification records
   ansible.builtin.set_fact:
@@ -119,7 +131,11 @@
           }
         ]
       }}
-  when: identity_provider_effective | default('') == 'ad'
+  when:
+    - identity_provider_effective | default('') == 'ad'
+    - >-
+      (ecs_ldap_sync_effective | default(false) | bool)
+      or (ecs_ldap_admin_user_effective | default(false) | bool)
 
 - name: Remove stale Data Services DNS verification pod
   ansible.builtin.command:
@@ -332,11 +348,25 @@
   delegate_to: "{{ groups[ecs_cluster_master_group] | first }}"
   connection: ssh
 
-- name: Require Data Services DNS resolution through CoreDNS
+- name: Require successful Data Services DNS verification pod
   ansible.builtin.assert:
     that:
       - ecs_data_services_dns_probe_logs.rc == 0
       - ecs_data_services_dns_probe_phases.stdout == 'Succeeded'
+      - "'ALL_PROBES_OK' in ecs_data_services_dns_probe_logs.stdout"
+    fail_msg: >-
+      One or more selected Data Services dependencies failed DNS or TCP
+      verification through the newly created Kubernetes probe pod. Probe
+      output:
+      {{
+        ecs_data_services_dns_probe_logs.stdout
+        | default(ecs_data_services_dns_probe_logs.stderr, true)
+      }}
+    quiet: true
+
+- name: Require selected Data Services DNS records in successful output
+  ansible.builtin.assert:
+    that:
       - >-
         (
           'DNS_A_OK fqdn=' + item.fqdn + ' ipv4='
@@ -349,16 +379,14 @@
         or (
           'TCP_OK fqdn=' + item.fqdn + ' ipv4='
         ) in ecs_data_services_dns_probe_logs.stdout
-      - "'ALL_PROBES_OK' in ecs_data_services_dns_probe_logs.stdout"
     fail_msg: >-
-      {{ item.label }} hostname {{ item.fqdn }} must return the
-      required IPv4 answer
-      {{ item.address | default('an address', true) }}
+      The successful DNS probe output did not contain the expected result for
+      {{ item.label }} hostname {{ item.fqdn }} with IPv4 answer
+      {{ item.address | default('an address', true) }}.
       {% if item.port | default(0) | int > 0 %}
-      and accept TCP connections on port {{ item.port }}
+      Expected a TCP success marker for port {{ item.port }}.
       {% endif %}
-      through the newly created Kubernetes probe pod before Data Services API calls
-      are allowed. Probe output:
+      Probe output:
       {{
         ecs_data_services_dns_probe_logs.stdout
         | default(ecs_data_services_dns_probe_logs.stderr, true)
