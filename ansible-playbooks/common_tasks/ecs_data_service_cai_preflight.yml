@@ -65,6 +65,38 @@
   loop: "{{ range(1, (ecs_cai_workspace_name_attempts | int) + 1) | list }}"
   when: "'cai' in (ecs_data_services_install_names | default([]))"
 
+- name: CAI | Reuse healthy workspace owning configured base endpoint
+  ansible.builtin.set_fact:
+    ecs_cai_workspace_name_effective: "{{ item.instanceName }}"
+    ecs_cai_existing_workspace: "{{ item }}"
+  loop: "{{ ecs_cai_live_workspaces }}"
+  loop_control:
+    label: "{{ item.instanceName | default('unnamed') }}"
+  vars:
+    _ecs_cai_live_endpoint_host: >-
+      {{
+        item.instanceUrl | default('')
+        | regex_replace('^https?://', '')
+        | regex_replace('/.*$', '')
+        | regex_replace(':.*$', '')
+        | lower
+      }}
+    _ecs_cai_configured_endpoint_host: >-
+      {{ ecs_cai_static_subdomain | lower }}.{{ ecs_app_domain | lower }}
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - ecs_cai_workspace_name_effective | length == 0
+    - item.instanceName | default('') | length > 0
+    - _ecs_cai_live_endpoint_host == _ecs_cai_configured_endpoint_host
+    - >-
+      item.instanceStatus | default('')
+      is not search('(?i)(failed$|create_failed|deleted$|delet|remov|terminat)')
+    - >-
+      item.instanceStatus | default('')
+      is search(
+        '(?i)(progress|pending|creat|install|provision|start|running|ready|active|finished|modify)'
+      )
+
 - name: CAI | Reuse first real active or provisioning workspace candidate
   ansible.builtin.set_fact:
     ecs_cai_workspace_name_effective: "{{ item }}"
@@ -152,5 +184,7 @@
         ecs_cai_workspace_candidate_names[
           ecs_cai_workspace_candidate_names.index(ecs_cai_workspace_name_effective):
         ]
+        if ecs_cai_workspace_name_effective in ecs_cai_workspace_candidate_names
+        else []
       }}
   when: "'cai' in (ecs_data_services_install_names | default([]))"

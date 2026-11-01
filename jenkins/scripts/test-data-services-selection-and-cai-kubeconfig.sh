@@ -119,6 +119,7 @@ assert group_vars["ecs_cdw_vw_name_attempts"] == 10
 assert group_vars["ecs_cdw_dataviz_user_groups"] == []
 assert group_vars["ecs_cdw_dataviz_admin_groups"] == []
 assert group_vars["ecs_cai_static_subdomain"] == "cai"
+assert group_vars["ecs_cai_workspace_name"].endswith("-ai-workbench")
 assert group_vars["ecs_model_registry_creator_crn"] == ""
 assert "playbook_dir" in group_vars["ecs_data_services_catalog_cache_path"]
 assert (
@@ -182,6 +183,9 @@ assert "ecs_cai_workspace_candidate_names" in cai_preflight
 assert "ecs_cai_subdomain_candidate_names" in cai_preflight
 assert "ecs_cai_workspace_name_effective" in cai_preflight
 assert "ecs_cai_static_subdomain_effective" in cai_preflight
+assert "Reuse healthy workspace owning configured base endpoint" in cai_preflight
+assert "item.instanceUrl" in cai_preflight
+assert "else []" in cai_preflight
 assert "range(1, (ecs_cai_workspace_name_attempts | int) + 1)" in cai_preflight
 assert "selectattr('instanceName', 'equalto', item)" in cai_preflight
 for cai_info_text in (cai_endpoint, cai_wait):
