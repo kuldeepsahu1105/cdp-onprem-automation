@@ -403,6 +403,26 @@ base_cluster_health_text = (
 ).read_text()
 assert "base_cluster_verified_service_states" in base_cluster_health_text
 assert "base_cluster_verified_health_summaries" in base_cluster_health_text
+ipa_ticket_tasks = yaml.safe_load(
+    (root / "ansible-playbooks/common_tasks/ensure_ipa_kerberos_ticket.yml").read_text()
+)
+ticket_probe = next(
+    task
+    for task in ipa_ticket_tasks
+    if task.get("name") == "Check for unexpired Kerberos TGT in Ansible FILE ccache"
+)
+assert ticket_probe["ansible.builtin.command"]["argv"] == ["klist", "-s"]
+wildcard_playbook_text = (
+    root / "ansible-playbooks/19_setup_wildcard.yml"
+).read_text()
+ticket_import = (
+    "ansible.builtin.import_tasks: "
+    "common_tasks/ensure_ipa_kerberos_ticket_with_klist.yml"
+)
+wildcard_mutation = "- name: Add wildcard DNS record for ECS"
+assert wildcard_playbook_text.index(ticket_import) < (
+    wildcard_playbook_text.index(wildcard_mutation)
+)
 data_context_text = (
     root / "ansible-playbooks/common_tasks/ensure_base_cluster_data_context.yml"
 ).read_text()
