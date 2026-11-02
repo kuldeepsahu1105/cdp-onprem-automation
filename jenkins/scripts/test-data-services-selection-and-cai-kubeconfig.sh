@@ -61,21 +61,32 @@ cdw_force_reset = (
 ).read_text()
 for forbidden in (
     "ipa-getkeytab",
-    " kinit",
     "state: disabled",
     "Remove legacy automation-owned principals",
     "ecs_cdw_legacy_principal_cleanup_marker",
 ):
     assert forbidden not in cdw_preflight
 assert "CDW | Ensure FreeIPA host principal object" in cdw_preflight
-assert "CDW | Ensure FreeIPA Hive service principal object" in cdw_preflight
+assert "CDW | Inspect FreeIPA Hive service principal" in cdw_preflight
 assert "freeipa.ansible_freeipa.ipahost" in cdw_preflight
-assert "freeipa.ansible_freeipa.ipaservice" in cdw_preflight
-assert cdw_preflight.count("force: true") >= 2
-assert "state: present" in cdw_preflight
+assert "CDW | Reject an existing keyless FreeIPA Hive principal" in cdw_preflight
+assert "/cm/commands/generateCredentialsAdhoc" in cdw_preflight
+assert "ecs_cdw_principals_to_generate" in cdw_preflight
+assert "pre-created keyless service causes CM" in cdw_preflight
+assert "CDW | Wait for CM-owned ad-hoc credentials" in cdw_preflight
+assert "CDW | Require CM-generated FreeIPA keys" in cdw_preflight
+assert "has_keytab: TRUE" in cdw_preflight
+assert "deleteCredentials?deleteCredentialsMode=unused" in cdw_preflight
+assert "CDW | Confirm stale CM credential recovery" in cdw_preflight
+assert (
+    "ecs_cdw_repair_stale_cm_credentials_confirm | default('')"
+    in cdw_preflight
+)
+assert "== ecs_cdp_environment_name" in cdw_preflight
 assert "ipa-getkeytab" not in cdw_preflight
 assert "allow_create_keytab" not in cdw_preflight
 assert "allow_retrieve_keytab" not in cdw_preflight
+assert "freeipa.ansible_freeipa.ipaservice" not in cdw_preflight
 assert "CDW | Require verified Base and CM Kerberos prerequisites" in cdw_preflight
 assert "/cm/kerberosInfo" in cdw_preflight
 assert "hadoop_security_authentication" in cdw_preflight

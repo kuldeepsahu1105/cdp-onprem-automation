@@ -389,8 +389,12 @@ not attempt activation, deletion, recreation, or a control-plane restart.
 `Running` is accepted as success. For FreeIPA, the playbook idempotently
 ensures that the required `host/<hostname>` and `hive/<hostname>` principal
 objects exist because CM `/cm/retrieveKeytab` requires pre-existing
-principals. It never generates, retrieves, disables, rotates, or deletes their
-keys; CM and the Private Cloud Data Warehouse control plane own the keytab.
+principals. Automation creates only the synthetic FreeIPA host container.
+CM's supported `generateCredentialsAdhoc` command creates the missing Hive
+service principal and its initial key together. Automation waits for that
+command and verifies that FreeIPA reports the Hive service as keyed. It never
+runs `ipa-getkeytab` or handles keytab bytes. Existing keyed services are left
+unchanged.
 
 Before that control-plane query, CDW performs a read-only Base readiness gate.
 CM `kerberosInfo` must report `kerberized=true` with the configured realm and
@@ -403,10 +407,23 @@ handoff; failure diagnostics still inspect that separate boundary.
 The product-standard private-cloud CDW hostname is
 `dwx-env-<environment>.cdp.local`, even when the deployment DNS domain and
 Kerberos realm are different (for example, `cldr.internal.arpa` and
-`CLDR.INTERNAL.ARPA`). Automation creates only the FreeIPA host and Hive service principal objects.
-CM `/cm/retrieveKeytab` and CDW own key generation, retrieval, and rotation;
-automation never runs `ipa-getkeytab`, disables keys, or deletes these
-principals.
+`CLDR.INTERNAL.ARPA`). Automation ensures the FreeIPA host object, then
+inspects the Hive service. If the service is absent, it supplies that service
+principal to CM `generateCredentialsAdhoc`; CM creates the service and key.
+CM `/cm/retrieveKeytab` and CDW own retrieval and subsequent rotation.
+Pre-created keyless Hive services are rejected because CM skips their
+generation and then fails `merge_credentials.sh` with no component keytabs.
+While CDW is deactivated, remove only the confirmed keyless Hive service,
+preserve the host object, and rerun so CM can create it correctly.
+
+If CM still retains a credential for an already removed Hive service,
+`generateCredentialsAdhoc` completes with `No roles required Kerberos
+credentials to be generated`. For this damaged state only, set
+`ecs_cdw_repair_stale_cm_credentials=true` and
+`ecs_cdw_repair_stale_cm_credentials_confirm=<environment-name>`. The exact
+confirmation gates CM `deleteCredentials?deleteCredentialsMode=unused`;
+automation never requests deletion mode `all`. Remove both recovery values
+after the successful run.
 
 Automation never removes a CDW principal automatically. The DW control-plane
 cluster query can return no records even while the backend still considers the

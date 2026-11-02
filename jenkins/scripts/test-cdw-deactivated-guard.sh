@@ -34,7 +34,7 @@ require(
 
 guard_start = preflight.index("- name: CDW | Select deactivated cluster records")
 mutation_start = preflight.index(
-    "- name: CDW | Ensure FreeIPA host principal prerequisite"
+    "- name: CDW | Ensure FreeIPA host principal object"
 )
 require(
     guard_start < mutation_start,
@@ -92,8 +92,13 @@ for content, label in ((guard, "preflight guard"), (wait, "wait helper")):
         "cloudera.cloud.dw_cluster:" not in content,
         f"{label} must not add a cluster activation/reconciliation call",
     )
-    require("state: absent" not in content, f"{label} must not delete")
     require("state: restarted" not in content, f"{label} must not restart")
+require(
+    "freeipa.ansible_freeipa.ipahost" not in guard
+    and "freeipa.ansible_freeipa.ipaservice" not in guard,
+    "preflight guard must not delete FreeIPA principals",
+)
+require("state: absent" not in wait, "wait helper must not delete")
 
 print("CDW Deactivated guard static/mock checks passed")
 PY

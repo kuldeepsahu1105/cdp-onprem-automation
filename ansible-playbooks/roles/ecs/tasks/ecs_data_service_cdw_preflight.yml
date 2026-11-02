@@ -163,6 +163,8 @@
   ansible.builtin.set_fact:
     ecs_cdw_principal_hostname: >-
       dwx-env-{{ ecs_cdp_environment_name }}.cdp.local
+    ecs_cdw_preflight_ipa_ccache: >-
+      /tmp/ansible-cdw-preflight-{{ ecs_cdp_environment_name }}.ccache
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
     - identity_provider_effective | default('freeipa') == 'freeipa'
@@ -175,10 +177,9 @@
       - ipaserver_inventory_host | default('') | length > 0
       - ipaadmin_password | default('') | string | length > 0
     fail_msg: >-
-      CM /cm/retrieveKeytab requires the CDW host and Hive service principal
-      objects to exist before activation. FreeIPA inventory access and
-      ipaadmin_password are required to prepare those objects without
-      generating or retrieving their keys.
+      FreeIPA inventory access and ipaadmin_password are required to inspect
+      the CDW host and Hive service principals before asking CM to generate
+      any missing ad-hoc credentials.
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
     - identity_provider_effective | default('freeipa') == 'freeipa'
@@ -198,16 +199,250 @@
     - identity_provider_effective | default('freeipa') == 'freeipa'
     - ecs_cdw_ensure_freeipa_principal_objects | default(true) | bool
 
-- name: CDW | Ensure FreeIPA Hive service principal object
-  freeipa.ansible_freeipa.ipaservice:
-    ipaadmin_password: "{{ ipaadmin_password }}"
-    ipaadmin_principal: "{{ ipaadmin_principal }}"
-    name: "hive/{{ ecs_cdw_principal_hostname }}"
-    force: true
-    state: present
+- name: CDW | Obtain isolated FreeIPA administrator ticket
+  ansible.builtin.command:
+    argv:
+      - kinit
+      - -c
+      - "FILE:{{ ecs_cdw_preflight_ipa_ccache }}"
+      - "{{ ipaadmin_principal }}"
+    stdin: "{{ ipaadmin_password }}"
+  environment:
+    KRB5CCNAME: "FILE:{{ ecs_cdw_preflight_ipa_ccache }}"
+  register: ecs_cdw_preflight_ipa_kinit
+  changed_when: false
+  no_log: true
   delegate_to: "{{ ipaserver_inventory_host }}"
   connection: ssh
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
     - identity_provider_effective | default('freeipa') == 'freeipa'
     - ecs_cdw_ensure_freeipa_principal_objects | default(true) | bool
+
+- name: CDW | Inspect FreeIPA Hive service principal
+  ansible.builtin.command:
+    argv:
+      - ipa
+      - service-show
+      - "hive/{{ ecs_cdw_principal_hostname }}"
+      - --all
+      - --raw
+  environment:
+    KRB5CCNAME: "FILE:{{ ecs_cdw_preflight_ipa_ccache }}"
+  register: ecs_cdw_preflight_ipa_hive_service
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ecs_cdw_ensure_freeipa_principal_objects | default(true) | bool
+
+- name: CDW | Remove isolated FreeIPA administrator ticket
+  ansible.builtin.file:
+    path: "{{ ecs_cdw_preflight_ipa_ccache }}"
+    state: absent
+  changed_when: false
+  become: true
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ecs_cdw_ensure_freeipa_principal_objects | default(true) | bool
+
+- name: CDW | Resolve FreeIPA Hive principal and key state
+  ansible.builtin.set_fact:
+    ecs_cdw_preflight_ipa_hive_exists: >-
+      {{ ecs_cdw_preflight_ipa_hive_service.rc | default(1) | int == 0 }}
+    ecs_cdw_preflight_ipa_hive_has_keytab: >-
+      {{
+        'has_keytab: TRUE'
+        in (ecs_cdw_preflight_ipa_hive_service.stdout | default(''))
+      }}
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ecs_cdw_ensure_freeipa_principal_objects | default(true) | bool
+
+- name: CDW | Reject an existing keyless FreeIPA Hive principal
+  ansible.builtin.assert:
+    that:
+      - >-
+        not ecs_cdw_preflight_ipa_hive_exists
+        or ecs_cdw_preflight_ipa_hive_has_keytab
+    fail_msg: >-
+      The existing hive/{{ ecs_cdw_principal_hostname }} FreeIPA service is
+      keyless. CM generateCredentialsAdhoc must create the missing service and
+      its key together; a pre-created keyless service causes CM
+      merge_credentials.sh to receive no keytabs. While CDW is deactivated,
+      remove only that confirmed keyless Hive service, then rerun. Preserve
+      the host object and do not run a separate keytab-generation command.
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ecs_cdw_ensure_freeipa_principal_objects | default(true) | bool
+
+- name: CDW | Resolve principals CM must generate
+  ansible.builtin.set_fact:
+    ecs_cdw_principals_to_generate: >-
+      {{
+        (
+          []
+          if ecs_cdw_preflight_ipa_hive_exists
+          else ['hive/' ~ ecs_cdw_principal_hostname ~ '@' ~ cluster_realm]
+        )
+      }}
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ecs_cdw_ensure_freeipa_principal_objects | default(true) | bool
+
+- name: CDW | Confirm stale CM credential recovery
+  ansible.builtin.assert:
+    that:
+      - >-
+        ecs_cdw_repair_stale_cm_credentials_confirm | default('')
+        == ecs_cdp_environment_name
+    fail_msg: >-
+      ecs_cdw_repair_stale_cm_credentials deletes CM credentials that CM
+      classifies as unused before regenerating the missing CDW Hive
+      credential. Confirm this recovery by setting
+      ecs_cdw_repair_stale_cm_credentials_confirm={{
+      ecs_cdp_environment_name }}.
+  when:
+    - ecs_cdw_repair_stale_cm_credentials | default(false) | bool
+    - ecs_cdw_principals_to_generate | default([]) | length > 0
+
+- name: CDW | Delete stale unused CM credentials
+  ansible.builtin.uri:
+    url: >-
+      https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/{{
+      cm_api_version
+      }}/cm/commands/deleteCredentials?deleteCredentialsMode=unused
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+    follow_redirects: none
+  register: ecs_cdw_delete_unused_credentials_command
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  connection: ssh
+  when:
+    - ecs_cdw_repair_stale_cm_credentials | default(false) | bool
+    - ecs_cdw_principals_to_generate | default([]) | length > 0
+
+- name: CDW | Wait for stale unused credential cleanup
+  ansible.builtin.include_tasks: >-
+    {{ playbook_dir }}/common_tasks/wait_cm_api_command.yml
+  vars:
+    cm_krb_api_url: >-
+      https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/{{
+      cm_api_version }}
+    cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
+    cm_api_command_id: >-
+      {{ ecs_cdw_delete_unused_credentials_command.json.id }}
+    cm_api_command_allow_already_exists: false
+  when:
+    - ecs_cdw_repair_stale_cm_credentials | default(false) | bool
+    - ecs_cdw_delete_unused_credentials_command.json.id is defined
+
+- name: CDW | Generate missing CM-owned FreeIPA credentials
+  ansible.builtin.uri:
+    url: >-
+      https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/{{
+      cm_api_version }}/cm/commands/generateCredentialsAdhoc
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body:
+      items: "{{ ecs_cdw_principals_to_generate }}"
+    status_code: [200]
+    follow_redirects: none
+  register: ecs_cdw_adhoc_credentials_command
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ecs_cdw_ensure_freeipa_principal_objects | default(true) | bool
+    - ecs_cdw_principals_to_generate | default([]) | length > 0
+
+- name: CDW | Wait for CM-owned ad-hoc credentials
+  ansible.builtin.include_tasks: >-
+    {{ playbook_dir }}/common_tasks/wait_cm_api_command.yml
+  vars:
+    cm_krb_api_url: >-
+      https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/{{
+      cm_api_version }}
+    cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
+    cm_api_command_id: "{{ ecs_cdw_adhoc_credentials_command.json.id }}"
+    cm_api_command_allow_already_exists: false
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_adhoc_credentials_command.json.id is defined
+
+- name: CDW | Obtain FreeIPA ticket for credential verification
+  ansible.builtin.command:
+    argv:
+      - kinit
+      - -c
+      - "FILE:{{ ecs_cdw_preflight_ipa_ccache }}"
+      - "{{ ipaadmin_principal }}"
+    stdin: "{{ ipaadmin_password }}"
+  environment:
+    KRB5CCNAME: "FILE:{{ ecs_cdw_preflight_ipa_ccache }}"
+  register: ecs_cdw_preflight_verify_ipa_kinit
+  changed_when: false
+  no_log: true
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
+  when:
+    - ecs_cdw_principals_to_generate | default([]) | length > 0
+
+- name: CDW | Verify CM-generated FreeIPA Hive credential
+  ansible.builtin.command:
+    argv:
+      - ipa
+      - service-show
+      - "hive/{{ ecs_cdw_principal_hostname }}"
+      - --all
+      - --raw
+  environment:
+    KRB5CCNAME: "FILE:{{ ecs_cdw_preflight_ipa_ccache }}"
+  register: ecs_cdw_preflight_generated_ipa_hive
+  changed_when: false
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
+  when:
+    - ecs_cdw_principals_to_generate | default([]) | length > 0
+
+- name: CDW | Remove credential verification ticket
+  ansible.builtin.file:
+    path: "{{ ecs_cdw_preflight_ipa_ccache }}"
+    state: absent
+  changed_when: false
+  become: true
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
+  when:
+    - ecs_cdw_principals_to_generate | default([]) | length > 0
+
+- name: CDW | Require CM-generated FreeIPA keys
+  ansible.builtin.assert:
+    that:
+      - >-
+        'has_keytab: TRUE'
+        in (ecs_cdw_preflight_generated_ipa_hive.stdout | default(''))
+    fail_msg: >-
+      CM completed generateCredentialsAdhoc, but FreeIPA does not report
+      a keytab for the required CDW Hive principal. Do not generate keys
+      outside CM; inspect the CM command result and cloudera-scm-server.log.
+  when:
+    - ecs_cdw_principals_to_generate | default([]) | length > 0

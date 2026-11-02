@@ -449,12 +449,38 @@ Cloudera support must repair that backend state.
 For FreeIPA-backed CDW, automation idempotently creates the standard
 `host/dwx-env-<environment>.cdp.local@<realm>` and
 `hive/dwx-env-<environment>.cdp.local@<realm>` principal objects because CM
-`/cm/retrieveKeytab` requires them to exist. CM/CDW own their keys: automation
-must not generate, retrieve, disable, rotate, or delete those keys or
-principals. A control-plane cluster query can return no
+`/cm/retrieveKeytab` requires them to exist. Automation creates the synthetic
+FreeIPA host container, then asks CM's supported `generateCredentialsAdhoc`
+command to create the absent Hive service and its initial KDC key together.
+It waits for completion and verifies the Hive service `has_keytab`.
+Automation never runs `ipa-getkeytab` or handles keytab bytes. CM/CDW own
+retrieval and later rotation. A control-plane cluster query can return no
 records while DWX still considers the environment activated, so automation
 must not infer that principal deletion is safe. Preserve the state and use the
 diagnostic report plus the supported DWX recovery workflow.
+
+If an operator or older automation pre-created the Hive service without a
+key, playbook 34 stops before submission. CM cannot repair that state with
+`generateCredentialsAdhoc`: it skips the existing service and later fails
+`merge_credentials.sh` because no component keytab was produced. While CDW is
+deactivated, confirm `has_keytab: FALSE`, remove only that keyless Hive
+service, preserve the host object, and rerun. Never delete a keyed principal
+or combine this recovery with `ipa-getkeytab`.
+
+If the service is absent but CM `generateCredentialsAdhoc` reports only
+`No roles required Kerberos credentials to be generated`, CM still has a
+stale unused credential record. With CDW deactivated, run playbook 34 once
+with:
+
+```yaml
+ecs_cdw_repair_stale_cm_credentials: true
+ecs_cdw_repair_stale_cm_credentials_confirm: <environment-name>
+```
+
+The exact environment confirmation permits only CM
+`deleteCredentialsMode=unused`, followed by ad-hoc Hive credential generation
+and FreeIPA `has_keytab` verification. It never requests deletion mode `all`.
+Remove the recovery settings immediately after success.
 
 On a failed CDW activation, playbook 34 now emits a non-mutating boundary
 report. It includes the control-plane environment identity and binding fields
