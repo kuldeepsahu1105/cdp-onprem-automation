@@ -144,6 +144,38 @@ claims remained Pending while their executor pods were unscheduled. Confirm
 the intended unit in the generated CDW template before using that value for
 disk-capacity planning.
 
+The following regular-container requests were captured from the live Impala
+`xsmall` namespace with two executors after the warehouse became healthy.
+Unlike the Hive table, this table includes generated support sidecars because
+the live KCM failure occurred in `autoscaler-metrics-shipper`, not in an
+Impala daemon. This is the complete steady-state `spec.containers` scheduling
+request for the observed warehouse; init containers and queue headroom remain
+additional considerations.
+
+| Impala `xsmall` component | Replicas | CPU request each | Memory request each | CPU subtotal | Memory subtotal |
+|---|---:|---:|---:|---:|---:|
+| Catalog daemon | 1 | 400 millicores | 8,192 M | 0.4 | 8,192 M |
+| Catalog support sidecars | 2 | 50 millicores | 64 Mi | 0.1 | 128 Mi |
+| Coordinator | 1 | 400 millicores | 24,576 M | 0.4 | 24,576 M |
+| Coordinator support sidecars | 4 | 50 millicores | 64 Mi | 0.2 | 256 Mi |
+| Hue backend | 1 | 500 millicores | 8,192 M | 0.5 | 8,192 M |
+| Hue coordinator-health sidecar | 1 | 50 millicores | 128 Mi | 0.05 | 128 Mi |
+| Hue frontend | 1 | 100 millicores | 512 Mi | 0.1 | 512 Mi |
+| Impala autoscaler | 1 | 100 millicores | 1,024 M | 0.1 | 1,024 M |
+| Autoscaler web-UI metrics | 1 | 500 millicores | 768 Mi | 0.5 | 768 Mi |
+| Autoscaler metrics shipper | 1 | 50 millicores | 64 Mi | 0.05 | 64 Mi |
+| Impala executor | 2 | 3 vcores | 24,576 M | 6 | 49,152 M |
+| Executor support sidecars | 4 | 50 millicores | 64 Mi | 0.2 | 256 Mi |
+| StateStore daemon | 1 | 100 millicores | 512 M | 0.1 | 512 M |
+| StateStore support sidecar | 1 | 50 millicores | 64 Mi | 0.05 | 64 Mi |
+| Hue database-create job | 1 job | No request declared | No request declared | 0 | 0 |
+| **Regular-container total** |  |  |  | **8.75 vcores** | **91,648 M + 2,176 Mi (about 87.48 GiB)** |
+
+The observed Impala YuniKorn guarantee is much larger than the steady-state
+pod request total because it reserves warehouse growth and autoscaling
+headroom. Size the worker pool against the queue guarantee when several
+warehouses coexist, not only against the initial two-executor pod footprint.
+
 Recommended ECS worker baselines using the new `m6a.8xlarge` worker shape:
 
 | Enabled CDW workload | Theoretical minimum | Practical minimum |
@@ -279,26 +311,45 @@ kubectl -n compute-hive-vw logs hiveserver2-0 -c hiveserver2 --tail=120 |
   grep -E 'Using default cache|Authenticated to Kerberos|Ticket cache|No KCM|kinit'
 ```
 
-For an isolated Impala verification, set the FILE cache on all generated
-StatefulSets and Deployments in its namespace. Each pod has an independent
-filesystem, so the shared path does not share credential contents between
-pods:
+HiveServer2 was the container that failed in the observed Hive deployment.
+For complete Hive, Impala, or Trino verification, patch every generated
+container that mounts the keytab directory because credential-using support
+containers can fail independently. The live Impala xsmall verification, for
+example, found the KCM failure in `autoscaler-metrics-shipper`, not in an
+Impala daemon. Each pod has an independent filesystem, so using the same cache
+path does not share credential contents between pods.
+
+Define this temporary helper on the ECS master:
 
 ```bash
-kubectl -n impala-impala-vw set env statefulset --all \
-  KRB5CCNAME=FILE:/tmp/krb5cc_impala
-kubectl -n impala-impala-vw set env deployment --all \
-  KRB5CCNAME=FILE:/tmp/krb5cc_impala
-kubectl -n impala-impala-vw get pods -w
+patch_cdw_keytab_containers() {
+  namespace=$1
+  ccache=$2
+  kubectl -n "$namespace" get statefulset,deployment -o json |
+    jq -r '
+      .items[] as $workload
+      | $workload.spec.template.spec.containers[]
+      | select(any(.volumeMounts[]?;
+          ((.mountPath // "") | contains("/etc/security/keytabs"))))
+      | "\($workload.kind | ascii_downcase) \($workload.metadata.name) \(.name)"
+    ' |
+    while read -r kind workload container; do
+      kubectl -n "$namespace" set env "$kind/$workload" \
+        --containers="$container" KRB5CCNAME="$ccache"
+    done
+}
 ```
 
-For an isolated Trino verification:
+Use it for each isolated warehouse:
 
 ```bash
-kubectl -n trino-trino-vw set env statefulset --all \
-  KRB5CCNAME=FILE:/tmp/krb5cc_trino
-kubectl -n trino-trino-vw set env deployment --all \
-  KRB5CCNAME=FILE:/tmp/krb5cc_trino
+patch_cdw_keytab_containers compute-hive-vw FILE:/tmp/krb5cc_hive
+kubectl -n compute-hive-vw get pods -w
+
+patch_cdw_keytab_containers impala-impala-vw FILE:/tmp/krb5cc_impala
+kubectl -n impala-impala-vw get pods -w
+
+patch_cdw_keytab_containers trino-trino-vw FILE:/tmp/krb5cc_trino
 kubectl -n trino-trino-vw get pods -w
 ```
 
