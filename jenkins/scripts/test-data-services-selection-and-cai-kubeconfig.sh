@@ -403,6 +403,17 @@ base_cluster_health_text = (
 ).read_text()
 assert "base_cluster_verified_service_states" in base_cluster_health_text
 assert "base_cluster_verified_health_summaries" in base_cluster_health_text
+cms_autotls_trust_text = (
+    root / "ansible-playbooks/common_tasks/configure_cm_cms_autotls_trust.yml"
+).read_text()
+assert "cms_servicemonitor_java_opts_redacted" in cms_autotls_trust_text
+assert "cms_servicemonitor_tls_checks" in cms_autotls_trust_text
+assert "CM redacted the password-bearing Service Monitor Java options" in (
+    cms_autotls_trust_text
+)
+assert "not (cms_servicemonitor_java_opts_redacted | bool)" in (
+    cms_autotls_trust_text
+)
 ipa_ticket_tasks = yaml.safe_load(
     (root / "ansible-playbooks/common_tasks/ensure_ipa_kerberos_ticket.yml").read_text()
 )

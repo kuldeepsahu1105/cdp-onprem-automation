@@ -286,14 +286,23 @@
   no_log: true
   when: cms_autotls_trust_required | default(false) | bool
 
+- name: CMS — resolve Service Monitor Java options item
+  ansible.builtin.set_fact:
+    cms_servicemonitor_existing_java_opts_item: >-
+      {{
+        cms_servicemonitor_tls_config.json['items'] | default([])
+        | selectattr('name', 'equalto', 'firehose_java_opts')
+        | first
+        | default({})
+      }}
+  no_log: true
+  when: cms_autotls_trust_required | default(false) | bool
+
 - name: CMS — build Service Monitor Auto-TLS JVM options
   ansible.builtin.set_fact:
     cms_servicemonitor_existing_java_opts: >-
       {{
-        cms_servicemonitor_tls_config.json['items'] | default([])
-        | selectattr('name', 'equalto', 'firehose_java_opts')
-        | map(attribute='value')
-        | first
+        cms_servicemonitor_existing_java_opts_item.value
         | default('', true)
         | trim
       }}
@@ -307,32 +316,117 @@
   no_log: true
   when: cms_autotls_trust_required | default(false) | bool
 
+- name: CMS — classify redacted Service Monitor Java options
+  ansible.builtin.set_fact:
+    cms_servicemonitor_java_opts_redacted: >-
+      {{
+        (
+          cms_servicemonitor_existing_java_opts
+          | regex_search('(?i)^\\s*(<*redacted>*|\\*+)\\s*$')
+        )
+        is not none
+        or (
+          cms_servicemonitor_existing_java_opts | length == 0
+          and (
+            cms_servicemonitor_existing_java_opts_item.sensitive
+            | default(false)
+            | bool
+          )
+        )
+      }}
+  no_log: true
+  when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — evaluate visible Service Monitor Auto-TLS JVM options
+  ansible.builtin.set_fact:
+    cms_servicemonitor_tls_checks:
+      key_store_path: >-
+        {{
+          cms_servicemonitor_existing_java_opts
+          is search(
+            '-Djavax\\.net\\.ssl\\.keyStore='
+            ~ (cm_cms_autotls_keystore_path | regex_escape)
+          )
+        }}
+      key_store_password: >-
+        {{
+          cms_servicemonitor_existing_java_opts
+          is search('-Djavax\\.net\\.ssl\\.keyStorePassword=')
+        }}
+      key_store_type: >-
+        {{
+          cms_servicemonitor_existing_java_opts
+          is search('-Djavax\\.net\\.ssl\\.keyStoreType=JKS')
+        }}
+      trust_store_path: >-
+        {{
+          cms_servicemonitor_existing_java_opts
+          is search(
+            '-Djavax\\.net\\.ssl\\.trustStore='
+            ~ (cm_cms_autotls_truststore_path | regex_escape)
+          )
+        }}
+      trust_store_password: >-
+        {{
+          cms_servicemonitor_existing_java_opts
+          is search('-Djavax\\.net\\.ssl\\.trustStorePassword=')
+        }}
+      trust_store_type: >-
+        {{
+          cms_servicemonitor_existing_java_opts
+          is search('-Djavax\\.net\\.ssl\\.trustStoreType=JKS')
+        }}
+  no_log: true
+  when: cms_autotls_trust_required | default(false) | bool
+
 - name: CMS — detect Service Monitor Auto-TLS JVM option drift
   ansible.builtin.set_fact:
     cms_servicemonitor_tls_needs_update: >-
       {{
-        cms_servicemonitor_existing_java_opts
-        is not search(
-          '-Djavax\\.net\\.ssl\\.keyStore='
-          ~ (cm_cms_autotls_keystore_path | regex_escape)
+        (
+          not (cms_servicemonitor_java_opts_redacted | bool)
+          and (
+            cms_servicemonitor_tls_checks.values()
+            | reject('equalto', true)
+            | list
+            | length > 0
+          )
         )
-        or cms_servicemonitor_existing_java_opts
-        is not search('-Djavax\\.net\\.ssl\\.keyStorePassword=')
-        or cms_servicemonitor_existing_java_opts
-        is not search('-Djavax\\.net\\.ssl\\.keyStoreType=JKS')
-        or cms_servicemonitor_existing_java_opts
-        is not search(
-          '-Djavax\\.net\\.ssl\\.trustStore='
-          ~ (cm_cms_autotls_truststore_path | regex_escape)
+        or (
+          cm_cms_update_autotls_truststore_password
+          | default(false)
+          | bool
         )
-        or cms_servicemonitor_existing_java_opts
-        is not search('-Djavax\\.net\\.ssl\\.trustStorePassword=')
-        or cms_servicemonitor_existing_java_opts
-        is not search('-Djavax\\.net\\.ssl\\.trustStoreType=JKS')
-        or (cm_cms_update_autotls_truststore_password | default(false) | bool)
       }}
   no_log: true
   when: cms_autotls_trust_required | default(false) | bool
+
+- name: CMS — report Service Monitor Auto-TLS JVM option drift
+  ansible.builtin.debug:
+    msg: >-
+      Service Monitor Auto-TLS JVM identity requires reconciliation.
+      Failed non-secret checks={{
+      cms_servicemonitor_tls_checks
+      | dict2items
+      | rejectattr('value', 'equalto', true)
+      | map(attribute='key')
+      | list }}; explicit_password_repair={{
+      cm_cms_update_autotls_truststore_password | default(false) | bool }}.
+  when:
+    - cms_autotls_trust_required | default(false) | bool
+    - cms_servicemonitor_tls_needs_update | default(false) | bool
+
+- name: CMS — report redacted Service Monitor identity as unchanged
+  ansible.builtin.debug:
+    msg: >-
+      CM redacted the password-bearing Service Monitor Java options on read.
+      Existing identity is retained without another PUT. Set
+      cm_cms_update_autotls_truststore_password=true only for an intentional
+      password repair or rotation.
+  when:
+    - cms_autotls_trust_required | default(false) | bool
+    - cms_servicemonitor_java_opts_redacted | default(false) | bool
+    - not (cms_servicemonitor_tls_needs_update | default(false) | bool)
 
 - name: CMS — remove managed TLS options from existing Service Monitor Java options
   ansible.builtin.set_fact:
