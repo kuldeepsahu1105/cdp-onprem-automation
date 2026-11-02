@@ -143,6 +143,16 @@
 
 - name: CDW diagnostics | Resolve CM and base-cluster Kerberos evidence
   ansible.builtin.set_fact:
+    ecs_cdw_diagnostic_cm_kerberos_succeeded: >-
+      {{
+        ecs_cdw_diagnostic_cm_kerberos is succeeded
+        and ecs_cdw_diagnostic_cm_kerberos.status | default(0) | int == 200
+      }}
+    ecs_cdw_diagnostic_hdfs_config_succeeded: >-
+      {{
+        ecs_cdw_diagnostic_hdfs_config is succeeded
+        and ecs_cdw_diagnostic_hdfs_config.status | default(0) | int == 200
+      }}
     ecs_cdw_diagnostic_cm_kerberized: >-
       {{
         ecs_cdw_diagnostic_cm_kerberos.get('json', {}).get('kerberized', false)
@@ -216,6 +226,16 @@
     - ipa_server_in_inventory | default(false) | bool
     - ipaserver_inventory_host | default('') | length > 0
 
+- name: CDW diagnostics | Record FreeIPA administrator ticket result
+  ansible.builtin.set_fact:
+    ecs_cdw_diagnostic_ipa_kinit_succeeded: >-
+      {{
+        ecs_cdw_diagnostic_ipa_kinit is defined
+        and ecs_cdw_diagnostic_ipa_kinit is succeeded
+        and not (ecs_cdw_diagnostic_ipa_kinit.skipped | default(false) | bool)
+        and ecs_cdw_diagnostic_ipa_kinit.rc | default(1) | int == 0
+      }}
+
 - name: CDW diagnostics | Inspect expected FreeIPA host principal
   ansible.builtin.command:
     argv:
@@ -231,9 +251,7 @@
   failed_when: false
   delegate_to: "{{ ipaserver_inventory_host }}"
   connection: ssh
-  when:
-    - ecs_cdw_diagnostic_ipa_kinit is defined
-    - ecs_cdw_diagnostic_ipa_kinit.rc | default(1) | int == 0
+  when: ecs_cdw_diagnostic_ipa_kinit_succeeded | bool
 
 - name: CDW diagnostics | Inspect expected FreeIPA Hive service principal
   ansible.builtin.command:
@@ -250,9 +268,28 @@
   failed_when: false
   delegate_to: "{{ ipaserver_inventory_host }}"
   connection: ssh
-  when:
-    - ecs_cdw_diagnostic_ipa_kinit is defined
-    - ecs_cdw_diagnostic_ipa_kinit.rc | default(1) | int == 0
+  when: ecs_cdw_diagnostic_ipa_kinit_succeeded | bool
+
+- name: CDW diagnostics | Record FreeIPA principal read results
+  ansible.builtin.set_fact:
+    ecs_cdw_diagnostic_ipa_host_succeeded: >-
+      {{
+        ecs_cdw_diagnostic_ipa_host is defined
+        and ecs_cdw_diagnostic_ipa_host is succeeded
+        and not (ecs_cdw_diagnostic_ipa_host.skipped | default(false) | bool)
+        and ecs_cdw_diagnostic_ipa_host.rc | default(1) | int == 0
+      }}
+    ecs_cdw_diagnostic_ipa_hive_service_succeeded: >-
+      {{
+        ecs_cdw_diagnostic_ipa_hive_service is defined
+        and ecs_cdw_diagnostic_ipa_hive_service is succeeded
+        and not (
+          ecs_cdw_diagnostic_ipa_hive_service.skipped
+          | default(false)
+          | bool
+        )
+        and ecs_cdw_diagnostic_ipa_hive_service.rc | default(1) | int == 0
+      }}
 
 - name: CDW diagnostics | Remove isolated FreeIPA ticket cache
   ansible.builtin.file:
@@ -299,22 +336,23 @@
         }}.
       - >-
         CM kerberosInfo HTTP={{
-          ecs_cdw_diagnostic_cm_kerberos.status | default('unreachable')
+          ecs_cdw_diagnostic_cm_kerberos.status
+          if ecs_cdw_diagnostic_cm_kerberos_succeeded | bool
+          else 'unreachable'
         }}, kerberized={{ ecs_cdw_diagnostic_cm_kerberized }},
         realm={{ ecs_cdw_diagnostic_cm_realm | default('unset', true) }},
         kdcHost={{ ecs_cdw_diagnostic_cm_kdc_host | default('unset', true) }};
         expected realm={{ cluster_realm }}, KDC={{ kdc_host }}.
       - >-
         Base cluster {{ cdh_basecluster_name }} HDFS authentication={{
-          ecs_cdw_diagnostic_hdfs_authentication | default('unavailable', true)
+          ecs_cdw_diagnostic_hdfs_authentication
+          if ecs_cdw_diagnostic_hdfs_config_succeeded | bool
+          else 'unavailable'
         }}.
       - >-
         FreeIPA admin ticket={{
           'valid'
-          if (
-            ecs_cdw_diagnostic_ipa_kinit is defined
-            and ecs_cdw_diagnostic_ipa_kinit.rc | default(1) | int == 0
-          )
+          if ecs_cdw_diagnostic_ipa_kinit_succeeded | bool
           else (
             'not applicable'
             if identity_provider_effective | default('freeipa') != 'freeipa'
@@ -322,17 +360,11 @@
           )
         }}; host/{{ ecs_cdw_diagnostic_principal_hostname }}={{
           'present'
-          if (
-            ecs_cdw_diagnostic_ipa_host is defined
-            and ecs_cdw_diagnostic_ipa_host.rc | default(1) | int == 0
-          )
+          if ecs_cdw_diagnostic_ipa_host_succeeded | bool
           else 'absent or unreadable'
         }}; hive/{{ ecs_cdw_diagnostic_principal_hostname }}={{
           'present'
-          if (
-            ecs_cdw_diagnostic_ipa_hive_service is defined
-            and ecs_cdw_diagnostic_ipa_hive_service.rc | default(1) | int == 0
-          )
+          if ecs_cdw_diagnostic_ipa_hive_service_succeeded | bool
           else 'absent or unreadable'
         }}.
       - >-
@@ -351,20 +383,17 @@
               'FreeIPA administrator credential or KDC access'
               if (
                 identity_provider_effective | default('freeipa') == 'freeipa'
-                and (
-                  ecs_cdw_diagnostic_ipa_kinit is not defined
-                  or ecs_cdw_diagnostic_ipa_kinit.rc | default(1) | int != 0
-                )
+                and not (ecs_cdw_diagnostic_ipa_kinit_succeeded | bool)
               )
               else (
                 'DWX-to-CM/KDC account-manager principal creation'
                 if (
                   identity_provider_effective | default('freeipa') == 'freeipa'
                   and (
-                    ecs_cdw_diagnostic_ipa_host is not defined
-                    or ecs_cdw_diagnostic_ipa_host.rc | default(1) | int != 0
-                    or ecs_cdw_diagnostic_ipa_hive_service is not defined
-                    or ecs_cdw_diagnostic_ipa_hive_service.rc | default(1) | int != 0
+                    not (ecs_cdw_diagnostic_ipa_host_succeeded | bool)
+                    or not (
+                      ecs_cdw_diagnostic_ipa_hive_service_succeeded | bool
+                    )
                   )
                 )
                 else 'CDW principal/keytab handoff or workload startup'

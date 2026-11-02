@@ -526,19 +526,12 @@ reachability, configures Cloudera Manager for Red Hat IPA, imports the Account
 Manager credentials, restarts CM when required, and verifies the resulting
 integration. CDW does not duplicate or partially reimplement those phases.
 
-As a migration from earlier automation releases, when no CDW cluster record
-exists, `ecs_cdw_cleanup_legacy_automation_principals` removes the default
-`dwx-env-<environment>.cdp.local` and rejected custom-hostname
-`dwx-env-<environment>.<ipa-domain>` host/Hive principals exactly once, then
-writes a per-environment marker under
-`ecs_cdw_legacy_principal_cleanup_marker_dir`. The versioned marker ensures
-this authoritative cleanup runs once even when the earlier role-migration
-regression left an older compatibility marker. This clears keys rotated by
-the old preflight so the next activation can recreate product-owned state.
-Later failed-activation retries do not repeat cleanup, and any existing CDW
-cluster suppresses it entirely. The migration is FreeIPA-only and also
-requires an IPA server in inventory; Active Directory and deployments without
-FreeIPA skip it completely.
+CDW preflight never deletes host or Hive principals and never treats an empty
+`dw_cluster_info` result as proof that no activation state exists. The DWX
+backend can retain an activated environment and keytab state even when that
+query returns zero clusters. Preserve the product-owned principal state and
+use the supported DWX recovery workflow when activation reports an existing
+cluster or keytab validation failure.
 
 A gateway timeout from `createPrivateCluster` is treated as ambiguous:
 automation continues structured discovery and accepts the recovered cluster

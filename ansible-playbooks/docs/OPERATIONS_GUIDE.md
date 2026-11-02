@@ -381,17 +381,12 @@ imports Account Manager credentials, performs required CM restarts, and
 verifies the final integration. CDW intentionally does not duplicate those
 steps.
 
-The first run after upgrading from the legacy principal-management logic
-performs one guarded cleanup when no CDW cluster record exists: it removes the
-default `dwx-env-<environment>.cdp.local` and legacy
-`dwx-env-<environment>.<ipa-domain>` host/Hive principals and records a
-versioned per-environment marker under `/var/lib/ipa`. The marker version
-permits one cleanup after the role-migration regression even when an older
-compatibility marker exists. This clears stale keys created or rotated by
-automation. The cleanup never repeats, and it never runs when a CDW cluster
-exists. It is also skipped for Active Directory or when no FreeIPA server
-exists in inventory. After the migration, CDW exclusively owns principal and
-keytab creation.
+CDW preflight does not delete host or Hive principals. An empty
+`dw_cluster_info` response is not a safe deletion signal because DWX can still
+retain an activated environment and keytab state. Preserve product-owned
+principal/keytab state and use supported DWX recovery when activation reports
+an existing cluster or keytab validation failure; do not repair it by deleting
+or recreating principals.
 
 On a failed CDW activation, playbook 34 now emits a non-mutating boundary
 report. It includes the control-plane environment identity and binding fields

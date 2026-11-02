@@ -1286,10 +1286,6 @@ ecs_ldap_admin_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|envi
 ecs_ldap_admin_resource_role_name_regex: '(?i)(admin|owner|power|environment|de|dw|ml|data)'
 # CDW
 ecs_cdw_private_cloud_config: {}  # optional storage_class, db_client_certificate paths
-# One-time removal of host/Hive principals created by automation versions before
-# CDW principal and keytab lifecycle was returned to the product activation flow.
-ecs_cdw_cleanup_legacy_automation_principals: true
-ecs_cdw_legacy_principal_cleanup_marker_dir: /var/lib/ipa
 ecs_cdw_submission_recovery_retries: 24
 ecs_cdw_submission_recovery_delay: 5
 ecs_cdw_kubernetes_namespace: "warehouse-{{ ecs_cdp_environment_name }}"

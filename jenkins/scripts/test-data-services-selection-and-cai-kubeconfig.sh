@@ -84,7 +84,6 @@ cdw_preflight = (
     root
     / "ansible-playbooks/common_tasks/ecs_data_service_cdw_preflight.yml"
 ).read_text()
-assert "/cdw-product-owned-v2-" in cdw_preflight
 assert "CDW | Require verified Base and CM Kerberos prerequisites" in cdw_preflight
 assert "/cm/kerberosInfo" in cdw_preflight
 assert "hadoop_security_authentication" in cdw_preflight
@@ -94,6 +93,10 @@ assert "ecs_cdw_preflight_cm_kdc_host == kdc_host" in cdw_preflight
 assert "ecs_cdw_preflight_hdfs_authentication == 'kerberos'" in cdw_preflight
 assert "state: present" not in cdw_preflight
 assert "ipa-getkeytab" not in cdw_preflight
+assert "ecs_cdw_legacy_principal_cleanup_marker" not in cdw_preflight
+assert "freeipa.ansible_freeipa.ipaservice" not in cdw_preflight
+assert "freeipa.ansible_freeipa.ipahost" not in cdw_preflight
+assert "state: absent" not in cdw_preflight
 cdw_diagnostics = (
     root
     / "ansible-playbooks/common_tasks/ecs_data_service_cdw_diagnostics.yml"
@@ -107,6 +110,12 @@ assert "\n      - service-show\n" in cdw_diagnostics
 assert "Likely failing boundary=" in cdw_diagnostics
 assert "DWX-to-CM/KDC account-manager principal creation" in cdw_diagnostics
 assert "ecs_cdw_diagnostics_collected: true" in cdw_diagnostics
+assert "ecs_cdw_diagnostic_cm_kerberos_succeeded" in cdw_diagnostics
+assert "ecs_cdw_diagnostic_hdfs_config_succeeded" in cdw_diagnostics
+assert "ecs_cdw_diagnostic_ipa_kinit_succeeded" in cdw_diagnostics
+assert "when: ecs_cdw_diagnostic_ipa_kinit_succeeded | bool" in cdw_diagnostics
+assert "ecs_cdw_diagnostic_ipa_host_succeeded" in cdw_diagnostics
+assert "ecs_cdw_diagnostic_ipa_hive_service_succeeded" in cdw_diagnostics
 assert "state: present" not in cdw_diagnostics
 assert "ipa-getkeytab" not in cdw_diagnostics
 playbook_tasks = yaml.safe_load(playbook.read_text())[1]["tasks"]
@@ -546,16 +555,12 @@ cdw_preflight_text = (
 ).read_text()
 assert "ecs_cdw_preflight_cluster_info is succeeded" in cdw_preflight_text
 assert "ecs_data_services_dns_probe_retry_delay" in cdw_preflight_text
-assert "Remove legacy automation-owned principals exactly once" in cdw_preflight_text
-assert "ecs_cdw_legacy_principal_cleanup_marker" in cdw_preflight_text
-assert "ecs_cdw_legacy_principal_hostnames" in cdw_preflight_text
-assert "'dwx-env-' + ecs_cdp_environment_name + '.cdp.local'" in cdw_preflight_text
-assert "'dwx-env-' + ecs_cdp_environment_name + '.' + ipaserver_domain" in cdw_preflight_text
-assert "ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0" in cdw_preflight_text
-assert "identity_provider_effective | default('freeipa') == 'freeipa'" in cdw_preflight_text
-assert "ipa_server_in_inventory | default(false) | bool" in cdw_preflight_text
-assert "ipaserver_inventory_host | default('') | length > 0" in cdw_preflight_text
-assert "state: absent" in cdw_preflight_text
+assert "Remove legacy automation-owned principals exactly once" not in cdw_preflight_text
+assert "ecs_cdw_legacy_principal_cleanup_marker" not in cdw_preflight_text
+assert "ecs_cdw_legacy_principal_hostnames" not in cdw_preflight_text
+assert "freeipa.ansible_freeipa.ipaservice" not in cdw_preflight_text
+assert "freeipa.ansible_freeipa.ipahost" not in cdw_preflight_text
+assert "state: absent" not in cdw_preflight_text
 assert "state: present" not in cdw_preflight_text
 assert "ipa-getkeytab" not in cdw_preflight_text
 assert "kinit" not in cdw_preflight_text
