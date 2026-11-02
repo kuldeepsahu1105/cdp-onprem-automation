@@ -102,6 +102,9 @@ assert "'--cluster-id'" in cdw_force_reset
 assert "'--force'" in cdw_force_reset
 assert "'describe-cluster'" in cdw_force_reset
 assert "until: ecs_cdw_force_reset_describe.rc != 0" in cdw_force_reset
+assert "ecs_cdw_force_reset_result.rc != 0" in cdw_force_reset
+assert r"Status Code:\s*404.*Error Code:\s*NOT_FOUND" in cdw_force_reset
+assert "internal DWX datastore state with no public reset operation" in cdw_force_reset
 assert "ipa-getkeytab" not in cdw_force_reset
 assert "freeipa.ansible_freeipa" not in cdw_force_reset
 assert "delete-environment" not in cdw_force_reset
