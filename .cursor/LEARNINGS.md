@@ -24,6 +24,23 @@ Also useful: [cloudera-deploy](https://github.com/cloudera-labs/cloudera-deploy)
 - **Pipeline order:** PREREQS → **PORTAL (10)** → identity → CM → TLS → CDH → monitoring → ECS. Numbered playbooks **10–35** per `ansible-playbooks/docs/RUN_ORDER.md`.
 - **Portal before CM:** Caddy serves portal/pgAdmin/monitoring/IPA only — **not** CM or ECS. URL verify is **milestone-scoped** (portal + IPA at bootstrap; **cm** milestone verifies direct CM on cldr-mngr, not Caddy). Re-running Jenkins **PORTAL** (`10_setup`) runs Tier A portal + IPA checks unless other milestones are passed.
 
+### ECS Service Discovery stale DNS cache
+
+- A healthy CoreDNS lookup from a fresh pod does not prove that the long-lived
+  `cdp-release-thunderhead-servicediscoverysimple` JVM can resolve CM. It can
+  retain a negative DNS result and return
+  `UnknownHostException: <cm-fqdn>` from remote-context/SDX discovery.
+- Proven symptoms include `Unable to get remote data context`,
+  `Not able to fetch details from Cluster`, and misleading downstream
+  `Unable to find SDX cluster with id` failures.
+- Proven manual recovery is narrowly scoped:
+  `kubectl -n cdp rollout restart
+  deployment/cdp-release-thunderhead-servicediscoverysimple`, followed by
+  `kubectl -n cdp rollout status ... --timeout=5m`.
+- Do not restart CoreDNS, DWX, CDE, CAI, or mutate FreeIPA/keytabs for this
+  symptom. Verify no new `UnknownHostException` in Service Discovery logs,
+  then retry the failed Data Service operation.
+
 ## Expected URL verify warnings (PORTAL vs after CM)
 
 On **PORTAL** bootstrap or rerun (`deployment_portal_verify_milestones`: `portal`, `ipa`), Ansible **requires** Caddy on `127.0.0.1:<deployment_portal_http_port> (default 81)` and portal/IPA vhosts only. **pgAdmin** and **Cloudera Manager** Caddy vhost and Tier B external probes are **skipped** until milestones `pgadmin` or `cm` (pvc_setup adds `cm` starting at phase 3). Tier B external checks may still **warn** when Jenkins cannot reach public URLs (SG/CIDR) — that is not a cluster failure if Tier A passed. After **CM_INSTALL**, refresh passes `…,cm` and CM vhost **502** should clear once CM listens on 7180.

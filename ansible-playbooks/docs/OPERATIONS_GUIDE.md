@@ -401,6 +401,28 @@ deleted SDX cluster UUID. Existing deployments should keep their exact
 environment name; enable the adoption fallback only for an intentional,
 verified migration.
 
+If CDW or CDE reports `Not able to fetch details from Cluster`,
+`Unable to get remote data context`, or `UnknownHostException` for the CM
+FQDN while fresh Kubernetes DNS probes resolve CM correctly, check the
+long-running Service Discovery JVM. It can retain a negative DNS cache entry.
+Use the narrowly scoped recovery:
+
+```bash
+kubectl -n cdp rollout restart \
+  deployment/cdp-release-thunderhead-servicediscoverysimple
+kubectl -n cdp rollout status \
+  deployment/cdp-release-thunderhead-servicediscoverysimple \
+  --timeout=5m
+kubectl logs -n cdp \
+  deployment/cdp-release-thunderhead-servicediscoverysimple \
+  --all-containers=true --since=5m \
+  | grep -Ei 'UnknownHostException|cldr-mngr|DescribeDatalakeServices|getRemoteContext'
+```
+
+Proceed when the rollout succeeds and no new `UnknownHostException` appears.
+Do not restart CoreDNS, DWX, CDE, or CAI and do not modify FreeIPA principals
+or keytabs for this condition.
+
 If UI deletion leaves a failed private-cloud activation hidden in the DW
 control plane, an explicitly confirmed CDW-only reset can reuse playbook 34's
 temporary signed profile without exposing its credentials:

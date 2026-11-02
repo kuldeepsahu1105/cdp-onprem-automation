@@ -349,6 +349,14 @@ Use a unique `ecs_cdp_environment_name` for each fresh Base/ECS deployment.
 new environment cannot silently adopt a differently named existing environment
 whose SDX cluster binding may belong to an older Base cluster.
 
+Remote-context retrieval is performed by the long-lived
+`cdp-release-thunderhead-servicediscoverysimple` JVM. A stale negative DNS
+cache in that process can produce `UnknownHostException` for the CM FQDN even
+when CoreDNS and fresh pods resolve it correctly. The proven recovery is to
+restart only that deployment, wait for its rollout, verify that no new
+`UnknownHostException` appears, and then retry the Data Service operation.
+Do not restart CoreDNS/DWX or alter Kerberos state for this symptom.
+
 `ecs_coredns_forwarders` optionally overrides the direct DNS candidate list.
 When empty, FreeIPA tries the first `ipaserver` private and Ansible addresses,
 while AD uses `ad_dns_servers`. Every candidate must prove all required A
