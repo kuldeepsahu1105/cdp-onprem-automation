@@ -1304,6 +1304,11 @@ ecs_cdw_repair_stale_cm_credentials_confirm: ""
 ecs_cdw_submission_recovery_retries: 24
 ecs_cdw_submission_recovery_delay: 5
 ecs_cdw_kubernetes_namespace: "warehouse-{{ ecs_cdp_environment_name }}"
+ecs_cdw_workload_file_ccache_reconcile: true
+ecs_cdw_workload_krb5ccname: "FILE:/tmp/krb5cc_cdw"
+ecs_cdw_workload_reconcile_wait_retries: 60
+ecs_cdw_workload_reconcile_wait_delay: 5
+ecs_cdw_workload_rollout_timeout: 5m
 ecs_cdw_hive_vw_name: hive-vw
 ecs_cdw_impala_vw_name: impala-vw
 ecs_cdw_vw_name_attempts: 10

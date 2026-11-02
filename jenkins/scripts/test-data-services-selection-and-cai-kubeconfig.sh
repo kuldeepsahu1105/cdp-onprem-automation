@@ -96,6 +96,11 @@ cdw_force_reset = (
     root
     / "ansible-playbooks/common_tasks/ecs_data_service_cdw_force_reset.yml"
 ).read_text()
+cdw_workload_ccache = (
+    root
+    / "ansible-playbooks/common_tasks/"
+    "ecs_data_service_cdw_reconcile_workload_ccache.yml"
+).read_text()
 assert "ecs_cdw_force_reset_confirm == ecs_cdw_force_reset_cluster_id" in cdw_force_reset
 assert "'delete-cluster'" in cdw_force_reset
 assert "'--cluster-id'" in cdw_force_reset
@@ -146,6 +151,23 @@ for forbidden in (
 ):
     assert forbidden not in cdw_preflight
 assert "freeipa.ansible_freeipa.ipaservice" not in cdw_preflight
+assert (
+    playbook_text.index("common_tasks/ecs_data_service_cdw_start.yml")
+    < playbook_text.index(
+        "common_tasks/ecs_data_service_cdw_reconcile_workload_ccache.yml"
+    )
+    < playbook_text.index("common_tasks/ecs_data_service_cdw_wait.yml")
+)
+assert "statefulset/metastore" in cdw_workload_ccache
+assert "--containers=metastore" in cdw_workload_ccache
+assert "KRB5CCNAME={{ ecs_cdw_workload_krb5ccname }}" in cdw_workload_ccache
+assert "\n      - delete\n" in cdw_workload_ccache
+assert "\n      - metastore-0\n" in cdw_workload_ccache
+assert "when: ecs_cdw_metastore_ccache_update is changed" in cdw_workload_ccache
+assert "rollout" in cdw_workload_ccache
+assert "status" in cdw_workload_ccache
+assert "No KCM server found" in cdw_workload_ccache
+assert "ecs_cdw_metastore_ccache_verify.stdout" in cdw_workload_ccache
 cdw_diagnostics = (
     root
     / "ansible-playbooks/common_tasks/ecs_data_service_cdw_diagnostics.yml"
@@ -260,6 +282,11 @@ assert group_vars["ecs_cdp_environment_adopt_single_existing"] is False
 assert group_vars["ecs_cdw_ensure_freeipa_principal_objects"] is True
 assert group_vars["ecs_cdw_repair_stale_cm_credentials"] is False
 assert group_vars["ecs_cdw_repair_stale_cm_credentials_confirm"] == ""
+assert group_vars["ecs_cdw_workload_file_ccache_reconcile"] is True
+assert group_vars["ecs_cdw_workload_krb5ccname"] == "FILE:/tmp/krb5cc_cdw"
+assert group_vars["ecs_cdw_workload_reconcile_wait_retries"] == 60
+assert group_vars["ecs_cdw_workload_reconcile_wait_delay"] == 5
+assert group_vars["ecs_cdw_workload_rollout_timeout"] == "5m"
 assert group_vars["ecs_cdw_dataviz_user_groups"] == []
 assert group_vars["ecs_cdw_dataviz_admin_groups"] == []
 assert group_vars["ecs_cai_static_subdomain"] == "cai"

@@ -577,6 +577,16 @@ followed by ad-hoc generation and FreeIPA `has_keytab: TRUE` verification.
 Automation never requests deletion mode `all`. Remove both recovery values
 after the successful run.
 
+CDW workload containers may inherit a `KCM:` default credential cache even
+though the Kubernetes nodes do not run a KCM daemon. After submission and
+before terminal-status polling, automation waits briefly for the warehouse
+namespace and `metastore` StatefulSet, sets
+`KRB5CCNAME=FILE:/tmp/krb5cc_cdw` on the metastore container, recreates only
+`metastore-0` when the pod template changed, and waits for the StatefulSet
+rollout. Healthy reruns are no-ops. This prevents the startup failure
+`kinit: No KCM server found while getting default ccache` without changing
+the metastore PVC, database, service, or principal.
+
 The prerequisite chain remains in its authoritative phases: identity playbook
 12 starts and verifies FreeIPA Directory Server and `krb5kdc` and configures
 AES enctypes; Kerberos playbook 30 rechecks those services, verifies KDC
