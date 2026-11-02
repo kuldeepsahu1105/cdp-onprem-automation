@@ -101,6 +101,10 @@ cdw_workload_ccache = (
     / "ansible-playbooks/common_tasks/"
     "ecs_data_service_cdw_reconcile_workload_ccache.yml"
 ).read_text()
+cdw_followup = (
+    root
+    / "ansible-playbooks/common_tasks/ecs_data_service_cdw_followup.yml"
+).read_text()
 assert "ecs_cdw_force_reset_confirm == ecs_cdw_force_reset_cluster_id" in cdw_force_reset
 assert "'delete-cluster'" in cdw_force_reset
 assert "'--cluster-id'" in cdw_force_reset
@@ -175,6 +179,17 @@ assert "rollout" in cdw_workload_ccache
 assert "status" in cdw_workload_ccache
 assert "No KCM server found" in cdw_workload_ccache
 assert "ecs_cdw_metastore_ccache_verify.stdout" in cdw_workload_ccache
+assert "ecs_cdw_trino_vw_name" in cdw_followup
+assert "type: trino" in cdw_followup
+assert "'create-vw'" in cdw_followup
+assert "'--resource-pool'" in cdw_followup
+assert "ecs_cdw_vw_resource_pool" in cdw_followup
+assert "'--t-shirt-size'" in cdw_followup
+assert "ecs_cdw_vw_tshirt_size" in cdw_followup
+assert "item.virtual_warehouses | default([]) | length == 0" in cdw_followup
+assert "CDW Virtual Warehouses to finish provisioning" in cdw_followup
+assert "Require all desired CDW Virtual Warehouses to be running" in cdw_followup
+assert "state: absent" not in cdw_followup
 cdw_diagnostics = (
     root
     / "ansible-playbooks/common_tasks/ecs_data_service_cdw_diagnostics.yml"
@@ -280,7 +295,6 @@ assert group_vars["ecs_cde_virtual_cluster_deleted_statuses"] == [
 assert group_vars["ecs_cde_virtual_cluster_cpu_requests"] == "20"
 assert group_vars["ecs_cde_virtual_cluster_memory_requests"] == "30Gi"
 assert group_vars["ecs_cdw_dataviz_name_attempts"] == 10
-assert group_vars["ecs_cdw_vw_name_attempts"] == 10
 assert group_vars["ecs_cdw_force_reset_cluster_id"] == ""
 assert group_vars["ecs_cdw_force_reset_confirm"] == ""
 assert group_vars["ecs_cdw_force_reset_wait_retries"] == 40
@@ -297,6 +311,14 @@ assert (
 assert group_vars["ecs_cdw_workload_reconcile_wait_retries"] == 60
 assert group_vars["ecs_cdw_workload_reconcile_wait_delay"] == 5
 assert group_vars["ecs_cdw_workload_rollout_timeout"] == "5m"
+assert group_vars["ecs_cdw_trino_vw_name"] == "trino-vw"
+assert group_vars["ecs_cdw_vw_tshirt_size"] == "xsmall"
+assert (
+    group_vars["ecs_cdw_vw_resource_pool"]
+    == "root.{{ ecs_cdp_environment_name }}.cdw"
+)
+assert group_vars["ecs_cdw_vw_wait_retries"] == 120
+assert group_vars["ecs_cdw_vw_wait_delay"] == 30
 assert group_vars["ecs_cdw_dataviz_user_groups"] == []
 assert group_vars["ecs_cdw_dataviz_admin_groups"] == []
 assert group_vars["ecs_cai_static_subdomain"] == "cai"
@@ -965,7 +987,9 @@ cdw_followup_text = (
 ).read_text()
 assert "ecs_data_service_cdw_dataviz.yml" in cdw_followup_text
 assert "ecs_cdw_dataviz_succeeded: false" in cdw_followup_text
-assert "list-vws" in cdw_followup_text
+assert "list-vws" not in cdw_followup_text
+assert "dw_virtual_warehouse:" not in cdw_followup_text
+assert "'create-vw'" in cdw_followup_text
 assert "ecs_cdw_hive_vw_name_effective" in cdw_followup_text
 assert "ecs_cdw_impala_vw_name_effective" in cdw_followup_text
 

@@ -587,6 +587,15 @@ rollout. Healthy reruns are no-ops. This prevents the startup failure
 `kinit: No KCM server found while getting default ccache` without changing
 the metastore PVC, database, service, or principal.
 
+After the default database catalog reaches `Running`, automation inspects and
+retains existing Virtual Warehouses and creates only missing `hive-vw`,
+`impala-vw`, and `trino-vw` services. All three default to the smallest
+`xsmall` template and the private-cloud CDW resource pool
+`root.<environment>.cdw`. The resource pool is passed explicitly because the
+private-cloud API rejects an inherited parent pool that is not the catalog's
+pool or one of its children. Existing warehouses are never deleted or
+recreated by this reconciliation.
+
 The prerequisite chain remains in its authoritative phases: identity playbook
 12 starts and verifies FreeIPA Directory Server and `krb5kdc` and configures
 AES enctypes; Kerberos playbook 30 rechecks those services, verifies KDC

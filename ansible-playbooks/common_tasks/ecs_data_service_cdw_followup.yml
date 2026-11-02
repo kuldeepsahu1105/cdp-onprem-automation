@@ -49,89 +49,116 @@
         ecs_cdw_catalog_id: "{{ ecs_cdw_dbc_info.database_catalogs | map(attribute='id') | list | first }}"
       when: ecs_cdw_catalog_succeeded | bool
 
-    - name: List authoritative CDW Virtual Warehouses
-      ansible.builtin.command:
-        argv: "{{ ecs_data_services_cdp_cli_prefix + ['dw', 'list-vws', '--cluster-id', ecs_cdw_cluster.cluster.id] }}"
+    - name: Define desired smallest CDW Virtual Warehouses
+      ansible.builtin.set_fact:
+        ecs_cdw_hive_vw_name_effective: "{{ ecs_cdw_hive_vw_name }}"
+        ecs_cdw_impala_vw_name_effective: "{{ ecs_cdw_impala_vw_name }}"
+        ecs_cdw_desired_virtual_warehouses:
+          - name: "{{ ecs_cdw_hive_vw_name }}"
+            type: hive
+          - name: "{{ ecs_cdw_impala_vw_name }}"
+            type: impala
+          - name: "{{ ecs_cdw_trino_vw_name }}"
+            type: trino
+      when: ecs_cdw_catalog_succeeded | bool
+
+    - name: Inspect desired CDW Virtual Warehouses
+      cloudera.cloud.dw_virtual_warehouse_info:
+        cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
+        name: "{{ item.name }}"
+        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
       environment: "{{ ecs_cdp_cli_environment }}"
-      register: ecs_cdw_vw_list
-      changed_when: false
+      register: ecs_cdw_vw_existing
+      loop: "{{ ecs_cdw_desired_virtual_warehouses }}"
+      loop_control:
+        label: "{{ item.type }}={{ item.name }}"
       become: false
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
       when: ecs_cdw_catalog_succeeded | bool
 
-    - name: Select deterministic effective Virtual Warehouse names
-      ansible.builtin.set_fact:
-        ecs_cdw_hive_vw_name_effective: >-
-          {%- set resources = (ecs_cdw_vw_list.stdout | from_json).vws | default([]) -%}
-          {%- set ns = namespace(name='') -%}
-          {%- for attempt in range(1, (ecs_cdw_vw_name_attempts | int) + 1) if ns.name | length == 0 -%}
-          {%- set suffix = '' if attempt == 1 else '-' + (attempt | string) -%}
-          {%- set candidate = ecs_cdw_hive_vw_name[:(ecs_cdw_vw_name_max_length | int) - (suffix | length)] + suffix -%}
-          {%- set matches = resources | selectattr('name', 'equalto', candidate) | list -%}
-          {%- if matches | length == 0 or (
-            matches[0].status | default('')
-            is search('(?i)^(running|creating|created|accepted|starting|stopping|stopped|updating|preupdate|upgrading|preupgrade|restarting|waiting)$')
-          ) -%}
-          {%- set ns.name = candidate -%}
-          {%- endif -%}
-          {%- endfor -%}
-          {{ ns.name }}
-        ecs_cdw_impala_vw_name_effective: >-
-          {%- set resources = (ecs_cdw_vw_list.stdout | from_json).vws | default([]) -%}
-          {%- set ns = namespace(name='') -%}
-          {%- for attempt in range(1, (ecs_cdw_vw_name_attempts | int) + 1) if ns.name | length == 0 -%}
-          {%- set suffix = '' if attempt == 1 else '-' + (attempt | string) -%}
-          {%- set candidate = ecs_cdw_impala_vw_name[:(ecs_cdw_vw_name_max_length | int) - (suffix | length)] + suffix -%}
-          {%- set matches = resources | selectattr('name', 'equalto', candidate) | list -%}
-          {%- if matches | length == 0 or (
-            matches[0].status | default('')
-            is search('(?i)^(running|creating|created|accepted|starting|stopping|stopped|updating|preupdate|upgrading|preupgrade|restarting|waiting)$')
-          ) -%}
-          {%- set ns.name = candidate -%}
-          {%- endif -%}
-          {%- endfor -%}
-          {{ ns.name }}
+    - name: Create missing smallest CDW Virtual Warehouses in the CDW resource pool
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_data_services_cdp_cli_prefix
+            + [
+                'dw',
+                'create-vw',
+                '--cluster-id',
+                ecs_cdw_cluster.cluster.id,
+                '--dbc-id',
+                ecs_cdw_catalog_id,
+                '--vw-type',
+                item.item.type,
+                '--name',
+                item.item.name,
+                '--t-shirt-size',
+                ecs_cdw_vw_tshirt_size,
+                '--resource-pool',
+                ecs_cdw_vw_resource_pool
+              ]
+          }}
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_vw_create_results
+      changed_when: true
+      loop: "{{ ecs_cdw_vw_existing.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.type }}={{ item.item.name }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_catalog_succeeded | bool
+        - item.virtual_warehouses | default([]) | length == 0
+
+    - name: Wait for desired CDW Virtual Warehouses to finish provisioning
+      cloudera.cloud.dw_virtual_warehouse_info:
+        cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
+        name: "{{ item.name }}"
+        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_vw_status
+      until:
+        - ecs_cdw_vw_status.virtual_warehouses | default([]) | length > 0
+        - >-
+          (
+            ecs_cdw_vw_status.virtual_warehouses
+            | first
+            | default({})
+          ).status
+          | default('')
+          is search('(?i)^(running|failed|error)$')
+      retries: "{{ ecs_cdw_vw_wait_retries | int }}"
+      delay: "{{ ecs_cdw_vw_wait_delay | int }}"
+      failed_when: false
+      loop: "{{ ecs_cdw_desired_virtual_warehouses }}"
+      loop_control:
+        label: "{{ item.type }}={{ item.name }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
       when: ecs_cdw_catalog_succeeded | bool
 
-    - name: Require available Virtual Warehouse names
+    - name: Require all desired CDW Virtual Warehouses to be running
       ansible.builtin.assert:
         that:
-          - ecs_cdw_hive_vw_name_effective | length > 0
-          - ecs_cdw_impala_vw_name_effective | length > 0
+          - item.virtual_warehouses | default([]) | length > 0
+          - >-
+            (
+              item.virtual_warehouses
+              | first
+              | default({})
+            ).status
+            | default('')
+            == 'Running'
         fail_msg: >-
-          No reusable or unused Virtual Warehouse names remained after bounded
-          attempts. Failed, Error, and Deleting warehouses are not deleted.
-      when: ecs_cdw_catalog_succeeded | bool
-
-    - name: Create Impala Virtual Warehouse
-      cloudera.cloud.dw_virtual_warehouse:
-        name: "{{ ecs_cdw_impala_vw_name_effective }}"
-        cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
-        catalog_id: "{{ ecs_cdw_catalog_id }}"
-        type: impala
-        tshirt_size: "{{ ecs_cdw_vw_tshirt_size }}"
-        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-        wait: true
-      environment: "{{ ecs_cdp_cli_environment }}"
-      become: false
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
-      when: ecs_cdw_catalog_succeeded | bool
-
-    - name: Create Hive Virtual Warehouse
-      cloudera.cloud.dw_virtual_warehouse:
-        name: "{{ ecs_cdw_hive_vw_name_effective }}"
-        cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
-        catalog_id: "{{ ecs_cdw_catalog_id }}"
-        type: hive
-        tshirt_size: "{{ ecs_cdw_vw_tshirt_size }}"
-        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-        wait: true
-      environment: "{{ ecs_cdp_cli_environment }}"
-      become: false
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
+          CDW {{ item.item.type }} Virtual Warehouse
+          {{ item.item.name }} did not reach Running:
+          {{ item.virtual_warehouses | default([]) | to_json }}.
+      loop: "{{ ecs_cdw_vw_status.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.type }}={{ item.item.name }}"
       when: ecs_cdw_catalog_succeeded | bool
 
     - name: Provision automatic Data Visualization
