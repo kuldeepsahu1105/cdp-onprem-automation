@@ -182,12 +182,14 @@
       rescue:
         - name: Record uncaught CDE failure
           ansible.builtin.set_fact:
-            ecs_cde_service_succeeded: false
+            ecs_cde_service_succeeded: >-
+              {{ ecs_cde_service_succeeded | default(false) | bool }}
             ecs_cde_virtual_cluster_succeeded: false
-            ecs_cde_service:
-              failed: true
-              finished: true
-              msg: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_json) }}"
+            ecs_cde_failure_message: >-
+              {{
+                ansible_failed_result.msg
+                | default(ansible_failed_result | to_json)
+              }}
       always:
         - name: Delete temporary CDE human creator access key
           ansible.builtin.command:
@@ -245,8 +247,12 @@
             and ecs_cde_virtual_cluster_succeeded | default(false) | bool
           )
           else (
-            (ecs_cde_service | default({})).msg
-            | default(ecs_cde_service | default({}) | to_json)
+            ecs_cde_failure_message
+            | default(
+                (ecs_cde_service | default({})).msg
+                | default(ecs_cde_service | default({}) | to_json),
+                true
+              )
           )
           }}
       when: "'cde' in (ecs_data_services_install_names | default([]))"
@@ -432,8 +438,19 @@
           - ecs_cde_service_succeeded | default(false) | bool
           - ecs_cde_virtual_cluster_succeeded | default(false) | bool
         fail_msg: >-
-          CDE failed after its independent provisioning attempt. See the
-          preceding CDE STATUS and liftie/dex/compute/resource-pool diagnostics.
+          CDE failed after its independent provisioning attempt:
+          service_succeeded={{
+          ecs_cde_service_succeeded | default(false) | bool }},
+          virtual_cluster_succeeded={{
+          ecs_cde_virtual_cluster_succeeded | default(false) | bool }}.
+          {{
+            ecs_cde_failure_message
+            | default(
+                (ecs_cde_service | default({})).msg
+                | default(ecs_cde_service | default({}) | to_json),
+                true
+              )
+          }}
       when: "'cde' in (ecs_data_services_install_names | default([]))"
 
     - name: Require successful CAI provisioning after all attempts
