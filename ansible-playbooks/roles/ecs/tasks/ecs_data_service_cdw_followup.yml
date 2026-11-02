@@ -109,6 +109,12 @@
         - ecs_cdw_catalog_succeeded | bool
         - item.virtual_warehouses | default([]) | length == 0
 
+    - name: Reconcile Virtual Warehouse workload Kerberos credential caches
+      ansible.builtin.include_tasks: ecs_data_service_cdw_reconcile_vw_ccaches.yml
+      when:
+        - ecs_cdw_catalog_succeeded | bool
+        - ecs_cdw_workload_file_ccache_reconcile | default(true) | bool
+
     - name: Wait for desired CDW Virtual Warehouses to finish provisioning
       cloudera.cloud.dw_virtual_warehouse_info:
         cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"

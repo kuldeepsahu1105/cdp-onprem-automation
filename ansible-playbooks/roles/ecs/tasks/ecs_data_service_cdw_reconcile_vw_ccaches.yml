@@ -1,0 +1,300 @@
+---
+- name: CDW | Define Virtual Warehouse workload namespaces
+  ansible.builtin.set_fact:
+    ecs_cdw_vw_workload_namespaces: >-
+      {{
+        ecs_cdw_desired_virtual_warehouses
+        | map(attribute='name')
+        | map('regex_replace', '^(.*)$', ecs_cdw_vw_namespace_prefix ~ '\1')
+        | list
+      }}
+
+- name: CDW | Wait for Virtual Warehouse workload namespaces
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - get
+      - namespace
+      - "{{ item }}"
+      - --output=name
+  register: ecs_cdw_vw_namespace_results
+  changed_when: false
+  failed_when: false
+  until: ecs_cdw_vw_namespace_results.rc | default(1) | int == 0
+  retries: "{{ ecs_cdw_workload_reconcile_wait_retries | int }}"
+  delay: "{{ ecs_cdw_workload_reconcile_wait_delay | int }}"
+  loop: "{{ ecs_cdw_vw_workload_namespaces }}"
+  loop_control:
+    label: "{{ item }}"
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CDW | Wait for Virtual Warehouse workload controllers
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ item }}"
+      - get
+      - statefulsets,deployments
+      - --output=json
+  register: ecs_cdw_vw_controller_objects
+  changed_when: false
+  failed_when: false
+  until:
+    - ecs_cdw_vw_controller_objects.rc | default(1) | int == 0
+    - >-
+      (
+        ecs_cdw_vw_controller_objects.stdout
+        | default('{"items":[]}', true)
+        | from_json
+      ).get('items', [])
+      | length > 0
+  retries: "{{ ecs_cdw_workload_reconcile_wait_retries | int }}"
+  delay: "{{ ecs_cdw_workload_reconcile_wait_delay | int }}"
+  loop: "{{ ecs_cdw_vw_workload_namespaces }}"
+  loop_control:
+    label: "{{ item }}"
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CDW | Initialize Virtual Warehouse credential-cache plan
+  ansible.builtin.set_fact:
+    ecs_cdw_vw_ccache_plan: []
+
+- name: CDW | Discover keytab-bearing Virtual Warehouse containers
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import re
+        import sys
+
+        namespace = sys.argv[1]
+        prefix = sys.argv[2]
+        payload = json.load(sys.stdin)
+        plans = []
+        for item in payload.get("items", []):
+            kind = item.get("kind", "").lower()
+            name = item.get("metadata", {}).get("name", "")
+            labels = item.get("spec", {}).get("selector", {}).get("matchLabels", {})
+            selector = ",".join(
+                "%s=%s" % pair for pair in sorted(labels.items())
+            )
+            containers = (
+                item.get("spec", {})
+                .get("template", {})
+                .get("spec", {})
+                .get("containers", [])
+            )
+            for container in containers:
+                mounts = container.get("volumeMounts", [])
+                if not any(
+                    mount.get("mountPath", "").startswith("/etc/security/keytabs")
+                    for mount in mounts
+                ):
+                    continue
+                container_name = container.get("name", "")
+                current = next(
+                    (
+                        env.get("value", "")
+                        for env in container.get("env", [])
+                        if env.get("name") == "KRB5CCNAME"
+                    ),
+                    "",
+                )
+                safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", container_name)
+                plans.append(
+                    {
+                        "namespace": namespace,
+                        "kind": kind,
+                        "name": name,
+                        "container": container_name,
+                        "selector": selector,
+                        "current": current,
+                        "desired": prefix + safe_name,
+                    }
+                )
+        print(json.dumps(plans))
+      - "{{ item.item }}"
+      - "{{ ecs_cdw_vw_krb5ccname_prefix }}"
+    stdin: "{{ item.stdout }}"
+  register: ecs_cdw_vw_ccache_discovery
+  changed_when: false
+  loop: "{{ ecs_cdw_vw_controller_objects.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CDW | Build Virtual Warehouse credential-cache reconciliation plan
+  ansible.builtin.set_fact:
+    ecs_cdw_vw_ccache_plan: >-
+      {{
+        ecs_cdw_vw_ccache_plan
+        + (item.stdout | from_json)
+      }}
+  loop: "{{ ecs_cdw_vw_ccache_discovery.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.item }}"
+
+- name: CDW | Route Virtual Warehouse Kerberos tickets to FILE caches
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ item.namespace }}"
+      - set
+      - env
+      - "{{ item.kind }}/{{ item.name }}"
+      - "--containers={{ item.container }}"
+      - "KRB5CCNAME={{ item.desired }}"
+  register: ecs_cdw_vw_ccache_updates
+  changed_when: true
+  loop: "{{ ecs_cdw_vw_ccache_plan }}"
+  loop_control:
+    label: >-
+      {{ item.namespace }}/{{ item.kind }}/{{ item.name }}:{{ item.container }}
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: item.current != item.desired
+
+- name: CDW | Initialize changed Virtual Warehouse controller list
+  ansible.builtin.set_fact:
+    ecs_cdw_vw_changed_controller_keys: []
+    ecs_cdw_vw_changed_controllers: []
+
+- name: CDW | Record each changed Virtual Warehouse controller once
+  ansible.builtin.set_fact:
+    ecs_cdw_vw_changed_controller_keys: >-
+      {{
+        ecs_cdw_vw_changed_controller_keys
+        + [
+            item.item.namespace
+            ~ '/'
+            ~ item.item.kind
+            ~ '/'
+            ~ item.item.name
+          ]
+      }}
+    ecs_cdw_vw_changed_controllers: >-
+      {{
+        ecs_cdw_vw_changed_controllers
+        + [
+            {
+              'namespace': item.item.namespace,
+              'kind': item.item.kind,
+              'name': item.item.name,
+              'selector': item.item.selector
+            }
+          ]
+      }}
+  loop: "{{ ecs_cdw_vw_ccache_updates.results | default([]) }}"
+  loop_control:
+    label: >-
+      {{ item.item.namespace }}/{{ item.item.kind }}/{{ item.item.name }}
+  when:
+    - item.changed | default(false) | bool
+    - >-
+      (
+        item.item.namespace
+        ~ '/'
+        ~ item.item.kind
+        ~ '/'
+        ~ item.item.name
+      ) not in ecs_cdw_vw_changed_controller_keys
+
+- name: CDW | Recreate changed Virtual Warehouse StatefulSet pods
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ item.namespace }}"
+      - delete
+      - pod
+      - "--selector={{ item.selector }}"
+  changed_when: true
+  loop: "{{ ecs_cdw_vw_changed_controllers }}"
+  loop_control:
+    label: >-
+      {{ item.namespace }}/{{ item.kind }}/{{ item.name }}
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - item.kind == 'statefulset'
+    - item.selector | length > 0
+
+- name: CDW | Wait for changed Virtual Warehouse controller rollouts
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ item.namespace }}"
+      - rollout
+      - status
+      - "{{ item.kind }}/{{ item.name }}"
+      - "--timeout={{ ecs_cdw_workload_rollout_timeout }}"
+  changed_when: false
+  loop: "{{ ecs_cdw_vw_changed_controllers }}"
+  loop_control:
+    label: >-
+      {{ item.namespace }}/{{ item.kind }}/{{ item.name }}
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CDW | Verify Virtual Warehouse FILE credential caches
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ item.namespace }}"
+      - get
+      - "{{ item.kind }}"
+      - "{{ item.name }}"
+      - >-
+        --output=jsonpath={.spec.template.spec.containers[?(@.name=="{{
+        item.container }}")].env[?(@.name=="KRB5CCNAME")].value}
+  register: ecs_cdw_vw_ccache_verify
+  changed_when: false
+  loop: "{{ ecs_cdw_vw_ccache_plan }}"
+  loop_control:
+    label: >-
+      {{ item.namespace }}/{{ item.kind }}/{{ item.name }}:{{ item.container }}
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CDW | Require Virtual Warehouse FILE credential caches
+  ansible.builtin.assert:
+    that:
+      - item.stdout | default('') | trim == item.item.desired
+    fail_msg: >-
+      {{ item.item.namespace }}/{{ item.item.kind }}/{{ item.item.name }}
+      container {{ item.item.container }} still lacks
+      KRB5CCNAME={{ item.item.desired }}. CDW workload containers do not run a
+      KCM daemon, so keytab login fails with "No KCM server found".
+  loop: "{{ ecs_cdw_vw_ccache_verify.results | default([]) }}"
+  loop_control:
+    label: >-
+      {{ item.item.namespace }}/{{ item.item.kind }}/{{ item.item.name }}:{{
+      item.item.container }}

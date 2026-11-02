@@ -1279,6 +1279,8 @@ ecs_cdw_vw_tshirt_size: xsmall
 ecs_cdw_vw_resource_pool: "root.{{ ecs_cdp_environment_name }}.cdw"
 ecs_cdw_vw_wait_retries: 120
 ecs_cdw_vw_wait_delay: 30
+ecs_cdw_vw_namespace_prefix: compute-
+ecs_cdw_vw_krb5ccname_prefix: "FILE:/tmp/krb5cc_"
 ecs_cdw_dbc_wait_retries: 40
 ecs_cdw_dbc_wait_delay: 30
 ecs_data_services_status_wait_retries: 480

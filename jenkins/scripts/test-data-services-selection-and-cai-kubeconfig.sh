@@ -151,9 +151,29 @@ assert "ecs_cdw_vw_resource_pool" in cdw_followup
 assert "'--t-shirt-size'" in cdw_followup
 assert "ecs_cdw_vw_tshirt_size" in cdw_followup
 assert "item.virtual_warehouses | default([]) | length == 0" in cdw_followup
+assert "ecs_data_service_cdw_reconcile_vw_ccaches.yml" in cdw_followup
+assert (
+    cdw_followup.index("ecs_data_service_cdw_reconcile_vw_ccaches.yml")
+    < cdw_followup.index("CDW Virtual Warehouses to finish provisioning")
+)
 assert "CDW Virtual Warehouses to finish provisioning" in cdw_followup
 assert group_vars["ecs_cdw_vw_tshirt_size"] == "xsmall"
 assert group_vars["ecs_cdw_vw_resource_pool"] == "root.{{ ecs_cdp_environment_name }}.cdw"
+assert group_vars["ecs_cdw_vw_namespace_prefix"] == "compute-"
+assert group_vars["ecs_cdw_vw_krb5ccname_prefix"] == "FILE:/tmp/krb5cc_"
+
+cdw_vw_ccaches = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/"
+    "ecs_data_service_cdw_reconcile_vw_ccaches.yml"
+).read_text()
+assert "statefulsets,deployments" in cdw_vw_ccaches
+assert "/etc/security/keytabs" in cdw_vw_ccaches
+assert "KRB5CCNAME={{ item.desired }}" in cdw_vw_ccaches
+assert "item.current != item.desired" in cdw_vw_ccaches
+assert "Record each changed Virtual Warehouse controller once" in cdw_vw_ccaches
+assert "item.kind == 'statefulset'" in cdw_vw_ccaches
+assert '"No KCM server found"' in cdw_vw_ccaches
 
 ozone_credentials = (
     root
