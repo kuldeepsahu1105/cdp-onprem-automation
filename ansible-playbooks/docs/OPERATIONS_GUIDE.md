@@ -439,12 +439,15 @@ This calls the supported `dw delete-cluster --force` operation, waits until
 the exact cluster ID is no longer returned, and then continues with fresh CDW
 activation. It does not delete the ECS environment, Base cluster, CDE, CAI, or
 FreeIPA. It does delete CDW catalogs and virtual warehouses attached to that
-cluster, so the confirmation must exactly match the cluster ID. A delete
-response stating that the cluster is already `404 NOT_FOUND` is treated as an
-idempotent success. If the subsequent activation still reports that same ID as
-already activated, the stale binding exists only in internal DWX datastore
-state; the published CLI has no environment-activation reset operation, so
-Cloudera support must repair that backend state.
+cluster, so the confirmation must exactly match the cluster ID. Before deleting,
+automation describes the cluster and refuses the reset unless its status is
+terminal `Error` or `Failed`; stale recovery values therefore cannot delete a
+healthy, setting-up, or running cluster. An already absent `404 NOT_FOUND`
+response is treated as an idempotent success. Clear both reset variables
+immediately after the one recovery run. If the subsequent activation still
+reports that same ID as already activated, the stale binding exists only in
+internal DWX datastore state; the published CLI has no environment-activation
+reset operation, so Cloudera support must repair that backend state.
 
 For FreeIPA-backed CDW, automation idempotently creates the standard
 `host/dwx-env-<environment>.cdp.local@<realm>` and
