@@ -80,6 +80,20 @@ assert (
     portal_refresh_task["rescue"][0]["name"]
     == "Report optional deployment portal route refresh failure"
 )
+cdw_preflight = (
+    root
+    / "ansible-playbooks/common_tasks/ecs_data_service_cdw_preflight.yml"
+).read_text()
+assert "/cdw-product-owned-v2-" in cdw_preflight
+assert "CDW | Require verified Base and CM Kerberos prerequisites" in cdw_preflight
+assert "/cm/kerberosInfo" in cdw_preflight
+assert "hadoop_security_authentication" in cdw_preflight
+assert "ecs_cdw_preflight_cm_kerberized | bool" in cdw_preflight
+assert "ecs_cdw_preflight_cm_realm == cluster_realm" in cdw_preflight
+assert "ecs_cdw_preflight_cm_kdc_host == kdc_host" in cdw_preflight
+assert "ecs_cdw_preflight_hdfs_authentication == 'kerberos'" in cdw_preflight
+assert "state: present" not in cdw_preflight
+assert "ipa-getkeytab" not in cdw_preflight
 cdw_diagnostics = (
     root
     / "ansible-playbooks/common_tasks/ecs_data_service_cdw_diagnostics.yml"

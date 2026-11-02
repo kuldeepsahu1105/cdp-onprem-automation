@@ -358,6 +358,11 @@ deletion, recreation, or a control-plane restart. A concurrent transition to
 `Deactivated` terminates structured polling promptly, but only `Running`
 passes the final success assertion.
 
+CDW preflight also verifies the Base security boundary without mutation:
+CM `kerberosInfo` must be enabled for the configured realm/KDC and the Base
+HDFS service must use Kerberos authentication. If this gate fails, rerun
+playbooks 30 and 31; do not create a CDW principal or keytab manually.
+
 CDW activation follows the manual UI and `cloudera-labs/cloudera.cloud`
 minimal request: the API receives the environment identity and no custom
 Kerberos hostname by default. Automation does not create, delete, initialize,
@@ -380,11 +385,13 @@ The first run after upgrading from the legacy principal-management logic
 performs one guarded cleanup when no CDW cluster record exists: it removes the
 default `dwx-env-<environment>.cdp.local` and legacy
 `dwx-env-<environment>.<ipa-domain>` host/Hive principals and records a
-per-environment marker under `/var/lib/ipa`. This clears stale keys created or
-rotated by automation. The cleanup never repeats, and it never runs when a CDW
-cluster exists. It is also skipped for Active Directory or when no FreeIPA
-server exists in inventory. After the migration, CDW exclusively owns
-principal and keytab creation.
+versioned per-environment marker under `/var/lib/ipa`. The marker version
+permits one cleanup after the role-migration regression even when an older
+compatibility marker exists. This clears stale keys created or rotated by
+automation. The cleanup never repeats, and it never runs when a CDW cluster
+exists. It is also skipped for Active Directory or when no FreeIPA server
+exists in inventory. After the migration, CDW exclusively owns principal and
+keytab creation.
 
 On a failed CDW activation, playbook 34 now emits a non-mutating boundary
 report. It includes the control-plane environment identity and binding fields

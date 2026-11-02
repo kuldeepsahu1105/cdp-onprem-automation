@@ -49,6 +49,9 @@
   ansible.builtin.uri:
     url: "https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/version"
     method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: true
     validate_certs: false
     status_code: [200]
     return_content: true
@@ -62,6 +65,9 @@
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ cm_http_port | default(7180) }}/api/version"
     method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: true
     status_code: [200]
     return_content: true
   register: ecs_cdw_diagnostic_cm_version_http
