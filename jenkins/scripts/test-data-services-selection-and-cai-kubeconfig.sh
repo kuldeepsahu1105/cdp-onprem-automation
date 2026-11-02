@@ -64,14 +64,12 @@ for forbidden in (
     "state: disabled",
     "Ensure FreeIPA host principal prerequisite",
     "Ensure FreeIPA Hive service principal prerequisite",
+    "Remove legacy automation-owned principals",
+    "ecs_cdw_legacy_principal_cleanup_marker",
+    "freeipa.ansible_freeipa.ipaservice",
+    "freeipa.ansible_freeipa.ipahost",
 ):
     assert forbidden not in cdw_preflight
-assert "Remove legacy automation-owned principals exactly once" in cdw_preflight
-assert "ecs_cdw_legacy_principal_cleanup_marker" in cdw_preflight
-assert "/cdw-product-owned-v2-" in cdw_preflight
-assert "identity_provider_effective | default('freeipa') == 'freeipa'" in cdw_preflight
-assert "ipa_server_in_inventory | default(false) | bool" in cdw_preflight
-assert "ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0" in cdw_preflight
 assert "CDW | Require verified Base and CM Kerberos prerequisites" in cdw_preflight
 assert "/cm/kerberosInfo" in cdw_preflight
 assert "hadoop_security_authentication" in cdw_preflight

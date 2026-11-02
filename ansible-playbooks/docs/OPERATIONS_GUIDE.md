@@ -396,13 +396,10 @@ playbooks 30 and 31; do not create a CDW principal or keytab manually.
 For FreeIPA-backed CDW, the product owns the standard
 `host/dwx-env-<environment>.cdp.local@<realm>` and `hive/` principal/keytab
 lifecycle. Automation must not pre-create, initialize, retrieve, disable, or
-rotate those keys. If an older automation version created either principal,
-the first CDW run with no existing cluster removes both legacy hostname
-variants once and records a versioned per-environment marker under
-`/var/lib/ipa`. The marker version permits one cleanup after the
-role-migration regression even if an older compatibility marker exists.
-Subsequent retries skip cleanup. Active Directory, missing-FreeIPA-inventory,
-and existing-cluster deployments skip this migration.
+rotate or delete those keys. A control-plane cluster query can return no
+records while DWX still considers the environment activated, so automation
+must not infer that principal deletion is safe. Preserve the state and use the
+diagnostic report plus the supported DWX recovery workflow.
 
 On a failed CDW activation, playbook 34 now emits a non-mutating boundary
 report. It includes the control-plane environment identity and binding fields

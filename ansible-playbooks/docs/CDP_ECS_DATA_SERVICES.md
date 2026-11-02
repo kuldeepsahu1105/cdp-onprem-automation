@@ -392,15 +392,12 @@ Kerberos realm are different (for example, `cldr.internal.arpa` and
 Hive service principals. Automation does not pre-create, initialize, retrieve,
 disable, or rotate those keys.
 
-Older automation versions created CDW principals outside the product flow. On
-the first CDW run with no existing cluster, FreeIPA deployments remove those
-legacy host and Hive principal variants once and record a per-environment
-versioned marker under `ecs_cdw_legacy_principal_cleanup_marker_dir`. The
-version ensures the authoritative role cleans state recreated by the earlier
-role-migration regression even if an older compatibility cleanup marker
-exists. Later retries do not repeat the cleanup. Active Directory deployments,
-deployments without an inventory FreeIPA server, and environments with an
-existing CDW cluster skip the migration cleanup.
+Automation never removes a CDW principal automatically. The DW control-plane
+cluster query can return no records even while the backend still considers the
+environment activated, so absence from that query is not sufficient proof that
+deleting a principal is safe. Environments touched by an older automation
+version must retain their current principal state for diagnostics and use a
+supported DWX recovery workflow rather than an inferred cleanup.
 
 A gateway timeout from `createPrivateCluster` is treated as ambiguous:
 automation continues structured discovery and accepts the recovered cluster
