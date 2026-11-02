@@ -485,44 +485,50 @@ in-progress clusters are adopted and monitored through `dw_cluster_info`
 instead of calling `createPrivateCluster` again. Terminal `Error` or `Failed`
 clusters are reported without deletion or recreation. An existing cluster
 whose status is exactly `Deactivated` (case-insensitive) fails preflight before
-FreeIPA principal mutation or submission. The pinned `cloudera.cloud`
-`dw_cluster` module does not reconcile or reactivate that state. In the
-observed UI failure, the cluster-specific `t-shirt-sizes` endpoint returned
-HTTP 404 (`404 page not found` / `NOT_FOUND_ERROR`), so the UI did not submit
-the activation POST. Repair and use the supported DWX UI/backend activation
-path, activate the cluster manually, then rerun playbook 34. Automation does
-not attempt activation, deletion, recreation, or a control-plane restart.
-`Deactivated` is also a terminal structured polling status, while only
-`Running` is accepted as success.
+submission. The pinned `cloudera.cloud` `dw_cluster` module does not reconcile
+or reactivate that state. In the observed UI failure, the cluster-specific
+`t-shirt-sizes` endpoint returned HTTP 404 (`404 page not found` /
+`NOT_FOUND_ERROR`), so the UI did not submit the activation POST. Repair and
+use the supported DWX UI/backend activation path, activate the cluster
+manually, then rerun playbook 34. Automation does not attempt activation,
+deletion, recreation, or a control-plane restart. `Deactivated` is also a
+terminal structured polling status, while only `Running` is accepted as
+success.
 
 The product-standard private-cloud CDW hostname is
 `dwx-env-<environment>.cdp.local`, even when the deployment DNS domain and
 Kerberos realm are different (for example, `cldr.internal.arpa` and
-`CLDR.INTERNAL.ARPA`). Before CDW submission in FreeIPA deployments,
-`ecs_cdw_ensure_freeipa_principal_host` idempotently ensures the external-name
-FreeIPA host object and the CDW Hive service principal:
-`host/dwx-env-<environment>.cdp.local@<cluster_realm>` and
-`hive/dwx-env-<environment>.cdp.local@<cluster_realm>`. The configured
-`ecs_cdw_freeipa_keytab_admin_principal` (default `ipaadmin_principal`) receives
-additive permission to create and retrieve those keys and authenticates with
-`ecs_cdw_freeipa_keytab_admin_password` (default
-`krb5_kdc_admin_password`). Automation initializes the host key when missing.
-Before a fresh activation with no CDW cluster record, it resets the Hive key,
-regenerates it explicitly with `aes256-cts,aes128-cts`, verifies that the
-resulting keytab contains only AES-SHA1 entries, and proves `kinit -kt` works.
-The temporary local keytab and credential cache are removed immediately; CDW
-downloads the server-side key during activation. Explicit enctype selection is
-required because FreeIPA client defaults may also generate AES-SHA2 keys that
-the CDW Kerberos client cannot consume; an empty key produces the observed
-unsupported EType `0`. Existing clusters are never subjected to key rotation.
-Active Directory deployments skip this FreeIPA-only step.
+`CLDR.INTERNAL.ARPA`). Automation does not create, delete, initialize,
+retrieve, validate, or rotate CDW host/service principals or keytabs.
+Cloudera's documented default activation owns the predefined
+`hive/dwx-env-<environment>.cdp.local@<realm>` identity through the configured
+Cloudera Manager KDC integration. This matches the UI and
+`cloudera-labs/cloudera.cloud` minimal request: submit only the environment
+identity. Manually mutating the principal can invalidate keytab state retained
+by a failed activation and cause `KDC_ERR_PREAUTH_FAILED` in both automation
+and the UI. The optional `custom_kerberos_principal_hostname` is not submitted
+unless explicitly configured because CDW rejects it when **Enable
+customization of Kerberos service principal** is disabled in Advanced
+Configuration.
 
-This matches the Cloudera UI and `cloudera-labs/cloudera.cloud` minimal
-activation flow: submit only the environment identity and allow CDW to use its
-predefined `hive/dwx-env-<environment>.cdp.local@<realm>` principal. The
-optional `custom_kerberos_principal_hostname` is not submitted unless explicitly
-configured because CDW rejects it when **Enable customization of Kerberos
-service principal** is disabled in Advanced Configuration.
+The prerequisite chain remains in its authoritative phases: identity playbook
+12 starts and verifies FreeIPA Directory Server and `krb5kdc` and configures
+AES enctypes; Kerberos playbook 30 rechecks those services, verifies KDC
+reachability, configures Cloudera Manager for Red Hat IPA, imports the Account
+Manager credentials, restarts CM when required, and verifies the resulting
+integration. CDW does not duplicate or partially reimplement those phases.
+
+As a migration from earlier automation releases, when no CDW cluster record
+exists, `ecs_cdw_cleanup_legacy_automation_principals` removes the default
+`dwx-env-<environment>.cdp.local` and rejected custom-hostname
+`dwx-env-<environment>.<ipa-domain>` host/Hive principals exactly once, then
+writes a per-environment marker under
+`ecs_cdw_legacy_principal_cleanup_marker_dir`. This clears keys rotated by the
+old preflight so the next activation can recreate product-owned state. The
+marker prevents cleanup on later failed-activation retries, and any existing
+CDW cluster suppresses cleanup entirely. The migration is FreeIPA-only and
+also requires an IPA server in inventory; Active Directory and deployments
+without FreeIPA skip it completely.
 
 A gateway timeout from `createPrivateCluster` is treated as ambiguous:
 automation continues structured discovery and accepts the recovered cluster

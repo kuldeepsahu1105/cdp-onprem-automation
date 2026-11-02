@@ -347,7 +347,7 @@ boundaries still allow later selected services to run before the final
 aggregate failure.
 
 If CDW preflight finds an existing cluster in the exact case-insensitive
-`Deactivated` state, it stops before FreeIPA principal mutation or submission.
+`Deactivated` state, it stops before submission.
 The pinned `cloudera.cloud` `dw_cluster` module cannot reactivate an existing
 Deactivated cluster. In the observed UI failure, the cluster-specific
 `t-shirt-sizes` endpoint returned HTTP 404 (`404 page not found` /
@@ -358,22 +358,33 @@ deletion, recreation, or a control-plane restart. A concurrent transition to
 `Deactivated` terminates structured polling promptly, but only `Running`
 passes the final success assertion.
 
-For FreeIPA-backed CDW, preflight ensures the product-standard
-`host/dwx-env-<environment>.cdp.local@<realm>` and
-`hive/dwx-env-<environment>.cdp.local@<realm>` principals exist. Automation
-initializes the host key. For a fresh activation with no existing CDW cluster,
-it resets and regenerates the Hive service key with only
-`aes256-cts,aes128-cts`, validates the AES-SHA1 keytab through `kinit -kt`, and
-deletes the temporary local keytab and credential cache. CDW then downloads
-the compatible server-side key. The configured
-`ecs_cdw_freeipa_keytab_admin_principal` receives additive create/retrieve
-permission. Existing clusters are never reset or rotated.
-This follows the manual UI and `cloudera-labs/cloudera.cloud` minimal request:
-the API receives no custom Kerberos hostname and uses the predefined
-`dwx-env-<environment>.cdp.local` identity. It avoids both
-`KDC_ERR_C_PRINCIPAL_UNKNOWN` from a missing service principal and
-`unknown or unsupported EType: 0` from an empty or incompatible service key.
-The prerequisite is skipped for Active Directory.
+CDW activation follows the manual UI and `cloudera-labs/cloudera.cloud`
+minimal request: the API receives the environment identity and no custom
+Kerberos hostname by default. Automation does not create, delete, initialize,
+retrieve, validate, or rotate the predefined
+`hive/dwx-env-<environment>.cdp.local@<realm>` principal or keytab. Cloudera
+Data Warehouse owns that lifecycle through the Cloudera Manager KDC
+integration. This is essential for retries because failed activation state can
+retain keytab material; out-of-band principal mutation can then cause
+`KDC_ERR_PREAUTH_FAILED` in both automation and the UI.
+
+FreeIPA health is owned by identity playbook 12, which starts and verifies
+Directory Server and `krb5kdc` and applies the AES enctype policy. Cloudera
+Manager automatic principal provisioning is owned by Kerberos playbook 30,
+which rechecks FreeIPA, validates KDC reachability, configures Red Hat IPA,
+imports Account Manager credentials, performs required CM restarts, and
+verifies the final integration. CDW intentionally does not duplicate those
+steps.
+
+The first run after upgrading from the legacy principal-management logic
+performs one guarded cleanup when no CDW cluster record exists: it removes the
+default `dwx-env-<environment>.cdp.local` and legacy
+`dwx-env-<environment>.<ipa-domain>` host/Hive principals and records a
+per-environment marker under `/var/lib/ipa`. This clears stale keys created or
+rotated by automation. The cleanup never repeats, and it never runs when a CDW
+cluster exists. It is also skipped for Active Directory or when no FreeIPA
+server exists in inventory. After the migration, CDW exclusively owns
+principal and keytab creation.
 
 ---
 

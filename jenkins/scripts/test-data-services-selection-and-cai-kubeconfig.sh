@@ -515,19 +515,33 @@ cdw_preflight_text = (
 ).read_text()
 assert "ecs_cdw_preflight_cluster_info is succeeded" in cdw_preflight_text
 assert "ecs_data_services_dns_probe_retry_delay" in cdw_preflight_text
-assert "ecs_cdw_hive_service_principal_effective" in cdw_preflight_text
-assert "freeipa.ansible_freeipa.ipaservice" in cdw_preflight_text
-assert "hive/{{ ecs_cdw_kerberos_principal_hostname_effective }}" in cdw_preflight_text
-assert "Reset Hive key before compatible regeneration" in cdw_preflight_text
-assert "state: disabled" in cdw_preflight_text
+assert "Remove legacy automation-owned principals exactly once" in cdw_preflight_text
+assert "ecs_cdw_legacy_principal_cleanup_marker" in cdw_preflight_text
+assert "ecs_cdw_legacy_principal_hostnames" in cdw_preflight_text
+assert "'dwx-env-' + ecs_cdp_environment_name + '.cdp.local'" in cdw_preflight_text
+assert "'dwx-env-' + ecs_cdp_environment_name + '.' + ipaserver_domain" in cdw_preflight_text
 assert "ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0" in cdw_preflight_text
-assert "ecs_cdw_freeipa_hive_service_has_keytab_before" not in cdw_preflight_text
-assert "Generate Hive key with CDW-supported AES enctypes" in cdw_preflight_text
-assert "ecs_cdw_freeipa_hive_key_enctypes" in cdw_preflight_text
-assert "aes(256|128)-cts-hmac-sha1-96" in cdw_preflight_text
-assert "sha256|sha384|arcfour|rc4|des3|des-cbc" in cdw_preflight_text
-assert "Validate Hive key ticket acquisition" in cdw_preflight_text
-assert "Retrieve the existing Hive service key for validation" not in cdw_preflight_text
+assert "identity_provider_effective | default('freeipa') == 'freeipa'" in cdw_preflight_text
+assert "ipa_server_in_inventory | default(false) | bool" in cdw_preflight_text
+assert "ipaserver_inventory_host | default('') | length > 0" in cdw_preflight_text
+assert "state: absent" in cdw_preflight_text
+assert "state: present" not in cdw_preflight_text
+assert "ipa-getkeytab" not in cdw_preflight_text
+assert "kinit" not in cdw_preflight_text
+assert "state: disabled" not in cdw_preflight_text
+freeipa_server_text = (
+    root / "ansible-playbooks/12_setup_freeipa_server.yml"
+).read_text()
+assert "common_tasks/ensure_ipa_kdc_services.yml" in freeipa_server_text
+assert "common_tasks/configure_ipa_krb_enc_types.yml" in freeipa_server_text
+cm_kerberos_text = (
+    root / "ansible-playbooks/30_setup_cm_krbs.yml"
+).read_text()
+assert "common_tasks/ensure_ipa_kdc_services.yml" in cm_kerberos_text
+assert "common_tasks/configure_ipa_krb_enc_types.yml" in cm_kerberos_text
+assert "common_tasks/preflight_kdc_reachable.yml" in cm_kerberos_text
+assert "importAdminCredentials" in cm_kerberos_text
+assert "common_tasks/verify_cm_kerberos_enabled.yml" in cm_kerberos_text
 cai_preflight_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cai_preflight.yml"
 ).read_text()
