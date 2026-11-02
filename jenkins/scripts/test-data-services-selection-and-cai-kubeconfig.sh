@@ -536,6 +536,13 @@ cde_result_text = (
 assert "reused without create or capacity resize" in cde_result_text
 assert "ecs_cde_service_green_statuses" in cde_result_text
 assert "ecs_cde_virtual_cluster_ui_url" in cde_result_text
+cde_wait_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cde_wait.yml"
+).read_text()
+assert "register: ecs_cde_service_async_result" in cde_wait_text
+assert "until: ecs_cde_service_async_result.finished" in cde_wait_text
+assert 'ecs_cde_service: "{{ ecs_cde_service_async_result }}"' in cde_wait_text
+assert "register: ecs_cde_service\n" not in cde_wait_text
 cde_vc_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cde_virtual_cluster.yml"
 ).read_text()
