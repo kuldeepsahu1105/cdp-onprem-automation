@@ -578,14 +578,15 @@ Automation never requests deletion mode `all`. Remove both recovery values
 after the successful run.
 
 CDW workload containers may inherit a `KCM:` default credential cache even
-though the Kubernetes nodes do not run a KCM daemon. After submission and
-before terminal-status polling, automation waits briefly for the warehouse
-namespace and `metastore` StatefulSet, sets
-`KRB5CCNAME=FILE:/tmp/krb5cc_metastore` on the metastore container, recreates only
-`metastore-0` when the pod template changed, and waits for the StatefulSet
-rollout. Healthy reruns are no-ops. This prevents the startup failure
-`kinit: No KCM server found while getting default ccache` without changing
-the metastore PVC, database, service, or principal.
+though the Kubernetes nodes do not run a KCM daemon. After the Database
+Catalog record appears, automation reads its supported CDW service
+configuration with `dw describe-dbc-config`. It calls additive
+`dw update-dbc --config` only when the `env` config block does not already set
+`KRB5CCNAME=FILE:/tmp/krb5cc_metastore`. The CDW control plane therefore owns
+the generated metastore workload configuration, and healthy reruns are
+no-ops. This prevents `kinit: No KCM server found while getting default
+ccache` without directly mutating a Helm-managed StatefulSet or changing the
+metastore PVC, database, service, or principal.
 
 After the default database catalog reaches `Running`, automation inspects and
 retains existing Virtual Warehouses and creates only missing `hive-vw`,
@@ -595,6 +596,24 @@ retains existing Virtual Warehouses and creates only missing `hive-vw`,
 private-cloud API rejects an inherited parent pool that is not the catalog's
 pool or one of its children. Existing warehouses are never deleted or
 recreated by this reconciliation.
+
+Impala creation also uses the configurable `ecs_cdw_impala_options`,
+`ecs_cdw_impala_ha_settings`, `ecs_cdw_impala_autoscaling`,
+`ecs_cdw_impala_additional_quota`, and `ecs_cdw_impala_query_log` values.
+Their defaults match the minimum private-cloud UI selection: HA disabled,
+coordinator shutdown disabled, autosuspend after 300 seconds, executor groups
+1–5, scale-out delay 20 seconds, scale-in delay 300 seconds, zero additional
+quota, and query logging enabled. CDP CLI 0.9.164 does not expose the UI's
+named resource-template selector on `create-vw`;
+`ecs_cdw_vw_tshirt_size: xsmall` is the supported minimum-size input.
+
+New warehouses receive the common `env` config block during `dw create-vw`.
+Existing warehouses are inspected with `dw describe-vw-config` and updated
+through additive `dw update-vw --config` only when their current
+`KRB5CCNAME` differs from `FILE:/tmp/krb5cc_cdw`. This durable control-plane
+configuration applies to generated HiveServer2, Impala, and Trino workloads.
+Automation does not patch, restart, delete, or recreate generated
+StatefulSets, Deployments, pods, PVCs, or warehouses.
 
 The prerequisite chain remains in its authoritative phases: identity playbook
 12 starts and verifies FreeIPA Directory Server and `krb5kdc` and configures

@@ -96,11 +96,6 @@ cdw_force_reset = (
     root
     / "ansible-playbooks/common_tasks/ecs_data_service_cdw_force_reset.yml"
 ).read_text()
-cdw_workload_ccache = (
-    root
-    / "ansible-playbooks/common_tasks/"
-    "ecs_data_service_cdw_reconcile_workload_ccache.yml"
-).read_text()
 cdw_followup = (
     root
     / "ansible-playbooks/common_tasks/ecs_data_service_cdw_followup.yml"
@@ -164,23 +159,7 @@ for forbidden in (
 ):
     assert forbidden not in cdw_preflight
 assert "freeipa.ansible_freeipa.ipaservice" not in cdw_preflight
-assert (
-    playbook_text.index("common_tasks/ecs_data_service_cdw_start.yml")
-    < playbook_text.index(
-        "common_tasks/ecs_data_service_cdw_reconcile_workload_ccache.yml"
-    )
-    < playbook_text.index("common_tasks/ecs_data_service_cdw_wait.yml")
-)
-assert "statefulset/metastore" in cdw_workload_ccache
-assert "--containers=metastore" in cdw_workload_ccache
-assert "KRB5CCNAME={{ ecs_cdw_workload_krb5ccname }}" in cdw_workload_ccache
-assert "\n      - delete\n" in cdw_workload_ccache
-assert "\n      - metastore-0\n" in cdw_workload_ccache
-assert "when: ecs_cdw_metastore_ccache_update is changed" in cdw_workload_ccache
-assert "rollout" in cdw_workload_ccache
-assert "status" in cdw_workload_ccache
-assert "No KCM server found" in cdw_workload_ccache
-assert "ecs_cdw_metastore_ccache_verify.stdout" in cdw_workload_ccache
+assert "ecs_data_service_cdw_reconcile_workload_ccache.yml" not in playbook_text
 assert "ecs_cdw_trino_vw_name" in cdw_followup
 assert "type: trino" in cdw_followup
 assert "'create-vw'" in cdw_followup
@@ -188,6 +167,21 @@ assert "'--resource-pool'" in cdw_followup
 assert "ecs_cdw_vw_resource_pool" in cdw_followup
 assert "'--t-shirt-size'" in cdw_followup
 assert "ecs_cdw_vw_tshirt_size" in cdw_followup
+assert "'--impala-options'" in cdw_followup
+assert "'--impala-ha-settings'" in cdw_followup
+assert "'--autoscaling'" in cdw_followup
+assert "'--additional-quota'" in cdw_followup
+assert "'--impala-query-log'" in cdw_followup
+assert "'--no-impala-query-log'" in cdw_followup
+assert "Validate configured Impala Virtual Warehouse settings" in cdw_followup
+assert "'describe-dbc-config'" in cdw_followup
+assert "'update-dbc'" in cdw_followup
+assert "'describe-vw-config'" in cdw_followup
+assert "'update-vw'" in cdw_followup
+assert "ecs_cdw_dbc_file_ccache_config | to_json" in cdw_followup
+assert cdw_followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 2
+assert cdw_followup.count('.get("KRB5CCNAME", "")') == 2
+assert "statefulset/metastore" not in cdw_followup
 assert "item.virtual_warehouses | default([]) | length == 0" in cdw_followup
 assert "CDW Virtual Warehouses to finish provisioning" in cdw_followup
 assert "Require all desired CDW Virtual Warehouses to be running" in cdw_followup
@@ -310,9 +304,11 @@ assert (
     group_vars["ecs_cdw_workload_krb5ccname"]
     == "FILE:/tmp/krb5cc_metastore"
 )
-assert group_vars["ecs_cdw_workload_reconcile_wait_retries"] == 60
-assert group_vars["ecs_cdw_workload_reconcile_wait_delay"] == 5
-assert group_vars["ecs_cdw_workload_rollout_timeout"] == "5m"
+assert (
+    group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
+    ["content"]["keyValues"]["KRB5CCNAME"]
+    == "{{ ecs_cdw_workload_krb5ccname }}"
+)
 assert group_vars["ecs_cdw_trino_vw_name"] == "trino-vw"
 assert group_vars["ecs_cdw_vw_tshirt_size"] == "xsmall"
 assert (
@@ -321,6 +317,16 @@ assert (
 )
 assert group_vars["ecs_cdw_vw_wait_retries"] == 120
 assert group_vars["ecs_cdw_vw_wait_delay"] == 30
+assert group_vars["ecs_cdw_vw_krb5ccname"] == "FILE:/tmp/krb5cc_cdw"
+assert (
+    group_vars["ecs_cdw_vw_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
+    ["content"]["keyValues"]["KRB5CCNAME"]
+    == "{{ ecs_cdw_vw_krb5ccname }}"
+)
+assert group_vars["ecs_cdw_impala_ha_settings"]["highAvailabilityMode"] == "DISABLED"
+assert group_vars["ecs_cdw_impala_autoscaling"]["minClusters"] == 1
+assert group_vars["ecs_cdw_impala_autoscaling"]["maxClusters"] == 5
+assert group_vars["ecs_cdw_impala_query_log"] is True
 assert group_vars["ecs_cdw_dataviz_user_groups"] == []
 assert group_vars["ecs_cdw_dataviz_admin_groups"] == []
 assert group_vars["ecs_cai_static_subdomain"] == "cai"
