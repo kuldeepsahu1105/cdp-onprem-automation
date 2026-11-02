@@ -388,6 +388,11 @@ deletion, recreation, or a control-plane restart. A concurrent transition to
 `Deactivated` terminates structured polling promptly, but only `Running`
 passes the final success assertion.
 
+CDW preflight also verifies the Base security boundary without mutation:
+CM `kerberosInfo` must be enabled for the configured realm/KDC and the Base
+HDFS service must use Kerberos authentication. If this gate fails, rerun
+playbooks 30 and 31; do not create a CDW principal or keytab manually.
+
 For FreeIPA-backed CDW, the product owns the standard
 `host/dwx-env-<environment>.cdp.local@<realm>` and `hive/` principal/keytab
 lifecycle. Automation must not pre-create, initialize, retrieve, disable, or

@@ -72,6 +72,13 @@ assert "/cdw-product-owned-v2-" in cdw_preflight
 assert "identity_provider_effective | default('freeipa') == 'freeipa'" in cdw_preflight
 assert "ipa_server_in_inventory | default(false) | bool" in cdw_preflight
 assert "ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0" in cdw_preflight
+assert "CDW | Require verified Base and CM Kerberos prerequisites" in cdw_preflight
+assert "/cm/kerberosInfo" in cdw_preflight
+assert "hadoop_security_authentication" in cdw_preflight
+assert "ecs_cdw_preflight_cm_kerberized | bool" in cdw_preflight
+assert "ecs_cdw_preflight_cm_realm == cluster_realm" in cdw_preflight
+assert "ecs_cdw_preflight_cm_kdc_host == kdc_host" in cdw_preflight
+assert "ecs_cdw_preflight_hdfs_authentication == 'kerberos'" in cdw_preflight
 assert "CDW diagnostics | Describe control-plane environment" in cdw_diagnostics
 assert "/cm/kerberosInfo" in cdw_diagnostics
 assert "hadoop_security_authentication" in cdw_diagnostics

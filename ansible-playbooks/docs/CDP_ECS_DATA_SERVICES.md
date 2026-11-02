@@ -377,6 +377,14 @@ not attempt activation, deletion, recreation, or a control-plane restart.
 CDW Hive service principal or its keytab; the Private Cloud Data Warehouse
 control plane owns `hive/<hostname>@<realm>` creation and key rotation.
 
+Before that control-plane query, CDW performs a read-only Base readiness gate.
+CM `kerberosInfo` must report `kerberized=true` with the configured realm and
+KDC host, and the Base-cluster HDFS service must report
+`hadoop_security_authentication=kerberos`. This prevents a standalone
+playbook-34 run from submitting CDW against an incomplete Base/CM Kerberos
+setup. It does not treat CM metadata as proof of the later DWX principal
+handoff; failure diagnostics still inspect that separate boundary.
+
 The product-standard private-cloud CDW hostname is
 `dwx-env-<environment>.cdp.local`, even when the deployment DNS domain and
 Kerberos realm are different (for example, `cldr.internal.arpa` and
