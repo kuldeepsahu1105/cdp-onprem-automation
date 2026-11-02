@@ -128,10 +128,17 @@ service is intentional.
 After the service is ready, CDE also converges one default Virtual Cluster.
 The base name, CPU, memory, and tier are configurable with `ecs_cde_virtual_cluster_*`. Discovery uses the
 authoritative `de list-vcs` `vcName` and `status` fields. `AppInstalled` and
-in-progress resources are reused/waited. The default
-`ecs_cde_virtual_cluster_name_attempts: 1` also preserves stable VC naming and
-fails on a stale conflicting record; increase it only to request deterministic
-suffixes explicitly. The effective VC name, status, and native `VcUiUrl` are
+in-progress resources are reused/waited. On a rerun,
+`ecs_cde_virtual_cluster_recreate_terminal_failed: true` removes and recreates
+only the configured stable VC when its observed status is one of the explicit
+terminal-failure statuses. It never deletes the healthy CDE service or healthy,
+transitional, deleting, unknown, or differently named VCs. The default
+`ecs_cde_virtual_cluster_name_attempts: 10` tries the stable base name first.
+When completed-deletion history (`AppDeleted` or `AppNotDeletedFromDB`) or
+another retained non-reusable record still reserves that name, selection
+advances deterministically to `-1`, then `-2`, without modifying the retained
+record. Healthy or in-progress matching names are always reused instead of
+creating a suffix. The effective VC name, status, and native `VcUiUrl` are
 recorded in the service catalog. After asynchronous VC submission, empty or
 unknown discovery responses are treated as eventual consistency and continue
 polling. The wait stops only for configured green states or explicit terminal

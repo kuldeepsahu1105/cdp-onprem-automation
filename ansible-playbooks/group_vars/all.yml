@@ -1355,8 +1355,13 @@ ecs_cde_control_plane_namespace: cdp
 ecs_cde_diagnostics_log_since: 20m
 ecs_cde_diagnostics_log_tail: 300
 ecs_cde_virtual_cluster_name: "{{ ecs_cde_service_name }}-vc"
-ecs_cde_virtual_cluster_name_attempts: 1
+# Try the stable base name first, then -1, -2, ... only when retained
+# completed-deletion history or another non-reusable record reserves a name.
+ecs_cde_virtual_cluster_name_attempts: 10
 ecs_cde_virtual_cluster_name_max_length: 40
+# Reruns may replace only the configured VC when it is explicitly terminal-failed.
+# Healthy, transitional, deleting, unknown, or differently named VCs are retained.
+ecs_cde_virtual_cluster_recreate_terminal_failed: true
 ecs_cde_virtual_cluster_green_statuses:
   - AppInstalled
   - Running
@@ -1371,11 +1376,16 @@ ecs_cde_virtual_cluster_transitional_statuses:
   - Waiting
   - Updating
 ecs_cde_virtual_cluster_terminal_failure_statuses:
+  - AppDeletionFailed
   - AppInstallationFailed
   - AppResumeFailed
+  - AppSuspendFailed
   - AppUpgradeFailed
   - Failed
   - Error
+ecs_cde_virtual_cluster_deleted_statuses:
+  - AppDeleted
+  - AppNotDeletedFromDB
 ecs_cde_virtual_cluster_cpu_requests: "20"
 ecs_cde_virtual_cluster_memory_requests: 30Gi
 ecs_cde_virtual_cluster_tier: CORE

@@ -140,17 +140,24 @@ assert group_vars["ecs_cde_service_deleted_statuses"] == [
     "ClusterDeletionCompleted",
     "Deleted",
 ]
-assert group_vars["ecs_cde_virtual_cluster_name_attempts"] == 1
+assert group_vars["ecs_cde_virtual_cluster_name_attempts"] == 10
+assert group_vars["ecs_cde_virtual_cluster_recreate_terminal_failed"] is True
 assert "AppInstalled" in group_vars["ecs_cde_virtual_cluster_green_statuses"]
 assert "AppInstallationInProgress" in group_vars[
     "ecs_cde_virtual_cluster_transitional_statuses"
 ]
 assert group_vars["ecs_cde_virtual_cluster_terminal_failure_statuses"] == [
+    "AppDeletionFailed",
     "AppInstallationFailed",
     "AppResumeFailed",
+    "AppSuspendFailed",
     "AppUpgradeFailed",
     "Failed",
     "Error",
+]
+assert group_vars["ecs_cde_virtual_cluster_deleted_statuses"] == [
+    "AppDeleted",
+    "AppNotDeletedFromDB",
 ]
 assert group_vars["ecs_cde_virtual_cluster_cpu_requests"] == "20"
 assert group_vars["ecs_cde_virtual_cluster_memory_requests"] == "30Gi"
@@ -551,6 +558,7 @@ assert "virtual_cluster_succeeded={{" in playbook_text
 cde_vc_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cde_virtual_cluster.yml"
 ).read_text()
+cde_vc_tasks = yaml.safe_load(cde_vc_text)
 assert "de', 'list-vcs'" in cde_vc_text
 assert "selectattr('vcName', 'equalto', candidate)" in cde_vc_text
 assert "ecs_cde_vc_candidate_names" in cde_vc_text
@@ -563,7 +571,27 @@ assert "native_ui=" in cde_vc_text
 assert "wait: false" in cde_vc_text
 assert "ecs_cde_vc_info.virtual_clusters | default([]) | length > 0" in cde_vc_text
 assert "ecs_cde_virtual_cluster_terminal_failure_statuses" in cde_vc_text
-assert "Automation does not delete" in cde_vc_text
+assert "Remove terminal-failed configured Virtual Cluster" in cde_vc_text
+assert "state: absent" in cde_vc_text
+assert "ecs_cde_virtual_cluster_recreate_terminal_failed" in cde_vc_text
+assert "ecs_cde_vc_terminal_failed_records" in cde_vc_text
+assert "ecs_cde_vc_blocking_records" in cde_vc_text
+assert "ecs_cde_vc_deleted_history" in cde_vc_text
+assert "((attempt - 1) | string)" in cde_vc_text
+assert "namespace(selected={}, blocked=false)" in cde_vc_text
+terminal_cleanup_task = next(
+    task
+    for task in cde_vc_tasks
+    if task.get("name")
+    == "CDE VC | Remove terminal-failed configured Virtual Cluster"
+)
+assert terminal_cleanup_task["cloudera.cloud.de_virtual_cluster"]["state"] == "absent"
+assert terminal_cleanup_task["cloudera.cloud.de_virtual_cluster"]["wait"] is True
+assert terminal_cleanup_task["loop"] == "{{ ecs_cde_vc_terminal_failed_records }}"
+assert terminal_cleanup_task["when"] == [
+    "ecs_cde_virtual_cluster_recreate_terminal_failed | bool",
+    "ecs_cde_vc_terminal_failed_records | length > 0",
+]
 service_probe_text = (
     root / "ansible-playbooks/common_tasks/ecs_probe_coredns_service.yml"
 ).read_text()
@@ -608,17 +636,29 @@ assert "ecs_data_service_cde_virtual_cluster.yml" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cde.yml"
 ).read_text()
 
-def select_versioned(base, records, green, transitional, deleted=(), attempts=1):
+def select_versioned(
+    base,
+    records,
+    green,
+    transitional,
+    deleted=(),
+    attempts=1,
+    suffix_starts_at_one=False,
+    deleted_reserves_name=False,
+    block_nonreusable=False,
+):
     for attempt in range(1, attempts + 1):
-        candidate = base if attempt == 1 else f"{base}-{attempt}"
+        suffix_number = attempt - 1 if suffix_starts_at_one else attempt
+        candidate = base if attempt == 1 else f"{base}-{suffix_number}"
         statuses = records.get(candidate, [])
         if isinstance(statuses, str):
             statuses = [statuses]
+        deleted_statuses = {value.lower() for value in deleted}
         active_statuses = [
-            status
-            for status in statuses
-            if status.lower() not in {value.lower() for value in deleted}
+            status for status in statuses if status.lower() not in deleted_statuses
         ]
+        if statuses and not active_statuses and deleted_reserves_name:
+            continue
         if not active_statuses:
             return candidate, False
         if any(
@@ -626,6 +666,8 @@ def select_versioned(base, records, green, transitional, deleted=(), attempts=1)
             for status in active_statuses
         ):
             return candidate, True
+        if block_nonreusable:
+            return None, False
     return None, False
 
 assert select_versioned(
@@ -674,8 +716,34 @@ assert select_versioned(
     {"vc": "AppInstallationFailed"},
     group_vars["ecs_cde_virtual_cluster_green_statuses"],
     group_vars["ecs_cde_virtual_cluster_transitional_statuses"],
+    group_vars["ecs_cde_virtual_cluster_deleted_statuses"],
     attempts=3,
+    suffix_starts_at_one=True,
+    deleted_reserves_name=True,
+    block_nonreusable=True,
+) == (None, False)
+assert select_versioned(
+    "vc",
+    {"vc": "AppDeleted", "vc-1": "AppNotDeletedFromDB"},
+    group_vars["ecs_cde_virtual_cluster_green_statuses"],
+    group_vars["ecs_cde_virtual_cluster_transitional_statuses"],
+    group_vars["ecs_cde_virtual_cluster_deleted_statuses"],
+    attempts=3,
+    suffix_starts_at_one=True,
+    deleted_reserves_name=True,
+    block_nonreusable=True,
 ) == ("vc-2", False)
+assert select_versioned(
+    "vc",
+    {"vc": "UnknownBackendState"},
+    group_vars["ecs_cde_virtual_cluster_green_statuses"],
+    group_vars["ecs_cde_virtual_cluster_transitional_statuses"],
+    group_vars["ecs_cde_virtual_cluster_deleted_statuses"],
+    attempts=3,
+    suffix_starts_at_one=True,
+    deleted_reserves_name=True,
+    block_nonreusable=True,
+) == (None, False)
 assert select_versioned(
     "vc",
     {"vc": "UnknownBackendState"},
