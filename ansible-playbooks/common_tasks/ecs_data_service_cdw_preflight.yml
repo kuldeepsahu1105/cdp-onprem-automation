@@ -364,59 +364,7 @@
   when:
     - ecs_cdw_hive_service_principal_effective is defined
 
-- name: CDW | Inspect FreeIPA Hive service key state
-  ansible.builtin.command:
-    argv:
-      - ipa
-      - service-show
-      - "{{ ecs_cdw_hive_service_principal_effective }}"
-      - --all
-      - --raw
-  environment:
-    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
-  register: ecs_cdw_freeipa_hive_service_show_before
-  changed_when: false
-  delegate_to: "{{ ipaserver_inventory_host }}"
-  connection: ssh
-  when:
-    - ecs_cdw_hive_service_principal_effective is defined
-
-- name: CDW | Resolve whether FreeIPA Hive service key is initialized
-  ansible.builtin.set_fact:
-    ecs_cdw_freeipa_hive_service_has_keytab_before: >-
-      {{
-        (
-          ecs_cdw_freeipa_hive_service_show_before.stdout
-          | regex_search(
-              '(?im)^\\s*(?:has_keytab|Keytab):\\s*(?:TRUE|True)\\s*$'
-            )
-        )
-        is not none
-      }}
-  when:
-    - ecs_cdw_freeipa_hive_service_show_before is not skipped
-
-- name: CDW | Require readable FreeIPA Hive service key state
-  ansible.builtin.assert:
-    that:
-      - >-
-        (
-          ecs_cdw_freeipa_hive_service_show_before.stdout
-          | regex_search(
-              '(?im)^\\s*(?:has_keytab|Keytab):\\s*'
-              + '(?:TRUE|FALSE|True|False)\\s*$'
-            )
-        )
-        is not none
-    fail_msg: >-
-      FreeIPA did not report the keytab state for
-      {{ ecs_cdw_hive_service_principal_effective }}.
-      ipa service-show output:
-      {{ ecs_cdw_freeipa_hive_service_show_before.stdout | default('') }}
-  when:
-    - ecs_cdw_freeipa_hive_service_show_before is not skipped
-
-- name: CDW | Remove preinitialized Hive key before fresh CDW activation
+- name: CDW | Enforce CDW-owned Hive key before fresh activation
   freeipa.ansible_freeipa.ipaservice:
     ipaadmin_password: "{{ ipaadmin_password }}"
     ipaadmin_principal: "{{ ipaadmin_principal }}"
@@ -425,43 +373,5 @@
   delegate_to: "{{ ipaserver_inventory_host }}"
   connection: ssh
   when:
-    - ecs_cdw_freeipa_hive_service_has_keytab_before is defined
-    - ecs_cdw_freeipa_hive_service_has_keytab_before | bool
-    - ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0
-
-- name: CDW | Verify FreeIPA Hive service key state before activation
-  ansible.builtin.command:
-    argv:
-      - ipa
-      - service-show
-      - "{{ ecs_cdw_hive_service_principal_effective }}"
-      - --all
-      - --raw
-  environment:
-    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
-  register: ecs_cdw_freeipa_hive_service_show_after
-  changed_when: false
-  delegate_to: "{{ ipaserver_inventory_host }}"
-  connection: ssh
-  when:
     - ecs_cdw_hive_service_principal_effective is defined
-
-- name: CDW | Require CDW to own fresh Hive service key creation
-  ansible.builtin.assert:
-    that:
-      - >-
-        (
-          ecs_cdw_freeipa_hive_service_show_after.stdout
-          | regex_search(
-              '(?im)^\\s*(?:has_keytab|Keytab):\\s*(?:FALSE|False)\\s*$'
-            )
-        )
-        is not none
-    fail_msg: >-
-      FreeIPA {{ ecs_cdw_hive_service_principal_effective }} reports an
-      initialized key before fresh CDW activation. CDW must create and retrieve
-      its own service keytab; a preinitialized key causes its keytab validation
-      endpoint to fail with HTTP 500.
-  when:
-    - ecs_cdw_freeipa_hive_service_show_after is not skipped
     - ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0

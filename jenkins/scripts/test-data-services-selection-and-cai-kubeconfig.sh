@@ -518,10 +518,10 @@ assert "ecs_data_services_dns_probe_retry_delay" in cdw_preflight_text
 assert "ecs_cdw_hive_service_principal_effective" in cdw_preflight_text
 assert "freeipa.ansible_freeipa.ipaservice" in cdw_preflight_text
 assert "hive/{{ ecs_cdw_kerberos_principal_hostname_effective }}" in cdw_preflight_text
-assert "Remove preinitialized Hive key before fresh CDW activation" in cdw_preflight_text
+assert "Enforce CDW-owned Hive key before fresh activation" in cdw_preflight_text
 assert "state: disabled" in cdw_preflight_text
 assert "ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0" in cdw_preflight_text
-assert "CDW must create and retrieve" in cdw_preflight_text
+assert "ecs_cdw_freeipa_hive_service_has_keytab_before" not in cdw_preflight_text
 assert "Generate initial FreeIPA Hive service key" not in cdw_preflight_text
 assert "Retrieve the existing Hive service key for validation" not in cdw_preflight_text
 cai_preflight_text = (
