@@ -98,6 +98,10 @@
       vars:
         ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
 
+    - name: Reconcile CDW workload Kerberos credential cache
+      ansible.builtin.include_tasks: ecs_data_service_cdw_reconcile_workload_ccache.yml
+      when: ecs_cdw_workload_file_ccache_reconcile | default(true) | bool
+
     - name: Wait for CDW terminal status
       ansible.builtin.include_tasks: ecs_data_service_cdw_wait.yml
       vars:

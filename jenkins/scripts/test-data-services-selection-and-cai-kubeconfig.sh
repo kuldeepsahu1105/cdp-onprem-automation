@@ -59,6 +59,15 @@ cdw_force_reset = (
     root
     / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_force_reset.yml"
 ).read_text()
+cdw_setup = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/setup_data_services.yml"
+).read_text()
+cdw_workload_ccache = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/"
+    "ecs_data_service_cdw_reconcile_workload_ccache.yml"
+).read_text()
 for forbidden in (
     "ipa-getkeytab",
     "state: disabled",
@@ -112,6 +121,17 @@ assert "DWX-to-CM/KDC account-manager principal creation" in cdw_diagnostics
 assert "ecs_cdw_diagnostics_collected: true" in cdw_diagnostics
 assert "state: present" not in cdw_diagnostics
 assert "ipa-getkeytab" not in cdw_diagnostics
+assert (
+    cdw_setup.index("ecs_data_service_cdw_start.yml")
+    < cdw_setup.index("ecs_data_service_cdw_reconcile_workload_ccache.yml")
+    < cdw_setup.index("ecs_data_service_cdw_wait.yml")
+)
+assert "statefulset/metastore" in cdw_workload_ccache
+assert "--containers=metastore" in cdw_workload_ccache
+assert "KRB5CCNAME={{ ecs_cdw_workload_krb5ccname }}" in cdw_workload_ccache
+assert "delete" in cdw_workload_ccache
+assert "metastore-0" in cdw_workload_ccache
+assert "No KCM server found" in cdw_workload_ccache
 
 ozone_credentials = (
     root
