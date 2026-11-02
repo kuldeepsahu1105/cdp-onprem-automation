@@ -607,11 +607,15 @@ explicit CDW-only force reset when `ecs_cdw_force_reset_cluster_id` and
 reuses the temporary signed profile, calls the supported DW delete operation,
 waits for that ID to disappear, and then continues activation. The reset does
 not affect ECS, Base, CDE, CAI, or FreeIPA and does not mutate principals or
-keytabs, but it destroys CDW objects attached to the named cluster. A delete
-response with both HTTP 404 and `NOT_FOUND` is treated as already absent so a
-prior UI deletion remains idempotent; every other delete error is fatal. If
-fresh activation still reports the same ID as already activated, the remaining
-record is internal DWX datastore state with no public reset operation.
+keytabs, but it destroys CDW objects attached to the named cluster. The reset
+first describes the exact cluster and refuses deletion unless its status is
+terminal `Error` or `Failed`, preventing stale recovery values from deleting
+healthy or progressing CDW resources. Clear both reset variables after the
+one recovery run. A describe response with both HTTP 404 and `NOT_FOUND` is
+treated as already absent so a prior UI deletion remains idempotent; every
+other describe or delete error is fatal. If fresh activation still reports
+the same ID as already activated, the remaining record is internal DWX
+datastore state with no public reset operation.
 
 A gateway timeout from `createPrivateCluster` is treated as ambiguous:
 automation continues structured discovery and accepts the recovered cluster

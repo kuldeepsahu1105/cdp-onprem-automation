@@ -106,6 +106,13 @@ assert "'delete-cluster'" in cdw_force_reset
 assert "'--cluster-id'" in cdw_force_reset
 assert "'--force'" in cdw_force_reset
 assert "'describe-cluster'" in cdw_force_reset
+assert "CDW recovery | Inspect confirmed cluster before deletion" in cdw_force_reset
+assert (
+    "CDW recovery | Refuse to delete a healthy or progressing cluster"
+    in cdw_force_reset
+)
+assert "is search('(?i)^(error|failed)$')" in cdw_force_reset
+assert "Clear ecs_cdw_force_reset_cluster_id" in cdw_force_reset
 assert "until: ecs_cdw_force_reset_describe.rc != 0" in cdw_force_reset
 assert "ecs_cdw_force_reset_result.rc != 0" in cdw_force_reset
 assert r"Status Code:\s*404.*Error Code:\s*NOT_FOUND" in cdw_force_reset
