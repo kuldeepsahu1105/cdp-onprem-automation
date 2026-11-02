@@ -56,6 +56,13 @@
     - name: Wait for ECS Management Console after cluster install
       ansible.builtin.import_tasks: common_tasks/ecs_wait_control_plane_console.yml
 
+    - name: Reconcile CoreDNS before Data Services provisioning
+      ansible.builtin.import_tasks: common_tasks/ecs_reconcile_coredns.yml
+      when:
+        - ecs_data_services_install_names | default([]) | length > 0
+        - ecs_reconcile_coredns | default(true) | bool
+        - not (ecs_coredns_reconciled_this_run | default(false) | bool)
+
     - name: Verify Data Services DNS through Kubernetes pods
       ansible.builtin.import_tasks: common_tasks/ecs_data_services_verify_dns.yml
       when:

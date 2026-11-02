@@ -26,8 +26,13 @@ assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cdw_preflig
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cde_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cai_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_model_registry.yml" in playbook_text
-assert "common_tasks/ecs_reconcile_coredns.yml" not in playbook_text
+assert "common_tasks/ecs_reconcile_coredns.yml" in playbook_text
 assert "common_tasks/ecs_data_services_verify_dns.yml" in playbook_text
+assert playbook_text.index(
+    "common_tasks/ecs_reconcile_coredns.yml"
+) < playbook_text.index(
+    "common_tasks/ecs_data_services_verify_dns.yml"
+)
 assert "when: \"'model_registry' in (ecs_data_services_install_names | default([]))\"" in playbook_text
 portal_facts_import = (
     "ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml"
@@ -550,15 +555,22 @@ assert "Automation does not delete" in cde_vc_text
 service_probe_text = (
     root / "ansible-playbooks/common_tasks/ecs_probe_coredns_service.yml"
 ).read_text()
-assert "COREDNS_SERVICE_ALL_RECORDS_OK" in service_probe_text
+assert "COREDNS_SERVICE_AND_ENDPOINTS_ALL_RECORDS_OK" in service_probe_text
 assert "socket.getaddrinfo" in service_probe_text
+assert "DNS_ENDPOINT_OK" in service_probe_text
+assert "DNS_ENDPOINT_FAILED" in service_probe_text
+assert "ecs_coredns_service_probe_endpoint_ips" in service_probe_text
+assert "subsets[*].addresses[*]" in service_probe_text
 coredns_reconcile_text = (
     root / "ansible-playbooks/common_tasks/ecs_reconcile_coredns.yml"
 ).read_text()
-assert "Verify required records through the CoreDNS Service" in coredns_reconcile_text
+assert (
+    "Verify required records through the CoreDNS Service and every ready replica"
+    in coredns_reconcile_text
+)
 assert "rollout" in coredns_reconcile_text
 assert "restart" in coredns_reconcile_text
-assert "Require reliable CoreDNS Service path" in coredns_reconcile_text
+assert "Require reliable CoreDNS Service path and replicas" in coredns_reconcile_text
 dns_verify_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_services_verify_dns.yml"
 ).read_text()
@@ -571,6 +583,14 @@ assert (
     "'ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK'\n"
     "          in ecs_data_services_dns_probe_logs.stdout_lines"
     not in dns_verify_text
+)
+data_services_playbook_text = (
+    root / "ansible-playbooks/34_setup_ecs_data_services.yml"
+).read_text()
+assert "Reconcile CoreDNS before Data Services provisioning" in data_services_playbook_text
+assert "common_tasks/ecs_reconcile_coredns.yml" in data_services_playbook_text
+assert "not (ecs_coredns_reconciled_this_run | default(false) | bool)" in (
+    data_services_playbook_text
 )
 assert "ecs_data_service_cde_virtual_cluster.yml" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cde.yml"

@@ -164,7 +164,7 @@
       - kube-system
       - get
       - endpoints
-      - rke2-coredns-rke2-coredns
+      - "{{ ecs_coredns_service_name }}"
       - --output
       - "jsonpath={.subsets[0].addresses[0].ip}"
   register: ecs_data_services_coredns_endpoint
@@ -179,7 +179,7 @@
       - ecs_data_services_coredns_endpoint.stdout | trim | length > 0
     fail_msg: >-
       No ready CoreDNS endpoint is available behind service
-      rke2-coredns-rke2-coredns.
+      {{ ecs_coredns_service_name }}.
 
 - name: Start Data Services DNS verification pod
   ansible.builtin.command:
@@ -440,8 +440,9 @@
       endpoint {{ ecs_data_services_coredns_endpoint.stdout | trim }} returned
       every required A record and direct TCP validation succeeded. Data
       Services control-plane workloads use the Service path, so endpoint-only
-      success is diagnostic evidence and is not accepted as readiness. Re-run
-      playbook 33 to perform bounded rolling CoreDNS recovery before provisioning.
+      success is diagnostic evidence and is not accepted as readiness. The
+      bounded CoreDNS reconciliation immediately preceding this gate did not
+      produce a consistently usable Service path, so provisioning is stopped.
   when:
     - >-
       'ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK'

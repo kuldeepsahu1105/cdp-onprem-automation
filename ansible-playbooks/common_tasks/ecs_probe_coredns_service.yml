@@ -16,6 +16,46 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
 
+- name: CoreDNS Service probe | Read every ready CoreDNS endpoint
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - get
+      - endpoints
+      - "{{ ecs_coredns_service_name }}"
+      - --output
+      - 'jsonpath={range .subsets[*].addresses[*]}{.ip}{"\n"}{end}'
+  register: ecs_coredns_service_probe_endpoints
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: CoreDNS Service probe | Resolve ready CoreDNS endpoint list
+  ansible.builtin.set_fact:
+    ecs_coredns_service_probe_endpoint_ips: >-
+      {{
+        ecs_coredns_service_probe_endpoints.stdout_lines
+        | default([])
+        | map('trim')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+
+- name: CoreDNS Service probe | Require ready CoreDNS endpoints
+  ansible.builtin.assert:
+    that:
+      - ecs_coredns_service_probe_endpoint_ips | length > 0
+    fail_msg: >-
+      No ready endpoints are registered behind CoreDNS Service
+      {{ ecs_coredns_service_name }} in namespace
+      {{ ecs_coredns_namespace }}.
+
 - name: CoreDNS Service probe | Start readiness pod
   ansible.builtin.command:
     argv:
@@ -33,22 +73,51 @@
       - python3
       - -c
       - |
+        import ipaddress
         import json
         import socket
+        import subprocess
         import sys
         import time
 
         records = json.loads(sys.argv[1])
-        attempts = int(sys.argv[2])
-        delay = int(sys.argv[3])
-        pending = {
+        endpoints = json.loads(sys.argv[2])
+        attempts = int(sys.argv[3])
+        delay = int(sys.argv[4])
+        service_pending = {
             record["fqdn"]: record
             for record in records
             if record.get("fqdn")
         }
-        last_answers = {}
+        endpoint_pending = {
+            (endpoint, record["fqdn"]): record
+            for endpoint in endpoints
+            for record in records
+            if record.get("fqdn")
+        }
+        service_last_answers = {}
+        endpoint_last_answers = {}
+
+        def endpoint_answers(fqdn, endpoint):
+            lookup = subprocess.run(
+                ["nslookup", "-type=A", fqdn.rstrip(".") + ".", endpoint],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            answers = []
+            for line in lookup.stdout.splitlines():
+                if not line.startswith("Address:"):
+                    continue
+                candidate = line.split()[-1]
+                try:
+                    answers.append(str(ipaddress.IPv4Address(candidate)))
+                except ipaddress.AddressValueError:
+                    pass
+            return sorted(set(answers))
+
         for attempt in range(1, attempts + 1):
-            for fqdn, record in list(pending.items()):
+            for fqdn, record in list(service_pending.items()):
                 try:
                     answers = sorted({
                         item[4][0]
@@ -61,28 +130,53 @@
                     })
                 except socket.gaierror as exc:
                     answers = [f"ERROR:{exc}"]
-                last_answers[fqdn] = answers
+                service_last_answers[fqdn] = answers
                 expected = record.get("address", "")
                 if not expected or expected in answers:
                     print(
                         f"DNS_SERVICE_OK fqdn={fqdn} answers={answers}",
                         flush=True,
                     )
-                    pending.pop(fqdn, None)
-            if not pending:
-                print("COREDNS_SERVICE_ALL_RECORDS_OK", flush=True)
+                    service_pending.pop(fqdn, None)
+
+            for key, record in list(endpoint_pending.items()):
+                endpoint, fqdn = key
+                answers = endpoint_answers(fqdn, endpoint)
+                endpoint_last_answers[key] = answers
+                expected = record.get("address", "")
+                if not expected or expected in answers:
+                    print(
+                        "DNS_ENDPOINT_OK "
+                        f"endpoint={endpoint} fqdn={fqdn} answers={answers}",
+                        flush=True,
+                    )
+                    endpoint_pending.pop(key, None)
+
+            if not service_pending and not endpoint_pending:
+                print("COREDNS_SERVICE_AND_ENDPOINTS_ALL_RECORDS_OK", flush=True)
                 raise SystemExit(0)
             if attempt < attempts:
                 time.sleep(delay)
-        for fqdn, record in pending.items():
+
+        for fqdn, record in service_pending.items():
             print(
                 "DNS_SERVICE_FAILED "
                 f"fqdn={fqdn} expected={record.get('address', '')} "
-                f"answers={last_answers.get(fqdn, [])}",
+                f"answers={service_last_answers.get(fqdn, [])}",
+                file=sys.stderr,
+            )
+        for key, record in endpoint_pending.items():
+            endpoint, fqdn = key
+            print(
+                "DNS_ENDPOINT_FAILED "
+                f"endpoint={endpoint} fqdn={fqdn} "
+                f"expected={record.get('address', '')} "
+                f"answers={endpoint_last_answers.get(key, [])}",
                 file=sys.stderr,
             )
         raise SystemExit(1)
       - "{{ ecs_coredns_required_dns_records | to_json }}"
+      - "{{ ecs_coredns_service_probe_endpoint_ips | to_json }}"
       - "{{ ecs_data_services_dns_probe_attempts | default(3) | int }}"
       - "{{ ecs_data_services_dns_probe_retry_delay | int }}"
   register: ecs_coredns_service_probe_start
@@ -157,7 +251,7 @@
       {{
         ecs_coredns_service_probe_phase.stdout | default('') == 'Succeeded'
         and (
-          'COREDNS_SERVICE_ALL_RECORDS_OK'
+          'COREDNS_SERVICE_AND_ENDPOINTS_ALL_RECORDS_OK'
           in ecs_coredns_service_probe_logs.stdout_lines | default([])
         )
       }}

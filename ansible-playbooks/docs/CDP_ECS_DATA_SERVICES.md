@@ -139,12 +139,18 @@ failure states; an empty first lookup no longer fails while the UI/backend is
 still installing the VC.
 
 Playbook 33 verifies required private records through the Kubernetes CoreDNS
-Service after reconciling the Corefile. If the Service path is stale while the
-configuration is correct, it performs one rolling CoreDNS deployment restart
-and verifies the Service again. Playbook 34 does not accept direct-endpoint
-fallback as readiness: Liftie/dex/compute workloads use the Service path, and
-endpoint-only success can otherwise surface later as `UnknownHostException`
-while fetching base-cluster details.
+Service and through every ready CoreDNS replica after reconciling the Corefile.
+Checking every replica prevents one healthy Service response from masking a
+stale replica. If the Service path or any replica is stale while the
+configuration is correct, playbook 33 performs one rolling CoreDNS deployment
+restart and verifies the Service and every replacement replica again. Healthy
+reruns do not restart CoreDNS. Playbook 34 performs this same idempotent
+reconciliation before its final workload DNS gate, so a standalone Data
+Services rerun does not require a separate playbook 33 recovery run. Playbook
+34 does not accept direct-endpoint fallback as readiness:
+Liftie/dex/compute workloads use the Service path, and endpoint-only success
+can otherwise surface later as `UnknownHostException` while fetching
+base-cluster details.
 Before a rerun, CDE uses the signed `de list-services` summary, which does not
 contact Cloudera Manager. Only explicit healthy or transitional service states
 are eligible for mutation-free adoption. Completed-deletion service tombstones
