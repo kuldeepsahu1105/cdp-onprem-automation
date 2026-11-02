@@ -124,6 +124,35 @@
               finished: true
               msg: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_json) }}"
 
+    - name: Report CDW completion status
+      ansible.builtin.debug:
+        msg: >-
+          CDW STATUS: {{
+          'SUCCEEDED'
+          if (
+            ecs_cdw_cluster_succeeded | default(false) | bool
+            and ecs_cdw_catalog_succeeded | default(false) | bool
+            and ecs_cdw_dataviz_succeeded | default(false) | bool
+          )
+          else 'FAILED'
+          }}. {{
+          'cluster='
+          + ((ecs_cdw_cluster.cluster | default({})).name | default(ecs_cdp_environment_name))
+          + ', Hive VW=' + (ecs_cdw_hive_vw_name_effective | default('unknown'))
+          + ', Impala VW=' + (ecs_cdw_impala_vw_name_effective | default('unknown'))
+          + ', DataViz=' + (ecs_cdw_dataviz_name_effective | default('unknown'))
+          if (
+            ecs_cdw_cluster_succeeded | default(false) | bool
+            and ecs_cdw_catalog_succeeded | default(false) | bool
+            and ecs_cdw_dataviz_succeeded | default(false) | bool
+          )
+          else (
+            (ecs_cdw_cluster | default({})).msg
+            | default(ecs_cdw_cluster | default({}) | to_json)
+          )
+          }}
+      when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
     - name: Provision CDE without blocking subsequent services
       when: "'cde' in (ecs_data_services_install_names | default([]))"
       block:
@@ -186,6 +215,35 @@
           delegate_to: "{{ ecs_data_services_delegate_host }}"
           connection: ssh
 
+    - name: Report CDE completion status
+      ansible.builtin.debug:
+        msg: >-
+          CDE STATUS: {{
+          'SUCCEEDED'
+          if (
+            ecs_cde_service_succeeded | default(false) | bool
+            and ecs_cde_virtual_cluster_succeeded | default(false) | bool
+          )
+          else 'FAILED'
+          }}. {{
+          'service=' + (ecs_cde_service_name_effective | default('unknown'))
+          + ', service_status='
+          + ((ecs_cde_service.service | default({})).status | default('unknown'))
+          + ', virtual_cluster='
+          + (ecs_cde_virtual_cluster_name_effective | default('unknown'))
+          + ', virtual_cluster_status='
+          + ((ecs_cde_virtual_cluster | default({})).status | default('unknown'))
+          if (
+            ecs_cde_service_succeeded | default(false) | bool
+            and ecs_cde_virtual_cluster_succeeded | default(false) | bool
+          )
+          else (
+            (ecs_cde_service | default({})).msg
+            | default(ecs_cde_service | default({}) | to_json)
+          )
+          }}
+      when: "'cde' in (ecs_data_services_install_names | default([]))"
+
     - name: Provision CAI without blocking subsequent services
       when: "'cai' in (ecs_data_services_install_names | default([]))"
       block:
@@ -224,11 +282,49 @@
               finished: true
               msg: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_json) }}"
 
+    - name: Report CAI completion status
+      ansible.builtin.debug:
+        msg: >-
+          CAI STATUS: {{
+          'SUCCEEDED'
+          if (
+            ecs_cai_workspace_succeeded | default(false) | bool
+            and ecs_cai_ui_succeeded | default(false) | bool
+          )
+          else 'FAILED'
+          }}. {{
+          ecs_cai_status
+          if (
+            ecs_cai_workspace_succeeded | default(false) | bool
+            and ecs_cai_ui_succeeded | default(false) | bool
+          )
+          else (
+            (ecs_cai_workspace | default({})).msg
+            | default(
+                'workspace=' + (ecs_cai_workspace | default({}) | to_json)
+                + ', ui_status='
+                + (ecs_cai_ui_probe.status | default('unavailable') | string)
+              )
+          )
+          }}
+      when: "'cai' in (ecs_data_services_install_names | default([]))"
+
     - name: Install Model Registry when selected
       ansible.builtin.include_tasks: common_tasks/ecs_data_service_model_registry.yml
       when: "'model_registry' in (ecs_data_services_install_names | default([]))"
       vars:
         ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+
+    - name: Report Model Registry completion status
+      ansible.builtin.debug:
+        msg: >-
+          MODEL REGISTRY STATUS: {{
+          'SUCCEEDED' if ecs_model_registry_succeeded | default(false) | bool else 'FAILED'
+          }}. {{
+          ecs_model_registry_status
+          | default(ecs_model_registry_failure_message | default('no result'), true)
+          }}
+      when: "'model_registry' in (ecs_data_services_install_names | default([]))"
 
     - name: Remove temporary Data Services profile from ECS master
       ansible.builtin.file:
@@ -312,109 +408,42 @@
               Native ECS application endpoints are unchanged. Re-run
               35_refresh_deployment_portal.yml after repairing the portal.
 
-    - name: Report Data Services provisioning result after all attempts
+    - name: Require successful CDW provisioning after all attempts
       ansible.builtin.assert:
         that:
-          - >-
-            'cdw' not in (ecs_data_services_install_names | default([]))
-            or (
-              (ecs_cdw_cluster_succeeded | default(false) | bool)
-              and (ecs_cdw_catalog_succeeded | default(false) | bool)
-              and (ecs_cdw_dataviz_succeeded | default(false) | bool)
-            )
-          - >-
-            'cde' not in (ecs_data_services_install_names | default([]))
-            or (
-              (ecs_cde_service_succeeded | default(false) | bool)
-              and (ecs_cde_virtual_cluster_succeeded | default(false) | bool)
-            )
-          - >-
-            'cai' not in (ecs_data_services_install_names | default([]))
-            or (
-              (ecs_cai_workspace_succeeded | default(false) | bool)
-              and (ecs_cai_ui_succeeded | default(false) | bool)
-            )
-          - >-
-            'model_registry' not in (ecs_data_services_install_names | default([]))
-            or (ecs_model_registry_succeeded | default(false) | bool)
+          - ecs_cdw_cluster_succeeded | default(false) | bool
+          - ecs_cdw_catalog_succeeded | default(false) | bool
+          - ecs_cdw_dataviz_succeeded | default(false) | bool
         fail_msg: >-
-          One or more selected Data Services failed after all selected services
-          and successful-service follow-up work were attempted.
-          CDW={{ (ecs_cdw_cluster | default({})).msg
-                 | default((ecs_cdw_dbc_info | default({})).database_catalogs
-                           | default(ecs_cdw_cluster | default({}))
-                           | to_json) }};
-          CDE={{ (ecs_cde_service | default({})).msg | default(ecs_cde_service | default({}) | to_json) }};
-          CAI={{
-            ecs_cai_status
-            if (
-              ecs_cai_workspace_succeeded | default(false) | bool
-              and ecs_cai_ui_succeeded | default(false) | bool
-            )
-            else (
-              (ecs_cai_workspace | default({})).msg
-              | default(
-                  'workspace=' + (ecs_cai_workspace | default({}) | to_json)
-                  + ', ui_status='
-                  + (ecs_cai_ui_probe.status | default('unavailable') | string)
-                )
-            )
-          }};
-          Model Registry={{
-            ecs_model_registry_status
-            | default(ecs_model_registry_failure_message | default('not selected'), true)
-          }}.
-        success_msg: >-
-          {%- set lines = ['ECS Data Services provisioning succeeded.'] -%}
-          {%- if 'cdw' in (ecs_data_services_install_names | default([])) -%}
-          {%- set _ = lines.append(
-            'CDW: Running (cluster='
-            + ((ecs_cdw_cluster.cluster | default({})).name | default(ecs_cdp_environment_name))
-            + ', Hive VW=' + (ecs_cdw_hive_vw_name_effective | default('unknown'))
-            + ', Impala VW=' + (ecs_cdw_impala_vw_name_effective | default('unknown'))
-            + ', DataViz=' + (ecs_cdw_dataviz_name_effective | default('unknown'))
-            + ', DataViz status=' + (ecs_cdw_dataviz_status | default('unknown'))
-            + ')'
-          ) -%}
-          {%- endif -%}
-          {%- if 'cde' in (ecs_data_services_install_names | default([])) -%}
-          {%- set _ = lines.append(
-            'CDE Service: '
-            + (
-                'Existing and running'
-                if ecs_cde_service_existing | default(false) | bool
-                else 'Created successfully'
-              )
-            + ' (name=' + (ecs_cde_service_name_effective | default('unknown'))
-            + ', status='
-            + ((ecs_cde_service.service | default({})).status | default('unknown'))
-            + '); Virtual Cluster: '
-            + (ecs_cde_virtual_cluster_status | default('unknown'))
-            + ' (name=' + (ecs_cde_virtual_cluster_name_effective | default('unknown'))
-            + ', status=' + ((ecs_cde_virtual_cluster | default({})).status | default('unknown'))
-            + ', native_ui=' + (ecs_cde_virtual_cluster_ui_url | default('not returned', true))
-            + ')'
-          ) -%}
-          {%- endif -%}
-          {%- if 'cai' in (ecs_data_services_install_names | default([])) -%}
-          {%- set _ = lines.append(
-            'CAI Workbench: '
-            + (
-                'Existing and running'
-                if ecs_cai_existing_workspace | default({}) | length > 0
-                else 'Created successfully'
-              )
-            + ' (name=' + (ecs_cai_workspace_name_effective | default('unknown'))
-            + ', endpoint=' + (ecs_cai_workspace_url | default('unknown'))
-            + ', status='
-            + ((ecs_cai_workspace.workspace | default({})).instanceStatus | default('unknown'))
-            + ')'
-          ) -%}
-          {%- endif -%}
-          {%- if 'model_registry' in (ecs_data_services_install_names | default([])) -%}
-          {%- set _ = lines.append(
-            'Model Registry: ' + (ecs_model_registry_status | default('unknown'))
-            + ' (name=' + (ecs_model_registry_service_name | default('unknown')) + ')'
-          ) -%}
-          {%- endif -%}
-          {{ lines | join('\n') }}
+          CDW failed after its independent provisioning attempt. See the
+          preceding CDW STATUS and Kubernetes diagnostics.
+      when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
+    - name: Require successful CDE provisioning after all attempts
+      ansible.builtin.assert:
+        that:
+          - ecs_cde_service_succeeded | default(false) | bool
+          - ecs_cde_virtual_cluster_succeeded | default(false) | bool
+        fail_msg: >-
+          CDE failed after its independent provisioning attempt. See the
+          preceding CDE STATUS and liftie/dex/compute/resource-pool diagnostics.
+      when: "'cde' in (ecs_data_services_install_names | default([]))"
+
+    - name: Require successful CAI provisioning after all attempts
+      ansible.builtin.assert:
+        that:
+          - ecs_cai_workspace_succeeded | default(false) | bool
+          - ecs_cai_ui_succeeded | default(false) | bool
+        fail_msg: >-
+          CAI failed after its independent provisioning attempt. See the
+          preceding CAI STATUS and workspace diagnostics.
+      when: "'cai' in (ecs_data_services_install_names | default([]))"
+
+    - name: Require successful Model Registry provisioning after all attempts
+      ansible.builtin.assert:
+        that:
+          - ecs_model_registry_succeeded | default(false) | bool
+        fail_msg: >-
+          Model Registry failed after its independent provisioning attempt.
+          See the preceding MODEL REGISTRY STATUS.
+      when: "'model_registry' in (ecs_data_services_install_names | default([]))"

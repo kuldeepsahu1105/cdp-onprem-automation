@@ -153,9 +153,12 @@ temporary V2 access key for that human, and signs only the
 `--creator-crn` for API consistency. The temporary credential file and access
 key are deleted in an Ansible `always` block after the request.
 Each CDW, CDE, and CAI attempt has an independent failure boundary. A failed
-service is recorded without preventing the next selected service from running,
-and the final aggregate assertion fails only after all selected services and
-successful-service follow-up work have been attempted. Model Registry remains
+service is recorded without preventing the next selected service from running.
+Immediately after each selected service finishes, playbook 34 prints a separate
+`CDW STATUS`, `CDE STATUS`, `CAI STATUS`, or `MODEL REGISTRY STATUS` result.
+After all selected services and successful-service follow-up work have been
+attempted, separate per-service assertions enforce the final result rather than
+combining every service into one bundled failure message. Model Registry remains
 sequential because it has separate Ozone and environment prerequisites.
 `ecs_data_services_status_wait_retries` and
 `ecs_data_services_status_wait_delay` bound structured CDW/CAI polling.
@@ -164,6 +167,11 @@ that use module-owned waits. The async settings remain only for CDE on this
 integration branch. Failed CDW provisioning also collects pod status,
 `hue-query-processor-0` description, and recent container logs from
 `warehouse-<environment>` on the ECS master.
+Failed CDE provisioning preserves the module stderr so terminal states such as
+`ClusterChartInstallationFailed` are not hidden by Ansible async-wrapper JSON
+parsing errors. It also records the current `de list-services` /
+`describe-service` payload and recent logs from the `cpx-liftie`, `dex-cp`,
+Resource Pool Manager, and Compute API deployments in the `cdp` namespace.
 
 ## Prerequisites
 
@@ -391,7 +399,10 @@ all inventory-derived direct candidates fail; fallback is not used when
 the identical A-record checks.
 
 Terminal failed CDE services are reported from `de list-services` without
-calling disable or delete. The CDE rescue boundary records the diagnostics,
+calling disable or delete. The CDE rescue boundary records the service and
+control-plane diagnostics, later selected services still run, and the final
+CDE assertion reports only the CDE failure after the separate service status
+lines have already been printed.
 
 When CDW is selected, the playbook also provisions one Data Visualization.
 `ecs_cdw_dataviz_name` controls its base name; `ecs_cdw_dataviz_user_groups`
@@ -400,8 +411,34 @@ Private-cloud deployments may set `ecs_cdw_dataviz_resource_template` and
 `ecs_cdw_dataviz_resource_pool`. Running resources are reused, transitional
 resources are waited, and Failed, Error, or Deleting names are preserved while
 the next deterministic bounded name is selected.
-later selected services still run, and the final aggregate assertion reports
-the failure.
+
+For manual triage on the ECS master, use the same read-only checks:
+
+```bash
+export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+kubectl -n cdp get pods -o wide
+kubectl -n cdp logs deployment/cdp-release-cpx-liftie \
+  --all-containers=true --since=20m --tail=300
+kubectl -n cdp logs deployment/cdp-release-dex-cp \
+  --all-containers=true --since=20m --tail=300
+kubectl -n cdp logs deployment/cdp-release-dex-cp-cadence-worker \
+  --all-containers=true --since=20m --tail=300
+kubectl -n cdp logs deployment/cdp-release-thunderhead-compute-api \
+  --all-containers=true --since=20m --tail=300
+kubectl -n cdp logs deployment/cdp-release-resource-pool-manager \
+  --all-containers=true --since=20m --tail=300
+```
+
+Filter those logs by the base-cluster name, CDE service name, cluster ID, or
+`remote data context`. For an older incident, replace `--since=20m` with an
+exact UTC start such as `--since-time=2026-11-01T17:50:00Z`; local timestamps
+must be converted before querying Kubernetes logs. The warning that
+observability could not be enabled
+because Telemetry Publisher is unavailable is not treated as the chart failure:
+Cloudera explicitly permits enabling observability later. Telemetry Publisher
+configuration requires its own external Altus/WXM credentials; it is not
+silently fabricated by playbook 34. The fatal evidence is the accompanying
+remote-data-context error used while generating dex-base chart overrides.
 
 Before launching CDW, the playbook queries the control plane. Running and
 in-progress clusters are adopted and monitored through `dw_cluster_info`

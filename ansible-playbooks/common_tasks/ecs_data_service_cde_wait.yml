@@ -18,7 +18,26 @@
   rescue:
     - name: CDE | Record Data Engineering provisioning failure
       ansible.builtin.set_fact:
-        ecs_cde_service: "{{ ansible_failed_result }}"
+        ecs_cde_service: >-
+          {{
+            ansible_failed_result
+            | combine(
+                {
+                  'msg': (
+                    ansible_failed_result.stderr
+                    | default(
+                        ansible_failed_result.msg
+                        | default(ansible_failed_result | to_json),
+                        true
+                      )
+                    | trim
+                  )
+                }
+              )
+          }}
+
+    - name: CDE | Collect control-plane diagnostics after provisioning failure
+      ansible.builtin.include_tasks: ecs_data_service_cde_diagnostics.yml
 
 - name: CDE | Complete Data Engineering provisioning
   ansible.builtin.include_tasks: ecs_data_service_cde.yml

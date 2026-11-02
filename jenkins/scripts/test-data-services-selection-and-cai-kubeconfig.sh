@@ -113,6 +113,9 @@ assert group_vars["ecs_cde_cpu_requests"] == "300"
 assert group_vars["ecs_cde_memory_requests"] == "1000Gi"
 assert group_vars["ecs_cde_resource_pool"] == "root.{{ ecs_cdp_environment_name }}.cde"
 assert group_vars["ecs_cde_creator_crn"] == ""
+assert group_vars["ecs_cde_control_plane_namespace"] == "cdp"
+assert group_vars["ecs_cde_diagnostics_log_since"] == "20m"
+assert group_vars["ecs_cde_diagnostics_log_tail"] == 300
 assert group_vars["ecs_cde_service_name_attempts"] == 10
 assert group_vars["ecs_cde_service_name_max_length"] == 40
 assert "ClusterCreationCompleted" in group_vars["ecs_cde_service_green_statuses"]
@@ -344,14 +347,33 @@ cai_followup_text = (
 assert "'effective_name': ecs_cai_workspace_name_effective" in cai_followup_text
 assert "'status': (" in cai_followup_text
 assert "ecs_model_registry_status" in playbook_text
-assert "Report Data Services provisioning result after all attempts" in playbook_text
-assert "Report failed Data Services provisioning after all attempts" not in playbook_text
-assert "success_msg:" in playbook_text
-assert "CAI Workbench:" in playbook_text
-assert "Model Registry:" in playbook_text
-assert "CDE Service:" in playbook_text
-assert "Virtual Cluster:" in playbook_text
-assert "DataViz status=" in playbook_text
+assert "Report Data Services provisioning result after all attempts" not in playbook_text
+for service in ("CDW", "CDE", "CAI", "Model Registry"):
+    assert f"Report {service} completion status" in playbook_text
+    assert f"Require successful {service} provisioning after all attempts" in playbook_text
+assert "CDW STATUS:" in playbook_text
+assert "CDE STATUS:" in playbook_text
+assert "CAI STATUS:" in playbook_text
+assert "MODEL REGISTRY STATUS:" in playbook_text
+assert "virtual_cluster_status=" in playbook_text
+assert "ui_status=" in playbook_text
+cde_wait_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cde_wait.yml"
+).read_text()
+assert "ansible_failed_result.stderr" in cde_wait_text
+assert "ecs_data_service_cde_diagnostics.yml" in cde_wait_text
+cde_diagnostics_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cde_diagnostics.yml"
+).read_text()
+for deployment_fragment in (
+    "cpx-liftie",
+    "dex-cp",
+    "resource-pool-manager",
+    "thunderhead-compute-api",
+):
+    assert deployment_fragment in cde_diagnostics_text
+assert "describe-service" in cde_diagnostics_text
+assert "--since={{ ecs_cde_diagnostics_log_since }}" in cde_diagnostics_text
 assert "Existing (healthy)" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
 ).read_text()
