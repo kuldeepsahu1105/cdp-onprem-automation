@@ -461,3 +461,7 @@
         Namespace events:
         {{ ecs_cdw_failed_events.stdout
            | default(ecs_cdw_failed_events.stderr, true) }}
+
+- name: CDW diagnostics | Record diagnostics completion
+  ansible.builtin.set_fact:
+    ecs_cdw_diagnostics_collected: true

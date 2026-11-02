@@ -111,6 +111,10 @@
           finished: true
           msg: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_json) }}"
 
+    - name: Collect CDW diagnostics after uncaught failure
+      ansible.builtin.include_tasks: ecs_data_service_cdw_diagnostics.yml
+      when: not (ecs_cdw_diagnostics_collected | default(false) | bool)
+
 - name: Provision CDE without blocking subsequent services
   when: "'cde' in (ecs_data_services_install_names | default([]))"
   block:
