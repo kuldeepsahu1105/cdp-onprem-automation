@@ -1,36 +1,58 @@
 ---
-- name: CDW | Define Virtual Warehouse workload namespaces
+- name: CDW | Define Virtual Warehouse namespace suffix pattern
   ansible.builtin.set_fact:
-    ecs_cdw_vw_workload_namespaces: >-
+    ecs_cdw_vw_namespace_suffix_pattern: >-
       {{
-        ecs_cdw_desired_virtual_warehouses
-        | map(attribute='name')
-        | map('regex_replace', '^(.*)$', ecs_cdw_vw_namespace_prefix ~ '\1')
-        | list
+        '-('
+        ~ (
+            ecs_cdw_desired_virtual_warehouses
+            | map(attribute='name')
+            | map('regex_escape')
+            | join('|')
+          )
+        ~ ')$'
       }}
 
-- name: CDW | Wait for Virtual Warehouse workload namespaces
+- name: CDW | Discover Virtual Warehouse workload namespaces
   ansible.builtin.command:
     argv:
       - "{{ ecs_coredns_kubectl_path }}"
       - --kubeconfig
       - "{{ ecs_coredns_kubeconfig_path }}"
       - get
-      - namespace
-      - "{{ item }}"
-      - --output=name
-  register: ecs_cdw_vw_namespace_results
+      - namespaces
+      - --output=jsonpath={.items[*].metadata.name}
+  register: ecs_cdw_vw_namespace_discovery
   changed_when: false
   failed_when: false
-  until: ecs_cdw_vw_namespace_results.rc | default(1) | int == 0
+  until:
+    - ecs_cdw_vw_namespace_discovery.rc | default(1) | int == 0
+    - >-
+      (
+        ecs_cdw_vw_namespace_discovery.stdout
+        | default('')
+        | split
+        | select('search', ecs_cdw_vw_namespace_suffix_pattern)
+        | list
+        | length
+      )
+      == ecs_cdw_desired_virtual_warehouses | length
   retries: "{{ ecs_cdw_workload_reconcile_wait_retries | int }}"
   delay: "{{ ecs_cdw_workload_reconcile_wait_delay | int }}"
-  loop: "{{ ecs_cdw_vw_workload_namespaces }}"
-  loop_control:
-    label: "{{ item }}"
   become: true
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
+
+- name: CDW | Select discovered Virtual Warehouse workload namespaces
+  ansible.builtin.set_fact:
+    ecs_cdw_vw_workload_namespaces: >-
+      {{
+        ecs_cdw_vw_namespace_discovery.stdout
+        | split
+        | select('search', ecs_cdw_vw_namespace_suffix_pattern)
+        | list
+        | sort
+      }}
 
 - name: CDW | Wait for Virtual Warehouse workload controllers
   ansible.builtin.command:

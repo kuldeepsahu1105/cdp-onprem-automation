@@ -159,7 +159,6 @@ assert (
 assert "CDW Virtual Warehouses to finish provisioning" in cdw_followup
 assert group_vars["ecs_cdw_vw_tshirt_size"] == "xsmall"
 assert group_vars["ecs_cdw_vw_resource_pool"] == "root.{{ ecs_cdp_environment_name }}.cdw"
-assert group_vars["ecs_cdw_vw_namespace_prefix"] == "compute-"
 assert group_vars["ecs_cdw_vw_krb5ccname_prefix"] == "FILE:/tmp/krb5cc_"
 
 cdw_vw_ccaches = (
@@ -167,6 +166,9 @@ cdw_vw_ccaches = (
     / "ansible-playbooks/roles/ecs/tasks/"
     "ecs_data_service_cdw_reconcile_vw_ccaches.yml"
 ).read_text()
+assert "CDW | Discover Virtual Warehouse workload namespaces" in cdw_vw_ccaches
+assert "ecs_cdw_vw_namespace_suffix_pattern" in cdw_vw_ccaches
+assert "--output=jsonpath={.items[*].metadata.name}" in cdw_vw_ccaches
 assert "statefulsets,deployments" in cdw_vw_ccaches
 assert "/etc/security/keytabs" in cdw_vw_ccaches
 assert "KRB5CCNAME={{ item.desired }}" in cdw_vw_ccaches

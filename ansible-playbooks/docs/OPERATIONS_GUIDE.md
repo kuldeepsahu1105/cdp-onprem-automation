@@ -431,7 +431,8 @@ warehouses with the configured names are retained. Override
 `ecs_cdw_vw_tshirt_size`, or `ecs_cdw_vw_resource_pool` only when the target
 CDW deployment uses different established values. In Kerberized deployments,
 playbook 34 also discovers keytab-bearing containers in the corresponding
-`compute-*` namespaces and sets a container-specific
+generated namespaces (`compute-hive-vw`, `trino-trino-vw`, and equivalent
+configured-name suffixes) and sets a container-specific
 `KRB5CCNAME=FILE:/tmp/krb5cc_*`. Controller templates are patched only when
 different, and StatefulSet pods are recreated only after an actual template
 change, avoiding KCM-dependent `kinit` failures without disturbing healthy

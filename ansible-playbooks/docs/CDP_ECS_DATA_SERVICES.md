@@ -451,12 +451,14 @@ private-cloud API rejects an inherited parent pool that is not the catalog's
 pool or one of its children. Existing warehouses are never deleted or
 recreated by this reconciliation. Before waiting for the warehouses to become
 healthy, automation discovers StatefulSet and Deployment containers in their
-`compute-*` namespaces that mount `/etc/security/keytabs`. It idempotently
-sets a container-specific `FILE:/tmp/krb5cc_*` cache only when the controller
-template differs, recreates StatefulSet pods only after such a change, waits
-for changed controller rollouts, and verifies the environment. This prevents
-HiveServer2, Impala, and Trino keytab login from failing when no KCM daemon is
-present.
+generated workload namespaces (for example, `compute-hive-vw` and
+`trino-trino-vw`) that mount `/etc/security/keytabs`. Namespace discovery
+matches the configured warehouse-name suffix rather than assuming one
+service-specific prefix. It idempotently sets a container-specific
+`FILE:/tmp/krb5cc_*` cache only when the controller template differs,
+recreates StatefulSet pods only after such a change, waits for changed
+controller rollouts, and verifies the environment. This prevents HiveServer2,
+Impala, and Trino keytab login from failing when no KCM daemon is present.
 
 For a confirmed disposable failed activation, playbook 34 supports an
 explicit CDW-only force reset when `ecs_cdw_force_reset_cluster_id` and
