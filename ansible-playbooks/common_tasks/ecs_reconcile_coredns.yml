@@ -677,7 +677,7 @@
         root = re.compile(
             r"(?ms)^(?P<header>\.:53\s*\{\n)"
             r"(?P<body>.*?)"
-            r"(?P<footer>^\})"
+            r"(?P<footer>^[ \t]*\})"
         )
         match = root.search(corefile)
         if match is None:

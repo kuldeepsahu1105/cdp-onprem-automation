@@ -64,27 +64,27 @@ node_local_corefile = """.:53 {
     bind 169.254.25.10 172.43.0.10
     forward . __PILLAR__UPSTREAM__SERVERS__ {
         force_tcp
+        }
     }
-}
 cluster.local:53 {
     errors
     cache {
         success 9984 30
         denial 9984 5
-    }
+        }
     bind 169.254.25.10 172.43.0.10
     forward . __PILLAR__CLUSTER__DNS__ {
         force_tcp
+        }
     }
-}
 in-addr.arpa:53 {
     bind 169.254.25.10 172.43.0.10
     forward . __PILLAR__CLUSTER__DNS__
-}
+    }
 ip6.arpa:53 {
     bind 169.254.25.10 172.43.0.10
     forward . __PILLAR__CLUSTER__DNS__
-}
+    }
 """
 node_local_result = subprocess.run(
     [
@@ -108,6 +108,22 @@ assert (
     node_local_result.stdout.split("cluster.local:53", 1)[1]
     == node_local_corefile.split("cluster.local:53", 1)[1]
 )
+node_local_idempotent_result = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        node_local_script,
+        node_local_result.stdout,
+        "10.0.0.10 10.0.0.11",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+assert (
+    node_local_idempotent_result.returncode == 0
+), node_local_idempotent_result.stderr
+assert node_local_idempotent_result.stdout == node_local_result.stdout
 
 node_local_restart = coredns_tasks_by_name[
     "Restart ECS node-local DNS after configuration change"
