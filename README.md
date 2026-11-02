@@ -75,8 +75,8 @@ The CDP **base cluster** is deployed by Ansible playbook `31_setup_base_cluster.
 
 | Group | `.tfvars.env` variables | Default | Purpose |
 |---|---|---|---|
-| `pvcbase_master` | `PVCBASE_MASTER_COUNT`, `PVCBASE_MASTER_INSTANCE_TYPE`, `PVCBASE_MASTER_VOLUME_SIZE` | 1 × m5.4xlarge, 400 GB | Base cluster master |
-| `pvcbase_worker` | `PVCBASE_WORKER_COUNT`, `PVCBASE_WORKER_INSTANCE_TYPE`, `PVCBASE_WORKER_VOLUME_SIZE` | 3 × m5.4xlarge, 400 GB | Base cluster workers |
+| `pvcbase_master` | `PVCBASE_MASTER_COUNT`, `PVCBASE_MASTER_INSTANCE_TYPE`, `PVCBASE_MASTER_VOLUME_SIZE` | 1 × m6a.4xlarge, 400 GB | Base cluster master |
+| `pvcbase_worker` | `PVCBASE_WORKER_COUNT`, `PVCBASE_WORKER_INSTANCE_TYPE`, `PVCBASE_WORKER_VOLUME_SIZE` | 3 × m6a.4xlarge, 400 GB | Base cluster workers |
 
 ### Ansible inventory groups
 
@@ -155,8 +155,8 @@ MONITORING_STACK_ENABLED=true DEPLOY_PHASE=6 ./pvc_setup.sh
 
 | Group | `.tfvars.env` variables | Default | Purpose |
 |---|---|---|---|
-| `pvcecs_master` | `PVCECS_MASTER_COUNT`, `PVCECS_MASTER_INSTANCE_TYPE`, `PVCECS_MASTER_VOLUME_SIZE` | 1 × m5.8xlarge, 1300 GB | ECS control-plane node |
-| `pvcecs_worker` | `PVCECS_WORKER_COUNT`, `PVCECS_WORKER_INSTANCE_TYPE`, `PVCECS_WORKER_VOLUME_SIZE` | 7 × r5a.4xlarge, 1300 GB | ECS worker nodes |
+| `pvcecs_master` | `PVCECS_MASTER_COUNT`, `PVCECS_MASTER_INSTANCE_TYPE`, `PVCECS_MASTER_VOLUME_SIZE` | 1 × m6a.8xlarge, 1300 GB | ECS control-plane node |
+| `pvcecs_worker` | `PVCECS_WORKER_COUNT`, `PVCECS_WORKER_INSTANCE_TYPE`, `PVCECS_WORKER_VOLUME_SIZE` | 7 × m6a.8xlarge, 1300 GB | ECS worker nodes (32 vCPU, 128 GiB each) |
 
 ECS nodes need larger root volumes (default 1300 GB) for Docker, Longhorn, and local storage.
 
