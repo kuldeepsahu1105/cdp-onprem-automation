@@ -56,12 +56,22 @@ record_results = tasks_by_name[
 assert "loop" not in probe_success
 assert record_results["loop"] == "{{ ecs_data_services_dns_verification_records }}"
 
-freeipa_record = tasks_by_name[
-    "Add FreeIPA to required Data Services DNS verification records"
+freeipa_task_names = [
+    "Require FreeIPA inventory for Data Services DNS verification",
+    "Resolve FreeIPA inventory host for DNS verification",
+    "Add FreeIPA to required Data Services DNS verification records",
 ]
-freeipa_when = "\n".join(freeipa_record["when"])
-assert "ecs_ldap_sync_effective" in freeipa_when
-assert "ecs_ldap_admin_user_effective" in freeipa_when
+for task_name in freeipa_task_names:
+    assert tasks_by_name[task_name]["when"] == [
+        "identity_provider_effective | default('freeipa') == 'freeipa'"
+    ]
+
+ad_record = tasks_by_name[
+    "Add Active Directory LDAP to required Data Services DNS verification records"
+]
+assert ad_record["when"] == [
+    "identity_provider_effective | default('') == 'ad'"
+]
 
 start = next(
     task for task in tasks
