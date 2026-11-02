@@ -302,7 +302,7 @@
   ansible.builtin.set_fact:
     cms_servicemonitor_existing_java_opts: >-
       {{
-        cms_servicemonitor_existing_java_opts_item.value
+        cms_servicemonitor_existing_java_opts_item.get('value', '')
         | default('', true)
         | trim
       }}
@@ -321,20 +321,26 @@
     cms_servicemonitor_java_opts_redacted: >-
       {{
         (
-          cms_servicemonitor_existing_java_opts
-          | regex_search('(?i)^\\s*(<*redacted>*|\\*+)\\s*$')
+          cms_servicemonitor_existing_java_opts | lower | trim
         )
-        is not none
+        in ['redacted', '<redacted>']
+        or (
+          cms_servicemonitor_existing_java_opts | trim | length > 0
+          and (
+            cms_servicemonitor_existing_java_opts
+            | trim
+            | replace('*', '')
+            | length
+          ) == 0
+        )
         or (
           cms_servicemonitor_existing_java_opts | length == 0
           and (
-            cms_servicemonitor_existing_java_opts_item.sensitive
-            | default(false)
+            cms_servicemonitor_existing_java_opts_item.get('sensitive', false)
             | bool
           )
         )
       }}
-  no_log: true
   when: cms_autotls_trust_required | default(false) | bool
 
 - name: CMS — evaluate visible Service Monitor Auto-TLS JVM options
@@ -376,7 +382,6 @@
           cms_servicemonitor_existing_java_opts
           is search('-Djavax\\.net\\.ssl\\.trustStoreType=JKS')
         }}
-  no_log: true
   when: cms_autotls_trust_required | default(false) | bool
 
 - name: CMS — detect Service Monitor Auto-TLS JVM option drift
@@ -398,7 +403,6 @@
           | bool
         )
       }}
-  no_log: true
   when: cms_autotls_trust_required | default(false) | bool
 
 - name: CMS — report Service Monitor Auto-TLS JVM option drift
