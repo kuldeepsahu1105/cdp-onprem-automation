@@ -23,6 +23,47 @@ chmod +x clone_and_run_*.sh
 
 Wrapper scripts clone this repo and handle dependencies automatically. See [READme.adoc](READme.adoc) for the full AWS/Terraform workflow, instance sizing, and configuration options.
 
+## Capacity planning and live ECS report
+
+- **Static sizing report:** [`ansible-playbooks/docs/CAPACITY_REQUIREMENTS.md`](ansible-playbooks/docs/CAPACITY_REQUIREMENTS.md)
+- **Live read-only reporter:** [`ansible-playbooks/report_ecs_capacity.sh`](ansible-playbooks/report_ecs_capacity.sh)
+
+The static report documents the configured CM, PostgreSQL, FreeIPA, Base,
+ECS, Hive, Impala, Trino, CDE, CAI, and Model Registry requirements. The
+script reads the current Kubernetes cluster and generates Markdown containing
+node allocatable capacity, namespace requests, Pending workloads, detailed
+container requests/limits, PVCs, and YuniKorn queues.
+
+Run it from a repository checkout on the ECS master or any host whose current
+`kubectl` context can read the cluster:
+
+```bash
+cd ansible-playbooks
+./report_ecs_capacity.sh --output /tmp/ecs-capacity.md
+
+# Limit detailed output to one or more Data Service namespaces:
+./report_ecs_capacity.sh \
+  --namespace compute-hive-vw \
+  --namespace impala-impala-vw \
+  --namespace trino-trino-vw \
+  --output /tmp/cdw-capacity.md
+```
+
+If the repository is not present on the ECS master, download the script from
+the deployment branch or a pinned commit:
+
+```bash
+REPO_REF=kuldeepsahu1105-ansible-roles-migration
+curl -fsSL \
+  "https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/${REPO_REF}/ansible-playbooks/report_ecs_capacity.sh" \
+  -o /tmp/report_ecs_capacity.sh
+chmod +x /tmp/report_ecs_capacity.sh
+/tmp/report_ecs_capacity.sh --output /tmp/ecs-capacity.md
+```
+
+The report is written only to the path passed with `--output`; view it with
+`less /tmp/ecs-capacity.md` or copy that file to your workstation.
+
 ## Configuration files
 
 Use **either** `.tfvars.env` (shell) **or** `.tfvars.yaml` (structured YAML) in your working directory:
@@ -75,6 +116,8 @@ The CDP **base cluster** is deployed by Ansible playbook `31_setup_base_cluster.
 
 | Group | `.tfvars.env` variables | Default | Purpose |
 |---|---|---|---|
+| `cldr_mngr` | `CLDR_MNGR_COUNT`, `CLDR_MNGR_INSTANCE_TYPE`, `CLDR_MNGR_VOLUME_SIZE` | 1 × m6a.4xlarge, 300 GB | Cloudera Manager, management services, and embedded PostgreSQL |
+| `ipa_server` | `IPA_SERVER_COUNT`, `IPA_SERVER_INSTANCE_TYPE`, `IPA_SERVER_VOLUME_SIZE` | 1 × m6a.large, 250 GB | FreeIPA identity, Kerberos, CA, and DNS |
 | `pvcbase_master` | `PVCBASE_MASTER_COUNT`, `PVCBASE_MASTER_INSTANCE_TYPE`, `PVCBASE_MASTER_VOLUME_SIZE` | 1 × m6a.4xlarge, 400 GB | Base cluster master |
 | `pvcbase_worker` | `PVCBASE_WORKER_COUNT`, `PVCBASE_WORKER_INSTANCE_TYPE`, `PVCBASE_WORKER_VOLUME_SIZE` | 3 × m6a.4xlarge, 400 GB | Base cluster workers |
 

@@ -70,4 +70,13 @@ grep -Fq '| query-executor-0-0-cache-volume | 1 | local-path | Pending | - |' "$
 grep -Fq 'requested resources become available' "$report"
 grep -Fq 'vcore: 33' "$report"
 
+for readme in \
+  "$repo_root/README.md" \
+  "$repo_root/README.adoc" \
+  "$repo_root/ansible-playbooks/README.md"; do
+  grep -Fq 'CAPACITY_REQUIREMENTS.md' "$readme"
+  grep -Fq 'report_ecs_capacity.sh' "$readme"
+  grep -Fq -- '--output /tmp/ecs-capacity.md' "$readme"
+done
+
 echo "ECS capacity report test passed"

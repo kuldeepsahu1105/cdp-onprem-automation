@@ -60,6 +60,22 @@ tfvars = yaml.safe_load((root / ".tfvars.yaml").read_text())
 for group, instance_type in expected.items():
     assert tfvars["instance_groups"][group]["instance_type"] == instance_type
 
+readme_md = (root / "README.md").read_text()
+readme_adoc = (root / "README.adoc").read_text()
+for group, instance_type in expected.items():
+    assert re.search(
+        rf"^\| `{re.escape(group)}` \|.*\b{re.escape(instance_type)}\b",
+        readme_md,
+        re.MULTILINE,
+    ), f"README.md: {group}"
+    assert re.search(
+        rf"^\| `{re.escape(group)}`\n\| \d+\n\| {re.escape(instance_type)}$",
+        readme_adoc,
+        re.MULTILINE,
+    ), f"README.adoc: {group}"
+
+assert tfvars["ami_id"] in readme_adoc
+
 jenkinsfile = (root / "Jenkinsfile").read_text()
 parameter_names = {
     "cldr_mngr": "CLDR_MNGR_INSTANCE_TYPE",

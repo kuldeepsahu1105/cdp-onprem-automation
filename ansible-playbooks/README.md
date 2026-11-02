@@ -47,6 +47,30 @@ For the shortest deployment sequence and cleanup path, see the runbook below.
 | [docs/OPERATIONS_GUIDE.md](docs/OPERATIONS_GUIDE.md) | **Detailed operations** — controller/network scenarios, FreeIPA/AD, portal verification, recovery, and troubleshooting |
 | [docs/RUN_ORDER.md](docs/RUN_ORDER.md) | **Run order** — Jenkins / `pvc_setup.sh` sequence (unique numbers 10–35) |
 | [docs/REFERENCE.md](docs/REFERENCE.md) | **Detailed reference** — every playbook, variable, inventory group, DNS behavior, repo modes, cleanup toggles |
+| [docs/CAPACITY_REQUIREMENTS.md](docs/CAPACITY_REQUIREMENTS.md) | **Capacity report** — configured infrastructure and per-component Data Service sizing |
+
+## ECS capacity report
+
+[`report_ecs_capacity.sh`](report_ecs_capacity.sh) is a standalone, read-only
+reporter for any ECS master or workstation whose current `kubectl` context can
+read the cluster. It requires `kubectl` and `jq`.
+
+```bash
+cd ansible-playbooks
+./report_ecs_capacity.sh --output /tmp/ecs-capacity.md
+
+# Include detailed data only for selected warehouse namespaces.
+./report_ecs_capacity.sh \
+  --namespace compute-hive-vw \
+  --namespace impala-impala-vw \
+  --namespace trino-trino-vw \
+  --output /tmp/cdw-capacity.md
+```
+
+The generated file is not stored automatically in the repository. View the
+selected output path with `less`, copy it to a workstation, or attach it to an
+operational record. For static requirements and command details, use
+[`docs/CAPACITY_REQUIREMENTS.md`](docs/CAPACITY_REQUIREMENTS.md).
 
 ## OS and repository support
 
