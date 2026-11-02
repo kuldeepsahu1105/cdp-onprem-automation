@@ -52,6 +52,10 @@ cdw_preflight = (
     root
     / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_preflight.yml"
 ).read_text()
+cdw_diagnostics = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_diagnostics.yml"
+).read_text()
 for forbidden in (
     "ipa-getkeytab",
     " kinit",
@@ -66,6 +70,16 @@ assert "/cdw-product-owned-v2-" in cdw_preflight
 assert "identity_provider_effective | default('freeipa') == 'freeipa'" in cdw_preflight
 assert "ipa_server_in_inventory | default(false) | bool" in cdw_preflight
 assert "ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0" in cdw_preflight
+assert "CDW diagnostics | Describe control-plane environment" in cdw_diagnostics
+assert "/cm/kerberosInfo" in cdw_diagnostics
+assert "hadoop_security_authentication" in cdw_diagnostics
+assert "ipa host-show" not in cdw_diagnostics
+assert "\n      - host-show\n" in cdw_diagnostics
+assert "\n      - service-show\n" in cdw_diagnostics
+assert "Likely failing boundary=" in cdw_diagnostics
+assert "DWX-to-CM/KDC account-manager principal creation" in cdw_diagnostics
+assert "state: present" not in cdw_diagnostics
+assert "ipa-getkeytab" not in cdw_diagnostics
 
 ozone_credentials = (
     root
