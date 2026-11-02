@@ -23,6 +23,8 @@ for service in ("cdw", "cde", "cai"):
 
 assert "common_tasks/ecs_data_service_cdw_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cdw_preflight.yml" in playbook_text
+assert "Collect CDW diagnostics after uncaught failure" in playbook_text
+assert "not (ecs_cdw_diagnostics_collected | default(false) | bool)" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cde_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cai_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_model_registry.yml" in playbook_text
@@ -78,6 +80,21 @@ assert (
     portal_refresh_task["rescue"][0]["name"]
     == "Report optional deployment portal route refresh failure"
 )
+cdw_diagnostics = (
+    root
+    / "ansible-playbooks/common_tasks/ecs_data_service_cdw_diagnostics.yml"
+).read_text()
+assert "CDW diagnostics | Describe control-plane environment" in cdw_diagnostics
+assert "/cm/kerberosInfo" in cdw_diagnostics
+assert "hadoop_security_authentication" in cdw_diagnostics
+assert "ipa host-show" not in cdw_diagnostics
+assert "\n      - host-show\n" in cdw_diagnostics
+assert "\n      - service-show\n" in cdw_diagnostics
+assert "Likely failing boundary=" in cdw_diagnostics
+assert "DWX-to-CM/KDC account-manager principal creation" in cdw_diagnostics
+assert "ecs_cdw_diagnostics_collected: true" in cdw_diagnostics
+assert "state: present" not in cdw_diagnostics
+assert "ipa-getkeytab" not in cdw_diagnostics
 playbook_tasks = yaml.safe_load(playbook.read_text())[1]["tasks"]
 catalog_dir_task = next(
     task

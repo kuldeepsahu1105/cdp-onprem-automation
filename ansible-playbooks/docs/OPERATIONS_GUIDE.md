@@ -386,6 +386,17 @@ cluster exists. It is also skipped for Active Directory or when no FreeIPA
 server exists in inventory. After the migration, CDW exclusively owns
 principal and keytab creation.
 
+On a failed CDW activation, playbook 34 now emits a non-mutating boundary
+report. It includes the control-plane environment identity and binding fields
+returned by the installed CLI, CM `kerberosInfo`, base-cluster HDFS
+authentication, expected FreeIPA host/Hive principal presence, recent CM
+Kerberos log matches, and warehouse namespace discovery. Use the reported
+`Likely failing boundary` before changing any principal. In particular,
+`DWX-to-CM/KDC account-manager principal creation` means CM/base Kerberos
+metadata is healthy but the product flow did not leave both expected
+principals; re-import CM account-manager credentials and inspect CM/DWX logs
+rather than creating a keytab manually.
+
 ---
 
 ## Scenario A — AWS deployment with FreeIPA

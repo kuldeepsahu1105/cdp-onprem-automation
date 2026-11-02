@@ -535,6 +535,16 @@ automation continues structured discovery and accepts the recovered cluster
 when the backend received the request. An already-exists response follows the
 same adoption path.
 
+When CDW activation fails, the failure diagnostics are intentionally
+non-mutating. They describe the ECS environment, read CM `kerberosInfo`, verify
+the base cluster HDFS authentication mode, inspect the expected FreeIPA host
+and Hive service principals, collect recent CM Kerberos errors, and list
+matching warehouse namespaces. The summary classifies the first observable
+failure boundary as environment binding, CM/base-cluster Kerberos, FreeIPA
+administrator/KDC access, DWX-to-CM/KDC principal creation, or the subsequent
+principal/keytab handoff. These checks never create, retrieve, rotate, or
+delete a principal or keytab.
+
 `ecs_data_services_module_wait_timeout` bounds cleanup calls that retain
 module-owned waits. `ecs_data_services_status_wait_retries` and
 `ecs_data_services_status_wait_delay` bound CDW/CAI lifecycle polling. The
