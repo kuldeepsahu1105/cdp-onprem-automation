@@ -624,6 +624,7 @@ service_probe_text = (
 ).read_text()
 assert "COREDNS_SERVICE_AND_ENDPOINTS_ALL_RECORDS_OK" in service_probe_text
 assert "socket.getaddrinfo" in service_probe_text
+assert 'socket.getaddrinfo(\n                            fqdn.rstrip(".") + ".",' in service_probe_text
 assert "DNS_ENDPOINT_OK" in service_probe_text
 assert "DNS_ENDPOINT_FAILED" in service_probe_text
 assert "ecs_coredns_service_probe_endpoint_ips" in service_probe_text
