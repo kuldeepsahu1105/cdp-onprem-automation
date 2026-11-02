@@ -24,6 +24,7 @@ license.txt
 **/logs/*
 !ansible-playbooks/logs/.gitkeep
 ansible-playbooks/jenkins_override.yml
+ansible-playbooks/ecs-data-services-catalog.yml
 
 # Jenkins pipeline runtime artifacts (keep directory placeholder)
 jenkins/artifacts/*

@@ -200,16 +200,18 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     string(name: 'AWS_REGION', defaultValue: 'ap-southeast-1', description: 'AWS region override (e.g. ap-southeast-1)')
     string(name: 'AMI_ID', defaultValue: 'ami-030a276b398df7eb7', description: 'AMI override for all instance groups in ap-southeast-1 (empty = use tfvars)')
     string(name: 'CLDR_MNGR_COUNT', defaultValue: '1', description: 'CM host count override (positive integer)')
-    string(name: 'CLDR_MNGR_INSTANCE_TYPE', defaultValue: 'm5.4xlarge', description: 'CM instance type override (e.g. m5.4xlarge)')
+    string(name: 'CLDR_MNGR_INSTANCE_TYPE', defaultValue: 'm6a.4xlarge', description: 'CM instance type override (16 vCPU, 64 GiB)')
     string(name: 'CLDR_MNGR_VOLUME_SIZE', defaultValue: '300', description: 'CM root volume GB override (positive integer)')
     string(name: 'IPA_SERVER_COUNT', defaultValue: '1', description: 'FreeIPA server count override')
-    string(name: 'IPA_SERVER_INSTANCE_TYPE', defaultValue: 'm5.xlarge', description: 'FreeIPA instance type override')
+    string(name: 'IPA_SERVER_INSTANCE_TYPE', defaultValue: 'm6a.large', description: 'FreeIPA instance type override (2 vCPU, 8 GiB)')
     string(name: 'PVCBASE_MASTER_COUNT', defaultValue: '1', description: 'CDH base master count override')
+    string(name: 'PVCBASE_MASTER_INSTANCE_TYPE', defaultValue: 'm6a.4xlarge', description: 'CDH base master instance type override (16 vCPU, 64 GiB)')
     string(name: 'PVCBASE_WORKER_COUNT', defaultValue: '3', description: 'CDH base worker count override')
-    string(name: 'PVCBASE_WORKER_INSTANCE_TYPE', defaultValue: 'm5.4xlarge', description: 'CDH base worker instance type override')
+    string(name: 'PVCBASE_WORKER_INSTANCE_TYPE', defaultValue: 'm6a.4xlarge', description: 'CDH base worker instance type override (16 vCPU, 64 GiB)')
     string(name: 'PVCECS_MASTER_COUNT', defaultValue: '1', description: 'ECS master count override')
+    string(name: 'PVCECS_MASTER_INSTANCE_TYPE', defaultValue: 'm6a.8xlarge', description: 'ECS master instance type override (32 vCPU, 128 GiB)')
     string(name: 'PVCECS_WORKER_COUNT', defaultValue: '7', description: 'ECS worker count override')
-    string(name: 'PVCECS_WORKER_INSTANCE_TYPE', defaultValue: 'r5a.4xlarge', description: 'ECS worker instance type override')
+    string(name: 'PVCECS_WORKER_INSTANCE_TYPE', defaultValue: 'm6a.8xlarge', description: 'ECS worker instance type override (32 vCPU, 128 GiB)')
     string(name: 'TFVARS_FILE', defaultValue: '.tfvars.yaml', description: 'Config file path relative to repo root (empty = auto-detect)')
     string(
       name: 'EXECUTION_BRANCH',
@@ -335,9 +337,11 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     JENKINS_IPA_SERVER_COUNT = "${params.IPA_SERVER_COUNT?.trim() ?: ''}"
     JENKINS_IPA_SERVER_INSTANCE_TYPE = "${params.IPA_SERVER_INSTANCE_TYPE?.trim() ?: ''}"
     JENKINS_PVCBASE_MASTER_COUNT = "${params.PVCBASE_MASTER_COUNT?.trim() ?: ''}"
+    JENKINS_PVCBASE_MASTER_INSTANCE_TYPE = "${params.PVCBASE_MASTER_INSTANCE_TYPE?.trim() ?: ''}"
     JENKINS_PVCBASE_WORKER_COUNT = "${params.PVCBASE_WORKER_COUNT?.trim() ?: ''}"
     JENKINS_PVCBASE_WORKER_INSTANCE_TYPE = "${params.PVCBASE_WORKER_INSTANCE_TYPE?.trim() ?: ''}"
     JENKINS_PVCECS_MASTER_COUNT = "${params.PVCECS_MASTER_COUNT?.trim() ?: ''}"
+    JENKINS_PVCECS_MASTER_INSTANCE_TYPE = "${params.PVCECS_MASTER_INSTANCE_TYPE?.trim() ?: ''}"
     JENKINS_PVCECS_WORKER_COUNT = "${params.PVCECS_WORKER_COUNT?.trim() ?: ''}"
     JENKINS_PVCECS_WORKER_INSTANCE_TYPE = "${params.PVCECS_WORKER_INSTANCE_TYPE?.trim() ?: ''}"
     VPC_MODE = "${params.VPC_MODE}"
@@ -1300,12 +1304,13 @@ def validatePipelineInputs() {
 
   def typeParams = [
     'CLDR_MNGR_INSTANCE_TYPE', 'IPA_SERVER_INSTANCE_TYPE',
-    'PVCBASE_WORKER_INSTANCE_TYPE', 'PVCECS_WORKER_INSTANCE_TYPE',
+    'PVCBASE_MASTER_INSTANCE_TYPE', 'PVCBASE_WORKER_INSTANCE_TYPE',
+    'PVCECS_MASTER_INSTANCE_TYPE', 'PVCECS_WORKER_INSTANCE_TYPE',
   ]
   typeParams.each { name ->
     def val = params."${name}"?.trim()
     if (val && !val.matches(instanceTypeRegex)) {
-      validationFail("${name} '${val}' does not look like a valid EC2 instance type (e.g. m5.4xlarge).")
+      validationFail("${name} '${val}' does not look like a valid EC2 instance type (e.g. m6a.4xlarge).")
     }
   }
 

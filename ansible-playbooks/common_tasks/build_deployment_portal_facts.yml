@@ -305,7 +305,107 @@
   ansible.builtin.stat:
     path: "{{ ecs_data_services_catalog_cache_path }}"
   register: deployment_portal_ecs_ds_catalog_cache
+  failed_when: false
+  become: true
   when: ecs_data_services_catalog_cache_path | default('') | length > 0
+
+- name: Check legacy cached ECS data-service catalog
+  ansible.builtin.stat:
+    path: "{{ ecs_data_services_catalog_legacy_cache_path }}"
+  register: deployment_portal_ecs_ds_catalog_legacy_cache
+  failed_when: false
+  become: true
+  when:
+    - ecs_data_services_catalog_legacy_cache_path | default('') | length > 0
+    - >-
+      ecs_data_services_catalog_legacy_cache_path
+      != ecs_data_services_catalog_cache_path
+    - not (deployment_portal_ecs_ds_catalog_cache.stat.exists | default(false) | bool)
+
+- name: Resolve readable ECS data-service catalog cache
+  ansible.builtin.set_fact:
+    deployment_portal_ecs_ds_catalog_cache_effective: >-
+      {{
+        ecs_data_services_catalog_cache_path
+        if (deployment_portal_ecs_ds_catalog_cache.stat.exists | default(false) | bool)
+        else (
+          ecs_data_services_catalog_legacy_cache_path
+          if (
+            (
+              deployment_portal_ecs_ds_catalog_legacy_cache
+              | default({})
+            ).stat.exists
+            | default(false)
+            | bool
+          )
+          else ''
+        ),
+        true
+      }}
+
+- name: Read cached ECS data-service catalog with controller privileges
+  ansible.builtin.slurp:
+    src: "{{ deployment_portal_ecs_ds_catalog_cache_effective }}"
+  register: deployment_portal_ecs_ds_catalog_cache_content
+  failed_when: false
+  become: true
+  when:
+    - deployment_portal_ecs_ds_catalog_cache_effective | length > 0
+
+- name: Normalize cached ECS data-service catalog payload
+  ansible.builtin.set_fact:
+    deployment_portal_ecs_ds_catalog_payload_b64: >-
+      {{
+        deployment_portal_ecs_ds_catalog_cache_content.content
+        | default(
+            (
+              deployment_portal_ecs_ds_catalog_cache_content.result
+              | default({})
+            ).content
+            | default('', true),
+            true
+          )
+      }}
+
+- name: Report optional unreadable ECS data-service catalog
+  ansible.builtin.debug:
+    msg: >-
+      Optional ECS data-service catalog
+      {{ deployment_portal_ecs_ds_catalog_cache_effective }} returned no
+      readable content (failed={{
+      deployment_portal_ecs_ds_catalog_cache_content.failed | default(false)
+      }}, skipped={{
+      deployment_portal_ecs_ds_catalog_cache_content.skipped | default(false)
+      }}). Continuing with the in-memory/default catalog.
+  when:
+    - deployment_portal_ecs_ds_catalog_cache_effective | length > 0
+    - deployment_portal_ecs_ds_catalog_payload_b64 | default('') | length == 0
+
+- name: Decode optional ECS data-service catalog
+  when: deployment_portal_ecs_ds_catalog_payload_b64 | default('') | length > 0
+  block:
+    - name: Parse cached ECS data-service catalog
+      ansible.builtin.set_fact:
+        deployment_portal_ecs_ds_catalog_parsed: >-
+          {{
+            deployment_portal_ecs_ds_catalog_payload_b64
+            | b64decode
+            | from_yaml
+            | default({}, true)
+          }}
+  rescue:
+    - name: Report optional malformed ECS data-service catalog
+      ansible.builtin.debug:
+        msg: >-
+          Optional ECS data-service catalog
+          {{ deployment_portal_ecs_ds_catalog_cache_effective }} could not be
+          decoded as YAML: {{
+          ansible_failed_result.msg | default('unknown parse error') }}.
+          Continuing with the in-memory/default catalog.
+
+    - name: Ignore malformed optional ECS data-service catalog
+      ansible.builtin.set_fact:
+        deployment_portal_ecs_ds_catalog_parsed: {}
 
 - name: Load cached ECS data-service catalog
   ansible.builtin.set_fact:
@@ -313,14 +413,10 @@
       {{
         ecs_data_services_catalog
         | combine(
-            lookup('file', ecs_data_services_catalog_cache_path)
-            | from_yaml | default({}, true),
+            deployment_portal_ecs_ds_catalog_parsed | default({}),
             recursive=True
           )
       }}
-  when:
-    - ecs_data_services_catalog_cache_path | default('') | length > 0
-    - deployment_portal_ecs_ds_catalog_cache.stat.exists | default(false) | bool
 
 - name: Initialize ECS data service portal links
   ansible.builtin.set_fact:
@@ -328,19 +424,57 @@
 
 - name: Add ECS data service URLs to portal when configured
   ansible.builtin.set_fact:
-    deployment_portal_ecs_ds_links: "{{ deployment_portal_ecs_ds_links + [item.link] }}"
+    deployment_portal_ecs_ds_links: "{{ deployment_portal_ecs_ds_links + [link] }}"
   loop:
     - key: cdw
     - key: cde
     - key: cai
   vars:
     _cat: "{{ ecs_data_services_catalog[item.key] | default({}) }}"
-    _url: "{{ _cat.url | default('') }}"
+    _url: >-
+      {{
+        _cat.url
+        | default(
+            _cat.endpoint
+            | default(
+                _cat.instanceUrl
+                | default(
+                    _cat.domain
+                    | default(
+                        (_cat.virtual_cluster | default({})).url
+                        | default(
+                            (_cat.data_visualization | default({})).url
+                            | default(
+                                (
+                                  _cat.link.url
+                                  if (
+                                    _cat.link | default({}) is mapping
+                                    and _cat.link.url | default('') | length > 0
+                                  )
+                                  else (
+                                    _cat.link
+                                    if _cat.link | default('') is string
+                                    else ''
+                                  )
+                                ),
+                                true
+                              ),
+                            true
+                          ),
+                        true
+                      ),
+                    true
+                  ),
+                true
+              ),
+            true
+          )
+      }}
     link:
       name: "{{ _cat.name | default(item.key | upper) }}"
       url: "{{ _url }}"
       description: "{{ _cat.description | default('ECS data service') }}"
-  when: _url | length > 0
+  when: _url | default('') | string | length > 0
 
 - name: Resolve Caddy pgAdmin public URL facts
   ansible.builtin.import_tasks: resolve_caddy_service_public_urls.yml

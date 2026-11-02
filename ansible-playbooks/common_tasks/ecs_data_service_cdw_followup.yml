@@ -2,21 +2,139 @@
 - name: Initialize Data Warehouse follow-up result
   ansible.builtin.set_fact:
     ecs_cdw_catalog_succeeded: false
+    ecs_cdw_dataviz_succeeded: false
 
 - name: CDW | Complete database catalog and Virtual Warehouses
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
     - ecs_cdw_cluster_succeeded | default(false) | bool
   block:
-    - name: Wait for default database catalog
+    - name: Wait for default database catalog record
       cloudera.cloud.dw_database_catalog_info:
         cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
         verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
       environment: "{{ ecs_cdp_cli_environment }}"
       register: ecs_cdw_dbc_info
+      until: ecs_cdw_dbc_info.database_catalogs | default([]) | length > 0
+      retries: "{{ ecs_cdw_dbc_wait_retries | default(40) }}"
+      delay: "{{ ecs_cdw_dbc_wait_delay | default(30) }}"
+      failed_when: false
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+
+    - name: Set default database catalog id
+      ansible.builtin.set_fact:
+        ecs_cdw_catalog_id: >-
+          {{
+            ecs_cdw_dbc_info.database_catalogs
+            | default([])
+            | map(attribute='id')
+            | list
+            | first
+          }}
+      when: ecs_cdw_dbc_info.database_catalogs | default([]) | length > 0
+
+    - name: Read database catalog service configuration
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_data_services_cdp_cli_prefix
+            + [
+                'dw',
+                'describe-dbc-config',
+                '--cluster-id',
+                ecs_cdw_cluster.cluster.id,
+                '--dbc-id',
+                ecs_cdw_catalog_id
+              ]
+          }}
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_dbc_config
+      changed_when: false
+      until: ecs_cdw_dbc_config.rc == 0
+      retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
+      delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_catalog_id | default('') | length > 0
+        - ecs_cdw_workload_file_ccache_reconcile | default(true) | bool
+
+    - name: Check database catalog FILE credential cache configuration
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import json
+            import sys
+
+            desired = sys.argv[1]
+            payload = json.load(sys.stdin)
+            config = payload.get("config", payload)
+            blocks = (
+                config.get("commonConfigs", {})
+                .get("configBlocks", [])
+            )
+            current = ""
+            for block in blocks:
+                if block.get("id") == "env":
+                    current = (
+                        block.get("content", {})
+                        .get("keyValues", {})
+                        .get("KRB5CCNAME", "")
+                    )
+                    break
+            print(current)
+            raise SystemExit(0 if current == desired else 3)
+          - "{{ ecs_cdw_workload_krb5ccname }}"
+        stdin: "{{ ecs_cdw_dbc_config.stdout }}"
+      register: ecs_cdw_dbc_ccache_check
+      changed_when: false
+      failed_when: ecs_cdw_dbc_ccache_check.rc not in [0, 3]
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_dbc_config is defined
+        - ecs_cdw_dbc_config.rc | default(1) == 0
+
+    - name: Persist database catalog FILE credential cache through CDW API
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_data_services_cdp_cli_prefix
+            + [
+                'dw',
+                'update-dbc',
+                '--cluster-id',
+                ecs_cdw_cluster.cluster.id,
+                '--dbc-id',
+                ecs_cdw_catalog_id,
+                '--config',
+                ecs_cdw_dbc_file_ccache_config | to_json
+              ]
+          }}
+      environment: "{{ ecs_cdp_cli_environment }}"
+      changed_when: true
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_dbc_ccache_check is defined
+        - ecs_cdw_dbc_ccache_check.rc | default(0) == 3
+
+    - name: Wait for default database catalog
+      cloudera.cloud.dw_database_catalog_info:
+        cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
+        verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_dbc_running
       until:
-        - ecs_cdw_dbc_info.database_catalogs | default([]) | length > 0
-        - ecs_cdw_dbc_info.database_catalogs[0].status == 'Running'
+        - ecs_cdw_dbc_running.database_catalogs | default([]) | length > 0
+        - ecs_cdw_dbc_running.database_catalogs[0].status == 'Running'
       retries: "{{ ecs_cdw_dbc_wait_retries | default(40) }}"
       delay: "{{ ecs_cdw_dbc_wait_delay | default(30) }}"
       failed_when: false
@@ -28,54 +146,370 @@
       ansible.builtin.set_fact:
         ecs_cdw_catalog_succeeded: >-
           {{
-            ecs_cdw_dbc_info.database_catalogs | default([]) | length > 0
-            and ecs_cdw_dbc_info.database_catalogs[0].status | default('') == 'Running'
+            ecs_cdw_dbc_running.database_catalogs | default([]) | length > 0
+            and ecs_cdw_dbc_running.database_catalogs[0].status
+            | default('') == 'Running'
           }}
 
     - name: Report default database catalog failure
       ansible.builtin.debug:
         msg: >-
           CDW database catalog did not reach Running:
-          {{ ecs_cdw_dbc_info.database_catalogs | default([]) | to_json }}
+          {{ ecs_cdw_dbc_running.database_catalogs | default([]) | to_json }}
       when: not (ecs_cdw_catalog_succeeded | bool)
 
     - name: Collect CDW Kubernetes diagnostics after catalog failure
       ansible.builtin.include_tasks: ecs_data_service_cdw_diagnostics.yml
       when: not (ecs_cdw_catalog_succeeded | bool)
 
-    - name: Set default database catalog id
+    - name: Define desired smallest CDW Virtual Warehouses
       ansible.builtin.set_fact:
-        ecs_cdw_catalog_id: "{{ ecs_cdw_dbc_info.database_catalogs | map(attribute='id') | list | first }}"
+        ecs_cdw_hive_vw_name_effective: "{{ ecs_cdw_hive_vw_name }}"
+        ecs_cdw_impala_vw_name_effective: "{{ ecs_cdw_impala_vw_name }}"
+        ecs_cdw_desired_virtual_warehouses:
+          - name: "{{ ecs_cdw_hive_vw_name }}"
+            type: hive
+          - name: "{{ ecs_cdw_impala_vw_name }}"
+            type: impala
+          - name: "{{ ecs_cdw_trino_vw_name }}"
+            type: trino
       when: ecs_cdw_catalog_succeeded | bool
 
-    - name: Create Impala Virtual Warehouse
-      cloudera.cloud.dw_virtual_warehouse:
-        name: "{{ ecs_cdw_impala_vw_name }}"
+    - name: Inspect desired CDW Virtual Warehouses
+      cloudera.cloud.dw_virtual_warehouse_info:
         cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
-        catalog_id: "{{ ecs_cdw_catalog_id }}"
-        type: impala
-        tshirt_size: "{{ ecs_cdw_vw_tshirt_size }}"
+        name: "{{ item.name }}"
         endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-        wait: true
       environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_vw_existing
+      loop: "{{ ecs_cdw_desired_virtual_warehouses }}"
+      loop_control:
+        label: "{{ item.type }}={{ item.name }}"
       become: false
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
       when: ecs_cdw_catalog_succeeded | bool
 
-    - name: Create Hive Virtual Warehouse
-      cloudera.cloud.dw_virtual_warehouse:
-        name: "{{ ecs_cdw_hive_vw_name }}"
-        cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
-        catalog_id: "{{ ecs_cdw_catalog_id }}"
-        type: hive
-        tshirt_size: "{{ ecs_cdw_vw_tshirt_size }}"
-        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-        wait: true
+    - name: Validate configured Impala Virtual Warehouse settings
+      ansible.builtin.assert:
+        that:
+          - >-
+            ecs_cdw_impala_ha_settings.highAvailabilityMode
+            | default('DISABLED')
+            in ['DISABLED', 'ACTIVE_PASSIVE', 'ACTIVE_ACTIVE']
+          - ecs_cdw_impala_ha_settings.shutdownOfCoordinatorDelaySeconds | default(0) | int >= 0
+          - ecs_cdw_impala_autoscaling.minClusters | default(1) | int >= 1
+          - >-
+            ecs_cdw_impala_autoscaling.maxClusters
+            | default(ecs_cdw_impala_autoscaling.minClusters | default(1))
+            | int
+            >= ecs_cdw_impala_autoscaling.minClusters | default(1) | int
+          - ecs_cdw_impala_autoscaling.autoSuspendTimeoutSeconds | default(1) | int > 0
+          - ecs_cdw_impala_autoscaling.impalaScaleUpDelaySeconds | default(0) | int >= 0
+          - ecs_cdw_impala_autoscaling.impalaScaleDownDelaySeconds | default(0) | int >= 0
+          - ecs_cdw_impala_additional_quota.cpu | default(0) | float >= 0
+          - ecs_cdw_impala_additional_quota.memory | default(0) | int >= 0
+          - ecs_cdw_impala_options.scratchSpaceLimit | default(0) | int >= 0
+          - >-
+            not (
+              ecs_cdw_impala_options.spillToS3Uri | default('') | length > 0
+              and ecs_cdw_impala_options.scratchSpaceLimit | default(0) | int > 0
+            )
+        fail_msg: >-
+          Invalid Impala Virtual Warehouse configuration. Use a supported HA
+          mode, positive executor-group bounds and autosuspend timeout,
+          nonnegative delays/quotas, and configure only one of spillToS3Uri
+          or scratchSpaceLimit.
+      when: ecs_cdw_catalog_succeeded | bool
+
+    - name: Validate configured Trino Virtual Warehouse settings
+      ansible.builtin.assert:
+        that:
+          - ecs_cdw_trino_autoscaling.trinoMinWorkerCount | default(1) | int >= 1
+          - >-
+            ecs_cdw_trino_autoscaling.trinoMaxWorkerCount
+            | default(ecs_cdw_trino_autoscaling.trinoMinWorkerCount | default(1))
+            | int
+            >= ecs_cdw_trino_autoscaling.trinoMinWorkerCount | default(1) | int
+          - ecs_cdw_trino_autoscaling.trinoShutdownGracePeriod | default(0) | int >= 0
+          - ecs_cdw_trino_autoscaling.trinoScaleUpDelaySeconds | default(0) | int >= 0
+          - ecs_cdw_trino_autoscaling.trinoScaleDownDelaySeconds | default(0) | int >= 0
+          - ecs_cdw_trino_additional_quota.cpu | default(0) | float >= 0
+          - ecs_cdw_trino_additional_quota.memory | default(0) | int >= 0
+        fail_msg: >-
+          Invalid Trino Virtual Warehouse configuration. Use positive worker
+          bounds with max greater than or equal to min, and nonnegative grace
+          periods, scaling delays, and additional quotas.
+      when: ecs_cdw_catalog_succeeded | bool
+
+    - name: Create missing smallest CDW Virtual Warehouses in the CDW resource pool
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_data_services_cdp_cli_prefix
+            + [
+                'dw',
+                'create-vw',
+                '--cluster-id',
+                ecs_cdw_cluster.cluster.id,
+                '--dbc-id',
+                ecs_cdw_catalog_id,
+                '--vw-type',
+                item.item.type,
+                '--name',
+                item.item.name,
+                '--t-shirt-size',
+                ecs_cdw_vw_tshirt_size,
+                '--resource-pool',
+                ecs_cdw_vw_resource_pool,
+                '--config',
+                ecs_cdw_vw_file_ccache_config | to_json
+              ]
+            + (
+                [
+                  '--impala-options',
+                  ecs_cdw_impala_options | to_json
+                ]
+                if (
+                  item.item.type == 'impala'
+                  and ecs_cdw_impala_options | default({}) | length > 0
+                )
+                else []
+              )
+            + (
+                [
+                  '--impala-ha-settings',
+                  ecs_cdw_impala_ha_settings | to_json,
+                  '--autoscaling',
+                  ecs_cdw_impala_autoscaling | to_json,
+                  (
+                    '--impala-query-log'
+                    if ecs_cdw_impala_query_log | bool
+                    else '--no-impala-query-log'
+                  )
+                ]
+                if item.item.type == 'impala'
+                else []
+              )
+            + (
+                [
+                  '--additional-quota',
+                  ecs_cdw_impala_additional_quota | to_json
+                ]
+                if (
+                  item.item.type == 'impala'
+                  and (
+                    ecs_cdw_impala_additional_quota.cpu | default(0) | float > 0
+                    or ecs_cdw_impala_additional_quota.memory | default(0) | int > 0
+                  )
+                )
+                else []
+              )
+            + (
+                [
+                  '--autoscaling',
+                  ecs_cdw_trino_autoscaling | to_json
+                ]
+                if (
+                  item.item.type == 'trino'
+                  and ecs_cdw_trino_autoscaling | default({}) | length > 0
+                )
+                else []
+              )
+            + (
+                [
+                  '--additional-quota',
+                  ecs_cdw_trino_additional_quota | to_json
+                ]
+                if (
+                  item.item.type == 'trino'
+                  and (
+                    ecs_cdw_trino_additional_quota.cpu | default(0) | float > 0
+                    or ecs_cdw_trino_additional_quota.memory | default(0) | int > 0
+                  )
+                )
+                else []
+              )
+          }}
       environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_vw_create_results
+      changed_when: true
+      loop: "{{ ecs_cdw_vw_existing.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.type }}={{ item.item.name }}"
       become: false
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
+      when:
+        - ecs_cdw_catalog_succeeded | bool
+        - item.virtual_warehouses | default([]) | length == 0
+
+    - name: Wait for desired CDW Virtual Warehouse records
+      cloudera.cloud.dw_virtual_warehouse_info:
+        cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
+        name: "{{ item.name }}"
+        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_vw_records
+      until: ecs_cdw_vw_records.virtual_warehouses | default([]) | length > 0
+      retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
+      delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
+      loop: "{{ ecs_cdw_desired_virtual_warehouses }}"
+      loop_control:
+        label: "{{ item.type }}={{ item.name }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when: ecs_cdw_catalog_succeeded | bool
+
+    - name: Read Virtual Warehouse service configurations
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_data_services_cdp_cli_prefix
+            + [
+                'dw',
+                'describe-vw-config',
+                '--cluster-id',
+                ecs_cdw_cluster.cluster.id,
+                '--vw-id',
+                item.virtual_warehouses[0].id
+              ]
+          }}
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_vw_configs
+      changed_when: false
+      until: ecs_cdw_vw_configs.rc == 0
+      retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
+      delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
+      loop: "{{ ecs_cdw_vw_records.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.type }}={{ item.item.name }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_workload_file_ccache_reconcile | default(true) | bool
+        - item.virtual_warehouses | default([]) | length > 0
+
+    - name: Check Virtual Warehouse FILE credential cache configurations
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import json
+            import sys
+
+            desired = sys.argv[1]
+            payload = json.load(sys.stdin)
+            config = payload.get("config", payload)
+            blocks = (
+                config.get("commonConfigs", {})
+                .get("configBlocks", [])
+            )
+            current = ""
+            for block in blocks:
+                if block.get("id") == "env":
+                    current = (
+                        block.get("content", {})
+                        .get("keyValues", {})
+                        .get("KRB5CCNAME", "")
+                    )
+                    break
+            print(current)
+            raise SystemExit(0 if current == desired else 3)
+          - "{{ ecs_cdw_vw_krb5ccname }}"
+        stdin: "{{ item.stdout }}"
+      register: ecs_cdw_vw_ccache_checks
+      changed_when: false
+      failed_when: ecs_cdw_vw_ccache_checks.rc not in [0, 3]
+      loop: "{{ ecs_cdw_vw_configs.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.item.type }}={{ item.item.item.name }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when: item.rc | default(1) == 0
+
+    - name: Persist Virtual Warehouse FILE credential caches through CDW API
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_data_services_cdp_cli_prefix
+            + [
+                'dw',
+                'update-vw',
+                '--cluster-id',
+                ecs_cdw_cluster.cluster.id,
+                '--vw-id',
+                item.item.item.virtual_warehouses[0].id,
+                '--config',
+                ecs_cdw_vw_file_ccache_config | to_json
+              ]
+          }}
+      environment: "{{ ecs_cdp_cli_environment }}"
+      changed_when: true
+      loop: "{{ ecs_cdw_vw_ccache_checks.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.item.item.type }}={{ item.item.item.item.name }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - item.rc | default(0) == 3
+
+    - name: Wait for desired CDW Virtual Warehouses to finish provisioning
+      cloudera.cloud.dw_virtual_warehouse_info:
+        cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
+        name: "{{ item.name }}"
+        endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_vw_status
+      until:
+        - ecs_cdw_vw_status.virtual_warehouses | default([]) | length > 0
+        - >-
+          (
+            ecs_cdw_vw_status.virtual_warehouses
+            | first
+            | default({})
+          ).status
+          | default('')
+          is search('(?i)^(running|failed|error)$')
+      retries: "{{ ecs_cdw_vw_wait_retries | int }}"
+      delay: "{{ ecs_cdw_vw_wait_delay | int }}"
+      failed_when: false
+      loop: "{{ ecs_cdw_desired_virtual_warehouses }}"
+      loop_control:
+        label: "{{ item.type }}={{ item.name }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when: ecs_cdw_catalog_succeeded | bool
+
+    - name: Require all desired CDW Virtual Warehouses to be running
+      ansible.builtin.assert:
+        that:
+          - item.virtual_warehouses | default([]) | length > 0
+          - >-
+            (
+              item.virtual_warehouses
+              | first
+              | default({})
+            ).status
+            | default('')
+            == 'Running'
+        fail_msg: >-
+          CDW {{ item.item.type }} Virtual Warehouse
+          {{ item.item.name }} did not reach Running:
+          {{ item.virtual_warehouses | default([]) | to_json }}.
+      loop: "{{ ecs_cdw_vw_status.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.type }}={{ item.item.name }}"
+      when: ecs_cdw_catalog_succeeded | bool
+
+    - name: Provision automatic Data Visualization
+      ansible.builtin.include_tasks: ecs_data_service_cdw_dataviz.yml
       when: ecs_cdw_catalog_succeeded | bool
 
     - name: Register Hue ingress hostnames for Caddy
@@ -86,14 +520,14 @@
             + [
               {
                 'id': 'cdw-hive',
-                'external_hostname': 'hue-' + ecs_cdw_hive_vw_name + '.' + ecs_app_domain,
+                'external_hostname': 'hue-' + ecs_cdw_hive_vw_name_effective + '.' + ecs_app_domain,
                 'backend_host': ecs_master_fqdn,
                 'backend_port': 443,
                 'backend_scheme': 'https'
               },
               {
                 'id': 'cdw-impala',
-                'external_hostname': 'hue-' + ecs_cdw_impala_vw_name + '.' + ecs_app_domain,
+                'external_hostname': 'hue-' + ecs_cdw_impala_vw_name_effective + '.' + ecs_app_domain,
                 'backend_host': ecs_master_fqdn,
                 'backend_port': 443,
                 'backend_scheme': 'https'
@@ -110,7 +544,9 @@
               {
                 'cdw': ecs_data_services_catalog.cdw | default({}) | combine(
                   {
-                    'url': 'https://hue-' + ecs_cdw_hive_vw_name + '.' + ecs_app_domain
+                    'url': 'https://hue-' + ecs_cdw_hive_vw_name_effective + '.' + ecs_app_domain,
+                    'hive_virtual_warehouse': ecs_cdw_hive_vw_name_effective,
+                    'impala_virtual_warehouse': ecs_cdw_impala_vw_name_effective
                   }
                 )
               },

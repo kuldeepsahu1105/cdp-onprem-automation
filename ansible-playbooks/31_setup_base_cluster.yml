@@ -3002,6 +3002,10 @@
     - name: Check ZooKeeper roles
       ansible.builtin.import_tasks: common_tasks/verify_base_cluster_zookeeper_servers.yml
 
+    - name: Ensure base cluster Data Context for fresh Data Services installation
+      ansible.builtin.import_tasks: common_tasks/ensure_base_cluster_data_context.yml
+      when: base_cluster_data_context_enabled | default(true) | bool
+
     - name: Record completed base cluster initialization
       ansible.builtin.copy:
         dest: "{{ base_cluster_initialization_marker_path }}"
@@ -3018,5 +3022,13 @@
       ansible.builtin.debug:
         msg: >-
           Base cluster with name {{ cdh_basecluster_name }} is ready:
-          state={{ base_cluster_final_state.json.clusterState | default('unknown') }},
-          health={{ base_cluster_final_state.json.healthSummary | default('unknown') }}.
+          service_states={{
+          base_cluster_verified_service_states | join(',') }},
+          service_health={{
+          base_cluster_verified_health_summaries | join(',') }},
+          verified_runtime_services={{
+          base_cluster_runtime_service_names | length }},
+          data_context={{
+          base_cluster_data_context_name
+          if base_cluster_data_context_enabled | default(true) | bool
+          else 'disabled' }}.

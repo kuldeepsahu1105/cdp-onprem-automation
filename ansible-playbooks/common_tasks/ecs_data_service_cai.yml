@@ -22,17 +22,30 @@
           {{ ecs_cai_workspace.msg | default(ecs_cai_workspace | to_json) }}
       when: not (ecs_cai_workspace_succeeded | bool)
 
-    - name: Remove ML workspace async result
-      ansible.builtin.async_status:
-        jid: "{{ ecs_cai_workspace_job.ansible_job_id }}"
-        mode: cleanup
-      changed_when: false
-      when:
-        - ecs_cai_workspace_job is defined
-        - ecs_cai_workspace.finished | default(false) | bool
-      become: false
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
+    - name: Record CAI effective workspace status
+      ansible.builtin.set_fact:
+        ecs_cai_status: >-
+          {{
+            (
+              'Existing and running (green)'
+              if (ecs_cai_existing_workspace | default({}) | length > 0)
+              else 'Created successfully (green)'
+            )
+            + ': effective_name='
+            + ecs_cai_workspace_name_effective
+            + ', status='
+            + (
+                (ecs_cai_workspace.workspace | default({})).instanceStatus
+                | default('unknown')
+              )
+            + (
+                ', skipped='
+                + (ecs_cai_workspace_collision_evidence | default([]) | to_json)
+                if (ecs_cai_workspace_collision_evidence | default([]) | length > 0)
+                else ''
+              )
+          }}
+      when: ecs_cai_workspace_succeeded | bool
 
     - name: Record workbench endpoint
       ansible.builtin.set_fact:
@@ -46,3 +59,20 @@
           }}
       when:
         - ecs_cai_workspace_succeeded | bool
+
+    - name: Report CAI Workbench outcome
+      ansible.builtin.debug:
+        msg: >-
+          CAI Workbench: {{
+          'Existing and running; reused without create or rename'
+          if ecs_cai_existing_workspace | default({}) | length > 0
+          else 'Created successfully'
+          }}. instanceName={{ ecs_cai_workspace_name_effective }};
+          observed_status={{
+          (ecs_cai_workspace.workspace | default({})).instanceStatus
+          | default('unknown') }};
+          endpoint={{ ecs_cai_workspace_url | default('not returned') }};
+          environment={{
+          (ecs_cai_workspace.workspace | default({})).environmentName
+          | default(ecs_cdp_environment_name) }}.
+      when: ecs_cai_workspace_succeeded | bool

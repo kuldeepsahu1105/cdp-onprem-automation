@@ -294,6 +294,245 @@ Set `ANSIBLE_DIFF=false` to omit `--diff` during Ansible dry runs. CM API playbo
 
 Identity is auto-detected: `[ipaserver]` in inventory → FreeIPA; empty ipaserver + `ad_kdc_host` → AD.
 
+For standalone Data Services recovery, run:
+
+```bash
+ansible-playbook -i inventory.ini 34_setup_ecs_data_services.yml --private-key "$ANSIBLE_PRIVATE_KEY"
+```
+
+For CAI with TLS enabled, `cml-tls-secret` is validated before
+`createWorkspace`. FreeIPA deployments use the existing wildcard certificate
+profile. AD, external-PKI, and identity-provider-free deployments must either
+pre-create a valid `kubernetes.io/tls` secret or set controller-side
+`ecs_cai_tls_certificate_path`, `ecs_cai_tls_private_key_path`, and
+`ecs_cai_tls_ca_bundle_path`. The certificate must cover
+`<ecs_cai_static_subdomain>.<ecs_app_domain>` and
+`*.<ecs_cai_static_subdomain>.<ecs_app_domain>`. Automation rejects missing,
+self-signed/untrusted, expired, wrong-SAN, or mismatched-key material before
+workspace submission and never creates a temporary certificate.
+
+ECS install owns authoritative FreeIPA records and CoreDNS reconciliation.
+Playbooks 33 and 34 use the same idempotent reconciliation before their
+workload DNS gates. If the optional `node-local-dns` ConfigMap exists, its root
+`.:53` forward target is changed from `__PILLAR__UPSTREAM__SERVERS__` to the
+already validated identity DNS forwarders, then its DaemonSet is rolled and
+awaited. The `cluster.local`, `in-addr.arpa`, and `ip6.arpa` blocks remain
+pointed at `__PILLAR__CLUSTER__DNS__`. This behavior defaults on through
+`ecs_node_local_dns_reconcile`; set it to `false` only when node-local DNS is
+managed externally. Fresh IPv4-only pod probes must resolve CM, the ECS
+console, and the effective FreeIPA or Active Directory LDAP endpoint through
+the normal Kubernetes DNS Service, then independently connect to the
+validated IPv4 addresses on CM 7183 and LDAP 636.
+When the Service path remains transiently inconsistent after bounded retries,
+the same fresh pod may query one ready CoreDNS endpoint directly. The fallback
+is accepted only when every required A answer and direct TCP dependency check
+succeeds; it never pins workloads or mutates DNS configuration itself.
+Authoritative Data Services backend reads then retry separately before any
+mutation. The pod logs its resolver configuration and reports each FQDN
+separately. DNS/TCP verification uses at most
+`ecs_data_services_dns_probe_attempts` attempts (default `3`). Failed DNS
+records wait `ecs_data_services_dns_probe_retry_delay` seconds (default `31`)
+between attempts so each retry occurs after the managed CoreDNS 30-second
+negative-cache TTL; successful records are not retried. The independent
+pod wait bound only covers scheduling and image startup.
+
+Fresh pod and CoreDNS Service/endpoint success does not prove that the
+long-lived Service Discovery JVM has refreshed its resolver state. Stale DNS
+inside `cdp-release-thunderhead-servicediscoverysimple` can cause
+remote-context errors, failure to fetch cluster details, misleading
+SDX-not-found messages, or `UnknownHostException: cldr-mngr...` even while new
+pods resolve CM correctly. On the ECS master, restart only that deployment and
+verify its rollout and recent logs:
+
+```bash
+sudo /var/lib/rancher/rke2/bin/kubectl \
+  --kubeconfig /etc/rancher/rke2/rke2.yaml -n cdp \
+  rollout restart deployment/cdp-release-thunderhead-servicediscoverysimple
+sudo /var/lib/rancher/rke2/bin/kubectl \
+  --kubeconfig /etc/rancher/rke2/rke2.yaml -n cdp \
+  rollout status deployment/cdp-release-thunderhead-servicediscoverysimple \
+  --timeout=5m
+sudo /var/lib/rancher/rke2/bin/kubectl \
+  --kubeconfig /etc/rancher/rke2/rke2.yaml -n cdp \
+  logs deployment/cdp-release-thunderhead-servicediscoverysimple \
+  --all-containers=true --since=10m --tail=300
+```
+
+Do not restart CoreDNS, DWX, CDE, or CAI for this condition. Do not mutate
+FreeIPA principals or keytabs.
+
+When a healthy CDE service already exists, CDE preflight also describes that
+service through the Management Console before submitting a new service. This
+exercises the same Management Console-to-Cloudera Manager DNS/API path used by
+`enableService` and retries transient `UnknownHostException` failures after the
+CoreDNS negative-cache interval without restarting or rewriting CoreDNS.
+CDW and CAI retain their existing authoritative `dw_cluster_info` and
+`ml_info` preflight behavior, but those read-only calls use the same bounded
+retry interval so transient backend DNS/cache errors clear before any
+principal, cluster, TLS, or workspace mutation begins.
+
+Terminal failed
+CDW/CDE/CAI resources are reported without automated disable, deletion,
+recreation, backend restart, or datastore mutation; independent service
+boundaries still allow later selected services to run before the final
+aggregate failure.
+
+If CDW preflight finds an existing cluster in the exact case-insensitive
+`Deactivated` state, it stops before submission.
+The pinned `cloudera.cloud` `dw_cluster` module cannot reactivate an existing
+Deactivated cluster. In the observed UI failure, the cluster-specific
+`t-shirt-sizes` endpoint returned HTTP 404 (`404 page not found` /
+`NOT_FOUND_ERROR`), so the UI did not submit the activation POST. Repair and
+use the supported DWX UI/backend activation path, activate the cluster
+manually, then rerun playbook 34. Automation does not attempt activation,
+deletion, recreation, or a control-plane restart. A concurrent transition to
+`Deactivated` terminates structured polling promptly, but only `Running`
+passes the final success assertion.
+
+CDW preflight also verifies the Base security boundary without mutation:
+CM `kerberosInfo` must be enabled for the configured realm/KDC and the Base
+HDFS service must use Kerberos authentication. If this gate fails, rerun
+playbooks 30 and 31; do not generate, retrieve, or rotate a CDW keytab
+manually.
+
+Give every fresh Base/ECS deployment a unique `ecs_cdp_environment_name`.
+Automation reuses an exact-name environment idempotently but does not adopt a
+sole differently named environment by default. This avoids binding a new Base
+cluster to stale SDX/environment metadata from another deployment. Enable
+`ecs_cdp_environment_adopt_single_existing=true` only for a verified migration
+where the existing environment is confirmed to belong to the current
+Base/ECS deployment.
+
+CDW activation follows the manual UI and `cloudera-labs/cloudera.cloud`
+minimal request: the API receives the environment identity and no custom
+Kerberos hostname by default. For FreeIPA, automation idempotently creates the
+standard `host/dwx-env-<environment>.cdp.local@<realm>` and
+synthetic host container with `force: true`, then asks CM's supported
+`generateCredentialsAdhoc` command to create the absent
+`hive/dwx-env-<environment>.cdp.local@<realm>` service and its initial KDC key
+together. It waits for completion and verifies the Hive service reports
+`has_keytab: TRUE`. Automation never runs `ipa-getkeytab` or handles keytab
+bytes. CM/CDW own retrieval and later rotation. This is essential for retries
+because failed activation state can retain keytab material; out-of-band key
+mutation can then cause
+`KDC_ERR_PREAUTH_FAILED` in both automation and the UI.
+
+FreeIPA health is owned by identity playbook 12, which starts and verifies
+Directory Server and `krb5kdc` and applies the AES enctype policy. Cloudera
+Manager automatic principal provisioning is owned by Kerberos playbook 30,
+which rechecks FreeIPA, validates KDC reachability, configures Red Hat IPA,
+imports Account Manager credentials, performs required CM restarts, and
+verifies the final integration. CDW intentionally does not duplicate those
+steps.
+
+CDW preflight does not delete host or Hive principals. An empty
+`dw_cluster_info` response is not a safe deletion signal because DWX can still
+retain an activated environment and keytab state. Preserve CM/CDW-owned key
+state and use supported DWX recovery when activation reports an existing
+cluster or keytab validation failure; do not repair it by deleting principals
+or mutating key material.
+
+If an operator or older automation pre-created the Hive service without a
+key, playbook 34 stops before submission. CM cannot repair that state with
+`generateCredentialsAdhoc`: it skips the existing service and later fails
+`merge_credentials.sh` because no component keytab was produced. While CDW is
+deactivated, confirm `has_keytab: FALSE`, remove only that keyless Hive
+service, preserve the host object, and rerun. Never delete a keyed principal
+or combine this recovery with `ipa-getkeytab`.
+
+If the service is absent but CM `generateCredentialsAdhoc` reports only
+`No roles required Kerberos credentials to be generated`, CM still has a
+stale unused credential record. With CDW deactivated, run playbook 34 once
+with:
+
+```yaml
+ecs_cdw_repair_stale_cm_credentials: true
+ecs_cdw_repair_stale_cm_credentials_confirm: <environment-name>
+```
+
+The exact environment confirmation permits only CM
+`deleteCredentialsMode=unused`, followed by ad-hoc Hive credential generation
+and FreeIPA `has_keytab: TRUE` verification. It never requests deletion mode
+`all`. Remove the recovery settings immediately after success.
+
+If `warehouse-<environment>/metastore-0` reports
+`kinit: No KCM server found while getting default ccache`, the generated
+container inherited a KCM default but has no KCM daemon. Playbook 34 reads the
+Database Catalog configuration with `dw describe-dbc-config` and applies
+`KRB5CCNAME=FILE:/tmp/krb5cc_metastore` through additive
+`dw update-dbc --config` only when missing or different. The reconciliation
+is controlled by
+`ecs_cdw_workload_file_ccache_reconcile` (default `true`) and is idempotent;
+the CDW control plane persists and renders the setting. Automation does not
+directly patch or delete the StatefulSet, pod, PVC, database, service, or
+Kerberos principal.
+
+Playbook 34 creates any missing Hive, Impala, and Trino Virtual Warehouses
+after the default database catalog becomes healthy. The defaults use the
+smallest `xsmall` template and `root.<environment>.cdw` resource pool. Existing
+warehouses with the configured names are retained. Override
+`ecs_cdw_hive_vw_name`, `ecs_cdw_impala_vw_name`, `ecs_cdw_trino_vw_name`,
+`ecs_cdw_vw_tshirt_size`, or `ecs_cdw_vw_resource_pool` only when the target
+CDW deployment uses different established values.
+
+Impala-specific creation settings are controlled by
+`ecs_cdw_impala_options`, `ecs_cdw_impala_ha_settings`,
+`ecs_cdw_impala_autoscaling`, `ecs_cdw_impala_additional_quota`, and
+`ecs_cdw_impala_query_log`. Defaults match the private-cloud UI's minimum
+xsmall selection. The pinned CLI does not expose the UI's named
+resource-template selector; use the supported `ecs_cdw_vw_tshirt_size` input.
+New Trino warehouses can additionally use `ecs_cdw_trino_autoscaling` and
+`ecs_cdw_trino_additional_quota`. The autoscaling map is empty by default so
+the CDW xsmall defaults, including two initial executors, remain authoritative.
+Set only supported `trino*` autoscaling keys when a deployment needs different
+worker bounds or delays.
+
+Playbook 34 supplies `KRB5CCNAME=FILE:/tmp/krb5cc_cdw` in the supported CDW
+service configuration when creating a warehouse. For an existing warehouse,
+it compares `dw describe-vw-config` with the desired common `env` block and
+uses additive `dw update-vw --config` only when different. Generated
+Kubernetes controllers are not patched or restarted directly.
+
+If UI deletion leaves a failed private-cloud activation hidden in the DW
+control plane, an explicitly confirmed CDW-only reset can reuse playbook 34's
+temporary signed profile without exposing its credentials:
+
+```bash
+cd ansible-playbooks
+ansible-playbook -i inventory.ini 34_setup_ecs_data_services.yml \
+  -e ecs_data_services_deploy_enabled=true \
+  -e '{"ecs_data_services_install":["cdw"]}' \
+  -e ecs_cdw_force_reset_cluster_id=env-cldr \
+  -e ecs_cdw_force_reset_confirm=env-cldr
+```
+
+This calls the supported `dw delete-cluster --force` operation, waits until
+the exact cluster ID is no longer returned, and then continues with fresh CDW
+activation. It does not delete the ECS environment, Base cluster, CDE, CAI, or
+FreeIPA and does not mutate principals or keytabs. It does delete CDW catalogs
+and virtual warehouses attached to that cluster, so confirmation must exactly
+match the cluster ID. Before deleting, automation describes the cluster and
+skips the reset unless its status is terminal `Error` or `Failed`; stale
+recovery values therefore neither delete a healthy, setting-up, running, or
+deactivated cluster nor abort its ordinary rerun. The exact CLI response
+containing both `Status Code: 404` and `Error Code: NOT_FOUND` is accepted as
+already absent. Clear both reset variables immediately after the one recovery
+run. All other describe or delete failures stop the playbook. If
+`createPrivateCluster` then still
+reports the same cluster ID as already activated, the inconsistency is
+internal DWX datastore state and no public reset operation remains.
+
+On a failed CDW activation, playbook 34 now emits a non-mutating boundary
+report. It includes the control-plane environment identity and binding fields
+returned by the installed CLI, CM `kerberosInfo`, base-cluster HDFS
+authentication, expected FreeIPA host/Hive principal presence, recent CM
+Kerberos log matches, and warehouse namespace discovery. Use the reported
+`Likely failing boundary` before changing any principal. In particular,
+`DWX-to-CM/KDC account-manager principal creation` means CM/base Kerberos
+metadata is healthy but the product flow did not leave both expected
+principals; re-import CM account-manager credentials and inspect CM/DWX logs
+rather than creating a keytab manually.
+
 ---
 
 ## Scenario A — AWS deployment with FreeIPA
@@ -504,6 +743,18 @@ cluster is never deleted: all requested service types must already exist, then
 required Ozone/Hive/Ranger/Knox settings and the Ozone Recon role are reconciled,
 the cluster is started if necessary, and CM runs
 `deployClientConfigsAndRefresh`. The final cluster state and health are printed.
+
+After cluster and ZooKeeper health pass, playbook **31** creates or verifies the
+CM Data Context required by fresh CDE and other compute installations. The
+default context is `SDX`, sharing `HDFS`, `HIVE`, `ATLAS`, and `RANGER`, matching
+the Cloudera Labs base-cluster pattern. This does not restart or reconfigure
+those healthy services; it registers them as a shareable Data Context before
+the initialization marker is written. Without this object, CDE dex-base chart
+installation fails with `Unable to get remote data context for cluster`.
+Existing complete contexts are read without mutation; existing incomplete
+contexts fail explicitly. Set `base_cluster_data_context_enabled: false` only
+when the base cluster will never back ECS Data Services or another compute
+workload.
 
 First Run failures are expanded from the parent CM command into failed service
 commands and their child validation messages in Jenkins. First Run is submitted
@@ -1284,7 +1535,7 @@ cm_version: "7.13.2.6"
 instance_groups:
   cldr_mngr:
     count: 1
-    instance_type: m5.4xlarge
+    instance_type: m6a.4xlarge
     volume_size: 300
 ```
 

@@ -1,0 +1,276 @@
+---
+- name: CDE | List existing services without describing their CM cluster
+  ansible.builtin.command:
+    argv: "{{ ecs_data_services_cdp_cli_prefix + ['de', 'list-services', '--no-remove-deleted'] }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cde_preflight_service_list
+  changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CDE | Resolve one healthy reference service
+  ansible.builtin.set_fact:
+    ecs_cde_reference_service: >-
+      {%- set services = (ecs_cde_preflight_service_list.stdout | from_json).services | default([]) -%}
+      {%- set ns = namespace(service={}) -%}
+      {%- for service in services if ns.service | length == 0 -%}
+      {%- if (
+        service.environmentName | default('') == ecs_cdp_environment_name
+        and service.status | default('') | lower
+        in (ecs_cde_service_green_statuses | map('lower') | list)
+      ) -%}
+      {%- set ns.service = service -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ ns.service }}
+
+- name: CDE | Record healthy reference service identity
+  ansible.builtin.set_fact:
+    ecs_cde_reference_service_name: "{{ ecs_cde_reference_service.name | default('') }}"
+    ecs_cde_reference_service_cluster_id: "{{ ecs_cde_reference_service.clusterId | default('') }}"
+
+- name: CDE | Initialize optional healthy reference resources
+  ansible.builtin.set_fact:
+    ecs_cde_reference_resources: {}
+
+- name: CDE | Verify Management Console can describe healthy reference service
+  cloudera.cloud.de_info:
+    environment: "{{ ecs_cdp_environment_name }}"
+    name: "{{ ecs_cde_reference_service_name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cde_reference_service_info
+  until: ecs_cde_reference_service_info is succeeded
+  retries: "{{ ecs_data_services_dns_probe_attempts | default(3) | int }}"
+  delay: "{{ ecs_data_services_dns_probe_retry_delay | int }}"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cde_reference_service_name | length > 0
+
+- name: CDE | Read raw healthy reference service configuration
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_data_services_cdp_cli_prefix
+        + [
+          'de',
+          'describe-service',
+          '--cluster-id',
+          ecs_cde_reference_service_cluster_id
+        ]
+      }}
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cde_reference_service_raw
+  changed_when: false
+  until: ecs_cde_reference_service_raw is succeeded
+  retries: "{{ ecs_data_services_dns_probe_attempts | default(3) | int }}"
+  delay: "{{ ecs_data_services_dns_probe_retry_delay | int }}"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cde_reference_service_cluster_id | length > 0
+
+- name: CDE | Record raw healthy reference resources
+  ansible.builtin.set_fact:
+    ecs_cde_reference_resources: >-
+      {{
+        (ecs_cde_reference_service_raw.stdout | from_json)
+        .get('service', {})
+        .get('resources', {})
+      }}
+  when: ecs_cde_reference_service_raw is not skipped
+
+- name: CDE | Resolve effective fresh-service capacity
+  ansible.builtin.set_fact:
+    ecs_cde_resource_pool_effective: >-
+      {{
+        ecs_cde_reference_resources.get('resourcePool')
+        | default(
+            ecs_cde_reference_resources.get('resource_pool')
+            | default(ecs_cde_resource_pool, true),
+            true
+          )
+      }}
+    ecs_cde_cpu_requests_effective: >-
+      {{
+        ecs_cde_reference_resources.get('cpuRequests')
+        | default(
+            ecs_cde_reference_resources.get('cpu_requests')
+            | default(ecs_cde_cpu_requests, true),
+            true
+          )
+      }}
+    ecs_cde_memory_requests_effective: >-
+      {{
+        ecs_cde_reference_resources.get('memoryRequests')
+        | default(
+            ecs_cde_reference_resources.get('memory_requests')
+            | default(ecs_cde_memory_requests, true),
+            true
+          )
+      }}
+
+- name: CDE | Require complete effective fresh-service capacity
+  ansible.builtin.assert:
+    that:
+      - ecs_cde_resource_pool_effective | string | length > 0
+      - ecs_cde_cpu_requests_effective | string | length > 0
+      - ecs_cde_memory_requests_effective | string | length > 0
+    fail_msg: >-
+      CDE fresh-service capacity is incomplete. Configure ecs_cde_resource_pool,
+      ecs_cde_cpu_requests, and ecs_cde_memory_requests, or retain one healthy
+      reference CDE service whose raw describe-service response includes them.
+
+- name: CDE | Report Management Console to CM reference probe
+  ansible.builtin.debug:
+    msg: >-
+      CDE Management Console successfully described healthy reference service
+      {{ ecs_cde_reference_service_name }} before new-service submission.
+      Fresh-service request will use resourcePool={{
+      ecs_cde_resource_pool_effective }}, cpuRequests={{
+      ecs_cde_cpu_requests_effective }}, memoryRequests={{
+      ecs_cde_memory_requests_effective }}.
+  when: ecs_cde_reference_service_name | length > 0
+
+- name: CDE | Build bounded deterministic service names
+  ansible.builtin.set_fact:
+    ecs_cde_service_candidate_names: >-
+      {%- set result = [] -%}
+      {%- for attempt in range(1, (ecs_cde_service_name_attempts | int) + 1) -%}
+      {%- set suffix = '' if attempt == 1 else '-' + (attempt | string) -%}
+      {%- set stem_length = (ecs_cde_service_name_max_length | int) - (suffix | length) -%}
+      {%- set candidate = (ecs_cde_service_name[:stem_length] + suffix) -%}
+      {%- set _ = result.append(candidate) -%}
+      {%- endfor -%}
+      {{ result }}
+
+- name: CDE | Classify records for configured candidate names
+  ansible.builtin.set_fact:
+    ecs_cde_service_name_conflicts: >-
+      {%- set services = (ecs_cde_preflight_service_list.stdout | from_json).services | default([]) -%}
+      {%- set result = [] -%}
+      {%- for service in services -%}
+      {%- if (
+        service.name | default('') in ecs_cde_service_candidate_names
+        and service.environmentName | default('') == ecs_cdp_environment_name
+        and service.status | default('') | lower
+          not in (ecs_cde_service_deleted_statuses | map('lower') | list)
+      ) -%}
+      {%- set _ = result.append({
+        'name': service.name | default('unknown'),
+        'status': service.status | default('Unknown'),
+        'clusterId': service.clusterId | default('not returned')
+      }) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ result }}
+    ecs_cde_service_deleted_history: >-
+      {%- set services = (ecs_cde_preflight_service_list.stdout | from_json).services | default([]) -%}
+      {%- set result = [] -%}
+      {%- for service in services -%}
+      {%- if (
+        service.name | default('') in ecs_cde_service_candidate_names
+        and service.environmentName | default('') == ecs_cdp_environment_name
+        and service.status | default('') | lower
+          in (ecs_cde_service_deleted_statuses | map('lower') | list)
+      ) -%}
+      {%- set _ = result.append({
+        'name': service.name | default('unknown'),
+        'status': service.status | default('Unknown'),
+        'clusterId': service.clusterId | default('not returned')
+      }) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ result }}
+
+- name: CDE | Report ignored completed-deletion history
+  ansible.builtin.debug:
+    msg: >-
+      Ignoring {{ ecs_cde_service_deleted_history | length }} completed CDE
+      deletion record(s) while evaluating stable service-name availability:
+      {{ ecs_cde_service_deleted_history }}.
+  when: ecs_cde_service_deleted_history | length > 0
+
+- name: CDE | Select reusable or first unused service name
+  ansible.builtin.set_fact:
+    ecs_cde_service_selection: >-
+      {%- set services = (ecs_cde_preflight_service_list.stdout | from_json).services | default([]) -%}
+      {%- set ns = namespace(selected={}) -%}
+      {%- for candidate in ecs_cde_service_candidate_names if ns.selected | length == 0 -%}
+      {%- set matches = services
+        | selectattr('name', 'equalto', candidate)
+        | selectattr('environmentName', 'equalto', ecs_cdp_environment_name)
+        | list -%}
+      {%- set candidate_state = namespace(active=[], reusable={}) -%}
+      {%- for match in matches -%}
+      {%- if (
+        match.status | default('') | lower
+        not in (ecs_cde_service_deleted_statuses | map('lower') | list)
+      ) -%}
+      {%- set _ = candidate_state.active.append(match) -%}
+      {%- if (
+        candidate_state.reusable | length == 0
+        and match.status | default('') | lower
+        in (
+          (
+            ecs_cde_service_green_statuses
+            + ecs_cde_service_transitional_statuses
+          )
+          | map('lower')
+          | list
+        )
+      ) -%}
+      {%- set candidate_state.reusable = match -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- if candidate_state.active | length == 0 -%}
+      {%- set ns.selected = {'name': candidate, 'existing': false, 'status': 'Absent'} -%}
+      {%- elif candidate_state.reusable | length > 0 -%}
+      {%- set ns.selected = {
+        'name': candidate,
+        'existing': true,
+        'status': candidate_state.reusable.status | default('Unknown'),
+        'service': candidate_state.reusable
+      } -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ ns.selected }}
+
+- name: CDE | Require an available bounded service name
+  ansible.builtin.assert:
+    that:
+      - ecs_cde_service_selection | length > 0
+    fail_msg: >-
+      CDE could not find a reusable or unused name after
+      {{ ecs_cde_service_name_attempts }} bounded attempt(s). Candidates={{
+      ecs_cde_service_candidate_names }}; blocking_records={{
+      ecs_cde_service_name_conflicts }}. Stable fresh-install naming does not
+      append a number by default. Completed-deletion history is ignored, while
+      failed, deletion-in-progress, or otherwise unusable live records are not
+      mutated automatically. Intentionally remove or complete the stale service
+      through the supported CDP workflow before retrying, or explicitly increase
+      ecs_cde_service_name_attempts to create a separately suffixed service.
+
+- name: CDE | Record effective service name and prior state
+  ansible.builtin.set_fact:
+    ecs_cde_service_name_effective: "{{ ecs_cde_service_selection.name }}"
+    ecs_cde_service_existing: "{{ ecs_cde_service_selection.existing | bool }}"
+    ecs_cde_service_prior_status: "{{ ecs_cde_service_selection.status }}"
+
+- name: CDE | Report selected existing service without capacity mutation
+  ansible.builtin.debug:
+    msg: >-
+      CDE Service: Existing resource selected for mutation-free reuse.
+      name={{ ecs_cde_service_name_effective }};
+      observed_status={{ ecs_cde_service_prior_status }};
+      clusterId={{
+      (ecs_cde_service_selection.service | default({})).clusterId
+      | default('not returned') }};
+      environment={{
+      (ecs_cde_service_selection.service | default({})).environmentName
+      | default(ecs_cdp_environment_name) }}.
+      Existing CPU and memory capacity will not be resized.
+  when: ecs_cde_service_existing | bool

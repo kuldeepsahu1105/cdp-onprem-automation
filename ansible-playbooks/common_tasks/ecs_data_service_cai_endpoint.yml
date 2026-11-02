@@ -2,7 +2,6 @@
 - name: CAI | Discover generated workspace endpoint
   cloudera.cloud.ml_info:
     environment: "{{ ecs_cdp_environment_name }}"
-    name: "{{ ecs_cai_workspace_name }}"
     endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cai_workspace_endpoint_info
@@ -11,13 +10,19 @@
   until: >-
     (
       ecs_cai_workspace_endpoint_info.workspaces | default([])
+      | selectattr('instanceName', 'defined')
+      | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+      | list
       | first | default({})
     ).instanceUrl | default('') | length > 0
     or
     (
       ecs_cai_workspace_endpoint_info.workspaces | default([])
+      | selectattr('instanceName', 'defined')
+      | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+      | list
       | first | default({})
-    ).instanceStatus | default('') == 'installation:failed'
+    ).instanceStatus | default('') is search('(?i):failed$')
   retries: "{{ ecs_cai_endpoint_wait_retries | int }}"
   delay: "{{ ecs_cai_endpoint_wait_delay | int }}"
   ignore_errors: true
@@ -27,12 +32,90 @@
   when:
     - "'cai' in (ecs_data_services_install_names | default([]))"
 
+- name: CAI | Require generated workspace endpoint
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | selectattr('instanceName', 'defined')
+          | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+          | list
+          | first | default({})
+        ).instanceStatus | default('') is not search('(?i):failed$')
+      - >-
+        (
+          ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | selectattr('instanceName', 'defined')
+          | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+          | list
+          | first | default({})
+        ).instanceUrl | default('') | length > 0
+    fail_msg: >-
+      CAI workspace {{ ecs_cai_workspace_name_effective }} did not expose an endpoint.
+      Final status:
+      {{
+        (
+          ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | selectattr('instanceName', 'defined')
+          | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+          | list
+          | first | default({})
+        ).instanceStatus | default('not returned')
+      }}.
+      API response:
+      {{
+        ecs_cai_workspace_endpoint_info.msg
+        | default(ecs_cai_workspace_endpoint_info | to_json)
+      }}.
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+
+- name: CAI | Require endpoint to match the pre-created TLS hostname
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          (
+            ecs_cai_workspace_endpoint_info.workspaces | default([])
+            | selectattr('instanceName', 'defined')
+            | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+            | list
+            | first | default({})
+          ).instanceUrl
+          | default('')
+          | regex_replace('^https?://', '')
+          | regex_replace('/.*$', '')
+          | regex_replace(':.*$', '')
+          | lower
+        )
+        == (ecs_cai_expected_base_hostname | lower)
+    fail_msg: >-
+      CAI returned endpoint
+      {{
+        (
+          ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | selectattr('instanceName', 'defined')
+          | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+          | list
+          | first | default({})
+        ).instanceUrl | default('not returned')
+      }}, but the pre-create TLS contract is
+      https://{{ ecs_cai_expected_base_hostname }}. Refusing to issue or install
+      a different certificate after workspace submission. Align
+      ecs_cai_static_subdomain with the supported workspace endpoint and rerun.
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+
 - name: CAI | Record generated workspace endpoint
   ansible.builtin.set_fact:
     ecs_cai_workspace_url: >-
       {{
         (
           ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | selectattr('instanceName', 'defined')
+          | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+          | list
           | first | default({})
         ).instanceUrl
         | default('')
@@ -42,6 +125,9 @@
       {{
         (
           ecs_cai_workspace_endpoint_info.workspaces | default([])
+          | selectattr('instanceName', 'defined')
+          | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+          | list
           | first | default({})
         ).instanceUrl
         | default('')
@@ -51,8 +137,3 @@
       }}
   when:
     - "'cai' in (ecs_data_services_install_names | default([]))"
-    - >-
-      (
-        ecs_cai_workspace_endpoint_info.workspaces | default([])
-        | first | default({})
-      ).instanceUrl | default('') | length > 0

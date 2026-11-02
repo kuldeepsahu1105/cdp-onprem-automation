@@ -1,0 +1,150 @@
+---
+- name: CDW recovery | Require exact destructive confirmation
+  ansible.builtin.assert:
+    that:
+      - ecs_cdw_force_reset_cluster_id | length > 0
+      - ecs_cdw_force_reset_confirm == ecs_cdw_force_reset_cluster_id
+    fail_msg: >-
+      CDW force reset deletes only the named Data Warehouse cluster and all
+      catalogs or virtual warehouses attached to it. Set
+      ecs_cdw_force_reset_confirm to the exact cluster ID
+      '{{ ecs_cdw_force_reset_cluster_id }}' to continue.
+
+- name: CDW recovery | Inspect confirmed cluster before deletion
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_data_services_cdp_cli_prefix
+        + [
+            'dw',
+            'describe-cluster',
+            '--cluster-id',
+            ecs_cdw_force_reset_cluster_id
+          ]
+      }}
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_force_reset_existing
+  changed_when: false
+  failed_when:
+    - ecs_cdw_force_reset_existing.rc != 0
+    - >-
+      ecs_cdw_force_reset_existing.stderr
+      | default('')
+      is not search('(?is)Status Code:\\s*404.*Error Code:\\s*NOT_FOUND')
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: CDW recovery | Parse existing cluster response
+  ansible.builtin.set_fact:
+    ecs_cdw_force_reset_existing_payload: >-
+      {{ ecs_cdw_force_reset_existing.stdout | from_json }}
+  when: ecs_cdw_force_reset_existing.rc == 0
+
+- name: CDW recovery | Select existing cluster object
+  ansible.builtin.set_fact:
+    ecs_cdw_force_reset_existing_cluster: >-
+      {{
+        ecs_cdw_force_reset_existing_payload.cluster
+        if (
+          ecs_cdw_force_reset_existing_payload.cluster is defined
+          and ecs_cdw_force_reset_existing_payload.cluster is mapping
+        )
+        else ecs_cdw_force_reset_existing_payload
+      }}
+  when: ecs_cdw_force_reset_existing.rc == 0
+
+- name: CDW recovery | Decide whether confirmed cluster is eligible for deletion
+  ansible.builtin.set_fact:
+    ecs_cdw_force_reset_eligible: >-
+      {{
+        ecs_cdw_force_reset_existing.rc == 0
+        and (
+          (ecs_cdw_force_reset_existing_cluster | default({})).status
+          | default('')
+          is search('(?i)^(error|failed)$')
+        )
+      }}
+
+- name: CDW recovery | Skip stale reset request for healthy or progressing cluster
+  ansible.builtin.debug:
+    msg: >-
+      Skipping CDW force reset for cluster
+      {{ ecs_cdw_force_reset_cluster_id }} because its current status is
+      '{{ ecs_cdw_force_reset_existing_cluster.status | default('unknown') }}'.
+      Force reset is recovery-only and may delete only a terminal Error or
+      Failed activation. Clear ecs_cdw_force_reset_cluster_id and
+      ecs_cdw_force_reset_confirm; this rerun will continue without deleting
+      the existing cluster or its Virtual Warehouses.
+  when:
+    - ecs_cdw_force_reset_existing.rc == 0
+    - not (ecs_cdw_force_reset_eligible | bool)
+
+- name: CDW recovery | Force-delete stale activation record
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_data_services_cdp_cli_prefix
+        + [
+            'dw',
+            'delete-cluster',
+            '--cluster-id',
+            ecs_cdw_force_reset_cluster_id,
+            '--force'
+          ]
+      }}
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_force_reset_result
+  changed_when: ecs_cdw_force_reset_result.rc == 0
+  failed_when: >-
+    ecs_cdw_force_reset_result.rc != 0
+    and not (
+      ecs_cdw_force_reset_result.stderr
+      | default('')
+      is search(
+        '(?is)Status Code:\s*404.*Error Code:\s*NOT_FOUND'
+      )
+    )
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cdw_force_reset_eligible | bool
+
+- name: CDW recovery | Wait for stale activation record removal
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_data_services_cdp_cli_prefix
+        + [
+            'dw',
+            'describe-cluster',
+            '--cluster-id',
+            ecs_cdw_force_reset_cluster_id
+          ]
+      }}
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_force_reset_describe
+  changed_when: false
+  failed_when: false
+  until: ecs_cdw_force_reset_describe.rc != 0
+  retries: "{{ ecs_cdw_force_reset_wait_retries | int }}"
+  delay: "{{ ecs_cdw_force_reset_wait_delay | int }}"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cdw_force_reset_eligible | bool
+
+- name: CDW recovery | Report reset completion
+  ansible.builtin.debug:
+    msg: >-
+      CDW cluster {{ ecs_cdw_force_reset_cluster_id }} is no longer returned
+      by the DW control plane{{
+        ' (it was already absent when force deletion was requested)'
+        if ecs_cdw_force_reset_existing.rc != 0
+        else ''
+      }}. Continuing with a fresh CDW activation. If createPrivateCluster still
+      reports this cluster ID as already activated, the remaining activation
+      binding is internal DWX datastore state with no public reset operation.
+  when:
+    - ecs_cdw_force_reset_existing.rc != 0
+      or ecs_cdw_force_reset_eligible | bool

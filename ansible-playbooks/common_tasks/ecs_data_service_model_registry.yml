@@ -41,6 +41,8 @@
       block:
         - name: Retrieve Ozone S3 credentials from selected host
           ansible.builtin.include_tasks: ecs_model_registry_ozone_credentials.yml
+          vars:
+            ansible_python_interpreter: /usr/bin/python3
 
         - name: Set Model Registry S3 endpoint from selected host when not overridden
           ansible.builtin.set_fact:
@@ -69,12 +71,11 @@
 
         - name: Check if registry already exists
           ansible.builtin.command:
-            argv:
-              - cdp
-              - --profile
-              - default
-              - ml
-              - list-model-registries
+            argv: >-
+              {{
+                ecs_data_services_cdp_cli_prefix
+                + ['ml', 'list-model-registries']
+              }}
           environment: "{{ ecs_cdp_cli_environment }}"
           register: ecs_mr_list
           changed_when: false
@@ -82,45 +83,329 @@
           delegate_to: "{{ ecs_data_services_delegate_host }}"
           connection: ssh
 
+        - name: Parse Model Registry list response
+          ansible.builtin.set_fact:
+            ecs_mr_list_response: "{{ ecs_mr_list.stdout | from_json }}"
+
+        - name: Resolve matching Model Registry
+          ansible.builtin.set_fact:
+            ecs_mr_existing_registry: >-
+              {{
+                (
+                  (
+                    ecs_mr_list_response.modelRegistries | default([])
+                    | selectattr('environmentName', 'defined')
+                    | selectattr('environmentName', 'equalto', ecs_cdp_environment_name)
+                    | selectattr('serviceName', 'defined')
+                    | selectattr('serviceName', 'equalto', ecs_model_registry_service_name)
+                    | list
+                  )
+                  + (
+                    ecs_mr_list_response.modelRegistries | default([])
+                    | selectattr('environmentName', 'defined')
+                    | selectattr('environmentName', 'equalto', ecs_cdp_environment_name)
+                    | selectattr('namespace', 'defined')
+                    | selectattr('namespace', 'equalto', ecs_model_registry_service_name)
+                    | list
+                  )
+                )
+                | first
+                | default({})
+              }}
+
         - name: Set registry existence fact
           ansible.builtin.set_fact:
-            ecs_mr_exists: "{{ ecs_mr_list.stdout is search(ecs_model_registry_service_name) }}"
+            ecs_mr_exists: "{{ ecs_mr_existing_registry | length > 0 }}"
 
-        - name: Create Model Registry
-          ansible.builtin.command:
-            argv:
-              - cdp
-              - --profile
-              - default
-              - ml
-              - create-model-registry
-              - --environment-crn
-              - "{{ ecs_mr_env_info.environments | map(attribute='crn') | list | first }}"
-              - --environment-name
-              - "{{ ecs_cdp_environment_name }}"
-              - --model-registry-service-name
-              - "{{ ecs_model_registry_service_name }}"
-              - --model-registry-subdomain
-              - "{{ ecs_model_registry_subdomain }}"
-              - --s3-access-key
-              - "{{ hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_access_key }}"
-              - --s3-secret-key
-              - "{{ hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_secret_key }}"
-              - --s3-bucket
-              - "{{ ecs_model_registry_s3_bucket }}"
-              - --s3-endpoint
-              - "{{ ecs_model_registry_s3_endpoint_effective }}"
-          environment: "{{ ecs_cdp_cli_environment }}"
-          register: ecs_mr_create
+        - name: Require existing Model Registry to be healthy
+          ansible.builtin.assert:
+            that:
+              - >-
+                ecs_mr_existing_registry.status | default('')
+                is search(
+                  '(?i)^(installed|ready|running|active|available|succeeded|success|healthy|created|installation:finished)$'
+                )
+            fail_msg: >-
+              Model Registry {{ ecs_model_registry_service_name }} already
+              exists in non-healthy state
+              {{ ecs_mr_existing_registry.status | default('unknown') }}.
+              Automation will not treat it as healthy or create a duplicate.
+            success_msg: >-
+              Model Registry existing-resource health check passed:
+              serviceName={{
+              ecs_mr_existing_registry.serviceName
+              | default(ecs_model_registry_service_name) }},
+              namespace={{
+              ecs_mr_existing_registry.namespace
+              | default(ecs_model_registry_service_name) }},
+              status={{ ecs_mr_existing_registry.status | default('unknown') }},
+              environment={{
+              ecs_mr_existing_registry.environmentName
+              | default(ecs_cdp_environment_name) }}.
+          when: ecs_mr_exists | bool
+
+        - name: Report existing healthy Model Registry
+          ansible.builtin.debug:
+            msg: >-
+              Model Registry: Existing (healthy);
+              no create or credential mutation performed. serviceName={{
+              ecs_mr_existing_registry.serviceName
+              | default(ecs_model_registry_service_name) }};
+              namespace={{
+              ecs_mr_existing_registry.namespace
+              | default(ecs_model_registry_service_name) }};
+              observed_status={{
+              ecs_mr_existing_registry.status | default('unknown') }};
+              environment={{
+              ecs_mr_existing_registry.environmentName
+              | default(ecs_cdp_environment_name) }};
+              endpoint={{
+              ecs_mr_existing_registry.domain
+              | default(ecs_mr_existing_registry.endpoint | default('not returned')) }};
+              crn={{ ecs_mr_existing_registry.crn | default('not returned') }}.
+          when: ecs_mr_exists | bool
+
+        - name: Resolve Model Registry creator CRN
+          ansible.builtin.set_fact:
+            ecs_model_registry_creator_crn_effective: >-
+              {{
+                ecs_model_registry_creator_crn | default('') | trim
+                if (ecs_model_registry_creator_crn | default('') | trim | length > 0)
+                else ecs_ldap_admin_user_crn | default('') | trim
+              }}
           when: not (ecs_mr_exists | bool)
-          no_log: true
-          become: false
-          delegate_to: "{{ ecs_data_services_delegate_host }}"
-          connection: ssh
+
+        - name: Require human Model Registry creator CRN
+          ansible.builtin.assert:
+            that:
+              - ecs_model_registry_creator_crn_effective | length > 0
+              - "':user:' in ecs_model_registry_creator_crn_effective"
+              - "':machineuser:' not in (ecs_model_registry_creator_crn_effective | lower)"
+            fail_msg: >-
+              Model Registry creation requires a human user CRN containing
+              ':user:'. Set ecs_model_registry_creator_crn or enable the ECS
+              LDAP admin lookup so ecs_ldap_admin_user_crn is available.
+              Machine-user CRNs such as ':machineUser:' are not accepted.
+          when: not (ecs_mr_exists | bool)
+
+        - name: Create Model Registry as human creator
+          when: not (ecs_mr_exists | bool)
+          block:
+            - name: Create temporary access key for Model Registry creator
+              ansible.builtin.command:
+                argv: >-
+                  {{
+                    ecs_data_services_cdp_cli_prefix
+                    + [
+                      'iam',
+                      'create-user-access-key',
+                      '--user',
+                      ecs_model_registry_creator_crn_effective,
+                      '--type',
+                      'V2'
+                    ]
+                  }}
+              environment: "{{ ecs_cdp_cli_environment }}"
+              register: ecs_mr_creator_access_key_create
+              no_log: true
+              become: false
+              delegate_to: "{{ ecs_data_services_delegate_host }}"
+              connection: ssh
+
+            - name: Parse temporary Model Registry creator access key response
+              ansible.builtin.set_fact:
+                ecs_mr_creator_access_key_response: >-
+                  {{ ecs_mr_creator_access_key_create.stdout | from_json }}
+              no_log: true
+
+            - name: Resolve temporary Model Registry creator access key
+              ansible.builtin.set_fact:
+                ecs_mr_creator_access_key: >-
+                  {{
+                    {
+                      'accessKeyId': (
+                        (
+                          ecs_mr_creator_access_key_response.accessKey
+                          | default({})
+                        ).accessKeyId
+                        | default(
+                            ecs_mr_creator_access_key_response.accessKeyId
+                            | default('')
+                          )
+                      ),
+                      'actorCrn': (
+                        (
+                          ecs_mr_creator_access_key_response.accessKey
+                          | default({})
+                        ).actorCrn
+                        | default(
+                            ecs_mr_creator_access_key_response.actorCrn
+                            | default('')
+                          )
+                      ),
+                      'privateKey': (
+                        ecs_mr_creator_access_key_response.privateKey
+                        | default(
+                            (
+                              ecs_mr_creator_access_key_response.accessKey
+                              | default({})
+                            ).privateKey
+                            | default('')
+                          )
+                      )
+                    }
+                  }}
+              no_log: true
+
+            - name: Require temporary key to belong to Model Registry creator
+              ansible.builtin.assert:
+                that:
+                  - ecs_mr_creator_access_key.actorCrn == ecs_model_registry_creator_crn_effective
+                  - ecs_mr_creator_access_key.accessKeyId | length > 0
+                  - ecs_mr_creator_access_key.privateKey | length > 0
+                fail_msg: >-
+                  IAM did not return a usable temporary access key owned by
+                  {{ ecs_model_registry_creator_crn_effective }}.
+
+            - name: Write temporary Model Registry creator credentials
+              ansible.builtin.copy:
+                dest: "{{ ecs_ds_cdp_profile_dir.path }}/model-registry-credentials"
+                mode: "0600"
+                content: |
+                  [default]
+                  cdp_access_key_id = {{ ecs_mr_creator_access_key.accessKeyId }}
+                  cdp_private_key = {{ ecs_mr_creator_access_key.privateKey | trim }}
+              no_log: true
+              changed_when: false
+              become: false
+              delegate_to: "{{ ecs_data_services_delegate_host }}"
+              connection: ssh
+
+            - name: Resolve Model Registry creator CLI environment
+              ansible.builtin.set_fact:
+                ecs_mr_creator_cli_environment: >-
+                  {{
+                    ecs_cdp_cli_environment
+                    | combine(
+                        {
+                          'CDP_SHARED_CREDENTIALS_FILE':
+                            ecs_ds_cdp_profile_dir.path
+                            + '/model-registry-credentials',
+                          'CDP_CREDENTIALS_PATH':
+                            ecs_ds_cdp_profile_dir.path
+                            + '/model-registry-credentials'
+                        }
+                      )
+                  }}
+
+            - name: Create Model Registry
+              ansible.builtin.command:
+                argv: >-
+                  {{
+                    ecs_data_services_cdp_cli_prefix
+                    + [
+                      'ml',
+                      'create-model-registry',
+                      '--environment-crn',
+                      ecs_mr_env_info.environments
+                      | map(attribute='crn')
+                      | list
+                      | first,
+                      '--environment-name',
+                      ecs_cdp_environment_name,
+                      '--creator-crn',
+                      ecs_model_registry_creator_crn_effective,
+                      '--namespace',
+                      ecs_model_registry_service_name,
+                      '--s-3-access-key',
+                      hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_access_key,
+                      '--s-3-secret-key',
+                      hostvars[ecs_model_registry_ozone_hosts[0]].ozone_s3_secret_key,
+                      '--s-3-bucket',
+                      ecs_model_registry_s3_bucket,
+                      '--s-3-endpoint',
+                      ecs_model_registry_s3_endpoint_effective
+                    ]
+                  }}
+              environment: "{{ ecs_mr_creator_cli_environment }}"
+              register: ecs_mr_create
+              failed_when: false
+              no_log: true
+              become: false
+              delegate_to: "{{ ecs_data_services_delegate_host }}"
+              connection: ssh
+
+            - name: Require successful Model Registry creation
+              ansible.builtin.assert:
+                that:
+                  - ecs_mr_create.rc | default(0) == 0
+                fail_msg: >-
+                  Model Registry creation failed with rc
+                  {{ ecs_mr_create.rc | default('unknown') }}:
+                  {{
+                    ecs_mr_create.stderr
+                    | default('')
+                    | regex_replace(
+                        '(?i)(--s-?3-(?:access|secret)-key(?:\\s+|,\\s*))([^,\\s]+)',
+                        '\\1<redacted>'
+                      )
+                    | regex_replace(
+                        '(?i)(awsAccessKey|awsSecret|password|secret|access[ _-]?key)(\\s*[=:]\\s*)\\S+',
+                        '\\1\\2<redacted>'
+                      )
+                    | trim
+                  }}
+          always:
+            - name: Delete temporary Model Registry creator access key
+              ansible.builtin.command:
+                argv: >-
+                  {{
+                    ecs_data_services_cdp_cli_prefix
+                    + [
+                      'iam',
+                      'delete-access-key',
+                      '--access-key-id',
+                      ecs_mr_creator_access_key.accessKeyId
+                    ]
+                  }}
+              environment: "{{ ecs_cdp_cli_environment }}"
+              register: ecs_mr_creator_access_key_delete
+              changed_when: ecs_mr_creator_access_key_delete.rc == 0
+              failed_when: false
+              no_log: true
+              become: false
+              delegate_to: "{{ ecs_data_services_delegate_host }}"
+              connection: ssh
+              when:
+                - ecs_mr_creator_access_key is defined
+                - ecs_mr_creator_access_key.accessKeyId | default('') | length > 0
+
+            - name: Remove temporary Model Registry creator credentials
+              ansible.builtin.file:
+                path: "{{ ecs_ds_cdp_profile_dir.path }}/model-registry-credentials"
+                state: absent
+              changed_when: false
+              become: false
+              delegate_to: "{{ ecs_data_services_delegate_host }}"
+              connection: ssh
+
+            - name: Require temporary Model Registry creator key deletion
+              ansible.builtin.assert:
+                that:
+                  - ecs_mr_creator_access_key_delete.rc | default(0) == 0
+                fail_msg: >-
+                  Failed to delete the temporary access key created for
+                  {{ ecs_model_registry_creator_crn_effective }}.
 
         - name: Record Model Registry provisioning success
           ansible.builtin.set_fact:
             ecs_model_registry_succeeded: true
+            ecs_model_registry_status: >-
+              {{
+                'Existing (healthy)'
+                if (ecs_mr_exists | bool)
+                else 'Created successfully'
+              }}
 
         - name: Register Model Registry ingress for Caddy
           ansible.builtin.set_fact:
@@ -146,6 +431,7 @@
                 ansible_failed_result.msg
                 | default(ansible_failed_result.stderr | default(ansible_failed_result | to_json))
               }}
+            ecs_model_registry_status: Failed
 
         - name: Report Model Registry provisioning failure
           ansible.builtin.debug:
