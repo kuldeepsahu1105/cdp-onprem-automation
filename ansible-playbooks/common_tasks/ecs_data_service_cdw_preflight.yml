@@ -53,31 +53,8 @@
           | default({})
         ).custom_kerberos_principal_hostname
         | default(
-            'dwx-env-'
-            + ecs_cdp_environment_name
-            + '.'
-            + (
-                ipaserver_domain
-                if identity_provider_effective | default('freeipa') == 'freeipa'
-                else 'cdp.local'
-              ),
+            'dwx-env-' + ecs_cdp_environment_name + '.cdp.local',
             true
-          )
-      }}
-  when: "'cdw' in (ecs_data_services_install_names | default([]))"
-
-- name: CDW | Build effective private-cloud submission configuration
-  ansible.builtin.set_fact:
-    ecs_cdw_private_cloud_config_effective: >-
-      {{
-        (ecs_cdw_private_cloud_config | default({}))
-        | combine(
-            {
-              'custom_kerberos_principal_hostname':
-                ecs_cdw_kerberos_principal_hostname_effective
-            }
-            if identity_provider_effective | default('freeipa') == 'freeipa'
-            else {}
           )
       }}
   when: "'cdw' in (ecs_data_services_install_names | default([]))"
@@ -439,51 +416,20 @@
   when:
     - ecs_cdw_freeipa_hive_service_show_before is not skipped
 
-- name: CDW | Initialize missing FreeIPA Hive service key exactly once
+- name: CDW | Remove preinitialized Hive key before fresh CDW activation
+  freeipa.ansible_freeipa.ipaservice:
+    ipaadmin_password: "{{ ipaadmin_password }}"
+    ipaadmin_principal: "{{ ipaadmin_principal }}"
+    name: "{{ ecs_cdw_hive_service_principal_effective }}"
+    state: disabled
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
   when:
     - ecs_cdw_freeipa_hive_service_has_keytab_before is defined
-    - not (ecs_cdw_freeipa_hive_service_has_keytab_before | bool)
-  block:
-    - name: CDW | Create temporary Hive service keytab directory
-      ansible.builtin.tempfile:
-        state: directory
-        prefix: ansible_cdw_hive_keytab_
-      register: ecs_cdw_freeipa_hive_temporary_keytab_dir
-      delegate_to: "{{ ipaserver_inventory_host }}"
-      connection: ssh
+    - ecs_cdw_freeipa_hive_service_has_keytab_before | bool
+    - ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0
 
-    - name: CDW | Generate initial FreeIPA Hive service key
-      ansible.builtin.command:
-        argv:
-          - ipa-getkeytab
-          - -p
-          - >-
-            {{ ecs_cdw_hive_service_principal_effective
-            }}@{{ ipaserver_realm }}
-          - -k
-          - >-
-            {{ ecs_cdw_freeipa_hive_temporary_keytab_dir.path
-            }}/hive.keytab
-      environment:
-        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
-      changed_when: true
-      delegate_to: "{{ ipaserver_inventory_host }}"
-      connection: ssh
-  always:
-    - name: CDW | Remove temporary Hive service keytab directory
-      ansible.builtin.file:
-        path: "{{ ecs_cdw_freeipa_hive_temporary_keytab_dir.path }}"
-        state: absent
-      delegate_to: "{{ ipaserver_inventory_host }}"
-      connection: ssh
-      when:
-        - ecs_cdw_freeipa_hive_temporary_keytab_dir is defined
-        - >-
-          ecs_cdw_freeipa_hive_temporary_keytab_dir.path
-          | default('')
-          | length > 0
-
-- name: CDW | Verify FreeIPA Hive service key is initialized
+- name: CDW | Verify FreeIPA Hive service key state before activation
   ansible.builtin.command:
     argv:
       - ipa
@@ -500,84 +446,22 @@
   when:
     - ecs_cdw_hive_service_principal_effective is defined
 
-- name: CDW | Require initialized FreeIPA Hive service key
+- name: CDW | Require CDW to own fresh Hive service key creation
   ansible.builtin.assert:
     that:
       - >-
         (
           ecs_cdw_freeipa_hive_service_show_after.stdout
           | regex_search(
-              '(?im)^\\s*(?:has_keytab|Keytab):\\s*(?:TRUE|True)\\s*$'
+              '(?im)^\\s*(?:has_keytab|Keytab):\\s*(?:FALSE|False)\\s*$'
             )
         )
         is not none
     fail_msg: >-
-      FreeIPA {{ ecs_cdw_hive_service_principal_effective }} still reports
-      Keytab: False after initialization.
+      FreeIPA {{ ecs_cdw_hive_service_principal_effective }} reports an
+      initialized key before fresh CDW activation. CDW must create and retrieve
+      its own service keytab; a preinitialized key causes its keytab validation
+      endpoint to fail with HTTP 500.
   when:
     - ecs_cdw_freeipa_hive_service_show_after is not skipped
-
-- name: CDW | Validate Hive principal ticket acquisition without rotating its key
-  when:
-    - ecs_cdw_hive_service_principal_effective is defined
-  block:
-    - name: CDW | Create temporary Hive principal validation directory
-      ansible.builtin.tempfile:
-        state: directory
-        prefix: ansible_cdw_hive_validate_
-      register: ecs_cdw_freeipa_hive_validation_dir
-      delegate_to: "{{ ipaserver_inventory_host }}"
-      connection: ssh
-
-    - name: CDW | Retrieve the existing Hive service key for validation
-      ansible.builtin.command:
-        argv:
-          - ipa-getkeytab
-          - -r
-          - -p
-          - >-
-            {{ ecs_cdw_hive_service_principal_effective
-            }}@{{ ipaserver_realm }}
-          - -k
-          - "{{ ecs_cdw_freeipa_hive_validation_dir.path }}/hive.keytab"
-      environment:
-        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
-      changed_when: false
-      delegate_to: "{{ ipaserver_inventory_host }}"
-      connection: ssh
-
-    - name: CDW | Acquire a Kerberos ticket with the Hive service key
-      ansible.builtin.command:
-        argv:
-          - kinit
-          - -c
-          - "FILE:{{ ecs_cdw_freeipa_hive_validation_dir.path }}/hive.ccache"
-          - -kt
-          - "{{ ecs_cdw_freeipa_hive_validation_dir.path }}/hive.keytab"
-          - >-
-            {{ ecs_cdw_hive_service_principal_effective
-            }}@{{ ipaserver_realm }}
-      changed_when: false
-      delegate_to: "{{ ipaserver_inventory_host }}"
-      connection: ssh
-
-    - name: CDW | Require a valid Hive service Kerberos ticket
-      ansible.builtin.command:
-        argv:
-          - klist
-          - -s
-          - -c
-          - "FILE:{{ ecs_cdw_freeipa_hive_validation_dir.path }}/hive.ccache"
-      changed_when: false
-      delegate_to: "{{ ipaserver_inventory_host }}"
-      connection: ssh
-  always:
-    - name: CDW | Remove temporary Hive principal validation directory
-      ansible.builtin.file:
-        path: "{{ ecs_cdw_freeipa_hive_validation_dir.path }}"
-        state: absent
-      delegate_to: "{{ ipaserver_inventory_host }}"
-      connection: ssh
-      when:
-        - ecs_cdw_freeipa_hive_validation_dir is defined
-        - ecs_cdw_freeipa_hive_validation_dir.path | default('') | length > 0
+    - ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0

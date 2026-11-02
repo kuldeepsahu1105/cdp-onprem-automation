@@ -1285,12 +1285,11 @@ ecs_ldap_admin_assign_all_resource_roles_on_env: false
 ecs_ldap_admin_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|environment)'
 ecs_ldap_admin_resource_role_name_regex: '(?i)(admin|owner|power|environment|de|dw|ml|data)'
 # CDW
-# Optional storage_class/certificate paths/custom hostname. FreeIPA defaults the
-# custom hostname to dwx-env-<environment>.<ipaserver_domain>.
-ecs_cdw_private_cloud_config: {}
-# FreeIPA only: initialize host/ and hive/ principals for the effective CDW hostname.
+ecs_cdw_private_cloud_config: {}  # optional storage_class, db_client_certificate paths
+# FreeIPA only: initialize host/ and create hive/ for the effective CDW hostname.
+# CDW itself creates and retrieves the Hive service keytab during activation.
 ecs_cdw_ensure_freeipa_principal_host: true
-# Principal used to initialize missing keys and validate Hive ticket acquisition.
+# Principal allowed to initialize the host key and create/retrieve the CDW Hive key.
 ecs_cdw_freeipa_keytab_admin_principal: "{{ ipaadmin_principal }}"
 ecs_cdw_freeipa_keytab_admin_password: "{{ krb5_kdc_admin_password }}"
 ecs_cdw_submission_recovery_retries: 24

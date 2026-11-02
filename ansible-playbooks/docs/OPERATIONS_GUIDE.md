@@ -359,21 +359,20 @@ deletion, recreation, or a control-plane restart. A concurrent transition to
 passes the final success assertion.
 
 For FreeIPA-backed CDW, preflight ensures the product-standard
-`host/dwx-env-<environment>.<ipaserver_domain>@<realm>` and
-`hive/dwx-env-<environment>.<ipaserver_domain>@<realm>` principals exist and
-have initialized key material. It passes the same
-`dwx-env-<environment>.<ipaserver_domain>` value as
-`customKerberosPrincipalHostname` in the CDW activation request; relying on
-the backend `dwx-env-<environment>.cdp.local` default can fail its keytab
-retrieval service with HTTP 500 even when direct `kinit` succeeds. The configured
+`host/dwx-env-<environment>.cdp.local@<realm>` and
+`hive/dwx-env-<environment>.cdp.local@<realm>` principals exist. Automation
+initializes the host key, but leaves the Hive service key uninitialized for
+the CDW activation backend to create and download. The configured
 `ecs_cdw_freeipa_keytab_admin_principal` receives additive create/retrieve
-permission. A missing key is initialized once through a temporary keytab that
-is immediately removed; existing keys are never rotated on rerun. Preflight
-retrieves the existing Hive key without rotation, proves that `kinit -kt` can
-acquire a ticket, and immediately removes the validation keytab and credential
-cache. This prevents CDW activation from reaching Bad Health with
-`KDC_ERR_C_PRINCIPAL_UNKNOWN` before any warehouse namespace or pod is created.
-The prerequisite is skipped for Active Directory.
+permission. Before a fresh activation with no existing CDW cluster record,
+preflight disables any preinitialized Hive key left by older automation while
+retaining the service principal and ACLs. Existing clusters are never reset.
+This follows the manual UI and `cloudera-labs/cloudera.cloud` minimal request:
+the API receives no custom Kerberos hostname and uses the predefined
+`dwx-env-<environment>.cdp.local` identity. It avoids both
+`KDC_ERR_C_PRINCIPAL_UNKNOWN` from a missing service principal and HTTP 500
+keytab download failures caused by an automation-generated Hive key. The
+prerequisite is skipped for Active Directory.
 
 ---
 
