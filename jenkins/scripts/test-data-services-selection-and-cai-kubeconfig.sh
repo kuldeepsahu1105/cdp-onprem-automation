@@ -283,7 +283,10 @@ assert group_vars["ecs_cdw_ensure_freeipa_principal_objects"] is True
 assert group_vars["ecs_cdw_repair_stale_cm_credentials"] is False
 assert group_vars["ecs_cdw_repair_stale_cm_credentials_confirm"] == ""
 assert group_vars["ecs_cdw_workload_file_ccache_reconcile"] is True
-assert group_vars["ecs_cdw_workload_krb5ccname"] == "FILE:/tmp/krb5cc_cdw"
+assert (
+    group_vars["ecs_cdw_workload_krb5ccname"]
+    == "FILE:/tmp/krb5cc_metastore"
+)
 assert group_vars["ecs_cdw_workload_reconcile_wait_retries"] == 60
 assert group_vars["ecs_cdw_workload_reconcile_wait_delay"] == 5
 assert group_vars["ecs_cdw_workload_rollout_timeout"] == "5m"
