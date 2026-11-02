@@ -436,10 +436,12 @@
 - name: Report transient CoreDNS Service fallback
   ansible.builtin.debug:
     msg: >-
-      CoreDNS Service DNS was transiently inconsistent, but ready CoreDNS
+      CoreDNS Service DNS is inconsistent, although ready CoreDNS
       endpoint {{ ecs_data_services_coredns_endpoint.stdout | trim }} returned
-      every required A record and direct TCP validation succeeded. Continuing
-      without pinning workloads, restarting pods, or modifying CoreDNS.
+      every required A record and direct TCP validation succeeded. Data
+      Services control-plane workloads use the Service path, so endpoint-only
+      success is diagnostic evidence and is not accepted as readiness. Re-run
+      playbook 33 to perform bounded rolling CoreDNS recovery before provisioning.
   when:
     - >-
       'ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK'
@@ -451,13 +453,7 @@
       - ecs_data_services_dns_probe_logs.rc == 0
       - ecs_data_services_dns_probe_phases.stdout == 'Succeeded'
       - >-
-        (
-          'ALL_PROBES_OK' in ecs_data_services_dns_probe_logs.stdout_lines
-        )
-        or (
-          'ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK'
-          in ecs_data_services_dns_probe_logs.stdout_lines
-        )
+        'ALL_PROBES_OK' in ecs_data_services_dns_probe_logs.stdout_lines
     fail_msg: >-
       One or more selected Data Services dependencies failed DNS or TCP
       verification through the newly created Kubernetes probe pod. Probe

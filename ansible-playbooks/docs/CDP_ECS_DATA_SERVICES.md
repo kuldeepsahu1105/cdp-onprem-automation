@@ -132,7 +132,19 @@ in-progress resources are reused/waited. The default
 `ecs_cde_virtual_cluster_name_attempts: 1` also preserves stable VC naming and
 fails on a stale conflicting record; increase it only to request deterministic
 suffixes explicitly. The effective VC name, status, and native `VcUiUrl` are
-recorded in the service catalog.
+recorded in the service catalog. After asynchronous VC submission, empty or
+unknown discovery responses are treated as eventual consistency and continue
+polling. The wait stops only for configured green states or explicit terminal
+failure states; an empty first lookup no longer fails while the UI/backend is
+still installing the VC.
+
+Playbook 33 verifies required private records through the Kubernetes CoreDNS
+Service after reconciling the Corefile. If the Service path is stale while the
+configuration is correct, it performs one rolling CoreDNS deployment restart
+and verifies the Service again. Playbook 34 does not accept direct-endpoint
+fallback as readiness: Liftie/dex/compute workloads use the Service path, and
+endpoint-only success can otherwise surface later as `UnknownHostException`
+while fetching base-cluster details.
 Before a rerun, CDE uses the signed `de list-services` summary, which does not
 contact Cloudera Manager. Only explicit healthy or transitional service states
 are eligible for mutation-free adoption. Completed-deletion service tombstones

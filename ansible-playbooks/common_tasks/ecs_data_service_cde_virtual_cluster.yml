@@ -113,19 +113,21 @@
     endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cde_vc_info
-  until: >-
-    (
-      ecs_cde_vc_info.virtual_clusters | default([])
-      | first | default({})
-    ).status | default('') | lower
-    in (ecs_cde_virtual_cluster_green_statuses | map('lower') | list)
-    or (
+  until:
+    - ecs_cde_vc_info.virtual_clusters | default([]) | length > 0
+    - >-
       (
         ecs_cde_vc_info.virtual_clusters | default([])
         | first | default({})
       ).status | default('') | lower
-      not in (ecs_cde_virtual_cluster_transitional_statuses | map('lower') | list)
-    )
+      in (
+        (
+          ecs_cde_virtual_cluster_green_statuses
+          + ecs_cde_virtual_cluster_terminal_failure_statuses
+        )
+        | map('lower')
+        | list
+      )
   retries: "{{ ecs_data_services_status_wait_retries | int }}"
   delay: "{{ ecs_data_services_status_wait_delay | int }}"
   become: false
@@ -153,7 +155,11 @@
       {{ ecs_cde_virtual_cluster.status | default('unknown') }} instead of a
       configured healthy status
       ({{ ecs_cde_virtual_cluster_green_statuses | join(', ') }}).
-      Automation does not delete the failed resource.
+      Explicit terminal failure statuses are
+      {{ ecs_cde_virtual_cluster_terminal_failure_statuses | join(', ') }}.
+      Empty or unknown discovery responses are polled until the configured
+      timeout rather than being treated as terminal. Automation does not delete
+      the failed resource.
 
 - name: CDE VC | Resolve native UI URL
   ansible.builtin.set_fact:

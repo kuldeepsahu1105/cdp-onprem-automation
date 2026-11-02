@@ -1,0 +1,168 @@
+---
+- name: CoreDNS Service probe | Remove stale readiness pod
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - delete
+      - pod
+      - "{{ ecs_coredns_service_probe_pod_name }}"
+      - --ignore-not-found
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: CoreDNS Service probe | Start readiness pod
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - run
+      - "{{ ecs_coredns_service_probe_pod_name }}"
+      - "--image={{ ecs_data_services_dns_probe_image }}"
+      - --restart=Never
+      - --command
+      - --
+      - python3
+      - -c
+      - |
+        import json
+        import socket
+        import sys
+        import time
+
+        records = json.loads(sys.argv[1])
+        attempts = int(sys.argv[2])
+        delay = int(sys.argv[3])
+        pending = {
+            record["fqdn"]: record
+            for record in records
+            if record.get("fqdn")
+        }
+        last_answers = {}
+        for attempt in range(1, attempts + 1):
+            for fqdn, record in list(pending.items()):
+                try:
+                    answers = sorted({
+                        item[4][0]
+                        for item in socket.getaddrinfo(
+                            fqdn,
+                            None,
+                            socket.AF_INET,
+                            socket.SOCK_STREAM,
+                        )
+                    })
+                except socket.gaierror as exc:
+                    answers = [f"ERROR:{exc}"]
+                last_answers[fqdn] = answers
+                expected = record.get("address", "")
+                if not expected or expected in answers:
+                    print(
+                        f"DNS_SERVICE_OK fqdn={fqdn} answers={answers}",
+                        flush=True,
+                    )
+                    pending.pop(fqdn, None)
+            if not pending:
+                print("COREDNS_SERVICE_ALL_RECORDS_OK", flush=True)
+                raise SystemExit(0)
+            if attempt < attempts:
+                time.sleep(delay)
+        for fqdn, record in pending.items():
+            print(
+                "DNS_SERVICE_FAILED "
+                f"fqdn={fqdn} expected={record.get('address', '')} "
+                f"answers={last_answers.get(fqdn, [])}",
+                file=sys.stderr,
+            )
+        raise SystemExit(1)
+      - "{{ ecs_coredns_required_dns_records | to_json }}"
+      - "{{ ecs_data_services_dns_probe_attempts | default(3) | int }}"
+      - "{{ ecs_data_services_dns_probe_retry_delay | int }}"
+  register: ecs_coredns_service_probe_start
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: CoreDNS Service probe | Wait for readiness pod
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - get
+      - pod
+      - "{{ ecs_coredns_service_probe_pod_name }}"
+      - --output
+      - jsonpath={.status.phase}
+  register: ecs_coredns_service_probe_phase
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  retries: "{{ ecs_data_services_dns_probe_wait_retries | int + 6 }}"
+  delay: "{{ ecs_data_services_dns_probe_wait_delay | int }}"
+  until:
+    - ecs_coredns_service_probe_phase.rc == 0
+    - ecs_coredns_service_probe_phase.stdout in ['Succeeded', 'Failed']
+
+- name: CoreDNS Service probe | Read readiness output
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - logs
+      - "{{ ecs_coredns_service_probe_pod_name }}"
+  register: ecs_coredns_service_probe_logs
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: CoreDNS Service probe | Remove completed readiness pod
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_data_services_dns_probe_namespace }}"
+      - delete
+      - pod
+      - "{{ ecs_coredns_service_probe_pod_name }}"
+      - --ignore-not-found
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: CoreDNS Service probe | Record readiness
+  ansible.builtin.set_fact:
+    ecs_coredns_service_probe_succeeded: >-
+      {{
+        ecs_coredns_service_probe_phase.stdout | default('') == 'Succeeded'
+        and (
+          'COREDNS_SERVICE_ALL_RECORDS_OK'
+          in ecs_coredns_service_probe_logs.stdout_lines | default([])
+        )
+      }}
+    ecs_coredns_service_probe_output: >-
+      {{
+        ecs_coredns_service_probe_logs.stdout
+        | default(ecs_coredns_service_probe_logs.stderr, true)
+      }}

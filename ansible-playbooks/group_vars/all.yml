@@ -1369,6 +1369,12 @@ ecs_cde_virtual_cluster_transitional_statuses:
   - Starting
   - Waiting
   - Updating
+ecs_cde_virtual_cluster_terminal_failure_statuses:
+  - AppInstallationFailed
+  - AppResumeFailed
+  - AppUpgradeFailed
+  - Failed
+  - Error
 ecs_cde_virtual_cluster_cpu_requests: "20"
 ecs_cde_virtual_cluster_memory_requests: 30Gi
 ecs_cde_virtual_cluster_tier: CORE

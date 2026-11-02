@@ -140,6 +140,13 @@ assert "AppInstalled" in group_vars["ecs_cde_virtual_cluster_green_statuses"]
 assert "AppInstallationInProgress" in group_vars[
     "ecs_cde_virtual_cluster_transitional_statuses"
 ]
+assert group_vars["ecs_cde_virtual_cluster_terminal_failure_statuses"] == [
+    "AppInstallationFailed",
+    "AppResumeFailed",
+    "AppUpgradeFailed",
+    "Failed",
+    "Error",
+]
 assert group_vars["ecs_cde_virtual_cluster_cpu_requests"] == "20"
 assert group_vars["ecs_cde_virtual_cluster_memory_requests"] == "30Gi"
 assert group_vars["ecs_cdw_dataviz_name_attempts"] == 10
@@ -537,7 +544,34 @@ assert "Existing compute settings will not be updated" in cde_vc_text
 assert "reused without create or compute mutation" in cde_vc_text
 assert "native_ui=" in cde_vc_text
 assert "wait: false" in cde_vc_text
-assert "Automation does not delete the failed resource" in cde_vc_text
+assert "ecs_cde_vc_info.virtual_clusters | default([]) | length > 0" in cde_vc_text
+assert "ecs_cde_virtual_cluster_terminal_failure_statuses" in cde_vc_text
+assert "Automation does not delete" in cde_vc_text
+service_probe_text = (
+    root / "ansible-playbooks/common_tasks/ecs_probe_coredns_service.yml"
+).read_text()
+assert "COREDNS_SERVICE_ALL_RECORDS_OK" in service_probe_text
+assert "socket.getaddrinfo" in service_probe_text
+coredns_reconcile_text = (
+    root / "ansible-playbooks/common_tasks/ecs_reconcile_coredns.yml"
+).read_text()
+assert "Verify required records through the CoreDNS Service" in coredns_reconcile_text
+assert "rollout" in coredns_reconcile_text
+assert "restart" in coredns_reconcile_text
+assert "Require reliable CoreDNS Service path" in coredns_reconcile_text
+dns_verify_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_services_verify_dns.yml"
+).read_text()
+assert "success is diagnostic evidence" in dns_verify_text
+assert (
+    "'ALL_PROBES_OK' in ecs_data_services_dns_probe_logs.stdout_lines"
+    in dns_verify_text
+)
+assert (
+    "'ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK'\n"
+    "          in ecs_data_services_dns_probe_logs.stdout_lines"
+    not in dns_verify_text
+)
 assert "ecs_data_service_cde_virtual_cluster.yml" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cde.yml"
 ).read_text()
@@ -616,6 +650,38 @@ assert select_versioned(
     group_vars["ecs_cde_virtual_cluster_green_statuses"],
     group_vars["ecs_cde_virtual_cluster_transitional_statuses"],
 ) == (None, False)
+
+def vc_poll_complete(records, green, terminal):
+    if not records:
+        return False
+    status = records[0].get("status", "").lower()
+    return status in {value.lower() for value in green + terminal}
+
+assert not vc_poll_complete(
+    [],
+    group_vars["ecs_cde_virtual_cluster_green_statuses"],
+    group_vars["ecs_cde_virtual_cluster_terminal_failure_statuses"],
+)
+assert not vc_poll_complete(
+    [{"status": "UnknownBackendState"}],
+    group_vars["ecs_cde_virtual_cluster_green_statuses"],
+    group_vars["ecs_cde_virtual_cluster_terminal_failure_statuses"],
+)
+assert not vc_poll_complete(
+    [{"status": "AppInstallationInProgress"}],
+    group_vars["ecs_cde_virtual_cluster_green_statuses"],
+    group_vars["ecs_cde_virtual_cluster_terminal_failure_statuses"],
+)
+assert vc_poll_complete(
+    [{"status": "AppInstalled"}],
+    group_vars["ecs_cde_virtual_cluster_green_statuses"],
+    group_vars["ecs_cde_virtual_cluster_terminal_failure_statuses"],
+)
+assert vc_poll_complete(
+    [{"status": "AppInstallationFailed"}],
+    group_vars["ecs_cde_virtual_cluster_green_statuses"],
+    group_vars["ecs_cde_virtual_cluster_terminal_failure_statuses"],
+)
 
 dataviz_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_dataviz.yml"
