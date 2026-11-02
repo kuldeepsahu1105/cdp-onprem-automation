@@ -493,12 +493,13 @@ activation. It does not delete the ECS environment, Base cluster, CDE, CAI, or
 FreeIPA and does not mutate principals or keytabs. It does delete CDW catalogs
 and virtual warehouses attached to that cluster, so confirmation must exactly
 match the cluster ID. Before deleting, automation describes the cluster and
-refuses the reset unless its status is terminal `Error` or `Failed`; stale
-recovery values therefore cannot delete a healthy, setting-up, running, or
-deactivated cluster. The exact CLI response containing both `Status Code:
-404` and `Error Code: NOT_FOUND` is accepted as already absent. Clear both
-reset variables immediately after the one recovery run. All other describe or
-delete failures stop the playbook. If `createPrivateCluster` then still
+skips the reset unless its status is terminal `Error` or `Failed`; stale
+recovery values therefore neither delete a healthy, setting-up, running, or
+deactivated cluster nor abort its ordinary rerun. The exact CLI response
+containing both `Status Code: 404` and `Error Code: NOT_FOUND` is accepted as
+already absent. Clear both reset variables immediately after the one recovery
+run. All other describe or delete failures stop the playbook. If
+`createPrivateCluster` then still
 reports the same cluster ID as already activated, the inconsistency is
 internal DWX datastore state and no public reset operation remains.
 
