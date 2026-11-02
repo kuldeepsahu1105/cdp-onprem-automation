@@ -493,30 +493,30 @@ the activation POST. Repair and use the supported DWX UI/backend activation
 path, activate the cluster manually, then rerun playbook 34. Automation does
 not attempt activation, deletion, recreation, or a control-plane restart.
 `Deactivated` is also a terminal structured polling status, while only
-`Running` is accepted as success. The playbook does not create or delete the
-CDW Hive service principal or its keytab; the Private Cloud Data Warehouse
-control plane owns `hive/<hostname>@<realm>` creation and key rotation.
+`Running` is accepted as success.
 
 The product-standard private-cloud CDW hostname is
 `dwx-env-<environment>.cdp.local`, even when the deployment DNS domain and
 Kerberos realm are different (for example, `cldr.internal.arpa` and
 `CLDR.INTERNAL.ARPA`). Before CDW submission in FreeIPA deployments,
 `ecs_cdw_ensure_freeipa_principal_host` idempotently ensures the external-name
-FreeIPA host object, which provides
-`host/dwx-env-<environment>.cdp.local@<cluster_realm>`. The configured
+FreeIPA host object and the CDW Hive service principal:
+`host/dwx-env-<environment>.cdp.local@<cluster_realm>` and
+`hive/dwx-env-<environment>.cdp.local@<cluster_realm>`. The configured
 `ecs_cdw_freeipa_keytab_admin_principal` (default `ipaadmin_principal`) receives
-additive permission to create and retrieve that host key and authenticates with
+additive permission to create and retrieve those keys and authenticates with
 `ecs_cdw_freeipa_keytab_admin_password` (default
 `krb5_kdc_admin_password`). Automation inspects the FreeIPA `Keytab` state and
-invokes `ipa-getkeytab` without `-r` only when the host reports
-`Keytab: False`, deleting the temporary keytab immediately afterward. Reruns
-with `Keytab: True` do not invoke key generation, retrieval, or rotation. This
-prerequisite does not create
-`hive/dwx-env-<environment>.cdp.local@<cluster_realm>` or store a persistent
-keytab; the Private Cloud Data Warehouse control plane owns the Hive service
-principal and keytab lifecycle. Active Directory deployments skip this
+invokes `ipa-getkeytab` without `-r` only when the corresponding principal
+reports `Keytab: False`, deleting each temporary keytab immediately afterward.
+Reruns with `Keytab: True` never rotate either key. Before CDW submission,
+automation retrieves the existing Hive key with `ipa-getkeytab -r`, verifies
+that `kinit -kt` can acquire a ticket for the exact Hive principal, and removes
+the validation keytab and credential cache immediately. No keytab is persisted.
+This catches the pre-Kubernetes `KDC_ERR_C_PRINCIPAL_UNKNOWN` failure before
+calling `createPrivateCluster`. Active Directory deployments skip this
 FreeIPA-only step. An explicit `custom_kerberos_principal_hostname` in
-`ecs_cdw_private_cloud_config` is honored by the same host prerequisite.
+`ecs_cdw_private_cloud_config` is honored by both principal prerequisites.
 
 A gateway timeout from `createPrivateCluster` is treated as ambiguous:
 automation continues structured discovery and accepts the recovered cluster
