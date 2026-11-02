@@ -459,7 +459,12 @@ after 300 seconds, executor groups 1–5, scale-out delay 20 seconds, scale-in
 delay 300 seconds, zero additional quota, and query logging enabled. CDP CLI
 0.9.164 does not expose the UI's named resource-template selector on
 `create-vw`; `ecs_cdw_vw_tshirt_size: xsmall` is the supported minimum-size
-input.
+input. Trino creation accepts `ecs_cdw_trino_autoscaling` and
+`ecs_cdw_trino_additional_quota`. The autoscaling map defaults to empty so CDW
+retains the xsmall UI defaults, including its two initial executors; optional
+supported keys are `trinoDisableAutoScaling`, `trinoMinWorkerCount`,
+`trinoMaxWorkerCount`, `trinoShutdownGracePeriod`,
+`trinoScaleUpDelaySeconds`, and `trinoScaleDownDelaySeconds`.
 
 Before waiting for the warehouses to become
 healthy, new warehouses receive the common `env` config block during

@@ -435,7 +435,11 @@ settings are controlled by `ecs_cdw_impala_options`,
 `ecs_cdw_impala_additional_quota`, and `ecs_cdw_impala_query_log`. Defaults
 match the private-cloud UI's minimum xsmall selection. The pinned CLI does not
 expose the UI's named resource-template selector; use the supported
-`ecs_cdw_vw_tshirt_size` input.
+`ecs_cdw_vw_tshirt_size` input. New Trino warehouses can additionally use
+`ecs_cdw_trino_autoscaling` and `ecs_cdw_trino_additional_quota`. The
+autoscaling map is empty by default so the CDW xsmall defaults, including two
+initial executors, remain authoritative. Set only supported `trino*`
+autoscaling keys when a deployment needs different worker bounds or delays.
 
 In Kerberized deployments,
 playbook 34 supplies `KRB5CCNAME=FILE:/tmp/krb5cc_cdw` in the supported CDW

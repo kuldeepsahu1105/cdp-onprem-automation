@@ -1298,6 +1298,12 @@ ecs_cdw_impala_additional_quota:
   cpu: 0.0
   memory: 0
 ecs_cdw_impala_query_log: true
+# Empty keeps the CDW xsmall Trino defaults shown in the UI (two executors).
+# Set supported trino* keys to customize worker autoscaling for new warehouses.
+ecs_cdw_trino_autoscaling: {}
+ecs_cdw_trino_additional_quota:
+  cpu: 0.0
+  memory: 0
 ecs_cdw_vw_wait_retries: 120
 ecs_cdw_vw_wait_delay: 30
 ecs_cdw_vw_krb5ccname: "FILE:/tmp/krb5cc_cdw"

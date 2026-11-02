@@ -142,6 +142,9 @@ assert "'--additional-quota'" in cdw_followup
 assert "'--impala-query-log'" in cdw_followup
 assert "'--no-impala-query-log'" in cdw_followup
 assert "Validate configured Impala Virtual Warehouse settings" in cdw_followup
+assert "Validate configured Trino Virtual Warehouse settings" in cdw_followup
+assert "ecs_cdw_trino_autoscaling | to_json" in cdw_followup
+assert "ecs_cdw_trino_additional_quota | to_json" in cdw_followup
 assert "item.virtual_warehouses | default([]) | length == 0" in cdw_followup
 assert "ecs_data_service_cdw_reconcile_vw_ccaches.yml" not in cdw_followup
 assert "'describe-dbc-config'" in cdw_followup
@@ -173,6 +176,8 @@ assert group_vars["ecs_cdw_impala_autoscaling"]["impalaScaleUpDelaySeconds"] == 
 assert group_vars["ecs_cdw_impala_autoscaling"]["impalaScaleDownDelaySeconds"] == 300
 assert group_vars["ecs_cdw_impala_additional_quota"] == {"cpu": 0.0, "memory": 0}
 assert group_vars["ecs_cdw_impala_query_log"] is True
+assert group_vars["ecs_cdw_trino_autoscaling"] == {}
+assert group_vars["ecs_cdw_trino_additional_quota"] == {"cpu": 0.0, "memory": 0}
 assert group_vars["ecs_cdw_vw_krb5ccname"] == "FILE:/tmp/krb5cc_cdw"
 assert (
     group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
