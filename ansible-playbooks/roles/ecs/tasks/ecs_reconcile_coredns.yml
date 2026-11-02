@@ -642,6 +642,150 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
 
+- name: Check for ECS node-local DNS configuration
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - get
+      - configmap
+      - "{{ ecs_node_local_dns_configmap_name }}"
+      - --output
+      - jsonpath={.data.Corefile}
+  register: ecs_node_local_dns_corefile
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  when: ecs_node_local_dns_reconcile | default(true) | bool
+
+- name: Build verified ECS node-local DNS forwarding policy
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import re
+        import sys
+
+        corefile = sys.argv[1]
+        upstreams = sys.argv[2]
+        root = re.compile(
+            r"(?ms)^(?P<header>\.:53\s*\{\n)"
+            r"(?P<body>.*?)"
+            r"(?P<footer>^\})"
+        )
+        match = root.search(corefile)
+        if match is None:
+            raise SystemExit("node-local DNS root server block was not found")
+        forward = re.compile(
+            r"(?m)^(?P<indent>[ \t]*)forward\s+\.\s+[^\n{]+\s*$"
+        )
+        body, count = forward.subn(
+            lambda item: (
+                item.group("indent") + "forward . " + upstreams
+            ),
+            match.group("body"),
+            count=1,
+        )
+        if count != 1:
+            raise SystemExit(
+                "node-local DNS root forward stanza was not found"
+            )
+        replacement = match.group("header") + body + match.group("footer")
+        print(
+            corefile[:match.start()]
+            + replacement
+            + corefile[match.end():],
+            end="",
+        )
+      - "{{ ecs_node_local_dns_corefile.stdout }}"
+      - "{{ ecs_coredns_forwarders_effective | join(' ') }}"
+  register: ecs_node_local_dns_identity_corefile
+  changed_when: false
+  become: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  when:
+    - ecs_node_local_dns_reconcile | default(true) | bool
+    - ecs_node_local_dns_corefile.rc == 0
+
+- name: Apply verified ECS node-local DNS forwarding policy
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - patch
+      - configmap
+      - "{{ ecs_node_local_dns_configmap_name }}"
+      - --type
+      - merge
+      - --patch
+      - >-
+        {{
+          {
+            'data': {
+              'Corefile': ecs_node_local_dns_identity_corefile.stdout
+            }
+          } | to_json
+        }}
+  register: ecs_node_local_dns_patch
+  changed_when: >-
+    ecs_node_local_dns_identity_corefile.stdout
+    != ecs_node_local_dns_corefile.stdout
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  when:
+    - ecs_node_local_dns_reconcile | default(true) | bool
+    - ecs_node_local_dns_corefile.rc == 0
+    - >-
+      ecs_node_local_dns_identity_corefile.stdout
+      != ecs_node_local_dns_corefile.stdout
+
+- name: Restart ECS node-local DNS after configuration change
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - rollout
+      - restart
+      - "daemonset/{{ ecs_node_local_dns_daemonset_name }}"
+  register: ecs_node_local_dns_restart
+  changed_when: ecs_node_local_dns_restart.rc == 0
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  when: ecs_node_local_dns_patch is changed
+
+- name: Wait for ECS node-local DNS rollout after configuration change
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - rollout
+      - status
+      - "daemonset/{{ ecs_node_local_dns_daemonset_name }}"
+      - "--timeout={{ ecs_control_plane_wait_retries | int * ecs_control_plane_wait_delay | int }}s"
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  when: ecs_node_local_dns_restart is changed
+
 - name: Record ECS CoreDNS reconciliation for this run
   ansible.builtin.set_fact:
     ecs_coredns_reconciled_this_run: true

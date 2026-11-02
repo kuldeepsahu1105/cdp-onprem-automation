@@ -39,6 +39,17 @@ assert "ecs_data_services_dns_probe_retry_delay | int" in text
 assert group_vars["ecs_data_services_dns_probe_attempts"] == 3
 assert group_vars["ecs_data_services_dns_probe_retry_delay"] > 30
 assert group_vars["ecs_data_services_dns_probe_wait_retries"] == 24
+assert group_vars["ecs_node_local_dns_reconcile"] is True
+assert group_vars["ecs_node_local_dns_configmap_name"] == "node-local-dns"
+assert group_vars["ecs_node_local_dns_daemonset_name"] == "node-local-dns"
+
+coredns_reconcile = (
+    path.parent / "ecs_reconcile_coredns.yml"
+).read_text()
+assert "Check for ECS node-local DNS configuration" in coredns_reconcile
+assert "node-local DNS root server block was not found" in coredns_reconcile
+assert "forward . \" + upstreams" in coredns_reconcile
+assert "daemonset/{{ ecs_node_local_dns_daemonset_name }}" in coredns_reconcile
 
 tasks = yaml.safe_load(path.read_text())
 tasks_by_name = {task.get("name"): task for task in tasks}

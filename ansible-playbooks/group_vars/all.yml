@@ -1134,6 +1134,9 @@ ecs_coredns_kubectl_path: /var/lib/rancher/rke2/bin/kubectl
 ecs_coredns_configmap_name: rke2-coredns-rke2-coredns
 ecs_coredns_deployment_name: rke2-coredns-rke2-coredns
 ecs_coredns_namespace: kube-system
+ecs_node_local_dns_reconcile: true
+ecs_node_local_dns_configmap_name: node-local-dns
+ecs_node_local_dns_daemonset_name: node-local-dns
 # Empty = verified FreeIPA inventory addresses, or ad_dns_servers for AD.
 ecs_coredns_forwarders: []
 # Node resolvers are considered only when no direct candidate proves that it
