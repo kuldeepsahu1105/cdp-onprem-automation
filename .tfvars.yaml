@@ -66,27 +66,27 @@ ami_id: ami-030a276b398df7eb7
 instance_groups:
   cldr_mngr:
     count: 1
-    instance_type: m5.4xlarge
+    instance_type: m6a.4xlarge
     volume_size: 300
   ipa_server:
     count: 1
-    instance_type: m5.xlarge
+    instance_type: m6a.large
     volume_size: 250
   pvcbase_master:
     count: 1
-    instance_type: m5.4xlarge
+    instance_type: m6a.4xlarge
     volume_size: 400
   pvcbase_worker:
     count: 3
-    instance_type: m5.4xlarge
+    instance_type: m6a.4xlarge
     volume_size: 400
   pvcecs_master:
     count: 1
-    instance_type: m5.8xlarge
+    instance_type: m6a.8xlarge
     volume_size: 1300
   pvcecs_worker:
     count: 7
-    instance_type: r5a.4xlarge
+    instance_type: m6a.8xlarge
     volume_size: 1300
 
 # --- Terraform state (local; Jenkins persists under holautosa HOL_AUTO_EXEC_DIR) -

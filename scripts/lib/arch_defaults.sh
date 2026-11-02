@@ -46,6 +46,8 @@ map_instance_type_to_graviton() {
     *)
       if [[ "$1" =~ ^m6i\. ]]; then
         echo "${1/m6i./m7g.}"
+      elif [[ "$1" =~ ^m6a\. ]]; then
+        echo "${1/m6a./m7g.}"
       elif [[ "$1" =~ ^r6i\. ]]; then
         echo "${1/r6i./r7g.}"
       elif [[ "$1" =~ ^c5\. ]]; then

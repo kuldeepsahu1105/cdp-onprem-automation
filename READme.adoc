@@ -31,9 +31,52 @@ End-to-end automation for provisioning AWS infrastructure and deploying Cloudera
 
 | link:ansible-playbooks/docs/REFERENCE.md[ansible-playbooks/docs/REFERENCE.md]
 | *Detailed reference* — playbooks, variables, inventory, DNS, repo modes, cleanup toggles
+
+| link:ansible-playbooks/docs/CAPACITY_REQUIREMENTS.md[ansible-playbooks/docs/CAPACITY_REQUIREMENTS.md]
+| *Capacity report* — static CM, DB, FreeIPA, Base, ECS, and Data Service sizing plus live-report commands
 |===
 
 TIP: Use the *runbook* for execution steps; use the *reference* for configuration details.
+
+== 📊 Capacity planning and live ECS report
+
+The checked-in static sizing report is
+link:ansible-playbooks/docs/CAPACITY_REQUIREMENTS.md[`ansible-playbooks/docs/CAPACITY_REQUIREMENTS.md`].
+It covers CM, PostgreSQL, FreeIPA, Base, ECS, Hive, Impala, Trino, CDE, CAI,
+and Model Registry.
+
+The read-only live reporter is
+link:ansible-playbooks/report_ecs_capacity.sh[`ansible-playbooks/report_ecs_capacity.sh`].
+Run it from a repository checkout on the ECS master, or any host whose current
+`kubectl` context can read the ECS cluster:
+
+[source,bash]
+----
+cd ansible-playbooks
+./report_ecs_capacity.sh --output /tmp/ecs-capacity.md
+
+./report_ecs_capacity.sh \
+  --namespace compute-hive-vw \
+  --namespace impala-impala-vw \
+  --namespace trino-trino-vw \
+  --output /tmp/cdw-capacity.md
+----
+
+If the repository is not present on the ECS master, download the script from
+the integration branch or a pinned commit:
+
+[source,bash]
+----
+REPO_REF=cursor/integration-testing-40f5
+curl -fsSL \
+  "https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/${REPO_REF}/ansible-playbooks/report_ecs_capacity.sh" \
+  -o /tmp/report_ecs_capacity.sh
+chmod +x /tmp/report_ecs_capacity.sh
+/tmp/report_ecs_capacity.sh --output /tmp/ecs-capacity.md
+----
+
+The generated Markdown exists only at the `--output` path. View it with
+`less /tmp/ecs-capacity.md` or copy the file to your workstation.
 
 == 🎯 Objective
 
@@ -298,9 +341,9 @@ Ansible-only inventories copied from the template are operator-owned instead.
 
 === Instance Groups
 
-The wrapper templates currently specify `ami-030a276b398df7eb7`.
-Verify image availability, region and architecture rather than assuming this
-example AMI is suitable for your account.
+The checked-in `.tfvars.yaml` uses AMI `ami-030a276b398df7eb7` in
+`ap-southeast-1`. Override `ami_id`/`AMI_ID` with a compatible image when
+deploying in another region.
 
 [cols="2,1,2,2", options="header"]
 |===
@@ -308,32 +351,32 @@ example AMI is suitable for your account.
 
 | `cldr_mngr`
 | 1
-| m5.4xlarge
+| m6a.4xlarge
 | 300 GB
 
 | `ipa_server`
 | 1
-| m5.xlarge
+| m6a.large
 | 250 GB
 
 | `pvcbase_master`
 | 1
-| m5.4xlarge
+| m6a.4xlarge
 | 400 GB
 
 | `pvcbase_worker`
 | 3
-| m5.4xlarge
+| m6a.4xlarge
 | 400 GB
 
 | `pvcecs_master`
 | 1
-| m5.8xlarge
+| m6a.8xlarge
 | 1300 GB
 
 | `pvcecs_worker`
 | 7
-| r5a.4xlarge
+| m6a.8xlarge
 | 1300 GB
 |===
 

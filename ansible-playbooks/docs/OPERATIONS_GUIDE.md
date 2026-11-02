@@ -1535,7 +1535,7 @@ cm_version: "7.13.2.6"
 instance_groups:
   cldr_mngr:
     count: 1
-    instance_type: m5.4xlarge
+    instance_type: m6a.4xlarge
     volume_size: 300
 ```
 
