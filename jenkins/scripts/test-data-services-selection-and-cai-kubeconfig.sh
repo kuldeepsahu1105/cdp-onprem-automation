@@ -45,11 +45,7 @@ assert group_vars["ecs_cde_memory_requests"] == "64Gi"
 assert group_vars["ecs_cai_static_subdomain"] == "cai"
 assert len(group_vars["ecs_cai_static_subdomain"]) <= 15
 assert group_vars["ecs_cdp_environment_adopt_single_existing"] is False
-assert group_vars["ecs_cdw_cleanup_legacy_automation_principals"] is True
-assert (
-    group_vars["ecs_cdw_legacy_principal_cleanup_marker_dir"] == "/var/lib/ipa"
-)
-assert "ecs_cdw_ensure_freeipa_principal_host" not in group_vars
+assert group_vars["ecs_cdw_ensure_freeipa_principal_objects"] is True
 
 cdw_preflight = (
     root
@@ -67,14 +63,19 @@ for forbidden in (
     "ipa-getkeytab",
     " kinit",
     "state: disabled",
-    "Ensure FreeIPA host principal prerequisite",
-    "Ensure FreeIPA Hive service principal prerequisite",
     "Remove legacy automation-owned principals",
     "ecs_cdw_legacy_principal_cleanup_marker",
-    "freeipa.ansible_freeipa.ipaservice",
-    "freeipa.ansible_freeipa.ipahost",
 ):
     assert forbidden not in cdw_preflight
+assert "CDW | Ensure FreeIPA host principal object" in cdw_preflight
+assert "CDW | Ensure FreeIPA Hive service principal object" in cdw_preflight
+assert "freeipa.ansible_freeipa.ipahost" in cdw_preflight
+assert "freeipa.ansible_freeipa.ipaservice" in cdw_preflight
+assert cdw_preflight.count("force: true") >= 2
+assert "state: present" in cdw_preflight
+assert "ipa-getkeytab" not in cdw_preflight
+assert "allow_create_keytab" not in cdw_preflight
+assert "allow_retrieve_keytab" not in cdw_preflight
 assert "CDW | Require verified Base and CM Kerberos prerequisites" in cdw_preflight
 assert "/cm/kerberosInfo" in cdw_preflight
 assert "hadoop_security_authentication" in cdw_preflight

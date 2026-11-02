@@ -446,10 +446,12 @@ already activated, the stale binding exists only in internal DWX datastore
 state; the published CLI has no environment-activation reset operation, so
 Cloudera support must repair that backend state.
 
-For FreeIPA-backed CDW, the product owns the standard
-`host/dwx-env-<environment>.cdp.local@<realm>` and `hive/` principal/keytab
-lifecycle. Automation must not pre-create, initialize, retrieve, disable, or
-rotate or delete those keys. A control-plane cluster query can return no
+For FreeIPA-backed CDW, automation idempotently creates the standard
+`host/dwx-env-<environment>.cdp.local@<realm>` and
+`hive/dwx-env-<environment>.cdp.local@<realm>` principal objects because CM
+`/cm/retrieveKeytab` requires them to exist. CM/CDW own their keys: automation
+must not generate, retrieve, disable, rotate, or delete those keys or
+principals. A control-plane cluster query can return no
 records while DWX still considers the environment activated, so automation
 must not infer that principal deletion is safe. Preserve the state and use the
 diagnostic report plus the supported DWX recovery workflow.

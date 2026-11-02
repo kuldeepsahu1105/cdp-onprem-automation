@@ -386,9 +386,11 @@ the activation POST. Repair and use the supported DWX UI/backend activation
 path, activate the cluster manually, then rerun playbook 34. Automation does
 not attempt activation, deletion, recreation, or a control-plane restart.
 `Deactivated` is also a terminal structured polling status, while only
-`Running` is accepted as success. The playbook does not create or delete the
-CDW Hive service principal or its keytab; the Private Cloud Data Warehouse
-control plane owns `hive/<hostname>@<realm>` creation and key rotation.
+`Running` is accepted as success. For FreeIPA, the playbook idempotently
+ensures that the required `host/<hostname>` and `hive/<hostname>` principal
+objects exist because CM `/cm/retrieveKeytab` requires pre-existing
+principals. It never generates, retrieves, disables, rotates, or deletes their
+keys; CM and the Private Cloud Data Warehouse control plane own the keytab.
 
 Before that control-plane query, CDW performs a read-only Base readiness gate.
 CM `kerberosInfo` must report `kerberized=true` with the configured realm and
@@ -401,9 +403,10 @@ handoff; failure diagnostics still inspect that separate boundary.
 The product-standard private-cloud CDW hostname is
 `dwx-env-<environment>.cdp.local`, even when the deployment DNS domain and
 Kerberos realm are different (for example, `cldr.internal.arpa` and
-`CLDR.INTERNAL.ARPA`). CDW owns creation and key rotation for both its host and
-Hive service principals. Automation does not pre-create, initialize, retrieve,
-disable, or rotate those keys.
+`CLDR.INTERNAL.ARPA`). Automation creates only the FreeIPA host and Hive service principal objects.
+CM `/cm/retrieveKeytab` and CDW own key generation, retrieval, and rotation;
+automation never runs `ipa-getkeytab`, disables keys, or deletes these
+principals.
 
 Automation never removes a CDW principal automatically. The DW control-plane
 cluster query can return no records even while the backend still considers the
