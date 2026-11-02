@@ -158,6 +158,29 @@ Services rerun does not require a separate playbook 33 recovery run. Playbook
 Liftie/dex/compute workloads use the Service path, and endpoint-only success
 can otherwise surface later as `UnknownHostException` while fetching
 base-cluster details.
+Even successful fresh-pod, CoreDNS Service, and ready-endpoint checks do not
+prove that the long-lived Service Discovery JVM has refreshed its resolver
+state. A stale `cdp-release-thunderhead-servicediscoverysimple` process can
+report remote-context failures, failure to fetch cluster details, misleading
+SDX-not-found errors, or `UnknownHostException: cldr-mngr...`. On the ECS
+master, restart and verify only that deployment:
+
+```bash
+sudo /var/lib/rancher/rke2/bin/kubectl \
+  --kubeconfig /etc/rancher/rke2/rke2.yaml -n cdp \
+  rollout restart deployment/cdp-release-thunderhead-servicediscoverysimple
+sudo /var/lib/rancher/rke2/bin/kubectl \
+  --kubeconfig /etc/rancher/rke2/rke2.yaml -n cdp \
+  rollout status deployment/cdp-release-thunderhead-servicediscoverysimple \
+  --timeout=5m
+sudo /var/lib/rancher/rke2/bin/kubectl \
+  --kubeconfig /etc/rancher/rke2/rke2.yaml -n cdp \
+  logs deployment/cdp-release-thunderhead-servicediscoverysimple \
+  --all-containers=true --since=10m --tail=300
+```
+
+Do not restart CoreDNS, DWX, CDE, or CAI for this JVM-cache symptom, and do not
+change FreeIPA principals or keytabs.
 Before a rerun, CDE uses the signed `de list-services` summary, which does not
 contact Cloudera Manager. Only explicit healthy or transitional service states
 are eligible for mutation-free adoption. Completed-deletion service tombstones

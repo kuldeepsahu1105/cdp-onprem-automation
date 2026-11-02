@@ -330,6 +330,31 @@ between attempts so each retry occurs after the managed CoreDNS 30-second
 negative-cache TTL; successful records are not retried. The independent
 pod wait bound only covers scheduling and image startup.
 
+Fresh pod and CoreDNS Service/endpoint success does not prove that the
+long-lived Service Discovery JVM has refreshed its resolver state. Stale DNS
+inside `cdp-release-thunderhead-servicediscoverysimple` can cause
+remote-context errors, failure to fetch cluster details, misleading
+SDX-not-found messages, or `UnknownHostException: cldr-mngr...` even while new
+pods resolve CM correctly. On the ECS master, restart only that deployment and
+verify its rollout and recent logs:
+
+```bash
+sudo /var/lib/rancher/rke2/bin/kubectl \
+  --kubeconfig /etc/rancher/rke2/rke2.yaml -n cdp \
+  rollout restart deployment/cdp-release-thunderhead-servicediscoverysimple
+sudo /var/lib/rancher/rke2/bin/kubectl \
+  --kubeconfig /etc/rancher/rke2/rke2.yaml -n cdp \
+  rollout status deployment/cdp-release-thunderhead-servicediscoverysimple \
+  --timeout=5m
+sudo /var/lib/rancher/rke2/bin/kubectl \
+  --kubeconfig /etc/rancher/rke2/rke2.yaml -n cdp \
+  logs deployment/cdp-release-thunderhead-servicediscoverysimple \
+  --all-containers=true --since=10m --tail=300
+```
+
+Do not restart CoreDNS, DWX, CDE, or CAI for this condition. Do not mutate
+FreeIPA principals or keytabs.
+
 When a healthy CDE service already exists, CDE preflight also describes that
 service through the Management Console before submitting a new service. This
 exercises the same Management Console-to-Cloudera Manager DNS/API path used by
