@@ -393,7 +393,9 @@ For FreeIPA-backed CDW, the product owns the standard
 lifecycle. Automation must not pre-create, initialize, retrieve, disable, or
 rotate those keys. If an older automation version created either principal,
 the first CDW run with no existing cluster removes both legacy hostname
-variants once and records a per-environment marker under `/var/lib/ipa`.
+variants once and records a versioned per-environment marker under
+`/var/lib/ipa`. The marker version permits one cleanup after the
+role-migration regression even if an older compatibility marker exists.
 Subsequent retries skip cleanup. Active Directory, missing-FreeIPA-inventory,
 and existing-cluster deployments skip this migration.
 

@@ -387,10 +387,12 @@ disable, or rotate those keys.
 Older automation versions created CDW principals outside the product flow. On
 the first CDW run with no existing cluster, FreeIPA deployments remove those
 legacy host and Hive principal variants once and record a per-environment
-marker under `ecs_cdw_legacy_principal_cleanup_marker_dir`. Later retries do
-not repeat the cleanup. Active Directory deployments, deployments without an
-inventory FreeIPA server, and environments with an existing CDW cluster skip
-the migration cleanup.
+versioned marker under `ecs_cdw_legacy_principal_cleanup_marker_dir`. The
+version ensures the authoritative role cleans state recreated by the earlier
+role-migration regression even if an older compatibility cleanup marker
+exists. Later retries do not repeat the cleanup. Active Directory deployments,
+deployments without an inventory FreeIPA server, and environments with an
+existing CDW cluster skip the migration cleanup.
 
 A gateway timeout from `createPrivateCluster` is treated as ambiguous:
 automation continues structured discovery and accepts the recovered cluster

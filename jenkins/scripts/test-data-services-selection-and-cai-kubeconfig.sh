@@ -62,6 +62,7 @@ for forbidden in (
     assert forbidden not in cdw_preflight
 assert "Remove legacy automation-owned principals exactly once" in cdw_preflight
 assert "ecs_cdw_legacy_principal_cleanup_marker" in cdw_preflight
+assert "/cdw-product-owned-v2-" in cdw_preflight
 assert "identity_provider_effective | default('freeipa') == 'freeipa'" in cdw_preflight
 assert "ipa_server_in_inventory | default(false) | bool" in cdw_preflight
 assert "ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0" in cdw_preflight

@@ -80,7 +80,7 @@
         | list
       }}
     ecs_cdw_legacy_principal_cleanup_marker: >-
-      {{ ecs_cdw_legacy_principal_cleanup_marker_dir }}/cdw-product-owned-{{
+      {{ ecs_cdw_legacy_principal_cleanup_marker_dir }}/cdw-product-owned-v2-{{
         ecs_cdp_environment_name | hash('sha256')
       }}
   when:
