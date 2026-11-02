@@ -49,6 +49,7 @@ coredns_reconcile = (
 assert "Check for ECS node-local DNS configuration" in coredns_reconcile
 assert "node-local DNS root server block was not found" in coredns_reconcile
 assert "forward . \" + upstreams" in coredns_reconcile
+assert 'r"(?P<footer>^[ \\t]*\\})"' in coredns_reconcile
 assert "daemonset/{{ ecs_node_local_dns_daemonset_name }}" in coredns_reconcile
 
 tasks = yaml.safe_load(path.read_text())
