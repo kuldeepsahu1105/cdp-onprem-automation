@@ -421,7 +421,14 @@ the namespace secret.
 
 ## Variables
 
-See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_registry_*`, `ecs_cdp_environment_name`). The preferred environment name is derived from the first IPA/domain label (for example, `cldrsetup.example` becomes `cldrsetup`). A healthy cluster with one existing vendor-created environment such as `apps` adopts that environment instead of creating a duplicate.
+See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`,
+`ecs_model_registry_*`, `ecs_cdp_environment_name`). The preferred environment
+name is derived from the first IPA/domain label (for example,
+`cldrsetup.example` becomes `cldrsetup`). Each fresh Base/ECS deployment needs
+a unique environment name. Exact-name reuse remains idempotent, but automation
+does not adopt the only differently named environment by default. Set
+`ecs_cdp_environment_adopt_single_existing: true` only for a verified migration
+where that sole environment is known to belong to this Base/ECS deployment.
 
 `ecs_coredns_forwarders` optionally overrides the direct DNS candidate list.
 When empty, FreeIPA tries the first `ipaserver` private and Ansible addresses,

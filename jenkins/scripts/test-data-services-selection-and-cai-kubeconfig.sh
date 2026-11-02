@@ -231,6 +231,7 @@ assert group_vars["ecs_cdw_force_reset_cluster_id"] == ""
 assert group_vars["ecs_cdw_force_reset_confirm"] == ""
 assert group_vars["ecs_cdw_force_reset_wait_retries"] == 40
 assert group_vars["ecs_cdw_force_reset_wait_delay"] == 15
+assert group_vars["ecs_cdp_environment_adopt_single_existing"] is False
 assert group_vars["ecs_cdw_dataviz_user_groups"] == []
 assert group_vars["ecs_cdw_dataviz_admin_groups"] == []
 assert group_vars["ecs_cai_static_subdomain"] == "cai"
@@ -605,6 +606,17 @@ assert "common_tasks/ensure_ipa_kdc_services.yml" in cm_kerberos_text
 assert "common_tasks/configure_ipa_krb_enc_types.yml" in cm_kerberos_text
 assert "common_tasks/preflight_kdc_reachable.yml" in cm_kerberos_text
 assert "importAdminCredentials" in cm_kerberos_text
+environment_access_text = (
+    root
+    / "ansible-playbooks/common_tasks/ecs_provision_iam_machine_access_key.yml"
+).read_text()
+assert "ecs_cdp_environment_adopt_single_existing | default(false) | bool" in (
+    environment_access_text
+)
+assert "ecs_requested_environment_matches[0].environmentName" in environment_access_text
+assert "Set ecs_cdp_environment_adopt_single_existing=true only for a verified" in (
+    environment_access_text
+)
 assert "common_tasks/verify_cm_kerberos_enabled.yml" in cm_kerberos_text
 cai_preflight_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cai_preflight.yml"

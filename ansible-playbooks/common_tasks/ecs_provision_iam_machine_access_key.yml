@@ -228,7 +228,7 @@
         else (
           ecs_existing_environments[0].environmentName
           if (
-            ecs_cdp_environment_adopt_single_existing | default(true) | bool
+            ecs_cdp_environment_adopt_single_existing | default(false) | bool
             and ecs_existing_environments | length == 1
           )
           else ''
@@ -242,10 +242,12 @@
         ecs_cdp_environment_name_effective | length > 0
         or ecs_existing_environments | length == 0
     fail_msg: >-
-      Environment {{ ecs_cdp_environment_name }} does not exist and multiple
-      environments are present: {{
+      Environment {{ ecs_cdp_environment_name }} does not exist and differently
+      named environments are present: {{
       ecs_existing_environments | map(attribute='environmentName') | list }}.
-      Set ecs_cdp_environment_name explicitly; automation will not guess.
+      Use a unique ecs_cdp_environment_name for this Base/ECS deployment.
+      Set ecs_cdp_environment_adopt_single_existing=true only for a verified
+      migration to the sole existing environment; automation will not guess.
 
 - name: Require permission to create a missing ECS environment
   ansible.builtin.assert:

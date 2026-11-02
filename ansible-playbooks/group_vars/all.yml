@@ -1267,10 +1267,10 @@ ecs_data_services_catalog:
     name: Cloudera AI
     description: Cloudera AI workspaces
     url: ""
-# Preferred environment name when automation must create one. A single
-# vendor-created environment such as "apps" is adopted on healthy clusters.
+# Each fresh Base/ECS deployment needs a unique environment name. Exact-name
+# reuse is idempotent; adopting a differently named environment is opt-in.
 ecs_cdp_environment_name: "{{ cluster_domain.split('.')[0] | lower | regex_replace('[^a-z0-9-]', '-') }}"
-ecs_cdp_environment_adopt_single_existing: true
+ecs_cdp_environment_adopt_single_existing: false
 ecs_cdp_environment_create_if_missing: true
 ecs_cdp_console_api_url: ""  # default https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}
 ecs_data_services_verify_tls: false

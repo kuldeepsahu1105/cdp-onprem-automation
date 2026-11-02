@@ -363,6 +363,14 @@ CM `kerberosInfo` must be enabled for the configured realm/KDC and the Base
 HDFS service must use Kerberos authentication. If this gate fails, rerun
 playbooks 30 and 31; do not create a CDW principal or keytab manually.
 
+Give every fresh Base/ECS deployment a unique `ecs_cdp_environment_name`.
+Automation reuses an exact-name environment idempotently but does not adopt a
+sole differently named environment by default. This avoids binding a new Base
+cluster to stale SDX/environment metadata from another deployment. Enable
+`ecs_cdp_environment_adopt_single_existing=true` only for a verified migration
+where the existing environment is confirmed to belong to the current
+Base/ECS deployment.
+
 CDW activation follows the manual UI and `cloudera-labs/cloudera.cloud`
 minimal request: the API receives the environment identity and no custom
 Kerberos hostname by default. Automation does not create, delete, initialize,
