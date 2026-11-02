@@ -126,12 +126,12 @@ assert group_vars["ecs_cde_creator_crn"] == ""
 assert group_vars["ecs_cde_control_plane_namespace"] == "cdp"
 assert group_vars["ecs_cde_diagnostics_log_since"] == "20m"
 assert group_vars["ecs_cde_diagnostics_log_tail"] == 300
-assert group_vars["ecs_cde_service_name_attempts"] == 10
+assert group_vars["ecs_cde_service_name_attempts"] == 1
 assert group_vars["ecs_cde_service_name_max_length"] == 40
 assert "ClusterCreationCompleted" in group_vars["ecs_cde_service_green_statuses"]
 assert "Running" in group_vars["ecs_cde_service_green_statuses"]
 assert "ClusterCreationInProgress" in group_vars["ecs_cde_service_transitional_statuses"]
-assert group_vars["ecs_cde_virtual_cluster_name_attempts"] == 10
+assert group_vars["ecs_cde_virtual_cluster_name_attempts"] == 1
 assert "AppInstalled" in group_vars["ecs_cde_virtual_cluster_green_statuses"]
 assert "AppInstallationInProgress" in group_vars[
     "ecs_cde_virtual_cluster_transitional_statuses"
@@ -432,6 +432,8 @@ cde_preflight_text = (
 assert "--no-remove-deleted" in cde_preflight_text
 assert "ecs_cde_service_candidate_names" in cde_preflight_text
 assert "ecs_cde_service_name_effective" in cde_preflight_text
+assert "ecs_cde_service_name_conflicts" in cde_preflight_text
+assert "Stable fresh-install naming does not" in cde_preflight_text
 assert "ecs_cde_service_green_statuses" in cde_preflight_text
 assert "ecs_cde_service_transitional_statuses" in cde_preflight_text
 assert "Verify Management Console can describe healthy reference service" in cde_preflight_text
@@ -495,8 +497,8 @@ assert "ecs_data_service_cde_virtual_cluster.yml" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cde.yml"
 ).read_text()
 
-def select_versioned(base, records, green, transitional):
-    for attempt in range(1, 4):
+def select_versioned(base, records, green, transitional, attempts=1):
+    for attempt in range(1, attempts + 1):
         candidate = base if attempt == 1 else f"{base}-{attempt}"
         status = records.get(candidate)
         if status is None:
@@ -516,6 +518,13 @@ assert select_versioned(
     {"service": "ClusterCreationFailed"},
     group_vars["ecs_cde_service_green_statuses"],
     group_vars["ecs_cde_service_transitional_statuses"],
+) == (None, False)
+assert select_versioned(
+    "service",
+    {"service": "ClusterCreationFailed"},
+    group_vars["ecs_cde_service_green_statuses"],
+    group_vars["ecs_cde_service_transitional_statuses"],
+    attempts=3,
 ) == ("service-2", False)
 assert select_versioned(
     "vc",
@@ -528,13 +537,20 @@ assert select_versioned(
     {"vc": "AppInstallationFailed"},
     group_vars["ecs_cde_virtual_cluster_green_statuses"],
     group_vars["ecs_cde_virtual_cluster_transitional_statuses"],
+) == (None, False)
+assert select_versioned(
+    "vc",
+    {"vc": "AppInstallationFailed"},
+    group_vars["ecs_cde_virtual_cluster_green_statuses"],
+    group_vars["ecs_cde_virtual_cluster_transitional_statuses"],
+    attempts=3,
 ) == ("vc-2", False)
 assert select_versioned(
     "vc",
     {"vc": "UnknownBackendState"},
     group_vars["ecs_cde_virtual_cluster_green_statuses"],
     group_vars["ecs_cde_virtual_cluster_transitional_statuses"],
-) == ("vc-2", False)
+) == (None, False)
 
 dataviz_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_dataviz.yml"

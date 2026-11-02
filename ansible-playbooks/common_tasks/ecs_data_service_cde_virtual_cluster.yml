@@ -64,7 +64,11 @@
     fail_msg: >-
       CDE Virtual Cluster could not find a reusable or unused name after
       {{ ecs_cde_virtual_cluster_name_attempts }} attempts. Failed, deleted,
-      deleting, and stale-reserved resources are retained and skipped.
+      deleting, and stale-reserved resources are retained. Stable fresh-install
+      naming does not append a number by default. Intentionally remove the
+      stale Virtual Cluster through the supported CDP workflow before retrying,
+      or explicitly increase ecs_cde_virtual_cluster_name_attempts to create a
+      separately suffixed Virtual Cluster.
 
 - name: CDE VC | Record effective name and prior status
   ansible.builtin.set_fact:

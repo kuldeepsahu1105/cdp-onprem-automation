@@ -1322,7 +1322,9 @@ ecs_data_services_ldap_probe_port: 636
 ecs_data_services_tcp_probe_timeout: 10
 # CDE
 ecs_cde_service_name: "{{ ecs_cluster_name | regex_replace('[^a-zA-Z0-9]+', '-') | lower }}-de"
-ecs_cde_service_name_attempts: 10
+# Stable fresh-install naming is the default. Increase only when intentionally
+# retaining failed/stale services and creating a separately suffixed service.
+ecs_cde_service_name_attempts: 1
 ecs_cde_service_name_max_length: 40
 ecs_cde_service_green_statuses:
   - ClusterCreationCompleted
@@ -1347,7 +1349,7 @@ ecs_cde_control_plane_namespace: cdp
 ecs_cde_diagnostics_log_since: 20m
 ecs_cde_diagnostics_log_tail: 300
 ecs_cde_virtual_cluster_name: "{{ ecs_cde_service_name }}-vc"
-ecs_cde_virtual_cluster_name_attempts: 10
+ecs_cde_virtual_cluster_name_attempts: 1
 ecs_cde_virtual_cluster_name_max_length: 40
 ecs_cde_virtual_cluster_green_statuses:
   - AppInstalled
