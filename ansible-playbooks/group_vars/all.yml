@@ -1287,11 +1287,12 @@ ecs_ldap_admin_resource_role_name_regex: '(?i)(admin|owner|power|environment|de|
 # CDW
 ecs_cdw_private_cloud_config: {}  # optional storage_class, db_client_certificate paths
 # FreeIPA only: initialize host/ and create hive/ for the effective CDW hostname.
-# CDW itself creates and retrieves the Hive service keytab during activation.
 ecs_cdw_ensure_freeipa_principal_host: true
 # Principal allowed to initialize the host key and create/retrieve the CDW Hive key.
 ecs_cdw_freeipa_keytab_admin_principal: "{{ ipaadmin_principal }}"
 ecs_cdw_freeipa_keytab_admin_password: "{{ krb5_kdc_admin_password }}"
+# CDW's Kerberos client supports the AES-SHA1 key types documented by Cloudera.
+ecs_cdw_freeipa_hive_key_enctypes: "aes256-cts,aes128-cts"
 ecs_cdw_submission_recovery_retries: 24
 ecs_cdw_submission_recovery_delay: 5
 ecs_cdw_kubernetes_namespace: "warehouse-{{ ecs_cdp_environment_name }}"

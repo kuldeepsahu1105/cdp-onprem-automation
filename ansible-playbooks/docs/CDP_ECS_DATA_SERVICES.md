@@ -506,15 +506,16 @@ FreeIPA host object and the CDW Hive service principal:
 `ecs_cdw_freeipa_keytab_admin_principal` (default `ipaadmin_principal`) receives
 additive permission to create and retrieve those keys and authenticates with
 `ecs_cdw_freeipa_keytab_admin_password` (default
-`krb5_kdc_admin_password`). Automation initializes the host key when missing,
-but deliberately does not initialize or retrieve the Hive service key. The CDW
-activation backend owns Hive key creation and download. Before a fresh
-activation with no CDW cluster record, automation disables any preinitialized
-Hive key left by an earlier automation version while preserving the principal
-and its permissions. This restores `Keytab: False`, the required starting state
-for `createPrivateCluster`; an automation-generated Hive key causes CDW keytab
-validation to fail with HTTP 500. Existing clusters are never subjected to this
-reset. Active Directory deployments skip this FreeIPA-only step.
+`krb5_kdc_admin_password`). Automation initializes the host key when missing.
+Before a fresh activation with no CDW cluster record, it resets the Hive key,
+regenerates it explicitly with `aes256-cts,aes128-cts`, verifies that the
+resulting keytab contains only AES-SHA1 entries, and proves `kinit -kt` works.
+The temporary local keytab and credential cache are removed immediately; CDW
+downloads the server-side key during activation. Explicit enctype selection is
+required because FreeIPA client defaults may also generate AES-SHA2 keys that
+the CDW Kerberos client cannot consume; an empty key produces the observed
+unsupported EType `0`. Existing clusters are never subjected to key rotation.
+Active Directory deployments skip this FreeIPA-only step.
 
 This matches the Cloudera UI and `cloudera-labs/cloudera.cloud` minimal
 activation flow: submit only the environment identity and allow CDW to use its

@@ -364,7 +364,7 @@
   when:
     - ecs_cdw_hive_service_principal_effective is defined
 
-- name: CDW | Enforce CDW-owned Hive key before fresh activation
+- name: CDW | Reset Hive key before compatible regeneration
   freeipa.ansible_freeipa.ipaservice:
     ipaadmin_password: "{{ ipaadmin_password }}"
     ipaadmin_principal: "{{ ipaadmin_principal }}"
@@ -375,3 +375,96 @@
   when:
     - ecs_cdw_hive_service_principal_effective is defined
     - ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0
+
+- name: CDW | Generate a CDW-compatible Hive service key
+  when:
+    - ecs_cdw_hive_service_principal_effective is defined
+    - ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0
+  block:
+    - name: CDW | Create temporary Hive keytab validation directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: ansible_cdw_hive_keytab_
+      register: ecs_cdw_freeipa_hive_keytab_dir
+      delegate_to: "{{ ipaserver_inventory_host }}"
+      connection: ssh
+
+    - name: CDW | Generate Hive key with CDW-supported AES enctypes
+      ansible.builtin.command:
+        argv:
+          - ipa-getkeytab
+          - -p
+          - >-
+            {{ ecs_cdw_hive_service_principal_effective
+            }}@{{ ipaserver_realm }}
+          - -k
+          - "{{ ecs_cdw_freeipa_hive_keytab_dir.path }}/hive.keytab"
+          - -e
+          - "{{ ecs_cdw_freeipa_hive_key_enctypes }}"
+      environment:
+        KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+      changed_when: true
+      delegate_to: "{{ ipaserver_inventory_host }}"
+      connection: ssh
+
+    - name: CDW | Inspect generated Hive key enctypes
+      ansible.builtin.command:
+        argv:
+          - klist
+          - -kte
+          - "{{ ecs_cdw_freeipa_hive_keytab_dir.path }}/hive.keytab"
+      register: ecs_cdw_freeipa_hive_keytab_contents
+      changed_when: false
+      delegate_to: "{{ ipaserver_inventory_host }}"
+      connection: ssh
+
+    - name: CDW | Require only CDW-supported Hive key enctypes
+      ansible.builtin.assert:
+        that:
+          - >-
+            ecs_cdw_freeipa_hive_keytab_contents.stdout
+            is search('(?i)aes(256|128)-cts-hmac-sha1-96')
+          - >-
+            ecs_cdw_freeipa_hive_keytab_contents.stdout
+            is not search('(?i)(sha256|sha384|arcfour|rc4|des3|des-cbc)')
+        fail_msg: >-
+          The generated Hive keytab contains encryption types unsupported by
+          the CDW Kerberos client. Requested
+          {{ ecs_cdw_freeipa_hive_key_enctypes }}; keytab:
+          {{ ecs_cdw_freeipa_hive_keytab_contents.stdout | default('') }}
+
+    - name: CDW | Validate Hive key ticket acquisition
+      ansible.builtin.command:
+        argv:
+          - kinit
+          - -c
+          - "FILE:{{ ecs_cdw_freeipa_hive_keytab_dir.path }}/hive.ccache"
+          - -kt
+          - "{{ ecs_cdw_freeipa_hive_keytab_dir.path }}/hive.keytab"
+          - >-
+            {{ ecs_cdw_hive_service_principal_effective
+            }}@{{ ipaserver_realm }}
+      changed_when: false
+      delegate_to: "{{ ipaserver_inventory_host }}"
+      connection: ssh
+
+    - name: CDW | Require valid Hive service ticket
+      ansible.builtin.command:
+        argv:
+          - klist
+          - -s
+          - -c
+          - "FILE:{{ ecs_cdw_freeipa_hive_keytab_dir.path }}/hive.ccache"
+      changed_when: false
+      delegate_to: "{{ ipaserver_inventory_host }}"
+      connection: ssh
+  always:
+    - name: CDW | Remove temporary Hive keytab validation directory
+      ansible.builtin.file:
+        path: "{{ ecs_cdw_freeipa_hive_keytab_dir.path }}"
+        state: absent
+      delegate_to: "{{ ipaserver_inventory_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_freeipa_hive_keytab_dir is defined
+        - ecs_cdw_freeipa_hive_keytab_dir.path | default('') | length > 0

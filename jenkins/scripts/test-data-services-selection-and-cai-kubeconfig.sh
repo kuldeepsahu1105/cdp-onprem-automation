@@ -518,11 +518,15 @@ assert "ecs_data_services_dns_probe_retry_delay" in cdw_preflight_text
 assert "ecs_cdw_hive_service_principal_effective" in cdw_preflight_text
 assert "freeipa.ansible_freeipa.ipaservice" in cdw_preflight_text
 assert "hive/{{ ecs_cdw_kerberos_principal_hostname_effective }}" in cdw_preflight_text
-assert "Enforce CDW-owned Hive key before fresh activation" in cdw_preflight_text
+assert "Reset Hive key before compatible regeneration" in cdw_preflight_text
 assert "state: disabled" in cdw_preflight_text
 assert "ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0" in cdw_preflight_text
 assert "ecs_cdw_freeipa_hive_service_has_keytab_before" not in cdw_preflight_text
-assert "Generate initial FreeIPA Hive service key" not in cdw_preflight_text
+assert "Generate Hive key with CDW-supported AES enctypes" in cdw_preflight_text
+assert "ecs_cdw_freeipa_hive_key_enctypes" in cdw_preflight_text
+assert "aes(256|128)-cts-hmac-sha1-96" in cdw_preflight_text
+assert "sha256|sha384|arcfour|rc4|des3|des-cbc" in cdw_preflight_text
+assert "Validate Hive key ticket acquisition" in cdw_preflight_text
 assert "Retrieve the existing Hive service key for validation" not in cdw_preflight_text
 cai_preflight_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cai_preflight.yml"

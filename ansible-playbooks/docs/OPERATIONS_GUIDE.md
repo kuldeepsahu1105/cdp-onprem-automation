@@ -361,18 +361,19 @@ passes the final success assertion.
 For FreeIPA-backed CDW, preflight ensures the product-standard
 `host/dwx-env-<environment>.cdp.local@<realm>` and
 `hive/dwx-env-<environment>.cdp.local@<realm>` principals exist. Automation
-initializes the host key, but leaves the Hive service key uninitialized for
-the CDW activation backend to create and download. The configured
+initializes the host key. For a fresh activation with no existing CDW cluster,
+it resets and regenerates the Hive service key with only
+`aes256-cts,aes128-cts`, validates the AES-SHA1 keytab through `kinit -kt`, and
+deletes the temporary local keytab and credential cache. CDW then downloads
+the compatible server-side key. The configured
 `ecs_cdw_freeipa_keytab_admin_principal` receives additive create/retrieve
-permission. Before a fresh activation with no existing CDW cluster record,
-preflight disables any preinitialized Hive key left by older automation while
-retaining the service principal and ACLs. Existing clusters are never reset.
+permission. Existing clusters are never reset or rotated.
 This follows the manual UI and `cloudera-labs/cloudera.cloud` minimal request:
 the API receives no custom Kerberos hostname and uses the predefined
 `dwx-env-<environment>.cdp.local` identity. It avoids both
-`KDC_ERR_C_PRINCIPAL_UNKNOWN` from a missing service principal and HTTP 500
-keytab download failures caused by an automation-generated Hive key. The
-prerequisite is skipped for Active Directory.
+`KDC_ERR_C_PRINCIPAL_UNKNOWN` from a missing service principal and
+`unknown or unsupported EType: 0` from an empty or incompatible service key.
+The prerequisite is skipped for Active Directory.
 
 ---
 
