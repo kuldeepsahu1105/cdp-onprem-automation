@@ -176,6 +176,27 @@ pod request total because it reserves warehouse growth and autoscaling
 headroom. Size the worker pool against the queue guarantee when several
 warehouses coexist, not only against the initial two-executor pod footprint.
 
+The following regular-container requests were captured from the live Trino
+`xsmall` namespace with two workers after the warehouse became healthy.
+Support sidecars are included for consistency with the Impala measurement.
+
+| Trino `xsmall` component | Replicas | CPU request each | Memory request each | CPU subtotal | Memory subtotal |
+|---|---:|---:|---:|---:|---:|
+| Hue backend | 1 | 500 millicores | 8,192 M | 0.5 | 8,192 M |
+| Hue frontend | 1 | 100 millicores | 512 Mi | 0.1 | 512 Mi |
+| Trino autoscaler | 1 | 1 vcore | 512 M | 1 | 512 M |
+| Trino coordinator | 1 | 4 vcores | 24,576 M | 4 | 24,576 M |
+| Coordinator JVM-dump sidecar | 1 | 50 millicores | 64 Mi | 0.05 | 64 Mi |
+| Trino worker | 2 | 4 vcores | 24,576 M | 8 | 49,152 M |
+| Worker JVM-dump sidecar | 2 | 50 millicores | 64 Mi | 0.1 | 128 Mi |
+| Hue database-create job | 1 job | No request declared | No request declared | 0 | 0 |
+| **Regular-container total** |  |  |  | **13.75 vcores** | **82,432 M + 704 Mi (about 77.46 GiB)** |
+
+As with Impala, the 45-vcore/360,793-M YuniKorn guarantee is intentionally
+larger than the initial two-worker pod request total. It represents queue and
+scaling capacity, so use the guarantee—not only the initial footprint—when
+planning to keep Trino active beside other warehouses.
+
 Recommended ECS worker baselines using the new `m6a.8xlarge` worker shape:
 
 | Enabled CDW workload | Theoretical minimum | Practical minimum |
