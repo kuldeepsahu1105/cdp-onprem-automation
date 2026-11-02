@@ -442,6 +442,15 @@ deleting a principal is safe. Environments touched by an older automation
 version must retain their current principal state for diagnostics and use a
 supported DWX recovery workflow rather than an inferred cleanup.
 
+After the default database catalog reaches `Running`, automation inspects and
+retains existing Virtual Warehouses and creates only missing `hive-vw`,
+`impala-vw`, and `trino-vw` services. All three default to the smallest
+`xsmall` template and the private-cloud CDW resource pool
+`root.<environment>.cdw`. The resource pool is passed explicitly because the
+private-cloud API rejects an inherited parent pool that is not the catalog's
+pool or one of its children. Existing warehouses are never deleted or
+recreated by this reconciliation.
+
 For a confirmed disposable failed activation, playbook 34 supports an
 explicit CDW-only force reset when `ecs_cdw_force_reset_cluster_id` and
 `ecs_cdw_force_reset_confirm` contain the same exact cluster ID. The task

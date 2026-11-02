@@ -137,6 +137,22 @@ assert "delete" in cdw_workload_ccache
 assert "metastore-0" in cdw_workload_ccache
 assert "No KCM server found" in cdw_workload_ccache
 
+cdw_followup = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_followup.yml"
+).read_text()
+assert "ecs_cdw_trino_vw_name" in cdw_followup
+assert "type: trino" in cdw_followup
+assert "'create-vw'" in cdw_followup
+assert "'--resource-pool'" in cdw_followup
+assert "ecs_cdw_vw_resource_pool" in cdw_followup
+assert "'--t-shirt-size'" in cdw_followup
+assert "ecs_cdw_vw_tshirt_size" in cdw_followup
+assert "item.virtual_warehouses | default([]) | length == 0" in cdw_followup
+assert "CDW Virtual Warehouses to finish provisioning" in cdw_followup
+assert group_vars["ecs_cdw_vw_tshirt_size"] == "xsmall"
+assert group_vars["ecs_cdw_vw_resource_pool"] == "root.{{ ecs_cdp_environment_name }}.cdw"
+
 ozone_credentials = (
     root
     / "ansible-playbooks/roles/ecs/tasks/ecs_model_registry_ozone_credentials.yml"

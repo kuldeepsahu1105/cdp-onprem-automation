@@ -423,6 +423,14 @@ Proceed when the rollout succeeds and no new `UnknownHostException` appears.
 Do not restart CoreDNS, DWX, CDE, or CAI and do not modify FreeIPA principals
 or keytabs for this condition.
 
+Playbook 34 creates any missing Hive, Impala, and Trino Virtual Warehouses
+after the default database catalog becomes healthy. The defaults use the
+smallest `xsmall` template and `root.<environment>.cdw` resource pool. Existing
+warehouses with the configured names are retained. Override
+`ecs_cdw_hive_vw_name`, `ecs_cdw_impala_vw_name`, `ecs_cdw_trino_vw_name`,
+`ecs_cdw_vw_tshirt_size`, or `ecs_cdw_vw_resource_pool` only when the target
+CDW deployment uses different established values.
+
 If UI deletion leaves a failed private-cloud activation hidden in the DW
 control plane, an explicitly confirmed CDW-only reset can reuse playbook 34's
 temporary signed profile without exposing its credentials:
