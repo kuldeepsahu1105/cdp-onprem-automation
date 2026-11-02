@@ -393,6 +393,24 @@ CM `kerberosInfo` must be enabled for the configured realm/KDC and the Base
 HDFS service must use Kerberos authentication. If this gate fails, rerun
 playbooks 30 and 31; do not create a CDW principal or keytab manually.
 
+If UI deletion leaves a failed private-cloud activation hidden in the DW
+control plane, an explicitly confirmed CDW-only reset can reuse playbook 34's
+temporary signed profile without exposing its credentials:
+
+```bash
+ansible-playbook -i inventory.ini 34_setup_ecs_data_services.yml \
+  -e ecs_data_services_deploy_enabled=true \
+  -e '{"ecs_data_services_install":["cdw"]}' \
+  -e ecs_cdw_force_reset_cluster_id=env-cldr \
+  -e ecs_cdw_force_reset_confirm=env-cldr
+```
+
+This calls the supported `dw delete-cluster --force` operation, waits until
+the exact cluster ID is no longer returned, and then continues with fresh CDW
+activation. It does not delete the ECS environment, Base cluster, CDE, CAI, or
+FreeIPA. It does delete CDW catalogs and virtual warehouses attached to that
+cluster, so the confirmation must exactly match the cluster ID.
+
 For FreeIPA-backed CDW, the product owns the standard
 `host/dwx-env-<environment>.cdp.local@<realm>` and `hive/` principal/keytab
 lifecycle. Automation must not pre-create, initialize, retrieve, disable, or

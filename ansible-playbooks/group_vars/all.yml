@@ -1197,6 +1197,10 @@ ecs_persistent_state_dir: >-
 ecs_cdp_cli_venv_path: "{{ ecs_persistent_state_dir }}/cdpcli-0.9.164"
 ecs_api_credentials_cache_path: "{{ ecs_persistent_state_dir }}/ecs-automation-api-credentials.yml"
 ecs_data_services_catalog_cache_path: "{{ ecs_persistent_state_dir }}/ecs-data-services-catalog.yml"
+ecs_cdw_force_reset_cluster_id: ""
+ecs_cdw_force_reset_confirm: ""
+ecs_cdw_force_reset_wait_retries: 40
+ecs_cdw_force_reset_wait_delay: 15
 ecs_control_plane_wait_retries: 40
 ecs_control_plane_wait_delay: 15
 ecs_control_plane_validate_certs: false

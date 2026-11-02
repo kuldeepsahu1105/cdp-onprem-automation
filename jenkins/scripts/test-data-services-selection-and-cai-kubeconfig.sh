@@ -58,6 +58,10 @@ cdw_diagnostics = (
     root
     / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_diagnostics.yml"
 ).read_text()
+cdw_force_reset = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_force_reset.yml"
+).read_text()
 for forbidden in (
     "ipa-getkeytab",
     " kinit",
@@ -77,6 +81,12 @@ assert "ecs_cdw_preflight_cm_kerberized | bool" in cdw_preflight
 assert "ecs_cdw_preflight_cm_realm == cluster_realm" in cdw_preflight
 assert "ecs_cdw_preflight_cm_kdc_host == kdc_host" in cdw_preflight
 assert "ecs_cdw_preflight_hdfs_authentication == 'kerberos'" in cdw_preflight
+assert "ecs_cdw_force_reset_confirm == ecs_cdw_force_reset_cluster_id" in cdw_force_reset
+assert "'delete-cluster'" in cdw_force_reset
+assert "'--cluster-id'" in cdw_force_reset
+assert "'--force'" in cdw_force_reset
+assert "'describe-cluster'" in cdw_force_reset
+assert "until: ecs_cdw_force_reset_describe.rc != 0" in cdw_force_reset
 assert "CDW diagnostics | Describe control-plane environment" in cdw_diagnostics
 assert "/cm/kerberosInfo" in cdw_diagnostics
 assert "hadoop_security_authentication" in cdw_diagnostics

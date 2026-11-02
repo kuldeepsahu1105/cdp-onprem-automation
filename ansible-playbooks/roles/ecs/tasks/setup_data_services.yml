@@ -65,6 +65,12 @@
 - name: Configure CDP CLI profile for data services API calls
   ansible.builtin.import_tasks: ecs_data_services_runtime.yml
 
+- name: Force-reset an explicitly confirmed stale CDW activation
+  ansible.builtin.include_tasks: ecs_data_service_cdw_force_reset.yml
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_force_reset_cluster_id | default('') | length > 0
+
 - name: Validate Data Services wait bounds
   ansible.builtin.assert:
     that:
