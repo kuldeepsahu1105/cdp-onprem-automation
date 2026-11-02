@@ -393,6 +393,14 @@ CM `kerberosInfo` must be enabled for the configured realm/KDC and the Base
 HDFS service must use Kerberos authentication. If this gate fails, rerun
 playbooks 30 and 31; do not create a CDW principal or keytab manually.
 
+Fresh deployments must use a unique `ecs_cdp_environment_name`. Automation
+does not adopt a differently named single existing environment by default:
+`ecs_cdp_environment_adopt_single_existing` is `false`. This prevents a new
+Base/ECS deployment from silently inheriting an environment bound to an older,
+deleted SDX cluster UUID. Existing deployments should keep their exact
+environment name; enable the adoption fallback only for an intentional,
+verified migration.
+
 If UI deletion leaves a failed private-cloud activation hidden in the DW
 control plane, an explicitly confirmed CDW-only reset can reuse playbook 34's
 temporary signed profile without exposing its credentials:

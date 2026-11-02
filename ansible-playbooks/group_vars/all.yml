@@ -1234,6 +1234,7 @@ ecs_data_services_catalog:
     url: ""
 # CDP environment name on private cloud (must match ECS control plane environment)
 ecs_cdp_environment_name: ecs
+ecs_cdp_environment_adopt_single_existing: false
 ecs_cdp_console_api_url: ""  # default https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}
 ecs_data_services_verify_tls: false
 # Optional ECS control plane LDAP (FreeIPA/AD) — playbook 33 end and/or 34

@@ -344,6 +344,11 @@ the namespace secret.
 
 See `group_vars/all.yml` (`ecs_cdw_*`, `ecs_cde_*`, `ecs_cai_*`, `ecs_model_registry_*`, `ecs_cdp_environment_name`).
 
+Use a unique `ecs_cdp_environment_name` for each fresh Base/ECS deployment.
+`ecs_cdp_environment_adopt_single_existing` defaults to `false`, so a requested
+new environment cannot silently adopt a differently named existing environment
+whose SDX cluster binding may belong to an older Base cluster.
+
 `ecs_coredns_forwarders` optionally overrides the direct DNS candidate list.
 When empty, FreeIPA tries the first `ipaserver` private and Ansible addresses,
 while AD uses `ad_dns_servers`. Every candidate must prove all required A
