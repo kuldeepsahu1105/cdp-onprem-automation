@@ -486,7 +486,7 @@ If `warehouse-<environment>/metastore-0` reports
 `kinit: No KCM server found while getting default ccache`, the generated
 container inherited a KCM default but has no KCM daemon. Playbook 34
 reconciles the metastore StatefulSet to
-`KRB5CCNAME=FILE:/tmp/krb5cc_cdw`, recreates only `metastore-0` when the pod
+`KRB5CCNAME=FILE:/tmp/krb5cc_metastore`, recreates only `metastore-0` when the pod
 template changes, and waits for rollout before continuing CDW status polling.
 The reconciliation is controlled by
 `ecs_cdw_workload_file_ccache_reconcile` (default `true`) and is idempotent;

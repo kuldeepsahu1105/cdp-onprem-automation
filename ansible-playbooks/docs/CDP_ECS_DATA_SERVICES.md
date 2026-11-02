@@ -429,7 +429,7 @@ CDW workload containers may inherit a `KCM:` default credential cache even
 though the Kubernetes nodes do not run a KCM daemon. After submission and
 before terminal-status polling, automation waits briefly for the warehouse
 namespace and `metastore` StatefulSet, sets
-`KRB5CCNAME=FILE:/tmp/krb5cc_cdw` on the metastore container, recreates only
+`KRB5CCNAME=FILE:/tmp/krb5cc_metastore` on the metastore container, recreates only
 `metastore-0` when the pod template changed, and waits for the StatefulSet
 rollout. Healthy reruns are no-ops. This prevents the startup failure
 `kinit: No KCM server found while getting default ccache` without changing
