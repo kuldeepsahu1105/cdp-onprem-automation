@@ -312,15 +312,21 @@ self-signed/untrusted, expired, wrong-SAN, or mismatched-key material before
 workspace submission and never creates a temporary certificate.
 
 ECS install owns authoritative FreeIPA records and CoreDNS reconciliation.
-Playbook 34 does not rewrite or restart CoreDNS; before any CDW/CDE/CAI API
-call it verifies the DNS contract established by playbook 33. Fresh IPv4-only
-pod probes must resolve CM, the ECS console, and LDAP when LDAP sync/admin is
-selected through the normal Kubernetes CoreDNS Service, then independently
-connect to the validated IPv4 addresses on CM 7183 and selected LDAP 636.
+Playbooks 33 and 34 use the same idempotent reconciliation before their
+workload DNS gates. If the optional `node-local-dns` ConfigMap exists, its root
+`.:53` forward target is changed from `__PILLAR__UPSTREAM__SERVERS__` to the
+already validated identity DNS forwarders, then its DaemonSet is rolled and
+awaited. The `cluster.local`, `in-addr.arpa`, and `ip6.arpa` blocks remain
+pointed at `__PILLAR__CLUSTER__DNS__`. This behavior defaults on through
+`ecs_node_local_dns_reconcile`; set it to `false` only when node-local DNS is
+managed externally. Fresh IPv4-only pod probes must resolve CM, the ECS
+console, and the effective FreeIPA or Active Directory LDAP endpoint through
+the normal Kubernetes DNS Service, then independently connect to the
+validated IPv4 addresses on CM 7183 and LDAP 636.
 When the Service path remains transiently inconsistent after bounded retries,
 the same fresh pod may query one ready CoreDNS endpoint directly. The fallback
 is accepted only when every required A answer and direct TCP dependency check
-succeeds; it never pins workloads, restarts pods, or rewrites CoreDNS.
+succeeds; it never pins workloads or mutates DNS configuration itself.
 Authoritative Data Services backend reads then retry separately before any
 mutation. The pod logs its resolver configuration and reports each FQDN
 separately. DNS/TCP verification uses at most

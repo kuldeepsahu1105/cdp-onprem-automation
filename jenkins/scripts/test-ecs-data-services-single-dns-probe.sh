@@ -44,6 +44,88 @@ assert "ecs_data_services_dns_probe_retry_delay | int" in text
 assert group_vars["ecs_data_services_dns_probe_attempts"] == 3
 assert group_vars["ecs_data_services_dns_probe_retry_delay"] > 30
 assert group_vars["ecs_data_services_dns_probe_wait_retries"] == 24
+assert group_vars["ecs_node_local_dns_reconcile"] is True
+assert group_vars["ecs_node_local_dns_configmap_name"] == "node-local-dns"
+assert group_vars["ecs_node_local_dns_daemonset_name"] == "node-local-dns"
+
+coredns_reconcile_path = path.parent / "ecs_reconcile_coredns.yml"
+coredns_reconcile_tasks = yaml.safe_load(coredns_reconcile_path.read_text())
+coredns_tasks_by_name = {
+    task.get("name"): task for task in coredns_reconcile_tasks
+}
+node_local_build = coredns_tasks_by_name[
+    "Build verified ECS node-local DNS forwarding policy"
+]
+node_local_argv = node_local_build["ansible.builtin.command"]["argv"]
+node_local_script = node_local_argv[node_local_argv.index("-c") + 1]
+node_local_corefile = """.:53 {
+    errors
+    cache 30
+    bind 169.254.25.10 172.43.0.10
+    forward . __PILLAR__UPSTREAM__SERVERS__ {
+        force_tcp
+    }
+}
+cluster.local:53 {
+    errors
+    cache {
+        success 9984 30
+        denial 9984 5
+    }
+    bind 169.254.25.10 172.43.0.10
+    forward . __PILLAR__CLUSTER__DNS__ {
+        force_tcp
+    }
+}
+in-addr.arpa:53 {
+    bind 169.254.25.10 172.43.0.10
+    forward . __PILLAR__CLUSTER__DNS__
+}
+ip6.arpa:53 {
+    bind 169.254.25.10 172.43.0.10
+    forward . __PILLAR__CLUSTER__DNS__
+}
+"""
+node_local_result = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        node_local_script,
+        node_local_corefile,
+        "10.0.0.10 10.0.0.11",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+assert node_local_result.returncode == 0, node_local_result.stderr
+assert "forward . 10.0.0.10 10.0.0.11 {" in node_local_result.stdout
+assert "__PILLAR__UPSTREAM__SERVERS__" not in node_local_result.stdout
+assert node_local_result.stdout.count(
+    "forward . __PILLAR__CLUSTER__DNS__"
+) == 3
+assert (
+    node_local_result.stdout.split("cluster.local:53", 1)[1]
+    == node_local_corefile.split("cluster.local:53", 1)[1]
+)
+
+node_local_restart = coredns_tasks_by_name[
+    "Restart ECS node-local DNS after configuration change"
+]
+assert (
+    "daemonset/{{ ecs_node_local_dns_daemonset_name }}"
+    in node_local_restart["ansible.builtin.command"]["argv"]
+)
+node_local_check_index = next(
+    index for index, task in enumerate(coredns_reconcile_tasks)
+    if task.get("name") == "Check for ECS node-local DNS configuration"
+)
+service_probe_index = next(
+    index for index, task in enumerate(coredns_reconcile_tasks)
+    if task.get("name")
+    == "Verify required records through the CoreDNS Service and every ready replica"
+)
+assert node_local_check_index < service_probe_index
 
 tasks = yaml.safe_load(path.read_text())
 tasks_by_name = {task.get("name"): task for task in tasks}

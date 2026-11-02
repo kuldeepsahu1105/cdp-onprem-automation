@@ -44,12 +44,17 @@ ECS-node resolvers that pass the same tests. The playbook refuses to modify
 CoreDNS when no candidate is proven. Verified upstreams replace the global
 stanza with the minimal existing-Corefile form
 `forward . <validated-upstreams>`; this deployment renders exactly
-`forward . 172.31.76.102`. The applied ConfigMap is reread and asserted before
-one fresh Python probe pod performs IPv4-only resolution for CM, the ECS
-console, and LDAP when LDAP sync/admin is selected, all in the same resolver
-context. It also performs independent TCP checks to the already validated IPv4
-address for Cloudera Manager on 7183 and selected LDAP on 636. The pod logs its
-`/etc/resolv.conf`, reports each FQDN separately, and
+`forward . 172.31.76.102`. When the optional node-local DNS ConfigMap exists,
+the shared reconciliation also replaces only the root `.:53` forward target
+with those validated upstreams and rolls its DaemonSet; the `cluster.local`,
+`in-addr.arpa`, and `ip6.arpa` blocks continue forwarding to
+`__PILLAR__CLUSTER__DNS__`. Set `ecs_node_local_dns_reconcile: false` to opt
+out. The applied CoreDNS ConfigMap is reread and asserted before one fresh
+Python probe pod performs IPv4-only resolution for CM, the ECS console, and
+the effective FreeIPA or Active Directory LDAP endpoint, all in the same
+resolver context. It also performs independent TCP checks to the already
+validated IPv4 address for Cloudera Manager on 7183 and LDAP on 636. The pod
+logs its `/etc/resolv.conf`, reports each FQDN separately, and
 uses at most `ecs_data_services_dns_probe_attempts` attempts (default `3`).
 Failed hostnames are retried after `ecs_data_services_dns_probe_retry_delay`
 (default `31` seconds), which exceeds the managed CoreDNS `cache 30` negative
