@@ -44,9 +44,6 @@
       inventory host.
   when:
     - identity_provider_effective | default('freeipa') == 'freeipa'
-    - >-
-      (ecs_ldap_sync_effective | default(false) | bool)
-      or (ecs_ldap_admin_user_effective | default(false) | bool)
 
 - name: Resolve FreeIPA inventory host for DNS verification
   ansible.builtin.set_fact:
@@ -54,9 +51,6 @@
       {{ ecs_coredns_ipa_inventory_host | default(groups['ipaserver'] | first) }}
   when:
     - identity_provider_effective | default('freeipa') == 'freeipa'
-    - >-
-      (ecs_ldap_sync_effective | default(false) | bool)
-      or (ecs_ldap_admin_user_effective | default(false) | bool)
 
 - name: Build required Data Services DNS verification records
   ansible.builtin.set_fact:
@@ -113,9 +107,6 @@
       }}
   when:
     - identity_provider_effective | default('freeipa') == 'freeipa'
-    - >-
-      (ecs_ldap_sync_effective | default(false) | bool)
-      or (ecs_ldap_admin_user_effective | default(false) | bool)
 
 - name: Add Active Directory LDAP to required Data Services DNS verification records
   ansible.builtin.set_fact:
@@ -133,9 +124,6 @@
       }}
   when:
     - identity_provider_effective | default('') == 'ad'
-    - >-
-      (ecs_ldap_sync_effective | default(false) | bool)
-      or (ecs_ldap_admin_user_effective | default(false) | bool)
 
 - name: Remove stale Data Services DNS verification pod
   ansible.builtin.command:

@@ -55,8 +55,17 @@ freeipa_record = tasks_by_name[
     "Add FreeIPA to required Data Services DNS verification records"
 ]
 freeipa_when = "\n".join(freeipa_record["when"])
-assert "ecs_ldap_sync_effective" in freeipa_when
-assert "ecs_ldap_admin_user_effective" in freeipa_when
+assert "identity_provider_effective" in freeipa_when
+assert "ecs_ldap_sync_effective" not in freeipa_when
+assert "ecs_ldap_admin_user_effective" not in freeipa_when
+
+freeipa_inventory = tasks_by_name[
+    "Require FreeIPA inventory for Data Services DNS verification"
+]
+freeipa_inventory_when = "\n".join(freeipa_inventory["when"])
+assert "identity_provider_effective" in freeipa_inventory_when
+assert "ecs_ldap_sync_effective" not in freeipa_inventory_when
+assert "ecs_ldap_admin_user_effective" not in freeipa_inventory_when
 
 start = next(
     task for task in tasks
