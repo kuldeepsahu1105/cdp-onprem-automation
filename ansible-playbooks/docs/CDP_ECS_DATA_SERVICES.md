@@ -118,9 +118,11 @@ and causes Resource Pool Manager to reject the child pool before processing.
 The automation machine user remains the bootstrap identity used to issue and
 delete the temporary human-user key. Stable naming is the default:
 `ecs_cde_service_name_attempts: 1`. The configured base name is reused when it
-is healthy or transitional and created when absent. A failed, deleted, or stale
-record with that name is retained and causes a clear preflight failure instead
-of silently creating `name-2`, `name-3`, and so on. Set
+is healthy or transitional and created when absent. Historical
+`ClusterDeletionCompleted` records returned by `--no-remove-deleted` are ignored
+because CDP permits the name to be reused after deletion completes. A failed,
+deletion-in-progress, or stale live record with that name causes a clear
+preflight failure instead of silently creating `name-2`, `name-3`, and so on. Set
 `ecs_cde_service_name_attempts` above `1` only when a separately suffixed
 service is intentional.
 After the service is ready, CDE also converges one default Virtual Cluster.
@@ -133,10 +135,11 @@ suffixes explicitly. The effective VC name, status, and native `VcUiUrl` are
 recorded in the service catalog.
 Before a rerun, CDE uses the signed `de list-services` summary, which does not
 contact Cloudera Manager. Only explicit healthy or transitional service states
-are eligible for mutation-free adoption. Failed, deleted, deleting, reserved,
-or unknown-status names are retained without disable/delete. With the default
-single attempt they block the stable name and fail preflight; deterministic
-suffixes remain an explicit opt-in. The same explicit allowlist policy applies
+are eligible for mutation-free adoption. Completed-deletion service tombstones
+are ignored, while failed, deleting, reserved, or unknown-status live names are
+retained without disable/delete. With the default single attempt they block the
+stable name and fail preflight; deterministic suffixes remain an explicit
+opt-in. The same explicit allowlist policy applies
 to CDE Virtual Clusters. Existing adopted service capacity and VC compute
 settings are never updated. Automation does not restart IAM/Liftie deployments
 or delete control-plane datastore state.

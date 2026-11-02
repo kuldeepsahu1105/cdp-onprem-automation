@@ -1340,6 +1340,11 @@ ecs_cde_service_transitional_statuses:
   - Waiting
   - Updating
   - Restarting
+# Historical tombstones returned by list-services --no-remove-deleted do not
+# reserve the service name after deletion has completed.
+ecs_cde_service_deleted_statuses:
+  - ClusterDeletionCompleted
+  - Deleted
 ecs_cde_instance_type: private
 ecs_cde_cpu_requests: "300"
 ecs_cde_memory_requests: 1000Gi

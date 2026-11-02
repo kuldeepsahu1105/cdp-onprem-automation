@@ -131,6 +131,10 @@ assert group_vars["ecs_cde_service_name_max_length"] == 40
 assert "ClusterCreationCompleted" in group_vars["ecs_cde_service_green_statuses"]
 assert "Running" in group_vars["ecs_cde_service_green_statuses"]
 assert "ClusterCreationInProgress" in group_vars["ecs_cde_service_transitional_statuses"]
+assert group_vars["ecs_cde_service_deleted_statuses"] == [
+    "ClusterDeletionCompleted",
+    "Deleted",
+]
 assert group_vars["ecs_cde_virtual_cluster_name_attempts"] == 1
 assert "AppInstalled" in group_vars["ecs_cde_virtual_cluster_green_statuses"]
 assert "AppInstallationInProgress" in group_vars[
@@ -472,6 +476,8 @@ assert "--no-remove-deleted" in cde_preflight_text
 assert "ecs_cde_service_candidate_names" in cde_preflight_text
 assert "ecs_cde_service_name_effective" in cde_preflight_text
 assert "ecs_cde_service_name_conflicts" in cde_preflight_text
+assert "ecs_cde_service_deleted_history" in cde_preflight_text
+assert "Ignoring {{ ecs_cde_service_deleted_history | length }}" in cde_preflight_text
 assert "Stable fresh-install naming does not" in cde_preflight_text
 assert "ecs_cde_service_green_statuses" in cde_preflight_text
 assert "ecs_cde_service_transitional_statuses" in cde_preflight_text
@@ -536,13 +542,23 @@ assert "ecs_data_service_cde_virtual_cluster.yml" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cde.yml"
 ).read_text()
 
-def select_versioned(base, records, green, transitional, attempts=1):
+def select_versioned(base, records, green, transitional, deleted=(), attempts=1):
     for attempt in range(1, attempts + 1):
         candidate = base if attempt == 1 else f"{base}-{attempt}"
-        status = records.get(candidate)
-        if status is None:
+        statuses = records.get(candidate, [])
+        if isinstance(statuses, str):
+            statuses = [statuses]
+        active_statuses = [
+            status
+            for status in statuses
+            if status.lower() not in {value.lower() for value in deleted}
+        ]
+        if not active_statuses:
             return candidate, False
-        if status.lower() in {value.lower() for value in green + transitional}:
+        if any(
+            status.lower() in {value.lower() for value in green + transitional}
+            for status in active_statuses
+        ):
             return candidate, True
     return None, False
 
@@ -551,18 +567,28 @@ assert select_versioned(
     {"service": "Running"},
     group_vars["ecs_cde_service_green_statuses"],
     group_vars["ecs_cde_service_transitional_statuses"],
+    group_vars["ecs_cde_service_deleted_statuses"],
 ) == ("service", True)
+assert select_versioned(
+    "service",
+    {"service": ["ClusterDeletionCompleted"] * 9},
+    group_vars["ecs_cde_service_green_statuses"],
+    group_vars["ecs_cde_service_transitional_statuses"],
+    group_vars["ecs_cde_service_deleted_statuses"],
+) == ("service", False)
 assert select_versioned(
     "service",
     {"service": "ClusterCreationFailed"},
     group_vars["ecs_cde_service_green_statuses"],
     group_vars["ecs_cde_service_transitional_statuses"],
+    group_vars["ecs_cde_service_deleted_statuses"],
 ) == (None, False)
 assert select_versioned(
     "service",
     {"service": "ClusterCreationFailed"},
     group_vars["ecs_cde_service_green_statuses"],
     group_vars["ecs_cde_service_transitional_statuses"],
+    group_vars["ecs_cde_service_deleted_statuses"],
     attempts=3,
 ) == ("service-2", False)
 assert select_versioned(

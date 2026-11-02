@@ -146,7 +146,7 @@
       {%- endfor -%}
       {{ result }}
 
-- name: CDE | Record records blocking configured candidate names
+- name: CDE | Classify records for configured candidate names
   ansible.builtin.set_fact:
     ecs_cde_service_name_conflicts: >-
       {%- set services = (ecs_cde_preflight_service_list.stdout | from_json).services | default([]) -%}
@@ -155,6 +155,8 @@
       {%- if (
         service.name | default('') in ecs_cde_service_candidate_names
         and service.environmentName | default('') == ecs_cdp_environment_name
+        and service.status | default('') | lower
+          not in (ecs_cde_service_deleted_statuses | map('lower') | list)
       ) -%}
       {%- set _ = result.append({
         'name': service.name | default('unknown'),
@@ -164,6 +166,32 @@
       {%- endif -%}
       {%- endfor -%}
       {{ result }}
+    ecs_cde_service_deleted_history: >-
+      {%- set services = (ecs_cde_preflight_service_list.stdout | from_json).services | default([]) -%}
+      {%- set result = [] -%}
+      {%- for service in services -%}
+      {%- if (
+        service.name | default('') in ecs_cde_service_candidate_names
+        and service.environmentName | default('') == ecs_cdp_environment_name
+        and service.status | default('') | lower
+          in (ecs_cde_service_deleted_statuses | map('lower') | list)
+      ) -%}
+      {%- set _ = result.append({
+        'name': service.name | default('unknown'),
+        'status': service.status | default('Unknown'),
+        'clusterId': service.clusterId | default('not returned')
+      }) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ result }}
+
+- name: CDE | Report ignored completed-deletion history
+  ansible.builtin.debug:
+    msg: >-
+      Ignoring {{ ecs_cde_service_deleted_history | length }} completed CDE
+      deletion record(s) while evaluating stable service-name availability:
+      {{ ecs_cde_service_deleted_history }}.
+  when: ecs_cde_service_deleted_history | length > 0
 
 - name: CDE | Select reusable or first unused service name
   ansible.builtin.set_fact:
@@ -175,10 +203,16 @@
         | selectattr('name', 'equalto', candidate)
         | selectattr('environmentName', 'equalto', ecs_cdp_environment_name)
         | list -%}
-      {%- if matches | length == 0 -%}
-      {%- set ns.selected = {'name': candidate, 'existing': false, 'status': 'Absent'} -%}
-      {%- elif (
-        matches[0].status | default('') | lower
+      {%- set candidate_state = namespace(active=[], reusable={}) -%}
+      {%- for match in matches -%}
+      {%- if (
+        match.status | default('') | lower
+        not in (ecs_cde_service_deleted_statuses | map('lower') | list)
+      ) -%}
+      {%- set _ = candidate_state.active.append(match) -%}
+      {%- if (
+        candidate_state.reusable | length == 0
+        and match.status | default('') | lower
         in (
           (
             ecs_cde_service_green_statuses
@@ -188,11 +222,18 @@
           | list
         )
       ) -%}
+      {%- set candidate_state.reusable = match -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- if candidate_state.active | length == 0 -%}
+      {%- set ns.selected = {'name': candidate, 'existing': false, 'status': 'Absent'} -%}
+      {%- elif candidate_state.reusable | length > 0 -%}
       {%- set ns.selected = {
         'name': candidate,
         'existing': true,
-        'status': matches[0].status | default('Unknown'),
-        'service': matches[0]
+        'status': candidate_state.reusable.status | default('Unknown'),
+        'service': candidate_state.reusable
       } -%}
       {%- endif -%}
       {%- endfor -%}
@@ -207,11 +248,11 @@
       {{ ecs_cde_service_name_attempts }} bounded attempt(s). Candidates={{
       ecs_cde_service_candidate_names }}; blocking_records={{
       ecs_cde_service_name_conflicts }}. Stable fresh-install naming does not
-      append a number by default, and failed, deleted, or otherwise unusable
-      services are not deleted automatically. Intentionally remove the stale
-      service through the supported CDP workflow before retrying, or explicitly
-      increase ecs_cde_service_name_attempts to create a separately suffixed
-      service.
+      append a number by default. Completed-deletion history is ignored, while
+      failed, deletion-in-progress, or otherwise unusable live records are not
+      mutated automatically. Intentionally remove or complete the stale service
+      through the supported CDP workflow before retrying, or explicitly increase
+      ecs_cde_service_name_attempts to create a separately suffixed service.
 
 - name: CDE | Record effective service name and prior state
   ansible.builtin.set_fact:
