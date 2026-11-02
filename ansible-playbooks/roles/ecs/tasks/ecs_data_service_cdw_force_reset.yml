@@ -26,6 +26,12 @@
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cdw_force_reset_result
   changed_when: ecs_cdw_force_reset_result.rc == 0
+  failed_when:
+    - ecs_cdw_force_reset_result.rc != 0
+    - >-
+      ecs_cdw_force_reset_result.stderr
+      | default('')
+      is not search('(?i)Status Code:\\s*404.*Error Code:\\s*NOT_FOUND')
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
@@ -57,4 +63,10 @@
   ansible.builtin.debug:
     msg: >-
       CDW cluster {{ ecs_cdw_force_reset_cluster_id }} is no longer returned
-      by the DW control plane. Continuing with a fresh CDW activation.
+      by the DW control plane{{
+        ' (it was already absent when force deletion was requested)'
+        if ecs_cdw_force_reset_result.rc != 0
+        else ''
+      }}. Continuing with a fresh CDW activation. If createPrivateCluster still
+      reports this cluster ID as already activated, the remaining activation
+      binding is internal DWX datastore state with no public reset operation.

@@ -86,6 +86,7 @@ assert "'delete-cluster'" in cdw_force_reset
 assert "'--cluster-id'" in cdw_force_reset
 assert "'--force'" in cdw_force_reset
 assert "'describe-cluster'" in cdw_force_reset
+assert "Status Code:\\\\s*404.*Error Code:\\\\s*NOT_FOUND" in cdw_force_reset
 assert "until: ecs_cdw_force_reset_describe.rc != 0" in cdw_force_reset
 assert "CDW diagnostics | Describe control-plane environment" in cdw_diagnostics
 assert "/cm/kerberosInfo" in cdw_diagnostics
