@@ -23,6 +23,14 @@ for service in ("cdw", "cde", "cai"):
 
 assert "common_tasks/ecs_data_service_cdw_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cdw_preflight.yml" in playbook_text
+assert "common_tasks/ecs_data_service_cdw_force_reset.yml" in playbook_text
+assert playbook_text.index(
+    "common_tasks/ecs_data_services_runtime.yml"
+) < playbook_text.index(
+    "common_tasks/ecs_data_service_cdw_force_reset.yml"
+) < playbook_text.index(
+    "common_tasks/ecs_data_service_cdw_preflight.yml"
+)
 assert "Collect CDW diagnostics after uncaught failure" in playbook_text
 assert "not (ecs_cdw_diagnostics_collected | default(false) | bool)" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cde_preflight.yml" in playbook_text
@@ -84,6 +92,19 @@ cdw_preflight = (
     root
     / "ansible-playbooks/common_tasks/ecs_data_service_cdw_preflight.yml"
 ).read_text()
+cdw_force_reset = (
+    root
+    / "ansible-playbooks/common_tasks/ecs_data_service_cdw_force_reset.yml"
+).read_text()
+assert "ecs_cdw_force_reset_confirm == ecs_cdw_force_reset_cluster_id" in cdw_force_reset
+assert "'delete-cluster'" in cdw_force_reset
+assert "'--cluster-id'" in cdw_force_reset
+assert "'--force'" in cdw_force_reset
+assert "'describe-cluster'" in cdw_force_reset
+assert "until: ecs_cdw_force_reset_describe.rc != 0" in cdw_force_reset
+assert "ipa-getkeytab" not in cdw_force_reset
+assert "freeipa.ansible_freeipa" not in cdw_force_reset
+assert "delete-environment" not in cdw_force_reset
 assert "CDW | Require verified Base and CM Kerberos prerequisites" in cdw_preflight
 assert "/cm/kerberosInfo" in cdw_preflight
 assert "hadoop_security_authentication" in cdw_preflight
@@ -203,6 +224,10 @@ assert group_vars["ecs_cde_virtual_cluster_cpu_requests"] == "20"
 assert group_vars["ecs_cde_virtual_cluster_memory_requests"] == "30Gi"
 assert group_vars["ecs_cdw_dataviz_name_attempts"] == 10
 assert group_vars["ecs_cdw_vw_name_attempts"] == 10
+assert group_vars["ecs_cdw_force_reset_cluster_id"] == ""
+assert group_vars["ecs_cdw_force_reset_confirm"] == ""
+assert group_vars["ecs_cdw_force_reset_wait_retries"] == 40
+assert group_vars["ecs_cdw_force_reset_wait_delay"] == 15
 assert group_vars["ecs_cdw_dataviz_user_groups"] == []
 assert group_vars["ecs_cdw_dataviz_admin_groups"] == []
 assert group_vars["ecs_cai_static_subdomain"] == "cai"

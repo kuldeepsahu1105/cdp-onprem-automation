@@ -533,6 +533,14 @@ query returns zero clusters. Preserve the product-owned principal state and
 use the supported DWX recovery workflow when activation reports an existing
 cluster or keytab validation failure.
 
+For a confirmed disposable failed activation, playbook 34 supports an
+explicit CDW-only force reset when `ecs_cdw_force_reset_cluster_id` and
+`ecs_cdw_force_reset_confirm` contain the same exact cluster ID. The task
+reuses the temporary signed profile, calls the supported DW delete operation,
+waits for that ID to disappear, and then continues activation. The reset does
+not affect ECS, Base, CDE, CAI, or FreeIPA and does not mutate principals or
+keytabs, but it destroys CDW objects attached to the named cluster.
+
 A gateway timeout from `createPrivateCluster` is treated as ambiguous:
 automation continues structured discovery and accepts the recovered cluster
 when the backend received the request. An already-exists response follows the

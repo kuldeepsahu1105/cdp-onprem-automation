@@ -388,6 +388,26 @@ principal/keytab state and use supported DWX recovery when activation reports
 an existing cluster or keytab validation failure; do not repair it by deleting
 or recreating principals.
 
+If UI deletion leaves a failed private-cloud activation hidden in the DW
+control plane, an explicitly confirmed CDW-only reset can reuse playbook 34's
+temporary signed profile without exposing its credentials:
+
+```bash
+cd ansible-playbooks
+ansible-playbook -i inventory.ini 34_setup_ecs_data_services.yml \
+  -e ecs_data_services_deploy_enabled=true \
+  -e '{"ecs_data_services_install":["cdw"]}' \
+  -e ecs_cdw_force_reset_cluster_id=env-cldr \
+  -e ecs_cdw_force_reset_confirm=env-cldr
+```
+
+This calls the supported `dw delete-cluster --force` operation, waits until
+the exact cluster ID is no longer returned, and then continues with fresh CDW
+activation. It does not delete the ECS environment, Base cluster, CDE, CAI, or
+FreeIPA and does not mutate principals or keytabs. It does delete CDW catalogs
+and virtual warehouses attached to that cluster, so confirmation must exactly
+match the cluster ID.
+
 On a failed CDW activation, playbook 34 now emits a non-mutating boundary
 report. It includes the control-plane environment identity and binding fields
 returned by the installed CLI, CM `kerberosInfo`, base-cluster HDFS
