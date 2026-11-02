@@ -429,14 +429,20 @@ smallest `xsmall` template and `root.<environment>.cdw` resource pool. Existing
 warehouses with the configured names are retained. Override
 `ecs_cdw_hive_vw_name`, `ecs_cdw_impala_vw_name`, `ecs_cdw_trino_vw_name`,
 `ecs_cdw_vw_tshirt_size`, or `ecs_cdw_vw_resource_pool` only when the target
-CDW deployment uses different established values. In Kerberized deployments,
-playbook 34 also discovers keytab-bearing containers in the corresponding
-generated namespaces (`compute-hive-vw`, `trino-trino-vw`, and equivalent
-configured-name suffixes) and sets a container-specific
-`KRB5CCNAME=FILE:/tmp/krb5cc_*`. Controller templates are patched only when
-different, and StatefulSet pods are recreated only after an actual template
-change, avoiding KCM-dependent `kinit` failures without disturbing healthy
-reruns.
+CDW deployment uses different established values. Impala-specific creation
+settings are controlled by `ecs_cdw_impala_options`,
+`ecs_cdw_impala_ha_settings`, `ecs_cdw_impala_autoscaling`,
+`ecs_cdw_impala_additional_quota`, and `ecs_cdw_impala_query_log`. Defaults
+match the private-cloud UI's minimum xsmall selection. The pinned CLI does not
+expose the UI's named resource-template selector; use the supported
+`ecs_cdw_vw_tshirt_size` input.
+
+In Kerberized deployments,
+playbook 34 supplies `KRB5CCNAME=FILE:/tmp/krb5cc_cdw` in the supported CDW
+service configuration when creating a warehouse. For an existing warehouse,
+it compares `dw describe-vw-config` with the desired common `env` block and
+uses additive `dw update-vw --config` only when different. Generated
+Kubernetes controllers are not patched or restarted directly.
 
 If UI deletion leaves a failed private-cloud activation hidden in the DW
 control plane, an explicitly confirmed CDW-only reset can reuse playbook 34's
@@ -502,14 +508,14 @@ Remove the recovery settings immediately after success.
 
 If `warehouse-<environment>/metastore-0` reports
 `kinit: No KCM server found while getting default ccache`, the generated
-container inherited a KCM default but has no KCM daemon. Playbook 34
-reconciles the metastore StatefulSet to
-`KRB5CCNAME=FILE:/tmp/krb5cc_metastore`, recreates only `metastore-0` when the pod
-template changes, and waits for rollout before continuing CDW status polling.
-The reconciliation is controlled by
-`ecs_cdw_workload_file_ccache_reconcile` (default `true`) and is idempotent;
-it does not delete the StatefulSet, PVC, database, service, or Kerberos
-principal.
+container inherited a KCM default but has no KCM daemon. Playbook 34 reads the
+Database Catalog configuration with `dw describe-dbc-config` and applies
+`KRB5CCNAME=FILE:/tmp/krb5cc_metastore` through additive
+`dw update-dbc --config` only when missing or different. The reconciliation
+is controlled by `ecs_cdw_workload_file_ccache_reconcile` (default `true`) and
+is idempotent. The CDW control plane persists and renders the setting;
+automation does not directly patch or delete the StatefulSet, pod, PVC,
+database, service, or Kerberos principal.
 
 On a failed CDW activation, playbook 34 now emits a non-mutating boundary
 report. It includes the control-plane environment identity and binding fields

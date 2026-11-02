@@ -1269,17 +1269,45 @@ ecs_cdw_submission_recovery_delay: 5
 ecs_cdw_kubernetes_namespace: "warehouse-{{ ecs_cdp_environment_name }}"
 ecs_cdw_workload_file_ccache_reconcile: true
 ecs_cdw_workload_krb5ccname: "FILE:/tmp/krb5cc_metastore"
-ecs_cdw_workload_reconcile_wait_retries: 60
-ecs_cdw_workload_reconcile_wait_delay: 5
-ecs_cdw_workload_rollout_timeout: 5m
+ecs_cdw_dbc_file_ccache_config:
+  commonConfigs:
+    configBlocks:
+      - id: env
+        content:
+          keyValues:
+            KRB5CCNAME: "{{ ecs_cdw_workload_krb5ccname }}"
 ecs_cdw_hive_vw_name: hive-vw
 ecs_cdw_impala_vw_name: impala-vw
 ecs_cdw_trino_vw_name: trino-vw
 ecs_cdw_vw_tshirt_size: xsmall
 ecs_cdw_vw_resource_pool: "root.{{ ecs_cdp_environment_name }}.cdw"
+ecs_cdw_impala_options: {}
+# Defaults mirror the private-cloud UI's minimum xsmall Impala settings.
+ecs_cdw_impala_ha_settings:
+  highAvailabilityMode: DISABLED
+  enableShutdownOfCoordinator: false
+  shutdownOfCoordinatorDelaySeconds: 300
+ecs_cdw_impala_autoscaling:
+  minClusters: 1
+  maxClusters: 5
+  disableAutoSuspend: false
+  autoSuspendTimeoutSeconds: 300
+  impalaScaleUpDelaySeconds: 20
+  impalaScaleDownDelaySeconds: 300
+ecs_cdw_impala_additional_quota:
+  cpu: 0.0
+  memory: 0
+ecs_cdw_impala_query_log: true
 ecs_cdw_vw_wait_retries: 120
 ecs_cdw_vw_wait_delay: 30
-ecs_cdw_vw_krb5ccname_prefix: "FILE:/tmp/krb5cc_"
+ecs_cdw_vw_krb5ccname: "FILE:/tmp/krb5cc_cdw"
+ecs_cdw_vw_file_ccache_config:
+  commonConfigs:
+    configBlocks:
+      - id: env
+        content:
+          keyValues:
+            KRB5CCNAME: "{{ ecs_cdw_vw_krb5ccname }}"
 ecs_cdw_dbc_wait_retries: 40
 ecs_cdw_dbc_wait_delay: 30
 ecs_data_services_status_wait_retries: 480

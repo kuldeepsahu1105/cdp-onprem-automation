@@ -63,11 +63,6 @@ cdw_setup = (
     root
     / "ansible-playbooks/roles/ecs/tasks/setup_data_services.yml"
 ).read_text()
-cdw_workload_ccache = (
-    root
-    / "ansible-playbooks/roles/ecs/tasks/"
-    "ecs_data_service_cdw_reconcile_workload_ccache.yml"
-).read_text()
 for forbidden in (
     "ipa-getkeytab",
     "state: disabled",
@@ -127,17 +122,7 @@ assert "DWX-to-CM/KDC account-manager principal creation" in cdw_diagnostics
 assert "ecs_cdw_diagnostics_collected: true" in cdw_diagnostics
 assert "state: present" not in cdw_diagnostics
 assert "ipa-getkeytab" not in cdw_diagnostics
-assert (
-    cdw_setup.index("ecs_data_service_cdw_start.yml")
-    < cdw_setup.index("ecs_data_service_cdw_reconcile_workload_ccache.yml")
-    < cdw_setup.index("ecs_data_service_cdw_wait.yml")
-)
-assert "statefulset/metastore" in cdw_workload_ccache
-assert "--containers=metastore" in cdw_workload_ccache
-assert "KRB5CCNAME={{ ecs_cdw_workload_krb5ccname }}" in cdw_workload_ccache
-assert "delete" in cdw_workload_ccache
-assert "metastore-0" in cdw_workload_ccache
-assert "No KCM server found" in cdw_workload_ccache
+assert "ecs_data_service_cdw_reconcile_workload_ccache.yml" not in cdw_setup
 
 cdw_followup = (
     root
@@ -150,32 +135,55 @@ assert "'--resource-pool'" in cdw_followup
 assert "ecs_cdw_vw_resource_pool" in cdw_followup
 assert "'--t-shirt-size'" in cdw_followup
 assert "ecs_cdw_vw_tshirt_size" in cdw_followup
+assert "'--impala-options'" in cdw_followup
+assert "'--impala-ha-settings'" in cdw_followup
+assert "'--autoscaling'" in cdw_followup
+assert "'--additional-quota'" in cdw_followup
+assert "'--impala-query-log'" in cdw_followup
+assert "'--no-impala-query-log'" in cdw_followup
+assert "Validate configured Impala Virtual Warehouse settings" in cdw_followup
 assert "item.virtual_warehouses | default([]) | length == 0" in cdw_followup
-assert "ecs_data_service_cdw_reconcile_vw_ccaches.yml" in cdw_followup
+assert "ecs_data_service_cdw_reconcile_vw_ccaches.yml" not in cdw_followup
+assert "'describe-dbc-config'" in cdw_followup
+assert "'update-dbc'" in cdw_followup
+assert "'describe-vw-config'" in cdw_followup
+assert "'update-vw'" in cdw_followup
+assert "ecs_cdw_dbc_file_ccache_config | to_json" in cdw_followup
+assert cdw_followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 2
+assert cdw_followup.count(".get(\"KRB5CCNAME\", \"\")") == 2
+assert "failed_when: ecs_cdw_dbc_ccache_check.rc not in [0, 3]" in cdw_followup
+assert "failed_when: ecs_cdw_vw_ccache_checks.rc not in [0, 3]" in cdw_followup
 assert (
-    cdw_followup.index("ecs_data_service_cdw_reconcile_vw_ccaches.yml")
+    cdw_followup.index("Persist database catalog FILE credential cache through CDW API")
+    < cdw_followup.index("\n    - name: Wait for default database catalog\n")
+)
+assert (
+    cdw_followup.index("Persist Virtual Warehouse FILE credential caches through CDW API")
     < cdw_followup.index("CDW Virtual Warehouses to finish provisioning")
 )
 assert "CDW Virtual Warehouses to finish provisioning" in cdw_followup
 assert group_vars["ecs_cdw_vw_tshirt_size"] == "xsmall"
 assert group_vars["ecs_cdw_vw_resource_pool"] == "root.{{ ecs_cdp_environment_name }}.cdw"
-assert group_vars["ecs_cdw_vw_krb5ccname_prefix"] == "FILE:/tmp/krb5cc_"
-
-cdw_vw_ccaches = (
-    root
-    / "ansible-playbooks/roles/ecs/tasks/"
-    "ecs_data_service_cdw_reconcile_vw_ccaches.yml"
-).read_text()
-assert "CDW | Discover Virtual Warehouse workload namespaces" in cdw_vw_ccaches
-assert "ecs_cdw_vw_namespace_suffix_pattern" in cdw_vw_ccaches
-assert "--output=jsonpath={.items[*].metadata.name}" in cdw_vw_ccaches
-assert "statefulsets,deployments" in cdw_vw_ccaches
-assert "/etc/security/keytabs" in cdw_vw_ccaches
-assert "KRB5CCNAME={{ item.desired }}" in cdw_vw_ccaches
-assert "item.current != item.desired" in cdw_vw_ccaches
-assert "Record each changed Virtual Warehouse controller once" in cdw_vw_ccaches
-assert "item.kind == 'statefulset'" in cdw_vw_ccaches
-assert '"No KCM server found"' in cdw_vw_ccaches
+assert group_vars["ecs_cdw_impala_ha_settings"]["highAvailabilityMode"] == "DISABLED"
+assert group_vars["ecs_cdw_impala_ha_settings"]["enableShutdownOfCoordinator"] is False
+assert group_vars["ecs_cdw_impala_autoscaling"]["minClusters"] == 1
+assert group_vars["ecs_cdw_impala_autoscaling"]["maxClusters"] == 5
+assert group_vars["ecs_cdw_impala_autoscaling"]["autoSuspendTimeoutSeconds"] == 300
+assert group_vars["ecs_cdw_impala_autoscaling"]["impalaScaleUpDelaySeconds"] == 20
+assert group_vars["ecs_cdw_impala_autoscaling"]["impalaScaleDownDelaySeconds"] == 300
+assert group_vars["ecs_cdw_impala_additional_quota"] == {"cpu": 0.0, "memory": 0}
+assert group_vars["ecs_cdw_impala_query_log"] is True
+assert group_vars["ecs_cdw_vw_krb5ccname"] == "FILE:/tmp/krb5cc_cdw"
+assert (
+    group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
+    ["content"]["keyValues"]["KRB5CCNAME"]
+    == "{{ ecs_cdw_workload_krb5ccname }}"
+)
+assert (
+    group_vars["ecs_cdw_vw_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
+    ["content"]["keyValues"]["KRB5CCNAME"]
+    == "{{ ecs_cdw_vw_krb5ccname }}"
+)
 
 ozone_credentials = (
     root
