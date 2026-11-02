@@ -34,11 +34,18 @@ require(
 
 guard_start = preflight.index("- name: CDW | Select deactivated cluster records")
 mutation_start = preflight.index(
-    "- name: CDW | Ensure FreeIPA host principal prerequisite"
+    "- name: CDW | Ensure FreeIPA host principal object"
 )
 require(
     guard_start < mutation_start,
     "Deactivated rejection must run before FreeIPA principal mutation",
+)
+terminal_guard_start = preflight.index(
+    "- name: CDW | Refuse to mutate terminal failed clusters"
+)
+require(
+    terminal_guard_start < mutation_start,
+    "Terminal-failure rejection must run before FreeIPA principal mutation",
 )
 guard = preflight[guard_start:mutation_start]
 normalized_guard = " ".join(guard.split())

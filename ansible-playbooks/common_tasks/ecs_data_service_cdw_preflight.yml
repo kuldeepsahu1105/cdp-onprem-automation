@@ -154,8 +154,8 @@
         ecs_cdw_preflight_hdfs_authentication | default('unset', true)
       }}. Expected realm={{ cluster_realm }}, KDC={{ kdc_host }}, and HDFS
       authentication=kerberos. Run 30_setup_cm_krbs.yml and
-      31_setup_base_cluster.yml successfully before CDW. Do not create or
-      rotate the CDW principal manually.
+      31_setup_base_cluster.yml successfully before CDW. Do not generate,
+      retrieve, or rotate the CDW keytab manually.
     success_msg: >-
       CDW Base prerequisites verified: CM is kerberized against
       {{ kdc_host }} in {{ cluster_realm }} and HDFS uses Kerberos.
@@ -229,3 +229,56 @@
       the supported control-plane workflow, then rerun.
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
+
+- name: CDW | Resolve required FreeIPA principal objects
+  ansible.builtin.set_fact:
+    ecs_cdw_principal_hostname: >-
+      dwx-env-{{ ecs_cdp_environment_name }}.cdp.local
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ecs_cdw_ensure_freeipa_principal_objects | default(true) | bool
+
+- name: CDW | Require FreeIPA access for principal preparation
+  ansible.builtin.assert:
+    that:
+      - ipa_server_in_inventory | default(false) | bool
+      - ipaserver_inventory_host | default('') | length > 0
+      - ipaadmin_password | default('') | string | length > 0
+    fail_msg: >-
+      CM /cm/retrieveKeytab requires the CDW host and Hive service principal
+      objects to exist before activation. FreeIPA inventory access and
+      ipaadmin_password are required to prepare those objects without
+      generating or retrieving their keys.
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ecs_cdw_ensure_freeipa_principal_objects | default(true) | bool
+
+- name: CDW | Ensure FreeIPA host principal object
+  freeipa.ansible_freeipa.ipahost:
+    ipaadmin_password: "{{ ipaadmin_password }}"
+    ipaadmin_principal: "{{ ipaadmin_principal }}"
+    name: "{{ ecs_cdw_principal_hostname }}"
+    force: true
+    state: present
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ecs_cdw_ensure_freeipa_principal_objects | default(true) | bool
+
+- name: CDW | Ensure FreeIPA Hive service principal object
+  freeipa.ansible_freeipa.ipaservice:
+    ipaadmin_password: "{{ ipaadmin_password }}"
+    ipaadmin_principal: "{{ ipaadmin_principal }}"
+    name: "hive/{{ ecs_cdw_principal_hostname }}"
+    force: true
+    state: present
+  delegate_to: "{{ ipaserver_inventory_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - identity_provider_effective | default('freeipa') == 'freeipa'
+    - ecs_cdw_ensure_freeipa_principal_objects | default(true) | bool

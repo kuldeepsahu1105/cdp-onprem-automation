@@ -528,7 +528,11 @@ use the supported DWX UI/backend activation path, activate the cluster
 manually, then rerun playbook 34. Automation does not attempt activation,
 deletion, recreation, or a control-plane restart. `Deactivated` is also a
 terminal structured polling status, while only `Running` is accepted as
-success.
+success. For FreeIPA, the playbook idempotently ensures that the required
+`host/<hostname>` and `hive/<hostname>` principal objects exist because CM
+`/cm/retrieveKeytab` requires pre-existing principals. It never generates,
+retrieves, disables, rotates, or deletes their keys; CM and the Private Cloud
+Data Warehouse control plane own the keytab.
 
 Before that control-plane query, CDW performs a read-only Base readiness gate.
 CM `kerberosInfo` must report `kerberized=true` with the configured realm and
@@ -541,13 +545,14 @@ handoff; failure diagnostics still inspect that separate boundary.
 The product-standard private-cloud CDW hostname is
 `dwx-env-<environment>.cdp.local`, even when the deployment DNS domain and
 Kerberos realm are different (for example, `cldr.internal.arpa` and
-`CLDR.INTERNAL.ARPA`). Automation does not create, delete, initialize,
-retrieve, validate, or rotate CDW host/service principals or keytabs.
-Cloudera's documented default activation owns the predefined
-`hive/dwx-env-<environment>.cdp.local@<realm>` identity through the configured
-Cloudera Manager KDC integration. This matches the UI and
+`CLDR.INTERNAL.ARPA`). Automation creates only the FreeIPA host and Hive
+service principal objects. Both use `force: true` because the product-standard
+`cdp.local` hostname does not require a DNS A or AAAA record. CM
+`/cm/retrieveKeytab` and CDW own key generation, retrieval, and rotation;
+automation never runs `ipa-getkeytab`, changes key permissions, disables keys,
+or deletes these principals. This matches the UI and
 `cloudera-labs/cloudera.cloud` minimal request: submit only the environment
-identity. Manually mutating the principal can invalidate keytab state retained
+identity. Manually mutating key material can invalidate state retained
 by a failed activation and cause `KDC_ERR_PREAUTH_FAILED` in both automation
 and the UI. The optional `custom_kerberos_principal_hostname` is not submitted
 unless explicitly configured because CDW rejects it when **Enable
@@ -564,9 +569,9 @@ integration. CDW does not duplicate or partially reimplement those phases.
 CDW preflight never deletes host or Hive principals and never treats an empty
 `dw_cluster_info` result as proof that no activation state exists. The DWX
 backend can retain an activated environment and keytab state even when that
-query returns zero clusters. Preserve the product-owned principal state and
-use the supported DWX recovery workflow when activation reports an existing
-cluster or keytab validation failure.
+query returns zero clusters. Preserve CM/CDW-owned key state and use the
+supported DWX recovery workflow when activation reports an existing cluster
+or keytab validation failure.
 
 For a confirmed disposable failed activation, playbook 34 supports an
 explicit CDW-only force reset when `ecs_cdw_force_reset_cluster_id` and

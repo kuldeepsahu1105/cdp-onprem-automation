@@ -115,12 +115,25 @@ assert "ecs_cdw_preflight_cm_kerberized | bool" in cdw_preflight
 assert "ecs_cdw_preflight_cm_realm == cluster_realm" in cdw_preflight
 assert "ecs_cdw_preflight_cm_kdc_host == kdc_host" in cdw_preflight
 assert "ecs_cdw_preflight_hdfs_authentication == 'kerberos'" in cdw_preflight
-assert "state: present" not in cdw_preflight
-assert "ipa-getkeytab" not in cdw_preflight
-assert "ecs_cdw_legacy_principal_cleanup_marker" not in cdw_preflight
-assert "freeipa.ansible_freeipa.ipaservice" not in cdw_preflight
-assert "freeipa.ansible_freeipa.ipahost" not in cdw_preflight
-assert "state: absent" not in cdw_preflight
+assert "CDW | Ensure FreeIPA host principal object" in cdw_preflight
+assert "CDW | Ensure FreeIPA Hive service principal object" in cdw_preflight
+assert "freeipa.ansible_freeipa.ipahost" in cdw_preflight
+assert "freeipa.ansible_freeipa.ipaservice" in cdw_preflight
+assert cdw_preflight.count("force: true") >= 2
+assert cdw_preflight.count("state: present") >= 2
+for forbidden in (
+    "ipa-getkeytab",
+    " kinit",
+    "state: absent",
+    "state: disabled",
+    "allow_create_keytab",
+    "allow_retrieve_keytab",
+    "ipa service-del",
+    "ipa host-del",
+    "chmod",
+    "chown",
+):
+    assert forbidden not in cdw_preflight
 cdw_diagnostics = (
     root
     / "ansible-playbooks/common_tasks/ecs_data_service_cdw_diagnostics.yml"
@@ -232,6 +245,7 @@ assert group_vars["ecs_cdw_force_reset_confirm"] == ""
 assert group_vars["ecs_cdw_force_reset_wait_retries"] == 40
 assert group_vars["ecs_cdw_force_reset_wait_delay"] == 15
 assert group_vars["ecs_cdp_environment_adopt_single_existing"] is False
+assert group_vars["ecs_cdw_ensure_freeipa_principal_objects"] is True
 assert group_vars["ecs_cdw_dataviz_user_groups"] == []
 assert group_vars["ecs_cdw_dataviz_admin_groups"] == []
 assert group_vars["ecs_cai_static_subdomain"] == "cai"
@@ -587,10 +601,11 @@ assert "ecs_data_services_dns_probe_retry_delay" in cdw_preflight_text
 assert "Remove legacy automation-owned principals exactly once" not in cdw_preflight_text
 assert "ecs_cdw_legacy_principal_cleanup_marker" not in cdw_preflight_text
 assert "ecs_cdw_legacy_principal_hostnames" not in cdw_preflight_text
-assert "freeipa.ansible_freeipa.ipaservice" not in cdw_preflight_text
-assert "freeipa.ansible_freeipa.ipahost" not in cdw_preflight_text
+assert "freeipa.ansible_freeipa.ipaservice" in cdw_preflight_text
+assert "freeipa.ansible_freeipa.ipahost" in cdw_preflight_text
 assert "state: absent" not in cdw_preflight_text
-assert "state: present" not in cdw_preflight_text
+assert cdw_preflight_text.count("state: present") >= 2
+assert cdw_preflight_text.count("force: true") >= 2
 assert "ipa-getkeytab" not in cdw_preflight_text
 assert "kinit" not in cdw_preflight_text
 assert "state: disabled" not in cdw_preflight_text

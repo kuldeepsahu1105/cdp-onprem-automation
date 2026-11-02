@@ -392,7 +392,8 @@ passes the final success assertion.
 CDW preflight also verifies the Base security boundary without mutation:
 CM `kerberosInfo` must be enabled for the configured realm/KDC and the Base
 HDFS service must use Kerberos authentication. If this gate fails, rerun
-playbooks 30 and 31; do not create a CDW principal or keytab manually.
+playbooks 30 and 31; do not generate, retrieve, or rotate a CDW keytab
+manually.
 
 Give every fresh Base/ECS deployment a unique `ecs_cdp_environment_name`.
 Automation reuses an exact-name environment idempotently but does not adopt a
@@ -404,12 +405,15 @@ Base/ECS deployment.
 
 CDW activation follows the manual UI and `cloudera-labs/cloudera.cloud`
 minimal request: the API receives the environment identity and no custom
-Kerberos hostname by default. Automation does not create, delete, initialize,
-retrieve, validate, or rotate the predefined
-`hive/dwx-env-<environment>.cdp.local@<realm>` principal or keytab. Cloudera
-Data Warehouse owns that lifecycle through the Cloudera Manager KDC
-integration. This is essential for retries because failed activation state can
-retain keytab material; out-of-band principal mutation can then cause
+Kerberos hostname by default. For FreeIPA, automation idempotently creates the
+standard `host/dwx-env-<environment>.cdp.local@<realm>` and
+`hive/dwx-env-<environment>.cdp.local@<realm>` principal objects because CM
+`/cm/retrieveKeytab` requires them to exist. Both object operations use
+`force: true` because `cdp.local` has no required DNS A or AAAA record. CM/CDW
+own their keys: automation does not generate, retrieve, disable, rotate,
+delete, or change permissions on key material. This is essential for retries
+because failed activation state can retain keytab material; out-of-band key
+mutation can then cause
 `KDC_ERR_PREAUTH_FAILED` in both automation and the UI.
 
 FreeIPA health is owned by identity playbook 12, which starts and verifies
@@ -422,10 +426,10 @@ steps.
 
 CDW preflight does not delete host or Hive principals. An empty
 `dw_cluster_info` response is not a safe deletion signal because DWX can still
-retain an activated environment and keytab state. Preserve product-owned
-principal/keytab state and use supported DWX recovery when activation reports
-an existing cluster or keytab validation failure; do not repair it by deleting
-or recreating principals.
+retain an activated environment and keytab state. Preserve CM/CDW-owned key
+state and use supported DWX recovery when activation reports an existing
+cluster or keytab validation failure; do not repair it by deleting principals
+or mutating key material.
 
 If UI deletion leaves a failed private-cloud activation hidden in the DW
 control plane, an explicitly confirmed CDW-only reset can reuse playbook 34's
