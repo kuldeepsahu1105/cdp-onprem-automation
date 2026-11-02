@@ -1248,11 +1248,10 @@ ecs_ldap_admin_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|envi
 ecs_ldap_admin_resource_role_name_regex: '(?i)(admin|owner|power|environment|de|dw|ml|data)'
 # CDW
 ecs_cdw_private_cloud_config: {}  # optional storage_class, db_client_certificate paths
-# FreeIPA only: create and initialize host/<dwx-env-*.cdp.local>. CDW owns hive/ keytabs.
-ecs_cdw_ensure_freeipa_principal_host: true
-# Principal used once to initialize a missing CDW host key; normal reruns never retrieve or rotate it.
-ecs_cdw_freeipa_keytab_admin_principal: "{{ ipaadmin_principal }}"
-ecs_cdw_freeipa_keytab_admin_password: "{{ krb5_kdc_admin_password }}"
+# One-time migration cleanup for principals created by older automation.
+# CDW owns creation and rotation of both its host and Hive service keys.
+ecs_cdw_cleanup_legacy_automation_principals: true
+ecs_cdw_legacy_principal_cleanup_marker_dir: /var/lib/ipa
 ecs_cdw_submission_recovery_retries: 24
 ecs_cdw_submission_recovery_delay: 5
 ecs_cdw_kubernetes_namespace: "warehouse-{{ ecs_cdp_environment_name }}"

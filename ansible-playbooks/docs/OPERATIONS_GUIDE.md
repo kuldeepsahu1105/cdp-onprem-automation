@@ -388,13 +388,14 @@ deletion, recreation, or a control-plane restart. A concurrent transition to
 `Deactivated` terminates structured polling promptly, but only `Running`
 passes the final success assertion.
 
-For FreeIPA-backed CDW, preflight ensures the product-standard
-`host/dwx-env-<environment>.cdp.local@<realm>` host exists and has initialized
-key material. The configured `ecs_cdw_freeipa_keytab_admin_principal` receives
-additive create/retrieve permission. A missing host key is initialized once
-through a temporary keytab that is immediately removed; an existing key is
-never retrieved or rotated on rerun. This does not create the CDW-owned
-`hive/` service principal and is skipped for Active Directory.
+For FreeIPA-backed CDW, the product owns the standard
+`host/dwx-env-<environment>.cdp.local@<realm>` and `hive/` principal/keytab
+lifecycle. Automation must not pre-create, initialize, retrieve, disable, or
+rotate those keys. If an older automation version created either principal,
+the first CDW run with no existing cluster removes both legacy hostname
+variants once and records a per-environment marker under `/var/lib/ipa`.
+Subsequent retries skip cleanup. Active Directory, missing-FreeIPA-inventory,
+and existing-cluster deployments skip this migration.
 
 ---
 

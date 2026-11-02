@@ -42,6 +42,29 @@ assert group_vars["ecs_cde_cpu_requests"] == "40"
 assert group_vars["ecs_cde_memory_requests"] == "64Gi"
 assert group_vars["ecs_cai_static_subdomain"] == "cai"
 assert len(group_vars["ecs_cai_static_subdomain"]) <= 15
+assert group_vars["ecs_cdw_cleanup_legacy_automation_principals"] is True
+assert (
+    group_vars["ecs_cdw_legacy_principal_cleanup_marker_dir"] == "/var/lib/ipa"
+)
+assert "ecs_cdw_ensure_freeipa_principal_host" not in group_vars
+
+cdw_preflight = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_preflight.yml"
+).read_text()
+for forbidden in (
+    "ipa-getkeytab",
+    " kinit",
+    "state: disabled",
+    "Ensure FreeIPA host principal prerequisite",
+    "Ensure FreeIPA Hive service principal prerequisite",
+):
+    assert forbidden not in cdw_preflight
+assert "Remove legacy automation-owned principals exactly once" in cdw_preflight
+assert "ecs_cdw_legacy_principal_cleanup_marker" in cdw_preflight
+assert "identity_provider_effective | default('freeipa') == 'freeipa'" in cdw_preflight
+assert "ipa_server_in_inventory | default(false) | bool" in cdw_preflight
+assert "ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0" in cdw_preflight
 
 ozone_credentials = (
     root
