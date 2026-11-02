@@ -175,6 +175,13 @@ Resource Pool Manager, and Compute API deployments in the `cdp` namespace.
 
 ## Prerequisites
 
+Playbook `31_setup_base_cluster.yml` must complete with its CM Data Context
+gate enabled before ECS Data Services are installed. The default `SDX` context
+shares HDFS, Hive, Atlas, and Ranger from `cdh_basecluster_name`. Cloudera Labs
+requires a base-cluster Data Context for compute workloads; without it, fresh
+CDE installation reaches dex-base chart generation and fails with
+`Unable to get remote data context for cluster: <base-cluster>`.
+
 | Step | Playbook / action |
 |------|-------------------|
 | ECS experience cluster + control plane | `33_setup_ecs_cluster.yml` |

@@ -108,6 +108,16 @@ assert "ecs_coredns_kubeconfig_path" in combined
 group_vars = yaml.safe_load(
     (root / "ansible-playbooks/group_vars/all.yml").read_text()
 )
+assert group_vars["base_cluster_data_context_enabled"] is True
+assert group_vars["base_cluster_data_context_name"] == "SDX"
+assert group_vars["base_cluster_data_context_services"] == [
+    "HDFS",
+    "HIVE",
+    "ATLAS",
+    "RANGER",
+]
+assert group_vars["base_cluster_data_context_wait_retries"] == 12
+assert group_vars["base_cluster_data_context_wait_delay"] == 5
 assert group_vars["ecs_coredns_kubeconfig_path"] == "/etc/rancher/rke2/rke2.yaml"
 assert group_vars["ecs_cde_cpu_requests"] == "300"
 assert group_vars["ecs_cde_memory_requests"] == "1000Gi"
@@ -374,6 +384,30 @@ for deployment_fragment in (
     assert deployment_fragment in cde_diagnostics_text
 assert "describe-service" in cde_diagnostics_text
 assert "--since={{ ecs_cde_diagnostics_log_since }}" in cde_diagnostics_text
+base_cluster_playbook_text = (
+    root / "ansible-playbooks/31_setup_base_cluster.yml"
+).read_text()
+data_context_import = (
+    "ansible.builtin.import_tasks: common_tasks/ensure_base_cluster_data_context.yml"
+)
+initialization_marker = "- name: Record completed base cluster initialization"
+assert data_context_import in base_cluster_playbook_text
+assert base_cluster_playbook_text.index(data_context_import) < (
+    base_cluster_playbook_text.index(initialization_marker)
+)
+data_context_text = (
+    root / "ansible-playbooks/common_tasks/ensure_base_cluster_data_context.yml"
+).read_text()
+for required_fragment in (
+    "/dataContexts?view=full",
+    "/dataContexts",
+    "'serviceName': service_type | lower",
+    "'serviceType': service_type | upper",
+    "'clusterName': cdh_basecluster_name",
+    "Unable to get remote data context",
+):
+    assert required_fragment in data_context_text
+assert "difference(base_cluster_data_context_observed_services)" in data_context_text
 assert "Existing (healthy)" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
 ).read_text()

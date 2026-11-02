@@ -577,6 +577,18 @@ required Ozone/Hive/Ranger/Knox settings and the Ozone Recon role are reconciled
 the cluster is started if necessary, and CM runs
 `deployClientConfigsAndRefresh`. The final cluster state and health are printed.
 
+After cluster and ZooKeeper health pass, playbook **31** creates or verifies the
+CM Data Context required by fresh CDE and other compute installations. The
+default context is `SDX`, sharing `HDFS`, `HIVE`, `ATLAS`, and `RANGER`, matching
+the Cloudera Labs base-cluster pattern. This does not restart or reconfigure
+those healthy services; it registers them as a shareable Data Context before
+the initialization marker is written. Without this object, CDE dex-base chart
+installation fails with `Unable to get remote data context for cluster`.
+Existing complete contexts are read without mutation; existing incomplete
+contexts fail explicitly. Set `base_cluster_data_context_enabled: false` only
+when the base cluster will never back ECS Data Services or another compute
+workload.
+
 First Run failures are expanded from the parent CM command into failed service
 commands and their child validation messages in Jenkins. First Run is submitted
 for a newly created cluster or an existing cluster only while both the matching

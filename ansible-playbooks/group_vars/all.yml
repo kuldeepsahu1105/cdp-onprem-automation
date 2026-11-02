@@ -562,6 +562,17 @@ base_cluster_initialization_marker_path: /var/lib/cloudera-scm-server/.ansible-b
 # The NameNode storage must still be unformatted; automation never reformats an
 # existing HDFS namespace.
 base_cluster_force_first_run: false
+# CDE and other compute workloads require a CM Data Context on the base
+# cluster. Playbook 31 creates it before recording successful initialization.
+base_cluster_data_context_enabled: true
+base_cluster_data_context_name: SDX
+base_cluster_data_context_services:
+  - HDFS
+  - HIVE
+  - ATLAS
+  - RANGER
+base_cluster_data_context_wait_retries: 12
+base_cluster_data_context_wait_delay: 5
 
 # CDP base cluster services (31_setup_base_cluster.yml). Override per key in Ansible controller via base_cluster_install_services.
 base_cluster_install_services:
