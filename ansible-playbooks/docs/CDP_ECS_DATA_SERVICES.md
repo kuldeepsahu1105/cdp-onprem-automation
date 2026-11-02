@@ -495,14 +495,18 @@ not attempt activation, deletion, recreation, or a control-plane restart.
 `Deactivated` is also a terminal structured polling status, while only
 `Running` is accepted as success.
 
-The product-standard private-cloud CDW hostname is
-`dwx-env-<environment>.cdp.local`, even when the deployment DNS domain and
-Kerberos realm are different (for example, `cldr.internal.arpa` and
-`CLDR.INTERNAL.ARPA`). Before CDW submission in FreeIPA deployments,
-`ecs_cdw_ensure_freeipa_principal_host` idempotently ensures the external-name
+The CDW backend defaults its private-cloud Kerberos hostname to
+`dwx-env-<environment>.cdp.local`. That external suffix can pass direct KDC
+validation after manual principal creation but still fail the CDW keytab
+service with `failed to get keytab for validation: ... status 500`. For
+self-managed FreeIPA, automation therefore sets
+`customKerberosPrincipalHostname` to
+`dwx-env-<environment>.<ipaserver_domain>` (for example,
+`dwx-env-cldr.cldr.internal.arpa`) and prepares that exact hostname before
+submission. `ecs_cdw_ensure_freeipa_principal_host` idempotently ensures the
 FreeIPA host object and the CDW Hive service principal:
-`host/dwx-env-<environment>.cdp.local@<cluster_realm>` and
-`hive/dwx-env-<environment>.cdp.local@<cluster_realm>`. The configured
+`host/dwx-env-<environment>.<ipaserver_domain>@<cluster_realm>` and
+`hive/dwx-env-<environment>.<ipaserver_domain>@<cluster_realm>`. The configured
 `ecs_cdw_freeipa_keytab_admin_principal` (default `ipaadmin_principal`) receives
 additive permission to create and retrieve those keys and authenticates with
 `ecs_cdw_freeipa_keytab_admin_password` (default
@@ -516,7 +520,8 @@ the validation keytab and credential cache immediately. No keytab is persisted.
 This catches the pre-Kubernetes `KDC_ERR_C_PRINCIPAL_UNKNOWN` failure before
 calling `createPrivateCluster`. Active Directory deployments skip this
 FreeIPA-only step. An explicit `custom_kerberos_principal_hostname` in
-`ecs_cdw_private_cloud_config` is honored by both principal prerequisites.
+`ecs_cdw_private_cloud_config` overrides the FreeIPA-domain default and is used
+consistently for both principal preparation and the activation request.
 
 A gateway timeout from `createPrivateCluster` is treated as ambiguous:
 automation continues structured discovery and accepts the recovered cluster

@@ -53,8 +53,31 @@
           | default({})
         ).custom_kerberos_principal_hostname
         | default(
-            'dwx-env-' + ecs_cdp_environment_name + '.cdp.local',
+            'dwx-env-'
+            + ecs_cdp_environment_name
+            + '.'
+            + (
+                ipaserver_domain
+                if identity_provider_effective | default('freeipa') == 'freeipa'
+                else 'cdp.local'
+              ),
             true
+          )
+      }}
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
+- name: CDW | Build effective private-cloud submission configuration
+  ansible.builtin.set_fact:
+    ecs_cdw_private_cloud_config_effective: >-
+      {{
+        (ecs_cdw_private_cloud_config | default({}))
+        | combine(
+            {
+              'custom_kerberos_principal_hostname':
+                ecs_cdw_kerberos_principal_hostname_effective
+            }
+            if identity_provider_effective | default('freeipa') == 'freeipa'
+            else {}
           )
       }}
   when: "'cdw' in (ecs_data_services_install_names | default([]))"

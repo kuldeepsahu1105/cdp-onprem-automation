@@ -359,9 +359,13 @@ deletion, recreation, or a control-plane restart. A concurrent transition to
 passes the final success assertion.
 
 For FreeIPA-backed CDW, preflight ensures the product-standard
-`host/dwx-env-<environment>.cdp.local@<realm>` and
-`hive/dwx-env-<environment>.cdp.local@<realm>` principals exist and have
-initialized key material. The configured
+`host/dwx-env-<environment>.<ipaserver_domain>@<realm>` and
+`hive/dwx-env-<environment>.<ipaserver_domain>@<realm>` principals exist and
+have initialized key material. It passes the same
+`dwx-env-<environment>.<ipaserver_domain>` value as
+`customKerberosPrincipalHostname` in the CDW activation request; relying on
+the backend `dwx-env-<environment>.cdp.local` default can fail its keytab
+retrieval service with HTTP 500 even when direct `kinit` succeeds. The configured
 `ecs_cdw_freeipa_keytab_admin_principal` receives additive create/retrieve
 permission. A missing key is initialized once through a temporary keytab that
 is immediately removed; existing keys are never rotated on rerun. Preflight

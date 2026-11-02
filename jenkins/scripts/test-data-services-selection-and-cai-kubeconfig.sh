@@ -516,14 +516,21 @@ cdw_preflight_text = (
 assert "ecs_cdw_preflight_cluster_info is succeeded" in cdw_preflight_text
 assert "ecs_data_services_dns_probe_retry_delay" in cdw_preflight_text
 assert "ecs_cdw_hive_service_principal_effective" in cdw_preflight_text
+assert "ecs_cdw_private_cloud_config_effective" in cdw_preflight_text
 assert "freeipa.ansible_freeipa.ipaservice" in cdw_preflight_text
 assert "hive/{{ ecs_cdw_kerberos_principal_hostname_effective }}" in cdw_preflight_text
+assert "+ (\n                ipaserver_domain" in cdw_preflight_text
+assert "'custom_kerberos_principal_hostname':" in cdw_preflight_text
 assert "Initialize missing FreeIPA Hive service key exactly once" in cdw_preflight_text
 assert "Retrieve the existing Hive service key for validation" in cdw_preflight_text
 assert "Acquire a Kerberos ticket with the Hive service key" in cdw_preflight_text
 assert "\n          - -r\n          - -p" in cdw_preflight_text
 assert "kinit\n          - -c" in cdw_preflight_text
 assert "klist\n          - -s" in cdw_preflight_text
+cdw_start_text = (
+    root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_start.yml"
+).read_text()
+assert "ecs_cdw_private_cloud_config_effective" in cdw_start_text
 cai_preflight_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cai_preflight.yml"
 ).read_text()
