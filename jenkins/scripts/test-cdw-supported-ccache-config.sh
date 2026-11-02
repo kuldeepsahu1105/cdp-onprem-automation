@@ -81,6 +81,19 @@ for option in (
     require(option in followup, f"missing configurable Impala option {option}")
 
 require(
+    "Validate configured Trino Virtual Warehouse settings" in followup,
+    "Trino settings must be validated before creation",
+)
+require(
+    "ecs_cdw_trino_autoscaling | to_json" in followup,
+    "configured Trino autoscaling must be passed to create-vw",
+)
+require(
+    "ecs_cdw_trino_additional_quota | to_json" in followup,
+    "configured Trino additional quota must be passed to create-vw",
+)
+
+require(
     group_vars["ecs_cdw_workload_krb5ccname"]
     == "FILE:/tmp/krb5cc_metastore",
     "DBC cache path changed",
@@ -121,6 +134,14 @@ require(
     group_vars["ecs_cdw_impala_query_log"] is True,
     "Impala query logging default changed",
 )
+require(
+    group_vars["ecs_cdw_trino_autoscaling"] == {},
+    "Trino autoscaling must remain empty by default",
+)
+require(
+    group_vars["ecs_cdw_trino_additional_quota"] == {"cpu": 0.0, "memory": 0},
+    "Trino additional quota defaults changed",
+)
 
-print("CDW supported API ccache and Impala setting checks passed")
+print("CDW supported API ccache and warehouse setting checks passed")
 PY

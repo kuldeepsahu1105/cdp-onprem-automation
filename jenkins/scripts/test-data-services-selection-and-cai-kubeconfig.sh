@@ -174,6 +174,9 @@ assert "'--additional-quota'" in cdw_followup
 assert "'--impala-query-log'" in cdw_followup
 assert "'--no-impala-query-log'" in cdw_followup
 assert "Validate configured Impala Virtual Warehouse settings" in cdw_followup
+assert "Validate configured Trino Virtual Warehouse settings" in cdw_followup
+assert "ecs_cdw_trino_autoscaling | to_json" in cdw_followup
+assert "ecs_cdw_trino_additional_quota | to_json" in cdw_followup
 assert "'describe-dbc-config'" in cdw_followup
 assert "'update-dbc'" in cdw_followup
 assert "'describe-vw-config'" in cdw_followup
@@ -327,6 +330,8 @@ assert group_vars["ecs_cdw_impala_ha_settings"]["highAvailabilityMode"] == "DISA
 assert group_vars["ecs_cdw_impala_autoscaling"]["minClusters"] == 1
 assert group_vars["ecs_cdw_impala_autoscaling"]["maxClusters"] == 5
 assert group_vars["ecs_cdw_impala_query_log"] is True
+assert group_vars["ecs_cdw_trino_autoscaling"] == {}
+assert group_vars["ecs_cdw_trino_additional_quota"] == {"cpu": 0.0, "memory": 0}
 assert group_vars["ecs_cdw_dataviz_user_groups"] == []
 assert group_vars["ecs_cdw_dataviz_admin_groups"] == []
 assert group_vars["ecs_cai_static_subdomain"] == "cai"

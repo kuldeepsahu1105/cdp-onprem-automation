@@ -222,6 +222,26 @@
           or scratchSpaceLimit.
       when: ecs_cdw_catalog_succeeded | bool
 
+    - name: Validate configured Trino Virtual Warehouse settings
+      ansible.builtin.assert:
+        that:
+          - ecs_cdw_trino_autoscaling.trinoMinWorkerCount | default(1) | int >= 1
+          - >-
+            ecs_cdw_trino_autoscaling.trinoMaxWorkerCount
+            | default(ecs_cdw_trino_autoscaling.trinoMinWorkerCount | default(1))
+            | int
+            >= ecs_cdw_trino_autoscaling.trinoMinWorkerCount | default(1) | int
+          - ecs_cdw_trino_autoscaling.trinoShutdownGracePeriod | default(0) | int >= 0
+          - ecs_cdw_trino_autoscaling.trinoScaleUpDelaySeconds | default(0) | int >= 0
+          - ecs_cdw_trino_autoscaling.trinoScaleDownDelaySeconds | default(0) | int >= 0
+          - ecs_cdw_trino_additional_quota.cpu | default(0) | float >= 0
+          - ecs_cdw_trino_additional_quota.memory | default(0) | int >= 0
+        fail_msg: >-
+          Invalid Trino Virtual Warehouse configuration. Use positive worker
+          bounds with max greater than or equal to min, and nonnegative grace
+          periods, scaling delays, and additional quotas.
+      when: ecs_cdw_catalog_succeeded | bool
+
     - name: Create missing smallest CDW Virtual Warehouses in the CDW resource pool
       ansible.builtin.command:
         argv: >-
@@ -281,6 +301,31 @@
                   and (
                     ecs_cdw_impala_additional_quota.cpu | default(0) | float > 0
                     or ecs_cdw_impala_additional_quota.memory | default(0) | int > 0
+                  )
+                )
+                else []
+              )
+            + (
+                [
+                  '--autoscaling',
+                  ecs_cdw_trino_autoscaling | to_json
+                ]
+                if (
+                  item.item.type == 'trino'
+                  and ecs_cdw_trino_autoscaling | default({}) | length > 0
+                )
+                else []
+              )
+            + (
+                [
+                  '--additional-quota',
+                  ecs_cdw_trino_additional_quota | to_json
+                ]
+                if (
+                  item.item.type == 'trino'
+                  and (
+                    ecs_cdw_trino_additional_quota.cpu | default(0) | float > 0
+                    or ecs_cdw_trino_additional_quota.memory | default(0) | int > 0
                   )
                 )
                 else []
