@@ -395,6 +395,14 @@ assert data_context_import in base_cluster_playbook_text
 assert base_cluster_playbook_text.index(data_context_import) < (
     base_cluster_playbook_text.index(initialization_marker)
 )
+assert "base_cluster_verified_service_states | join(',')" in base_cluster_playbook_text
+assert "base_cluster_verified_health_summaries | join(',')" in base_cluster_playbook_text
+assert "base_cluster_final_state.json.healthSummary" not in base_cluster_playbook_text
+base_cluster_health_text = (
+    root / "ansible-playbooks/common_tasks/verify_base_cluster_service_health.yml"
+).read_text()
+assert "base_cluster_verified_service_states" in base_cluster_health_text
+assert "base_cluster_verified_health_summaries" in base_cluster_health_text
 data_context_text = (
     root / "ansible-playbooks/common_tasks/ensure_base_cluster_data_context.yml"
 ).read_text()

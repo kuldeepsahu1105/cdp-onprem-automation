@@ -3022,8 +3022,12 @@
       ansible.builtin.debug:
         msg: >-
           Base cluster with name {{ cdh_basecluster_name }} is ready:
-          state={{ base_cluster_final_state.json.clusterState | default('unknown') }},
-          health={{ base_cluster_final_state.json.healthSummary | default('unknown') }},
+          service_states={{
+          base_cluster_verified_service_states | join(',') }},
+          service_health={{
+          base_cluster_verified_health_summaries | join(',') }},
+          verified_runtime_services={{
+          base_cluster_runtime_service_names | length }},
           data_context={{
           base_cluster_data_context_name
           if base_cluster_data_context_enabled | default(true) | bool
