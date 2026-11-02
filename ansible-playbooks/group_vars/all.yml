@@ -1293,9 +1293,14 @@ ecs_ldap_admin_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|envi
 ecs_ldap_admin_resource_role_name_regex: '(?i)(admin|owner|power|environment|de|dw|ml|data)'
 # CDW
 ecs_cdw_private_cloud_config: {}  # optional storage_class, db_client_certificate paths
-# CM /cm/retrieveKeytab requires these principal objects to exist. CDW/CM still
-# own key generation, retrieval, and rotation.
+# FreeIPA owns the synthetic host container. CM generateCredentialsAdhoc
+# creates the missing Hive service principal and its initial key together.
+# Existing keyless Hive service objects are rejected.
 ecs_cdw_ensure_freeipa_principal_objects: true
+# Recovery-only: remove credentials CM classifies as unused before generating
+# an absent Hive service. Confirmation must exactly match the environment name.
+ecs_cdw_repair_stale_cm_credentials: false
+ecs_cdw_repair_stale_cm_credentials_confirm: ""
 ecs_cdw_submission_recovery_retries: 24
 ecs_cdw_submission_recovery_delay: 5
 ecs_cdw_kubernetes_namespace: "warehouse-{{ ecs_cdp_environment_name }}"

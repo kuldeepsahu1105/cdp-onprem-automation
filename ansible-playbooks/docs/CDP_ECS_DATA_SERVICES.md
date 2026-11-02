@@ -531,8 +531,12 @@ terminal structured polling status, while only `Running` is accepted as
 success. For FreeIPA, the playbook idempotently ensures that the required
 `host/<hostname>` and `hive/<hostname>` principal objects exist because CM
 `/cm/retrieveKeytab` requires pre-existing principals. It never generates,
-retrieves, disables, rotates, or deletes their keys; CM and the Private Cloud
-Data Warehouse control plane own the keytab.
+retrieves, disables, rotates, or deletes their keys directly. Automation
+creates only the synthetic FreeIPA host container. CM's supported
+`generateCredentialsAdhoc` command creates the missing Hive service principal
+and its initial key together. Automation waits for that command and verifies
+that FreeIPA reports the Hive service as keyed. It never runs `ipa-getkeytab`
+or handles keytab bytes. Existing keyed services are left unchanged.
 
 Before that control-plane query, CDW performs a read-only Base readiness gate.
 CM `kerberosInfo` must report `kerberized=true` with the configured realm and
@@ -545,12 +549,16 @@ handoff; failure diagnostics still inspect that separate boundary.
 The product-standard private-cloud CDW hostname is
 `dwx-env-<environment>.cdp.local`, even when the deployment DNS domain and
 Kerberos realm are different (for example, `cldr.internal.arpa` and
-`CLDR.INTERNAL.ARPA`). Automation creates only the FreeIPA host and Hive
-service principal objects. Both use `force: true` because the product-standard
-`cdp.local` hostname does not require a DNS A or AAAA record. CM
-`/cm/retrieveKeytab` and CDW own key generation, retrieval, and rotation;
-automation never runs `ipa-getkeytab`, changes key permissions, disables keys,
-or deletes these principals. This matches the UI and
+`CLDR.INTERNAL.ARPA`). Automation ensures the FreeIPA host object with
+`force: true` because the product-standard `cdp.local` hostname does not
+require a DNS A or AAAA record, then inspects the Hive service. If the service
+is absent, it supplies that principal to CM `generateCredentialsAdhoc`; CM
+creates the service and key. CM `/cm/retrieveKeytab` and CDW own retrieval and
+subsequent rotation. Pre-created keyless Hive services are rejected because
+CM skips their generation and then fails `merge_credentials.sh` with no
+component keytabs. While CDW is deactivated, remove only the confirmed keyless
+Hive service, preserve the host object, and rerun so CM can create it
+correctly. This matches the UI and
 `cloudera-labs/cloudera.cloud` minimal request: submit only the environment
 identity. Manually mutating key material can invalidate state retained
 by a failed activation and cause `KDC_ERR_PREAUTH_FAILED` in both automation
@@ -558,6 +566,16 @@ and the UI. The optional `custom_kerberos_principal_hostname` is not submitted
 unless explicitly configured because CDW rejects it when **Enable
 customization of Kerberos service principal** is disabled in Advanced
 Configuration.
+
+If CM still retains a credential for an already removed Hive service,
+`generateCredentialsAdhoc` completes with `No roles required Kerberos
+credentials to be generated`. For this damaged state only, set
+`ecs_cdw_repair_stale_cm_credentials=true` and
+`ecs_cdw_repair_stale_cm_credentials_confirm=<environment-name>`. The exact
+confirmation gates CM `deleteCredentials?deleteCredentialsMode=unused`,
+followed by ad-hoc generation and FreeIPA `has_keytab: TRUE` verification.
+Automation never requests deletion mode `all`. Remove both recovery values
+after the successful run.
 
 The prerequisite chain remains in its authoritative phases: identity playbook
 12 starts and verifies FreeIPA Directory Server and `krb5kdc` and configures

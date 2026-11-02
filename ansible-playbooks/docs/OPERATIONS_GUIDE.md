@@ -407,11 +407,12 @@ CDW activation follows the manual UI and `cloudera-labs/cloudera.cloud`
 minimal request: the API receives the environment identity and no custom
 Kerberos hostname by default. For FreeIPA, automation idempotently creates the
 standard `host/dwx-env-<environment>.cdp.local@<realm>` and
-`hive/dwx-env-<environment>.cdp.local@<realm>` principal objects because CM
-`/cm/retrieveKeytab` requires them to exist. Both object operations use
-`force: true` because `cdp.local` has no required DNS A or AAAA record. CM/CDW
-own their keys: automation does not generate, retrieve, disable, rotate,
-delete, or change permissions on key material. This is essential for retries
+synthetic host container with `force: true`, then asks CM's supported
+`generateCredentialsAdhoc` command to create the absent
+`hive/dwx-env-<environment>.cdp.local@<realm>` service and its initial KDC key
+together. It waits for completion and verifies the Hive service reports
+`has_keytab: TRUE`. Automation never runs `ipa-getkeytab` or handles keytab
+bytes. CM/CDW own retrieval and later rotation. This is essential for retries
 because failed activation state can retain keytab material; out-of-band key
 mutation can then cause
 `KDC_ERR_PREAUTH_FAILED` in both automation and the UI.
@@ -430,6 +431,29 @@ retain an activated environment and keytab state. Preserve CM/CDW-owned key
 state and use supported DWX recovery when activation reports an existing
 cluster or keytab validation failure; do not repair it by deleting principals
 or mutating key material.
+
+If an operator or older automation pre-created the Hive service without a
+key, playbook 34 stops before submission. CM cannot repair that state with
+`generateCredentialsAdhoc`: it skips the existing service and later fails
+`merge_credentials.sh` because no component keytab was produced. While CDW is
+deactivated, confirm `has_keytab: FALSE`, remove only that keyless Hive
+service, preserve the host object, and rerun. Never delete a keyed principal
+or combine this recovery with `ipa-getkeytab`.
+
+If the service is absent but CM `generateCredentialsAdhoc` reports only
+`No roles required Kerberos credentials to be generated`, CM still has a
+stale unused credential record. With CDW deactivated, run playbook 34 once
+with:
+
+```yaml
+ecs_cdw_repair_stale_cm_credentials: true
+ecs_cdw_repair_stale_cm_credentials_confirm: <environment-name>
+```
+
+The exact environment confirmation permits only CM
+`deleteCredentialsMode=unused`, followed by ad-hoc Hive credential generation
+and FreeIPA `has_keytab: TRUE` verification. It never requests deletion mode
+`all`. Remove the recovery settings immediately after success.
 
 If UI deletion leaves a failed private-cloud activation hidden in the DW
 control plane, an explicitly confirmed CDW-only reset can reuse playbook 34's
