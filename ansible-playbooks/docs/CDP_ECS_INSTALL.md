@@ -34,7 +34,10 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
    creation job can run. After the Kubernetes API reports ready and the
    CoreDNS ConfigMap exists, confirm the same authoritative forwarder, replace
    the `/etc/resolv.conf` upstream, omit the ineffective `policy sequential`
-   block, and restart CoreDNS only when changed. The live bootstrap path does not
+   block, and restart CoreDNS only when changed. The initial chart and live
+   reconciliation also publish static CM, console, and FreeIPA A records so
+   First Run does not depend on pod-network reachability to FreeIPA DNS. The
+   live bootstrap path does not
    require a pod to reach the upstream before mutation because pod DNS is the
    dependency being repaired; the exact applied CoreDNS forward stanza is
    verified before First Run waiting continues. Waiting for the API, rather

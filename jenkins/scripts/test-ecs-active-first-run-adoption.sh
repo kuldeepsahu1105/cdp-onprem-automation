@@ -27,6 +27,8 @@ assert phased.index("ecs_stage_coredns_bootstrap.yml") < phased.index(
 ) < phased.index(
     "ecs_reconcile_coredns.yml"
 ) < phased.index(
+    "ecs_configure_cli_tools.yml"
+) < phased.index(
     "ecs_wait_control_plane_first_run.yml"
 ) < phased.index(
     "Start ECS cluster services and roles"
@@ -66,6 +68,12 @@ assert stage["ansible.builtin.copy"]["dest"] == (
 manifest_text = stage["ansible.builtin.copy"]["content"].replace(
     "{{ ecs_coredns_bootstrap_forwarders | join(' ') }}",
     "10.0.0.10 10.0.0.11",
+).replace(
+    "{{ ecs_coredns_bootstrap_hosts_config | indent(20, true) }}",
+    "                    10.0.0.20 cldr-mngr.cldr.internal.arpa\n"
+    "                    10.0.0.30 console-cdp.apps.cldr.internal.arpa\n"
+    "                    10.0.0.40 ipaserver.cldr.internal.arpa\n"
+    "                    fallthrough",
 )
 manifest = yaml.safe_load(manifest_text)
 assert manifest["kind"] == "HelmChartConfig"
@@ -80,7 +88,21 @@ forward = next(
     if plugin["name"] == "forward"
 )
 assert forward["parameters"] == ". 10.0.0.10 10.0.0.11"
+hosts = next(
+    plugin
+    for plugin in values["servers"][0]["plugins"]
+    if plugin["name"] == "hosts"
+)
+assert "10.0.0.20 cldr-mngr.cldr.internal.arpa" in hosts["configBlock"]
+assert "10.0.0.30 console-cdp.apps.cldr.internal.arpa" in hosts["configBlock"]
+assert "10.0.0.40 ipaserver.cldr.internal.arpa" in hosts["configBlock"]
+assert hosts["configBlock"].strip().endswith("fallthrough")
 assert "/etc/resolv.conf" not in manifest["spec"]["valuesContent"]
+
+reconcile_text = (role_tasks / "ecs_reconcile_coredns.yml").read_text()
+assert "Require static ECS bootstrap DNS records in CoreDNS" in reconcile_text
+assert '"hosts {"' in reconcile_text
+assert "ecs_coredns_required_dns_records | to_json" in reconcile_text
 
 active_read = setup_by_name["Read active ECS cluster commands"]
 assert active_read["ansible.builtin.uri"]["url"].endswith(
