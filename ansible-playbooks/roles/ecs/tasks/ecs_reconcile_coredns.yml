@@ -211,6 +211,40 @@
       ECS CoreDNS reconciliation requires {{ ecs_coredns_kubectl_path }} on
       {{ groups[ecs_cluster_master_group][0] }} after control-plane installation.
 
+- name: Wait for ECS Kubernetes API before CoreDNS reconciliation
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - get
+      - --raw=/readyz
+  register: ecs_coredns_kubernetes_api_ready
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  until:
+    - ecs_coredns_kubernetes_api_ready.rc | int == 0
+    - ecs_coredns_kubernetes_api_ready.stdout | default('') | trim == 'ok'
+  retries: "{{ ecs_control_plane_install_poll_retries | default(240) }}"
+  delay: "{{ ecs_control_plane_install_poll_delay | default(15) }}"
+
+- name: Require ECS Kubernetes API before CoreDNS reconciliation
+  ansible.builtin.assert:
+    that:
+      - ecs_coredns_kubernetes_api_ready.rc | int == 0
+      - ecs_coredns_kubernetes_api_ready.stdout | default('') | trim == 'ok'
+    fail_msg: >-
+      ECS CoreDNS reconciliation requires the Kubernetes API on
+      {{ groups[ecs_cluster_master_group][0] }} to report ready through
+      {{ ecs_coredns_kubeconfig_path }}. Last error:
+      {{
+        ecs_coredns_kubernetes_api_ready.stderr
+        | default(ecs_coredns_kubernetes_api_ready.stdout | default('unknown'))
+      }}.
+
 - name: Read ECS master resolver configuration
   ansible.builtin.command:
     argv:

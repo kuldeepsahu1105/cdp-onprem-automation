@@ -46,11 +46,72 @@ assert group_vars["ecs_node_local_dns_daemonset_name"] == "node-local-dns"
 coredns_reconcile = (
     path.parent / "ecs_reconcile_coredns.yml"
 ).read_text()
+compat_coredns_reconcile = (
+    path.parents[3] / "common_tasks/ecs_reconcile_coredns.yml"
+).read_text()
+assert "name: ecs" in compat_coredns_reconcile
+assert "tasks_from: ecs_reconcile_coredns" in compat_coredns_reconcile
 assert "Check for ECS node-local DNS configuration" in coredns_reconcile
 assert "node-local DNS root server block was not found" in coredns_reconcile
 assert "forward . \" + upstreams" in coredns_reconcile
 assert 'r"(?P<footer>^[ \\t]*\\})"' in coredns_reconcile
 assert "daemonset/{{ ecs_node_local_dns_daemonset_name }}" in coredns_reconcile
+
+coredns_reconcile_tasks = yaml.safe_load(coredns_reconcile)
+coredns_tasks_by_name = {
+    task.get("name"): task for task in coredns_reconcile_tasks
+}
+kubectl_index = next(
+    index for index, task in enumerate(coredns_reconcile_tasks)
+    if task.get("name") == "Check ECS kubectl binary"
+)
+api_wait_index = next(
+    index for index, task in enumerate(coredns_reconcile_tasks)
+    if task.get("name")
+    == "Wait for ECS Kubernetes API before CoreDNS reconciliation"
+)
+api_require_index = next(
+    index for index, task in enumerate(coredns_reconcile_tasks)
+    if task.get("name")
+    == "Require ECS Kubernetes API before CoreDNS reconciliation"
+)
+resolver_index = next(
+    index for index, task in enumerate(coredns_reconcile_tasks)
+    if task.get("name") == "Read ECS master resolver configuration"
+)
+probe_cleanup_index = next(
+    index for index, task in enumerate(coredns_reconcile_tasks)
+    if task.get("name") == "Remove stale ECS DNS upstream probe pods"
+)
+assert (
+    kubectl_index
+    < api_wait_index
+    < api_require_index
+    < resolver_index
+    < probe_cleanup_index
+)
+api_wait = coredns_tasks_by_name[
+    "Wait for ECS Kubernetes API before CoreDNS reconciliation"
+]
+assert api_wait["ansible.builtin.command"]["argv"][-1] == "--raw=/readyz"
+assert api_wait["delegate_to"] == "{{ groups[ecs_cluster_master_group][0] }}"
+assert api_wait["connection"] == "ssh"
+assert api_wait["failed_when"] is False
+assert api_wait["retries"] == (
+    "{{ ecs_control_plane_install_poll_retries | default(240) }}"
+)
+assert api_wait["delay"] == (
+    "{{ ecs_control_plane_install_poll_delay | default(15) }}"
+)
+api_require = coredns_tasks_by_name[
+    "Require ECS Kubernetes API before CoreDNS reconciliation"
+]
+api_require_conditions = "\n".join(api_require["ansible.builtin.assert"]["that"])
+assert "ecs_coredns_kubernetes_api_ready.rc | int == 0" in api_require_conditions
+assert (
+    "ecs_coredns_kubernetes_api_ready.stdout | default('') | trim == 'ok'"
+    in api_require_conditions
+)
 
 tasks = yaml.safe_load(path.read_text())
 tasks_by_name = {task.get("name"): task for task in tasks}
