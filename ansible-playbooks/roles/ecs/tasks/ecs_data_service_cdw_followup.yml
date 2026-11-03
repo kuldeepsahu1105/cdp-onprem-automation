@@ -72,6 +72,8 @@
 
             desired = sys.argv[1]
             payload = json.load(sys.stdin)
+            if isinstance(payload, str):
+                payload = json.loads(payload)
             config = payload.get("config", payload)
             blocks = (
                 config.get("commonConfigs", {})
@@ -89,7 +91,7 @@
             print(current)
             raise SystemExit(0 if current == desired else 3)
           - "{{ ecs_cdw_workload_krb5ccname }}"
-        stdin: "{{ ecs_cdw_dbc_config.stdout }}"
+        stdin: "{{ ecs_cdw_dbc_config.stdout | to_json }}"
       register: ecs_cdw_dbc_ccache_check
       changed_when: false
       failed_when: ecs_cdw_dbc_ccache_check.rc not in [0, 3]
@@ -174,6 +176,8 @@
             import sys
 
             payload = json.load(sys.stdin)
+            if isinstance(payload, str):
+                payload = json.loads(payload)
             required_apps = {"metastore", "hue-query-processor"}
             observed_apps = set()
             unhealthy = []
@@ -216,7 +220,12 @@
                 if active_count > 0 and not missing and not unhealthy
                 else 3
             )
-        stdin: "{{ ecs_cdw_catalog_kubernetes_pods.stdout | default('{}') }}"
+        stdin: >-
+          {{
+            ecs_cdw_catalog_kubernetes_pods.stdout
+            | default({})
+            | to_json
+          }}
       register: ecs_cdw_catalog_kubernetes_health
       changed_when: false
       failed_when: ecs_cdw_catalog_kubernetes_health.rc not in [0, 3]
@@ -508,6 +517,8 @@
 
             desired = sys.argv[1]
             payload = json.load(sys.stdin)
+            if isinstance(payload, str):
+                payload = json.loads(payload)
             config = payload.get("config", payload)
             blocks = (
                 config.get("commonConfigs", {})
@@ -525,7 +536,7 @@
             print(current)
             raise SystemExit(0 if current == desired else 3)
           - "{{ ecs_cdw_vw_krb5ccname }}"
-        stdin: "{{ item.stdout }}"
+        stdin: "{{ item.stdout | to_json }}"
       register: ecs_cdw_vw_ccache_checks
       changed_when: false
       failed_when: ecs_cdw_vw_ccache_checks.rc not in [0, 3]
