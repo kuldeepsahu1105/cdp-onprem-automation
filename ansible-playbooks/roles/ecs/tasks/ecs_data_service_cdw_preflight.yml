@@ -374,6 +374,19 @@
     - ecs_cdw_ensure_freeipa_principal_objects | default(true) | bool
     - ecs_cdw_principals_to_generate | default([]) | length > 0
 
+- name: CDW | Report submitted CM ad-hoc credential command
+  ansible.builtin.debug:
+    msg: >-
+      CM accepted internal ad-hoc credential generation command
+      id={{ ecs_cdw_adhoc_credentials_command.json.id }},
+      name={{ ecs_cdw_adhoc_credentials_command.json.name | default('unknown') }},
+      active={{ ecs_cdw_adhoc_credentials_command.json.active | default('unknown') }},
+      success={{ ecs_cdw_adhoc_credentials_command.json.success | default('unknown') }}.
+      This internal API command may not appear in the Cloudera Manager UI.
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_adhoc_credentials_command.json.id is defined
+
 - name: CDW | Wait for CM-owned ad-hoc credentials
   ansible.builtin.include_tasks: >-
     {{ playbook_dir }}/common_tasks/wait_cm_api_command.yml
@@ -383,6 +396,7 @@
       cm_api_version }}
     cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
     cm_api_command_id: "{{ ecs_cdw_adhoc_credentials_command.json.id }}"
+    cm_api_command_label: CM internal ad-hoc credential command
     cm_api_command_allow_already_exists: false
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
