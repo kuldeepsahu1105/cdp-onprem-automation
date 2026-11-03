@@ -36,14 +36,18 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
    the `/etc/resolv.conf` upstream, omit the ineffective `policy sequential`
    block, and restart CoreDNS only when changed. The live bootstrap path does not
    require a pod to reach the upstream before mutation because pod DNS is the
-   dependency being repaired; the applied CoreDNS Service and every ready
-   replica are still verified before First Run waiting continues. Waiting for
-   the API, rather than only the `kubectl` binary, keeps fresh installs from
-   creating probe pods before the embedded control plane is listening.
+   dependency being repaired; the exact applied CoreDNS forward stanza is
+   verified before First Run waiting continues. Waiting for the API, rather
+   than only the `kubectl` binary, keeps fresh installs from touching CoreDNS
+   before the embedded control plane is listening.
    As soon as the ECS-provided client exists, bootstrap also exposes it as
    `/usr/bin/kubectl`; the normal CLI setup installs `k9s` as `/usr/bin/k9s`
    after cluster convergence so root and non-login shells do not depend on
    `/usr/local/bin` being present in `PATH`.
+   The default path preserves the proven October 31/November 1 behavior and
+   does not mutate node-local DNS.
+   `ecs_coredns_extended_verification_enabled=true` optionally enables that
+   later diagnostic reconciliation.
    This repository intentionally differs from the shared reference because
    runtime ECS environment creation could not resolve the CM hostname through
    RKE2's `/etc/resolv.conf` forwarding.

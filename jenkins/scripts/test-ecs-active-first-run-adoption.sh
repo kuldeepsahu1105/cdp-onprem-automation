@@ -10,6 +10,10 @@ import yaml
 
 root = Path(sys.argv[1])
 role_tasks = root / "ansible-playbooks/roles/ecs/tasks"
+group_vars = yaml.safe_load(
+    (root / "ansible-playbooks/group_vars/all.yml").read_text()
+)
+assert group_vars["ecs_coredns_extended_verification_enabled"] is False
 setup = yaml.safe_load((role_tasks / "setup_cluster.yml").read_text())
 setup_by_name = {task.get("name"): task for task in setup}
 phased = (
@@ -27,6 +31,25 @@ assert phased.index("ecs_stage_coredns_bootstrap.yml") < phased.index(
 ) < phased.index(
     "Start ECS cluster services and roles"
 )
+
+coredns_tasks = yaml.safe_load(
+    (role_tasks / "ecs_reconcile_coredns.yml").read_text()
+)
+coredns_by_name = {task.get("name"): task for task in coredns_tasks}
+for task_name in (
+    "Check for ECS node-local DNS configuration",
+    "Build verified ECS node-local DNS forwarding policy",
+    "Apply verified ECS node-local DNS forwarding policy",
+    "Restart ECS node-local DNS after configuration change",
+    "Wait for ECS node-local DNS rollout after configuration change",
+):
+    task = coredns_by_name[task_name]
+    when = task["when"]
+    conditions = when if isinstance(when, list) else [when]
+    assert (
+        "ecs_coredns_extended_verification_enabled | default(false) | bool"
+        in conditions
+    )
 
 bootstrap = (
     role_tasks / "ecs_stage_coredns_bootstrap.yml"

@@ -733,7 +733,9 @@
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
-  when: ecs_node_local_dns_reconcile | default(true) | bool
+  when:
+    - ecs_coredns_extended_verification_enabled | default(false) | bool
+    - ecs_node_local_dns_reconcile | default(true) | bool
 
 - name: Build verified ECS node-local DNS forwarding policy
   ansible.builtin.command:
@@ -783,6 +785,7 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   when:
+    - ecs_coredns_extended_verification_enabled | default(false) | bool
     - ecs_node_local_dns_reconcile | default(true) | bool
     - ecs_node_local_dns_corefile.rc == 0
 
@@ -816,6 +819,7 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   when:
+    - ecs_coredns_extended_verification_enabled | default(false) | bool
     - ecs_node_local_dns_reconcile | default(true) | bool
     - ecs_node_local_dns_corefile.rc == 0
     - >-
@@ -838,7 +842,9 @@
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
-  when: ecs_node_local_dns_patch is changed
+  when:
+    - ecs_coredns_extended_verification_enabled | default(false) | bool
+    - ecs_node_local_dns_patch is changed
 
 - name: Wait for ECS node-local DNS rollout after configuration change
   ansible.builtin.command:
@@ -856,7 +862,9 @@
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
-  when: ecs_node_local_dns_restart is changed
+  when:
+    - ecs_coredns_extended_verification_enabled | default(false) | bool
+    - ecs_node_local_dns_restart is changed
 
 - name: Record ECS CoreDNS reconciliation for this run
   ansible.builtin.set_fact:
