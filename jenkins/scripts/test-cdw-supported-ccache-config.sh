@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 python3 - "$repo_root" <<'PY'
 from pathlib import Path
+import json
 import sys
 import yaml
 
@@ -19,6 +20,38 @@ group_vars = yaml.safe_load(
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
+
+def decode_serialized_stdout(value):
+    payload = json.loads(json.dumps(value))
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    return payload
+
+representative_config = {
+    "config": {
+        "commonConfigs": {
+            "configBlocks": [
+                {
+                    "id": "env",
+                    "content": {
+                        "keyValues": {
+                            "KRB5CCNAME": "FILE:/tmp/krb5cc_metastore"
+                        }
+                    },
+                }
+            ]
+        }
+    }
+}
+require(
+    decode_serialized_stdout(representative_config) == representative_config,
+    "native mapping stdout must survive JSON serialization",
+)
+require(
+    decode_serialized_stdout(json.dumps(representative_config))
+    == representative_config,
+    "text stdout must survive JSON serialization and one JSON unwrap",
+)
 
 for command in (
     "'describe-dbc-config'",
@@ -40,6 +73,25 @@ require(
 require(
     followup.count('.get("KRB5CCNAME", "")') == 2,
     "DBC and VW configuration must be inspected idempotently",
+)
+require(
+    followup.count("if isinstance(payload, str):") == 3
+    and followup.count("payload = json.loads(payload)") == 3,
+    "JSON parsers must unwrap registered stdout when Ansible preserves it as text",
+)
+require(
+    'stdin: "{{ ecs_cdw_dbc_config.stdout | to_json }}"' in followup,
+    "DBC config must cross the command stdin boundary as JSON",
+)
+require(
+    'stdin: "{{ item.stdout | to_json }}"' in followup,
+    "VW config must cross the command stdin boundary as JSON",
+)
+require(
+    "ecs_cdw_catalog_kubernetes_pods.stdout" in followup
+    and "| default({})" in followup
+    and followup.count("| to_json") >= 8,
+    "Kubernetes health input must cross the command stdin boundary as JSON",
 )
 require(
     "failed_when: ecs_cdw_dbc_ccache_check.rc not in [0, 3]" in followup,
