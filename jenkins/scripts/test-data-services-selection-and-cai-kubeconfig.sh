@@ -27,7 +27,17 @@ assert "not (ecs_cdw_diagnostics_collected | default(false) | bool)" in playbook
 assert "ansible.builtin.include_tasks: ecs_data_service_cde_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: ecs_data_service_cai_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: ecs_data_service_model_registry.yml" in playbook_text
+assert "ecs_reconcile_coredns.yml" not in playbook_text
+assert "ecs_data_services_verify_dns.yml" not in playbook_text
 assert "when: \"'model_registry' in (ecs_data_services_install_names | default([]))\"" in playbook_text
+
+compat_playbook_text = (
+    root / "ansible-playbooks/34_setup_ecs_data_services.yml"
+).read_text()
+assert "name: ecs" in compat_playbook_text
+assert "tasks_from: setup_data_services" in compat_playbook_text
+assert "ecs_reconcile_coredns.yml" not in compat_playbook_text
+assert "ecs_data_services_verify_dns.yml" not in compat_playbook_text
 
 cai_files = list(
     (root / "ansible-playbooks/roles/ecs/tasks").glob("ecs_data_service_cai*.yml")

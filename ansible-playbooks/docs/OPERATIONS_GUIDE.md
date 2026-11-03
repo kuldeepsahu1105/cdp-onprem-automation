@@ -354,23 +354,11 @@ pre-create a valid `kubernetes.io/tls` secret or set controller-side
 self-signed/untrusted, expired, wrong-SAN, or mismatched-key material before
 workspace submission and never creates a temporary certificate.
 
-Before any CDW/CDE/CAI API call, playbook 34 ensures the authoritative FreeIPA
-A records for CM, the ECS console/wildcard, and LDAP, then validates each
-CoreDNS upstream candidate with explicit A queries. Explicit
-`ecs_coredns_forwarders` are authoritative and do not fall back;
-inventory-derived candidates may use a proven ECS node resolver only when
-`ecs_coredns_allow_node_resolver_fallback: true`. The applied Corefile must
-contain the exact minimal `forward . <validated-upstreams>` stanza (this
-deployment: `forward . 172.31.76.102`). Fresh IPv4-only pod probes must resolve
-CM, the ECS console, and LDAP when LDAP sync/admin is selected from one newly
-created pod, then independently connect to the validated IPv4 addresses on CM
-7183 and selected LDAP 636 before provisioning. The pod logs its resolver
-configuration and reports each FQDN separately. DNS/TCP verification uses at most
-`ecs_data_services_dns_probe_attempts` attempts (default `3`). Failed DNS
-records wait `ecs_data_services_dns_probe_retry_delay` seconds (default `31`)
-between attempts so each retry occurs after the managed CoreDNS 30-second
-negative-cache TTL; successful records are not retried. The independent
-pod wait bound only covers scheduling and image startup. Terminal failed
+ECS install owns authoritative DNS and CoreDNS reconciliation. Playbook 33 and
+its phased installer perform that reconciliation. Playbook 34 does not rewrite
+CoreDNS or create Kubernetes DNS probe pods during Data Services post-install;
+it waits for the Management Console and relies on the completed ECS install's
+cluster DNS before using the supported APIs. Terminal failed
 CDW/CDE/CAI resources are reported without automated disable, deletion,
 recreation, backend restart, or datastore mutation; independent service
 boundaries still allow later selected services to run before the final

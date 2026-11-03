@@ -33,33 +33,11 @@ the external Jenkins controller is unsupported because private names such as
 The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
 than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
-ECS installation owns CoreDNS and wildcard DNS. Before changing the global
-forwarder, playbook 34 idempotently ensures the authoritative FreeIPA A records
-for Cloudera Manager, the ECS Management Console, the FreeIPA LDAP endpoint,
-and the ECS application wildcard. It then tests each configured FreeIPA or AD
-resolver directly with explicit A-record queries. A candidate is accepted only
-when every required hostname returns its expected IPv4 answer. If no direct
-candidate passes, `ecs_coredns_allow_node_resolver_fallback` permits only
-ECS-node resolvers that pass the same tests. The playbook refuses to modify
-CoreDNS when no candidate is proven. Verified upstreams replace the global
-stanza with the minimal existing-Corefile form
-`forward . <validated-upstreams>`; this deployment renders exactly
-`forward . 172.31.76.102`. The applied ConfigMap is reread and asserted before
-one fresh Python probe pod performs IPv4-only resolution for CM, the ECS
-console, and LDAP when LDAP sync/admin is selected, all in the same resolver
-context. It also performs independent TCP checks to the already validated IPv4
-address for Cloudera Manager on 7183 and selected LDAP on 636. The pod logs its
-`/etc/resolv.conf`, reports each FQDN separately, and
-uses at most `ecs_data_services_dns_probe_attempts` attempts (default `3`).
-Failed hostnames are retried after `ecs_data_services_dns_probe_retry_delay`
-(default `31` seconds), which exceeds the managed CoreDNS `cache 30` negative
-TTL so an NXDOMAIN observed during authoritative record convergence is not
-replayed for every retry. Successful hostnames are removed from the pending
-set and are not checked again. Kubernetes pod lifecycle polling remains
-separate and uses `ecs_data_services_dns_probe_wait_delay`.
-The separate pod wait bound covers Kubernetes scheduling and image startup; it
-does not multiply DNS checks. No Data Services API call occurs until all checks
-pass.
+ECS installation owns authoritative DNS and CoreDNS reconciliation in
+playbook 33 and its phased installer. Playbook 34 does not rewrite CoreDNS or
+create Kubernetes DNS probe pods during Data Services post-install. It assumes
+the completed ECS installation has already established cluster DNS, waits for
+the Management Console, and then uses the supported Data Services APIs.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
