@@ -146,6 +146,12 @@ assert (
 
 assert group_vars["ecs_kubectl_install_path"] == "/usr/bin/kubectl"
 assert group_vars["ecs_k9s_install_path"] == "/usr/bin/k9s"
+upstream_assert = coredns_tasks_by_name[
+    "Require a verified ECS DNS upstream"
+]
+assert "selectattr('stdout', 'defined')" in (
+    upstream_assert["ansible.builtin.assert"]["fail_msg"]
+)
 node_local_build = coredns_tasks_by_name[
     "Build verified ECS node-local DNS forwarding policy"
 ]

@@ -532,6 +532,7 @@
       {{
         ecs_coredns_upstream_probe_logs.results
         | default([])
+        | selectattr('stdout', 'defined')
         | map(attribute='stdout')
         | list
         | to_json
