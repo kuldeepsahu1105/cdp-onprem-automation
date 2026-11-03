@@ -5,11 +5,56 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 python3 - "$repo_root" <<'PY'
 from pathlib import Path
+import json
 import re
+import subprocess
 import sys
+import tempfile
 import yaml
 
 root = Path(sys.argv[1])
+credentials_parser = (
+    root / "ansible-playbooks/files/parse_ecs_api_credentials_cache.py"
+)
+with tempfile.TemporaryDirectory() as temp_dir:
+    cache_path = Path(temp_dir) / "credentials.yml"
+    cache_path.write_text(
+        "access_key_id: automation-key\n"
+        "private_key: private-key\n"
+        "bootstrap_access_key_id: installer-key\n"
+    )
+    parsed_cache = json.loads(
+        subprocess.check_output(
+            [sys.executable, str(credentials_parser), str(cache_path)],
+            text=True,
+        )
+    )
+assert parsed_cache == {
+    "access_key_id": "automation-key",
+    "private_key": "private-key",
+    "bootstrap_access_key_id": "installer-key",
+}
+
+credentials_load_text = (
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_load_api_credentials.yml"
+).read_text()
+assert "Read current installer IAM credentials for cache identity" in credentials_load_text
+assert "Report ECS API credential cache from another cluster" in credentials_load_text
+assert (
+    "bootstrap_access_key_id\n"
+    "        == ecs_api_credentials_expected_bootstrap_access_key_id"
+    in credentials_load_text
+)
+credentials_provision_text = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/ecs_provision_iam_machine_access_key.yml"
+).read_text()
+assert (
+    "bootstrap_access_key_id: "
+    "{{ ecs_iam_bootstrap_access_key_id_effective | to_json }}"
+    in credentials_provision_text
+)
+
 playbook = root / "ansible-playbooks/roles/ecs/tasks/setup_data_services.yml"
 playbook_text = playbook.read_text()
 
