@@ -683,6 +683,23 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
 
+- name: Extract applied ECS CoreDNS forward line
+  ansible.builtin.command:
+    argv:
+      - grep
+      - -E
+      - "^[[:space:]]*forward[[:space:]]+[.][[:space:]]+"
+    stdin: "{{ ecs_coredns_applied_corefile.stdout }}"
+  register: ecs_coredns_applied_forward_line
+  changed_when: false
+  failed_when: ecs_coredns_applied_forward_line.rc != 0
+
+- name: Report applied ECS CoreDNS forward line
+  ansible.builtin.debug:
+    msg: >-
+      Applied ECS CoreDNS forward line:
+      {{ ecs_coredns_applied_forward_line.stdout | trim }}
+
 - name: Require exact verified ECS CoreDNS forward stanza
   ansible.builtin.command:
     argv:

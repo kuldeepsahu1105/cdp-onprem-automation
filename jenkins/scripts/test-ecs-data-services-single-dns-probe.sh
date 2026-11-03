@@ -53,6 +53,13 @@ coredns_reconcile_tasks = yaml.safe_load(coredns_reconcile_path.read_text())
 coredns_tasks_by_name = {
     task.get("name"): task for task in coredns_reconcile_tasks
 }
+assert "Extract applied ECS CoreDNS forward line" in coredns_tasks_by_name
+assert "Report applied ECS CoreDNS forward line" in coredns_tasks_by_name
+assert coredns_tasks_by_name[
+    "Extract applied ECS CoreDNS forward line"
+]["ansible.builtin.command"]["stdin"] == (
+    "{{ ecs_coredns_applied_corefile.stdout }}"
+)
 
 kubectl_index = next(
     index for index, task in enumerate(coredns_reconcile_tasks)
