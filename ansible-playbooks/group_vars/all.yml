@@ -1362,6 +1362,9 @@ ecs_cdw_dataviz_wait_retries: 120
 ecs_cdw_dataviz_wait_delay: 30
 ecs_cdw_dbc_wait_retries: 40
 ecs_cdw_dbc_wait_delay: 30
+# Accept a stale non-Running DBC API status only when the exact warehouse
+# namespace has the required catalog workloads and every non-Job pod is Ready.
+ecs_cdw_catalog_kubernetes_health_fallback: true
 ecs_data_services_status_wait_retries: 480
 ecs_data_services_status_wait_delay: 30
 ecs_data_services_dns_probe_namespace: default
