@@ -448,6 +448,14 @@ it compares `dw describe-vw-config` with the desired common `env` block and
 uses additive `dw update-vw --config` only when different. Generated
 Kubernetes controllers are not patched or restarted directly.
 
+The database catalog status wait also has a read-only stale-status fallback,
+enabled by `ecs_cdw_catalog_kubernetes_health_fallback`. It accepts the exact
+`warehouse-<environment>` namespace only when the catalog API returned a
+record, `metastore` and `hue-query-processor` are both present, and every
+non-Job pod is Running with all containers Ready. This prevents a healthy
+catalog from failing a rerun solely because the control-plane status remained
+stale; it does not create, patch, restart, or delete Kubernetes workloads.
+
 If UI deletion leaves a failed private-cloud activation hidden in the DW
 control plane, an explicitly confirmed CDW-only reset can reuse playbook 34's
 temporary signed profile without exposing its credentials:

@@ -141,14 +141,122 @@
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
 
+    - name: Read database catalog namespace pods after stale API status
+      ansible.builtin.command:
+        argv:
+          - "{{ ecs_coredns_kubectl_path }}"
+          - --kubeconfig
+          - "{{ ecs_coredns_kubeconfig_path }}"
+          - --namespace
+          - "{{ ecs_cdw_kubernetes_namespace }}"
+          - get
+          - pods
+          - --output
+          - json
+      register: ecs_cdw_catalog_kubernetes_pods
+      changed_when: false
+      failed_when: false
+      become: true
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_catalog_kubernetes_health_fallback | default(true) | bool
+        - ecs_cdw_dbc_running.database_catalogs | default([]) | length > 0
+        - ecs_cdw_dbc_running.database_catalogs[0].status | default('') != 'Running'
+
+    - name: Verify database catalog namespace health after stale API status
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import json
+            import sys
+
+            payload = json.load(sys.stdin)
+            required_apps = {"metastore", "hue-query-processor"}
+            observed_apps = set()
+            unhealthy = []
+            active_count = 0
+
+            for pod in payload.get("items", []):
+                metadata = pod.get("metadata", {})
+                spec = pod.get("spec", {})
+                status = pod.get("status", {})
+                owners = metadata.get("ownerReferences", [])
+                if any(owner.get("kind") == "Job" for owner in owners):
+                    continue
+
+                active_count += 1
+                name = metadata.get("name", "unknown")
+                app = metadata.get("labels", {}).get("app", "")
+                if app:
+                    observed_apps.add(app)
+
+                if status.get("phase") != "Running":
+                    unhealthy.append(f"{name}:phase={status.get('phase', 'unknown')}")
+                    continue
+
+                containers = status.get("containerStatuses", [])
+                expected = len(spec.get("containers", []))
+                ready = sum(1 for container in containers if container.get("ready"))
+                if expected == 0 or ready != expected:
+                    unhealthy.append(f"{name}:ready={ready}/{expected}")
+
+            missing = sorted(required_apps - observed_apps)
+            summary = {
+                "activePods": active_count,
+                "observedApps": sorted(observed_apps),
+                "missingRequiredApps": missing,
+                "unhealthyPods": unhealthy,
+            }
+            print(json.dumps(summary, sort_keys=True))
+            raise SystemExit(
+                0
+                if active_count > 0 and not missing and not unhealthy
+                else 3
+            )
+        stdin: "{{ ecs_cdw_catalog_kubernetes_pods.stdout | default('{}') }}"
+      register: ecs_cdw_catalog_kubernetes_health
+      changed_when: false
+      failed_when: ecs_cdw_catalog_kubernetes_health.rc not in [0, 3]
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_catalog_kubernetes_pods is defined
+        - ecs_cdw_catalog_kubernetes_pods.rc | default(1) == 0
+
     - name: Record default database catalog result
       ansible.builtin.set_fact:
         ecs_cdw_catalog_succeeded: >-
           {{
-            ecs_cdw_dbc_running.database_catalogs | default([]) | length > 0
-            and ecs_cdw_dbc_running.database_catalogs[0].status
-            | default('') == 'Running'
+            (
+              ecs_cdw_dbc_running.database_catalogs | default([]) | length > 0
+              and ecs_cdw_dbc_running.database_catalogs[0].status
+              | default('') == 'Running'
+            )
+            or (
+              ecs_cdw_catalog_kubernetes_health is defined
+              and ecs_cdw_catalog_kubernetes_health.rc | default(3) == 0
+            )
           }}
+
+    - name: Warn when healthy database catalog workloads override stale API status
+      ansible.builtin.debug:
+        msg: >-
+          CDW database catalog API status remained
+          '{{ ecs_cdw_dbc_running.database_catalogs[0].status | default('unknown') }}',
+          but {{ ecs_cdw_kubernetes_namespace }} has healthy metastore and Hue
+          Query Processor workloads with every non-Job pod Ready. Continuing
+          without mutating or restarting generated Kubernetes workloads.
+          Health={{ ecs_cdw_catalog_kubernetes_health.stdout | default('{}') }}.
+      when:
+        - ecs_cdw_catalog_succeeded | bool
+        - ecs_cdw_dbc_running.database_catalogs | default([]) | length > 0
+        - ecs_cdw_dbc_running.database_catalogs[0].status | default('') != 'Running'
+        - ecs_cdw_catalog_kubernetes_health is defined
+        - ecs_cdw_catalog_kubernetes_health.rc | default(3) == 0
 
     - name: Report default database catalog failure
       ansible.builtin.debug:

@@ -154,6 +154,14 @@ assert "'update-vw'" in cdw_followup
 assert "ecs_cdw_dbc_file_ccache_config | to_json" in cdw_followup
 assert cdw_followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 2
 assert cdw_followup.count(".get(\"KRB5CCNAME\", \"\")") == 2
+assert "Read database catalog namespace pods after stale API status" in cdw_followup
+assert "Verify database catalog namespace health after stale API status" in cdw_followup
+assert 'required_apps = {"metastore", "hue-query-processor"}' in cdw_followup
+assert 'any(owner.get("kind") == "Job" for owner in owners)' in cdw_followup
+assert 'status.get("phase") != "Running"' in cdw_followup
+assert 'ready != expected' in cdw_followup
+assert "ecs_cdw_catalog_kubernetes_health.rc not in [0, 3]" in cdw_followup
+assert "healthy metastore and Hue" in cdw_followup
 assert "failed_when: ecs_cdw_dbc_ccache_check.rc not in [0, 3]" in cdw_followup
 assert "failed_when: ecs_cdw_vw_ccache_checks.rc not in [0, 3]" in cdw_followup
 assert (
@@ -178,6 +186,7 @@ assert group_vars["ecs_cdw_impala_additional_quota"] == {"cpu": 0.0, "memory": 0
 assert group_vars["ecs_cdw_impala_query_log"] is True
 assert group_vars["ecs_cdw_trino_autoscaling"] == {}
 assert group_vars["ecs_cdw_trino_additional_quota"] == {"cpu": 0.0, "memory": 0}
+assert group_vars["ecs_cdw_catalog_kubernetes_health_fallback"] is True
 assert group_vars["ecs_cdw_vw_krb5ccname"] == "FILE:/tmp/krb5cc_cdw"
 assert (
     group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]

@@ -476,6 +476,16 @@ the generated HiveServer2, Impala, and Trino workloads and prevents keytab
 login from falling back to KCM. Automation does not patch, restart, delete,
 or recreate generated StatefulSets, Deployments, pods, PVCs, or warehouses.
 
+If the database catalog API remains non-`Running` after the bounded wait,
+automation performs one read-only health check of the exact
+`warehouse-<environment>` namespace. It may continue only when the API still
+returns a catalog record, both `metastore` and `hue-query-processor` workloads
+are present, and every non-Job pod is Running with all declared containers
+Ready. This handles stale control-plane status without treating a merely
+existing namespace as success and without patching or restarting generated
+workloads. Disable this narrow fallback with
+`ecs_cdw_catalog_kubernetes_health_fallback: false`.
+
 For a confirmed disposable failed activation, playbook 34 supports an
 explicit CDW-only force reset when `ecs_cdw_force_reset_cluster_id` and
 `ecs_cdw_force_reset_confirm` contain the same exact cluster ID. The task
