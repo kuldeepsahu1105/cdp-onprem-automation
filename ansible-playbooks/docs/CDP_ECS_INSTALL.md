@@ -26,11 +26,15 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
    (`ECSMaster`, `ECSWorker`) through the v4-compatible CM API, applied with
    `startRoles=false`.
 6. **Control plane submission/adoption** — `common_tasks/ecs_install_control_plane.yml` submits First Run or adopts its durable `/controlPlanes` record without blocking on completion.
-7. **CoreDNS during First Run** — after the RKE2 Kubernetes API reports ready
-   and the CoreDNS ConfigMap exists, use the authoritative FreeIPA private IP
-   (or configured AD DNS servers) directly for the bootstrap repair, replace
+7. **CoreDNS before and during First Run** — before submitting the CM embedded
+   control-plane install command, stage RKE2's supported
+   `rke2-coredns-config.yaml` `HelmChartConfig` with the authoritative FreeIPA
+   private IP (or configured AD DNS servers). RKE2 therefore creates its first
+   CoreDNS pods with the correct forwarder before the in-cluster environment
+   creation job can run. After the Kubernetes API reports ready and the
+   CoreDNS ConfigMap exists, confirm the same authoritative forwarder, replace
    the `/etc/resolv.conf` upstream, omit the ineffective `policy sequential`
-   block, and restart CoreDNS only when changed. The bootstrap path does not
+   block, and restart CoreDNS only when changed. The live bootstrap path does not
    require a pod to reach the upstream before mutation because pod DNS is the
    dependency being repaired; the applied CoreDNS Service and every ready
    replica are still verified before First Run waiting continues. Waiting for
