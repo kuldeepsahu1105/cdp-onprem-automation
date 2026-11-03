@@ -497,10 +497,11 @@ Set only supported `trino*` autoscaling keys when a deployment needs different
 worker bounds or delays.
 
 Playbook 34 supplies `KRB5CCNAME=FILE:/tmp/krb5cc_cdw` in the supported CDW
-service configuration when creating a warehouse. For an existing warehouse,
-it compares `dw describe-vw-config` with the desired common `env` block and
-uses additive `dw update-vw --config` only when different. Generated
-Kubernetes controllers are not patched or restarted directly.
+service configuration when creating a warehouse. The Cloudera collection
+defines Virtual Warehouse common and application configuration as
+creation-only, so existing warehouses are retained without an unsupported
+`dw update-vw --config` mutation. Generated Kubernetes controllers are not
+patched or restarted directly.
 
 If UI deletion leaves a failed private-cloud activation hidden in the DW
 control plane, an explicitly confirmed CDW-only reset can reuse playbook 34's

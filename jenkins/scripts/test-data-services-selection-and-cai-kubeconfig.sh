@@ -179,11 +179,11 @@ assert "ecs_cdw_trino_autoscaling | to_json" in cdw_followup
 assert "ecs_cdw_trino_additional_quota | to_json" in cdw_followup
 assert "'describe-dbc-config'" in cdw_followup
 assert "'update-dbc'" in cdw_followup
-assert "'describe-vw-config'" in cdw_followup
-assert "'update-vw'" in cdw_followup
+assert "'describe-vw-config'" not in cdw_followup
+assert "'update-vw'" not in cdw_followup
 assert "ecs_cdw_dbc_file_ccache_config | to_json" in cdw_followup
-assert cdw_followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 2
-assert cdw_followup.count('.get("KRB5CCNAME", "")') == 2
+assert cdw_followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 1
+assert cdw_followup.count('.get("KRB5CCNAME", "")') == 1
 assert "Read database catalog namespace pods after stale API status" in cdw_followup
 assert "Verify database catalog namespace health after stale API status" in cdw_followup
 assert 'required_apps = {"metastore", "hue-query-processor"}' in cdw_followup

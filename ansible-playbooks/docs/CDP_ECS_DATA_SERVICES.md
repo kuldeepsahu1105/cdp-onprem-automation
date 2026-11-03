@@ -617,10 +617,11 @@ optional supported keys are `trinoDisableAutoScaling`,
 `trinoScaleDownDelaySeconds`.
 
 New warehouses receive the common `env` config block during `dw create-vw`.
-Existing warehouses are inspected with `dw describe-vw-config` and updated
-through additive `dw update-vw --config` only when their current
-`KRB5CCNAME` differs from `FILE:/tmp/krb5cc_cdw`. This durable control-plane
-configuration applies to generated HiveServer2, Impala, and Trino workloads.
+The pinned `cloudera.cloud.dw_virtual_warehouse` contract defines common and
+application configurations as creation-only, so existing warehouses are
+retained without attempting the unsupported `dw update-vw --config` path.
+The creation-time configuration applies to generated HiveServer2, Impala, and
+Trino workloads.
 Automation does not patch, restart, delete, or recreate generated
 StatefulSets, Deployments, pods, PVCs, or warehouses.
 
