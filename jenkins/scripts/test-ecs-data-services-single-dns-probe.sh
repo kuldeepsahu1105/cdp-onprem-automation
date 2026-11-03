@@ -106,6 +106,49 @@ assert api_wait["delay"] == (
 api_require = coredns_tasks_by_name[
     "Require ECS Kubernetes API before CoreDNS reconciliation"
 ]
+bootstrap = coredns_tasks_by_name[
+    "Select authoritative ECS DNS upstreams during First Run bootstrap"
+]
+assert bootstrap["ansible.builtin.set_fact"][
+    "ecs_coredns_forwarders_effective"
+] == "{{ ecs_coredns_direct_forwarder_candidates }}"
+assert (
+    bootstrap["when"]
+    == "ecs_coredns_first_run_bootstrap | default(false) | bool"
+)
+for task_name in (
+    "Remove stale ECS DNS upstream probe pods",
+    "Start direct ECS DNS upstream probes",
+    "Wait for direct ECS DNS upstream probes",
+    "Read direct ECS DNS upstream probe output",
+    "Remove completed ECS DNS upstream probe pods",
+):
+    task = coredns_tasks_by_name[task_name]
+    when = task["when"]
+    conditions = when if isinstance(when, list) else [when]
+    assert (
+        "not (ecs_coredns_first_run_bootstrap | default(false) | bool)"
+        in conditions
+    )
+bootstrap_kubectl = coredns_tasks_by_name[
+    "Expose ECS kubectl in the system path during First Run"
+]
+assert bootstrap_kubectl["ansible.builtin.file"]["src"] == (
+    "{{ ecs_coredns_kubectl_path }}"
+)
+assert bootstrap_kubectl["ansible.builtin.file"]["dest"] == (
+    "{{ ecs_kubectl_install_path }}"
+)
+assert (
+    bootstrap_kubectl["when"]
+    == "ecs_coredns_first_run_bootstrap | default(false) | bool"
+)
+
+assert group_vars["ecs_kubectl_install_path"] == "/usr/bin/kubectl"
+assert group_vars["ecs_k9s_install_path"] == "/usr/bin/k9s"
+node_local_build = coredns_tasks_by_name[
+    "Build verified ECS node-local DNS forwarding policy"
+]
 api_require_conditions = "\n".join(api_require["ansible.builtin.assert"]["that"])
 assert "ecs_coredns_kubernetes_api_ready.rc | int == 0" in api_require_conditions
 assert (

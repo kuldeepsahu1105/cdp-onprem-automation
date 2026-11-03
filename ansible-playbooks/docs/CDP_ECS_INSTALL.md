@@ -27,11 +27,19 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
    `startRoles=false`.
 6. **Control plane submission/adoption** — `common_tasks/ecs_install_control_plane.yml` submits First Run or adopts its durable `/controlPlanes` record without blocking on completion.
 7. **CoreDNS during First Run** — after the RKE2 Kubernetes API reports ready
-   and the CoreDNS ConfigMap exists, replace its `/etc/resolv.conf` upstream
-   with the FreeIPA private IP (or AD DNS servers), omit the ineffective
-   `policy sequential` block, and restart CoreDNS only when changed. Waiting
-   for the API, rather than only the `kubectl` binary, keeps fresh installs
-   from creating probe pods before the embedded control plane is listening.
+   and the CoreDNS ConfigMap exists, use the authoritative FreeIPA private IP
+   (or configured AD DNS servers) directly for the bootstrap repair, replace
+   the `/etc/resolv.conf` upstream, omit the ineffective `policy sequential`
+   block, and restart CoreDNS only when changed. The bootstrap path does not
+   require a pod to reach the upstream before mutation because pod DNS is the
+   dependency being repaired; the applied CoreDNS Service and every ready
+   replica are still verified before First Run waiting continues. Waiting for
+   the API, rather than only the `kubectl` binary, keeps fresh installs from
+   creating probe pods before the embedded control plane is listening.
+   As soon as the ECS-provided client exists, bootstrap also exposes it as
+   `/usr/bin/kubectl`; the normal CLI setup installs `k9s` as `/usr/bin/k9s`
+   after cluster convergence so root and non-login shells do not depend on
+   `/usr/local/bin` being present in `PATH`.
    This repository intentionally differs from the shared reference because
    runtime ECS environment creation could not resolve the CM hostname through
    RKE2's `/etc/resolv.conf` forwarding.

@@ -12,6 +12,16 @@ root = Path(sys.argv[1])
 role_tasks = root / "ansible-playbooks/roles/ecs/tasks"
 setup = yaml.safe_load((role_tasks / "setup_cluster.yml").read_text())
 setup_by_name = {task.get("name"): task for task in setup}
+phased = (
+    role_tasks / "ecs_phased_cluster_install.yml"
+).read_text()
+assert "ecs_reconcile_coredns.yml" in phased
+assert "ecs_coredns_first_run_bootstrap: true" in phased
+assert phased.index("ecs_reconcile_coredns.yml") < phased.index(
+    "ecs_wait_control_plane_first_run.yml"
+) < phased.index(
+    "Start ECS cluster services and roles"
+)
 
 active_read = setup_by_name["Read active ECS cluster commands"]
 assert active_read["ansible.builtin.uri"]["url"].endswith(
