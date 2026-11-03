@@ -630,6 +630,7 @@
     content: |
       access_key_id: {{ ecs_api_access_key_id | to_json }}
       private_key: {{ ecs_api_private_key | to_json }}
+      bootstrap_access_key_id: {{ ecs_iam_bootstrap_access_key_id_effective | to_json }}
   no_log: true
   when: ecs_api_credentials_cache_path | default('') | length > 0
 

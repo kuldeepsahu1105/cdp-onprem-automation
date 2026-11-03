@@ -21,9 +21,12 @@ def main() -> int:
 
     access_key_id = payload.get("access_key_id")
     private_key = payload.get("private_key")
+    bootstrap_access_key_id = payload.get("bootstrap_access_key_id", "")
     if not isinstance(access_key_id, str) or not access_key_id:
         return 2
     if not isinstance(private_key, str) or not private_key:
+        return 2
+    if not isinstance(bootstrap_access_key_id, str):
         return 2
     if re.search(r"^-----BEGIN [^-]+----- ", private_key):
         return 2
@@ -33,6 +36,7 @@ def main() -> int:
             {
                 "access_key_id": access_key_id,
                 "private_key": private_key,
+                "bootstrap_access_key_id": bootstrap_access_key_id,
             }
         )
     )
