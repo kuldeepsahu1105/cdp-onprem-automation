@@ -37,15 +37,16 @@ http://:{{ deployment_portal_http_port }} {
 {% endif %}
 
 {% if deployment_portal_monitoring_routes_enabled | default(false) | bool %}
-  handle /grafana/* {
+{% set _monitoring_path_handler = 'handle_path' if (caddy_vhost_enabled | default(false) | bool) else 'handle' %}
+  {{ _monitoring_path_handler }} /grafana/* {
     reverse_proxy {{ monitoring_grafana_docker_service }}:3000
   }
 
-  handle /prometheus/* {
+  {{ _monitoring_path_handler }} /prometheus/* {
     reverse_proxy {{ monitoring_prometheus_docker_service }}:9090
   }
 
-  handle /alertmanager/* {
+  {{ _monitoring_path_handler }} /alertmanager/* {
     reverse_proxy {{ monitoring_alertmanager_docker_service }}:9093
   }
 
