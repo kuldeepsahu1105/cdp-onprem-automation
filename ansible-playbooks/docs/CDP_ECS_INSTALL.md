@@ -53,10 +53,10 @@ hanging on a self-connection through the public IP.
    replica are still verified before First Run waiting continues. Waiting for
    the API, rather than only the `kubectl` binary, keeps fresh installs from
    creating probe pods before the embedded control plane is listening.
-   As soon as the ECS-provided client exists, bootstrap also exposes it as
-   `/usr/bin/kubectl`; the normal CLI setup installs `k9s` as `/usr/bin/k9s`
-   after cluster convergence so root and non-login shells do not depend on
-   `/usr/local/bin` being present in `PATH`.
+   As soon as the ECS-provided client and kubeconfig exist, the active First
+   Run path exposes `/usr/bin/kubectl`, configures operator kubeconfigs, and
+   installs `k9s` as `/usr/bin/k9s`. Operator tools are therefore available
+   even when the later CM First Run command fails.
    The default install path stops after verifying the exact applied CoreDNS
    forward stanza, matching the proven October 31/November 1 behavior.
    `ecs_coredns_extended_verification_enabled=true` optionally enables the

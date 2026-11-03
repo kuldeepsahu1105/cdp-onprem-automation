@@ -21,6 +21,8 @@ assert phased.index("ecs_stage_coredns_bootstrap.yml") < phased.index(
 ) < phased.index(
     "ecs_reconcile_coredns.yml"
 ) < phased.index(
+    "ecs_configure_cli_tools.yml"
+) < phased.index(
     "ecs_wait_control_plane_first_run.yml"
 ) < phased.index(
     "Start ECS cluster services and roles"

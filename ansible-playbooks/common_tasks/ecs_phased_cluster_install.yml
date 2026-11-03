@@ -221,6 +221,10 @@
     ecs_coredns_first_run_bootstrap: true
   when: ecs_reconcile_coredns | default(true) | bool
 
+- name: Configure ECS operator CLI tools during First Run
+  ansible.builtin.import_tasks: ecs_configure_cli_tools.yml
+  when: ecs_cli_tools_enabled | default(true) | bool
+
 - name: Wait for ECS control-plane First Run after CoreDNS reconciliation
   ansible.builtin.import_tasks: ecs_wait_control_plane_first_run.yml
 
