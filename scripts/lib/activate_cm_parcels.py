@@ -41,7 +41,7 @@ class CmClient:
         self.username = env("CM_USERNAME")
         self.password = env("CM_PASSWORD")
         self.cluster = env("CM_CLUSTER")
-        self.timeout = int(env("CM_PARCEL_TIMEOUT", "3600"))
+        self.timeout = int(env("CM_PARCEL_TIMEOUT", "14400"))
         self.poll_delay = int(env("CM_PARCEL_POLL_DELAY", "15"))
         self.command_retries = int(env("CM_PARCEL_COMMAND_RETRIES", "3"))
         self.command_retry_delay = int(env("CM_PARCEL_COMMAND_RETRY_DELAY", "10"))

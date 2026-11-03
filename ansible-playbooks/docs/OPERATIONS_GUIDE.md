@@ -1930,7 +1930,9 @@ retries, aggregate failures, and backward-compatible single-parcel calls.
 Base CDH and CFM parcels run concurrently when CFM is enabled; ECS uses the same
 helper with one item. Tune `cluster_parcel_max_workers`,
 `cluster_parcel_timeout_seconds`, and the command retry variables in
-`group_vars/all.yml`.
+`group_vars/all.yml`. The default parcel workflow deadline is four hours because
+large public archive downloads can exceed one hour. A rerun resumes the parcel's
+current CM stage instead of restarting an existing download.
 
 **FreeIPA `ipa-server-install` `FileNotFoundError` [Errno 2] — diagnostic bundle (run on ipaserver as root, paste output):**
 

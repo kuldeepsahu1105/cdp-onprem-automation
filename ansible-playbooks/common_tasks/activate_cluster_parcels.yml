@@ -38,7 +38,7 @@
     CM_CLUSTER: "{{ cluster_parcel_cluster }}"
     CM_PARCELS_JSON: "{{ cluster_parcels_effective | to_json }}"
     CM_PARCEL_MAX_WORKERS: "{{ cluster_parcel_max_workers | default(2) | string }}"
-    CM_PARCEL_TIMEOUT: "{{ cluster_parcel_timeout_seconds | default(3600) | string }}"
+    CM_PARCEL_TIMEOUT: "{{ cluster_parcel_timeout_seconds | default(14400) | string }}"
     CM_PARCEL_POLL_DELAY: "{{ cluster_parcel_poll_delay | default(15) | string }}"
     CM_PARCEL_COMMAND_RETRIES: "{{ cluster_parcel_command_retries | default(3) | string }}"
     CM_PARCEL_COMMAND_RETRY_DELAY: "{{ cluster_parcel_command_retry_delay | default(10) | string }}"
