@@ -40,6 +40,98 @@
       forwarder. Set ecs_coredns_forwarders, provide a FreeIPA inventory
       address, or configure ad_dns_servers.
 
+- name: Require ECS bootstrap inventory hosts
+  ansible.builtin.assert:
+    that:
+      - groups.get('cldr-mngr', []) | length > 0
+      - groups.get(ecs_cluster_master_group, []) | length > 0
+    fail_msg: >-
+      ECS First Run requires Cloudera Manager and ECS master inventory hosts
+      before the initial CoreDNS policy can be staged.
+
+- name: Resolve ECS CoreDNS bootstrap static records
+  ansible.builtin.set_fact:
+    ecs_coredns_bootstrap_static_records: >-
+      {{
+        [
+          {
+            'fqdn': (
+              hostvars[groups['cldr-mngr'][0]].cldr_hostname
+              + '.'
+              + cluster_domain
+            ),
+            'address': (
+              hostvars[groups['cldr-mngr'][0]].private_ip
+              | default(
+                  hostvars[groups['cldr-mngr'][0]].ansible_host,
+                  true
+                )
+            )
+          },
+          {
+            'fqdn': ecs_console_host_prefix + '.' + ecs_app_domain,
+            'address': (
+              hostvars[groups[ecs_cluster_master_group][0]].private_ip
+              | default(
+                  hostvars[groups[ecs_cluster_master_group][0]].ansible_host,
+                  true
+                )
+            )
+          }
+        ]
+        + (
+          [
+            {
+              'fqdn': ipa_kdc_host,
+              'address': (
+                hostvars[groups['ipaserver'][0]].private_ip
+                | default(
+                    hostvars[groups['ipaserver'][0]].ansible_host,
+                    true
+                  )
+              )
+            }
+          ]
+          if identity_provider_effective | default('freeipa') == 'freeipa'
+          and groups.get('ipaserver', []) | length > 0
+          else []
+        )
+      }}
+
+- name: Require ECS CoreDNS bootstrap static records
+  ansible.builtin.assert:
+    that:
+      - ecs_coredns_bootstrap_static_records | length >= 2
+      - >-
+        ecs_coredns_bootstrap_static_records
+        | map(attribute='fqdn')
+        | map('string')
+        | map('trim')
+        | reject('equalto', '')
+        | list
+        | length
+        == ecs_coredns_bootstrap_static_records | length
+      - >-
+        ecs_coredns_bootstrap_static_records
+        | map(attribute='address')
+        | map('string')
+        | map('trim')
+        | reject('equalto', '')
+        | list
+        | length
+        == ecs_coredns_bootstrap_static_records | length
+    fail_msg: >-
+      ECS First Run requires static bootstrap A records for Cloudera Manager,
+      the ECS console, and FreeIPA when selected.
+
+- name: Render ECS CoreDNS bootstrap hosts configuration
+  ansible.builtin.set_fact:
+    ecs_coredns_bootstrap_hosts_config: |-
+      {% for record in ecs_coredns_bootstrap_static_records %}
+      {{ record.address }} {{ record.fqdn }}
+      {% endfor %}
+      fallthrough
+
 - name: Create RKE2 server manifest directory before First Run
   ansible.builtin.file:
     path: "{{ ecs_rke2_server_manifests_dir }}"
@@ -84,6 +176,9 @@
                     ttl 30
                 - name: prometheus
                   parameters: 0.0.0.0:9153
+                - name: hosts
+                  configBlock: |-
+      {{ ecs_coredns_bootstrap_hosts_config | indent(20, true) }}
                 - name: forward
                   parameters: ". {{ ecs_coredns_bootstrap_forwarders | join(' ') }}"
                 - name: cache
