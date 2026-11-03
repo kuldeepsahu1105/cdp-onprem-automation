@@ -468,15 +468,15 @@ supported keys are `trinoDisableAutoScaling`, `trinoMinWorkerCount`,
 `trinoMaxWorkerCount`, `trinoShutdownGracePeriod`,
 `trinoScaleUpDelaySeconds`, and `trinoScaleDownDelaySeconds`.
 
-Before waiting for the warehouses to become
-healthy, new warehouses receive the common `env` config block during
-`dw create-vw`. Existing warehouses are inspected with
-`dw describe-vw-config` and updated through additive `dw update-vw --config`
-only when their current `KRB5CCNAME` differs from
-`FILE:/tmp/krb5cc_cdw`. This durable control-plane configuration applies to
-the generated HiveServer2, Impala, and Trino workloads and prevents keytab
-login from falling back to KCM. Automation does not patch, restart, delete,
-or recreate generated StatefulSets, Deployments, pods, PVCs, or warehouses.
+Before waiting for the warehouses to become healthy, new warehouses receive
+the common `env` config block during `dw create-vw`. The pinned
+`cloudera.cloud.dw_virtual_warehouse` contract defines common and application
+configurations as creation-only, so existing warehouses are retained without
+attempting the unsupported `dw update-vw --config` path. The creation-time
+configuration applies to generated HiveServer2, Impala, and Trino workloads
+and prevents keytab login from falling back to KCM. Automation does not patch,
+restart, delete, or recreate generated StatefulSets, Deployments, pods, PVCs,
+or warehouses.
 
 If the database catalog API remains non-`Running` after the bounded wait,
 automation performs one read-only health check of the exact

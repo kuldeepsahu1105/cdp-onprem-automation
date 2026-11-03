@@ -84,10 +84,9 @@ parser_tasks = {
     in {
         "Check database catalog FILE credential cache configuration",
         "Verify database catalog namespace health after stale API status",
-        "Check Virtual Warehouse FILE credential cache configurations",
     }
 }
-require(len(parser_tasks) == 3, "expected all three registered-stdout parser tasks")
+require(len(parser_tasks) == 2, "expected both registered-stdout parser tasks")
 for name, argv in parser_tasks.items():
     command = ["python3", "-c", argv[2]]
     if len(argv) > 3:
@@ -108,35 +107,39 @@ for command in (
     "'describe-dbc-config'",
     "'update-dbc'",
     "'create-vw'",
-    "'describe-vw-config'",
-    "'update-vw'",
 ):
     require(command in followup, f"missing supported CDW API command {command}")
+
+for unsupported_vw_update in (
+    "'describe-vw-config'",
+    "'update-vw'",
+    "ecs_cdw_vw_ccache_checks",
+):
+    require(
+        unsupported_vw_update not in followup,
+        f"creation-only Virtual Warehouse config must not be reconciled: {unsupported_vw_update}",
+    )
 
 require(
     "ecs_cdw_dbc_file_ccache_config | to_json" in followup,
     "DBC update must use the shared FILE-cache config",
 )
 require(
-    followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 2,
-    "VW create and update must use the shared FILE-cache config",
+    followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 1,
+    "VW creation must use the shared FILE-cache config exactly once",
 )
 require(
-    followup.count('.get("KRB5CCNAME", "")') == 2,
-    "DBC and VW configuration must be inspected idempotently",
+    followup.count('.get("KRB5CCNAME", "")') == 1,
+    "DBC configuration must be inspected idempotently",
 )
 require(
-    followup.count("if isinstance(payload, str):") == 3
-    and followup.count("payload = json.loads(payload)") == 3,
+    followup.count("if isinstance(payload, str):") == 2
+    and followup.count("payload = json.loads(payload)") == 2,
     "JSON parsers must unwrap registered stdout when Ansible preserves it as text",
 )
 require(
     'stdin: "{{ ecs_cdw_dbc_config.stdout | to_json }}"' in followup,
     "DBC config must cross the command stdin boundary as JSON",
-)
-require(
-    'stdin: "{{ item.stdout | to_json }}"' in followup,
-    "VW config must cross the command stdin boundary as JSON",
 )
 require(
     "ecs_cdw_catalog_kubernetes_pods.stdout" in followup
@@ -149,20 +152,10 @@ require(
     "DBC comparison must distinguish equal from update-required",
 )
 require(
-    "failed_when: ecs_cdw_vw_ccache_checks.rc not in [0, 3]" in followup,
-    "VW comparison must distinguish equal from update-required",
-)
-require(
     followup.index("Persist database catalog FILE credential cache through CDW API")
     < followup.index("\n    - name: Wait for default database catalog\n"),
     "DBC cache must be configured before waiting for Running",
 )
-require(
-    followup.index("Persist Virtual Warehouse FILE credential caches through CDW API")
-    < followup.index("Wait for desired CDW Virtual Warehouses to finish provisioning"),
-    "existing VW caches must be configured before terminal waits",
-)
-
 for forbidden in (
     "kubectl set env",
     "statefulset/metastore",

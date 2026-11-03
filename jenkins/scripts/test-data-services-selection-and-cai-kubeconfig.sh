@@ -149,11 +149,11 @@ assert "item.virtual_warehouses | default([]) | length == 0" in cdw_followup
 assert "ecs_data_service_cdw_reconcile_vw_ccaches.yml" not in cdw_followup
 assert "'describe-dbc-config'" in cdw_followup
 assert "'update-dbc'" in cdw_followup
-assert "'describe-vw-config'" in cdw_followup
-assert "'update-vw'" in cdw_followup
+assert "'describe-vw-config'" not in cdw_followup
+assert "'update-vw'" not in cdw_followup
 assert "ecs_cdw_dbc_file_ccache_config | to_json" in cdw_followup
-assert cdw_followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 2
-assert cdw_followup.count(".get(\"KRB5CCNAME\", \"\")") == 2
+assert cdw_followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 1
+assert cdw_followup.count(".get(\"KRB5CCNAME\", \"\")") == 1
 assert "Read database catalog namespace pods after stale API status" in cdw_followup
 assert "Verify database catalog namespace health after stale API status" in cdw_followup
 assert 'required_apps = {"metastore", "hue-query-processor"}' in cdw_followup
@@ -163,14 +163,9 @@ assert 'ready != expected' in cdw_followup
 assert "ecs_cdw_catalog_kubernetes_health.rc not in [0, 3]" in cdw_followup
 assert "healthy metastore and Hue" in cdw_followup
 assert "failed_when: ecs_cdw_dbc_ccache_check.rc not in [0, 3]" in cdw_followup
-assert "failed_when: ecs_cdw_vw_ccache_checks.rc not in [0, 3]" in cdw_followup
 assert (
     cdw_followup.index("Persist database catalog FILE credential cache through CDW API")
     < cdw_followup.index("\n    - name: Wait for default database catalog\n")
-)
-assert (
-    cdw_followup.index("Persist Virtual Warehouse FILE credential caches through CDW API")
-    < cdw_followup.index("CDW Virtual Warehouses to finish provisioning")
 )
 assert "CDW Virtual Warehouses to finish provisioning" in cdw_followup
 assert group_vars["ecs_cdw_vw_tshirt_size"] == "xsmall"

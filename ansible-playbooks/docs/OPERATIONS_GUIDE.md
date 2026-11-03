@@ -444,10 +444,11 @@ autoscaling keys when a deployment needs different worker bounds or delays.
 
 In Kerberized deployments,
 playbook 34 supplies `KRB5CCNAME=FILE:/tmp/krb5cc_cdw` in the supported CDW
-service configuration when creating a warehouse. For an existing warehouse,
-it compares `dw describe-vw-config` with the desired common `env` block and
-uses additive `dw update-vw --config` only when different. Generated
-Kubernetes controllers are not patched or restarted directly.
+service configuration when creating a warehouse. The Cloudera collection
+defines Virtual Warehouse common and application configuration as
+creation-only, so existing warehouses are retained without an unsupported
+`dw update-vw --config` mutation. Generated Kubernetes controllers are not
+patched or restarted directly.
 
 The database catalog status wait also has a read-only stale-status fallback,
 enabled by `ecs_cdw_catalog_kubernetes_health_fallback`. It accepts the exact
