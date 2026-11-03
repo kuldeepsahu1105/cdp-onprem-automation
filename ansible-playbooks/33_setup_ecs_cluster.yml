@@ -421,6 +421,23 @@
       when: existing_ecs_cluster.status == 200
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+    - name: Read active ECS cluster commands
+      ansible.builtin.uri:
+        url: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{
+          ecs_cluster_name | urlencode }}/commands?view=full
+        method: GET
+        user: "{{ cm_admin_user }}"
+        password: "{{ cm_admin_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: [200]
+        follow_redirects: none
+      register: existing_ecs_active_commands
+      changed_when: false
+      when: existing_ecs_cluster.status == 200
+      delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
     - name: Determine whether phased ECS installation is required
       ansible.builtin.set_fact:
         ecs_phased_install_required: >-
@@ -439,6 +456,11 @@
                     )
                   | length
                 ) > 0
+                or (
+                  existing_ecs_active_commands.json['items']
+                  | default([])
+                  | length
+                ) > 0
               )
             )
           }}
@@ -447,8 +469,14 @@
       ansible.builtin.debug:
         msg: >-
           ECS cluster '{{ ecs_cluster_name }}' exists but is incomplete or not
-          fully started. Resuming the reference-aligned host attachment, parcel
-          activation, service, role, and control-plane phases.
+          fully converged. Resuming the reference-aligned host attachment,
+          parcel activation, service, role, and control-plane phases.
+          Active CM commands={{
+            existing_ecs_active_commands.json['items']
+            | default([])
+            | map(attribute='id')
+            | list
+          }}.
       when:
         - existing_ecs_cluster.status == 200
         - ecs_phased_install_required | bool

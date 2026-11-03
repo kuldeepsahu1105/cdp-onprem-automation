@@ -59,9 +59,11 @@ An existing cluster that is missing required services or is not fully `STARTED`
 re-enters the idempotent phased installer, allowing failed control-plane
 installation to resume without deleting the ECS cluster.
 When CM already has a matching `/controlPlanes` record, reruns adopt that
-installation, repair CoreDNS while the existing First Run is active, and then
-wait for completion instead of submitting a competing install or cluster-start
-command.
+installation, include active cluster commands in the phased-install decision,
+repair CoreDNS while the existing First Run is active, wait for the exact
+active CM command IDs and service convergence, and only then allow a cluster
+start. This prevents a rerun from submitting a competing start while First Run
+is still active.
 
 `ApplicationDomain` must not contain the ECS-generated `apps.` label. The
 Cloudera reference uses the same parent domain for CM `app_domain` and control

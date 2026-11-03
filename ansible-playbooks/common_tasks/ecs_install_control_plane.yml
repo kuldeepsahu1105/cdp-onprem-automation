@@ -45,6 +45,23 @@
     ecs_control_plane_existing: >-
       {{ ecs_control_plane_matching_records | length > 0 }}
 
+- name: Read active ECS cluster commands for adopted control plane
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{
+      ecs_cluster_name | urlencode }}/commands?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: ecs_control_plane_active_commands
+  changed_when: false
+  when: ecs_control_plane_existing | bool
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
 - name: Reject a control plane installed with the ingress suffix
   ansible.builtin.assert:
     that:

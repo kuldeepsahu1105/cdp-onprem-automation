@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+python3 - "$repo_root" <<'PY'
+from pathlib import Path
+import sys
+import yaml
+
+root = Path(sys.argv[1])
+playbook = yaml.safe_load(
+    (root / "ansible-playbooks/33_setup_ecs_cluster.yml").read_text()
+)
+tasks = playbook[-1]["tasks"]
+by_name = {task.get("name"): task for task in tasks}
+
+active_read = by_name["Read active ECS cluster commands"]
+assert active_read["ansible.builtin.uri"]["url"].endswith(
+    "/commands?view=full"
+)
+assert active_read["delegate_to"] == "{{ cm_cluster_module_delegate_to }}"
+
+decision = by_name["Determine whether phased ECS installation is required"]
+decision_text = decision["ansible.builtin.set_fact"][
+    "ecs_phased_install_required"
+]
+assert "existing_ecs_active_commands.json['items']" in decision_text
+
+start = by_name["Start existing ECS cluster services"]
+assert "not (ecs_phased_install_required | bool)" in start["when"]
+
+install = yaml.safe_load(
+    (
+        root
+        / "ansible-playbooks/common_tasks/ecs_install_control_plane.yml"
+    ).read_text()
+)
+install_by_name = {task.get("name"): task for task in install}
+adopted_read = install_by_name[
+    "Read active ECS cluster commands for adopted control plane"
+]
+assert adopted_read["ansible.builtin.uri"]["url"].endswith(
+    "/commands?view=full"
+)
+assert adopted_read["when"] == "ecs_control_plane_existing | bool"
+
+wait = yaml.safe_load(
+    (
+        root
+        / "ansible-playbooks/common_tasks/ecs_wait_control_plane_first_run.yml"
+    ).read_text()
+)
+wait_by_name = {task.get("name"): task for task in wait}
+active_wait = wait_by_name[
+    "Wait for active CM commands during adopted ECS First Run"
+]
+assert active_wait["ansible.builtin.include_tasks"] == "wait_cm_api_command.yml"
+assert active_wait["loop_control"]["loop_var"] == (
+    "ecs_active_control_plane_command"
+)
+assert active_wait["vars"]["cm_api_command_id"] == (
+    "{{ ecs_active_control_plane_command.id }}"
+)
+
+print("ECS active First Run adoption checks passed")
+PY
