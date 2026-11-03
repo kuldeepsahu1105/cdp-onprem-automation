@@ -33,38 +33,11 @@ the external Jenkins controller is unsupported because private names such as
 The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
 than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
-ECS installation owns CoreDNS and wildcard DNS. Before changing the global
-forwarder, playbook 34 idempotently ensures the authoritative FreeIPA A records
-for Cloudera Manager, the ECS Management Console, the FreeIPA LDAP endpoint,
-and the ECS application wildcard. It then tests each configured FreeIPA or AD
-resolver directly with explicit A-record queries. A candidate is accepted only
-when every required hostname returns its expected IPv4 answer. If no direct
-candidate passes, `ecs_coredns_allow_node_resolver_fallback` permits only
-ECS-node resolvers that pass the same tests. The playbook refuses to modify
-CoreDNS when no candidate is proven. Verified upstreams replace the global
-stanza with the minimal existing-Corefile form
-`forward . <validated-upstreams>`; this deployment renders exactly
-`forward . 172.31.76.102`. When the optional node-local DNS ConfigMap exists,
-the shared reconciliation also replaces only the root `.:53` forward target
-with those validated upstreams and rolls its DaemonSet; the `cluster.local`,
-`in-addr.arpa`, and `ip6.arpa` blocks continue forwarding to
-`__PILLAR__CLUSTER__DNS__`. Set `ecs_node_local_dns_reconcile: false` to opt
-out. The applied CoreDNS ConfigMap is reread and asserted before one fresh
-Python probe pod performs IPv4-only resolution for CM, the ECS console, and
-the effective FreeIPA or Active Directory LDAP endpoint, all in the same
-resolver context. It also performs independent TCP checks to the already
-validated IPv4 address for Cloudera Manager on 7183 and LDAP on 636. The pod
-logs its `/etc/resolv.conf`, reports each FQDN separately, and
-uses at most `ecs_data_services_dns_probe_attempts` attempts (default `3`).
-Failed hostnames are retried after `ecs_data_services_dns_probe_retry_delay`
-(default `31` seconds), which exceeds the managed CoreDNS `cache 30` negative
-TTL so an NXDOMAIN observed during authoritative record convergence is not
-replayed for every retry. Successful hostnames are removed from the pending
-set and are not checked again. Kubernetes pod lifecycle polling remains
-separate and uses `ecs_data_services_dns_probe_wait_delay`.
-The separate pod wait bound covers Kubernetes scheduling and image startup; it
-does not multiply DNS checks. No Data Services API call occurs until all checks
-pass.
+ECS installation owns authoritative DNS and CoreDNS reconciliation in
+playbook 33 and its phased installer. Playbook 34 does not rewrite CoreDNS or
+create Kubernetes DNS probe pods during Data Services post-install. It assumes
+the completed ECS installation has already established cluster DNS, waits for
+the Management Console, and then uses the supported Data Services APIs.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
@@ -156,13 +129,8 @@ Checking every replica prevents one healthy Service response from masking a
 stale replica. If the Service path or any replica is stale while the
 configuration is correct, playbook 33 performs one rolling CoreDNS deployment
 restart and verifies the Service and every replacement replica again. Healthy
-reruns do not restart CoreDNS. Playbook 34 performs this same idempotent
-reconciliation before its final workload DNS gate, so a standalone Data
-Services rerun does not require a separate playbook 33 recovery run. Playbook
-34 does not accept direct-endpoint fallback as readiness:
-Liftie/dex/compute workloads use the Service path, and endpoint-only success
-can otherwise surface later as `UnknownHostException` while fetching
-base-cluster details.
+reruns do not restart CoreDNS. Playbook 34 intentionally does not repeat this
+cluster-install responsibility during Data Services post-install.
 Even successful fresh-pod, CoreDNS Service, and ready-endpoint checks do not
 prove that the long-lived Service Discovery JVM has refreshed its resolver
 state. A stale `cdp-release-thunderhead-servicediscoverysimple` process can

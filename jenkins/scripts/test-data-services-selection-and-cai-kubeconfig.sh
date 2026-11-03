@@ -36,13 +36,8 @@ assert "not (ecs_cdw_diagnostics_collected | default(false) | bool)" in playbook
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cde_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cai_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_model_registry.yml" in playbook_text
-assert "common_tasks/ecs_reconcile_coredns.yml" in playbook_text
-assert "common_tasks/ecs_data_services_verify_dns.yml" in playbook_text
-assert playbook_text.index(
-    "common_tasks/ecs_reconcile_coredns.yml"
-) < playbook_text.index(
-    "common_tasks/ecs_data_services_verify_dns.yml"
-)
+assert "common_tasks/ecs_reconcile_coredns.yml" not in playbook_text
+assert "common_tasks/ecs_data_services_verify_dns.yml" not in playbook_text
 assert "when: \"'model_registry' in (ecs_data_services_install_names | default([]))\"" in playbook_text
 portal_facts_import = (
     "ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml"
@@ -839,11 +834,9 @@ assert (
 data_services_playbook_text = (
     root / "ansible-playbooks/34_setup_ecs_data_services.yml"
 ).read_text()
-assert "Reconcile CoreDNS before Data Services provisioning" in data_services_playbook_text
-assert "common_tasks/ecs_reconcile_coredns.yml" in data_services_playbook_text
-assert "not (ecs_coredns_reconciled_this_run | default(false) | bool)" in (
-    data_services_playbook_text
-)
+assert "Reconcile CoreDNS before Data Services provisioning" not in data_services_playbook_text
+assert "common_tasks/ecs_reconcile_coredns.yml" not in data_services_playbook_text
+assert "common_tasks/ecs_data_services_verify_dns.yml" not in data_services_playbook_text
 assert "ecs_data_service_cde_virtual_cluster.yml" in (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cde.yml"
 ).read_text()

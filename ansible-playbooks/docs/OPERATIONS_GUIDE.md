@@ -312,8 +312,9 @@ self-signed/untrusted, expired, wrong-SAN, or mismatched-key material before
 workspace submission and never creates a temporary certificate.
 
 ECS install owns authoritative FreeIPA records and CoreDNS reconciliation.
-Playbooks 33 and 34 use the same idempotent reconciliation before their
-workload DNS gates. If the optional `node-local-dns` ConfigMap exists, its root
+Playbook 33 and its phased installer perform that reconciliation. Playbook 34
+does not rewrite CoreDNS or create Kubernetes DNS probe pods during Data
+Services post-install. If the optional `node-local-dns` ConfigMap exists, its root
 `.:53` forward target is changed from `__PILLAR__UPSTREAM__SERVERS__` to the
 already validated identity DNS forwarders, then its DaemonSet is rolled and
 awaited. The `cluster.local`, `in-addr.arpa`, and `ip6.arpa` blocks remain
