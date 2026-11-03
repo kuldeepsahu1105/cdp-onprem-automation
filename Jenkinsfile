@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-11-03.1 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-11-03.2 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -18,7 +18,32 @@ pipeline {
       quoteValue: false,
       description: '''Select one or more stages; they always run in the fixed pipeline order.
 See PIPELINE_STAGES_REFERENCE below for copy-ready combinations, dependencies, stage details, and teardown guidance.''',
-      descriptionPropertyValue: '''VALIDATE — standard prerequisite checks,TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→28→29→30 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — install/CoreDNS/healthy console (33),ECS_POST_INSTALL_TASKS — API credentials/IAM/LDAP/portal after health,ECS_DATA_SERVICES — data services only (34),STARTSTOP_AUTOMATION — deploy EC2 start/stop helper on ipaserver,DESTROY_STACK — terraform destroy or DRY_RUN plan'''
+      descriptionPropertyValue: '''VALIDATE — standard prerequisite checks,TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→28→29→30 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — install/CoreDNS/healthy console (33),ECS_POST_INSTALL_TASKS — API credentials/IAM/LDAP/portal after health,ECS_DATA_SERVICES — data services only (34),STARTSTOP_AUTOMATION — deploy EC2 start/stop helper on ipaserver,DESTROY_STACK — terraform destroy or DRY_RUN plan''',
+      javascript: '''
+(function resizePipelineStagesReference(attempt) {
+  var marker = document.evaluate(
+    "//input[@name='name' and @value='PIPELINE_STAGES_REFERENCE']/following::textarea[@name='value'][1]",
+    document,
+    null,
+    XPathResult.FIRST_ORDERED_NODE_TYPE,
+    null
+  ).singleNodeValue;
+  if (!marker && attempt < 20) {
+    window.setTimeout(function () {
+      resizePipelineStagesReference(attempt + 1);
+    }, 100);
+    return;
+  }
+  if (marker) {
+    marker.style.width = '32rem';
+    marker.style.maxWidth = '100%';
+    marker.style.height = '14rem';
+    marker.style.minHeight = '10rem';
+    marker.style.overflow = 'auto';
+    marker.style.resize = 'both';
+  }
+})(0);
+'''
     )
     string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Deployment name prefix + Terraform workspace (overrides tfvars when set)')
     text(
