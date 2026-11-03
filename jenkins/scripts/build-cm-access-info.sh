@@ -29,17 +29,21 @@ read_group_var() {
 }
 
 inventory_host_ip() {
-  local group="$1" host="" ip=""
+  local group="$1" host="" ip="" section="" in_group="false"
   [[ -f "$INVENTORY" ]] || return 1
   while IFS= read -r line; do
-    if [[ "$line" =~ ^\[${group}\] ]]; then
-      host=""
+    if [[ "$line" =~ ^\[([^]]+)\] ]]; then
+      section="${BASH_REMATCH[1]}"
+      if [[ "$section" == "$group" ]]; then
+        in_group="true"
+      elif [[ "$in_group" == "true" ]]; then
+        break
+      else
+        in_group="false"
+      fi
       continue
     fi
-    if [[ "$line" =~ ^\[ ]]; then
-      [[ -n "$host" ]] && break
-      continue
-    fi
+    [[ "$in_group" == "true" ]] || continue
     [[ "$line" =~ ^# ]] && continue
     [[ -z "${line// }" ]] && continue
     host="${line%% *}"
