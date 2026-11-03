@@ -208,6 +208,10 @@
 - name: Apply ECS host templates and role assignments
   ansible.builtin.import_tasks: ecs_apply_host_templates.yml
 
+- name: Stage ECS CoreDNS policy before control-plane First Run
+  ansible.builtin.import_tasks: ecs_stage_coredns_bootstrap.yml
+  when: ecs_reconcile_coredns | default(true) | bool
+
 - name: Install ECS embedded control plane
   ansible.builtin.import_tasks: ecs_install_control_plane.yml
 
