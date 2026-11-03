@@ -1152,6 +1152,10 @@ ecs_coredns_deployment_name: rke2-coredns-rke2-coredns
 ecs_coredns_service_name: rke2-coredns-rke2-coredns
 ecs_coredns_namespace: kube-system
 ecs_node_local_dns_reconcile: true
+# Preserve the proven October 31/November 1 install path by default: verify the
+# applied CoreDNS forward stanza without launching extra probe pods or rolling
+# DNS deployments. Enable only for targeted diagnostics.
+ecs_coredns_extended_verification_enabled: false
 ecs_node_local_dns_configmap_name: node-local-dns
 ecs_node_local_dns_daemonset_name: node-local-dns
 # Empty = verified FreeIPA inventory addresses, or ad_dns_servers for AD.

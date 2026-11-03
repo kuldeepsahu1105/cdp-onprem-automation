@@ -54,6 +54,10 @@ hanging on a self-connection through the public IP.
    `/usr/bin/kubectl`; the normal CLI setup installs `k9s` as `/usr/bin/k9s`
    after cluster convergence so root and non-login shells do not depend on
    `/usr/local/bin` being present in `PATH`.
+   The default install path stops after verifying the exact applied CoreDNS
+   forward stanza, matching the proven October 31/November 1 behavior.
+   `ecs_coredns_extended_verification_enabled=true` optionally enables the
+   later node-local mutation and probe-pod/rolling-recovery diagnostics.
    This repository intentionally differs from the shared reference because
    runtime ECS environment creation could not resolve the CM hostname through
    RKE2's `/etc/resolv.conf` forwarding.

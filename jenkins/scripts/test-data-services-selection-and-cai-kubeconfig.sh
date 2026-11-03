@@ -811,6 +811,10 @@ assert "subsets[*].addresses[*]" in service_probe_text
 coredns_reconcile_text = (
     root / "ansible-playbooks/common_tasks/ecs_reconcile_coredns.yml"
 ).read_text()
+group_vars = yaml.safe_load(
+    (root / "ansible-playbooks/group_vars/all.yml").read_text()
+)
+assert group_vars["ecs_coredns_extended_verification_enabled"] is False
 assert (
     "Verify required records through the CoreDNS Service and every ready replica"
     in coredns_reconcile_text
@@ -818,6 +822,25 @@ assert (
 assert "rollout" in coredns_reconcile_text
 assert "restart" in coredns_reconcile_text
 assert "Require reliable CoreDNS Service path and replicas" in coredns_reconcile_text
+coredns_reconcile_tasks = yaml.safe_load(coredns_reconcile_text)
+coredns_reconcile_by_name = {
+    task.get("name"): task for task in coredns_reconcile_tasks
+}
+for task_name in (
+    "Verify required records through the CoreDNS Service and every ready replica",
+    "Record initial CoreDNS Service and replica readiness",
+    "Roll CoreDNS deployment when the Service path or any replica is stale",
+    "Wait for CoreDNS rolling recovery",
+    "Reverify the CoreDNS Service and every ready replica after rolling recovery",
+    "Require reliable CoreDNS Service path and replicas",
+):
+    task = coredns_reconcile_by_name[task_name]
+    when = task["when"]
+    conditions = when if isinstance(when, list) else [when]
+    assert (
+        "ecs_coredns_extended_verification_enabled | default(false) | bool"
+        in conditions
+    )
 dns_verify_text = (
     root / "ansible-playbooks/common_tasks/ecs_data_services_verify_dns.yml"
 ).read_text()
