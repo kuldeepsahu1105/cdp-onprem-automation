@@ -1,5 +1,0 @@
----
-- name: Compatibility entry point for ECS CoreDNS bootstrap staging
-  ansible.builtin.import_role:
-    name: ecs
-    tasks_from: ecs_stage_coredns_bootstrap

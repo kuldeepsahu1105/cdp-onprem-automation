@@ -26,27 +26,22 @@ The flow follows the phased pattern in [Cloudera Labs reference playbooks](https
    (`ECSMaster`, `ECSWorker`) through the v4-compatible CM API, applied with
    `startRoles=false`.
 6. **Control plane submission/adoption** — `common_tasks/ecs_install_control_plane.yml` submits First Run or adopts its durable `/controlPlanes` record without blocking on completion.
-7. **CoreDNS before and during First Run** — before submitting the CM embedded
-   control-plane install command, stage RKE2's supported
-   `rke2-coredns-config.yaml` `HelmChartConfig` with the authoritative FreeIPA
-   private IP (or configured AD DNS servers). RKE2 therefore creates its first
-   CoreDNS pods with the correct forwarder before the in-cluster environment
-   creation job can run. After the Kubernetes API reports ready and the
+7. **CoreDNS before and during First Run** — reapply the managed resolver on
+   every ECS host before control-plane installation because the stock RKE2
+   CoreDNS chart forwards through `/etc/resolv.conf`, matching the November 1
+   and November 2 install flow. After the Kubernetes API reports ready and the
    CoreDNS ConfigMap exists, confirm the same authoritative forwarder, replace
    the `/etc/resolv.conf` upstream, omit the ineffective `policy sequential`
-   block, and restart CoreDNS only when changed. The initial chart and live
-   reconciliation also publish static CM, console, and FreeIPA A records so
-   First Run does not depend on pod-network reachability to FreeIPA DNS. The
-   live bootstrap path does not
+   block, and restart CoreDNS only when changed. The live bootstrap path does not
    require a pod to reach the upstream before mutation because pod DNS is the
    dependency being repaired; the exact applied CoreDNS forward stanza is
    verified before First Run waiting continues. Waiting for the API, rather
    than only the `kubectl` binary, keeps fresh installs from touching CoreDNS
    before the embedded control plane is listening.
-   As soon as the ECS-provided client exists, bootstrap also exposes it as
-   `/usr/bin/kubectl`; the normal CLI setup installs `k9s` as `/usr/bin/k9s`
-   after cluster convergence so root and non-login shells do not depend on
-   `/usr/local/bin` being present in `PATH`.
+   As soon as the ECS-provided client and kubeconfig exist, the active First
+   Run path exposes `/usr/bin/kubectl`, configures operator kubeconfigs, and
+   installs `k9s` as `/usr/bin/k9s`. Operator tools are therefore available
+   even when the later CM First Run command fails.
    The default path preserves the proven October 31/November 1 behavior and
    does not mutate node-local DNS.
    `ecs_coredns_extended_verification_enabled=true` optionally enables that

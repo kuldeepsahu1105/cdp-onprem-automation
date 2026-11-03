@@ -19,12 +19,16 @@ setup_by_name = {task.get("name"): task for task in setup}
 phased = (
     role_tasks / "ecs_phased_cluster_install.yml"
 ).read_text()
-assert "ecs_stage_coredns_bootstrap.yml" in phased
+playbook = (
+    root / "ansible-playbooks/33_setup_ecs_cluster.yml"
+).read_text()
+assert "Restore managed DNS resolver configuration on ECS hosts" in playbook
+assert playbook.index("common_tasks/configure_resolv_conf.yml") < playbook.index(
+    "tasks_from: setup_cluster"
+)
 assert "ecs_reconcile_coredns.yml" in phased
 assert "ecs_coredns_first_run_bootstrap: true" in phased
-assert phased.index("ecs_stage_coredns_bootstrap.yml") < phased.index(
-    "ecs_install_control_plane.yml"
-) < phased.index(
+assert phased.index("ecs_install_control_plane.yml") < phased.index(
     "ecs_reconcile_coredns.yml"
 ) < phased.index(
     "ecs_configure_cli_tools.yml"
@@ -52,57 +56,6 @@ for task_name in (
         "ecs_coredns_extended_verification_enabled | default(false) | bool"
         in conditions
     )
-
-bootstrap = (
-    role_tasks / "ecs_stage_coredns_bootstrap.yml"
-)
-bootstrap_text = bootstrap.read_text()
-bootstrap_tasks = yaml.safe_load(bootstrap_text)
-bootstrap_by_name = {task.get("name"): task for task in bootstrap_tasks}
-stage = bootstrap_by_name[
-    "Stage initial RKE2 CoreDNS forwarding policy before First Run"
-]
-assert stage["ansible.builtin.copy"]["dest"] == (
-    "{{ ecs_rke2_coredns_helm_config_path }}"
-)
-manifest_text = stage["ansible.builtin.copy"]["content"].replace(
-    "{{ ecs_coredns_bootstrap_forwarders | join(' ') }}",
-    "10.0.0.10 10.0.0.11",
-).replace(
-    "{{ ecs_coredns_bootstrap_hosts_config | indent(20, true) }}",
-    "                    10.0.0.20 cldr-mngr.cldr.internal.arpa\n"
-    "                    10.0.0.30 console-cdp.apps.cldr.internal.arpa\n"
-    "                    10.0.0.40 ipaserver.cldr.internal.arpa\n"
-    "                    fallthrough",
-)
-manifest = yaml.safe_load(manifest_text)
-assert manifest["kind"] == "HelmChartConfig"
-assert manifest["metadata"] == {
-    "name": "rke2-coredns",
-    "namespace": "kube-system",
-}
-values = yaml.safe_load(manifest["spec"]["valuesContent"])
-forward = next(
-    plugin
-    for plugin in values["servers"][0]["plugins"]
-    if plugin["name"] == "forward"
-)
-assert forward["parameters"] == ". 10.0.0.10 10.0.0.11"
-hosts = next(
-    plugin
-    for plugin in values["servers"][0]["plugins"]
-    if plugin["name"] == "hosts"
-)
-assert "10.0.0.20 cldr-mngr.cldr.internal.arpa" in hosts["configBlock"]
-assert "10.0.0.30 console-cdp.apps.cldr.internal.arpa" in hosts["configBlock"]
-assert "10.0.0.40 ipaserver.cldr.internal.arpa" in hosts["configBlock"]
-assert hosts["configBlock"].strip().endswith("fallthrough")
-assert "/etc/resolv.conf" not in manifest["spec"]["valuesContent"]
-
-reconcile_text = (role_tasks / "ecs_reconcile_coredns.yml").read_text()
-assert "Require static ECS bootstrap DNS records in CoreDNS" in reconcile_text
-assert '"hosts {"' in reconcile_text
-assert "ecs_coredns_required_dns_records | to_json" in reconcile_text
 
 active_read = setup_by_name["Read active ECS cluster commands"]
 assert active_read["ansible.builtin.uri"]["url"].endswith(
