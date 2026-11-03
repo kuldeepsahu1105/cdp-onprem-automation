@@ -1297,7 +1297,6 @@ ecs_cdw_impala_autoscaling:
 ecs_cdw_impala_additional_quota:
   cpu: 0.0
   memory: 0
-ecs_cdw_impala_query_log: true
 # Empty keeps the CDW xsmall Trino defaults shown in the UI (two executors).
 # Set supported trino* keys to customize worker autoscaling for new warehouses.
 ecs_cdw_trino_autoscaling: {}

@@ -178,10 +178,17 @@ for option in (
     "'--impala-ha-settings'",
     "'--autoscaling'",
     "'--additional-quota'",
+):
+    require(option in followup, f"missing configurable Impala option {option}")
+
+for unsupported_private_option in (
     "'--impala-query-log'",
     "'--no-impala-query-log'",
 ):
-    require(option in followup, f"missing configurable Impala option {option}")
+    require(
+        unsupported_private_option not in followup,
+        f"public-only option must not be submitted to private CDP: {unsupported_private_option}",
+    )
 
 require(
     "Validate configured Trino Virtual Warehouse settings" in followup,
@@ -234,8 +241,8 @@ require(
     "Impala autoscaling defaults changed",
 )
 require(
-    group_vars["ecs_cdw_impala_query_log"] is True,
-    "Impala query logging default changed",
+    "ecs_cdw_impala_query_log" not in group_vars,
+    "public-only Impala query logging option must not be configurable",
 )
 require(
     group_vars["ecs_cdw_trino_autoscaling"] == {},

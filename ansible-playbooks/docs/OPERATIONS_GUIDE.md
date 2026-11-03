@@ -432,9 +432,10 @@ warehouses with the configured names are retained. Override
 CDW deployment uses different established values. Impala-specific creation
 settings are controlled by `ecs_cdw_impala_options`,
 `ecs_cdw_impala_ha_settings`, `ecs_cdw_impala_autoscaling`,
-`ecs_cdw_impala_additional_quota`, and `ecs_cdw_impala_query_log`. Defaults
-match the private-cloud UI's minimum xsmall selection. The pinned CLI does not
-expose the UI's named resource-template selector; use the supported
+and `ecs_cdw_impala_additional_quota`. Defaults match the private-cloud UI's
+minimum xsmall selection. Query logging remains control-plane-owned because
+the pinned CLI marks both query-log flags as public-only. The pinned CLI does
+not expose the UI's named resource-template selector; use the supported
 `ecs_cdw_vw_tshirt_size` input. New Trino warehouses can additionally use
 `ecs_cdw_trino_autoscaling` and `ecs_cdw_trino_additional_quota`. The
 autoscaling map is empty by default so the CDW xsmall defaults, including two

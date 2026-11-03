@@ -395,12 +395,7 @@
                   '--impala-ha-settings',
                   ecs_cdw_impala_ha_settings | to_json,
                   '--autoscaling',
-                  ecs_cdw_impala_autoscaling | to_json,
-                  (
-                    '--impala-query-log'
-                    if ecs_cdw_impala_query_log | bool
-                    else '--no-impala-query-log'
-                  )
+                  ecs_cdw_impala_autoscaling | to_json
                 ]
                 if item.item.type == 'impala'
                 else []

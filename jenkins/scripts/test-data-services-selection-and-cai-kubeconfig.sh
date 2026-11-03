@@ -139,8 +139,8 @@ assert "'--impala-options'" in cdw_followup
 assert "'--impala-ha-settings'" in cdw_followup
 assert "'--autoscaling'" in cdw_followup
 assert "'--additional-quota'" in cdw_followup
-assert "'--impala-query-log'" in cdw_followup
-assert "'--no-impala-query-log'" in cdw_followup
+assert "'--impala-query-log'" not in cdw_followup
+assert "'--no-impala-query-log'" not in cdw_followup
 assert "Validate configured Impala Virtual Warehouse settings" in cdw_followup
 assert "Validate configured Trino Virtual Warehouse settings" in cdw_followup
 assert "ecs_cdw_trino_autoscaling | to_json" in cdw_followup
@@ -183,7 +183,7 @@ assert group_vars["ecs_cdw_impala_autoscaling"]["autoSuspendTimeoutSeconds"] == 
 assert group_vars["ecs_cdw_impala_autoscaling"]["impalaScaleUpDelaySeconds"] == 20
 assert group_vars["ecs_cdw_impala_autoscaling"]["impalaScaleDownDelaySeconds"] == 300
 assert group_vars["ecs_cdw_impala_additional_quota"] == {"cpu": 0.0, "memory": 0}
-assert group_vars["ecs_cdw_impala_query_log"] is True
+assert "ecs_cdw_impala_query_log" not in group_vars
 assert group_vars["ecs_cdw_trino_autoscaling"] == {}
 assert group_vars["ecs_cdw_trino_additional_quota"] == {"cpu": 0.0, "memory": 0}
 assert group_vars["ecs_cdw_catalog_kubernetes_health_fallback"] is True
