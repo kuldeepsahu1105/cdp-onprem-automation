@@ -131,6 +131,9 @@ cdw_preflight = (
     root
     / "ansible-playbooks/common_tasks/ecs_data_service_cdw_preflight.yml"
 ).read_text()
+cm_command_wait = (
+    root / "ansible-playbooks/common_tasks/wait_cm_api_command.yml"
+).read_text()
 cdw_force_reset = (
     root
     / "ansible-playbooks/common_tasks/ecs_data_service_cdw_force_reset.yml"
@@ -174,7 +177,13 @@ assert "CDW | Reject an existing keyless FreeIPA Hive principal" in cdw_prefligh
 assert "/cm/commands/generateCredentialsAdhoc" in cdw_preflight
 assert "ecs_cdw_principals_to_generate" in cdw_preflight
 assert "pre-created keyless service causes CM" in cdw_preflight
+assert "CDW | Report submitted CM ad-hoc credential command" in cdw_preflight
+assert "This internal API command may not appear in the Cloudera Manager UI" in cdw_preflight
+assert "cm_api_command_label: CM internal ad-hoc credential command" in cdw_preflight
 assert "CDW | Wait for CM-owned ad-hoc credentials" in cdw_preflight
+assert "status_code: [200, 404]" in cm_command_wait
+assert "cm_api_command_poll.status | default(0) | int == 404" in cm_command_wait
+assert "cm_api_command_label | default('CM API command')" in cm_command_wait
 assert "CDW | Require CM-generated FreeIPA keys" in cdw_preflight
 assert "has_keytab: TRUE" in cdw_preflight
 assert "deleteCredentials?deleteCredentialsMode=unused" in cdw_preflight
