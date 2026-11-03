@@ -79,6 +79,13 @@ assert "existing_ecs_active_commands.json['items']" in decision_text
 start = by_name["Start existing ECS cluster services"]
 assert "not (ecs_phased_install_required | bool)" in start["when"]
 
+final_coredns = by_name["Reconcile ECS CoreDNS forwarding order"]
+assert final_coredns["vars"]["ecs_coredns_first_run_bootstrap"] is True
+assert (
+    "not (ecs_coredns_reconciled_this_run | default(false) | bool)"
+    in final_coredns["when"]
+)
+
 install = yaml.safe_load(
     (
         root
