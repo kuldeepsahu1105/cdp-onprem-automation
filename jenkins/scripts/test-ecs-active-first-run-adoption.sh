@@ -77,6 +77,12 @@ assert "not (ecs_phased_install_required | bool)" in start["when"]
 wrapper = (root / "ansible-playbooks/33_setup_ecs_cluster.yml").read_text()
 assert "name: ecs" in wrapper
 assert "tasks_from: setup_cluster" in wrapper
+final_coredns = setup_by_name["Reconcile ECS CoreDNS forwarding order"]
+assert final_coredns["vars"]["ecs_coredns_first_run_bootstrap"] is True
+assert (
+    "not (ecs_coredns_reconciled_this_run | default(false) | bool)"
+    in final_coredns["when"]
+)
 
 install = yaml.safe_load(
     (role_tasks / "ecs_install_control_plane.yml").read_text()

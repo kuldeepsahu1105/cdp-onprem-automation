@@ -479,6 +479,8 @@
 
 - name: Reconcile ECS CoreDNS forwarding order
   ansible.builtin.import_tasks: ecs_reconcile_coredns.yml
+  vars:
+    ecs_coredns_first_run_bootstrap: true
   when:
     - ecs_deploy_effective | default(false) | bool
     - ecs_reconcile_coredns | default(true) | bool
