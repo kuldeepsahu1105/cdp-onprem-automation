@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-10-29.2 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-11-03.1 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -16,25 +16,8 @@ pipeline {
       multiSelectDelimiter: ',',
       visibleItemCount: 15,
       quoteValue: false,
-      description: '''Stages to run (fixed order; select one or more). Full table: PIPELINE_STAGES_REFERENCE text parameter below.
-
-Copy-paste (full deploy path, no STARTSTOP/DESTROY):
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS
-
-Copy-paste (full deploy including selected ECS Data Services):
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES
-
-More copy-ready combinations: see PIPELINE_STAGES_REFERENCE below.
-
-Optional tail stages (append when needed): ECS_POST_INSTALL_TASKS, ECS_DATA_SERVICES, STARTSTOP_AUTOMATION, DESTROY_STACK
-
-Order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → ECS_POST_INSTALL_TASKS → ECS_DATA_SERVICES → STARTSTOP_AUTOMATION → DESTROY_STACK
-
-CM_TLS_KRB_LDAP = playbooks 27→28→29→30 (Auto-TLS, CMS, LDAP, Kerberos). Legacy CDH_BASE → check CM_TLS_KRB_LDAP + CDH_INSTALL.
-
-DESTROY_STACK = terraform destroy (optional 99_cleanup via CLEANUP_BEFORE_DESTROY). Selecting the stage confirms destroy; DRY_RUN=true produces a destroy plan only.
-
-After Jenkinsfile changes: REFRESH_JENKINSFILE=YES once, then re-run with your stage checkboxes.''',
+      description: '''Select one or more stages; they always run in the fixed pipeline order.
+See PIPELINE_STAGES_REFERENCE below for copy-ready combinations, dependencies, stage details, and teardown guidance.''',
       descriptionPropertyValue: '''VALIDATE — standard prerequisite checks,TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→28→29→30 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — install/CoreDNS/healthy console (33),ECS_POST_INSTALL_TASKS — API credentials/IAM/LDAP/portal after health,ECS_DATA_SERVICES — data services only (34),STARTSTOP_AUTOMATION — deploy EC2 start/stop helper on ipaserver,DESTROY_STACK — terraform destroy or DRY_RUN plan'''
     )
     string(name: 'ENVIRONMENT', defaultValue: 'development', description: 'Deployment name prefix + Terraform workspace (overrides tfvars when set)')
