@@ -9,6 +9,18 @@ import sys
 import yaml
 
 root = Path(sys.argv[1])
+phased = (
+    root
+    / "ansible-playbooks/common_tasks/ecs_phased_cluster_install.yml"
+).read_text()
+assert "ecs_reconcile_coredns.yml" in phased
+assert "ecs_coredns_first_run_bootstrap: true" in phased
+assert phased.index("ecs_reconcile_coredns.yml") < phased.index(
+    "ecs_wait_control_plane_first_run.yml"
+) < phased.index(
+    "Start ECS cluster services and roles"
+)
+
 playbook = yaml.safe_load(
     (root / "ansible-playbooks/33_setup_ecs_cluster.yml").read_text()
 )

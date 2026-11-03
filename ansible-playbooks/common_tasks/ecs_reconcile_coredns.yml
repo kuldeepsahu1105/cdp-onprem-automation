@@ -211,6 +211,19 @@
       ECS CoreDNS reconciliation requires {{ ecs_coredns_kubectl_path }} on
       {{ groups[ecs_cluster_master_group][0] }} after control-plane installation.
 
+- name: Expose ECS kubectl in the system path during First Run
+  ansible.builtin.file:
+    src: "{{ ecs_coredns_kubectl_path }}"
+    dest: "{{ ecs_kubectl_install_path }}"
+    state: link
+    owner: root
+    group: root
+    force: true
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  when: ecs_coredns_first_run_bootstrap | default(false) | bool
+
 - name: Wait for ECS Kubernetes API before CoreDNS reconciliation
   ansible.builtin.command:
     argv:
@@ -288,6 +301,15 @@
         | list
       }}
 
+- name: Select authoritative ECS DNS upstreams during First Run bootstrap
+  ansible.builtin.set_fact:
+    ecs_coredns_validated_direct_forwarders: >-
+      {{ ecs_coredns_direct_forwarder_candidates }}
+    ecs_coredns_validated_node_forwarders: []
+    ecs_coredns_forwarders_effective: >-
+      {{ ecs_coredns_direct_forwarder_candidates }}
+  when: ecs_coredns_first_run_bootstrap | default(false) | bool
+
 - name: Remove stale ECS DNS upstream probe pods
   ansible.builtin.command:
     argv:
@@ -305,6 +327,7 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   loop: "{{ range(1, ecs_coredns_forwarder_probe_candidates | length + 1) | list }}"
+  when: not (ecs_coredns_first_run_bootstrap | default(false) | bool)
 
 - name: Start direct ECS DNS upstream probes
   ansible.builtin.command:
@@ -378,6 +401,7 @@
   loop_control:
     extended: true
     label: "{{ item }}"
+  when: not (ecs_coredns_first_run_bootstrap | default(false) | bool)
 
 - name: Wait for direct ECS DNS upstream probes
   ansible.builtin.command:
@@ -407,6 +431,7 @@
   until:
     - ecs_coredns_upstream_probe_phases.rc == 0
     - ecs_coredns_upstream_probe_phases.stdout in ['Succeeded', 'Failed']
+  when: not (ecs_coredns_first_run_bootstrap | default(false) | bool)
 
 - name: Read direct ECS DNS upstream probe output
   ansible.builtin.command:
@@ -428,10 +453,12 @@
   loop_control:
     extended: true
     label: "{{ item }}"
+  when: not (ecs_coredns_first_run_bootstrap | default(false) | bool)
 
 - name: Initialize validated ECS DNS upstreams
   ansible.builtin.set_fact:
     ecs_coredns_validated_forwarders: []
+  when: not (ecs_coredns_first_run_bootstrap | default(false) | bool)
 
 - name: Record validated ECS DNS upstreams
   ansible.builtin.set_fact:
@@ -442,6 +469,7 @@
     extended: true
     label: "{{ item.item }}"
   when:
+    - not (ecs_coredns_first_run_bootstrap | default(false) | bool)
     - item.rc == 0
     - >-
       ecs_coredns_upstream_probe_phases.results[ansible_loop.index0].stdout
@@ -461,6 +489,7 @@
         | select('in', ecs_coredns_validated_forwarders)
         | list
       }}
+  when: not (ecs_coredns_first_run_bootstrap | default(false) | bool)
 
 - name: Select effective verified ECS DNS upstreams
   ansible.builtin.set_fact:
@@ -470,6 +499,7 @@
         if ecs_coredns_validated_direct_forwarders | length > 0
         else ecs_coredns_validated_node_forwarders
       }}
+  when: not (ecs_coredns_first_run_bootstrap | default(false) | bool)
 
 - name: Remove completed ECS DNS upstream probe pods
   ansible.builtin.command:
@@ -488,6 +518,7 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   loop: "{{ range(1, ecs_coredns_forwarder_probe_candidates | length + 1) | list }}"
+  when: not (ecs_coredns_first_run_bootstrap | default(false) | bool)
 
 - name: Require a verified ECS DNS upstream
   ansible.builtin.assert:
@@ -498,7 +529,13 @@
       {{ ecs_coredns_forwarder_probe_candidates | join(', ') }} returned the
       required A records
       {{ ecs_coredns_required_dns_records | to_json }}. Probe output:
-      {{ ecs_coredns_upstream_probe_logs.results | map(attribute='stdout') | list | to_json }}
+      {{
+        ecs_coredns_upstream_probe_logs.results
+        | default([])
+        | map(attribute='stdout')
+        | list
+        | to_json
+      }}
 
 - name: Report ECS node resolver fallback
   ansible.builtin.debug:
