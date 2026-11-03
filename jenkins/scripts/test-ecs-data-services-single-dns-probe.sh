@@ -53,6 +53,28 @@ coredns_reconcile_tasks = yaml.safe_load(coredns_reconcile_path.read_text())
 coredns_tasks_by_name = {
     task.get("name"): task for task in coredns_reconcile_tasks
 }
+
+kubectl_index = next(
+    index for index, task in enumerate(coredns_reconcile_tasks)
+    if task.get("name") == "Check ECS kubectl binary"
+)
+api_wait_index = next(
+    index for index, task in enumerate(coredns_reconcile_tasks)
+    if task.get("name")
+    == "Wait for ECS Kubernetes API before CoreDNS reconciliation"
+)
+probe_cleanup_index = next(
+    index for index, task in enumerate(coredns_reconcile_tasks)
+    if task.get("name") == "Remove stale ECS DNS upstream probe pods"
+)
+assert kubectl_index < api_wait_index < probe_cleanup_index
+api_wait = coredns_tasks_by_name[
+    "Wait for ECS Kubernetes API before CoreDNS reconciliation"
+]
+assert api_wait["ansible.builtin.command"]["argv"][-1] == "--raw=/readyz"
+assert api_wait["delegate_to"] == "{{ groups[ecs_cluster_master_group][0] }}"
+assert api_wait["connection"] == "ssh"
+assert api_wait["failed_when"] is False
 node_local_build = coredns_tasks_by_name[
     "Build verified ECS node-local DNS forwarding policy"
 ]
