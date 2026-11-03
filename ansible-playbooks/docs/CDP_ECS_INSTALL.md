@@ -41,6 +41,12 @@ On rerun, playbook 33 enters the phased recovery path only when the required
 service-secret and host-template reconciliation. Cached automation API
 credentials are loaded before IAM bootstrap, so an existing cache also skips
 temporary profile creation and access-key generation.
+An active CM cluster command also forces the phased path even when both
+services already report `STARTED`. When CM already has a matching
+`/controlPlanes` record, reruns refresh the active command list, wait for every
+exact command ID, then require adopted service convergence before allowing a
+cluster start. This prevents a competing start while embedded First Run is
+still active.
 8. **First Run completion** — wait for the submitted CM command, or for every service in an adopted installation to reach `STARTED`, only after CoreDNS is repaired.
 9. **Start** — `cloudera.cluster.cluster` `state: started`.
 10. **Operator CLI** — expose the RKE2 `kubectl` binary, copy a user-owned kubeconfig for `root` and the SSH user, install checksum-verified `k9s`, and verify that each user can list Kubernetes nodes.
