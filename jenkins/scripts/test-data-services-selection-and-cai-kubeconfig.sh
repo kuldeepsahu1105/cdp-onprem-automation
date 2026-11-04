@@ -262,7 +262,8 @@ assert "freeipa.ansible_freeipa.ipauser" in ldap_freeipa_user
 assert "LDAP | Set provider argv for external LDAP" in ldap_provider
 assert "base_cluster_ranger_usersync_bind_dn" in ldap_provider
 assert "base_cluster_ranger_usersync_bind_password" in ldap_provider
-assert "get-access-key" in ldap_credential_refresh
+assert "+ ['iam', 'list-users']" in ldap_credential_refresh
+assert "get-access-key" not in ldap_credential_refresh
 assert "No access key found".lower() in ldap_credential_refresh.lower()
 assert "ecs_provision_iam_machine_access_key.yml" in ldap_credential_refresh
 assert "ecs_control_plane_remote_runtime.yml" in ldap_credential_refresh

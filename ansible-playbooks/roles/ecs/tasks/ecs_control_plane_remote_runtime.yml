@@ -138,10 +138,6 @@
     HOME: "{{ ecs_remote_cdp_profile_dir.path }}"
   loop:
     - service: iam
-      operation: get-access-key
-      expected_options:
-        - --access-key-id
-    - service: iam
       operation: update-ldap-provider
       expected_options:
         - --ldap-provider-name
