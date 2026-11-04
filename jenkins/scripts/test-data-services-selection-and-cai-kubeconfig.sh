@@ -82,6 +82,15 @@ assert playbook_text.index(
     "Load existing ECS automation API credentials"
 )
 assert "when: \"'model_registry' in (ecs_data_services_install_names | default([]))\"" in playbook_text
+selection_text = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/resolve_ecs_data_services_install.yml"
+).read_text()
+assert "Report ECS data service enablement" in selection_text
+assert "'ENABLED' if 'cdw' in ecs_data_services_install_names" in selection_text
+assert "'ENABLED' if 'cde' in ecs_data_services_install_names" in selection_text
+assert "'ENABLED' if 'cai' in ecs_data_services_install_names" in selection_text
+assert "'model_registry' in ecs_data_services_install_names" in selection_text
 
 compat_playbook_text = (
     root / "ansible-playbooks/34_setup_ecs_data_services.yml"
@@ -143,6 +152,10 @@ assert "/cm/commands/generateCredentialsAdhoc" in cdw_preflight
 assert "ecs_cdw_principals_to_generate" in cdw_preflight
 assert "pre-created keyless service causes CM" in cdw_preflight
 assert "CDW | Report submitted CM ad-hoc credential command" in cdw_preflight
+assert "CDW | Report existing Data Warehouse clusters" in cdw_preflight
+assert "CDW | Report absent Data Warehouse cluster" in cdw_preflight
+assert "action=REUSE" in cdw_preflight
+assert "action=CREATE" in cdw_preflight
 assert "This internal API command may not appear in the Cloudera Manager UI" in cdw_preflight
 assert "cm_api_command_label: CM internal ad-hoc credential command" in cdw_preflight
 assert "CDW | Wait for CM-owned ad-hoc credentials" in cdw_preflight
@@ -194,6 +207,58 @@ assert "ecs_cdw_diagnostics_collected: true" in cdw_diagnostics
 assert "state: present" not in cdw_diagnostics
 assert "ipa-getkeytab" not in cdw_diagnostics
 assert "ecs_data_service_cdw_reconcile_workload_ccache.yml" not in cdw_setup
+
+cde_preflight = yaml.safe_load(
+    (
+        root
+        / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cde_preflight.yml"
+    ).read_text()
+)
+cde_tasks = {task.get("name"): task for task in cde_preflight}
+cde_existing_report = str(
+    cde_tasks["CDE | Report selected existing service without capacity mutation"][
+        "ansible.builtin.debug"
+    ]["msg"]
+)
+cde_absent_report = str(
+    cde_tasks["CDE | Report absent service selected for creation"][
+        "ansible.builtin.debug"
+    ]["msg"]
+)
+assert "CDE: EXISTS" in cde_existing_report
+assert "name={{ ecs_cde_preflight_service.name" in cde_existing_report
+assert "status={{ ecs_cde_preflight_service.status" in cde_existing_report
+assert "action=REUSE" in cde_existing_report
+assert "CDE: ABSENT" in cde_absent_report
+assert "name={{ ecs_cde_service_name }}" in cde_absent_report
+assert "status=Absent" in cde_absent_report
+assert "action=CREATE" in cde_absent_report
+
+cai_preflight = yaml.safe_load(
+    (
+        root
+        / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cai_preflight.yml"
+    ).read_text()
+)
+cai_tasks = {task.get("name"): task for task in cai_preflight}
+cai_existing_report = str(
+    cai_tasks["CAI | Report authoritative reusable workspace"][
+        "ansible.builtin.debug"
+    ]["msg"]
+)
+cai_absent_report = str(
+    cai_tasks["CAI | Report absent workspace selected for creation"][
+        "ansible.builtin.debug"
+    ]["msg"]
+)
+assert "CAI: EXISTS" in cai_existing_report
+assert "ecs_cai_existing_workspace.instanceName" in cai_existing_report
+assert "ecs_cai_existing_workspace.instanceStatus" in cai_existing_report
+assert "action=REUSE" in cai_existing_report
+assert "CAI: ABSENT" in cai_absent_report
+assert "name={{ ecs_cai_workspace_name }}" in cai_absent_report
+assert "status=Absent" in cai_absent_report
+assert "action=CREATE" in cai_absent_report
 
 cdw_followup = (
     root

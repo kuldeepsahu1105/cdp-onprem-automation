@@ -54,6 +54,28 @@
         | list
       }}
 
+- name: Report ECS data service enablement
+  ansible.builtin.debug:
+    msg:
+      - >-
+        CDW: {{
+        'ENABLED' if 'cdw' in ecs_data_services_install_names else 'DISABLED'
+        }}
+      - >-
+        CDE: {{
+        'ENABLED' if 'cde' in ecs_data_services_install_names else 'DISABLED'
+        }}
+      - >-
+        CAI: {{
+        'ENABLED' if 'cai' in ecs_data_services_install_names else 'DISABLED'
+        }}
+      - >-
+        Model Registry: {{
+        'ENABLED'
+        if 'model_registry' in ecs_data_services_install_names
+        else 'DISABLED'
+        }}
+
 - name: Enable data services phase when at least one service is selected
   ansible.builtin.set_fact:
     ecs_data_services_deploy_enabled: true

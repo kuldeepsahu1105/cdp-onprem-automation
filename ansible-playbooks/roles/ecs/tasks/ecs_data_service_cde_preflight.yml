@@ -47,3 +47,25 @@
       {{ ecs_cde_failed_service.status | default('unknown') }}. Automation will
       not disable, delete, or recreate a failed service. Resolve or remove it
       through the supported control-plane workflow, then rerun.
+
+- name: CDE | Report selected existing service without capacity mutation
+  ansible.builtin.debug:
+    msg: >-
+      CDE: EXISTS;
+      name={{ ecs_cde_preflight_service.name | default(ecs_cde_service_name) }};
+      status={{ ecs_cde_preflight_service.status | default('unknown') }};
+      clusterId={{
+      ecs_cde_preflight_service.clusterId | default('not returned') }};
+      environment={{
+      ecs_cde_preflight_service.environmentName
+      | default(ecs_cdp_environment_name) }};
+      action=REUSE.
+  when: ecs_cde_preflight_service | length > 0
+
+- name: CDE | Report absent service selected for creation
+  ansible.builtin.debug:
+    msg: >-
+      CDE: ABSENT; name={{ ecs_cde_service_name }};
+      status=Absent; environment={{ ecs_cdp_environment_name }};
+      action=CREATE.
+  when: ecs_cde_preflight_service | length == 0
