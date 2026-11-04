@@ -55,6 +55,12 @@ coredns_tasks_by_name = {
 }
 assert "Extract applied ECS CoreDNS forward line" in coredns_tasks_by_name
 assert "Report applied ECS CoreDNS forward line" in coredns_tasks_by_name
+assert "Require literal IP ECS CoreDNS upstreams" in coredns_tasks_by_name
+assert "Extract current ECS CoreDNS forward line" in coredns_tasks_by_name
+assert "Report current ECS CoreDNS forward line" in coredns_tasks_by_name
+assert coredns_tasks_by_name[
+    "Extract current ECS CoreDNS forward line"
+]["ansible.builtin.command"]["stdin"] == "{{ ecs_coredns_corefile.stdout }}"
 assert coredns_tasks_by_name[
     "Extract applied ECS CoreDNS forward line"
 ]["ansible.builtin.command"]["stdin"] == (
