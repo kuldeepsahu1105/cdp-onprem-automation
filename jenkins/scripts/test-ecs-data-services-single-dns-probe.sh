@@ -32,7 +32,7 @@ assert "socket.getaddrinfo(" not in text
 assert "ipaddress.IPv4Address(candidate)" in text
 assert "COREDNS_ENDPOINT_FALLBACK_OK" in text
 assert "ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK" in text
-assert "(connect_address, port)" in text
+assert "(address, port)" in text
 assert "NSLOOKUP_DIAGNOSTIC" in text
 assert "loop: \"{{ ecs_data_services_dns_verification_records }}\"" in text
 assert "ecs_data_services_dns_probe_phases.stdout == 'Succeeded'" in text
@@ -62,8 +62,6 @@ coredns_reconcile_tasks = yaml.safe_load(coredns_reconcile_path.read_text())
 coredns_tasks_by_name = {
     task.get("name"): task for task in coredns_reconcile_tasks
 }
-assert "Extract applied ECS CoreDNS forward line" in coredns_tasks_by_name
-assert "Report applied ECS CoreDNS forward line" in coredns_tasks_by_name
 assert "Require literal IP ECS CoreDNS upstreams" in coredns_tasks_by_name
 direct_forwarders = coredns_tasks_by_name[
     "Resolve direct ECS CoreDNS forwarder candidates"
@@ -72,16 +70,78 @@ assert "private_ip" in direct_forwarders
 assert "default(" in direct_forwarders
 assert "ansible_host" in direct_forwarders
 assert direct_forwarders.count("ansible_host") == 1
-assert "Extract current ECS CoreDNS forward line" in coredns_tasks_by_name
-assert "Report current ECS CoreDNS forward line" in coredns_tasks_by_name
-assert coredns_tasks_by_name[
-    "Extract current ECS CoreDNS forward line"
-]["ansible.builtin.command"]["stdin"] == "{{ ecs_coredns_corefile.stdout }}"
-assert coredns_tasks_by_name[
-    "Extract applied ECS CoreDNS forward line"
-]["ansible.builtin.command"]["stdin"] == (
-    "{{ ecs_coredns_applied_corefile.stdout }}"
+assert "ad_dns_servers" in direct_forwarders
+assert "extra_dns_nameservers" in direct_forwarders
+
+corefile_build = coredns_tasks_by_name[
+    "Build verified ECS CoreDNS forwarding policy"
+]
+corefile_argv = corefile_build["ansible.builtin.command"]["argv"]
+corefile_script = corefile_argv[corefile_argv.index("-c") + 1]
+platform_root = """.:53 {
+    errors
+    forward . /etc/resolv.conf {
+        max_concurrent 1000
+    }
+}
+"""
+corefile_result = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        corefile_script,
+        platform_root,
+        "192.0.2.10 198.51.100.10",
+        "identity.example",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
 )
+assert corefile_result.returncode == 0, corefile_result.stderr
+assert platform_root.rstrip() in corefile_result.stdout
+assert "identity.example:53 {" in corefile_result.stdout
+assert "forward . 192.0.2.10 198.51.100.10" in corefile_result.stdout
+corefile_idempotent = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        corefile_script,
+        corefile_result.stdout,
+        "192.0.2.10 198.51.100.10",
+        "identity.example",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+assert corefile_idempotent.returncode == 0, corefile_idempotent.stderr
+assert corefile_idempotent.stdout == corefile_result.stdout
+chart_corefile = platform_root + """
+identity.example:53 {
+    errors
+    cache 30
+    forward . 203.0.113.53
+}
+"""
+chart_update = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        corefile_script,
+        chart_corefile,
+        "192.0.2.10 198.51.100.10",
+        "identity.example",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+assert chart_update.returncode == 0, chart_update.stderr
+assert platform_root.rstrip() in chart_update.stdout
+assert chart_update.stdout.count("identity.example:53 {") == 1
+assert "forward . 203.0.113.53" not in chart_update.stdout
+assert "forward . 192.0.2.10 198.51.100.10" in chart_update.stdout
 
 kubectl_index = next(
     index for index, task in enumerate(coredns_reconcile_tasks)
@@ -151,11 +211,11 @@ assert "selectattr('stdout', 'defined')" in (
     upstream_assert["ansible.builtin.assert"]["fail_msg"]
 )
 node_local_build = coredns_tasks_by_name[
-    "Build verified ECS node-local identity-zone forwarding policy"
+    "Build verified ECS node-local identity-domain forwarding policy"
 ]
 for task_name in (
     "Check for ECS node-local DNS configuration",
-    "Build verified ECS node-local identity-zone forwarding policy",
+    "Build verified ECS node-local identity-domain forwarding policy",
     "Apply verified ECS node-local DNS forwarding policy",
     "Restart ECS node-local DNS after configuration change",
     "Wait for ECS node-local DNS rollout after configuration change",
@@ -172,28 +232,28 @@ node_local_script = node_local_argv[node_local_argv.index("-c") + 1]
 node_local_corefile = """.:53 {
     errors
     cache 30
-    bind 169.254.25.10 172.43.0.10
+    bind 169.254.25.10 192.0.2.53
     forward . __PILLAR__UPSTREAM__SERVERS__ {
         force_tcp
         }
     }
-cluster.local:53 {
+cluster.example:53 {
     errors
     cache {
         success 9984 30
         denial 9984 5
         }
-    bind 169.254.25.10 172.43.0.10
+    bind 169.254.25.10 192.0.2.53
     forward . __PILLAR__CLUSTER__DNS__ {
         force_tcp
         }
     }
 in-addr.arpa:53 {
-    bind 169.254.25.10 172.43.0.10
+    bind 169.254.25.10 192.0.2.53
     forward . __PILLAR__CLUSTER__DNS__
     }
 ip6.arpa:53 {
-    bind 169.254.25.10 172.43.0.10
+    bind 169.254.25.10 192.0.2.53
     forward . __PILLAR__CLUSTER__DNS__
     }
 """
@@ -203,24 +263,25 @@ node_local_result = subprocess.run(
         "-c",
         node_local_script,
         node_local_corefile,
-        "10.0.0.10 10.0.0.11",
-        "cldr.internal.arpa",
+        "identity.example",
     ],
     check=False,
     capture_output=True,
     text=True,
 )
 assert node_local_result.returncode == 0, node_local_result.stderr
-assert "# BEGIN ANSIBLE IDENTITY DNS" in node_local_result.stdout
-assert "cldr.internal.arpa:53 {" in node_local_result.stdout
-assert "forward . 10.0.0.10 10.0.0.11" in node_local_result.stdout
+assert "cluster.example:53 identity.example:53 {" in node_local_result.stdout
 assert "__PILLAR__UPSTREAM__SERVERS__" in node_local_result.stdout
 assert node_local_result.stdout.count(
     "forward . __PILLAR__CLUSTER__DNS__"
 ) == 3
 assert (
-    node_local_result.stdout.split("# BEGIN ANSIBLE IDENTITY DNS", 1)[0].rstrip()
-    == node_local_corefile.rstrip()
+    node_local_result.stdout.replace(
+        "cluster.example:53 identity.example:53 {",
+        "cluster.example:53 {",
+        1,
+    )
+    == node_local_corefile
 )
 node_local_idempotent_result = subprocess.run(
     [
@@ -228,8 +289,7 @@ node_local_idempotent_result = subprocess.run(
         "-c",
         node_local_script,
         node_local_result.stdout,
-        "10.0.0.10 10.0.0.11",
-        "cldr.internal.arpa",
+        "identity.example",
     ],
     check=False,
     capture_output=True,
@@ -260,6 +320,15 @@ assert node_local_check_index < service_probe_index
 
 tasks = yaml.safe_load(path.read_text())
 tasks_by_name = {task.get("name"): task for task in tasks}
+probe_start = tasks_by_name["Start Data Services DNS verification pod"]
+probe_argv = probe_start["ansible.builtin.command"]["argv"]
+probe_script = probe_argv[probe_argv.index("-c") + 1]
+assert "successes_required = int(sys.argv[6])" in probe_script
+assert "for sample in range(1, successes_required + 1)" in probe_script
+assert "HTTPS_OK" in probe_script
+assert probe_argv[-1] == (
+    "{{ ecs_data_services_dns_probe_successes_required | default(1) | int }}"
+)
 probe_success = tasks_by_name[
     "Require successful Data Services DNS verification pod"
 ]
@@ -346,8 +415,8 @@ with tempfile.TemporaryDirectory() as temp_dir:
         "  echo '** server cannot find test name: NXDOMAIN'\n"
         "  exit 1\n"
         "fi\n"
-        "printf 'Server:\\t172.43.0.10\\n"
-        "Address:\\t172.43.0.10:53\\n\\n"
+        "printf 'Server:\\t192.0.2.53\\n"
+        "Address:\\t192.0.2.53:53\\n\\n"
         "Name:\\t%s\\nAddress: 127.0.0.1\\n' \"$2\"\n"
     )
     nslookup.chmod(0o755)
@@ -371,6 +440,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
                 }
             ]),
             "172.42.1.96",
+            "1",
         ],
         check=False,
         capture_output=True,
@@ -398,6 +468,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
                 }
             ]),
             "172.42.1.96",
+            "1",
         ],
         check=False,
         capture_output=True,
@@ -426,6 +497,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
                 }
             ]),
             "172.42.1.96",
+            "1",
         ],
         check=False,
         capture_output=True,

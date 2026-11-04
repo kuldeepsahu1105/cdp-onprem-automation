@@ -26,6 +26,8 @@ assert phased.index("ecs_stage_coredns_bootstrap.yml") < phased.index(
 ) < phased.index(
     "ecs_reconcile_coredns.yml"
 ) < phased.index(
+    "ecs_data_services_verify_dns.yml"
+) < phased.index(
     "ecs_configure_cli_tools.yml"
 ) < phased.index(
     "ecs_wait_control_plane_first_run.yml"
@@ -82,13 +84,23 @@ assert manifest["metadata"] == {
     "namespace": "kube-system",
 }
 values = yaml.safe_load(manifest["spec"]["valuesContent"])
-forward = next(
+root_forward = next(
     plugin
     for plugin in values["servers"][0]["plugins"]
     if plugin["name"] == "forward"
 )
-assert forward["parameters"] == ". 10.0.0.10"
-assert "/etc/resolv.conf" not in manifest["spec"]["valuesContent"]
+identity_forward = next(
+    plugin
+    for plugin in values["servers"][1]["plugins"]
+    if plugin["name"] == "forward"
+)
+assert root_forward["parameters"] == ". /etc/resolv.conf"
+assert values["servers"][1]["zones"] == [{"zone": "{{ cluster_domain }}"}]
+assert identity_forward["parameters"] == ". 10.0.0.10"
+assert values["nodelocal"]["extraClusterDomains"] == [
+    "{{ cluster_domain }}"
+]
+assert "ecs_data_services_dns_probe_successes_required: 20" in phased
 
 install = yaml.safe_load(
     (

@@ -35,21 +35,31 @@ hanging on a self-connection through the public IP.
 5. **Host templates** — `common_tasks/ecs_apply_host_templates.yml`
    (`ECSMaster`, `ECSWorker`) through the v4-compatible CM API, applied with
    `startRoles=false`.
-6. **Control plane submission/adoption** — `common_tasks/ecs_install_control_plane.yml` submits First Run or adopts its durable `/controlPlanes` record without blocking on completion.
-7. **CoreDNS before and during First Run** — reapply the managed resolver on
-   every ECS host and stage an RKE2 `HelmChartConfig` before control-plane
-   installation. The chart override dynamically uses the current FreeIPA
-   private IP, `ad_dns_servers`, or an intentional DNS override, preventing the
-   RKE2 Helm controller from restoring `forward . /etc/resolv.conf`. After the
-   Kubernetes API reports ready and the CoreDNS ConfigMap exists, confirm the
-   authoritative identity-DNS forwarder, replace any stale upstream, omit the
-   ineffective `policy sequential` block, and restart CoreDNS only when
-   changed. When the ECS installation supplies NodeLocal DNS, automation also
-   maintains a dedicated `cluster_domain` server block forwarding directly to
-   the same identity DNS; it does not replace NodeLocal's global or Kubernetes
-   forwarding blocks. Reconciliation runs again after First Run so an in-flight
-   chart update cannot leave either DNS layer reverted. The live
-   bootstrap path does not
+6. **DNS bootstrap before control-plane submission** — reapply the managed
+   resolver on every ECS host and stage an RKE2 `HelmChartConfig` before CM can
+   start First Run. The chart override dynamically uses the current FreeIPA
+   private IP, `ad_dns_servers`, `extra_dns_nameservers`, or an intentional DNS
+   override for a dedicated dynamic `cluster_domain` server. The root server
+   continues to use the platform-provided `/etc/resolv.conf`; automation does
+   not inject an AWS VPC resolver or replace global DNS.
+7. **Control plane submission/adoption** —
+   `common_tasks/ecs_install_control_plane.yml` submits First Run or adopts its
+   durable `/controlPlanes` record without blocking on completion.
+8. **Live CoreDNS and NodeLocal readiness gate** — after the Kubernetes API
+   reports ready and the CoreDNS ConfigMap exists, confirm or insert only that
+   identity-domain server block and restart CoreDNS only when changed.
+   When the ECS installation supplies NodeLocal DNS, automation also adds
+   `cluster_domain` to NodeLocal's chart-supported cluster forwarding domains;
+   it preserves the global/Kubernetes PILLAR forwarding blocks and sends
+   private-domain queries through CoreDNS to the same identity DNS. A normal
+   Kubernetes pod must then complete 20 consecutive lookups for every required
+   record and an HTTPS handshake to the ECS console. CM owns the sequential
+   First Run child commands after the asynchronous install submission, so
+   Ansible cannot pause between those internal child commands; pre-staging the
+   chart is the fresh-install ordering guarantee, and the live gate fails the
+   automation closed if the resulting normal-pod path is not ready.
+   Reconciliation runs again after First Run so an in-flight chart update
+   cannot leave either DNS layer reverted. The live bootstrap path does not
    require a pod to reach the upstream before mutation because pod DNS is the
    dependency being repaired; the applied CoreDNS Service and every ready
    replica are still verified before First Run waiting continues. Waiting for
@@ -73,9 +83,9 @@ On rerun, playbook 33 enters the phased recovery path only when the required
 service-secret and host-template reconciliation. Cached automation API
 credentials are loaded before IAM bootstrap, so an existing cache also skips
 temporary profile creation and access-key generation.
-8. **First Run completion** — wait for the submitted CM command, or for every service in an adopted installation to reach `STARTED`, only after CoreDNS is repaired.
-9. **Start** — `cloudera.cluster.cluster` `state: started`.
-10. **Operator CLI** — expose the RKE2 `kubectl` binary, copy a user-owned kubeconfig for `root` and the SSH user, install checksum-verified `k9s`, and verify that each user can list Kubernetes nodes.
+9. **Operator CLI** — expose the RKE2 `kubectl` binary, copy a user-owned kubeconfig for `root` and the SSH user, install checksum-verified `k9s`, and verify that each user can list Kubernetes nodes.
+10. **First Run completion** — wait for the submitted CM command, or for every service in an adopted installation to reach `STARTED`, only after CoreDNS is repaired.
+11. **Start** — `cloudera.cluster.cluster` `state: started`.
 
 An existing cluster that is missing required services or is not fully `STARTED`
 re-enters the idempotent phased installer, allowing failed control-plane

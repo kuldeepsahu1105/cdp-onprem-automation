@@ -221,6 +221,12 @@
     ecs_coredns_first_run_bootstrap: true
   when: ecs_reconcile_coredns | default(true) | bool
 
+- name: Fail closed on normal pod DNS and HTTPS during First Run
+  ansible.builtin.import_tasks: ecs_data_services_verify_dns.yml
+  vars:
+    ecs_data_services_dns_probe_successes_required: 20
+  when: ecs_reconcile_coredns | default(true) | bool
+
 - name: Configure ECS operator CLI tools during First Run
   ansible.builtin.import_tasks: ecs_configure_cli_tools.yml
   when: ecs_cli_tools_enabled | default(true) | bool

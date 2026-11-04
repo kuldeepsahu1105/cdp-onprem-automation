@@ -102,12 +102,24 @@
                 - name: prometheus
                   parameters: 0.0.0.0:9153
                 - name: forward
-                  parameters: ". {{ ecs_coredns_bootstrap_forwarders | join(' ') }}"
+                  parameters: ". /etc/resolv.conf"
                 - name: cache
                   parameters: "30"
                 - name: loop
                 - name: reload
                 - name: loadbalance
+            - zones:
+                - zone: "{{ cluster_domain }}"
+              port: 53
+              plugins:
+                - name: errors
+                - name: cache
+                  parameters: "30"
+                - name: forward
+                  parameters: ". {{ ecs_coredns_bootstrap_forwarders | join(' ') }}"
+          nodelocal:
+            extraClusterDomains:
+              - "{{ cluster_domain }}"
   become: true
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
