@@ -73,7 +73,10 @@ assert "ansible.builtin.include_tasks: ecs_data_service_cdw_preflight.yml" in pl
 assert "Collect CDW diagnostics after uncaught failure" in playbook_text
 assert "not (ecs_cdw_diagnostics_collected | default(false) | bool)" in playbook_text
 assert "ansible_failed_result.stderr" in playbook_text
+assert "ansible_failed_task.name" in playbook_text
 assert "details: \"{{ ansible_failed_result }}\"" in playbook_text
+assert "CDW failed task=" in playbook_text
+assert "CDW details=" in playbook_text
 assert "Collect pending CDW pod names" in diagnostics_text
 assert "Describe pending CDW pods" in diagnostics_text
 assert "Collect failed CDW persistent volume claims" in diagnostics_text
@@ -463,11 +466,13 @@ assert "item.virtual_warehouses | default([]) | length == 0" in cdw_followup
 assert "ecs_data_service_cdw_reconcile_vw_ccaches.yml" not in cdw_followup
 assert "'describe-dbc-config'" in cdw_followup
 assert "'update-dbc'" in cdw_followup
+assert 'block.get("format") == "ENV"' in cdw_followup
+assert "Verify converged database catalog FILE credential cache configuration" in cdw_followup
 assert "'describe-vw-config'" not in cdw_followup
 assert "'update-vw'" not in cdw_followup
 assert "ecs_cdw_dbc_file_ccache_config | to_json" in cdw_followup
 assert cdw_followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 1
-assert cdw_followup.count(".get(\"KRB5CCNAME\", \"\")") == 1
+assert cdw_followup.count(".get(\"KRB5CCNAME\", \"\")") == 2
 assert "Read database catalog namespace pods after stale API status" in cdw_followup
 assert "Verify database catalog namespace health after stale API status" in cdw_followup
 assert 'required_apps = {"metastore", "hue-query-processor"}' in cdw_followup
@@ -499,8 +504,18 @@ assert group_vars["ecs_cdw_catalog_kubernetes_health_fallback"] is True
 assert group_vars["ecs_cdw_vw_krb5ccname"] == "FILE:/tmp/krb5cc_cdw"
 assert (
     group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
+    ["format"]
+    == "ENV"
+)
+assert (
+    group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
     ["content"]["keyValues"]["KRB5CCNAME"]
     == "{{ ecs_cdw_workload_krb5ccname }}"
+)
+assert (
+    group_vars["ecs_cdw_vw_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
+    ["format"]
+    == "ENV"
 )
 assert (
     group_vars["ecs_cdw_vw_file_ccache_config"]["commonConfigs"]["configBlocks"][0]

@@ -147,6 +147,7 @@
                 )
             }}
           rc: "{{ ansible_failed_result.rc | default('unknown') }}"
+          task: "{{ ansible_failed_task.name | default('unknown') }}"
           details: "{{ ansible_failed_result }}"
 
     - name: Collect CDW diagnostics after uncaught failure
@@ -300,6 +301,11 @@
              | default((ecs_cdw_dbc_info | default({})).database_catalogs
                        | default(ecs_cdw_cluster | default({}))
                        | to_json) }};
+      CDW failed task={{ (ecs_cdw_cluster | default({})).task | default('unknown') }};
+      CDW rc={{ (ecs_cdw_cluster | default({})).rc | default('unknown') }};
+      CDW details={{ (ecs_cdw_cluster | default({})).details
+                     | default(ecs_cdw_cluster | default({}))
+                     | to_json }};
       CDE={{ (ecs_cde_service | default({})).msg | default(ecs_cde_service | default({}) | to_json) }};
       CAI={{ (ecs_cai_workspace | default({})).msg
              | default(

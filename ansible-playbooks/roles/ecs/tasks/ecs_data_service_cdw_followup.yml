@@ -81,16 +81,30 @@
                 .get("configBlocks", [])
             )
             current = ""
+            current_format = ""
             for block in blocks:
                 if block.get("id") == "env":
+                    current_format = block.get("format", "")
                     current = (
                         block.get("content", {})
                         .get("keyValues", {})
                         .get("KRB5CCNAME", "")
                     )
                     break
-            print(current)
-            raise SystemExit(0 if current == desired else 3)
+            print(
+                json.dumps(
+                    {
+                        "format": current_format,
+                        "KRB5CCNAME": current,
+                    },
+                    sort_keys=True,
+                )
+            )
+            raise SystemExit(
+                0
+                if current_format == "ENV" and current == desired
+                else 3
+            )
           - "{{ ecs_cdw_workload_krb5ccname }}"
         stdin: "{{ ecs_cdw_dbc_config.stdout | to_json }}"
       register: ecs_cdw_dbc_ccache_check
@@ -120,6 +134,7 @@
               ]
           }}
       environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_dbc_ccache_update
       changed_when: true
       become: false
       delegate_to: "{{ ecs_data_services_delegate_host }}"
@@ -127,6 +142,78 @@
       when:
         - ecs_cdw_dbc_ccache_check is defined
         - ecs_cdw_dbc_ccache_check.rc | default(0) == 3
+
+    - name: Read converged database catalog service configuration
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_data_services_cdp_cli_prefix
+            + [
+                'dw',
+                'describe-dbc-config',
+                '--cluster-id',
+                ecs_cdw_cluster.cluster.id,
+                '--dbc-id',
+                ecs_cdw_catalog_id
+              ]
+          }}
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_dbc_config_converged
+      changed_when: false
+      until: ecs_cdw_dbc_config_converged.rc == 0
+      retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
+      delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_catalog_id | default('') | length > 0
+        - ecs_cdw_workload_file_ccache_reconcile | default(true) | bool
+
+    - name: Verify converged database catalog FILE credential cache configuration
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import json
+            import sys
+
+            desired = sys.argv[1]
+            payload = json.load(sys.stdin)
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            config = payload.get("config", payload)
+            blocks = (
+                config.get("commonConfigs", {})
+                .get("configBlocks", [])
+            )
+            matches = [
+                block
+                for block in blocks
+                if (
+                    block.get("id") == "env"
+                    and block.get("format") == "ENV"
+                    and (
+                        block.get("content", {})
+                        .get("keyValues", {})
+                        .get("KRB5CCNAME", "")
+                    ) == desired
+                )
+            ]
+            print(json.dumps(blocks, sort_keys=True))
+            raise SystemExit(0 if len(matches) == 1 else 3)
+          - "{{ ecs_cdw_workload_krb5ccname }}"
+        stdin: "{{ ecs_cdw_dbc_config_converged.stdout | to_json }}"
+      register: ecs_cdw_dbc_ccache_converged
+      changed_when: false
+      failed_when: ecs_cdw_dbc_ccache_converged.rc != 0
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_dbc_config_converged is defined
+        - ecs_cdw_dbc_config_converged.rc | default(1) == 0
 
     - name: Wait for default database catalog
       cloudera.cloud.dw_database_catalog_info:
