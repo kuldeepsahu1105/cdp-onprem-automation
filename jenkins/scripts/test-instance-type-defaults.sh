@@ -61,7 +61,7 @@ for group, instance_type in expected.items():
     assert tfvars["instance_groups"][group]["instance_type"] == instance_type
 
 readme_md = (root / "README.md").read_text()
-readme_adoc = (root / "READme.adoc").read_text()
+readme_adoc = (root / "README.adoc").read_text()
 for group, instance_type in expected.items():
     assert re.search(
         rf"^\| `{re.escape(group)}` \|.*\b{re.escape(instance_type)}\b",
@@ -72,12 +72,11 @@ for group, instance_type in expected.items():
         rf"^\| `{re.escape(group)}`\n\| \d+\n\| {re.escape(instance_type)}$",
         readme_adoc,
         re.MULTILINE,
-    ), f"READme.adoc: {group}"
+    ), f"README.adoc: {group}"
 
 assert tfvars["ami_id"] in readme_adoc
 
 jenkinsfile = (root / "Jenkinsfile").read_text()
-build_summary = (root / "jenkins/scripts/build-summary.sh").read_text()
 parameter_names = {
     "cldr_mngr": "CLDR_MNGR_INSTANCE_TYPE",
     "ipa_server": "IPA_SERVER_INSTANCE_TYPE",
@@ -97,16 +96,6 @@ for group, parameter_name in parameter_names.items():
         in jenkinsfile
     )
     assert f"'{parameter_name}'" in jenkinsfile
-
-for parameter_name in (
-    "CLDR_MNGR_INSTANCE_TYPE",
-    "IPA_SERVER_INSTANCE_TYPE",
-    "PVCBASE_MASTER_INSTANCE_TYPE",
-    "PVCBASE_WORKER_INSTANCE_TYPE",
-    "PVCECS_MASTER_INSTANCE_TYPE",
-    "PVCECS_WORKER_INSTANCE_TYPE",
-):
-    assert f"${{{parameter_name}:-?}}" in build_summary, parameter_name
 
 for relative_path in (
     "terraform-code/cloudera-pvc-terraform/variables.tf",

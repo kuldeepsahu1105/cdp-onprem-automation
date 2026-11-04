@@ -1,0 +1,79 @@
+{
+  "id": null,
+  "uid": "cldr-blackbox-probes",
+  "title": "Blackbox Exporter — HTTP/TCP Probes",
+  "description": "Endpoint reachability and TLS certificate horizon from blackbox_exporter probes. Provisioned by Ansible playbook 32.",
+  "tags": ["cloudera", "blackbox_exporter"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Probes failing",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }]
+          }
+        }
+      },
+      "targets": [{ "expr": "count(probe_success{job=~\"blackbox_.*\"} == 0) OR on() vector(0)", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "title": "Probes OK",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [{ "expr": "count(probe_success{job=~\"blackbox_.*\"} == 1)", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "title": "Probe success by target",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "min": 0, "max": 1 } },
+      "targets": [{
+        "expr": "probe_success{job=~\"blackbox_.*\"}",
+        "legendFormat": "{{job}} {{instance}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 4,
+      "title": "Probe duration (s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [{
+        "expr": "probe_duration_seconds{job=~\"blackbox_.*\"}",
+        "legendFormat": "{{instance}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "TLS cert expiry (days)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "d" } },
+      "targets": [{
+        "expr": "(probe_ssl_earliest_cert_expiry{job=~\"blackbox_.*\"} - time()) / 86400",
+        "legendFormat": "{{instance}}",
+        "refId": "A"
+      }]
+    }
+  ]
+}

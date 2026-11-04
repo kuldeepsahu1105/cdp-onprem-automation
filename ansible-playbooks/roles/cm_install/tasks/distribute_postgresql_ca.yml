@@ -1,0 +1,11 @@
+---
+- name: "Copy root.crt to {{ pg_client_crt_dir }}/root.crt"
+  copy:
+    src: /tmp/root.crt      # on control node
+    dest: "{{ pg_client_crt_dir }}/root.crt"
+    owner: root
+    group: root
+    mode: '0644'
+
+##### ==================== VERIFICATION TASKS ====================
+##### TLS Verify for Postgres DB

@@ -1,0 +1,4 @@
+---
+- name: End playbook when public repo mode is selected
+  ansible.builtin.meta: end_play
+  when: cm_repo_source != 'internal'

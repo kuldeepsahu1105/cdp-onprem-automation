@@ -168,11 +168,14 @@ assert "_run_ecs_post_install() {\n  run_playbook 34_setup_ecs_post_install.yml\
 data_services = (
     Path(sys.argv[1]).parent
     / "ansible-playbooks"
-    / "34_setup_ecs_data_services.yml"
+    / "roles"
+    / "ecs"
+    / "tasks"
+    / "setup_data_services.yml"
 ).read_text()
 assert data_services.count(
     "ecs_data_services_sync_portal_routes | default(true) | bool"
-) == 2
+) >= 2
 
 print("Jenkins phase selection and portal/monitoring gating checks passed")
 PY

@@ -14,7 +14,7 @@ root = Path(sys.argv[1])
 tasks = yaml.safe_load(
     (
         root
-        / "ansible-playbooks/common_tasks/ecs_data_service_cdw_followup.yml"
+        / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_followup.yml"
     ).read_text()
 )
 

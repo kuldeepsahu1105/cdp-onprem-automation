@@ -1,0 +1,81 @@
+---
+- name: Set IPA Server fact
+  ansible.builtin.set_fact:
+    ipaserver: "ipaserver.{{ ipaserver_domain }}"
+
+- name: Check if IPA client is configured
+  ansible.builtin.stat:
+    path: /etc/ipa/default.conf
+  register: ipa_client_config
+
+- name: Install and configure FreeIPA client
+  ansible.builtin.command: >
+    ipa-client-install --unattended --force-join --force
+    --realm={{ ipaserver_realm }} --domain={{ ipaserver_domain }} --server="{{ ipaserver }}"
+    --principal={{ ipaadmin_principal }} --password={{ ipaadmin_password }}
+    --mkhomedir --enable-dns-updates --ntp-server=pool.ntp.org
+  register: ipa_client_output
+  changed_when: ipa_client_output.rc == 0 and not ipa_client_config.stat.exists
+  when: not ipa_client_config.stat.exists
+
+- name: Print IPA client installation output
+  ansible.builtin.debug:
+    msg: "{{ ipa_client_output.stderr_lines }}"
+  when: ipa_client_output is defined and not ipa_client_config.stat.exists
+
+- name: Ensure FreeIPA client CA bundle is present after enrollment
+  ansible.builtin.import_tasks: ensure_freeipa_client_ca.yml
+
+- name: Verify complete FreeIPA client enrollment
+  ansible.builtin.import_tasks: verify_freeipa_client_enrollment.yml
+
+- name: Ensure Kerberos ticket is available (Ansible FILE ccache)
+  ansible.builtin.command: klist
+  register: klist_output
+  changed_when: false
+  failed_when: false
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+
+- name: Obtain Kerberos ticket if missing
+  ansible.builtin.shell: kinit -c "FILE:{{ ipa_kerberos_ccache_path }}" "{{ ipaadmin_principal }}"
+  args:
+    stdin: "{{ ipaadmin_password }}"
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+  register: kinit_result
+  changed_when: kinit_result.rc == 0
+  failed_when: false
+  no_log: true
+  when: >-
+    ('No credentials cache found' in (klist_output.stderr | default('')))
+    or ('No credentials cache found' in (klist_output.stdout | default('')))
+    or (klist_output.rc | default(0) | int != 0)
+
+- name: Verify IPA domain enrollment
+  ansible.builtin.command: ipa ping
+  register: ipa_ping
+  changed_when: false
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+  failed_when: >-
+    'did not receive Kerberos credentials' in (
+      (ipa_ping.stderr | default('')) ~ (ipa_ping.stdout | default(''))
+    )
+
+- name: List Current Kerberos Ticket
+  ansible.builtin.command: klist -e
+  register: kerberos_ticket
+  changed_when: false
+  environment:
+    KRB5CCNAME: "FILE:{{ ipa_kerberos_ccache_path }}"
+
+- name: Print Kerberos Ticket Details
+  debug:
+    msg: "{{ kerberos_ticket.stdout.replace('\t', '    ').split('\n') }}"
+
+- name: Restore managed resolver configuration after FreeIPA enrollment
+  ansible.builtin.import_tasks: configure_resolv_conf.yml
+
+- name: Verify resolver configuration after FreeIPA enrollment
+  ansible.builtin.import_tasks: verify_identity_dns.yml

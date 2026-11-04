@@ -1,0 +1,169 @@
+---
+# Optional ECS control plane LDAP (FreeIPA or AD). Runs from the ECS master.
+
+- name: LDAP | Sync identity provider to ECS control plane
+  when: ecs_ldap_sync_effective | default(false) | bool
+  block:
+    - name: LDAP | Read FreeIPA CA certificate from ipaserver
+      ansible.builtin.slurp:
+        src: /etc/ipa/ca.crt
+      register: ecs_freeipa_ca_cert
+      delegate_to: "{{ ipaserver_inventory_host }}"
+      connection: ssh
+      become: true
+      when: identity_provider_effective == 'freeipa'
+
+    - name: LDAP | Decode FreeIPA CA certificate
+      ansible.builtin.set_fact:
+        ecs_freeipa_ca_pem: "{{ ecs_freeipa_ca_cert.content | b64decode | trim }}"
+      when: identity_provider_effective == 'freeipa'
+
+    - name: LDAP | Validate FreeIPA CA PEM
+      ansible.builtin.assert:
+        that:
+          - "'-----BEGIN CERTIFICATE-----' in ecs_freeipa_ca_pem"
+          - "'-----END CERTIFICATE-----' in ecs_freeipa_ca_pem"
+        fail_msg: /etc/ipa/ca.crt on the FreeIPA server is not a PEM certificate.
+      when: identity_provider_effective == 'freeipa'
+
+    - name: LDAP | Set provider argv for FreeIPA
+      ansible.builtin.set_fact:
+        ecs_ldap_provider_argv_extra: >-
+          {{
+            [
+              '--url', 'ldaps://' + ipa_kdc_host + ':636',
+              '--user-search-base', 'cn=users,cn=accounts,' + ipa_ldap_dc_suffix,
+              '--user-search-filter', '(uid={0})',
+              '--group-search-base', 'cn=groups,cn=accounts,' + ipa_ldap_dc_suffix,
+              '--group-search-filter', '(&(member={0})(objectClass=posixgroup)(!(|(cn=admins)(cn=ipausers))))',
+              '--username-mapping-attribute', 'uid',
+              '--email-mapping-attribute', 'mail',
+              '--first-name-mapping-attribute', 'givenName',
+              '--last-name-mapping-attribute', 'sn',
+              '--group-name-mapping-attribute', 'cn',
+              '--bind-dn', 'uid=' + ipaadmin_principal + ',cn=users,cn=accounts,' + ipa_ldap_dc_suffix,
+              '--bind-password', ipaadmin_password,
+              '--tls-ca-certificates', ecs_freeipa_ca_pem,
+              '--skip-group-sync-on-login'
+            ]
+          }}
+      when: identity_provider_effective == 'freeipa'
+      no_log: true
+
+    - name: LDAP | Set provider argv for Active Directory
+      ansible.builtin.set_fact:
+        ecs_ldap_provider_argv_extra: >-
+          {{
+            [
+              '--url', cm_ldap_url,
+              '--user-search-base', cm_ldap_user_search_base,
+              '--user-search-filter', cm_ldap_user_search_filter,
+              '--group-search-base', cm_ldap_group_search_base,
+              '--group-search-filter', cm_ldap_group_search_filter,
+              '--username-mapping-attribute', 'sAMAccountName',
+              '--bind-dn', cm_ldap_bind_dn,
+              '--bind-password', cm_ldap_bind_password,
+              '--skip-group-sync-on-login'
+            ]
+          }}
+      when: identity_provider_effective == 'ad'
+      no_log: true
+
+    - name: LDAP | Update control plane LDAP provider
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_remote_cdp_cli_prefix
+            + ['iam', 'update-ldap-provider',
+             '--ldap-provider-name', ecs_ldap_provider_name]
+            + ecs_ldap_provider_argv_extra
+          }}
+      environment: "{{ ecs_remote_cdp_cli_environment }}"
+      register: ecs_ldap_update
+      changed_when: false
+      failed_when: false
+      no_log: true
+      become: false
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+      connection: ssh
+
+    - name: LDAP | Report provider update failure
+      ansible.builtin.fail:
+        msg: >-
+          ECS LDAP provider update failed from the ECS master (rc={{ ecs_ldap_update.rc }}):
+          {{ ecs_ldap_update.stderr | default(ecs_ldap_update.stdout) }}
+      when:
+        - ecs_ldap_update.rc != 0
+        - "'not found' not in (ecs_ldap_update.stderr | default('') | lower)"
+
+    - name: LDAP | Create control plane LDAP provider when missing
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_remote_cdp_cli_prefix
+            + ['iam', 'create-ldap-provider',
+             '--ldap-provider-name', ecs_ldap_provider_name]
+            + ecs_ldap_provider_argv_extra
+          }}
+      environment: "{{ ecs_remote_cdp_cli_environment }}"
+      register: ecs_ldap_create
+      failed_when: false
+      no_log: true
+      when:
+        - ecs_ldap_update.rc != 0
+        - "'not found' in (ecs_ldap_update.stderr | default('') | lower)"
+      become: false
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+      connection: ssh
+
+    - name: LDAP | Report provider create failure
+      ansible.builtin.fail:
+        msg: >-
+          ECS LDAP provider creation failed from the ECS master (rc={{ ecs_ldap_create.rc }}):
+          {{ ecs_ldap_create.stderr | default(ecs_ldap_create.stdout) }}
+      when:
+        - ecs_ldap_create is defined
+        - not (ecs_ldap_create.skipped | default(false))
+        - ecs_ldap_create.rc | default(0) != 0
+
+    - name: LDAP | Resolve configured provider CRN
+      ansible.builtin.set_fact:
+        ecs_ldap_provider_crn: >-
+          {{
+            (
+              (
+                ecs_ldap_update.stdout
+                if ecs_ldap_update.rc == 0
+                else ecs_ldap_create.stdout
+              )
+              | from_json
+            ).ldapProvider.crn
+          }}
+
+    - name: LDAP | Read default identity provider
+      ansible.builtin.command:
+        argv: "{{ ecs_remote_cdp_cli_prefix + ['iam', 'get-default-identity-provider'] }}"
+      environment: "{{ ecs_remote_cdp_cli_environment }}"
+      register: ecs_ldap_default_identity_provider
+      changed_when: false
+      become: false
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+      connection: ssh
+
+    - name: LDAP | Set LDAP provider as default identity provider
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_remote_cdp_cli_prefix
+            + [
+              'iam', 'set-default-identity-provider',
+              '--name-or-crn', ecs_ldap_provider_crn
+            ]
+          }}
+      environment: "{{ ecs_remote_cdp_cli_environment }}"
+      when: >-
+        (ecs_ldap_default_identity_provider.stdout | from_json).crn
+        != ecs_ldap_provider_crn
+      become: false
+      delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+      connection: ssh

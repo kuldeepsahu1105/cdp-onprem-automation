@@ -1,0 +1,3 @@
+---
+- name: Detect and validate identity provider
+  ansible.builtin.import_tasks: detect_identity_provider.yml

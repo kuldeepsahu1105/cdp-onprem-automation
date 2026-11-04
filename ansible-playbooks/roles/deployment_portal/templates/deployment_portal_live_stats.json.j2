@@ -1,0 +1,1 @@
+{{ deployment_portal_live_stats | default(deployment_portal_context.live_stats | default({})) | to_nice_json }}

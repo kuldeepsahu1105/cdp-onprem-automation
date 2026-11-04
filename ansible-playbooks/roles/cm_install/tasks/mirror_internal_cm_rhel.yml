@@ -1,0 +1,153 @@
+---
+- name: Set CDH and Spark version variables for RPM mirror
+  ansible.builtin.set_fact:
+    os_version: "{{ ansible_distribution | lower }}{{ ansible_distribution_major_version }}"
+    cm_major_version: "{{ cm_version.split('.')[:3] | join('.') }}"
+    cdh7: "{{ cdh_repo_product }}"
+    download_spark: >-
+      {{
+        (spark_version is defined and spark_version | length > 0)
+        and not (cdh_version is version(cdh_spark_bundled_min_version, '>='))
+      }}
+    spark3: "{{ 'spark' + (spark_version.split('.')[0] | string) if (spark_version is defined and spark_version | length > 0) else '' }}"
+
+- name: Create RPM mirror directories
+  ansible.builtin.file:
+    path: "{{ cldr_repos_path }}/{{ item }}"
+    state: directory
+  loop: >-
+    {{
+      [
+        'cloudera-manager',
+        'cloudera-manager/cm' + cm_major_version + '/' + os_version + '/yum/RPMS/' + ansible_architecture + '/',
+        cdh7 + '/' + cdh_version
+      ]
+      + (['spark3/' + spark_version] if download_spark else [])
+    }}
+
+- name: Download Cloudera Manager yum metadata from archive
+  ansible.builtin.get_url:
+    url: >-
+      https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_repo_version_path | default(cm_version) }}/
+      {%- if item in ['allkeys.asc', 'allkeyssha256.asc'] -%}
+      {{ item }}
+      {%- else -%}
+      {{ os_version }}/yum/{{ item }}
+      {%- endif -%}
+    dest: "{{ cldr_repos_path }}/cloudera-manager/{{ item }}"
+    url_username: "{{ cm_repo_username }}"
+    url_password: "{{ cm_repo_password }}"
+    force_basic_auth: true
+  loop:
+    - cloudera-manager.repo
+    - cloudera-manager-trial.repo
+    - RPM-GPG-KEY-cloudera
+    - allkeys.asc
+    - allkeyssha256.asc
+
+- name: Define required Cloudera Manager RPM packages
+  ansible.builtin.set_fact:
+    cm_rpm_package_names:
+      - cloudera-manager-agent
+      - cloudera-manager-daemons
+      - cloudera-manager-server
+      - cloudera-manager-server-db-2
+
+- name: Read Cloudera Manager RPM directory listing
+  ansible.builtin.uri:
+    url: >-
+      https://archive.cloudera.com/p/cm7/{{
+      cm_repo_version_path | default(cm_version) }}/{{
+      os_version }}/yum/RPMS/{{ ansible_architecture }}/
+    method: GET
+    user: "{{ cm_repo_username }}"
+    password: "{{ cm_repo_password }}"
+    force_basic_auth: true
+    return_content: true
+    status_code: [200]
+  register: cm_rpm_directory_listing
+  no_log: true
+
+- name: Resolve Cloudera Manager RPM filenames from repository listing
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import html
+        import json
+        import re
+        import sys
+
+        listing = html.unescape(sys.stdin.read())
+        version, el_major, architecture, *packages = sys.argv[1:]
+        resolved = []
+        for package in packages:
+            pattern = re.compile(
+                rf'href=["\'](?:[^"\']*/)?'
+                rf'({re.escape(package)}-{re.escape(version)}-[0-9]+'
+                rf'\.el{re.escape(el_major)}\.{re.escape(architecture)}\.rpm)'
+                rf'["\']'
+            )
+            matches = sorted(set(pattern.findall(listing)))
+            if len(matches) != 1:
+                raise SystemExit(
+                    f"expected one RPM for {package} {version}, found {matches}"
+                )
+            resolved.append(matches[0])
+        print(json.dumps(resolved))
+      - "{{ cm_version }}"
+      - "{{ ansible_distribution_major_version }}"
+      - "{{ ansible_architecture }}"
+      - "{{ cm_rpm_package_names[0] }}"
+      - "{{ cm_rpm_package_names[1] }}"
+      - "{{ cm_rpm_package_names[2] }}"
+      - "{{ cm_rpm_package_names[3] }}"
+    stdin: "{{ cm_rpm_directory_listing.content }}"
+  register: cm_rpm_filename_resolution
+  changed_when: false
+
+- name: Use dynamically resolved Cloudera Manager RPM filenames
+  ansible.builtin.set_fact:
+    cm_rpm_filenames_effective: "{{ cm_rpm_filename_resolution.stdout | from_json }}"
+
+- name: Require all Cloudera Manager RPM filenames
+  ansible.builtin.assert:
+    that:
+      - cm_rpm_filenames_effective | length == cm_rpm_package_names | length
+    fail_msg: >-
+      Could not resolve all required Cloudera Manager {{ cm_version }} RPMs.
+      Repository directory discovery did not return one exact build for every
+      required package.
+
+- name: Download Cloudera Manager RPMs from archive
+  ansible.builtin.get_url:
+    url: "https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/cm7/{{ cm_repo_version_path | default(cm_version) }}/{{ os_version }}/yum/RPMS/{{ ansible_architecture }}/{{ item }}"
+    dest: "{{ cldr_repos_path }}/cloudera-manager/cm{{ cm_major_version }}/{{ os_version }}/yum/RPMS/{{ ansible_architecture }}/"
+    url_username: "{{ cm_repo_username }}"
+    url_password: "{{ cm_repo_password }}"
+    force_basic_auth: true
+  loop: "{{ cm_rpm_filenames_effective }}"
+
+- name: Download CDH parcel from archive (RPM mirror host)
+  ansible.builtin.get_url:
+    url: "https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/{{ cdh7 }}/{{ cdh_version }}/parcels/{{ cdh_parcel_filename }}"
+    dest: "{{ cldr_repos_path }}/{{ cdh7 }}/{{ cdh_version }}/"
+    url_username: "{{ cm_repo_username }}"
+    url_password: "{{ cm_repo_password }}"
+    force_basic_auth: true
+
+- name: Download Spark parcel from archive
+  ansible.builtin.get_url:
+    url: "https://{{ cm_repo_username }}:{{ cm_repo_password }}@archive.cloudera.com/p/{{ spark3 }}/{{ spark_version }}/parcels/SPARK3-{{ spark_minor_version }}-1-1.{{ spark_numeric_version }}-{{ cdh_parcel_os_suffix_effective }}.parcel"
+    dest: "{{ cldr_repos_path }}/{{ spark3 }}/{{ spark_version }}/"
+    url_username: "{{ cm_repo_username }}"
+    url_password: "{{ cm_repo_password }}"
+    force_basic_auth: true
+  when: download_spark
+
+- name: Run createrepo for internal CM yum mirror
+  ansible.builtin.command: "createrepo --baseurl http://{{ ansible_default_ipv4.address }}/cloudera-repos/cloudera-manager/ {{ cldr_repos_path }}/cloudera-manager/"
+  args:
+    chdir: "{{ cldr_repos_path }}/cloudera-manager/"
+  changed_when: true

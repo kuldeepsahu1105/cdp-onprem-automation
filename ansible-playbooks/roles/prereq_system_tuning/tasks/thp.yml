@@ -1,0 +1,36 @@
+---
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/set_os_facts.yml"
+
+- name: Disable Transparent Huge Pages (THP) at runtime
+  ansible.builtin.shell: "{{ item }}"
+  with_items:
+    - "echo never > /sys/kernel/mm/transparent_hugepage/enabled"
+    - "echo never > /sys/kernel/mm/transparent_hugepage/defrag"
+
+- name: Deploy rc.local template
+  ansible.builtin.template:
+    src: rc.local.j2
+    dest: "{{ os.rc_local_path }}"
+    mode: "0755"
+
+- name: Ensure rc.local is executable
+  ansible.builtin.file:
+    path: "{{ os.rc_local_path }}"
+    mode: "0755"
+
+- name: Enable rc-local service (Ubuntu/Debian)
+  ansible.builtin.systemd:
+    name: rc-local
+    enabled: true
+    state: started
+  when: ansible_os_family == "Debian"
+  failed_when: false
+
+- name: Display rc.local content
+  ansible.builtin.command: cat {{ os.rc_local_path }}
+  register: rc_local_content
+
+- name: Show rc.local contents
+  ansible.builtin.debug:
+    msg: "{{ rc_local_content.stdout.replace('\t', '    ').split('\n') }}"

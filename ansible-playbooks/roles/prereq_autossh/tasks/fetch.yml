@@ -1,0 +1,12 @@
+---
+- name: Fetch private key to controller
+  ansible.builtin.fetch:
+    src: "{{ private_key_path }}"
+    dest: "/tmp/ansible_ssh_keys/id_rsa"
+    flat: yes
+
+- name: Fetch public key to controller
+  ansible.builtin.fetch:
+    src: "{{ public_key_path }}"
+    dest: "/tmp/ansible_ssh_keys/id_rsa.pub"
+    flat: yes

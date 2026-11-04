@@ -1,29 +1,5 @@
 ---
-- name: Data Services SDX | Read CM API version
-  ansible.builtin.uri:
-    url: >-
-      https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/version
-    method: GET
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: true
-    validate_certs: false
-    status_code: [200]
-    return_content: true
-  register: ecs_data_services_cm_api_version
-  changed_when: false
-  delegate_to: "{{ cm_manager_inventory_host }}"
-  connection: ssh
-
-- name: Data Services SDX | Resolve CM cluster API URL
-  ansible.builtin.set_fact:
-    ecs_data_services_cm_cluster_api_url: >-
-      https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/{{
-      ecs_data_services_cm_api_version.content | trim }}/clusters/{{
-      cdh_basecluster_name | urlencode }}
-
-- name: Data Services SDX | Ensure base cluster Data Context
-  ansible.builtin.include_tasks: ensure_base_cluster_data_context.yml
-  vars:
-    cm_cluster_module_api_url: "{{ ecs_data_services_cm_cluster_api_url }}"
-    cm_cluster_module_delegate_to: "{{ cm_manager_inventory_host }}"
+- name: Compatibility entry point for ECS base Data Context gate
+  ansible.builtin.import_role:
+    name: ecs
+    tasks_from: ecs_ensure_base_data_context

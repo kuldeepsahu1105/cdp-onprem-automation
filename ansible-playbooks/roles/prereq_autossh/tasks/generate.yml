@@ -1,0 +1,34 @@
+---
+- name: Ensure .ssh directory exists
+  ansible.builtin.file:
+    path: "{{ ssh_dir }}"
+    state: directory
+    mode: "0700"
+    owner: "{{ ssh_user }}"
+    group: "{{ ssh_user }}"
+
+- name: Check if SSH private key exists
+  ansible.builtin.stat:
+    path: "{{ private_key_path }}"
+  register: private_key_stat
+
+- name: Generate SSH key pair if not exists
+  community.crypto.openssh_keypair:
+    path: "{{ private_key_path }}"
+    type: rsa
+    size: 2048
+    owner: "{{ ssh_user }}"
+    group: "{{ ssh_user }}"
+    mode: "0600"
+  when: not private_key_stat.stat.exists
+
+- name: Read public key from ipaserver
+  ansible.builtin.slurp:
+    src: "{{ public_key_path }}"
+  register: pubkey_raw
+
+- name: Ensure public key exists in authorized_keys on ipaserver
+  ansible.posix.authorized_key:
+    user: "{{ ssh_user }}"
+    key: "{{ pubkey_raw.content | b64decode }}"
+    state: present

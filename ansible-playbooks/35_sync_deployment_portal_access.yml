@@ -59,7 +59,9 @@
           Run the PORTAL stage once before credential-only synchronization.
 
     - name: Sync operator credentials only
-      ansible.builtin.import_tasks: common_tasks/sync_deployment_portal_access.yml
+      ansible.builtin.import_role:
+        name: deployment_portal
+        tasks_from: sync_deployment_portal_access
 
     - name: Report credential-only portal sync
       ansible.builtin.debug:

@@ -1,0 +1,4 @@
+---
+- name: End playbook for Active Directory deployments
+  ansible.builtin.meta: end_play
+  when: identity_provider_effective == 'ad'

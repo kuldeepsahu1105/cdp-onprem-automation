@@ -8,16 +8,27 @@ from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
-caddy = (
-    root / "ansible-playbooks/templates/deployment_portal_Caddyfile.j2"
-).read_text()
-monitoring_env = (
-    root / "ansible-playbooks/templates/monitoring_docker-compose.env.j2"
+role_templates = root / "ansible-playbooks/roles/deployment_portal/templates"
+compat_templates = root / "ansible-playbooks/templates"
+caddy = (role_templates / "deployment_portal_Caddyfile.j2").read_text()
+compat_caddy = (compat_templates / "deployment_portal_Caddyfile.j2").read_text()
+monitoring_env = (role_templates / "monitoring_docker-compose.env.j2").read_text()
+compat_monitoring_env = (
+    compat_templates / "monitoring_docker-compose.env.j2"
 ).read_text()
 verify = (
+    root
+    / "ansible-playbooks/roles/deployment_portal/tasks"
+    / "verify_deployment_portal_monitoring.yml"
+).read_text()
+compat_verify = (
     root / "ansible-playbooks/common_tasks/verify_deployment_portal_monitoring.yml"
 ).read_text()
 
+assert caddy == compat_caddy
+assert monitoring_env == compat_monitoring_env
+assert "name: deployment_portal" in compat_verify
+assert "tasks_from: verify_deployment_portal_monitoring" in compat_verify
 assert (
     "{% set _monitoring_path_handler = 'handle_path' "
     "if (caddy_vhost_enabled | default(false) | bool) else 'handle' %}"

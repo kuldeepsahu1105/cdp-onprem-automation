@@ -1,0 +1,12 @@
+---
+- name: Require Active Directory mode
+  ansible.builtin.assert:
+    that:
+      - identity_provider_effective == 'ad'
+      - ad_domain | length > 0
+      - ad_kdc_host | length > 0
+      - ad_join_user | length > 0
+      - ad_join_password | length > 0
+    fail_msg: >-
+      Active Directory not detected. Leave [ipaserver] empty in inventory
+      and set ad_domain, ad_kdc_host, ad_join_user, ad_join_password.

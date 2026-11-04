@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for CM security assert postgresql installed
+  ansible.builtin.import_role:
+    name: cm_security
+    tasks_from: assert_postgresql_installed

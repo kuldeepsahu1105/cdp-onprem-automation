@@ -1,0 +1,25 @@
+---
+- name: Generate SQL script from template
+  ansible.builtin.template:
+    src: templates/create_cm_dbs.sql.j2 # Jinja2 template
+    dest: /tmp/init.sql
+    owner: postgres
+    group: postgres
+    mode: "0644"
+
+- name: Run SQL script on PostgreSQL
+  ansible.builtin.shell: |
+    PGPASSWORD={{ postgres_password }} psql -v ON_ERROR_STOP=1 -h {{ ansible_fqdn }} -p {{ postgres_port }} -U {{ postgres_user }} -d {{ postgres_db }} -f /tmp/init.sql
+  register: sql_output
+  changed_when: false
+  failed_when: >
+    (sql_output.rc | default(1) | int != 0) or
+    ('ERROR' in (sql_output.stderr | default('')))
+
+- name: Display SQL Execution Output
+  ansible.builtin.debug:
+    msg: "{{ sql_output.stdout.replace('\t', '    ').split('\n') }}"
+
+- name: Display SQL Execution STDERR Output
+  ansible.builtin.debug:
+    msg: "{{ sql_output.stderr.replace('\t', '    ').split('\n') }}"

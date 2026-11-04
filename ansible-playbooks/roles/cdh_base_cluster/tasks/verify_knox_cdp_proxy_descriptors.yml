@@ -1,0 +1,91 @@
+---
+# After Knox is STARTED, CDP proxy topologies require Knox→CM HTTPS trust (ssl_client_truststore_*).
+# CM populates gateway_descriptor_cdp_proxy* role configs when discovery succeeds.
+
+- name: Read Knox service state for descriptor verification
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name }}/services/knox?view=summary
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_knox_descriptor_service
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Read Knox CDP proxy descriptor configuration
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/knox/roleConfigGroups/{{ base_cluster_knox_gateway_group }}/config?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_knox_descriptor_config
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Resolve Knox CDP proxy descriptor values
+  ansible.builtin.set_fact:
+    base_cluster_knox_descriptor_cdp_proxy: >-
+      {{
+        (
+          base_cluster_knox_descriptor_config.json['items'] | default([])
+          | selectattr('name', 'equalto', 'gateway_descriptor_cdp_proxy')
+          | map(attribute='value')
+          | first
+        )
+        | default(
+            (
+              base_cluster_knox_descriptor_config.json['items'] | default([])
+              | selectattr('name', 'equalto', 'gateway_descriptor_cdp_proxy')
+              | map(attribute='default')
+              | first
+            ),
+            true
+          )
+        | default('', true)
+        | trim
+      }}
+    base_cluster_knox_descriptor_cdp_proxy_token: >-
+      {{
+        (
+          base_cluster_knox_descriptor_config.json['items'] | default([])
+          | selectattr('name', 'equalto', 'gateway_descriptor_cdp_proxy_token')
+          | map(attribute='value')
+          | first
+        )
+        | default(
+            (
+              base_cluster_knox_descriptor_config.json['items'] | default([])
+              | selectattr('name', 'equalto', 'gateway_descriptor_cdp_proxy_token')
+              | map(attribute='default')
+              | first
+            ),
+            true
+          )
+        | default('', true)
+        | trim
+      }}
+
+- name: Require Knox CDP proxy descriptors after gateway start
+  ansible.builtin.assert:
+    that:
+      - base_cluster_knox_descriptor_cdp_proxy | length > 0
+      - base_cluster_knox_descriptor_cdp_proxy_token | length > 0
+    fail_msg: >-
+      Knox is running but CM has not populated gateway_descriptor_cdp_proxy / _token
+      (CDP topologies cdp-proxy, cdp-proxy-token, cdp-proxy-api, cdp-datashare-access).
+      Check Knox gateway.log for PKIX/truststore errors and confirm
+      ssl_client_truststore_location points at
+      {{ base_cluster_knox_autotls_truststore_path }} on the Knox host. Re-run
+      27_setup_cm_autotls.yml then 31_setup_base_cluster.yml.
+  when: base_cluster_knox_descriptor_service.json.serviceState | default('') == 'STARTED'

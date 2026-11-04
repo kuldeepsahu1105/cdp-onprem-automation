@@ -1,0 +1,133 @@
+---
+# Ensure FreeIPA KDC (and core IPA) services are running before CM Kerberos integration.
+# Prefer systemctl start ipa.service on RHEL; fall back to ipactl start (FreeIPA docs).
+
+- name: IPA KDC — check whether FreeIPA server default.conf exists
+  ansible.builtin.stat:
+    path: /etc/ipa/default.conf
+  register: ipa_kdc_default_conf
+
+- name: IPA KDC — read IPA service status
+  ansible.builtin.command: ipactl status
+  register: ipa_kdc_ipactl_status
+  changed_when: false
+  failed_when: false
+
+- name: IPA KDC — derive combined status text for parsing
+  ansible.builtin.set_fact:
+    ipa_kdc_status_text: >-
+      {{
+        (ipa_kdc_ipactl_status.stdout | default(''))
+        ~ (ipa_kdc_ipactl_status.stderr | default(''))
+      }}
+
+- name: IPA KDC — detect ipactl "not configured" (permanent; do not retry)
+  ansible.builtin.set_fact:
+    ipa_kdc_ipactl_not_configured: >-
+      {{
+        (ipa_kdc_ipactl_status.rc | default(1) | int) == 4
+        or ipa_kdc_status_text is search('IPA is not configured', ignorecase=True)
+      }}
+
+- name: IPA KDC — skip when FreeIPA was never installed on this host
+  ansible.builtin.meta: end_host
+  when:
+    - not (ipa_kdc_default_conf.stat.exists | default(false))
+    - ipa_kdc_ipactl_not_configured | bool
+
+- name: IPA KDC — fail fast when IPA is not configured (stale default.conf or skipped install)
+  ansible.builtin.fail:
+    msg: >-
+      FreeIPA on {{ inventory_hostname }} is not configured (ipactl rc={{
+        ipa_kdc_ipactl_status.rc | default('?')
+      }}: {{ ipa_kdc_status_text | trim | truncate(200, True, '') }}).
+      Re-run: ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}
+      If debris remains: on ipaserver as root run ipa-server-install --uninstall --unattended
+      (add --force if needed); see /var/log/ipaserver-uninstall.log, then playbook 12.
+  when: ipa_kdc_ipactl_not_configured | bool
+
+- name: IPA KDC — detect whether core IPA services need a start
+  ansible.builtin.set_fact:
+    ipa_kdc_services_need_start: >-
+      {{
+        not (ipa_kdc_skip_start_after_install | default(false) | bool)
+        and (
+          ipa_kdc_ipactl_status.rc | default(1) != 0
+          or not (ipa_kdc_status_text is search('Directory Service.*RUNNING'))
+          or not (ipa_kdc_status_text is search('krb5kdc.*RUNNING'))
+        )
+      }}
+
+- name: IPA KDC — start IPA stack via systemd (RHEL preferred)
+  ansible.builtin.systemd:
+    name: ipa
+    state: started
+    enabled: true
+  register: ipa_kdc_systemd_ipa_start
+  failed_when: false
+  when: ipa_kdc_services_need_start | bool
+
+- name: IPA KDC — start IPA when services are not all running (ipactl)
+  ansible.builtin.command: ipactl start
+  register: ipa_kdc_ipactl_start
+  changed_when: ipa_kdc_ipactl_start.rc == 0
+  failed_when: false
+  when: ipa_kdc_services_need_start | bool
+
+- name: IPA KDC — wait for krb5kdc systemd unit (FreeIPA KDC)
+  ansible.builtin.systemd:
+    name: krb5kdc
+    state: started
+    enabled: true
+  register: ipa_kdc_krb5kdc_unit
+  failed_when: false
+
+- name: IPA KDC — re-check IPA service status after start
+  ansible.builtin.command: ipactl status
+  register: ipa_kdc_ipactl_status_after
+  changed_when: false
+  retries: 12
+  delay: 10
+  until: >-
+    (ipa_kdc_ipactl_status_after.rc | default(1) | int) == 0
+    or (ipa_kdc_ipactl_status_after.rc | default(1) | int) == 4
+    or (
+      ((ipa_kdc_ipactl_status_after.stdout | default(''))
+       ~ (ipa_kdc_ipactl_status_after.stderr | default('')))
+      is search('IPA is not configured', ignorecase=True)
+    )
+
+- name: IPA KDC — derive post-start status text
+  ansible.builtin.set_fact:
+    ipa_kdc_status_text_after: >-
+      {{
+        (ipa_kdc_ipactl_status_after.stdout | default(''))
+        ~ (ipa_kdc_ipactl_status_after.stderr | default(''))
+      }}
+
+- name: IPA KDC — detect not-configured after start attempts
+  ansible.builtin.set_fact:
+    ipa_kdc_ipactl_not_configured_after: >-
+      {{
+        (ipa_kdc_ipactl_status_after.rc | default(1) | int) == 4
+        or ipa_kdc_status_text_after is search('IPA is not configured', ignorecase=True)
+      }}
+
+- name: IPA KDC — abort when ipactl still reports not configured after start attempts
+  ansible.builtin.fail:
+    msg: >-
+      FreeIPA on {{ inventory_hostname }} remains not configured after start attempts.
+      On ipaserver: ipa-server-install --uninstall --unattended; inspect /var/log/ipaserver-uninstall.log.
+      Re-run: ansible-playbook -i inventory.ini 12_setup_freeipa_server.yml --limit {{ inventory_hostname }}
+  when: ipa_kdc_ipactl_not_configured_after | bool
+
+- name: IPA KDC — assert KDC and core IPA services are running
+  ansible.builtin.assert:
+    that:
+      - ipa_kdc_ipactl_status_after.rc == 0
+      - ipa_kdc_status_text_after is search('Directory Service.*RUNNING')
+      - ipa_kdc_status_text_after is search('krb5kdc.*RUNNING')
+    fail_msg: >-
+      FreeIPA KDC is not running on {{ inventory_hostname }}.
+      Inspect: ipactl status; systemctl status ipa krb5kdc.
+      Re-run 12_setup_freeipa_server.yml or start services with: systemctl start ipa

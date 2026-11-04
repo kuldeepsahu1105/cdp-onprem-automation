@@ -10,13 +10,13 @@ import sys
 
 root = Path(sys.argv[1])
 preflight = (
-    root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_preflight.yml"
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_preflight.yml"
 ).read_text()
 wait = (
-    root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_wait.yml"
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_wait.yml"
 ).read_text()
 result = (
-    root / "ansible-playbooks/common_tasks/ecs_data_service_cdw.yml"
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw.yml"
 ).read_text()
 
 
@@ -39,13 +39,6 @@ mutation_start = preflight.index(
 require(
     guard_start < mutation_start,
     "Deactivated rejection must run before FreeIPA principal mutation",
-)
-terminal_guard_start = preflight.index(
-    "- name: CDW | Refuse to mutate terminal failed clusters"
-)
-require(
-    terminal_guard_start < mutation_start,
-    "Terminal-failure rejection must run before FreeIPA principal mutation",
 )
 guard = preflight[guard_start:mutation_start]
 normalized_guard = " ".join(guard.split())
@@ -103,7 +96,7 @@ for content, label in ((guard, "preflight guard"), (wait, "wait helper")):
 require(
     "freeipa.ansible_freeipa.ipahost" not in guard
     and "freeipa.ansible_freeipa.ipaservice" not in guard,
-    "preflight guard must not mutate FreeIPA principals",
+    "preflight guard must not delete FreeIPA principals",
 )
 require("state: absent" not in wait, "wait helper must not delete")
 

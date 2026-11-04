@@ -11,12 +11,12 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 1 | VALIDATE | — | (outside Ansible) |
 | 2 | TERRAFORM | — | inventory generation |
 | 3 | PREREQS | `1` / `prereq` | SSH: `00_setup_ssh_preqs` → `01`–`09` (`00` only on PREREQS / `all`; override with `ANSIBLE_RUN_SSH_PREQS`) |
-| 4 | PORTAL | `portal` | `10_setup_deployment_portal`; optional monitoring/exporter work runs only when MONITORING is also selected |
-| 5 | MONITORING | `monitoring` | `32_setup_monitoring_stack`; runs immediately after PORTAL when enabled and includes exporter enrollment plus portal Caddy/index sync |
-| 6 | IDENTITY | `2` / `identity` | `11_identity_setup` (`12` → packages → `13` → `14` DNS records → `19` wildcard → `16` clients; imports `detect_identity.yml` first) |
-| 7 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
-| 8 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `28` → `29` → `30` (requires `04_setup_autossh` from PREREQS) |
-| 9 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` (see [RUNBOOK.md](RUNBOOK.md) — CM First Run sub-step order inside **31**) |
+| 4 | PORTAL | `portal` | `10_setup_deployment_portal`; defers monitoring/exporter work when MONITORING is also selected |
+| 5 | IDENTITY | `2` / `identity` | `11_identity_setup` (`12` → packages → `13` → `14` DNS records → `19` wildcard → `16` clients; imports `detect_identity.yml` first) |
+| 6 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
+| 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `28` → `29` → `30` (requires `04_setup_autossh` from PREREQS) |
+| 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` (see [RUNBOOK.md](RUNBOOK.md) — CM First Run sub-step order inside **31**) |
+| 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` (includes portal Caddy/index sync) |
 | 10 | ECS_INSTALL | `5` / `ecs` | `33_setup_ecs_cluster` (reconciles `19_setup_wildcard` first) and requires a healthy Management Console before success; legacy standalone runs retain inline post-install behavior |
 | 11 | ECS_POST_INSTALL_TASKS | `8` / `ecs_post_install` | Recheck console health, then `34_setup_ecs_post_install` credentials/IAM/LDAP work → `35_sync_deployment_portal_access` |
 | 12 | ECS_DATA_SERVICES | `7` / `dataservices` | `34_setup_ecs_data_services` (CDW/CDE/CAI/Model Registry only) |
@@ -24,7 +24,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 14 | DESTROY_STACK | `destroy_stack` | optional `99_cleanup.yml` → `clone_and_run_terraform_destroy.sh` (`DESTROY_STACK_CONFIRM`) |
 | — | (manual) | `6` / `portal_refresh` | `35_refresh_deployment_portal` (milestone URL verify / index refresh) |
 
-**Full local flow:** `DEPLOY_PHASE=all ./pvc_setup.sh` = phases 1 → portal (`10`) → monitoring (`32`, if enabled) → identity → CM → cm_tls → CDH → ECS.
+**Full local flow:** `DEPLOY_PHASE=all ./pvc_setup.sh` = phases 1 → portal (`10`) → identity → CM → cm_tls → CDH → monitoring (if enabled) → ECS.
 
 **Portal refresh:** Bootstrap (`10`) runs only on `DEPLOY_PHASE=portal` (Jenkins **PORTAL**). A deliberate `DEPLOY_PHASE=6` / `portal_refresh` still runs the full `35_refresh_deployment_portal.yml`. Non-portal phases update portal credentials/routes only when the Jenkins **PORTAL** stage is explicitly selected in the same lifecycle or `DEPLOYMENT_PORTAL_REFRESH=true`; selecting ECS phases alone never invokes portal or monitoring work.
 
@@ -39,7 +39,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | `cm_tls` | **Mandatory for Kerberos/LDAP-secured clusters**; skippable only for throwaway/manual-TLS clusters | Requires **CM_INSTALL** / play 23 to have installed and initialized PostgreSQL. Order inside this phase (`27→28→29→30`) is fixed — do not reorder or split without re-reading `VARIABLE_CONTRACTS.md` |
 | `cdh` | **Mandatory** | Requires **CM_INSTALL** / play 23 to have installed and initialized PostgreSQL; installs the base CDH cluster (HDFS/YARN/ZK) |
 | `monitoring` | Optional | Gated by `MONITORING_STACK_ENABLED` (default true); safe to skip |
-| `5` / `ecs` | Optional | Only when ECS is part of the deployment; does not require the optional portal phase |
+| `5` / `ecs` | Optional | Only when ECS is part of the deployment |
 | `6` / `portal_refresh` | Optional, idempotent | Re-render/re-verify portal content; safe to run repeatedly |
 | `7` / `dataservices` | Optional | CDW/CDE/CAI on top of ECS |
 | `destroy_stack` | Manual only | Never part of `all`/`full` |
@@ -57,7 +57,7 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 | `cm_api_context_resolved_this_play` (`common_tasks/resolve_cm_api_probe_context.yml`) | Within one `ansible-playbook` process (persists across plays targeting `localhost`) | Re-running the CM manager reachability + bind-address discovery (`resolve_cm_connect_host.yml` + `select_cm_api_probe_host.yml`) more than once per process |
 | `cm_api_url` / `cm_api_version` / `cm_api_discovery_succeeded` early-exit (`common_tasks/set_cm_api_url.yml`) | Within one `ansible-playbook` process | Re-running the `/api/version` HTTP+HTTPS probe loop when a prior play in the **same process** already resolved it (this is why `pvc_setup.sh` runs `25_verify_cm.yml 26_setup_cm_license.yml` as one `ansible-playbook` call — `26` reuses `25`'s already-resolved `cm_api_url`) |
 | `11_identity_setup.yml` importing `detect_identity.yml` itself | `pvc_setup.sh` no longer also calls `detect_identity.yml` standalone in `run_phase_2` | A guaranteed double run of the identity-provider assert/debug on every identity-phase run |
-| Deterministic selected-stage dispatch | Jenkins `SELECTED_ANSIBLE_STAGES` or local `DEPLOY_PHASE=all` | Normalizes aliases/case/whitespace, removes duplicates, and runs each selected stage once in fixed order. MONITORING may add its required PORTAL foundation; ECS/CM/CDH stages never add PORTAL or MONITORING. |
+| Deterministic selected-stage dispatch | Jenkins `SELECTED_ANSIBLE_STAGES` or local `DEPLOY_PHASE=all` | Normalizes aliases/case/whitespace, removes duplicates, and runs each selected stage once in the role branch's fixed order. ECS/CM/CDH stages never add PORTAL or MONITORING. |
 | EC2 start/stop installer ownership | PORTAL defers play **36** when IDENTITY follows in the same selected pipeline | Running the same package/template install in both PORTAL and IDENTITY |
 
 **Known, intentional process boundaries:** `27_setup_cm_autotls.yml` remains a separate `ansible-playbook` process because it can replace TLS material and restart CM. After that stable boundary, the wrapper runs `28_setup_cm_cms.yml`, `29_setup_cm_ldap.yml`, and `30_setup_cm_krbs.yml` in one process so LDAP and Kerberos reuse the CMS-resolved CM API endpoint instead of repeating discovery. Every numbered playbook remains independently runnable for targeted recovery. Likewise, `validate_ansible_ssh_reachability.yml` deliberately re-probes SSH reachability in `00`, `10`, `32`, and `35` even when their target host groups overlap — it is a cheap fail-fast guard against the exact "SSH timeout" symptom in `docs/OPERATIONS_GUIDE.md`, not a redundant check to remove.
@@ -66,7 +66,7 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 
 | # | Playbook | Notes |
 |---|----------|--------|
-| 10 | `10_setup_deployment_portal.yml` | Ops portal bootstrap (Caddy edge `deployment_portal_http_port`, default **81** — portal, pgAdmin, monitoring, IPA; not CM/ECS) |
+| 10 | `10_setup_deployment_portal.yml` | Ops portal bootstrap via `roles/deployment_portal` (Caddy edge `deployment_portal_http_port`, default **81** — portal, pgAdmin, monitoring, IPA; not CM/ECS) |
 | 11 | `11_identity_setup.yml` | Identity **router** |
 | 12 | `12_setup_freeipa_server.yml` | FreeIPA server (skipped for AD) |
 | — | `ipa_deep_recovery.yml` | Optional IPA detect/recover/sanitize before **12** (`ipa_server_deep_recovery: true`) |
@@ -94,8 +94,8 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 | 33 | `33_setup_ecs_cluster.yml` | ECS cluster |
 | 34 | `34_setup_ecs_post_install.yml` | ECS console recheck, IAM credentials/roles, optional LDAP/admin permissions |
 | 34 | `34_setup_ecs_data_services.yml` | CDW / CDE / CAI / Model Registry (optional) |
-| 35 | `35_sync_deployment_portal_access.yml` | Existing portal credential/access sync only |
-| 35 | `35_refresh_deployment_portal.yml` | Portal re-render only |
+| 35 | `35_sync_deployment_portal_access.yml` | Existing portal credential/access sync only via `roles/deployment_portal` |
+| 35 | `35_refresh_deployment_portal.yml` | Portal re-render only via `roles/deployment_portal` |
 | 36 | `36_install_ipaserver_ec2_startstop.yml` | EC2 start/stop script on ipaserver (end of IDENTITY / `pvc_setup` phase 2) |
 | 37 | `37_run_ipaserver_ec2_startstop.yml` | Run start/stop/describe via script (Jenkins `STARTSTOP_AUTOMATION`) |
 
@@ -106,9 +106,87 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 | `00_setup_ssh_preqs.yml` | First in wrapper — the only playbook that still uses prefix `00` |
 | `ensure_collections.yml` | Unnumbered — imported by every numbered playbook; no fixed position in the sequence |
 | `detect_identity.yml` | Unnumbered — imported by `11_identity_setup.yml` as its first play (no free number between `10` and `11`) — `pvc_setup.sh` does not also invoke it standalone (see [Avoiding duplicate work](#avoiding-duplicate-work-within-a-run)) |
-| `01`–`09` | OS prerequisites (`04_setup_autossh.yml` in phase 1 after `03_create_etc_hosts`) |
+| `01`–`09` | OS prerequisites (`04_setup_autossh.yml` in phase 1 after `03_create_etc_hosts`); compatibility playbooks delegate implementation to `roles/prereq_*` |
 | `99_cleanup.yml` | Teardown |
 | `unused_legacy_cm_service_enable.yml` | Unused; prefer `28_setup_cm_cms.yml` |
+
+### Role architecture and compatibility entry points
+
+The PREREQS implementation is organized under `roles/prereq_*`. Numbered
+playbooks `00_setup_ssh_preqs.yml` through `09_verify_os_prereqs.yml` remain
+the supported orchestration entry points and preserve their original play
+names, host patterns, play order, privilege escalation, play vars, and
+`ensure_collections.yml` import. `pvc_setup.sh`, Jenkins, and direct
+`ansible-playbook` invocations continue to call those filenames; roles are
+implementation units, not replacements for the compatibility playbooks.
+
+Multi-play sequencing remains visible in the wrappers. In particular,
+`04_setup_autossh.yml` keeps generate/fetch/distribute as three plays and
+`07_prereq_setup_002.yml` keeps each original host-targeting boundary while
+selecting task files from `prereq_system_tuning`.
+
+The PORTAL implementation is organized under `roles/deployment_portal`.
+Playbooks `10_setup_deployment_portal.yml` and
+`35_refresh_deployment_portal.yml` remain compatibility orchestrators and
+retain the localhost fact build, optional exporter playbook import, ops-host
+sync, and localhost Tier B verification as distinct plays. Legacy
+`common_tasks/<portal-task>.yml` paths remain as role-import compatibility
+shims for monitoring, identity, ECS, and manual callers.
+
+The IDENTITY implementation is organized under `roles/identity`. Router
+`11_identity_setup.yml` preserves its literal imported-playbook order, while
+numbered playbooks `12`–`19`, `detect_identity.yml`, and
+`ipa_deep_recovery.yml` retain their original play definitions and delegate
+only task implementation to the role. Identity-owned `common_tasks` paths
+remain static compatibility shims for CM security, ECS, portal, and manual
+callers. FreeIPA/AD routing, localhost facts, client host expressions,
+delegation, and `vars_files` therefore remain owned by the compatibility
+entry points.
+
+The CM_INSTALL implementation is organized under `roles/cm_install`.
+Repository router `20_setup_cm_repos.yml` continues to import compatibility
+playbooks `21` and `22` literally; playbooks `23`–`26` retain every original
+play boundary and delegate task bodies to the role. Install-owned
+`common_tasks` paths remain static compatibility shims for CM security and
+CDH callers. The wrapper still invokes `25_verify_cm.yml` and
+`26_setup_cm_license.yml` in one `ansible-playbook` process so localhost API
+facts are reused.
+
+The CM security implementation is organized under `roles/cm_security`.
+Playbooks `27`–`30` retain all twelve original play boundaries, including
+Auto-TLS agent restart waves, serial execution, the FreeIPA KDC play, and
+localhost fact reuse. The shared CM API discovery/transport, restart, TLS,
+CMS, LDAP, and Kerberos implementations now live in this role; their
+`common_tasks` paths remain static compatibility shims for CM_INSTALL, CDH,
+ECS, cleanup, and manual callers. Generic OS facts, inventory validation,
+controller reachability, identity-owned KDC tasks, and install-owned package
+or PostgreSQL tasks remain in their existing shared/owning locations.
+
+The CDH/base-cluster implementation is organized under
+`roles/cdh_base_cluster`. Playbook `31_setup_base_cluster.yml` retains its
+collection-bootstrap play and localhost cluster-orchestration play as
+separate boundaries. The role owns the cluster specification, Knox safety
+valve, service dependency/configuration, First Run and recovery, HDFS,
+Kerberos, Auto-TLS, Ranger, Ozone, and health-verification tasks. CDH-owned
+`common_tasks` names remain static compatibility shims; generic collection
+installation and CM module endpoint helpers continue in `common_tasks`, while
+CM security/install helpers continue through their owning role shims.
+
+The MONITORING implementation is organized under `roles/monitoring`.
+Playbook `32_setup_monitoring_stack.yml` retains its localhost portal-context
+play, literal `enroll_monitoring_exporters.yml` import, and ops-host deployment
+play. The exporter helper keeps its four host/play boundaries and
+`vars_files`. Monitoring owns node_exporter, process_exporter, and host
+cAdvisor implementations and service templates; deployment-portal context,
+content sync, and scrape-target rendering continue through portal-role
+compatibility shims.
+
+The ECS implementation is organized under `roles/ecs`. Playbooks `33` and
+`34` retain their three original play boundaries and delegate only task
+implementation. ECS-owned phased cluster, IAM, control-plane, LDAP, data
+service, and Caddy-sync helpers retain static `common_tasks` shims. Generic
+Cloudera collection/module helpers and portal/CM role shims remain externally
+owned.
 
 ## Migration: renumbering duplicate prefixes (2026-09)
 

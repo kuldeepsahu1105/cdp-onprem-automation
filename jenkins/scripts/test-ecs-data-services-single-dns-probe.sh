@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-probe_file="$repo_root/ansible-playbooks/common_tasks/ecs_data_services_verify_dns.yml"
+probe_file="$repo_root/ansible-playbooks/roles/ecs/tasks/ecs_data_services_verify_dns.yml"
 group_vars_file="$repo_root/ansible-playbooks/group_vars/all.yml"
 config_file="$repo_root/ansible-playbooks/config.yml"
 
@@ -366,8 +366,8 @@ for task in refresh_tasks:
         assert task["connection"] == "ssh"
 
 playbook_tasks = yaml.safe_load(
-    (path.parent.parent / "34_setup_ecs_data_services.yml").read_text()
-)[1]["tasks"]
+    (path.parent / "setup_data_services.yml").read_text()
+)
 playbook_task_names = [task.get("name") for task in playbook_tasks]
 reconcile_index = playbook_task_names.index(
     "Reconcile CoreDNS before Data Services provisioning"

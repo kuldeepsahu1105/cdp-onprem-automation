@@ -1,7 +1,5 @@
 ---
-# Short URL summary for PORTAL playbooks (full report: print_deployment_access_urls.yml).
-
-- name: Print deployment portal URLs
-  ansible.builtin.debug:
-    msg: "{{ lookup('template', 'deployment_portal_urls_print.j2') | from_yaml }}"
-  changed_when: false
+- name: Compatibility entry point for deployment portal print deployment portal urls
+  ansible.builtin.import_role:
+    name: deployment_portal
+    tasks_from: print_deployment_portal_urls

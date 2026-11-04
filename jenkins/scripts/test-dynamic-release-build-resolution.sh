@@ -6,9 +6,9 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 python3 - \
   "${repo_root}/ansible-playbooks/config.yml" \
   "${repo_root}/ansible-playbooks/group_vars/all.yml" \
-  "${repo_root}/ansible-playbooks/common_tasks/mirror_internal_cm_rhel.yml" \
-  "${repo_root}/ansible-playbooks/31_setup_base_cluster.yml" \
-  "${repo_root}/ansible-playbooks/common_tasks/set_cm_mirror_facts.yml" <<'PY'
+  "${repo_root}/ansible-playbooks/roles/cm_install/tasks/mirror_internal_cm_rhel.yml" \
+  "${repo_root}/ansible-playbooks/roles/cdh_base_cluster/tasks/setup_base_cluster.yml" \
+  "${repo_root}/ansible-playbooks/roles/cm_install/tasks/set_cm_mirror_facts.yml" <<'PY'
 import json
 from pathlib import Path
 import subprocess
@@ -66,7 +66,7 @@ assert json.loads(result.stdout) == [
     for package in packages
 ]
 
-base_cluster_tasks = yaml.safe_load(base_cluster_path.read_text())[1]["tasks"]
+base_cluster_tasks = yaml.safe_load(base_cluster_path.read_text())
 selection = next(
     task for task in base_cluster_tasks
     if task.get("name")

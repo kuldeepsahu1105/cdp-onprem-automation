@@ -10,7 +10,9 @@
   gather_facts: no
   tasks:
     - name: Detect identity provider
-      ansible.builtin.import_tasks: common_tasks/detect_identity_provider.yml
+      ansible.builtin.import_role:
+        name: identity
+        tasks_from: detect_identity_provider
 
 - name: Kerberos — Ansible FILE ccache documentation on FreeIPA server
   hosts: ipaserver
@@ -19,13 +21,10 @@
   vars_files:
     - group_vars/all.yml
   tasks:
-    - name: Install krb5.conf.d ansible-ccache-note.conf on ipaserver
-      ansible.builtin.import_tasks: common_tasks/ensure_krb5_ansible_ccache_note.yml
-      when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'
-
-    - name: Restore KEYRING default_ccache_name on ipaserver (clients stay commented in later plays)
-      ansible.builtin.import_tasks: common_tasks/ensure_krb5_default_ccache_commented.yml
-      when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'
+    - name: Ipaserver kerberos ccache
+      ansible.builtin.import_role:
+        name: identity
+        tasks_from: ipaserver_kerberos_ccache
 
 - name: Kerberos — Ansible FILE ccache documentation on identity client hosts
   hosts: "{{ identity_client_hosts }}"
@@ -34,9 +33,10 @@
   vars_files:
     - group_vars/all.yml
   tasks:
-    - name: Install krb5.conf.d ansible-ccache-note.conf on enrolled or enrolling hosts
-      ansible.builtin.import_tasks: common_tasks/ensure_krb5_ansible_ccache_note.yml
-      when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'
+    - name: Client kerberos ccache
+      ansible.builtin.import_role:
+        name: identity
+        tasks_from: client_kerberos_ccache
 
 - name: Build deployment portal facts for IPA HTTPD Caddy proxy (localhost)
   hosts: localhost
@@ -45,9 +45,10 @@
   vars_files:
     - group_vars/all.yml
   tasks:
-    - name: Resolve portal facts before IPA client enrollment
-      ansible.builtin.import_tasks: common_tasks/ensure_ipa_httpd_behind_caddy_before_client.yml
-      when: identity_provider_effective == 'freeipa'
+    - name: Portal facts before client
+      ansible.builtin.import_role:
+        name: identity
+        tasks_from: portal_facts_before_client
 
 - name: Sync ipaserver HTTPD Caddy proxy state before client enrollment
   hosts: ipaserver
@@ -56,9 +57,10 @@
   vars_files:
     - group_vars/all.yml
   tasks:
-    - name: Apply or remove IPA HTTPD Caddy snippets and preflight JSON-RPC
-      ansible.builtin.import_tasks: common_tasks/sync_ipa_httpd_caddy_proxy_state_on_ipaserver.yml
-      when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'
+    - name: Sync ipaserver caddy proxy
+      ansible.builtin.import_role:
+        name: identity
+        tasks_from: sync_ipaserver_caddy_proxy
 
 - name: Install identity client packages before DNS cutover
   hosts: "{{ identity_client_hosts }}"
@@ -66,21 +68,19 @@
   vars_files:
     - group_vars/all.yml
   tasks:
-    - name: Install packages required by the selected identity provider
-      ansible.builtin.import_tasks: common_tasks/install_identity_client_packages.yml
-      when: not (identity_client_packages_preinstalled | default(false) | bool)
+    - name: Identity client packages
+      ansible.builtin.import_role:
+        name: identity
+        tasks_from: identity_client_packages
 
 - name: Update DNS for identity provider
   hosts: all
   become: yes
   tasks:
-    - name: Configure DNS (netplan or resolv.conf)
-      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
-      when: not (identity_dns_configured_by_router | default(false) | bool)
-
-    - name: Verify identity and external DNS after resolver cutover
-      ansible.builtin.import_tasks: common_tasks/verify_identity_dns.yml
-      when: not (identity_dns_configured_by_router | default(false) | bool)
+    - name: Identity dns cutover
+      ansible.builtin.import_role:
+        name: identity
+        tasks_from: identity_dns_cutover
 
 - name: Enroll cluster hosts with identity provider
   hosts: "{{ identity_client_hosts }}"
@@ -88,19 +88,7 @@
   vars_files:
     - group_vars/all.yml
   tasks:
-    - name: Join FreeIPA domain
-      ansible.builtin.import_tasks: common_tasks/join_freeipa_client.yml
-      when: identity_provider_effective == 'freeipa'
-
-    - name: Join Active Directory realm
-      ansible.builtin.import_tasks: common_tasks/join_ad_realm.yml
-      when: identity_provider_effective == 'ad'
-
-    - name: Configure renewable Kerberos ticket defaults
-      ansible.builtin.import_tasks: common_tasks/configure_krb5_ticket_renewal.yml
-
-    - name: Restore managed resolver configuration after identity enrollment
-      ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
-
-    - name: Verify resolver configuration after identity enrollment
-      ansible.builtin.import_tasks: common_tasks/verify_identity_dns.yml
+    - name: Identity client enrollment
+      ansible.builtin.import_role:
+        name: identity
+        tasks_from: identity_client_enrollment

@@ -1,0 +1,121 @@
+---
+# Tier A: monitoring UIs via Caddy on localhost (path routes) and direct host publishes.
+
+- name: Resolve deployment portal URL verify milestones for monitoring checks
+  ansible.builtin.import_tasks: resolve_deployment_portal_verify_milestones.yml
+
+- name: Skip monitoring localhost checks when monitoring routes are disabled
+  ansible.builtin.meta: end_host
+  when: not (deployment_portal_monitoring_routes_enabled | default(false) | bool)
+
+- name: Set monitoring localhost verify base URL
+  ansible.builtin.set_fact:
+    _monitoring_local_base: "http://127.0.0.1:{{ deployment_portal_http_port | int }}"
+    _monitoring_grafana_host_suffix: "{{ '/login' if (caddy_vhost_enabled | default(false) | bool) else '/grafana/login' }}"
+    _monitoring_prometheus_host_suffix: "{{ '/-/healthy' if (caddy_vhost_enabled | default(false) | bool) else '/prometheus/-/healthy' }}"
+    _monitoring_alertmanager_host_suffix: "{{ '/-/healthy' if (caddy_vhost_enabled | default(false) | bool) else '/alertmanager/-/healthy' }}"
+
+- name: Verify Grafana via Caddy path route on localhost
+  ansible.builtin.uri:
+    url: "{{ _monitoring_local_base }}/grafana/login"
+    method: GET
+    status_code: "{{ deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_grafana_path_check
+  retries: 5
+  delay: 5
+  until: _monitoring_grafana_path_check is succeeded
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
+
+- name: Verify Prometheus via Caddy path route on localhost
+  ansible.builtin.uri:
+    url: "{{ _monitoring_local_base }}/prometheus/-/healthy"
+    method: GET
+    status_code: "{{ deployment_portal_url_verify_status_codes | default([200]) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_prometheus_path_check
+  retries: 5
+  delay: 5
+  until: _monitoring_prometheus_path_check is succeeded
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
+
+- name: Verify Grafana on published host port (localhost)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ monitoring_grafana_host_port | int }}{{ _monitoring_grafana_host_suffix }}"
+    method: GET
+    status_code: "{{ deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_grafana_host_check
+  retries: 5
+  delay: 5
+  until: _monitoring_grafana_host_check is succeeded
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
+
+- name: Verify Prometheus on published host port (localhost)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ monitoring_prometheus_host_port | int }}{{ _monitoring_prometheus_host_suffix }}"
+    method: GET
+    status_code: "{{ deployment_portal_url_verify_status_codes | default([200]) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_prometheus_host_check
+  retries: 5
+  delay: 5
+  until: _monitoring_prometheus_host_check is succeeded
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
+
+- name: Verify Alertmanager on published host port (localhost)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ monitoring_alertmanager_host_port | int }}{{ _monitoring_alertmanager_host_suffix }}"
+    method: GET
+    status_code: "{{ deployment_portal_url_verify_status_codes | default([200]) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_alertmanager_host_check
+  retries: 5
+  delay: 5
+  until: _monitoring_alertmanager_host_check is succeeded
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
+
+- name: Verify cAdvisor via Caddy path route on localhost
+  ansible.builtin.uri:
+    url: "{{ _monitoring_local_base }}/cadvisor/containers/"
+    method: GET
+    status_code: "{{ deployment_portal_url_verify_status_codes | default([200, 301, 302, 303, 307, 308]) }}"
+    follow_redirects: none
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_cadvisor_path_check
+  retries: 5
+  delay: 5
+  until: _monitoring_cadvisor_path_check is succeeded
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"
+
+- name: Verify cAdvisor on published host port (localhost)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ monitoring_cadvisor_host_port | int }}/metrics"
+    method: GET
+    status_code: 200
+    return_content: true
+    validate_certs: false
+    timeout: 45
+  register: _monitoring_cadvisor_host_check
+  retries: 5
+  delay: 5
+  until:
+    - _monitoring_cadvisor_host_check is succeeded
+    - >-
+      (
+        _monitoring_cadvisor_host_check.content
+        | default('')
+        | regex_search('container_last_seen[{][^}\\n]*name="[^"]+"')
+      ) is not none
+  when: "'monitoring' in (_portal_verify_milestones_effective | default([]))"

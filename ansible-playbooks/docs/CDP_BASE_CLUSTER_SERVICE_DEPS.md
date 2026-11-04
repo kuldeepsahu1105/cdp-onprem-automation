@@ -2,7 +2,7 @@
 
 Authoritative matrix: [Service Dependencies in Cloudera Manager](https://docs.cloudera.com/cloudera-manager/7.13.2/cloudera-manager-installation/topics/cdpdc-service-dependencies.html).
 
-`31_setup_base_cluster.yml` renders `templates/base_cluster_cluster_spec.j2` from `base_cluster_install_services` in `group_vars/all.yml`. Only set **service-level** config keys that exist for that service type in CM (invalid keys return HTTP 400).
+`31_setup_base_cluster.yml` renders `roles/cdh_base_cluster/templates/base_cluster_cluster_spec.j2` from `base_cluster_install_services` in `group_vars/all.yml`. Only set **service-level** config keys that exist for that service type in CM (invalid keys return HTTP 400).
 
 ## Required service-level links (this repo)
 

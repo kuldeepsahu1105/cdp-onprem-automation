@@ -6,26 +6,44 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 python3 - "$repo_root" <<'PY'
 from pathlib import Path
 import json
+import subprocess
 import sys
 import yaml
 
 root = Path(sys.argv[1])
-followup = (
+followup_path = (
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_followup.yml"
+)
+followup = followup_path.read_text()
+followup_tasks = yaml.safe_load(followup)
+compatibility = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_followup.yml"
 ).read_text()
 group_vars = yaml.safe_load(
     (root / "ansible-playbooks/group_vars/all.yml").read_text()
 )
 
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
+
 
 def decode_serialized_stdout(value):
     payload = json.loads(json.dumps(value))
     if isinstance(payload, str):
         payload = json.loads(payload)
     return payload
+
+
+def walk(items):
+    for item in items:
+        yield item
+        for key in ("block", "rescue", "always"):
+            nested = item.get(key, [])
+            if isinstance(nested, list):
+                yield from walk(nested)
+
 
 representative_config = {
     "config": {
@@ -52,6 +70,38 @@ require(
     == representative_config,
     "text stdout must survive JSON serialization and one JSON unwrap",
 )
+require(
+    "ansible.builtin.import_role:" in compatibility
+    and "name: ecs" in compatibility
+    and "tasks_from: ecs_data_service_cdw_followup" in compatibility,
+    "common task compatibility entry point must import the authoritative ECS role task",
+)
+
+parser_tasks = {
+    item["name"]: item["ansible.builtin.command"]["argv"]
+    for item in walk(followup_tasks)
+    if item.get("name")
+    in {
+        "Check database catalog FILE credential cache configuration",
+        "Verify database catalog namespace health after stale API status",
+    }
+}
+require(len(parser_tasks) == 2, "expected both registered-stdout parser tasks")
+for name, argv in parser_tasks.items():
+    command = ["python3", "-c", argv[2]]
+    if len(argv) > 3:
+        command.append("FILE:/tmp/krb5cc_expected")
+    malformed = subprocess.run(
+        command,
+        input="{not-json",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    require(
+        malformed.returncode not in (0, 3),
+        f"{name} must fail strictly for malformed JSON input",
+    )
 
 for command in (
     "'describe-dbc-config'",
@@ -106,7 +156,6 @@ require(
     < followup.index("\n    - name: Wait for default database catalog\n"),
     "DBC cache must be configured before waiting for Running",
 )
-
 for forbidden in (
     "kubectl set env",
     "statefulset/metastore",

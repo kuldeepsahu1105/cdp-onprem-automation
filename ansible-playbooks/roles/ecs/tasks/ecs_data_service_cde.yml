@@ -1,0 +1,116 @@
+---
+- name: CDE | Complete Data Engineering installation
+  when: "'cde' in (ecs_data_services_install_names | default([]))"
+  block:
+    - name: Record Data Engineering provisioning result
+      ansible.builtin.set_fact:
+        ecs_cde_service_succeeded: >-
+          {{
+            ecs_cde_service.finished | default(false) | bool
+            and (ecs_cde_service.service | default({})) is mapping
+            and (ecs_cde_service.service | default({})).clusterFqdn | default('') | length > 0
+            and (
+              (ecs_cde_service.service | default({})).status | default('') | lower
+              in (ecs_cde_service_green_statuses | map('lower') | list)
+            )
+          }}
+
+    - name: Report Data Engineering provisioning failure
+      ansible.builtin.debug:
+        msg: >-
+          CDE provisioning did not return an activated service:
+          {{ ecs_cde_service.msg | default(ecs_cde_service | to_json) }}
+      when: not (ecs_cde_service_succeeded | bool)
+
+    - name: Remove Data Engineering async result
+      ansible.builtin.async_status:
+        jid: "{{ ecs_cde_service_job.ansible_job_id | default('') }}"
+        mode: cleanup
+      changed_when: false
+      when:
+        - >-
+          ecs_cde_service_job.ansible_job_id
+          | default('')
+          | length > 0
+        - ecs_cde_service.finished | default(false) | bool
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+
+    - name: Derive service id for ingress hostname
+      ansible.builtin.set_fact:
+        ecs_cde_service_id: "{{ ecs_cde_service.service.clusterFqdn | regex_replace('^service\\.', '') }}"
+      when:
+        - ecs_cde_service_succeeded | bool
+
+    - name: Converge default CDE Virtual Cluster
+      ansible.builtin.include_tasks: ecs_data_service_cde_virtual_cluster.yml
+      when:
+        - ecs_cde_service_succeeded | bool
+
+    - name: Report CDE service convergence
+      ansible.builtin.debug:
+        msg: >-
+          CDE Service: {{
+          'Existing and healthy; reused without create or capacity resize'
+          if ecs_cde_service_existing | default(false) | bool
+          else 'Created successfully'
+          }}. name={{ ecs_cde_service_name_effective }};
+          observed_status={{
+          (ecs_cde_service.service | default({})).status | default('unknown') }};
+          clusterId={{
+          (ecs_cde_service.service | default({})).clusterId
+          | default('not returned') }};
+          native_endpoint={{
+          (ecs_cde_service.service | default({})).clusterFqdn
+          | default('not returned') }};
+          environment={{ ecs_cdp_environment_name }}.
+      when: ecs_cde_service_succeeded | bool
+
+    - name: Register CDE ingress for Caddy
+      ansible.builtin.set_fact:
+        ecs_caddy_data_service_routes: >-
+          {{
+            (ecs_caddy_data_service_routes | default([]))
+            + [
+              {
+                'id': 'cde-' + ecs_cde_service_name_effective,
+                'external_hostname': ecs_cde_service_id + '.' + ecs_app_domain,
+                'backend_host': ecs_master_fqdn,
+                'backend_port': 443,
+                'backend_scheme': 'https'
+              }
+            ]
+          }}
+      when:
+        - ecs_cde_service_succeeded | bool
+
+    - name: Update portal catalog URL for CDE
+      ansible.builtin.set_fact:
+        ecs_data_services_catalog: >-
+          {{
+            ecs_data_services_catalog | combine(
+              {
+                'cde': ecs_data_services_catalog.cde | default({}) | combine(
+                  {
+                    'url': (
+                      ecs_cde_virtual_cluster_ui_url
+                      | default(
+                          'https://' + ecs_cde_service_id + '.' + ecs_app_domain,
+                          true
+                        )
+                    ),
+                    'effective_name': ecs_cde_service_name_effective,
+                    'status': (
+                      'Existing and running (green)'
+                      if ecs_cde_service_existing | default(false) | bool
+                      else 'Created successfully (green)'
+                    )
+                  }
+                )
+              },
+              recursive=True
+            )
+          }}
+      when:
+        - ecs_cde_service_succeeded | bool

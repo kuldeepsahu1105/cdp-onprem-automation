@@ -1,0 +1,127 @@
+{
+  "id": null,
+  "uid": "cldr-cadvisor-deep-dive",
+  "title": "cAdvisor — Deep Dive",
+  "description": "cAdvisor scrape health, host capacity, container throttling, memory pressure, threads, and file descriptors.",
+  "tags": ["cloudera", "cadvisor", "containers", "diagnostics"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "cAdvisor target",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(up{job=~\"cadvisor|cadvisor_host\"}, instance)",
+        "definition": "label_values(up{job=~\"cadvisor|cadvisor_host\"}, instance)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 1
+      },
+      {
+        "name": "container",
+        "label": "Container",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(container_last_seen{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name!=\"\"}, name)",
+        "definition": "label_values(container_last_seen{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name!=\"\"}, name)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Targets up",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "sum(up{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\"} == 1)", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "title": "Targets down",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } },
+      "targets": [{ "expr": "sum(up{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\"} == 0) OR on() vector(0)", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "title": "Observed containers",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [{ "expr": "count(container_last_seen{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"})", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "title": "Machine memory",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [{ "expr": "sum(machine_memory_bytes{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\"})", "refId": "A" }]
+    },
+    {
+      "id": 5,
+      "title": "Prometheus scrape duration",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [{ "expr": "scrape_duration_seconds{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\"}", "legendFormat": "{{job}} / {{instance}}", "refId": "A" }]
+    },
+    {
+      "id": 6,
+      "title": "Samples scraped",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [{ "expr": "scrape_samples_scraped{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\"}", "legendFormat": "{{job}} / {{instance}}", "refId": "A" }]
+    },
+    {
+      "id": 7,
+      "title": "CPU throttled time",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [{ "expr": "sum by (instance, name) (rate(container_cpu_cfs_throttled_seconds_total{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"}[5m]))", "legendFormat": "{{instance}} / {{name}}", "refId": "A" }]
+    },
+    {
+      "id": 8,
+      "title": "Memory failures",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 12 },
+      "targets": [{ "expr": "sum by (instance, name, failure_type) (rate(container_memory_failures_total{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"}[5m]))", "legendFormat": "{{instance}} / {{name}} / {{failure_type}}", "refId": "A" }]
+    },
+    {
+      "id": 9,
+      "title": "Container threads",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
+      "targets": [{ "expr": "max by (instance, name) (container_threads{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"})", "legendFormat": "{{instance}} / {{name}}", "refId": "A" }]
+    },
+    {
+      "id": 10,
+      "title": "Container file descriptors",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
+      "targets": [{ "expr": "max by (instance, name) (container_file_descriptors{job=~\"cadvisor|cadvisor_host\",instance=~\"$instance\",name=~\"$container\",name!=\"\"})", "legendFormat": "{{instance}} / {{name}}", "refId": "A" }]
+    }
+  ]
+}

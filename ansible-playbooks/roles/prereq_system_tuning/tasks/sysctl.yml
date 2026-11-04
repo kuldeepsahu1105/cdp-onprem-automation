@@ -1,0 +1,56 @@
+---
+- name: Set TCP retries in /etc/sysctl.conf
+  ansible.builtin.lineinfile:
+    path: /etc/sysctl.conf
+    line: "net.ipv4.tcp_retries2=5"
+    create: yes
+    backup: yes
+
+- name: Set fsinotify limits in /etc/sysctl.conf
+  ansible.builtin.lineinfile:
+    path: /etc/sysctl.conf
+    line: "fs.inotify.max_user_instances=512"
+    create: yes
+    backup: yes
+
+- name: Disable IPv6 in sysctl.conf
+  ansible.builtin.lineinfile:
+    path: /etc/sysctl.conf
+    line: "{{ item }}"
+    create: yes
+    backup: yes
+  with_items:
+    - "net.ipv6.conf.all.disable_ipv6 = 1"
+    - "net.ipv6.conf.default.disable_ipv6 = 1"
+    - "net.ipv6.conf.lo.disable_ipv6 = 0"
+  when: inventory_hostname not in ((groups['ecs-masters'] | default([])) + (groups['ecs-workers'] | default([])))
+
+- name: Set VM swappiness to 1
+  ansible.builtin.lineinfile:
+    path: /etc/sysctl.conf
+    line: "vm.swappiness=1"
+    create: yes
+    backup: yes
+
+- name: Set vm.overcommit_memory to 0
+  ansible.builtin.lineinfile:
+    path: /etc/sysctl.conf
+    line: "vm.overcommit_memory=0"
+    create: yes
+    backup: yes
+
+- name: Reload sysctl settings
+  ansible.builtin.command: sysctl -p
+  register: sysctl_reload_output
+
+- name: Display sysctl reload output
+  ansible.builtin.debug:
+    msg: "{{ sysctl_reload_output.stdout.replace('\t', '    ').split('\n') }}"
+
+- name: Show /etc/sysctl.conf contents
+  ansible.builtin.command: cat /etc/sysctl.conf
+  register: sysctl_conf_contents
+
+- name: Display sysctl.conf contents
+  ansible.builtin.debug:
+    msg: "{{ sysctl_conf_contents.stdout.replace('\t', '    ').split('\n') }}"

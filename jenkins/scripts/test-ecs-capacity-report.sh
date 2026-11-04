@@ -72,7 +72,7 @@ grep -Fq 'vcore: 33' "$report"
 
 for readme in \
   "$repo_root/README.md" \
-  "$repo_root/READme.adoc" \
+  "$repo_root/README.adoc" \
   "$repo_root/ansible-playbooks/README.md"; do
   grep -Fq 'CAPACITY_REQUIREMENTS.md' "$readme"
   grep -Fq 'report_ecs_capacity.sh' "$readme"
