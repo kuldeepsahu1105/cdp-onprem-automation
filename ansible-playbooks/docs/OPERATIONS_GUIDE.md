@@ -982,10 +982,10 @@ registered`, OM/DN cert enrollment retries, `RAFT closed`, or
    stops unhealthy Ozone, starts the single SCM or all preserved HA SCM roles,
    waits for `ozone admin scm roles` `LEADER`, then starts remaining Ozone roles
    (see recovery section above).
-5. **`.local` cluster domains** — IPA default `cldrsetup.local` is valid for
-   hostnames but some Ozone/Auto-TLS cert validators log `Invalid domain` for
-   internal TLDs. Confirm SANs on signed certs match the CM host FQDN; for
-   production labs consider a resolvable suffix consistent with CM Auto-TLS.
+5. **Legacy `.local` cluster domains** — The greenfield default is
+   `cldr.internal.arpa`. Brownfield `cldrsetup.local` deployments can retain
+   their explicit override, but some Ozone/Auto-TLS validators log
+   `Invalid domain`; confirm signed-certificate SANs match the CM host FQDN.
 
 **Operator checks:** SCM role logs under
 `/var/log/cloudera-scm-agent/process/*-ozone-STORAGE_CONTAINER_MANAGER/`; Ratis

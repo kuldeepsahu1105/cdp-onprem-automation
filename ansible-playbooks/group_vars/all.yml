@@ -107,8 +107,9 @@ identity_client_hosts: "{{ 'all:!ipaserver' if ipa_server_in_inventory | bool el
 cluster_domain: "{{ ad_domain if identity_provider_effective == 'ad' else ipaserver_domain }}"
 cluster_realm: "{{ cluster_domain | upper }}"
 
-# FreeIPA
-ipaserver_domain: cldrsetup.local
+# FreeIPA — private lab DNS under the IANA .arpa infrastructure TLD.
+# Explicit inventory, config.yml, Jenkins, and extra-var overrides still win.
+ipaserver_domain: cldr.internal.arpa
 ipaserver_realm: "{{ ipaserver_domain | upper }}"
 ipaadmin_principal: "admin"
 ipaadmin_password: "PseTeam@123"
