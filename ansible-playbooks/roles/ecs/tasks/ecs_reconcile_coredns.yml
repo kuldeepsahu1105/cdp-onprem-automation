@@ -758,20 +758,21 @@
             break
         if identity_block is None:
             raise SystemExit(f"CoreDNS identity zone {zone_token} was not found")
-        forward = re.compile(
-            r"(?ms)^(?P<indent>[ \t]*)forward\s+\.\s+[^\n{]+"
-            r"(?:\s*\{\n.*?^(?P=indent)\})?"
-        )
-        match = forward.search(identity_block)
-        if match is None:
+
+        forward_lines = [
+            line.strip()
+            for line in identity_block.splitlines()
+            if re.match(r"^\s*forward\s+\.", line)
+        ]
+        if len(forward_lines) != 1:
             raise SystemExit(
-                f"CoreDNS identity zone {zone_token} has no forward stanza"
+                f"Expected exactly one forward stanza in {zone_token}, "
+                f"found {len(forward_lines)}: {forward_lines!r}"
             )
-        actual = match.group(0).strip()
-        if actual != expected:
+        if forward_lines[0] != expected:
             raise SystemExit(
                 f"CoreDNS forward stanza mismatch: expected {expected!r}, "
-                f"found {actual!r}"
+                f"found {forward_lines[0]!r}"
             )
       - "{{ ecs_coredns_applied_corefile.stdout }}"
       - "{{ ecs_coredns_forwarders_effective | join(' ') }}"
