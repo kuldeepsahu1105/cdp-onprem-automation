@@ -444,6 +444,10 @@ the generated metastore workload configuration, and healthy reruns are
 no-ops. This prevents `kinit: No KCM server found while getting default
 ccache` without directly mutating a Helm-managed StatefulSet or changing the
 metastore PVC, database, service, or principal.
+If another DWX operation temporarily owns the Database Catalog update lease,
+automation retries the supported update within the same bounded ten-minute
+refresh window rather than treating `already leased by operation` as a
+terminal configuration failure.
 
 Automation never removes a CDW principal automatically. The DW control-plane
 cluster query can return no records even while the backend still considers the

@@ -121,13 +121,39 @@
           }}
       environment: "{{ ecs_cdp_cli_environment }}"
       register: ecs_cdw_dbc_ccache_update
-      changed_when: true
+      changed_when: ecs_cdw_dbc_ccache_update.rc | default(1) == 0
+      failed_when: false
+      until: >-
+        ecs_cdw_dbc_ccache_update.rc | default(1) == 0
+        or (
+          ecs_cdw_dbc_ccache_update.stderr | default('')
+          is not search('(?i)(failed to acquire lease|already leased by operation)')
+        )
+      retries: "{{ ecs_cdw_workload_refresh_retries | int }}"
+      delay: "{{ ecs_cdw_workload_refresh_delay | int }}"
       become: false
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
       when:
         - ecs_cdw_dbc_ccache_check is defined
         - ecs_cdw_dbc_ccache_check.rc | default(0) == 3
+
+    - name: Require database catalog FILE cache update
+      ansible.builtin.assert:
+        that:
+          - ecs_cdw_dbc_ccache_update.rc | default(0) == 0
+        fail_msg: >-
+          CDW database catalog FILE-cache update failed after waiting for any
+          active update lease to clear (rc={{
+            ecs_cdw_dbc_ccache_update.rc | default('unknown')
+          }}):
+          {{
+            ecs_cdw_dbc_ccache_update.stderr
+            | default(ecs_cdw_dbc_ccache_update.stdout, true)
+          }}
+      when:
+        - ecs_cdw_dbc_ccache_update is defined
+        - not (ecs_cdw_dbc_ccache_update.skipped | default(false) | bool)
 
     - name: Read generated metastore FILE credential cache
       ansible.builtin.command:
