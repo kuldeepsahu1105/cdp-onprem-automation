@@ -2638,6 +2638,12 @@
     - base_cluster_refresh_command is defined
     - base_cluster_refresh_command.json.id is defined
 
+- name: Reconcile stale Ranger configuration after startup
+  ansible.builtin.include_tasks: reconcile_ranger_stale_config.yml
+  when:
+    - base_cluster_install_services.ranger | default(true) | bool
+    - existing_cluster.status == 200 or base_cluster_create_required | bool
+
 - name: Read base cluster HDFS authentication mode
   ansible.builtin.uri:
     url: >-
