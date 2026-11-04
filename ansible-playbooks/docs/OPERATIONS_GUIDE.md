@@ -752,9 +752,42 @@ base_cluster_ranger_usersync_provider: auto
 Set the provider to `freeipa` or `ad` to choose one explicitly, `external` with
 the `base_cluster_ranger_usersync_external_*` bind/search variables for another
 LDAP directory, or `none` to omit the UserSync role and LDAP configuration.
-Ranger Admin LDAP authentication is configured first with the same provider,
-then UserSync imports users and groups. Fresh and adopted Base clusters use the
-same role-config-group reconciliation.
+An explicit `freeipa` or `ad` value must match `identity_provider_effective`;
+the role refuses to activate both Ranger authentication modes. Setting
+`base_cluster_ranger_usersync_enabled: false` or provider `none` leaves fresh
+clusters on Ranger Admin `UNIX` authentication and omits UserSync. On an
+existing cluster, it restores `ranger_authentication_method=UNIX` and sets only
+the owned `ranger.usersync.enabled=false` key.
+
+The mapping is inventory/domain driven and is applied to the CM
+`RANGER_ADMIN` and `RANGER_USERSYNC` role config groups:
+
+| Provider | Endpoint and DNs | Users and groups |
+|---|---|---|
+| FreeIPA | `cm_ldap_url` using `ipa_kdc_host`; base DN derived from `ipaserver_domain`; bind DN `uid=<ipaadmin_principal>,cn=users,cn=accounts,<base DN>` | users under `cn=users,cn=accounts,<base DN>` with `person`, `(uid=*)`, `uid`; groups under `cn=groups,cn=accounts,<base DN>` with `ipausergroup`, `(objectClass=ipausergroup)`, `cn`, `member` |
+| Active Directory | `cm_ldap_url` using `ad_kdc_host`; base DN derived from `ad_domain`; bind identity from `ad_ldap_bind_dn` | `ad_ldap_user_search_base` with `user`, `(sAMAccountName=*)`, `sAMAccountName`; `ad_ldap_group_search_base` with `group`, `(objectClass=group)`, `cn`, `member` |
+| External LDAP | All endpoint, bind, base/search DN, object class, filter, and attribute values come from `base_cluster_ranger_usersync_external_*` | No deployment-specific host, domain, DN, or credential is embedded |
+
+Ranger Admin is reconciled first, followed by UserSync. UserSync also owns
+enablement, source implementation, delta sync, STARTTLS, user/group scopes and
+filters, referral handling, case conversion, paging, and the Unix backend.
+Before an adopted cluster is changed, the role checks that the installed
+CM/parcel schema exposes every owned key and fails with the missing names
+rather than writing an unvalidated safety valve.
+
+`ldaps://` is the default. Set `cm_ldap_scheme: ldap` and
+`cm_ldap_starttls: true` only when the directory supports STARTTLS; STARTTLS is
+rejected with an `ldaps://` URL. Under Auto-TLS,
+`base_cluster_ranger_usersync_truststore_path` defaults to the agent global
+truststore and must exist on the Ranger host. For manually managed PKI, point
+that variable at a JKS containing the directory CA, or leave it empty to use
+the JVM CA set. Certificate verification is never disabled. Bind passwords are
+read from the selected provider secret and rendering/reconciliation suppresses
+secret output.
+
+Fresh and adopted Base clusters use the same role-config-group mapping. A
+rerun compares only the owned keys, preserves unrelated operator settings, and
+restarts the existing cluster only when those owned values changed.
 
 First Run failures are expanded from the parent CM command into failed service
 commands and their child validation messages in Jenkins. First Run is submitted

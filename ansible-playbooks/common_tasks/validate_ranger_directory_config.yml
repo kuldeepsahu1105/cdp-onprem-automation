@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for Ranger directory validation
+  ansible.builtin.import_role:
+    name: cdh_base_cluster
+    tasks_from: validate_ranger_directory_config

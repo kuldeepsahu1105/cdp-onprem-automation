@@ -174,6 +174,18 @@ for service in ("HDFS", "HIVE", "ATLAS", "RANGER"):
 assert group_vars["base_cluster_data_context_enabled"] is True
 assert group_vars["ecs_data_services_base_data_context_enabled"] is True
 assert group_vars["base_cluster_data_context_name"] == "SDX"
+assert group_vars["base_cluster_ranger_usersync_provider_allowed"] == [
+    "auto",
+    "freeipa",
+    "ad",
+    "external",
+    "none",
+]
+assert group_vars["base_cluster_ranger_usersync_delta_sync"] is True
+assert group_vars["base_cluster_ranger_usersync_user_search_scope"] == "sub"
+assert group_vars["base_cluster_ranger_usersync_group_search_scope"] == "sub"
+assert group_vars["base_cluster_ranger_usersync_referral"] == "follow"
+assert group_vars["base_cluster_ranger_usersync_unix_backend"] == "nss"
 assert group_vars["ecs_coredns_kubeconfig_path"] == "/etc/rancher/rke2/rke2.yaml"
 assert group_vars["ecs_cde_cpu_requests"] == "40"
 assert group_vars["ecs_cde_memory_requests"] == "64Gi"
@@ -181,6 +193,33 @@ assert group_vars["ecs_cai_static_subdomain"] == "cai"
 assert len(group_vars["ecs_cai_static_subdomain"]) <= 15
 assert group_vars["ecs_cdp_environment_adopt_single_existing"] is False
 assert group_vars["ecs_cdw_ensure_freeipa_principal_objects"] is True
+
+base_cluster_role = (
+    root / "ansible-playbooks/roles/cdh_base_cluster/tasks/setup_base_cluster.yml"
+).read_text()
+assert "Configure Ranger Admin LDAP authentication" in base_cluster_role
+assert "Configure Ranger UserSync LDAP provider" in base_cluster_role
+assert "Restore Ranger Admin local authentication when directory integration is disabled" in (
+    base_cluster_role
+)
+assert "Disable existing Ranger UserSync when directory integration is disabled" in (
+    base_cluster_role
+)
+assert base_cluster_role.index("Configure Ranger Admin LDAP authentication") < (
+    base_cluster_role.index("Configure Ranger UserSync LDAP provider")
+)
+base_cluster_spec = (
+    root
+    / "ansible-playbooks/roles/cdh_base_cluster/templates/base_cluster_cluster_spec.j2"
+).read_text()
+assert "base_cluster_ranger_admin_ldap_config.items()" in base_cluster_spec
+assert "base_cluster_ranger_usersync_role_config.items()" in base_cluster_spec
+assert "ranger.usersync.enabled" in str(
+    group_vars["base_cluster_ranger_usersync_role_config"]
+)
+assert "ranger.usersync.ldap.starttls" in str(
+    group_vars["base_cluster_ranger_usersync_role_config"]
+)
 
 cdw_preflight = (
     root
