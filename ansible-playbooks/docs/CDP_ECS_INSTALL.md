@@ -37,12 +37,15 @@ hanging on a self-connection through the public IP.
    `startRoles=false`.
 6. **Control plane submission/adoption** — `common_tasks/ecs_install_control_plane.yml` submits First Run or adopts its durable `/controlPlanes` record without blocking on completion.
 7. **CoreDNS before and during First Run** — reapply the managed resolver on
-   every ECS host before control-plane installation because the stock RKE2
-   CoreDNS chart forwards through `/etc/resolv.conf`, matching the November 1
-   and November 2 install flow. After the Kubernetes API reports ready and the
-   CoreDNS ConfigMap exists, confirm the authoritative identity-DNS forwarder,
-   replace the `/etc/resolv.conf` upstream, omit the ineffective
-   `policy sequential` block, and restart CoreDNS only when changed. The live
+   every ECS host and stage an RKE2 `HelmChartConfig` before control-plane
+   installation. The chart override dynamically uses the current FreeIPA
+   private IP, `ad_dns_servers`, or an intentional DNS override, preventing the
+   RKE2 Helm controller from restoring `forward . /etc/resolv.conf`. After the
+   Kubernetes API reports ready and the CoreDNS ConfigMap exists, confirm the
+   authoritative identity-DNS forwarder, replace any stale upstream, omit the
+   ineffective `policy sequential` block, and restart CoreDNS only when
+   changed. Reconciliation runs again after First Run so an in-flight chart
+   update cannot leave the reverted ConfigMap in place. The live
    bootstrap path does not
    require a pod to reach the upstream before mutation because pod DNS is the
    dependency being repaired; the applied CoreDNS Service and every ready
