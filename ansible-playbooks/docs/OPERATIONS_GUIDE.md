@@ -769,6 +769,22 @@ Existing complete contexts are read without mutation; existing incomplete
 contexts fail explicitly. Set `base_cluster_data_context_enabled: false` only
 when the base cluster will never back ECS Data Services or another compute
 workload.
+
+Ranger UserSync is enabled by default and follows the deployment identity
+provider:
+
+```yaml
+base_cluster_ranger_usersync_enabled: true
+base_cluster_ranger_usersync_provider: auto
+```
+
+`auto` selects FreeIPA or Active Directory from `identity_provider_effective`.
+Set the provider to `freeipa` or `ad` to choose one explicitly, `external` with
+the `base_cluster_ranger_usersync_external_*` bind/search variables for another
+LDAP directory, or `none` to omit the UserSync role and LDAP configuration.
+Ranger Admin LDAP authentication is configured first with the same provider,
+then UserSync imports users and groups. Fresh and adopted Base clusters use the
+same role-config-group reconciliation.
 Playbook **34** repeats the same idempotent create/verify gate before Data
 Services provisioning, so a standalone rerun or an incomplete phase 4 cannot
 submit CDE/CDW without the required `SDX` context. Control the two boundaries
