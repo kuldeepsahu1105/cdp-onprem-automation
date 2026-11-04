@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-11-03.2 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-11-04.4 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -416,26 +416,10 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     stage('Resolve Stages') {
       steps {
         script {
-          env.USE_CREDENTIALS_USER_AWS = credentialsUserAwsEnabled() ? 'true' : 'false'
-          env.AWS_USE_INSTANCE_ROLE = credentialsUserAwsEnabled() ? 'false' : 'true'
-          def cfg = resolvePipelineStages(params.PIPELINE_STAGES, env.VALIDATION_CHECKS)
-          env.RUN_VALIDATE = cfg.runValidate
-          env.RUN_TERRAFORM = cfg.runTerraform
-          env.RUN_ANSIBLE = cfg.runAnsible
-          env.ANSIBLE_PHASES = cfg.ansiblePhases
-          env.SELECTED_ANSIBLE_STAGES = cfg.selectedAnsibleStages
-          env.REQUIRE_INVENTORY = cfg.requireInventory
-          env.VALIDATE_INVENTORY = cfg.validateInventory
-          env.PIPELINE_ACTION = cfg.summaryLabel
-          env.VALIDATION_CHECKS = cfg.validationChecks
-          env.REQUIRE_ANSIBLE = cfg.runAnsible
-          env.RUN_DESTROY_STACK = cfg.runDestroyStack
-          // Terraform destroy needs the CLI + tfvars, not provision-time AWS keypair/SG pre-checks.
-          env.REQUIRE_TERRAFORM = cfg.runTerraform == 'true' ? 'true' : 'false'
+          def cfg = applyResolvedPipelineStages()
           echo "Resolved stages: validate=${cfg.runValidate}, terraform=${cfg.runTerraform}, destroy=${cfg.runDestroyStack}, ansible=${cfg.runAnsible}, phases=${cfg.ansiblePhases}"
           echo "Ansible stage order: ${cfg.selectedAnsibleStages ?: '(none)'}"
           echoPipelineStagesQuickReference()
-          env.RUN_STARTSTOP_AUTOMATION = cfg.runStartstopAutomation
           if (cfg.runValidate != 'true' && cfg.runTerraform != 'true' && cfg.runAnsible != 'true' && cfg.runDestroyStack != 'true' && cfg.runStartstopAutomation != 'true') {
             error("No pipeline work resolved from PIPELINE_STAGES='${params.PIPELINE_STAGES}'. Use valid checkboxes (e.g. CDH_BASE not CDH_INSTALL) or REFRESH_JENKINSFILE=YES.")
           }
@@ -837,6 +821,12 @@ def parseSelectedStages(def csv) {
   if (csv == null) {
     return []
   }
+  if (csv instanceof Collection) {
+    return csv.collectMany { parseSelectedStages(it) }
+  }
+  if (csv.getClass().isArray()) {
+    return csv.toList().collectMany { parseSelectedStages(it) }
+  }
   def text = csv.toString().trim()
   if (!text) {
     return []
@@ -844,13 +834,17 @@ def parseSelectedStages(def csv) {
   return text.split(',').collect { it.trim() }.findAll { it }
 }
 
-def knownPipelineStages() {
+def orderedPipelineStageIds() {
   return [
-    'VALIDATE', 'TERRAFORM', 'PREREQS', 'IDENTITY', 'CM_INSTALL',
-    'CM_TLS_KRB_LDAP', 'CDH_INSTALL', 'PORTAL', 'MONITORING', 'ECS_INSTALL',
-    'ECS_POST_INSTALL_TASKS', 'ECS_DATA_SERVICES', 'CDH_BASE',
-    'STARTSTOP_AUTOMATION', 'DESTROY_STACK',
+    'VALIDATE', 'TERRAFORM', 'PREREQS', 'PORTAL', 'IDENTITY', 'CM_INSTALL',
+    'CM_TLS_KRB_LDAP', 'CDH_INSTALL', 'CDH_BASE', 'MONITORING', 'ECS_INSTALL',
+    'ECS_POST_INSTALL_TASKS', 'ECS_DATA_SERVICES', 'STARTSTOP_AUTOMATION',
+    'DESTROY_STACK',
   ]
+}
+
+def knownPipelineStages() {
+  return orderedPipelineStageIds()
 }
 
 def orderedAnsibleStageIds() {
@@ -868,7 +862,7 @@ def echoPipelineStagesQuickReference() {
   IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → 27→28→29→30 | CDH_INSTALL → base cluster (31)
   MONITORING → (32) | ECS_INSTALL → (33 + CoreDNS + healthy console) | ECS_POST_INSTALL_TASKS → credentials/IAM/LDAP/portal after health | ECS_DATA_SERVICES → (34 data services only)
   STARTSTOP_AUTOMATION → ipaserver (EC2_STARTSTOP_DEPLOY_SCRIPT/ RUN_SCRIPT + OPERATION/GROUPS) | DESTROY_STACK → destroy (or DRY_RUN plan)
-  Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. PORTAL may auto-insert when DEPLOYMENT_PORTAL_ENABLED and CM/CDH/ECS selected without PORTAL.'''
+  Stage selection is exact and deduplicated. Legacy CDH_BASE expands once to CM_TLS_KRB_LDAP + CDH_INSTALL.'''
 }
 
 def ansiblePhaseForStage(String stageId) {
@@ -924,6 +918,19 @@ def monitoringStackEnabled() {
   return isParamEnabled(params.MONITORING_STACK_ENABLED)
 }
 
+def canonicalizePipelineStages(List stages) {
+  def unique = []
+  stages.each { stage ->
+    def normalized = normalizePipelineStageToken(stage?.toString())
+    if (normalized && !unique.contains(normalized)) {
+      unique << normalized
+    }
+  }
+  def ordered = orderedPipelineStageIds().findAll { unique.contains(it) }
+  ordered.addAll(unique.findAll { !orderedPipelineStageIds().contains(it) })
+  return ordered
+}
+
 def isDestroyStackOnly(List stages) {
   if (!stages.contains('DESTROY_STACK')) {
     return false
@@ -945,6 +952,9 @@ def isStartstopAutomationOnly(List stages) {
 }
 
 def shouldRunAnsibleStage(String stageId) {
+  if (env.PIPELINE_STAGES_RESOLVED != 'true') {
+    applyResolvedPipelineStages()
+  }
   if (env.RUN_ANSIBLE != 'true') {
     return false
   }
@@ -963,12 +973,12 @@ def normalizePipelineStageToken(String token) {
 }
 
 def effectivePipelineStages(def csv) {
-  def stages = parseSelectedStages(csv).collect { normalizePipelineStageToken(it) }
+  def stages = canonicalizePipelineStages(parseSelectedStages(csv))
   if (stages.isEmpty()) {
     echo "PIPELINE_STAGES not set — using default: ${defaultPipelineStages()}"
-    stages = parseSelectedStages(defaultPipelineStages())
+    stages = canonicalizePipelineStages(parseSelectedStages(defaultPipelineStages()))
   }
-  return expandPipelineStageTokens(stages)
+  return canonicalizePipelineStages(expandPipelineStageTokens(stages))
 }
 
 def effectiveValidationChecks(def csv) {
@@ -1028,6 +1038,28 @@ def resolvePipelineStages(def stagesCsv, def validationCsv) {
     validationChecks        : validationChecks,
     summaryLabel            : summary,
   ]
+}
+
+def applyResolvedPipelineStages() {
+  def cfg = resolvePipelineStages(params.PIPELINE_STAGES, env.VALIDATION_CHECKS)
+  env.USE_CREDENTIALS_USER_AWS = credentialsUserAwsEnabled() ? 'true' : 'false'
+  env.AWS_USE_INSTANCE_ROLE = credentialsUserAwsEnabled() ? 'false' : 'true'
+  env.RUN_VALIDATE = cfg.runValidate
+  env.RUN_TERRAFORM = cfg.runTerraform
+  env.RUN_ANSIBLE = cfg.runAnsible
+  env.ANSIBLE_PHASES = cfg.ansiblePhases
+  env.SELECTED_ANSIBLE_STAGES = cfg.selectedAnsibleStages
+  env.REQUIRE_INVENTORY = cfg.requireInventory
+  env.VALIDATE_INVENTORY = cfg.validateInventory
+  env.PIPELINE_ACTION = cfg.summaryLabel
+  env.VALIDATION_CHECKS = cfg.validationChecks
+  env.REQUIRE_ANSIBLE = cfg.runAnsible
+  env.RUN_DESTROY_STACK = cfg.runDestroyStack
+  env.RUN_STARTSTOP_AUTOMATION = cfg.runStartstopAutomation
+  // Terraform destroy needs the CLI + tfvars, not provision-time AWS keypair/SG pre-checks.
+  env.REQUIRE_TERRAFORM = cfg.runTerraform == 'true' ? 'true' : 'false'
+  env.PIPELINE_STAGES_RESOLVED = 'true'
+  return cfg
 }
 
 def runAnsibleDeployPhase(String phase) {

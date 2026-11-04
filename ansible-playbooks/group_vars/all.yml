@@ -1353,6 +1353,7 @@ ecs_k9s_checksums:
 # is up only when a bootstrap admin key exists (one-time console key or ecs_iam_bootstrap_*).
 ecs_run_post_install_inline: true  # compatibility: playbook 33 performs post-install unless wrapper defers it
 ecs_data_services_deploy_enabled: false
+ecs_data_services_sync_portal_routes: true
 ecs_control_plane_url: ""  # blank = https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}
 ecs_api_access_key_id: ""
 ecs_api_private_key: ""

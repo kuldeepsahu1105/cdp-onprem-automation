@@ -105,6 +105,7 @@ End-to-end order inside `roles/deployment_portal/tasks/sync_deployment_portal_co
 **Playbook-level prerequisites**
 
 - **`10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` play 1 (localhost):** `resolve_deployment_portal_host.yml` runs before the Caddy skip gate so play 2 `hosts:` can template `deployment_portal_host_group_effective` even when Caddy is off. `build_deployment_portal_facts.yml` sets `deployment_portal_context`, `deployment_portal_anchor_inv`, `caddy_vhost_urls`, etc. on localhost when the stack runs.
+- **`roles/ecs/tasks/setup_data_services.yml` optional route refresh:** `ecs_data_services_sync_portal_routes` gates all portal/Caddy resolution and sync work. It defaults to `true` for standalone playbook compatibility; `pvc_setup.sh` passes `true` only when `PORTAL` is selected in the same lifecycle or `DEPLOYMENT_PORTAL_REFRESH=true`.
 - **Play 2 (ops host):** `deployment_portal_load_host_facts.yml` before any verify — ops host does not rebuild context locally.
 - **`deployment_portal_verify_milestones`:** play vars on `10_setup` default `[portal, ipa]`; refresh play sets `deployment_portal_verify_post_cm: true` so empty milestone list becomes `[portal, ipa]`. `resolve_deployment_portal_verify_milestones.yml` always strips `cm` / `cm_tls` — CM URL checks run only in `25_verify_cm.yml`. Tier A/Tier B pgAdmin checks run only when `pgadmin` is in the list.
 
