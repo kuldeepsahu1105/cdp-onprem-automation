@@ -472,8 +472,12 @@ If `warehouse-<environment>/metastore-0` reports
 container inherited a KCM default but has no KCM daemon. Playbook 34 reads the
 Database Catalog configuration with `dw describe-dbc-config` and applies
 `KRB5CCNAME=FILE:/tmp/krb5cc_metastore` through additive
-`dw update-dbc --config` with an explicit `ENV` block only when missing or
-different. The reconciliation
+`dw update-dbc --config` only when missing or different. If the persisted
+configuration is correct but the generated metastore pod is stale, automation
+uses `dw start-dbc --force-refresh` and verifies the recreated pod. The
+verification is bounded by `ecs_cdw_workload_refresh_retries` and
+`ecs_cdw_workload_refresh_delay` (defaults: 60 attempts, 10 seconds). The
+reconciliation
 is controlled by
 `ecs_cdw_workload_file_ccache_reconcile` (default `true`) and is idempotent;
 the CDW control plane persists and renders the setting. Automation does not

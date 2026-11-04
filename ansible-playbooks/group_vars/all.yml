@@ -1624,11 +1624,12 @@ ecs_cdw_submission_recovery_delay: 5
 ecs_cdw_kubernetes_namespace: "warehouse-{{ ecs_cdp_environment_name }}"
 ecs_cdw_workload_file_ccache_reconcile: true
 ecs_cdw_workload_krb5ccname: "FILE:/tmp/krb5cc_metastore"
+ecs_cdw_workload_refresh_retries: 60
+ecs_cdw_workload_refresh_delay: 10
 ecs_cdw_dbc_file_ccache_config:
   commonConfigs:
     configBlocks:
       - id: env
-        format: ENV
         content:
           keyValues:
             KRB5CCNAME: "{{ ecs_cdw_workload_krb5ccname }}"
@@ -1666,7 +1667,6 @@ ecs_cdw_vw_file_ccache_config:
   commonConfigs:
     configBlocks:
       - id: env
-        format: ENV
         content:
           keyValues:
             KRB5CCNAME: "{{ ecs_cdw_vw_krb5ccname }}"

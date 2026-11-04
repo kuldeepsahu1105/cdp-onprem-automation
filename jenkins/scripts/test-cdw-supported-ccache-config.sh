@@ -106,6 +106,7 @@ for name, argv in parser_tasks.items():
 for command in (
     "'describe-dbc-config'",
     "'update-dbc'",
+    "'start-dbc'",
     "'create-vw'",
 ):
     require(command in followup, f"missing supported CDW API command {command}")
@@ -154,6 +155,11 @@ require(
 require(
     "failed_when: ecs_cdw_dbc_ccache_check.rc not in [0, 3]" in followup,
     "DBC comparison must distinguish equal from update-required",
+)
+require(
+    "'--force-refresh'" in followup
+    and "Verify generated metastore FILE credential cache" in followup,
+    "persisted DBC config must force-refresh and verify the generated metastore pod",
 )
 require(
     followup.index("Persist database catalog FILE credential cache through CDW API")
@@ -206,14 +212,20 @@ require(
     "DBC cache path changed",
 )
 require(
+    group_vars["ecs_cdw_workload_refresh_retries"] == 60
+    and group_vars["ecs_cdw_workload_refresh_delay"] == 10,
+    "DBC workload refresh wait must remain bounded to ten minutes",
+)
+require(
     group_vars["ecs_cdw_vw_krb5ccname"] == "FILE:/tmp/krb5cc_cdw",
     "VW cache path changed",
 )
 require(
-    group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
-    ["format"]
-    == "ENV",
-    "DBC environment config block must declare ENV format",
+    "format"
+    not in group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"][
+        "configBlocks"
+    ][0],
+    "DBC payload must match pinned CLI schema (id/content only)",
 )
 require(
     group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
@@ -222,10 +234,11 @@ require(
     "DBC config must reference the authoritative variable",
 )
 require(
-    group_vars["ecs_cdw_vw_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
-    ["format"]
-    == "ENV",
-    "Virtual Warehouse environment config block must declare ENV format",
+    "format"
+    not in group_vars["ecs_cdw_vw_file_ccache_config"]["commonConfigs"][
+        "configBlocks"
+    ][0],
+    "Virtual Warehouse payload must match pinned CLI schema (id/content only)",
 )
 require(
     group_vars["ecs_cdw_vw_file_ccache_config"]["commonConfigs"]["configBlocks"][0]

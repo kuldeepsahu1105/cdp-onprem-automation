@@ -248,6 +248,10 @@ ldap_control = (
 ldap_provider = (
     root / "ansible-playbooks/roles/ecs/tasks/ecs_data_services_ldap.yml"
 ).read_text()
+ldap_credential_refresh = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/ecs_validate_or_refresh_api_credentials.yml"
+).read_text()
 ldap_freeipa_user = (
     root / "ansible-playbooks/roles/ecs/tasks/ecs_ldap_freeipa_admin_user.yml"
 ).read_text()
@@ -258,6 +262,11 @@ assert "freeipa.ansible_freeipa.ipauser" in ldap_freeipa_user
 assert "LDAP | Set provider argv for external LDAP" in ldap_provider
 assert "base_cluster_ranger_usersync_bind_dn" in ldap_provider
 assert "base_cluster_ranger_usersync_bind_password" in ldap_provider
+assert "get-access-key" in ldap_credential_refresh
+assert "No access key found".lower() in ldap_credential_refresh.lower()
+assert "ecs_provision_iam_machine_access_key.yml" in ldap_credential_refresh
+assert "ecs_control_plane_remote_runtime.yml" in ldap_credential_refresh
+assert "ecs_validate_or_refresh_api_credentials.yml" in ldap_control
 
 base_cluster_role = (
     root / "ansible-playbooks/roles/cdh_base_cluster/tasks/setup_base_cluster.yml"
@@ -466,7 +475,9 @@ assert "item.virtual_warehouses | default([]) | length == 0" in cdw_followup
 assert "ecs_data_service_cdw_reconcile_vw_ccaches.yml" not in cdw_followup
 assert "'describe-dbc-config'" in cdw_followup
 assert "'update-dbc'" in cdw_followup
-assert 'block.get("format") == "ENV"' in cdw_followup
+assert "'start-dbc'" in cdw_followup
+assert "'--force-refresh'" in cdw_followup
+assert "Verify generated metastore FILE credential cache" in cdw_followup
 assert "Verify converged database catalog FILE credential cache configuration" in cdw_followup
 assert "'describe-vw-config'" not in cdw_followup
 assert "'update-vw'" not in cdw_followup
@@ -503,9 +514,10 @@ assert group_vars["ecs_cdw_trino_additional_quota"] == {"cpu": 0.0, "memory": 0}
 assert group_vars["ecs_cdw_catalog_kubernetes_health_fallback"] is True
 assert group_vars["ecs_cdw_vw_krb5ccname"] == "FILE:/tmp/krb5cc_cdw"
 assert (
-    group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
-    ["format"]
-    == "ENV"
+    "format"
+    not in group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"][
+        "configBlocks"
+    ][0]
 )
 assert (
     group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
@@ -513,9 +525,10 @@ assert (
     == "{{ ecs_cdw_workload_krb5ccname }}"
 )
 assert (
-    group_vars["ecs_cdw_vw_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
-    ["format"]
-    == "ENV"
+    "format"
+    not in group_vars["ecs_cdw_vw_file_ccache_config"]["commonConfigs"][
+        "configBlocks"
+    ][0]
 )
 assert (
     group_vars["ecs_cdw_vw_file_ccache_config"]["commonConfigs"]["configBlocks"][0]

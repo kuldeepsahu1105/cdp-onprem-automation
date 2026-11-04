@@ -81,30 +81,16 @@
                 .get("configBlocks", [])
             )
             current = ""
-            current_format = ""
             for block in blocks:
                 if block.get("id") == "env":
-                    current_format = block.get("format", "")
                     current = (
                         block.get("content", {})
                         .get("keyValues", {})
                         .get("KRB5CCNAME", "")
                     )
                     break
-            print(
-                json.dumps(
-                    {
-                        "format": current_format,
-                        "KRB5CCNAME": current,
-                    },
-                    sort_keys=True,
-                )
-            )
-            raise SystemExit(
-                0
-                if current_format == "ENV" and current == desired
-                else 3
-            )
+            print(current)
+            raise SystemExit(0 if current == desired else 3)
           - "{{ ecs_cdw_workload_krb5ccname }}"
         stdin: "{{ ecs_cdw_dbc_config.stdout | to_json }}"
       register: ecs_cdw_dbc_ccache_check
@@ -142,6 +128,61 @@
       when:
         - ecs_cdw_dbc_ccache_check is defined
         - ecs_cdw_dbc_ccache_check.rc | default(0) == 3
+
+    - name: Read generated metastore FILE credential cache
+      ansible.builtin.command:
+        argv:
+          - "{{ ecs_coredns_kubectl_path }}"
+          - --kubeconfig
+          - "{{ ecs_coredns_kubeconfig_path }}"
+          - --namespace
+          - "{{ ecs_cdw_kubernetes_namespace }}"
+          - get
+          - pod
+          - metastore-0
+          - --output
+          - >-
+            jsonpath={.spec.containers[?(@.name=="metastore")].env[?(@.name=="KRB5CCNAME")].value}
+      register: ecs_cdw_metastore_krb5ccname
+      changed_when: false
+      failed_when: false
+      become: true
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+
+    - name: Refresh database catalog workloads after FILE cache reconciliation
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_data_services_cdp_cli_prefix
+            + [
+                'dw',
+                'start-dbc',
+                '--cluster-id',
+                ecs_cdw_cluster.cluster.id,
+                '--dbc-id',
+                ecs_cdw_catalog_id,
+                '--force-refresh'
+              ]
+          }}
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_dbc_ccache_refresh
+      changed_when: true
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_catalog_id | default('') | length > 0
+        - ecs_cdw_workload_file_ccache_reconcile | default(true) | bool
+        - >-
+          (
+            ecs_cdw_dbc_ccache_update is defined
+            and not (ecs_cdw_dbc_ccache_update.skipped | default(false) | bool)
+          )
+          or (
+            ecs_cdw_metastore_krb5ccname.stdout | default('') | trim
+            != ecs_cdw_workload_krb5ccname
+          )
 
     - name: Read converged database catalog service configuration
       ansible.builtin.command:
@@ -193,7 +234,6 @@
                 for block in blocks
                 if (
                     block.get("id") == "env"
-                    and block.get("format") == "ENV"
                     and (
                         block.get("content", {})
                         .get("keyValues", {})
@@ -214,6 +254,36 @@
       when:
         - ecs_cdw_dbc_config_converged is defined
         - ecs_cdw_dbc_config_converged.rc | default(1) == 0
+
+    - name: Verify generated metastore FILE credential cache
+      ansible.builtin.command:
+        argv:
+          - "{{ ecs_coredns_kubectl_path }}"
+          - --kubeconfig
+          - "{{ ecs_coredns_kubeconfig_path }}"
+          - --namespace
+          - "{{ ecs_cdw_kubernetes_namespace }}"
+          - get
+          - pod
+          - metastore-0
+          - --output
+          - >-
+            jsonpath={.spec.containers[?(@.name=="metastore")].env[?(@.name=="KRB5CCNAME")].value}
+      register: ecs_cdw_metastore_krb5ccname_converged
+      changed_when: false
+      until:
+        - ecs_cdw_metastore_krb5ccname_converged.rc == 0
+        - >-
+          ecs_cdw_metastore_krb5ccname_converged.stdout | trim
+          == ecs_cdw_workload_krb5ccname
+      retries: "{{ ecs_cdw_workload_refresh_retries | int }}"
+      delay: "{{ ecs_cdw_workload_refresh_delay | int }}"
+      become: true
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_catalog_id | default('') | length > 0
+        - ecs_cdw_workload_file_ccache_reconcile | default(true) | bool
 
     - name: Wait for default database catalog
       cloudera.cloud.dw_database_catalog_info:

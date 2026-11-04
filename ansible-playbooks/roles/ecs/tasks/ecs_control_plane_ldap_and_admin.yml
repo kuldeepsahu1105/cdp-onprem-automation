@@ -8,7 +8,10 @@
       or (ecs_ldap_admin_user_effective | default(false) | bool)
   block:
     - name: Prepare CDP CLI runtime on ECS master
-      ansible.builtin.import_tasks: ecs_control_plane_remote_runtime.yml
+      ansible.builtin.include_tasks: ecs_control_plane_remote_runtime.yml
+
+    - name: Validate or refresh ECS automation API credentials
+      ansible.builtin.include_tasks: ecs_validate_or_refresh_api_credentials.yml
 
     - name: Sync LDAP provider to ECS control plane
       ansible.builtin.import_tasks: ecs_data_services_ldap.yml
