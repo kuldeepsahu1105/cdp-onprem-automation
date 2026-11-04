@@ -1282,6 +1282,12 @@ ecs_cdp_environment_adopt_single_existing: false
 ecs_cdp_environment_create_if_missing: true
 ecs_cdp_console_api_url: ""  # default https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}
 ecs_data_services_verify_tls: false
+# Fresh DNS probes do not clear the long-lived Service Discovery JVM resolver
+# cache. Refresh only that deployment before CDW/CDE/CAI backend submissions.
+ecs_data_services_refresh_service_discovery_dns: true
+ecs_service_discovery_namespace: cdp
+ecs_service_discovery_deployment_name: cdp-release-thunderhead-servicediscoverysimple
+ecs_service_discovery_rollout_timeout: 300
 # Optional ECS control plane LDAP (FreeIPA/AD) — playbook 33 end and/or 34
 ecs_ldap_enabled: false
 ecs_data_services_configure_ldap: false  # when true, sync LDAP before installing CDW/CDE/CAI in playbook 34

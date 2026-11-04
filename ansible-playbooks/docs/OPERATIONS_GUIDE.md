@@ -341,9 +341,12 @@ Fresh pod and CoreDNS Service/endpoint success does not prove that the
 long-lived Service Discovery JVM has refreshed its resolver state. Stale DNS
 inside `cdp-release-thunderhead-servicediscoverysimple` can cause
 remote-context errors, failure to fetch cluster details, misleading
-SDX-not-found messages, or `UnknownHostException: cldr-mngr...` even while new
-pods resolve CM correctly. On the ECS master, restart only that deployment and
-verify its rollout and recent logs:
+SDX-not-found messages, `UnknownHostException: cldr-mngr...`, or DB Catalog
+secret-install failures while retrieving CM LDAP configuration even while new
+pods resolve CM correctly. Playbook 34 restarts and waits for only that
+deployment after DNS verification and before Data Services submissions. Set
+`ecs_data_services_refresh_service_discovery_dns: false` only for diagnostic
+isolation. The equivalent manual recovery is:
 
 ```bash
 sudo /var/lib/rancher/rke2/bin/kubectl \

@@ -68,6 +68,13 @@
       when:
         - ecs_data_services_install_names | default([]) | length > 0
 
+    - name: Refresh Service Discovery DNS state before Data Services provisioning
+      ansible.builtin.import_tasks: common_tasks/ecs_refresh_service_discovery_dns.yml
+      when:
+        - ecs_data_services_install_names | default([]) | length > 0
+        - ecs_data_services_refresh_service_discovery_dns | default(true) | bool
+        - not (ecs_service_discovery_dns_refreshed_this_run | default(false) | bool)
+
     - name: Load existing ECS automation API credentials
       ansible.builtin.import_tasks: common_tasks/ecs_load_api_credentials.yml
 

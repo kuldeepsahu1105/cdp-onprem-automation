@@ -1,0 +1,72 @@
+---
+- name: Check ECS Service Discovery deployment
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_service_discovery_namespace }}"
+      - get
+      - deployment
+      - "{{ ecs_service_discovery_deployment_name }}"
+      - -o
+      - name
+  register: ecs_service_discovery_deployment
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: Require ECS Service Discovery deployment
+  ansible.builtin.assert:
+    that:
+      - ecs_service_discovery_deployment.rc == 0
+      - >-
+        ecs_service_discovery_deployment_name
+        in (ecs_service_discovery_deployment.stdout | default(''))
+    fail_msg: >-
+      Data Services provisioning requires deployment/{{
+      ecs_service_discovery_deployment_name }} in namespace {{
+      ecs_service_discovery_namespace }}. The long-lived Service Discovery JVM
+      must be refreshed after CoreDNS validation so it cannot retain a stale
+      Cloudera Manager address or NXDOMAIN result.
+
+- name: Refresh ECS Service Discovery DNS cache before Data Services provisioning
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_service_discovery_namespace }}"
+      - rollout
+      - restart
+      - "deployment/{{ ecs_service_discovery_deployment_name }}"
+  register: ecs_service_discovery_restart
+  changed_when: ecs_service_discovery_restart.rc == 0
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: Wait for refreshed ECS Service Discovery deployment
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_service_discovery_namespace }}"
+      - rollout
+      - status
+      - "deployment/{{ ecs_service_discovery_deployment_name }}"
+      - "--timeout={{ ecs_service_discovery_rollout_timeout }}s"
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+
+- name: Record ECS Service Discovery DNS refresh
+  ansible.builtin.set_fact:
+    ecs_service_discovery_dns_refreshed_this_run: true

@@ -44,6 +44,12 @@ assert "ecs_data_services_dns_probe_retry_delay | int" in text
 assert group_vars["ecs_data_services_dns_probe_attempts"] == 3
 assert group_vars["ecs_data_services_dns_probe_retry_delay"] > 30
 assert group_vars["ecs_data_services_dns_probe_wait_retries"] == 24
+assert group_vars["ecs_data_services_refresh_service_discovery_dns"] is True
+assert group_vars["ecs_service_discovery_namespace"] == "cdp"
+assert group_vars["ecs_service_discovery_deployment_name"] == (
+    "cdp-release-thunderhead-servicediscoverysimple"
+)
+assert group_vars["ecs_service_discovery_rollout_timeout"] == 300
 assert group_vars["ecs_node_local_dns_reconcile"] is True
 assert group_vars["ecs_node_local_dns_configmap_name"] == "node-local-dns"
 assert group_vars["ecs_node_local_dns_daemonset_name"] == "node-local-dns"
@@ -234,6 +240,51 @@ record_results = tasks_by_name[
 ]
 assert "loop" not in probe_success
 assert record_results["loop"] == "{{ ecs_data_services_dns_verification_records }}"
+
+refresh_path = path.parent / "ecs_refresh_service_discovery_dns.yml"
+refresh_tasks = yaml.safe_load(refresh_path.read_text())
+refresh_tasks_by_name = {
+    task.get("name"): task for task in refresh_tasks
+}
+restart_task = refresh_tasks_by_name[
+    "Refresh ECS Service Discovery DNS cache before Data Services provisioning"
+]
+restart_argv = restart_task["ansible.builtin.command"]["argv"]
+assert "rollout" in restart_argv
+assert "restart" in restart_argv
+assert (
+    "deployment/{{ ecs_service_discovery_deployment_name }}"
+    in restart_argv
+)
+wait_task = refresh_tasks_by_name[
+    "Wait for refreshed ECS Service Discovery deployment"
+]
+assert (
+    "--timeout={{ ecs_service_discovery_rollout_timeout }}s"
+    in wait_task["ansible.builtin.command"]["argv"]
+)
+for task in refresh_tasks:
+    if "ansible.builtin.command" in task:
+        assert task["delegate_to"] == "{{ groups[ecs_cluster_master_group][0] }}"
+        assert task["connection"] == "ssh"
+
+playbook_tasks = yaml.safe_load(
+    (path.parent.parent / "34_setup_ecs_data_services.yml").read_text()
+)[1]["tasks"]
+playbook_task_names = [task.get("name") for task in playbook_tasks]
+reconcile_index = playbook_task_names.index(
+    "Reconcile CoreDNS before Data Services provisioning"
+)
+verify_index = playbook_task_names.index(
+    "Verify Data Services DNS through Kubernetes pods"
+)
+refresh_index = playbook_task_names.index(
+    "Refresh Service Discovery DNS state before Data Services provisioning"
+)
+credentials_index = playbook_task_names.index(
+    "Load existing ECS automation API credentials"
+)
+assert reconcile_index < verify_index < refresh_index < credentials_index
 
 freeipa_task_names = [
     "Require FreeIPA inventory for Data Services DNS verification",

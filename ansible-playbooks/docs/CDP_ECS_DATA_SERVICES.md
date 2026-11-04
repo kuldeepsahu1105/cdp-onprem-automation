@@ -129,14 +129,22 @@ Checking every replica prevents one healthy Service response from masking a
 stale replica. If the Service path or any replica is stale while the
 configuration is correct, playbook 33 performs one rolling CoreDNS deployment
 restart and verifies the Service and every replacement replica again. Healthy
-reruns do not restart CoreDNS. Playbook 34 intentionally does not repeat this
-cluster-install responsibility during Data Services post-install.
+reruns do not restart CoreDNS. Playbook 34 reconciles and verifies the same DNS
+contract again immediately before Data Services provisioning because a later
+standalone rerun must not assume playbook 33 completed that boundary
+successfully.
 Even successful fresh-pod, CoreDNS Service, and ready-endpoint checks do not
 prove that the long-lived Service Discovery JVM has refreshed its resolver
 state. A stale `cdp-release-thunderhead-servicediscoverysimple` process can
 report remote-context failures, failure to fetch cluster details, misleading
-SDX-not-found errors, or `UnknownHostException: cldr-mngr...`. On the ECS
-master, restart and verify only that deployment:
+SDX-not-found errors, `UnknownHostException: cldr-mngr...`, or downstream
+DB Catalog failures while retrieving CM LDAP configuration. Playbook 34
+therefore restarts and waits for only that deployment after pod-based DNS
+verification and before any CDW/CDE/CAI submission. Disable this only for
+diagnostic isolation with
+`ecs_data_services_refresh_service_discovery_dns: false`.
+
+The equivalent manual recovery on the ECS master is:
 
 ```bash
 sudo /var/lib/rancher/rke2/bin/kubectl \
