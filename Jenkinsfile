@@ -1056,6 +1056,26 @@ def applyResolvedPipelineStages() {
 }
 
 def runAnsibleDeployPhase(String phase) {
+  def phaseLabels = [
+    '1': 'Prerequisites',
+    'portal': 'Deployment Portal',
+    'monitoring': 'Monitoring Stack',
+    '2': 'Identity',
+    '3': 'Cloudera Manager Install',
+    'cm_tls': 'CM TLS / Kerberos / LDAP',
+    'cdh': 'CDH Base Cluster',
+    'ecs': 'ECS Cluster',
+    '8': 'ECS Post-Install Tasks',
+    '7': 'ECS Data Services',
+  ]
+  def phaseLabel = phaseLabels[phase] ?: phase
+  def phaseStatus = 'FAILED'
+  sh """
+    printf '\\n%s\\n' '################################################################################'
+    printf '### JENKINS ANSIBLE PHASE START: %s (DEPLOY_PHASE=%s)\\n' '${phaseLabel}' '${phase}'
+    printf '%s\\n\\n' '################################################################################'
+  """
+  try {
   writeAnsibleGroupVarsFragmentFile()
   def licenseFile = writeCmLicenseContentFile()
   if (ansibleGroupVarsYamlHasKeys(params.ANSIBLE_GROUP_VARS_YAML?.toString())) {
@@ -1125,18 +1145,26 @@ def runAnsibleDeployPhase(String phase) {
   }
   def ecsBootstrapCredentialId =
     params.ECS_IAM_BOOTSTRAP_CREDENTIAL_ID?.toString()?.trim()
-  if (ecsBootstrapCredentialId && phase in ['ecs', '7', '8']) {
-    withCredentials([
-      usernamePassword(
-        credentialsId: ecsBootstrapCredentialId,
-        usernameVariable: 'ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID',
-        passwordVariable: 'ECS_IAM_BOOTSTRAP_PRIVATE_KEY',
-      ),
-    ]) {
+    if (ecsBootstrapCredentialId && phase in ['ecs', '7', '8']) {
+      withCredentials([
+        usernamePassword(
+          credentialsId: ecsBootstrapCredentialId,
+          usernameVariable: 'ECS_IAM_BOOTSTRAP_ACCESS_KEY_ID',
+          passwordVariable: 'ECS_IAM_BOOTSTRAP_PRIVATE_KEY',
+        ),
+      ]) {
+        runAnsiblePhase()
+      }
+    } else {
       runAnsiblePhase()
     }
-  } else {
-    runAnsiblePhase()
+    phaseStatus = 'SUCCESS'
+  } finally {
+    sh """
+      printf '\\n%s\\n' '################################################################################'
+      printf '### JENKINS ANSIBLE PHASE END: %s (DEPLOY_PHASE=%s) — %s\\n' '${phaseLabel}' '${phase}' '${phaseStatus}'
+      printf '%s\\n\\n' '################################################################################'
+    """
   }
 }
 

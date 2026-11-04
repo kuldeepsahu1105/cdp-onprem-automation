@@ -154,6 +154,13 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 | `USE_CREDENTIALS_USER_AWS` | `true` (checked — holautosa `~/.aws`; uncheck for EC2 IAM role via IMDS) |
 | Instance counts/types | Same as `.tfvars.yaml` instance_groups |
 
+Terraform initialization is workspace-aware. The first selected Terraform,
+Ansible, start/stop, or destroy phase runs `terraform init` when the checkout
+has not been initialized or its Terraform configuration changed. Later phases
+in the same end-to-end build reuse that initialization. A build started from a
+mid-lifecycle phase still initializes automatically. Set
+`TERRAFORM_INIT_FORCE=true` only to force reinitialization for troubleshooting.
+
 If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION`.
 
 **Legacy token:** Saved jobs may still submit **`CDH_BASE`** — it expands to `CM_TLS_KRB_LDAP` + `CDH_INSTALL`. Run **REFRESH_JENKINSFILE=YES** after Jenkinsfile changes to reload checkboxes.
