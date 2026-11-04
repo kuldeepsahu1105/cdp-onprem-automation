@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-11-03.2 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-11-04.1 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -256,12 +256,12 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     booleanParam(
       name: 'MONITORING_STACK_ENABLED',
       defaultValue: true,
-      description: 'Deploy Grafana/Prometheus (32) and enable ops Caddy reverse proxy (portal/cm/ipa vhosts on deployment_portal_http_port, default 81 → CM :7180/:7183 upstream). When false, no PORTAL/Caddy — CM direct only.'
+      description: 'Deploy Grafana/Prometheus/Alertmanager/cAdvisor (32). When CDH_INSTALL or ECS_INSTALL is selected, stage 32 is inserted automatically unless this is false.'
     )
     booleanParam(
       name: 'DEPLOYMENT_PORTAL_ENABLED',
       defaultValue: true,
-      description: 'Bootstrap Caddy portal on ops host (10) when MONITORING_STACK_ENABLED=true. Without monitoring, no Caddy/portal — CM stays direct :7180/:7183. CM Caddy vhost uses edge port deployment_portal_http_port (81) proxying to cldr-mngr:7180/7183.'
+      description: 'Bootstrap the Caddy deployment portal on the ops host (10), independently of monitoring. Required portal stage is inserted automatically for CM/CDH/monitoring/ECS deployment stages.'
     )
     // Hidden advanced input: AUTO_INCLUDE_PORTAL_BOOTSTRAP=false; select PORTAL explicitly.
     booleanParam(
@@ -874,7 +874,7 @@ def echoPipelineStagesQuickReference() {
   IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → 27→28→29→30 | CDH_INSTALL → base cluster (31)
   MONITORING → (32) | ECS_INSTALL → (33 + CoreDNS + healthy console) | ECS_POST_INSTALL_TASKS → credentials/IAM/LDAP/portal after health | ECS_DATA_SERVICES → (34 data services only)
   STARTSTOP_AUTOMATION → ipaserver (EC2_STARTSTOP_DEPLOY_SCRIPT/ RUN_SCRIPT + OPERATION/GROUPS) | DESTROY_STACK → destroy (or DRY_RUN plan)
-  Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. PORTAL may auto-insert when DEPLOYMENT_PORTAL_ENABLED and CM/CDH/ECS selected without PORTAL.'''
+  Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. PORTAL auto-inserts for deployment stages when enabled; MONITORING auto-inserts for CDH/ECS when monitoring is enabled.'''
 }
 
 def ansiblePhaseForStage(String stageId) {
@@ -922,12 +922,44 @@ def expandPipelineStageTokens(List stages) {
 }
 
 def portalDeployEnabled() {
-  // Caddy / portal stack requires monitoring (ops reverse proxy for Grafana + CM/pgAdmin vhosts).
-  return isParamEnabled(params.DEPLOYMENT_PORTAL_ENABLED) && monitoringStackEnabled()
+  return isParamEnabled(params.DEPLOYMENT_PORTAL_ENABLED)
 }
 
 def monitoringStackEnabled() {
   return isParamEnabled(params.MONITORING_STACK_ENABLED)
+}
+
+def autoIncludePortalBootstrapEnabled() {
+  def raw = env.AUTO_INCLUDE_PORTAL_BOOTSTRAP
+  return raw == null || !raw.toString().trim() || isParamEnabled(raw)
+}
+
+def addImplicitDeploymentStages(List stages) {
+  def result = new ArrayList(stages)
+  def portalTriggers = [
+    'CM_INSTALL', 'CM_TLS_KRB_LDAP', 'CDH_INSTALL', 'MONITORING',
+    'ECS_INSTALL', 'ECS_POST_INSTALL_TASKS', 'ECS_DATA_SERVICES',
+  ]
+  if (
+    portalDeployEnabled()
+    && autoIncludePortalBootstrapEnabled()
+    && result.any { it in portalTriggers }
+    && !result.contains('PORTAL')
+  ) {
+    echo 'INFO: DEPLOYMENT_PORTAL_ENABLED=true — adding required PORTAL stage.'
+    result << 'PORTAL'
+  }
+
+  def monitoringTriggers = ['CDH_INSTALL', 'ECS_INSTALL']
+  if (
+    monitoringStackEnabled()
+    && result.any { it in monitoringTriggers }
+    && !result.contains('MONITORING')
+  ) {
+    echo 'INFO: MONITORING_STACK_ENABLED=true — adding MONITORING stage after CDH and before ECS.'
+    result << 'MONITORING'
+  }
+  return result
 }
 
 def isDestroyStackOnly(List stages) {
@@ -974,7 +1006,7 @@ def effectivePipelineStages(def csv) {
     echo "PIPELINE_STAGES not set — using default: ${defaultPipelineStages()}"
     stages = parseSelectedStages(defaultPipelineStages())
   }
-  return expandPipelineStageTokens(stages)
+  return addImplicitDeploymentStages(expandPipelineStageTokens(stages))
 }
 
 def effectiveValidationChecks(def csv) {
