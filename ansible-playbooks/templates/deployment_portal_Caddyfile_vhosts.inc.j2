@@ -37,6 +37,10 @@ http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | in
 https://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_ipa_https_port | int != 443 %}:{{ deployment_portal_ipa_https_port }}{% endif %} {
   tls internal
   redir / {{ deployment_portal_ipa_ui_path | default('/ipa/ui/') }} permanent
+{% if not (deployment_portal_ipa_modern_ui_available | default(false) | bool) %}
+  @ipa_modern_unavailable path /ipa/modern-ui /ipa/modern-ui/*
+  redir @ipa_modern_unavailable /ipa/ui/ temporary
+{% endif %}
 {% include 'deployment_portal_Caddyfile_ipa_proxy.inc.j2' %}
 }
 {% else %}
@@ -45,6 +49,10 @@ https://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_ipa_https_por
 {% set _ipa_caddy_strip_secure_cookie = true %}
 http://{{ caddy_vhost_urls.ipa.hostname }}{% if deployment_portal_http_port | int != 80 %}:{{ deployment_portal_http_port }}{% endif %} {
   redir / {{ deployment_portal_ipa_ui_path | default('/ipa/ui/') }} permanent
+{% if not (deployment_portal_ipa_modern_ui_available | default(false) | bool) %}
+  @ipa_modern_unavailable path /ipa/modern-ui /ipa/modern-ui/*
+  redir @ipa_modern_unavailable /ipa/ui/ temporary
+{% endif %}
 {% include 'deployment_portal_Caddyfile_ipa_proxy.inc.j2' %}
 }
 {% endif %}

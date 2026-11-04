@@ -130,6 +130,10 @@ index = (templates / "deployment_portal_index.html.j2").read_text()
 base_urls = (templates / "deployment_portal_base_cluster_portal_urls.j2").read_text()
 ipa_httpd = (templates / "ipa_httpd_disable_browser_krb.conf.j2").read_text()
 ipa_proxy = (templates / "deployment_portal_Caddyfile_ipa_proxy.inc.j2").read_text()
+ipa_vhosts = (
+    root / "ansible-playbooks/templates/deployment_portal_Caddyfile_vhosts.inc.j2"
+).read_text()
+endpoints = (templates / "deployment_portal_endpoints.j2").read_text()
 discovery = (
     root
     / "ansible-playbooks/roles/deployment_portal/tasks/discover_deployment_portal_ecs_cm_links.yml"
@@ -137,6 +141,10 @@ discovery = (
 
 assert "deployment_portal_dynamic_links: []" in facts
 assert "deployment_portal_dynamic_links | default([])" not in facts
+assert "Probe FreeIPA modern UI application" in facts
+assert "deployment_portal_ipa_modern_ui_probe.status" in facts
+assert "Unable to verify your Kerberos credentials" in facts
+assert "ipa_caddy_preferred_url" in facts
 assert "ctx.ecs.links | default([])" in index
 assert '<span class="tile-label">Cloudera Manager</span>' in index
 assert '<span class="tile-label">ECS</span>' in index
@@ -147,6 +155,11 @@ for unwanted in ("Ranger Admin", "Ozone Recon UI", "HDFS NameNode UI", "Knox Gat
 assert 'SetEnvIf Request_URI "^/ipa(/|$)" gssapi-no-negotiate=1' in ipa_httpd
 assert re.search(r"(?m)^<Location\s+/ipa>", ipa_httpd) is None
 assert "header -WWW-Authenticate" not in ipa_proxy
+assert "@ipa_modern_unavailable path /ipa/modern-ui /ipa/modern-ui/*" in ipa_vhosts
+assert "redir @ipa_modern_unavailable /ipa/ui/ temporary" in ipa_vhosts
+assert "ipa_caddy_preferred_url" in index
+assert "ipa_legacy_caddy_url != ipa_tile_url" in index
+assert "~ deployment_portal_ipa_ui_path" in endpoints
 assert "@ipa_session path /ipa/session /ipa/session/*" in ipa_proxy
 assert "header_up Host {{ deployment_portal_ipa_fqdn }}" in ipa_proxy
 assert "tls_server_name {{ deployment_portal_ipa_fqdn }}" in ipa_proxy

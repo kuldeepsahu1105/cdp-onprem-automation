@@ -31,6 +31,10 @@ http://:{{ deployment_portal_http_port }} {
   }
 
 {% if deployment_portal_has_ipa | default(false) | bool %}
+{% if not (deployment_portal_ipa_modern_ui_available | default(false) | bool) %}
+  @ipa_modern_unavailable path /ipa/modern-ui /ipa/modern-ui/*
+  redir @ipa_modern_unavailable /ipa/ui/ temporary
+{% endif %}
   handle /ipa* {
 {% include 'deployment_portal_Caddyfile_ipa_proxy.inc.j2' %}
   }

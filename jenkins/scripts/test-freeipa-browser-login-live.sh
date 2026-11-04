@@ -17,7 +17,7 @@ if [[ -n "${FREEIPA_CA_CERT:-}" ]]; then
   curl_args+=(--cacert "${FREEIPA_CA_CERT}")
 fi
 
-curl "${curl_args[@]}" --dump-header "${workdir}/modern.headers" \
+curl "${curl_args[@]}" --location --dump-header "${workdir}/modern.headers" \
   --output "${workdir}/modern.html" "${base_url}/ipa/modern-ui/"
 
 grep -Eq '^HTTP/[^ ]+ 200([[:space:]]|$)' "${workdir}/modern.headers"
@@ -56,7 +56,7 @@ fi
 grep -Eiq 'ipa_session|Set-Cookie:.*ipa_session' "${cookie_jar}" "${workdir}/login.headers"
 
 authenticated_status="$(
-  curl "${curl_args[@]}" --cookie "${cookie_jar}" --output "${workdir}/authenticated.html" \
+  curl "${curl_args[@]}" --location --cookie "${cookie_jar}" --output "${workdir}/authenticated.html" \
     --write-out '%{http_code}' "${base_url}/ipa/modern-ui/"
 )"
 test "${authenticated_status}" = "200"
