@@ -215,9 +215,9 @@ Ansible values. The Ansible deployment banner prints both values when they diffe
 | `postgresql_version` | `18` | PostgreSQL server/client target version. |
 | `postgres_jdbc_version` | `"42.7.10"` | JDBC driver downloaded for CM services. |
 | `cm_version` | `"7.13.2.20000"` | Cloudera Manager package/repository version. |
-| `cm_numeric_version` | `"7132020000"` | Numeric CM build path used by archive URLs; update with `cm_version`. |
+| `cm_numeric_version` | `""` | Optional CM GBN override for the internal RHEL mirror. Empty resolves exact RPM filenames from the selected repository directory. |
 | `cdh_version` | `"7.3.2.20000"` | Runtime parcel version. |
-| `cdh_numeric_version` | `"77083870"` | Expected CDH parcel build identifier. Playbook 31 resolves the effective numeric build from the configured repository manifest for the selected `cdh_version`. |
+| `cdh_numeric_version` | `""` | Optional CDH parcel GBN override. Empty is the default because playbook 31 resolves the published build from the selected repository manifest. |
 | `cdv_version` | `"8.0.7"` | Data Visualization CSD/parcel release. |
 | `cfm_version` | `"2.1.7.3004"` | Flow Management CSD/parcel release. |
 | `cfm_nifi_app_version` | `"1.28.1"` | NiFi application segment used in CSD filenames. |

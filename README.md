@@ -159,7 +159,7 @@ Terraform generates `inventory.ini` with these groups when you run `clone_and_ru
 | Variable | Default | Description |
 |---|---|---|
 | `cdh_version` | `7.3.2.20000` | CDH Runtime parcel version |
-| `cdh_numeric_version` | `77083870` | Parcel build number (used to build full parcel name) |
+| `cdh_numeric_version` | empty | Optional parcel GBN override; playbook 31 resolves the published build from `manifest.json` |
 | `cdh_basecluster_name` | `<deployment_name_prefix>-base-cluster` | Cluster name in Cloudera Manager (`base-cluster` when the prefix is empty); default-name reruns safely adopt legacy `CDP-base-cluster` / `CDH-Cluster` registrations by host ownership |
 | `base_cluster_master_group` | `base-masters` | Inventory group for master host |
 | `base_cluster_worker_group` | `base-workers` | Inventory group for worker hosts |
