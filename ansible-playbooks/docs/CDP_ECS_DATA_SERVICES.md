@@ -138,7 +138,9 @@ the Base cluster `SDX` Data Context before DNS checks and service submission.
 The context must expose HDFS, HIVE, ATLAS, and RANGER. This repeats the
 playbook 31 completion gate without restarting or reconfiguring healthy Base
 services, and prevents CDE from reaching chart installation without its remote
-data context.
+data context. Set `ecs_data_services_base_data_context_enabled: false` only
+when an external process owns that preflight. This switch is independent of
+playbook 31's `base_cluster_data_context_enabled`.
 Even successful fresh-pod, CoreDNS Service, and ready-endpoint checks do not
 prove that the long-lived Service Discovery JVM has refreshed its resolver
 state. A stale `cdp-release-thunderhead-servicediscoverysimple` process can

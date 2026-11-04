@@ -100,6 +100,7 @@ assert "Data Services SDX | Read CM API version" in sdx_gate
 assert "Data Services SDX | Ensure base cluster Data Context" in sdx_gate
 assert "ansible.builtin.include_tasks: ensure_base_cluster_data_context.yml" in sdx_gate
 assert "cm_cluster_module_delegate_to: \"{{ cm_manager_inventory_host }}\"" in sdx_gate
+assert "ecs_data_services_base_data_context_enabled | default(true) | bool" in playbook_text
 assert "when: \"'model_registry' in (ecs_data_services_install_names | default([]))\"" in playbook_text
 selection_text = (
     root / "ansible-playbooks/common_tasks/resolve_ecs_data_services_install.yml"
@@ -331,6 +332,7 @@ group_vars = yaml.safe_load(
     (root / "ansible-playbooks/group_vars/all.yml").read_text()
 )
 assert group_vars["base_cluster_data_context_enabled"] is True
+assert group_vars["ecs_data_services_base_data_context_enabled"] is True
 assert group_vars["base_cluster_data_context_name"] == "SDX"
 assert group_vars["base_cluster_data_context_services"] == [
     "HDFS",

@@ -60,7 +60,7 @@
       ansible.builtin.import_tasks: common_tasks/ecs_ensure_base_data_context.yml
       when:
         - ecs_data_services_install_names | default([]) | length > 0
-        - base_cluster_data_context_enabled | default(true) | bool
+        - ecs_data_services_base_data_context_enabled | default(true) | bool
 
     - name: Reconcile CoreDNS before Data Services provisioning
       ansible.builtin.import_tasks: common_tasks/ecs_reconcile_coredns.yml

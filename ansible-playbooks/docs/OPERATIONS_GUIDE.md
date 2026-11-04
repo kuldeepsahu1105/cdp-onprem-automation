@@ -771,7 +771,16 @@ when the base cluster will never back ECS Data Services or another compute
 workload.
 Playbook **34** repeats the same idempotent create/verify gate before Data
 Services provisioning, so a standalone rerun or an incomplete phase 4 cannot
-submit CDE/CDW without the required `SDX` context.
+submit CDE/CDW without the required `SDX` context. Control the two boundaries
+independently:
+
+```yaml
+base_cluster_data_context_enabled: true
+ecs_data_services_base_data_context_enabled: true
+```
+
+The first controls playbook 31 Base creation; the second controls playbook 34
+Data Services preflight.
 
 First Run failures are expanded from the parent CM command into failed service
 commands and their child validation messages in Jenkins. First Run is submitted

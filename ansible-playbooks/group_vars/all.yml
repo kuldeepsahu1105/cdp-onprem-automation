@@ -1282,6 +1282,9 @@ ecs_cdp_environment_adopt_single_existing: false
 ecs_cdp_environment_create_if_missing: true
 ecs_cdp_console_api_url: ""  # default https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}
 ecs_data_services_verify_tls: false
+# Independently control the playbook 34 SDX create/verify gate. Base-cluster
+# creation uses base_cluster_data_context_enabled.
+ecs_data_services_base_data_context_enabled: true
 # Fresh DNS probes do not clear the long-lived Service Discovery JVM resolver
 # cache. Refresh only that deployment before CDW/CDE/CAI backend submissions.
 ecs_data_services_refresh_service_discovery_dns: true
