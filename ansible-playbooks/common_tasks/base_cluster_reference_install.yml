@@ -280,6 +280,7 @@
         {%- endfor -%}
       {%- endfor -%}
       {{ configs }}
+  no_log: true
 
 - name: Count configured Base role config groups
   ansible.builtin.set_fact:
@@ -320,7 +321,11 @@
   loop: "{{ base_cluster_reference_role_configs }}"
   loop_control:
     label: "{{ item.service }}/{{ item.role_type }}"
-  no_log: "{{ item.service == 'ranger' and item.role_type == 'RANGER_USERSYNC' }}"
+  no_log: >-
+    {{
+      item.service == 'ranger'
+      and item.role_type in ['RANGER_ADMIN', 'RANGER_USERSYNC']
+    }}
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Build v4-compatible Base host-template payloads

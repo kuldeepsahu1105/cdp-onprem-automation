@@ -166,6 +166,10 @@
         base_cluster_kafka_metadata_store_effective: >-
           {{ 'KRaft' if base_cluster_kafka_metadata_store | lower == 'kraft' else 'Zookeeper' }}
 
+    - name: Validate Ranger directory integration
+      ansible.builtin.import_tasks: common_tasks/validate_ranger_directory_config.yml
+      when: base_cluster_install_services.ranger | default(true) | bool
+
     - name: Set master hostname
       ansible.builtin.set_fact:
         base_master_fqdn: >-
@@ -224,9 +228,38 @@
           - "Master host: {{ base_master_fqdn }}"
           - "Worker hosts: {{ base_worker_fqdns }}"
 
+    - name: Check Ranger directory truststore on the Ranger host
+      ansible.builtin.stat:
+        path: "{{ base_cluster_ranger_usersync_truststore_path }}"
+      register: base_cluster_ranger_usersync_truststore
+      delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+      when:
+        - base_cluster_install_services.ranger | default(true) | bool
+        - base_cluster_ranger_usersync_configure_effective | bool
+        - base_cluster_ranger_usersync_tls_enabled | bool
+        - base_cluster_ranger_usersync_truststore_path | string | trim | length > 0
+
+    - name: Require configured Ranger directory truststore
+      ansible.builtin.assert:
+        that:
+          - base_cluster_ranger_usersync_truststore.stat.exists | default(false) | bool
+          - base_cluster_ranger_usersync_truststore.stat.isreg | default(false) | bool
+        fail_msg: >-
+          Ranger UserSync truststore
+          {{ base_cluster_ranger_usersync_truststore_path }} is missing on the
+          Ranger host. Install the directory CA through the existing TLS/
+          Auto-TLS trust workflow or clear the override to use the JVM default
+          CA set; certificate verification is never disabled.
+      when:
+        - base_cluster_install_services.ranger | default(true) | bool
+        - base_cluster_ranger_usersync_configure_effective | bool
+        - base_cluster_ranger_usersync_tls_enabled | bool
+        - base_cluster_ranger_usersync_truststore_path | string | trim | length > 0
+
     - name: Build cluster specification
       ansible.builtin.set_fact:
         base_cluster_spec: "{{ lookup('template', 'base_cluster_cluster_spec.j2') | from_yaml }}"
+      no_log: true
 
     - name: Find native booleans incompatible with collection v4 configuration modules
       ansible.builtin.set_fact:
@@ -1325,7 +1358,6 @@
       delegate_to: "{{ cm_cluster_module_delegate_to }}"
       when:
         - base_cluster_install_services.ranger | default(true) | bool
-        - base_cluster_ranger_usersync_configure_effective | bool
 
     - name: Resolve Ranger Admin role config group
       ansible.builtin.set_fact:
@@ -1339,7 +1371,6 @@
           }}
       when:
         - base_cluster_install_services.ranger | default(true) | bool
-        - base_cluster_ranger_usersync_configure_effective | bool
 
     - name: Resolve Ranger UserSync role config group
       ansible.builtin.set_fact:
@@ -1353,7 +1384,6 @@
           }}
       when:
         - base_cluster_install_services.ranger | default(true) | bool
-        - base_cluster_ranger_usersync_configure_effective | bool
 
     - name: Require Ranger LDAP role config groups
       ansible.builtin.assert:
@@ -1377,6 +1407,7 @@
           }}/services/ranger/roleConfigGroups/{{
           base_cluster_ranger_admin_group }}/config
         cm_config_desired: "{{ base_cluster_ranger_admin_ldap_config }}"
+        cm_config_require_known_names: true
         cm_config_secret_names: >-
           {{
             ['ranger_ldap_ad_bind_password']
@@ -1387,6 +1418,22 @@
         - base_cluster_install_services.ranger | default(true) | bool
         - base_cluster_ranger_usersync_configure_effective | bool
 
+    - name: Restore Ranger Admin local authentication when directory integration is disabled
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Ranger Admin local authentication
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/ranger/roleConfigGroups/{{
+          base_cluster_ranger_admin_group }}/config
+        cm_config_desired:
+          ranger_authentication_method: UNIX
+        cm_config_require_known_names: true
+      when:
+        - base_cluster_install_services.ranger | default(true) | bool
+        - not (base_cluster_ranger_usersync_configure_effective | bool)
+        - base_cluster_ranger_admin_group | length > 0
+
     - name: Configure Ranger UserSync LDAP provider
       ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
       vars:
@@ -1395,28 +1442,29 @@
           {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
           }}/services/ranger/roleConfigGroups/{{
           base_cluster_ranger_usersync_group }}/config
-        cm_config_desired:
-          ranger.usersync.ldap.url: "{{ base_cluster_ranger_usersync_ldap_url }}"
-          ranger.usersync.ldap.binddn: "{{ base_cluster_ranger_usersync_bind_dn }}"
-          ranger_usersync_ldap_ldapbindpassword: "{{ base_cluster_ranger_usersync_bind_password }}"
-          ranger.usersync.ldap.user.searchbase: "{{ base_cluster_ranger_usersync_user_search_base }}"
-          ranger.usersync.ldap.user.objectclass: "{{ base_cluster_ranger_usersync_user_object_class }}"
-          ranger.usersync.ldap.user.nameattribute: "{{ base_cluster_ranger_usersync_user_name_attribute }}"
-          ranger.usersync.group.searchbase: "{{ base_cluster_ranger_usersync_group_search_base }}"
-          ranger.usersync.group.objectclass: "{{ base_cluster_ranger_usersync_group_object_class }}"
-          ranger.usersync.group.nameattribute: "{{ base_cluster_ranger_usersync_group_name_attribute }}"
-          ranger.usersync.group.memberattributename: "{{ base_cluster_ranger_usersync_group_member_attribute }}"
-          ranger.usersync.ldap.referral: follow
-          ranger.usersync.ldap.username.caseconversion: lower
-          ranger.usersync.ldap.groupname.caseconversion: lower
-          ranger.usersync.ldap.grouphierarchylevels: 0
-          ranger.usersync.source.impl.class: org.apache.ranger.ldapusersync.process.LdapUserGroupBuilder
-          ranger.usersync.user.searchenabled: "true"
+        cm_config_desired: "{{ base_cluster_ranger_usersync_role_config }}"
+        cm_config_require_known_names: true
         cm_config_secret_names:
           - ranger_usersync_ldap_ldapbindpassword
       when:
         - base_cluster_install_services.ranger | default(true) | bool
         - base_cluster_ranger_usersync_configure_effective | bool
+
+    - name: Disable existing Ranger UserSync when directory integration is disabled
+      ansible.builtin.include_tasks: common_tasks/reconcile_cm_config_api.yml
+      vars:
+        cm_config_display_name: Ranger UserSync disabled state
+        cm_config_endpoint: >-
+          {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+          }}/services/ranger/roleConfigGroups/{{
+          base_cluster_ranger_usersync_group }}/config
+        cm_config_desired:
+          ranger.usersync.enabled: "false"
+        cm_config_require_known_names: true
+      when:
+        - base_cluster_install_services.ranger | default(true) | bool
+        - not (base_cluster_ranger_usersync_configure_effective | bool)
+        - base_cluster_ranger_usersync_group | length > 0
 
     - name: Initialize Knox CDP discovery change flags
       ansible.builtin.set_fact:
