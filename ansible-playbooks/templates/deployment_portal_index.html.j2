@@ -1,9 +1,9 @@
 {% set ctx = deployment_portal_context %}
 {% set cm_tile_url = ctx.cloudera_manager.ui_url_https %}
 {% set pgadmin_tile_url = ctx.portal.pgadmin_caddy_url | default('') if (ctx.portal.pgadmin_caddy_url | default('') | length > 0) else (ctx.portal.pgadmin_url_direct | default(ctx.portal.pgadmin_url | default(''))) %}
-{% set ipa_preferred_url = ctx.identity.ipa_caddy_preferred_url | default('') if (ctx.identity.ipa_caddy_preferred_url | default('') | length > 0) else (ctx.identity.ipa_caddy_url | default('')) %}
+{% set ipa_modern_url = ctx.identity.ipa_caddy_modern_url | default('') if (ctx.identity.ipa_caddy_modern_url | default('') | length > 0) else (ctx.identity.ipa_caddy_url | default('')) %}
 {% set ipa_legacy_caddy_url = ctx.identity.ipa_caddy_legacy_url | default('') %}
-{% set ipa_tile_url = ipa_preferred_url if (ipa_preferred_url | length > 0) else (ctx.identity.ipa_ui_url | default('')) %}
+{% set ipa_tile_url = ipa_modern_url if (ipa_modern_url | length > 0) else (ctx.identity.ipa_ui_url | default('')) %}
 {% set ecs_tile_url = ctx.ecs.console_hint | default('') if ctx.ecs.deployed else '' %}
 {% set _portal_caddy_url = ctx.caddy_vhosts.urls_public.portal.url | default('') if (ctx.caddy_vhosts.enabled | default(false)) else '' %}
 {% set portal_tile_url = _portal_caddy_url if (_portal_caddy_url | length > 0) else ctx.portal.index_url | default('') %}
@@ -982,11 +982,11 @@
         {% endif %}
         {% if ipa_tile_url | length > 0 %}
         <a class="tile tile-rose" href="{{ ipa_tile_url }}" target="_blank" rel="noopener noreferrer">
-          <span class="tile-label">{% if ctx.identity.ipa_modern_ui_available | default(false) | bool %}{{ ctx.identity.ipa_ui_modern_label | default(ctx.identity.ipa_ui_label) }}{% else %}{{ ctx.identity.ipa_ui_legacy_label | default(ctx.identity.ipa_ui_label) }}{% endif %}</span>
+          <span class="tile-label">{{ ctx.identity.ipa_ui_modern_label | default(ctx.identity.ipa_ui_label) }}</span>
           <span class="tile-hint">Identity management (default)</span>
         </a>
         {% endif %}
-        {% if ipa_legacy_caddy_url | length > 0 and ipa_legacy_caddy_url != ipa_tile_url %}
+        {% if ipa_legacy_caddy_url | length > 0 %}
         <a class="tile tile-rose" href="{{ ipa_legacy_caddy_url }}" target="_blank" rel="noopener noreferrer">
           <span class="tile-label">{{ ctx.identity.ipa_ui_legacy_label | default('FreeIPA (legacy UI)') }}</span>
           <span class="tile-hint">Classic Web UI</span>
