@@ -1,0 +1,141 @@
+---
+- name: Ranger stale config | Read role configuration status
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/ranger/roles?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_ranger_roles_before_stale_reconcile
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Ranger stale config | Resolve stale roles
+  ansible.builtin.set_fact:
+    base_cluster_ranger_stale_roles: >-
+      {%- set stale = [] -%}
+      {%- for role in
+        base_cluster_ranger_roles_before_stale_reconcile.json['items']
+        | default([])
+      -%}
+        {%- if
+          role.get('configStalenessStatus', 'FRESH') | upper != 'FRESH'
+        -%}
+          {%- set _ = stale.append(
+            {
+              'name': role.get('name', 'unknown'),
+              'type': role.get('type', 'unknown'),
+              'status': role.get('configStalenessStatus', 'unknown')
+            }
+          ) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ stale }}
+
+- name: Ranger stale config | Report reconciliation
+  ansible.builtin.debug:
+    msg: >-
+      Ranger roles require stale configuration reconciliation:
+      {{ base_cluster_ranger_stale_roles | to_json }}.
+  when: base_cluster_ranger_stale_roles | length > 0
+
+- name: Ranger stale config | Deploy client configuration
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/ranger/commands/deployClientConfig
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body: {}
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_ranger_deploy_client_config
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: base_cluster_ranger_stale_roles | length > 0
+
+- name: Ranger stale config | Wait for client configuration deployment
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/common_tasks/wait_cm_api_command.yml"
+  vars:
+    cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+    cm_api_command_id: "{{ base_cluster_ranger_deploy_client_config.json.id }}"
+    cm_api_command_allow_already_exists: false
+  when:
+    - base_cluster_ranger_stale_roles | length > 0
+    - base_cluster_ranger_deploy_client_config.json.id is defined
+
+- name: Ranger stale config | Restart service
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/ranger/commands/restart
+    method: POST
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body: {}
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_ranger_stale_restart
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: base_cluster_ranger_stale_roles | length > 0
+
+- name: Ranger stale config | Wait for service restart
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/common_tasks/wait_cm_api_command.yml"
+  vars:
+    cm_krb_api_url: "{{ cm_cluster_module_api_url }}"
+    cm_api_command_id: "{{ base_cluster_ranger_stale_restart.json.id }}"
+    cm_api_command_allow_already_exists: false
+  when:
+    - base_cluster_ranger_stale_roles | length > 0
+    - base_cluster_ranger_stale_restart.json.id is defined
+
+- name: Ranger stale config | Read reconciled role status
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/ranger/roles?view=full
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_ranger_roles_after_stale_reconcile
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when: base_cluster_ranger_stale_roles | length > 0
+
+- name: Ranger stale config | Require fresh role configuration
+  ansible.builtin.assert:
+    that:
+      - >-
+        base_cluster_ranger_roles_after_stale_reconcile.json['items']
+        | default([])
+        | selectattr('configStalenessStatus', 'defined')
+        | rejectattr('configStalenessStatus', 'equalto', 'FRESH')
+        | list
+        | length == 0
+    fail_msg: >-
+      Ranger configuration remains stale after deployClientConfig and service
+      restart. Stale roles: {{
+        base_cluster_ranger_roles_after_stale_reconcile.json['items']
+        | default([])
+        | selectattr('configStalenessStatus', 'defined')
+        | rejectattr('configStalenessStatus', 'equalto', 'FRESH')
+        | map(attribute='name')
+        | list
+        | join(', ')
+      }}.
+  when: base_cluster_ranger_stale_roles | length > 0

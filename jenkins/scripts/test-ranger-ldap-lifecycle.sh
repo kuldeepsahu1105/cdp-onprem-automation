@@ -25,6 +25,13 @@ reconcile = (
 validation = (
     root / "ansible-playbooks/roles/cdh_base_cluster/tasks/validate_ranger_directory_config.yml"
 ).read_text()
+stale_reconcile_path = (
+    root
+    / "ansible-playbooks/roles/cdh_base_cluster/tasks/reconcile_ranger_stale_config.yml"
+)
+stale_reconcile = stale_reconcile_path.read_text()
+stale_reconcile_tasks = yaml.safe_load(stale_reconcile)
+stale_by_name = {task["name"]: task for task in stale_reconcile_tasks}
 
 assert group_vars["base_cluster_ranger_usersync_enabled"] is True
 assert group_vars["base_cluster_ranger_usersync_provider"] == "auto"
@@ -73,6 +80,10 @@ assert "Validate Ranger directory integration" in tasks
 assert "no_log: true" in tasks
 assert "base_cluster_required_config_changed" in tasks
 assert "base_cluster_existing_restart_required" in tasks
+assert "Reconcile stale Ranger configuration after startup" in tasks
+assert tasks.index(
+    "Refresh base cluster client and monitoring configuration after startup"
+) < tasks.index("Reconcile stale Ranger configuration after startup")
 assert "cm_config_desired | dict2items" in reconcile
 assert "cm_config_require_known_names" in reconcile
 assert "difference(" in reconcile
@@ -80,6 +91,17 @@ assert "base_cluster_required_config_changed" in reconcile
 assert "no_log:" in reconcile
 assert "STARTTLS is valid only with ldap://" in validation
 assert "identity_provider_effective" in validation
+
+assert "configStalenessStatus" in stale_reconcile
+deploy = stale_by_name["Ranger stale config | Deploy client configuration"]
+assert deploy["ansible.builtin.uri"]["url"].endswith(
+    "/services/ranger/commands/deployClientConfig"
+)
+restart = stale_by_name["Ranger stale config | Restart service"]
+assert restart["ansible.builtin.uri"]["url"].endswith(
+    "/services/ranger/commands/restart"
+)
+assert "Ranger stale config | Require fresh role configuration" in stale_by_name
 
 assert "base_cluster_ranger_usersync_configure_effective | bool" in template
 assert "base_cluster_ranger_admin_ldap_config.items()" in template
