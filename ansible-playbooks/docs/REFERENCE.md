@@ -81,6 +81,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `base_cluster_ranger_usersync_username_case_conversion` / `base_cluster_ranger_usersync_groupname_case_conversion` | `lower` / `lower` | UserSync name normalization (`lower`, `upper`, or `none`) |
 | `base_cluster_ranger_usersync_paged_results_enabled` | `true` | Enable paged LDAP user/group results |
 | `base_cluster_ranger_usersync_unix_backend` | `nss` | Safe CM Unix backend value retained while LDAP is the selected source |
+| `base_cluster_ranger_usersync_allow_plaintext_fallback` / `base_cluster_ranger_usersync_plaintext_port` | `true` / `389` | Use the privileged Auto-TLS truststore check first; if the file is genuinely absent, allow Ranger Admin/UserSync to continue with plaintext LDAP on this port |
 | `base_cluster_ranger_usersync_truststore_path` | Auto-TLS global truststore | JKS used to validate LDAPS/STARTTLS servers; empty uses the JVM CA set |
 | `base_cluster_ranger_usersync_external_*` | empty/provider defaults | External LDAP URL, bind secret, base/search DNs, Admin and UserSync filters, object classes, attributes, and STARTTLS choice |
 | `base_cluster_*_ui_port` | see `all.yml` | Direct HTTP UI ports on `base-masters` when Knox is off (`hdfs` 9870, `yarn` 8088, `hue` 8888, `hbase` 16010, `atlas` 21000, `ozone` Recon 9888, `solr` 8983, `impala` debug 25000) |

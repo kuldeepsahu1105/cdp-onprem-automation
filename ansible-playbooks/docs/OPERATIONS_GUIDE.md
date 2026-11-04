@@ -810,9 +810,14 @@ with the missing names rather than writing an unvalidated safety valve.
 `cm_ldap_starttls: true` only when the directory supports STARTTLS; STARTTLS is
 rejected with an `ldaps://` URL. Under Auto-TLS,
 `base_cluster_ranger_usersync_truststore_path` defaults to the agent global
-truststore and must exist on the Ranger host. For a manually managed PKI, point
-that variable at a JKS containing the directory CA, or leave it empty to use
-the JVM CA set. Certificate verification is never disabled. Bind passwords are
+truststore, which CM Auto-TLS places on every agent host. CDH setup checks the
+file with privilege because the agent certificate directory is not generally
+traversable by the Ansible SSH user. If it is genuinely unavailable and
+`base_cluster_ranger_usersync_allow_plaintext_fallback=true`, Ranger Admin and
+UserSync fall back to `ldap://` on port 389 without STARTTLS. Set the fallback
+to `false` to require LDAPS. For a manually managed PKI, point the truststore
+variable at a JKS containing the directory CA, or leave it empty to use the JVM
+CA set. Bind passwords are
 read from `ipaadmin_password`, `ad_ldap_bind_password`, or the external secret
 variable and all rendering/reconciliation tasks suppress secret output.
 

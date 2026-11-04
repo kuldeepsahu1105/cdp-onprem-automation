@@ -175,6 +175,8 @@ base_cluster_ranger_usersync_paged_results_enabled: true
 base_cluster_ranger_usersync_unix_backend: nss
 # Empty uses the JVM default CA set. Under Auto-TLS this defaults in all.yml to
 # the agent global truststore, which includes the configured directory CA.
+base_cluster_ranger_usersync_allow_plaintext_fallback: true
+base_cluster_ranger_usersync_plaintext_port: 389
 base_cluster_ranger_usersync_truststore_path: ""
 base_cluster_knox_database_name: knox
 base_cluster_knox_database_user: knox

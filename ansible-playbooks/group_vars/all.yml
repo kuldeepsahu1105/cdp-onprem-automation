@@ -564,6 +564,8 @@ base_cluster_ranger_usersync_username_case_conversion: lower
 base_cluster_ranger_usersync_groupname_case_conversion: lower
 base_cluster_ranger_usersync_paged_results_enabled: true
 base_cluster_ranger_usersync_unix_backend: nss
+base_cluster_ranger_usersync_allow_plaintext_fallback: true
+base_cluster_ranger_usersync_plaintext_port: 389
 base_cluster_ranger_usersync_truststore_path: >-
   {{
     cm_cms_autotls_truststore_path
