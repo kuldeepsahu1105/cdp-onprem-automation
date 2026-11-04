@@ -160,8 +160,9 @@ assert "_run_ecs_post_install()" in pvc_setup
 assert "_run_ecs_post_install() {\n  run_playbook 34_setup_ecs_post_install.yml\n  _maybe_sync_deployment_portal_access" in pvc_setup
 
 jenkinsfile = Path(sys.argv[1]).read_text()
-assert "JENKINS ANSIBLE PHASE START:" in jenkinsfile
-assert "JENKINS ANSIBLE PHASE END:" in jenkinsfile
+assert "ANSIBLE PHASE START:" in jenkinsfile
+assert "ANSIBLE PHASE END:" in jenkinsfile
+assert 'sh """\n    printf' not in jenkinsfile
 assert "phaseStatus = 'FAILED'" in jenkinsfile
 assert "phaseStatus = 'SUCCESS'" in jenkinsfile
 assert "} finally {" in jenkinsfile

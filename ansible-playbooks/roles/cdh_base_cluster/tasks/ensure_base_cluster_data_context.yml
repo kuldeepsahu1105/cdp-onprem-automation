@@ -23,6 +23,7 @@
   register: base_cluster_data_contexts_before
   changed_when: false
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  connection: ssh
 
 - name: Base data context | Resolve existing configured context
   ansible.builtin.set_fact:
@@ -65,6 +66,7 @@
     follow_redirects: none
   register: base_cluster_data_context_create
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  connection: ssh
   when: base_cluster_data_context_existing | length == 0
 
 - name: Base data context | Read created or existing context
@@ -89,6 +91,7 @@
   retries: "{{ base_cluster_data_context_wait_retries | int }}"
   delay: "{{ base_cluster_data_context_wait_delay | int }}"
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  connection: ssh
 
 - name: Base data context | Resolve authoritative context
   ansible.builtin.set_fact:

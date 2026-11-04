@@ -38,6 +38,10 @@
 - name: Wait for ECS Management Console after cluster install
   ansible.builtin.import_tasks: ecs_wait_control_plane_console.yml
 
+- name: Resolve CM API endpoint for ECS Data Services
+  ansible.builtin.import_tasks: ecs_resolve_cm_api_endpoint.yml
+  when: ecs_data_services_install_names | default([]) | length > 0
+
 - name: Ensure Base SDX Data Context before Data Services provisioning
   ansible.builtin.import_tasks: ecs_ensure_base_data_context.yml
   when:

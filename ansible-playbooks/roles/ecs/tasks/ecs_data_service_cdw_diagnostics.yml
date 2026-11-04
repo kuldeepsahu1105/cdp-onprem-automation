@@ -45,66 +45,17 @@
         | default(ecs_cdw_diagnostic_environment_payload, true)
       }}
 
-- name: CDW diagnostics | Read CM API version over HTTPS
-  ansible.builtin.uri:
-    url: "https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/version"
-    method: GET
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: true
-    validate_certs: false
-    status_code: [200]
-    return_content: true
-  register: ecs_cdw_diagnostic_cm_version_https
-  changed_when: false
-  failed_when: false
-  delegate_to: "{{ cm_manager_inventory_host }}"
-  connection: ssh
-
-- name: CDW diagnostics | Read CM API version over HTTP fallback
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ cm_http_port | default(7180) }}/api/version"
-    method: GET
-    user: "{{ cm_admin_user }}"
-    password: "{{ cm_admin_pass }}"
-    force_basic_auth: true
-    status_code: [200]
-    return_content: true
-  register: ecs_cdw_diagnostic_cm_version_http
-  changed_when: false
-  failed_when: false
-  delegate_to: "{{ cm_manager_inventory_host }}"
-  connection: ssh
-  when: ecs_cdw_diagnostic_cm_version_https.status | default(0) | int != 200
-
 - name: CDW diagnostics | Resolve CM diagnostic endpoint
   ansible.builtin.set_fact:
-    ecs_cdw_diagnostic_cm_protocol: >-
-      {{
-        'https'
-        if ecs_cdw_diagnostic_cm_version_https.status | default(0) | int == 200
-        else 'http'
-      }}
-    ecs_cdw_diagnostic_cm_port: >-
-      {{
-        cm_https_port | default(7183)
-        if ecs_cdw_diagnostic_cm_version_https.status | default(0) | int == 200
-        else cm_http_port | default(7180)
-      }}
-    ecs_cdw_diagnostic_cm_api_version: >-
-      {{
-        ecs_cdw_diagnostic_cm_version_https.content
-        | default(
-            ecs_cdw_diagnostic_cm_version_http.content | default(''),
-            true
-          )
-        | trim
-      }}
+    ecs_cdw_diagnostic_cm_protocol: "{{ ecs_cm_api_protocol }}"
+    ecs_cdw_diagnostic_cm_host: "{{ ecs_cm_api_host }}"
+    ecs_cdw_diagnostic_cm_port: "{{ ecs_cm_api_port }}"
+    ecs_cdw_diagnostic_cm_api_version: "{{ ecs_cm_api_version }}"
 
 - name: CDW diagnostics | Read CM Kerberos state
   ansible.builtin.uri:
     url: >-
-      {{ ecs_cdw_diagnostic_cm_protocol }}://127.0.0.1:{{
+      {{ ecs_cdw_diagnostic_cm_protocol }}://{{ ecs_cdw_diagnostic_cm_host }}:{{
       ecs_cdw_diagnostic_cm_port }}/api/{{
       ecs_cdw_diagnostic_cm_api_version }}/cm/kerberosInfo
     method: GET
@@ -123,7 +74,7 @@
 - name: CDW diagnostics | Read base-cluster HDFS authentication
   ansible.builtin.uri:
     url: >-
-      {{ ecs_cdw_diagnostic_cm_protocol }}://127.0.0.1:{{
+      {{ ecs_cdw_diagnostic_cm_protocol }}://{{ ecs_cdw_diagnostic_cm_host }}:{{
       ecs_cdw_diagnostic_cm_port }}/api/{{
       ecs_cdw_diagnostic_cm_api_version }}/clusters/{{
       cdh_basecluster_name | urlencode
