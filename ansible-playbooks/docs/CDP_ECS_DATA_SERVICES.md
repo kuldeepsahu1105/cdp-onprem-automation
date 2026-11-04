@@ -447,14 +447,13 @@ does not adopt the only differently named environment by default. Set
 where that sole environment is known to belong to this Base/ECS deployment.
 
 `ecs_coredns_forwarders` optionally overrides the direct DNS candidate list.
-When empty, FreeIPA tries the first `ipaserver` private and Ansible addresses,
-while AD uses `ad_dns_servers`. Every candidate must prove all required A
-answers before use. `ecs_coredns_upstream_probe_retries` and
+When empty, FreeIPA uses the first `ipaserver` inventory host's `private_ip`,
+falling back to `ansible_host` only when no private address is defined; AD uses
+`ad_dns_servers`. Every candidate must prove all required A answers before use.
+`ecs_coredns_upstream_probe_retries` and
 `ecs_coredns_upstream_probe_delay` bound that validation.
-The tracked deployment configuration in `config.yml` explicitly selects
-`172.31.76.102`; other deployments must replace or remove that deployment
-override rather than changing the general empty default in
-`group_vars/all.yml`.
+The tracked `config.yml` leaves this override empty so regenerated inventories
+cannot retain a previous deployment's FreeIPA address.
 `ecs_coredns_allow_node_resolver_fallback` controls whether non-loopback
 nameservers from the ECS master's `/etc/resolv.conf` may be considered after
 all inventory-derived direct candidates fail; fallback is not used when

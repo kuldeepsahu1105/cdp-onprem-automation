@@ -247,10 +247,9 @@ ecs_deploy_cde: false
 ecs_deploy_cai: false
 ecs_deploy_cai_registry: false
 ecs_ldap_enabled: false
-# This deployment's FreeIPA DNS service. Playbook 34 validates all required
-# CM, ECS console, and LDAP A records before CoreDNS is changed.
-ecs_coredns_forwarders:
-  - 172.31.76.102
+# Empty derives the current FreeIPA private IP from inventory. Set explicit
+# literal IPs only for an intentional external DNS override.
+ecs_coredns_forwarders: []
 
 # -----------------------------------------------------------------------------
 # 6. Deployment portal and monitoring

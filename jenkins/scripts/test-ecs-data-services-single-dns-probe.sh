@@ -4,8 +4,9 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 probe_file="$repo_root/ansible-playbooks/common_tasks/ecs_data_services_verify_dns.yml"
 group_vars_file="$repo_root/ansible-playbooks/group_vars/all.yml"
+config_file="$repo_root/ansible-playbooks/config.yml"
 
-python3 - "$probe_file" "$group_vars_file" <<'PY'
+python3 - "$probe_file" "$group_vars_file" "$config_file" <<'PY'
 from pathlib import Path
 import json
 import os
@@ -17,6 +18,7 @@ import yaml
 path = Path(sys.argv[1])
 text = path.read_text()
 group_vars = yaml.safe_load(Path(sys.argv[2]).read_text())
+config = yaml.safe_load(Path(sys.argv[3]).read_text())
 
 assert text.count("- ansible-dns-check\n") == 5
 assert "ansible-dns-check-{{" not in text
@@ -53,6 +55,7 @@ assert group_vars["ecs_service_discovery_rollout_timeout"] == 300
 assert group_vars["ecs_node_local_dns_reconcile"] is True
 assert group_vars["ecs_node_local_dns_configmap_name"] == "node-local-dns"
 assert group_vars["ecs_node_local_dns_daemonset_name"] == "node-local-dns"
+assert config["ecs_coredns_forwarders"] == []
 
 coredns_reconcile_path = path.parent / "ecs_reconcile_coredns.yml"
 coredns_reconcile_tasks = yaml.safe_load(coredns_reconcile_path.read_text())
@@ -62,6 +65,13 @@ coredns_tasks_by_name = {
 assert "Extract applied ECS CoreDNS forward line" in coredns_tasks_by_name
 assert "Report applied ECS CoreDNS forward line" in coredns_tasks_by_name
 assert "Require literal IP ECS CoreDNS upstreams" in coredns_tasks_by_name
+direct_forwarders = coredns_tasks_by_name[
+    "Resolve direct ECS CoreDNS forwarder candidates"
+]["ansible.builtin.set_fact"]["ecs_coredns_direct_forwarder_candidates"]
+assert "private_ip" in direct_forwarders
+assert "default(" in direct_forwarders
+assert "ansible_host" in direct_forwarders
+assert direct_forwarders.count("ansible_host") == 1
 assert "Extract current ECS CoreDNS forward line" in coredns_tasks_by_name
 assert "Report current ECS CoreDNS forward line" in coredns_tasks_by_name
 assert coredns_tasks_by_name[
