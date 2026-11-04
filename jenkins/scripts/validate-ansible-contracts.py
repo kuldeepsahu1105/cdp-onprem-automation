@@ -18,7 +18,7 @@ SET_FACT_MODULE = re.compile(
 VERIFY_WHEN_VAR = re.compile(
     r"\b(_portal_[a-z0-9_]+|_acr_[a-z0-9_]+|deployment_portal_[a-z0-9_]+)\b"
 )
-SET_FACT_KEY = re.compile(r"^\s{4}([a-zA-Z_][a-zA-Z0-9_]*):\s")
+SET_FACT_KEY = re.compile(r"^\s{4}([a-zA-Z_][a-zA-Z0-9_]*):(?:\s|$)")
 TASK_MODULE_LINE = re.compile(r"^\s{2}(?:ansible\.builtin\.)?\w+:")
 
 

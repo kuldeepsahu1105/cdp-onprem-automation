@@ -100,6 +100,9 @@
         and not (ipa_detect_sysrestore_state.stat.exists | default(false) | bool)
         and ((ipa_detect_var_lib_ipa_contents.matched | default(0) | int) > 0)
       }}
+
+- name: Detect IPA — derive aggregate critical install debris
+  ansible.builtin.set_fact:
     ipa_detect_critical_debris: >-
       {{
         (ipa_detect_ca_crt.stat.exists | default(false) | bool)
@@ -107,6 +110,9 @@
         or ((ipa_detect_var_lib_ipa_contents.matched | default(0) | int) > 0)
         or ((ipa_detect_dirsrv_instances.matched | default(0) | int) > 0)
       }}
+
+- name: Detect IPA — count partial-install marker hits
+  ansible.builtin.set_fact:
     ipa_detect_partial_marker_hits: >-
       {{
         (

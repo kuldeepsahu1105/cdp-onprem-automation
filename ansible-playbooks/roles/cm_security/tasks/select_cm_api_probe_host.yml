@@ -217,7 +217,7 @@
         ) == 0
       )
 
-- name: CM API — pick working address on Ansible controller (HTTP, then HTTPS)
+- name: CM API — select working probe host on Ansible controller
   ansible.builtin.set_fact:
     cm_api_probe_host: >-
       {{
@@ -266,6 +266,14 @@
         )
         | default(cm_api_probe_host, true)
       }}
+  when:
+    - cm_api_probe_delegate_to | default('') | length == 0
+    - cm_api_probe_from_controller_public | default(false) | bool
+    - not (cm_api_probe_use_caddy_vhost | default(false) | bool)
+    - cm_api_probe_https_discovery is defined or cm_api_probe_host_discovery is defined
+
+- name: CM API — publish working address on Ansible controller
+  ansible.builtin.set_fact:
     cm_api_client_host: >-
       {{
         (
@@ -586,7 +594,7 @@
         ) == 0
       )
 
-- name: CM API — pick working address on cldr-mngr (HTTP, then HTTPS)
+- name: CM API — select working probe host on cldr-mngr
   ansible.builtin.set_fact:
     cm_api_probe_host: >-
       {{
@@ -635,6 +643,13 @@
         )
         | default(cm_api_probe_host, true)
       }}
+  when:
+    - cm_api_probe_host_discovery is defined or cm_api_probe_https_discovery is defined
+    - (cm_api_probe_delegate_to | default('') | length > 0) or (cm_api_probe_on_manager_local | default(false) | bool)
+    - not (cm_api_controller_probe_succeeded | default(false) | bool)
+
+- name: CM API — publish working address on cldr-mngr
+  ansible.builtin.set_fact:
     cm_api_discovery_succeeded: >-
       {{
         (

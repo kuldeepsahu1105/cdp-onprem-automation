@@ -88,20 +88,18 @@
 {% set ns.sections = ns.sections + [{'id': 'monitoring', 'title': 'Monitoring stack', 'intro': _mon_intro, 'downloads': [], 'credentials': _mon_creds}] %}
 {% endif %}
 {% if deployment_portal_has_ipa | default(false) | bool %}
-{% set _ipa_ui_path = deployment_portal_ipa_ui_path | default('/ipa/ui/') %}
-{% set _ipa_ui_label = 'modern UI' if deployment_portal_ipa_modern_ui_available | default(false) | bool else 'legacy UI' %}
-{% set _ipa_direct_url = 'https://' ~ deployment_portal_ipa_fqdn ~ _ipa_ui_path %}
-{% set _ipa_preferred_url = ipa_caddy_preferred_public_url | default('') | trim %}
-{% set _ipa_public_url = ('http://' ~ deployment_portal_ops_public_ip ~ ':' ~ (deployment_portal_http_port | string) ~ _ipa_ui_path) if (deployment_portal_ops_public_ip | default('') | trim | length > 0) else '' %}
-{% set _ipa_private_url = ('http://' ~ deployment_portal_ops_private_ip ~ ':' ~ (deployment_portal_http_port | string) ~ _ipa_ui_path) if (deployment_portal_ops_private_ip | default('') | trim | length > 0) else '' %}
+{% set _ipa_direct_url = 'https://' ~ deployment_portal_ipa_fqdn %}
+{% set _ipa_modern_url = ipa_caddy_modern_public_url | default('') | trim %}
+{% set _ipa_public_url = ('http://' ~ deployment_portal_ops_public_ip ~ ':' ~ (deployment_portal_http_port | string) ~ '/ipa/modern-ui/') if (deployment_portal_ops_public_ip | default('') | trim | length > 0) else '' %}
+{% set _ipa_private_url = ('http://' ~ deployment_portal_ops_private_ip ~ ':' ~ (deployment_portal_http_port | string) ~ '/ipa/modern-ui/') if (deployment_portal_ops_private_ip | default('') | trim | length > 0) else '' %}
 {% set _ipa_bind_note = 'CM LDAP bind password often matches ipaadmin_password' %}
-{% if (_ipa_preferred_url | length > 0) %}
-{% set _ipa_legacy_note = 'Legacy /ipa/ui is available on the same Caddy vhost' if deployment_portal_ipa_modern_ui_available | default(false) | bool else 'Modern UI is not installed on this FreeIPA server' %}
+{% if (_ipa_modern_url | length > 0) %}
+{% set _ipa_legacy_note = 'Legacy /ipa/ui is available on the same Caddy vhost' %}
 {% set _ipa_creds = [
-  {'label': 'IPA admin (' ~ _ipa_ui_label ~ ' via Caddy)', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': _ipa_preferred_url, 'public_url': _ipa_public_url, 'private_url': _ipa_private_url, 'note': (caddy_vhost_urls_external.ipa.hostname | default('')) ~ '; ' ~ _ipa_legacy_note},
+  {'label': 'IPA admin (modern UI via Caddy)', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': _ipa_modern_url, 'public_url': _ipa_public_url, 'private_url': _ipa_private_url, 'note': (caddy_vhost_urls_external.ipa.hostname | default('')) ~ '; ' ~ _ipa_legacy_note},
   {'label': 'IPA admin (direct HTTPS on ipaserver)', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': _ipa_direct_url, 'note': _ipa_bind_note}
 ] %}
-{% set _ipa_intro = 'IPA directory administrator. Caddy URLs work without /etc/hosts (use password login on the selected UI — browser Kerberos SSO needs https://' ~ deployment_portal_ipa_fqdn ~ '). Direct HTTPS requires resolving that FQDN.' %}
+{% set _ipa_intro = 'IPA directory administrator. Caddy URLs work without /etc/hosts (use password login on modern UI — browser Kerberos SSO needs https://' ~ deployment_portal_ipa_fqdn ~ '). Direct HTTPS requires resolving that FQDN.' %}
 {% else %}
 {% set _ipa_creds = [{'label': 'IPA admin', 'username': ipaadmin_principal, 'password': ipaadmin_password, 'url': _ipa_direct_url, 'note': _ipa_bind_note}] %}
 {% set _ipa_intro = 'IPA directory administrator.' %}
@@ -130,12 +128,12 @@
 {% if ecs_ldap_admin_user_enabled | default(false) | bool %}
 {% set ecs_creds = ecs_creds + [{'label': 'ECS LDAP admin', 'username': ecs_ldap_admin_username, 'password': ecs_ldap_admin_password, 'url': '', 'note': ''}] %}
 {% endif %}
-{% if auth_on and ecs_api_access_key_id | default('') | length > 0 and ecs_api_private_key | default('') | length > 0 %}
+{% if ecs_api_access_key_id | default('') | length > 0 and ecs_api_private_key | default('') | length > 0 %}
 {% set ecs_creds = ecs_creds + [{'label': 'ECS API key', 'username': ecs_api_access_key_id, 'password': ecs_api_private_key, 'url': '', 'note': 'From group_vars'}] %}
-{% elif auth_on and deployment_portal_ecs_api_cache | default({}) | length > 0 %}
+{% elif deployment_portal_ecs_api_cache | default({}) | length > 0 %}
 {% set _cache = deployment_portal_ecs_api_cache %}
 {% if _cache.access_key_id | default('') | length > 0 %}
-{% set ecs_creds = ecs_creds + [{'label': 'ECS automation machine-user key', 'username': _cache.access_key_id, 'password': _cache.private_key | default(''), 'url': 'https://' ~ ecs_console_host_prefix ~ '.' ~ ecs_app_domain, 'note': 'Machine user ' ~ ecs_automation_machine_user ~ '; environment ' ~ ecs_cdp_environment_name ~ '; username = cdp_access_key_id, password = cdp_private_key'}] %}
+{% set ecs_creds = ecs_creds + [{'label': 'ECS API key', 'username': _cache.access_key_id, 'password': _cache.private_key | default(''), 'url': '', 'note': 'From ecs_api_credentials_cache_path'}] %}
 {% endif %}
 {% endif %}
 {% set ns.sections = ns.sections + [{'id': 'ecs', 'title': 'ECS / Data Services', 'intro': 'Control plane and automation API credentials when present. The internal Kubernetes WebUI installer token is not an end-user login and is intentionally not displayed.', 'downloads': [], 'credentials': ecs_creds}] %}

@@ -118,6 +118,9 @@
 - name: Finalize IPA install DNS custom forwarder flag for playbook templates
   ansible.builtin.set_fact:
     ipa_install_dns_custom_forwarder: "{{ ipa_install_dns_custom_forwarder_str }}"
+
+- name: Record whether IPA has a custom DNS forwarder
+  ansible.builtin.set_fact:
     ipa_install_dns_has_custom_forwarder: >-
       {{
         (ipa_install_dns_custom_forwarder_str | default('') | length) > 0

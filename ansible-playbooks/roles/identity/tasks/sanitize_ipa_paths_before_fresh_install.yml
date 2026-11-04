@@ -38,11 +38,17 @@
         (ipa_sanitize_sysrestore_state.stat.exists | default(false) | bool)
         or (ipa_sanitize_sysrestore_index.stat.exists | default(false) | bool)
       }}
+
+- name: Sanitize IPA paths — derive incomplete sysrestore flag
+  ansible.builtin.set_fact:
     ipa_sanitize_incomplete_sysrestore: >-
       {{
         (ipa_sanitize_sysrestore_present | default(false) | bool)
         and (ipa_detect_ipactl_not_configured | default(false) | bool)
       }}
+
+- name: Sanitize IPA paths — derive /var/lib/ipa removal flag
+  ansible.builtin.set_fact:
     ipa_sanitize_remove_var_lib_ipa: >-
       {{
         (ipa_sanitize_var_lib_ipa.stat.exists | default(false) | bool)
