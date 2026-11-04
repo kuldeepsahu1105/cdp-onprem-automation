@@ -229,6 +229,17 @@
     - "'cai' in (ecs_data_services_install_names | default([]))"
     - ecs_cai_existing_workspace | default({}) | length > 0
 
+- name: CAI | Report absent workspace selected for creation
+  ansible.builtin.debug:
+    msg: >-
+      CAI: ABSENT; name={{ ecs_cai_workspace_name_effective }};
+      status=Absent; endpoint={{
+      ecs_cai_static_subdomain_effective }}.{{ ecs_app_domain }};
+      environment={{ ecs_cdp_environment_name }}; action=CREATE.
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - ecs_cai_existing_workspace | default({}) | length == 0
+
 - name: CAI | Preserve deterministic workspace create attempt order
   ansible.builtin.set_fact:
     ecs_cai_workspace_create_candidates: >-

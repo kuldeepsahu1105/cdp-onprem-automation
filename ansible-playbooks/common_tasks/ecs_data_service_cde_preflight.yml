@@ -274,3 +274,11 @@
       | default(ecs_cdp_environment_name) }}.
       Existing CPU and memory capacity will not be resized.
   when: ecs_cde_service_existing | bool
+
+- name: CDE | Report absent service selected for creation
+  ansible.builtin.debug:
+    msg: >-
+      CDE: ABSENT; name={{ ecs_cde_service_name_effective }};
+      status={{ ecs_cde_service_prior_status }}; environment={{
+      ecs_cdp_environment_name }}; action=CREATE.
+  when: not (ecs_cde_service_existing | bool)

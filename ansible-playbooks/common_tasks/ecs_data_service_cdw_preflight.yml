@@ -178,6 +178,38 @@
   connection: ssh
   when: "'cdw' in (ecs_data_services_install_names | default([]))"
 
+- name: CDW | Report existing Data Warehouse clusters
+  ansible.builtin.debug:
+    msg: >-
+      CDW: EXISTS;
+      name={{
+        item.name
+        | default(item.clusterName | default(item.clusterId | default('not returned')))
+      }};
+      status={{ item.status | default('unknown') }};
+      clusterId={{ item.clusterId | default('not returned') }};
+      action=REUSE.
+  loop: "{{ ecs_cdw_preflight_cluster_info.clusters | default([]) }}"
+  loop_control:
+    label: >-
+      {{
+        item.name
+        | default(item.clusterName | default(item.clusterId | default('unknown')))
+      }}
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_preflight_cluster_info.clusters | default([]) | length > 0
+
+- name: CDW | Report absent Data Warehouse cluster
+  ansible.builtin.debug:
+    msg: >-
+      CDW: ABSENT; name=environment-managed;
+      status=Absent; environment={{ ecs_cdp_environment_name }};
+      action=CREATE.
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_preflight_cluster_info.clusters | default([]) | length == 0
+
 - name: CDW | Select deactivated cluster records
   ansible.builtin.set_fact:
     ecs_cdw_deactivated_clusters: >-

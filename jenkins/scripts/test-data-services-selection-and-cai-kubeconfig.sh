@@ -90,6 +90,13 @@ assert playbook_text.index(
     "Load existing ECS automation API credentials"
 )
 assert "when: \"'model_registry' in (ecs_data_services_install_names | default([]))\"" in playbook_text
+selection_text = (
+    root / "ansible-playbooks/common_tasks/resolve_ecs_data_services_install.yml"
+).read_text()
+assert "Report ECS data service enablement" in selection_text
+assert "'ENABLED' if 'cdw' in ecs_data_services_install_names" in selection_text
+assert "'ENABLED' if 'cde' in ecs_data_services_install_names" in selection_text
+assert "'ENABLED' if 'cai' in ecs_data_services_install_names" in selection_text
 portal_facts_import = (
     "ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml"
 )
@@ -185,6 +192,10 @@ assert "/cm/commands/generateCredentialsAdhoc" in cdw_preflight
 assert "ecs_cdw_principals_to_generate" in cdw_preflight
 assert "pre-created keyless service causes CM" in cdw_preflight
 assert "CDW | Report submitted CM ad-hoc credential command" in cdw_preflight
+assert "CDW | Report existing Data Warehouse clusters" in cdw_preflight
+assert "CDW | Report absent Data Warehouse cluster" in cdw_preflight
+assert "action=REUSE" in cdw_preflight
+assert "action=CREATE" in cdw_preflight
 assert "This internal API command may not appear in the Cloudera Manager UI" in cdw_preflight
 assert "cm_api_command_label: CM internal ad-hoc credential command" in cdw_preflight
 assert "CDW | Wait for CM-owned ad-hoc credentials" in cdw_preflight
@@ -428,6 +439,14 @@ assert "vars" not in cde_capacity
 assert "default(ecs_cde_resource_pool, true)" in str(cde_capacity)
 assert "default(ecs_cde_cpu_requests, true)" in str(cde_capacity)
 assert "default(ecs_cde_memory_requests, true)" in str(cde_capacity)
+assert any(
+    task.get("name") == "CDE | Report selected existing service without capacity mutation"
+    for task in cde_preflight
+)
+assert any(
+    task.get("name") == "CDE | Report absent service selected for creation"
+    for task in cde_preflight
+)
 
 portal_facts = yaml.safe_load(
     (root / "ansible-playbooks/common_tasks/build_deployment_portal_facts.yml").read_text()
@@ -517,6 +536,8 @@ cai_attempt = (
 assert "ecs_cai_workspace_candidate_names" in cai_preflight
 assert "ecs_cai_subdomain_candidate_names" in cai_preflight
 assert "ecs_cai_workspace_name_effective" in cai_preflight
+assert "CAI | Report authoritative reusable workspace" in cai_preflight
+assert "CAI | Report absent workspace selected for creation" in cai_preflight
 assert "ecs_cai_static_subdomain_effective" in cai_preflight
 assert "Reuse healthy workspace owning configured base endpoint" in cai_preflight
 assert "item.instanceUrl" in cai_preflight
