@@ -1589,6 +1589,11 @@ ecs_cdw_private_cloud_config: {}  # optional storage_class, db_client_certificat
 # creates the missing Hive service principal and its initial key together.
 # Existing keyless Hive service objects are rejected.
 ecs_cdw_ensure_freeipa_principal_objects: true
+# Bound the internal CM credential command to approximately five minutes.
+# Each poll can consume request_timeout plus poll_delay.
+ecs_cdw_credential_command_poll_retries: 30
+ecs_cdw_credential_command_poll_delay: 5
+ecs_cdw_credential_command_request_timeout: 5
 # Recovery-only: remove credentials CM classifies as unused before generating
 # an absent Hive service. Confirmation must exactly match the environment name.
 ecs_cdw_repair_stale_cm_credentials: false

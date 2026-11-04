@@ -421,6 +421,14 @@ because failed activation state can retain keytab material; out-of-band key
 mutation can then cause
 `KDC_ERR_PREAUTH_FAILED` in both automation and the UI.
 
+The internal command is bounded by
+`ecs_cdw_credential_command_poll_retries`,
+`ecs_cdw_credential_command_poll_delay`, and
+`ecs_cdw_credential_command_request_timeout` (approximately five minutes by
+default, including HTTP request time). A timeout reports the last CM command
+state and directs operators to `cloudera-scm-server.log`; do not repeatedly
+submit the command or generate the keytab outside CM.
+
 FreeIPA health is owned by identity playbook 12, which starts and verifies
 Directory Server and `krb5kdc` and applies the AES enctype policy. Cloudera
 Manager automatic principal provisioning is owned by Kerberos playbook 30,

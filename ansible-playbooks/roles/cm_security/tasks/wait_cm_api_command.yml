@@ -1,7 +1,8 @@
 ---
 # Poll a Cloudera Manager async command until it completes.
 # Required vars: cm_krb_api_url, cm_admin_user, cm_admin_pass, cm_api_command_id
-# Bounds: cm_api_command_poll_retries × cm_api_command_poll_delay (defaults in group_vars/all.yml).
+# Bounds include both request and delay time:
+# retries × (cm_api_command_request_timeout + cm_api_command_poll_delay).
 
 - name: >-
     Wait for {{ cm_api_command_label | default('CM API command') }}
@@ -15,6 +16,7 @@
     validate_certs: no
     status_code: [200, 404]
     follow_redirects: none
+    timeout: "{{ cm_api_command_request_timeout | default(10) }}"
   delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
   register: cm_api_command_poll
   until: >
@@ -32,15 +34,28 @@
   ansible.builtin.fail:
     msg: >-
       CM API command {{ cm_api_command_id }} did not finish within
-      {{ (cm_api_command_poll_retries | default(90) | int) * (cm_api_command_poll_delay | default(10) | int) }}s
-      ({{ cm_api_command_poll_retries | default(90) }} retries × {{ cm_api_command_poll_delay | default(10) }}s delay).
+      approximately {{
+        (cm_api_command_poll_retries | default(90) | int)
+        * (
+          (cm_api_command_request_timeout | default(10) | int)
+          + (cm_api_command_poll_delay | default(10) | int)
+        )
+      }}s
+      ({{ cm_api_command_poll_retries | default(90) }} retries ×
+      [{{ cm_api_command_request_timeout | default(10) }}s request timeout +
+      {{ cm_api_command_poll_delay | default(10) }}s delay]).
       Last state: active={{ cm_api_command_poll.json.active | default('unknown') }},
       success={{ cm_api_command_poll.json.success | default('unknown') }},
       HTTP status={{ cm_api_command_poll.status | default('unknown') }},
-      message={{
+      result={{
+        cm_api_command_poll.json.resultMessage
+        | default(cm_api_command_poll.json.result_message | default('unknown'))
+      }},
+      transport={{
         cm_api_command_poll.json.message
         | default(cm_api_command_poll.msg | default('unknown'))
       }}.
+      {{ cm_api_command_timeout_help | default('Inspect the command in Cloudera Manager and cloudera-scm-server.log before retrying.') }}
   when: >
     cm_api_command_poll.status | default(0) | int != 200
     or cm_api_command_poll.json.active is not defined
@@ -85,6 +100,7 @@
     validate_certs: no
     status_code: [200]
     follow_redirects: none
+    timeout: "{{ cm_api_command_request_timeout | default(10) }}"
   delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
   register: cm_api_failed_command_details
   changed_when: false
@@ -102,6 +118,7 @@
     validate_certs: no
     status_code: [200]
     follow_redirects: none
+    timeout: "{{ cm_api_command_request_timeout | default(10) }}"
   loop: >-
     {{
       (cm_api_failed_command_details | default({})).get('json', {})

@@ -443,6 +443,17 @@
     cm_api_command_id: "{{ ecs_cdw_adhoc_credentials_command.json.id }}"
     cm_api_command_label: CM internal ad-hoc credential command
     cm_api_command_allow_already_exists: false
+    cm_api_command_poll_retries: >-
+      {{ ecs_cdw_credential_command_poll_retries }}
+    cm_api_command_poll_delay: "{{ ecs_cdw_credential_command_poll_delay }}"
+    cm_api_command_request_timeout: >-
+      {{ ecs_cdw_credential_command_request_timeout }}
+    cm_api_command_timeout_help: >-
+      Credential generation should normally complete quickly. On timeout,
+      inspect cloudera-scm-server.log for command
+      {{ ecs_cdw_adhoc_credentials_command.json.id }} and verify CM can reach
+      the FreeIPA KDC before rerunning; do not submit repeated credential
+      commands or generate the keytab outside CM.
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
     - ecs_cdw_adhoc_credentials_command.json.id is defined
