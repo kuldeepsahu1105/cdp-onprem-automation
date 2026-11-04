@@ -290,9 +290,18 @@ assert "action=CREATE" in cdw_preflight
 assert "This internal API command may not appear in the Cloudera Manager UI" in cdw_preflight
 assert "cm_api_command_label: CM internal ad-hoc credential command" in cdw_preflight
 assert "CDW | Wait for CM-owned ad-hoc credentials" in cdw_preflight
+assert "ecs_cdw_credential_command_poll_retries" in cdw_preflight
+assert "ecs_cdw_credential_command_poll_delay" in cdw_preflight
+assert "ecs_cdw_credential_command_request_timeout" in cdw_preflight
+assert cdw_preflight.count("cm_api_command_connection: ssh") == 2
 assert "status_code: [200, 404]" in cm_command_wait
 assert "cm_api_command_poll.status | default(0) | int == 404" in cm_command_wait
 assert "cm_api_command_label | default('CM API command')" in cm_command_wait
+assert "cm_api_command_request_timeout | default(10)" in cm_command_wait
+assert "cm_api_command_timeout_help" in cm_command_wait
+assert cm_command_wait.count(
+    'connection: "{{ cm_api_command_connection | default(\'smart\') }}"'
+) == 3
 assert "CDW | Require CM-generated FreeIPA keys" in cdw_preflight
 assert "has_keytab: TRUE" in cdw_preflight
 assert "deleteCredentials?deleteCredentialsMode=unused" in cdw_preflight

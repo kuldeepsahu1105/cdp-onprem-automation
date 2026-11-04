@@ -391,6 +391,7 @@
   vars:
     cm_krb_api_url: "{{ ecs_cm_api_base_url }}"
     cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
+    cm_api_command_connection: ssh
     cm_api_command_id: >-
       {{ ecs_cdw_delete_unused_credentials_command.json.id }}
     cm_api_command_allow_already_exists: false
@@ -440,9 +441,23 @@
   vars:
     cm_krb_api_url: "{{ ecs_cm_api_base_url }}"
     cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
+    cm_api_command_connection: ssh
     cm_api_command_id: "{{ ecs_cdw_adhoc_credentials_command.json.id }}"
     cm_api_command_label: CM internal ad-hoc credential command
     cm_api_command_allow_already_exists: false
+    cm_api_command_poll_retries: >-
+      {{ ecs_cdw_credential_command_poll_retries }}
+    cm_api_command_poll_delay: "{{ ecs_cdw_credential_command_poll_delay }}"
+    cm_api_command_request_timeout: >-
+      {{ ecs_cdw_credential_command_request_timeout }}
+    cm_api_command_timeout_help: >-
+      Credential generation should normally complete quickly. On timeout,
+      inspect cloudera-scm-server.log for command
+      {{ ecs_cdw_adhoc_credentials_command.json.id }} and verify CM can reach
+      the FreeIPA KDC before rerunning. Query the command from cm-node with
+      /api/{{ ecs_cm_api_version }}/commands/{{
+      ecs_cdw_adhoc_credentials_command.json.id }}?view=full; do not submit
+      repeated credential commands or generate the keytab outside CM.
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
     - ecs_cdw_adhoc_credentials_command.json.id is defined
