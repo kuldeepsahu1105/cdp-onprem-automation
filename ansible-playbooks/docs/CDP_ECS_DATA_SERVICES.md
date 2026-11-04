@@ -223,6 +223,13 @@ non-secret per-build logs and reports. The playbook reports the state path when
 it creates or reuses the credential cache and does not generate a replacement
 key while valid cached credentials are available.
 
+Before LDAP/IAM mutations, automation validates the cached access-key ID with
+the private IAM API. If IAM explicitly reports that the key is missing,
+unauthenticated, or invalid, automation removes only that stale cache, creates
+a replacement key through the configured installer/bootstrap credential, and
+rebuilds the isolated ECS-master profile. Network and unrelated API errors
+remain fatal and do not trigger credential rotation.
+
 Credential values are serialized with JSON-compatible YAML quoting so
 multiline private keys remain intact. An unreadable legacy cache no longer
 blocks deployment portal refresh. ECS post-install/Data Services automation
@@ -427,8 +434,10 @@ though the Kubernetes nodes do not run a KCM daemon. After the Database
 Catalog record appears, automation reads its supported CDW service
 configuration with `dw describe-dbc-config`. It calls additive
 `dw update-dbc --config` only when the `env` config block does not already set
-`format: ENV` and `KRB5CCNAME=FILE:/tmp/krb5cc_metastore`. The CDW control
-plane therefore owns
+`KRB5CCNAME=FILE:/tmp/krb5cc_metastore`. When the persisted configuration is
+already correct but the generated metastore pod still lacks the variable,
+automation calls supported `dw start-dbc --force-refresh` and verifies the
+recreated pod before continuing. The CDW control plane therefore owns
 the generated metastore workload configuration, and healthy reruns are
 no-ops. This prevents `kinit: No KCM server found while getting default
 ccache` without directly mutating a Helm-managed StatefulSet or changing the
