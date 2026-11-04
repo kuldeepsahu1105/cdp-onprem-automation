@@ -11,6 +11,11 @@ import yaml
 root = Path(sys.argv[1])
 group_vars = yaml.safe_load((root / "ansible-playbooks/group_vars/all.yml").read_text())
 tasks = (root / "ansible-playbooks/roles/cdh_base_cluster/tasks/setup_base_cluster.yml").read_text()
+truststore = (
+    root
+    / "ansible-playbooks/roles/cdh_base_cluster/tasks/resolve_ranger_directory_truststore.yml"
+).read_text()
+truststore_tasks = yaml.safe_load(truststore)
 template = (
     root / "ansible-playbooks/roles/cdh_base_cluster/templates/base_cluster_cluster_spec.j2"
 ).read_text()
@@ -53,7 +58,17 @@ assert "cm_config_require_known_names: true" in tasks
 assert "Restore Ranger Admin local authentication when directory integration is disabled" in tasks
 assert "Disable existing Ranger UserSync when directory integration is disabled" in tasks
 assert 'ranger.usersync.enabled: "false"' in tasks
-assert "Check Ranger directory truststore on the Ranger host" in tasks
+assert "Resolve Ranger directory truststore and LDAP transport" in tasks
+assert "become: true" in truststore
+assert "Set Ranger plaintext LDAP endpoint when truststore is unavailable" in truststore
+assert "base_cluster_ranger_usersync_allow_plaintext_fallback" in truststore
+truststore_check = next(
+    task
+    for task in truststore_tasks
+    if task.get("name") == "Check Ranger directory truststore on the Ranger host"
+)
+assert truststore_check["delegate_to"] == "{{ groups[base_cluster_master_group][0] }}"
+assert truststore_check["become"] is True
 assert "Validate Ranger directory integration" in tasks
 assert "no_log: true" in tasks
 assert "base_cluster_required_config_changed" in tasks

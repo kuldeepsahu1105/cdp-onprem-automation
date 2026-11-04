@@ -1,7 +1,7 @@
 ### ansible-playbook -i inventory.ini 10_setup_deployment_portal.yml
 #
-# Ops stack on ipaserver (auto) or cldr-mngr: Caddy index, pgAdmin, Prometheus, Grafana,
-# Alertmanager, cAdvisor. CM PostgreSQL remains on cldr-mngr (remote pgAdmin server entry).
+# Ops stack on ipaserver (auto) or cldr-mngr: Caddy index and pgAdmin.
+# Monitoring is owned exclusively by playbook 32.
 ---
 - import_playbook: ensure_collections.yml
 
@@ -15,10 +15,7 @@
         name: deployment_portal
         tasks_from: setup_controller
 
-- import_playbook: enroll_monitoring_exporters.yml
-  when: hostvars['localhost'].monitoring_exporter_enrollment_enabled | default(false) | bool
-
-- name: Install deployment portal and monitoring (Caddy, pgAdmin, Grafana, Prometheus, …)
+- name: Install deployment portal (Caddy and pgAdmin)
   hosts: deployment_portal_runtime
   become: true
   gather_facts: true
@@ -31,6 +28,8 @@
       ansible.builtin.import_role:
         name: deployment_portal
         tasks_from: install
+      vars:
+        deployment_portal_manage_monitoring_stack: false
 
 - name: Verify external deployment portal URLs from Ansible controller (Tier B)
   hosts: localhost

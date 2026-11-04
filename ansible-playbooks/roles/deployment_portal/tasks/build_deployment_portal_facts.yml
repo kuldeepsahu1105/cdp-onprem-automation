@@ -4,9 +4,6 @@
 - name: Resolve portal install host and PostgreSQL host
   ansible.builtin.import_tasks: resolve_deployment_portal_host.yml
 
-- name: Detect deployed monitoring stack on portal ops host
-  ansible.builtin.import_tasks: detect_deployment_portal_monitoring.yml
-
 - name: Set deployment portal anchor host facts (Caddy / Grafana / Prometheus / pgAdmin)
   ansible.builtin.set_fact:
     deployment_portal_anchor_inv: "{{ groups[deployment_portal_host_group_effective][0] }}"

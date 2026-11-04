@@ -31,6 +31,3 @@
 
 - name: Build deployment portal context from inventory
   ansible.builtin.import_tasks: build_deployment_portal_facts.yml
-
-- name: Resolve monitoring exporter enrollment gate
-  ansible.builtin.import_tasks: resolve_monitoring_exporter_enroll_enabled.yml

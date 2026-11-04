@@ -166,7 +166,7 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 
 `VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL` → `ECS_POST_INSTALL_TASKS` → `ECS_DATA_SERVICES` → `STARTSTOP_AUTOMATION` → `DESTROY_STACK`
 
-Selection is normalized case-insensitively, trims whitespace, accepts existing aliases (including `CDH_BASE`), and removes duplicates before execution. Selecting `ECS_INSTALL,ECS_DATA_SERVICES` runs exactly those two stages once without portal or monitoring. Jenkins **Restart from Stage** reconstructs the same canonical selection from the original build parameters.
+Selection is normalized case-insensitively, trims whitespace, accepts existing aliases (including `CDH_BASE`), and removes duplicates before execution. Stages never implicitly add `PORTAL` or `MONITORING`: selecting `MONITORING` runs only playbook **32**, so select `PORTAL` too when the Caddy foundation has not already been bootstrapped. Jenkins **Restart from Stage** reconstructs the same canonical selection from the original build parameters.
 
 **Copy-paste (matches Jenkinsfile checkbox names):** `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS` — also at the top of **Build with Parameters** → `PIPELINE_STAGES` description and `PIPELINE_STAGES_REFERENCE` default text. Append `ECS_DATA_SERVICES`, `STARTSTOP_AUTOMATION`, or `DESTROY_STACK` when needed.
 
@@ -180,7 +180,7 @@ Selection is normalized case-insensitively, trims whitespace, accepts existing a
 | `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
 | `CM_TLS_KRB_LDAP` | Auto-TLS, CMS, LDAP, Kerberos (27→28→29→30); portal refresh. **Checkout `EXECUTION_BRANCH=main` at commit `b03af5a` or newer** — older trees fail in `realign_cm_api_url_after_autotls_restart.yml` with task *CM API — derive API host from existing cm_api_url* (`NoneType` `.group` when `cm_api_url` has no hostname match). |
 | `CDH_INSTALL` | CDH base cluster (`31_setup_base_cluster.yml`); portal refresh |
-| `MONITORING` | `32_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
+| `MONITORING` | `32_setup_monitoring_stack.yml` only (when `MONITORING_STACK_ENABLED`); requires an existing portal/Caddy foundation but does not run playbook 10 or 35 |
 | `ECS_INSTALL` | ECS cluster installation/reconciliation (`33_setup_ecs_cluster.yml`), including CoreDNS; succeeds only after the Management Console is healthy |
 | `ECS_POST_INSTALL_TASKS` | Recheck console health, create/reuse the automation machine-user key, assign IAM/LDAP permissions, and refresh the portal |
 | `ECS_DATA_SERVICES` | Data services only (`34_setup_ecs_data_services.yml`) against an existing healthy ECS cluster; does not rerun playbook 33 |

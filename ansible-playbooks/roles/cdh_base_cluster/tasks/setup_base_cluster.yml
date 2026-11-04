@@ -208,33 +208,11 @@
       - "Master host: {{ base_master_fqdn }}"
       - "Worker hosts: {{ base_worker_fqdns }}"
 
-- name: Check Ranger directory truststore on the Ranger host
-  ansible.builtin.stat:
-    path: "{{ base_cluster_ranger_usersync_truststore_path }}"
-  register: base_cluster_ranger_usersync_truststore
-  delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+- name: Resolve Ranger directory truststore and LDAP transport
+  ansible.builtin.import_tasks: resolve_ranger_directory_truststore.yml
   when:
     - base_cluster_install_services.ranger | default(true) | bool
     - base_cluster_ranger_usersync_configure_effective | bool
-    - base_cluster_ranger_usersync_tls_enabled | bool
-    - base_cluster_ranger_usersync_truststore_path | string | trim | length > 0
-
-- name: Require configured Ranger directory truststore
-  ansible.builtin.assert:
-    that:
-      - base_cluster_ranger_usersync_truststore.stat.exists | default(false) | bool
-      - base_cluster_ranger_usersync_truststore.stat.isreg | default(false) | bool
-    fail_msg: >-
-      Ranger UserSync truststore
-      {{ base_cluster_ranger_usersync_truststore_path }} is missing on the
-      Ranger host. Install the directory CA through the existing TLS/
-      Auto-TLS trust workflow or clear the override to use the JVM default
-      CA set; certificate verification is never disabled.
-  when:
-    - base_cluster_install_services.ranger | default(true) | bool
-    - base_cluster_ranger_usersync_configure_effective | bool
-    - base_cluster_ranger_usersync_tls_enabled | bool
-    - base_cluster_ranger_usersync_truststore_path | string | trim | length > 0
 
 - name: Build cluster specification
   ansible.builtin.set_fact:

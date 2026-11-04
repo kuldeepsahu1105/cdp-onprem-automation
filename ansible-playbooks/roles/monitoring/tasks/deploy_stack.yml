@@ -18,8 +18,17 @@
       Docker network 'deployment_portal' not found. Run 10_setup_deployment_portal.yml first.
   when: portal_network.rc != 0
 
-- name: Sync monitoring stack and Caddy routes
+- name: Sync portal content required by monitoring
   ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/sync_deployment_portal_content.yml"
+  vars:
+    deployment_portal_verify_milestones:
+      - portal
+      - ipa
+
+- name: Sync monitoring stack and its Caddy routes
+  ansible.builtin.import_role:
+    name: deployment_portal
+    tasks_from: sync_deployment_portal_monitoring
 
 - name: Print monitoring URLs
   ansible.builtin.debug:
