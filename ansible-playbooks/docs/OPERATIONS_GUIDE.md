@@ -354,11 +354,12 @@ pre-create a valid `kubernetes.io/tls` secret or set controller-side
 self-signed/untrusted, expired, wrong-SAN, or mismatched-key material before
 workspace submission and never creates a temporary certificate.
 
-ECS install owns authoritative DNS and CoreDNS reconciliation. Playbook 33 and
-its phased installer perform that reconciliation. Playbook 34 does not rewrite
-CoreDNS or create Kubernetes DNS probe pods during Data Services post-install;
-it waits for the Management Console and relies on the completed ECS install's
-cluster DNS before using the supported APIs. Terminal failed
+ECS install owns authoritative DNS and initial CoreDNS reconciliation.
+Playbook 33 and its phased installer perform that reconciliation. Playbook 34
+reconciles and verifies the same DNS contract again for standalone safety,
+then restarts and waits for only
+`cdp/cdp-release-thunderhead-servicediscoverysimple` before loading Data
+Services credentials or submitting CDW, CDE, or CAI operations. Terminal failed
 CDW/CDE/CAI resources are reported without automated disable, deletion,
 recreation, backend restart, or datastore mutation; independent service
 boundaries still allow later selected services to run before the final
@@ -393,7 +394,10 @@ If CDW or CDE reports `Not able to fetch details from Cluster`,
 `Unable to get remote data context`, or `UnknownHostException` for the CM
 FQDN while fresh Kubernetes DNS probes resolve CM correctly, check the
 long-running Service Discovery JVM. It can retain a negative DNS cache entry.
-Use the narrowly scoped recovery:
+Playbook 34 performs the narrowly scoped restart and bounded rollout wait
+automatically after DNS verification. Set
+`ecs_data_services_refresh_service_discovery_dns: false` only for diagnostic
+isolation. The equivalent manual recovery is:
 
 ```bash
 kubectl -n cdp rollout restart \

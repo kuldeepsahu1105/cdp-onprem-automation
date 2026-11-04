@@ -33,11 +33,13 @@ the external Jenkins controller is unsupported because private names such as
 The ECS-master CDPy install uses the pinned GitHub tag archive over HTTPS rather
 than a `git+` URL, so standalone ECS hosts do not require the `git` executable.
 
-ECS installation owns authoritative DNS and CoreDNS reconciliation in
-playbook 33 and its phased installer. Playbook 34 does not rewrite CoreDNS or
-create Kubernetes DNS probe pods during Data Services post-install. It assumes
-the completed ECS installation has already established cluster DNS, waits for
-the Management Console, and then uses the supported Data Services APIs.
+ECS installation owns authoritative DNS and initial CoreDNS reconciliation in
+playbook 33 and its phased installer. Playbook 34 reconciles and verifies the
+same DNS contract immediately before Data Services provisioning because a
+later standalone rerun must not assume playbook 33 completed that boundary
+successfully. After fresh-pod DNS verification, playbook 34 restarts and waits
+for only `cdp/cdp-release-thunderhead-servicediscoverysimple` before loading
+credentials or submitting CDW, CDE, or CAI operations.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services
@@ -330,10 +332,12 @@ whose SDX cluster binding may belong to an older Base cluster.
 Remote-context retrieval is performed by the long-lived
 `cdp-release-thunderhead-servicediscoverysimple` JVM. A stale negative DNS
 cache in that process can produce `UnknownHostException` for the CM FQDN even
-when CoreDNS and fresh pods resolve it correctly. The proven recovery is to
-restart only that deployment, wait for its rollout, verify that no new
-`UnknownHostException` appears, and then retry the Data Service operation.
-Do not restart CoreDNS/DWX or alter Kerberos state for this symptom.
+when CoreDNS and fresh pods resolve it correctly. Playbook 34 restarts and
+waits for only that deployment after pod-based DNS verification and before any
+Data Services credentials or submissions. Disable this only for diagnostic
+isolation with `ecs_data_services_refresh_service_discovery_dns: false`.
+Do not restart CoreDNS, CDW, CDE, or CAI or alter principals/keytabs for this
+symptom.
 
 `ecs_coredns_forwarders` optionally overrides the direct DNS candidate list.
 When empty, FreeIPA tries the first `ipaserver` private and Ansible addresses,

@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for ECS Service Discovery DNS refresh
+  ansible.builtin.import_role:
+    name: ecs
+    tasks_from: ecs_refresh_service_discovery_dns
