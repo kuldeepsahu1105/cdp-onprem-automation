@@ -91,6 +91,7 @@ sdx_gate = (
 assert "Data Services SDX | Ensure base cluster Data Context" in sdx_gate
 assert "ecs_cm_api_base_url" in sdx_gate
 assert "127.0.0.1" not in sdx_gate
+assert "/clusters/" not in sdx_gate
 assert "common_tasks/ensure_base_cluster_data_context.yml" in sdx_gate
 assert "cm_cluster_module_delegate_to: \"{{ cm_manager_inventory_host }}\"" in sdx_gate
 assert "ecs_data_services_base_data_context_enabled | default(true) | bool" in playbook_text
@@ -123,6 +124,7 @@ base_sdx_helper = (
 ).read_text()
 assert "Base data context | Create configured context for fresh cluster" in base_sdx_helper
 assert "Base data context | Require complete fresh-install prerequisite" in base_sdx_helper
+assert 'cm_cluster_module_api_url }}/dataContexts' in base_sdx_helper
 assert base_sdx_helper.count("connection: ssh") == 3
 base_setup = (
     root

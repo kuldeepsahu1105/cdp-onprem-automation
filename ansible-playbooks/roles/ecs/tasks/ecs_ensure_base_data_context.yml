@@ -1,12 +1,10 @@
 ---
-- name: Data Services SDX | Resolve CM cluster API URL
+- name: Data Services SDX | Resolve CM API URL
   ansible.builtin.set_fact:
-    ecs_data_services_cm_cluster_api_url: >-
-      {{ ecs_cm_api_base_url }}/clusters/{{
-      cdh_basecluster_name | urlencode }}
+    ecs_data_services_cm_api_url: "{{ ecs_cm_api_base_url }}"
 
 - name: Data Services SDX | Ensure base cluster Data Context
   ansible.builtin.include_tasks: "{{ playbook_dir }}/common_tasks/ensure_base_cluster_data_context.yml"
   vars:
-    cm_cluster_module_api_url: "{{ ecs_data_services_cm_cluster_api_url }}"
+    cm_cluster_module_api_url: "{{ ecs_data_services_cm_api_url }}"
     cm_cluster_module_delegate_to: "{{ cm_manager_inventory_host }}"
