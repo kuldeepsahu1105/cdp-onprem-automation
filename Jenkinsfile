@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-11-04.5 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-11-04.6 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -293,13 +293,13 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     )
     booleanParam(
       name: 'ECS_LDAP_ENABLED',
-      defaultValue: false,
-      description: 'ECS_POST_INSTALL_TASKS: sync the FreeIPA/AD LDAP provider to the healthy ECS control plane.'
+      defaultValue: true,
+      description: 'ECS_POST_INSTALL_TASKS: sync the FreeIPA, AD, or external LDAP provider to the healthy ECS control plane.'
     )
     booleanParam(
       name: 'ECS_LDAP_ADMIN_USER_ENABLED',
-      defaultValue: false,
-      description: 'ECS_POST_INSTALL_TASKS: create FreeIPA user <prefix>admin and assign ECS IAM admin roles.'
+      defaultValue: true,
+      description: 'ECS_POST_INSTALL_TASKS: create FreeIPA <prefix>admin or use the existing AD/external LDAP user, then assign ECS IAM admin roles.'
     )
     // Hidden advanced inputs: full colored Ansible output; plain per-host lines disabled.
   }

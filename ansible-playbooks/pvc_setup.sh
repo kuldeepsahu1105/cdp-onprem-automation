@@ -503,6 +503,7 @@ _run_ecs_data_services() {
     ds_extra+=(
       -e ecs_ldap_enabled=false
       -e ecs_ldap_admin_user_enabled=false
+      -e ecs_ldap_resolve_environment_flags=false
       -e ecs_data_services_configure_ldap=false
     )
     ui_info "ECS LDAP/IAM convergence already belongs to ECS_POST_INSTALL_TASKS; Data Services will not repeat it."

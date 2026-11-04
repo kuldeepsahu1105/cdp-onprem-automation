@@ -11,12 +11,12 @@
       delegate_to: "{{ ipaserver_inventory_host }}"
       connection: ssh
       become: true
-      when: identity_provider_effective == 'freeipa'
+      when: ecs_ldap_provider_effective == 'freeipa'
 
     - name: LDAP | Decode FreeIPA CA certificate
       ansible.builtin.set_fact:
         ecs_freeipa_ca_pem: "{{ ecs_freeipa_ca_cert.content | b64decode | trim }}"
-      when: identity_provider_effective == 'freeipa'
+      when: ecs_ldap_provider_effective == 'freeipa'
 
     - name: LDAP | Validate FreeIPA CA PEM
       ansible.builtin.assert:
@@ -24,7 +24,7 @@
           - "'-----BEGIN CERTIFICATE-----' in ecs_freeipa_ca_pem"
           - "'-----END CERTIFICATE-----' in ecs_freeipa_ca_pem"
         fail_msg: /etc/ipa/ca.crt on the FreeIPA server is not a PEM certificate.
-      when: identity_provider_effective == 'freeipa'
+      when: ecs_ldap_provider_effective == 'freeipa'
 
     - name: LDAP | Set provider argv for FreeIPA
       ansible.builtin.set_fact:
@@ -47,7 +47,7 @@
               '--skip-group-sync-on-login'
             ]
           }}
-      when: identity_provider_effective == 'freeipa'
+      when: ecs_ldap_provider_effective == 'freeipa'
       no_log: true
 
     - name: LDAP | Set provider argv for Active Directory
@@ -66,7 +66,39 @@
               '--skip-group-sync-on-login'
             ]
           }}
-      when: identity_provider_effective == 'ad'
+      when: ecs_ldap_provider_effective == 'ad'
+      no_log: true
+
+    - name: LDAP | Set provider argv for external LDAP
+      ansible.builtin.set_fact:
+        ecs_ldap_provider_argv_extra: >-
+          {{
+            [
+              '--url', base_cluster_ranger_usersync_ldap_url,
+              '--user-search-base',
+              base_cluster_ranger_usersync_user_search_base,
+              '--user-search-filter',
+              base_cluster_ranger_admin_user_search_filter,
+              '--group-search-base',
+              base_cluster_ranger_usersync_group_search_base,
+              '--group-search-filter',
+              base_cluster_ranger_admin_group_search_filter,
+              '--username-mapping-attribute',
+              base_cluster_ranger_usersync_user_name_attribute,
+              '--email-mapping-attribute',
+              ecs_ldap_external_email_attribute,
+              '--first-name-mapping-attribute',
+              ecs_ldap_external_first_name_attribute,
+              '--last-name-mapping-attribute',
+              ecs_ldap_external_last_name_attribute,
+              '--group-name-mapping-attribute',
+              base_cluster_ranger_usersync_group_name_attribute,
+              '--bind-dn', base_cluster_ranger_usersync_bind_dn,
+              '--bind-password', base_cluster_ranger_usersync_bind_password,
+              '--skip-group-sync-on-login'
+            ]
+          }}
+      when: ecs_ldap_provider_effective == 'external'
       no_log: true
 
     - name: LDAP | Update control plane LDAP provider

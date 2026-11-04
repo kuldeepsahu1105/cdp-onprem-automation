@@ -3,35 +3,76 @@
   ansible.builtin.set_fact:
     ecs_ldap_enabled: >-
       {{
-        ecs_ldap_enabled | default(false) | bool
-        or (lookup('env', 'ECS_LDAP_ENABLED') | default('', true) | lower in ['1', 'true', 'yes'])
+        (
+          lookup('env', 'ECS_LDAP_ENABLED') | lower
+          in ['1', 'true', 'yes']
+        )
+        if (
+          ecs_ldap_resolve_environment_flags | default(true) | bool
+          and lookup('env', 'ECS_LDAP_ENABLED') | default('', true) | length > 0
+        )
+        else ecs_ldap_enabled | default(true) | bool
       }}
     ecs_ldap_admin_user_enabled: >-
       {{
-        ecs_ldap_admin_user_enabled | default(false) | bool
-        or (lookup('env', 'ECS_LDAP_ADMIN_USER_ENABLED') | default('', true) | lower in ['1', 'true', 'yes'])
+        (
+          lookup('env', 'ECS_LDAP_ADMIN_USER_ENABLED') | lower
+          in ['1', 'true', 'yes']
+        )
+        if (
+          ecs_ldap_resolve_environment_flags | default(true) | bool
+          and lookup('env', 'ECS_LDAP_ADMIN_USER_ENABLED')
+          | default('', true) | length > 0
+        )
+        else ecs_ldap_admin_user_enabled | default(true) | bool
       }}
+
+- name: Validate ECS LDAP provider selection
+  ansible.builtin.assert:
+    that:
+      - ecs_ldap_provider_effective in ecs_ldap_provider_allowed
+    fail_msg: >-
+      Invalid ecs_ldap_provider '{{ ecs_ldap_provider }}'. Use auto, freeipa,
+      ad, external, or none.
 
 - name: Resolve ECS LDAP provider sync toggle
   ansible.builtin.set_fact:
     ecs_ldap_sync_effective: >-
       {{
-        (ecs_ldap_enabled | default(false) | bool)
-        or (ecs_ldap_admin_user_enabled | default(false) | bool)
+        (
+          ecs_ldap_enabled | default(true) | bool
+          and ecs_ldap_provider_effective != 'none'
+        )
         or (
-          ecs_data_services_configure_ldap | default(false) | bool
+          ecs_ldap_admin_user_enabled | default(true) | bool
+          and ecs_ldap_provider_effective != 'none'
+        )
+        or (
+          ecs_ldap_provider_effective != 'none'
+          and ecs_data_services_configure_ldap | default(false) | bool
           and (ecs_data_services_install_names | default([]) | length > 0)
         )
       }}
-    ecs_ldap_admin_user_effective: "{{ ecs_ldap_admin_user_enabled | default(false) | bool }}"
+    ecs_ldap_admin_user_effective: >-
+      {{
+        ecs_ldap_admin_user_enabled | default(true) | bool
+        and ecs_ldap_provider_effective != 'none'
+      }}
     ecs_control_plane_iam_phase_enabled: >-
       {{
         (ecs_auto_provision_api_access_key | default(true) | bool)
         or
-        (ecs_ldap_enabled | default(false) | bool)
-        or (ecs_ldap_admin_user_enabled | default(false) | bool)
+        (
+          ecs_ldap_enabled | default(true) | bool
+          and ecs_ldap_provider_effective != 'none'
+        )
         or (
-          ecs_data_services_configure_ldap | default(false) | bool
+          ecs_ldap_admin_user_enabled | default(true) | bool
+          and ecs_ldap_provider_effective != 'none'
+        )
+        or (
+          ecs_ldap_provider_effective != 'none'
+          and ecs_data_services_configure_ldap | default(false) | bool
           and (ecs_data_services_install_names | default([]) | length > 0)
         )
       }}

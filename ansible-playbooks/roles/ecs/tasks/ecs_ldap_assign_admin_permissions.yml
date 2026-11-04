@@ -5,7 +5,11 @@
   ansible.builtin.assert:
     that:
       - ecs_ldap_admin_username | default('') | length > 0
-    fail_msg: Run ecs_ldap_freeipa_admin_user.yml or set ecs_ldap_admin_username.
+      - ecs_ldap_admin_email | default('') | length > 0
+    fail_msg: >-
+      Set ecs_ldap_admin_username and ecs_ldap_admin_email. FreeIPA creates
+      this directory user automatically; AD and external LDAP require the
+      configured user to exist in the directory before ECS IAM reconciliation.
 
 - name: ECS LDAP admin | Describe ECS environment
   ansible.builtin.command:

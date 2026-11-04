@@ -3,6 +3,7 @@
   ansible.builtin.assert:
     that:
       - identity_provider_effective == 'freeipa'
+      - ecs_ldap_provider_effective == 'freeipa'
     fail_msg: >-
       ecs_ldap_admin_user_enabled requires FreeIPA (identity_provider_effective=freeipa).
 

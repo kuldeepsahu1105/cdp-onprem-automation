@@ -221,6 +221,31 @@ assert group_vars["ecs_cai_static_subdomain"] == "cai"
 assert len(group_vars["ecs_cai_static_subdomain"]) <= 15
 assert group_vars["ecs_cdp_environment_adopt_single_existing"] is False
 assert group_vars["ecs_cdw_ensure_freeipa_principal_objects"] is True
+assert group_vars["ecs_ldap_enabled"] is True
+assert group_vars["ecs_ldap_admin_user_enabled"] is True
+assert group_vars["ecs_ldap_provider"] == "auto"
+
+ldap_phase = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/resolve_ecs_control_plane_iam_phase.yml"
+).read_text()
+ldap_control = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/ecs_control_plane_ldap_and_admin.yml"
+).read_text()
+ldap_provider = (
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_data_services_ldap.yml"
+).read_text()
+ldap_freeipa_user = (
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_ldap_freeipa_admin_user.yml"
+).read_text()
+assert "ecs_ldap_provider_effective != 'none'" in ldap_phase
+assert "ecs_ldap_resolve_environment_flags | default(true) | bool" in ldap_phase
+assert "ecs_ldap_provider_effective == 'freeipa'" in ldap_control
+assert "freeipa.ansible_freeipa.ipauser" in ldap_freeipa_user
+assert "LDAP | Set provider argv for external LDAP" in ldap_provider
+assert "base_cluster_ranger_usersync_bind_dn" in ldap_provider
+assert "base_cluster_ranger_usersync_bind_password" in ldap_provider
 
 base_cluster_role = (
     root / "ansible-playbooks/roles/cdh_base_cluster/tasks/setup_base_cluster.yml"
