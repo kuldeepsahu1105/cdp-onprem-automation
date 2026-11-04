@@ -38,17 +38,25 @@ for token in (
 assert implicit_body.index("result << 'PORTAL'") < implicit_body.index(
     "result << 'MONITORING'"
 )
+assert "def monitoringTriggers = ['PORTAL']" in implicit_body
+assert "adding MONITORING immediately after PORTAL" in implicit_body
 
 effective_body = function_body("effectivePipelineStages")
 assert "addImplicitDeploymentStages(expandPipelineStageTokens(stages))" in effective_body
 
+ordered_body = function_body("orderedAnsibleStageIds")
+assert ordered_body.index("'PORTAL'") < ordered_body.index("'MONITORING'")
+assert ordered_body.index("'MONITORING'") < ordered_body.index("'IDENTITY'")
+
 monitoring_stage = re.search(
-    r"stage\('Ansible 7 — Monitoring Stack'\).*?"
+    r"stage\('Ansible 3 — Monitoring Stack'\).*?"
     r"shouldRunAnsibleStage\('MONITORING'\) && monitoringStackEnabled\(\)",
     jenkinsfile,
     re.DOTALL,
 )
 assert monitoring_stage
+assert jenkinsfile.index("stage('Ansible 2 — Deployment Portal (bootstrap)')") < monitoring_stage.start()
+assert monitoring_stage.end() < jenkinsfile.index("stage('Ansible 4 — Identity')")
 
 print("Jenkins monitoring stage selection checks passed")
 PY

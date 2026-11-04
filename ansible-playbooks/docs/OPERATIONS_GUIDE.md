@@ -1611,7 +1611,7 @@ Use this after **DESTROY_STACK** (or a new `ENVIRONMENT` workspace) for a full r
 
 ### Full deploy stage order (fixed)
 
-`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` (when `DEPLOYMENT_PORTAL_ENABLED`) → `IDENTITY` → `CM_INSTALL` → **`CM_TLS_KRB_LDAP`** → `CDH_INSTALL` → `MONITORING` (optional) → `ECS_INSTALL` (optional).
+`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` (when `DEPLOYMENT_PORTAL_ENABLED`) → `MONITORING` (immediately after PORTAL when enabled) → `IDENTITY` → `CM_INSTALL` → **`CM_TLS_KRB_LDAP`** → `CDH_INSTALL` → `ECS_INSTALL` (optional).
 
 **`CM_TLS_KRB_LDAP`** runs `pvc_setup.sh` phase **`cm_tls`** in Labs order: **`27` → `29` → `30` → `28`** (Auto-TLS, CMS, LDAP, Kerberos).
 

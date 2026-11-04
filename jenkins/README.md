@@ -169,13 +169,13 @@ for CLI/Vault input and the complete option reference.
 **Copy-paste `PIPELINE_STAGES` (full deploy through ECS):**
 
 ```
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS
+VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS
 ```
 
 To continue through selected ECS Data Services:
 
 ```text
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES
+VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES
 ```
 
 Optional tail stages: `ECS_POST_INSTALL_TASKS`, `ECS_DATA_SERVICES`, `STARTSTOP_AUTOMATION`, `DESTROY_STACK`. Default job checkboxes remain `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION` (see table below).
@@ -188,8 +188,8 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 
 | Parameter | Default |
 |---|---|
-| `PIPELINE_STAGES` | `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION` (not `CDH_INSTALL`, `MONITORING`, or `ECS_INSTALL`) |
-| `DEPLOYMENT_PORTAL_ENABLED` | `true` (bootstrap Caddy portal when `MONITORING_STACK_ENABLED` and **PORTAL** stage selected) |
+| `PIPELINE_STAGES` | `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION`; with `MONITORING_STACK_ENABLED=true`, MONITORING is inserted immediately after PORTAL |
+| `DEPLOYMENT_PORTAL_ENABLED` | `true` (bootstrap the Caddy portal foundation before the adjacent monitoring stage) |
 | `ECS_DATA_SERVICES_DEPLOY_ENABLED` | `false` (playbook 34 only when checked or an `ECS_DEPLOY_*` box is checked) |
 | Internal validation checks | `TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY` |
 | `ENVIRONMENT` | `development` |
@@ -206,27 +206,27 @@ If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALI
 
 **Legacy token:** Saved jobs may still submit **`CDH_BASE`** — it expands to `CM_TLS_KRB_LDAP` + `CDH_INSTALL`. Run **REFRESH_JENKINSFILE=YES** after Jenkinsfile changes to reload checkboxes.
 
-**Migrate old `PREREQS,IDENTITY,CM_INSTALL,CDH_BASE`:** check **`PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL`**. Add **`VALIDATE,TERRAFORM`** if you still provision EC2 (old string omitted them). Select **`PORTAL`** explicitly when portal bootstrap is required.
+**Migrate old `PREREQS,IDENTITY,CM_INSTALL,CDH_BASE`:** check **`PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL`**. Add **`VALIDATE,TERRAFORM`** if you still provision EC2 (old string omitted them). Uncheck `MONITORING_STACK_ENABLED` when only the portal foundation is wanted.
 
 ## Stage checkboxes (`PIPELINE_STAGES`)
 
 Select one or more stage checkboxes. Fixed run order (each Ansible step is its own Jenkins stage in the UI):
 
-`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL` → `ECS_POST_INSTALL_TASKS` → `ECS_DATA_SERVICES` → `STARTSTOP_AUTOMATION` → `DESTROY_STACK`
+`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `MONITORING` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `ECS_INSTALL` → `ECS_POST_INSTALL_TASKS` → `ECS_DATA_SERVICES` → `STARTSTOP_AUTOMATION` → `DESTROY_STACK`
 
-**Copy-paste (matches Jenkinsfile checkbox names):** `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS` — also at the top of **Build with Parameters** → `PIPELINE_STAGES` description and `PIPELINE_STAGES_REFERENCE` default text. Append `ECS_DATA_SERVICES`, `STARTSTOP_AUTOMATION`, or `DESTROY_STACK` when needed.
+**Copy-paste (matches Jenkinsfile checkbox names):** `VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS` — also at the top of **Build with Parameters** → `PIPELINE_STAGES` description and `PIPELINE_STAGES_REFERENCE` default text. Append `ECS_DATA_SERVICES`, `STARTSTOP_AUTOMATION`, or `DESTROY_STACK` when needed.
 
 | Checkbox | What runs |
 |---|---|
 | `VALIDATE` | `validate-prereqs.sh` — standard tool, AWS, tfvars, Ozone/Netty cluster-domain check for user-set `ipaserver_domain` / `cluster_domain` in tfvars or `ANSIBLE_GROUP_VARS_YAML` (`VALIDATE_CLUSTER_DOMAIN` / `CLUSTER_DOMAIN`), Ansible syntax, and inventory checks (no deploy) |
 | `TERRAFORM` | EC2/VPC/SG/EIP via Terraform; `inventory.ini` + `.pem` key |
 | `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 |
-| `PORTAL` | Bootstrap Caddy/pgAdmin/index (`10`); before CM when `DEPLOYMENT_PORTAL_ENABLED` |
+| `PORTAL` | Bootstrap the shared Caddy/pgAdmin/index foundation (`10`); MONITORING follows immediately when enabled |
 | `IDENTITY` | Ansible **phase 2** — FreeIPA or AD (`11_identity_setup.yml` → `12_setup_freeipa_server.yml` with DNS preflight + VPC forwarder); refreshes portal index (`35`). **Checkout `EXECUTION_BRANCH=main` at commit `e30c2de` or newer** — older trees used `dns_forwarders: no` → `--no-forwarders` on AWS and skipped dig preflight (IDENTITY failures: `[Errno 2]`, ~10 playbook tasks). |
 | `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
 | `CM_TLS_KRB_LDAP` | Auto-TLS, CMS, LDAP, Kerberos (27→28→29→30); portal refresh. **Checkout `EXECUTION_BRANCH=main` at commit `b03af5a` or newer** — older trees fail in `realign_cm_api_url_after_autotls_restart.yml` with task *CM API — derive API host from existing cm_api_url* (`NoneType` `.group` when `cm_api_url` has no hostname match). |
 | `CDH_INSTALL` | CDH base cluster (`31_setup_base_cluster.yml`); portal refresh |
-| `MONITORING` | `32_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
+| `MONITORING` | `32_setup_monitoring_stack.yml` immediately after PORTAL (when `MONITORING_STACK_ENABLED`); owns Grafana, Prometheus, Alertmanager, cAdvisor, exporters, and monitoring routes |
 | `ECS_INSTALL` | ECS cluster installation/reconciliation (`33_setup_ecs_cluster.yml`), including CoreDNS; succeeds only after the Management Console is healthy |
 | `ECS_POST_INSTALL_TASKS` | Recheck console health, create/reuse the automation machine-user key, assign IAM/LDAP permissions, and refresh the portal |
 | `ECS_DATA_SERVICES` | Data services only (`34_setup_ecs_data_services.yml`) against an existing healthy ECS cluster; does not rerun playbook 33 |
@@ -259,12 +259,12 @@ Full teardown steps are also in the **`PIPELINE_STAGES_REFERENCE`** text area on
 |---|---|
 | Validation only | `VALIDATE` |
 | Provision infrastructure only | `VALIDATE,TERRAFORM` |
-| Greenfield through Cloudera Manager | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL` |
-| Greenfield CDH base cluster | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL` |
-| Greenfield CDH plus monitoring | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING` |
-| Full stack through ECS | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS` |
-| Full stack through selected ECS Data Services | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES` |
-| Existing hosts through Cloudera Manager | `VALIDATE,PREREQS,PORTAL,IDENTITY,CM_INSTALL` |
+| Greenfield through Cloudera Manager | `VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL` |
+| Greenfield CDH base cluster | `VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL` |
+| Greenfield CDH plus monitoring | `VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL` |
+| Full stack through ECS | `VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS` |
+| Full stack through selected ECS Data Services | `VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES` |
+| Existing hosts through Cloudera Manager | `VALIDATE,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL` |
 | Apply CM security to an existing CM | `VALIDATE,CM_TLS_KRB_LDAP` |
 | Install CDH on an existing secured CM | `VALIDATE,CDH_INSTALL` |
 | Install monitoring on existing CDH | `VALIDATE,PORTAL,MONITORING` |
@@ -325,7 +325,7 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `CM_REPO_USERNAME` | Optional archive.cloudera.com username (empty = skip; no early validation failure) |
 | `CM_REPO_PASSWORD` | Optional archive.cloudera.com password (empty = skip) |
 | `CM_LICENSE_CONTENT` | Optional multiline Cloudera license file content when no `*license*` file on the agent (empty = trial or agent file) |
-| `MONITORING_STACK_ENABLED` | When checked (default), sets Ansible `monitoring_stack_enabled: true` and automatically inserts playbook **32** when `CDH_INSTALL` or `ECS_INSTALL` is selected. Uncheck to skip. Overrides `monitoring_stack_enabled` in `ANSIBLE_GROUP_VARS_YAML` if both are set. |
+| `MONITORING_STACK_ENABLED` | When checked (default), sets Ansible `monitoring_stack_enabled: true` and automatically inserts playbook **32** immediately after PORTAL. Uncheck to run the portal foundation without monitoring. Overrides `monitoring_stack_enabled` in `ANSIBLE_GROUP_VARS_YAML` if both are set. |
 
 **Deployment portal (playbook 10) and CM verify (25)** use two URL verification tiers (detail: `ansible-playbooks/docs/OPERATIONS_GUIDE.md` § Service URL verification tiers):
 

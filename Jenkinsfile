@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-11-04.1 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-11-04.2 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -11,14 +11,14 @@ pipeline {
     extendedChoice(
       name: 'PIPELINE_STAGES',
       type: 'PT_CHECKBOX',
-      value: 'VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES,STARTSTOP_AUTOMATION,DESTROY_STACK',
+      value: 'VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES,STARTSTOP_AUTOMATION,DESTROY_STACK',
       defaultValue: 'VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION',
       multiSelectDelimiter: ',',
       visibleItemCount: 15,
       quoteValue: false,
       description: '''Select one or more stages; they always run in the fixed pipeline order.
 See PIPELINE_STAGES_REFERENCE below for copy-ready combinations, dependencies, stage details, and teardown guidance.''',
-      descriptionPropertyValue: '''VALIDATE — standard prerequisite checks,TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal bootstrap (10),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→28→29→30 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),MONITORING — Grafana/Prom (32),ECS_INSTALL — install/CoreDNS/healthy console (33),ECS_POST_INSTALL_TASKS — API credentials/IAM/LDAP/portal after health,ECS_DATA_SERVICES — data services only (34),STARTSTOP_AUTOMATION — deploy EC2 start/stop helper on ipaserver,DESTROY_STACK — terraform destroy or DRY_RUN plan''',
+      descriptionPropertyValue: '''VALIDATE — standard prerequisite checks,TERRAFORM — EC2/VPC/SG/EIP + inventory,PREREQS — Ansible 01-09,PORTAL — portal/Caddy foundation (10),MONITORING — immediately after PORTAL: Grafana/Prometheus/exporters (32),IDENTITY — FreeIPA/AD phase 2,CM_INSTALL — CM server phase 3,CM_TLS_KRB_LDAP — 27→28→29→30 Auto-TLS/CMS/LDAP/Kerberos,CDH_INSTALL — base cluster (31),ECS_INSTALL — install/CoreDNS/healthy console (33),ECS_POST_INSTALL_TASKS — API credentials/IAM/LDAP/portal after health,ECS_DATA_SERVICES — data services only (34),STARTSTOP_AUTOMATION — deploy EC2 start/stop helper on ipaserver,DESTROY_STACK — terraform destroy or DRY_RUN plan''',
       javascript: '''
 (function resizePipelineStagesReference(attempt) {
   var marker = document.evaluate(
@@ -54,7 +54,7 @@ COPY-READY COMBINATIONS
 Copy only the comma-separated line below the required goal. Stages always execute in the fixed order.
 
 ALL SELECTABLE STAGES (reference; destructive and deployment stages should be selected intentionally):
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES,STARTSTOP_AUTOMATION,DESTROY_STACK
+VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES,STARTSTOP_AUTOMATION,DESTROY_STACK
 
 Validation only:
 VALIDATE
@@ -63,22 +63,22 @@ Provision infrastructure only:
 VALIDATE,TERRAFORM
 
 Greenfield through Cloudera Manager:
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL
+VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL
 
 Greenfield CDH base cluster:
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL
+VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL
 
 Greenfield CDH plus monitoring:
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING
+VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL
 
 Full stack through ECS:
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS
+VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS
 
 Full stack through selected ECS Data Services:
-VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES
+VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES
 
 Existing hosts — configure through Cloudera Manager (requires a valid inventory):
-VALIDATE,PREREQS,PORTAL,IDENTITY,CM_INSTALL
+VALIDATE,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL
 
 Existing CM — apply Auto-TLS, CMS, LDAP, and Kerberos:
 VALIDATE,CM_TLS_KRB_LDAP
@@ -109,18 +109,18 @@ Teardown — check PIPELINE_STAGES checkbox DESTROY_STACK, then:
   Destroy plan only (no apply):  DESTROY_STACK  +  DRY_RUN=true
   Optional: CLEANUP_BEFORE_DESTROY=true runs ansible-playbooks/99_cleanup.yml before terraform destroy
 
-Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → MONITORING → ECS_INSTALL → ECS_POST_INSTALL_TASKS → ECS_DATA_SERVICES → STARTSTOP_AUTOMATION → DESTROY_STACK
+Run order: VALIDATE → TERRAFORM → PREREQS → PORTAL → MONITORING → IDENTITY → CM_INSTALL → CM_TLS_KRB_LDAP → CDH_INSTALL → ECS_INSTALL → ECS_POST_INSTALL_TASKS → ECS_DATA_SERVICES → STARTSTOP_AUTOMATION → DESTROY_STACK
 
 | Checkbox | What runs |
 | VALIDATE | validate-prereqs.sh — standard tool, AWS, tfvars, Ansible syntax, and inventory checks |
 | TERRAFORM | run-terraform.sh — plan/apply; writes inventory.ini + PEM |
 | PREREQS | Ansible phase 1 (playbooks 01–09) |
-| PORTAL | Deployment portal bootstrap (10); before CM when portal enabled |
+| PORTAL | Deployment portal/Caddy foundation (10); MONITORING follows immediately when enabled |
 | IDENTITY | Ansible phase 2 — FreeIPA or AD |
 | CM_INSTALL | Ansible phase 3 — CM repos, Postgres, CM server |
 | CM_TLS_KRB_LDAP | Auto-TLS, CMS, LDAP, Kerberos (27→28→29→30) |
 | CDH_INSTALL | CDH base cluster (31_setup_base_cluster.yml) |
-| MONITORING | Monitoring stack (32); needs PORTAL; MONITORING_STACK_ENABLED |
+| MONITORING | Monitoring stack and exporter enrollment (32); runs immediately after PORTAL; MONITORING_STACK_ENABLED |
 | ECS_INSTALL | ECS cluster installation/reconciliation (33), including CoreDNS; succeeds only after the Management Console is healthy |
 | ECS_POST_INSTALL_TASKS | Recheck console health, then automation machine user/key, IAM/LDAP role assignments, and portal refresh |
 | ECS_DATA_SERVICES | Data services only (34); requires an existing healthy ECS cluster |
@@ -136,7 +136,7 @@ Legacy: CDH_BASE (old jobs) expands to CM_TLS_KRB_LDAP + CDH_INSTALL — check t
 
 Examples:
   New job defaults: VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION (ECS_INSTALL and CDH_INSTALL unchecked; ECS_DATA_SERVICES_DEPLOY_ENABLED=false)
-  Old PREREQS,IDENTITY,CM_INSTALL,CDH_BASE equivalent: PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL (+ VALIDATE,TERRAFORM if you still provision VMs)
+  Old PREREQS,IDENTITY,CM_INSTALL,CDH_BASE equivalent: PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL (+ VALIDATE,TERRAFORM if you still provision VMs; uncheck MONITORING_STACK_ENABLED to omit monitoring)
 
 Details: jenkins/README.md
 ''',
@@ -256,7 +256,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     booleanParam(
       name: 'MONITORING_STACK_ENABLED',
       defaultValue: true,
-      description: 'Deploy Grafana/Prometheus/Alertmanager/cAdvisor (32). When CDH_INSTALL or ECS_INSTALL is selected, stage 32 is inserted automatically unless this is false.'
+      description: 'Deploy Grafana/Prometheus/Alertmanager/cAdvisor/exporters (32) immediately after PORTAL. PORTAL automatically inserts this stage unless this is false.'
     )
     booleanParam(
       name: 'DEPLOYMENT_PORTAL_ENABLED',
@@ -610,25 +610,25 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
         }
       }
     }
-    stage('Ansible 3 — Identity') {
+    stage('Ansible 3 — Monitoring Stack') {
+      when { expression { return shouldRunAnsibleStage('MONITORING') && monitoringStackEnabled() } }
+      steps { script { runAnsibleDeployPhase('monitoring') } }
+    }
+    stage('Ansible 4 — Identity') {
       when { expression { return shouldRunAnsibleStage('IDENTITY') } }
       steps { script { runAnsibleDeployPhase('2') } }
     }
-    stage('Ansible 4 — CM Install') {
+    stage('Ansible 5 — CM Install') {
       when { expression { return shouldRunAnsibleStage('CM_INSTALL') } }
       steps { script { runAnsibleDeployPhase('3') } }
     }
-    stage('Ansible 5 — CM TLS / Kerberos / LDAP') {
+    stage('Ansible 6 — CM TLS / Kerberos / LDAP') {
       when { expression { return shouldRunAnsibleStage('CM_TLS_KRB_LDAP') } }
       steps { script { runAnsibleDeployPhase('cm_tls') } }
     }
-    stage('Ansible 6 — CDH Base Cluster') {
+    stage('Ansible 7 — CDH Base Cluster') {
       when { expression { return shouldRunAnsibleStage('CDH_INSTALL') } }
       steps { script { runAnsibleDeployPhase('cdh') } }
-    }
-    stage('Ansible 7 — Monitoring Stack') {
-      when { expression { return shouldRunAnsibleStage('MONITORING') && monitoringStackEnabled() } }
-      steps { script { runAnsibleDeployPhase('monitoring') } }
     }
     stage('Ansible 8 — ECS Cluster') {
       when { expression { return shouldRunAnsibleStage('ECS_INSTALL') } }
@@ -861,20 +861,20 @@ def knownPipelineStages() {
 
 def orderedAnsibleStageIds() {
   return [
-    'PREREQS', 'PORTAL', 'IDENTITY', 'CM_INSTALL', 'CM_TLS_KRB_LDAP', 'CDH_INSTALL',
-    'MONITORING', 'ECS_INSTALL', 'ECS_POST_INSTALL_TASKS', 'ECS_DATA_SERVICES',
+    'PREREQS', 'PORTAL', 'MONITORING', 'IDENTITY', 'CM_INSTALL', 'CM_TLS_KRB_LDAP',
+    'CDH_INSTALL', 'ECS_INSTALL', 'ECS_POST_INSTALL_TASKS', 'ECS_DATA_SERVICES',
   ]
 }
 
 def echoPipelineStagesQuickReference() {
   echo '''PIPELINE_STAGES quick reference (full table: Build parameter PIPELINE_STAGES_REFERENCE or jenkins/README.md):
-  Copy-paste full path: VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS
+  Copy-paste full path: VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS
   Optional: ECS_POST_INSTALL_TASKS, ECS_DATA_SERVICES, STARTSTOP_AUTOMATION, DESTROY_STACK | Job defaults: VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION
-  VALIDATE → prereqs script | TERRAFORM → EC2/inventory | PREREQS → Ansible 01-09 | PORTAL → bootstrap (10)
+  VALIDATE → prereqs script | TERRAFORM → EC2/inventory | PREREQS → Ansible 01-09 | PORTAL → foundation (10) | MONITORING → immediately after PORTAL (32)
   IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → 27→28→29→30 | CDH_INSTALL → base cluster (31)
-  MONITORING → (32) | ECS_INSTALL → (33 + CoreDNS + healthy console) | ECS_POST_INSTALL_TASKS → credentials/IAM/LDAP/portal after health | ECS_DATA_SERVICES → (34 data services only)
+  ECS_INSTALL → (33 + CoreDNS + healthy console) | ECS_POST_INSTALL_TASKS → credentials/IAM/LDAP/portal after health | ECS_DATA_SERVICES → (34 data services only)
   STARTSTOP_AUTOMATION → ipaserver (EC2_STARTSTOP_DEPLOY_SCRIPT/ RUN_SCRIPT + OPERATION/GROUPS) | DESTROY_STACK → destroy (or DRY_RUN plan)
-  Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. PORTAL auto-inserts for deployment stages when enabled; MONITORING auto-inserts for CDH/ECS when monitoring is enabled.'''
+  Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. PORTAL auto-inserts for deployment stages when enabled; PORTAL auto-inserts MONITORING immediately afterward when monitoring is enabled.'''
 }
 
 def ansiblePhaseForStage(String stageId) {
@@ -950,13 +950,13 @@ def addImplicitDeploymentStages(List stages) {
     result << 'PORTAL'
   }
 
-  def monitoringTriggers = ['CDH_INSTALL', 'ECS_INSTALL']
+  def monitoringTriggers = ['PORTAL']
   if (
     monitoringStackEnabled()
     && result.any { it in monitoringTriggers }
     && !result.contains('MONITORING')
   ) {
-    echo 'INFO: MONITORING_STACK_ENABLED=true — adding MONITORING stage after CDH and before ECS.'
+    echo 'INFO: MONITORING_STACK_ENABLED=true — adding MONITORING immediately after PORTAL.'
     result << 'MONITORING'
   }
   return result
