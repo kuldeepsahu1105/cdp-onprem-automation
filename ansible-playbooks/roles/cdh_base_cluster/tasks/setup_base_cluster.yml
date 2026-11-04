@@ -48,7 +48,37 @@
       - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_admin_password | string | length > 0)
       - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_keyadmin_password | string | length > 0)
       - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_tagsync_password | string | length > 0)
-      - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_usersync_password | string | length > 0)
+      - >-
+        not (base_cluster_install_services.ranger | default(true) | bool)
+        or not (base_cluster_ranger_usersync_configure_effective | bool)
+        or (base_cluster_ranger_usersync_password | string | length > 0)
+      - >-
+        base_cluster_ranger_usersync_provider | lower
+        in base_cluster_ranger_usersync_provider_allowed
+      - >-
+        not (base_cluster_ranger_usersync_configure_effective | bool)
+        or base_cluster_ranger_usersync_ldap_url | string | length > 0
+      - >-
+        not (base_cluster_ranger_usersync_configure_effective | bool)
+        or base_cluster_ranger_usersync_bind_dn | string | length > 0
+      - >-
+        not (base_cluster_ranger_usersync_configure_effective | bool)
+        or base_cluster_ranger_usersync_bind_password | string | length > 0
+      - >-
+        not (base_cluster_ranger_usersync_configure_effective | bool)
+        or base_cluster_ranger_usersync_user_search_base | string | length > 0
+      - >-
+        not (base_cluster_ranger_usersync_configure_effective | bool)
+        or base_cluster_ranger_usersync_group_search_base | string | length > 0
+      - >-
+        not (base_cluster_ranger_usersync_configure_effective | bool)
+        or base_cluster_ranger_admin_base_dn | string | length > 0
+      - >-
+        not (base_cluster_ranger_usersync_configure_effective | bool)
+        or base_cluster_ranger_admin_user_search_filter | string | length > 0
+      - >-
+        not (base_cluster_ranger_usersync_configure_effective | bool)
+        or base_cluster_ranger_admin_group_search_filter | string | length > 0
       - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_admin_password | string | length >= 8)
       - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_admin_password | regex_search('[A-Za-z]'))
       - not (base_cluster_install_services.ranger | default(true) | bool) or (base_cluster_ranger_admin_password | regex_search('[0-9]'))
@@ -746,6 +776,116 @@
       - rangertagsync_user_password
       - rangerusersync_user_password
   when: base_cluster_install_services.ranger | default(true) | bool
+
+- name: Read Ranger role config groups for LDAP integration
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/ranger/roleConfigGroups?view=summary
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: base_cluster_ranger_role_groups
+  changed_when: false
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+  when:
+    - base_cluster_install_services.ranger | default(true) | bool
+    - base_cluster_ranger_usersync_configure_effective | bool
+
+- name: Resolve Ranger Admin role config group
+  ansible.builtin.set_fact:
+    base_cluster_ranger_admin_group: >-
+      {{
+        base_cluster_ranger_role_groups.json['items']
+        | selectattr('roleType', 'equalto', 'RANGER_ADMIN')
+        | map(attribute='name')
+        | first
+        | default('')
+      }}
+  when:
+    - base_cluster_install_services.ranger | default(true) | bool
+    - base_cluster_ranger_usersync_configure_effective | bool
+
+- name: Resolve Ranger UserSync role config group
+  ansible.builtin.set_fact:
+    base_cluster_ranger_usersync_group: >-
+      {{
+        base_cluster_ranger_role_groups.json['items']
+        | selectattr('roleType', 'equalto', 'RANGER_USERSYNC')
+        | map(attribute='name')
+        | first
+        | default('')
+      }}
+  when:
+    - base_cluster_install_services.ranger | default(true) | bool
+    - base_cluster_ranger_usersync_configure_effective | bool
+
+- name: Require Ranger LDAP role config groups
+  ansible.builtin.assert:
+    that:
+      - base_cluster_ranger_admin_group | length > 0
+      - base_cluster_ranger_usersync_group | length > 0
+    fail_msg: >-
+      Ranger LDAP integration is enabled with provider
+      '{{ base_cluster_ranger_usersync_provider_effective }}', but Ranger
+      is missing its RANGER_ADMIN or RANGER_USERSYNC role config group.
+  when:
+    - base_cluster_install_services.ranger | default(true) | bool
+    - base_cluster_ranger_usersync_configure_effective | bool
+
+- name: Configure Ranger Admin LDAP authentication
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/common_tasks/reconcile_cm_config_api.yml"
+  vars:
+    cm_config_display_name: Ranger Admin LDAP authentication
+    cm_config_endpoint: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/ranger/roleConfigGroups/{{
+      base_cluster_ranger_admin_group }}/config
+    cm_config_desired: "{{ base_cluster_ranger_admin_ldap_config }}"
+    cm_config_secret_names: >-
+      {{
+        ['ranger_ldap_ad_bind_password']
+        if base_cluster_ranger_usersync_provider_effective == 'ad'
+        else ['ranger_ldap_bind_password']
+      }}
+  when:
+    - base_cluster_install_services.ranger | default(true) | bool
+    - base_cluster_ranger_usersync_configure_effective | bool
+
+- name: Configure Ranger UserSync LDAP provider
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/common_tasks/reconcile_cm_config_api.yml"
+  vars:
+    cm_config_display_name: Ranger UserSync LDAP provider
+    cm_config_endpoint: >-
+      {{ cm_cluster_module_api_url }}/clusters/{{ cdh_basecluster_name
+      }}/services/ranger/roleConfigGroups/{{
+      base_cluster_ranger_usersync_group }}/config
+    cm_config_desired:
+      ranger.usersync.ldap.url: "{{ base_cluster_ranger_usersync_ldap_url }}"
+      ranger.usersync.ldap.binddn: "{{ base_cluster_ranger_usersync_bind_dn }}"
+      ranger_usersync_ldap_ldapbindpassword: "{{ base_cluster_ranger_usersync_bind_password }}"
+      ranger.usersync.ldap.user.searchbase: "{{ base_cluster_ranger_usersync_user_search_base }}"
+      ranger.usersync.ldap.user.objectclass: "{{ base_cluster_ranger_usersync_user_object_class }}"
+      ranger.usersync.ldap.user.nameattribute: "{{ base_cluster_ranger_usersync_user_name_attribute }}"
+      ranger.usersync.group.searchbase: "{{ base_cluster_ranger_usersync_group_search_base }}"
+      ranger.usersync.group.objectclass: "{{ base_cluster_ranger_usersync_group_object_class }}"
+      ranger.usersync.group.nameattribute: "{{ base_cluster_ranger_usersync_group_name_attribute }}"
+      ranger.usersync.group.memberattributename: "{{ base_cluster_ranger_usersync_group_member_attribute }}"
+      ranger.usersync.ldap.referral: follow
+      ranger.usersync.ldap.username.caseconversion: lower
+      ranger.usersync.ldap.groupname.caseconversion: lower
+      ranger.usersync.ldap.grouphierarchylevels: 0
+      ranger.usersync.source.impl.class: org.apache.ranger.ldapusersync.process.LdapUserGroupBuilder
+      ranger.usersync.user.searchenabled: "true"
+    cm_config_secret_names:
+      - ranger_usersync_ldap_ldapbindpassword
+  when:
+    - base_cluster_install_services.ranger | default(true) | bool
+    - base_cluster_ranger_usersync_configure_effective | bool
 
 - name: Initialize Knox CDP discovery change flags
   ansible.builtin.set_fact:

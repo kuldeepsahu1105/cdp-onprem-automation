@@ -291,8 +291,33 @@ services:
 {% endif %}
     role_groups:
       - type: RANGER_ADMIN
+{% if base_cluster_ranger_usersync_configure_effective | bool %}
+        config:
+{% for config_name, config_value in base_cluster_ranger_admin_ldap_config.items() %}
+          {{ config_name }}: {{ config_value | to_json }}
+{% endfor %}
+{% endif %}
       - type: RANGER_TAGSYNC
+{% if base_cluster_ranger_usersync_configure_effective | bool %}
       - type: RANGER_USERSYNC
+        config:
+          ranger.usersync.ldap.url: {{ base_cluster_ranger_usersync_ldap_url | to_json }}
+          ranger.usersync.ldap.binddn: {{ base_cluster_ranger_usersync_bind_dn | to_json }}
+          ranger_usersync_ldap_ldapbindpassword: {{ base_cluster_ranger_usersync_bind_password | to_json }}
+          ranger.usersync.ldap.user.searchbase: {{ base_cluster_ranger_usersync_user_search_base | to_json }}
+          ranger.usersync.ldap.user.objectclass: {{ base_cluster_ranger_usersync_user_object_class | to_json }}
+          ranger.usersync.ldap.user.nameattribute: {{ base_cluster_ranger_usersync_user_name_attribute | to_json }}
+          ranger.usersync.group.searchbase: {{ base_cluster_ranger_usersync_group_search_base | to_json }}
+          ranger.usersync.group.objectclass: {{ base_cluster_ranger_usersync_group_object_class | to_json }}
+          ranger.usersync.group.nameattribute: {{ base_cluster_ranger_usersync_group_name_attribute | to_json }}
+          ranger.usersync.group.memberattributename: {{ base_cluster_ranger_usersync_group_member_attribute | to_json }}
+          ranger.usersync.ldap.referral: follow
+          ranger.usersync.ldap.username.caseconversion: lower
+          ranger.usersync.ldap.groupname.caseconversion: lower
+          ranger.usersync.ldap.grouphierarchylevels: 0
+          ranger.usersync.source.impl.class: org.apache.ranger.ldapusersync.process.LdapUserGroupBuilder
+          ranger.usersync.user.searchenabled: "true"
+{% endif %}
 {% endif %}
 {% if svc.nifi | default(false) %}
   - name: nifi
@@ -421,8 +446,10 @@ host_templates:
         type: RANGER_ADMIN
       - service: RANGER
         type: RANGER_TAGSYNC
+{% if base_cluster_ranger_usersync_configure_effective | bool %}
       - service: RANGER
         type: RANGER_USERSYNC
+{% endif %}
 {% endif %}
 {% if svc.replication | default(false) %}
       - service: REPLICATION_MANAGER

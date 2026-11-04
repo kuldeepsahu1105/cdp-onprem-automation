@@ -133,6 +133,24 @@ base_cluster_ranger_admin_password: "{{ common_password | default(ipaadmin_passw
 base_cluster_ranger_keyadmin_password: "{{ base_cluster_ranger_admin_password }}"
 base_cluster_ranger_tagsync_password: "{{ base_cluster_ranger_admin_password }}"
 base_cluster_ranger_usersync_password: "{{ base_cluster_ranger_admin_password }}"
+# Ranger Admin LDAP authentication followed by UserSync:
+# auto | freeipa | ad | external | none.
+base_cluster_ranger_usersync_enabled: true
+base_cluster_ranger_usersync_provider: auto
+# Required only when provider is external.
+base_cluster_ranger_usersync_external_ldap_url: ""
+base_cluster_ranger_usersync_external_bind_dn: ""
+base_cluster_ranger_usersync_external_bind_password: ""
+base_cluster_ranger_usersync_external_base_dn: ""
+base_cluster_ranger_usersync_external_user_search_base: ""
+base_cluster_ranger_usersync_external_group_search_base: ""
+base_cluster_ranger_usersync_external_user_search_filter: "(uid={0})"
+base_cluster_ranger_usersync_external_group_search_filter: "(&(member={0})(objectClass=groupOfNames))"
+base_cluster_ranger_usersync_external_user_object_class: person
+base_cluster_ranger_usersync_external_group_object_class: groupOfNames
+base_cluster_ranger_usersync_external_user_name_attribute: uid
+base_cluster_ranger_usersync_external_group_name_attribute: cn
+base_cluster_ranger_usersync_external_group_member_attribute: member
 base_cluster_knox_database_name: knox
 base_cluster_knox_database_user: knox
 base_cluster_knox_database_password: knox

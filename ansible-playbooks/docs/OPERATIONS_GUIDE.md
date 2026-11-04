@@ -740,6 +740,22 @@ required Ozone/Hive/Ranger/Knox settings and the Ozone Recon role are reconciled
 the cluster is started if necessary, and CM runs
 `deployClientConfigsAndRefresh`. The final cluster state and health are printed.
 
+Ranger UserSync is enabled by default and follows the deployment identity
+provider:
+
+```yaml
+base_cluster_ranger_usersync_enabled: true
+base_cluster_ranger_usersync_provider: auto
+```
+
+`auto` selects FreeIPA or Active Directory from `identity_provider_effective`.
+Set the provider to `freeipa` or `ad` to choose one explicitly, `external` with
+the `base_cluster_ranger_usersync_external_*` bind/search variables for another
+LDAP directory, or `none` to omit the UserSync role and LDAP configuration.
+Ranger Admin LDAP authentication is configured first with the same provider,
+then UserSync imports users and groups. Fresh and adopted Base clusters use the
+same role-config-group reconciliation.
+
 First Run failures are expanded from the parent CM command into failed service
 commands and their child validation messages in Jenkins. First Run is submitted
 for a newly created cluster and for an existing populated cluster when the
