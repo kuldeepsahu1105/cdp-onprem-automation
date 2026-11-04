@@ -1,0 +1,60 @@
+---
+- name: Check Ranger directory truststore on the Ranger host
+  ansible.builtin.stat:
+    path: "{{ base_cluster_ranger_usersync_truststore_path }}"
+  register: base_cluster_ranger_usersync_truststore
+  delegate_to: "{{ groups[base_cluster_master_group][0] }}"
+  become: true
+  when:
+    - base_cluster_ranger_usersync_tls_enabled | bool
+    - base_cluster_ranger_usersync_truststore_path | string | trim | length > 0
+
+- name: Report Ranger plaintext LDAP fallback
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Ranger directory truststore {{ base_cluster_ranger_usersync_truststore_path }}
+      is unavailable on {{ groups[base_cluster_master_group][0] }}. Ranger Admin
+      and UserSync will use plaintext LDAP on port
+      {{ base_cluster_ranger_usersync_plaintext_port }} for this deployment.
+  when:
+    - base_cluster_ranger_usersync_tls_enabled | bool
+    - base_cluster_ranger_usersync_truststore_path | string | trim | length > 0
+    - not (base_cluster_ranger_usersync_truststore.stat.exists | default(false) | bool)
+    - base_cluster_ranger_usersync_allow_plaintext_fallback | bool
+
+- name: Set Ranger plaintext LDAP endpoint when truststore is unavailable
+  ansible.builtin.set_fact:
+    base_cluster_ranger_usersync_ldap_url: >-
+      ldap://{{ base_cluster_ranger_usersync_ldap_url | urlsplit('hostname') }}:{{
+        base_cluster_ranger_usersync_plaintext_port
+      }}
+  when:
+    - base_cluster_ranger_usersync_tls_enabled | bool
+    - base_cluster_ranger_usersync_truststore_path | string | trim | length > 0
+    - not (base_cluster_ranger_usersync_truststore.stat.exists | default(false) | bool)
+    - base_cluster_ranger_usersync_allow_plaintext_fallback | bool
+
+- name: Disable Ranger LDAP transport security after plaintext fallback
+  ansible.builtin.set_fact:
+    base_cluster_ranger_usersync_starttls: false
+    base_cluster_ranger_usersync_tls_enabled: false
+    base_cluster_ranger_usersync_truststore_path: ""
+  when:
+    - base_cluster_ranger_usersync_tls_enabled | bool
+    - base_cluster_ranger_usersync_truststore_path | string | trim | length > 0
+    - not (base_cluster_ranger_usersync_truststore.stat.exists | default(false) | bool)
+    - base_cluster_ranger_usersync_allow_plaintext_fallback | bool
+
+- name: Require Ranger directory truststore when plaintext fallback is disabled
+  ansible.builtin.assert:
+    that:
+      - base_cluster_ranger_usersync_truststore.stat.exists | default(false) | bool
+      - base_cluster_ranger_usersync_truststore.stat.isreg | default(false) | bool
+    fail_msg: >-
+      Ranger directory truststore {{ base_cluster_ranger_usersync_truststore_path }}
+      is missing on {{ groups[base_cluster_master_group][0] }}. Restore the
+      Auto-TLS truststore or enable base_cluster_ranger_usersync_allow_plaintext_fallback.
+  when:
+    - base_cluster_ranger_usersync_tls_enabled | bool
+    - base_cluster_ranger_usersync_truststore_path | string | trim | length > 0
+    - not (base_cluster_ranger_usersync_allow_plaintext_fallback | bool)
