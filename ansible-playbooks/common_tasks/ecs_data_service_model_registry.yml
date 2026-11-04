@@ -407,6 +407,33 @@
                 else 'Created successfully'
               }}
 
+        - name: Update portal catalog URL for Model Registry
+          ansible.builtin.set_fact:
+            ecs_data_services_catalog: >-
+              {{
+                ecs_data_services_catalog | combine(
+                  {
+                    'model_registry':
+                      ecs_data_services_catalog.model_registry
+                      | default({})
+                      | combine(
+                          {
+                            'url': (
+                              'https://'
+                              + ecs_model_registry_subdomain
+                              + '.'
+                              + ecs_app_domain
+                            ),
+                            'service_name': ecs_model_registry_service_name,
+                            'status': ecs_model_registry_status
+                          },
+                          recursive=True
+                        )
+                  },
+                  recursive=True
+                )
+              }}
+
         - name: Register Model Registry ingress for Caddy
           ansible.builtin.set_fact:
             ecs_caddy_data_service_routes: >-

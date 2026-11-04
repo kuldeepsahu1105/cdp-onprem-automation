@@ -1451,6 +1451,10 @@ ecs_data_services_catalog:
     name: Cloudera AI
     description: Cloudera AI workspaces
     url: ""
+  model_registry:
+    name: Model Registry
+    description: Cloudera AI Model Registry
+    url: ""
 # Each fresh Base/ECS deployment needs a unique environment name. Exact-name
 # reuse is idempotent; adopting a differently named environment is opt-in.
 ecs_cdp_environment_name: "{{ cluster_domain.split('.')[0] | lower | regex_replace('[^a-z0-9-]', '-') }}"

@@ -429,6 +429,7 @@
     - key: cdw
     - key: cde
     - key: cai
+    - key: model_registry
   vars:
     _cat: "{{ ecs_data_services_catalog[item.key] | default({}) }}"
     _url: >-

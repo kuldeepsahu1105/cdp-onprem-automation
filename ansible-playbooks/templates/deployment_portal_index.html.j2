@@ -1003,6 +1003,14 @@
           <span class="tile-hint">{% if ctx.ecs.deployed %}{{ ctx.ecs.cluster_name }}{% else %}Console{% endif %}</span>
         </a>
         {% endif %}
+        {% for link in ctx.data_services.links | default([]) %}
+        {% if link.url | default('') | length > 0 %}
+        <a class="tile tile-cyan" href="{{ link.url }}" target="_blank" rel="noopener noreferrer">
+          <span class="tile-label">{{ link.name | default('Deployment add-on') }}</span>
+          <span class="tile-hint">{{ link.description | default('Configured deployment service') }}</span>
+        </a>
+        {% endif %}
+        {% endfor %}
         {% if portal_tile_url | length > 0 %}
         <a class="tile tile-accent tile-cyan" target="_blank" rel="noopener noreferrer" href="{{ portal_tile_url }}">
           <span class="tile-label">Deployment portal</span>

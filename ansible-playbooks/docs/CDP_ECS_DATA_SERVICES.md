@@ -319,6 +319,10 @@ The catalog is non-secret and is written with controller-readable permissions.
 Portal fact construction reads it with Ansible `slurp` under local privilege
 escalation, so a legacy/root-owned cache remains readable from Jenkins and
 direct `ansible-playbook` runs.
+Successful CDW, CDE, Cloudera AI, and Model Registry endpoints are added to
+the deployment portal catalog and Quick Open alongside enabled Base-cluster
+service links. Existing core portal tiles are retained; add-ons extend the
+catalog rather than replacing earlier components.
 
 Credential caches remain under `ecs_persistent_state_dir`: Jenkins uses
 `$CDP_STATE_DIR`, while standalone runs use `$CDP_STATE_DIR` when set,
