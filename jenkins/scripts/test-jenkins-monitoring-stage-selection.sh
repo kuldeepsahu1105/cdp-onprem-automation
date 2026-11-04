@@ -27,7 +27,8 @@ assert "monitoringStackEnabled" not in portal_body
 
 parse_body = function_body("parseSelectedStages")
 assert "csv instanceof Collection" in parse_body
-assert "csv.getClass().isArray()" in parse_body
+assert "csv instanceof Object[]" in parse_body
+assert ".getClass().isArray()" not in parse_body
 
 canonical_body = function_body("canonicalizePipelineStages")
 assert "normalizePipelineStageToken" in canonical_body

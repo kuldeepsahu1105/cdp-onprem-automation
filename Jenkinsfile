@@ -828,7 +828,7 @@ def parseSelectedStages(def csv) {
   if (csv instanceof Collection) {
     return csv.collectMany { parseSelectedStages(it) }
   }
-  if (csv.getClass().isArray()) {
+  if (csv instanceof Object[]) {
     return csv.toList().collectMany { parseSelectedStages(it) }
   }
   def text = csv.toString().trim()
