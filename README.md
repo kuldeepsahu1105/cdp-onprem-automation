@@ -76,14 +76,17 @@ In `vi`, press `i` to edit, then `Esc` and `:wq` + Enter to save/quit;
 AMI IDs, domains, and lab passwords; never commit credentials, private keys,
 licenses, Terraform state, or plan files.
 
-## Offline infrastructure cost reporting
+## Infrastructure cost reporting
 
-Use [the cost reporting guide](docs/COST_REPORTING.md) for offline Terraform or
-Ansible inventory imports, evidenced AWS prices or operator-supplied
-Nutanix/bare-metal rate cards, and a **separate** billing-export ledger.
-`make cost-report` writes reconciled TXT, JSON, and CSV artifacts without
-credentials, provider API calls, provisioning, or changes to deployment workflows.
-Unknown prices stay `null`; estimates are never presented as invoices.
+Use [the cost reporting guide](docs/COST_REPORTING.md) for Terraform or Ansible
+inventory imports, AWS Pricing and Cost Explorer evidence, operator-supplied
+Nutanix/bare-metal rate cards, and a **separate** billing ledger. `make
+cost-report` defaults `COST_LIVE_COLLECTION=true`: AWS inventories use the AWS
+CLI to record private evidence before invoking the audited renderer; non-AWS
+inventories skip AWS collection and use manual rates. Set
+`COST_LIVE_COLLECTION=false` for recorded-input-only operation. Cost reporting
+is never invoked by deployment playbooks/wrappers. Unknown prices stay `null`;
+estimates are never presented as invoices.
 
 ## Configuration files
 

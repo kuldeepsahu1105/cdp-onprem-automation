@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline cost reporting entry point; no SDKs, credentials, or network access."""
+"""Cost reporting entry point; only live-report invokes the AWS CLI."""
 
 import sys
 from pathlib import Path

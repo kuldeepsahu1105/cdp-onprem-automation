@@ -1,10 +1,22 @@
-# Offline infrastructure estimates and actual billed costs
+# Infrastructure estimates and actual billed costs
 
-This is an **additive, opt-in** reporting path. It changes no Terraform, Ansible,
-inventory generation, Jenkins job, or deployment prerequisites. Python 3.9+ and
-the standard library are sufficient; `make` is optional. The CLI never imports
-an AWS/Nutanix SDK, reads credentials, invokes Terraform/Ansible, queries an
-endpoint, provisions infrastructure, or starts services.
+This is an **additive, explicitly invoked** reporting path. It changes no
+Terraform, Ansible, inventory generation, Jenkins job, deployment prerequisite,
+playbook or wrapper exit status. Python 3.9+ and the standard library are
+sufficient; live AWS collection additionally requires the AWS CLI.
+
+`make cost-report` defaults `COST_LIVE_COLLECTION=true`. When the normalized
+inventory contains AWS resources, the explicit `live-report` command validates
+the AWS caller/account/region, collects paginated AWS Pricing `GetProducts`
+evidence through `us-east-1`, collects Cost Explorer `GetCostAndUsage` evidence,
+then invokes the same audited renderer. It never runs Terraform init/plan/refresh,
+inspects credential files, logs tokens, provisions infrastructure or uses static
+prices as a live fallback. When inventory is Nutanix or bare metal only, AWS
+collection is skipped without requiring the AWS CLI and manual rates are used.
+
+Set `COST_LIVE_COLLECTION=false` for strictly offline operation with previously
+recorded normalized inputs. The low-level `report`, `inventory`, `pricing` and
+`billing` commands never make network calls.
 
 ## Audit and supported scope
 
@@ -23,11 +35,12 @@ Review the requested period and actual allocated/running hours yourself.
 
 ## Input filenames and operator checklist
 
-Keep private inputs in ignored `cost-inputs/`; reports default to ignored
-`artifacts/cost/`. Never commit state, plan JSON, real CUR exports, account IDs,
+Keep private inputs and live evidence in ignored `cost-inputs/`; reports default
+to ignored `artifacts/cost/`. Live evidence directories and report directories
+are forced to mode `0700`; files are atomically replaced with mode `0600`.
+Never commit state, plan JSON, real CUR/Cost Explorer exports, account IDs,
 prices under NDA, or credentials. Terraform JSON can contain secrets: obtain a
 sanitized, already exported snapshot under your existing operational process.
-The examples below use **local files only**, not cloud/deploy commands.
 
 ```bash
 umask 077
@@ -50,8 +63,10 @@ Before running, review:
 | `terraform-show.json` or `ansible-inventory.json` | Genuine sanitized snapshot, timestamp/source, intended environment and plan versus deployed state; no duplicate state files/aliases |
 | `inventory-context.json` | Exact account/site, region, owner, currency, interval and explicit exclusions; canonical physical IDs, charge pools, shared allocations and uptime overrides |
 | `prices.json` | Exact provider/region/SKU/unit/currency match; source URL/export/approved rate-card reference and as-of; OS, architecture, tenancy, purchase model and storage/IOPS/throughput dimensions |
-| `aws-price-list.json` + `price-context.json` (optional) | Genuine AWS bulk price-list JSON; select exact provider SKU and non-tiered OnDemand rate code; do not assume OS/tenancy from an instance name |
-| `aws-cur.csv` + `billing-context.json` (optional) | One consistent export revision, scope, metric, account/project/tag coverage, billing period, freshness and completeness; don't append older exports of the same charges |
+| `aws-price-list.json` + `price-context.json` (offline) | Genuine AWS bulk price-list JSON; select exact provider SKU and non-tiered OnDemand rate code; do not assume OS/tenancy from an instance name |
+| `price-context.json` (live AWS) | Each selection also supplies the AWS `service_code`; live collection binds the exact provider SKU and consumes every `NextToken` page |
+| `aws-cur.csv` + `billing-context.json` (offline) | One consistent export revision, scope, metric, account/project/tag coverage, billing period, freshness and completeness; don't append older exports of the same charges |
+| `billing-context.json` (live AWS) | Includes exact `live_request` with `TimePeriod`, `Granularity`, one supported metric, explicit `Filter` (`{}` means account-wide), and optional `GroupBy` |
 
 An input file's basename and SHA-256 are recorded; that proves which local file
 content was used without publishing workstation directory names, **not** that the
@@ -317,18 +332,35 @@ evidence, not a guarantee of final invoicing.
 ## Generate and consume all three formats
 
 ```bash
+# Default: live AWS collection when AWS resources are present.
 make cost-report
-# Same operation without make:
+
+# Equivalent explicit live command:
+python3 scripts/cost_report.py live-report \
+  --terraform-json cost-inputs/terraform-show.json \
+  --inventory-context cost-inputs/inventory-context.json \
+  --price-context cost-inputs/price-context.json \
+  --billing-context cost-inputs/billing-context.json \
+  --evidence-dir cost-inputs/live \
+  --output-dir artifacts/cost
+
+# Offline: consume recorded normalized evidence only.
+make cost-report COST_LIVE_COLLECTION=false
 python3 scripts/cost_report.py report \
   --inventory cost-inputs/inventory.json \
   --prices cost-inputs/prices.json \
   --output-dir artifacts/cost
 
-# Add actual billing only when available:
-make cost-report COST_BILLING=cost-inputs/billing.json
-# Explicit paths (also permits jenkins/artifacts/cost for a caller-managed copy):
-make cost-report COST_INVENTORY=cost-inputs/inventory.json \
-  COST_PRICES=cost-inputs/prices.json COST_OUTPUT_DIR=artifacts/cost
+# Offline billing and explicit paths:
+make cost-report COST_LIVE_COLLECTION=false \
+  COST_INVENTORY=cost-inputs/inventory.json \
+  COST_PRICES=cost-inputs/prices.json COST_OUTPUT_DIR=artifacts/cost \
+  COST_BILLING=cost-inputs/billing.json
+
+# Nutanix/bare-metal: live remains true but AWS is skipped.
+make cost-report COST_ANSIBLE_JSON=cost-inputs/ansible-inventory.json \
+  COST_INVENTORY_CONTEXT=cost-inputs/inventory-context.json \
+  COST_MANUAL_PRICES=cost-inputs/prices.json
 make test-cost-report
 ```
 
@@ -379,32 +411,37 @@ inventory, pricing, billing or report file is atomically replaced with mode
 files as a successful run. Filesystem failures during multi-file writes are not
 a transactional publish across all three report formats.
 
-## Deliberate differences from the AWS prerequisites reference
+## Live AWS evidence and failure behavior
 
-The audited reporting path here is offline-only. It does not retain the
-reference repository's legacy Terraform-time AWS Pricing lookup or its static
-fallback table. Therefore this branch does **not** satisfy a requirement for a
-live cloud collector; adding one would require a separate explicit command,
-documented read permissions, recorded request/response provenance, pagination
-handling and fail-closed behavior. There is no hidden network fallback.
+The collector records exact requests and responses in
+`cost-inputs/live/aws-pricing-evidence.json` and
+`aws-billing-evidence.json`, including collection timestamp, source, endpoint,
+pagination tokens/pages, Cost Explorer scope/filter/grouping, period, currency
+and `Estimated` flags. Normalized `inventory.json`, `prices.json` and
+`billing.json` in the same private directory are the inputs to the renderer.
+Negative credits/refunds retain their sign; estimates and actuals remain separate.
 
-Actual AWS data is accepted as line-level CUR CSV rather than a Cost Explorer
-request/response envelope. CUR lines retain account, region, resource, project,
-tags, currency, metric, period, negative credits/refunds and export collection
-time. The operator-declared `scope` and `completeness` describe the export;
-Cost Explorer request filters, grouping and `Estimated` flags are not available
-in CUR and are not invented. AWS bulk price-list files likewise are complete
-catalog exports, not paginated `GetProducts` response arrays; unsupported raw
-response envelopes are rejected by shape rather than partially consumed.
+Required AWS permissions are `sts:GetCallerIdentity`,
+`pricing:GetProducts` (AWS Pricing endpoint `us-east-1`) and
+`ce:GetCostAndUsage`. Pricing, CLI, credential or caller-context failure is
+fatal: prior evidence and reports remain untouched, no static fallback is used,
+and the error explains that `COST_LIVE_COLLECTION=false` requires recorded
+inputs. Cost Explorer `AccessDenied` after caller validation is recorded as an
+explicit unavailable envelope and actuals remain unavailable, never zero.
+
+For non-AWS inventory the collector does not look for or execute `aws`; it emits
+an informational report warning and uses manual/recorded rates. Mixed inventory
+can combine live AWS rates with `COST_MANUAL_PRICES` for Nutanix/bare-metal
+components. Unsupported AWS charge dimensions remain unknown.
 
 ## Permissions and limitations
 
-The reporter needs only read permission on supplied inputs and write permission
-on the selected output directory. **No IAM, Prism, SSH, Ansible or Terraform
-permissions are required.** An authorized operator may separately export data
-with their established read-only process; no live adapter is included to avoid
-unexpected credential/API access. This implementation was exercised only with
-synthetic repository-shaped fixtures, never live cloud or on-prem systems.
+Offline rendering needs only read permission on supplied inputs and write
+permission on the selected output directory. Live AWS collection needs only the
+AWS read calls listed above; no Prism, SSH, Ansible or Terraform permissions are
+required. The implementation is tested with mocked AWS CLI responses and
+synthetic repository-shaped fixtures; operators must review real account scope,
+pricing applicability and billing completeness.
 
 Public IPv4/EIP overlap cannot be inferred from `associate_public_ip_address`;
 add reviewed allocation hours once per address, not once per IP and association.

@@ -6,6 +6,7 @@
   },
   "selections": [
     {
+      "service_code": "AmazonEC2",
       "provider_sku": "SYNTHETIC-SKU",
       "rate_code": "SYNTHETIC-RATE",
       "region": "fixture-region",

@@ -7,5 +7,12 @@
     "scope": "fixture-account test project plus unattributed credit",
     "metric": "UnblendedCost",
     "completeness": "partial"
+  },
+  "live_request": {
+    "TimePeriod": {"Start": "2026-10-01", "End": "2026-10-02"},
+    "Granularity": "DAILY",
+    "Metrics": ["UnblendedCost"],
+    "Filter": {},
+    "GroupBy": [{"Type": "DIMENSION", "Key": "RECORD_TYPE"}]
   }
 }

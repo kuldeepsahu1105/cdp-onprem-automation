@@ -7,6 +7,8 @@ import io
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 from collections import defaultdict
@@ -376,6 +378,11 @@ def _build_actuals(billing):
                 "summaries": [], "metadata": None, "warnings": ["Actual billed costs unavailable."]}
     version(billing)
     meta = evidence(billing.get("metadata"))
+    if billing.get("status") == "unavailable":
+        text(billing.get("reason"), "billing unavailable reason")
+        return {"status": "unavailable", "reason": billing["reason"], "lines": [],
+                "summaries": [], "metadata": meta,
+                "warnings": ["Actual billed costs unavailable: " + billing["reason"]]}
     for name in ("scope", "metric", "completeness"):
         text(meta.get(name), f"billing.metadata.{name}")
     require(meta["completeness"] in ("partial", "complete"), "billing completeness must be partial or complete")
@@ -712,6 +719,260 @@ def adapt_cur(path, context):
     return result
 
 
+def aws_json(arguments):
+    executable = shutil.which("aws")
+    require(executable is not None,
+            "AWS CLI is required for live collection; set COST_LIVE_COLLECTION=false "
+            "and provide recorded inputs for offline reporting")
+    environment = dict(os.environ, AWS_PAGER="")
+    result = subprocess.run(
+        [executable, *arguments], text=True, capture_output=True, env=environment)
+    if result.returncode != 0:
+        message = result.stderr.strip() or result.stdout.strip() or "AWS CLI command failed"
+        raise InputError(message)
+    try:
+        return json.loads(result.stdout, object_pairs_hook=unique_object)
+    except json.JSONDecodeError as exc:
+        raise InputError("AWS CLI returned invalid JSON") from exc
+
+
+def collect_pricing_evidence(context, call=aws_json):
+    version(context)
+    selections = array(context.get("selections"), "price selections")
+    collected_at = datetime.now(timezone.utc).isoformat()
+    pages = []
+    seen_requests = set()
+    for selection in selections:
+        fields(selection, "service_code provider_sku")
+        request_key = (selection["service_code"], selection["provider_sku"])
+        if request_key in seen_requests:
+            continue
+        seen_requests.add(request_key)
+        request = {
+            "ServiceCode": selection["service_code"],
+            "Filters": [{"Type": "TERM_MATCH", "Field": "sku",
+                         "Value": selection["provider_sku"]}],
+            "MaxResults": 100,
+        }
+        token, seen_tokens, page = None, set(), 1
+        while True:
+            arguments = [
+                "pricing", "get-products", "--region", "us-east-1",
+                "--service-code", request["ServiceCode"],
+                "--filters", json.dumps(request["Filters"], separators=(",", ":")),
+                "--max-results", str(request["MaxResults"]), "--no-paginate", "--output", "json",
+            ]
+            if token is not None:
+                arguments.extend(["--next-token", token])
+            response = mapping(call(arguments), "AWS Pricing response")
+            array(response.get("PriceList"), "AWS Pricing PriceList")
+            pages.append({"request": {**request, **({"NextToken": token} if token else {})},
+                          "response": response, "page": page})
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
+            text(next_token, "AWS Pricing NextToken")
+            require(next_token not in seen_tokens, "AWS Pricing pagination token repeated")
+            seen_tokens.add(next_token)
+            token, page = next_token, page + 1
+    require(pages, "live pricing requires at least one selection")
+    return {
+        "schema_version": 1,
+        "source": "aws-pricing:GetProducts",
+        "collected_at": collected_at,
+        "endpoint_region": "us-east-1",
+        "pages": pages,
+    }
+
+
+def adapt_live_aws_prices(evidence, context):
+    version(evidence)
+    require(evidence.get("source") == "aws-pricing:GetProducts",
+            "unsupported live pricing evidence source")
+    timestamp(evidence.get("collected_at"), "pricing collected_at")
+    require(evidence.get("endpoint_region") == "us-east-1",
+            "AWS Pricing collection must use us-east-1")
+    products, terms = {}, {"OnDemand": {}}
+    request_tokens = defaultdict(set)
+    expected_tokens = defaultdict(lambda: None)
+    completed = set()
+    for page in array(evidence.get("pages"), "pricing pages"):
+        mapping(page, "pricing page")
+        request = mapping(page.get("request"), "pricing request")
+        response = mapping(page.get("response"), "pricing response")
+        fields(request, "ServiceCode")
+        filters = array(request.get("Filters"), "pricing request Filters")
+        require(len(filters) == 1 and filters[0].get("Type") == "TERM_MATCH"
+                and filters[0].get("Field") == "sku", "pricing request must bind one exact SKU")
+        sku_filter = text(filters[0].get("Value"), "pricing request SKU")
+        key = (request["ServiceCode"], sku_filter)
+        token = request.get("NextToken")
+        require(key not in completed, "pricing page found after completed request")
+        require(token == expected_tokens[key], "AWS Pricing pages are out of sequence")
+        require(token not in request_tokens[key], "duplicate pricing request page")
+        request_tokens[key].add(token)
+        for raw in array(response.get("PriceList"), "AWS Pricing PriceList"):
+            product = json.loads(raw, object_pairs_hook=unique_object) if isinstance(raw, str) else raw
+            mapping(product, "AWS Pricing product")
+            require(product.get("serviceCode") == request["ServiceCode"],
+                    "AWS Pricing response service mismatch")
+            item = mapping(product.get("product"), "AWS Pricing product metadata")
+            provider_sku = text(item.get("sku"), "AWS Pricing SKU")
+            require(provider_sku == sku_filter, "AWS Pricing response SKU mismatch")
+            normalized = {
+                "sku": provider_sku,
+                "attributes": mapping(item.get("attributes", {}), "AWS Pricing attributes"),
+                "productFamily": item.get("productFamily"),
+            }
+            if provider_sku in products:
+                require(products[provider_sku] == normalized, "conflicting AWS Pricing product")
+            products[provider_sku] = normalized
+            on_demand = mapping(mapping(product.get("terms"), "AWS Pricing terms").get("OnDemand", {}),
+                                "AWS Pricing OnDemand terms")
+            existing = terms["OnDemand"].setdefault(provider_sku, {})
+            for term_code, term in on_demand.items():
+                require(term_code not in existing or existing[term_code] == term,
+                        "conflicting AWS Pricing term")
+                existing[term_code] = term
+        next_token = response.get("NextToken")
+        if next_token:
+            text(next_token, "AWS Pricing response NextToken")
+            expected_tokens[key] = next_token
+        else:
+            completed.add(key)
+    requested = {(selection["service_code"], selection["provider_sku"])
+                 for selection in array(context.get("selections"), "price selections")}
+    require(requested == completed, "incomplete live pricing pagination")
+    live_context = json.loads(json.dumps(context))
+    live_context["metadata"] = {
+        "source": evidence["source"],
+        "as_of": evidence["collected_at"],
+    }
+    return adapt_aws_prices({"products": products, "terms": terms}, live_context)
+
+
+def collect_billing_evidence(context, account, call=aws_json):
+    version(context)
+    request = mapping(context.get("live_request"), "billing live_request")
+    require(request.get("Metrics") == [context["metadata"]["metric"]],
+            "billing live_request metric must match metadata.metric")
+    collected_at = datetime.now(timezone.utc).isoformat()
+    pages, token, seen_tokens, page = [], None, set(), 1
+    while True:
+        page_request = json.loads(json.dumps(request))
+        if token is not None:
+            page_request["NextPageToken"] = token
+        arguments = [
+            "ce", "get-cost-and-usage", "--region", "us-east-1",
+            "--cli-input-json", json.dumps(page_request, separators=(",", ":")),
+            "--no-paginate", "--output", "json",
+        ]
+        try:
+            response = mapping(call(arguments), "Cost Explorer response")
+        except InputError as exc:
+            if "AccessDenied" not in str(exc):
+                raise
+            return {
+                "schema_version": 1, "source": "aws-ce:GetCostAndUsage",
+                "collected_at": collected_at, "account": account,
+                "request": request, "status": "unavailable",
+                "reason": f"Cost Explorer access denied: {exc}",
+            }
+        pages.append({"request": page_request, "response": response, "page": page})
+        next_token = response.get("NextPageToken")
+        if not next_token:
+            break
+        text(next_token, "Cost Explorer NextPageToken")
+        require(next_token not in seen_tokens, "Cost Explorer pagination token repeated")
+        seen_tokens.add(next_token)
+        token, page = next_token, page + 1
+    return {
+        "schema_version": 1, "source": "aws-ce:GetCostAndUsage",
+        "collected_at": collected_at, "account": account,
+        "request": request, "pages": pages,
+    }
+
+
+def adapt_cost_explorer(envelope, context):
+    version(envelope)
+    require(envelope.get("source") == "aws-ce:GetCostAndUsage",
+            "unsupported Cost Explorer evidence source")
+    collected_at = timestamp(envelope.get("collected_at"), "billing collected_at")
+    metadata = dict(evidence(context.get("metadata")))
+    request = mapping(envelope.get("request"), "Cost Explorer request")
+    metric = metadata.get("metric")
+    require(request.get("Metrics") == [metric], "Cost Explorer metric mismatch")
+    require(request.get("Granularity") in ("DAILY", "MONTHLY"),
+            "unsupported Cost Explorer granularity")
+    require(isinstance(request.get("Filter"), dict), "Cost Explorer Filter must be explicit")
+    group_by = array(request.get("GroupBy", []), "Cost Explorer GroupBy")
+    if envelope.get("status") == "unavailable":
+        text(envelope.get("reason"), "billing unavailable reason")
+        return {
+            "schema_version": 1,
+            "metadata": {**metadata, "source": envelope["source"],
+                         "as_of": collected_at.isoformat(), "collected_at": collected_at.isoformat(),
+                         "request": request, "estimated": None},
+            "status": "unavailable", "reason": envelope["reason"], "lines": [],
+        }
+    pages = array(envelope.get("pages"), "Cost Explorer pages")
+    require(pages, "Cost Explorer evidence has no pages")
+    lines, expected_token, seen_tokens, seen_groups, estimated = [], None, set(), set(), False
+    for page in pages:
+        page_request = mapping(page.get("request"), "Cost Explorer page request")
+        response = mapping(page.get("response"), "Cost Explorer page response")
+        actual_token = page_request.get("NextPageToken")
+        require(actual_token == expected_token, "Cost Explorer pages are out of sequence")
+        results = array(response.get("ResultsByTime"), "Cost Explorer ResultsByTime")
+        for interval_index, interval in enumerate(results):
+            times = mapping(interval.get("TimePeriod"), "Cost Explorer TimePeriod")
+            start = timestamp(times.get("Start") + "T00:00:00Z", "Cost Explorer start")
+            end = timestamp(times.get("End") + "T00:00:00Z", "Cost Explorer end")
+            require(end > start, "invalid Cost Explorer period")
+            require(isinstance(interval.get("Estimated"), bool),
+                    "Cost Explorer Estimated flag required")
+            estimated = estimated or interval["Estimated"]
+            groups = array(interval.get("Groups", []), "Cost Explorer Groups")
+            entries = groups if group_by else [{"Keys": [], "Metrics": interval.get("Total", {})}]
+            require(group_by or not groups, "unexpected Cost Explorer groups")
+            for group_index, group in enumerate(entries):
+                keys = array(group.get("Keys", []), "Cost Explorer group Keys")
+                require(len(keys) == len(group_by), "Cost Explorer group key count mismatch")
+                group_identity = (times.get("Start"), times.get("End"), tuple(keys))
+                require(group_identity not in seen_groups, "duplicate Cost Explorer group")
+                seen_groups.add(group_identity)
+                amount = mapping(mapping(group.get("Metrics"), "Cost Explorer Metrics").get(metric),
+                                 "Cost Explorer metric")
+                currency(amount.get("Unit"))
+                number(amount.get("Amount"), "Cost Explorer amount")
+                labels = {binding["Key"]: value for binding, value in zip(group_by, keys)}
+                lines.append({
+                    "line_id": f"{page.get('page', 0)}:{interval_index}:{group_index}",
+                    "provider": "aws", "account": envelope["account"], "region": "unattributed",
+                    "resource_id": "unattributed", "project": labels.get("TAG", "unattributed"),
+                    "tags": {f"cost_explorer:{key}": value for key, value in labels.items()},
+                    "metric": metric, "currency": amount["Unit"], "amount": amount["Amount"],
+                    "period": {"start": start.isoformat(), "end": end.isoformat()},
+                    "estimated": interval["Estimated"], "group_keys": keys,
+                })
+        expected_token = response.get("NextPageToken")
+        if expected_token:
+            text(expected_token, "Cost Explorer response NextPageToken")
+            require(expected_token not in seen_tokens, "Cost Explorer pagination token repeated")
+            seen_tokens.add(expected_token)
+    require(expected_token is None, "incomplete Cost Explorer pagination")
+    result = {
+        "schema_version": 1,
+        "metadata": {**metadata, "source": envelope["source"],
+                     "as_of": collected_at.isoformat(), "collected_at": collected_at.isoformat(),
+                     "request": request, "estimated": estimated,
+                     "group_by": group_by, "granularity": request["Granularity"]},
+        "lines": lines,
+    }
+    build_actuals(result)
+    return result
+
+
 def flat_rows(report):
     """Single ledger across formats; nested evidence stays lossless as JSON columns."""
     rows = []
@@ -814,8 +1075,130 @@ def write_text(path, value):
             temporary.unlink()
 
 
+def json_text(value):
+    return json.dumps(value, indent=2, ensure_ascii=True) + "\n"
+
+
 def write_json(path, value):
-    write_text(path, json.dumps(value, indent=2, ensure_ascii=True) + "\n")
+    write_text(path, json_text(value))
+
+
+def content_fingerprint(name, value):
+    return {"name": name, "sha256": hashlib.sha256(json_text(value).encode("utf-8")).hexdigest()}
+
+
+def ensure_private_directory(path):
+    directory = Path(path)
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(directory, 0o700)
+    return directory
+
+
+def merge_prices(manual, live):
+    if manual is None:
+        return live
+    version(manual)
+    rates = list(array(manual.get("rates"), "manual rates"))
+    rates.extend(array(live.get("rates"), "live rates"))
+    result = {
+        "schema_version": 1,
+        "metadata": {"source": "manual/operator rates plus live AWS Pricing evidence",
+                     "as_of": live["metadata"]["as_of"],
+                     "collected_at": live["metadata"]["collected_at"]},
+        "rates": rates,
+    }
+    build_rate_map(result)
+    return result
+
+
+def prepare_report(inventory, prices, billing, input_values):
+    value = build_report(inventory, prices, billing)
+    value["metadata"]["input_files"] = [
+        content_fingerprint(name, document) for name, document in input_values
+    ]
+    rows = flat_rows(value)
+    return value, render_csv(rows), render_txt(value, rows)
+
+
+def run_live_report(args):
+    raw_inventory = load(args.terraform_json) if args.terraform_json else load(args.ansible_json)
+    inventory_context = load(args.inventory_context)
+    inventory = adapt_inventory(
+        raw_inventory, inventory_context, "terraform" if args.terraform_json else "ansible")
+    inventory["metadata"]["input_files"] = [
+        fingerprint(args.terraform_json or args.ansible_json),
+        fingerprint(args.inventory_context),
+    ]
+    providers = {resource["provider"] for resource in inventory["resources"]}
+    manual_prices = load(args.prices) if args.prices else None
+    billing = load(args.billing) if args.billing else None
+    evidence_values = {}
+
+    if "aws" in providers:
+        require(args.price_context is not None and args.billing_context is not None,
+                "AWS live collection requires --price-context and --billing-context")
+        try:
+            identity = mapping(aws_json([
+                "sts", "get-caller-identity", "--region",
+                args.aws_region or inventory_context["defaults"]["region"], "--output", "json",
+            ]), "AWS caller identity")
+            account = text(identity.get("Account"), "AWS caller account")
+            expected_account = text(inventory_context["defaults"].get("account"), "inventory account")
+            require(account == expected_account, "AWS caller account does not match inventory context")
+            region = args.aws_region or text(
+                inventory_context["defaults"].get("region"), "inventory region")
+            require(region == inventory_context["defaults"]["region"],
+                    "AWS region does not match inventory context")
+
+            price_context = load(args.price_context)
+            pricing_evidence = collect_pricing_evidence(price_context)
+            live_prices = adapt_live_aws_prices(pricing_evidence, price_context)
+            live_prices["metadata"]["input_files"] = [
+                content_fingerprint("aws-pricing-evidence.json", pricing_evidence),
+                fingerprint(args.price_context),
+            ]
+            prices = merge_prices(manual_prices, live_prices)
+
+            billing_context = load(args.billing_context)
+            billing_evidence = collect_billing_evidence(billing_context, account)
+            billing = adapt_cost_explorer(billing_evidence, billing_context)
+            billing["metadata"]["input_files"] = [
+                content_fingerprint("aws-billing-evidence.json", billing_evidence),
+                fingerprint(args.billing_context),
+            ]
+        except (InputError, OSError, ValueError, KeyError, TypeError) as exc:
+            raise InputError(
+                f"{exc}; live AWS collection failed. Set COST_LIVE_COLLECTION=false "
+                "and provide recorded normalized inputs for offline reporting") from exc
+        evidence_values = {
+            "aws-pricing-evidence.json": pricing_evidence,
+            "aws-billing-evidence.json": billing_evidence,
+        }
+    else:
+        require(manual_prices is not None,
+                "non-AWS live workflow requires --prices with manual/recorded rates")
+        prices = manual_prices
+        build_rate_map(prices)
+        inventory.setdefault("warnings", []).append(
+            "AWS live collection skipped: normalized inventory contains no AWS resources; "
+            "manual/recorded prices were used.")
+
+    normalized_values = {
+        "inventory.json": inventory,
+        "prices.json": prices,
+    }
+    if billing is not None:
+        normalized_values["billing.json"] = billing
+    report, csv_data, txt_data = prepare_report(
+        inventory, prices, billing, list(normalized_values.items()))
+
+    evidence_dir = ensure_private_directory(args.evidence_dir)
+    output_dir = ensure_private_directory(args.output_dir)
+    for name, value in {**evidence_values, **normalized_values}.items():
+        write_json(evidence_dir / name, value)
+    write_json(output_dir / "cost-report.json", report)
+    write_text(output_dir / "cost-report.csv", csv_data)
+    write_text(output_dir / "cost-report.txt", txt_data)
 
 
 def main(argv=None):
@@ -840,6 +1223,20 @@ def main(argv=None):
     report.add_argument("--prices", required=True)
     report.add_argument("--billing")
     report.add_argument("--output-dir", required=True)
+    live = commands.add_parser(
+        "live-report",
+        help="explicitly collect AWS evidence when AWS resources exist, then render offline")
+    live_inventory = live.add_mutually_exclusive_group(required=True)
+    live_inventory.add_argument("--terraform-json")
+    live_inventory.add_argument("--ansible-json")
+    live.add_argument("--inventory-context", required=True)
+    live.add_argument("--price-context")
+    live.add_argument("--billing-context")
+    live.add_argument("--prices", help="manual rates retained for Nutanix/bare metal or mixed inventory")
+    live.add_argument("--billing", help="recorded non-AWS billing ledger, if applicable")
+    live.add_argument("--aws-region")
+    live.add_argument("--evidence-dir", required=True)
+    live.add_argument("--output-dir", required=True)
     args = parser.parse_args(argv)
     try:
         if args.command == "inventory":
@@ -863,7 +1260,7 @@ def main(argv=None):
             require(Path(args.output).resolve() not in (Path(path).resolve(), Path(args.context).resolve()),
                     "output must not overwrite an input")
             write_json(args.output, value)
-        else:
+        elif args.command == "report":
             paths = [args.inventory, args.prices] + ([args.billing] if args.billing else [])
             value = build_report(load(args.inventory), load(args.prices), load(args.billing) if args.billing else None)
             value["metadata"]["input_files"] = [fingerprint(p) for p in paths]
@@ -877,6 +1274,8 @@ def main(argv=None):
             write_json(destinations[0], value)
             write_text(destinations[1], csv_data)
             write_text(destinations[2], txt_data)
+        else:
+            run_live_report(args)
         return 0
     except (InputError, OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
         print(f"cost-report: {exc}; report not completed (existing files may be stale)",

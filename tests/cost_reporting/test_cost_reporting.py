@@ -432,6 +432,7 @@ class CostReportingTests(unittest.TestCase):
                                   "--context", root / "context.json", "--output", root / "inventory.json")
             self.assertEqual(result.returncode, 0, result.stderr)
             result = subprocess.run(["make", "cost-report", f"PYTHON={sys.executable}",
+                                     "COST_LIVE_COLLECTION=false",
                                      f"COST_INVENTORY={root / 'inventory.json'}",
                                      f"COST_PRICES={FIXTURES / 'prices.json'}",
                                      f"COST_OUTPUT_DIR={root / 'reports'}"], cwd=ROOT, text=True, capture_output=True)
@@ -456,9 +457,237 @@ class CostReportingTests(unittest.TestCase):
                          if row["amount"] is not None), Decimal(0))
             self.assertEqual(total, Decimal(report[section]["summaries"][0][field]))
 
-    def run_cli(self, *args):
+    def fake_aws(self, root):
+        raw = cost.load(FIXTURES / "aws-price-list.json")
+        sku = "SYNTHETIC-SKU"
+        product = {
+            "serviceCode": "AmazonEC2",
+            "product": raw["products"][sku],
+            "terms": {"OnDemand": raw["terms"]["OnDemand"][sku]},
+        }
+        script = root / "aws"
+        script.write_text(
+            f"#!{sys.executable}\n"
+            "import json, os, sys\n"
+            "args = sys.argv[1:]\n"
+            "log = os.environ.get('FAKE_AWS_LOG')\n"
+            "if log:\n"
+            "    with open(log, 'a', encoding='utf-8') as stream:\n"
+            "        stream.write(json.dumps(args) + '\\n')\n"
+            "scenario = os.environ.get('FAKE_AWS_SCENARIO', 'success')\n"
+            "if args[:2] == ['sts', 'get-caller-identity']:\n"
+            "    print(json.dumps({'Account':'123456789012','Arn':'arn:aws:iam::123456789012:user/test','UserId':'test'}))\n"
+            "elif args[:2] == ['pricing', 'get-products']:\n"
+            "    if scenario == 'pricing-fail':\n"
+            "        print('AccessDeniedException: pricing denied', file=sys.stderr); sys.exit(254)\n"
+            "    if '--next-token' not in args:\n"
+            "        print(json.dumps({'PriceList':[], 'NextToken':'pricing-page-2'}))\n"
+            "    else:\n"
+            f"        print(json.dumps({{'PriceList':[{json.dumps(product)!r}]}}))\n"
+            "elif args[:2] == ['ce', 'get-cost-and-usage']:\n"
+            "    if scenario == 'billing-denied':\n"
+            "        print('AccessDeniedException: billing denied', file=sys.stderr); sys.exit(254)\n"
+            "    request = json.loads(args[args.index('--cli-input-json') + 1])\n"
+            "    print(json.dumps({'ResultsByTime':[{'TimePeriod':request['TimePeriod'],"
+            "'Estimated':False,'Total':{},'Groups':[{'Keys':['Usage'],"
+            "'Metrics':{'UnblendedCost':{'Amount':'5.125','Unit':'USD'}}},"
+            "{'Keys':['Credit'],'Metrics':{'UnblendedCost':{'Amount':'-0.125','Unit':'USD'}}}]}]}))\n"
+            "else:\n"
+            "    print('unexpected fake AWS command', file=sys.stderr); sys.exit(2)\n",
+            encoding="utf-8")
+        script.chmod(0o700)
+        return script
+
+    def live_contexts(self, root):
+        inventory_context = copy.deepcopy(self.context)
+        inventory_context["defaults"]["account"] = "123456789012"
+        cost.write_json(root / "inventory-context.json", inventory_context)
+        cost.write_json(root / "price-context.json", cost.load(FIXTURES / "price-context.json"))
+        cost.write_json(root / "billing-context.json", cost.load(FIXTURES / "billing-context.json"))
+
+    def test_live_pricing_pagination_and_cost_explorer_provenance(self):
+        price_context = cost.load(FIXTURES / "price-context.json")
+        raw = cost.load(FIXTURES / "aws-price-list.json")
+        calls = []
+
+        def pricing_call(arguments):
+            calls.append(arguments)
+            if "--next-token" not in arguments:
+                return {"PriceList": [], "NextToken": "next"}
+            sku = "SYNTHETIC-SKU"
+            return {"PriceList": [{
+                "serviceCode": "AmazonEC2", "product": raw["products"][sku],
+                "terms": {"OnDemand": raw["terms"]["OnDemand"][sku]},
+            }]}
+
+        envelope = cost.collect_pricing_evidence(price_context, pricing_call)
+        prices = cost.adapt_live_aws_prices(envelope, price_context)
+        self.assertEqual(len(envelope["pages"]), 2)
+        self.assertIn("--next-token", calls[1])
+        self.assertEqual(prices["rates"][0]["source"], "aws-pricing:GetProducts")
+        self.assertEqual(prices["rates"][0]["collected_at"], envelope["collected_at"])
+
+        billing_context = cost.load(FIXTURES / "billing-context.json")
+        def billing_call(arguments):
+            request = json.loads(arguments[arguments.index("--cli-input-json") + 1])
+            if "NextPageToken" not in request:
+                return {"ResultsByTime": [], "NextPageToken": "billing-next"}
+            return {"ResultsByTime": [{
+                "TimePeriod": {"Start": "2026-10-01", "End": "2026-10-02"},
+                "Estimated": True, "Total": {}, "Groups": [{
+                    "Keys": ["Credit"], "Metrics": {
+                        "UnblendedCost": {"Amount": "-1.25", "Unit": "USD"}}}]}]}
+
+        billing = cost.collect_billing_evidence(
+            billing_context, "123456789012", billing_call)
+        normalized = cost.adapt_cost_explorer(billing, billing_context)
+        self.assertEqual(len(billing["pages"]), 2)
+        self.assertTrue(normalized["metadata"]["estimated"])
+        self.assertEqual(normalized["metadata"]["request"]["Filter"], {})
+        self.assertEqual(normalized["lines"][0]["amount"], "-1.25")
+
+    def test_live_report_end_to_end_permissions_and_billing_unavailable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fake_aws(root)
+            self.live_contexts(root)
+            environment = dict(os.environ, PATH=str(root),
+                               FAKE_AWS_SCENARIO="billing-denied",
+                               FAKE_AWS_LOG=str(root / "aws.log"))
+            result = self.run_cli(
+                "live-report", "--terraform-json", FIXTURES / "terraform-show.json",
+                "--inventory-context", root / "inventory-context.json",
+                "--price-context", root / "price-context.json",
+                "--billing-context", root / "billing-context.json",
+                "--evidence-dir", root / "evidence", "--output-dir", root / "reports",
+                env=environment)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = cost.load(root / "reports" / "cost-report.json")
+            self.assertEqual(report["actuals"]["status"], "unavailable")
+            self.assertIn("access denied", report["actuals"]["reason"].lower())
+            pricing = cost.load(root / "evidence" / "aws-pricing-evidence.json")
+            self.assertEqual(len(pricing["pages"]), 2)
+            self.assertEqual(pricing["endpoint_region"], "us-east-1")
+            for directory_path in (root / "evidence", root / "reports"):
+                self.assertEqual(os.stat(directory_path).st_mode & 0o777, 0o700)
+                self.assertTrue(all(os.stat(path).st_mode & 0o777 == 0o600
+                                    for path in directory_path.iterdir() if path.is_file()))
+
+    def test_live_report_end_to_end_success_feeds_offline_renderer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fake_aws(root)
+            self.live_contexts(root)
+            environment = dict(os.environ, PATH=str(root), FAKE_AWS_LOG=str(root / "aws.log"))
+            result = self.run_cli(
+                "live-report", "--terraform-json", FIXTURES / "terraform-show.json",
+                "--inventory-context", root / "inventory-context.json",
+                "--price-context", root / "price-context.json",
+                "--billing-context", root / "billing-context.json",
+                "--evidence-dir", root / "evidence", "--output-dir", root / "reports",
+                env=environment)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = cost.load(root / "reports" / "cost-report.json")
+            self.assertEqual(report["actuals"]["status"], "available")
+            self.assertEqual(report["actuals"]["summaries"][0]["billed_subtotal"], "5.00")
+            self.assertEqual(report["estimates"]["lines"][0]["rate"]["source"],
+                             "aws-pricing:GetProducts")
+            offline = self.run_cli(
+                "report", "--inventory", root / "evidence" / "inventory.json",
+                "--prices", root / "evidence" / "prices.json",
+                "--billing", root / "evidence" / "billing.json",
+                "--output-dir", root / "offline-replay")
+            self.assertEqual(offline.returncode, 0, offline.stderr)
+            replay = cost.load(root / "offline-replay" / "cost-report.json")
+            self.assertEqual(replay["estimates"]["summaries"], report["estimates"]["summaries"])
+            self.assertEqual(replay["actuals"]["summaries"], report["actuals"]["summaries"])
+            calls = [json.loads(line) for line in (root / "aws.log").read_text().splitlines()]
+            self.assertTrue(any(call[:2] == ["pricing", "get-products"]
+                                and call[call.index("--region") + 1] == "us-east-1"
+                                for call in calls))
+            ce_call = next(call for call in calls if call[:2] == ["ce", "get-cost-and-usage"])
+            request = json.loads(ce_call[ce_call.index("--cli-input-json") + 1])
+            self.assertEqual(request, cost.load(root / "billing-context.json")["live_request"])
+
+    def test_live_pricing_failure_preserves_prior_artifacts_without_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fake_aws(root)
+            self.live_contexts(root)
+            for target in (root / "evidence", root / "reports"):
+                target.mkdir()
+                (target / "sentinel").write_text("prior")
+            environment = dict(os.environ, PATH=str(root), FAKE_AWS_SCENARIO="pricing-fail")
+            result = self.run_cli(
+                "live-report", "--terraform-json", FIXTURES / "terraform-show.json",
+                "--inventory-context", root / "inventory-context.json",
+                "--price-context", root / "price-context.json",
+                "--billing-context", root / "billing-context.json",
+                "--evidence-dir", root / "evidence", "--output-dir", root / "reports",
+                env=environment)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("pricing denied", result.stderr)
+            self.assertNotIn("fallback", result.stderr.lower())
+            self.assertEqual((root / "evidence" / "sentinel").read_text(), "prior")
+            self.assertEqual((root / "reports" / "sentinel").read_text(), "prior")
+            self.assertEqual(len(list((root / "evidence").iterdir())), 1)
+            self.assertEqual(len(list((root / "reports").iterdir())), 1)
+
+    def test_default_live_missing_aws_cli_fails_with_offline_guidance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.live_contexts(root)
+            result = self.run_cli(
+                "live-report", "--terraform-json", FIXTURES / "terraform-show.json",
+                "--inventory-context", root / "inventory-context.json",
+                "--price-context", root / "price-context.json",
+                "--billing-context", root / "billing-context.json",
+                "--evidence-dir", root / "evidence", "--output-dir", root / "reports",
+                env=dict(os.environ, PATH=""))
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("COST_LIVE_COLLECTION=false", result.stderr)
+            self.assertFalse((root / "evidence").exists())
+            self.assertFalse((root / "reports").exists())
+
+    def test_non_aws_live_workflow_skips_aws_cli_and_wrappers_unchanged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            context = copy.deepcopy(self.context)
+            override = {"resource_id": "asset01", "provider": "baremetal",
+                        "sku": "site-host", "unit": "host-hour"}
+            context["overrides"] = {"worker": override, "worker-alias": override}
+            cost.write_json(root / "context.json", context)
+            prices = {"schema_version": 1, "rates": [{
+                **self.prices["rates"][0], "provider": "baremetal", "sku": "site-host",
+                "unit": "host-hour", "basis": "operator_rate",
+            }]}
+            cost.write_json(root / "prices.json", prices)
+            result = self.run_cli(
+                "live-report", "--ansible-json", FIXTURES / "ansible-inventory.json",
+                "--inventory-context", root / "context.json", "--prices", root / "prices.json",
+                "--evidence-dir", root / "evidence", "--output-dir", root / "reports",
+                env=dict(os.environ, PATH=""))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = cost.load(root / "reports" / "cost-report.json")
+            self.assertTrue(any("AWS live collection skipped" in warning
+                                for warning in report["warnings"]))
+            for path in [ROOT / "clone_and_run_pvc_automation.sh",
+                         ROOT / "ansible-playbooks" / "pvc_setup.sh",
+                         ROOT / "Jenkinsfile"]:
+                self.assertNotIn("cost_report.py", path.read_text())
+
+    def test_make_defaults_live_and_explicit_false_is_offline(self):
+        live = subprocess.run(["make", "-n", "cost-report"], cwd=ROOT, text=True, capture_output=True)
+        offline = subprocess.run(["make", "-n", "cost-report", "COST_LIVE_COLLECTION=false"],
+                                 cwd=ROOT, text=True, capture_output=True)
+        self.assertEqual((live.returncode, offline.returncode), (0, 0))
+        self.assertIn("live-report", live.stdout)
+        self.assertNotIn(" live-report ", offline.stdout)
+        self.assertIn(" report ", offline.stdout)
+
+    def run_cli(self, *args, env=None):
         return subprocess.run([sys.executable, str(CLI), *map(str, args)], cwd=ROOT,
-                              text=True, capture_output=True)
+                              text=True, capture_output=True, env=env)
 
     def test_real_cli_all_adapters_and_formats(self):
         with tempfile.TemporaryDirectory() as directory:

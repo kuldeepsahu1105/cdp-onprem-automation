@@ -31,7 +31,7 @@ jenkins/artifacts/*
 !jenkins/artifacts/.gitkeep
 .ce-aws/
 
-# Offline cost inputs/exports and generated reports may contain account data.
+# Cost inputs/live evidence and generated reports may contain account data.
 /cost-inputs/
 /artifacts/cost/
 
