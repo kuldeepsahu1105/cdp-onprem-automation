@@ -81,8 +81,6 @@ def effective(value):
             if token and token not in normalized:
                 normalized.append(token)
     result = [stage for stage in order if stage in normalized]
-    if "MONITORING" in result and "PORTAL" not in result:
-        result.append("PORTAL")
     return [stage for stage in order if stage in result]
 
 
@@ -95,6 +93,7 @@ assert effective([" ecs ", "DATA_SERVICES", "ecs-install", "dataservices"]) == [
     "ECS_DATA_SERVICES",
 ]
 assert effective("PORTAL,MONITORING,PORTAL") == ["PORTAL", "MONITORING"]
+assert effective("MONITORING") == ["MONITORING"]
 assert effective("CDH_INSTALL,CM_TLS") == [
     "CM_TLS_KRB_LDAP",
     "CDH_INSTALL",

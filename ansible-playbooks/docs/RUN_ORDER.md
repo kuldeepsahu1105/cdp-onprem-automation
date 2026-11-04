@@ -11,12 +11,12 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 1 | VALIDATE | — | (outside Ansible) |
 | 2 | TERRAFORM | — | inventory generation |
 | 3 | PREREQS | `1` / `prereq` | SSH: `00_setup_ssh_preqs` → `01`–`09` (`00` only on PREREQS / `all`; override with `ANSIBLE_RUN_SSH_PREQS`) |
-| 4 | PORTAL | `portal` | `10_setup_deployment_portal`; defers monitoring/exporter work when MONITORING is also selected |
+| 4 | PORTAL | `portal` | `10_setup_deployment_portal` only (Caddy, pgAdmin, index); never discovers, verifies, enrolls, or manages monitoring services |
 | 5 | IDENTITY | `2` / `identity` | `11_identity_setup` (`12` → packages → `13` → `14` DNS records → `19` wildcard → `16` clients; imports `detect_identity.yml` first) |
 | 6 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
 | 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `28` → `29` → `30` (requires `04_setup_autossh` from PREREQS) |
 | 8 | CDH_INSTALL | `cdh` | `31_setup_base_cluster` (see [RUNBOOK.md](RUNBOOK.md) — CM First Run sub-step order inside **31**) |
-| 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` (includes portal Caddy/index sync) |
+| 9 | MONITORING | `monitoring` | `32_setup_monitoring_stack` only; requires an existing portal/Caddy foundation and updates only the monitoring routes/index it owns |
 | 10 | ECS_INSTALL | `5` / `ecs` | `33_setup_ecs_cluster` (reconciles `19_setup_wildcard` first) and requires a healthy Management Console before success; legacy standalone runs retain inline post-install behavior |
 | 11 | ECS_POST_INSTALL_TASKS | `8` / `ecs_post_install` | Recheck console health, then `34_setup_ecs_post_install` credentials/IAM/LDAP work → `35_sync_deployment_portal_access` |
 | 12 | ECS_DATA_SERVICES | `7` / `dataservices` | `34_setup_ecs_data_services` (CDW/CDE/CAI/Model Registry only) |
@@ -57,7 +57,7 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 | `cm_api_context_resolved_this_play` (`common_tasks/resolve_cm_api_probe_context.yml`) | Within one `ansible-playbook` process (persists across plays targeting `localhost`) | Re-running the CM manager reachability + bind-address discovery (`resolve_cm_connect_host.yml` + `select_cm_api_probe_host.yml`) more than once per process |
 | `cm_api_url` / `cm_api_version` / `cm_api_discovery_succeeded` early-exit (`common_tasks/set_cm_api_url.yml`) | Within one `ansible-playbook` process | Re-running the `/api/version` HTTP+HTTPS probe loop when a prior play in the **same process** already resolved it (this is why `pvc_setup.sh` runs `25_verify_cm.yml 26_setup_cm_license.yml` as one `ansible-playbook` call — `26` reuses `25`'s already-resolved `cm_api_url`) |
 | `11_identity_setup.yml` importing `detect_identity.yml` itself | `pvc_setup.sh` no longer also calls `detect_identity.yml` standalone in `run_phase_2` | A guaranteed double run of the identity-provider assert/debug on every identity-phase run |
-| Deterministic selected-stage dispatch | Jenkins `SELECTED_ANSIBLE_STAGES` or local `DEPLOY_PHASE=all` | Normalizes aliases/case/whitespace, removes duplicates, and runs each selected stage once in the role branch's fixed order. ECS/CM/CDH stages never add PORTAL or MONITORING. |
+| Deterministic selected-stage dispatch | Jenkins `SELECTED_ANSIBLE_STAGES` or local `DEPLOY_PHASE=all` | Normalizes aliases/case/whitespace, removes duplicates, and runs each selected stage once in the role branch's fixed order. No stage implicitly adds PORTAL or MONITORING; select prerequisites explicitly. |
 | EC2 start/stop installer ownership | PORTAL defers play **36** when IDENTITY follows in the same selected pipeline | Running the same package/template install in both PORTAL and IDENTITY |
 
 **Known, intentional process boundaries:** `27_setup_cm_autotls.yml` remains a separate `ansible-playbook` process because it can replace TLS material and restart CM. After that stable boundary, the wrapper runs `28_setup_cm_cms.yml`, `29_setup_cm_ldap.yml`, and `30_setup_cm_krbs.yml` in one process so LDAP and Kerberos reuse the CMS-resolved CM API endpoint instead of repeating discovery. Every numbered playbook remains independently runnable for targeted recovery. Likewise, `validate_ansible_ssh_reachability.yml` deliberately re-probes SSH reachability in `00`, `10`, `32`, and `35` even when their target host groups overlap — it is a cheap fail-fast guard against the exact "SSH timeout" symptom in `docs/OPERATIONS_GUIDE.md`, not a redundant check to remove.
@@ -128,8 +128,9 @@ selecting task files from `prereq_system_tuning`.
 The PORTAL implementation is organized under `roles/deployment_portal`.
 Playbooks `10_setup_deployment_portal.yml` and
 `35_refresh_deployment_portal.yml` remain compatibility orchestrators and
-retain the localhost fact build, optional exporter playbook import, ops-host
-sync, and localhost Tier B verification as distinct plays. Legacy
+retain the localhost fact build, ops-host portal sync, and localhost Tier B
+verification as distinct plays. Monitoring exporter enrollment and container
+management belong only to playbook `32_setup_monitoring_stack.yml`. Legacy
 `common_tasks/<portal-task>.yml` paths remain as role-import compatibility
 shims for monitoring, identity, ECS, and manual callers.
 

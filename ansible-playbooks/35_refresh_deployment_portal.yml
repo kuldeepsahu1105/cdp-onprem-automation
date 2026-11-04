@@ -1,6 +1,6 @@
 ### ansible-playbook -i inventory.ini 35_refresh_deployment_portal.yml
-# Update Caddy index/pgAdmin/monitoring URLs after CM, base cluster, ECS, or data services change.
-# Run 28 once (PORTAL deploy phase, before CM). Re-run after CM/TLS/CDH/ECS to update the index.
+# Update Caddy index, pgAdmin, and discovered service URLs after CDH, ECS, or data services change.
+# Run playbook 10 once for PORTAL bootstrap. Use this refresh only when portal content must be rebuilt.
 ---
 - import_playbook: ensure_collections.yml
 
@@ -13,9 +13,6 @@
       ansible.builtin.import_role:
         name: deployment_portal
         tasks_from: refresh_controller
-
-- import_playbook: enroll_monitoring_exporters.yml
-  when: hostvars['localhost'].monitoring_exporter_enrollment_enabled | default(false) | bool
 
 - name: Refresh deployment portal content on ops host
   hosts: deployment_portal_runtime

@@ -17,5 +17,8 @@
   ansible.builtin.set_fact:
     monitoring_stack_enabled: true
 
+- name: Detect existing monitoring routes before rebuilding portal context
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/detect_deployment_portal_monitoring.yml"
+
 - name: Build deployment portal context from inventory
   ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/build_deployment_portal_facts.yml"
