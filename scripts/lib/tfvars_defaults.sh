@@ -49,7 +49,7 @@ CM_VERSION="${CM_VERSION:-7.13.2.20000}"
 # ECS_PVC_DS_VERSION="1.5.5-h40000"    # ECS Data Services repo tag (ansible group_vars)
 
 # --- AMI ---
-AMI_ID="${AMI_ID:-ami-030a276b398df7eb7}"
+AMI_ID="${AMI_ID:-ami-0ace6c94b5ab2e659}"
 
 # --- Instance group: Cloudera Manager ---
 CLDR_MNGR_COUNT="${CLDR_MNGR_COUNT:-1}"
