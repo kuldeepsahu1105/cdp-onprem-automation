@@ -268,12 +268,14 @@ the public `iamapi.us-west-1.altus.cloudera.com` endpoint.
 
 | Variable | Jenkins | Purpose |
 |----------|---------|---------|
-| `ecs_ldap_enabled` | `ECS_LDAP_ENABLED` | Sync FreeIPA/AD LDAP to ECS (`cm-ldap`) via `cdp iam` |
+| `ecs_ldap_provider` | (group_vars) | `auto` (default), `freeipa`, `ad`, `external`, or `none`; `auto` follows the active Ranger/identity directory provider |
+| `ecs_ldap_enabled` | `ECS_LDAP_ENABLED` | Sync the selected LDAP provider to ECS (`cm-ldap`) via `cdp iam`; defaults true |
 | `ecs_data_services_configure_ldap` | (group_vars) | Also sync LDAP when installing CDW/CDE/CAI in playbook 34 |
-| `ecs_ldap_admin_user_enabled` | `ECS_LDAP_ADMIN_USER_ENABLED` | Create FreeIPA user **`{{ ecs_ldap_admin_user_prefix }}admin`** (default `cldradmin`) |
+| `ecs_ldap_admin_user_enabled` | `ECS_LDAP_ADMIN_USER_ENABLED` | Defaults true. Create FreeIPA user **`{{ ecs_ldap_admin_user_prefix }}admin`** (default `cldradmin`), or reconcile that pre-existing AD/external LDAP user into ECS IAM |
 | `ecs_ldap_admin_user_prefix` | (group_vars) | Prefix before `admin` in the username |
-| `ecs_ldap_admin_email` | (group_vars) | IAM display/lookup email for the LDAP admin; defaults to `<username>@<IPA domain>` |
+| `ecs_ldap_admin_email` | (group_vars) | IAM display/lookup email for the LDAP admin; defaults to `<username>@<cluster domain>` |
 | `ecs_ldap_admin_password` | (group_vars) | FreeIPA password (default `common_password`) |
+| `ecs_ldap_external_*_attribute` | (group_vars) | External LDAP email/first-name/last-name mappings; defaults `mail`, `givenName`, `sn` |
 
 LDAP admin IAM ensures the LDAP provider is the default identity provider,
 creates or resolves the matching control-plane user record, and assigns roles
@@ -284,6 +286,11 @@ administrative tenant and environment roles using
 tenant roles. Set `ecs_ldap_admin_assign_all_tenant_roles` or
 `ecs_ldap_admin_assign_all_resource_roles_on_env` only when the target control
 plane explicitly supports every returned role for human users.
+
+FreeIPA deployments create `cldradmin` idempotently. AD and external LDAP
+deployments do not mutate the external directory: create the configured
+`ecs_ldap_admin_username` / `ecs_ldap_admin_email` there first, or explicitly
+disable `ECS_LDAP_ADMIN_USER_ENABLED`.
 
 The private control plane requires `identityProviderCrn` when creating an LDAP
 user record, while `cdpcli==0.9.164` omits that newer field from its bundled

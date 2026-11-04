@@ -510,7 +510,6 @@
   when:
     - ecs_deploy_effective | default(false) | bool
     - ecs_run_post_install_inline | default(true) | bool
-    - (ecs_ldap_enabled | default(false) | bool) or (ecs_ldap_admin_user_enabled | default(false) | bool)
   block:
     - name: Resolve ECS LDAP / IAM phase flags
       ansible.builtin.import_tasks: resolve_ecs_control_plane_iam_phase.yml

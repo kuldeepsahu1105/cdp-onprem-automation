@@ -1569,16 +1569,37 @@ ecs_data_services_refresh_service_discovery_dns: true
 ecs_service_discovery_namespace: cdp
 ecs_service_discovery_deployment_name: cdp-release-thunderhead-servicediscoverysimple
 ecs_service_discovery_rollout_timeout: 300
-# Optional ECS control plane LDAP (FreeIPA/AD) — playbook 33 end and/or 34
-ecs_ldap_enabled: false
+# ECS control plane LDAP — defaults to the active FreeIPA/AD provider or the
+# external Ranger LDAP provider when one is selected.
+ecs_ldap_provider: auto
+ecs_ldap_provider_allowed:
+  - auto
+  - freeipa
+  - ad
+  - external
+  - none
+ecs_ldap_provider_effective: >-
+  {{
+    (
+      'external'
+      if base_cluster_ranger_usersync_provider_effective == 'external'
+      else identity_provider_effective
+    )
+    if ecs_ldap_provider | lower == 'auto'
+    else ecs_ldap_provider | lower
+  }}
+ecs_ldap_enabled: true
 ecs_data_services_configure_ldap: false  # when true, sync LDAP before installing CDW/CDE/CAI in playbook 34
 ecs_ldap_provider_name: cm-ldap
 # LDAP admin user <prefix>admin in FreeIPA + IAM roles on ECS environment
-ecs_ldap_admin_user_enabled: false
+ecs_ldap_admin_user_enabled: true
 ecs_ldap_admin_user_prefix: cldr
 ecs_ldap_admin_username: "{{ ecs_ldap_admin_user_prefix }}admin"
-ecs_ldap_admin_email: "{{ ecs_ldap_admin_username }}@{{ ipaserver_domain }}"
+ecs_ldap_admin_email: "{{ ecs_ldap_admin_username }}@{{ cluster_domain }}"
 ecs_ldap_admin_password: "{{ common_password | default(ipaadmin_password, true) }}"
+ecs_ldap_external_email_attribute: mail
+ecs_ldap_external_first_name_attribute: givenName
+ecs_ldap_external_last_name_attribute: sn
 ecs_ldap_admin_assign_all_tenant_roles: false
 ecs_ldap_admin_assign_all_resource_roles_on_env: false
 ecs_ldap_admin_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|environment)'

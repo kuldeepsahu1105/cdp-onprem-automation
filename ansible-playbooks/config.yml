@@ -268,7 +268,9 @@ ecs_deploy_cdw: false
 ecs_deploy_cde: false
 ecs_deploy_cai: false
 ecs_deploy_cai_registry: false
-ecs_ldap_enabled: false
+ecs_ldap_provider: auto
+ecs_ldap_enabled: true
+ecs_ldap_admin_user_enabled: true
 # Empty derives the current FreeIPA private IP from inventory. Set explicit
 # literal IPs only for an intentional external DNS override.
 ecs_coredns_forwarders: []
