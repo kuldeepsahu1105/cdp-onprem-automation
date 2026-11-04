@@ -125,6 +125,7 @@ portal_refresh_task = next(
     == "Refresh optional deployment portal routes for ECS data services"
 )
 assert portal_refresh_task["when"] == [
+    "ecs_data_services_sync_portal_routes | default(true) | bool",
     "ecs_caddy_data_service_routes | default([]) | length > 0",
     "deployment_portal_caddy_effective | default(false) | bool",
 ]
