@@ -208,9 +208,9 @@
         lookup('template', 'deployment_portal_base_cluster_portal_urls.j2') | from_yaml | default({}, true)
       }}
 
-- name: Set dynamic data service links from base cluster URL catalog
+- name: Exclude generated CDP Runtime service URLs from portal quicklinks
   ansible.builtin.set_fact:
-    deployment_portal_dynamic_links: "{{ deployment_portal_base_cluster_portal_urls.links | default([]) }}"
+    deployment_portal_dynamic_links: []
 
 - name: Build direct access URL map (public vs VPC private IP)
   ansible.builtin.set_fact:
@@ -480,6 +480,18 @@
 - name: Resolve Caddy pgAdmin public URL facts
   ansible.builtin.import_tasks: resolve_caddy_service_public_urls.yml
 
+- name: Discover Cloudera Manager ECS links
+  ansible.builtin.import_tasks: discover_deployment_portal_ecs_cm_links.yml
+
+- name: Sanitize configured data service links for stable portal rendering
+  ansible.builtin.set_fact:
+    deployment_portal_sanitized_data_service_links: >-
+      {{
+        lookup('template', 'deployment_portal_sanitized_data_service_links.j2')
+        | from_yaml
+        | default([], true)
+      }}
+
 - name: Render deployment portal service endpoints list
   ansible.builtin.set_fact:
     deployment_portal_endpoints: >-
@@ -678,7 +690,6 @@
             if (
               caddy_vhost_enabled | default(false) | bool
               and deployment_portal_has_ipa | bool
-              and deployment_portal_ipa_modern_ui_available | bool
             )
             else ''
           }}
@@ -745,15 +756,12 @@
         app_domain: "{{ ecs_app_domain }}"
         console_hint: "https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}"
         console_url_direct: "https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}"
+        cm_service_id: "{{ deployment_portal_ecs_service_id | default('') }}"
+        links: "{{ deployment_portal_ecs_cm_links | default([]) }}"
         caddy_url: ""
         apps_wildcard: "https://*.{{ ecs_app_domain }}"
       data_services:
-        links: >-
-          {{
-            deployment_portal_data_service_links
-            + (deployment_portal_dynamic_links | default([]))
-            + (deployment_portal_ecs_ds_links | default([]))
-          }}
+        links: "{{ deployment_portal_sanitized_data_service_links | default([]) }}"
       monitoring:
         enabled: >-
           {{

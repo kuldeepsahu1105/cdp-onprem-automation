@@ -1,0 +1,16 @@
+{# YAML list: preserve operator order, remove stale CM-hosted ECS links, and deduplicate by URL. #}
+{% set ns = namespace(links=[], urls=[]) %}
+{% set _links = (deployment_portal_data_service_links | default([])) + (deployment_portal_ecs_ds_links | default([])) %}
+{% for link in _links %}
+{% set _name = link.name | default('') | string | trim %}
+{% set _url = link.url | default('') | string | trim %}
+{% set _legacy_ecs = (
+  _name in ['ECS Management', 'ECS Management / Workloads', 'Longhorn', 'Longhorn UI']
+  or (_url | regex_search('/cmf/services/[0-9]+/(ecsWebUI|longhorn)(/|#|$)'))
+) %}
+{% if _url | length > 0 and not _legacy_ecs and _url not in ns.urls %}
+{% set ns.links = ns.links + [link] %}
+{% set ns.urls = ns.urls + [_url] %}
+{% endif %}
+{% endfor %}
+{{ ns.links | to_json }}

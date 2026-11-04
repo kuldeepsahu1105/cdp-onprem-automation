@@ -98,6 +98,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `ecs_application_domain` | `<domain>` | Parent domain passed to CM `app_domain` and embedded-control-plane `ApplicationDomain` |
 | `ecs_app_domain` | `apps.<ecs_application_domain>` | Effective ingress suffix for ECS console and service hostnames |
 | `ecs_console_host_prefix` | `console-cdp` | DNS label for ECS management console (`https://<prefix>.<ecs_app_domain>`) |
+| `deployment_portal_ecs_service_id` | Discovered | Numeric CM service ID for the current ECS cluster; used only when rendering CM-hosted ECS Workloads and Longhorn links |
+| `deployment_portal_ecs_cm_links` | `[]` before discovery | Stable ECS Management / Workloads and Longhorn UI links built from the current CM base URL and service ID |
 
 ### CM/CDH repository source
 
@@ -677,7 +679,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/ensure_ipa_httpd_behind_caddy_before_client.yml` | Playbook **16** localhost play: resolve Caddy gate and **`build_deployment_portal_facts.yml`** before client enroll |
 | `common_tasks/sync_ipa_httpd_caddy_proxy_state_on_ipaserver.yml` | Playbook **16** **`[ipaserver]`** play: load portal facts; **`manage_ipa_httpd_caddy_proxy_on_ipaserver.yml`** (cleanup by default; apply + **`preflight_ipa_json_on_ipaserver.yml`** only when **`deployment_portal_ipa_httpd_proxy_enabled`**) |
 | `common_tasks/manage_ipa_httpd_caddy_proxy_on_ipaserver.yml` | **`configure_ipa_httpd_behind_caddy.yml`** when **`deployment_portal_ipa_httpd_proxy_enabled`**; else **`remove_ipa_httpd_caddy_proxy_on_ipaserver.yml`**; then **`sync_ipa_httpd_disable_browser_krb_on_ipaserver.yml`** when **`ipa_httpd_disable_browser_krb_negotiate`** (default **true**) |
-| `common_tasks/sync_ipa_httpd_disable_browser_krb_on_ipaserver.yml` | Restored September implementation: **`zz-ipa-disable-browser-krb.conf`** sets `gssapi-no-negotiate` in `<Location /ipa>` and reloads httpd when changed; play **12**, PORTAL/**16** via **manage**. It does not fail deployment on the stock `login_kerberos` endpoint header. |
+| `common_tasks/sync_ipa_httpd_disable_browser_krb_on_ipaserver.yml` | Installs **`zz-ipa-disable-browser-krb.conf`** with `SetEnvIf Request_URI "^/ipa(/|$)" gssapi-no-negotiate=1` and reloads httpd when changed; play **12**, PORTAL/**16** via **manage**. It suppresses browser negotiation without reopening `/ipa` or disabling service Kerberos. |
 | `common_tasks/remove_ipa_httpd_caddy_proxy_on_ipaserver.yml` | Default: absent **`zz-ipa-caddy-proxy.conf`**, revert **`ipa-rewrite`** Caddy markers, httpd reload |
 | `common_tasks/apply_ipa_httpd_behind_caddy_on_ipaserver.yml` | Deprecated alias → **`sync_ipa_httpd_caddy_proxy_state_on_ipaserver.yml`** |
 | `common_tasks/preflight_ipa_json_on_ipaserver.yml` | POST **`/ipa/json`** on ipaserver after opt-in httpd apply — fail on HTML (not run on default Caddy-only play **16** path) |

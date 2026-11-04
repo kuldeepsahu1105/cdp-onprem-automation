@@ -9,7 +9,6 @@
 
   request_header -Authorization
   request_header -Proxy-Authorization
-  header -WWW-Authenticate
 
   reverse_proxy https://{{ deployment_portal_ipa_upstream_host }} {
     transport http {
