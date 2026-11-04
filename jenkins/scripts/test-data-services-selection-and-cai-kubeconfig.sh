@@ -75,12 +75,46 @@ assert "ansible.builtin.include_tasks: ecs_data_service_model_registry.yml" in p
 assert "ecs_reconcile_coredns.yml" in playbook_text
 assert "ecs_data_services_verify_dns.yml" in playbook_text
 assert playbook_text.index(
+    "Ensure Base SDX Data Context before Data Services provisioning"
+) < playbook_text.index(
     "Reconcile CoreDNS before Data Services provisioning"
 ) < playbook_text.index(
     "Verify Data Services DNS through Kubernetes pods"
 ) < playbook_text.index(
     "Load existing ECS automation API credentials"
 )
+sdx_gate = (
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_ensure_base_data_context.yml"
+).read_text()
+assert "Data Services SDX | Read CM API version" in sdx_gate
+assert "Data Services SDX | Ensure base cluster Data Context" in sdx_gate
+assert "common_tasks/ensure_base_cluster_data_context.yml" in sdx_gate
+assert "cm_cluster_module_delegate_to: \"{{ cm_manager_inventory_host }}\"" in sdx_gate
+assert "ecs_data_services_base_data_context_enabled | default(true) | bool" in playbook_text
+
+base_sdx_helper = (
+    root
+    / "ansible-playbooks/roles/cdh_base_cluster/tasks/ensure_base_cluster_data_context.yml"
+).read_text()
+assert "Base data context | Create configured context for fresh cluster" in base_sdx_helper
+assert "Base data context | Require complete fresh-install prerequisite" in base_sdx_helper
+base_setup = (
+    root
+    / "ansible-playbooks/roles/cdh_base_cluster/tasks/setup_base_cluster.yml"
+).read_text()
+assert base_setup.index(
+    "Ensure base cluster Data Context for fresh Data Services installation"
+) < base_setup.index("Record completed base cluster initialization")
+base_sdx_compat = (
+    root / "ansible-playbooks/common_tasks/ensure_base_cluster_data_context.yml"
+).read_text()
+assert "name: cdh_base_cluster" in base_sdx_compat
+assert "tasks_from: ensure_base_cluster_data_context" in base_sdx_compat
+ecs_sdx_compat = (
+    root / "ansible-playbooks/common_tasks/ecs_ensure_base_data_context.yml"
+).read_text()
+assert "name: ecs" in ecs_sdx_compat
+assert "tasks_from: ecs_ensure_base_data_context" in ecs_sdx_compat
 assert "when: \"'model_registry' in (ecs_data_services_install_names | default([]))\"" in playbook_text
 selection_text = (
     root
@@ -110,6 +144,11 @@ assert "ecs_coredns_kubeconfig_path" in combined
 group_vars = yaml.safe_load(
     (root / "ansible-playbooks/group_vars/all.yml").read_text()
 )
+for service in ("HDFS", "HIVE", "ATLAS", "RANGER"):
+    assert service in group_vars["base_cluster_data_context_services"]
+assert group_vars["base_cluster_data_context_enabled"] is True
+assert group_vars["ecs_data_services_base_data_context_enabled"] is True
+assert group_vars["base_cluster_data_context_name"] == "SDX"
 assert group_vars["ecs_coredns_kubeconfig_path"] == "/etc/rancher/rke2/rke2.yaml"
 assert group_vars["ecs_cde_cpu_requests"] == "40"
 assert group_vars["ecs_cde_memory_requests"] == "64Gi"

@@ -365,6 +365,20 @@ recreation, backend restart, or datastore mutation; independent service
 boundaries still allow later selected services to run before the final
 aggregate failure.
 
+Playbooks **31** and **34** both idempotently create or verify the Base cluster
+`SDX` Data Context with HDFS, HIVE, ATLAS, and RANGER. Playbook 34 runs this
+gate before DNS, credentials, or Data Services submissions so a standalone
+rerun cannot submit CDE/CDW against an absent or incomplete remote context.
+Control the two boundaries independently:
+
+```yaml
+base_cluster_data_context_enabled: true
+ecs_data_services_base_data_context_enabled: true
+```
+
+The first controls playbook 31 Base creation; the second controls playbook 34
+Data Services preflight.
+
 If CDW preflight finds an existing cluster in the exact case-insensitive
 `Deactivated` state, it stops before FreeIPA principal mutation or submission.
 The pinned `cloudera.cloud` `dw_cluster` module cannot reactivate an existing

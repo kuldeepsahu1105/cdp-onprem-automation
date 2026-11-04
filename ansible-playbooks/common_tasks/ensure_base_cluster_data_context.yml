@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for base cluster Data Context
+  ansible.builtin.import_role:
+    name: cdh_base_cluster
+    tasks_from: ensure_base_cluster_data_context

@@ -40,6 +40,14 @@ later standalone rerun must not assume playbook 33 completed that boundary
 successfully. After fresh-pod DNS verification, playbook 34 restarts and waits
 for only `cdp/cdp-release-thunderhead-servicediscoverysimple` before loading
 credentials or submitting CDW, CDE, or CAI operations.
+For the same standalone guarantee, playbook 34 idempotently creates or verifies
+the Base cluster `SDX` Data Context before DNS checks and service submission.
+The context must expose HDFS, HIVE, ATLAS, and RANGER. This repeats the
+playbook 31 completion gate without restarting or reconfiguring healthy Base
+services, and prevents CDE from reaching chart installation without its remote
+data context. Set `ecs_data_services_base_data_context_enabled: false` only
+when an external process owns that preflight. This switch is independent of
+playbook 31's `base_cluster_data_context_enabled`.
 
 When Jenkins selects both `ECS_POST_INSTALL_TASKS` and `ECS_DATA_SERVICES`, LDAP
 provider/admin IAM convergence runs only in post-install. The Data Services

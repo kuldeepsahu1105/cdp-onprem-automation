@@ -513,6 +513,17 @@ base_cluster_initialization_marker_path: /var/lib/cloudera-scm-server/.ansible-b
 # When true, submit CM First Run even on an existing cluster (normally auto-detected when the marker
 # is missing and HDFS is not STARTED/GOOD — e.g. playbook failed on Knox config before First Run).
 base_cluster_force_first_run: false
+# CDE and other compute workloads require a CM Data Context on the base
+# cluster. Playbooks 31 and 34 create or verify it before successful completion.
+base_cluster_data_context_enabled: true
+base_cluster_data_context_name: SDX
+base_cluster_data_context_services:
+  - HDFS
+  - HIVE
+  - ATLAS
+  - RANGER
+base_cluster_data_context_wait_retries: 12
+base_cluster_data_context_wait_delay: 5
 
 # CDP base cluster services (31_setup_base_cluster.yml). Override per key in Ansible controller via base_cluster_install_services.
 base_cluster_install_services:
@@ -1330,6 +1341,9 @@ ecs_data_services_dns_probe_attempts: 3
 ecs_data_services_dns_probe_retry_delay: 31
 ecs_data_services_dns_probe_wait_retries: 24
 ecs_data_services_dns_probe_wait_delay: 5
+# Independently control the playbook 34 SDX create/verify gate. Base-cluster
+# creation uses base_cluster_data_context_enabled.
+ecs_data_services_base_data_context_enabled: true
 # Fresh DNS probes do not clear the long-lived Service Discovery JVM resolver
 # cache. Refresh only that deployment before CDW/CDE/CAI backend submissions.
 ecs_data_services_refresh_service_discovery_dns: true
