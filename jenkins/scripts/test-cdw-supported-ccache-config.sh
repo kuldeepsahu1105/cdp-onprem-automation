@@ -129,17 +129,21 @@ require(
     "VW creation must use the shared FILE-cache config exactly once",
 )
 require(
-    followup.count('.get("KRB5CCNAME", "")') == 1,
-    "DBC configuration must be inspected idempotently",
+    followup.count('.get("KRB5CCNAME", "")') == 2,
+    "DBC configuration must be inspected before and after reconciliation",
 )
 require(
-    followup.count("if isinstance(payload, str):") == 2
-    and followup.count("payload = json.loads(payload)") == 2,
+    followup.count("if isinstance(payload, str):") == 3
+    and followup.count("payload = json.loads(payload)") == 3,
     "JSON parsers must unwrap registered stdout when Ansible preserves it as text",
 )
 require(
     'stdin: "{{ ecs_cdw_dbc_config.stdout | to_json }}"' in followup,
     "DBC config must cross the command stdin boundary as JSON",
+)
+require(
+    'stdin: "{{ ecs_cdw_dbc_config_converged.stdout | to_json }}"' in followup,
+    "converged DBC config must be verified across the command stdin boundary",
 )
 require(
     "ecs_cdw_catalog_kubernetes_pods.stdout" in followup
@@ -207,9 +211,21 @@ require(
 )
 require(
     group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
+    ["format"]
+    == "ENV",
+    "DBC environment config block must declare ENV format",
+)
+require(
+    group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
     ["content"]["keyValues"]["KRB5CCNAME"]
     == "{{ ecs_cdw_workload_krb5ccname }}",
     "DBC config must reference the authoritative variable",
+)
+require(
+    group_vars["ecs_cdw_vw_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
+    ["format"]
+    == "ENV",
+    "Virtual Warehouse environment config block must declare ENV format",
 )
 require(
     group_vars["ecs_cdw_vw_file_ccache_config"]["commonConfigs"]["configBlocks"][0]

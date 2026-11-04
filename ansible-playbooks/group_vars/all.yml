@@ -1628,6 +1628,7 @@ ecs_cdw_dbc_file_ccache_config:
   commonConfigs:
     configBlocks:
       - id: env
+        format: ENV
         content:
           keyValues:
             KRB5CCNAME: "{{ ecs_cdw_workload_krb5ccname }}"
@@ -1665,6 +1666,7 @@ ecs_cdw_vw_file_ccache_config:
   commonConfigs:
     configBlocks:
       - id: env
+        format: ENV
         content:
           keyValues:
             KRB5CCNAME: "{{ ecs_cdw_vw_krb5ccname }}"

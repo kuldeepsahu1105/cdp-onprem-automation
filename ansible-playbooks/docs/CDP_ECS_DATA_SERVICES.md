@@ -427,7 +427,8 @@ though the Kubernetes nodes do not run a KCM daemon. After the Database
 Catalog record appears, automation reads its supported CDW service
 configuration with `dw describe-dbc-config`. It calls additive
 `dw update-dbc --config` only when the `env` config block does not already set
-`KRB5CCNAME=FILE:/tmp/krb5cc_metastore`. The CDW control plane therefore owns
+`format: ENV` and `KRB5CCNAME=FILE:/tmp/krb5cc_metastore`. The CDW control
+plane therefore owns
 the generated metastore workload configuration, and healthy reruns are
 no-ops. This prevents `kinit: No KCM server found while getting default
 ccache` without directly mutating a Helm-managed StatefulSet or changing the
