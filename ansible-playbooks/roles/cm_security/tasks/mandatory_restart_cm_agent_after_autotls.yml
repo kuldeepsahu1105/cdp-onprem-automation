@@ -1,0 +1,19 @@
+---
+# Unconditional cloudera-scm-agent restart after Auto-TLS mutating work in 27_setup_cm_autotls.yml.
+# Runs even when cm_agent_reconcile_after_autotls is false (config reconcile optional; agent restart is not).
+
+- name: Mandatory Auto-TLS — restart Cloudera Manager agent
+  ansible.builtin.systemd:
+    name: cloudera-scm-agent
+    enabled: true
+    state: restarted
+  register: cm_agent_mandatory_autotls_restart
+
+- name: Mandatory Auto-TLS — require agent active after restart
+  ansible.builtin.command: systemctl is-active cloudera-scm-agent
+  register: cm_agent_mandatory_active_check
+  changed_when: false
+  failed_when: cm_agent_mandatory_active_check.rc | int != 0
+  retries: "{{ cm_agent_active_wait_retries | default(12) }}"
+  delay: "{{ cm_agent_active_wait_delay | default(5) }}"
+  until: cm_agent_mandatory_active_check.rc | int == 0

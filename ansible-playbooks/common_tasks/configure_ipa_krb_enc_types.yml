@@ -1,19 +1,5 @@
 ---
-# FreeIPA KDC: prefer AES enctypes via krb5.conf.d (modern IPA derives KDC types from permitted_enctypes).
-
-- name: Kerberos — document Ansible FILE ccache in krb5.conf.d on IPA server
-  ansible.builtin.import_tasks: ensure_krb5_ansible_ccache_note.yml
-
-- name: Kerberos — restore KEYRING default_ccache_name on IPA server (clients commented elsewhere)
-  ansible.builtin.import_tasks: ensure_krb5_default_ccache_commented.yml
-
-- name: Kerberos — deploy IPA KDC permitted enctypes snippet
-  ansible.builtin.template:
-    src: krb5_permitted_enctypes.conf.j2
-    dest: /etc/krb5.conf.d/cldr-permitted-enctypes.conf
-    mode: "0644"
-  register: ipa_krb5_enc_snippet
-
-- name: Kerberos — restart IPA services after krb5.conf.d snippet change
-  ansible.builtin.import_tasks: restart_ipa_after_krb5_conf_change.yml
-  when: ipa_krb5_enc_snippet is changed
+- name: Compatibility entry point for identity configure ipa krb enc types
+  ansible.builtin.import_role:
+    name: identity
+    tasks_from: configure_ipa_krb_enc_types

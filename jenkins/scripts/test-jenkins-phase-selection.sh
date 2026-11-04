@@ -109,5 +109,5 @@ assert "ecs_data_services_sync_portal_routes=false" in pvc_setup
 assert "ecs_data_services_sync_portal_routes=true" in pvc_setup
 assert "_portal_actions_selected()" in pvc_setup
 
-print("Jenkins phase selection checks passed")
+print("Role branch Jenkins phase selection checks passed")
 PY

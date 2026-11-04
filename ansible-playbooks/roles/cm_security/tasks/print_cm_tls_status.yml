@@ -1,0 +1,87 @@
+---
+# Unified CM TLS / Auto-TLS console line (after set_cm_api_url.yml; optional fetch_cm_autotls_api_state.yml).
+# Sets cm_tls_mode / cm_api_https_active / cm_autotls_api_enabled when fetch did not run.
+
+- name: CM API — derive TLS mode for display when fetch did not run
+  ansible.builtin.set_fact:
+    cm_api_https_active: >-
+      {{
+        cm_api_https_active | default(
+          (
+            (cm_protocol | default('http')) == 'https'
+            or ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+          ),
+          true
+        ) | bool
+      }}
+  when: cm_api_https_active is not defined
+
+- name: CM API — derive cm_tls_mode for display when fetch did not run
+  ansible.builtin.set_fact:
+    cm_tls_mode: >-
+      {{
+        cm_tls_mode | default(
+          (
+            'auto_tls'
+            if (cm_autotls_api_enabled | default(false) | bool)
+            else (
+              'https'
+              if (
+                (cm_protocol | default('http')) == 'https'
+                or ((cm_api_port | default(0) | int) == (cm_https_port | default(7183) | int))
+              )
+              else 'http'
+            )
+          ),
+          true
+        )
+      }}
+  when: cm_tls_mode is not defined
+
+- name: CM API — print TLS / Auto-TLS summary
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        (
+          'HTTPS :' + (cm_https_port | default(7183) | string) + ' enabled — ' + (cm_api_url | default('unset'))
+          + (
+            ' ; Auto-TLS applied this run (generateCmca); CM config flags not reported'
+            if (cm_autotls_config_flags_unreported | default(false) | bool)
+            else (
+              ' ; Auto-TLS in CM config=' + (cm_autotls_api_enabled | default(false) | string)
+              + (
+                ' ; requested=True — enablement runs in playbook 27 / CM_TLS_KRB_LDAP'
+                if (
+                  not (cm_autotls_api_enabled | default(false) | bool)
+                  and (cm_autotls_setup_intent | default(false) | bool)
+                )
+                else ''
+              )
+              if (cm_autotls_api_enabled is defined)
+              else ''
+            )
+          )
+        )
+        if (cm_api_https_active | default(false) | bool)
+        else (
+          'CM API ' + (cm_protocol | default('http')) + ':' + (cm_api_port | default(cm_http_port | default(7180)) | string)
+          + ' — ' + (cm_api_url | default('unset'))
+          + (
+            ' ; Auto-TLS applied this run (generateCmca); CM config flags not reported'
+            if (cm_autotls_config_flags_unreported | default(false) | bool)
+            else (
+              ' ; Auto-TLS in CM config=' + (cm_autotls_api_enabled | default(false) | string)
+              + (
+                ' ; requested=True — enablement runs in playbook 27 / CM_TLS_KRB_LDAP'
+                if (
+                  not (cm_autotls_api_enabled | default(false) | bool)
+                  and (cm_autotls_setup_intent | default(false) | bool)
+                )
+                else ''
+              )
+              if (cm_autotls_api_enabled is defined)
+              else ''
+            )
+          )
+        )
+      }}

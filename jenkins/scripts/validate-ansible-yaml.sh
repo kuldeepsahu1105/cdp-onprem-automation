@@ -20,6 +20,7 @@ root = Path(os.environ["ANSIBLE_DIR"])
 paths = sorted(
     set(root.glob("common_tasks/**/*.yml"))
     | set(root.glob("common_tasks/*.yml"))
+    | set(root.glob("roles/**/*.yml"))
     | set(root.glob("[0-9]*.yml"))
 )
 errors = []

@@ -1,0 +1,4 @@
+---
+- name: Install krb5.conf.d ansible-ccache-note.conf on enrolled or enrolling hosts
+  ansible.builtin.import_tasks: ensure_krb5_ansible_ccache_note.yml
+  when: hostvars['localhost']['identity_provider_effective'] | default('') == 'freeipa'

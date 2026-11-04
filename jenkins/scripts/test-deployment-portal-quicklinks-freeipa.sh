@@ -13,7 +13,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 import yaml
 
 root = Path(sys.argv[1])
-templates = root / "ansible-playbooks" / "templates"
+templates = root / "ansible-playbooks" / "roles" / "deployment_portal" / "templates"
 env = Environment(
     loader=FileSystemLoader(str(templates)),
     undefined=StrictUndefined,
@@ -122,13 +122,17 @@ rerun = yaml.safe_load(
 )
 assert rerun == sanitized
 
-facts = (root / "ansible-playbooks/common_tasks/build_deployment_portal_facts.yml").read_text()
+facts = (
+    root
+    / "ansible-playbooks/roles/deployment_portal/tasks/build_deployment_portal_facts.yml"
+).read_text()
 index = (templates / "deployment_portal_index.html.j2").read_text()
 base_urls = (templates / "deployment_portal_base_cluster_portal_urls.j2").read_text()
 ipa_httpd = (templates / "ipa_httpd_disable_browser_krb.conf.j2").read_text()
 ipa_proxy = (templates / "deployment_portal_Caddyfile_ipa_proxy.inc.j2").read_text()
 discovery = (
-    root / "ansible-playbooks/common_tasks/discover_deployment_portal_ecs_cm_links.yml"
+    root
+    / "ansible-playbooks/roles/deployment_portal/tasks/discover_deployment_portal_ecs_cm_links.yml"
 ).read_text()
 
 assert "deployment_portal_dynamic_links: []" in facts

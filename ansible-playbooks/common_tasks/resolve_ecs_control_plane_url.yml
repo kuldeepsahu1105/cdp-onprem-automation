@@ -1,9 +1,5 @@
 ---
-- name: Set ECS control plane console URL (explicit override or app domain)
-  ansible.builtin.set_fact:
-    ecs_control_plane_url_effective: >-
-      {{
-        ecs_control_plane_url | trim
-        if (ecs_control_plane_url | default('') | length > 0)
-        else ('https://' + ecs_console_host_prefix + '.' + ecs_app_domain)
-      }}
+- name: Compatibility entry point for ECS resolve ecs control plane url
+  ansible.builtin.import_role:
+    name: ecs
+    tasks_from: resolve_ecs_control_plane_url

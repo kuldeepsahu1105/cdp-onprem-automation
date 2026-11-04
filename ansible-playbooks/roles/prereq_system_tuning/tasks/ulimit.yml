@@ -1,0 +1,22 @@
+---
+- name: Set OS-specific facts
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/set_os_facts.yml"
+
+- name: Ensure ulimit values are set in /etc/security/limits.conf
+  ansible.builtin.lineinfile:
+    path: /etc/security/limits.conf
+    line: "{{ item }}"
+    create: yes
+    backup: yes
+  with_items:
+    - "* soft nofile 1048576"
+    - "* hard nofile 1048576"
+
+- name: Configure PAM settings
+  ansible.builtin.template:
+    src: pam_su.j2
+    dest: /etc/pam.d/su
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes

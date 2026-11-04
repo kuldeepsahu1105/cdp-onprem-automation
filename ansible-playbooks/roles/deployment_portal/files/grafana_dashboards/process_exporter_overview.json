@@ -1,0 +1,71 @@
+{
+  "id": null,
+  "uid": "cldr-process-exporter",
+  "title": "Process Exporter — Named Groups",
+  "description": "Per-process-group CPU and memory from process_exporter. Provisioned by Ansible playbook 32.",
+  "tags": ["cloudera", "process_exporter"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Scrape targets up",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 0 },
+      "targets": [{ "expr": "count(up{job=\"process_exporter\"} == 1)", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "title": "Process groups tracked",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 0 },
+      "targets": [{ "expr": "count(count by (groupname) (namedprocess_namegroup_num_procs{job=\"process_exporter\"}))", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "title": "Top groups by CPU",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "targets": [{
+        "expr": "topk(8, sum by (groupname, instance) (rate(namedprocess_namegroup_cpu_seconds_total{job=\"process_exporter\"}[5m])))",
+        "legendFormat": "{{instance}} {{groupname}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 4,
+      "title": "Top groups by resident memory",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [{
+        "expr": "topk(8, namedprocess_namegroup_memory_bytes{job=\"process_exporter\",memtype=\"resident\"})",
+        "legendFormat": "{{instance}} {{groupname}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "Process count by group (table)",
+      "type": "table",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 13 },
+      "targets": [{
+        "expr": "topk(20, namedprocess_namegroup_num_procs{job=\"process_exporter\"})",
+        "format": "table",
+        "instant": true,
+        "refId": "A"
+      }]
+    }
+  ]
+}

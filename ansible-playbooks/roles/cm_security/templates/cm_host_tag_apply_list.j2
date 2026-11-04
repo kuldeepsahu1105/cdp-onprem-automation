@@ -1,0 +1,19 @@
+{# YAML list: hostname (CM FQDN), inventory_hostname, tags (ApiEntityTag[]) #}
+{% set ns = namespace(items=[]) %}
+{% for grp, role_label in (cm_host_tag_group_map | default({})).items() %}
+{%   for inv_host in groups.get(grp, []) %}
+{%     set fqdn = hostvars[inv_host].cldr_hostname | default(inv_host) ~ '.' ~ cluster_domain %}
+{%     set tag_list = [
+  {'name': 'role', 'value': role_label},
+  {'name': 'inventory', 'value': inv_host},
+] %}
+{%     if (cm_host_tags_env_value | default('') | trim | length) > 0 %}
+{%       set _env = tag_list.append({'name': 'env', 'value': cm_host_tags_env_value | trim}) %}
+{%     endif %}
+{%     if (cm_host_tags_owner | default('') | trim | length) > 0 %}
+{%       set _own = tag_list.append({'name': 'owner', 'value': cm_host_tags_owner | trim}) %}
+{%     endif %}
+{%     set _add = ns.items.append({'hostname': fqdn, 'inventory_hostname': inv_host, 'tags': tag_list}) %}
+{%   endfor %}
+{% endfor %}
+{{ ns.items | to_yaml }}

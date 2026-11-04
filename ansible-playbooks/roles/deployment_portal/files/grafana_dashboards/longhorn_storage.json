@@ -1,0 +1,135 @@
+{
+  "id": null,
+  "uid": "cldr-longhorn-storage",
+  "title": "Longhorn — Storage Detail",
+  "description": "Longhorn workload usage from cAdvisor plus native longhorn_* storage metrics when exposed to Prometheus.",
+  "tags": ["cloudera", "kubernetes", "longhorn", "storage", "cadvisor"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "Host",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(container_last_seen{job=\"cadvisor_host\",container_label_io_kubernetes_pod_namespace=\"longhorn-system\"}, instance)",
+        "definition": "label_values(container_last_seen{job=\"cadvisor_host\",container_label_io_kubernetes_pod_namespace=\"longhorn-system\"}, instance)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 1
+      },
+      {
+        "name": "pod",
+        "label": "Longhorn pod",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(container_last_seen{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=\"longhorn-system\"}, container_label_io_kubernetes_pod_name)",
+        "definition": "label_values(container_last_seen{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=\"longhorn-system\"}, container_label_io_kubernetes_pod_name)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Observed Longhorn pods",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "count(count by (container_label_io_kubernetes_pod_name) (container_last_seen{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=\"longhorn-system\",container_label_io_kubernetes_pod_name=~\"$pod\"}))", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "title": "Longhorn workload CPU",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "cores" } },
+      "targets": [{ "expr": "sum(rate(container_cpu_usage_seconds_total{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=\"longhorn-system\",container_label_io_kubernetes_pod_name=~\"$pod\"}[5m]))", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "title": "Longhorn workload memory",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [{ "expr": "sum(container_memory_working_set_bytes{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=\"longhorn-system\",container_label_io_kubernetes_pod_name=~\"$pod\"})", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "title": "Native volume actual size",
+      "description": "Populates when Longhorn manager metrics are scraped.",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [{ "expr": "sum(longhorn_volume_actual_size_bytes)", "refId": "A" }]
+    },
+    {
+      "id": 5,
+      "title": "Longhorn CPU by pod",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "cores" } },
+      "targets": [{ "expr": "sum by (container_label_io_kubernetes_pod_name, container_label_io_kubernetes_container_name) (rate(container_cpu_usage_seconds_total{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=\"longhorn-system\",container_label_io_kubernetes_pod_name=~\"$pod\"}[5m]))", "legendFormat": "{{container_label_io_kubernetes_pod_name}} / {{container_label_io_kubernetes_container_name}}", "refId": "A" }]
+    },
+    {
+      "id": 6,
+      "title": "Longhorn memory by pod",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [{ "expr": "sum by (container_label_io_kubernetes_pod_name, container_label_io_kubernetes_container_name) (container_memory_working_set_bytes{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=\"longhorn-system\",container_label_io_kubernetes_pod_name=~\"$pod\"})", "legendFormat": "{{container_label_io_kubernetes_pod_name}} / {{container_label_io_kubernetes_container_name}}", "refId": "A" }]
+    },
+    {
+      "id": 7,
+      "title": "Longhorn pod network throughput",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 13 },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [
+        { "expr": "sum by (container_label_io_kubernetes_pod_name) (rate(container_network_receive_bytes_total{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=\"longhorn-system\",container_label_io_kubernetes_pod_name=~\"$pod\"}[5m]))", "legendFormat": "{{container_label_io_kubernetes_pod_name}} rx", "refId": "A" },
+        { "expr": "sum by (container_label_io_kubernetes_pod_name) (rate(container_network_transmit_bytes_total{job=\"cadvisor_host\",instance=~\"$instance\",container_label_io_kubernetes_pod_namespace=\"longhorn-system\",container_label_io_kubernetes_pod_name=~\"$pod\"}[5m]))", "legendFormat": "{{container_label_io_kubernetes_pod_name}} tx", "refId": "B" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Native Longhorn volume capacity and usage",
+      "description": "Populates when Longhorn manager metrics are scraped.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 13 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [
+        { "expr": "max by (volume) (longhorn_volume_capacity_bytes)", "legendFormat": "{{volume}} capacity", "refId": "A" },
+        { "expr": "max by (volume) (longhorn_volume_actual_size_bytes)", "legendFormat": "{{volume}} actual", "refId": "B" }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Native Longhorn node storage",
+      "description": "Populates when Longhorn manager metrics are scraped.",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [
+        { "expr": "max by (node) (longhorn_node_storage_capacity_bytes)", "legendFormat": "{{node}} capacity", "refId": "A" },
+        { "expr": "max by (node) (longhorn_node_storage_usage_bytes)", "legendFormat": "{{node}} used", "refId": "B" }
+      ]
+    }
+  ]
+}

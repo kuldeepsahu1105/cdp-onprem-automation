@@ -1,0 +1,79 @@
+---
+- name: FreeIPA enrollment — read host FQDN
+  ansible.builtin.command: hostname -f
+  delegate_to: "{{ freeipa_client_validation_host | default(inventory_hostname) }}"
+  register: freeipa_client_validation_hostname
+  changed_when: false
+
+- name: FreeIPA enrollment — inspect required client files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/ipa/default.conf
+    - /etc/ipa/ca.crt
+    - /etc/krb5.keytab
+  delegate_to: "{{ freeipa_client_validation_host | default(inventory_hostname) }}"
+  register: freeipa_client_validation_files
+
+- name: FreeIPA enrollment — list host keytab principals
+  ansible.builtin.command:
+    argv:
+      - klist
+      - -k
+      - /etc/krb5.keytab
+  delegate_to: "{{ freeipa_client_validation_host | default(inventory_hostname) }}"
+  register: freeipa_client_validation_keytab
+  changed_when: false
+  failed_when: false
+
+- name: FreeIPA enrollment — require complete client files and host principal
+  ansible.builtin.assert:
+    that:
+      - freeipa_client_validation_hostname.stdout | trim | length > 0
+      - freeipa_client_validation_files.results[0].stat.exists | default(false) | bool
+      - freeipa_client_validation_files.results[1].stat.exists | default(false) | bool
+      - freeipa_client_validation_files.results[1].stat.size | default(0) | int > 0
+      - freeipa_client_validation_files.results[2].stat.exists | default(false) | bool
+      - freeipa_client_validation_keytab.rc | default(1) | int == 0
+      - >-
+        ('host/' + (freeipa_client_validation_hostname.stdout | trim) + '@' + ipaserver_realm)
+        in (freeipa_client_validation_keytab.stdout | default(''))
+    fail_msg: >-
+      FreeIPA enrollment validation failed on
+      {{ freeipa_client_validation_host | default(inventory_hostname) }}
+      (reported FQDN={{ freeipa_client_validation_hostname.stdout | default('unknown') | trim }}).
+      Required: non-empty /etc/ipa/default.conf, /etc/ipa/ca.crt, /etc/krb5.keytab,
+      and host/<fqdn>@{{ ipaserver_realm }} in `klist -k`.
+      default.conf={{ freeipa_client_validation_files.results[0].stat.exists | default(false) }},
+      ca.crt={{ freeipa_client_validation_files.results[1].stat.exists | default(false) }},
+      keytab={{ freeipa_client_validation_files.results[2].stat.exists | default(false) }},
+      klist_rc={{ freeipa_client_validation_keytab.rc | default('unknown') }}.
+
+- name: FreeIPA enrollment — verify host credentials and IPA API
+  block:
+    - name: FreeIPA enrollment — obtain isolated host-principal ticket
+      ansible.builtin.command:
+        argv:
+          - kinit
+          - -c
+          - "FILE:/tmp/krb5cc_ansible_ipa_verify"
+          - -k
+          - -t
+          - /etc/krb5.keytab
+          - "host/{{ freeipa_client_validation_hostname.stdout | trim }}@{{ ipaserver_realm }}"
+      delegate_to: "{{ freeipa_client_validation_host | default(inventory_hostname) }}"
+      changed_when: false
+
+    - name: FreeIPA enrollment — verify authenticated IPA ping
+      ansible.builtin.command: ipa ping
+      delegate_to: "{{ freeipa_client_validation_host | default(inventory_hostname) }}"
+      environment:
+        KRB5CCNAME: FILE:/tmp/krb5cc_ansible_ipa_verify
+      changed_when: false
+  always:
+    - name: FreeIPA enrollment — remove isolated verification ticket cache
+      ansible.builtin.file:
+        path: /tmp/krb5cc_ansible_ipa_verify
+        state: absent
+      delegate_to: "{{ freeipa_client_validation_host | default(inventory_hostname) }}"
+      changed_when: false

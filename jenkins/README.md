@@ -2,43 +2,6 @@
 
 Declarative pipeline with **checkbox stage selection**, standard prerequisite validation, and **REFRESH_JENKINSFILE** support.
 
-## Before running: editable inputs
-
-The main job uses repository `.tfvars.yaml` (or `.tfvars.env`), Ansible
-`config.yml`, and **Build with Parameters**; it does not have an operator
-dotenv file. From a local repository checkout:
-
-```bash
-vi .tfvars.yaml
-# Alternative: vi .tfvars.env
-vi ansible-playbooks/config.yml
-```
-
-Use `i` to edit, then `Esc`, `:wq`, Enter to save/quit, or `:q!`, Enter
-to discard unsaved edits. Follow the
-[AWS parameter checklist](../READme.adoc#operator-editing-checklist) and
-[Ansible parameter checklist](../ansible-playbooks/docs/CONFIGURATION.md#operator-editing-checklist).
-Local edits do not automatically reach a remote Jenkins checkout: use the
-intended reviewed configuration ref or job overrides. Do not edit the agent's
-generated files to make settings persist.
-
-Verify these actual job parameters before starting:
-
-| Requirement | Parameters / checks |
-|---|---|
-| Always | `EXECUTION_BRANCH`, `TFVARS_FILE`, `PIPELINE_STAGES`, `AWS_REGION`, `ENVIRONMENT`, `OWNER`; confirm branch/config, target account credentials, environment/workspace and intended stages |
-| Terraform selected | `VPC_MODE`, `SG_MODE`, `EXISTING_SG_NAME`, `ALLOW_ALL`, `ALLOWED_CIDRS`; verify create/reuse intent and restricted ingress. `ALLOWED_PORTS` does not restrict ingress in the current Terraform module. The job forces new-keypair naming, so do not assume local wrapper reuse behavior. |
-| Ansible selected | Existing/generated `ansible-playbooks/inventory.ini`, matching private key, `ANSIBLE_GROUP_VARS_YAML` for non-secret overrides, `CM_REPO_USERNAME` / masked `CM_REPO_PASSWORD` for authenticated downloads |
-| AD selected | `AD_JOIN_USER`, masked `AD_JOIN_PASSWORD`, conditional `AD_KDC_ADMIN_USER` / `AD_KDC_ADMIN_PASSWORD`, `AD_LDAP_BIND_DN` / `AD_LDAP_BIND_PASSWORD`; topology/search-base keys belong in config or non-secret YAML overrides |
-| Optional / deliberate | `MONITORING_STACK_ENABLED`, `DRY_RUN`; validate stage selection before enabling deployment or destructive stages. Dry-run/check mode is not a guarantee of no side effects or no secret output. |
-
-Use the `VALIDATE` stage before deployment (details below); it is not an
-offline doc check and may contact AWS/install dependencies. Never edit
-`ansible-playbooks/jenkins_override.yml`, generated inventory, rendered remote
-`.env` / compose / Caddy files, Terraform output, plan or state. Change the
-source config/job inputs, then regenerate through the owning stage.
-Keep passwords out of multiline text inputs, Git and logs.
-
 ## cloudera-ce-aws pipeline
 
 `Jenkinsfile.ce-aws` defines a separate job that keeps
@@ -72,17 +35,6 @@ Use `CE_AWS_CONFIG_OVERRIDES_YAML` for upstream options from
 precedence. Use `ADDON_OVERRIDES_YAML` when an upstream per-service password
 differs from `COMMON_PASSWORD`, so portal credentials and monitoring
 configuration match the deployed service.
-
-This separate job is **not configured by this repository's `.tfvars.env`**.
-Before running, verify `NAME_PREFIX`, `AWS_REGION`, masked `COMMON_PASSWORD`,
-`OWNER_EMAIL`, `JENKINS_IP`, `CE_AWS_REF`, and `CE_AWS_STAGES` in its job UI.
-`JENKINS_IP` must be a single IPv4 address, not CIDR; replace all sample names
-and emails. Review `CE_AWS_CONFIG_OVERRIDES_YAML` against the selected upstream
-`config-template.yml`, and `ADDON_OVERRIDES_YAML` for enabled add-ons; do not
-assume this repo's Ansible variable names are upstream config keys.
-Do not `vi` generated `.ce-aws` configuration or the artifacts override YAML:
-the pipeline regenerates/cleans these. Supply secrets via masked job inputs,
-not committed files or plain multiline override text.
 
 ## Required Jenkins plugins
 
@@ -169,13 +121,13 @@ for CLI/Vault input and the complete option reference.
 **Copy-paste `PIPELINE_STAGES` (full deploy through ECS):**
 
 ```
-VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS
 ```
 
 To continue through selected ECS Data Services:
 
 ```text
-VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES
+VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES
 ```
 
 Optional tail stages: `ECS_POST_INSTALL_TASKS`, `ECS_DATA_SERVICES`, `STARTSTOP_AUTOMATION`, `DESTROY_STACK`. Default job checkboxes remain `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION` (see table below).
@@ -188,8 +140,8 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 
 | Parameter | Default |
 |---|---|
-| `PIPELINE_STAGES` | `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION`; optional MONITORING must be selected explicitly |
-| `DEPLOYMENT_PORTAL_ENABLED` | `true` (bootstrap the Caddy portal foundation before the adjacent monitoring stage) |
+| `PIPELINE_STAGES` | `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION` (not `CDH_INSTALL`, `MONITORING`, or `ECS_INSTALL`) |
+| `DEPLOYMENT_PORTAL_ENABLED` | `true` (bootstrap Caddy portal when `MONITORING_STACK_ENABLED` and **PORTAL** stage selected) |
 | `ECS_DATA_SERVICES_DEPLOY_ENABLED` | `false` (playbook 34 only when checked or an `ECS_DEPLOY_*` box is checked) |
 | Internal validation checks | `TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY` |
 | `ENVIRONMENT` | `development` |
@@ -204,31 +156,31 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 
 If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION`.
 
-Run **`REFRESH_JENKINSFILE=YES`** after Jenkinsfile changes to reload checkboxes. `CDH_INSTALL` is the only supported base-cluster stage; select `CM_TLS_KRB_LDAP` separately when CM security configuration is also required.
+**Legacy token:** Saved jobs may still submit **`CDH_BASE`** — it expands to `CM_TLS_KRB_LDAP` + `CDH_INSTALL`. Run **REFRESH_JENKINSFILE=YES** after Jenkinsfile changes to reload checkboxes.
+
+**Migrate old `PREREQS,IDENTITY,CM_INSTALL,CDH_BASE`:** check **`PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL`**. Add **`VALIDATE,TERRAFORM`** if you still provision EC2 (old string omitted them). Select **`PORTAL`** explicitly when portal bootstrap is required.
 
 ## Stage checkboxes (`PIPELINE_STAGES`)
 
 Select one or more stage checkboxes. Fixed run order (each Ansible step is its own Jenkins stage in the UI):
 
-`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `MONITORING` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `ECS_INSTALL` → `ECS_POST_INSTALL_TASKS` → `ECS_DATA_SERVICES` → `STARTSTOP_AUTOMATION` → `DESTROY_STACK`
+`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL` → `ECS_POST_INSTALL_TASKS` → `ECS_DATA_SERVICES` → `STARTSTOP_AUTOMATION` → `DESTROY_STACK`
 
-Selection is normalized case-insensitively, trims whitespace, accepts the legacy aliases listed by validation, and removes duplicates before execution. Stages run only when selected, except that `MONITORING` adds its required `PORTAL` foundation. Selecting `PORTAL` alone does not add monitoring, and selecting `ECS_INSTALL,ECS_DATA_SERVICES` runs exactly those two stages once without portal or monitoring.
+Selection is normalized case-insensitively, trims whitespace, accepts existing aliases (including `CDH_BASE`), and removes duplicates before execution. Selecting `ECS_INSTALL,ECS_DATA_SERVICES` runs exactly those two stages once without portal or monitoring. Jenkins **Restart from Stage** reconstructs the same canonical selection from the original build parameters.
 
-On Jenkins **Restart from Stage**, the skipped `Resolve Stages` checkpoint is reconstructed from the original build parameters before evaluating Ansible stages. The canonical selection is idempotent, so completed earlier stages remain skipped and the resumed selected stage is not expanded into unrelated portal or monitoring work.
-
-**Copy-paste (matches Jenkinsfile checkbox names):** `VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS` — also at the top of **Build with Parameters** → `PIPELINE_STAGES` description and `PIPELINE_STAGES_REFERENCE` default text. Append `ECS_DATA_SERVICES`, `STARTSTOP_AUTOMATION`, or `DESTROY_STACK` when needed.
+**Copy-paste (matches Jenkinsfile checkbox names):** `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS` — also at the top of **Build with Parameters** → `PIPELINE_STAGES` description and `PIPELINE_STAGES_REFERENCE` default text. Append `ECS_DATA_SERVICES`, `STARTSTOP_AUTOMATION`, or `DESTROY_STACK` when needed.
 
 | Checkbox | What runs |
 |---|---|
-| `VALIDATE` | `validate-prereqs.sh` — standard tool, AWS, tfvars, Ozone/Netty cluster-domain check for user-set `ipaserver_domain` / `cluster_domain` in tfvars or `ANSIBLE_GROUP_VARS_YAML` (`VALIDATE_CLUSTER_DOMAIN` / `CLUSTER_DOMAIN`), Ansible syntax, and inventory checks (no deploy) |
+| `VALIDATE` | `validate-prereqs.sh` — standard tool, AWS, tfvars, Ansible syntax, and inventory checks (no deploy) |
 | `TERRAFORM` | EC2/VPC/SG/EIP via Terraform; `inventory.ini` + `.pem` key |
 | `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 |
-| `PORTAL` | Bootstrap the shared Caddy/pgAdmin/index foundation (`10`); select MONITORING separately when required |
+| `PORTAL` | Bootstrap Caddy/pgAdmin/index (`10`); before CM when `DEPLOYMENT_PORTAL_ENABLED` |
 | `IDENTITY` | Ansible **phase 2** — FreeIPA or AD (`11_identity_setup.yml` → `12_setup_freeipa_server.yml` with DNS preflight + VPC forwarder); refreshes portal index (`35`). **Checkout `EXECUTION_BRANCH=main` at commit `e30c2de` or newer** — older trees used `dns_forwarders: no` → `--no-forwarders` on AWS and skipped dig preflight (IDENTITY failures: `[Errno 2]`, ~10 playbook tasks). |
 | `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
 | `CM_TLS_KRB_LDAP` | Auto-TLS, CMS, LDAP, Kerberos (27→28→29→30); portal refresh. **Checkout `EXECUTION_BRANCH=main` at commit `b03af5a` or newer** — older trees fail in `realign_cm_api_url_after_autotls_restart.yml` with task *CM API — derive API host from existing cm_api_url* (`NoneType` `.group` when `cm_api_url` has no hostname match). |
 | `CDH_INSTALL` | CDH base cluster (`31_setup_base_cluster.yml`); portal refresh |
-| `MONITORING` | `32_setup_monitoring_stack.yml` immediately after PORTAL (when `MONITORING_STACK_ENABLED`); owns Grafana, Prometheus, Alertmanager, cAdvisor, exporters, and monitoring routes |
+| `MONITORING` | `32_setup_monitoring_stack.yml` (when `MONITORING_STACK_ENABLED`; needs `PORTAL`) |
 | `ECS_INSTALL` | ECS cluster installation/reconciliation (`33_setup_ecs_cluster.yml`), including CoreDNS; succeeds only after the Management Console is healthy |
 | `ECS_POST_INSTALL_TASKS` | Recheck console health, create/reuse the automation machine-user key, assign IAM/LDAP permissions, and refresh the portal |
 | `ECS_DATA_SERVICES` | Data services only (`34_setup_ecs_data_services.yml`) against an existing healthy ECS cluster; does not rerun playbook 33 |
@@ -261,12 +213,12 @@ Full teardown steps are also in the **`PIPELINE_STAGES_REFERENCE`** text area on
 |---|---|
 | Validation only | `VALIDATE` |
 | Provision infrastructure only | `VALIDATE,TERRAFORM` |
-| Greenfield through Cloudera Manager | `VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL` |
-| Greenfield CDH base cluster | `VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL` |
-| Greenfield CDH plus monitoring | `VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL` |
-| Full stack through ECS | `VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS` |
-| Full stack through selected ECS Data Services | `VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES` |
-| Existing hosts through Cloudera Manager | `VALIDATE,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL` |
+| Greenfield through Cloudera Manager | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL` |
+| Greenfield CDH base cluster | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL` |
+| Greenfield CDH plus monitoring | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING` |
+| Full stack through ECS | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS` |
+| Full stack through selected ECS Data Services | `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS,ECS_DATA_SERVICES` |
+| Existing hosts through Cloudera Manager | `VALIDATE,PREREQS,PORTAL,IDENTITY,CM_INSTALL` |
 | Apply CM security to an existing CM | `VALIDATE,CM_TLS_KRB_LDAP` |
 | Install CDH on an existing secured CM | `VALIDATE,CDH_INSTALL` |
 | Install monitoring on existing CDH | `VALIDATE,PORTAL,MONITORING` |
@@ -327,7 +279,7 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `CM_REPO_USERNAME` | Optional archive.cloudera.com username (empty = skip; no early validation failure) |
 | `CM_REPO_PASSWORD` | Optional archive.cloudera.com password (empty = skip) |
 | `CM_LICENSE_CONTENT` | Optional multiline Cloudera license file content when no `*license*` file on the agent (empty = trial or agent file) |
-| `MONITORING_STACK_ENABLED` | When checked (default), permits the explicitly selected MONITORING stage to run playbook **32**. Selecting MONITORING adds its required PORTAL foundation; selecting PORTAL alone does not add monitoring. Overrides `monitoring_stack_enabled` in `ANSIBLE_GROUP_VARS_YAML` if both are set. |
+| `MONITORING_STACK_ENABLED` | When checked (default), sets Ansible `monitoring_stack_enabled: true` for playbook `28` (Grafana/Prometheus/Alertmanager/cAdvisor). Uncheck to skip. Overrides `monitoring_stack_enabled` in `ANSIBLE_GROUP_VARS_YAML` if both are set. |
 
 **Deployment portal (playbook 10) and CM verify (25)** use two URL verification tiers (detail: `ansible-playbooks/docs/OPERATIONS_GUIDE.md` § Service URL verification tiers):
 

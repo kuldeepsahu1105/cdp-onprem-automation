@@ -1,0 +1,84 @@
+---
+- name: Ensure PostgreSQL data directory exists
+  ansible.builtin.file:
+    path: "{{ postgres_data_dir }}"
+    state: directory
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+    # mode: "0700"
+
+- name: Generate private key and CSR
+  ansible.builtin.command:
+    cmd: >
+      openssl req -new -nodes -text
+      -out {{ postgres_data_dir }}/root.csr
+      -keyout {{ postgres_data_dir }}/root.key
+      -subj "{{ cert_subj }}"
+  args:
+    creates: "{{ postgres_data_dir }}/root.key"
+
+- name: Set permissions on root key
+  ansible.builtin.file:
+    path: "{{ postgres_data_dir }}/root.key"
+    mode: "0400"
+
+- name: Generate root CA certificate
+  ansible.builtin.command:
+    cmd: >
+      openssl x509 -req -in {{ postgres_data_dir }}/root.csr -text -days 3650
+      -extfile /etc/ssl/openssl.cnf -extensions v3_ca
+      -signkey {{ postgres_data_dir }}/root.key -out {{ postgres_data_dir }}/root.crt
+  args:
+    creates: "{{ postgres_data_dir }}/root.crt"
+
+- name: Generate server key and CSR
+  ansible.builtin.command:
+    cmd: >
+      openssl req -new -nodes -text
+      -out {{ postgres_data_dir }}/server.csr
+      -keyout {{ postgres_data_dir }}/server.key
+      -subj "/CN={{ postgres_host_fqdn }}"
+  args:
+    creates: "{{ postgres_data_dir }}/server.key"
+
+- name: Set permissions on server key
+  ansible.builtin.file:
+    path: "{{ postgres_data_dir }}/server.key"
+    mode: "0400"
+
+- name: Generate server certificate signed by CA
+  ansible.builtin.command:
+    cmd: >
+      openssl x509 -req -in {{ postgres_data_dir }}/server.csr -text -days 3650
+      -CA {{ postgres_data_dir }}/root.crt -CAkey {{ postgres_data_dir }}/root.key -CAcreateserial
+      -out {{ postgres_data_dir }}/server.crt
+  args:
+    creates: "{{ postgres_data_dir }}/server.crt"
+
+- name: Set correct ownership for certificates
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: "{{ postgres_user }}"
+    group: "{{ postgres_user }}"
+  loop:
+    - "{{ postgres_data_dir }}/server.crt"
+    - "{{ postgres_data_dir }}/server.key"
+    - "{{ postgres_data_dir }}/root.crt"
+
+- name: Set permissions on certificates
+  ansible.builtin.file:
+    path: "{{ item }}"
+    mode: "0644"
+  loop:
+    - "{{ postgres_data_dir }}/server.crt"
+    - "{{ postgres_data_dir }}/root.crt"
+
+- name: "Ensure PostgreSQL client certificate directory {{ pg_client_crt_dir }} exists on all nodes"
+  ansible.builtin.file:
+    path: "{{ pg_client_crt_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['all'] }}"

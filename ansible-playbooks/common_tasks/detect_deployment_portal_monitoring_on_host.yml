@@ -1,42 +1,5 @@
 ---
-# Detect Prometheus/Grafana on the portal ops host (play target = ops). Use before Caddy/index sync
-# when monitoring_stack_enabled is false but Grafana/compose already exist on the ops host.
-
-- name: Portal — check Grafana container on ops host (local Docker)
-  ansible.builtin.command:
-    argv:
-      - docker
-      - ps
-      - --filter
-      - "name={{ monitoring_grafana_container }}"
-      - --filter
-      - status=running
-      - -q
-  become: true
-  register: _portal_monitoring_grafana_probe_host
-  failed_when: false
-  changed_when: false
-
-- name: Portal — check monitoring compose file on ops host
-  ansible.builtin.stat:
-    path: "{{ monitoring_config_dir }}/docker-compose.yml"
-  become: true
-  register: _portal_monitoring_compose_stat_host
-
-- name: Portal — set monitoring deployed flag from ops host checks
-  ansible.builtin.set_fact:
-    deployment_portal_monitoring_deployed: >-
-      {{
-        (
-          (_portal_monitoring_grafana_probe_host.stdout | default('') | trim | length > 0)
-          or (_portal_monitoring_compose_stat_host.stat.exists | default(false) | bool)
-        ) | bool
-      }}
-
-- name: Set monitoring route flag on ops host (Caddy templates; not overridden by extra-vars)
-  ansible.builtin.set_fact:
-    deployment_portal_monitoring_routes_enabled: >-
-      {{
-        (monitoring_stack_enabled | default(false) | bool)
-        or (deployment_portal_monitoring_deployed | default(false) | bool)
-      }}
+- name: Compatibility entry point for deployment portal detect deployment portal monitoring on host
+  ansible.builtin.import_role:
+    name: deployment_portal
+    tasks_from: detect_deployment_portal_monitoring_on_host

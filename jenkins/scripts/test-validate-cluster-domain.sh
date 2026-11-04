@@ -6,6 +6,15 @@ PY="$REPO_ROOT/scripts/lib/validate_cluster_domain.py"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
+group_vars_default="$(awk -F': *' '$1 == "ipaserver_domain" {print $2; exit}' \
+  "$REPO_ROOT/ansible-playbooks/group_vars/all.yml")"
+config_default="$(awk -F': *' '$1 == "ipaserver_domain" {print $2; exit}' \
+  "$REPO_ROOT/ansible-playbooks/config.yml")"
+[[ "$group_vars_default" == "cldr.internal.arpa" ]] \
+  || fail "group_vars ipaserver_domain default must be cldr.internal.arpa"
+[[ "$config_default" == "cldr.internal.arpa" ]] \
+  || fail "config.yml ipaserver_domain default must be cldr.internal.arpa"
+
 "$PY" --domain cldr.internal.arpa --quiet-warnings
 "$PY" --domain cluster.home.arpa --quiet-warnings
 "$PY" --domain host.local.arpa --quiet-warnings

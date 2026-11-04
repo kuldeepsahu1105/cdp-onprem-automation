@@ -9,50 +9,12 @@
   gather_facts: false
   tasks:
     - name: Validate SSH reachability of all inventory hosts before this run's first connection
-      ansible.builtin.import_tasks: common_tasks/validate_ansible_ssh_reachability.yml
+      ansible.builtin.import_role:
+        name: prereq_ssh
+        tasks_from: validate_reachability
 
 - name: Ensure SSH allows password authentication and root login
   hosts: all:!ipaserver
   become: yes
-  tasks:
-    - name: Set OS-specific facts
-      ansible.builtin.import_tasks: common_tasks/set_os_facts.yml
-
-    - name: Enable PasswordAuthentication in SSH config
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: "^#*PasswordAuthentication"
-        line: "PasswordAuthentication yes"
-        state: present
-
-    - name: Enable PermitRootLogin in SSH config
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: "^#*PermitRootLogin"
-        line: "PermitRootLogin yes"
-        state: present
-
-    - name: Restart SSH service
-      ansible.builtin.service:
-        name: "{{ os.ssh_service }}"
-        state: restarted
-
-    - name: Ensure root has SSH authorized_keys for key-based login
-      when: ansible_user != 'root'
-      block:
-        - name: Create /root/.ssh directory
-          ansible.builtin.file:
-            path: /root/.ssh
-            state: directory
-            mode: "0700"
-            owner: root
-            group: root
-
-        - name: Copy bootstrap user authorized_keys to root
-          ansible.builtin.copy:
-            src: "/home/{{ ansible_user }}/.ssh/authorized_keys"
-            dest: /root/.ssh/authorized_keys
-            remote_src: true
-            mode: "0600"
-            owner: root
-            group: root
+  roles:
+    - role: prereq_ssh

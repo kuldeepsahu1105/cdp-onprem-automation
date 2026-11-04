@@ -1,0 +1,99 @@
+---
+# Install or remove zz-ipa-disable-browser-krb.conf on ipaserver (mod_auth_gssapi gssapi-no-negotiate).
+# Default ipa_httpd_disable_browser_krb_negotiate: true — password/form UI login only.
+
+- name: Resolve IPA HTTPD delegate paths on ipaserver for browser krb snippet
+  ansible.builtin.import_tasks: resolve_ipa_httpd_delegate_on_ipaserver.yml
+  when: groups.get('ipaserver', []) | length > 0
+
+- name: Apply FreeIPA HTTPD snippet to disable browser SPNEGO negotiate
+  when:
+    - ipa_httpd_disable_browser_krb_negotiate | default(true) | bool
+    - groups.get('ipaserver', []) | length > 0
+    - ipa_server_configured is defined
+    - ipa_server_configured.stat.exists | default(false) | bool
+    - ipa_httpd_conf_d_effective is defined
+    - ipa_httpd_conf_d_effective | length > 0
+  block:
+    - name: Render expected zz-ipa-disable-browser-krb.conf for checksum compare
+      ansible.builtin.set_fact:
+        ipa_httpd_disable_browser_krb_expected_content: "{{ lookup('template', 'ipa_httpd_disable_browser_krb.conf.j2') }}"
+
+    - name: Slurp installed zz-ipa-disable-browser-krb.conf on ipaserver
+      ansible.builtin.slurp:
+        path: "{{ ipa_httpd_conf_d_effective }}/zz-ipa-disable-browser-krb.conf"
+      register: ipa_httpd_disable_browser_krb_slurp
+      delegate_to: "{{ ipa_httpd_delegate_host }}"
+      become: true
+      failed_when: false
+
+    - name: Set whether on-disk browser krb snippet differs from Ansible template
+      ansible.builtin.set_fact:
+        ipa_httpd_disable_browser_krb_content_differs: >-
+          {{
+            (
+              (
+                (ipa_httpd_disable_browser_krb_slurp.content | b64decode)
+                if (
+                  ipa_httpd_disable_browser_krb_slurp is defined
+                  and ipa_httpd_disable_browser_krb_slurp.content is defined
+                )
+                else ''
+              )
+              != ipa_httpd_disable_browser_krb_expected_content
+            )
+          }}
+
+    - name: Install zz-ipa-disable-browser-krb.conf on ipaserver
+      ansible.builtin.template:
+        src: ipa_httpd_disable_browser_krb.conf.j2
+        dest: "{{ ipa_httpd_conf_d_effective }}/zz-ipa-disable-browser-krb.conf"
+        mode: "0644"
+        force: "{{ ipa_httpd_disable_browser_krb_content_differs | default(true) | bool }}"
+      register: ipa_httpd_disable_browser_krb_conf
+      delegate_to: "{{ ipa_httpd_delegate_host }}"
+      become: true
+
+    - name: Track IPA HTTPD browser krb snippet change
+      ansible.builtin.set_fact:
+        ipa_httpd_browser_krb_config_changed: >-
+          {{
+            (ipa_httpd_disable_browser_krb_conf.changed | default(false))
+            or (ipa_httpd_disable_browser_krb_content_differs | default(false) | bool)
+          }}
+
+- name: Remove FreeIPA HTTPD browser krb snippet when disabled
+  when:
+    - not (ipa_httpd_disable_browser_krb_negotiate | default(true) | bool)
+    - groups.get('ipaserver', []) | length > 0
+    - ipa_httpd_conf_d_effective is defined
+    - ipa_httpd_conf_d_effective | length > 0
+  block:
+    - name: Stat zz-ipa-disable-browser-krb.conf on ipaserver
+      ansible.builtin.stat:
+        path: "{{ ipa_httpd_conf_d_effective }}/zz-ipa-disable-browser-krb.conf"
+      register: ipa_httpd_disable_browser_krb_stat
+      delegate_to: "{{ ipa_httpd_delegate_host }}"
+      become: true
+
+    - name: Remove zz-ipa-disable-browser-krb.conf from ipaserver
+      ansible.builtin.file:
+        path: "{{ ipa_httpd_conf_d_effective }}/zz-ipa-disable-browser-krb.conf"
+        state: absent
+      register: ipa_httpd_disable_browser_krb_removed
+      delegate_to: "{{ ipa_httpd_delegate_host }}"
+      become: true
+      when: ipa_httpd_disable_browser_krb_stat.stat.exists | default(false) | bool
+
+    - name: Track IPA HTTPD browser krb snippet removal
+      ansible.builtin.set_fact:
+        ipa_httpd_browser_krb_config_changed: "{{ ipa_httpd_disable_browser_krb_removed.changed | default(false) }}"
+
+- name: Reload httpd after browser krb snippet change on ipaserver
+  ansible.builtin.set_fact:
+    ipa_httpd_config_changed: true
+  when: ipa_httpd_browser_krb_config_changed | default(false) | bool
+
+- name: Reload httpd on ipaserver when browser krb snippet changed
+  ansible.builtin.import_tasks: reload_ipa_httpd_on_ipaserver_after_change.yml
+  when: ipa_httpd_browser_krb_config_changed | default(false) | bool

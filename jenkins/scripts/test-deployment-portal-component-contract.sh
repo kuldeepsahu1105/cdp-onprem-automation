@@ -8,24 +8,27 @@ from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
-index = (root / "ansible-playbooks/templates/deployment_portal_index.html.j2").read_text()
-endpoints = (root / "ansible-playbooks/templates/deployment_portal_endpoints.j2").read_text()
+portal_templates = root / "ansible-playbooks/roles/deployment_portal/templates"
+index = (portal_templates / "deployment_portal_index.html.j2").read_text()
+endpoints = (portal_templates / "deployment_portal_endpoints.j2").read_text()
 base_urls = (
-    root
-    / "ansible-playbooks/templates/deployment_portal_base_cluster_portal_urls.j2"
+    portal_templates
+    / "deployment_portal_base_cluster_portal_urls.j2"
 ).read_text()
 sanitized_links = (
-    root
-    / "ansible-playbooks/templates/deployment_portal_sanitized_data_service_links.j2"
+    portal_templates
+    / "deployment_portal_sanitized_data_service_links.j2"
 ).read_text()
 facts = (
-    root / "ansible-playbooks/common_tasks/build_deployment_portal_facts.yml"
+    root
+    / "ansible-playbooks/roles/deployment_portal/tasks/build_deployment_portal_facts.yml"
 ).read_text()
 model_registry = (
-    root / "ansible-playbooks/common_tasks/ecs_data_service_model_registry.yml"
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_model_registry.yml"
 ).read_text()
 blackbox = (
-    root / "ansible-playbooks/templates/monitoring_blackbox_probe_targets.j2"
+    root
+    / "ansible-playbooks/roles/deployment_portal/templates/monitoring_blackbox_probe_targets.j2"
 ).read_text()
 
 for component in (

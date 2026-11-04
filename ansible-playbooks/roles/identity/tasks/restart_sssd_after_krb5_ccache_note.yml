@@ -1,0 +1,14 @@
+---
+# Enrolled FreeIPA clients — comment-only krb5.conf.d drop-in; restart SSSD when it is already running.
+
+- name: Kerberos — probe whether SSSD is active before restart
+  ansible.builtin.command: systemctl is-active sssd
+  register: krb5_ccache_sssd_active_probe
+  changed_when: false
+  failed_when: false
+
+- name: Kerberos — restart SSSD after krb5.conf.d ansible-ccache-note change
+  ansible.builtin.systemd:
+    name: sssd
+    state: restarted
+  when: krb5_ccache_sssd_active_probe.rc | default(1) | int == 0

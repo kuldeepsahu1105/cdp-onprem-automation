@@ -1,0 +1,9 @@
+---
+- name: Re-render exporter scrape targets from inventory (host cAdvisor flags)
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/refresh_monitoring_scrape_target_facts.yml"
+  vars:
+    monitoring_scrape_targets_bump_config: true
+
+- name: Mark exporter enrollment completed for this Ansible run
+  ansible.builtin.set_fact:
+    monitoring_exporters_enrolled_this_run: true

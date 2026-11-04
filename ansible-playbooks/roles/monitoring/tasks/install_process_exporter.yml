@@ -1,0 +1,148 @@
+---
+# Install process_exporter as a systemd service on cluster hosts for per-process CPU/memory metrics
+# ("process advisor" style host process metrics) — imported from 32_setup_monitoring_stack.yml,
+# gated by monitoring_process_exporter_enabled. Idempotent: skips the download when the pinned
+# version is already installed; the systemd unit and config are templated and the service is only
+# restarted when the binary, config, or unit file actually changed. Firewall port is opened only
+# when firewalld is active (same pattern as install_node_exporter.yml).
+
+- name: Set process_exporter release architecture suffix
+  ansible.builtin.set_fact:
+    _process_exporter_arch: >-
+      {{
+        'arm64'
+        if ansible_architecture | default('x86_64') in ['aarch64', 'arm64']
+        else 'amd64'
+      }}
+
+- name: Set process_exporter release and binary path facts
+  ansible.builtin.set_fact:
+    _process_exporter_release_name: "process-exporter-{{ monitoring_process_exporter_version }}.linux-{{ _process_exporter_arch }}"
+    _process_exporter_bin_path: "{{ monitoring_process_exporter_bin_dir }}/process-exporter"
+
+- name: Check installed process_exporter version
+  ansible.builtin.command:
+    argv: ["{{ _process_exporter_bin_path }}", "--version"]
+  register: _process_exporter_installed_version
+  changed_when: false
+  failed_when: false
+
+- name: Create process_exporter system group
+  ansible.builtin.group:
+    name: "{{ monitoring_process_exporter_group }}"
+    system: true
+    state: present
+
+- name: Create process_exporter system user
+  ansible.builtin.user:
+    name: "{{ monitoring_process_exporter_user }}"
+    group: "{{ monitoring_process_exporter_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    state: present
+
+- name: Download and install pinned process_exporter binary
+  when: >-
+    _process_exporter_installed_version.rc != 0
+    or (
+      monitoring_process_exporter_version
+      not in ((_process_exporter_installed_version.stdout | default('')) ~ (_process_exporter_installed_version.stderr | default('')))
+    )
+  block:
+    - name: Create temporary download directory for process_exporter
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: process_exporter
+      register: _process_exporter_tmp_dir
+
+    - name: Download process_exporter release archive
+      ansible.builtin.get_url:
+        url: >-
+          {{ monitoring_process_exporter_download_base_url }}/v{{ monitoring_process_exporter_version }}/{{ _process_exporter_release_name }}.tar.gz
+        dest: "{{ _process_exporter_tmp_dir.path }}/{{ _process_exporter_release_name }}.tar.gz"
+        mode: "0644"
+
+    - name: Extract process_exporter release archive
+      ansible.builtin.unarchive:
+        src: "{{ _process_exporter_tmp_dir.path }}/{{ _process_exporter_release_name }}.tar.gz"
+        dest: "{{ _process_exporter_tmp_dir.path }}"
+        remote_src: true
+
+    - name: Install process_exporter binary
+      ansible.builtin.copy:
+        src: "{{ _process_exporter_tmp_dir.path }}/{{ _process_exporter_release_name }}/process-exporter"
+        dest: "{{ _process_exporter_bin_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+        remote_src: true
+      register: _process_exporter_binary_install
+
+    - name: Clean up process_exporter temporary download directory
+      ansible.builtin.file:
+        path: "{{ _process_exporter_tmp_dir.path }}"
+        state: absent
+
+- name: Ensure process_exporter config directory exists
+  ansible.builtin.file:
+    path: "{{ monitoring_process_exporter_config_dir }}"
+    state: directory
+    owner: root
+    group: "{{ monitoring_process_exporter_group }}"
+    mode: "0750"
+
+- name: Render process_exporter config (process_names matchers)
+  ansible.builtin.template:
+    src: process_exporter_config.yml.j2
+    dest: "{{ monitoring_process_exporter_config_dir }}/config.yml"
+    owner: root
+    group: "{{ monitoring_process_exporter_group }}"
+    mode: "0640"
+  register: _process_exporter_config_render
+
+- name: Render process_exporter systemd unit
+  ansible.builtin.template:
+    src: process_exporter.service.j2
+    dest: /etc/systemd/system/process_exporter.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: _process_exporter_unit_render
+
+- name: Reload systemd daemon when process_exporter unit changed
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: _process_exporter_unit_render is changed
+
+- name: Enable and start process_exporter service
+  ansible.builtin.systemd:
+    name: process_exporter
+    state: started
+    enabled: true
+
+- name: Restart process_exporter when binary, config, or unit changed
+  ansible.builtin.systemd:
+    name: process_exporter
+    state: restarted
+  when: >-
+    (_process_exporter_binary_install is defined and _process_exporter_binary_install is changed)
+    or _process_exporter_config_render is changed
+    or _process_exporter_unit_render is changed
+
+- name: Check firewalld service state on cluster host
+  ansible.builtin.systemd:
+    name: firewalld
+  register: _process_exporter_firewalld_svc
+  failed_when: false
+  changed_when: false
+
+- name: Allow process_exporter port in firewalld
+  ansible.posix.firewalld:
+    port: "{{ monitoring_process_exporter_port }}/tcp"
+    permanent: true
+    state: enabled
+    immediate: true
+  when:
+    - _process_exporter_firewalld_svc is succeeded
+    - (_process_exporter_firewalld_svc.status.ActiveState | default('inactive')) == 'active'

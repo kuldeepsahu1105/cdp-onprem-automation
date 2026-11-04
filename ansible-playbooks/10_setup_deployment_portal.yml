@@ -10,41 +10,10 @@
   connection: local
   gather_facts: true
   tasks:
-    - name: Resolve deployment portal Caddy gate (portal + caddy_vhost flags)
-      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_caddy_enabled.yml
-
-    - name: Resolve deployment portal install host group (play hosts line when Caddy skipped)
-      ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_host.yml
-
-    - name: Register deployment portal runtime host
-      ansible.builtin.add_host:
-        name: "{{ groups[deployment_portal_host_group_effective][0] }}"
-        groups: deployment_portal_runtime
-      changed_when: false
-
-    - name: Validate SSH reachability of portal target host before connecting
-      ansible.builtin.import_tasks: common_tasks/validate_ansible_ssh_reachability.yml
-      vars:
-        ansible_ssh_reachability_check_group: "{{ deployment_portal_host_group_effective }}"
-
-    - name: "SKIPPED PORTAL — Caddy stack disabled (see Report deployment portal Caddy gate above)"
-      ansible.builtin.debug:
-        msg: >-
-          SKIPPED PORTAL: deployment_portal_caddy_effective=false
-          (deployment_portal_enabled={{ deployment_portal_enabled | default(true) | bool }},
-          caddy_vhost_enabled={{ caddy_vhost_enabled | default(true) | bool }}).
-          No portal install or Tier B verify will run in this playbook.
-      when: not (deployment_portal_caddy_effective | default(false) | bool)
-
-    - name: "SKIPPED PORTAL — end localhost play (Caddy stack disabled)"
-      ansible.builtin.meta: end_play
-      when: not (deployment_portal_caddy_effective | default(false) | bool)
-
-    - name: Build deployment portal context from inventory
-      ansible.builtin.import_tasks: common_tasks/build_deployment_portal_facts.yml
-
-    - name: Resolve monitoring exporter enrollment gate
-      ansible.builtin.import_tasks: common_tasks/resolve_monitoring_exporter_enroll_enabled.yml
+    - name: Build deployment portal facts
+      ansible.builtin.import_role:
+        name: deployment_portal
+        tasks_from: setup_controller
 
 - import_playbook: enroll_monitoring_exporters.yml
   when: hostvars['localhost'].monitoring_exporter_enrollment_enabled | default(false) | bool
@@ -58,42 +27,10 @@
       - portal
       - ipa
   tasks:
-    - name: "SKIPPED PORTAL — end ops host (Caddy stack disabled on controller)"
-      ansible.builtin.meta: end_host
-      when: not (hostvars['localhost'].deployment_portal_caddy_effective | default(false) | bool)
-
     - name: Install deployment portal stack
-      when: deployment_portal_enabled | default(true) | bool
-      block:
-        - name: Load deployment portal context from localhost
-          ansible.builtin.import_tasks: common_tasks/deployment_portal_load_host_facts.yml
-
-        - name: Install container runtime for portal stacks
-          ansible.builtin.import_tasks: common_tasks/install_portal_container_runtime.yml
-
-        - name: Install or update portal and monitoring stacks
-          ansible.builtin.import_tasks: common_tasks/sync_deployment_portal_content.yml
-
-        - name: Stat portal compose after mandated install
-          ansible.builtin.stat:
-            path: "{{ deployment_portal_config_dir }}/docker-compose.yml"
-          register: portal_compose_post_install
-          when: deployment_portal_install_required | default(false) | bool
-
-        - name: Fail when mandated PORTAL install did not lay down compose on ops host
-          ansible.builtin.fail:
-            msg: >-
-              deployment_portal_install_required=true but {{ deployment_portal_config_dir }}/docker-compose.yml
-              is missing on {{ inventory_hostname }} after sync (install may have been skipped).
-          when:
-            - deployment_portal_install_required | default(false) | bool
-            - not (portal_compose_post_install.stat.exists | default(false) | bool)
-
-        - name: Print deployment portal URLs
-          ansible.builtin.import_tasks: common_tasks/print_deployment_portal_urls.yml
-
-        - name: Print full access URL report (pipeline log / email)
-          ansible.builtin.import_tasks: common_tasks/print_deployment_access_urls.yml
+      ansible.builtin.import_role:
+        name: deployment_portal
+        tasks_from: install
 
 - name: Verify external deployment portal URLs from Ansible controller (Tier B)
   hosts: localhost
@@ -104,10 +41,9 @@
       - portal
       - ipa
   tasks:
-    - name: "SKIPPED PORTAL Tier B — Caddy stack disabled"
-      ansible.builtin.meta: end_play
-      when: not (deployment_portal_caddy_effective | default(false) | bool)
-
-    - name: External URL verify from Ansible controller (opt-in)
-      ansible.builtin.import_tasks: common_tasks/verify_deployment_portal_external_from_controller.yml
-      when: deployment_portal_verify_tier_b_enabled | default(false) | bool
+    - name: Verify external deployment portal URLs from Ansible controller
+      ansible.builtin.import_role:
+        name: deployment_portal
+        tasks_from: verify_external
+      vars:
+        deployment_portal_tier_b_skip_task_name: "SKIPPED PORTAL Tier B — Caddy stack disabled"

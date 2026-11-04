@@ -1,0 +1,116 @@
+---
+# Idempotent CM agent service: systemctl restart only when config.ini changed or one-shot Auto-TLS;
+# start (not restart) when agent was inactive but config unchanged.
+
+- name: CM agent — check systemd state before restart
+  ansible.builtin.command: systemctl is-active cloudera-scm-agent
+  register: cm_agent_pre_active
+  changed_when: false
+  failed_when: false
+
+- name: CM agent — derive whether agent config tasks changed ini
+  ansible.builtin.set_fact:
+    cm_agent_config_changed: >-
+      {{
+        (
+          not (cm_agent_config_server_host.skipped | default(false))
+          and (cm_agent_config_server_host.changed | default(false))
+        )
+        or (
+          not (cm_agent_config_reported_hostname.skipped | default(false))
+          and (cm_agent_config_reported_hostname.changed | default(false))
+        )
+        or (
+          not (cm_agent_config_use_tls_enable.skipped | default(false))
+          and (cm_agent_config_use_tls_enable.changed | default(false))
+        )
+        or (
+          not (cm_agent_config_use_tls_disable.skipped | default(false))
+          and (cm_agent_config_use_tls_disable.changed | default(false))
+        )
+      }}
+  changed_when: false
+
+- name: CM agent — derive whether Auto-TLS still requires one cluster agent restart this run
+  ansible.builtin.set_fact:
+    cm_agent_autotls_restart_pending: >-
+      {{
+        (
+          hostvars['localhost'].cm_restart_after_autotls_this_run
+          | default(false)
+          | bool
+        )
+        or (
+          hostvars['localhost'].autotls_applied_this_run
+          | default(false)
+          | bool
+        )
+      }}
+      and not (
+        hostvars['localhost'].cm_agents_restarted_after_autotls_this_run
+        | default(false)
+        | bool
+      )
+  changed_when: false
+
+- name: CM agent — derive whether config or Auto-TLS requires systemctl restart (not merely start)
+  ansible.builtin.set_fact:
+    cm_agent_systemd_restart: >-
+      {{
+        (cm_agent_config_changed | default(false) | bool)
+        or (cm_agent_autotls_restart_pending | default(false) | bool)
+      }}
+  changed_when: false
+
+- name: CM agent — decide if agent service action is required
+  ansible.builtin.set_fact:
+    cm_agent_restart_needed: >-
+      {{
+        (cm_agent_pre_active.rc | int != 0)
+        or (cm_agent_config_changed | default(false) | bool)
+        or (cm_agent_autotls_restart_pending | default(false) | bool)
+      }}
+  changed_when: false
+
+- name: CM agent — restart / start decision (summary)
+  ansible.builtin.debug:
+    msg: >-
+      CM agent service gate: batch size {{ ansible_play_batch | length }}.
+      Sample host {{ inventory_hostname }}:
+      active={{ (cm_agent_pre_active.rc | int == 0) }},
+      config_changed={{ cm_agent_config_changed | default(false) | bool }},
+      autotls_one_shot_pending={{ cm_agent_autotls_restart_pending | default(false) | bool }},
+      action={{ 'none' if not (cm_agent_restart_needed | default(false) | bool) else ('restart' if (cm_agent_systemd_restart | default(false) | bool) else 'start') }}.
+      Per-host: no systemctl when already active and config unchanged (and no pending Auto-TLS restart).
+  run_once: true
+  changed_when: false
+
+- name: Restart Cloudera Manager agent after config reconcile
+  ansible.builtin.systemd:
+    name: cloudera-scm-agent
+    enabled: true
+    state: restarted
+  register: cm_agent_restart
+  when:
+    - cm_agent_restart_needed | default(false) | bool
+    - cm_agent_systemd_restart | default(false) | bool
+
+- name: Start Cloudera Manager agent when inactive and config unchanged
+  ansible.builtin.systemd:
+    name: cloudera-scm-agent
+    enabled: true
+    state: started
+  register: cm_agent_restart
+  when:
+    - cm_agent_restart_needed | default(false) | bool
+    - not (cm_agent_systemd_restart | default(false) | bool)
+
+- name: Require Cloudera Manager agent active after service action
+  ansible.builtin.command: systemctl is-active cloudera-scm-agent
+  register: cm_agent_active_check
+  changed_when: false
+  failed_when: cm_agent_active_check.rc | int != 0
+  retries: "{{ cm_agent_active_wait_retries | default(12) }}"
+  delay: "{{ cm_agent_active_wait_delay | default(5) }}"
+  until: cm_agent_active_check.rc | int == 0
+  when: cm_agent_restart_needed | default(false) | bool

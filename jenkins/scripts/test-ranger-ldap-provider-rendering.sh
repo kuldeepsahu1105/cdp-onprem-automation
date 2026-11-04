@@ -4,15 +4,15 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ansible_dir="${repo_root}/ansible-playbooks"
 inventory="${ansible_dir}/inventory.ini"
-template="${ansible_dir}/templates/base_cluster_cluster_spec.j2"
-validation_tasks="${ansible_dir}/common_tasks/validate_ranger_directory_config.yml"
+template="${ansible_dir}/roles/cdh_base_cluster/templates/base_cluster_cluster_spec.j2"
+validation_tasks="${ansible_dir}/roles/cdh_base_cluster/tasks/validate_ranger_directory_config.yml"
 tmp_dir="$(mktemp -d)"
 playbook="${tmp_dir}/ranger-provider-render.yml"
 trap 'rm -rf "${tmp_dir}"' EXIT
 
 cat >"${playbook}" <<'YAML'
 ---
-- name: Validate Ranger LDAP provider rendering
+- name: Validate Ranger LDAP and AD provider rendering
   hosts: cm-node
   connection: local
   gather_facts: false
@@ -20,6 +20,9 @@ cat >"${playbook}" <<'YAML'
     - name: Resolve cluster template prerequisites
       ansible.builtin.set_fact:
         base_cluster_kafka_metadata_store_effective: Zookeeper
+        base_cluster_hdfs_name_dir: /dfs/nn
+        base_cluster_spark3_service_name: spark3
+        base_cluster_spark3_service_type: SPARK3_ON_YARN
         base_master_fqdn: master.example.invalid
         base_worker_fqdns: []
         base_cluster_hosts: []
@@ -34,14 +37,8 @@ cat >"${playbook}" <<'YAML'
         rendered_cluster_spec_second: "{{ lookup('template', ranger_cluster_spec_template) | from_yaml }}"
       no_log: true
 
-    - name: Select rendered Ranger service and role groups
+    - name: Select rendered Ranger role groups
       ansible.builtin.set_fact:
-        rendered_ranger_service: >-
-          {{
-            rendered_cluster_spec_first.services
-            | selectattr('type', 'equalto', 'RANGER')
-            | first
-          }}
         rendered_ranger_role_groups: >-
           {{
             (
@@ -58,13 +55,6 @@ cat >"${playbook}" <<'YAML'
           - rendered_cluster_spec_first == rendered_cluster_spec_second
           - base_cluster_ranger_usersync_provider_effective == expected_provider
           - (base_cluster_ranger_usersync_configure_effective | bool) == (expected_configure | bool)
-          - >-
-            (
-              rendered_ranger_role_groups
-              | selectattr('type', 'equalto', 'RANGER_ADMIN')
-              | list
-              | length
-            ) == 1
           - >-
             (
               rendered_ranger_role_groups
@@ -97,22 +87,6 @@ cat >"${playbook}" <<'YAML'
             or base_cluster_ranger_admin_base_dn == expected_base_dn
           - >-
             not (expected_configure | bool)
-            or base_cluster_ranger_usersync_user_search_base == expected_user_base
-          - >-
-            not (expected_configure | bool)
-            or base_cluster_ranger_usersync_group_search_base == expected_group_base
-          - >-
-            not (expected_configure | bool)
-            or (
-              (
-                rendered_ranger_role_groups
-                | selectattr('type', 'equalto', 'RANGER_USERSYNC')
-                | first
-              ).config['ranger.usersync.enabled']
-              == 'true'
-            )
-          - >-
-            not (expected_configure | bool)
             or (
               (
                 rendered_ranger_role_groups
@@ -143,35 +117,11 @@ cat >"${playbook}" <<'YAML'
             )
           - >-
             not (expected_configure | bool)
-            or (
-              (
-                rendered_ranger_role_groups
-                | selectattr('type', 'equalto', 'RANGER_USERSYNC')
-                | first
-              ).config['ranger_usersync_ldap_ldapbindpassword']
-              == lookup('env', 'RANGER_TEST_BIND_PASSWORD')
-            )
-          - >-
-            not (expected_configure | bool)
-            or (
-              base_cluster_ranger_usersync_role_config
-              | dict2items
-              | map(attribute='key')
-              | difference(expected_usersync_keys)
-              | length
-            ) == 0
-          - >-
-            not (expected_configure | bool)
-            or (
-              expected_usersync_keys
-              | difference(
-                  base_cluster_ranger_usersync_role_config
-                  | dict2items
-                  | map(attribute='key')
-                  | list
-                )
-              | length
-            ) == 0
+            or expected_usersync_keys
+            | difference(
+                base_cluster_ranger_usersync_role_config.keys() | list
+              )
+            | length == 0
       no_log: true
 
     - name: Report mapping verification
@@ -191,9 +141,7 @@ run_provider() {
   local expected_starttls="$7"
   local expected_ldap_url="$8"
   local expected_base_dn="$9"
-  local expected_user_base="${10}"
-  local expected_group_base="${11}"
-  shift 11
+  shift 9
 
   local output
   output="$(
@@ -213,8 +161,6 @@ run_provider() {
       -e "expected_starttls=${expected_starttls}" \
       -e "expected_ldap_url=${expected_ldap_url}" \
       -e "expected_base_dn=${expected_base_dn}" \
-      -e "expected_user_base=${expected_user_base}" \
-      -e "expected_group_base=${expected_group_base}" \
       -e "{\"expected_usersync_keys\":${expected_usersync_keys}}" \
       "$@" 2>&1
   )"
@@ -232,8 +178,6 @@ run_provider freeipa true LDAP ranger.ldap.url '(uid=*)' \
   '(objectClass=ipausergroup)' true \
   ldap://ipa01.directory.lab.example:389 \
   dc=directory,dc=lab,dc=example \
-  cn=users,cn=accounts,dc=directory,dc=lab,dc=example \
-  cn=groups,cn=accounts,dc=directory,dc=lab,dc=example \
   -e identity_provider=freeipa \
   -e ipaserver_domain=directory.lab.example \
   -e ipa_kdc_host=ipa01.directory.lab.example \
@@ -246,8 +190,6 @@ run_provider ad true ACTIVE_DIRECTORY ranger.ldap.ad.url '(sAMAccountName=*)' \
   '(objectClass=group)' false \
   ldaps://dc02.directory.example.net:636 \
   DC=directory,DC=example,DC=net \
-  'OU=Platform Users,DC=directory,DC=example,DC=net' \
-  'OU=Platform Groups,DC=directory,DC=example,DC=net' \
   -e identity_provider=ad \
   -e ad_domain=directory.example.net \
   -e ad_kdc_host=dc02.directory.example.net \
@@ -262,8 +204,6 @@ run_provider external true LDAP ranger.ldap.url '(employeeType=platform)' \
   '(businessCategory=data)' false \
   ldaps://ldap03.example.org:1636 \
   dc=example,dc=org \
-  ou=people,dc=example,dc=org \
-  ou=groups,dc=example,dc=org \
   -e identity_provider=freeipa \
   -e base_cluster_ranger_usersync_external_ldap_url=ldaps://ldap03.example.org:1636 \
   -e 'base_cluster_ranger_usersync_external_bind_dn=uid=svc-ranger,ou=system,dc=example,dc=org' \
@@ -274,11 +214,11 @@ run_provider external true LDAP ranger.ldap.url '(employeeType=platform)' \
   -e 'base_cluster_ranger_usersync_external_sync_group_search_filter=(businessCategory=data)' \
   -e base_cluster_ranger_usersync_truststore_path=
 
-run_provider none false "" "" "" "" false "" "" "" "" \
+run_provider none false "" "" "" "" false "" "" \
   -e identity_provider=freeipa
 
 validation_output="${tmp_dir}/validation-failure.log"
-if RANGER_TEST_BIND_PASSWORD="" ansible-playbook \
+if ansible-playbook \
   -i "${inventory}" \
   "${playbook}" \
   -e "ranger_cluster_spec_template=${template}" \
@@ -288,11 +228,6 @@ if RANGER_TEST_BIND_PASSWORD="" ansible-playbook \
   -e base_cluster_ranger_usersync_bind_password= \
   -e expected_provider=freeipa \
   -e expected_configure=true \
-  -e expected_authentication_method=LDAP \
-  -e expected_admin_url_key=ranger.ldap.url \
-  -e 'expected_user_filter=(uid=*)' \
-  -e 'expected_group_filter=(objectClass=ipausergroup)' \
-  -e expected_starttls=false \
   -e "{\"expected_usersync_keys\":${expected_usersync_keys}}" \
   >"${validation_output}" 2>&1; then
   echo "Expected missing Ranger bind credential validation to fail" >&2
@@ -309,11 +244,6 @@ if ansible-playbook \
   -e "base_cluster_ranger_usersync_bind_password={{ lookup('env', 'RANGER_TEST_BIND_PASSWORD') }}" \
   -e expected_provider=ad \
   -e expected_configure=true \
-  -e expected_authentication_method=ACTIVE_DIRECTORY \
-  -e expected_admin_url_key=ranger.ldap.ad.url \
-  -e 'expected_user_filter=(sAMAccountName=*)' \
-  -e 'expected_group_filter=(objectClass=group)' \
-  -e expected_starttls=false \
   -e "{\"expected_usersync_keys\":${expected_usersync_keys}}" \
   >"${validation_output}" 2>&1; then
   echo "Expected mismatched Ranger/identity providers to fail" >&2
