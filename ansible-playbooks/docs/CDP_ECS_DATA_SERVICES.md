@@ -133,6 +133,12 @@ reruns do not restart CoreDNS. Playbook 34 reconciles and verifies the same DNS
 contract again immediately before Data Services provisioning because a later
 standalone rerun must not assume playbook 33 completed that boundary
 successfully.
+For the same standalone guarantee, playbook 34 idempotently creates or verifies
+the Base cluster `SDX` Data Context before DNS checks and service submission.
+The context must expose HDFS, HIVE, ATLAS, and RANGER. This repeats the
+playbook 31 completion gate without restarting or reconfiguring healthy Base
+services, and prevents CDE from reaching chart installation without its remote
+data context.
 Even successful fresh-pod, CoreDNS Service, and ready-endpoint checks do not
 prove that the long-lived Service Discovery JVM has refreshed its resolver
 state. A stale `cdp-release-thunderhead-servicediscoverysimple` process can

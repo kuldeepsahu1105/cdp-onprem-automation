@@ -769,6 +769,9 @@ Existing complete contexts are read without mutation; existing incomplete
 contexts fail explicitly. Set `base_cluster_data_context_enabled: false` only
 when the base cluster will never back ECS Data Services or another compute
 workload.
+Playbook **34** repeats the same idempotent create/verify gate before Data
+Services provisioning, so a standalone rerun or an incomplete phase 4 cannot
+submit CDE/CDW without the required `SDX` context.
 
 First Run failures are expanded from the parent CM command into failed service
 commands and their child validation messages in Jenkins. First Run is submitted

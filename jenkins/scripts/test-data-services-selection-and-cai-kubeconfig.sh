@@ -66,6 +66,7 @@ for service in ("cdw", "cde", "cai"):
     assert marker in playbook_text
 
 assert "common_tasks/ecs_data_service_cdw_preflight.yml" in playbook_text
+assert "common_tasks/ecs_ensure_base_data_context.yml" in playbook_text
 assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_cdw_preflight.yml" in playbook_text
 assert "common_tasks/ecs_data_service_cdw_force_reset.yml" in playbook_text
 assert playbook_text.index(
@@ -83,12 +84,22 @@ assert "ansible.builtin.include_tasks: common_tasks/ecs_data_service_model_regis
 assert "common_tasks/ecs_reconcile_coredns.yml" in playbook_text
 assert "common_tasks/ecs_data_services_verify_dns.yml" in playbook_text
 assert playbook_text.index(
+    "Ensure Base SDX Data Context before Data Services provisioning"
+) < playbook_text.index(
     "Reconcile CoreDNS before Data Services provisioning"
 ) < playbook_text.index(
     "Verify Data Services DNS through Kubernetes pods"
 ) < playbook_text.index(
     "Load existing ECS automation API credentials"
 )
+
+sdx_gate = (
+    root / "ansible-playbooks/common_tasks/ecs_ensure_base_data_context.yml"
+).read_text()
+assert "Data Services SDX | Read CM API version" in sdx_gate
+assert "Data Services SDX | Ensure base cluster Data Context" in sdx_gate
+assert "ansible.builtin.include_tasks: ensure_base_cluster_data_context.yml" in sdx_gate
+assert "cm_cluster_module_delegate_to: \"{{ cm_manager_inventory_host }}\"" in sdx_gate
 assert "when: \"'model_registry' in (ecs_data_services_install_names | default([]))\"" in playbook_text
 selection_text = (
     root / "ansible-playbooks/common_tasks/resolve_ecs_data_services_install.yml"
