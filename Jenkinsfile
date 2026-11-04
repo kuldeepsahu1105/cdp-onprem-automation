@@ -1070,11 +1070,7 @@ def runAnsibleDeployPhase(String phase) {
   ]
   def phaseLabel = phaseLabels[phase] ?: phase
   def phaseStatus = 'FAILED'
-  sh """
-    printf '\\n%s\\n' '################################################################################'
-    printf '### JENKINS ANSIBLE PHASE START: %s (DEPLOY_PHASE=%s)\\n' '${phaseLabel}' '${phase}'
-    printf '%s\\n\\n' '################################################################################'
-  """
+  echo "\n\n================ ANSIBLE PHASE START: ${phaseLabel} (${phase}) ================\n"
   try {
   writeAnsibleGroupVarsFragmentFile()
   def licenseFile = writeCmLicenseContentFile()
@@ -1160,11 +1156,7 @@ def runAnsibleDeployPhase(String phase) {
     }
     phaseStatus = 'SUCCESS'
   } finally {
-    sh """
-      printf '\\n%s\\n' '################################################################################'
-      printf '### JENKINS ANSIBLE PHASE END: %s (DEPLOY_PHASE=%s) — %s\\n' '${phaseLabel}' '${phase}' '${phaseStatus}'
-      printf '%s\\n\\n' '################################################################################'
-    """
+    echo "\n================ ANSIBLE PHASE END: ${phaseLabel} (${phase}) — ${phaseStatus} ================\n\n"
   }
 }
 

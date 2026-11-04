@@ -75,6 +75,8 @@ assert "ansible.builtin.include_tasks: ecs_data_service_model_registry.yml" in p
 assert "ecs_reconcile_coredns.yml" in playbook_text
 assert "ecs_data_services_verify_dns.yml" in playbook_text
 assert playbook_text.index(
+    "Resolve CM API endpoint for ECS Data Services"
+) < playbook_text.index(
     "Ensure Base SDX Data Context before Data Services provisioning"
 ) < playbook_text.index(
     "Reconcile CoreDNS before Data Services provisioning"
@@ -86,11 +88,34 @@ assert playbook_text.index(
 sdx_gate = (
     root / "ansible-playbooks/roles/ecs/tasks/ecs_ensure_base_data_context.yml"
 ).read_text()
-assert "Data Services SDX | Read CM API version" in sdx_gate
 assert "Data Services SDX | Ensure base cluster Data Context" in sdx_gate
+assert "ecs_cm_api_base_url" in sdx_gate
+assert "127.0.0.1" not in sdx_gate
 assert "common_tasks/ensure_base_cluster_data_context.yml" in sdx_gate
 assert "cm_cluster_module_delegate_to: \"{{ cm_manager_inventory_host }}\"" in sdx_gate
 assert "ecs_data_services_base_data_context_enabled | default(true) | bool" in playbook_text
+
+cm_endpoint = (
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_resolve_cm_api_endpoint.yml"
+).read_text()
+for candidate in (
+    "cm_host_private",
+    "private_ip",
+    "cm_host_fqdn",
+    "ansible_host",
+    "127.0.0.1",
+):
+    assert candidate in cm_endpoint
+assert "ECS CM API | Probe HTTPS endpoints from manager" in cm_endpoint
+assert "ECS CM API | Probe HTTP endpoints when HTTPS is unavailable" in cm_endpoint
+
+for relative_path in (
+    "ansible-playbooks/roles/ecs/tasks/ecs_ensure_base_data_context.yml",
+    "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_preflight.yml",
+    "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_diagnostics.yml",
+):
+    text = (root / relative_path).read_text()
+    assert "://127.0.0.1:" not in text, relative_path
 
 base_sdx_helper = (
     root
@@ -98,6 +123,7 @@ base_sdx_helper = (
 ).read_text()
 assert "Base data context | Create configured context for fresh cluster" in base_sdx_helper
 assert "Base data context | Require complete fresh-install prerequisite" in base_sdx_helper
+assert base_sdx_helper.count("connection: ssh") == 3
 base_setup = (
     root
     / "ansible-playbooks/roles/cdh_base_cluster/tasks/setup_base_cluster.yml"

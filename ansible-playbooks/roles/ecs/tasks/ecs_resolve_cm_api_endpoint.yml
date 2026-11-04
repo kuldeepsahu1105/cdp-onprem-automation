@@ -1,0 +1,146 @@
+---
+- name: ECS CM API | Build manager-local probe hosts
+  ansible.builtin.set_fact:
+    ecs_cm_api_probe_hosts: >-
+      {{
+        [
+          cm_host_private | default(''),
+          hostvars[cm_manager_inventory_host].private_ip | default(''),
+          cm_host_fqdn | default(''),
+          (
+            (
+              (hostvars[cm_manager_inventory_host].cldr_hostname | default(''))
+              ~ '.'
+              ~ (cluster_domain | default(''))
+            )
+            if (
+              hostvars[cm_manager_inventory_host].cldr_hostname | default('')
+              | length > 0
+              and cluster_domain | default('') | length > 0
+            )
+            else ''
+          ),
+          hostvars[cm_manager_inventory_host].ansible_host | default(''),
+          '127.0.0.1'
+        ]
+        | map('trim')
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+
+- name: ECS CM API | Probe HTTPS endpoints from manager
+  ansible.builtin.uri:
+    url: >-
+      https://{{ item }}:{{ cm_https_port | default(7183) }}/api/version
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+    return_content: true
+    timeout: 5
+  loop: "{{ ecs_cm_api_probe_hosts }}"
+  register: ecs_cm_api_https_probes
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  connection: ssh
+
+- name: ECS CM API | Select reachable HTTPS endpoint
+  ansible.builtin.set_fact:
+    ecs_cm_api_selected_probe: >-
+      {{
+        (
+          ecs_cm_api_https_probes.results | default([])
+          | selectattr('status', 'defined')
+          | selectattr('status', 'equalto', 200)
+          | list
+          | first
+        )
+        | default({}, true)
+      }}
+
+- name: ECS CM API | Probe HTTP endpoints when HTTPS is unavailable
+  ansible.builtin.uri:
+    url: >-
+      http://{{ item }}:{{ cm_http_port | default(7180) }}/api/version
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: true
+    status_code: [200]
+    return_content: true
+    timeout: 5
+  loop: "{{ ecs_cm_api_probe_hosts }}"
+  register: ecs_cm_api_http_probes
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  connection: ssh
+  when: ecs_cm_api_selected_probe | length == 0
+
+- name: ECS CM API | Select reachable HTTP endpoint
+  ansible.builtin.set_fact:
+    ecs_cm_api_selected_probe: >-
+      {{
+        (
+          ecs_cm_api_http_probes.results | default([])
+          | rejectattr('skipped', 'defined')
+          | selectattr('status', 'defined')
+          | selectattr('status', 'equalto', 200)
+          | list
+          | first
+        )
+        | default({}, true)
+      }}
+  when: ecs_cm_api_selected_probe | length == 0
+
+- name: ECS CM API | Require reachable endpoint from manager
+  ansible.builtin.assert:
+    that:
+      - ecs_cm_api_selected_probe | length > 0
+      - ecs_cm_api_selected_probe.item | default('') | length > 0
+      - ecs_cm_api_selected_probe.content | default('') | trim | length > 0
+    fail_msg: >-
+      Cloudera Manager API is not reachable from {{ cm_manager_inventory_host }}
+      over HTTPS port {{ cm_https_port | default(7183) }} or HTTP port
+      {{ cm_http_port | default(7180) }}. Probed addresses:
+      {{ ecs_cm_api_probe_hosts | join(', ') }}. Confirm the CM bind address,
+      service state, and host firewall.
+
+- name: ECS CM API | Resolve endpoint protocol
+  ansible.builtin.set_fact:
+    ecs_cm_api_protocol: >-
+      {{
+        'https'
+        if ecs_cm_api_selected_probe.url | default('') is match('^https://')
+        else 'http'
+      }}
+
+- name: ECS CM API | Resolve endpoint host
+  ansible.builtin.set_fact:
+    ecs_cm_api_host: "{{ ecs_cm_api_selected_probe.item }}"
+
+- name: ECS CM API | Resolve endpoint port and version
+  ansible.builtin.set_fact:
+    ecs_cm_api_port: >-
+      {{
+        cm_https_port | default(7183)
+        if ecs_cm_api_protocol == 'https'
+        else cm_http_port | default(7180)
+      }}
+    ecs_cm_api_version: "{{ ecs_cm_api_selected_probe.content | trim }}"
+
+- name: ECS CM API | Build endpoint base URL
+  ansible.builtin.set_fact:
+    ecs_cm_api_base_url: >-
+      {{ ecs_cm_api_protocol }}://{{ ecs_cm_api_host }}:{{
+      ecs_cm_api_port }}/api/{{ ecs_cm_api_version }}
+
+- name: ECS CM API | Report selected manager endpoint
+  ansible.builtin.debug:
+    msg: >-
+      ECS CM REST endpoint {{ ecs_cm_api_base_url }} delegated to
+      {{ cm_manager_inventory_host }}.
