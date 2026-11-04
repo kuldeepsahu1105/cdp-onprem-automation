@@ -17,6 +17,33 @@
   changed_when: false
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+- name: Require supported {{ cm_config_display_name }} configuration keys
+  ansible.builtin.assert:
+    that:
+      - >-
+        cm_config_desired.keys() | list
+        | difference(
+            cm_config_current.json['items']
+            | default([])
+            | map(attribute='name')
+            | list
+          )
+        | length == 0
+    fail_msg: >-
+      The installed Cloudera Manager/parcel schema does not expose all owned
+      {{ cm_config_display_name }} keys. Missing keys: {{
+        cm_config_desired.keys() | list
+        | difference(
+            cm_config_current.json['items']
+            | default([])
+            | map(attribute='name')
+            | list
+          )
+        | join(', ')
+      }}. Use a supported Runtime version or update the version-specific
+      mapping instead of writing an unvalidated safety valve.
+  when: cm_config_require_known_names | default(false) | bool
+
 - name: Find {{ cm_config_display_name }} configuration changes
   ansible.builtin.set_fact:
     cm_config_updates: >-

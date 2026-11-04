@@ -135,7 +135,7 @@ Three credential purposes are supported:
 | `ad_join_password` | Password for `ad_join_user` | Required; no secure value should be committed |
 | `ad_kdc_admin_user` | Imported into CM as the Kerberos account manager | Defaults to `ad_join_user`; provide a separate delegated account when available |
 | `ad_kdc_admin_password` | Password used by CM `importAdminCredentials` | Defaults to `ad_join_password`; provide when the KDC account differs |
-| `ad_ldap_bind_dn` | Full LDAP bind DN used by CM to search AD | Required when `cm_ldap_enabled: true` |
+| `ad_ldap_bind_dn` | LDAP bind DN or UPN used by CM and Ranger to search AD | Defaults to `<ad_join_user>@<ad_domain>`; override with a delegated full DN when required |
 | `ad_ldap_bind_password` | Password for the LDAP bind DN | Defaults to `ad_join_password`; provide when the bind account differs |
 
 ### Jenkins
@@ -191,9 +191,9 @@ ansible-playbook -i inventory.ini 11_identity_setup.yml \
 | `ad_join_user` | Account name; default `svc-cloudera-join` | Account used by realm join. Pair with secret `ad_join_password`. |
 | `ad_computer_ou` | Empty or AD distinguished name | Empty uses the default Computers container; otherwise places joined computer objects in this OU. |
 | `ad_kdc_admin_user` | Account name; defaults to `ad_join_user` | Account CM uses to create/regenerate Kerberos principals. |
-| `ad_ldap_bind_dn` | LDAP distinguished name | CM LDAP search account. Replace every `corp.example.com` example component. |
-| `ad_ldap_user_search_base` | LDAP distinguished name | Base under which CM searches for users. |
-| `ad_ldap_group_search_base` | LDAP distinguished name | Base under which CM searches for groups. |
+| `ad_ldap_bind_dn` | LDAP DN or UPN | CM/Ranger LDAP search account; defaults from `ad_join_user` and `ad_domain`. |
+| `ad_ldap_user_search_base` | LDAP distinguished name | Base under which CM/Ranger search for users; defaults to the base DN derived from `ad_domain`. |
+| `ad_ldap_group_search_base` | LDAP distinguished name | Base under which CM/Ranger search for groups; defaults to the base DN derived from `ad_domain`. |
 | `extra_dns_search_domains` | YAML list; default `[]` | Appends search domains to environment-derived DNS configuration. |
 | `extra_dns_nameservers` | YAML list; default `[]` | Appends additional resolver addresses. |
 | `identity_dns_external_probe_host` | FQDN, empty, or `"off"` | External name checked after DNS cutover. Empty uses the regional RHUI name on RHEL/AWS, `archive.cloudera.com` on other AWS hosts, and skips the public check outside AWS. Use an internal mirror FQDN for restricted networks or quoted `"off"` to disable explicitly. |

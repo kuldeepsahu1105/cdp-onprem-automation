@@ -351,6 +351,11 @@ assert group_vars["base_cluster_ranger_usersync_provider_allowed"] == [
     "external",
     "none",
 ]
+assert group_vars["base_cluster_ranger_usersync_delta_sync"] is True
+assert group_vars["base_cluster_ranger_usersync_user_search_scope"] == "sub"
+assert group_vars["base_cluster_ranger_usersync_group_search_scope"] == "sub"
+assert group_vars["base_cluster_ranger_usersync_referral"] == "follow"
+assert group_vars["base_cluster_ranger_usersync_unix_backend"] == "nss"
 assert group_vars["ecs_coredns_kubeconfig_path"] == "/etc/rancher/rke2/rke2.yaml"
 assert group_vars["ecs_cde_cpu_requests"] == "300"
 assert group_vars["ecs_cde_memory_requests"] == "1000Gi"
@@ -698,6 +703,13 @@ assert "base_cluster_verified_service_states | join(',')" in base_cluster_playbo
 assert "base_cluster_verified_health_summaries | join(',')" in base_cluster_playbook_text
 assert "Configure Ranger UserSync LDAP provider" in base_cluster_playbook_text
 assert "Configure Ranger Admin LDAP authentication" in base_cluster_playbook_text
+assert "Restore Ranger Admin local authentication when directory integration is disabled" in (
+    base_cluster_playbook_text
+)
+assert "Disable existing Ranger UserSync when directory integration is disabled" in (
+    base_cluster_playbook_text
+)
+assert 'ranger.usersync.enabled: "false"' in base_cluster_playbook_text
 assert base_cluster_playbook_text.index(
     "Configure Ranger Admin LDAP authentication"
 ) < base_cluster_playbook_text.index(
@@ -711,16 +723,22 @@ base_cluster_spec_text = (
     root / "ansible-playbooks/templates/base_cluster_cluster_spec.j2"
 ).read_text()
 assert "base_cluster_ranger_usersync_configure_effective | bool" in base_cluster_spec_text
-assert "base_cluster_ranger_usersync_ldap_url" in base_cluster_spec_text
-assert "base_cluster_ranger_usersync_bind_dn" in base_cluster_spec_text
-assert "base_cluster_ranger_usersync_bind_password" in base_cluster_spec_text
 assert "base_cluster_ranger_admin_ldap_config.items()" in base_cluster_spec_text
-assert "ranger.usersync.source.impl.class" in base_cluster_spec_text
+assert "base_cluster_ranger_usersync_role_config.items()" in base_cluster_spec_text
 assert "ranger_authentication_method" in str(
     group_vars["base_cluster_ranger_admin_ldap_config"]
 )
 assert "ranger.ldap.ad.url" in str(group_vars["base_cluster_ranger_admin_ldap_config"])
 assert "ranger.ldap.url" in str(group_vars["base_cluster_ranger_admin_ldap_config"])
+assert "ranger.usersync.source.impl.class" in str(
+    group_vars["base_cluster_ranger_usersync_role_config"]
+)
+assert "ranger.usersync.enabled" in str(
+    group_vars["base_cluster_ranger_usersync_role_config"]
+)
+assert "ranger.usersync.ldap.starttls" in str(
+    group_vars["base_cluster_ranger_usersync_role_config"]
+)
 assert "base_cluster_final_state.json.healthSummary" not in base_cluster_playbook_text
 base_cluster_health_text = (
     root / "ansible-playbooks/common_tasks/verify_base_cluster_service_health.yml"

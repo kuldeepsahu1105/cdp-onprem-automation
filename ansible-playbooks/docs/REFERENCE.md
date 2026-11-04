@@ -74,9 +74,15 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `base_cluster_knox_gateway_https_port` | `8443` | HTTPS port for Knox topology readiness probes on the gateway host |
 | `base_cluster_ranger_admin_port` | `6182` | Direct Ranger Admin UI on the base cluster master (deployment portal links; Knox uses its own gateway URL) |
 | `base_cluster_ranger_usersync_enabled` | `true` | Configure Ranger Admin LDAP authentication, then create/configure Ranger UserSync |
-| `base_cluster_ranger_usersync_provider` | `auto` | `auto`, `freeipa`, `ad`, `external`, or `none`; external LDAP uses `base_cluster_ranger_usersync_external_*` |
-| `base_cluster_ranger_usersync_external_base_dn` | `""` | Directory base DN required with the `external` provider |
-| `base_cluster_ranger_usersync_external_user_search_filter` / `base_cluster_ranger_usersync_external_group_search_filter` | `(uid={0})` / group membership filter | Ranger Admin LDAP search filters for an external directory |
+| `base_cluster_ranger_usersync_provider` | `auto` | `auto`, active `freeipa`/`ad`, `external`, or `none`; a FreeIPA/AD override must match `identity_provider_effective` |
+| `base_cluster_ranger_usersync_delta_sync` | `true` | Set CM `ranger.usersync.ldap.deltasync` |
+| `base_cluster_ranger_usersync_user_search_scope` / `base_cluster_ranger_usersync_group_search_scope` | `sub` / `sub` | LDAP search scopes: `base`, `one`, or `sub` |
+| `base_cluster_ranger_usersync_referral` | `follow` | Ranger Admin/UserSync referral behavior (`follow`, `ignore`, or `throw` where supported) |
+| `base_cluster_ranger_usersync_username_case_conversion` / `base_cluster_ranger_usersync_groupname_case_conversion` | `lower` / `lower` | UserSync name normalization (`lower`, `upper`, or `none`) |
+| `base_cluster_ranger_usersync_paged_results_enabled` | `true` | Enable paged LDAP user/group results |
+| `base_cluster_ranger_usersync_unix_backend` | `nss` | Safe CM Unix backend value retained while LDAP is the selected source |
+| `base_cluster_ranger_usersync_truststore_path` | Auto-TLS global truststore | JKS used to validate LDAPS/STARTTLS servers; empty uses the JVM CA set |
+| `base_cluster_ranger_usersync_external_*` | empty/provider defaults | External LDAP URL, bind secret, base/search DNs, Admin and UserSync filters, object classes, attributes, and STARTTLS choice |
 | `base_cluster_*_ui_port` | see `all.yml` | Direct HTTP UI ports on `base-masters` when Knox is off (`hdfs` 9870, `yarn` 8088, `hue` 8888, `hbase` 16010, `atlas` 21000, `ozone` Recon 9888, `solr` 8983, `impala` debug 25000) |
 | `base_cluster_knox_cdp_proxy_path` | `/gateway/cdp-proxy` | Knox topology prefix for portal links when `base_cluster_install_services.knox` is true (`deployment_portal_base_cluster_portal_urls.j2`) |
 | `base_cluster_hdfs_name_dir` | `/dfs/nn` | NameNode storage inspected before First Run; an existing `current/VERSION` selects non-destructive partial-First-Run recovery |

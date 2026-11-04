@@ -159,11 +159,25 @@ base_cluster_ranger_usersync_external_user_search_base: ""
 base_cluster_ranger_usersync_external_group_search_base: ""
 base_cluster_ranger_usersync_external_user_search_filter: "(uid={0})"
 base_cluster_ranger_usersync_external_group_search_filter: "(&(member={0})(objectClass=groupOfNames))"
+base_cluster_ranger_usersync_external_sync_user_search_filter: "(uid=*)"
+base_cluster_ranger_usersync_external_sync_group_search_filter: "(objectClass=groupOfNames)"
 base_cluster_ranger_usersync_external_user_object_class: person
 base_cluster_ranger_usersync_external_group_object_class: groupOfNames
 base_cluster_ranger_usersync_external_user_name_attribute: uid
 base_cluster_ranger_usersync_external_group_name_attribute: cn
 base_cluster_ranger_usersync_external_group_member_attribute: member
+base_cluster_ranger_usersync_external_starttls: false
+base_cluster_ranger_usersync_delta_sync: true
+base_cluster_ranger_usersync_user_search_scope: sub
+base_cluster_ranger_usersync_group_search_scope: sub
+base_cluster_ranger_usersync_referral: follow
+base_cluster_ranger_usersync_username_case_conversion: lower
+base_cluster_ranger_usersync_groupname_case_conversion: lower
+base_cluster_ranger_usersync_paged_results_enabled: true
+base_cluster_ranger_usersync_unix_backend: nss
+# Empty uses the JVM default CA set. Under Auto-TLS this defaults in all.yml to
+# the agent global truststore, which includes the configured directory CA.
+base_cluster_ranger_usersync_truststore_path: ""
 base_cluster_knox_database_name: knox
 base_cluster_knox_database_user: knox
 base_cluster_knox_database_password: knox
@@ -221,6 +235,7 @@ cm_krb_update_libdefaults_safety_valve: false
 # LDAP transport: use ldap/389 or ldaps/636. LDAPS remains the secure default.
 cm_ldap_scheme: ldaps                    # ldap | ldaps
 cm_ldap_port: "{{ 636 if (cm_ldap_scheme | lower) == 'ldaps' else 389 }}"
+cm_ldap_starttls: false                  # valid only with ldap://
 cm_cms_update_reports_manager_password: false
 cm_cms_update_autotls_truststore_password: false
 

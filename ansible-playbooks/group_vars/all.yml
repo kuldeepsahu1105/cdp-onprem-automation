@@ -550,11 +550,28 @@ base_cluster_ranger_usersync_external_user_search_base: ""
 base_cluster_ranger_usersync_external_group_search_base: ""
 base_cluster_ranger_usersync_external_user_search_filter: "(uid={0})"
 base_cluster_ranger_usersync_external_group_search_filter: "(&(member={0})(objectClass=groupOfNames))"
+base_cluster_ranger_usersync_external_sync_user_search_filter: "(uid=*)"
+base_cluster_ranger_usersync_external_sync_group_search_filter: "(objectClass=groupOfNames)"
 base_cluster_ranger_usersync_external_user_object_class: person
 base_cluster_ranger_usersync_external_group_object_class: groupOfNames
 base_cluster_ranger_usersync_external_user_name_attribute: uid
 base_cluster_ranger_usersync_external_group_name_attribute: cn
 base_cluster_ranger_usersync_external_group_member_attribute: member
+base_cluster_ranger_usersync_external_starttls: false
+base_cluster_ranger_usersync_delta_sync: true
+base_cluster_ranger_usersync_user_search_scope: sub
+base_cluster_ranger_usersync_group_search_scope: sub
+base_cluster_ranger_usersync_referral: follow
+base_cluster_ranger_usersync_username_case_conversion: lower
+base_cluster_ranger_usersync_groupname_case_conversion: lower
+base_cluster_ranger_usersync_paged_results_enabled: true
+base_cluster_ranger_usersync_unix_backend: nss
+base_cluster_ranger_usersync_truststore_path: >-
+  {{
+    cm_cms_autotls_truststore_path
+    if autotls_enabled | default(true) | bool
+    else ''
+  }}
 base_cluster_ranger_usersync_provider_effective: >-
   {{
     identity_provider_effective
@@ -570,11 +587,18 @@ base_cluster_ranger_usersync_ldap_url: >-
   {{
     base_cluster_ranger_usersync_external_ldap_url
     if base_cluster_ranger_usersync_provider_effective == 'external'
-    else (
-      'ldaps://' ~ ad_kdc_host ~ ':636'
-      if base_cluster_ranger_usersync_provider_effective == 'ad'
-      else 'ldaps://' ~ ipa_kdc_host ~ ':636'
-    )
+    else cm_ldap_url
+  }}
+base_cluster_ranger_usersync_starttls: >-
+  {{
+    base_cluster_ranger_usersync_external_starttls | bool
+    if base_cluster_ranger_usersync_provider_effective == 'external'
+    else cm_ldap_starttls | default(false) | bool
+  }}
+base_cluster_ranger_usersync_tls_enabled: >-
+  {{
+    (base_cluster_ranger_usersync_ldap_url | urlsplit('scheme')) == 'ldaps'
+    or base_cluster_ranger_usersync_starttls | bool
   }}
 base_cluster_ranger_usersync_bind_dn: >-
   {{
@@ -686,7 +710,7 @@ base_cluster_ranger_admin_ldap_config: >-
       'ranger_ldap_ad_bind_password': base_cluster_ranger_usersync_bind_password,
       'ranger.ldap.ad.domain': ad_domain,
       'ranger.ldap.ad.user.searchfilter': base_cluster_ranger_admin_user_search_filter,
-      'ranger.ldap.ad.referral': 'follow'
+      'ranger.ldap.ad.referral': base_cluster_ranger_usersync_referral
     }
     if base_cluster_ranger_usersync_provider_effective == 'ad'
     else {
@@ -702,8 +726,75 @@ base_cluster_ranger_admin_ldap_config: >-
       'ranger.ldap.group.searchfilter': base_cluster_ranger_admin_group_search_filter,
       'ranger.ldap.group.searchbase': base_cluster_ranger_usersync_group_search_base,
       'ranger.ldap.group.roleattribute': base_cluster_ranger_usersync_group_name_attribute,
-      'ranger.ldap.referral': 'follow'
+      'ranger.ldap.referral': base_cluster_ranger_usersync_referral
     }
+  }}
+base_cluster_ranger_usersync_role_config: >-
+  {{
+    {
+      'ranger.usersync.enabled': 'true',
+      'ranger.usersync.source.impl.class':
+        'org.apache.ranger.ldapusersync.process.LdapUserGroupBuilder',
+      'ranger.usersync.ldap.url': base_cluster_ranger_usersync_ldap_url,
+      'ranger.usersync.ldap.binddn': base_cluster_ranger_usersync_bind_dn,
+      'ranger_usersync_ldap_ldapbindpassword': base_cluster_ranger_usersync_bind_password,
+      'ranger.usersync.ldap.searchBase': base_cluster_ranger_admin_base_dn,
+      'ranger.usersync.ldap.starttls':
+        base_cluster_ranger_usersync_starttls | bool | lower,
+      'ranger.usersync.ldap.deltasync':
+        base_cluster_ranger_usersync_delta_sync | bool | lower,
+      'ranger.usersync.ldap.user.searchbase': base_cluster_ranger_usersync_user_search_base,
+      'ranger.usersync.ldap.user.searchscope': base_cluster_ranger_usersync_user_search_scope,
+      'ranger.usersync.ldap.user.objectclass': base_cluster_ranger_usersync_user_object_class,
+      'ranger.usersync.ldap.user.searchfilter': (
+        base_cluster_ranger_usersync_external_sync_user_search_filter
+        if base_cluster_ranger_usersync_provider_effective == 'external'
+        else (
+          '(sAMAccountName=*)'
+          if base_cluster_ranger_usersync_provider_effective == 'ad'
+          else '(uid=*)'
+        )
+      ),
+      'ranger.usersync.ldap.user.nameattribute': base_cluster_ranger_usersync_user_name_attribute,
+      'ranger.usersync.ldap.user.groupnameattribute': base_cluster_ranger_usersync_user_name_attribute,
+      'ranger.usersync.group.searchbase': base_cluster_ranger_usersync_group_search_base,
+      'ranger.usersync.group.searchscope': base_cluster_ranger_usersync_group_search_scope,
+      'ranger.usersync.group.objectclass': base_cluster_ranger_usersync_group_object_class,
+      'ranger.usersync.group.searchfilter': (
+        base_cluster_ranger_usersync_external_sync_group_search_filter
+        if base_cluster_ranger_usersync_provider_effective == 'external'
+        else (
+          '(objectClass=group)'
+          if base_cluster_ranger_usersync_provider_effective == 'ad'
+          else '(objectClass=ipausergroup)'
+        )
+      ),
+      'ranger.usersync.group.nameattribute': base_cluster_ranger_usersync_group_name_attribute,
+      'ranger.usersync.group.memberattributename': base_cluster_ranger_usersync_group_member_attribute,
+      'ranger.usersync.group.searchenabled': 'true',
+      'ranger.usersync.group.usermapsyncenabled': 'true',
+      'ranger.usersync.ldap.referral': base_cluster_ranger_usersync_referral,
+      'ranger.usersync.ldap.username.caseconversion':
+        base_cluster_ranger_usersync_username_case_conversion,
+      'ranger.usersync.ldap.groupname.caseconversion':
+        base_cluster_ranger_usersync_groupname_case_conversion,
+      'ranger.usersync.ldap.grouphierarchylevels': 0,
+      'ranger.usersync.pagedresultsenabled':
+        base_cluster_ranger_usersync_paged_results_enabled | bool | lower,
+      'ranger.usersync.user.searchenabled': 'true',
+      'ranger.usersync.unix.backend': base_cluster_ranger_usersync_unix_backend
+    }
+    | combine(
+        {
+          'ssl_client_truststore_location':
+            base_cluster_ranger_usersync_truststore_path
+        }
+        if (
+          base_cluster_ranger_usersync_tls_enabled | bool
+          and base_cluster_ranger_usersync_truststore_path | string | trim | length > 0
+        )
+        else {}
+      )
   }}
 # Ranger Admin UI (direct on base master; not Knox gateway path)
 base_cluster_ranger_admin_port: 6182
@@ -1102,6 +1193,7 @@ cm_ldap_auth_backend_order_allowed:
 cm_ldap_type: "LDAP"
 cm_ldap_scheme: ldaps
 cm_ldap_port: "{{ 636 if (cm_ldap_scheme | lower) == 'ldaps' else 389 }}"
+cm_ldap_starttls: false
 cm_ldap_host: "{{ ad_kdc_host if identity_provider_effective == 'ad' else ipa_kdc_host }}"
 cm_ldap_url: >-
   {{ (cm_ldap_scheme | lower) + '://' + cm_ldap_host + ':' + (cm_ldap_port | string) }}
@@ -1120,11 +1212,11 @@ cm_ldap_group_search_filter: "{{ '(member={0})' if identity_provider_effective =
 cm_ldap_dn_pattern: ""
 
 # AD LDAP bind/search defaults (override in extra-vars or vault as needed)
-ad_ldap_bind_dn: "CN=svc-cm-ldap,OU=Service Accounts,DC=corp,DC=example,DC=com"
+ad_ldap_bind_dn: "{{ ad_join_user ~ '@' ~ ad_domain }}"
 ad_ldap_bind_password: "{{ ad_join_password }}"
 ad_ldap_base_dn: "{% for part in ad_domain.split('.') %}DC={{ part }}{% if not loop.last %},{% endif %}{% endfor %}"
-ad_ldap_user_search_base: "OU=Users,DC=corp,DC=example,DC=com"
-ad_ldap_group_search_base: "OU=Groups,DC=corp,DC=example,DC=com"
+ad_ldap_user_search_base: "{{ ad_ldap_base_dn }}"
+ad_ldap_group_search_base: "{{ ad_ldap_base_dn }}"
 
 # FreeIPA LDAP (used when identity_provider: freeipa)
 ipa_ldap_dc_suffix: "{% for part in ipaserver_domain.split('.') %}dc={{ part }}{% if not loop.last %},{% endif %}{% endfor %}"
