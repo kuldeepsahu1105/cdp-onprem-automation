@@ -36,23 +36,9 @@ assert "!unique.contains(normalized)" in canonical_body
 assert "orderedPipelineStageIds().findAll" in canonical_body
 
 implicit_body = function_body("addImplicitDeploymentStages")
-for token in (
-    "PORTAL",
-    "MONITORING",
-):
-    assert token in implicit_body
-for token in (
-    "CM_INSTALL",
-    "CM_TLS_KRB_LDAP",
-    "CDH_INSTALL",
-    "ECS_INSTALL",
-    "ECS_POST_INSTALL_TASKS",
-    "ECS_DATA_SERVICES",
-):
-    assert token not in implicit_body
-assert "def portalTriggers = ['MONITORING']" in implicit_body
-assert "result << 'MONITORING'" not in implicit_body
-assert "canonicalizePipelineStages(result)" in implicit_body
+assert "return canonicalizePipelineStages(stages)" in implicit_body
+assert "PORTAL" not in implicit_body
+assert "MONITORING" not in implicit_body
 
 effective_body = function_body("effectivePipelineStages")
 assert effective_body.count("canonicalizePipelineStages") >= 2
@@ -111,7 +97,7 @@ aliases = {
 }
 
 
-def effective(value, portal=True, monitoring=True):
+def effective(value):
     if isinstance(value, (list, tuple)):
         raw = []
         for item in value:
@@ -125,8 +111,6 @@ def effective(value, portal=True, monitoring=True):
         if token and token not in normalized:
             normalized.append(token)
     result = [stage for stage in pipeline_order if stage in normalized]
-    if monitoring and "MONITORING" in result and "PORTAL" not in result and portal:
-        result.append("PORTAL")
     return [stage for stage in pipeline_order if stage in result]
 
 
@@ -140,7 +124,7 @@ assert effective([" ecs ", "DATA_SERVICES", "ecs-install", "dataservices"]) == [
 ]
 assert effective("PORTAL,MONITORING,PORTAL") == ["PORTAL", "MONITORING"]
 assert effective("PORTAL") == ["PORTAL"]
-assert effective("MONITORING") == ["PORTAL", "MONITORING"]
+assert effective("MONITORING") == ["MONITORING"]
 assert effective(
     "VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,"
     "CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS,"
@@ -158,6 +142,16 @@ assert effective(" ECS_INSTALL, ECS_DATA_SERVICES ") == effective(
 
 pvc_setup = (Path(sys.argv[1]).parent / "ansible-playbooks" / "pvc_setup.sh").read_text()
 assert "_portal_actions_selected()" in pvc_setup
+monitoring_phase = re.search(
+    r"run_phase_monitoring\(\) \{(?P<body>.*?)\n\}",
+    pvc_setup,
+    re.DOTALL,
+)
+assert monitoring_phase
+assert "run_playbook 32_setup_monitoring_stack.yml" in monitoring_phase.group("body")
+assert "10_setup_deployment_portal.yml" not in monitoring_phase.group("body")
+assert "35_refresh_deployment_portal.yml" not in monitoring_phase.group("body")
+assert "_maybe_sync_deployment_portal_access" not in monitoring_phase.group("body")
 assert "ecs_data_services_sync_portal_routes=false" in pvc_setup
 assert "ecs_data_services_sync_portal_routes=true" in pvc_setup
 assert "run_playbook 33_setup_ecs_cluster.yml" in pvc_setup

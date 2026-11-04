@@ -401,9 +401,9 @@ run_phase_monitoring() {
   fi
   local _phase="Monitoring stack (Grafana / Prometheus)"
   ui_phase_header "$_phase"
-  # Playbook 32 owns monitoring deployment; the optional follow-up syncs access files only.
+  # Playbook 32 owns exporter enrollment, monitoring deployment, and its required
+  # Caddy route update. Do not run portal playbooks 10 or 35 from this phase.
   run_playbook 32_setup_monitoring_stack.yml
-  _maybe_sync_deployment_portal_access
   ui_phase_footer "$_phase"
 }
 

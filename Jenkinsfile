@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-11-04.4 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-11-04.5 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -254,14 +254,13 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
     booleanParam(
       name: 'MONITORING_STACK_ENABLED',
       defaultValue: true,
-      description: 'Deploy Grafana/Prometheus/Alertmanager/cAdvisor/exporters (32) immediately after PORTAL. PORTAL automatically inserts this stage unless this is false.'
+      description: 'Deploy Grafana/Prometheus/Alertmanager/cAdvisor/exporters with playbook 32 when MONITORING is selected. Select PORTAL separately if the Caddy foundation is not already installed.'
     )
     booleanParam(
       name: 'DEPLOYMENT_PORTAL_ENABLED',
       defaultValue: true,
-      description: 'Bootstrap the Caddy deployment portal on the ops host (10), independently of monitoring. It is added automatically only when the selected MONITORING stage needs its Caddy foundation.'
+      description: 'Bootstrap the Caddy deployment portal on the ops host with playbook 10 when PORTAL is selected. No other phase implicitly adds PORTAL.'
     )
-    // Hidden advanced input: AUTO_INCLUDE_PORTAL_BOOTSTRAP=false; select PORTAL explicitly.
     booleanParam(
       name: 'ECS_DATA_SERVICES_DEPLOY_ENABLED',
       defaultValue: false,
@@ -908,11 +907,6 @@ def monitoringStackEnabled() {
   return isParamEnabled(params.MONITORING_STACK_ENABLED)
 }
 
-def autoIncludePortalBootstrapEnabled() {
-  def raw = env.AUTO_INCLUDE_PORTAL_BOOTSTRAP
-  return raw == null || !raw.toString().trim() || isParamEnabled(raw)
-}
-
 def canonicalizePipelineStages(List stages) {
   def unique = []
   stages.each { stage ->
@@ -927,19 +921,7 @@ def canonicalizePipelineStages(List stages) {
 }
 
 def addImplicitDeploymentStages(List stages) {
-  def result = canonicalizePipelineStages(stages)
-  def portalTriggers = ['MONITORING']
-  if (
-    portalDeployEnabled()
-    && autoIncludePortalBootstrapEnabled()
-    && result.any { it in portalTriggers }
-    && !result.contains('PORTAL')
-  ) {
-    echo 'INFO: MONITORING requires the portal/Caddy foundation — adding PORTAL stage.'
-    result << 'PORTAL'
-  }
-
-  return canonicalizePipelineStages(result)
+  return canonicalizePipelineStages(stages)
 }
 
 def isDestroyStackOnly(List stages) {
