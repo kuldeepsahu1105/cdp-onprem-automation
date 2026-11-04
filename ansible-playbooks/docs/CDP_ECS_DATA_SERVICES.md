@@ -223,8 +223,10 @@ non-secret per-build logs and reports. The playbook reports the state path when
 it creates or reuses the credential cache and does not generate a replacement
 key while valid cached credentials are available.
 
-Before LDAP/IAM mutations, automation validates the cached access-key ID with
-the private IAM API. If IAM explicitly reports that the key is missing,
+Before LDAP/IAM mutations, automation validates the cached credential with a
+signed, read-only private IAM `list-users` request. (`get-access-key` remains
+in pinned CLI `0.9.164` but is removed by the private IAM server.) If IAM
+explicitly reports that the key is missing,
 unauthenticated, or invalid, automation removes only that stale cache, creates
 a replacement key through the configured installer/bootstrap credential, and
 rebuilds the isolated ECS-master profile. Network and unrelated API errors
