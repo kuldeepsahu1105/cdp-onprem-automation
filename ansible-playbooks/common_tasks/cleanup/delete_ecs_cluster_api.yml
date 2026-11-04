@@ -1,7 +1,7 @@
 ---
 - name: Check whether ECS cluster exists
   ansible.builtin.uri:
-    url: "{{ cm_api_url }}/clusters/{{ ecs_cluster_name }}"
+    url: "{{ cm_api_url }}/clusters/{{ ecs_cluster_name | urlencode }}"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -11,9 +11,41 @@
     follow_redirects: none
   register: ecs_cluster_before_delete
 
+- name: Check legacy ECS cluster when the prefixed default is absent
+  ansible.builtin.uri:
+    url: "{{ cm_api_url }}/clusters/{{ ecs_cluster_legacy_name | urlencode }}"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200, 404]
+    follow_redirects: none
+  register: legacy_ecs_cluster_before_delete
+  when:
+    - ecs_cluster_before_delete.status == 404
+    - ecs_cluster_name == ecs_cluster_default_name
+    - ecs_cluster_legacy_name | default('') | length > 0
+    - ecs_cluster_legacy_name != ecs_cluster_name
+
+- name: Resolve ECS cluster API cleanup name
+  ansible.builtin.set_fact:
+    cleanup_ecs_cluster_api_name: >-
+      {{
+        ecs_cluster_legacy_name
+        if (legacy_ecs_cluster_before_delete.status | default(404) == 200)
+        else ecs_cluster_name
+      }}
+    cleanup_ecs_cluster_api_lookup: >-
+      {{
+        legacy_ecs_cluster_before_delete
+        if (legacy_ecs_cluster_before_delete.status | default(404) == 200)
+        else ecs_cluster_before_delete
+      }}
+
 - name: Stop ECS cluster services via API
   ansible.builtin.uri:
-    url: "{{ cm_api_url }}/clusters/{{ ecs_cluster_name }}/commands/stop"
+    url: "{{ cm_api_url }}/clusters/{{ cleanup_ecs_cluster_api_name | urlencode }}/commands/stop"
     method: POST
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -23,14 +55,14 @@
     follow_redirects: none
   register: stop_ecs_cluster
   when:
-    - ecs_cluster_before_delete.status == 200
-    - ecs_cluster_before_delete.json.clusterState | default('') != 'STOPPED'
+    - cleanup_ecs_cluster_api_lookup.status == 200
+    - cleanup_ecs_cluster_api_lookup.json.clusterState | default('') != 'STOPPED'
 
 - name: Require ECS cluster stop command ID
   ansible.builtin.assert:
     that:
       - stop_ecs_cluster.json.id is defined
-    fail_msg: CM did not return a command ID while stopping {{ ecs_cluster_name }}.
+    fail_msg: CM did not return a command ID while stopping {{ cleanup_ecs_cluster_api_name }}.
   when: stop_ecs_cluster is not skipped
 
 - name: Wait for ECS cluster stop command
@@ -42,7 +74,7 @@
 
 - name: Delete ECS cluster via API
   ansible.builtin.uri:
-    url: "{{ cm_api_url }}/clusters/{{ ecs_cluster_name }}"
+    url: "{{ cm_api_url }}/clusters/{{ cleanup_ecs_cluster_api_name | urlencode }}"
     method: DELETE
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -51,11 +83,11 @@
     status_code: [200]
     follow_redirects: none
   register: delete_ecs_cluster
-  when: ecs_cluster_before_delete.status == 200
+  when: cleanup_ecs_cluster_api_lookup.status == 200
 
 - name: Confirm ECS cluster is absent
   ansible.builtin.uri:
-    url: "{{ cm_api_url }}/clusters/{{ ecs_cluster_name }}"
+    url: "{{ cm_api_url }}/clusters/{{ cleanup_ecs_cluster_api_name | urlencode }}"
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -71,5 +103,5 @@
 - name: Print ECS cluster API delete result
   ansible.builtin.debug:
     msg: >-
-      ECS cluster {{ ecs_cluster_name }} is absent
-      (initial status {{ ecs_cluster_before_delete.status }}).
+      ECS cluster {{ cleanup_ecs_cluster_api_name }} is absent
+      (initial status {{ cleanup_ecs_cluster_api_lookup.status }}).

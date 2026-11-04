@@ -243,9 +243,9 @@
             )
           + (
               [
-                {'name': 'IPA Caddy vhost GET / (expect redirect → /ipa/modern-ui/)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
+                {'name': 'IPA Caddy vhost GET / (expect redirect → selected installed UI)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/',
                  'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
-                {'name': 'IPA Caddy vhost GET /ipa/modern-ui/ (200 or 301 OK)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/modern-ui/',
+                {'name': 'IPA Caddy vhost selected UI GET ' ~ (deployment_portal_ipa_ui_path | default('/ipa/ui/')), 'host': caddy_vhost_urls.ipa.hostname, 'path': deployment_portal_ipa_ui_path | default('/ipa/ui/'),
                  'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
                 {'name': 'IPA Caddy vhost GET /ipa/ui/ (200 or 301 OK)', 'host': caddy_vhost_urls.ipa.hostname, 'path': '/ipa/ui/',
                  'upstream_ipa_fqdn': deployment_portal_ipa_fqdn | default(''), 'optional': _portal_bootstrap_milestone_vhost_warn | default(false) | bool},
@@ -307,7 +307,7 @@
     msg: >-
       Tier A URL verify runs after every portal sync (including PORTAL deploy reruns) against
       {{ _portal_local_base }} with Caddy vhost Host headers (follow_redirects=no).
-      HTTP 301/302 on the Caddy vhost (IPA GET / → /ipa/modern-ui/) passes when the status is in {{ _portal_url_verify_codes_int | join('/') }}.
+      HTTP 301/302 on the Caddy vhost (IPA GET / → {{ deployment_portal_ipa_ui_path | default('/ipa/ui/') }}) passes when the status is in {{ _portal_url_verify_codes_int | join('/') }}.
       Cloudera Manager URL checks run in 25_verify_cm.yml only (not portal refresh). IPA HTTPD may return 301 to the cluster FQDN — expected; use Caddy IPA vhosts in the portal index.
       Verbose Ansible output may show redirect responses; the play fails only on unexpected status codes.
   when:
@@ -389,8 +389,11 @@
       FreeIPA upstream must use HTTPS with TLS server name and Host: {{ item.item.upstream_ipa_fqdn }},
       plus Referer https://{{ item.item.upstream_ipa_fqdn }}<request-path>
       (see deployment_portal_Caddyfile_vhosts.inc.j2).
-      GET / on the IPA vhost should 301 to /ipa/modern-ui/; /ipa/modern-ui/ and /ipa/ui should return 200 or redirect (301/302).
-      Confirm https://{{ item.item.upstream_ipa_fqdn }}/ipa/modern-ui/ and /ipa/ui/ respond on the IPA server and IPA HTTPD is running.
+      GET / on the IPA vhost should redirect to the installed UI at
+      {{ deployment_portal_ipa_ui_path | default('/ipa/ui/') }}; the selected route and
+      /ipa/ui/ should return 200 or redirect (301/302). Confirm
+      https://{{ item.item.upstream_ipa_fqdn }}{{ deployment_portal_ipa_ui_path | default('/ipa/ui/') }}
+      responds on the IPA server and IPA HTTPD is running.
       {% elif 'pgAdmin' in item.item.name %}
       Confirm pgAdmin container {{ deployment_portal_pgadmin_container }} is running and responds on
       http://127.0.0.1:{{ deployment_portal_pgadmin_host_port }}/ (Caddy reverse_proxies pgadmin:80 on the compose network).
@@ -427,6 +430,7 @@
     - deployment_portal_has_ipa | default(false) | bool
     - deployment_portal_ipa_fqdn | default('') | length > 0
     - inventory_hostname in groups.get('ipaserver', [])
+    - deployment_portal_ipa_modern_ui_available | default(false) | bool
   failed_when: false
 
 - name: Verify FreeIPA legacy UI on ipaserver HTTPS (direct; 301 from IPA without follow_redirects is OK)
@@ -467,18 +471,23 @@
     - ipa_direct_modern_ui_check is defined
     - ipa_direct_legacy_ui_check is defined
     - >-
-      ipa_direct_modern_ui_check is failed
-      or (ipa_direct_modern_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)
+      (
+        deployment_portal_ipa_modern_ui_available | default(false) | bool
+        and (
+          ipa_direct_modern_ui_check is failed
+          or (ipa_direct_modern_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)
+        )
+      )
       or ipa_direct_legacy_ui_check is failed
       or (ipa_direct_legacy_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)
 
 - name: Fail when FreeIPA modern or legacy UI does not accept its FQDN Host header locally
   ansible.builtin.fail:
     msg: >-
-      FreeIPA modern or legacy UI did not respond on https://127.0.0.1/ with Host: {{ deployment_portal_ipa_fqdn }}.
+      FreeIPA selected or legacy UI did not respond on https://127.0.0.1/ with Host: {{ deployment_portal_ipa_fqdn }}.
       Caddy IPA vhost proxies HTTPS to the inventory IP with the IPA FQDN as TLS server name and Host,
       plus a path-matched Referer; fix IPA HTTPS first.
-      Modern UI: curl -ksS -o /dev/null -w '%{http_code}' https://{{ deployment_portal_ipa_fqdn }}/ipa/modern-ui/
+      Selected UI: curl -ksS -o /dev/null -w '%{http_code}' https://{{ deployment_portal_ipa_fqdn }}{{ deployment_portal_ipa_ui_path | default('/ipa/ui/') }}
       Legacy UI: curl -ksS -o /dev/null -w '%{http_code}' https://{{ deployment_portal_ipa_fqdn }}/ipa/ui/
       HTTP status modern={{ ipa_direct_modern_ui_check.status | default('n/a') }} legacy={{ ipa_direct_legacy_ui_check.status | default('n/a') }}
       (acceptable: {{ _portal_url_verify_codes_int | join('/') }}).
@@ -491,7 +500,12 @@
     - ipa_direct_modern_ui_check is defined
     - ipa_direct_legacy_ui_check is defined
     - >-
-      ipa_direct_modern_ui_check is failed
-      or (ipa_direct_modern_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)
+      (
+        deployment_portal_ipa_modern_ui_available | default(false) | bool
+        and (
+          ipa_direct_modern_ui_check is failed
+          or (ipa_direct_modern_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)
+        )
+      )
       or ipa_direct_legacy_ui_check is failed
       or (ipa_direct_legacy_ui_check.status | default(0) | int not in _portal_url_verify_codes_int)

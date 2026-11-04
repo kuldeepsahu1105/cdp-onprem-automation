@@ -1,92 +1,230 @@
 ---
-- name: CAI | Check for an existing ML workspace
+- name: CAI | List live workspaces in target environment
   cloudera.cloud.ml_info:
     environment: "{{ ecs_cdp_environment_name }}"
-    name: "{{ ecs_cai_workspace_name }}"
     endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
   environment: "{{ ecs_cdp_cli_environment }}"
-  register: ecs_cai_preflight_workspace_info
+  register: ecs_cai_workspace_inventory
   changed_when: false
+  until: ecs_cai_workspace_inventory is succeeded
+  retries: "{{ ecs_data_services_dns_probe_attempts | default(3) | int }}"
+  delay: "{{ ecs_data_services_dns_probe_retry_delay | int }}"
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
   when: "'cai' in (ecs_data_services_install_names | default([]))"
 
-- name: CAI | Wait for backend deletion or a reusable workspace
-  cloudera.cloud.ml_info:
-    environment: "{{ ecs_cdp_environment_name }}"
-    name: "{{ ecs_cai_workspace_name }}"
-    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
-  environment: "{{ ecs_cdp_cli_environment }}"
-  register: ecs_cai_workspace_info_after_cleanup
-  changed_when: false
-  until: >-
-    (
-      ecs_cai_workspace_info_after_cleanup.workspaces | default([]) | length == 0
-    )
-    or
-    (
-      (
-        ecs_cai_workspace_info_after_cleanup.workspaces | default([])
-        | first | default({})
-      ).instanceStatus | default('')
-      is search('(?i):failed$')
-    )
-    or
-    (
-      not (
-        (
-          ecs_cai_workspace_info_after_cleanup.workspaces | default([])
-          | first | default({})
-        ).instanceStatus | default('')
-        is search('(?i)(delet|remov|terminat)')
-      )
-    )
-  retries: "{{ ecs_data_services_status_wait_retries | int }}"
-  delay: "{{ ecs_data_services_status_wait_delay | int }}"
-  become: false
-  delegate_to: "{{ ecs_data_services_delegate_host }}"
-  connection: ssh
-  when: "'cai' in (ecs_data_services_install_names | default([]))"
-
-- name: CAI | Record existing workspace for adoption
+- name: CAI | Initialize effective workspace name candidates
   ansible.builtin.set_fact:
-    ecs_cai_existing_workspace: >-
-      {{
-        ecs_cai_workspace_info_after_cleanup.workspaces | default([])
-        | first | default({})
-      }}
+    ecs_cai_live_workspaces: "{{ ecs_cai_workspace_inventory.workspaces | default([]) }}"
+    ecs_cai_workspace_candidate_names: []
+    ecs_cai_subdomain_candidate_names: []
+    ecs_cai_workspace_name_effective: ""
+    ecs_cai_static_subdomain_effective: ""
+    ecs_cai_existing_workspace: {}
   when: "'cai' in (ecs_data_services_install_names | default([]))"
 
-- name: CAI | Refuse to mutate a terminal failed workspace
+- name: CAI | Build bounded workspace name candidates
+  ansible.builtin.set_fact:
+    ecs_cai_workspace_candidate_names: >-
+      {{ ecs_cai_workspace_candidate_names + [_ecs_cai_candidate_name] }}
+  vars:
+    _ecs_cai_numeric_suffix: >-
+      {{ ecs_cai_workspace_name | regex_search('([0-9]+)$') | default('', true) }}
+    _ecs_cai_numeric_prefix: >-
+      {{
+        ecs_cai_workspace_name
+        | regex_replace('[0-9]+$', '')
+      }}
+    _ecs_cai_candidate_suffix: "{{ '' if item == 1 else '-' + (item | string) }}"
+    _ecs_cai_candidate_base: >-
+      {{
+        ecs_cai_workspace_name[
+          0:
+          (
+            ecs_cai_workspace_name_max_length | int
+            - (_ecs_cai_candidate_suffix | length)
+          )
+        ]
+        | regex_replace('-+$', '')
+      }}
+    _ecs_cai_candidate_name: >-
+      {{
+        (
+          _ecs_cai_numeric_prefix[
+            0:
+            (
+              ecs_cai_workspace_name_max_length | int
+              - (
+                  (
+                    _ecs_cai_numeric_suffix | int
+                    + item - 1
+                  ) | string | length
+                )
+            )
+          ]
+          + (
+              (
+                _ecs_cai_numeric_suffix | int
+                + item - 1
+              ) | string
+            )
+        )
+        if _ecs_cai_numeric_suffix | length > 0
+        else (_ecs_cai_candidate_base + _ecs_cai_candidate_suffix)
+      }}
+  loop: "{{ range(1, (ecs_cai_workspace_name_attempts | int) + 1) | list }}"
+  when: "'cai' in (ecs_data_services_install_names | default([]))"
+
+- name: CAI | Build matching bounded endpoint candidates
+  ansible.builtin.set_fact:
+    ecs_cai_subdomain_candidate_names: >-
+      {{ ecs_cai_subdomain_candidate_names + [_ecs_cai_endpoint_candidate] }}
+  vars:
+    _ecs_cai_endpoint_suffix: "{{ '' if item == 1 else '-' + (item | string) }}"
+    _ecs_cai_endpoint_base: >-
+      {{
+        ecs_cai_static_subdomain[
+          0:
+          (
+            15
+            - (_ecs_cai_endpoint_suffix | length)
+          )
+        ]
+        | regex_replace('-+$', '')
+      }}
+    _ecs_cai_endpoint_candidate: >-
+      {{ _ecs_cai_endpoint_base + _ecs_cai_endpoint_suffix }}
+  loop: "{{ range(1, (ecs_cai_workspace_name_attempts | int) + 1) | list }}"
+  when: "'cai' in (ecs_data_services_install_names | default([]))"
+
+- name: CAI | Reuse healthy workspace owning configured base endpoint
+  ansible.builtin.set_fact:
+    ecs_cai_workspace_name_effective: "{{ item.instanceName }}"
+    ecs_cai_existing_workspace: "{{ item }}"
+  loop: "{{ ecs_cai_live_workspaces }}"
+  loop_control:
+    label: "{{ item.instanceName | default('unnamed') }}"
+  vars:
+    _ecs_cai_live_endpoint_host: >-
+      {{
+        item.instanceUrl | default('')
+        | regex_replace('^https?://', '')
+        | regex_replace('/.*$', '')
+        | regex_replace(':.*$', '')
+        | lower
+      }}
+    _ecs_cai_configured_endpoint_host: >-
+      {{ ecs_cai_static_subdomain | lower }}.{{ ecs_app_domain | lower }}
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - ecs_cai_workspace_name_effective | length == 0
+    - item.instanceName | default('') | length > 0
+    - _ecs_cai_live_endpoint_host == _ecs_cai_configured_endpoint_host
+    - >-
+      item.instanceStatus | default('')
+      is not search('(?i)(failed$|create_failed|deleted$|delet|remov|terminat)')
+    - >-
+      item.instanceStatus | default('')
+      is search(
+        '(?i)(progress|pending|creat|install|provision|start|running|ready|active|finished|modify)'
+      )
+
+- name: CAI | Reuse first real active or provisioning workspace candidate
+  ansible.builtin.set_fact:
+    ecs_cai_workspace_name_effective: "{{ item }}"
+    ecs_cai_existing_workspace: "{{ _ecs_cai_candidate_workspace }}"
+  vars:
+    _ecs_cai_candidate_workspace: >-
+      {{
+        ecs_cai_live_workspaces
+        | selectattr('instanceName', 'defined')
+        | selectattr('instanceName', 'equalto', item)
+        | list
+        | first
+        | default({})
+      }}
+  loop: "{{ ecs_cai_workspace_candidate_names }}"
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - ecs_cai_workspace_name_effective | length == 0
+    - _ecs_cai_candidate_workspace | length > 0
+    - >-
+      _ecs_cai_candidate_workspace.instanceStatus | default('')
+      is not search('(?i)(failed$|create_failed|deleted$|delet|remov|terminat)')
+    - >-
+      _ecs_cai_candidate_workspace.instanceStatus | default('')
+      is search(
+        '(?i)(progress|pending|creat|install|provision|start|running|ready|active|finished|modify)'
+      )
+
+- name: CAI | Select first candidate not present in live workspace inventory
+  ansible.builtin.set_fact:
+    ecs_cai_workspace_name_effective: "{{ item }}"
+  vars:
+    _ecs_cai_live_workspace_names: >-
+      {{
+        ecs_cai_live_workspaces
+        | selectattr('instanceName', 'defined')
+        | map(attribute='instanceName')
+        | list
+      }}
+  loop: "{{ ecs_cai_workspace_candidate_names }}"
+  when:
+    - "'cai' in (ecs_data_services_install_names | default([]))"
+    - ecs_cai_workspace_name_effective | length == 0
+    - item not in _ecs_cai_live_workspace_names
+
+- name: CAI | Require a bounded effective workspace name
   ansible.builtin.assert:
     that:
-      - >-
-        ecs_cai_existing_workspace.instanceStatus | default('')
-        is not search('(?i):failed$')
+      - ecs_cai_workspace_name_effective | length > 0
+      - ecs_cai_workspace_name_effective | length <= ecs_cai_workspace_name_max_length | int
     fail_msg: >-
-      Existing CAI workspace {{ ecs_cai_workspace_name }} is in terminal
-      status
-      {{ ecs_cai_existing_workspace.instanceStatus | default('unknown') }}.
-      Automation will not delete or recreate a failed workspace. Resolve or
-      remove it through the supported control-plane workflow, then rerun.
+      Unable to select a CAI workspace name from
+      {{ ecs_cai_workspace_name_attempts }} bounded candidates derived from
+      {{ ecs_cai_workspace_name }}.
+  when: "'cai' in (ecs_data_services_install_names | default([]))"
+
+- name: CAI | Match initial endpoint to effective workspace candidate
+  ansible.builtin.set_fact:
+    ecs_cai_static_subdomain_effective: >-
+      {{
+        (
+          ecs_cai_existing_workspace.instanceUrl
+          | regex_replace('^https?://', '')
+          | regex_replace('/.*$', '')
+          | regex_replace(':.*$', '')
+          | split('.')
+          | first
+        )
+        if (
+          ecs_cai_existing_workspace | length > 0
+          and ecs_cai_existing_workspace.instanceUrl | default('') | length > 0
+        )
+        else (
+          ecs_cai_subdomain_candidate_names[
+            ecs_cai_workspace_candidate_names.index(ecs_cai_workspace_name_effective)
+          ]
+        )
+      }}
   when: "'cai' in (ecs_data_services_install_names | default([]))"
 
 - name: CAI | Report authoritative reusable workspace
   ansible.builtin.debug:
     msg: >-
-      CAI: EXISTS;
-      name={{
+      CAI Workbench: Existing workspace recognized and selected for reuse.
+      instanceName={{
       ecs_cai_existing_workspace.instanceName
-      | default(ecs_cai_workspace_name) }};
-      status={{
+      | default(ecs_cai_workspace_name_effective) }};
+      observed_status={{
       ecs_cai_existing_workspace.instanceStatus | default('unknown') }};
       endpoint={{
       ecs_cai_existing_workspace.instanceUrl | default('not returned') }};
       environment={{
       ecs_cai_existing_workspace.environmentName
-      | default(ecs_cdp_environment_name) }};
-      action=REUSE.
+      | default(ecs_cdp_environment_name) }}.
+      No rename or duplicate create is performed.
   when:
     - "'cai' in (ecs_data_services_install_names | default([]))"
     - ecs_cai_existing_workspace | default({}) | length > 0
@@ -94,10 +232,22 @@
 - name: CAI | Report absent workspace selected for creation
   ansible.builtin.debug:
     msg: >-
-      CAI: ABSENT; name={{ ecs_cai_workspace_name }};
+      CAI: ABSENT; name={{ ecs_cai_workspace_name_effective }};
       status=Absent; endpoint={{
-      ecs_cai_static_subdomain }}.{{ ecs_app_domain }};
+      ecs_cai_static_subdomain_effective }}.{{ ecs_app_domain }};
       environment={{ ecs_cdp_environment_name }}; action=CREATE.
   when:
     - "'cai' in (ecs_data_services_install_names | default([]))"
     - ecs_cai_existing_workspace | default({}) | length == 0
+
+- name: CAI | Preserve deterministic workspace create attempt order
+  ansible.builtin.set_fact:
+    ecs_cai_workspace_create_candidates: >-
+      {{
+        ecs_cai_workspace_candidate_names[
+          ecs_cai_workspace_candidate_names.index(ecs_cai_workspace_name_effective):
+        ]
+        if ecs_cai_workspace_name_effective in ecs_cai_workspace_candidate_names
+        else []
+      }}
+  when: "'cai' in (ecs_data_services_install_names | default([]))"

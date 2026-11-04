@@ -20,6 +20,9 @@ cat >"${playbook}" <<'YAML'
     - name: Resolve cluster template prerequisites
       ansible.builtin.set_fact:
         base_cluster_kafka_metadata_store_effective: Zookeeper
+        base_cluster_hdfs_name_dir: /dfs/nn
+        base_cluster_spark3_service_name: spark3
+        base_cluster_spark3_service_type: SPARK3_ON_YARN
         base_master_fqdn: master.example.invalid
         base_worker_fqdns: []
         base_cluster_hosts: []

@@ -23,15 +23,16 @@ def function_body(name: str) -> str:
 
 parse_body = function_body("parseSelectedStages")
 assert "csv instanceof Collection" in parse_body
-assert "csv.getClass().isArray()" in parse_body
+assert "csv instanceof Object[]" in parse_body
+assert ".getClass().isArray()" not in parse_body
 
 canonical_body = function_body("canonicalizePipelineStages")
 assert "!unique.contains(normalized)" in canonical_body
 assert "orderedPipelineStageIds().findAll" in canonical_body
 
 effective_body = function_body("effectivePipelineStages")
-assert effective_body.count("canonicalizePipelineStages") >= 3
-assert "expandPipelineStageTokens(stages)" in effective_body
+assert effective_body.count("canonicalizePipelineStages") >= 2
+assert "addImplicitDeploymentStages(stages)" in effective_body
 
 should_run_body = function_body("shouldRunAnsibleStage")
 assert "PIPELINE_STAGES_RESOLVED" in should_run_body
@@ -46,11 +47,11 @@ order = [
     "TERRAFORM",
     "PREREQS",
     "PORTAL",
+    "MONITORING",
     "IDENTITY",
     "CM_INSTALL",
     "CM_TLS_KRB_LDAP",
     "CDH_INSTALL",
-    "MONITORING",
     "ECS_INSTALL",
     "ECS_POST_INSTALL_TASKS",
     "ECS_DATA_SERVICES",
@@ -77,15 +78,12 @@ def effective(value):
         for token in str(item).split(","):
             token = token.strip().upper().replace("-", "_")
             token = aliases.get(token, token)
-            expanded = (
-                ["CM_TLS_KRB_LDAP", "CDH_INSTALL"]
-                if token == "CDH_BASE"
-                else [token]
-            )
-            for stage in expanded:
-                if stage and stage not in normalized:
-                    normalized.append(stage)
-    return [stage for stage in order if stage in normalized]
+            if token and token not in normalized:
+                normalized.append(token)
+    result = [stage for stage in order if stage in normalized]
+    if "MONITORING" in result and "PORTAL" not in result:
+        result.append("PORTAL")
+    return [stage for stage in order if stage in result]
 
 
 assert effective("ECS_INSTALL,ECS_DATA_SERVICES") == [
@@ -97,7 +95,7 @@ assert effective([" ecs ", "DATA_SERVICES", "ecs-install", "dataservices"]) == [
     "ECS_DATA_SERVICES",
 ]
 assert effective("PORTAL,MONITORING,PORTAL") == ["PORTAL", "MONITORING"]
-assert effective("CDH_BASE,CDH_INSTALL,CM_TLS") == [
+assert effective("CDH_INSTALL,CM_TLS") == [
     "CM_TLS_KRB_LDAP",
     "CDH_INSTALL",
 ]

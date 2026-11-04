@@ -7,6 +7,9 @@ services:
   - name: core-settings
     type: CORE_SETTINGS
     display_name: Core Settings
+    config:
+      hadoop_security_authorization: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
+      hadoop_security_authentication: "{{ 'kerberos' if base_cluster_enable_kerberos | default(true) | bool else 'simple' }}"
     role_groups:
       - type: GATEWAY
 {% endif %}
@@ -15,27 +18,34 @@ services:
     type: ZOOKEEPER
     display_name: ZooKeeper
     config:
-      zookeeper_datadir_autocreate: true
+      zookeeper_datadir_autocreate: "true"
+      quorum_auth_enable_sasl: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
+      enableSecurity: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
     role_groups:
       - type: SERVER
+        config:
+          dataDir: /var/lib/zookeeper
+          dataLogDir: /var/lib/zookeeper
 {% endif %}
 {% if svc.hdfs | default(true) %}
   - name: hdfs
     type: HDFS
     display_name: HDFS
     config:
-      zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
       core_connector: "{{ 'core-settings' if svc.core_settings | default(true) else '' }}"
+      dfs_encrypt_data_transfer_algorithm: AES/CTR/NoPadding
+      hadoop_secure_web_ui: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
     role_groups:
       - type: DATANODE
         config:
           dfs_data_dir_list: /dfs/dn
       - type: NAMENODE
         config:
-          dfs_name_dir_list: /dfs/nn
+          dfs_name_dir_list: "{{ base_cluster_hdfs_name_dir }}"
       - type: SECONDARYNAMENODE
         config:
           fs_checkpoint_dir_list: /dfs/snn
+      - type: BALANCER
       - type: GATEWAY
 {% endif %}
 {% if svc.ozone | default(true) %}
@@ -45,10 +55,22 @@ services:
     config:
       ozone.service.id: "{{ base_cluster_ozone_service_id }}"
       ozone.scm.primordial.node.id: "{{ base_master_fqdn }}"
-      hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
+      ozone.security.enabled: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
+{% if svc.hdfs | default(true) %}
+      hdfs_service: hdfs
+{% endif %}
+{% if svc.solr | default(false) %}
+      solr_service: solr
+{% endif %}
     role_groups:
       - type: OZONE_MANAGER
       - type: STORAGE_CONTAINER_MANAGER
+        config:
+          ozone-conf/ozone-site.xml_role_safety_valve: >-
+            <property>
+              <name>hdds.scm.safemode.enabled</name>
+              <value>false</value>
+            </property>
       - type: OZONE_DATANODE
       - type: OZONE_RECON
       - type: S3_GATEWAY
@@ -60,10 +82,7 @@ services:
     display_name: YARN
     config:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
-      zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
-{% if svc.ranger | default(true) %}
-      ranger_service: ranger
-{% endif %}
+      hadoop_secure_web_ui: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
     role_groups:
       - type: RESOURCEMANAGER
         config:
@@ -73,10 +92,12 @@ services:
         config:
           yarn_nodemanager_resource_memory_mb: {{ base_cluster_yarn_nm_memory_mb | default(4096) }}
           yarn_nodemanager_resource_cpu_vcores: {{ base_cluster_yarn_nm_vcores | default(4) }}
-          yarn_nodemanager_local_dirs: /tmp/nm
+          yarn_nodemanager_local_dirs: /yarn/nm
           yarn_nodemanager_log_dirs: /var/log/nm
       - type: JOBHISTORY
       - type: GATEWAY
+        config:
+          mapred_submit_replication: {{ [base_worker_fqdns | length, 1] | max }}
 {% endif %}
 {% if svc.tez | default(true) %}
   - name: tez
@@ -89,9 +110,9 @@ services:
       - type: GATEWAY
 {% endif %}
 {% if svc.spark3 | default(true) %}
-  - name: spark3_on_yarn
-    type: SPARK3_ON_YARN
-    display_name: Spark 3 on YARN
+  - name: "{{ base_cluster_spark3_service_name }}"
+    type: "{{ base_cluster_spark3_service_type }}"
+    display_name: Spark3
     config:
       yarn_service: "{{ 'yarn' if svc.yarn | default(true) else '' }}"
 {% if svc.hbase | default(true) %}
@@ -157,6 +178,12 @@ services:
     config:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+      hbase_thriftserver_security_authentication: "{{ 'auth-conf' if base_cluster_enable_kerberos | default(true) | bool else 'none' }}"
+      hbase_security_authentication: "{{ 'kerberos' if base_cluster_enable_kerberos | default(true) | bool else 'simple' }}"
+      hbase_security_authorization: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
+{% if svc.ranger | default(true) %}
+      ranger_service: ranger
+{% endif %}
     role_groups:
       - type: MASTER
       - type: REGIONSERVER
@@ -200,6 +227,7 @@ services:
     role_groups:
       - type: HUE_SERVER
       - type: HUE_LOAD_BALANCER
+      - type: KT_RENEWER
 {% endif %}
 {% if svc.replication | default(false) %}
   - name: replication
@@ -239,13 +267,9 @@ services:
     config:
 {% if kafka_metadata_store | lower == 'zookeeper' %}
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+      zookeeper.chroot: /kafka
 {% endif %}
-{% if svc.hdfs | default(true) %}
-      hdfs_service: hdfs
-{% endif %}
-{% if svc.ranger | default(true) %}
-      ranger_service: ranger
-{% endif %}
+      kerberos.auth.enable: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
     role_groups:
       - type: KAFKA_BROKER
         config:
@@ -260,6 +284,7 @@ services:
     type: ATLAS
     display_name: Atlas
     config:
+      kerberos.auth.enable: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
       kafka_service: "{{ 'kafka' if svc.kafka | default(true) else '' }}"
 {% if svc.hbase | default(true) %}
@@ -355,6 +380,13 @@ services:
       knox_gateway_database_type: postgresql
       knox_gateway_database_name: "{{ base_cluster_knox_database_name }}"
       knox_gateway_database_user: "{{ base_cluster_knox_database_user }}"
+      kerberos.auth.enabled: "{{ base_cluster_enable_kerberos | default(true) | bool | lower }}"
+{% if svc.ranger | default(true) %}
+      ranger_service: ranger
+{% endif %}
+{% if svc.hdfs | default(true) %}
+      hdfs_service: hdfs
+{% endif %}
     role_groups:
       - type: KNOX_GATEWAY
 {% endif %}
@@ -365,6 +397,7 @@ services:
     config:
       hdfs_service: "{{ 'hdfs' if svc.hdfs | default(true) else '' }}"
       zookeeper_service: "{{ 'zookeeper' if svc.zookeeper | default(true) else '' }}"
+      solr_security_authentication: "{{ 'kerberos' if base_cluster_enable_kerberos | default(true) | bool else 'none' }}"
     role_groups:
       - type: SOLR_SERVER
       - type: GATEWAY
@@ -379,6 +412,8 @@ host_templates:
         type: NAMENODE
       - service: HDFS
         type: SECONDARYNAMENODE
+      - service: HDFS
+        type: BALANCER
 {% endif %}
 {% if svc.ozone | default(true) %}
       - service: OZONE
@@ -397,7 +432,7 @@ host_templates:
         type: JOBHISTORY
 {% endif %}
 {% if svc.spark3 | default(true) %}
-      - service: SPARK3_ON_YARN
+      - service: "{{ base_cluster_spark3_service_type }}"
         type: SPARK3_YARN_HISTORY_SERVER
 {% endif %}
 {% if svc.hive | default(true) %}
@@ -417,6 +452,8 @@ host_templates:
         type: HUE_SERVER
       - service: HUE
         type: HUE_LOAD_BALANCER
+      - service: HUE
+        type: KT_RENEWER
 {% endif %}
 {% if svc.impala | default(true) %}
       - service: IMPALA
@@ -519,7 +556,7 @@ host_templates:
         type: GATEWAY
 {% endif %}
 {% if svc.spark3 | default(true) %}
-      - service: SPARK3_ON_YARN
+      - service: "{{ base_cluster_spark3_service_type }}"
         type: GATEWAY
 {% endif %}
 {% if svc.nifi | default(false) %}

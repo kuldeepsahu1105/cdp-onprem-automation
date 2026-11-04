@@ -4,8 +4,9 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 probe_file="$repo_root/ansible-playbooks/roles/ecs/tasks/ecs_data_services_verify_dns.yml"
 group_vars_file="$repo_root/ansible-playbooks/group_vars/all.yml"
+config_file="$repo_root/ansible-playbooks/config.yml"
 
-python3 - "$probe_file" "$group_vars_file" <<'PY'
+python3 - "$probe_file" "$group_vars_file" "$config_file" <<'PY'
 from pathlib import Path
 import json
 import os
@@ -17,6 +18,7 @@ import yaml
 path = Path(sys.argv[1])
 text = path.read_text()
 group_vars = yaml.safe_load(Path(sys.argv[2]).read_text())
+config = yaml.safe_load(Path(sys.argv[3]).read_text())
 
 assert text.count("- ansible-dns-check\n") == 5
 assert "ansible-dns-check-{{" not in text
@@ -30,10 +32,15 @@ assert "socket.getaddrinfo(" not in text
 assert "ipaddress.IPv4Address(candidate)" in text
 assert "COREDNS_ENDPOINT_FALLBACK_OK" in text
 assert "ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK" in text
-assert "(connect_address, port)" in text
+assert "(address, port)" in text
 assert "NSLOOKUP_DIAGNOSTIC" in text
 assert "loop: \"{{ ecs_data_services_dns_verification_records }}\"" in text
 assert "ecs_data_services_dns_probe_phases.stdout == 'Succeeded'" in text
+assert "'ALL_PROBES_OK' in ecs_data_services_dns_probe_logs.stdout_lines" in text
+assert (
+    "'ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK'"
+    in text
+)
 assert "ecs_data_services_dns_probe_attempts | default(3) | int" in text
 assert "ecs_data_services_dns_probe_retry_delay | int" in text
 assert group_vars["ecs_data_services_dns_probe_attempts"] == 3
@@ -48,38 +55,94 @@ assert group_vars["ecs_service_discovery_rollout_timeout"] == 300
 assert group_vars["ecs_node_local_dns_reconcile"] is True
 assert group_vars["ecs_node_local_dns_configmap_name"] == "node-local-dns"
 assert group_vars["ecs_node_local_dns_daemonset_name"] == "node-local-dns"
+assert config["ecs_coredns_forwarders"] == []
 
-coredns_reconcile = (
-    path.parent / "ecs_reconcile_coredns.yml"
-).read_text()
-compat_coredns_reconcile = (
-    path.parents[3] / "common_tasks/ecs_reconcile_coredns.yml"
-).read_text()
-assert "name: ecs" in compat_coredns_reconcile
-assert "tasks_from: ecs_reconcile_coredns" in compat_coredns_reconcile
-assert "Check for ECS node-local DNS configuration" in coredns_reconcile
-assert "node-local DNS root server block was not found" in coredns_reconcile
-assert "forward . \" + upstreams" in coredns_reconcile
-assert 'r"(?P<footer>^[ \\t]*\\})"' in coredns_reconcile
-assert "daemonset/{{ ecs_node_local_dns_daemonset_name }}" in coredns_reconcile
-
-coredns_reconcile_tasks = yaml.safe_load(coredns_reconcile)
+coredns_reconcile_path = path.parent / "ecs_reconcile_coredns.yml"
+coredns_reconcile_tasks = yaml.safe_load(coredns_reconcile_path.read_text())
 coredns_tasks_by_name = {
     task.get("name"): task for task in coredns_reconcile_tasks
 }
-assert "Extract applied ECS CoreDNS forward line" in coredns_tasks_by_name
-assert "Report applied ECS CoreDNS forward line" in coredns_tasks_by_name
 assert "Require literal IP ECS CoreDNS upstreams" in coredns_tasks_by_name
-assert "Extract current ECS CoreDNS forward line" in coredns_tasks_by_name
-assert "Report current ECS CoreDNS forward line" in coredns_tasks_by_name
-assert coredns_tasks_by_name[
-    "Extract current ECS CoreDNS forward line"
-]["ansible.builtin.command"]["stdin"] == "{{ ecs_coredns_corefile.stdout }}"
-assert coredns_tasks_by_name[
-    "Extract applied ECS CoreDNS forward line"
-]["ansible.builtin.command"]["stdin"] == (
-    "{{ ecs_coredns_applied_corefile.stdout }}"
+direct_forwarders = coredns_tasks_by_name[
+    "Resolve direct ECS CoreDNS forwarder candidates"
+]["ansible.builtin.set_fact"]["ecs_coredns_direct_forwarder_candidates"]
+assert "private_ip" in direct_forwarders
+assert "default(" in direct_forwarders
+assert "ansible_host" in direct_forwarders
+assert direct_forwarders.count("ansible_host") == 1
+assert "ad_dns_servers" in direct_forwarders
+assert "extra_dns_nameservers" in direct_forwarders
+
+corefile_build = coredns_tasks_by_name[
+    "Build verified ECS CoreDNS forwarding policy"
+]
+corefile_argv = corefile_build["ansible.builtin.command"]["argv"]
+corefile_script = corefile_argv[corefile_argv.index("-c") + 1]
+platform_root = """.:53 {
+    errors
+    forward . /etc/resolv.conf {
+        max_concurrent 1000
+    }
+}
+"""
+corefile_result = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        corefile_script,
+        platform_root,
+        "192.0.2.10 198.51.100.10",
+        "identity.example",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
 )
+assert corefile_result.returncode == 0, corefile_result.stderr
+assert platform_root.rstrip() in corefile_result.stdout
+assert "identity.example:53 {" in corefile_result.stdout
+assert "forward . 192.0.2.10 198.51.100.10" in corefile_result.stdout
+corefile_idempotent = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        corefile_script,
+        corefile_result.stdout,
+        "192.0.2.10 198.51.100.10",
+        "identity.example",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+assert corefile_idempotent.returncode == 0, corefile_idempotent.stderr
+assert corefile_idempotent.stdout == corefile_result.stdout
+chart_corefile = platform_root + """
+identity.example:53 {
+    errors
+    cache 30
+    forward . 203.0.113.53
+}
+"""
+chart_update = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        corefile_script,
+        chart_corefile,
+        "192.0.2.10 198.51.100.10",
+        "identity.example",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+assert chart_update.returncode == 0, chart_update.stderr
+assert platform_root.rstrip() in chart_update.stdout
+assert chart_update.stdout.count("identity.example:53 {") == 1
+assert "forward . 203.0.113.53" not in chart_update.stdout
+assert "forward . 192.0.2.10 198.51.100.10" in chart_update.stdout
+
 kubectl_index = next(
     index for index, task in enumerate(coredns_reconcile_tasks)
     if task.get("name") == "Check ECS kubectl binary"
@@ -89,26 +152,11 @@ api_wait_index = next(
     if task.get("name")
     == "Wait for ECS Kubernetes API before CoreDNS reconciliation"
 )
-api_require_index = next(
-    index for index, task in enumerate(coredns_reconcile_tasks)
-    if task.get("name")
-    == "Require ECS Kubernetes API before CoreDNS reconciliation"
-)
-resolver_index = next(
-    index for index, task in enumerate(coredns_reconcile_tasks)
-    if task.get("name") == "Read ECS master resolver configuration"
-)
 probe_cleanup_index = next(
     index for index, task in enumerate(coredns_reconcile_tasks)
     if task.get("name") == "Remove stale ECS DNS upstream probe pods"
 )
-assert (
-    kubectl_index
-    < api_wait_index
-    < api_require_index
-    < resolver_index
-    < probe_cleanup_index
-)
+assert kubectl_index < api_wait_index < probe_cleanup_index
 api_wait = coredns_tasks_by_name[
     "Wait for ECS Kubernetes API before CoreDNS reconciliation"
 ]
@@ -116,15 +164,6 @@ assert api_wait["ansible.builtin.command"]["argv"][-1] == "--raw=/readyz"
 assert api_wait["delegate_to"] == "{{ groups[ecs_cluster_master_group][0] }}"
 assert api_wait["connection"] == "ssh"
 assert api_wait["failed_when"] is False
-assert api_wait["retries"] == (
-    "{{ ecs_control_plane_install_poll_retries | default(240) }}"
-)
-assert api_wait["delay"] == (
-    "{{ ecs_control_plane_install_poll_delay | default(15) }}"
-)
-api_require = coredns_tasks_by_name[
-    "Require ECS Kubernetes API before CoreDNS reconciliation"
-]
 bootstrap = coredns_tasks_by_name[
     "Select authoritative ECS DNS upstreams during First Run bootstrap"
 ]
@@ -172,17 +211,124 @@ assert "selectattr('stdout', 'defined')" in (
     upstream_assert["ansible.builtin.assert"]["fail_msg"]
 )
 node_local_build = coredns_tasks_by_name[
-    "Build verified ECS node-local DNS forwarding policy"
+    "Build verified ECS node-local identity-domain forwarding policy"
 ]
-api_require_conditions = "\n".join(api_require["ansible.builtin.assert"]["that"])
-assert "ecs_coredns_kubernetes_api_ready.rc | int == 0" in api_require_conditions
-assert (
-    "ecs_coredns_kubernetes_api_ready.stdout | default('') | trim == 'ok'"
-    in api_require_conditions
+for task_name in (
+    "Check for ECS node-local DNS configuration",
+    "Build verified ECS node-local identity-domain forwarding policy",
+    "Apply verified ECS node-local DNS forwarding policy",
+    "Restart ECS node-local DNS after configuration change",
+    "Wait for ECS node-local DNS rollout after configuration change",
+):
+    task = coredns_tasks_by_name[task_name]
+    conditions = task.get("when", [])
+    conditions = conditions if isinstance(conditions, list) else [conditions]
+    assert not any(
+        "ecs_coredns_extended_verification_enabled" in str(condition)
+        for condition in conditions
+    )
+node_local_argv = node_local_build["ansible.builtin.command"]["argv"]
+node_local_script = node_local_argv[node_local_argv.index("-c") + 1]
+node_local_corefile = """.:53 {
+    errors
+    cache 30
+    bind 169.254.25.10 192.0.2.53
+    forward . __PILLAR__UPSTREAM__SERVERS__ {
+        force_tcp
+        }
+    }
+cluster.example:53 {
+    errors
+    cache {
+        success 9984 30
+        denial 9984 5
+        }
+    bind 169.254.25.10 192.0.2.53
+    forward . __PILLAR__CLUSTER__DNS__ {
+        force_tcp
+        }
+    }
+in-addr.arpa:53 {
+    bind 169.254.25.10 192.0.2.53
+    forward . __PILLAR__CLUSTER__DNS__
+    }
+ip6.arpa:53 {
+    bind 169.254.25.10 192.0.2.53
+    forward . __PILLAR__CLUSTER__DNS__
+    }
+"""
+node_local_result = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        node_local_script,
+        node_local_corefile,
+        "identity.example",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
 )
+assert node_local_result.returncode == 0, node_local_result.stderr
+assert "cluster.example:53 identity.example:53 {" in node_local_result.stdout
+assert "__PILLAR__UPSTREAM__SERVERS__" in node_local_result.stdout
+assert node_local_result.stdout.count(
+    "forward . __PILLAR__CLUSTER__DNS__"
+) == 3
+assert (
+    node_local_result.stdout.replace(
+        "cluster.example:53 identity.example:53 {",
+        "cluster.example:53 {",
+        1,
+    )
+    == node_local_corefile
+)
+node_local_idempotent_result = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        node_local_script,
+        node_local_result.stdout,
+        "identity.example",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+assert (
+    node_local_idempotent_result.returncode == 0
+), node_local_idempotent_result.stderr
+assert node_local_idempotent_result.stdout == node_local_result.stdout
+
+node_local_restart = coredns_tasks_by_name[
+    "Restart ECS node-local DNS after configuration change"
+]
+assert (
+    "daemonset/{{ ecs_node_local_dns_daemonset_name }}"
+    in node_local_restart["ansible.builtin.command"]["argv"]
+)
+node_local_check_index = next(
+    index for index, task in enumerate(coredns_reconcile_tasks)
+    if task.get("name") == "Check for ECS node-local DNS configuration"
+)
+service_probe_index = next(
+    index for index, task in enumerate(coredns_reconcile_tasks)
+    if task.get("name")
+    == "Verify required records through the CoreDNS Service and every ready replica"
+)
+assert node_local_check_index < service_probe_index
 
 tasks = yaml.safe_load(path.read_text())
 tasks_by_name = {task.get("name"): task for task in tasks}
+probe_start = tasks_by_name["Start Data Services DNS verification pod"]
+probe_argv = probe_start["ansible.builtin.command"]["argv"]
+probe_script = probe_argv[probe_argv.index("-c") + 1]
+assert "successes_required = int(sys.argv[6])" in probe_script
+assert "for sample in range(1, successes_required + 1)" in probe_script
+assert "HTTPS_OK" in probe_script
+assert probe_argv[-1] == (
+    "{{ ecs_data_services_dns_probe_successes_required | default(1) | int }}"
+)
 probe_success = tasks_by_name[
     "Require successful Data Services DNS verification pod"
 ]
@@ -197,12 +343,6 @@ refresh_tasks = yaml.safe_load(refresh_path.read_text())
 refresh_tasks_by_name = {
     task.get("name"): task for task in refresh_tasks
 }
-rollout_restart_tasks = [
-    task for task in refresh_tasks
-    if "ansible.builtin.command" in task
-    and "restart" in task["ansible.builtin.command"]["argv"]
-]
-assert len(rollout_restart_tasks) == 1
 restart_task = refresh_tasks_by_name[
     "Refresh ECS Service Discovery DNS cache before Data Services provisioning"
 ]
@@ -225,45 +365,40 @@ for task in refresh_tasks:
         assert task["delegate_to"] == "{{ groups[ecs_cluster_master_group][0] }}"
         assert task["connection"] == "ssh"
 
-compat_refresh = (
-    path.parents[3] / "common_tasks/ecs_refresh_service_discovery_dns.yml"
-).read_text()
-assert "name: ecs" in compat_refresh
-assert "tasks_from: ecs_refresh_service_discovery_dns" in compat_refresh
-
-setup_tasks = yaml.safe_load(
+playbook_tasks = yaml.safe_load(
     (path.parent / "setup_data_services.yml").read_text()
 )
-setup_task_names = [task.get("name") for task in setup_tasks]
-reconcile_index = setup_task_names.index(
+playbook_task_names = [task.get("name") for task in playbook_tasks]
+reconcile_index = playbook_task_names.index(
     "Reconcile CoreDNS before Data Services provisioning"
 )
-verify_index = setup_task_names.index(
+verify_index = playbook_task_names.index(
     "Verify Data Services DNS through Kubernetes pods"
 )
-refresh_index = setup_task_names.index(
+refresh_index = playbook_task_names.index(
     "Refresh Service Discovery DNS state before Data Services provisioning"
 )
-credentials_index = setup_task_names.index(
+credentials_index = playbook_task_names.index(
     "Load existing ECS automation API credentials"
 )
 assert reconcile_index < verify_index < refresh_index < credentials_index
 
-freeipa_record = tasks_by_name[
-    "Add FreeIPA to required Data Services DNS verification records"
+freeipa_task_names = [
+    "Require FreeIPA inventory for Data Services DNS verification",
+    "Resolve FreeIPA inventory host for DNS verification",
+    "Add FreeIPA to required Data Services DNS verification records",
 ]
-freeipa_when = "\n".join(freeipa_record["when"])
-assert "identity_provider_effective" in freeipa_when
-assert "ecs_ldap_sync_effective" not in freeipa_when
-assert "ecs_ldap_admin_user_effective" not in freeipa_when
+for task_name in freeipa_task_names:
+    assert tasks_by_name[task_name]["when"] == [
+        "identity_provider_effective | default('freeipa') == 'freeipa'"
+    ]
 
-freeipa_inventory = tasks_by_name[
-    "Require FreeIPA inventory for Data Services DNS verification"
+ad_record = tasks_by_name[
+    "Add Active Directory LDAP to required Data Services DNS verification records"
 ]
-freeipa_inventory_when = "\n".join(freeipa_inventory["when"])
-assert "identity_provider_effective" in freeipa_inventory_when
-assert "ecs_ldap_sync_effective" not in freeipa_inventory_when
-assert "ecs_ldap_admin_user_effective" not in freeipa_inventory_when
+assert ad_record["when"] == [
+    "identity_provider_effective | default('') == 'ad'"
+]
 
 start = next(
     task for task in tasks
@@ -280,8 +415,8 @@ with tempfile.TemporaryDirectory() as temp_dir:
         "  echo '** server cannot find test name: NXDOMAIN'\n"
         "  exit 1\n"
         "fi\n"
-        "printf 'Server:\\t172.43.0.10\\n"
-        "Address:\\t172.43.0.10:53\\n\\n"
+        "printf 'Server:\\t192.0.2.53\\n"
+        "Address:\\t192.0.2.53:53\\n\\n"
         "Name:\\t%s\\nAddress: 127.0.0.1\\n' \"$2\"\n"
     )
     nslookup.chmod(0o755)
@@ -305,6 +440,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
                 }
             ]),
             "172.42.1.96",
+            "1",
         ],
         check=False,
         capture_output=True,
@@ -332,6 +468,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
                 }
             ]),
             "172.42.1.96",
+            "1",
         ],
         check=False,
         capture_output=True,
@@ -360,6 +497,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
                 }
             ]),
             "172.42.1.96",
+            "1",
         ],
         check=False,
         capture_output=True,

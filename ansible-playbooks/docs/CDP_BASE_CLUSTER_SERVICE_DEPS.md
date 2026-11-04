@@ -12,11 +12,11 @@ Authoritative matrix: [Service Dependencies in Cloudera Manager](https://docs.cl
 | HDFS | `zookeeper_service`, `core_connector` |
 | YARN | `hdfs_service`, `zookeeper_service`; optional `ranger_service` |
 | Tez | `yarn_service` only |
-| Spark 3 on YARN | `yarn_service`; roles `SPARK3_YARN_HISTORY_SERVER` and `GATEWAY` |
+| Spark3 | `yarn_service`; bundled in the CDH 7.3.1+ parcel and exposed by CM as service type `SPARK3_ON_YARN`, with service name `spark3` and roles `SPARK3_YARN_HISTORY_SERVER` and `GATEWAY` |
 | Hive | `hdfs_service`, `zookeeper_service`, `mapreduce_yarn_service`; PostgreSQL metastore host, port, name, user, and password; optional `ranger_service`, `hbase_service`, `atlas_service` |
 | Hive on Tez | `hdfs_service`, `hms_connector`, `tez_service`, `mapreduce_yarn_service`, `zookeeper_service`; optional ranger/hbase/atlas |
 | HBase | `hdfs_service`, `zookeeper_service` |
-| Hue | PostgreSQL database host, port, name, user, and password; `hdfs_service`; on CDP 7+ with Hive + Hive on Tez use `hms_service: hive` and `hive_service: hive_on_tez`; optional hbase/impala/solr/atlas/zookeeper when those services enabled |
+| Hue | PostgreSQL database host, port, name, user, and password; `hdfs_service`; on CDP 7+ with Hive + Hive on Tez use `hms_service: hive` and `hive_service: hive_on_tez`; optional hbase/impala/solr/atlas/zookeeper when those services enabled; every Hue server/Data Explorer host requires a colocated `KT_RENEWER` on Kerberized clusters |
 | Impala | `hdfs_service`, `hive_service` (HMS); optional `hbase_service`, `ranger_service`, `atlas_service` |
 | Kafka | `base_cluster_kafka_metadata_store: Zookeeper` (default) uses `zookeeper_service`; `KRaft` uses `KRAFT` controllers; optional `hdfs_service`, `ranger_service`; always includes `KAFKA_BROKER` and `GATEWAY` |
 | Atlas | `hdfs_service`, `kafka_service`; optional `hbase_service`, `solr_service`, `ranger_service` |

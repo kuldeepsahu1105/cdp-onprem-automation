@@ -1,16 +1,16 @@
 ---
 - name: CM API — set connection context (once per play)
-  ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/resolve_cm_api_probe_context.yml"
 
 - name: Capture Auto-TLS setup intent from inventory (before HTTPS probes may set autotls_enabled)
   ansible.builtin.set_fact:
     cm_autotls_setup_intent: "{{ autotls_enabled | default(true) | bool }}"
 
 - name: CMS — prepare Cloudera Manager API
-  ansible.builtin.import_tasks: common_tasks/prepare_cm_security_api.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/prepare_cm_security_api.yml"
 
 - name: CM API — read TLS / Auto-TLS state for CMS messaging
-  ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/fetch_cm_autotls_api_state.yml"
 
 - name: CMS — read existing management service
   ansible.builtin.uri:
@@ -148,7 +148,7 @@
     - not (cms_fast_path_autotls_trust_ready | default(false) | bool)
 
 - name: CMS — print existing Cloudera Manager access URLs
-  ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/print_cm_urls.yml"
   when: cm_cms_noop_this_run | bool
 
 - name: CMS — finish healthy no-op play
@@ -178,13 +178,13 @@
       - "Prerequisite: run 27_setup_cm_autotls.yml before CMS only when CM Auto-TLS is enabled (MGMT ssl_client_truststore_*); manual HTTPS :7183 skips agent truststore automation"
 
 - name: Configure and start Cloudera Management Service (REST API)
-  ansible.builtin.import_tasks: common_tasks/configure_cm_cms_api.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/configure_cm_cms_api.yml"
 
 - name: Apply optional CM host tags from inventory (role, env, owner)
-  ansible.builtin.import_tasks: common_tasks/apply_cm_host_tags.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/apply_cm_host_tags.yml"
 
 - name: Verify CM host agent heartbeats are fresh
-  ansible.builtin.import_tasks: common_tasks/verify_cm_host_heartbeats.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/verify_cm_host_heartbeats.yml"
   when: cm_host_heartbeat_verify_after_cms | default(true) | bool
 
 - name: Print CMS configuration result

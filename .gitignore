@@ -24,11 +24,16 @@ license.txt
 **/logs/*
 !ansible-playbooks/logs/.gitkeep
 ansible-playbooks/jenkins_override.yml
+ansible-playbooks/ecs-data-services-catalog.yml
 
 # Jenkins pipeline runtime artifacts (keep directory placeholder)
 jenkins/artifacts/*
 !jenkins/artifacts/.gitkeep
 .ce-aws/
+
+# Cost inputs/live evidence and generated reports may contain account data.
+/cost-inputs/
+/artifacts/cost/
 
 # Local inventory overrides (keep inventory.ini as template if needed)
 ansible-playbooks/inventory.ini.bak

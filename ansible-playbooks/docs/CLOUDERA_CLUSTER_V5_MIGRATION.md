@@ -32,3 +32,21 @@ Upstream **[5.0.0](https://github.com/cloudera-labs/cloudera.cluster/releases/ta
 
 - [5.0.0 release notes](https://github.com/cloudera-labs/cloudera.cluster/releases/tag/5.0.0) — includes “Update to cm-client v57” (#326).
 - Active pin on main: v4.4.0 + [PR #82](https://github.com/kuldeepsahu1105/cdp-onprem-automation/pull/82) rationale.
+
+## 2026-10 upstream review
+
+- [`cloudera-labs/cloudera.cluster#355`](https://github.com/cloudera-labs/cloudera.cluster/pull/355)
+  proposes parallel parcel processing, but remains open with requested API
+  changes. Do not pin to its branch or copy its unstable return contract.
+- Main now provides equivalent deployment behavior through
+  `common_tasks/activate_cluster_parcels.yml` and
+  `scripts/lib/activate_cm_parcels.py`: backward-compatible single-item input,
+  bounded parallel lists, per-parcel deadlines, transient CM HTTP 400 retries,
+  and aggregate failures.
+- Merged 5.0.0 parcel timeout/retry fixes are useful, but do not justify a
+  collection upgrade by themselves because the local CM API helper already
+  covers those failure modes.
+- New 5.0.0 modules (`cm_autotls`, `cm_kerberos`, `control_plane`) remain
+  migration candidates only. Replacing the proven local Auto-TLS, Kerberos, or
+  ECS orchestration requires the cm-client v57 migration and dedicated
+  end-to-end validation.

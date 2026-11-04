@@ -42,20 +42,9 @@ coredns_tasks = yaml.safe_load(
     (role_tasks / "ecs_reconcile_coredns.yml").read_text()
 )
 coredns_by_name = {task.get("name"): task for task in coredns_tasks}
-for task_name in (
-    "Check for ECS node-local DNS configuration",
-    "Build verified ECS node-local DNS forwarding policy",
-    "Apply verified ECS node-local DNS forwarding policy",
-    "Restart ECS node-local DNS after configuration change",
-    "Wait for ECS node-local DNS rollout after configuration change",
-):
-    task = coredns_by_name[task_name]
-    when = task["when"]
-    conditions = when if isinstance(when, list) else [when]
-    assert (
-        "ecs_coredns_extended_verification_enabled | default(false) | bool"
-        in conditions
-    )
+assert "Build verified ECS node-local identity-domain forwarding policy" in (
+    coredns_by_name
+)
 
 active_read = setup_by_name["Read active ECS cluster commands"]
 assert active_read["ansible.builtin.uri"]["url"].endswith(
@@ -77,9 +66,9 @@ assert "name: ecs" in wrapper
 assert "tasks_from: setup_cluster" in wrapper
 final_coredns = setup_by_name["Reconcile ECS CoreDNS forwarding order"]
 assert final_coredns["vars"]["ecs_coredns_first_run_bootstrap"] is True
-assert (
-    "not (ecs_coredns_reconciled_this_run | default(false) | bool)"
-    in final_coredns["when"]
+assert all(
+    "ecs_coredns_reconciled_this_run" not in condition
+    for condition in final_coredns["when"]
 )
 
 install = yaml.safe_load(
@@ -138,8 +127,8 @@ assert "tasks_from: ecs_wait_control_plane_first_run" in wait_compat
 data_services = (
     role_tasks / "setup_data_services.yml"
 ).read_text()
-assert "ecs_reconcile_coredns.yml" not in data_services
-assert "ecs_data_services_verify_dns.yml" not in data_services
+assert "ecs_reconcile_coredns.yml" in data_services
+assert "ecs_data_services_verify_dns.yml" in data_services
 
 print("ECS active First Run adoption checks passed")
 PY

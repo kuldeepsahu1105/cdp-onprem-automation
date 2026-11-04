@@ -10,7 +10,7 @@
           cm_security_api_https_required | default(false) | bool
           and (cm_krb_api_url | default('') | length > 0)
         )
-        else cm_api_url
+        else (cm_api_effective_url | default(cm_api_url))
       }}
 
 - name: CM API — GET CM global configuration

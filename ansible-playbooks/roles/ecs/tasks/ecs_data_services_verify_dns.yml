@@ -75,7 +75,8 @@
                 true
               )
           }}
-        port: 0
+        port: 443
+        tls: true
 
 - name: Add FreeIPA to required Data Services DNS verification records
   ansible.builtin.set_fact:
@@ -152,7 +153,7 @@
       - kube-system
       - get
       - endpoints
-      - rke2-coredns-rke2-coredns
+      - "{{ ecs_coredns_service_name }}"
       - --output
       - "jsonpath={.subsets[0].addresses[0].ip}"
   register: ecs_data_services_coredns_endpoint
@@ -167,7 +168,7 @@
       - ecs_data_services_coredns_endpoint.stdout | trim | length > 0
     fail_msg: >-
       No ready CoreDNS endpoint is available behind service
-      rke2-coredns-rke2-coredns.
+      {{ ecs_coredns_service_name }}.
 
 - name: Start Data Services DNS verification pod
   ansible.builtin.command:
@@ -189,6 +190,7 @@
         import json
         import ipaddress
         import socket
+        import ssl
         import subprocess
         import sys
         import time
@@ -198,6 +200,7 @@
         timeout = int(sys.argv[3])
         records = json.loads(sys.argv[4])
         coredns_endpoint = sys.argv[5]
+        successes_required = int(sys.argv[6])
         pending = {record["fqdn"]: record for record in records}
         last_errors = {}
 
@@ -240,6 +243,34 @@
                     "expected one IPv4 answer, resolved " + ",".join(addresses)
                 )
 
+        def validate_connectivity(host, address, port, tls):
+            if not port:
+                return
+            with socket.create_connection(
+                (address, port),
+                timeout=timeout,
+            ) as connection:
+                if tls:
+                    context = ssl.create_default_context()
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
+                    with context.wrap_socket(
+                        connection,
+                        server_hostname=host,
+                    ) as secured:
+                        secured.do_handshake()
+                    print(
+                        f"HTTPS_OK fqdn={host} ipv4={address} "
+                        f"port={port}",
+                        flush=True,
+                    )
+                else:
+                    print(
+                        f"TCP_OK fqdn={host} ipv4={address} "
+                        f"port={port}",
+                        flush=True,
+                    )
+
         with open("/etc/resolv.conf", encoding="utf-8") as resolv_conf:
             print("RESOLV_CONF_BEGIN", flush=True)
             print(resolv_conf.read().strip(), flush=True)
@@ -249,26 +280,27 @@
             for host, record in list(pending.items()):
                 expected = record.get("address", "")
                 port = int(record.get("port", 0))
+                tls = bool(record.get("tls", False))
                 try:
-                    addresses, lookup = lookup_ipv4(host)
-                    validate_addresses(host, expected, addresses, lookup)
+                    observed = set()
+                    for sample in range(1, successes_required + 1):
+                        addresses, lookup = lookup_ipv4(host)
+                        validate_addresses(host, expected, addresses, lookup)
+                        observed.update(addresses)
+                    addresses = sorted(observed)
                     connect_address = expected or addresses[0]
                     print(
                         f"DNS_A_OK fqdn={host} "
-                        f"ipv4={','.join(addresses)}",
+                        f"ipv4={','.join(addresses)} "
+                        f"samples={successes_required}",
                         flush=True,
                     )
-                    if port:
-                        with socket.create_connection(
-                            (connect_address, port),
-                            timeout=timeout,
-                        ):
-                            pass
-                        print(
-                            f"TCP_OK fqdn={host} ipv4={connect_address} "
-                            f"port={port}",
-                            flush=True,
-                        )
+                    validate_connectivity(
+                        host,
+                        connect_address,
+                        port,
+                        tls,
+                    )
                     del pending[host]
                     last_errors.pop(host, None)
                 except Exception as exc:
@@ -289,6 +321,7 @@
         for host, record in list(pending.items()):
             expected = record.get("address", "")
             port = int(record.get("port", 0))
+            tls = bool(record.get("tls", False))
             try:
                 addresses, lookup = lookup_ipv4(host, coredns_endpoint)
                 validate_addresses(host, expected, addresses, lookup)
@@ -303,17 +336,12 @@
                     f"source=endpoint:{coredns_endpoint}",
                     flush=True,
                 )
-                if port:
-                    with socket.create_connection(
-                        (connect_address, port),
-                        timeout=timeout,
-                    ):
-                        pass
-                    print(
-                        f"TCP_OK fqdn={host} ipv4={connect_address} "
-                        f"port={port}",
-                        flush=True,
-                    )
+                validate_connectivity(
+                    host,
+                    connect_address,
+                    port,
+                    tls,
+                )
                 del pending[host]
                 last_errors.pop(host, None)
             except Exception as exc:
@@ -355,6 +383,7 @@
       - "{{ ecs_data_services_tcp_probe_timeout | int }}"
       - "{{ ecs_data_services_dns_verification_records | to_json }}"
       - "{{ ecs_data_services_coredns_endpoint.stdout | trim }}"
+      - "{{ ecs_data_services_dns_probe_successes_required | default(1) | int }}"
   register: ecs_data_services_dns_probe_starts
   changed_when: false
   failed_when: false
@@ -424,10 +453,13 @@
 - name: Report transient CoreDNS Service fallback
   ansible.builtin.debug:
     msg: >-
-      CoreDNS Service DNS was transiently inconsistent, but ready CoreDNS
+      CoreDNS Service DNS is inconsistent, although ready CoreDNS
       endpoint {{ ecs_data_services_coredns_endpoint.stdout | trim }} returned
-      every required A record and direct TCP validation succeeded. Continuing
-      without pinning workloads or modifying CoreDNS.
+      every required A record and direct TCP validation succeeded. Data
+      Services control-plane workloads use the Service path, so endpoint-only
+      success is diagnostic evidence and is not accepted as readiness. The
+      bounded CoreDNS reconciliation immediately preceding this gate did not
+      produce a consistently usable Service path, so provisioning is stopped.
   when:
     - >-
       'ALL_PROBES_OK_WITH_COREDNS_ENDPOINT_FALLBACK'
@@ -438,7 +470,8 @@
     that:
       - ecs_data_services_dns_probe_logs.rc == 0
       - ecs_data_services_dns_probe_phases.stdout == 'Succeeded'
-      - "'ALL_PROBES_OK' in ecs_data_services_dns_probe_logs.stdout"
+      - >-
+        'ALL_PROBES_OK' in ecs_data_services_dns_probe_logs.stdout_lines
     fail_msg: >-
       One or more selected Data Services dependencies failed DNS or TCP
       verification through the newly created Kubernetes probe pod. Probe
@@ -462,7 +495,11 @@
       - >-
         item.port | default(0) | int == 0
         or (
-          'TCP_OK fqdn=' + item.fqdn + ' ipv4='
+          (
+            'HTTPS_OK fqdn=' + item.fqdn + ' ipv4='
+            if item.tls | default(false) | bool
+            else 'TCP_OK fqdn=' + item.fqdn + ' ipv4='
+          )
         ) in ecs_data_services_dns_probe_logs.stdout
     fail_msg: >-
       The successful DNS probe output did not contain the expected result for

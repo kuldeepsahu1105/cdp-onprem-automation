@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for CM effective API URL
+  ansible.builtin.import_role:
+    name: cm_security
+    tasks_from: resolve_cm_api_effective_url

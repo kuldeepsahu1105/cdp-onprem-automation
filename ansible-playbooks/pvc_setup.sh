@@ -620,6 +620,10 @@ case "$DEPLOY_PHASE" in
     if _portal_enabled; then
       run_phase_portal
       sleep 5
+      if _monitoring_enabled; then
+        run_phase_monitoring
+        sleep 5
+      fi
     fi
     run_phase_2
     sleep 5
@@ -629,10 +633,6 @@ case "$DEPLOY_PHASE" in
     sleep 5
     run_phase_cdh
     sleep 5
-    if _monitoring_enabled; then
-      run_phase_monitoring
-      sleep 5
-    fi
     run_phase_5
     ;;
   *)

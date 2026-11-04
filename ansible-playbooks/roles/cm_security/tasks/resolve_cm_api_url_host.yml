@@ -26,13 +26,21 @@
         | length > 0
       )
 
-- name: CM API — use manager private address for delegated API calls
+- name: CM API — use manager bind address for delegated API calls
   ansible.builtin.set_fact:
     _cm_api_url_host_resolved: >-
       {{
-        cm_host_private
-        if (cm_host_private | default('') | length > 0)
-        else cm_api_probe_host
+        cm_api_probe_host
+        if (
+          (cm_api_discovery_succeeded | default(false) | bool)
+          and (cm_api_probe_host | default('') | length > 0)
+          and (cm_api_probe_host not in ['127.0.0.1', 'localhost'])
+        )
+        else (
+          cm_host_private
+          if (cm_host_private | default('') | length > 0)
+          else cm_api_probe_host
+        )
       }}
   when:
     - cm_api_uri_delegate_to | default('') | length > 0

@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for Hue PostgreSQL backend
+  ansible.builtin.import_role:
+    name: cdh_base_cluster
+    tasks_from: ensure_hue_postgresql_backend

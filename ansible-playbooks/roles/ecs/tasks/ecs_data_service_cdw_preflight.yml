@@ -1,9 +1,70 @@
 ---
+- name: CDW | Read CM API version over HTTPS
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+    return_content: true
+  register: ecs_cdw_preflight_cm_version_https
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  connection: ssh
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
+- name: CDW | Read CM API version over HTTP fallback
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ cm_http_port | default(7180) }}/api/version"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: true
+    status_code: [200]
+    return_content: true
+  register: ecs_cdw_preflight_cm_version_http
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ cm_manager_inventory_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_preflight_cm_version_https.status | default(0) | int != 200
+
+- name: CDW | Resolve CM preflight endpoint
+  ansible.builtin.set_fact:
+    ecs_cdw_preflight_cm_protocol: >-
+      {{
+        'https'
+        if ecs_cdw_preflight_cm_version_https.status | default(0) | int == 200
+        else 'http'
+      }}
+    ecs_cdw_preflight_cm_port: >-
+      {{
+        cm_https_port | default(7183)
+        if ecs_cdw_preflight_cm_version_https.status | default(0) | int == 200
+        else cm_http_port | default(7180)
+      }}
+    ecs_cdw_preflight_cm_api_version: >-
+      {{
+        ecs_cdw_preflight_cm_version_https.content
+        | default(
+            ecs_cdw_preflight_cm_version_http.content | default(''),
+            true
+          )
+        | trim
+      }}
+  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+
 - name: CDW | Read Cloudera Manager Kerberos state
   ansible.builtin.uri:
     url: >-
-      https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/{{
-      cm_api_version }}/cm/kerberosInfo
+      {{ ecs_cdw_preflight_cm_protocol }}://127.0.0.1:{{
+      ecs_cdw_preflight_cm_port }}/api/{{
+      ecs_cdw_preflight_cm_api_version }}/cm/kerberosInfo
     method: GET
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -13,6 +74,7 @@
     follow_redirects: none
   register: ecs_cdw_preflight_cm_kerberos
   changed_when: false
+  failed_when: false
   delegate_to: "{{ cm_manager_inventory_host }}"
   connection: ssh
   when: "'cdw' in (ecs_data_services_install_names | default([]))"
@@ -20,8 +82,10 @@
 - name: CDW | Read base-cluster HDFS authentication
   ansible.builtin.uri:
     url: >-
-      https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/{{
-      cm_api_version }}/clusters/{{ cdh_basecluster_name | urlencode
+      {{ ecs_cdw_preflight_cm_protocol }}://127.0.0.1:{{
+      ecs_cdw_preflight_cm_port }}/api/{{
+      ecs_cdw_preflight_cm_api_version }}/clusters/{{
+      cdh_basecluster_name | urlencode
       }}/services/hdfs/config?view=full
     method: GET
     user: "{{ cm_admin_user }}"
@@ -32,6 +96,7 @@
     follow_redirects: none
   register: ecs_cdw_preflight_hdfs_config
   changed_when: false
+  failed_when: false
   delegate_to: "{{ cm_manager_inventory_host }}"
   connection: ssh
   when: "'cdw' in (ecs_data_services_install_names | default([]))"
@@ -70,16 +135,22 @@
 - name: CDW | Require verified Base and CM Kerberos prerequisites
   ansible.builtin.assert:
     that:
+      - ecs_cdw_preflight_cm_kerberos.status | default(0) | int == 200
+      - ecs_cdw_preflight_hdfs_config.status | default(0) | int == 200
       - ecs_cdw_preflight_cm_kerberized | bool
       - ecs_cdw_preflight_cm_realm == cluster_realm
       - ecs_cdw_preflight_cm_kdc_host == kdc_host
       - ecs_cdw_preflight_hdfs_authentication == 'kerberos'
     fail_msg: >-
       CDW requires a Kerberized Base cluster and usable CM KDC integration.
-      CM reports kerberized={{ ecs_cdw_preflight_cm_kerberized }},
+      CM kerberosInfo HTTP={{
+        ecs_cdw_preflight_cm_kerberos.status | default('unreachable')
+      }}, kerberized={{ ecs_cdw_preflight_cm_kerberized }},
       realm={{ ecs_cdw_preflight_cm_realm | default('unset', true) }},
       kdcHost={{ ecs_cdw_preflight_cm_kdc_host | default('unset', true) }};
-      HDFS authentication={{
+      HDFS config HTTP={{
+        ecs_cdw_preflight_hdfs_config.status | default('unreachable')
+      }}, authentication={{
         ecs_cdw_preflight_hdfs_authentication | default('unset', true)
       }}. Expected realm={{ cluster_realm }}, KDC={{ kdc_host }}, and HDFS
       authentication=kerberos. Run 30_setup_cm_krbs.yml and
@@ -351,7 +422,7 @@
   ansible.builtin.uri:
     url: >-
       https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/{{
-      cm_api_version
+      ecs_cdw_preflight_cm_api_version
       }}/cm/commands/deleteCredentials?deleteCredentialsMode=unused
     method: POST
     user: "{{ cm_admin_user }}"
@@ -373,7 +444,7 @@
   vars:
     cm_krb_api_url: >-
       https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/{{
-      cm_api_version }}
+      ecs_cdw_preflight_cm_api_version }}
     cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
     cm_api_command_id: >-
       {{ ecs_cdw_delete_unused_credentials_command.json.id }}
@@ -386,7 +457,7 @@
   ansible.builtin.uri:
     url: >-
       https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/{{
-      cm_api_version }}/cm/commands/generateCredentialsAdhoc
+      ecs_cdw_preflight_cm_api_version }}/cm/commands/generateCredentialsAdhoc
     method: POST
     user: "{{ cm_admin_user }}"
     password: "{{ cm_admin_pass }}"
@@ -425,7 +496,7 @@
   vars:
     cm_krb_api_url: >-
       https://127.0.0.1:{{ cm_https_port | default(7183) }}/api/{{
-      cm_api_version }}
+      ecs_cdw_preflight_cm_api_version }}
     cm_api_uri_delegate_to: "{{ cm_manager_inventory_host }}"
     cm_api_command_id: "{{ ecs_cdw_adhoc_credentials_command.json.id }}"
     cm_api_command_label: CM internal ad-hoc credential command

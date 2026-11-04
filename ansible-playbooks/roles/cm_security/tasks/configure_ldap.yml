@@ -9,7 +9,7 @@
   when: not cm_ldap_enabled | default(false)
 
 - name: LDAP — prepare Cloudera Manager API
-  ansible.builtin.import_tasks: common_tasks/prepare_cm_security_api.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/prepare_cm_security_api.yml"
 
 - name: LDAP — resolve configured directory endpoint
   ansible.builtin.set_fact:
@@ -52,10 +52,10 @@
       - "Authentication backend order: {{ cm_ldap_auth_backend_order }}"
 
 - name: Configure Cloudera Manager LDAP settings (REST API)
-  ansible.builtin.import_tasks: common_tasks/configure_cm_ldap_api.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/configure_cm_ldap_api.yml"
 
 - name: LDAP — print existing Cloudera Manager access URLs
-  ansible.builtin.include_tasks: common_tasks/print_cm_urls.yml
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/common_tasks/print_cm_urls.yml"
   when: not (cm_ldap_config_changed | bool)
 
 - name: LDAP — finish matching configuration no-op play
@@ -63,7 +63,7 @@
   when: not (cm_ldap_config_changed | bool)
 
 - name: Restart Cloudera Manager after LDAP configuration change
-  ansible.builtin.include_tasks: common_tasks/apply_cm_restart_after_ldap.yml
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/common_tasks/apply_cm_restart_after_ldap.yml"
   when: cm_restart_after_config_change | default(false) | bool
 
 - name: Print LDAP configuration result

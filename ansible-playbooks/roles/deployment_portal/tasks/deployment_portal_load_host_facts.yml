@@ -54,6 +54,9 @@
     monitoring_scrape_targets_generated_at: "{{ hostvars['localhost']['monitoring_scrape_targets_generated_at'] | default('') }}"
     monitoring_exporters_enrolled_this_run: "{{ hostvars['localhost']['monitoring_exporters_enrolled_this_run'] | default(false) }}"
     deployment_portal_ecs_api_cache: "{{ hostvars['localhost']['deployment_portal_ecs_api_cache'] | default({}) }}"
+    deployment_portal_ipa_modern_ui_available: "{{ hostvars['localhost']['deployment_portal_ipa_modern_ui_available'] | default(false) | bool }}"
+    deployment_portal_ipa_ui_path: "{{ hostvars['localhost']['deployment_portal_ipa_ui_path'] | default('/ipa/ui/') }}"
+    ipa_caddy_preferred_public_url: "{{ hostvars['localhost']['ipa_caddy_preferred_public_url'] | default('') }}"
     ipa_caddy_modern_public_url: "{{ hostvars['localhost']['ipa_caddy_modern_public_url'] | default('') }}"
     ipa_caddy_legacy_public_url: "{{ hostvars['localhost']['ipa_caddy_legacy_public_url'] | default('') }}"
 

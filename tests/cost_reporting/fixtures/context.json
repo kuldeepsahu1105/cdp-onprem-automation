@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "source": "synthetic repository-shaped Terraform show fixture; NOT a provider quote",
+    "as_of": "2026-10-01T00:00:00Z",
+    "period": {"start": "2026-10-01T00:00:00Z", "end": "2026-10-02T00:00:00Z"},
+    "exclusions": ["Synthetic test only; no real deployment or invoice"]
+  },
+  "defaults": {
+    "account": "fixture-account",
+    "region": "fixture-region",
+    "owner": "fixture-project",
+    "scope": "dedicated",
+    "currency": "USD"
+  },
+  "overrides": {}
+}

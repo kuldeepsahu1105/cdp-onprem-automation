@@ -1,6 +1,6 @@
 ---
 - name: Require PostgreSQL before CM security configuration
-  ansible.builtin.import_tasks: common_tasks/assert_postgresql_installed.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/assert_postgresql_installed.yml"
 
 - name: Clear Auto-TLS applied / restart flags for this run
   ansible.builtin.set_fact:
@@ -15,16 +15,16 @@
     cm_autotls_setup_intent: "{{ autotls_enabled | default(true) | bool }}"
 
 - name: CM API — set connection context
-  ansible.builtin.import_tasks: common_tasks/resolve_cm_api_probe_context.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/resolve_cm_api_probe_context.yml"
 
 - name: Align Cloudera Manager admin password with group_vars (before Auto-TLS API)
-  ansible.builtin.import_tasks: common_tasks/ensure_cm_admin_password.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/ensure_cm_admin_password.yml"
 
 - name: Set up Cloudera Manager API URL
-  ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/set_cm_api_url.yml"
 
 - name: CM API — read Auto-TLS state from CM configuration
-  ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/fetch_cm_autotls_api_state.yml"
 
 - name: Auto-TLS — inspect CM agent identity-change markers
   ansible.builtin.stat:
@@ -130,7 +130,7 @@
   when: cm_autotls_noop_this_run | default(false) | bool
 
 - name: Auto-TLS — print existing Cloudera Manager access URLs
-  ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/print_cm_urls.yml"
   when: cm_autotls_noop_this_run | default(false) | bool
 
 - name: Auto-TLS — finish healthy no-op play
@@ -162,14 +162,14 @@
               }}
 
         - name: Auto-TLS — resolve trusted CA bundle for generateCmca (Cloudera Labs cm_autotls trustedCaCerts)
-          ansible.builtin.import_tasks: common_tasks/resolve_cm_autotls_trusted_ca.yml
+          ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/resolve_cm_autotls_trusted_ca.yml"
 
         - name: Auto-TLS — select password or SSH key provisioning
           ansible.builtin.set_fact:
             use_password: "{{ cm_node_sudo_password is defined and cm_node_sudo_password | trim | length > 0 }}"
 
         - name: Auto-TLS — resolve controller SSH key for key-based provisioning
-          ansible.builtin.import_tasks: common_tasks/resolve_cm_autotls_private_key.yml
+          ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/resolve_cm_autotls_private_key.yml"
           when: not use_password
 
         - name: Auto-TLS — build generateCmca request
@@ -258,7 +258,7 @@
               'password' if use_password else 'private-key' }}.
 
         - name: Wait for generateCmca command to finish successfully
-          ansible.builtin.import_tasks: common_tasks/wait_cm_api_command.yml
+          ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/wait_cm_api_command.yml"
           vars:
             cm_krb_api_url: "{{ cm_api_url }}"
             cm_api_command_id: "{{ auto_tls_response.json.id }}"
@@ -285,7 +285,7 @@
         - not (cm_autotls_api_enabled | default(false) | bool)
 
     - name: Restart Cloudera Manager after Auto-TLS when generateCmca applied
-      ansible.builtin.import_tasks: common_tasks/apply_cm_restart_after_config.yml
+      ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/apply_cm_restart_after_config.yml"
       when: cm_restart_after_autotls_this_run | default(false) | bool
 
 - name: CM API — allow fresh /cm/config read after generateCmca and CM health wait
@@ -296,13 +296,13 @@
     or (cm_restart_after_autotls_this_run | default(false) | bool)
 
 - name: CM API — refresh Auto-TLS state after generateCmca / CM restart (before access URLs)
-  ansible.builtin.import_tasks: common_tasks/fetch_cm_autotls_api_state.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/fetch_cm_autotls_api_state.yml"
   when: >-
     (autotls_applied_this_run | default(false) | bool)
     or (cm_restart_after_autotls_this_run | default(false) | bool)
 
 - name: Print Cloudera Manager Access URLs
-  ansible.builtin.import_tasks: common_tasks/print_cm_urls.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/print_cm_urls.yml"
 
 - name: Set CM agent TLS reconcile flag from CM API (for agent play)
   ansible.builtin.set_fact:

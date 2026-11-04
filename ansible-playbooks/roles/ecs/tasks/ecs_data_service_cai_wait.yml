@@ -2,7 +2,6 @@
 - name: CAI | Poll workspace through structured status API
   cloudera.cloud.ml_info:
     environment: "{{ ecs_cdp_environment_name }}"
-    name: "{{ ecs_cai_workspace_name }}"
     endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cai_workspace_info
@@ -12,6 +11,9 @@
     (
       (
         ecs_cai_workspace_info.workspaces | default([])
+        | selectattr('instanceName', 'defined')
+        | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+        | list
         | first | default({})
       ).instanceStatus | default('')
       in ['installation:finished', 'modify:finished']
@@ -20,6 +22,9 @@
     (
       (
         ecs_cai_workspace_info.workspaces | default([])
+        | selectattr('instanceName', 'defined')
+        | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+        | list
         | first | default({})
       ).instanceStatus | default('')
       is search('(?i):failed$')
@@ -41,6 +46,9 @@
         {{
           (
             (ecs_cai_workspace_info | default({})).workspaces | default([])
+            | selectattr('instanceName', 'defined')
+            | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+            | list
             | first | default({})
           )
         }}
@@ -52,6 +60,9 @@
               + (
                   (
                     (ecs_cai_workspace_info | default({})).workspaces | default([])
+                    | selectattr('instanceName', 'defined')
+                    | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+                    | list
                     | first | default({})
                   ).instanceStatus | default('not returned')
                 )
@@ -68,11 +79,14 @@
     that:
       - ecs_cai_workspace_succeeded | default(false) | bool
     fail_msg: >-
-      CAI workspace {{ ecs_cai_workspace_name }} did not reach a successful
+      CAI workspace {{ ecs_cai_workspace_name_effective }} did not reach a successful
       terminal status. Final status:
       {{
         (
           (ecs_cai_workspace_info | default({})).workspaces | default([])
+          | selectattr('instanceName', 'defined')
+          | selectattr('instanceName', 'equalto', ecs_cai_workspace_name_effective)
+          | list
           | first | default({})
         ).instanceStatus | default('not returned')
       }}.

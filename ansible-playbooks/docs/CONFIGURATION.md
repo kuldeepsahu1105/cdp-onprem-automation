@@ -122,7 +122,7 @@ edit in `vi`.
 | Active Directory | Set `identity_provider: ad`, `ad_domain`, `ad_kdc_host`, DNS servers, AD account names/DNs, and the secrets described below |
 | Terraform/AWS | Keep `deployment_environment: auto` or set `aws`; Terraform generates `inventory.ini` |
 | Existing/bare-metal hosts | Set `deployment_environment: baremetal`; copy `inventory.example.ini` to `inventory.ini` and replace every example host/address |
-| Base CDH only | Configure base inventory groups and `base_cluster_install_services`; leave ECS disabled or omit ECS groups |
+| Base CDH only | Configure base inventory groups and `base_cluster_install_services`; set `ecs_deploy_enabled: false` or leave both ECS groups empty (keep headers) |
 | ECS | Provide ECS inventory groups and enable `ecs_deploy_enabled`; enable individual data services only when required |
 
 ## Active Directory credentials
@@ -182,7 +182,9 @@ ansible-playbook -i inventory.ini 11_identity_setup.yml \
 | `identity_provider` | `auto` (default), `freeipa`, `ad` | `auto` selects FreeIPA when `[ipaserver]` has a host, otherwise AD when `ad_kdc_host` is set. Use an explicit value when inventory alone must not decide. |
 | `deployment_environment` | `auto` (default), `aws`, `baremetal` | Controls DNS/network assumptions. `auto` detects AWS metadata; `baremetal` expects private routing or a configured bastion. |
 | `rhel_release_pin` | `auto` (configured default) or `major.minor` | With `auto`, the first run detects and persists each host's current RHEL minor before any package operation; reruns reuse that persisted minor instead of adopting a newer release. Pins both DNF `$releasever` and subscription-manager when available; AWS RHUI uses `/etc/dnf/vars/releasever`. Any mismatch between the running OS and the persisted or explicit pin fails rather than attempting an unsafe downgrade. |
-| `ipaserver_domain` | DNS domain; default `cldrsetup.local` | FreeIPA DNS domain and source for the uppercase Kerberos realm. Replace it for every non-lab deployment. |
+| `ipaserver_domain` | DNS domain; default `cldr.internal.arpa` | FreeIPA DNS domain and Kerberos realm source (`CLDR.INTERNAL.ARPA`). Greenfield defaults use a private zone under the IANA `.arpa` infrastructure TLD. Validation allows `*.internal.arpa`, `*.local.arpa`, and `*.home.arpa` (RFC 8375) and still blocks bare `.local`, `.internal`, `.lan`, `.corp`, `.home`, `.test`, `.localdomain`. Ozone HDDS-16034 acceptance of `*.internal.arpa` / `*.local.arpa` is not confirmed in community threads — use `cluster.home.arpa` for the RFC-standard private suffix or `lab.example.com` (RFC 2606) if you need a documented-safe default. |
+| `ipa_server_install_allow_zone_overlap` | Boolean; `false` | Opt in to FreeIPA `--allow-zone-overlap` when `ipaserver_domain` already exists in public/upstream DNS. Prefer a delegated internal subdomain; IPA-enrolled clients otherwise see IPA as authoritative and public records in the overlapping zone must also exist in IPA. |
+| `cluster_domain_skip_ozone_hostname_validation` | Boolean; `false` | Set `true` only for brownfield stacks that must keep a legacy non-IANA suffix. Greenfield defaults pass validation automatically. |
 | `ad_domain` | AD DNS domain; default example `corp.example.com` | Required for AD. It becomes the cluster domain and uppercase Kerberos realm. |
 | `ad_kdc_host` | FQDN or IP; empty by default | Required for AD. Empty prevents AD auto-detection. Prefer a resolvable domain controller FQDN. |
 | `ad_dns_servers` | YAML list; defaults to `ad_kdc_host` | DNS resolvers written for AD clients. Provide all reachable AD DNS server IPs/FQDNs. |
@@ -215,11 +217,11 @@ Ansible values. The Ansible deployment banner prints both values when they diffe
 | `cm_version` | `"7.13.2.6"` | Cloudera Manager package/repository version. |
 | `cm_numeric_version` | `"713200006"` | Numeric CM build path used by archive URLs; update with `cm_version`. |
 | `cdh_version` | `"7.3.2.0"` | Runtime parcel version. |
-| `cdh_numeric_version` | `"77083870"` | CDH parcel build identifier; update with `cdh_version`. |
+| `cdh_numeric_version` | `"77083870"` | Expected CDH parcel build identifier. Playbook 31 resolves the effective numeric build from the configured repository manifest for the selected `cdh_version`. |
 | `cdv_version` | `"8.0.7"` | Data Visualization CSD/parcel release. |
 | `cfm_version` | `"2.1.7.3004"` | Flow Management CSD/parcel release. |
 | `cfm_nifi_app_version` | `"1.28.1"` | NiFi application segment used in CSD filenames. |
-| `ecs_pvc_ds_version` | `"1.5.5-h3300"` | ECS/CDP Private Cloud Data Services repository tag. |
+| `ecs_pvc_ds_version` | `"1.5.5-h40000"` | ECS/CDP Private Cloud Data Services repository tag. |
 | `cm_repo_source` | `public` or `internal` | `public` installs from the Cloudera archive; `internal` builds/uses the CM-host mirror. |
 | `cm_parcel_repo_urls_override` | `[]` or list of directory URLs | Non-empty **replaces the entire** CM parcel repository list. Include every CDH/CDV/CFM/ECS repository required. |
 | `cm_csd_urls_override` | `[]` or list of `.jar` URLs | Non-empty replaces generated CSD downloads. Include every required CSD JAR. |
@@ -237,7 +239,7 @@ entries must be complete `.jar` URLs. See
 
 | Variable | Accepted values/default | What it does |
 |---|---|---|
-| `cdh_basecluster_name` | Name; `CDP-base-cluster` | Cluster name created in CM. The unchanged default safely adopts an existing legacy `CDH-Cluster` or the single CM cluster that already owns every configured base host. |
+| `cdh_basecluster_name` | Name; `<deployment_name_prefix>-base-cluster` | Cluster name created in CM (`base-cluster` when the prefix is empty). The unchanged default safely adopts legacy `CDP-base-cluster` / `CDH-Cluster` registrations by configured base-host ownership. |
 | `base_cluster_adopt_by_master_host` | Boolean; `true` | When the unchanged default name is absent, adopt the single existing cluster containing the configured base master only if it contains all expected base hosts; ambiguous or partial matches fail safely. |
 | `base_cluster_adopt_existing_ozone_ha` | Boolean; `true` | Preserve an adopted populated cluster's initialized Ozone service ID and recover an existing odd-sized SCM HA quorum (at least three roles) without adding/removing SCM roles; new clusters retain the single-SCM topology. |
 | `base_cluster_enable_kerberos` | Boolean; `true` | Configures newly created base clusters for Kerberos before First Run; safely converges existing unsecure clusters and verifies HDFS authentication. |
@@ -247,8 +249,6 @@ entries must be complete `.jar` URLs. See
 | `base_cluster_worker_group` | Inventory group; `base-workers` | Hosts eligible for worker roles and parcel OS detection. |
 | `base_cluster_module_async_timeout` | Seconds; `7500` | Outer bound for cluster creation, parcel activation, and First Run. |
 | `base_cluster_module_poll_interval` | Seconds; `15` | Jenkins progress-update interval while the cluster module waits on CM. |
-| `base_cluster_knox_readiness_recovery_retries` | Integer; `30` | Maximum health polls when Knox is the sole First Run readiness failure. |
-| `base_cluster_knox_readiness_recovery_delay` | Seconds; `10` | Delay between bounded Knox recovery health polls. |
 | `base_cluster_hue_database_name` | Database name; `hue` | PostgreSQL database used by Hue instead of its non-production SQLite fallback. |
 | `base_cluster_hue_database_user` | Database user; `hue` | PostgreSQL login used by Hue. |
 | `base_cluster_hue_database_password` | Secret; `hue` | PostgreSQL password used by Hue; override through a vault or `ANSIBLE_GROUP_VARS_YAML`. |
@@ -265,12 +265,12 @@ entries must be complete `.jar` URLs. See
 | `ozone` | `true` | Installs Ozone object storage roles. |
 | `yarn` | `true` | Installs YARN resource management. |
 | `tez` | `true` | Enables the Tez execution engine. |
-| `spark3` | `true` | Installs Spark 3 on YARN with a History Server and client gateways. |
+| `spark3` | `true` | Installs bundled Spark3 using CM service descriptor `SPARK3_ON_YARN`, with a History Server and client gateways. The CM service name remains `spark3`. |
 | `hive` | `true` | Installs Hive services and metadata integration. |
 | `hive_on_tez` | `true` | Configures Hive to use Tez; requires Hive and Tez. |
 | `hbase` | `true` | Installs HBase; requires ZooKeeper and HDFS. |
 | `hue` | `true` | Installs the Hue web application. |
-| `iceberg` | `true` | Validates the Hive, Impala, and Spark 3 services that provide Iceberg support in CDP 7.3.x; Iceberg is not a standalone CM service. |
+| `iceberg` | `true` | Validates the Hive, Impala, and Spark3 services that provide Iceberg support in CDP 7.3.x; Iceberg is not a standalone CM service. |
 | `replication` | `false` | Enables replication service roles. |
 | `impala` | `true` | Installs Impala query services. |
 | `kafka` | `true` | Installs Kafka brokers. |
@@ -303,7 +303,7 @@ template validation rather than being silently ignored.
 | `cm_ldap_update_bind_password` | Boolean; `false` | Set true only to rotate the existing LDAP bind DN/password pair. CM may redact both credential values on reads, so ordinary reruns verify their presence rather than comparing an unavailable value. |
 | `cm_krb_update_libdefaults_safety_valve` | Boolean; `false` | Set true only to intentionally rewrite `KRB_LIBDEFAULTS_SAFETY_VALVE`. CM returns this setting as `REDACTED`, so ordinary reruns verify presence and do not treat the redaction token as drift. |
 | `cm_cms_update_reports_manager_password` | Boolean; `false` | Set true only to rotate the CMS Reports Manager database password. |
-| `cm_cms_update_autotls_truststore_password` | Boolean; `false` | Set true only to rotate the CMS Auto-TLS truststore password. |
+| `cm_cms_update_autotls_truststore_password` | Boolean; `false` | Set true only to rotate the CMS Auto-TLS truststore and Service Monitor JVM key/trust-store passwords. |
 
 Auto-TLS provisioning uses password mode when secret
 `cm_node_sudo_password` is provided; otherwise it uses SSH-key mode.
@@ -313,7 +313,7 @@ Auto-TLS provisioning uses password mode when secret
 | Variable | Accepted values/default | What it does |
 |---|---|---|
 | `ecs_deploy_enabled` | `auto`, `true`, `false` | `auto` deploys when ECS inventory groups contain hosts; `true` requires them; `false` skips ECS. |
-| `ecs_cluster_name` | Name; `ECS-Cluster` | ECS cluster name created in CM. |
+| `ecs_cluster_name` | Name; `<deployment_name_prefix>-ecs-cluster` | ECS cluster name created in CM (`ecs-cluster` when the prefix is empty). The unchanged default adopts an existing legacy `ECS-Cluster`. |
 | `ecs_cluster_master_group` | Inventory group; `ecs-masters` | Hosts assigned ECS master/control-plane roles. |
 | `ecs_cluster_worker_group` | Inventory group; `ecs-workers` | Hosts assigned ECS worker roles. |
 | `ecs_data_services_deploy_enabled` | Boolean; `false` | Master gate for playbook 34 data-service deployment. |
@@ -350,7 +350,7 @@ Auto-TLS provisioning uses password mode when secret
 ```yaml
 identity_provider: freeipa
 deployment_environment: aws
-ipaserver_domain: lab.example.com
+ipaserver_domain: cldr.internal.arpa
 ecs_deploy_enabled: false
 monitoring_stack_enabled: true
 ```

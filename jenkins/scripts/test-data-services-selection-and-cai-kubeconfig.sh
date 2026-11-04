@@ -328,13 +328,15 @@ cde_absent_report = str(
         "ansible.builtin.debug"
     ]["msg"]
 )
-assert "CDE: EXISTS" in cde_existing_report
-assert "name={{ ecs_cde_preflight_service.name" in cde_existing_report
-assert "status={{ ecs_cde_preflight_service.status" in cde_existing_report
-assert "action=REUSE" in cde_existing_report
+assert "CDE Service: Existing resource selected for mutation-free reuse." in (
+    cde_existing_report
+)
+assert "name={{ ecs_cde_service_name_effective }}" in cde_existing_report
+assert "observed_status={{ ecs_cde_service_prior_status }}" in cde_existing_report
+assert "Existing CPU and memory capacity will not be resized." in cde_existing_report
 assert "CDE: ABSENT" in cde_absent_report
-assert "name={{ ecs_cde_service_name }}" in cde_absent_report
-assert "status=Absent" in cde_absent_report
+assert "name={{ ecs_cde_service_name_effective }}" in cde_absent_report
+assert "status={{ ecs_cde_service_prior_status }}" in cde_absent_report
 assert "action=CREATE" in cde_absent_report
 
 cai_preflight = yaml.safe_load(
@@ -354,12 +356,14 @@ cai_absent_report = str(
         "ansible.builtin.debug"
     ]["msg"]
 )
-assert "CAI: EXISTS" in cai_existing_report
+assert "CAI Workbench: Existing workspace recognized and selected for reuse." in (
+    cai_existing_report
+)
 assert "ecs_cai_existing_workspace.instanceName" in cai_existing_report
 assert "ecs_cai_existing_workspace.instanceStatus" in cai_existing_report
-assert "action=REUSE" in cai_existing_report
+assert "No rename or duplicate create is performed." in cai_existing_report
 assert "CAI: ABSENT" in cai_absent_report
-assert "name={{ ecs_cai_workspace_name }}" in cai_absent_report
+assert "name={{ ecs_cai_workspace_name_effective }}" in cai_absent_report
 assert "status=Absent" in cai_absent_report
 assert "action=CREATE" in cai_absent_report
 
@@ -554,11 +558,11 @@ for obsolete_flag in (
 model_registry_creator_assert = next(
     task
     for task in model_registry_tasks
-    if task.get("name") == "Require a human Model Registry creator"
+    if task.get("name") == "Require human Model Registry creator CRN"
 )
 creator_assert_text = str(model_registry_creator_assert)
 assert ":user:" in creator_assert_text
-assert ":machineUser:" in creator_assert_text
+assert ":machineuser:" in creator_assert_text
 model_registry_create_assert = next(
     task
     for task in model_registry_tasks

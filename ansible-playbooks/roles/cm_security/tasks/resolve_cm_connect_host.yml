@@ -293,10 +293,9 @@
     - not (cm_api_runner_is_manager | bool)
     - not (cm_api_delegate_probes_to_manager | default(true) | bool)
 
-- name: Set Cloudera Manager host
+- name: Set Cloudera Manager host from client address
   ansible.builtin.set_fact:
     cm_host: "{{ cm_api_client_host }}"
-    cm_api_uri_delegate_to: ""
 
 - name: Print Cloudera Manager API connection target
   ansible.builtin.debug:

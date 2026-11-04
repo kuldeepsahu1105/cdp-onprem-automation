@@ -162,14 +162,17 @@
           if ecs_coredns_forwarders | default([]) | length > 0
           else (
             [
-              hostvars[ecs_coredns_ipa_inventory_host].private_ip | default(''),
-              hostvars[ecs_coredns_ipa_inventory_host].ansible_host | default('')
+              hostvars[ecs_coredns_ipa_inventory_host].private_ip
+              | default(
+                  hostvars[ecs_coredns_ipa_inventory_host].ansible_host,
+                  true
+                )
             ]
             if identity_provider_effective | default('freeipa') == 'freeipa'
             else (
               ad_dns_servers | default([])
               if identity_provider_effective | default('') == 'ad'
-              else []
+              else extra_dns_nameservers | default([])
             )
           )
         )
@@ -187,7 +190,8 @@
     fail_msg: >-
       ECS CoreDNS has no identity-provider DNS candidates. Set
       ecs_coredns_forwarders explicitly, provide a FreeIPA inventory address,
-      or configure ad_dns_servers.
+      configure ad_dns_servers, or provide extra_dns_nameservers for another
+      identity/DNS deployment.
 
 - name: Check ECS kubectl binary
   ansible.builtin.stat:
@@ -583,23 +587,6 @@
   retries: "{{ ecs_control_plane_wait_retries | default(40) }}"
   delay: "{{ ecs_control_plane_wait_delay | default(15) }}"
 
-- name: Extract current ECS CoreDNS forward line
-  ansible.builtin.command:
-    argv:
-      - grep
-      - -E
-      - "^[[:space:]]*forward[[:space:]]+[.][[:space:]]+"
-    stdin: "{{ ecs_coredns_corefile.stdout }}"
-  register: ecs_coredns_current_forward_line
-  changed_when: false
-  failed_when: ecs_coredns_current_forward_line.rc != 0
-
-- name: Report current ECS CoreDNS forward line
-  ansible.builtin.debug:
-    msg: >-
-      Current ECS CoreDNS forward line before reconciliation:
-      {{ ecs_coredns_current_forward_line.stdout | trim }}
-
 - name: Build verified ECS CoreDNS forwarding policy
   ansible.builtin.command:
     argv:
@@ -611,24 +598,56 @@
 
         corefile = sys.argv[1]
         upstreams = sys.argv[2]
+        zone = sys.argv[3].rstrip(".")
+        zone_token = zone + ":53"
         begin = "# BEGIN ANSIBLE DATA SERVICES PRIVATE DNS"
         end = "# END ANSIBLE DATA SERVICES PRIVATE DNS"
+        block = (
+            f"{begin}\n"
+            f"{zone_token} {{\n"
+            "    errors\n"
+            "    cache 30\n"
+            f"    forward . {upstreams}\n"
+            "}\n"
+            f"{end}"
+        )
         managed = re.compile(
-            rf"(?ms)^{re.escape(begin)}\n.*?^{re.escape(end)}\n?"
+            rf"(?ms)^{re.escape(begin)}\n.*?^{re.escape(end)}[ \t]*"
         )
-        corefile = managed.sub("", corefile).rstrip() + "\n"
-        forward = re.compile(
-            r"(?ms)^(?P<indent>[ \t]*)forward\s+\.\s+[^\n{]+"
-            r"(?:\s*\{\n.*?^(?P=indent)\})?"
-        )
-        match = forward.search(corefile)
-        if match is None:
-            raise SystemExit("CoreDNS global forward stanza was not found")
-        indent = match.group("indent")
-        replacement = indent + "forward . " + upstreams
-        print(forward.sub(replacement, corefile, count=1), end="")
+        if managed.search(corefile):
+            print(managed.sub(block, corefile, count=1), end="")
+            raise SystemExit(0)
+
+        lines = corefile.splitlines(keepends=True)
+        for start, line in enumerate(lines):
+            if "{" not in line or zone_token not in line.split("{", 1)[0].split():
+                continue
+            depth = line.count("{") - line.count("}")
+            finish = start
+            while depth > 0 and finish + 1 < len(lines):
+                finish += 1
+                depth += lines[finish].count("{") - lines[finish].count("}")
+            existing = "".join(lines[start:finish + 1])
+            forward = re.compile(
+                r"(?ms)^(?P<indent>[ \t]*)forward\s+\.\s+[^\n{]+"
+                r"(?:\s*\{\n.*?^(?P=indent)\})?"
+            )
+            match = forward.search(existing)
+            if match is None:
+                raise SystemExit(
+                    f"CoreDNS identity zone {zone_token} has no forward stanza"
+                )
+            indent = match.group("indent")
+            replacement = indent + "forward . " + upstreams
+            rendered = forward.sub(replacement, existing, count=1)
+            lines[start:finish + 1] = [rendered]
+            print("".join(lines), end="")
+            raise SystemExit(0)
+
+        print(corefile.rstrip() + "\n\n" + block + "\n", end="")
       - "{{ ecs_coredns_corefile.stdout }}"
       - "{{ ecs_coredns_forwarders_effective | join(' ') }}"
+      - "{{ cluster_domain }}"
   register: ecs_coredns_identity_corefile
   changed_when: false
   become: false
@@ -713,23 +732,6 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
 
-- name: Extract applied ECS CoreDNS forward line
-  ansible.builtin.command:
-    argv:
-      - grep
-      - -E
-      - "^[[:space:]]*forward[[:space:]]+[.][[:space:]]+"
-    stdin: "{{ ecs_coredns_applied_corefile.stdout }}"
-  register: ecs_coredns_applied_forward_line
-  changed_when: false
-  failed_when: ecs_coredns_applied_forward_line.rc != 0
-
-- name: Report applied ECS CoreDNS forward line
-  ansible.builtin.debug:
-    msg: >-
-      Applied ECS CoreDNS forward line:
-      {{ ecs_coredns_applied_forward_line.stdout | trim }}
-
 - name: Require exact verified ECS CoreDNS forward stanza
   ansible.builtin.command:
     argv:
@@ -741,13 +743,30 @@
 
         corefile = sys.argv[1]
         expected = "forward . " + sys.argv[2]
+        zone_token = sys.argv[3].rstrip(".") + ":53"
+        lines = corefile.splitlines(keepends=True)
+        identity_block = None
+        for start, line in enumerate(lines):
+            if "{" not in line or zone_token not in line.split("{", 1)[0].split():
+                continue
+            depth = line.count("{") - line.count("}")
+            finish = start
+            while depth > 0 and finish + 1 < len(lines):
+                finish += 1
+                depth += lines[finish].count("{") - lines[finish].count("}")
+            identity_block = "".join(lines[start:finish + 1])
+            break
+        if identity_block is None:
+            raise SystemExit(f"CoreDNS identity zone {zone_token} was not found")
         forward = re.compile(
             r"(?ms)^(?P<indent>[ \t]*)forward\s+\.\s+[^\n{]+"
             r"(?:\s*\{\n.*?^(?P=indent)\})?"
         )
-        match = forward.search(corefile)
+        match = forward.search(identity_block)
         if match is None:
-            raise SystemExit("CoreDNS global forward stanza was not found")
+            raise SystemExit(
+                f"CoreDNS identity zone {zone_token} has no forward stanza"
+            )
         actual = match.group(0).strip()
         if actual != expected:
             raise SystemExit(
@@ -756,6 +775,7 @@
             )
       - "{{ ecs_coredns_applied_corefile.stdout }}"
       - "{{ ecs_coredns_forwarders_effective | join(' ') }}"
+      - "{{ cluster_domain }}"
   changed_when: false
   become: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
@@ -781,58 +801,48 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   when:
-    - ecs_coredns_extended_verification_enabled | default(false) | bool
     - ecs_node_local_dns_reconcile | default(true) | bool
 
-- name: Build verified ECS node-local DNS forwarding policy
+- name: Build verified ECS node-local identity-domain forwarding policy
   ansible.builtin.command:
     argv:
       - python3
       - -c
       - |
-        import re
         import sys
 
         corefile = sys.argv[1]
-        upstreams = sys.argv[2]
-        root = re.compile(
-            r"(?ms)^(?P<header>\.:53\s*\{\n)"
-            r"(?P<body>.*?)"
-            r"(?P<footer>^[ \t]*\})"
-        )
-        match = root.search(corefile)
-        if match is None:
-            raise SystemExit("node-local DNS root server block was not found")
-        forward = re.compile(
-            r"(?m)^(?P<indent>[ \t]*)forward\s+\.\s+[^\n{]+\s*$"
-        )
-        body, count = forward.subn(
-            lambda item: (
-                item.group("indent") + "forward . " + upstreams
-            ),
-            match.group("body"),
-            count=1,
-        )
-        if count != 1:
-            raise SystemExit(
-                "node-local DNS root forward stanza was not found"
-            )
-        replacement = match.group("header") + body + match.group("footer")
-        print(
-            corefile[:match.start()]
-            + replacement
-            + corefile[match.end():],
-            end="",
+        zone_token = sys.argv[2].rstrip(".") + ":53"
+        lines = corefile.splitlines(keepends=True)
+        for start, line in enumerate(lines):
+            if ":53" not in line or "{" not in line:
+                continue
+            depth = line.count("{") - line.count("}")
+            end = start
+            while depth > 0 and end + 1 < len(lines):
+                end += 1
+                depth += lines[end].count("{") - lines[end].count("}")
+            block = "".join(lines[start:end + 1])
+            if "__PILLAR__CLUSTER__DNS__" not in block:
+                continue
+            header, suffix = line.split("{", 1)
+            zones = header.split()
+            if zone_token not in zones:
+                zones.append(zone_token)
+                lines[start] = " ".join(zones) + " {" + suffix
+            print("".join(lines), end="")
+            raise SystemExit(0)
+        raise SystemExit(
+            "node-local DNS cluster-forwarding server block was not found"
         )
       - "{{ ecs_node_local_dns_corefile.stdout }}"
-      - "{{ ecs_coredns_forwarders_effective | join(' ') }}"
+      - "{{ cluster_domain }}"
   register: ecs_node_local_dns_identity_corefile
   changed_when: false
   become: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   when:
-    - ecs_coredns_extended_verification_enabled | default(false) | bool
     - ecs_node_local_dns_reconcile | default(true) | bool
     - ecs_node_local_dns_corefile.rc == 0
 
@@ -866,7 +876,6 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   when:
-    - ecs_coredns_extended_verification_enabled | default(false) | bool
     - ecs_node_local_dns_reconcile | default(true) | bool
     - ecs_node_local_dns_corefile.rc == 0
     - >-
@@ -890,7 +899,6 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   when:
-    - ecs_coredns_extended_verification_enabled | default(false) | bool
     - ecs_node_local_dns_patch is changed
 
 - name: Wait for ECS node-local DNS rollout after configuration change
@@ -910,8 +918,78 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   when:
-    - ecs_coredns_extended_verification_enabled | default(false) | bool
     - ecs_node_local_dns_restart is changed
+
+- name: Verify required records through the CoreDNS Service and every ready replica
+  ansible.builtin.include_tasks: ecs_probe_coredns_service.yml
+  vars:
+    ecs_coredns_service_probe_pod_name: ansible-coredns-service-readiness
+  when: ecs_coredns_extended_verification_enabled | default(false) | bool
+
+- name: Record initial CoreDNS Service and replica readiness
+  ansible.builtin.set_fact:
+    ecs_coredns_service_probe_initial_succeeded: >-
+      {{ ecs_coredns_service_probe_succeeded | bool }}
+  when: ecs_coredns_extended_verification_enabled | default(false) | bool
+
+- name: Roll CoreDNS deployment when the Service path or any replica is stale
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - rollout
+      - restart
+      - "deployment/{{ ecs_coredns_deployment_name }}"
+  register: ecs_coredns_service_recovery_restart
+  changed_when: ecs_coredns_service_recovery_restart.rc == 0
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  when:
+    - ecs_coredns_extended_verification_enabled | default(false) | bool
+    - not (ecs_coredns_service_probe_initial_succeeded | bool)
+
+- name: Wait for CoreDNS rolling recovery
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_coredns_namespace }}"
+      - rollout
+      - status
+      - "deployment/{{ ecs_coredns_deployment_name }}"
+      - "--timeout={{ ecs_control_plane_wait_retries | int * ecs_control_plane_wait_delay | int }}s"
+  changed_when: false
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  connection: ssh
+  when:
+    - ecs_coredns_extended_verification_enabled | default(false) | bool
+    - not (ecs_coredns_service_probe_initial_succeeded | bool)
+
+- name: Reverify the CoreDNS Service and every ready replica after rolling recovery
+  ansible.builtin.include_tasks: ecs_probe_coredns_service.yml
+  vars:
+    ecs_coredns_service_probe_pod_name: ansible-coredns-service-recovery
+  when:
+    - ecs_coredns_extended_verification_enabled | default(false) | bool
+    - not (ecs_coredns_service_probe_initial_succeeded | bool)
+
+- name: Require reliable CoreDNS Service path and replicas
+  ansible.builtin.assert:
+    that:
+      - ecs_coredns_service_probe_succeeded | bool
+    fail_msg: >-
+      ECS CoreDNS configuration is correct, but the Kubernetes DNS Service or
+      at least one ready CoreDNS replica still cannot resolve every required
+      Data Services hostname after one rolling CoreDNS recovery. Probe output:
+      {{ ecs_coredns_service_probe_output }}
+  when: ecs_coredns_extended_verification_enabled | default(false) | bool
 
 - name: Record ECS CoreDNS reconciliation for this run
   ansible.builtin.set_fact:

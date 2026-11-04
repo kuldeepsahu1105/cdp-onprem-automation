@@ -36,5 +36,16 @@
   when:
     - cms_after_autotls_status.status | default(0) | int == 200
     - cm_cms_restart_after_autotls | default(true) | bool
-    - cms_service_truststore_put is defined
-    - cms_service_truststore_put is changed
+    - >-
+      (
+        cms_service_truststore_put is defined
+        and cms_service_truststore_put is changed
+      )
+      or (
+        cms_legacy_client_keystore_safety_valve_put is defined
+        and cms_legacy_client_keystore_safety_valve_put is changed
+      )
+      or (
+        cms_servicemonitor_tls_put is defined
+        and cms_servicemonitor_tls_put is changed
+      )

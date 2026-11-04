@@ -146,50 +146,8 @@
     - name: Prepare Cloudera Manager API
       ansible.builtin.import_tasks: common_tasks/set_cm_api_url.yml
 
-    - name: Read existing CM clusters
-      ansible.builtin.uri:
-        url: "{{ cm_api_url }}/clusters?view=summary"
-        method: GET
-        user: "{{ cm_admin_user }}"
-        password: "{{ cm_admin_pass }}"
-        force_basic_auth: yes
-        validate_certs: no
-        status_code: [200]
-        follow_redirects: none
-      register: cleanup_cluster_services_existing_clusters
-
-    - name: Resolve base cluster name for deletion
-      ansible.builtin.set_fact:
-        cleanup_cluster_services_base_name: >-
-          {{
-            cdh_basecluster_name
-            if (
-              cdh_basecluster_name
-              in (
-                cleanup_cluster_services_existing_clusters.json['items'] | default([])
-                | map(attribute='name')
-                | list
-              )
-            )
-            else (
-              base_cluster_legacy_name
-              if (
-                cdh_basecluster_name == 'CDP-base-cluster'
-                and base_cluster_legacy_name
-                in (
-                  cleanup_cluster_services_existing_clusters.json['items'] | default([])
-                  | map(attribute='name')
-                  | list
-                )
-              )
-              else cdh_basecluster_name
-            )
-          }}
-
     - name: Delete base cluster through CM
       ansible.builtin.include_tasks: common_tasks/cleanup/delete_base_cluster_api.yml
-      vars:
-        cdh_basecluster_name: "{{ cleanup_cluster_services_base_name }}"
       when: hostvars['localhost']['cleanup_cluster_services_base'] | bool
 
     - name: Require base cluster deletion
@@ -197,7 +155,7 @@
         that:
           - base_cluster_deleted.status | default(0) == 404
         fail_msg: >-
-          CM did not confirm deletion of {{ cleanup_cluster_services_base_name }}.
+          CM did not confirm deletion of {{ cleanup_base_cluster_api_name }}.
           Node data cleanup was not started.
       when: hostvars['localhost']['cleanup_cluster_services_base'] | bool
 

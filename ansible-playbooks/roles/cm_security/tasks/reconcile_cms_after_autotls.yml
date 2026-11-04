@@ -11,4 +11,4 @@
     )
 
 - name: Reconcile MGMT truststore and restart CMS when already deployed
-  ansible.builtin.import_tasks: common_tasks/reconcile_cm_cms_after_autotls.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/reconcile_cm_cms_after_autotls.yml"

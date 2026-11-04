@@ -1,0 +1,8 @@
+---
+# Backward-compatible single-parcel wrapper.
+- name: Activate one cluster parcel
+  ansible.builtin.include_tasks: activate_cluster_parcels.yml
+  vars:
+    cluster_parcels:
+      - name: "{{ cluster_parcel_product }}"
+        parcel_version: "{{ cluster_parcel_version }}"

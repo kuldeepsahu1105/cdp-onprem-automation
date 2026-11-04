@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for ECS CoreDNS service probe
+  ansible.builtin.import_role:
+    name: ecs
+    tasks_from: ecs_probe_coredns_service

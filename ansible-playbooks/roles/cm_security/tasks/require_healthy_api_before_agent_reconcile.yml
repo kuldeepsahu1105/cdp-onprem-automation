@@ -6,4 +6,4 @@
     or not (cm_agent_mandatory_restart_after_autotls_this_run | default(false) | bool)
 
 - name: CM API — must be healthy before mass agent restart
-  ansible.builtin.import_tasks: common_tasks/assert_cm_api_healthy_for_agent_reconcile.yml
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/common_tasks/assert_cm_api_healthy_for_agent_reconcile.yml"

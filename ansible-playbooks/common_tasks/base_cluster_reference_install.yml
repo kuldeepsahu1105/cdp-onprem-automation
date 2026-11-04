@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for CDH reference base cluster installation
+  ansible.builtin.import_role:
+    name: cdh_base_cluster
+    tasks_from: base_cluster_reference_install

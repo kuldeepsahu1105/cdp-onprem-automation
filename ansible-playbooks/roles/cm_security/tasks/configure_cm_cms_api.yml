@@ -376,6 +376,11 @@
       {{
         (cms_setup is defined and cms_setup is changed)
         or (cms_service_truststore_put is defined and cms_service_truststore_put is changed)
+        or (
+          cms_legacy_client_keystore_safety_valve_put is defined
+          and cms_legacy_client_keystore_safety_valve_put is changed
+        )
+        or (cms_servicemonitor_tls_put is defined and cms_servicemonitor_tls_put is changed)
         or (cms_rcg_servicemonitor_put is defined and cms_rcg_servicemonitor_put is changed)
         or (cms_rcg_reportsmanager_put is defined and cms_rcg_reportsmanager_put is changed)
         or (

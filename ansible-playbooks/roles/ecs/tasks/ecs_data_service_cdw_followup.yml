@@ -2,6 +2,7 @@
 - name: Initialize Data Warehouse follow-up result
   ansible.builtin.set_fact:
     ecs_cdw_catalog_succeeded: false
+    ecs_cdw_dataviz_succeeded: false
 
 - name: CDW | Complete database catalog and Virtual Warehouses
   when:
@@ -280,6 +281,8 @@
 
     - name: Define desired smallest CDW Virtual Warehouses
       ansible.builtin.set_fact:
+        ecs_cdw_hive_vw_name_effective: "{{ ecs_cdw_hive_vw_name }}"
+        ecs_cdw_impala_vw_name_effective: "{{ ecs_cdw_impala_vw_name }}"
         ecs_cdw_desired_virtual_warehouses:
           - name: "{{ ecs_cdw_hive_vw_name }}"
             type: hive
@@ -520,6 +523,10 @@
         label: "{{ item.item.type }}={{ item.item.name }}"
       when: ecs_cdw_catalog_succeeded | bool
 
+    - name: Provision automatic Data Visualization
+      ansible.builtin.include_tasks: ecs_data_service_cdw_dataviz.yml
+      when: ecs_cdw_catalog_succeeded | bool
+
     - name: Register Hue ingress hostnames for Caddy
       ansible.builtin.set_fact:
         ecs_caddy_data_service_routes: >-
@@ -528,14 +535,14 @@
             + [
               {
                 'id': 'cdw-hive',
-                'external_hostname': 'hue-' + ecs_cdw_hive_vw_name + '.' + ecs_app_domain,
+                'external_hostname': 'hue-' + ecs_cdw_hive_vw_name_effective + '.' + ecs_app_domain,
                 'backend_host': ecs_master_fqdn,
                 'backend_port': 443,
                 'backend_scheme': 'https'
               },
               {
                 'id': 'cdw-impala',
-                'external_hostname': 'hue-' + ecs_cdw_impala_vw_name + '.' + ecs_app_domain,
+                'external_hostname': 'hue-' + ecs_cdw_impala_vw_name_effective + '.' + ecs_app_domain,
                 'backend_host': ecs_master_fqdn,
                 'backend_port': 443,
                 'backend_scheme': 'https'
@@ -552,7 +559,9 @@
               {
                 'cdw': ecs_data_services_catalog.cdw | default({}) | combine(
                   {
-                    'url': 'https://hue-' + ecs_cdw_hive_vw_name + '.' + ecs_app_domain
+                    'url': 'https://hue-' + ecs_cdw_hive_vw_name_effective + '.' + ecs_app_domain,
+                    'hive_virtual_warehouse': ecs_cdw_hive_vw_name_effective,
+                    'impala_virtual_warehouse': ecs_cdw_impala_vw_name_effective
                   }
                 )
               },

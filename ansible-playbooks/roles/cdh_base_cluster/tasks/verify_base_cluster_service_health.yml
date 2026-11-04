@@ -78,4 +78,25 @@
       converge within {{ (base_cluster_service_health_retries | int) * (base_cluster_service_health_delay | int) }}s:
       {{ base_cluster_unhealthy_runtime_service_details | join(', ') }}.
       The initialization marker was not written. Fix the reported service health checks and rerun
-      31_setup_base_cluster.yml; the rerun will retain interrupted-initialization recovery.
+      31_setup_base_cluster.yml; the rerun will resubmit CM First Run.
+
+- name: Record verified base cluster runtime service summary
+  ansible.builtin.set_fact:
+    base_cluster_verified_service_states: >-
+      {{
+        base_cluster_service_health_poll.json['items'] | default([])
+        | selectattr('name', 'in', base_cluster_runtime_service_names)
+        | map(attribute='serviceState')
+        | unique
+        | sort
+        | list
+      }}
+    base_cluster_verified_health_summaries: >-
+      {{
+        base_cluster_service_health_poll.json['items'] | default([])
+        | selectattr('name', 'in', base_cluster_runtime_service_names)
+        | map(attribute='healthSummary')
+        | unique
+        | sort
+        | list
+      }}

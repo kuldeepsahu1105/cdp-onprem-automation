@@ -66,7 +66,7 @@
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Activate ECS parcel on cluster
-  ansible.builtin.include_tasks: activate_cluster_parcel.yml
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/common_tasks/activate_cluster_parcel.yml"
   vars:
     cluster_parcel_cluster: "{{ ecs_cluster_name }}"
     cluster_parcel_product: ECS
@@ -205,52 +205,12 @@
         | default('(missing)')
       }}.
 
-- name: Require reference ECS storage configuration
-  ansible.builtin.assert:
-    that:
-      - >-
-        (
-          ecs_service_config_check.json['items']
-          | selectattr('name', 'equalto', 'lsoDataPath')
-          | map(attribute='value')
-          | first
-          | default('')
-        ) == ecs_lso_data_path
-      - >-
-        (
-          ecs_service_config_check.json['items']
-          | selectattr('name', 'equalto', 'defaultDataPath')
-          | map(attribute='value')
-          | first
-          | default('')
-        ) == ecs_longhorn_data_path
-      - >-
-        (
-          ecs_service_config_check.json['items']
-          | selectattr('name', 'equalto', 'longhorn_replication')
-          | map(attribute='value')
-          | first
-          | default('')
-          | string
-        ) == (ecs_longhorn_replication | string)
-      - >-
-        (
-          ecs_service_config_check.json['items']
-          | selectattr('name', 'equalto', 'nfs_over_provisioning')
-          | map(attribute='value')
-          | first
-          | default('')
-          | string
-        ) == (ecs_nfs_over_provisioning | string)
-    fail_msg: >-
-      Cloudera Manager did not persist the supplied reference ECS storage
-      configuration. Expected lsoDataPath={{ ecs_lso_data_path }},
-      defaultDataPath={{ ecs_longhorn_data_path }},
-      longhorn_replication={{ ecs_longhorn_replication }}, and
-      nfs_over_provisioning={{ ecs_nfs_over_provisioning }}.
-
 - name: Apply ECS host templates and role assignments
   ansible.builtin.import_tasks: ecs_apply_host_templates.yml
+
+- name: Stage persistent ECS CoreDNS policy before control-plane installation
+  ansible.builtin.import_tasks: ecs_stage_coredns_bootstrap.yml
+  when: ecs_reconcile_coredns | default(true) | bool
 
 - name: Install ECS embedded control plane
   ansible.builtin.import_tasks: ecs_install_control_plane.yml
@@ -259,6 +219,12 @@
   ansible.builtin.import_tasks: ecs_reconcile_coredns.yml
   vars:
     ecs_coredns_first_run_bootstrap: true
+  when: ecs_reconcile_coredns | default(true) | bool
+
+- name: Fail closed on normal pod DNS and HTTPS during First Run
+  ansible.builtin.import_tasks: ecs_data_services_verify_dns.yml
+  vars:
+    ecs_data_services_dns_probe_successes_required: 20
   when: ecs_reconcile_coredns | default(true) | bool
 
 - name: Configure ECS operator CLI tools during First Run

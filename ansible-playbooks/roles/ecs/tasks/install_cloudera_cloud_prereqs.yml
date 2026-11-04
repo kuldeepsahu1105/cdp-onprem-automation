@@ -1,5 +1,4 @@
 ---
-
 - name: Create persistent CDP CLI state directory
   ansible.builtin.file:
     path: "{{ ecs_cdp_cli_venv_path | dirname }}"

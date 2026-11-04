@@ -483,6 +483,8 @@ base_cluster_ranger_admin_password: "{{ common_password | default(ipaadmin_passw
 base_cluster_ranger_keyadmin_password: "{{ base_cluster_ranger_admin_password }}"
 base_cluster_ranger_tagsync_password: "{{ base_cluster_ranger_admin_password }}"
 base_cluster_ranger_usersync_password: "{{ base_cluster_ranger_admin_password }}"
+base_cluster_spark3_service_name: spark3
+base_cluster_spark3_service_type: SPARK3_ON_YARN
 # Ranger Admin LDAP authentication and UserSync source. Admin LDAP is reconciled
 # before UserSync. auto follows identity_provider_effective; freeipa/ad select
 # those provider defaults, external uses the fields below, and none omits LDAP
@@ -751,6 +753,7 @@ base_cluster_ranger_usersync_role_config: >-
   }}
 # Ranger Admin UI (direct on base master; not Knox gateway path)
 base_cluster_ranger_admin_port: 6182
+base_cluster_hdfs_name_dir: /dfs/nn
 # Direct web UI ports on base-masters (used when Knox is disabled; Knox uses cdp-proxy below)
 base_cluster_hdfs_namenode_ui_port: 9870
 base_cluster_yarn_rm_ui_port: 8088

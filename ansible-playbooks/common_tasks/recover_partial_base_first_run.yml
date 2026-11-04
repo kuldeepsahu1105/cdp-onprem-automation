@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for partial Base First Run recovery
+  ansible.builtin.import_role:
+    name: cdh_base_cluster
+    tasks_from: recover_partial_base_first_run

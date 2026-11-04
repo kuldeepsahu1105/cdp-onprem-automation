@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "rates": [
+    {
+      "provider": "aws",
+      "region": "fixture-region",
+      "sku": "fixture-instance",
+      "unit": "instance-hour",
+      "currency": "USD",
+      "basis": "cloud_price",
+      "amount": "0.12345",
+      "unit_hours": "1",
+      "source": "SYNTHETIC TEST VALUE, NOT AN AWS PRICE",
+      "as_of": "2026-10-01T00:00:00Z"
+    },
+    {
+      "provider": "aws",
+      "region": "fixture-region",
+      "sku": "gp3",
+      "unit": "GiB-month",
+      "currency": "USD",
+      "basis": "cloud_price",
+      "amount": "0.10",
+      "unit_hours": "730",
+      "source": "SYNTHETIC TEST VALUE, NOT AN AWS PRICE",
+      "as_of": "2026-10-01T00:00:00Z"
+    }
+  ]
+}

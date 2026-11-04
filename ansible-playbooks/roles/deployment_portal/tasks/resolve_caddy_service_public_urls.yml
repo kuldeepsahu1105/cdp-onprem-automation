@@ -7,6 +7,7 @@
     deployment_portal_public_host: ""
     pgadmin_caddy_public_url: ""
     ipa_caddy_public_url: ""
+    ipa_caddy_preferred_public_url: ""
     ipa_caddy_modern_public_url: ""
     ipa_caddy_legacy_public_url: ""
   when: not (caddy_vhost_enabled | default(false) | bool)
@@ -24,6 +25,11 @@
 - name: Set FreeIPA Caddy public URLs from vhost map
   ansible.builtin.set_fact:
     ipa_caddy_public_url: "{{ caddy_vhost_urls_external.ipa.url | default('') | trim }}"
+    ipa_caddy_preferred_public_url: >-
+      {{
+        (caddy_vhost_urls_external.ipa.url | default('') | trim | regex_replace('/+$', ''))
+        + deployment_portal_ipa_ui_path
+      }}
     ipa_caddy_modern_public_url: >-
       {{
         (caddy_vhost_urls_external.ipa.url | default('') | trim | regex_replace('/+$', ''))
@@ -44,6 +50,7 @@
 - name: Clear FreeIPA Caddy public URLs when IPA vhost is absent
   ansible.builtin.set_fact:
     ipa_caddy_public_url: ""
+    ipa_caddy_preferred_public_url: ""
     ipa_caddy_modern_public_url: ""
     ipa_caddy_legacy_public_url: ""
   when:

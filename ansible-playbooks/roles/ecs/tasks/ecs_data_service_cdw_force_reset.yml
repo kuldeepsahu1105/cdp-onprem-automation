@@ -30,7 +30,7 @@
     - >-
       ecs_cdw_force_reset_existing.stderr
       | default('')
-      is not search('(?i)Status Code:\\s*404.*Error Code:\\s*NOT_FOUND')
+      is not search('(?is)Status Code:\\s*404.*Error Code:\\s*NOT_FOUND')
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
@@ -96,12 +96,15 @@
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cdw_force_reset_result
   changed_when: ecs_cdw_force_reset_result.rc == 0
-  failed_when:
-    - ecs_cdw_force_reset_result.rc != 0
-    - >-
+  failed_when: >-
+    ecs_cdw_force_reset_result.rc != 0
+    and not (
       ecs_cdw_force_reset_result.stderr
       | default('')
-      is not search('(?i)Status Code:\\s*404.*Error Code:\\s*NOT_FOUND')
+      is search(
+        '(?is)Status Code:\s*404.*Error Code:\s*NOT_FOUND'
+      )
+    )
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh

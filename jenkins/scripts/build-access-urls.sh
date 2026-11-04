@@ -342,9 +342,8 @@ render_access_urls_from_inventory() {
       ipa_fqdn="${HOST_SHORT}.${cluster_domain}"
       echo ""
       echo "--- Identity (FreeIPA via Caddy) ---"
-      echo "  IPA UI (Caddy vhost): $(url_with_port http "$ipa_h" "$http_port" /ipa/modern-ui/)"
-      echo "  IPA UI (legacy path): $(url_with_port http "$ipa_h" "$http_port" /ipa/ui)"
-      echo "  IPA direct (ipaserver): https://${ipa_fqdn}/ipa/modern-ui/"
+      echo "  IPA UI (Caddy vhost): $(url_with_port http "$ipa_h" "$http_port" /ipa/ui/)"
+      echo "  IPA direct (ipaserver): https://${ipa_fqdn}/ipa/ui/"
     fi
   else
     echo "--- Caddy: disabled (use direct URLs above) ---"
@@ -353,7 +352,7 @@ render_access_urls_from_inventory() {
       ipa_fqdn="${HOST_SHORT}.${cluster_domain}"
       echo ""
       echo "--- Identity (FreeIPA direct) ---"
-      echo "  IPA UI: https://${ipa_fqdn}/ipa/modern-ui/"
+      echo "  IPA UI: https://${ipa_fqdn}/ipa/ui/"
     fi
   fi
 

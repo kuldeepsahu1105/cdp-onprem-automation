@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for ECS CDE virtual cluster
+  ansible.builtin.import_role:
+    name: ecs
+    tasks_from: ecs_data_service_cde_virtual_cluster
