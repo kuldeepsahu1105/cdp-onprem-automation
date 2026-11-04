@@ -57,6 +57,9 @@ assert (
 
 playbook = root / "ansible-playbooks/roles/ecs/tasks/setup_data_services.yml"
 playbook_text = playbook.read_text()
+diagnostics_text = (
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_diagnostics.yml"
+).read_text()
 
 for service in ("cdw", "cde", "cai"):
     marker = f"- name: Provision {service.upper() if service != 'cai' else 'CAI'}"
@@ -69,6 +72,12 @@ for service in ("cdw", "cde", "cai"):
 assert "ansible.builtin.include_tasks: ecs_data_service_cdw_preflight.yml" in playbook_text
 assert "Collect CDW diagnostics after uncaught failure" in playbook_text
 assert "not (ecs_cdw_diagnostics_collected | default(false) | bool)" in playbook_text
+assert "ansible_failed_result.stderr" in playbook_text
+assert "details: \"{{ ansible_failed_result }}\"" in playbook_text
+assert "Collect pending CDW pod names" in diagnostics_text
+assert "Describe pending CDW pods" in diagnostics_text
+assert "Collect failed CDW persistent volume claims" in diagnostics_text
+assert "Collect ECS node scheduling capacity" in diagnostics_text
 assert "ansible.builtin.include_tasks: ecs_data_service_cde_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: ecs_data_service_cai_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: ecs_data_service_model_registry.yml" in playbook_text

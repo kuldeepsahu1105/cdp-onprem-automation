@@ -479,6 +479,12 @@ the CDW control plane persists and renders the setting. Automation does not
 directly patch or delete the StatefulSet, pod, PVC, database, service, or
 Kerberos principal.
 
+When a database catalog fails while `metastore-0` is Pending, the failure
+diagnostics describe every Pending pod and report namespace events, PVC state,
+and node allocatable CPU/memory and taints. Use the `FailedScheduling` event
+message to correct capacity, affinity/taints, or storage binding; do not delete
+the generated metastore pod or PVC.
+
 The database catalog status wait also has a read-only stale-status fallback,
 enabled by `ecs_cdw_catalog_kubernetes_health_fallback`. It accepts the exact
 `warehouse-<environment>` namespace only when the catalog API returned a

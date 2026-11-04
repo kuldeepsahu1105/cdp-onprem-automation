@@ -485,6 +485,11 @@ existing namespace as success and without patching or restarting generated
 workloads. Disable this narrow fallback with
 `ecs_cdw_catalog_kubernetes_health_fallback: false`.
 
+Failure diagnostics describe all Pending warehouse pods and include namespace
+events, PVC state, and node allocatable CPU/memory and taints. A metastore pod
+waiting for scheduling therefore reports the exact `FailedScheduling` reason
+without mutating or deleting CDW-owned Kubernetes resources.
+
 For a confirmed disposable failed activation, playbook 34 supports an
 explicit CDW-only force reset when `ecs_cdw_force_reset_cluster_id` and
 `ecs_cdw_force_reset_confirm` contain the same exact cluster ID. The task

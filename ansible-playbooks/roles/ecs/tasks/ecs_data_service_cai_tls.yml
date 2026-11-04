@@ -22,3 +22,7 @@
       loop:
         - "{{ playbook_dir }}/{{ ecs_cai_expected_base_hostname | default('cai') }}.crt"
         - "{{ playbook_dir }}/{{ ecs_cai_expected_base_hostname | default('cai') }}.pem"
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      delegate_to: localhost
+      connection: local
