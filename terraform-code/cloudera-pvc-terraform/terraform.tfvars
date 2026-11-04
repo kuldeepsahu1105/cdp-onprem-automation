@@ -41,42 +41,42 @@ existing_keypair_name = "kuldeep-pvc-session"
 instance_groups = {
   cldr_mngr = {
     count         = 1
-    ami           = "ami-06dc977f58c8d7857"
+    ami           = "ami-0ace6c94b5ab2e659"
     instance_type = "t3.medium"
     volume_size   = 30
     tags          = { Name = "cldr-mngr" }
   },
   ipa_server = {
     count         = 1
-    ami           = "ami-06dc977f58c8d7857"
+    ami           = "ami-0ace6c94b5ab2e659"
     instance_type = "t3.medium"
     volume_size   = 30
     tags          = { Name = "ipa-server" }
   },
   pvcbase_master = {
     count         = 1
-    ami           = "ami-06dc977f58c8d7857"
+    ami           = "ami-0ace6c94b5ab2e659"
     instance_type = "t3.large"
     volume_size   = 50
     tags          = { Name = "pvcbase-master" }
   },
   pvcbase_worker = {
     count         = 1
-    ami           = "ami-06dc977f58c8d7857"
+    ami           = "ami-0ace6c94b5ab2e659"
     instance_type = "t3.large"
     volume_size   = 50
     tags          = { Name = "pvcbase-worker" }
   },
   pvcecs_master = {
     count         = 1
-    ami           = "ami-06dc977f58c8d7857"
+    ami           = "ami-0ace6c94b5ab2e659"
     instance_type = "t3.xlarge"
     volume_size   = 100
     tags          = { Name = "pvcecs-master" }
   },
   pvcecs_worker = {
     count         = 1
-    ami           = "ami-06dc977f58c8d7857"
+    ami           = "ami-0ace6c94b5ab2e659"
     instance_type = "t3.xlarge"
     volume_size   = 100
     tags          = { Name = "pvcecs-worker" }

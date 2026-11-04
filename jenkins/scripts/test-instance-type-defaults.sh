@@ -57,6 +57,9 @@ expected = {
 }
 
 tfvars = yaml.safe_load((root / ".tfvars.yaml").read_text())
+expected_ami = "ami-0ace6c94b5ab2e659"
+assert tfvars["aws_region"] == "ap-southeast-1"
+assert tfvars["ami_id"] == expected_ami
 for group, instance_type in expected.items():
     assert tfvars["instance_groups"][group]["instance_type"] == instance_type
 
@@ -77,6 +80,9 @@ for group, instance_type in expected.items():
 assert tfvars["ami_id"] in readme_adoc
 
 jenkinsfile = (root / "Jenkinsfile").read_text()
+assert f"defaultValue: '{expected_ami}'" in jenkinsfile
+assert expected_ami in (root / "scripts/lib/tfvars_defaults.sh").read_text()
+assert expected_ami in (root / "scripts/lib/arch_defaults.sh").read_text()
 parameter_names = {
     "cldr_mngr": "CLDR_MNGR_INSTANCE_TYPE",
     "ipa_server": "IPA_SERVER_INSTANCE_TYPE",
@@ -108,6 +114,17 @@ for relative_path in (
             re.DOTALL,
         )
         assert block_pattern.search(terraform_text), f"{relative_path}: {group}"
+
+for relative_path in (
+    "terraform-code/cloudera-pvc-terraform/variables.tf",
+    "terraform-code/cloudera-pvc-terraform/terraform.tfvars",
+    "terraform-code/cloudera-pvc-terraform/modules/ec2-instance/variables.tf",
+    "terraform-code/cloudera-pvc-terraform/modules/ec2-instance/terraform.tfvars",
+):
+    terraform_text = (root / relative_path).read_text()
+    assert expected_ami in terraform_text, relative_path
+    old_ami = "ami-" + "06dc977f58c8d7857"
+    assert old_ami not in terraform_text, relative_path
 
 print("Instance type defaults test passed")
 PY

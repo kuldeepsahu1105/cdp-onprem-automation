@@ -222,7 +222,7 @@ WARNING: Do *NOT* commit license, credentials, or SSH key files to GitHub.
 
 === Instance Groups
 
-The checked-in `.tfvars.yaml` uses AMI `ami-030a276b398df7eb7` in
+The checked-in `.tfvars.yaml` uses AMI `ami-0ace6c94b5ab2e659` in
 `ap-southeast-1`. Override `ami_id`/`AMI_ID` with a compatible image when
 deploying in another region.
 
