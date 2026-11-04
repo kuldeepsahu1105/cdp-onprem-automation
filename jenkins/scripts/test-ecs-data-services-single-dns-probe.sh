@@ -78,6 +78,8 @@ corefile_build = coredns_tasks_by_name[
 ]
 corefile_argv = corefile_build["ansible.builtin.command"]["argv"]
 corefile_script = corefile_argv[corefile_argv.index("-c") + 1]
+assert "{{" not in corefile_script
+assert "{%" not in corefile_script
 platform_root = """.:53 {
     errors
     forward . /etc/resolv.conf {
