@@ -104,6 +104,39 @@ assert corefile_result.returncode == 0, corefile_result.stderr
 assert platform_root.rstrip() in corefile_result.stdout
 assert "identity.example:53 {" in corefile_result.stdout
 assert "forward . 192.0.2.10 198.51.100.10" in corefile_result.stdout
+
+non_breaking_space = "\u00a0"
+live_identity_zone = (
+    "identity.example:53 {\n"
+    f"{non_breaking_space * 3}errors\n"
+    f"{non_breaking_space * 3}cache 30\n"
+    f"{non_breaking_space * 3}forward . 203.0.113.53\n"
+    f"{non_breaking_space * 2}}}\n"
+    ".:53 {\n"
+    "  forward . /etc/resolv.conf\n"
+    "}\n"
+)
+unicode_indent_update = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        corefile_script,
+        live_identity_zone,
+        "192.0.2.10 198.51.100.10",
+        "identity.example",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+assert unicode_indent_update.returncode == 0, unicode_indent_update.stderr
+assert unicode_indent_update.stdout.count("identity.example:53 {") == 1
+assert "forward . 203.0.113.53" not in unicode_indent_update.stdout
+assert (
+    f"{non_breaking_space * 3}forward . 192.0.2.10 198.51.100.10"
+    in unicode_indent_update.stdout
+)
+
 corefile_idempotent = subprocess.run(
     [
         sys.executable,

@@ -612,7 +612,7 @@
             f"{end}"
         )
         managed = re.compile(
-            rf"(?ms)^{re.escape(begin)}\n.*?^{re.escape(end)}[ \t]*"
+            rf"(?ms)^{re.escape(begin)}\n.*?^{re.escape(end)}[^\S\r\n]*"
         )
         if managed.search(corefile):
             print(managed.sub(block, corefile, count=1), end="")
@@ -629,7 +629,7 @@
                 depth += lines[finish].count("{") - lines[finish].count("}")
             existing = "".join(lines[start:finish + 1])
             forward = re.compile(
-                r"(?ms)^(?P<indent>[ \t]*)forward\s+\.\s+[^\n{]+"
+                r"(?ms)^(?P<indent>[^\S\r\n]*)forward\s+\.\s+[^\n{]+"
                 r"(?:\s*\{\n.*?^(?P=indent)\})?"
             )
             match = forward.search(existing)

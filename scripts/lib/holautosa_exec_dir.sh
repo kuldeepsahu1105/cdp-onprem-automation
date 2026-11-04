@@ -110,7 +110,7 @@ _holautosa_clean_legacy_terraform_cache() {
   fi
 }
 
-# Jenkins preflight: drop module/provider cache everywhere we no longer persist it.
+# Explicit maintenance helper for removing local module/provider caches.
 holautosa_purge_terraform_module_cache() {
   local tf_dir="${1:-.}"
   _holautosa_clean_legacy_terraform_cache "$tf_dir"
@@ -126,9 +126,6 @@ restore_terraform_state_to_workspace() {
   [[ -n "$src" && -d "$src" ]] || return 0
   printf '[holautosa-dir] State restore v2 (state files only; no .terraform cache)\n'
   _holautosa_mkdir_p "$tf_dir"
-
-  # Drop any stale init cache; terraform init recreates .terraform/ each build.
-  holautosa_purge_terraform_module_cache "$tf_dir"
 
   for item in terraform.tfstate terraform.tfstate.backup; do
     [[ -f "$src/$item" ]] && cp -f "$src/$item" "$tf_dir/$item"
