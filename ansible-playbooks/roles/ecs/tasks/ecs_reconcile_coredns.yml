@@ -604,7 +604,7 @@
         end = "# END ANSIBLE DATA SERVICES PRIVATE DNS"
         block = (
             f"{begin}\n"
-            f"{zone_token} {{\n"
+            f"{zone_token} " + "{\n"
             "    errors\n"
             "    cache 30\n"
             f"    forward . {upstreams}\n"
