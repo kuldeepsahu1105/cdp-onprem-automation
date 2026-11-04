@@ -1,0 +1,188 @@
+---
+- name: Detect monitoring stack on portal ops host before Caddy/index render
+  ansible.builtin.import_tasks: detect_deployment_portal_monitoring_on_host.yml
+  when: deployment_portal_detect_monitoring_routes | default(true) | bool
+
+- name: Refresh portal context monitoring flags and endpoints after ops-host probe
+  ansible.builtin.import_tasks: refresh_deployment_portal_monitoring_context.yml
+  when: deployment_portal_detect_monitoring_routes | default(true) | bool
+
+- name: Sync monitoring stack configuration
+  when:
+    - deployment_portal_manage_monitoring_stack | default(true) | bool
+    - deployment_portal_monitoring_routes_enabled | default(false) | bool
+  block:
+    - name: Create monitoring config subdirectories (rules, Grafana provisioning/dashboards)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ monitoring_config_dir }}/rules"
+        - "{{ monitoring_config_dir }}/grafana/provisioning/datasources"
+        - "{{ monitoring_config_dir }}/grafana/provisioning/dashboards"
+        - "{{ monitoring_config_dir }}/grafana/dashboards"
+
+    - name: Render blackbox_exporter configuration
+      ansible.builtin.template:
+        src: monitoring_blackbox.yml.j2
+        dest: "{{ monitoring_config_dir }}/blackbox.yml"
+        mode: "0644"
+      register: monitoring_blackbox_render
+      when: monitoring_blackbox_exporter_enabled | default(true) | bool
+
+    - name: Remove blackbox_exporter configuration when disabled
+      ansible.builtin.file:
+        path: "{{ monitoring_config_dir }}/blackbox.yml"
+        state: absent
+      when: not (monitoring_blackbox_exporter_enabled | default(true) | bool)
+
+    - name: Render Prometheus configuration
+      ansible.builtin.template:
+        src: monitoring_prometheus.yml.j2
+        dest: "{{ monitoring_config_dir }}/prometheus.yml"
+        mode: "0644"
+      register: monitoring_prometheus_render
+
+    - name: Render Prometheus alerting rules
+      ansible.builtin.template:
+        src: monitoring_alert_rules.yml.j2
+        dest: "{{ monitoring_config_dir }}/rules/alerts.yml"
+        mode: "0644"
+      register: monitoring_alert_rules_render
+      when: monitoring_alert_rules_enabled | default(true) | bool
+
+    - name: Remove rendered alerting rules when disabled
+      ansible.builtin.file:
+        path: "{{ monitoring_config_dir }}/rules/alerts.yml"
+        state: absent
+      when: not (monitoring_alert_rules_enabled | default(true) | bool)
+
+    - name: Render Alertmanager configuration
+      ansible.builtin.template:
+        src: monitoring_alertmanager.yml.j2
+        dest: "{{ monitoring_config_dir }}/alertmanager.yml"
+        mode: "0644"
+      register: monitoring_alertmanager_render
+
+    - name: Render Grafana datasources provisioning (Prometheus + Alertmanager)
+      ansible.builtin.template:
+        src: grafana_datasources.yml.j2
+        dest: "{{ monitoring_config_dir }}/grafana/provisioning/datasources/datasources.yml"
+        mode: "0644"
+      register: monitoring_grafana_datasources_render
+      when: monitoring_grafana_provisioning_enabled | default(true) | bool
+
+    - name: Render Grafana dashboard provider provisioning
+      ansible.builtin.template:
+        src: grafana_dashboard_provider.yml.j2
+        dest: "{{ monitoring_config_dir }}/grafana/provisioning/dashboards/dashboards.yml"
+        mode: "0644"
+      register: monitoring_grafana_dashboard_provider_render
+      when: monitoring_grafana_provisioning_enabled | default(true) | bool
+
+    - name: Copy prepopulated Grafana dashboard JSON
+      ansible.builtin.copy:
+        src: "grafana_dashboards/{{ item }}"
+        dest: "{{ monitoring_config_dir }}/grafana/dashboards/{{ item }}"
+        mode: "0644"
+      loop: "{{ monitoring_grafana_dashboard_files | default(['cm_cluster_overview.json']) }}"
+      register: monitoring_grafana_dashboards_copy
+      when: monitoring_grafana_provisioning_enabled | default(true) | bool
+
+    - name: Render monitoring Docker Compose environment file
+      ansible.builtin.template:
+        src: monitoring_docker-compose.env.j2
+        dest: "{{ monitoring_config_dir }}/.env"
+        mode: "0600"
+      register: monitoring_env_render
+
+    - name: Render monitoring Docker Compose file
+      ansible.builtin.template:
+        src: monitoring_docker-compose.yml.j2
+        dest: "{{ monitoring_config_dir }}/docker-compose.yml"
+        mode: "0644"
+      register: monitoring_compose_render
+
+    - name: Force-recreate monitoring containers when rendered config changed
+      ansible.builtin.command:
+        argv: >-
+          {{
+            deployment_portal_compose_argv
+            + ['-f', monitoring_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', '--remove-orphans']
+          }}
+      when: >-
+        monitoring_compose_render is changed
+        or monitoring_env_render is changed
+        or (monitoring_blackbox_render is defined and monitoring_blackbox_render is changed)
+        or monitoring_prometheus_render is changed
+        or monitoring_alertmanager_render is changed
+        or (monitoring_exporters_enrolled_this_run | default(false) | bool)
+        or (monitoring_alert_rules_render is defined and monitoring_alert_rules_render is changed)
+        or (monitoring_grafana_datasources_render is defined and monitoring_grafana_datasources_render is changed)
+        or (monitoring_grafana_dashboard_provider_render is defined and monitoring_grafana_dashboard_provider_render is changed)
+        or (monitoring_grafana_dashboards_copy is defined and monitoring_grafana_dashboards_copy is changed)
+      register: monitoring_stack_force_recreate
+      failed_when: monitoring_stack_force_recreate.rc != 0
+      changed_when: true
+
+    - name: Ensure monitoring stack is running
+      ansible.builtin.command:
+        argv: >-
+          {{
+            deployment_portal_compose_argv
+            + ['-f', monitoring_config_dir ~ '/docker-compose.yml', 'up', '-d', '--remove-orphans']
+          }}
+      when: >-
+        not (monitoring_compose_render is changed)
+        and not (monitoring_env_render is changed)
+        and not (monitoring_blackbox_render is defined and monitoring_blackbox_render is changed)
+        and not (monitoring_prometheus_render is changed)
+        and not (monitoring_alertmanager_render is changed)
+        and not (monitoring_alert_rules_render is defined and monitoring_alert_rules_render is changed)
+        and not (monitoring_grafana_datasources_render is defined and monitoring_grafana_datasources_render is changed)
+        and not (monitoring_grafana_dashboard_provider_render is defined and monitoring_grafana_dashboard_provider_render is changed)
+        and not (monitoring_grafana_dashboards_copy is defined and monitoring_grafana_dashboards_copy is changed)
+      register: monitoring_compose_up
+      changed_when: >-
+        'Creating' in monitoring_compose_up.stdout
+        or 'Starting' in monitoring_compose_up.stdout
+
+    - name: Re-render Caddy with monitoring routes after monitoring sync
+      ansible.builtin.template:
+        src: deployment_portal_Caddyfile.j2
+        dest: "{{ deployment_portal_config_dir }}/Caddyfile"
+        mode: "0644"
+      register: caddyfile_after_monitoring
+
+    - name: Recreate Caddy after monitoring route update
+      ansible.builtin.command:
+        argv: >-
+          {{
+            deployment_portal_compose_argv
+            + ['-f', deployment_portal_config_dir ~ '/docker-compose.yml', 'up', '-d', '--force-recreate', 'caddy']
+          }}
+      when: caddyfile_after_monitoring is changed
+      register: caddy_recreate_after_monitoring
+      failed_when: caddy_recreate_after_monitoring.rc != 0
+
+    - name: Refresh deployment index after monitoring sync
+      ansible.builtin.template:
+        src: deployment_portal_index.html.j2
+        dest: "{{ deployment_portal_www_dir }}/index.html"
+        mode: "0644"
+
+    - name: Refresh deployment portal live stats JSON after monitoring sync
+      ansible.builtin.template:
+        src: deployment_portal_live_stats.json.j2
+        dest: "{{ deployment_portal_www_dir }}/live-stats.json"
+        mode: "0644"
+
+- name: Verify monitoring UIs via Caddy path routes (monitoring milestone)
+  ansible.builtin.import_tasks: verify_deployment_portal_monitoring.yml
+  when:
+    - deployment_portal_manage_monitoring_stack | default(true) | bool
+    - deployment_portal_monitoring_routes_enabled | default(false) | bool
+
+- name: Verify Caddy container and monitoring URLs after monitoring sync
+  ansible.builtin.import_tasks: verify_deployment_portal_caddy.yml

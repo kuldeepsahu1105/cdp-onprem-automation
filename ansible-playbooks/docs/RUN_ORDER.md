@@ -11,7 +11,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 1 | VALIDATE | — | (outside Ansible) |
 | 2 | TERRAFORM | — | inventory generation |
 | 3 | PREREQS | `1` / `prereq` | SSH: `00_setup_ssh_preqs` → `01`–`09` (`00` only on PREREQS / `all`; override with `ANSIBLE_RUN_SSH_PREQS`) |
-| 4 | PORTAL | `portal` | `10_setup_deployment_portal`; defers monitoring/exporter work when MONITORING is also selected |
+| 4 | PORTAL | `portal` | `10_setup_deployment_portal` only (Caddy, pgAdmin, index); never discovers, verifies, enrolls, or manages monitoring services |
 | 5 | IDENTITY | `2` / `identity` | `11_identity_setup` (`12` → packages → `13` → `14` DNS records → `19` wildcard → `16` clients; imports `detect_identity.yml` first) |
 | 6 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
 | 7 | CM_TLS_KRB_LDAP | `cm_tls` | `27` → `28` → `29` → `30` (requires `04_setup_autossh` from PREREQS) |
@@ -128,8 +128,9 @@ selecting task files from `prereq_system_tuning`.
 The PORTAL implementation is organized under `roles/deployment_portal`.
 Playbooks `10_setup_deployment_portal.yml` and
 `35_refresh_deployment_portal.yml` remain compatibility orchestrators and
-retain the localhost fact build, optional exporter playbook import, ops-host
-sync, and localhost Tier B verification as distinct plays. Legacy
+retain the localhost fact build, ops-host portal sync, and localhost Tier B
+verification as distinct plays. Monitoring exporter enrollment and container
+management belong only to playbook `32_setup_monitoring_stack.yml`. Legacy
 `common_tasks/<portal-task>.yml` paths remain as role-import compatibility
 shims for monitoring, identity, ECS, and manual callers.
 

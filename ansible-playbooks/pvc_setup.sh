@@ -332,7 +332,6 @@ run_phase_2() {
   # run detect_identity.yml here too (was a duplicate assert+debug on every identity run).
   _install_ipaserver_ec2_startstop
   run_playbook 11_identity_setup.yml
-  _maybe_sync_deployment_portal_access
   ui_phase_footer "$_phase"
 }
 
@@ -376,7 +375,6 @@ run_phase_cm_tls() {
   # Keep the post-Auto-TLS steps in one Ansible process so LDAP and Kerberos reuse
   # the stable API endpoint resolved by CMS. Each numbered playbook remains standalone.
   run_playbook 28_setup_cm_cms.yml 29_setup_cm_ldap.yml 30_setup_cm_krbs.yml
-  _maybe_sync_deployment_portal_access
   ui_phase_footer "$_phase"
 }
 
@@ -437,10 +435,7 @@ _run_deployment_portal_bootstrap() {
   fi
   local portal_extra=()
   while IFS= read -r -d '' arg; do portal_extra+=("$arg"); done < <(_portal_extra_args)
-  if _monitoring_phase_will_run; then
-    ui_info "Deferring monitoring stack and exporter enrollment to the selected MONITORING phase."
-    portal_extra+=(-e monitoring_stack_enabled=false)
-  fi
+  portal_extra+=(-e monitoring_stack_enabled=false)
   portal_extra+=(-e deployment_portal_install_required=true)
   run_playbook 10_setup_deployment_portal.yml "${portal_extra[@]}"
 }

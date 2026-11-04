@@ -12,7 +12,7 @@
     - name: Install container runtime for portal stacks
       ansible.builtin.import_tasks: install_portal_container_runtime.yml
 
-    - name: Install or update portal and monitoring stacks
+    - name: Install or update portal stack
       ansible.builtin.import_tasks: sync_deployment_portal_content.yml
 
     - name: Stat portal compose after mandated install

@@ -28,8 +28,8 @@
   ansible.builtin.meta: end_play
   when: not (deployment_portal_caddy_effective | default(false) | bool)
 
+- name: Detect deployed monitoring routes for portal refresh
+  ansible.builtin.import_tasks: detect_deployment_portal_monitoring.yml
+
 - name: Build deployment portal context from inventory
   ansible.builtin.import_tasks: build_deployment_portal_facts.yml
-
-- name: Resolve monitoring exporter enrollment gate
-  ansible.builtin.import_tasks: resolve_monitoring_exporter_enroll_enabled.yml
