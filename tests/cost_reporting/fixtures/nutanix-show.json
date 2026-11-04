@@ -7,6 +7,7 @@
           "address": "nutanix_virtual_machine.dev[0]",
           "mode": "managed",
           "type": "nutanix_virtual_machine",
+          "provider_name": "registry.terraform.io/nutanix/nutanix",
           "values": {"id": "fixture-vm-uuid", "num_vcpus_per_socket": 2, "num_sockets": 1, "memory_size_mib": 1024}
         }
       ]

@@ -10,6 +10,7 @@
               "address": "module.ec2_instances.aws_instance.group_instances[\"pvcbase_worker-1\"]",
               "mode": "managed",
               "type": "aws_instance",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
               "values": {
                 "instance_type": "fixture-instance",
                 "root_block_device": [{"volume_size": 100, "volume_type": "gp3"}]
@@ -19,6 +20,7 @@
               "address": "module.elastic-ip.aws_eip.this[0]",
               "mode": "managed",
               "type": "aws_eip",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
               "values": {}
             }
           ]

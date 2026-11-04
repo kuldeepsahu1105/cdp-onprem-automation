@@ -2,6 +2,7 @@ import copy
 import csv
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -200,6 +201,10 @@ class CostReportingTests(unittest.TestCase):
             cost.adapt_inventory(raw, self.context, "terraform")
         with self.assertRaises(cost.InputError):
             cost.adapt_inventory({"public_ips": {"value": {}}}, self.context, "terraform")
+        raw = cost.load(FIXTURES / "terraform-show.json")
+        raw["planned_values"]["root_module"]["child_modules"][0]["resources"][0]["provider_name"] = "example.invalid/aws"
+        with self.assertRaisesRegex(cost.InputError, "provider"):
+            cost.adapt_inventory(raw, self.context, "terraform")
         self.context["overrides"] = {"typo": {}}
         with self.assertRaisesRegex(cost.InputError, "unused context"):
             cost.adapt_inventory(cost.load(FIXTURES / "terraform-show.json"), self.context, "terraform")
@@ -209,6 +214,7 @@ class CostReportingTests(unittest.TestCase):
         resources = raw["planned_values"]["root_module"]["child_modules"][0]["resources"]
         resources[0]["values"]["root_block_device"][0]["volume_id"] = "vol-01"
         resources.append({"address": "aws_ebs_volume.duplicate", "type": "aws_ebs_volume", "mode": "managed",
+                          "provider_name": "registry.terraform.io/hashicorp/aws",
                           "values": {"id": "vol-01", "type": "gp3", "size": 100}})
         inventory = cost.adapt_inventory(raw, self.context, "terraform")
         with self.assertRaisesRegex(cost.InputError, "double counting"):
@@ -222,6 +228,7 @@ class CostReportingTests(unittest.TestCase):
         self.assertEqual(rate["amount"], "0.12345")
         self.assertEqual(rate["attributes"]["operatingSystem"], "Linux")
         self.assertEqual(rate["effective_date"], "2026-10-01T00:00:00Z")
+        self.assertEqual(rate["collected_at"], context["metadata"]["as_of"])
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "prices.json"
             result = self.run_cli("pricing", "--aws-price-list", FIXTURES / "aws-price-list.json",
@@ -334,11 +341,14 @@ class CostReportingTests(unittest.TestCase):
         resources = raw["planned_values"]["root_module"]["child_modules"][0]["resources"]
         resources[:] = [
             {"address": "aws_nat_gateway.nat", "mode": "managed", "type": "aws_nat_gateway",
+             "provider_name": "registry.terraform.io/hashicorp/aws",
              "values": {"id": "nat-01", "connectivity_type": "public", "tags": {"Group": "network"}}},
             {"address": "aws_lb.app", "mode": "managed", "type": "aws_lb",
+             "provider_name": "registry.terraform.io/hashicorp/aws",
              "values": {"id": "lb-01", "load_balancer_type": "application", "internal": False,
                         "tags": {"Group": "network"}}},
             {"address": "aws_eip.address", "mode": "managed", "type": "aws_eip",
+             "provider_name": "registry.terraform.io/hashicorp/aws",
              "values": {"id": "eipalloc-01", "domain": "vpc", "tags": {"Group": "network"}}},
         ]
         for resource in resources:
@@ -364,7 +374,8 @@ class CostReportingTests(unittest.TestCase):
         resources = raw["planned_values"]["root_module"]["child_modules"][0]["resources"]
         resources[0]["values"]["root_block_device"][0].update(iops=4000, throughput=250)
         resources.append({"address": "aws_eip_association.link", "mode": "managed",
-                          "type": "aws_eip_association", "values": {}})
+                          "type": "aws_eip_association",
+                          "provider_name": "registry.terraform.io/hashicorp/aws", "values": {}})
         inventory = cost.adapt_inventory(raw, self.context, "terraform")
         premiums = [r for r in inventory["resources"] if r["sku"].startswith("gp3-")]
         self.assertEqual([r["quantity"] for r in premiums], ["1000", "125"])
@@ -468,6 +479,17 @@ class CostReportingTests(unittest.TestCase):
             self.assertEqual((root / "reports" / "cost-report.txt").read_text(), cost.render_txt(report, ledger))
             self.assertEqual(len(report["metadata"]["input_files"]), 3)
             self.assertTrue(all(len(x["sha256"]) == 64 for x in report["metadata"]["input_files"]))
+            self.assertTrue(report["metadata"]["generated_at"].endswith("+00:00"))
+            self.assertTrue(all(set(x) == {"name", "sha256"} for x in report["metadata"]["input_files"]))
+            for path in (inventory, billing, *(root / "reports").iterdir()):
+                self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+            before = {path.name: path.read_bytes() for path in (root / "reports").iterdir()}
+            broken = root / "broken-prices.json"
+            broken.write_text("{")
+            result = self.run_cli("report", "--inventory", inventory, "--prices", broken,
+                                  "--billing", billing, "--output-dir", root / "reports")
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(before, {path.name: path.read_bytes() for path in (root / "reports").iterdir()})
 
     def test_cli_errors_no_success_artifacts_and_duplicate_json_keys(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -478,6 +500,7 @@ class CostReportingTests(unittest.TestCase):
                                   "--output-dir", root / "reports")
             self.assertEqual(result.returncode, 2)
             self.assertIn("duplicate JSON key", result.stderr)
+            self.assertIn("existing files may be stale", result.stderr)
             self.assertFalse((root / "reports").exists())
             result = self.run_cli("report", "--inventory", root / "missing", "--prices", FIXTURES / "prices.json",
                                   "--output-dir", root / "reports")

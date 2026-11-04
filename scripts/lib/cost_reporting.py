@@ -5,7 +5,10 @@ import csv
 import hashlib
 import io
 import json
+import os
+import re
 import sys
+import tempfile
 from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
@@ -346,7 +349,8 @@ def _build_report(inventory, prices, billing):
     warnings.extend(actuals.pop("warnings"))
     return {
         "schema_version": 1,
-        "metadata": {**meta, "rounding": "ROUND_HALF_UP, 2 decimals per line; summaries sum displayed lines",
+        "metadata": {**meta, "generated_at": datetime.now(timezone.utc).isoformat(),
+                     "rounding": "ROUND_HALF_UP, 2 decimals per line; summaries sum displayed lines",
                      "money_encoding": "decimal strings or null; no currency conversion",
                      "coverage_basis": "priced component count, not cost or utilization coverage"},
         "resources": resources,
@@ -376,7 +380,7 @@ def _build_actuals(billing):
         text(meta.get(name), f"billing.metadata.{name}")
     require(meta["completeness"] in ("partial", "complete"), "billing completeness must be partial or complete")
     export_period = period(meta.get("period"))
-    meta = {**meta, "period": export_period,
+    meta = {**meta, "period": export_period, "collected_at": meta["as_of"],
             "freshness": "Snapshot as_of only; not checked against live provider or final invoice"}
     rows = array(billing.get("lines"), "billing.lines")
     grouped, seen, scopes = defaultdict(list), set(), defaultdict(set)
@@ -465,6 +469,9 @@ def _adapt_inventory(raw, context, kind):
         rows.append(row)
 
     if kind == "terraform":
+        require(isinstance(raw.get("format_version"), str)
+                and re.fullmatch(r"1\.\d+", raw["format_version"]) is not None,
+                "Terraform show JSON format_version 1.x required")
         require(not raw.get("errored"), "errored Terraform plan cannot be reported")
         require(not raw.get("deferred_changes") and raw.get("complete", True) is not False,
                 "deferred/incomplete Terraform plan cannot be reported")
@@ -509,6 +516,12 @@ def _adapt_inventory(raw, context, kind):
             if provider is None:
                 warnings.append(f"Excluded non-infrastructure Terraform resource: {address}")
                 continue
+            expected_provider = {
+                "aws": "registry.terraform.io/hashicorp/aws",
+                "nutanix": "registry.terraform.io/nutanix/nutanix",
+            }[provider]
+            require(resource.get("provider_name") == expected_provider,
+                    f"unexpected Terraform provider for {address}")
             rid = values.get("id") or address
             first_row = len(rows)
             if rtype == "aws_instance":
@@ -617,7 +630,8 @@ def adapt_aws_prices(raw, context):
     """Select explicit, non-tiered OnDemand dimensions from an AWS bulk price-list file."""
     version(context)
     mapping(raw, "price export")
-    metadata = evidence(context.get("metadata"))
+    metadata = dict(evidence(context.get("metadata")))
+    metadata["collected_at"] = metadata["as_of"]
     require(isinstance(raw.get("products"), dict) and isinstance(raw.get("terms"), dict),
             "AWS bulk price-list JSON products/terms required")
     rates = []
@@ -655,6 +669,7 @@ def adapt_aws_prices(raw, context):
         rates.append({
             "provider": "aws", **selection, "basis": "cloud_price", "amount": amount,
             "source": metadata["source"], "as_of": metadata["as_of"],
+            "collected_at": metadata["collected_at"],
             "effective_date": term.get("effectiveDate"), "attributes": attributes,
             "description": dimension.get("description"), "product_family": product.get("productFamily"),
         })
@@ -778,12 +793,29 @@ def render_txt(report, rows):
 
 
 def fingerprint(path):
-    return {"path": str(path), "sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest()}
+    return {"name": Path(path).name, "sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest()}
+
+
+def write_text(path, value):
+    target = Path(path)
+    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    temporary = None
+    try:
+        descriptor, name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+        temporary = Path(name)
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as stream:
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, target)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def write_json(path, value):
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text(json.dumps(value, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    write_text(path, json.dumps(value, indent=2, ensure_ascii=True) + "\n")
 
 
 def main(argv=None):
@@ -842,11 +874,11 @@ def main(argv=None):
                     "report must not overwrite input files")
             # Fully validate/render all formats before writing any artifact.
             csv_data, txt_data = render_csv(rows), render_txt(value, rows)
-            output.mkdir(parents=True, exist_ok=True)
             write_json(destinations[0], value)
-            destinations[1].write_text(csv_data, encoding="utf-8")
-            destinations[2].write_text(txt_data, encoding="utf-8")
+            write_text(destinations[1], csv_data)
+            write_text(destinations[2], txt_data)
         return 0
     except (InputError, OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
-        print(f"cost-report: {exc}", file=sys.stderr)
+        print(f"cost-report: {exc}; report not completed (existing files may be stale)",
+              file=sys.stderr)
         return 2

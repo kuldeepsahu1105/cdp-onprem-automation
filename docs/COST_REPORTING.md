@@ -53,9 +53,10 @@ Before running, review:
 | `aws-price-list.json` + `price-context.json` (optional) | Genuine AWS bulk price-list JSON; select exact provider SKU and non-tiered OnDemand rate code; do not assume OS/tenancy from an instance name |
 | `aws-cur.csv` + `billing-context.json` (optional) | One consistent export revision, scope, metric, account/project/tag coverage, billing period, freshness and completeness; don't append older exports of the same charges |
 
-An input file's SHA-256 and path are recorded; that proves which local file was
-used, **not** that the file is authentic or current. Rate evidence is retained on
-each estimate, including original provider attributes when imported.
+An input file's basename and SHA-256 are recorded; that proves which local file
+content was used without publishing workstation directory names, **not** that the
+file is authentic or current. Rate evidence is retained on each estimate,
+including original provider attributes when imported.
 
 ## Import Terraform or bare-metal inventory
 
@@ -252,7 +253,8 @@ python3 scripts/cost_report.py pricing \
 ```
 
 The adapter checks regionCode, exact rate code/currency/unit and retains product
-attributes, description and effective date. Only unconditional, non-tiered
+attributes, description, effective date and the context `as_of` as the collection
+timestamp. Only unconditional, non-tiered
 OnDemand dimensions (`beginRange=0`, `endRange=Inf`) are supported; reserved,
 Savings Plans, tiered transfer or free-tier discounts need a separate reviewed
 usage model, not a guessed blended rate. Bulk `products`/`terms` JSON is supported,
@@ -332,6 +334,7 @@ make test-cost-report
 
 Output files: `cost-report.json`, `cost-report.csv`, `cost-report.txt`.
 JSON v1 has `metadata`, `resources`, `estimates`, `actuals`, `coverage`, `warnings`.
+Metadata includes the UTC report generation timestamp and input fingerprints.
 Money is a decimal string or `null`. Estimates group by provider, currency and
 the report period, keeping cloud and operator-supplied pricing separate.
 Actuals group by provider/account/currency/metric/period. There is **no
@@ -370,9 +373,29 @@ If a caller integrates it, check its exit status and archive **all three** files
 as a set. CLI success is exit 0; missing files, malformed data, invalid decimals,
 duplicate records/rates, contradictory shared pools or write failures return 2
 with a `cost-report:` stderr error. Input validation/rendering finishes before
-report writes, and input-overwriting destinations are rejected. Existing output
-files are not deleted on failure; don't treat stale files as a successful run.
-Filesystem failures during multi-file writes are not a transactional publish.
+report writes, and input-overwriting destinations are rejected. Each generated
+inventory, pricing, billing or report file is atomically replaced with mode
+`0600`. Existing output files are not deleted on failure; don't treat stale
+files as a successful run. Filesystem failures during multi-file writes are not
+a transactional publish across all three report formats.
+
+## Deliberate differences from the AWS prerequisites reference
+
+The audited reporting path here is offline-only. It does not retain the
+reference repository's legacy Terraform-time AWS Pricing lookup or its static
+fallback table. Therefore this branch does **not** satisfy a requirement for a
+live cloud collector; adding one would require a separate explicit command,
+documented read permissions, recorded request/response provenance, pagination
+handling and fail-closed behavior. There is no hidden network fallback.
+
+Actual AWS data is accepted as line-level CUR CSV rather than a Cost Explorer
+request/response envelope. CUR lines retain account, region, resource, project,
+tags, currency, metric, period, negative credits/refunds and export collection
+time. The operator-declared `scope` and `completeness` describe the export;
+Cost Explorer request filters, grouping and `Estimated` flags are not available
+in CUR and are not invented. AWS bulk price-list files likewise are complete
+catalog exports, not paginated `GetProducts` response arrays; unsupported raw
+response envelopes are rejected by shape rather than partially consumed.
 
 ## Permissions and limitations
 
