@@ -72,8 +72,15 @@ assert "not (ecs_cdw_diagnostics_collected | default(false) | bool)" in playbook
 assert "ansible.builtin.include_tasks: ecs_data_service_cde_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: ecs_data_service_cai_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: ecs_data_service_model_registry.yml" in playbook_text
-assert "ecs_reconcile_coredns.yml" not in playbook_text
-assert "ecs_data_services_verify_dns.yml" not in playbook_text
+assert "ecs_reconcile_coredns.yml" in playbook_text
+assert "ecs_data_services_verify_dns.yml" in playbook_text
+assert playbook_text.index(
+    "Reconcile CoreDNS before Data Services provisioning"
+) < playbook_text.index(
+    "Verify Data Services DNS through Kubernetes pods"
+) < playbook_text.index(
+    "Load existing ECS automation API credentials"
+)
 assert "when: \"'model_registry' in (ecs_data_services_install_names | default([]))\"" in playbook_text
 
 compat_playbook_text = (
