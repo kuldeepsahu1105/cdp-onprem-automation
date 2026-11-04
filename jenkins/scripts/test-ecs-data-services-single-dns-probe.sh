@@ -151,8 +151,22 @@ assert "selectattr('stdout', 'defined')" in (
     upstream_assert["ansible.builtin.assert"]["fail_msg"]
 )
 node_local_build = coredns_tasks_by_name[
-    "Build verified ECS node-local DNS forwarding policy"
+    "Build verified ECS node-local identity-zone forwarding policy"
 ]
+for task_name in (
+    "Check for ECS node-local DNS configuration",
+    "Build verified ECS node-local identity-zone forwarding policy",
+    "Apply verified ECS node-local DNS forwarding policy",
+    "Restart ECS node-local DNS after configuration change",
+    "Wait for ECS node-local DNS rollout after configuration change",
+):
+    task = coredns_tasks_by_name[task_name]
+    conditions = task.get("when", [])
+    conditions = conditions if isinstance(conditions, list) else [conditions]
+    assert not any(
+        "ecs_coredns_extended_verification_enabled" in str(condition)
+        for condition in conditions
+    )
 node_local_argv = node_local_build["ansible.builtin.command"]["argv"]
 node_local_script = node_local_argv[node_local_argv.index("-c") + 1]
 node_local_corefile = """.:53 {
@@ -190,20 +204,23 @@ node_local_result = subprocess.run(
         node_local_script,
         node_local_corefile,
         "10.0.0.10 10.0.0.11",
+        "cldr.internal.arpa",
     ],
     check=False,
     capture_output=True,
     text=True,
 )
 assert node_local_result.returncode == 0, node_local_result.stderr
-assert "forward . 10.0.0.10 10.0.0.11 {" in node_local_result.stdout
-assert "__PILLAR__UPSTREAM__SERVERS__" not in node_local_result.stdout
+assert "# BEGIN ANSIBLE IDENTITY DNS" in node_local_result.stdout
+assert "cldr.internal.arpa:53 {" in node_local_result.stdout
+assert "forward . 10.0.0.10 10.0.0.11" in node_local_result.stdout
+assert "__PILLAR__UPSTREAM__SERVERS__" in node_local_result.stdout
 assert node_local_result.stdout.count(
     "forward . __PILLAR__CLUSTER__DNS__"
 ) == 3
 assert (
-    node_local_result.stdout.split("cluster.local:53", 1)[1]
-    == node_local_corefile.split("cluster.local:53", 1)[1]
+    node_local_result.stdout.split("# BEGIN ANSIBLE IDENTITY DNS", 1)[0].rstrip()
+    == node_local_corefile.rstrip()
 )
 node_local_idempotent_result = subprocess.run(
     [
@@ -212,6 +229,7 @@ node_local_idempotent_result = subprocess.run(
         node_local_script,
         node_local_result.stdout,
         "10.0.0.10 10.0.0.11",
+        "cldr.internal.arpa",
     ],
     check=False,
     capture_output=True,

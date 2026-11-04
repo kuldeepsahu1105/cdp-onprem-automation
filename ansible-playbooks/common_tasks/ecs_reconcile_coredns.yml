@@ -784,10 +784,9 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   when:
-    - ecs_coredns_extended_verification_enabled | default(false) | bool
     - ecs_node_local_dns_reconcile | default(true) | bool
 
-- name: Build verified ECS node-local DNS forwarding policy
+- name: Build verified ECS node-local identity-zone forwarding policy
   ansible.builtin.command:
     argv:
       - python3
@@ -798,48 +797,35 @@
 
         corefile = sys.argv[1]
         upstreams = sys.argv[2]
-        root = re.compile(
-            r"(?ms)^(?P<header>\.:53\s*\{\n)"
-            r"(?P<body>.*?)"
-            r"(?P<footer>^[ \t]*\})"
+        zone = sys.argv[3]
+        begin = "# BEGIN ANSIBLE IDENTITY DNS"
+        end = "# END ANSIBLE IDENTITY DNS"
+        block = (
+            f"{begin}\n"
+            f"{zone}:53 {{\n"
+            "    errors\n"
+            "    cache 30\n"
+            f"    forward . {upstreams}\n"
+            "}\n"
+            f"{end}"
         )
-        match = root.search(corefile)
-        if match is None:
-            raise SystemExit("node-local DNS root server block was not found")
-        forward = re.compile(
-            r"(?m)^(?P<indent>[ \t]*)forward\s+\.\s+"
-            r"[^\n{]*?(?P<suffix>[ \t]*\{[ \t]*)?$"
+        managed = re.compile(
+            rf"(?ms)^{re.escape(begin)}\n.*?^{re.escape(end)}[ \t]*"
         )
-        body, count = forward.subn(
-            lambda item: (
-                item.group("indent")
-                + "forward . "
-                + upstreams
-                + (item.group("suffix") or "")
-            ),
-            match.group("body"),
-            count=1,
-        )
-        if count != 1:
-            raise SystemExit(
-                "node-local DNS root forward stanza was not found"
-            )
-        replacement = match.group("header") + body + match.group("footer")
-        print(
-            corefile[:match.start()]
-            + replacement
-            + corefile[match.end():],
-            end="",
-        )
+        if managed.search(corefile):
+            rendered = managed.sub(block, corefile, count=1)
+        else:
+            rendered = corefile.rstrip() + "\n\n" + block + "\n"
+        print(rendered, end="")
       - "{{ ecs_node_local_dns_corefile.stdout }}"
       - "{{ ecs_coredns_forwarders_effective | join(' ') }}"
+      - "{{ cluster_domain }}"
   register: ecs_node_local_dns_identity_corefile
   changed_when: false
   become: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   when:
-    - ecs_coredns_extended_verification_enabled | default(false) | bool
     - ecs_node_local_dns_reconcile | default(true) | bool
     - ecs_node_local_dns_corefile.rc == 0
 
@@ -873,7 +859,6 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   when:
-    - ecs_coredns_extended_verification_enabled | default(false) | bool
     - ecs_node_local_dns_reconcile | default(true) | bool
     - ecs_node_local_dns_corefile.rc == 0
     - >-
@@ -897,7 +882,6 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   when:
-    - ecs_coredns_extended_verification_enabled | default(false) | bool
     - ecs_node_local_dns_patch is changed
 
 - name: Wait for ECS node-local DNS rollout after configuration change
@@ -917,7 +901,6 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
   when:
-    - ecs_coredns_extended_verification_enabled | default(false) | bool
     - ecs_node_local_dns_restart is changed
 
 - name: Verify required records through the CoreDNS Service and every ready replica

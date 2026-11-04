@@ -44,8 +44,11 @@ hanging on a self-connection through the public IP.
    Kubernetes API reports ready and the CoreDNS ConfigMap exists, confirm the
    authoritative identity-DNS forwarder, replace any stale upstream, omit the
    ineffective `policy sequential` block, and restart CoreDNS only when
-   changed. Reconciliation runs again after First Run so an in-flight chart
-   update cannot leave the reverted ConfigMap in place. The live
+   changed. When the ECS installation supplies NodeLocal DNS, automation also
+   maintains a dedicated `cluster_domain` server block forwarding directly to
+   the same identity DNS; it does not replace NodeLocal's global or Kubernetes
+   forwarding blocks. Reconciliation runs again after First Run so an in-flight
+   chart update cannot leave either DNS layer reverted. The live
    bootstrap path does not
    require a pod to reach the upstream before mutation because pod DNS is the
    dependency being repaired; the applied CoreDNS Service and every ready
@@ -58,8 +61,9 @@ hanging on a self-connection through the public IP.
    even when the later CM First Run command fails.
    The default install path stops after verifying the exact applied CoreDNS
    forward stanza, matching the proven October 31/November 1 behavior.
-   `ecs_coredns_extended_verification_enabled=true` optionally enables the
-   later node-local mutation and probe-pod/rolling-recovery diagnostics.
+   `ecs_coredns_extended_verification_enabled=true` optionally enables only
+   probe-pod and rolling-recovery diagnostics. Required CoreDNS and NodeLocal
+   forwarding reconciliation runs independently of that diagnostic flag.
    This repository intentionally differs from the shared reference because
    runtime ECS environment creation could not resolve the CM hostname through
    RKE2's `/etc/resolv.conf` forwarding.
