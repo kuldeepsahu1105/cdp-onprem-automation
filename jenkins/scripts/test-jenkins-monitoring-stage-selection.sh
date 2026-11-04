@@ -42,7 +42,8 @@ assert "def monitoringTriggers = ['PORTAL']" in implicit_body
 assert "adding MONITORING immediately after PORTAL" in implicit_body
 
 effective_body = function_body("effectivePipelineStages")
-assert "addImplicitDeploymentStages(expandPipelineStageTokens(stages))" in effective_body
+assert "addImplicitDeploymentStages(stages)" in effective_body
+assert "CDH_BASE" not in jenkinsfile
 
 ordered_body = function_body("orderedAnsibleStageIds")
 assert ordered_body.index("'PORTAL'") < ordered_body.index("'MONITORING'")

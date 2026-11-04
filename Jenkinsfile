@@ -1,4 +1,4 @@
-// Jenkinsfile parameters v2026-11-04.2 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
+// Jenkinsfile parameters v2026-11-04.3 — bump when stage checkboxes or param help text changes (then REFRESH_JENKINSFILE=YES).
 pipeline {
   agent any
 
@@ -132,11 +132,9 @@ Destroy behavior:
   DRY_RUN=true — terraform destroy plan only (no apply).
   CLEANUP_BEFORE_DESTROY — run ansible-playbooks/99_cleanup.yml before destroy when enabled.
 
-Legacy: CDH_BASE (old jobs) expands to CM_TLS_KRB_LDAP + CDH_INSTALL — check those two boxes instead.
-
 Examples:
   New job defaults: VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION (ECS_INSTALL and CDH_INSTALL unchecked; ECS_DATA_SERVICES_DEPLOY_ENABLED=false)
-  Old PREREQS,IDENTITY,CM_INSTALL,CDH_BASE equivalent: PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL (+ VALIDATE,TERRAFORM if you still provision VMs; uncheck MONITORING_STACK_ENABLED to omit monitoring)
+  Base cluster: PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL (+ VALIDATE,TERRAFORM when provisioning VMs; uncheck MONITORING_STACK_ENABLED to omit monitoring)
 
 Details: jenkins/README.md
 ''',
@@ -443,7 +441,7 @@ Kept for .tfvars.yaml / docs — typical ports: 22 SSH; 80/443 HTTP(S); 7180/718
           echoPipelineStagesQuickReference()
           env.RUN_STARTSTOP_AUTOMATION = cfg.runStartstopAutomation
           if (cfg.runValidate != 'true' && cfg.runTerraform != 'true' && cfg.runAnsible != 'true' && cfg.runDestroyStack != 'true' && cfg.runStartstopAutomation != 'true') {
-            error("No pipeline work resolved from PIPELINE_STAGES='${params.PIPELINE_STAGES}'. Use valid checkboxes (e.g. CDH_BASE not CDH_INSTALL) or REFRESH_JENKINSFILE=YES.")
+            error("No pipeline work resolved from PIPELINE_STAGES='${params.PIPELINE_STAGES}'. Use valid checkboxes or REFRESH_JENKINSFILE=YES.")
           }
           echo "Validation checks: ${cfg.validationChecks}"
           echo "AWS creds: USE_CREDENTIALS_USER_AWS=${env.USE_CREDENTIALS_USER_AWS}, AWS_USE_INSTANCE_ROLE=${env.AWS_USE_INSTANCE_ROLE}"
@@ -854,7 +852,7 @@ def knownPipelineStages() {
   return [
     'VALIDATE', 'TERRAFORM', 'PREREQS', 'IDENTITY', 'CM_INSTALL',
     'CM_TLS_KRB_LDAP', 'CDH_INSTALL', 'PORTAL', 'MONITORING', 'ECS_INSTALL',
-    'ECS_POST_INSTALL_TASKS', 'ECS_DATA_SERVICES', 'CDH_BASE',
+    'ECS_POST_INSTALL_TASKS', 'ECS_DATA_SERVICES',
     'STARTSTOP_AUTOMATION', 'DESTROY_STACK',
   ]
 }
@@ -874,7 +872,7 @@ def echoPipelineStagesQuickReference() {
   IDENTITY → phase 2 | CM_INSTALL → phase 3 | CM_TLS_KRB_LDAP → 27→28→29→30 | CDH_INSTALL → base cluster (31)
   ECS_INSTALL → (33 + CoreDNS + healthy console) | ECS_POST_INSTALL_TASKS → credentials/IAM/LDAP/portal after health | ECS_DATA_SERVICES → (34 data services only)
   STARTSTOP_AUTOMATION → ipaserver (EC2_STARTSTOP_DEPLOY_SCRIPT/ RUN_SCRIPT + OPERATION/GROUPS) | DESTROY_STACK → destroy (or DRY_RUN plan)
-  Legacy CDH_BASE → CM_TLS_KRB_LDAP + CDH_INSTALL. PORTAL auto-inserts for deployment stages when enabled; PORTAL auto-inserts MONITORING immediately afterward when monitoring is enabled.'''
+  PORTAL auto-inserts for deployment stages when enabled; PORTAL auto-inserts MONITORING immediately afterward when monitoring is enabled.'''
 }
 
 def ansiblePhaseForStage(String stageId) {
@@ -906,19 +904,6 @@ def pipelineStageAliases() {
     'CM_TLS_KRB'     : 'CM_TLS_KRB_LDAP',
     'TLS_KRB_LDAP'   : 'CM_TLS_KRB_LDAP',
   ]
-}
-
-def expandPipelineStageTokens(List stages) {
-  def result = []
-  stages.each { token ->
-    if (token == 'CDH_BASE') {
-      result << 'CM_TLS_KRB_LDAP'
-      result << 'CDH_INSTALL'
-    } else if (!result.contains(token)) {
-      result << token
-    }
-  }
-  return result
 }
 
 def portalDeployEnabled() {
@@ -1006,7 +991,7 @@ def effectivePipelineStages(def csv) {
     echo "PIPELINE_STAGES not set — using default: ${defaultPipelineStages()}"
     stages = parseSelectedStages(defaultPipelineStages())
   }
-  return addImplicitDeploymentStages(expandPipelineStageTokens(stages))
+  return addImplicitDeploymentStages(stages)
 }
 
 def effectiveValidationChecks(def csv) {
@@ -1225,7 +1210,7 @@ def validatePipelineInputs() {
   def known = knownPipelineStages()
   def unknown = stages.findAll { !known.contains(it) }
   if (!unknown.isEmpty()) {
-    validationFail("Unknown PIPELINE_STAGES value(s): ${unknown.join(', ')}. Valid checkboxes: ${orderedAnsibleStageIds().plus(['VALIDATE', 'TERRAFORM', 'STARTSTOP_AUTOMATION', 'DESTROY_STACK', 'CDH_BASE']).join(', ')} (use ECS_INSTALL not ECS-INSTALL). Run REFRESH_JENKINSFILE=YES after Jenkinsfile changes.")
+    validationFail("Unknown PIPELINE_STAGES value(s): ${unknown.join(', ')}. Valid checkboxes: ${orderedAnsibleStageIds().plus(['VALIDATE', 'TERRAFORM', 'STARTSTOP_AUTOMATION', 'DESTROY_STACK']).join(', ')} (use ECS_INSTALL not ECS-INSTALL). Run REFRESH_JENKINSFILE=YES after Jenkinsfile changes.")
   }
 
   if (stages.contains('STARTSTOP_AUTOMATION')) {

@@ -204,9 +204,7 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 
 If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION`.
 
-**Legacy token:** Saved jobs may still submit **`CDH_BASE`** — it expands to `CM_TLS_KRB_LDAP` + `CDH_INSTALL`. Run **REFRESH_JENKINSFILE=YES** after Jenkinsfile changes to reload checkboxes.
-
-**Migrate old `PREREQS,IDENTITY,CM_INSTALL,CDH_BASE`:** check **`PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL`**. Add **`VALIDATE,TERRAFORM`** if you still provision EC2 (old string omitted them). Uncheck `MONITORING_STACK_ENABLED` when only the portal foundation is wanted.
+Run **`REFRESH_JENKINSFILE=YES`** after Jenkinsfile changes to reload checkboxes. `CDH_INSTALL` is the only supported base-cluster stage; select `CM_TLS_KRB_LDAP` separately when CM security configuration is also required.
 
 ## Stage checkboxes (`PIPELINE_STAGES`)
 
