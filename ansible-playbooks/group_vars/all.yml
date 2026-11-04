@@ -276,7 +276,6 @@ ssl_key_file: "server.key"
 # 04. Cloudera Manager, Runtime, parcel, and CSD repositories
 # -----------------------------------------------------------------------------
 cm_version: "7.13.2.20000"
-cm_numeric_version: ""
 # Archive path under .../p/cm7/ (cumulative hotfixes use patch/<version>/).
 cm_repo_version_path: >-
   {%- set cm_build = cm_version.split('.')[-1] | int -%}
@@ -287,7 +286,6 @@ cm_repo_version_path: >-
   {%- endif -%}
 
 cdh_version: "7.3.2.20000"
-cdh_numeric_version: ""
 # Spark3 is bundled in the CDH parcel for 7.3.1+; the CM service descriptor remains SPARK3_ON_YARN.
 cdh_spark_bundled_min_version: "7.3.1"
 base_cluster_spark3_service_name: spark3
@@ -914,10 +912,8 @@ base_cluster_knox_configure_kerberos: true
 base_cluster_restart_cms_after_start: true
 
 cdh_parcel_version: >-
-  {%- set parcel_base = cdh_version.split('.')[:3] | join('.')
-    ~ '-1.cdh' ~ cdh_version.split('.')[:3] | join('.')
-    ~ '.p' ~ cdh_version.split('.')[-1] -%}
-  {{ parcel_base ~ ('.' ~ cdh_numeric_version if cdh_numeric_version | default('') | length > 0 else '') }}
+  {{ cdh_version.split('.')[:3] | join('.') }}-1.cdh{{
+  cdh_version.split('.')[:3] | join('.') }}.p{{ cdh_version.split('.')[-1] }}
 kerberos_principal: "{{ ipaadmin_principal }}/{{ ipaadmin_principal }}@{{ cluster_realm }}"
 kerberos_password: "{{ ipaadmin_password }}"
 license_file_name: "license.txt"

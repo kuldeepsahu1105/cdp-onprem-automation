@@ -1024,7 +1024,7 @@ registered`, OM/DN cert enrollment retries, `RAFT closed`, or
    parcel-repository refresh, reads the configured CDH repository's
    `manifest.json`, and resolves the single parcel version published for the
    configured `cdh_version` release. The manifest's numeric build is authoritative,
-   avoiding stale `cdh_numeric_version` values. A missing or ambiguous parcel,
+   avoiding stale checked-in build identifiers. A missing or ambiguous parcel,
    inaccessible manifest, or invalid archive credential therefore fails before
    cluster topology mutation.
 3. **Security phase skipped** — Run **CM_TLS_KRB_LDAP** (plays **27** → **30**)

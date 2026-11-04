@@ -54,22 +54,6 @@
       - cloudera-manager-server
       - cloudera-manager-server-db-2
 
-- name: Build explicitly configured Cloudera Manager RPM filenames
-  ansible.builtin.set_fact:
-    cm_rpm_filenames_effective: >-
-      {{
-        cm_rpm_package_names
-        | map(
-            'regex_replace',
-            '$',
-            '-' ~ cm_version ~ '-' ~ cm_numeric_version
-            ~ '.el' ~ ansible_distribution_major_version
-            ~ '.' ~ ansible_architecture ~ '.rpm'
-          )
-        | list
-      }}
-  when: cm_numeric_version | default('') | string | trim | length > 0
-
 - name: Read Cloudera Manager RPM directory listing
   ansible.builtin.uri:
     url: >-
@@ -84,7 +68,6 @@
     status_code: [200]
   register: cm_rpm_directory_listing
   no_log: true
-  when: cm_numeric_version | default('') | string | trim | length == 0
 
 - name: Resolve Cloudera Manager RPM filenames from repository listing
   ansible.builtin.command:
@@ -124,12 +107,10 @@
     stdin: "{{ cm_rpm_directory_listing.content }}"
   register: cm_rpm_filename_resolution
   changed_when: false
-  when: cm_numeric_version | default('') | string | trim | length == 0
 
 - name: Use dynamically resolved Cloudera Manager RPM filenames
   ansible.builtin.set_fact:
     cm_rpm_filenames_effective: "{{ cm_rpm_filename_resolution.stdout | from_json }}"
-  when: cm_numeric_version | default('') | string | trim | length == 0
 
 - name: Require all Cloudera Manager RPM filenames
   ansible.builtin.assert:
@@ -137,8 +118,8 @@
       - cm_rpm_filenames_effective | length == cm_rpm_package_names | length
     fail_msg: >-
       Could not resolve all required Cloudera Manager {{ cm_version }} RPMs.
-      Set cm_numeric_version only as an explicit GBN override when repository
-      directory discovery is unavailable.
+      Repository directory discovery did not return one exact build for every
+      required package.
 
 - name: Download Cloudera Manager RPMs from archive
   ansible.builtin.get_url:

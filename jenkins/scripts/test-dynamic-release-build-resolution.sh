@@ -7,7 +7,8 @@ python3 - \
   "${repo_root}/ansible-playbooks/config.yml" \
   "${repo_root}/ansible-playbooks/group_vars/all.yml" \
   "${repo_root}/ansible-playbooks/common_tasks/mirror_internal_cm_rhel.yml" \
-  "${repo_root}/ansible-playbooks/31_setup_base_cluster.yml" <<'PY'
+  "${repo_root}/ansible-playbooks/31_setup_base_cluster.yml" \
+  "${repo_root}/ansible-playbooks/common_tasks/set_cm_mirror_facts.yml" <<'PY'
 import json
 from pathlib import Path
 import subprocess
@@ -15,14 +16,12 @@ import sys
 
 import yaml
 
-config_path, group_vars_path, mirror_path, base_cluster_path = map(
+config_path, group_vars_path, mirror_path, base_cluster_path, mirror_facts_path = map(
     Path, sys.argv[1:]
 )
 expected = {
     "cm_version": "7.13.2.20000",
-    "cm_numeric_version": "",
     "cdh_version": "7.3.2.20000",
-    "cdh_numeric_version": "",
     "ecs_pvc_ds_version": "1.5.5-h40000",
 }
 for path in (config_path, group_vars_path):
@@ -77,7 +76,17 @@ selection_expression = selection["ansible.builtin.set_fact"][
     "base_cluster_cdh_parcel_versions_available"
 ]
 assert "cdh_version.split('.')[-1]" in selection_expression
-assert "cdh_numeric_version" not in selection_expression
+
+mirror_fact_tasks = yaml.safe_load(mirror_facts_path.read_text())
+mirror_facts_by_name = {
+    task.get("name"): task for task in mirror_fact_tasks
+}
+assert "Read configured CDH parcel manifest for internal mirror" in mirror_facts_by_name
+mirror_selection = mirror_facts_by_name[
+    "Select published CDH parcel file for internal mirror target"
+]["ansible.builtin.set_fact"]["cdh_mirror_parcel_filenames_available"]
+assert "cdh_version.split('.')[-1]" in mirror_selection
+assert "cdh_parcel_os_suffix_effective" in mirror_selection
 
 print("Dynamic CM and CDH build resolution checks passed")
 PY

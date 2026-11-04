@@ -440,7 +440,7 @@
             | map(attribute='parcelName')
             | join(', ')
           }}. Verify parcel_repo/REMOTE_PARCEL_REPO_URLS, archive credentials,
-          cdh_version, and cdh_numeric_version before cluster mutation.
+          and cdh_version before cluster mutation.
 
     - name: Use CDH parcel version published by configured repository
       ansible.builtin.set_fact:
