@@ -18,6 +18,7 @@
     follow_redirects: none
     timeout: "{{ cm_api_command_request_timeout | default(10) }}"
   delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
+  connection: "{{ cm_api_command_connection | default('smart') }}"
   register: cm_api_command_poll
   until: >
     cm_api_command_poll.status | default(0) | int == 404
@@ -102,6 +103,7 @@
     follow_redirects: none
     timeout: "{{ cm_api_command_request_timeout | default(10) }}"
   delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
+  connection: "{{ cm_api_command_connection | default('smart') }}"
   register: cm_api_failed_command_details
   changed_when: false
   when:
@@ -135,6 +137,7 @@
         )
       }}
   delegate_to: "{{ cm_api_uri_delegate_to | default('localhost', true) }}"
+  connection: "{{ cm_api_command_connection | default('smart') }}"
   register: cm_api_failed_child_commands
   changed_when: false
   when:
