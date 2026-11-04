@@ -137,6 +137,88 @@ assert (
     in unicode_indent_update.stdout
 )
 
+corefile_verify = coredns_tasks_by_name[
+    "Require exact verified ECS CoreDNS forward stanza"
+]
+verify_argv = corefile_verify["ansible.builtin.command"]["argv"]
+verify_script = verify_argv[verify_argv.index("-c") + 1]
+assert "[ \\t]*" not in verify_script
+assert "Expected exactly one forward stanza" in verify_script
+
+verified_live_corefile = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        verify_script,
+        live_identity_zone,
+        "203.0.113.53",
+        "identity.example",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+assert verified_live_corefile.returncode == 0, verified_live_corefile.stderr
+
+missing_forward_corefile = live_identity_zone.replace(
+    f"{non_breaking_space * 3}forward . 203.0.113.53\n",
+    "",
+)
+missing_forward = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        verify_script,
+        missing_forward_corefile,
+        "203.0.113.53",
+        "identity.example",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+assert missing_forward.returncode != 0
+assert "found 0: []" in missing_forward.stderr
+
+duplicate_forward_corefile = live_identity_zone.replace(
+    f"{non_breaking_space * 3}forward . 203.0.113.53\n",
+    (
+        f"{non_breaking_space * 3}forward . 203.0.113.53\n"
+        f"{non_breaking_space * 3}forward . 198.51.100.53\n"
+    ),
+)
+duplicate_forward = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        verify_script,
+        duplicate_forward_corefile,
+        "203.0.113.53",
+        "identity.example",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+assert duplicate_forward.returncode != 0
+assert "found 2:" in duplicate_forward.stderr
+
+mismatched_forward = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        verify_script,
+        live_identity_zone,
+        "192.0.2.53",
+        "identity.example",
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+assert mismatched_forward.returncode != 0
+assert "CoreDNS forward stanza mismatch" in mismatched_forward.stderr
+
 corefile_idempotent = subprocess.run(
     [
         sys.executable,
