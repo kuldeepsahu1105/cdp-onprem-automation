@@ -166,6 +166,8 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 
 `VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL` → `ECS_POST_INSTALL_TASKS` → `ECS_DATA_SERVICES` → `STARTSTOP_AUTOMATION` → `DESTROY_STACK`
 
+Selection is normalized case-insensitively, trims whitespace, accepts existing aliases (including `CDH_BASE`), and removes duplicates before execution. Selecting `ECS_INSTALL,ECS_DATA_SERVICES` runs exactly those two stages once without portal or monitoring. Jenkins **Restart from Stage** reconstructs the same canonical selection from the original build parameters.
+
 **Copy-paste (matches Jenkinsfile checkbox names):** `VALIDATE,TERRAFORM,PREREQS,PORTAL,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,MONITORING,ECS_INSTALL,ECS_POST_INSTALL_TASKS` — also at the top of **Build with Parameters** → `PIPELINE_STAGES` description and `PIPELINE_STAGES_REFERENCE` default text. Append `ECS_DATA_SERVICES`, `STARTSTOP_AUTOMATION`, or `DESTROY_STACK` when needed.
 
 | Checkbox | What runs |

@@ -134,6 +134,31 @@ assert "tasks_from: setup_data_services" in compat_playbook_text
 assert "ecs_reconcile_coredns.yml" not in compat_playbook_text
 assert "ecs_data_services_verify_dns.yml" not in compat_playbook_text
 
+role_data_services = yaml.safe_load(
+    (
+        root / "ansible-playbooks/roles/ecs/tasks/setup_data_services.yml"
+    ).read_text()
+)
+portal_gate = next(
+    task
+    for task in role_data_services
+    if task.get("name") == "Resolve deployment portal Caddy gate for ECS ingress sync"
+)
+portal_host = next(
+    task
+    for task in role_data_services
+    if task.get("name") == "Resolve deployment portal target host group"
+)
+portal_sync = next(
+    task
+    for task in role_data_services
+    if task.get("name") == "Sync ECS data service routes on deployment portal Caddy"
+)
+portal_route_gate = "ecs_data_services_sync_portal_routes | default(true) | bool"
+assert portal_gate["when"] == portal_route_gate
+assert portal_host["when"] == portal_route_gate
+assert portal_route_gate in portal_sync["when"]
+
 cai_files = list(
     (root / "ansible-playbooks/roles/ecs/tasks").glob("ecs_data_service_cai*.yml")
 )

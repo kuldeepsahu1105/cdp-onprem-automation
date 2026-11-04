@@ -390,7 +390,7 @@ run_phase_cdh() {
     cm_extra=(-e "cm_repo_username=$cm_user" -e "cm_repo_password=$cm_pass")
   fi
   run_playbook 31_setup_base_cluster.yml "${cm_extra[@]}"
-  _run_deployment_portal_access_sync
+  _maybe_sync_deployment_portal_access
   ui_phase_footer "$_phase"
 }
 
@@ -454,9 +454,13 @@ _portal_refresh_explicitly_enabled() {
   [[ "${DEPLOYMENT_PORTAL_REFRESH:-false}" == "true" || "${DEPLOYMENT_PORTAL_REFRESH:-false}" == "1" ]]
 }
 
+_portal_actions_selected() {
+  _portal_refresh_explicitly_enabled || _pipeline_stage_selected "PORTAL"
+}
+
 # Sync credentials/access metadata only; deployed portal services remain untouched.
 _maybe_sync_deployment_portal_access() {
-  if ! _portal_refresh_explicitly_enabled; then
+  if ! _portal_actions_selected; then
     return 0
   fi
   _run_deployment_portal_access_sync
@@ -538,6 +542,11 @@ _run_ecs_data_services() {
   if ! $ds_enabled; then
     return 0
   fi
+  if _portal_actions_selected; then
+    ds_extra+=(-e ecs_data_services_sync_portal_routes=true)
+  else
+    ds_extra+=(-e ecs_data_services_sync_portal_routes=false)
+  fi
   ds_extra+=(-e ecs_data_services_deploy_enabled=true)
   run_playbook 34_setup_ecs_data_services.yml "${ds_extra[@]}"
   _maybe_sync_deployment_portal_access
@@ -545,7 +554,7 @@ _run_ecs_data_services() {
 
 _run_ecs_post_install() {
   run_playbook 34_setup_ecs_post_install.yml
-  _run_deployment_portal_access_sync
+  _maybe_sync_deployment_portal_access
 }
 
 run_phase_6() {
@@ -579,7 +588,7 @@ run_phase_5() {
   fi
   run_playbook 33_setup_ecs_cluster.yml "${ecs_extra[@]}"
   if ! _pipeline_stage_selected "ECS_POST_INSTALL_TASKS"; then
-    _run_deployment_portal_access_sync
+    _maybe_sync_deployment_portal_access
   fi
   if _pipeline_stage_selected "ECS_DATA_SERVICES"; then
     ui_info "Deferring playbook 34 data services to the selected ECS_DATA_SERVICES stage"
