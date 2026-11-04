@@ -73,9 +73,7 @@ postgresql_version: 17
 postgres_jdbc_version: "42.7.10"
 
 cm_version: "7.13.2.20000"
-cm_numeric_version: "7132020000"
 cdh_version: "7.3.2.20000"
-cdh_numeric_version: "77083870"
 cdv_version: "8.0.7"
 cfm_version: "2.1.7.3004"
 cfm_nifi_app_version: "1.28.1"
