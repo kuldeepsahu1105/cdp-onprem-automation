@@ -14,6 +14,10 @@ base_urls = (
     root
     / "ansible-playbooks/templates/deployment_portal_base_cluster_portal_urls.j2"
 ).read_text()
+sanitized_links = (
+    root
+    / "ansible-playbooks/templates/deployment_portal_sanitized_data_service_links.j2"
+).read_text()
 facts = (
     root / "ansible-playbooks/common_tasks/build_deployment_portal_facts.yml"
 ).read_text()
@@ -37,25 +41,21 @@ for component in (
 ):
     assert component in index or component in endpoints, component
 
+assert "ctx.data_services.links | default([])" in index
+assert "ctx.ecs.links | default([])" in index
+assert "deployment_portal_data_service_links" in sanitized_links
+assert "deployment_portal_dynamic_links" in facts
+assert "deployment_portal_dynamic_links: []" in facts
+assert "deployment_portal_ecs_ds_links" in facts
+assert "deployment_portal_sanitized_data_service_links" in facts
 for add_on in (
     "HDFS NameNode UI",
-    "YARN ResourceManager UI",
-    "Hue",
-    "Hive",
-    "HBase Master UI",
     "Ozone Recon UI",
-    "Atlas UI",
-    "Impala",
-    "Solr Admin",
     "Ranger Admin",
     "Knox Gateway",
 ):
     assert add_on in base_urls, add_on
-
-assert "ctx.data_services.links | default([])" in index
-assert "deployment_portal_data_service_links" in facts
-assert "deployment_portal_dynamic_links" in facts
-assert "deployment_portal_ecs_ds_links" in facts
+    assert add_on not in index, add_on
 for service in ("cdw", "cde", "cai", "model_registry"):
     assert f"- key: {service}" in facts
     assert service in blackbox
