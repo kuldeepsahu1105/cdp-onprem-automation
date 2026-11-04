@@ -698,6 +698,7 @@ Playbook **`12_setup_freeipa_server.yml`** refreshes package metadata and reconc
 | `dns_forwarders` | `no` | Playbook **12**: AWS EC2 → VPC `--forwarder`; else `--no-forwarders`. See **`ipa_server_install_use_vpc_dns_forwarder`**. |
 | `ipa_server_install_use_vpc_dns_forwarder` | `true` | When **`dns_forwarders: no`**, use VPC resolver on AWS at install (and **`dnsconfig-mod`** when install skipped). |
 | `ipa_server_packages_state` | `latest` | Keep FreeIPA server packages current from configured supported OS repositories on every IDENTITY run. |
+| `ipa_server_packages_override` | `[]` | Optional complete native package specifications for exact version pinning. When populated, set `ipa_server_packages_state: present`; empty uses the OS package map and repository-latest versions. |
 | `ipa_server_disabled_repositories` | `[docker-ce-stable]` | Repositories excluded only from FreeIPA metadata/package operations so an unrelated third-party mirror cannot block IDENTITY. |
 | `ipa_server_require_modern_ui` | `false` | Optional strict gate for the packaged React UI at `/usr/share/ipa/modern-ui/index.html`; the portal otherwise uses supported `/ipa/ui/`. |
 | `ipa_server_deep_recovery` | `false` | When **`true`**, run playbook **`ipa_deep_recovery.yml`** before **12** for automated detect/recover/sanitize. |

@@ -1,13 +1,70 @@
 ---
-- name: Install required packages
-  ansible.builtin.package:
-    name: "{{ os_vars[ansible_os_family].freeipa_server_packages }}"
-    state: present
+- name: Restore managed resolver before FreeIPA package operations
+  ansible.builtin.import_tasks: configure_resolv_conf.yml
 
-- name: Install DNS lookup tools required by ipa-server-install (dig)
-  ansible.builtin.package:
+- name: Verify external DNS before FreeIPA package operations
+  ansible.builtin.import_tasks: verify_identity_dns.yml
+  vars:
+    identity_dns_skip_provider_probe: true
+
+- name: Resolve FreeIPA package specifications
+  ansible.builtin.set_fact:
+    ipa_server_packages_effective: >-
+      {{
+        ipa_server_packages_override
+        if ipa_server_packages_override | default([]) | length > 0
+        else os_vars[ansible_os_family].freeipa_server_packages
+      }}
+
+- name: Refresh Red Hat package metadata before FreeIPA update
+  ansible.builtin.dnf:
+    update_cache: true
+    disablerepo: "{{ ipa_server_disabled_repositories | default([]) }}"
+  changed_when: false
+  when: ansible_os_family == 'RedHat'
+
+- name: Refresh Debian package metadata before FreeIPA update
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  changed_when: false
+  when: ansible_os_family == 'Debian'
+
+- name: Install or update required FreeIPA packages on Red Hat
+  ansible.builtin.dnf:
+    name: "{{ ipa_server_packages_effective }}"
+    state: "{{ ipa_server_packages_state | default('latest') }}"
+    disablerepo: "{{ ipa_server_disabled_repositories | default([]) }}"
+  register: ipa_server_packages_update_redhat
+  when: ansible_os_family == 'RedHat'
+
+- name: Install or update required FreeIPA packages on Debian
+  ansible.builtin.apt:
+    name: "{{ ipa_server_packages_effective }}"
+    state: "{{ ipa_server_packages_state | default('latest') }}"
+  register: ipa_server_packages_update_debian
+  when: ansible_os_family == 'Debian'
+
+- name: Record FreeIPA package update state
+  ansible.builtin.set_fact:
+    ipa_server_packages_changed: >-
+      {{
+        (ipa_server_packages_update_redhat is changed)
+        or (ipa_server_packages_update_debian is changed)
+      }}
+
+- name: Install DNS lookup tools required by ipa-server-install on Red Hat
+  ansible.builtin.dnf:
     name: "{{ os_vars[ansible_os_family].ipa_install_dns_packages }}"
     state: present
+    disablerepo: "{{ ipa_server_disabled_repositories | default([]) }}"
+  when: ansible_os_family == 'RedHat'
+
+- name: Install DNS lookup tools required by ipa-server-install on Debian
+  ansible.builtin.apt:
+    name: "{{ os_vars[ansible_os_family].ipa_install_dns_packages }}"
+    state: present
+  when: ansible_os_family == 'Debian'
 
 - name: Extract NetBIOS name from realm
   ansible.builtin.set_fact:
@@ -105,6 +162,22 @@
       {%- else -%}
       IPA not configured (install required)
       {%- endif %}
+
+- name: Upgrade configured FreeIPA server after package update
+  ansible.builtin.command: ipa-server-upgrade
+  register: ipa_server_upgrade
+  changed_when: true
+  when:
+    - ipa_server_packages_changed | bool
+    - ipa_server_configured_healthy | bool
+
+- name: Restart configured FreeIPA after package upgrade
+  ansible.builtin.command: ipactl restart
+  register: ipa_server_upgrade_restart
+  changed_when: true
+  when:
+    - ipa_server_upgrade is defined
+    - ipa_server_upgrade is changed
 
 - name: Normalize IPA install skip/install reason as string
   ansible.builtin.set_fact:
@@ -283,6 +356,29 @@
     - ipa_server_should_run_install | bool
     - ipa_install_result is defined
     - ipa_install_result.rc | default(0) != 0
+
+- name: Check packaged FreeIPA modern UI application
+  ansible.builtin.stat:
+    path: /usr/share/ipa/modern-ui/index.html
+  register: ipa_server_modern_ui
+  changed_when: false
+
+- name: Require FreeIPA modern UI when explicitly requested
+  ansible.builtin.assert:
+    that:
+      - ipa_server_modern_ui.stat.exists | default(false) | bool
+      - ipa_server_modern_ui.stat.isreg | default(false) | bool
+    fail_msg: >-
+      The latest FreeIPA packages available from the configured OS repositories
+      do not provide /usr/share/ipa/modern-ui/index.html.
+      Installed CLI version: {{
+        (ipa_cli_version.stdout | default('') ~ ipa_cli_version.stderr | default(''))
+        | trim | default('unknown', true)
+      }}.
+      Confirm the host uses a supported current OS release with its official
+      BaseOS/AppStream repositories enabled, or disable ipa_server_require_modern_ui
+      to retain the supported legacy /ipa/ui/ fallback.
+  when: ipa_server_require_modern_ui | default(false) | bool
 
 - name: Validate IPA Services
   ansible.builtin.command: ipactl status

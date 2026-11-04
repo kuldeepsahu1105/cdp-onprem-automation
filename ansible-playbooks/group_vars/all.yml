@@ -155,6 +155,9 @@ ipa_server_deep_recovery: false
 ipa_server_install_force: false
 # Keep FreeIPA packages current from the configured supported OS repositories.
 ipa_server_packages_state: latest
+# Optional native package-manager specifications for exact version pins.
+# Empty keeps the OS-specific package list above on repository-latest versions.
+ipa_server_packages_override: []
 # Do not let unrelated third-party repositories block identity package updates.
 ipa_server_disabled_repositories:
   - docker-ce-stable
