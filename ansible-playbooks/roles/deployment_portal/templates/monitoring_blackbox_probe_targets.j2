@@ -142,7 +142,7 @@
     probe: ecs_cdp_console_api
     service: ecs
 {% if monitoring_blackbox_probe_ecs_data_services_enabled | default(true) | bool %}
-{% for _ds_key in ['cdw', 'cde', 'cai'] %}
+{% for _ds_key in ['cdw', 'cde', 'cai', 'model_registry'] %}
 {% set _ds = ecs_data_services_catalog[_ds_key] | default({}) %}
 {% if _ds.url | default('') | length > 0 %}
 - module: http_2xx_ssl

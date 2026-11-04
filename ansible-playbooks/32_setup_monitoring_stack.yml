@@ -14,6 +14,8 @@
         name: monitoring
         tasks_from: build_portal_context
 
+- import_playbook: enroll_monitoring_exporters.yml
+
 - name: Deploy monitoring stack and update Caddy routes
   hosts: deployment_portal_runtime
   become: true

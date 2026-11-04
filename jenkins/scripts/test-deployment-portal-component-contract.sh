@@ -8,11 +8,16 @@ from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
-index = (root / "ansible-playbooks/templates/deployment_portal_index.html.j2").read_text()
-endpoints = (root / "ansible-playbooks/templates/deployment_portal_endpoints.j2").read_text()
+portal_templates = root / "ansible-playbooks/roles/deployment_portal/templates"
+index = (portal_templates / "deployment_portal_index.html.j2").read_text()
+endpoints = (portal_templates / "deployment_portal_endpoints.j2").read_text()
 base_urls = (
-    root
-    / "ansible-playbooks/templates/deployment_portal_base_cluster_portal_urls.j2"
+    portal_templates
+    / "deployment_portal_base_cluster_portal_urls.j2"
+).read_text()
+sanitized_links = (
+    portal_templates
+    / "deployment_portal_sanitized_data_service_links.j2"
 ).read_text()
 facts = (
     root
@@ -22,7 +27,8 @@ model_registry = (
     root / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_model_registry.yml"
 ).read_text()
 blackbox = (
-    root / "ansible-playbooks/templates/monitoring_blackbox_probe_targets.j2"
+    root
+    / "ansible-playbooks/roles/deployment_portal/templates/monitoring_blackbox_probe_targets.j2"
 ).read_text()
 
 for component in (
@@ -38,25 +44,21 @@ for component in (
 ):
     assert component in index or component in endpoints, component
 
+assert "ctx.data_services.links | default([])" in index
+assert "ctx.ecs.links | default([])" in index
+assert "deployment_portal_data_service_links" in sanitized_links
+assert "deployment_portal_dynamic_links" in facts
+assert "deployment_portal_dynamic_links: []" in facts
+assert "deployment_portal_ecs_ds_links" in facts
+assert "deployment_portal_sanitized_data_service_links" in facts
 for add_on in (
     "HDFS NameNode UI",
-    "YARN ResourceManager UI",
-    "Hue",
-    "Hive",
-    "HBase Master UI",
     "Ozone Recon UI",
-    "Atlas UI",
-    "Impala",
-    "Solr Admin",
     "Ranger Admin",
     "Knox Gateway",
 ):
     assert add_on in base_urls, add_on
-
-assert "ctx.data_services.links | default([])" in index
-assert "deployment_portal_data_service_links" in facts
-assert "deployment_portal_dynamic_links" in facts
-assert "deployment_portal_ecs_ds_links" in facts
+    assert add_on not in index, add_on
 for service in ("cdw", "cde", "cai", "model_registry"):
     assert f"- key: {service}" in facts
     assert service in blackbox

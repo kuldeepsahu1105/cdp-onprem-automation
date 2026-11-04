@@ -1,0 +1,9 @@
+{# YAML list of CM-hosted ECS management links. #}
+{% set _cm = deployment_portal_cm_ui_base_url | trim | regex_replace('/+$', '') %}
+{% set _service = deployment_portal_ecs_service_id | string | trim %}
+- name: "ECS Management / Workloads"
+  url: "{{ _cm }}/cmf/services/{{ _service }}/ecsWebUI/#/workloads?namespace=all"
+  description: "ECS workloads across all namespaces"
+- name: "Longhorn UI"
+  url: "{{ _cm }}/cmf/services/{{ _service }}/longhorn/"
+  description: "ECS persistent storage management"

@@ -4,6 +4,8 @@ End-to-end automation for provisioning infrastructure and deploying **Cloudera P
 
 Supports **RHEL/Rocky/Alma** and **Ubuntu 22.04/24.04**, with **FreeIPA** or **Active Directory** for identity, and **public or internal** Cloudera archive repositories (RPM mirror on RHEL, apt mirror on Ubuntu).
 
+**Cluster DNS domain:** greenfield FreeIPA defaults use **`cldr.internal.arpa`** (private zone under the IANA `.arpa` infrastructure TLD). Validation allows `*.internal.arpa`, `*.local.arpa`, and `*.home.arpa` (RFC 8375) while blocking bare `.local` / `.internal` suffixes. Ozone acceptance of `*.internal.arpa` is not confirmed — see [OPERATIONS_GUIDE.md](ansible-playbooks/docs/OPERATIONS_GUIDE.md). Override via `ipaserver_domain` in `config.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML`; brownfield opt-out: `cluster_domain_skip_ozone_hostname_validation`.
+
 ## Quick start (AWS)
 
 ```bash
@@ -16,7 +18,10 @@ wget https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/ref
 # wget https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/refs/heads/main/.tfvars.yaml
 
 chmod +x clone_and_run_*.sh
-# Edit .tfvars.env or .tfvars.yaml, add license + archive credentials, then:
+# Choose ONE config; YAML wins when both are present.
+vi .tfvars.env
+# Or: vi .tfvars.yaml
+# Complete the configuration checklists linked below before running:
 ./clone_and_run_terraform.sh      # provision EC2 + inventory
 ./clone_and_run_pvc_automation.sh # run Ansible deployment
 ```
@@ -50,10 +55,10 @@ cd ansible-playbooks
 ```
 
 If the repository is not present on the ECS master, download the script from
-the deployment branch or a pinned commit:
+the integration branch or a pinned commit:
 
 ```bash
-REPO_REF=kuldeepsahu1105-ansible-roles-migration
+REPO_REF=cursor/integration-testing-40f5
 curl -fsSL \
   "https://raw.githubusercontent.com/kuldeepsahu1105/cdp-onprem-automation/${REPO_REF}/ansible-playbooks/report_ecs_capacity.sh" \
   -o /tmp/report_ecs_capacity.sh
@@ -63,6 +68,25 @@ chmod +x /tmp/report_ecs_capacity.sh
 
 The report is written only to the path passed with `--output`; view it with
 `less /tmp/ecs-capacity.md` or copy that file to your workstation.
+
+**Before running:** follow the [AWS file/parameter checklist](READme.adoc#operator-editing-checklist)
+and the [Ansible configuration checklist](ansible-playbooks/docs/CONFIGURATION.md#operator-editing-checklist).
+In `vi`, press `i` to edit, then `Esc` and `:wq` + Enter to save/quit;
+`:q!` + Enter discards unsaved edits. Replace example accounts, addresses,
+AMI IDs, domains, and lab passwords; never commit credentials, private keys,
+licenses, Terraform state, or plan files.
+
+## Infrastructure cost reporting
+
+Use [the cost reporting guide](docs/COST_REPORTING.md) for Terraform or Ansible
+inventory imports, AWS Pricing and Cost Explorer evidence, operator-supplied
+Nutanix/bare-metal rate cards, and a **separate** billing ledger. `make
+cost-report` defaults `COST_LIVE_COLLECTION=true`: AWS inventories use the AWS
+CLI to record private evidence before invoking the audited renderer; non-AWS
+inventories skip AWS collection and use manual rates. Set
+`COST_LIVE_COLLECTION=false` for recorded-input-only operation. Cost reporting
+is never invoked by deployment playbooks/wrappers. Unknown prices stay `null`;
+estimates are never presented as invoices.
 
 ## Configuration files
 
@@ -110,7 +134,7 @@ CDH and ECS **deploy versions** are applied by Ansible (`ansible-playbooks/confi
 
 ## CDH base cluster deployment
 
-The CDP **base cluster** is deployed by Ansible playbook `31_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, CMS, LDAP, and Kerberos are in place. By default it installs HDFS, Ozone, YARN, Tez, Spark 3 on YARN, Hive, Hive on Tez, HBase, Hue/Data Explorer, Impala, Kafka, ZooKeeper, Ranger, Atlas, Solr, Knox, and Core Settings. Iceberg support is provided through Hive, Impala, and Spark 3. Optional Phoenix, NiFi, NiFi Registry, and DataViz services are off unless enabled in `base_cluster_install_services`.
+The CDP **base cluster** is deployed by Ansible playbook `31_setup_base_cluster.yml` after Cloudera Manager, Auto-TLS, CMS, LDAP, and Kerberos are in place. By default it installs HDFS, Ozone, YARN, Tez, Spark3 on YARN, Hive, Hive on Tez, HBase, Hue/Data Explorer, Impala, Kafka, ZooKeeper, Ranger, Atlas, Solr, Knox, and Core Settings. Iceberg support is provided through Hive, Impala, and Spark3. Optional Phoenix, NiFi, NiFi Registry, and DataViz services are off unless enabled in `base_cluster_install_services`.
 
 ### Terraform instance groups (infrastructure)
 
@@ -134,9 +158,8 @@ Terraform generates `inventory.ini` with these groups when you run `clone_and_ru
 
 | Variable | Default | Description |
 |---|---|---|
-| `cdh_version` | `7.3.2.0` | CDH Runtime parcel version |
-| `cdh_numeric_version` | `77083870` | Parcel build number (used to build full parcel name) |
-| `cdh_basecluster_name` | `CDP-base-cluster` | Cluster name in Cloudera Manager; the default adopts an existing legacy `CDH-Cluster` |
+| `cdh_version` | `7.3.2.20000` | CDH Runtime parcel version |
+| `cdh_basecluster_name` | `<deployment_name_prefix>-base-cluster` | Cluster name in Cloudera Manager (`base-cluster` when the prefix is empty); default-name reruns safely adopt legacy `CDP-base-cluster` / `CDH-Cluster` registrations by host ownership |
 | `base_cluster_master_group` | `base-masters` | Inventory group for master host |
 | `base_cluster_worker_group` | `base-workers` | Inventory group for worker hosts |
 | `base_cluster_install_services` | see `all.yml` | Per-service booleans for base cluster create |
@@ -151,7 +174,7 @@ Spark is bundled in the CDH parcel for `>= 7.3.1` — no separate SPARK3 downloa
 ```bash
 # Override at deploy time (example)
 ansible-playbook -i inventory.ini 31_setup_base_cluster.yml \
-  -e cdh_version=7.3.2.0 \
+  -e cdh_version=7.3.2.20000 \
   -e cdh_parcel_os_suffix=noble
 ```
 
@@ -217,30 +240,24 @@ Set `PVCECS_*_COUNT=0` in tfvars to skip ECS infrastructure entirely, or leave g
 | Variable | Default | Description |
 |---|---|---|
 | `ecs_deploy_enabled` | `auto` | `auto` = deploy when ecs inventory groups exist; `true` / `false` to force |
-| `ecs_cluster_name` | `ECS-Cluster` | ECS cluster name in Cloudera Manager |
+| `ecs_cluster_name` | `<deployment_name_prefix>-ecs-cluster` | ECS cluster name in Cloudera Manager (`ecs-cluster` when the prefix is empty); reruns adopt legacy `ECS-Cluster` |
 | `ecs_cluster_master_group` | `ecs-masters` | Inventory group for ECS master |
 | `ecs_cluster_worker_group` | `ecs-workers` | Inventory group for ECS workers |
-| `ecs_pvc_ds_version` | `1.5.5-h3300` | CDS repo tag (CDS 1.5.5 SP3 CHF3) |
+| `ecs_pvc_ds_version` | `1.5.5-h40000` | CDS repo tag (CDS 1.5.5) |
 | `ecs_pvc_repository_url` | computed | `https://archive.cloudera.com/p/cdp-pvc-ds/<version>` |
 | `ecs_parcel_repo_url` | computed | ECS parcel repo under CDS path |
-| `ecs_parcel_version` | `""` | Optional override; auto-discovered from CM when empty |
-| `ecs_app_domain` | `apps.<cluster_domain>` | Application domain for ECS services |
+| `ecs_parcel_version` | `""` | Optional override; resolved from the pinned ECS repository manifest when empty |
+| `ecs_application_domain` | `<cluster_domain>` | Parent domain passed to CM and embedded ECS control-plane installation |
+| `ecs_app_domain` | `apps.<ecs_application_domain>` | Effective ECS ingress suffix for console and service URLs |
 | `ecs_docker_data_path` | `/mnt/docker` | Docker data directory |
-| `ecs_lso_data_path` | `/ecs/local-storage` | Local storage operator path |
+| `ecs_lso_data_path` | `/ecs/local` | Local storage operator path |
 | `ecs_longhorn_data_path` | `/ecs/longhorn-storage` | Longhorn persistent volume path |
-| `ecs_longhorn_replication` | `1` | Longhorn replica count |
+| `ecs_longhorn_replication` | `2` | Longhorn replica count |
 | `ecs_control_plane_database_mode` | `embedded` | `embedded` or `existing` (external DB needs full config) |
 | `ecs_control_plane_vault_mode` | `embedded` | Vault storage mode |
-| `ecs_control_plane_embedded_db_storage_gb` | `200` | Embedded control-plane database storage |
-| `ecs_control_plane_embedded_vault_storage_gb` | `20` | Embedded control-plane Vault storage |
 | `ecs_k8s_webui_secret_admin_token` | `ChangeMe@ECS-WebUI` | Internal Kubernetes WebUI service token passed to ECS installation; not an end-user login and not displayed in the portal — change before deploy |
 
-Embedded database/Vault sizes are control-plane installation inputs. Changing
-them does not resize an already-installed embedded control plane; use the
-documented destructive ECS cleanup/rebuild flow when those install-time values
-must change.
-
-Compatible with CDH 7.3.2: CDS 1.5.5 SP3 CHF3+ (see Cloudera release matrix).
+Compatible with CDH 7.3.2: CDS 1.5.5+ (see Cloudera release matrix).
 
 ```bash
 # ECS only (after base cluster is up)
@@ -249,7 +266,7 @@ DEPLOY_PHASE=5 ./pvc_setup.sh
 
 # Or run playbook directly
 ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml \
-  -e ecs_pvc_ds_version=1.5.5-h3300
+  -e ecs_pvc_ds_version=1.5.5-h40000
 ```
 
 ### ECS cleanup toggles (`99_cleanup.yml`)
@@ -299,8 +316,8 @@ Configured in `ansible-playbooks/config.yml`:
 
 | Component | Version |
 |---|---|
-| Cloudera Manager | `7.13.2.6` |
-| CDH (Runtime parcel) | `7.3.2.0` (`cdh_parcel_os_suffix`: `auto` default) |
+| Cloudera Manager | `7.13.2.20000` |
+| CDH (Runtime parcel) | `7.3.2.20000` (`cdh_parcel_os_suffix`: `auto` default) |
 | Java | `17` |
 | Python | `3.11` |
 | PostgreSQL | `18` |
@@ -412,7 +429,7 @@ DRY_RUN=true DEPLOY_PHASE=1 ./pvc_setup.sh
 
 Declarative **`Jenkinsfile`** with **checkbox stage selection**, input validation, and `REFRESH_JENKINSFILE=YES` to reload parameters after changes.
 
-**Stage checkboxes (`PIPELINE_STAGES`):** `VALIDATE`, `TERRAFORM`, `PREREQS`, `PORTAL`, `IDENTITY`, `CM_INSTALL`, `CM_TLS_KRB_LDAP`, `CDH_INSTALL`, `MONITORING`, `ECS_INSTALL` — selection is exact and deduplicated; ECS stages do not add portal or monitoring (`CDH_BASE` legacy → CM_TLS + CDH_INSTALL).
+**Stage checkboxes (`PIPELINE_STAGES`):** `VALIDATE`, `TERRAFORM`, `PREREQS`, `PORTAL`, `MONITORING`, `IDENTITY`, `CM_INSTALL`, `CM_TLS_KRB_LDAP`, `CDH_INSTALL`, `ECS_INSTALL` — selection is exact and deduplicated; MONITORING adds only its required PORTAL foundation; `CDH_INSTALL` is the only base-cluster deployment stage.
 
 **Validation checkboxes (`VALIDATION_CHECKS`):** `TOOLS`, `AWS_CREDS`, `TFVARS`, `ANSIBLE_SYNTAX`, `INVENTORY`, `EMAIL_FORMAT`.
 

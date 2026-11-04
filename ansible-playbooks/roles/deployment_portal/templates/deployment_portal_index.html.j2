@@ -934,6 +934,8 @@
       <div class="meta-row">
         <span class="chip"><strong>Domain</strong> {{ ctx.cluster_domain }}</span>
         <span class="chip"><strong>Realm</strong> {{ ctx.cluster_realm }}</span>
+        <span class="chip"><strong>Base cluster</strong> {{ ctx.cloudera_manager.cluster_name }}</span>
+        <span class="chip"><strong>ECS cluster</strong> {{ ctx.ecs.cluster_name }}</span>
         <span class="chip"><strong>Identity</strong> {{ ctx.identity_provider }}</span>
         <span class="chip"><strong>Access</strong> {{ ctx.access.profile }} ({{ ctx.access.environment }})</span>
         <span class="chip"><strong>Generated</strong> {{ ctx.generated_at }}</span>
@@ -1001,6 +1003,20 @@
           <span class="tile-hint">{% if ctx.ecs.deployed %}{{ ctx.ecs.cluster_name }}{% else %}Console{% endif %}</span>
         </a>
         {% endif %}
+        {% for link in ctx.ecs.links | default([]) %}
+        <a class="tile tile-purple" href="{{ link.url }}" target="_blank" rel="noopener noreferrer">
+          <span class="tile-label">{{ link.name }}</span>
+          <span class="tile-hint">{{ link.description }}</span>
+        </a>
+        {% endfor %}
+        {% for link in ctx.data_services.links | default([]) %}
+        {% if link.url | default('') | length > 0 %}
+        <a class="tile tile-cyan" href="{{ link.url }}" target="_blank" rel="noopener noreferrer">
+          <span class="tile-label">{{ link.name | default('Deployment add-on') }}</span>
+          <span class="tile-hint">{{ link.description | default('Configured deployment service') }}</span>
+        </a>
+        {% endif %}
+        {% endfor %}
         {% if portal_tile_url | length > 0 %}
         <a class="tile tile-accent tile-cyan" target="_blank" rel="noopener noreferrer" href="{{ portal_tile_url }}">
           <span class="tile-label">Deployment portal</span>
@@ -1358,13 +1374,16 @@
           <li>ECS app domain: <code>{{ ctx.ecs.app_domain }}</code></li>
           <li>ECS console — {{ portal_url_for_context(ctx.ecs.console_hint, ctx) }}</li>
           <li>ECS direct HTTPS — {{ portal_url_for_context(ctx.ecs.console_url_direct | default('https://' ~ (ecs_console_host_prefix | default('console-cdp')) ~ '.' ~ ctx.ecs.app_domain), ctx) }}</li>
+          {% for link in ctx.ecs.links | default([]) %}
+          <li><strong>{{ link.name }}</strong> — {{ link.description }} — {{ portal_url_for_context(link.url, ctx) }}</li>
+          {% endfor %}
           <li>Data Services hostnames: <code>{{ ctx.ecs.apps_wildcard }}</code></li>
           {% else %}
           <li>ECS: <span class="badge">not in inventory</span></li>
           {% endif %}
         </ul>
         {% if ctx.data_services.links | length > 0 %}
-        <h2 class="section-title" style="margin-top:1rem">CDP Runtime base cluster &amp; data service URLs</h2>
+        <h2 class="section-title" style="margin-top:1rem">Data services &amp; related URLs</h2>
         <ul class="clean">
           {% for link in ctx.data_services.links %}
           <li><strong>{{ link.name }}</strong>{% if link.description %} — {{ link.description }}{% endif %} — {{ portal_url_for_context(link.url, ctx) }}</li>
@@ -1529,7 +1548,7 @@
             <tbody>
               {% for h in ctx.inventory_hosts %}
               <tr>
-                <td><code>{{ h.hostname }}</code> <span class="badge">{{ h.inventory_name }}</span></td>
+                <td><code>{{ h.hostname }}</code></td>
                 <td><code>{{ h.fqdn }}</code></td>
                 <td><code>{{ h.private_ip }}</code></td>
                 <td>{% if h.public_ip | default('') | length > 0 and ('{{' not in (h.public_ip | string)) %}<code>{{ h.public_ip }}</code>{% else %}<span class="badge">VPC only</span>{% endif %}</td>

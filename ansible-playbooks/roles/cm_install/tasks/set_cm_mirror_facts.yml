@@ -68,12 +68,71 @@
     cdh_parcel_os_suffix_effective: "{{ cdh_parcel_os_suffix }}"
   when: cdh_parcel_os_suffix | default('auto') != 'auto'
 
-- name: Set CDH parcel filename from resolved suffix
+- name: Set CDH release facts
   ansible.builtin.set_fact:
     cdh_major_version: "{{ cdh_version.split('.')[:3] | join('.') }}"
     cdh_build_number: "{{ cdh_version.split('.')[-1] }}"
-    cdh_parcel_filename: >-
-      CDH-{{ cdh_version.split('.')[:3] | join('.') }}-1.cdh{{ cdh_version.split('.')[:3] | join('.') }}.p{{ cdh_version.split('.')[-1] }}.{{ cdh_numeric_version }}-{{ cdh_parcel_os_suffix_effective }}.parcel
+
+- name: Read configured CDH parcel manifest for internal mirror
+  ansible.builtin.uri:
+    url: >-
+      {{ cm_repo_public_base_url }}/{{ cdh_repo_product }}/{{
+      cdh_version }}/parcels/manifest.json
+    method: GET
+    user: "{{ cm_repo_username }}"
+    password: "{{ cm_repo_password }}"
+    force_basic_auth: true
+    return_content: true
+    status_code: [200]
+  register: cdh_mirror_parcel_manifest
+  no_log: true
+  until: cdh_mirror_parcel_manifest.status | default(0) == 200
+  retries: 3
+  delay: 10
+
+- name: Select published CDH parcel file for internal mirror target
+  ansible.builtin.set_fact:
+    cdh_mirror_parcel_filenames_available: >-
+      {{
+        (cdh_mirror_parcel_manifest.content | from_json).get('parcels', [])
+        | map(attribute='parcelName')
+        | select(
+            'match',
+            '^CDH-'
+            ~ (
+                (
+                  cdh_version.split('.')[:3] | join('.')
+                  ~ '-1.cdh'
+                  ~ cdh_version.split('.')[:3] | join('.')
+                  ~ '.p'
+                  ~ cdh_version.split('.')[-1]
+                )
+                | regex_escape
+              )
+            ~ '[.][0-9]+-'
+            ~ (cdh_parcel_os_suffix_effective | regex_escape)
+            ~ '[.]parcel$'
+          )
+        | unique
+        | list
+      }}
+
+- name: Require one published CDH parcel file for internal mirror target
+  ansible.builtin.assert:
+    that:
+      - cdh_mirror_parcel_filenames_available | length == 1
+    fail_msg: >-
+      Could not resolve one CDH {{ cdh_version }} parcel for suffix
+      {{ cdh_parcel_os_suffix_effective }} from the repository manifest.
+      Matches: {{
+        cdh_mirror_parcel_filenames_available
+        | join(', ')
+        | default('(none)', true)
+      }}.
+
+- name: Use published CDH parcel filename for internal mirror
+  ansible.builtin.set_fact:
+    cdh_parcel_filename: "{{ cdh_mirror_parcel_filenames_available | first }}"
 
 - name: Print CDH parcel target and archive file
   ansible.builtin.debug:

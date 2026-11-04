@@ -45,30 +45,31 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `python_version` | `3.11` | Python version (packages and module enablement) |
 | `postgresql_version` | `18` | PostgreSQL version |
 | `postgres_amazon_linux_2023_native_client_version` | (computed) | Native Amazon Linux 2023 `psql` client package version (`min(postgresql_version, 17)`); CM DB tasks on `cldr-mngr` may use this while the server stays `postgresql_version` |
-| `cm_version` | `7.13.2.6` | Cloudera Manager version |
-| `cdh_version` | `7.3.2.0` | CDH parcel version |
+| `cm_version` | `7.13.2.20000` | Cloudera Manager version |
+| `cdh_version` | `7.3.2.20000` | CDH parcel version |
 
 **`python_version` scope:** On targets, this drives `os_vars` package names (`python{{ python_version }}`, pip/devel or venv/dev packages), RHEL 8 `dnf module enable python<version>`, and on RedHat the `python{{ python_version }}` / `pip{{ python_version }}` executables used in **06_prereq_setup.yml** for install and pip upgrade. It does **not** fully align every Python path in the repo:
 
 | Area | Behavior |
 |---|---|
 | Ansible on targets | `ansible.cfg` sets `interpreter_python = /usr/bin/python3`; remote modules use that unless you set `ansible_python_interpreter` in inventory or host vars |
-| **06** / **23** / **31** psycopg2 | `psycopg2` is installed and verified in Ansible's target interpreter (`/usr/bin/python3` by default), the configured `python{{ python_version }}` interpreter, and before First Run in Hue's isolated parcel virtual environment when Hue is enabled; duplicate executable names are installed only once. Discovery uses a zero-exit module-spec marker when the driver is absent, so expected installation work is not reported by Jenkins as a failed command; broken interpreters or installed-but-unloadable drivers still fail |
+| **06** / **23** / **31** PostgreSQL Python driver | `psycopg2` is installed and verified in Ansible's target interpreter (`/usr/bin/python3` by default) and the configured `python{{ python_version }}` interpreter. Discovery uses a zero-exit module-spec marker when the driver is absent, so expected installation work is not reported by Jenkins as a failed command; broken interpreters or installed-but-unloadable drivers still fail. Before First Run, playbook 31 discovers Hue's actual interpreter in the resolved versioned parcel, requires a readable psycopg 3 binary driver there, and verifies both psycopg and Django's PostgreSQL backend as the `hue` service user |
 | Debian pip upgrade | `os_vars.Debian.pip_executable` is `pip3`; **06** pip upgrade uses it even when `python_version` changes |
 | `psycopg2_binary_version` | Pins the **library** for every interpreter fallback (`psycopg2-binary==…` when set); interpreter selection remains independent |
+| `base_cluster_hue_psycopg_binary_version` | Empty by default, selecting the current compatible `psycopg[binary]>=3.1.8,<4` driver for Hue; set an exact psycopg 3 library version to pin it. This does not select Python—the active Hue parcel interpreter does |
+| `base_cluster_hue_service_user` | `hue`; account used by CM Hue roles and by the parcel PostgreSQL backend verification |
 
 ### Cluster names
 
 | Variable | Default |
 |---|---|
-| `cdh_basecluster_name` | `CDP-base-cluster` (adopts an existing legacy `CDH-Cluster`, or a single full host-ownership match when enabled) |
+| `cdh_basecluster_name` | `<deployment_name_prefix>-base-cluster` (`base-cluster` with an empty prefix; default-name reruns adopt legacy `CDP-base-cluster` / `CDH-Cluster` registrations by host ownership) |
 | `base_cluster_adopt_by_master_host` | `true` — with the unchanged default name, adopt one existing CM cluster only when it owns the configured base master and every expected base host |
 | `base_cluster_adopt_existing_ozone_ha` | `true` — preserve adopted Ozone identity and recover an existing odd-sized SCM HA quorum without topology mutation; new clusters remain single-SCM |
 | `base_cluster_enable_kerberos` | `true` | Kerberize new base clusters before First Run, converge existing unsecure clusters, and verify HDFS authentication |
 | `base_cluster_restart_cms_after_start` | `true` | Permit CMS restart after First Run or an actual cluster TLS/Kerberos transition; healthy and service-recovery reruns skip it |
-| `base_cluster_install_services` | see `all.yml` | Per-service booleans for `31_setup_base_cluster.yml` (Spark 3, Knox, and Solr default `true`; NiFi, NiFi Registry, DataViz, and Phoenix default `false`; Iceberg validates its engine services) |
+| `base_cluster_install_services` | see `all.yml` | Per-service booleans for `31_setup_base_cluster.yml` (Spark3, Knox, and Solr default `true`; NiFi, NiFi Registry, DataViz, and Phoenix default `false`; Iceberg validates its engine services) |
 | `base_cluster_kafka_metadata_store` | `Zookeeper` | Kafka Broker metadata backend; accepted values are `Zookeeper` and `KRaft` |
-| `base_cluster_knox_readiness_recovery_retries` / `base_cluster_knox_readiness_recovery_delay` | `30` / `10` | Bounded health wait when Knox readiness is the sole First Run failure |
 | `base_cluster_knox_cdp_proxy_topology_retries` / `base_cluster_knox_cdp_proxy_topology_delay` | `60` / `10` | Poll Knox `gateway-status` until CDP proxy topologies deploy (~10 min default) |
 | `base_cluster_knox_gateway_https_port` | `8443` | HTTPS port for Knox topology readiness probes on the gateway host |
 | `base_cluster_ranger_admin_port` | `6182` | Direct Ranger Admin UI on the base cluster master (deployment portal links; Knox uses its own gateway URL) |
@@ -76,7 +77,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `base_cluster_ranger_usersync_provider` | `auto` | `auto`, active `freeipa`/`ad`, `external`, or `none`; a FreeIPA/AD override must match `identity_provider_effective` |
 | `base_cluster_ranger_usersync_delta_sync` | `true` | Set CM `ranger.usersync.ldap.deltasync` |
 | `base_cluster_ranger_usersync_user_search_scope` / `base_cluster_ranger_usersync_group_search_scope` | `sub` / `sub` | LDAP search scopes: `base`, `one`, or `sub` |
-| `base_cluster_ranger_usersync_referral` | `follow` | Ranger Admin/UserSync referral behavior (`follow`, `ignore`, or `throw`) |
+| `base_cluster_ranger_usersync_referral` | `follow` | Ranger Admin/UserSync referral behavior (`follow`, `ignore`, or `throw` where supported) |
 | `base_cluster_ranger_usersync_username_case_conversion` / `base_cluster_ranger_usersync_groupname_case_conversion` | `lower` / `lower` | UserSync name normalization (`lower`, `upper`, or `none`) |
 | `base_cluster_ranger_usersync_paged_results_enabled` | `true` | Enable paged LDAP user/group results |
 | `base_cluster_ranger_usersync_unix_backend` | `nss` | Safe CM Unix backend value retained while LDAP is the selected source |
@@ -84,17 +85,21 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `base_cluster_ranger_usersync_external_*` | empty/provider defaults | External LDAP URL, bind secret, base/search DNs, Admin and UserSync filters, object classes, attributes, and STARTTLS choice |
 | `base_cluster_*_ui_port` | see `all.yml` | Direct HTTP UI ports on `base-masters` when Knox is off (`hdfs` 9870, `yarn` 8088, `hue` 8888, `hbase` 16010, `atlas` 21000, `ozone` Recon 9888, `solr` 8983, `impala` debug 25000) |
 | `base_cluster_knox_cdp_proxy_path` | `/gateway/cdp-proxy` | Knox topology prefix for portal links when `base_cluster_install_services.knox` is true (`deployment_portal_base_cluster_portal_urls.j2`) |
-| `base_cluster_force_first_run` | `false` | Force `POST .../commands/firstRun` on an existing cluster; normally auto when marker missing and HDFS not `STARTED/GOOD` |
+| `base_cluster_hdfs_name_dir` | `/dfs/nn` | NameNode storage inspected before First Run; an existing `current/VERSION` selects non-destructive partial-First-Run recovery |
+| `base_cluster_force_first_run` | `false` | Force `POST .../commands/firstRun` despite the completion marker; existing HDFS namespace metadata still blocks destructive reformatting |
 | `base_cluster_service_health_retries` / `base_cluster_service_health_delay` | `90` / `10` | Bounded final poll for every enabled service with a non-gateway role before initialization is recorded |
 | `base_cluster_accepted_health_summaries` | `[GOOD]` | Health summaries accepted by the final base-cluster service gate |
 | `cm_admin_bootstrap_pass` | `admin` | Factory CM password; when `cm_admin_pass` differs, `ensure_cm_admin_password.yml` runs in **24_start_cm** / **27_setup_cm_autotls** only |
 | `base_cluster_yarn_*` | `4096` / `4` | YARN RM/NM memory and vcore limits in cluster spec template |
-| `ecs_cluster_name` | `ECS-Cluster` |
+| `ecs_cluster_name` | `<deployment_name_prefix>-ecs-cluster` (`ecs-cluster` with an empty prefix; adopts legacy `ECS-Cluster`) |
 | `ecs_deploy_enabled` | `auto` | `auto`, `true`, or `false` — deploy ECS when ecs inventory groups exist |
-| `ecs_pvc_ds_version` | `1.5.5-h3300` | CDS repo tag (`1.5.5-h3300` = SP3 CHF3; older: `1.5.5-h2000` SP2, `1.5.5-h2100` SP2 CHF1) |
-| `ecs_parcel_version` | `""` | Optional override; auto-discovered from CM after parcel repo refresh |
-| `ecs_app_domain` | `apps.<domain>` | Application domain for ECS services |
+| `ecs_pvc_ds_version` | `1.5.5-h40000` | CDS repo tag (default `1.5.5-h40000`; older: `1.5.5-h3300` SP3 CHF3, `1.5.5-h2000` SP2, `1.5.5-h2100` SP2 CHF1) |
+| `ecs_parcel_version` | `""` | Optional override; when empty, resolved from the pinned ECS repository `manifest.json` |
+| `ecs_application_domain` | `<domain>` | Parent domain passed to CM `app_domain` and embedded-control-plane `ApplicationDomain` |
+| `ecs_app_domain` | `apps.<ecs_application_domain>` | Effective ingress suffix for ECS console and service hostnames |
 | `ecs_console_host_prefix` | `console-cdp` | DNS label for ECS management console (`https://<prefix>.<ecs_app_domain>`) |
+| `deployment_portal_ecs_service_id` | Discovered | Numeric CM service ID for the current ECS cluster; used only when rendering CM-hosted ECS Workloads and Longhorn links |
+| `deployment_portal_ecs_cm_links` | `[]` before discovery | Stable ECS Management / Workloads and Longhorn UI links built from the current CM base URL and service ID |
 
 ### CM/CDH repository source
 
@@ -104,6 +109,8 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 | `cm_repo_public_base_url` | `https://archive.cloudera.com/p` | Public archive base URL |
 | `cm_repo_mirror_host` | cldr-mngr IP | Internal mirror HTTP host |
 | `parcel_repo` | computed | Public or internal CDH parcel URL (`…/p/cdh7/<cdh_version>/parcels/`) |
+| `cluster_parcel_timeout_seconds` | `14400` | Four-hour per-parcel maximum across download, distribution, and activation; reruns resume CM's current parcel stage, and dependent CDH/CFM parcels each receive this budget |
+| `cluster_parcel_poll_delay` | `15` | Seconds between CM parcel-stage polls |
 | `parcel_repo_latest_public` | computed | `…/p/cdh7/latest/parcels/` when `cm_parcel_repo_include_latest` (literal segment `latest` — **not** `{latest}`) |
 | `ecs_parcel_repo_url` | computed | `…/p/cdp-pvc-ds/<ecs_pvc_ds_version>/parcels/` (see `ecs_pvc_ds_version` in ECS table above) |
 | `ecs_parcel_repo_latest_url` | computed | `…/p/cdp-pvc-ds/latest/parcels/` when `cm_parcel_repo_include_latest` |
@@ -153,7 +160,7 @@ Module migration (optional future): `cm_service` could replace CMS REST where `c
 
 On RHEL 9 CM hosts, CDV JAR paths may still use `redhat8/yum` (`cdv_redhat_yum_repo: auto`); CFM uses `redhat9/yum/…` from `csd_redhat_repo: auto`. Parcel repo scrub in `configure_cm_parcel_repo_api.yml` drops any candidate URL matching `\.jar`.
 
-**Spark parcel:** For CDH `>= 7.3.1`, Spark is bundled in the CDH parcel — a separate SPARK3 download is skipped automatically (`cdh_spark_bundled_min_version`). Set `spark_version` only for older CDH releases that need a standalone Spark parcel.
+**Spark parcel and service type:** For CDH `>= 7.3.1`, Spark3 is bundled in the CDH parcel, so a separate download is skipped automatically (`cdh_spark_bundled_min_version`). Cloudera Manager still exposes the service descriptor as `SPARK3_ON_YARN`; the automation uses the no-space CM service name `spark3`.
 
 ```yaml
 # Public (default) — no local download
@@ -231,11 +238,13 @@ Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` 
 
 | Variable | Description |
 |---|---|
-| `ipaserver_domain` | DNS domain |
+| `ipaserver_domain` | DNS domain (default `cldr.internal.arpa`; `.arpa` / IANA suffix for Ozone HDDS-16034) |
+| `cluster_domain_skip_ozone_hostname_validation` | Skip HDDS-16034 domain preflight (brownfield legacy `.local` / `.internal` only) |
 | `ipaserver_realm` | Kerberos realm (uppercase domain) |
 | `ipaadmin_principal` | IPA admin user |
 | `ipaadmin_password` | IPA admin password |
 | `ipa_kdc_host` | `ipaserver.<domain>` |
+| `ipa_server_install_allow_zone_overlap` | `false` by default; explicitly pass `--allow-zone-overlap` when intentionally using an IPA DNS zone that already exists in public/upstream DNS |
 | `krb5_enc_types` | Space-separated CM `KRB_ENC_TYPES` (default `aes256-cts aes128-cts`) |
 | `krb5_cm_managed_krb5_conf` | CM `KRB_MANAGE_KRB5_CONF` (default `true`); `false` leaves `/etc/krb5.conf` to IPA/Ansible |
 | `krb5_cm_libdefaults_safety_valve` | CM `KRB_LIBDEFAULTS_SAFETY_VALVE` — preserves commented KEYRING `default_ccache_name` when CM deploys krb5.conf |
@@ -308,55 +317,38 @@ For Jenkins / wrapper execution order and why some numbers appear twice (10, 14,
 
 ### Phase 1 — Infrastructure & prerequisites
 
-The numbered files remain the public standalone entry points. Their task
-implementations live in `roles/prereq_*`; do not invoke a role directly when
-you need the compatibility play's `hosts`, `become`, vars, or multi-play
-ordering.
-
-| Playbook | Role implementation | Description |
-|---|---|---|
-| `00_setup_ssh_preqs.yml` | `prereq_ssh` | SSH prerequisites |
-| `ensure_collections.yml` | n/a | Galaxy install from `requirements.yml` (imported by every playbook; same logic as `pvc_setup.sh`) |
-| `01_install_collection.yml` | `prereq_system_update` | Imports `ensure_collections.yml`; pins DNF `$releasever` before any package operation (and subscription-manager when available), then updates only within that RHEL minor |
-| `02_set_hostname.yml` | `prereq_hostname` | Set FQDN hostnames |
-| `03_create_etc_hosts.yml` | `prereq_hosts` | Populate `/etc/hosts` |
-| `04_setup_autossh.yml` | `prereq_autossh` | Passwordless SSH |
-| `05_disable_selinux.yml` | `prereq_selinux` | SELinux permissive (RHEL) |
-| `06_prereq_setup.yml` | `prereq_packages` | Base packages, Java, Python 3.11 |
-| `07_prereq_setup_002.yml` | `prereq_system_tuning` | sysctl, ulimit, THP, chrony |
-| `08_prereq_setup_003.yml` | `prereq_postgres_client` | PostgreSQL client + PGDG repo |
-| `09_verify_os_prereqs.yml` | `prereq_verify` | Verify OS prerequisites |
+| Playbook | Description |
+|---|---|
+| `00_setup_ssh_preqs.yml` | SSH prerequisites |
+| `ensure_collections.yml` | Galaxy install from `requirements.yml` (imported by every playbook; same logic as `pvc_setup.sh`) |
+| `01_install_collection.yml` | Imports `ensure_collections.yml`; pins DNF `$releasever` before any package operation (and subscription-manager when available), then updates only within that RHEL minor |
+| `02_set_hostname.yml` | Set FQDN hostnames |
+| `03_create_etc_hosts.yml` | Populate `/etc/hosts` |
+| `04_setup_autossh.yml` | Passwordless SSH |
+| `05_disable_selinux.yml` | SELinux permissive (RHEL) |
+| `06_prereq_setup.yml` | Base packages, Java, Python 3.11 |
+| `07_prereq_setup_002.yml` | sysctl, ulimit, THP, chrony |
+| `08_prereq_setup_003.yml` | PostgreSQL client + PGDG repo |
+| `09_verify_os_prereqs.yml` | Verify OS prerequisites |
 
 ### Phase 2 — Identity & DNS
 
-All listed playbooks remain supported standalone compatibility entry points.
-Their task implementations and identity-specific templates live in
-`roles/identity`; the router still imports the same playbooks in the same
-order.
-
-| Playbook | Role | Description |
-|---|---|---|
-| `detect_identity.yml` | `identity` | Detect FreeIPA vs AD |
-| `11_identity_setup.yml` | `identity` + imported compatibility playbooks | Phase 2 router |
-| `12_setup_freeipa_server.yml` | `identity` | FreeIPA server (skipped for AD) |
-| `ipa_deep_recovery.yml` | `identity` | Optional IPA detect/recover/sanitize before playbook 12 |
-| `13_update_resolv_conf.yml` | `identity` | DNS (netplan or resolv.conf) |
-| `14_setup_dns_records.yml` | `identity` | FreeIPA DNS records (skipped for AD) |
-| `16_setup_identity_client.yml` | `identity` | FreeIPA client or AD realm join |
-| `18_setup_ad_client.yml` | `identity` | AD realm join only |
-| `17_setup_freeipa_client.yml` | `identity` | FreeIPA client only |
-| `19_setup_wildcard.yml` | `identity` | `*.apps` wildcard DNS (FreeIPA only) |
+| Playbook | Description |
+|---|---|
+| `detect_identity.yml` | Detect FreeIPA vs AD |
+| `11_identity_setup.yml` | Phase 2 router (all of 10–15) |
+| `12_setup_freeipa_server.yml` | FreeIPA server (skipped for AD) |
+| `ipa_deep_recovery.yml` | Optional IPA detect/recover/sanitize before playbook 12 |
+| `13_update_resolv_conf.yml` | DNS (netplan or resolv.conf) |
+| `14_setup_dns_records.yml` | FreeIPA DNS records (skipped for AD) |
+| `16_setup_identity_client.yml` | FreeIPA client or AD realm join |
+| `18_setup_ad_client.yml` | AD realm join only |
+| `17_setup_freeipa_client.yml` | FreeIPA client only |
+| `19_setup_wildcard.yml` | `*.apps` wildcard DNS (FreeIPA only) |
 
 ### Phase 3 — Cloudera Manager
 
 **Auto-TLS default:** `autotls_enabled` defaults to **`true`** in `group_vars/all.yml` (override with Jenkins `ANSIBLE_GROUP_VARS_YAML` or `-e autotls_enabled=false` for manual TLS only). Playbook **`27_setup_cm_autotls.yml`** is **not** part of **`CM_INSTALL`** / `DEPLOY_PHASE=3` — it runs in the next stage (**`CM_TLS_KRB_LDAP`** / `cm_tls`, legacy phase 4) after CM is up on HTTP `:7180`. With the default, **27** calls **`POST /cm/commands/generateCmca`**, restarts CM, and reconciles agents so the **CM UI is HTTPS on `:7183`** (Cloudera Auto-TLS, not a hand-installed cert). Jenkins **`CM_INSTALL` alone** leaves CM on `:7180` until **`CM_TLS_KRB_LDAP`** (or `DEPLOY_PHASE=all`).
-
-CM install task implementation and PostgreSQL/repository templates live in
-`roles/cm_install`. Playbooks `20`–`26` remain the standalone compatibility
-entry points and retain router imports, host groups, delegation, privilege
-escalation, and localhost fact reuse. CM API transport/discovery stays in
-`roles/cm_security`; compatibility shims preserve the same contract for
-playbooks `20`–`26`.
 
 | Playbook | Description |
 |---|---|
@@ -374,13 +366,6 @@ playbooks `20`–`26`.
 | `29_setup_cm_ldap.yml` | LDAP auth (FreeIPA or AD) — run **before** **30** |
 | `30_setup_cm_krbs.yml` | Kerberos (FreeIPA or AD KDC); PUT `/cm/config`, `POST /cm/commands/importAdminCredentials` (query params), CM restart; bounded wait on `kerberosInfo.kerberized` |
 
-Playbooks `27`–`30` remain the standalone CM security compatibility entry
-points and delegate only task implementation to `roles/cm_security`.
-Auto-TLS's eight plays, CMS and LDAP localhost plays, and Kerberos's
-FreeIPA/localhost split remain unchanged. Shared CM API and security
-`common_tasks` filenames are role-import shims so CDH, ECS, cleanup, and
-manual entry points continue to resolve the same implementations.
-
 ### Phase 4 — CMS & base cluster
 
 CMS (Management Service) and CDP base cluster are **separate**:
@@ -388,29 +373,6 @@ CMS (Management Service) and CDP base cluster are **separate**:
 | Playbook | Component | Deploys |
 |---|---|---|
 | `28_setup_cm_cms.yml` | CMS | Service Monitor, Host Monitor, Event Server, etc. Run **after** `27_setup_cm_autotls.yml` when Auto-TLS is on. |
-| `31_setup_base_cluster.yml` | CDP base cluster | Thin compatibility wrapper over `roles/cdh_base_cluster`; preserves collection bootstrap and localhost orchestration plays |
-
-Base-cluster task implementation and role-relative cluster/Knox templates
-live in `roles/cdh_base_cluster`. CDH-owned legacy `common_tasks` paths are
-static role-import shims for manual or later callers. The numbered playbook
-remains the supported standalone/Jenkins/`pvc_setup.sh` entry point.
-
-### Monitoring
-
-`32_setup_monitoring_stack.yml` remains the supported compatibility entry
-point and delegates implementation to `roles/monitoring`. It preserves the
-portal-context and deployment play boundaries plus the literal exporter
-playbook import. `enroll_monitoring_exporters.yml` remains directly runnable
-and retains separate node_exporter, process_exporter, cAdvisor, and localhost
-scrape-target plays. Exporter service templates are role-relative.
-
-### ECS
-
-Playbooks `33_setup_ecs_cluster.yml` and `34_setup_ecs_data_services.yml`
-remain standalone compatibility entry points over `roles/ecs`. The role owns
-ECS phased installation, control-plane/IAM/LDAP/data-service tasks and its
-control-plane values template; portal and CM integrations continue through
-their owning role shims.
 
 **CMS troubleshooting (Service Monitor / Avro `Connection refused`):**
 
@@ -426,13 +388,13 @@ their owning role shims.
 | `31_setup_base_cluster.yml` | Base cluster | HDFS, Ozone, YARN, Hue, Tez, Hive, Hive on Tez, HBase, Core Settings, Iceberg, Replication Manager, Impala, Kafka, ZooKeeper, Atlas, Ranger; optional NiFi, NiFi Registry, DataViz, Phoenix, Knox, Solr (`base_cluster_install_services`) |
 | `33_setup_ecs_cluster.yml` | ECS cluster | Phased DOCKER + ECS + embedded control plane — see [CDP_ECS_INSTALL.md](CDP_ECS_INSTALL.md) |
 | `34_setup_ecs_post_install.yml` | ECS post-install | Healthy-console recheck, automation machine user/key, IAM/LDAP permissions; wrapper phase 8 then syncs portal credentials only |
-| `10_setup_deployment_portal.yml` | Ops portal bootstrap | Compatibility orchestrator for `roles/deployment_portal`: Caddy, pgAdmin, optional monitoring on ops host (`auto` → ipaserver else cldr-mngr); run early in phase 1 |
+| `10_setup_deployment_portal.yml` | Ops portal bootstrap | Caddy, pgAdmin, optional monitoring on ops host (`auto` → ipaserver else cldr-mngr); run early in phase 1 |
 | `32_setup_monitoring_stack.yml` | Monitoring only | Add monitoring after 28 (requires portal network): Prometheus/Grafana/Alertmanager/cAdvisor/blackbox_exporter stack + node_exporter/process_exporter/host cAdvisor on cluster hosts + HTTP/TCP blackbox probes + Grafana provisioning + Prometheus alert rules |
 | `34_setup_ecs_data_services.yml` | ECS data services | CDW/CDE/CAI/Model Registry via `cloudera.cloud` + Caddy — see [CDP_ECS_DATA_SERVICES.md](CDP_ECS_DATA_SERVICES.md) |
-| `35_sync_deployment_portal_access.yml` | Portal credentials/access only | Compatibility orchestrator for `roles/deployment_portal`: refreshes authenticated base-cluster/ECS credential JSON/HTML in an existing portal; never runs Compose or changes Caddy, pgAdmin, or monitoring |
+| `35_sync_deployment_portal_access.yml` | Portal credentials/access only | Refreshes authenticated base-cluster/ECS credential JSON/HTML in an existing portal; never runs Compose or changes Caddy, pgAdmin, or monitoring |
 
 **ECS API keys (automation):** IAM `createMachineUserAccessKey` requires a **signed** request. Password-only console login is not enough. Automation first reads the installer-generated key from Kubernetes secret `cdp/cm.creds` (`cdp_keys.json`); `ecs_iam_bootstrap_*` or Jenkins `ECS_IAM_BOOTSTRAP_CREDENTIAL_ID` remain fallback sources. It creates `ecs_automation_machine_user`, assigns tenant and environment resource roles, creates its V2 key via CDP CLI, and caches it at `ecs_api_credentials_cache_path`. The cache records the installer bootstrap access-key ID as a cluster identity marker; rebuilding ECS invalidates an older cache and provisions a current automation key instead of sending a deleted key to IAM. Jenkins sets `$CDP_STATE_DIR` under the `holautosa` credentials user's home (or `$CREDENTIALS_HOME`) so `CleanBeforeCheckout` cannot delete the private key; standalone runs default to `$XDG_STATE_HOME/cdp-onprem-automation` or `$HOME/.local/state/cdp-onprem-automation`, never `/tmp`. `$CDP_ARTIFACTS_DIR` remains for non-secret build logs/reports. Multiline private keys use JSON-compatible YAML quoting. Unreadable legacy caches no longer block portal refresh and are replaced only when ECS automation requires valid credentials.
-| `35_refresh_deployment_portal.yml` | Portal refresh | Compatibility orchestrator for `roles/deployment_portal`: re-render index/Caddy after CM, base, ECS, or DS changes (no full reinstall) |
+| `35_refresh_deployment_portal.yml` | Portal refresh | Re-render index/Caddy after CM, base, ECS, or DS changes (no full reinstall) |
 
 Requires base cluster for `control_plane.datalake_cluster_name`. Uses `ecs-masters` / `ecs-workers` inventory groups. Skipped when `ecs_deploy_enabled: auto` and ECS groups are empty.
 
@@ -440,20 +402,14 @@ CAI TLS variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ecs_cai_static_subdomain` | `ecs_cai_workspace_name` | Stable CAI endpoint label passed to `createWorkspace` and used for pre-create TLS validation. |
+| `ecs_cai_static_subdomain` | `cai` | Stable CAI endpoint label passed to `createWorkspace` and used for pre-create TLS validation; maximum 15 characters. |
 | `ecs_cai_tls_certificate_path` | empty | External trusted PEM certificate/chain on the Ansible controller. |
 | `ecs_cai_tls_private_key_path` | empty | Matching external PEM private key on the Ansible controller. |
 | `ecs_cai_tls_ca_bundle_path` | empty | PEM trust anchor used to validate external or pre-existing CAI TLS material. Required without FreeIPA. |
 | `ecs_cai_tls_minimum_validity_seconds` | `86400` | Minimum remaining certificate validity before submission. |
+| `ecs_model_registry_creator_crn` | empty | Optional human `:user:` CRN used to sign Model Registry creation with a temporary access key; defaults to the resolved `ecs_ldap_admin_user_crn`. Machine-user CRNs are rejected. |
 
 ### Deployment portal & monitoring (`group_vars/all.yml`)
-
-Portal task implementation, templates, static web assets, authentication
-service, and Grafana dashboards live under `roles/deployment_portal/`.
-Numbered playbooks `10` and `35` remain the supported entry points. Existing
-portal-related `common_tasks/*.yml` filenames are compatibility shims that
-import the corresponding role task file, so playbooks outside the PORTAL
-phase keep their established imports without duplicated implementation.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -723,7 +679,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/ensure_ipa_httpd_behind_caddy_before_client.yml` | Playbook **16** localhost play: resolve Caddy gate and **`build_deployment_portal_facts.yml`** before client enroll |
 | `common_tasks/sync_ipa_httpd_caddy_proxy_state_on_ipaserver.yml` | Playbook **16** **`[ipaserver]`** play: load portal facts; **`manage_ipa_httpd_caddy_proxy_on_ipaserver.yml`** (cleanup by default; apply + **`preflight_ipa_json_on_ipaserver.yml`** only when **`deployment_portal_ipa_httpd_proxy_enabled`**) |
 | `common_tasks/manage_ipa_httpd_caddy_proxy_on_ipaserver.yml` | **`configure_ipa_httpd_behind_caddy.yml`** when **`deployment_portal_ipa_httpd_proxy_enabled`**; else **`remove_ipa_httpd_caddy_proxy_on_ipaserver.yml`**; then **`sync_ipa_httpd_disable_browser_krb_on_ipaserver.yml`** when **`ipa_httpd_disable_browser_krb_negotiate`** (default **true**) |
-| `common_tasks/sync_ipa_httpd_disable_browser_krb_on_ipaserver.yml` | **`zz-ipa-disable-browser-krb.conf`** (`SetEnv gssapi-no-negotiate` on `/ipa`); play **12**, PORTAL/**16** via **manage**; httpd reload — survives **`ipactl restart`** |
+| `common_tasks/sync_ipa_httpd_disable_browser_krb_on_ipaserver.yml` | Installs **`zz-ipa-disable-browser-krb.conf`** with `SetEnvIf Request_URI "^/ipa(/|$)" gssapi-no-negotiate=1` and reloads httpd when changed; play **12**, PORTAL/**16** via **manage**. It suppresses browser negotiation without reopening `/ipa` or disabling service Kerberos. |
 | `common_tasks/remove_ipa_httpd_caddy_proxy_on_ipaserver.yml` | Default: absent **`zz-ipa-caddy-proxy.conf`**, revert **`ipa-rewrite`** Caddy markers, httpd reload |
 | `common_tasks/apply_ipa_httpd_behind_caddy_on_ipaserver.yml` | Deprecated alias → **`sync_ipa_httpd_caddy_proxy_state_on_ipaserver.yml`** |
 | `common_tasks/preflight_ipa_json_on_ipaserver.yml` | POST **`/ipa/json`** on ipaserver after opt-in httpd apply — fail on HTML (not run on default Caddy-only play **16** path) |
@@ -736,10 +692,13 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `ipa_deep_recovery.yml` | Optional detect / recover / sanitize before playbook 12 (set `ipa_server_deep_recovery: true`) |
 | `common_tasks/resolve_ipa_install_dns_forwarders.yml` | VPC vs `--no-forwarders` flags for `ipa-server-install` (playbook 12) |
 
-Playbook **`12_setup_freeipa_server.yml`** imports **`detect_ipa_server_install_state.yml`** and skips **`ipa-server-install`** when **`ipa_server_has_default_conf`** is true, **`ipactl`** does not report **IPA is not configured**, and there is no partial install debris (**`ipa_server_has_partial_state`**). **`ipa --version`** remains diagnostic only. A non-zero **`ipactl`** rc from stopped services alone does **not** trigger reinstall; **`ensure_ipa_kdc_services.yml`** runs after the play. A clean host installs directly without uninstall. Best-effort **`ipa-server-install --uninstall`** runs only for concrete stale/partial server markers or **`ipa_server_install_force: true`**. DNS forwarder argv comes from **`resolve_ipa_install_dns_forwarders.yml`**.
+Playbook **`12_setup_freeipa_server.yml`** refreshes package metadata and reconciles **`freeipa_server_packages`** to **`ipa_server_packages_state: latest`** by default. A changed configured installation runs **`ipa-server-upgrade`** and restarts IPA. The play imports **`detect_ipa_server_install_state.yml`** and skips **`ipa-server-install`** when **`ipa_server_has_default_conf`** is true, **`ipactl`** does not report **IPA is not configured**, and there is no partial install debris (**`ipa_server_has_partial_state`**). **`ipa --version`** remains diagnostic only. A non-zero **`ipactl`** rc from stopped services alone does **not** trigger reinstall; **`ensure_ipa_kdc_services.yml`** runs after the play. A clean host installs directly without uninstall. Best-effort **`ipa-server-install --uninstall`** runs only for concrete stale/partial server markers or **`ipa_server_install_force: true`**. Modern UI is capability-detected: `/ipa/modern-ui/` is used when packaged and `/ipa/ui/` otherwise. Set **`ipa_server_require_modern_ui: true`** only to make the optional artifact a strict environment requirement. DNS forwarder argv comes from **`resolve_ipa_install_dns_forwarders.yml`**.
 
 | `dns_forwarders` | `no` | Playbook **12**: AWS EC2 → VPC `--forwarder`; else `--no-forwarders`. See **`ipa_server_install_use_vpc_dns_forwarder`**. |
 | `ipa_server_install_use_vpc_dns_forwarder` | `true` | When **`dns_forwarders: no`**, use VPC resolver on AWS at install (and **`dnsconfig-mod`** when install skipped). |
+| `ipa_server_packages_state` | `latest` | Keep FreeIPA server packages current from configured supported OS repositories on every IDENTITY run. |
+| `ipa_server_disabled_repositories` | `[docker-ce-stable]` | Repositories excluded only from FreeIPA metadata/package operations so an unrelated third-party mirror cannot block IDENTITY. |
+| `ipa_server_require_modern_ui` | `false` | Optional strict gate for the packaged React UI at `/usr/share/ipa/modern-ui/index.html`; the portal otherwise uses supported `/ipa/ui/`. |
 | `ipa_server_deep_recovery` | `false` | When **`true`**, run playbook **`ipa_deep_recovery.yml`** before **12** for automated detect/recover/sanitize. |
 | `common_tasks/preflight_kdc_reachable.yml` | TCP :88 to `kdc_host` before CM Kerberos REST; from **cldr-mngr** when `ansible_control_reachability` is `public` (Jenkins) |
 | `common_tasks/verify_cm_kerberos_enabled.yml` | Bounded wait on `/cm/kerberosInfo` field `kerberized`; actionable fail (see `cm_krb_kerberized_wait_*` in `group_vars/all.yml`) |

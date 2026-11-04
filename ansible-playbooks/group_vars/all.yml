@@ -107,8 +107,12 @@ identity_client_hosts: "{{ 'all:!ipaserver' if ipa_server_in_inventory | bool el
 cluster_domain: "{{ ad_domain if identity_provider_effective == 'ad' else ipaserver_domain }}"
 cluster_realm: "{{ cluster_domain | upper }}"
 
-# FreeIPA — private lab DNS under the IANA .arpa infrastructure TLD.
-# Explicit inventory, config.yml, Jenkins, and extra-var overrides still win.
+# FreeIPA — default cldr.internal.arpa (IANA .arpa infrastructure TLD) for private lab DNS.
+# Alternatives: internal.arpa, cluster.home.arpa (RFC 8375), lab.example.com (RFC 2606).
+# Ozone HDDS-16034 acceptance of *.internal.arpa is not confirmed — see OPERATIONS_GUIDE.md.
+# Avoid bare .local/.internal/.lan/.corp/.home/.test/.localdomain (without .arpa).
+# Brownfield stacks still on a legacy suffix: cluster_domain_skip_ozone_hostname_validation: true in Jenkins/tfvars overrides.
+cluster_domain_skip_ozone_hostname_validation: false
 ipaserver_domain: cldr.internal.arpa
 ipaserver_realm: "{{ ipaserver_domain | upper }}"
 ipaadmin_principal: "admin"
@@ -140,12 +144,23 @@ ipaserver_setup_dns: yes
 dns_forwarders: "no"
 # When dns_forwarders is no, use AWS VPC DNS at ipa-server-install (default true on AWS)
 ipa_server_install_use_vpc_dns_forwarder: true
+# Opt in only when intentionally creating an IPA authoritative zone that already
+# exists in public or upstream DNS. A delegated internal subdomain is safer.
+ipa_server_install_allow_zone_overlap: false
 reverse_zones: "no"
 chrony_enabled: "yes"
 # Playbook ipa_deep_recovery.yml — detect / recover / sanitize (verbose; not in Jenkins IDENTITY by default)
 ipa_server_deep_recovery: false
 # Playbook 12 — when true, run ipa-server-install even if default.conf + healthy ipactl (re-install; rare)
 ipa_server_install_force: false
+# Keep FreeIPA packages current from the configured supported OS repositories.
+ipa_server_packages_state: latest
+# Do not let unrelated third-party repositories block identity package updates.
+ipa_server_disabled_repositories:
+  - docker-ce-stable
+# Optional strict gate for distributions that package the React UI separately.
+# The supported /ipa/ui/ application is selected automatically when this is false.
+ipa_server_require_modern_ui: false
 # Playbook 16 — hostname/DNS asserts before ipa-client-install (see RUNBOOK identity troubleshooting)
 ipa_client_preflight_enabled: false
 # Playbook 12 preflight — explicit RPMs probed before ipa-server-install (RHEL; also in freeipa_server_packages)
@@ -210,12 +225,20 @@ cert_state: "Santa Clara"
 cert_locality: "Raleigh"
 cert_organization: "Cloudera Inc"
 cert_organizational_unit: "CLDR"
-# cert_common_name: "cldr-mngr.cldrsetup.local"
+# cert_common_name: "cldr-mngr.cldr.internal.arpa"
 
 # The certificate CN is the current host FQDN.
 cert_subj: "/C={{ cert_country }}/ST={{ cert_state }}/L={{ cert_locality }}/O={{ cert_organization }}/OU={{ cert_organizational_unit }}/CN={{ ansible_fqdn }}"
 
 wildcard_dns_record: "*.apps"
+# Opt-in brownfield cleanup for records accidentally added under a wrong domain.
+# Example:
+#   ipa_dns_cleanup_stale_domain: cldr.internal.arpa
+#   ipa_dns_cleanup_stale_domain_confirm: true
+# Playbooks 14 and 19 remove only matching inventory-host A/PTR values and the
+# ECS wildcard value; they never delete the whole stale zone.
+ipa_dns_cleanup_stale_domain: ""
+ipa_dns_cleanup_stale_domain_confirm: false
 
 # -----------------------------------------------------------------------------
 # 03. PostgreSQL
@@ -252,8 +275,7 @@ ssl_key_file: "server.key"
 # -----------------------------------------------------------------------------
 # 04. Cloudera Manager, Runtime, parcel, and CSD repositories
 # -----------------------------------------------------------------------------
-cm_version: "7.13.2.6"
-cm_numeric_version: "713200006"
+cm_version: "7.13.2.20000"
 # Archive path under .../p/cm7/ (cumulative hotfixes use patch/<version>/).
 cm_repo_version_path: >-
   {%- set cm_build = cm_version.split('.')[-1] | int -%}
@@ -263,10 +285,11 @@ cm_repo_version_path: >-
   {{ cm_version }}
   {%- endif -%}
 
-cdh_version: "7.3.2.0"
-cdh_numeric_version: "77083870"
-# Spark is bundled in the CDH parcel for 7.3.1+ — separate SPARK3 parcel not required
+cdh_version: "7.3.2.20000"
+# Spark3 is bundled in the CDH parcel for 7.3.1+; the CM service descriptor remains SPARK3_ON_YARN.
 cdh_spark_bundled_min_version: "7.3.1"
+base_cluster_spark3_service_name: spark3
+base_cluster_spark3_service_type: SPARK3_ON_YARN
 
 # spark_version: "3.3.1.7.3.1.700"
 # spark_minor_version: "3.3.1.7.3.1.700"
@@ -451,8 +474,20 @@ cm_admin_user: "admin"
 cm_admin_pass: "admin"
 # Factory CM login password on first boot (used to reset to cm_admin_pass when different)
 cm_admin_bootstrap_pass: "admin"
-cdh_basecluster_name: "CDP-base-cluster"
+base_cluster_default_name: >-
+  {{
+    (
+      (deployment_name_prefix | default('', true) | trim) ~ '-'
+      if (deployment_name_prefix | default('', true) | trim | length > 0)
+      else ''
+    )
+    ~ 'base-cluster'
+  }}
+cdh_basecluster_name: "{{ base_cluster_default_name }}"
 base_cluster_legacy_name: "CDH-Cluster"
+base_cluster_legacy_names:
+  - "CDP-base-cluster"
+  - "{{ base_cluster_legacy_name }}"
 # When the unchanged default name is absent, safely adopt the single CM cluster
 # containing the configured base master only when it also contains every base host.
 base_cluster_adopt_by_master_host: true
@@ -471,11 +506,20 @@ base_cluster_repair_hive_canary_catalogs: true
 base_cluster_hue_database_name: hue
 base_cluster_hue_database_user: hue
 base_cluster_hue_database_password: hue
-# Hue parcel Python: 3.11+ uses lib/hue/build/env; older CDH uses build/venvs/pythonX.Y (see discover_hue_parcel_python.yml).
-base_cluster_hue_parcel_hue_root: /opt/cloudera/parcels/CDH/lib/hue
+# Hue parcel Python: current releases use lib/hue/build/env; older CDH uses
+# build/venvs/pythonX.Y. Resolve the repository-selected version directly
+# instead of trusting the CDH symlink during parcel activation.
+base_cluster_hue_parcel_hue_root: >-
+  /opt/cloudera/parcels/CDH-{{
+    base_cluster_cdh_parcel_version_effective | default(cdh_parcel_version)
+  }}/lib/hue
 base_cluster_hue_python_version: "{{ python_version }}"
 base_cluster_hue_venv_wait_retries: 24
 base_cluster_hue_venv_wait_delay: 15
+base_cluster_hue_service_user: hue
+# Empty installs the current compatible psycopg 3 binary release in Hue's
+# parcel environment; set an exact library version to pin it.
+base_cluster_hue_psycopg_binary_version: ""
 base_cluster_ranger_database_name: ranger
 base_cluster_ranger_database_user: rangeradmin
 base_cluster_ranger_database_password: rangeradmin
@@ -484,8 +528,6 @@ base_cluster_ranger_admin_password: "{{ common_password | default(ipaadmin_passw
 base_cluster_ranger_keyadmin_password: "{{ base_cluster_ranger_admin_password }}"
 base_cluster_ranger_tagsync_password: "{{ base_cluster_ranger_admin_password }}"
 base_cluster_ranger_usersync_password: "{{ base_cluster_ranger_admin_password }}"
-base_cluster_spark3_service_name: spark3
-base_cluster_spark3_service_type: SPARK3_ON_YARN
 # Ranger Admin LDAP authentication and UserSync source. Admin LDAP is reconciled
 # before UserSync. auto follows identity_provider_effective; freeipa/ad select
 # those provider defaults, external uses the fields below, and none omits LDAP
@@ -754,9 +796,9 @@ base_cluster_ranger_usersync_role_config: >-
   }}
 # Ranger Admin UI (direct on base master; not Knox gateway path)
 base_cluster_ranger_admin_port: 6182
-base_cluster_hdfs_name_dir: /dfs/nn
 # Direct web UI ports on base-masters (used when Knox is disabled; Knox uses cdp-proxy below)
 base_cluster_hdfs_namenode_ui_port: 9870
+base_cluster_hdfs_name_dir: /dfs/nn
 base_cluster_yarn_rm_ui_port: 8088
 base_cluster_hue_ui_port: 8888
 base_cluster_hbase_master_ui_port: 16010
@@ -778,13 +820,14 @@ base_cluster_adopt_existing_ozone_ha: true
 base_cluster_kafka_metadata_store: Zookeeper
 # Set true only when intentionally rotating redacted Hive/Ranger/Knox secrets.
 base_cluster_force_secret_update: false
-# Records completion of non-destructive service initialization used to recover an interrupted First Run.
+# Records successful CM First Run plus final service-health verification for this cluster UUID.
 base_cluster_initialization_marker_path: /var/lib/cloudera-scm-server/.ansible-base-cluster-initialized
-# When true, submit CM First Run even on an existing cluster (normally auto-detected when the marker
-# is missing and HDFS is not STARTED/GOOD — e.g. playbook failed on Knox config before First Run).
+# When true, submit CM First Run even when the matching completion marker exists.
+# The NameNode storage must still be unformatted; automation never reformats an
+# existing HDFS namespace.
 base_cluster_force_first_run: false
 # CDE and other compute workloads require a CM Data Context on the base
-# cluster. Playbooks 31 and 34 create or verify it before successful completion.
+# cluster. Playbook 31 creates it before recording successful initialization.
 base_cluster_data_context_enabled: true
 base_cluster_data_context_name: SDX
 base_cluster_data_context_services:
@@ -808,7 +851,7 @@ base_cluster_install_services:
   hive_on_tez: true
   hbase: true
   hue: true
-  # Iceberg is provided through Hive, Impala, and Spark 3 in CDP 7.3.x (no standalone CM service).
+  # Iceberg is provided through Hive, Impala, and Spark3 in CDP 7.3.x (no standalone CM service).
   iceberg: true
   # Replication Manager is not on CDH 7.3.2; enable when the parcel supports REPLICATION_MANAGER.
   replication: false
@@ -834,22 +877,26 @@ base_cluster_yarn_nm_vcores: 4
 # Run it asynchronously so Jenkins emits a poll update instead of appearing frozen.
 base_cluster_module_async_timeout: 7500
 base_cluster_module_poll_interval: 15
+# Each parcel gets its own workflow deadline across download, distribution, and
+# activation. Public archive downloads can take several hours; Base CDH/CFM
+# parcels are processed concurrently when both are enabled.
+cluster_parcel_timeout_seconds: 14400
+cluster_parcel_poll_delay: 15
+cluster_parcel_max_workers: 2
+cluster_parcel_command_retries: 3
+cluster_parcel_command_retry_delay: 10
 # Do not persist the initialization marker until every enabled service with a
 # runtime role is STARTED and reports one of these health summaries.
 base_cluster_service_health_retries: 90
 base_cluster_service_health_delay: 10
 base_cluster_accepted_health_summaries:
   - GOOD
-# CM can time out its Knox readiness subcommand shortly before the gateway
-# reaches healthy state. Bound the narrow First Run recovery wait.
-base_cluster_knox_readiness_recovery_retries: 30
-base_cluster_knox_readiness_recovery_delay: 10
 # Poll Knox /gateway/health/v1/gateway-status until cdp-proxy* topologies leave the wait list.
 base_cluster_knox_cdp_proxy_topology_retries: 60
 base_cluster_knox_cdp_proxy_topology_delay: 10
 base_cluster_knox_gateway_https_port: 8443
-# During interrupted First Run recovery, start SCM alone and wait for its
-# authenticated HA status to report LEADER before starting Ozone DataNodes.
+# For a previously initialized cluster whose Ozone service later becomes BAD,
+# start SCM alone and wait for authenticated HA leadership before other roles.
 base_cluster_ozone_scm_leader_retries: 60
 base_cluster_ozone_scm_leader_delay: 5
 # New clusters are Kerberized before First Run; existing unsecure clusters use
@@ -864,7 +911,9 @@ base_cluster_knox_configure_kerberos: true
 # Restart CMS after base-cluster startup and security convergence.
 base_cluster_restart_cms_after_start: true
 
-cdh_parcel_version: "{{ cdh_version.split('.')[:3] | join('.') }}-1.cdh{{ cdh_version.split('.')[:3] | join('.') }}.p{{ cdh_version.split('.')[-1] }}.{{ cdh_numeric_version }}"
+cdh_parcel_version: >-
+  {{ cdh_version.split('.')[:3] | join('.') }}-1.cdh{{
+  cdh_version.split('.')[:3] | join('.') }}.p{{ cdh_version.split('.')[-1] }}
 kerberos_principal: "{{ ipaadmin_principal }}/{{ ipaadmin_principal }}@{{ cluster_realm }}"
 kerberos_password: "{{ ipaadmin_password }}"
 license_file_name: "license.txt"
@@ -934,6 +983,8 @@ cm_cms_update_reports_manager_password: false
 # After 27_setup_cm_autotls.yml, point CMS Java clients (firehose/headlamp) at agent Auto-TLS truststore.
 cm_cms_configure_autotls_trust: true
 cm_cms_autotls_truststore_path: /var/lib/cloudera-scm-agent/agent-cert/cm-auto-global_truststore.jks
+cm_cms_autotls_keystore_path: /var/lib/cloudera-scm-agent/agent-cert/cm-auto-host_keystore.jks
+cm_cms_autotls_keystore_password_path: /var/lib/cloudera-scm-agent/agent-cert/cm-auto-host_key.pw
 # CM redacts this secret on reads; set true only for an explicit truststore password repair.
 cm_cms_update_autotls_truststore_password: false
 # Knox service discovery calls CM over HTTPS and must use the Auto-TLS truststore.
@@ -1283,74 +1334,6 @@ cleanup_ecs_service_library_paths:
   - /var/lib/rancher
   - /var/lib/rke2
 
-# Service-owned /var/lib directories removed whenever base-cluster cleanup runs,
-# in both scoped and end-to-end cleanup modes. Infrastructure services such as
-# PostgreSQL, FreeIPA, and Cloudera Manager are intentionally controlled separately.
-cleanup_base_service_path_names:
-  - accumulo
-  - atlas
-  - cruisecontrol
-  - dataviz
-  - dpprofiler
-  - druid
-  - flink
-  - flume
-  - hadoop
-  - hadoop-hdfs
-  - hadoop-kms
-  - hadoop-mapreduce
-  - hadoop-ozone
-  - hadoop-yarn
-  - hbase
-  - hbase-solr
-  - hive
-  - hive-hcatalog
-  - hive-webhcat
-  - httpfs
-  - hue
-  - impala
-  - kafka
-  - knox
-  - kraft
-  - kudu
-  - livy
-  - kms
-  - mapred
-  - nifi
-  - nifi-registry
-  - nifiregistry
-  - omid
-  - oozie
-  - ozone
-  - phoenix
-  - ranger
-  - rangerraz
-  - rangerrms
-  - replication-manager
-  - schemaregistry
-  - solr
-  - spark
-  - spark3
-  - sqoop
-  - streams
-  - streamsmsgmgr
-  - streamsrepmgr
-  - superset
-  - tez
-  - yarn
-  - zeppelin
-  - zookeeper
-
-cleanup_ecs_service_library_paths:
-  - /var/lib/cni
-  - /var/lib/containerd
-  - /var/lib/docker
-  - /var/lib/docker_server
-  - /var/lib/kubelet
-  - /var/lib/longhorn
-  - /var/lib/rancher
-  - /var/lib/rke2
-
 # ECS-specific options
 cleanup_reset_iptables: false
 cleanup_ecs_remove_docker_registry: true
@@ -1360,7 +1343,17 @@ cleanup_ecs_run_rke2_killall: true
 cleanup_reboot_hosts: false
 
 # Cluster names for API deletion
-ecs_cluster_name: "ECS-Cluster"
+ecs_cluster_default_name: >-
+  {{
+    (
+      (deployment_name_prefix | default('', true) | trim) ~ '-'
+      if (deployment_name_prefix | default('', true) | trim | length > 0)
+      else ''
+    )
+    ~ 'ecs-cluster'
+  }}
+ecs_cluster_name: "{{ ecs_cluster_default_name }}"
+ecs_cluster_legacy_name: "ECS-Cluster"
 
 # When CM itself is removed, clear schemas/tables from all configured databases
 # while preserving the database objects and login roles for the next install.
@@ -1375,21 +1368,26 @@ cleanup_reset_service_databases: true
 ecs_deploy_enabled: auto  # auto | true | false — auto runs when ecs-masters/workers exist
 ecs_cluster_master_group: ecs-masters
 ecs_cluster_worker_group: ecs-workers
-ecs_pvc_ds_version: "1.5.5-h3300"  # CDS 1.5.5 SP3 CHF3 repo tag
+ecs_pvc_ds_version: "1.5.5-h40000"  # CDS 1.5.5 repo tag
 ecs_pvc_repository_url: "{{ cm_repo_public_base_url }}/cdp-pvc-ds/{{ ecs_pvc_ds_version }}"
 ecs_parcel_repo_url: "{{ ecs_pvc_repository_url }}/parcels/"
 ecs_parcel_repo_latest_url: "{{ cm_repo_public_base_url }}/cdp-pvc-ds/{{ cm_parcel_repo_latest_segment }}/parcels/"
-# Optional override; when empty the playbook discovers the latest ECS parcel from CM after refresh
+# Optional override; when empty the playbook resolves the single ECS parcel from the pinned repository manifest
 ecs_parcel_version: ""
-ecs_app_domain: "apps.{{ cluster_domain }}"
+# ECS/CM parent application domain. ECS adds the "apps." ingress label.
+ecs_application_domain: "{{ cluster_domain }}"
+# Effective ingress DNS suffix for console and data-service hostnames.
+ecs_app_domain: "apps.{{ ecs_application_domain }}"
 # ECS Management Console DNS label (FQDN {{ ecs_console_host_prefix }}.{{ ecs_app_domain }})
 ecs_console_host_prefix: "console-cdp"
-ecs_coredns_deployment_name: rke2-coredns-rke2-coredns
-# Optional direct DNS upstream override; defaults to FreeIPA/AD inventory addresses.
-ecs_coredns_forwarders: []
 ecs_console_dns_wait_retries: 24
 ecs_console_dns_wait_delay: 5
 ecs_docker_data_path: "/mnt/docker"
+ecs_cluster_cidr: "172.42.0.0/16"
+ecs_service_cidr: "172.43.0.0/16"
+ecs_image_basepath: "cdp-private"
+ecs_docker_registry: "container.repository.cloudera.com"
+ecs_external_registry_enabled: true
 ecs_lso_data_path: "/ecs/local-storage"
 ecs_longhorn_data_path: "/ecs/longhorn-storage"
 ecs_longhorn_replication: 1
@@ -1397,10 +1395,11 @@ ecs_nfs_over_provisioning: 800
 # Internal ECS Kubernetes WebUI service token passed during installation.
 # This is not a username/password login and is intentionally omitted from the portal.
 ecs_k8s_webui_secret_admin_token: "ChangeMe@ECS-WebUI"
-ecs_cp_prometheus_ingress_user: "{{ cm_admin_user }}"
-ecs_cp_prometheus_ingress_password: "{{ cm_admin_pass }}"
-ecs_infra_prometheus_ingress_user: "{{ cm_admin_user }}"
-ecs_infra_prometheus_ingress_password: "{{ cm_admin_pass }}"
+ecs_prometheus_ingress_password: "{{ common_password | default(ipaadmin_password, true) }}"
+ecs_cp_prometheus_ingress_user: "cloudera-manager"
+ecs_cp_prometheus_ingress_password: "{{ ecs_prometheus_ingress_password }}"
+ecs_infra_prometheus_ingress_user: "cloudera-manager"
+ecs_infra_prometheus_ingress_password: "{{ ecs_prometheus_ingress_password }}"
 # ECS Management Console bootstrap admin (UMS); must meet CDP complexity rules
 ecs_console_admin_password: "{{ common_password | default(ipaadmin_password, true) }}"
 ecs_control_plane_database_mode: embedded  # embedded | existing (existing needs full control_plane_config)
@@ -1412,15 +1411,20 @@ ecs_control_plane_container_id: "1000001"
 ecs_control_plane_install_poll_retries: 240
 ecs_control_plane_install_poll_delay: 15
 ecs_reconcile_coredns: true
+ecs_rke2_server_manifests_dir: /var/lib/rancher/rke2/server/manifests
+ecs_rke2_coredns_helm_config_path: >-
+  {{ ecs_rke2_server_manifests_dir }}/rke2-coredns-config.yaml
 ecs_coredns_kubeconfig_path: /etc/rancher/rke2/rke2.yaml
 ecs_coredns_kubectl_path: /var/lib/rancher/rke2/bin/kubectl
 ecs_coredns_configmap_name: rke2-coredns-rke2-coredns
 ecs_coredns_deployment_name: rke2-coredns-rke2-coredns
+ecs_coredns_service_name: rke2-coredns-rke2-coredns
 ecs_coredns_namespace: kube-system
+# Required when ECS pods use the node-local DNS cache. Reconcile a dedicated
+# cluster-domain server block before environment creation and after First Run.
 ecs_node_local_dns_reconcile: true
-# Preserve the proven October 31/November 1 install path by default: verify the
-# applied CoreDNS forward stanza without mutating node-local DNS. Enable only
-# for targeted diagnostics.
+# Optional probe-pod and automatic rolling-recovery diagnostics. Required
+# CoreDNS and node-local forwarding reconciliation is not gated by this flag.
 ecs_coredns_extended_verification_enabled: false
 ecs_node_local_dns_configmap_name: node-local-dns
 ecs_node_local_dns_daemonset_name: node-local-dns
@@ -1456,6 +1460,14 @@ ecs_api_private_key: ""
 ecs_auto_provision_api_access_key: true
 ecs_automation_machine_user: cldr-automation-sa
 ecs_automation_access_key_type: V2
+ecs_automation_assign_all_tenant_roles: true
+ecs_automation_assign_all_resource_roles_on_env: true
+ecs_automation_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|environment)'
+ecs_automation_resource_role_name_regex: '(?i)(admin|owner|power|environment|de|dw|ml|data)'
+ecs_iam_use_installer_credentials: true
+ecs_iam_installer_secret_namespace: cdp
+ecs_iam_installer_secret_name: cm.creds
+ecs_iam_installer_secret_key: cdp_keys.json
 ecs_iam_bootstrap_access_key_id: ""
 ecs_iam_bootstrap_private_key: ""
 ecs_local_state_dir: >-
@@ -1487,7 +1499,12 @@ ecs_persistent_state_dir: >-
   }}
 ecs_cdp_cli_venv_path: "{{ ecs_persistent_state_dir }}/cdpcli-0.9.164"
 ecs_api_credentials_cache_path: "{{ ecs_persistent_state_dir }}/ecs-automation-api-credentials.yml"
-ecs_data_services_catalog_cache_path: "{{ ecs_persistent_state_dir }}/ecs-data-services-catalog.yml"
+ecs_data_services_catalog_cache_path: >-
+  {{
+    lookup('env', 'CDP_DATA_SERVICES_CATALOG_PATH')
+    | default(playbook_dir ~ '/ecs-data-services-catalog.yml', true)
+  }}
+ecs_data_services_catalog_legacy_cache_path: "{{ ecs_persistent_state_dir }}/ecs-data-services-catalog.yml"
 ecs_cdw_force_reset_cluster_id: ""
 ecs_cdw_force_reset_confirm: ""
 ecs_cdw_force_reset_wait_retries: 40
@@ -1515,19 +1532,42 @@ ecs_data_services_catalog:
     name: Cloudera Data Warehouse
     description: CDW on ECS control plane
     url: ""
+    data_visualization:
+      name: ""
+      effective_name: ""
+      status: ""
   cde:
     name: Cloudera Data Engineering
     description: CDE virtual clusters
     url: ""
+    virtual_cluster:
+      name: ""
+      effective_name: ""
+      status: ""
   cai:
     name: Cloudera AI
     description: Cloudera AI workspaces
     url: ""
-# CDP environment name on private cloud (must match ECS control plane environment)
-ecs_cdp_environment_name: ecs
+  model_registry:
+    name: Model Registry
+    description: Cloudera AI Model Registry
+    url: ""
+# Each fresh Base/ECS deployment needs a unique environment name. Exact-name
+# reuse is idempotent; adopting a differently named environment is opt-in.
+ecs_cdp_environment_name: "{{ cluster_domain.split('.')[0] | lower | regex_replace('[^a-z0-9-]', '-') }}"
 ecs_cdp_environment_adopt_single_existing: false
+ecs_cdp_environment_create_if_missing: true
 ecs_cdp_console_api_url: ""  # default https://{{ ecs_console_host_prefix }}.{{ ecs_app_domain }}
 ecs_data_services_verify_tls: false
+# Independently control the playbook 34 SDX create/verify gate. Base-cluster
+# creation uses base_cluster_data_context_enabled.
+ecs_data_services_base_data_context_enabled: true
+# Fresh DNS probes do not clear the long-lived Service Discovery JVM resolver
+# cache. Refresh only that deployment before CDW/CDE/CAI backend submissions.
+ecs_data_services_refresh_service_discovery_dns: true
+ecs_service_discovery_namespace: cdp
+ecs_service_discovery_deployment_name: cdp-release-thunderhead-servicediscoverysimple
+ecs_service_discovery_rollout_timeout: 300
 # Optional ECS control plane LDAP (FreeIPA/AD) — playbook 33 end and/or 34
 ecs_ldap_enabled: false
 ecs_data_services_configure_ldap: false  # when true, sync LDAP before installing CDW/CDE/CAI in playbook 34
@@ -1601,6 +1641,15 @@ ecs_cdw_vw_file_ccache_config:
         content:
           keyValues:
             KRB5CCNAME: "{{ ecs_cdw_vw_krb5ccname }}"
+ecs_cdw_dataviz_name: "{{ ecs_cluster_name | regex_replace('[^a-zA-Z0-9]+', '-') | lower }}-viz"
+ecs_cdw_dataviz_name_attempts: 10
+ecs_cdw_dataviz_name_max_length: 40
+ecs_cdw_dataviz_user_groups: []
+ecs_cdw_dataviz_admin_groups: []
+ecs_cdw_dataviz_resource_template: ""
+ecs_cdw_dataviz_resource_pool: ""
+ecs_cdw_dataviz_wait_retries: 120
+ecs_cdw_dataviz_wait_delay: 30
 ecs_cdw_dbc_wait_retries: 40
 ecs_cdw_dbc_wait_delay: 30
 # Accept a stale non-Running DBC API status only when the exact warehouse
@@ -1614,26 +1663,83 @@ ecs_data_services_dns_probe_attempts: 3
 ecs_data_services_dns_probe_retry_delay: 31
 ecs_data_services_dns_probe_wait_retries: 24
 ecs_data_services_dns_probe_wait_delay: 5
-# Independently control the playbook 34 SDX create/verify gate. Base-cluster
-# creation uses base_cluster_data_context_enabled.
-ecs_data_services_base_data_context_enabled: true
-# Fresh DNS probes do not clear the long-lived Service Discovery JVM resolver
-# cache. Refresh only that deployment before CDW/CDE/CAI backend submissions.
-ecs_data_services_refresh_service_discovery_dns: true
-ecs_service_discovery_namespace: cdp
-ecs_service_discovery_deployment_name: cdp-release-thunderhead-servicediscoverysimple
-ecs_service_discovery_rollout_timeout: 300
 ecs_data_services_cm_probe_port: 7183
 ecs_data_services_ldap_probe_port: 636
 ecs_data_services_tcp_probe_timeout: 10
 # CDE
 ecs_cde_service_name: "{{ ecs_cluster_name | regex_replace('[^a-zA-Z0-9]+', '-') | lower }}-de"
+# Stable fresh-install naming is the default. Increase only when intentionally
+# retaining failed/stale services and creating a separately suffixed service.
+ecs_cde_service_name_attempts: 1
+ecs_cde_service_name_max_length: 40
+ecs_cde_service_green_statuses:
+  - ClusterCreationCompleted
+  - Running
+  - Ready
+  - Available
+ecs_cde_service_transitional_statuses:
+  - ClusterCreationInProgress
+  - Creating
+  - Created
+  - Accepted
+  - Starting
+  - Waiting
+  - Updating
+  - Restarting
+# Historical tombstones returned by list-services --no-remove-deleted do not
+# reserve the service name after deletion has completed.
+ecs_cde_service_deleted_statuses:
+  - ClusterDeletionCompleted
+  - Deleted
 ecs_cde_instance_type: private
-ecs_cde_cpu_requests: "40"
-ecs_cde_memory_requests: 64Gi
+ecs_cde_cpu_requests: "300"
+ecs_cde_memory_requests: 1000Gi
 ecs_cde_resource_pool: "root.{{ ecs_cdp_environment_name }}.cde"
+ecs_cde_creator_crn: ""
+ecs_cde_control_plane_namespace: cdp
+ecs_cde_diagnostics_log_since: 20m
+ecs_cde_diagnostics_log_tail: 300
+ecs_cde_virtual_cluster_name: "{{ ecs_cde_service_name }}-vc"
+# Try the stable base name first, then -1, -2, ... only when retained
+# completed-deletion history or another non-reusable record reserves a name.
+ecs_cde_virtual_cluster_name_attempts: 10
+ecs_cde_virtual_cluster_name_max_length: 40
+# Reruns may replace only the configured VC when it is explicitly terminal-failed.
+# Healthy, transitional, deleting, unknown, or differently named VCs are retained.
+ecs_cde_virtual_cluster_recreate_terminal_failed: true
+ecs_cde_virtual_cluster_green_statuses:
+  - AppInstalled
+  - Running
+  - Ready
+ecs_cde_virtual_cluster_transitional_statuses:
+  - AppInstallationInitiated
+  - AppInstallationInProgress
+  - AppResumeInitiated
+  - AppResumeInProgress
+  - Creating
+  - Starting
+  - Waiting
+  - Updating
+ecs_cde_virtual_cluster_terminal_failure_statuses:
+  - AppDeletionFailed
+  - AppInstallationFailed
+  - AppResumeFailed
+  - AppSuspendFailed
+  - AppUpgradeFailed
+  - Failed
+  - Error
+ecs_cde_virtual_cluster_deleted_statuses:
+  - AppDeleted
+  - AppNotDeletedFromDB
+ecs_cde_virtual_cluster_cpu_requests: "20"
+ecs_cde_virtual_cluster_memory_requests: 30Gi
+ecs_cde_virtual_cluster_tier: CORE
 # CAI / CML workspace
-ecs_cai_workspace_name: "{{ ecs_cluster_name | regex_replace('[^a-zA-Z0-9]+', '-') | lower }}-ml"
+ecs_cai_workspace_name: cai-wb-1
+ecs_cai_workspace_name_attempts: 10
+ecs_cai_workspace_name_max_length: 40
+ecs_cai_workspace_reconcile_retries: 6
+ecs_cai_workspace_reconcile_delay: 10
 ecs_cai_k8s_namespace: cml
 ecs_cai_resource_pool:
   workspace_quota:
@@ -1644,13 +1750,11 @@ ecs_cai_enable_metrics: true
 ecs_cai_enable_tls: true
 ecs_cai_enable_monitoring: true
 ecs_cai_configure_wildcard_tls: true
-ecs_cai_recreate_failed_workspace: true
 ecs_cai_wildcard_cert_profile: wildcard
 ecs_cai_tls_secret_name: cml-tls-secret
 # Stable CAI ingress label. The resulting base hostname is
 # <static_subdomain>.<ecs_app_domain>; the TLS certificate must also cover
-# *.<static_subdomain>.<ecs_app_domain>. The private-cloud API limits this
-# label to 15 characters.
+# *.<static_subdomain>.<ecs_app_domain>.
 ecs_cai_static_subdomain: cai
 # External/AD/no-identity-provider TLS inputs on the Ansible controller.
 # A trusted existing cml-tls-secret is reused when it validates against this CA.
@@ -1669,9 +1773,6 @@ ecs_model_registry_subdomain: model-registry
 ecs_model_registry_s3_bucket: "{{ cdh_basecluster_name | lower }}-registry"
 ecs_model_registry_s3_endpoint: ""  # default https://<selected-ozone-host-fqdn>:9879
 ecs_model_registry_ozone_service_id: o3service1
-# Model Registry CRP namespace ownership must be a human user CRN, not the
-# automation machine-user CRN. Blank reuses the LDAP admin user resolved by
-# ecs_ldap_assign_admin_permissions.yml.
 ecs_model_registry_creator_crn: ""
 
 # -----------------------------------------------------------------------------
@@ -1798,7 +1899,7 @@ deployment_portal_pgadmin_container: cldr-portal-pgadmin
 deployment_portal_pgadmin_postgres_sslmode: prefer
 # When true, print docker logs for pgAdmin after successful PORTAL sync (troubleshooting).
 deployment_portal_pgadmin_debug_logs: false
-# pgAdmin validates PGADMIN_DEFAULT_EMAIL; IPA/cluster .local domains (e.g. cldrsetup.local) fail at container start.
+# pgAdmin validates PGADMIN_DEFAULT_EMAIL; legacy .local cluster domains fail at container start (default domain is cldr.internal.arpa).
 pgadmin_default_email: "admin@{{ caddy_vhost_public_base }}"
 pgadmin_default_password: "{{ postgres_password }}"
 deployment_portal_inventory_groups:
@@ -2146,6 +2247,8 @@ cleanup_cm_packages:
 os_vars:
   RedHat:
     pkg_mgr: dnf
+    prereq_disabled_repositories:
+      - "pgdg*"
     prereq_packages:
       - wget
       - telnet

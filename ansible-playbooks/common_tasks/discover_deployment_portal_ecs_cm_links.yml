@@ -1,0 +1,5 @@
+---
+- name: Compatibility entry point for deployment portal ECS CM link discovery
+  ansible.builtin.import_role:
+    name: deployment_portal
+    tasks_from: discover_deployment_portal_ecs_cm_links

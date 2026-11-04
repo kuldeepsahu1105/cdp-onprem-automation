@@ -22,7 +22,10 @@ cd ansible-playbooks
 | **Single playbook** | `./run-playbook.sh 10_setup_deployment_portal.yml` **or** `ansible-playbook …` (each playbook imports `ensure_collections.yml`) **or** once manually: `ansible-galaxy collection install -r requirements.yml` |
 
 2. Prepare `inventory.ini` with your hosts (see [REFERENCE.md](REFERENCE.md#inventory-groups)).
-3. Configure `group_vars/all.yml` (domain, passwords, AD vars if needed).
+3. Run `vi config.yml` for deployment choices and complete the
+   [operator editing checklist](CONFIGURATION.md#operator-editing-checklist).
+   Keep `group_vars/all.yml` as the defaults reference and passwords in protected
+   extra vars/Vault, not tracked YAML.
 4. Place `license.txt` and an SSH private key in `ansible-playbooks/` (or use `~/.ssh/id_rsa`):
    - `*.pem` (e.g. `sshkey.pem` copied from Terraform output)
    - `id_rsa` in `ansible-playbooks/`
@@ -33,9 +36,13 @@ cd ansible-playbooks
    - `*info.txt` in `ansible-playbooks/` with `login:` and `password:` lines
    - `CM_INFO_FILE=/path/to/info.txt`
    - `CM_REPO_USERNAME` + `CM_REPO_PASSWORD` environment variables
-   - `cm_repo_username` / `cm_repo_password` in `group_vars/all.yml`
+   - `cm_repo_username` / `cm_repo_password` in protected Vault/extra vars
 
    If an info file or env vars are set, the wrapper passes them as Ansible extra vars; you do **not** also need credentials in `all.yml` or manual `-e` flags.
+   Direct `ansible-playbook` and `run-playbook.sh` do not translate the wrapper's
+   archive environment variables: use `-e @/secure/path/deployment-secrets.vault.yml`
+   and Vault password input. For direct SSH use `--private-key /secure/path/key`
+   or `ansible_ssh_private_key_file`, not just the wrapper's `ANSIBLE_PRIVATE_KEY`.
 
 ## Control node and OS support
 
@@ -232,7 +239,9 @@ flowchart LR
 
 **pgAdmin connection prompt:** Read the red error below the password box. The server preset uses `postgres_host_fqdn`, matching the original pgAdmin configuration and the PostgreSQL certificate identity. Because the container does not necessarily use the cluster/IPA resolver, Compose adds an `extra_hosts` entry that maps this FQDN to the database host's `private_ip`, then `ansible_host`, with the FQDN only as a final fallback. Passwords cannot be imported in `servers.json`, so Ansible renders `{{ deployment_portal_config_dir }}/pgadmin-pgpass` from the effective `postgres_password` with mode **0600** and Compose mounts it read-only as `/var/lib/pgadmin/.pgpass`; its host field uses the same FQDN. A direct mount is required because the image's `PGPASS_FILE` entrypoint copy runs only while initially creating `pgadmin4.db`, but Docker retains the image's anonymous `/var/lib/pgadmin` volume across ordinary container recreation. The default `deployment_portal_pgadmin_postgres_sslmode: prefer` preserves the original SSL-preferred behavior. On a new deployment, PORTAL precedes CM_INSTALL, so verification skips database login while no PostgreSQL unit exists; play 23 in CM_INSTALL remains the sole database installer. Once installed, the gate resolves the unit matching `postgresql_version` and starts it when stopped; it never restarts a running database. Startup and login failures include the exact unit status and journal. Ambiguous units also include listener and process evidence. If startup fails, repair the database or re-run PostgreSQL play **23**; DNS failures do not require password rotation.
 
-**pgAdmin restart loop / invalid email:** pgAdmin rejects `PGADMIN_DEFAULT_EMAIL` values like `admin@cldrsetup.local` (from `admin@{{ cluster_domain }}`). Set `pgadmin_default_email` to a real TLD (default `admin@pvc.cloudera-labs.com`), re-render compose, then on the portal host: `cd /opt/cldr-deployment-portal && docker compose up -d --force-recreate pgadmin`.
+**pgAdmin restart loop / invalid email:** pgAdmin rejects `PGADMIN_DEFAULT_EMAIL` values like `admin@cldrsetup.local` (legacy clusters using `admin@{{ cluster_domain }}`). Set `pgadmin_default_email` to a real TLD (default `admin@pvc.cloudera-labs.com`), re-render compose, then on the portal host: `cd /opt/cldr-deployment-portal && docker compose up -d --force-recreate pgadmin`.
+
+**Cluster domain / Ozone TLS (HDDS-16034):** Default FreeIPA domain is `cldr.internal.arpa` (realm `CLDR.INTERNAL.ARPA`). Names under the IANA `.arpa` infrastructure TLD pass automation validation, including `*.internal.arpa`, `*.local.arpa`, and `*.home.arpa` (RFC 8375). Bare private suffixes (`.local`, `.internal`, `.lan`, `.corp`, `.home`, `.test`, `.localdomain` without a trailing `.arpa`) still fail with errors such as `Invalid domain` during Auto-TLS or `CertificateSignRequest`. **Ozone acceptance of `*.internal.arpa` / `*.local.arpa` is not confirmed** in community threads — operators accept that risk or choose `cluster.home.arpa` / `lab.example.com`. Validation runs in playbook **02** and `detect_identity.yml` (`validate_cluster_domain_ozone_hostname.yml`), and Jenkins `validate-prereqs.sh` checks domains you set in `ANSIBLE_GROUP_VARS_YAML` or tfvars. Grandfathered legacy values `cldrsetup.local` and `cldr.internal` warn only when explicitly overridden. Brownfield stacks that cannot rename DNS yet: `cluster_domain_skip_ozone_hostname_validation: true` in Jenkins/tfvars.
 
 When multiple `*.pem` / `id_rsa` or `*license*` files exist in `ansible-playbooks/`, the wrapper prompts you to choose. Override with `ANSIBLE_PRIVATE_KEY`, `LICENSE_FILE`, or `CM_INFO_FILE`.
 
@@ -246,58 +255,6 @@ export ANSIBLE_PRIVATE_KEY=/path/to/your-key.pem   # or place sshkey.pem / id_rs
 ansible-playbook -i inventory.ini 00_setup_ssh_preqs.yml --private-key "$ANSIBLE_PRIVATE_KEY"
 ansible-playbook -i inventory.ini 27_setup_cm_autotls.yml --private-key "$ANSIBLE_PRIVATE_KEY"
 ```
-
-The numbered playbooks remain the compatibility API even where implementation
-has moved into `roles/`. For PREREQS, continue invoking `00`–`09` directly or
-use `DEPLOY_PHASE=1 ./pvc_setup.sh`; do not replace those calls with ad hoc
-role-only playbooks because the wrappers preserve host targeting, privilege
-escalation, and multi-play ordering.
-
-The same rule applies to PORTAL: invoke
-`10_setup_deployment_portal.yml` for bootstrap and
-`35_refresh_deployment_portal.yml` for refresh. Both orchestrate
-`roles/deployment_portal` while retaining the controller, exporter, ops-host,
-and Tier B verification play boundaries expected by Jenkins and
-`pvc_setup.sh`.
-
-For IDENTITY, invoke `11_identity_setup.yml` for the routed phase or the
-existing numbered/manual entry point for targeted recovery. The router and
-standalone playbooks retain FreeIPA/AD detection, play order, host selection,
-and cross-play facts while delegating task implementation to
-`roles/identity`; do not construct an ad hoc role-only playbook as a
-replacement.
-
-For CM_INSTALL, continue invoking router `20` and playbooks `23`–`26`
-directly, or use `DEPLOY_PHASE=3 ./pvc_setup.sh`. Their implementations live
-in `roles/cm_install`, but compatibility playbooks retain repository-mode
-routing, PostgreSQL host/service discovery, delegation, and CM API localhost
-facts. In particular, keep plays `25` and `26` in the wrapper's combined
-invocation; splitting them loses the intentional in-process API fact reuse.
-
-For CM security, continue invoking `27_setup_cm_autotls.yml` through
-`30_setup_cm_krbs.yml` directly, or use the existing `cm_tls` phase/Jenkins
-stage. Their task implementation lives in `roles/cm_security`, while the
-numbered wrappers preserve Auto-TLS's agent restart play boundaries and
-serial setting, CMS/LDAP/Kerberos localhost fact reuse, and the FreeIPA KDC
-host play. Keep `27` in its existing separate process and `28`–`30` in the
-wrapper's combined process.
-
-For CDH, continue invoking `31_setup_base_cluster.yml` directly or through
-the existing CDH Jenkins/`pvc_setup.sh` phase. Its implementation lives in
-`roles/cdh_base_cluster`, but the numbered wrapper retains the collection
-bootstrap boundary and the single localhost orchestration scope required for
-CM API facts, First Run recovery, markers, retries, and service ordering.
-
-For monitoring, continue invoking `32_setup_monitoring_stack.yml` or
-`enroll_monitoring_exporters.yml` directly. Their implementation lives in
-`roles/monitoring`, but the compatibility playbooks preserve portal-context
-fact construction, exporter host groups, privilege escalation, `vars_files`,
-and the ops-host content-sync boundary.
-
-For ECS, continue invoking `33_setup_ecs_cluster.yml` and
-`34_setup_ecs_data_services.yml`. Their implementation lives in `roles/ecs`,
-while the wrappers preserve controller-local facts, CM API delegation,
-phased control-plane ordering, and standalone/Jenkins entry points.
 
 Playbooks resolve SSH keys and Auto-TLS material on the **control machine** via `ANSIBLE_PRIVATE_KEY`, files under `ansible-playbooks/`, or `group_vars` (`cm_private_key_path`, `cm_node_sudo_password`). Wrappers only set the same env vars and `--private-key` for convenience.
 
@@ -354,33 +311,78 @@ pre-create a valid `kubernetes.io/tls` secret or set controller-side
 self-signed/untrusted, expired, wrong-SAN, or mismatched-key material before
 workspace submission and never creates a temporary certificate.
 
-ECS install owns authoritative DNS and initial CoreDNS reconciliation.
+ECS install owns authoritative FreeIPA records and CoreDNS reconciliation.
 Playbook 33 and its phased installer perform that reconciliation. Playbook 34
-reconciles and verifies the same DNS contract again for standalone safety,
-then restarts and waits for only
-`cdp/cdp-release-thunderhead-servicediscoverysimple` before loading Data
-Services credentials or submitting CDW, CDE, or CAI operations. Terminal failed
+does not rewrite CoreDNS or create Kubernetes DNS probe pods during Data
+Services post-install. If the optional `node-local-dns` ConfigMap exists, its root
+`.:53` forward target is changed from `__PILLAR__UPSTREAM__SERVERS__` to the
+already validated identity DNS forwarders, then its DaemonSet is rolled and
+awaited. The `cluster.local`, `in-addr.arpa`, and `ip6.arpa` blocks remain
+pointed at `__PILLAR__CLUSTER__DNS__`. This behavior defaults on through
+`ecs_node_local_dns_reconcile`; set it to `false` only when node-local DNS is
+managed externally. Fresh IPv4-only pod probes must resolve CM, the ECS
+console, and the effective FreeIPA or Active Directory LDAP endpoint through
+the normal Kubernetes DNS Service, then independently connect to the
+validated IPv4 addresses on CM 7183 and LDAP 636.
+When the Service path remains transiently inconsistent after bounded retries,
+the same fresh pod may query one ready CoreDNS endpoint directly. The fallback
+is accepted only when every required A answer and direct TCP dependency check
+succeeds; it never pins workloads or mutates DNS configuration itself.
+Authoritative Data Services backend reads then retry separately before any
+mutation. The pod logs its resolver configuration and reports each FQDN
+separately. DNS/TCP verification uses at most
+`ecs_data_services_dns_probe_attempts` attempts (default `3`). Failed DNS
+records wait `ecs_data_services_dns_probe_retry_delay` seconds (default `31`)
+between attempts so each retry occurs after the managed CoreDNS 30-second
+negative-cache TTL; successful records are not retried. The independent
+pod wait bound only covers scheduling and image startup.
+
+Fresh pod and CoreDNS Service/endpoint success does not prove that the
+long-lived Service Discovery JVM has refreshed its resolver state. Stale DNS
+inside `cdp-release-thunderhead-servicediscoverysimple` can cause
+remote-context errors, failure to fetch cluster details, misleading
+SDX-not-found messages, `UnknownHostException: cldr-mngr...`, or DB Catalog
+secret-install failures while retrieving CM LDAP configuration even while new
+pods resolve CM correctly. Playbook 34 restarts and waits for only that
+deployment after DNS verification and before Data Services submissions. Set
+`ecs_data_services_refresh_service_discovery_dns: false` only for diagnostic
+isolation. The equivalent manual recovery is:
+
+```bash
+sudo /var/lib/rancher/rke2/bin/kubectl \
+  --kubeconfig /etc/rancher/rke2/rke2.yaml -n cdp \
+  rollout restart deployment/cdp-release-thunderhead-servicediscoverysimple
+sudo /var/lib/rancher/rke2/bin/kubectl \
+  --kubeconfig /etc/rancher/rke2/rke2.yaml -n cdp \
+  rollout status deployment/cdp-release-thunderhead-servicediscoverysimple \
+  --timeout=5m
+sudo /var/lib/rancher/rke2/bin/kubectl \
+  --kubeconfig /etc/rancher/rke2/rke2.yaml -n cdp \
+  logs deployment/cdp-release-thunderhead-servicediscoverysimple \
+  --all-containers=true --since=10m --tail=300
+```
+
+Do not restart CoreDNS, DWX, CDE, or CAI for this condition. Do not mutate
+FreeIPA principals or keytabs.
+
+When a healthy CDE service already exists, CDE preflight also describes that
+service through the Management Console before submitting a new service. This
+exercises the same Management Console-to-Cloudera Manager DNS/API path used by
+`enableService` and retries transient `UnknownHostException` failures after the
+CoreDNS negative-cache interval without restarting or rewriting CoreDNS.
+CDW and CAI retain their existing authoritative `dw_cluster_info` and
+`ml_info` preflight behavior, but those read-only calls use the same bounded
+retry interval so transient backend DNS/cache errors clear before any
+principal, cluster, TLS, or workspace mutation begins.
+
+Terminal failed
 CDW/CDE/CAI resources are reported without automated disable, deletion,
 recreation, backend restart, or datastore mutation; independent service
 boundaries still allow later selected services to run before the final
 aggregate failure.
 
-Playbooks **31** and **34** both idempotently create or verify the Base cluster
-`SDX` Data Context with HDFS, HIVE, ATLAS, and RANGER. Playbook 34 runs this
-gate before DNS, credentials, or Data Services submissions so a standalone
-rerun cannot submit CDE/CDW against an absent or incomplete remote context.
-Control the two boundaries independently:
-
-```yaml
-base_cluster_data_context_enabled: true
-ecs_data_services_base_data_context_enabled: true
-```
-
-The first controls playbook 31 Base creation; the second controls playbook 34
-Data Services preflight.
-
 If CDW preflight finds an existing cluster in the exact case-insensitive
-`Deactivated` state, it stops before FreeIPA principal mutation or submission.
+`Deactivated` state, it stops before submission.
 The pinned `cloudera.cloud` `dw_cluster` module cannot reactivate an existing
 Deactivated cluster. In the observed UI failure, the cluster-specific
 `t-shirt-sizes` endpoint returned HTTP 404 (`404 page not found` /
@@ -394,114 +396,45 @@ passes the final success assertion.
 CDW preflight also verifies the Base security boundary without mutation:
 CM `kerberosInfo` must be enabled for the configured realm/KDC and the Base
 HDFS service must use Kerberos authentication. If this gate fails, rerun
-playbooks 30 and 31; do not create a CDW principal or keytab manually.
+playbooks 30 and 31; do not generate, retrieve, or rotate a CDW keytab
+manually.
 
-Fresh deployments must use a unique `ecs_cdp_environment_name`. Automation
-does not adopt a differently named single existing environment by default:
-`ecs_cdp_environment_adopt_single_existing` is `false`. This prevents a new
-Base/ECS deployment from silently inheriting an environment bound to an older,
-deleted SDX cluster UUID. Existing deployments should keep their exact
-environment name; enable the adoption fallback only for an intentional,
-verified migration.
+Give every fresh Base/ECS deployment a unique `ecs_cdp_environment_name`.
+Automation reuses an exact-name environment idempotently but does not adopt a
+sole differently named environment by default. This avoids binding a new Base
+cluster to stale SDX/environment metadata from another deployment. Enable
+`ecs_cdp_environment_adopt_single_existing=true` only for a verified migration
+where the existing environment is confirmed to belong to the current
+Base/ECS deployment.
 
-If CDW or CDE reports `Not able to fetch details from Cluster`,
-`Unable to get remote data context`, or `UnknownHostException` for the CM
-FQDN while fresh Kubernetes DNS probes resolve CM correctly, check the
-long-running Service Discovery JVM. It can retain a negative DNS cache entry.
-Playbook 34 performs the narrowly scoped restart and bounded rollout wait
-automatically after DNS verification. Set
-`ecs_data_services_refresh_service_discovery_dns: false` only for diagnostic
-isolation. The equivalent manual recovery is:
+CDW activation follows the manual UI and `cloudera-labs/cloudera.cloud`
+minimal request: the API receives the environment identity and no custom
+Kerberos hostname by default. For FreeIPA, automation idempotently creates the
+standard `host/dwx-env-<environment>.cdp.local@<realm>` and
+synthetic host container with `force: true`, then asks CM's supported
+`generateCredentialsAdhoc` command to create the absent
+`hive/dwx-env-<environment>.cdp.local@<realm>` service and its initial KDC key
+together. It waits for completion and verifies the Hive service reports
+`has_keytab: TRUE`. Automation never runs `ipa-getkeytab` or handles keytab
+bytes. CM/CDW own retrieval and later rotation. This is essential for retries
+because failed activation state can retain keytab material; out-of-band key
+mutation can then cause
+`KDC_ERR_PREAUTH_FAILED` in both automation and the UI.
 
-```bash
-kubectl -n cdp rollout restart \
-  deployment/cdp-release-thunderhead-servicediscoverysimple
-kubectl -n cdp rollout status \
-  deployment/cdp-release-thunderhead-servicediscoverysimple \
-  --timeout=5m
-kubectl logs -n cdp \
-  deployment/cdp-release-thunderhead-servicediscoverysimple \
-  --all-containers=true --since=5m \
-  | grep -Ei 'UnknownHostException|cldr-mngr|DescribeDatalakeServices|getRemoteContext'
-```
+FreeIPA health is owned by identity playbook 12, which starts and verifies
+Directory Server and `krb5kdc` and applies the AES enctype policy. Cloudera
+Manager automatic principal provisioning is owned by Kerberos playbook 30,
+which rechecks FreeIPA, validates KDC reachability, configures Red Hat IPA,
+imports Account Manager credentials, performs required CM restarts, and
+verifies the final integration. CDW intentionally does not duplicate those
+steps.
 
-Proceed when the rollout succeeds and no new `UnknownHostException` appears.
-Do not restart CoreDNS, DWX, CDE, or CAI and do not modify FreeIPA principals
-or keytabs for this condition.
-
-Playbook 34 creates any missing Hive, Impala, and Trino Virtual Warehouses
-after the default database catalog becomes healthy. The defaults use the
-smallest `xsmall` template and `root.<environment>.cdw` resource pool. Existing
-warehouses with the configured names are retained. Override
-`ecs_cdw_hive_vw_name`, `ecs_cdw_impala_vw_name`, `ecs_cdw_trino_vw_name`,
-`ecs_cdw_vw_tshirt_size`, or `ecs_cdw_vw_resource_pool` only when the target
-CDW deployment uses different established values. Impala-specific creation
-settings are controlled by `ecs_cdw_impala_options`,
-`ecs_cdw_impala_ha_settings`, `ecs_cdw_impala_autoscaling`,
-and `ecs_cdw_impala_additional_quota`. Defaults match the private-cloud UI's
-minimum xsmall selection. Query logging remains control-plane-owned because
-the pinned CLI marks both query-log flags as public-only. The pinned CLI does
-not expose the UI's named resource-template selector; use the supported
-`ecs_cdw_vw_tshirt_size` input. New Trino warehouses can additionally use
-`ecs_cdw_trino_autoscaling` and `ecs_cdw_trino_additional_quota`. The
-autoscaling map is empty by default so the CDW xsmall defaults, including two
-initial executors, remain authoritative. Set only supported `trino*`
-autoscaling keys when a deployment needs different worker bounds or delays.
-
-In Kerberized deployments,
-playbook 34 supplies `KRB5CCNAME=FILE:/tmp/krb5cc_cdw` in the supported CDW
-service configuration when creating a warehouse. The Cloudera collection
-defines Virtual Warehouse common and application configuration as
-creation-only, so existing warehouses are retained without an unsupported
-`dw update-vw --config` mutation. Generated Kubernetes controllers are not
-patched or restarted directly.
-
-The database catalog status wait also has a read-only stale-status fallback,
-enabled by `ecs_cdw_catalog_kubernetes_health_fallback`. It accepts the exact
-`warehouse-<environment>` namespace only when the catalog API returned a
-record, `metastore` and `hue-query-processor` are both present, and every
-non-Job pod is Running with all containers Ready. This prevents a healthy
-catalog from failing a rerun solely because the control-plane status remained
-stale; it does not create, patch, restart, or delete Kubernetes workloads.
-
-If UI deletion leaves a failed private-cloud activation hidden in the DW
-control plane, an explicitly confirmed CDW-only reset can reuse playbook 34's
-temporary signed profile without exposing its credentials:
-
-```bash
-ansible-playbook -i inventory.ini 34_setup_ecs_data_services.yml \
-  -e ecs_data_services_deploy_enabled=true \
-  -e '{"ecs_data_services_install":["cdw"]}' \
-  -e ecs_cdw_force_reset_cluster_id=env-cldr \
-  -e ecs_cdw_force_reset_confirm=env-cldr
-```
-
-This calls the supported `dw delete-cluster --force` operation, waits until
-the exact cluster ID is no longer returned, and then continues with fresh CDW
-activation. It does not delete the ECS environment, Base cluster, CDE, CAI, or
-FreeIPA. It does delete CDW catalogs and virtual warehouses attached to that
-cluster, so the confirmation must exactly match the cluster ID. Before deleting,
-automation describes the cluster and skips the reset unless its status is
-terminal `Error` or `Failed`; stale recovery values therefore neither delete a
-healthy, setting-up, or running cluster nor abort its ordinary rerun. An already
-absent `404 NOT_FOUND` response is treated as an idempotent success. Clear both
-reset variables immediately after the one recovery run. If the subsequent activation still
-reports that same ID as already activated, the stale binding exists only in
-internal DWX datastore state; the published CLI has no environment-activation
-reset operation, so Cloudera support must repair that backend state.
-
-For FreeIPA-backed CDW, automation idempotently creates the standard
-`host/dwx-env-<environment>.cdp.local@<realm>` and
-`hive/dwx-env-<environment>.cdp.local@<realm>` principal objects because CM
-`/cm/retrieveKeytab` requires them to exist. Automation creates the synthetic
-FreeIPA host container, then asks CM's supported `generateCredentialsAdhoc`
-command to create the absent Hive service and its initial KDC key together.
-It waits for completion and verifies the Hive service `has_keytab`.
-Automation never runs `ipa-getkeytab` or handles keytab bytes. CM/CDW own
-retrieval and later rotation. A control-plane cluster query can return no
-records while DWX still considers the environment activated, so automation
-must not infer that principal deletion is safe. Preserve the state and use the
-diagnostic report plus the supported DWX recovery workflow.
+CDW preflight does not delete host or Hive principals. An empty
+`dw_cluster_info` response is not a safe deletion signal because DWX can still
+retain an activated environment and keytab state. Preserve CM/CDW-owned key
+state and use supported DWX recovery when activation reports an existing
+cluster or keytab validation failure; do not repair it by deleting principals
+or mutating key material.
 
 If an operator or older automation pre-created the Hive service without a
 key, playbook 34 stops before submission. CM cannot repair that state with
@@ -523,8 +456,8 @@ ecs_cdw_repair_stale_cm_credentials_confirm: <environment-name>
 
 The exact environment confirmation permits only CM
 `deleteCredentialsMode=unused`, followed by ad-hoc Hive credential generation
-and FreeIPA `has_keytab` verification. It never requests deletion mode `all`.
-Remove the recovery settings immediately after success.
+and FreeIPA `has_keytab: TRUE` verification. It never requests deletion mode
+`all`. Remove the recovery settings immediately after success.
 
 If `warehouse-<environment>/metastore-0` reports
 `kinit: No KCM server found while getting default ccache`, the generated
@@ -532,10 +465,76 @@ container inherited a KCM default but has no KCM daemon. Playbook 34 reads the
 Database Catalog configuration with `dw describe-dbc-config` and applies
 `KRB5CCNAME=FILE:/tmp/krb5cc_metastore` through additive
 `dw update-dbc --config` only when missing or different. The reconciliation
-is controlled by `ecs_cdw_workload_file_ccache_reconcile` (default `true`) and
-is idempotent. The CDW control plane persists and renders the setting;
-automation does not directly patch or delete the StatefulSet, pod, PVC,
-database, service, or Kerberos principal.
+is controlled by
+`ecs_cdw_workload_file_ccache_reconcile` (default `true`) and is idempotent;
+the CDW control plane persists and renders the setting. Automation does not
+directly patch or delete the StatefulSet, pod, PVC, database, service, or
+Kerberos principal.
+
+The database catalog status wait also has a read-only stale-status fallback,
+enabled by `ecs_cdw_catalog_kubernetes_health_fallback`. It accepts the exact
+`warehouse-<environment>` namespace only when the catalog API returned a
+record, `metastore` and `hue-query-processor` are both present, and every
+non-Job pod is Running with all containers Ready. This prevents a healthy
+catalog from failing a rerun solely because the control-plane status remained
+stale; it does not create, patch, restart, or delete Kubernetes workloads.
+
+Playbook 34 creates any missing Hive, Impala, and Trino Virtual Warehouses
+after the default database catalog becomes healthy. The defaults use the
+smallest `xsmall` template and `root.<environment>.cdw` resource pool. Existing
+warehouses with the configured names are retained. Override
+`ecs_cdw_hive_vw_name`, `ecs_cdw_impala_vw_name`, `ecs_cdw_trino_vw_name`,
+`ecs_cdw_vw_tshirt_size`, or `ecs_cdw_vw_resource_pool` only when the target
+CDW deployment uses different established values.
+
+Impala-specific creation settings are controlled by
+`ecs_cdw_impala_options`, `ecs_cdw_impala_ha_settings`,
+`ecs_cdw_impala_autoscaling`, and `ecs_cdw_impala_additional_quota`. Defaults
+match the private-cloud UI's minimum xsmall selection. Query logging remains
+control-plane-owned because the pinned CLI marks both query-log flags as
+public-only. The pinned CLI does not expose the UI's named resource-template
+selector; use the supported `ecs_cdw_vw_tshirt_size` input.
+New Trino warehouses can additionally use `ecs_cdw_trino_autoscaling` and
+`ecs_cdw_trino_additional_quota`. The autoscaling map is empty by default so
+the CDW xsmall defaults, including two initial executors, remain authoritative.
+Set only supported `trino*` autoscaling keys when a deployment needs different
+worker bounds or delays.
+
+Playbook 34 supplies `KRB5CCNAME=FILE:/tmp/krb5cc_cdw` in the supported CDW
+service configuration when creating a warehouse. The Cloudera collection
+defines Virtual Warehouse common and application configuration as
+creation-only, so existing warehouses are retained without an unsupported
+`dw update-vw --config` mutation. Generated Kubernetes controllers are not
+patched or restarted directly.
+
+If UI deletion leaves a failed private-cloud activation hidden in the DW
+control plane, an explicitly confirmed CDW-only reset can reuse playbook 34's
+temporary signed profile without exposing its credentials:
+
+```bash
+cd ansible-playbooks
+ansible-playbook -i inventory.ini 34_setup_ecs_data_services.yml \
+  -e ecs_data_services_deploy_enabled=true \
+  -e '{"ecs_data_services_install":["cdw"]}' \
+  -e ecs_cdw_force_reset_cluster_id=env-cldr \
+  -e ecs_cdw_force_reset_confirm=env-cldr
+```
+
+This calls the supported `dw delete-cluster --force` operation, waits until
+the exact cluster ID is no longer returned, and then continues with fresh CDW
+activation. It does not delete the ECS environment, Base cluster, CDE, CAI, or
+FreeIPA and does not mutate principals or keytabs. It does delete CDW catalogs
+and virtual warehouses attached to that cluster, so confirmation must exactly
+match the cluster ID. Before deleting, automation describes the cluster and
+skips the reset unless its status is terminal `Error` or `Failed`; stale
+recovery values therefore neither delete a healthy, setting-up, running, or
+deactivated cluster nor abort its ordinary rerun. The exact CLI response
+containing both `Status Code: 404` and `Error Code: NOT_FOUND` is accepted as
+already absent. Clear both reset variables immediately after the one recovery
+run. All other describe or delete failures stop the playbook. If
+`createPrivateCluster` then still
+reports the same cluster ID as already activated, the inconsistency is
+internal DWX datastore state and no public reset operation remains.
 
 On a failed CDW activation, playbook 34 now emits a non-mutating boundary
 report. It includes the control-plane environment identity and binding fields
@@ -598,11 +597,11 @@ rm -rf /etc/dirsrv/slapd-*
 mkdir -p /etc/ipa/custodia /var/log/ipa /var/lib/ipa/{sysupgrade,sysrestore,backup,dnssec}
 
 # 4) Fresh install — use lab/Jenkins passwords (default admin + DS: PseTeam@123 unless rotated)
-FQDN="$(hostname -f)"   # must match inventory FQDN, e.g. ipaserver.cldrsetup.local
+FQDN="$(hostname -f)"   # must match inventory FQDN, e.g. ipaserver.cldr.internal.arpa
 IP="$(hostname -I | awk '{print $1}')"
 ipa-server-install --setup-dns --unattended \
   --hostname="${FQDN}" --ip-address="${IP}" \
-  --domain=cldrsetup.local --realm=CLDRSETUP.LOCAL \
+  --domain=cldr.internal.arpa --realm=CLDR.INTERNAL.ARPA \
   --ds-password='PseTeam@123' --admin-password='PseTeam@123' \
   --no-dnssec-validation --no-reverse \
   --forwarder=172.31.0.2
@@ -631,6 +630,16 @@ mkdir -p /etc/ipa/custodia /var/log/ipa /var/lib/ipa/{sysupgrade,sysrestore,back
 ```
 
 If **`ipa-server-install`** fails with **port 389 already in use** in **`ipaserver-install.log`**, use the same steps before retrying.
+
+**Existing public/upstream DNS zone:** Prefer setting `ipaserver_domain` to a
+delegated internal subdomain such as `cldr.example.com`. If FreeIPA must use a
+zone that already exists publicly, explicitly set
+`ipa_server_install_allow_zone_overlap: true`; playbook **12** then passes
+`--allow-zone-overlap`. This is intentionally opt-in because IPA becomes
+authoritative for the whole zone on enrolled clients. Public records are not
+merged automatically and must also be created in IPA DNS when internal clients
+need them. The setting affects only a fresh `ipa-server-install`; healthy
+existing IPA servers remain untouched on reruns.
 
 ### 3. Detect identity provider
 
@@ -699,8 +708,8 @@ CSD JARs for DataViz / NiFi / NiFi Registry are listed in `scm_csds_effective` d
 **Example `REMOTE_PARCEL_REPO_URLS` (defaults in `group_vars/all.yml`, public archive, `cm_parcel_repo_include_latest: false`):**
 
 ```text
-https://archive.cloudera.com/p/cdh7/7.3.2.0/parcels/
-https://archive.cloudera.com/p/cdp-pvc-ds/1.5.5-h3300/parcels/
+https://archive.cloudera.com/p/cdh7/7.3.2.20000/parcels/
+https://archive.cloudera.com/p/cdp-pvc-ds/1.5.5-h40000/parcels/
 https://archive.cloudera.com/p/cdv/8.0.7/parcels/
 https://archive.cloudera.com/p/cfm2/2.1.7.3004/redhat9/yum/tars/parcel
 ```
@@ -725,12 +734,21 @@ ansible-playbook -i inventory.ini 31_setup_base_cluster.yml
 ansible-playbook -i inventory.ini 33_setup_ecs_cluster.yml
 ```
 
-`31_setup_base_cluster.yml` builds the cluster from `roles/cdh_base_cluster/templates/base_cluster_cluster_spec.j2`. Toggle services with `base_cluster_install_services` in `group_vars/all.yml` or Jenkins `ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`). Cluster **create** runs only when the cluster does not exist in CM; adding services to an existing cluster requires CM UI/API changes.
+`31_setup_base_cluster.yml` builds the cluster from
+`templates/base_cluster_cluster_spec.j2`. Toggle services with
+`base_cluster_install_services` in `group_vars/all.yml` or Jenkins
+`ANSIBLE_GROUP_VARS_YAML` (allowed key `base_cluster_install_services`).
+Cluster **create** runs only when the cluster does not exist in CM; adding
+services to an existing cluster requires CM UI/API changes.
 
-Cluster creation is split into a create/configure phase and a First Run phase. The
-`cloudera.cluster` module can spend up to two hours activating parcels or waiting
-for CM commands; Ansible runs it asynchronously and Jenkins prints a poll update
-every `base_cluster_module_poll_interval` seconds instead of appearing frozen.
+Fresh cluster creation follows the working Labs sequence rather than one
+monolithic cluster-module request: cluster shell, Core Settings, host attachment,
+CDH parcel activation, dependency-ordered services, role config groups, Master
+and Worker host templates, role assignment without starting roles, Kerberos,
+Auto-TLS, then one CM First Run. The repository pins `cloudera.cluster` v4.4.0:
+its `service` module is used for services, while host-template creation and
+application use the exact CM API through `cm_resource` because the standalone
+`host_template` module was added in v5.
 
 When a base cluster with the configured name already exists, playbook **31**
 reads its current state, assigned hosts, and service types. A zero-host partial
@@ -739,6 +757,18 @@ cluster is never deleted: all requested service types must already exist, then
 required Ozone/Hive/Ranger/Knox settings and the Ozone Recon role are reconciled,
 the cluster is started if necessary, and CM runs
 `deployClientConfigsAndRefresh`. The final cluster state and health are printed.
+
+After cluster and ZooKeeper health pass, playbook **31** creates or verifies the
+CM Data Context required by fresh CDE and other compute installations. The
+default context is `SDX`, sharing `HDFS`, `HIVE`, `ATLAS`, and `RANGER`, matching
+the Cloudera Labs base-cluster pattern. This does not restart or reconfigure
+those healthy services; it registers them as a shareable Data Context before
+the initialization marker is written. Without this object, CDE dex-base chart
+installation fails with `Unable to get remote data context for cluster`.
+Existing complete contexts are read without mutation; existing incomplete
+contexts fail explicitly. Set `base_cluster_data_context_enabled: false` only
+when the base cluster will never back ECS Data Services or another compute
+workload.
 
 Ranger UserSync is enabled by default and follows the deployment identity
 provider:
@@ -753,7 +783,7 @@ Set the provider to `freeipa` or `ad` to choose one explicitly, `external` with
 the `base_cluster_ranger_usersync_external_*` bind/search variables for another
 LDAP directory, or `none` to omit the UserSync role and LDAP configuration.
 An explicit `freeipa` or `ad` value must match `identity_provider_effective`;
-the role refuses to activate both Ranger authentication modes. Setting
+the playbook refuses to activate both Ranger authentication modes. Setting
 `base_cluster_ranger_usersync_enabled: false` or provider `none` leaves fresh
 clusters on Ranger Admin `UNIX` authentication and omits UserSync. On an
 existing cluster, it restores `ranger_authentication_method=UNIX` and sets only
@@ -765,41 +795,81 @@ The mapping is inventory/domain driven and is applied to the CM
 | Provider | Endpoint and DNs | Users and groups |
 |---|---|---|
 | FreeIPA | `cm_ldap_url` using `ipa_kdc_host`; base DN derived from `ipaserver_domain`; bind DN `uid=<ipaadmin_principal>,cn=users,cn=accounts,<base DN>` | users under `cn=users,cn=accounts,<base DN>` with `person`, `(uid=*)`, `uid`; groups under `cn=groups,cn=accounts,<base DN>` with `ipausergroup`, `(objectClass=ipausergroup)`, `cn`, `member` |
-| Active Directory | `cm_ldap_url` using `ad_kdc_host`; base DN derived from `ad_domain`; bind identity from `ad_ldap_bind_dn` | `ad_ldap_user_search_base` with `user`, `(sAMAccountName=*)`, `sAMAccountName`; `ad_ldap_group_search_base` with `group`, `(objectClass=group)`, `cn`, `member` |
+| Active Directory | `cm_ldap_url` using `ad_kdc_host`; base DN derived from `ad_domain`; bind identity from `ad_ldap_bind_dn` (defaults to the configured join identity as a UPN) | `ad_ldap_user_search_base` with `user`, `(sAMAccountName=*)`, `sAMAccountName`; `ad_ldap_group_search_base` with `group`, `(objectClass=group)`, `cn`, `member` |
 | External LDAP | All endpoint, bind, base/search DN, object class, filter, and attribute values come from `base_cluster_ranger_usersync_external_*` | No deployment-specific host, domain, DN, or credential is embedded |
 
 Ranger Admin is reconciled first, followed by UserSync. UserSync also owns
-enablement, source implementation, delta sync, STARTTLS, user/group scopes and
-filters, referral handling, case conversion, paging, and the Unix backend.
-Before an adopted cluster is changed, the role checks that the installed
-CM/parcel schema exposes every owned key and fails with the missing names
-rather than writing an unvalidated safety valve.
+`ranger.usersync.enabled`, source implementation, delta sync, STARTTLS,
+user/group scopes and filters, referral handling, case conversion, paging, and
+the `nss` Unix backend default. The runtime mapping uses direct CM 7.1.8 role
+configuration API names. Before an adopted cluster is changed, the playbook
+checks that the installed CM/parcel schema exposes every owned key and fails
+with the missing names rather than writing an unvalidated safety valve.
 
 `ldaps://` is the default. Set `cm_ldap_scheme: ldap` and
 `cm_ldap_starttls: true` only when the directory supports STARTTLS; STARTTLS is
 rejected with an `ldaps://` URL. Under Auto-TLS,
 `base_cluster_ranger_usersync_truststore_path` defaults to the agent global
-truststore and must exist on the Ranger host. For manually managed PKI, point
+truststore and must exist on the Ranger host. For a manually managed PKI, point
 that variable at a JKS containing the directory CA, or leave it empty to use
 the JVM CA set. Certificate verification is never disabled. Bind passwords are
-read from the selected provider secret and rendering/reconciliation suppresses
-secret output.
+read from `ipaadmin_password`, `ad_ldap_bind_password`, or the external secret
+variable and all rendering/reconciliation tasks suppress secret output.
 
 Fresh and adopted Base clusters use the same role-config-group mapping. A
 rerun compares only the owned keys, preserves unrelated operator settings, and
 restarts the existing cluster only when those owned values changed.
+Playbook **34** repeats the same idempotent create/verify gate before Data
+Services provisioning, so a standalone rerun or an incomplete phase 4 cannot
+submit CDE/CDW without the required `SDX` context. Control the two boundaries
+independently:
+
+```yaml
+base_cluster_data_context_enabled: true
+ecs_data_services_base_data_context_enabled: true
+```
+
+The first controls playbook 31 Base creation; the second controls playbook 34
+Data Services preflight.
 
 First Run failures are expanded from the parent CM command into failed service
 commands and their child validation messages in Jenkins. First Run is submitted
-for a newly created cluster and for an existing populated cluster when the
-initialization marker is absent **and** HDFS is not yet `STARTED/GOOD` (typical
-when playbook **31** failed during Knox or other pre-First-Run configuration
-before CM ever formatted the NameNode). In that case **31** skips interrupted-run
-recovery and calls `POST .../commands/firstRun` instead of `commands/start`.
-Once HDFS is healthy, reruns use interrupted First Run recovery or a normal
-cluster start so an already formatted NameNode is never formatted again. Set
-`base_cluster_force_first_run: true` only when CM support directs a deliberate
-First Run retry. Database and initial service
+for a newly created cluster or an existing cluster only while both the matching
+cluster-UUID completion marker and the HDFS
+`{{ base_cluster_hdfs_name_dir }}/current/VERSION` file are absent. CM may format
+HDFS successfully and then report a later Hue, Knox, HBase, YARN, Spark, or
+other service failure. On that rerun, playbook **31** preserves the formatted
+namespace, runs only idempotent service initialization commands, and uses normal
+cluster Start. It never resubmits First Run or formats the NameNode once the
+HDFS VERSION file exists. A newly created CM cluster that finds an existing
+VERSION file fails immediately rather than adopting or destroying unknown data.
+For a new unformatted filesystem mounted directly at the configured NameNode
+directory, playbook **31** removes only an otherwise-empty filesystem's
+`lost+found` entry. Any other contents fail the preflight with their names before
+First Run; they are never deleted implicitly.
+
+Before submitting First Run, playbook **31** performs deterministic topology,
+Hue role-colocation, Kerberos, NameNode-directory, and service-dependency
+assertions that do not require running cluster services. It deliberately does
+not run CM's cluster-wide `deployClientConfig` command while roles are stopped:
+CM 7.13 client generators resolve runtime values from a commissioned healthy
+ResourceManager and healthy role hosts, so that command fails on a valid fresh
+cluster before First Run can start those prerequisites. CM First Run remains the
+authoritative runtime configuration validation, with expanded failed-service
+diagnostics. After startup, playbook **31** runs
+`deployClientConfigsAndRefresh`, when the required services and hosts are
+healthy.
+
+The matching marker is recorded only after First Run, startup,
+client-configuration refresh, ZooKeeper role validation, and every enabled
+service with a non-gateway role reports `STARTED` with an accepted health
+summary (default: `GOOD`). A normal initialized rerun uses cluster Start or a
+controlled restart only when configuration or runtime health requires it. Set
+`base_cluster_force_first_run: true` to deliberately resubmit First Run even
+when the marker exists. The repository pins `cloudera.cluster` v4.4.0, which
+predates the module's `force` option shown in newer cloudera-labs examples, so
+playbook **31** calls the equivalent CM `firstRun` endpoint directly and retains
+the composite command tree for diagnostics. Database and initial service
 passwords use the `base_cluster_*` variables and should be overridden through
 `ANSIBLE_GROUP_VARS_YAML` or an Ansible vault. Ranger initial passwords must
 contain letters and numbers and be at least eight characters long. By default,
@@ -807,80 +877,32 @@ contain letters and numbers and be at least eight characters long. By default,
 the FreeIPA administrator password. The Ranger Admin UI username is `admin`;
 `rangeradmin` is the separate PostgreSQL database account.
 
-An interrupted First Run can leave HDFS formatted and running while later
-service setup never occurred. When a populated cluster has no matching
-cluster-UUID marker at `base_cluster_initialization_marker_path`, playbook **31**
-performs only non-destructive recovery before normal Start: it starts ZooKeeper
-and HDFS, creates HDFS `/tmp` plus the configured YARN node-label store with
-the required permissions, starts Ranger and initializes its plugin services
-(which populate their local policy caches), initializes Solr's HDFS home and ZooKeeper state,
-creates the HBase root and user directories, creates the YARN JobHistory
-directory and installs MapReduce framework JARs, creates the Spark history,
-user, and driver-log directories, and creates the Hive and Impala HDFS
-directories. Ozone recovery starts the SCM role alone, waits until an
-authenticated `ozone admin scm roles` check reports `LEADER`, and only then
-starts the remaining Ozone roles. This prevents DataNodes from exhausting
-certificate-enrollment retries against a running but not-yet-leader SCM and
-leaving SCM in safe mode with no healthy pipeline. CM First Run retains
-responsibility for initializing SCM on a new cluster; if that initial run is
-interrupted, the next Base Cluster phase applies the ordered recovery without
-deleting Ozone metadata. The same ordered recovery runs for an initialized
-existing cluster when the cluster remains started but Ozone is stopped or has
-`BAD` health, so a later SCM or DataNode failure does not depend on the
-initialization marker being absent. A deliberately stopped whole cluster uses
-the normal cluster start path, and an initialized cluster does not restart
-Ozone for a transient `CONCERNING` health state. Interrupted First Run recovery
-continues to recover any non-`GOOD` Ozone state. The optional YARN
-container-usage directory command is not part of automatic recovery; run it
-only after enabling container-usage aggregation and configuring its MapReduce
-job user. Recovery never invokes NameNode format or cluster First Run.
+Ordered Ozone repair is reserved for a cluster that already has the matching
+completion marker and later reports Ozone stopped or `BAD`. In that post-
+initialization repair path, automation starts SCM alone, waits for authenticated
+SCM leadership, and then starts the remaining Ozone roles. An interrupted First
+Run never enters that repair path; CM First Run owns Ozone initialization along
+with HDFS, Ranger, Solr, HBase, YARN, Spark, Hive, and Impala.
 
-HDFS `/tmp` reconciliation first calls CM's documented
-`hdfsCreateTmpDir` service command. Some CM 7.13/CDP 7.3.2 layouts return
-`Command not valid for ...`; in that case Ansible probes every base master and
-worker, then uses the first available HDFS client to create the namespace path
-and verify mode `1777` (world-writable with sticky bit). The probe checks
-`PATH`, the active `/opt/cloudera/parcels/CDH/bin/hdfs` link, and executable
-versioned `/opt/cloudera/parcels/CDH-*/bin/hdfs` clients. These delegated
-commands explicitly use SSH so the localhost CM orchestration play cannot run
-them on the Jenkins controller. The fallback reads the authoritative
-`hadoop_security_authentication` setting from CM rather than trusting
-`/etc/hadoop/conf`, which can remain stale after a security transition. In
-SIMPLE mode it uses `HADOOP_USER_NAME=hdfs`; after Kerberos enablement it
-selects the newest CM-generated `hdfs.keytab`, uses that keytab's CM process
-directory as `HADOOP_CONF_DIR`, obtains an `hdfs/*` ticket in an isolated
-temporary credential cache, performs the same `/tmp` verification, and
-destroys the cache on exit.
-The same verification runs after a fresh First Run, so the HDFS canary can
-create `/tmp/.cloudera_health_monitoring_canary_files`. This is not the local
-Linux `/tmp` directory on each DataNode.
-The marker is recorded only after startup, client-configuration refresh,
-ZooKeeper role validation, and every enabled service with a non-gateway role
-reports `STARTED` with an accepted health summary (default: `GOOD`). The bounded
-poll uses `base_cluster_service_health_retries`,
+The bounded final poll uses `base_cluster_service_health_retries`,
 `base_cluster_service_health_delay`, and
-`base_cluster_accepted_health_summaries`. On a rerun, reconciled service
-configuration or an existing runtime service that is stopped/BAD triggers one
-controlled cluster stop/start before this gate, so already-running roles do not
-retain stale Hive, Ranger, Knox, Kafka, or Ozone configuration. CM can report a one-time setup command as
-`Command not valid for ...` when that artifact is already initialized; recovery
-reports that exact response as a skip and continues, but all other HTTP or
-command failures remain fatal.
+`base_cluster_accepted_health_summaries`. On an initialized rerun, reconciled
+service configuration or an existing runtime service that is stopped/BAD
+triggers one controlled cluster stop/start before this gate so running roles do
+not retain stale Hive, Ranger, Knox, Kafka, or Ozone configuration.
 
 CM can occasionally fail First Run at `WaitForKnoxGatewayReadyToServe` even
-though the Knox process subsequently reaches `STARTED/GOOD`. When that is the
-only failed First Run child, playbook **31** performs a bounded Knox health
-poll, then starts and polls the full cluster. It does not suppress other Knox
-failures or continue while the remaining services are stopped.
+though the Knox process subsequently reaches `STARTED/GOOD`. Playbook **31**
+reports that failed child command and leaves the completion marker absent; the
+next rerun resubmits CM First Run rather than replacing the failed composite
+command with a normal cluster Start.
 
 `KNOX_GATEWAY=STARTED` only confirms the Java process is running. CM's
 `checkTopologyDeployment.sh` separately polls
 `/gateway/health/v1/gateway-status`; HTTP 200 with body `PENDING` means topology
 deployment is not ready yet. The CSD's default bounded wait is 600 seconds.
-Playbook **31** does not falsely convert `PENDING` to success. It applies the
-recovery above only after CM ends First Run with the single
-`WaitForKnoxGatewayReadyToServe` failure and Knox subsequently reports
-`STARTED/GOOD`.
+Playbook **31** does not falsely convert `PENDING` to success or bypass the
+failed First Run.
 
 When `gateway.log` reports `Failed to configure truststore` followed by a
 `PKIX path building failed` error while discovering the CM API, waiting cannot
@@ -909,12 +931,22 @@ the default ~10 minutes.
 `base_cluster_enable_kerberos: true` makes playbook **31** Kerberize every base
 cluster it manages. Auto-TLS and CM KDC/account-manager integration must already
 be active before cluster creation. For a newly created cluster, playbook **31**
-refuses First Run unless the KDC is reachable and CM's matching credential
-marker exists; it then runs `configureForKerberos`, generates credentials, and
-verifies HDFS authentication **before any cluster service is started**. This
-avoids initializing service state in SIMPLE mode and retrofitting security
-afterward. Interrupted pre-First-Run attempts repeat credential generation and
-verification before any retry starts the cluster.
+renders the complete declarative security configuration from the working
+Cloudera Labs Ozone Base reference for Core Settings, ZooKeeper, HDFS, YARN,
+Ozone, Kafka, HBase, Atlas, Knox, and Solr. It requires the KDC and CM
+account-manager credential marker and verifies every enabled security-sensitive
+service **before any cluster service is started**. `configureForKerberos` and
+credential generation are used only to converge a cluster that still reports
+SIMPLE authentication; an already declaratively secured cluster proceeds to
+Auto-TLS and CM First Run without repeating that wizard.
+
+Before First Run, cluster Auto-TLS is considered complete only when CM reports
+the cluster TLS flag **and** HDFS reports `hdfs_hadoop_ssl_enabled=true` with
+`dfs_data_transfer_protection` set, DataNode transceiver port at least 1024, and
+DataNode HTTPS port at least 1024. Playbook **31** reruns CM's
+`configureAutoTlsServices` command when that complete DataNode tuple is
+incomplete and refuses First Run if CM still reports a configuration that would
+fail secure DataNode validation.
 
 For an existing initialized cluster, the playbook checks HDFS authentication.
 A cluster still using `simple` authentication is stopped, configured through
@@ -925,6 +957,11 @@ transition. This leaves playbook **30** responsible for CM-wide KDC integration
 and account-manager credential import.
 
 Hue's `KT_RENEWER` requires its initial keytab login to receive a renewable TGT.
+The Base master host template colocates `KT_RENEWER` with Hue's server roles,
+and playbook **31** adds the role when adopting an interrupted cluster created
+before that mapping existed. This auxiliary repair is excluded from destructive
+partial-topology classification, so a missing renewer never causes cluster
+recreation.
 Playbook **12** reconciles the FreeIPA global policy to a 24-hour maximum ticket
 life and 7-day maximum renewable life. Playbook **16** deploys matching
 `ticket_lifetime` and `renew_lifetime` defaults under `/etc/krb5.conf.d` on
@@ -948,7 +985,7 @@ services. Without that dependency CM's Ozone CSD receives no `core-site.xml`; it
 For new clusters, playbook **31** sets `ozone.scm.primordial.node.id` and
 attaches the single `Master` host template to
 **`groups[base_cluster_master_group][0]`** only (`cldr_hostname` +
-`cluster_domain`, e.g. `pvcbase-master.cldrsetup.local`). Workers receive
+`cluster_domain`, e.g. `pvcbase-master.cldr.internal.arpa`). Workers receive
 `OZONE_DATANODE` only; OM/SCM/Recon/S3 Gateway run on that one master. When
 adopting a populated cluster, **31** preserves its initialized
 `ozone.service.id` and primordial node. With
@@ -974,7 +1011,22 @@ registered`, OM/DN cert enrollment retries, `RAFT closed`, or
 2. **SCM topology** — New clusters deploy one `STORAGE_CONTAINER_MANAGER` on
    the first `[base-masters]` host. Adopted clusters may retain an initialized
    odd-sized HA quorum (three or more) when the primordial node is a member.
-   Even-sized, two-node, or primordial-missing topologies fail before mutation.
+   An interrupted, uninitialized cluster that has services but no roles at all is
+   safely recreated from the complete cluster specification before topology
+   validation. Clusters with any assigned or started role are never deleted by
+   this recovery. If an interrupted cluster has other roles but is missing only
+   SCM, playbook **31** adds SCM on the configured primordial/master host before
+   validating topology. Even-sized, two-node, or primordial-missing SCM
+   topologies fail before mutation. This explicit repair is required because the
+   pinned `cloudera.cluster` v4.4.0 cluster module does not reconcile host
+   templates or role assignments after a cluster already exists.
+   Before deleting or creating a partial cluster, playbook **31** forces a CM
+   parcel-repository refresh, reads the configured CDH repository's
+   `manifest.json`, and resolves the single parcel version published for the
+   configured `cdh_version` release. The manifest's numeric build is authoritative,
+   avoiding stale checked-in build identifiers. A missing or ambiguous parcel,
+   inaccessible manifest, or invalid archive credential therefore fails before
+   cluster topology mutation.
 3. **Security phase skipped** — Run **CM_TLS_KRB_LDAP** (plays **27** → **30**)
    before **31**. Starting Ozone before `configureForKerberos` /
    `configureAutoTlsServices` causes cert/Kerberos mismatches.
@@ -982,10 +1034,11 @@ registered`, OM/DN cert enrollment retries, `RAFT closed`, or
    stops unhealthy Ozone, starts the single SCM or all preserved HA SCM roles,
    waits for `ozone admin scm roles` `LEADER`, then starts remaining Ozone roles
    (see recovery section above).
-5. **Legacy `.local` cluster domains** — The greenfield default is
-   `cldr.internal.arpa`. Brownfield `cldrsetup.local` deployments can retain
-   their explicit override, but some Ozone/Auto-TLS validators log
-   `Invalid domain`; confirm signed-certificate SANs match the CM host FQDN.
+5. **Non-IANA cluster domains** — Legacy `.local` / `.internal` suffixes (former
+   default `cldrsetup.local`) break Ozone/Netty hostname verification (HDDS-16034).
+   Greenfield defaults use `cldr.internal.arpa`. Confirm SANs on signed certs match
+   the CM host FQDN; migrate DNS or set
+   `cluster_domain_skip_ozone_hostname_validation: true` only for brownfield.
 
 **Operator checks:** SCM role logs under
 `/var/log/cloudera-scm-agent/process/*-ozone-STORAGE_CONTAINER_MANAGER/`; Ratis
@@ -1025,7 +1078,21 @@ layouts) instead of hardcoding a full venv path. Before invoking pip, it verifie
 that the parcel interpreter itself starts. If its ELF loader reports a missing
 `libpythonX.Y.so`, the play installs the matching OS runtime package
 (`pythonX.Y-libs` on Red Hat family or `libpythonX.Y` on Debian family) and
-rechecks the interpreter.
+rechecks the interpreter. The loader parser checks both stdout and stderr; an
+unrelated interpreter failure stops with its rc/stdout/stderr instead of being
+misreported as a missing libpython package. Before First Run, the play requires
+the psycopg 3 binary driver in the same parcel environment and verifies both
+that driver and Django's PostgreSQL backend as the `hue` account. This avoids
+Hue bootstrap failures that can occur even when a standalone `psycopg2` import
+succeeds. The step is rerun-safe: pip is skipped once `psycopg` imports
+successfully. No Python minor version is hardcoded:
+the play reads the version from the discovered parcel interpreter and invokes
+that interpreter's own `-m pip` for any compatible runtime shipped by Hue.
+Discovery targets the repository-resolved versioned parcel directory rather
+than the mutable `CDH` symlink. Driver and backend checks run as the `hue`
+service account, matching CM role execution; installation uses a `0022` umask
+and a forced reinstall when import fails so incomplete or root-only packages
+are repaired on rerun.
 
 For an existing cluster, playbook **31** also detects stale Hive Metastore
 catalogs whose names begin with
@@ -1065,9 +1132,11 @@ refreshed and CMS is restarted. Existing initialized clusters managed by
 playbook **31** receive guarded Auto-TLS/Kerberos convergence without requiring
 a rebuild.
 
-New deployments use the default cluster name `CDP-base-cluster`. When that
-default is unchanged, playbook **31** first adopts a pre-V2 `CDH-Cluster`.
-If neither default name exists, `base_cluster_adopt_by_master_host: true`
+New deployments use `<deployment_name_prefix>-base-cluster` (or `base-cluster`
+when the prefix is empty). When that default is unchanged, playbook **31**
+adopts legacy `CDP-base-cluster` and pre-V2 `CDH-Cluster` registrations through
+the same guarded host-ownership discovery. If no configured name exists,
+`base_cluster_adopt_by_master_host: true`
 adopts the single CM cluster containing the configured base master only when
 that cluster also contains every configured base host. Multiple or partial
 matches fail before mutation. Explicit custom cluster names never use these
@@ -1139,7 +1208,7 @@ portal01 ansible_host=203.0.113.10 private_ip=10.20.0.10 cldr_hostname=portal01
 Keep secrets out of the inventory and command line. Create a local, uncommitted `portal-vars.yml`:
 
 ```yaml
-cluster_domain: example.internal
+cluster_domain: cldr.internal.arpa
 deployment_environment: baremetal
 deployment_portal_access_profile: private
 
@@ -1201,7 +1270,7 @@ sudo sed -n '1,220p' /opt/cldr-deployment-portal/Caddyfile
 
 **AWS (public IP):** Jenkins and browsers on the internet use `http://<ops-public-ip>:81/`; hosts inside the VPC can use `http://<ops-private-ip>:81/`. The generated index lists both. Caddy vhost URLs use a **dashed** ops public IP in the hostname (`portal.52-221-251-41.pvc.cloudera-labs.com`, not dotted); that requires wildcard DNS on `caddy_vhost_public_base` or use `caddy_vhost_dns_mode: classic_nipio`. Playbook 28 fails fast if Caddy does not respond on `http://127.0.0.1:<deployment_portal_http_port> (default 81)/` on the ops host.
 
-**Caddy FreeIPA vhost:** When `[ipaserver]` is present, the preferred URL is `https://ipa.<ops-ip-dashed>.<base>:9443/`; its HTTP `:81` vhost redirects to HTTPS and `/` redirects to `/ipa/modern-ui/` (legacy UI remains under `/ipa/ui/`). Caddy uses its persistent internal CA because ports 80/443 are already owned by FreeIPA Apache and 8443-8445 are reserved for Dogtag PKI on the default ops host. Download `/downloads/caddy-root-ca.crt` after portal login and trust it in the operator browser/OS once. Caddy connects over **HTTPS** to the IPA inventory address (`private_ip`, then `ansible_host`) so its container does not need to resolve the IPA DNS zone, while using the IPA FQDN for TLS SNI and **`Host`**. The shared IPA proxy route remains mounted on the direct-IP HTTP listener at `http://<ops-public-or-private-ip>:81/ipa/...` as a fallback. That fallback removes the upstream cookie's `Secure` attribute; the preferred HTTPS vhost retains it. Path matchers set IPA’s required HTTPS `Referer`, disable JSON compression through the proxy, and rewrite upstream redirects/cookie domains. **`GET /ipa/session/login_kerberos` → 401** is expected when **`ipa_httpd_disable_browser_krb_negotiate: true`** — use password login. **Default:** no ipaserver httpd edits — Caddy alone fronts the UI. Optional **`deployment_portal_ipa_httpd_proxy_enabled: true`** adds Apache **`mod_substitute`** on UI paths only (not `/ipa/json`).
+**Caddy FreeIPA vhost:** When `[ipaserver]` is present, the modern UI link is `https://ipa.<ops-ip-dashed>.<base>:9443/ipa/modern-ui/`; the IP slug, DNS suffix, and port come from the normal Caddy URL facts (no AWS region, IP, or domain is hardcoded). Its HTTP `:81` vhost redirects to HTTPS. Caddy uses its persistent internal CA because ports 80/443 are already owned by FreeIPA Apache and 8443-8445 are reserved for Dogtag PKI on the default ops host. Download `/downloads/caddy-root-ca.crt` after portal login and trust it in the operator browser/OS once. Caddy connects over **HTTPS** to the IPA inventory address (`private_ip`, then `ansible_host`) so its container does not need to resolve the IPA DNS zone, while using the IPA FQDN for TLS SNI and **`Host`**. The shared IPA proxy route remains mounted on the direct-IP HTTP listener at `http://<ops-public-or-private-ip>:81/ipa/...` as a fallback. That fallback removes the upstream cookie's `Secure` attribute; the preferred HTTPS vhost retains it. Path matchers set IPA’s required HTTPS `Referer`, disable JSON compression through the proxy, and rewrite upstream redirects/cookie domains. **`GET /ipa/session/login_kerberos` → 401** is expected when **`ipa_httpd_disable_browser_krb_negotiate: true`** — use password login. Optional **`deployment_portal_ipa_httpd_proxy_enabled: true`** adds Apache **`mod_substitute`** on UI paths only (not `/ipa/json`).
 
 **IPA Apache behind Caddy (ipaserver, opt-in):** Default **`deployment_portal_ipa_httpd_proxy_enabled: false`** — no ipaserver httpd edits; ops Caddy reverse-proxies HTTPS to the ipaserver inventory address on port 443. Jenkins **PORTAL** and playbook **16** run **`remove_ipa_httpd_caddy_proxy_on_ipaserver.yml`** (absent **`zz-ipa-caddy-proxy.conf`**, revert **`ipa-rewrite`** Caddy markers, **`systemctl reload httpd`** when changed). When the flag is **true**, the same entry points run **`configure_ipa_httpd_behind_caddy.yml`** (`mod_substitute` on UI paths only, **`ipa-rewrite`** patches, **`apachectl configtest`**, httpd reload — not **`ipactl restart`**). Manual check: `apachectl configtest && systemctl reload httpd`.
 
@@ -1214,22 +1283,66 @@ sudo sed -n '1,220p' /opt/cldr-deployment-portal/Caddyfile
 
 **Operator takeaway:** Re-run **IDENTITY** to push fleet **`ansible-ccache-note.conf`**, refresh FreeIPA server krb5 snippets (with **`ipactl restart`** when enctypes change), and re-enroll or verify clients. Re-run **PORTAL** for Caddy/portal stack updates; by default Ansible **removes** legacy ipaserver **`zz-ipa-caddy-proxy.conf`** and reloads **httpd** when needed. Set **`deployment_portal_ipa_httpd_proxy_enabled: true`** only when you need Apache HTML rewrites on ipaserver.
 
-**IPA Web UI — password/form login only (no browser Kerberos/SPNEGO):** By default **`ipa_httpd_disable_browser_krb_negotiate: true`** installs **`/etc/httpd/conf.d/zz-ipa-disable-browser-krb.conf`** on **ipaserver** (`SetEnv gssapi-no-negotiate` on **`/ipa`** per **mod_auth_gssapi**). Apache stops sending **`WWW-Authenticate: Negotiate`**; the modern UI uses **forms-based login** (`admin` / **`ipaadmin_password`**). This drop-in survives **`ipactl restart`** (not regenerated by **`ipa-server-install`**). **`ipa` CLI**, **`ipa-client-install`**, and Ansible still use **Kerberos** with **`KRB5CCNAME=FILE:{{ ipa_kerberos_ccache_path }}`** — not browser negotiate.
+**IPA Web UI — password/form login:** By default **`ipa_httpd_disable_browser_krb_negotiate: true`** installs **`/etc/httpd/conf.d/zz-ipa-disable-browser-krb.conf`** on **ipaserver** with `SetEnvIf Request_URI "^/ipa(/|$)" gssapi-no-negotiate=1`. This is the mod_auth_gssapi mechanism for suppressing an interactive browser SPNEGO challenge without reopening FreeIPA's `<Location>` blocks. A broad late `<Location /ipa>` is intentionally forbidden because it overrides FreeIPA's public `/ipa/ui` and `/ipa/modern-ui` locations and produces the generic “obtain Kerberos tickets” page. Caddy does not hide `WWW-Authenticate`; the upstream browser policy is authoritative. The password form posts through `/ipa/session/login_password` with the IPA FQDN as TLS SNI/`Host`, the required `Referer`, and rewritten session cookie domain. **`ipa` CLI**, **`ipa-client-install`**, keytabs, KDC, and direct service Kerberos remain enabled and continue sending Kerberos credentials proactively.
 
-**Where to open the UI:** **`https://ipa.<ops-ip-dashed>.<base>:9443/`** (Caddy on ops; trust the downloadable Caddy root CA first) or **`https://ipaserver.<domain>/ipa/modern-ui/`** (direct; resolve via lab DNS or `/etc/hosts`). `http://ipa.<ops-ip-dashed>.<base>:81/` redirects to the HTTPS Caddy URL. Set **`ipa_httpd_disable_browser_krb_negotiate: false`** only if you need browser Kerberos SSO on the direct **ipaserver** FQDN (stock `ipa.conf` GSSAPI).
+Run the deterministic regression with `./jenkins/scripts/test-deployment-portal-quicklinks-freeipa.sh`. For a deployed environment, trust the downloaded Caddy root CA in the host trust store or pass `FREEIPA_CA_CERT=/path/to/caddy-root-ca.crt`, then verify the real proxy, form POST, session cookie, and Kerberos endpoint routing with `FREEIPA_MODERN_URL=https://ipa.<slug>.<base>:9443/ipa/modern-ui/ FREEIPA_USERNAME=admin FREEIPA_LOGIN_SECRET='<login-credential>' ./jenkins/scripts/test-freeipa-browser-login-live.sh`. The live test keeps TLS verification enabled. The repository test cannot replace final visual browser confirmation that the packaged JavaScript application renders correctly.
 
-**IPA modern UI — HTTP 401 / “obtain Kerberos tickets” (legacy):** If **`zz-ipa-disable-browser-krb.conf`** is missing, the UI may try **SPNEGO** first. On the Caddy hostname there is no matching **`HTTP/ipa.<slug>…`** service principal — re-run **`12_setup_freeipa_server.yml`** or Jenkins **PORTAL**/**IDENTITY** to apply the snippet. **`deployment_portal_ipa_httpd_proxy_enabled: true`** only rewrites embedded FQDNs in HTML. On **ipaserver**, **`ensure_krb5_default_ccache_commented.yml`** keeps **`default_ccache_name = KEYRING:persistent:%{uid}`** active by default for server-side **`kinit`**; enrolled **clients** comment KEYRING for Ansible **`KRB5CCNAME=FILE:…`**.
+**Portal ECS links:** After ECS exists, portal refresh queries the current CM service object at `/api/<version>/clusters/<ecs-cluster>/services/ecs?view=full`, extracts its numeric service ID, and adds **ECS Management / Workloads** (`.../ecsWebUI/#/workloads?namespace=all`) plus **Longhorn UI** (`.../longhorn/`). The CM base follows `cm_external_url`, public-cloud CM IP mode, or the inventory FQDN for private/on-prem mode. Generated CDP Runtime service links (Ranger, Ozone, HDFS, and similar) are not placed in Quick open; configured operator and Data Service links remain, with duplicate/stale ECS management entries removed.
+
+**Where to open the UI:** **`https://ipa.<ops-ip-dashed>.<base>:9443/ipa/modern-ui/`** (Caddy on ops; trust the downloadable Caddy root CA first) or **`https://ipaserver.<domain>/ipa/ui/`** (direct legacy UI; resolve via lab DNS or `/etc/hosts`). Set **`ipa_httpd_disable_browser_krb_negotiate: false`** only if you need browser Kerberos SSO on the direct **ipaserver** FQDN (stock `ipa.conf` GSSAPI).
+
+**IPA modern UI — HTTP 401 / “obtain Kerberos tickets”:** First check `test -f /usr/share/ipa/modern-ui/index.html`. If absent, that FreeIPA build supports only `/ipa/ui/`; a request to `/ipa/modern-ui/` falls through to protected `/ipa` and returns the generic Kerberos 401 page. If the file exists, a 401 means an Apache override protected the static application itself; re-run **`12_setup_freeipa_server.yml`** or Jenkins **PORTAL**/**IDENTITY** to replace the legacy broad `zz-ipa-disable-browser-krb.conf` and reload httpd. A 401 from **`/ipa/session/login_kerberos`** remains expected when password login is selected. On the Caddy hostname there is no matching **`HTTP/ipa.<slug>…`** service principal. **`deployment_portal_ipa_httpd_proxy_enabled: true`** only rewrites embedded FQDNs in HTML. On **ipaserver**, **`ensure_krb5_default_ccache_commented.yml`** keeps **`default_ccache_name = KEYRING:persistent:%{uid}`** active by default for server-side **`kinit`**; enrolled **clients** comment KEYRING for Ansible **`KRB5CCNAME=FILE:…`**.
 
 **Kerberos `kinit` / `klist` by host role (Ansible FILE ccache only):** On **clients**, **`ensure_krb5_default_ccache_commented.yml`** keeps FreeIPA’s KEYRING **`default_ccache_name`** commented — that is **config**, not ticket acquisition. **ipaserver:** **`12_setup_freeipa_server.yml`**, **`14_setup_dns_records.yml`**, and **`19_setup_wildcard.yml`** import **`ensure_ipa_kerberos_ticket_with_klist.yml`** (host keytab first when **`/etc/ipa/default.conf`** exists, admin password fallback, **`klist -e`** logged). **cldr-mngr and workers** (`identity_client_hosts` = **`all:!ipaserver`**): **`16_setup_identity_client.yml`** → **`join_freeipa_client.yml`** uses the same FILE ccache pattern for **`ipa ping`**; admin password **`kinit` runs only when no ticket and host keytab **`kinit` failed** — not a fleet-wide admin password step on every worker.
 
 **Running Ansible from ipaserver:** Playbook **06** copies an operator inventory, SSH key, and Ansible configuration to `/root`. Unlike the Jenkins/controller inventory, `/root/inventory.ini` rewrites each `ansible_host` to its `private_ip`, because connections originating inside the VPC should not hairpin through public addresses. `/root/ansible.cfg` selects that inventory and `/root/sshkey.pem`, and suppresses warnings for the established hyphenated group names. After rerunning **PREREQS**, root can run commands directly, for example `ansible cm-node -b -m ping`.
+
+**Existing FreeIPA domain protection and stale DNS cleanup:** Brownfield runs read
+`/etc/ipa/default.conf` from the configured IPA server before changing hostnames,
+DNS, wildcard records, or portal links. If the installed domain differs from
+`ipaserver_domain`, the run fails before mutation. Use the installed domain in
+`ANSIBLE_GROUP_VARS_YAML`; changing an existing IPA realm/domain is a migration,
+not a rerun. To clean records accidentally created under a wrong domain while
+preserving the installed zone, run the identity flow once with:
+
+```yaml
+ipaserver_domain: cldrsetup.local
+cluster_domain_skip_ozone_hostname_validation: true
+ipa_dns_cleanup_stale_domain: cldr.internal.arpa
+ipa_dns_cleanup_stale_domain_confirm: true
+```
+
+Playbook **14** removes only matching inventory-host A/PTR values from the stale
+domain and recreates correct PTR values. Playbook **19** removes the stale ECS
+wildcard value and ensures `*.apps.<installed-domain>` points to the ECS master
+private IP. The stale forward zone itself is not deleted automatically.
+
+For manual repair on the IPA server, use the repository utility. Review its
+derived host map in dry-run mode before applying:
+
+```bash
+cd ansible-playbooks
+sudo ./fix-ipa-dns-domain.sh \
+  --good-domain cldrsetup.local \
+  --bad-domain cldr.internal.arpa
+
+sudo ./fix-ipa-dns-domain.sh \
+  --good-domain cldrsetup.local \
+  --bad-domain cldr.internal.arpa \
+  --apply \
+  --delete-stale-zone
+```
+
+The utility requires an IPA admin Kerberos ticket (and prompts with `kinit admin`
+when needed). It reconciles known inventory A/PTR records and the ECS wildcard,
+but intentionally does not delete host principals or re-enroll clients.
 
 **Auto-TLS reports `/etc/ipa/ca.crt` missing:** FreeIPA trust is optional for `generateCmca`; CM Auto-TLS can use its own generated CA. When `use_freeipa_for_crt_mgmt=true`, automation first checks cldr-mngr and then tries to copy the authoritative CA from the inventory `ipaserver`. If neither has a non-empty CA file, playbook **27** warns and continues without `trustedCaCerts` instead of blocking Auto-TLS. The **IDENTITY** phase remains strict: every FreeIPA client must have the remote FQDN, non-empty `/etc/ipa/default.conf` and CA bundle, `/etc/krb5.keytab`, the matching `host/<fqdn>@REALM` principal, host-keytab `kinit`, and authenticated `ipa ping`. Rerun **IDENTITY** before LDAP/Kerberos integration to repair the current IPA deployment.
 
 **`ipa-client-install` / `zlib.error` on `/ipa/json` schema RPC** (log shows session cookie OK, then `invalid code lengths set`): **`ipa-client-install`** talks to **`https://ipaserver.<domain>/ipa/json`** on the IPA server (not the Caddy `:81` UI vhost). A broken **`zz-ipa-caddy-proxy.conf`** that runs **`mod_substitute`** on **`application/json`** under **`/ipa`** corrupts **gzip** JSON-RPC bodies. From a failing worker (replace FQDNs):
 
 ```bash
-IPA=ipaserver.cldrsetup.local
+IPA=ipaserver.cldr.internal.arpa
 # Use the IPA server FQDN (not https://localhost) — ipa-client-install does. localhost with TLS often 301s to http://<FQDN>/ipa/... (HTML if followed).
 # Direct HTTPS to IPA — expect HTTP 401 (or 200) with Content-Encoding: gzip; body must gunzip (not HTML starting with <!)
 curl -vk -H 'Accept-Encoding: gzip' -H 'Content-Type: application/json' \
@@ -1253,7 +1366,7 @@ On **ipaserver**, remove or fix a stale **`zz-ipa-caddy-proxy.conf`** (SUBSTITUT
 
 **Cloudera Manager (not via Caddy):** Use direct **`https://<cldr-mngr-fqdn>:7183`** (or `:7180` before Auto-TLS) from browsers and Jenkins Tier **B**. Caddy on the ops host serves portal, pgAdmin, monitoring, and IPA only. Optional `cm_external_url` sets a custom published CM URL in portal facts; it does not configure Caddy.
 
-**ECS console (not via Caddy):** Published console URL is **`https://<ecs_console_host_prefix>.<ecs_app_domain>`** (default prefix **`console-cdp`**; `ecs_control_plane_url_effective`). Override with `ecs_control_plane_url` when needed. Internal ECS **`ApplicationDomain`** stays `ecs_app_domain`.
+**ECS console (not via Caddy):** Published console URL is **`https://<ecs_console_host_prefix>.<ecs_app_domain>`** (default prefix **`console-cdp`**; `ecs_control_plane_url_effective`). Override with `ecs_control_plane_url` when needed. CM `app_domain` and embedded-control-plane `ApplicationDomain` use the parent **`ecs_application_domain`**; ECS adds the `apps.` label represented by `ecs_app_domain`.
 
 **Bare metal / private network (no public IP):** Set `deployment_environment: baremetal` (or `deployment_portal_access_profile: private`). The portal index shows only private-network URLs — typically `http://<ops-fqdn>:81/` when `deployment_portal_prefer_fqdn_urls: true`, or `http://<management-ip>:81/` otherwise. pgAdmin stays on port `5050` on the same ops host; database is **cldr-mngr** PostgreSQL. Caddy lab hostnames use the ops management IP (often `caddy_vhost_dns_mode: flat` with IPA/AD DNS).
 
@@ -1387,7 +1500,7 @@ For FreeIPA:
 
 ```yaml
 identity_provider: freeipa
-ipaserver_domain: cldrsetup.example.com
+ipaserver_domain: cldr.internal.arpa
 dns_forwarders: no-forwarders
 ```
 
@@ -1498,7 +1611,7 @@ YAML example (`.tfvars.yaml`):
 ```yaml
 aws_region: ap-southeast-1
 environment: development
-cm_version: "7.13.2.6"
+cm_version: "7.13.2.20000"
 instance_groups:
   cldr_mngr:
     count: 1
@@ -1536,7 +1649,7 @@ Use this after **DESTROY_STACK** (or a new `ENVIRONMENT` workspace) for a full r
 
 ### Full deploy stage order (fixed)
 
-`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` (when `DEPLOYMENT_PORTAL_ENABLED`) → `IDENTITY` → `CM_INSTALL` → **`CM_TLS_KRB_LDAP`** → `CDH_INSTALL` → `MONITORING` (optional) → `ECS_INSTALL` (optional).
+`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` (when `DEPLOYMENT_PORTAL_ENABLED`) → `MONITORING` (immediately after PORTAL when enabled) → `IDENTITY` → `CM_INSTALL` → **`CM_TLS_KRB_LDAP`** → `CDH_INSTALL` → `ECS_INSTALL` (optional).
 
 **`CM_TLS_KRB_LDAP`** runs `pvc_setup.sh` phase **`cm_tls`** in Labs order: **`27` → `29` → `30` → `28`** (Auto-TLS, CMS, LDAP, Kerberos).
 
@@ -1723,6 +1836,50 @@ cluster-node service state. Even with `cleanup_e2e=true`, PostgreSQL data and
 packages are preserved unless the separate `cleanup_remove_postgres_*` toggles
 are explicitly enabled.
 
+### Clean Base First Run retest while preserving parcel files
+
+Use the rebuild workflow for an empty test cluster so playbook **31** executes
+the supplied working reference sequence from a fresh CM cluster shell:
+
+```bash
+cd ansible-playbooks
+./rebuild-base-cluster.sh --inventory inventory.ini --execute
+```
+
+The workflow deletes only the Base cluster registration from CM, removes Base
+service data, resets the Hive, Hue, Ranger, and Knox schemas, and recreates the
+cluster through playbook **31** using the supplied reference order: cluster
+shell, Core Settings, hosts, parcel activation, dependency-ordered services,
+host templates and role assignment, Auto-TLS, then First Run. It preserves CM,
+CMS, FreeIPA, ECS,
+`/opt/cloudera/parcels`, `/opt/cloudera/csd`, the CM parcel cache, repositories,
+and agent host UUIDs. Recreating the CM cluster is required so the preserved
+parcel is associated and activated against the recreated cluster and its hosts;
+the parcel archive does not need to be downloaded again.
+
+Do **not** clean all Base service data while retaining the old CM Base cluster
+registration. That leaves CM's cluster-level parcel stage at `ACTIVATED` while
+restarted agents can report no detected CDH release. First Run then waits seven
+minutes and fails before service initialization with `Host(s) missing this
+release`.
+
+If node data and service schemas were already cleaned through that unsupported
+shortcut and First Run failed at release detection before formatting HDFS,
+delete only the stale Base cluster registration in CM and rerun playbook **31**.
+Do not clean the nodes or databases again. For example, on the CM host:
+
+```bash
+read -rsp 'CM admin password: ' CM_PASS; echo
+curl -kfsS -u "admin:${CM_PASS}" -X DELETE \
+  'https://127.0.0.1:7183/api/v58/clusters/cmtestv2-base-cluster'
+unset CM_PASS
+```
+
+Replace the cluster name or API version when they differ. The equivalent CM UI
+operation is **Clusters → Delete** for the stopped Base cluster; do not delete
+hosts or parcels. Playbook **31** then recreates the service/role topology and
+reactivates the already-cached parcel before one clean First Run.
+
 ### Manual PostgreSQL reset of the CM `scm` schema
 
 Service-only reset (`98_cleanup_cluster_services.yml`) **does not** change the
@@ -1842,7 +1999,9 @@ retries, aggregate failures, and backward-compatible single-parcel calls.
 Base CDH and CFM parcels run concurrently when CFM is enabled; ECS uses the same
 helper with one item. Tune `cluster_parcel_max_workers`,
 `cluster_parcel_timeout_seconds`, and the command retry variables in
-`group_vars/all.yml`.
+`group_vars/all.yml`. The default parcel workflow deadline is four hours because
+large public archive downloads can exceed one hour. A rerun resumes the parcel's
+current CM stage instead of restarting an existing download.
 
 **FreeIPA `ipa-server-install` `FileNotFoundError` [Errno 2] — diagnostic bundle (run on ipaserver as root, paste output):**
 
@@ -1880,7 +2039,7 @@ helper with one item. Tune `cluster_parcel_max_workers`,
 | CM **Hosts** — **Last Heartbeat** stale (~minutes), all **Commissioned** | **Agent → CM Server** path (heartbeat is not Host Monitor). Check `cloudera-scm-agent`, `server_host` FQDN, `use_tls` after **27**, SG **7182/7183** agent→manager. Re-run **`reconcile_cm_agents.yml`** or **27** (agent reconcile play). Chrony: **07_prereq_setup_002.yml**. |
 | CM **Hosts** — **Tags** empty | Expected until tags are set (automation: **28** with `cm_host_tags_enabled`, or CM UI). |
 | CM **Hosts** — load/disk/memory sparse | **Host Monitor** (CMS). Re-run **29** when Service Monitor / Host Monitor unhealthy; see REFERENCE CMS troubleshooting. |
-| ZooKeeper/Ozone canaries fail after Auto-TLS while service clients authenticate successfully | Distinguish a transient ZooKeeper restart or stopped Ozone endpoint from stale CMS trust. `ConnectionLoss` at the exact ZooKeeper restart time is transient; Ozone `Connection refused` means its OM/SCM endpoint is not listening. `PKIX`/`SSLHandshakeException` instead indicates trust. Re-run **28** to reconcile CMS: its healthy fast path requires the expected Auto-TLS truststore file, location, and password setting. For persistent Ozone refusal, inspect OM/SCM role state and logs rather than rotating Kerberos credentials. |
+| ZooKeeper/Ozone canaries fail after Auto-TLS while service clients authenticate successfully | Distinguish a transient ZooKeeper restart or stopped Ozone endpoint from stale CMS trust. ZooKeeper JMX `Broken pipe` / `bad_certificate` on port 9010 means Service Monitor lacks its Auto-TLS client identity even when the quorum and application clients are healthy. Re-run **28** or **31**: automation configures the MGMT truststore plus JVM `javax.net.ssl.keyStore*` / `trustStore*` options in Service Monitor `firehose_java_opts`, then restarts CMS. `mgmt_ssl_client_safety_valve` is Reports Manager-only and does not repair Service Monitor JMX. Ozone `Connection refused` instead means its OM/SCM endpoint is not listening; inspect those roles rather than rotating Kerberos credentials. |
 | CM agent identity or Auto-TLS certificate uses an IP/intermittent FQDN on IPv4-only hosts | Play **24** now pins `[General] reported_hostname` to the inventory FQDN, verifies `hostname -f`, and requires IPv4 resolution before starting/restarting the agent. If this changes on an existing Auto-TLS deployment, play **27** stops instead of taking its no-op path. Review the hostnames, then run **27** once with `-e cm_autotls_force_run=true` to regenerate CMCA/certificates; the success path clears the remediation markers. |
 | DNS not persisting on Ubuntu | DNS is applied via netplan — see [REFERENCE.md](REFERENCE.md#dns-configuration) |
 | CM install fails on Ubuntu | Set `cm_repo_username` / `cm_repo_password`; use `cm_repo_source: public` or `internal` (apt mirror on cldr-mngr) |

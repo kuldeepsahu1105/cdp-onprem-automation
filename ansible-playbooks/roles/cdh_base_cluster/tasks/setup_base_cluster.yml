@@ -384,9 +384,13 @@
             'match',
             '^CDH-'
             ~ (
-                cdh_parcel_version
-                .split('.')[:-1]
-                | join('.')
+                (
+                  cdh_version.split('.')[:3] | join('.')
+                  ~ '-1.cdh'
+                  ~ cdh_version.split('.')[:3] | join('.')
+                  ~ '.p'
+                  ~ cdh_version.split('.')[-1]
+                )
                 | regex_escape
               )
             ~ '[.][0-9]+-.*[.]parcel$'
@@ -416,7 +420,7 @@
         | map(attribute='parcelName')
         | join(', ')
       }}. Verify parcel_repo/REMOTE_PARCEL_REPO_URLS, archive credentials,
-      cdh_version, and cdh_numeric_version before cluster mutation.
+      and cdh_version before cluster mutation.
 
 - name: Use CDH parcel version published by configured repository
   ansible.builtin.set_fact:

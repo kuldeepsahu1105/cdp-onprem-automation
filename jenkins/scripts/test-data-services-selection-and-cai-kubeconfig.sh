@@ -187,8 +187,8 @@ assert group_vars["base_cluster_ranger_usersync_group_search_scope"] == "sub"
 assert group_vars["base_cluster_ranger_usersync_referral"] == "follow"
 assert group_vars["base_cluster_ranger_usersync_unix_backend"] == "nss"
 assert group_vars["ecs_coredns_kubeconfig_path"] == "/etc/rancher/rke2/rke2.yaml"
-assert group_vars["ecs_cde_cpu_requests"] == "40"
-assert group_vars["ecs_cde_memory_requests"] == "64Gi"
+assert group_vars["ecs_cde_cpu_requests"] == "300"
+assert group_vars["ecs_cde_memory_requests"] == "1000Gi"
 assert group_vars["ecs_cai_static_subdomain"] == "cai"
 assert len(group_vars["ecs_cai_static_subdomain"]) <= 15
 assert group_vars["ecs_cdp_environment_adopt_single_existing"] is False

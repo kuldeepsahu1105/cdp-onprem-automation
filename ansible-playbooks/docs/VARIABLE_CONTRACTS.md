@@ -6,90 +6,9 @@ Automated checks: `jenkins/scripts/validate-ansible-contracts.sh` (runs from Jen
 
 ---
 
-## Role import contract
-
-Numbered compatibility playbooks own orchestration: play order, `hosts`,
-`connection`, `remote_user`, `become`, play vars, and collection bootstrap.
-Roles own reusable task implementation. The PREREQS wrappers `00`–`09`
-therefore import `roles/prereq_*`, while PORTAL wrappers `10` and `35` import
-`roles/deployment_portal`, and IDENTITY entry points import `roles/identity`,
-CM_INSTALL entry points `20`–`26` import `roles/cm_install`, CM security entry
-points `27`–`30` import `roles/cm_security`, and CDH entry point `31` imports
-`roles/cdh_base_cluster`, while monitoring entry points import
-`roles/monitoring` and ECS entry points `33`–`34` import `roles/ecs`. None
-introduces role defaults or vars;
-inventory, `group_vars`, config, Jenkins values, and extra-vars retain their
-existing precedence.
-
-Runtime values registered or set by a prerequisite role remain host facts in
-the same play scope as before. Shared task imports use
-`{{ playbook_dir }}/common_tasks/...` so moving their caller into a role does
-not change which shared task file executes. Multi-play facts such as the
-AutoSSH key material and controller-fetched files retain their original play
-boundaries in the numbered wrappers.
-
-Portal-specific shared task implementations and their templates/files live in
-`roles/deployment_portal`. The same filenames under `common_tasks/` are
-compatibility shims that statically import the role task so existing
-monitoring, ECS, identity, and manual imports preserve conditions, tags,
-delegation, and caller-supplied vars. Generic shared tasks such as
-`validate_ansible_ssh_reachability.yml`,
-`detect_ansible_control_reachability.yml`, and inventory validation remain in
-`common_tasks/` and are imported from roles through `{{ playbook_dir }}`.
-
-Identity-owned shared implementations and templates live in `roles/identity`.
-Their `common_tasks` filenames are static compatibility shims. The role does
-not own play orchestration: router import order, FreeIPA/AD skip plays,
-localhost identity facts, `identity_client_hosts`, delegation, and
-cross-play facts remain in `11`–`19`, `detect_identity.yml`, and
-`ipa_deep_recovery.yml`. Portal interactions from identity continue through
-the deployment portal compatibility shims rather than duplicating portal
-implementation.
-
-CM-install-owned repository, PostgreSQL, package, agent, license, and
-verification implementations live in `roles/cm_install`; their legacy
-`common_tasks` paths are static compatibility shims for later phases. The
-shared CM API chain (`resolve_cm_api_probe_context.yml`,
-`set_cm_api_url.yml`, transport/host selection, Auto-TLS state reads) lives
-in `roles/cm_security`; its `common_tasks` compatibility shims preserve the
-private/public/delegated endpoint contract and let the wrapper's combined
-`25_verify_cm.yml 26_setup_cm_license.yml` invocation reuse localhost facts
-without creating role defaults or vars that alter precedence.
-
-CM security playbooks `27`–`30` keep orchestration and cross-play facts in
-their compatibility wrappers. `roles/cm_security` owns the task bodies and
-the shared API/restart/TLS/CMS/LDAP/Kerberos implementations. Identity-owned
-KDC service/encryption tasks and CM-install-owned agent/PostgreSQL helpers are
-still reached through their existing static shims, avoiding duplicated
-implementation or a change in variable precedence.
-
-CDH playbook `31` keeps its two plays, CM API localhost facts, async/poll
-settings, retries, and First Run markers in the same scopes while delegating
-task implementation to `roles/cdh_base_cluster`. CDH-owned shared helpers are
-static compatibility shims. Generic collection/module endpoint tasks and
-CM-security/CM-install-owned helpers remain at their existing shared paths or
-role shims, preserving service dependency ordering and caller-supplied vars.
-
-Monitoring playbook `32` and `enroll_monitoring_exporters.yml` retain their
-original play scopes while delegating implementation to `roles/monitoring`.
-Exporter task shims preserve manual callers; portal host/context/content and
-scrape-target facts still come through `roles/deployment_portal`, so
-`deployment_portal_context` and localhost fact propagation are unchanged.
-
-ECS playbooks `33`–`34` retain controller-local facts and their original play
-boundaries while importing `roles/ecs`. ECS-owned shared helpers use static
-shims; portal context/Caddy assets and CM API/module helpers remain with their
-existing owners, preserving delegation and extra-var precedence.
-
-Both validation gates scan role task YAML. Contract setter/index checks must
-continue to include `roles/*/tasks/*.yml`; otherwise moving a `set_fact` into a
-role would make the static contract report incomplete.
-
----
-
 ## Playbook import order (portal verify chain)
 
-End-to-end order inside `roles/deployment_portal/tasks/sync_deployment_portal_content.yml` (used by `10_setup_deployment_portal.yml` and `35_refresh_deployment_portal.yml`; legacy `common_tasks` path is a compatibility shim):
+End-to-end order inside `sync_deployment_portal_content.yml` (used by `10_setup_deployment_portal.yml` and `35_refresh_deployment_portal.yml`):
 
 | Step | Task file | Purpose |
 |------|-----------|---------|
@@ -105,7 +24,7 @@ End-to-end order inside `roles/deployment_portal/tasks/sync_deployment_portal_co
 **Playbook-level prerequisites**
 
 - **`10_setup_deployment_portal.yml` / `35_refresh_deployment_portal.yml` play 1 (localhost):** `resolve_deployment_portal_host.yml` runs before the Caddy skip gate so play 2 `hosts:` can template `deployment_portal_host_group_effective` even when Caddy is off. `build_deployment_portal_facts.yml` sets `deployment_portal_context`, `deployment_portal_anchor_inv`, `caddy_vhost_urls`, etc. on localhost when the stack runs.
-- **`roles/ecs/tasks/setup_data_services.yml` optional route refresh:** `ecs_data_services_sync_portal_routes` gates all portal/Caddy resolution and sync work. It defaults to `true` for standalone playbook compatibility; `pvc_setup.sh` passes `true` only when `PORTAL` is selected in the same lifecycle or `DEPLOYMENT_PORTAL_REFRESH=true`.
+- **`34_setup_ecs_data_services.yml` optional route refresh (localhost):** `ecs_data_services_sync_portal_routes` gates all portal/Caddy resolution and sync work. It defaults to `true` for direct standalone playbook compatibility; `pvc_setup.sh` passes `true` only when `PORTAL` is selected in the same lifecycle or `DEPLOYMENT_PORTAL_REFRESH=true`. When enabled, the play checks that the portal Compose stack exists, then runs `build_deployment_portal_facts.yml` before `ecs_data_services_sync_caddy.yml`. The sync renders the full `deployment_portal_Caddyfile.j2`, not only the ECS route include, so it requires the same complete Caddy URL/context contract as the main portal playbooks. Disabled or unbootstrapped portal state skips cleanly; refresh failures are reported without changing native ECS endpoints or Data Services provisioning results.
 - **Play 2 (ops host):** `deployment_portal_load_host_facts.yml` before any verify — ops host does not rebuild context locally.
 - **`deployment_portal_verify_milestones`:** play vars on `10_setup` default `[portal, ipa]`; refresh play sets `deployment_portal_verify_post_cm: true` so empty milestone list becomes `[portal, ipa]`. `resolve_deployment_portal_verify_milestones.yml` always strips `cm` / `cm_tls` — CM URL checks run only in `25_verify_cm.yml`. Tier A/Tier B pgAdmin checks run only when `pgadmin` is in the list.
 
@@ -122,7 +41,8 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 | `_portal_verify_milestones_effective` | `resolve_deployment_portal_verify_milestones.yml` | Must run immediately before verify URLs (also imported from `verify_deployment_portal_caddy.yml`) |
 | `caddy_vhost_urls` | `build_deployment_portal_facts.yml` | Required for Caddy vhost Tier A checks |
 | `ansible_control_reach_public_only` | `detect_ansible_control_reachability.yml` (delegate localhost) | Marks printed portal URLs optional on ops host / Jenkins public profile; read via `hostvars['localhost']` on ops host |
-| `deployment_portal_has_ipa`, `deployment_portal_ipa_fqdn`, `deployment_portal_ipa_upstream_host`, `deployment_portal_cm_fqdn`, `deployment_portal_cm_upstream_host` | `build_deployment_portal_facts.yml` + load on ops | IPA Caddy connects to the inventory IP (`private_ip`, then `ansible_host`) while sending `deployment_portal_ipa_fqdn` as the upstream `Host`; CM UI/API probes are not run from portal verify |
+| `deployment_portal_has_ipa`, `deployment_portal_ipa_fqdn`, `deployment_portal_ipa_upstream_host`, `deployment_portal_cm_fqdn`, `deployment_portal_cm_upstream_host` | `build_deployment_portal_facts.yml` + load on ops | IPA Caddy connects to the inventory IP (`private_ip`, then `ansible_host`) while sending `deployment_portal_ipa_fqdn` as the upstream `Host`; portal verify does not gate on CM UI/API probes |
+| `deployment_portal_ecs_service_id`, `deployment_portal_ecs_cm_links` | `discover_deployment_portal_ecs_cm_links.yml` (optional CM API discovery during portal fact build) | Numeric current ECS service ID and CM-hosted Workloads/Longhorn links. Discovery is non-fatal before CM/ECS exists; browser URL base follows `cm_external_url`, cloud public CM IP, or private/on-prem CM FQDN. |
 | `deployment_portal_postgres_fqdn`, `deployment_portal_postgres_connect_host` | `resolve_deployment_portal_host.yml` → `deployment_portal_context.postgresql` | pgAdmin displays the FQDN but connects to `private_ip`, then `ansible_host`, then FQDN fallback because the container may not use cluster DNS |
 | Group defaults | `group_vars/all.yml` | e.g. `deployment_portal_http_port`, `deployment_portal_ipa_httpd_proxy_enabled` (default **false** — Caddy-only IPA UI), `ipa_httpd_disable_browser_krb_negotiate` (default **true** — no browser SPNEGO on `/ipa`), `deployment_portal_url_verify_status_codes`, `caddy_vhost_enabled`, `deployment_portal_basic_auth_enabled` (revocable session auth on `/downloads/*`) |
 | `deployment_portal_expose_ssh_keys` | `group_vars/all.yml` | `true` (default) or legacy `auto`: request controller SSH key export; export occurs only when `deployment_portal_basic_auth_enabled` is `true`. `false`: disable |
@@ -141,7 +61,23 @@ Standalone external verify (no sync): `verify_deployment_portal_external_from_co
 
 **Admin password API reset:** `ensure_cm_admin_password.yml` runs in **`24_start_cm.yml`** (after first server start) and **`27_setup_cm_autotls.yml`** (before Auto-TLS API). It is **not** imported from portal playbooks or from read-only API probes.
 
-**Probe context:** `resolve_cm_api_probe_context.yml` → **`resolve_cm_api_transport.yml`** (`cm_api_use_https`, `cm_api_probe_https_first`, default `cm_api_port`) → `resolve_cm_connect_host.yml` + `select_cm_api_probe_host.yml`. Plays **25–26** default **`cm_api_use_https: false`** (HTTP **:7180**); set **`cm_autotls_complete: true`** or **`cm_api_use_https: true`** after **27** or for HTTPS-only re-runs.
+**Probe context:** `resolve_cm_api_probe_context.yml` → **`resolve_cm_api_transport.yml`** (`cm_api_use_https`, `cm_api_probe_https_first`, `cm_api_probe_skip_controller_http`, default `cm_api_port`) → `resolve_cm_connect_host.yml` + `select_cm_api_probe_host.yml`. Plays **25–26** default **`cm_api_use_https: false`** (HTTP **:7180**); set **`cm_autotls_complete: true`** or **`cm_api_use_https: true`** after **27** or for HTTPS-only re-runs. When **`cm_autotls_setup_intent`** is set before probe context (plays **25**, **27**, **28**, and **`prepare_cm_security_api.yml`** for **29–31**), public-controller `http://<EIP>:7180` auth/probes delegate to **cldr-mngr** on its private bind.
+
+**Mutation protocol selection:** `resolve_cm_krb_api_url_from_facts.yml`
+selects HTTPS only from observed runtime state (`cm_api_use_https`,
+`cm_api_https_active`, or `cm_autotls_api_enabled`). Requested configuration
+(`cm_autotls_setup_intent` / `autotls_enabled`) is not proof that the HTTPS
+listener exists. When live CM configuration reports Auto-TLS disabled, the
+resolver replaces any stale HTTPS mutation URL with the working discovered
+HTTP endpoint so play **25** can configure parcel repositories before play
+**27** enables Auto-TLS.
+
+**Probe result isolation:** delegated-manager and controller HTTP/HTTPS tasks
+must not share a `register` target when one task is expected to skip. Ansible
+records a skipped result and would overwrite the preceding successful probe,
+causing a false HTTPS fallback and red ignored failure after HTTP succeeded.
+Controller results are copied to the effective `cm_tls_probe_*` facts only
+when the controller task actually executes.
 
 When Jenkins cannot reach a CM API port directly and discovery falls back to a
 request delegated to `cldr-mngr`, `cm_api_client_host`, `cm_host`, and the
@@ -151,21 +87,19 @@ Never replace that address with the manager public IP while
 `cm_api_uri_delegate_to` is set; AWS instances may not hairpin to their own
 public EIP. URL assembly must run again after delegation is selected, even
 when an existing public `cm_api_url` is otherwise syntactically valid.
-Immediately before a delegated `GET /api/version`,
-`fetch_cm_api_version_slug.yml` pins `cm_api_probe_host`,
-`cm_api_client_host`, and `cm_host` to nonempty `cm_host_private` when the
-controller probe failed. That delegated request must not use loopback or the
-manager public EIP.
-Likewise, `set_cm_api_url.yml` may select the manager public host only when
-the public-controller profile is active, the controller probe actually
-succeeded, and both `cm_api_probe_delegate_to` and `cm_api_uri_delegate_to`
-are empty. Before its full probe, either delegation mode resolves a temporary
-private-host fact and aligns all three host facts to it. A delegated API path
-must never be overwritten by the public-host fact task.
+`fetch_cm_api_version_slug.yml` enforces the same alignment before its
+pre-assembly `/api/version` request so version discovery cannot reuse a stale
+public `cm_api_probe_host` on `cldr-mngr`. The full-probe block may select the
+manager public address only after a successful controller probe and only while
+both `cm_api_probe_delegate_to` and `cm_api_uri_delegate_to` are empty; it must
+not overwrite a manager-local probe host before delegated HTTP/HTTPS discovery.
+Before the full probe block, a delegated manager probe is explicitly aligned
+to `cm_host_private`; the API-version slug fetch applies the same rule for
+either form of delegation.
 
 **Version variable names:** `cm_version` is the configured Cloudera Manager product/package version from `config.yml` and can have extra-var precedence in Jenkins. Never use it as a `register` target. Play **25** stores `GET /cm/version` in `cm_version_response` and parses the payload into `cm_version_info`; the API slug remains `cm_api_version`.
 
-**`set_cm_api_url.yml`:** HTTP/HTTPS `/api/version` probes → `cm_protocol`, `cm_api_port`; **`assemble_cm_api_url.yml`** (+ **`resolve_cm_api_url_host.yml`**) → **`cm_api_version`**, **`cm_api_url`** (dynamically includes probe context only when `cm_api_probe_host` is unset, so resolved-context reruns do not expand its skipped task chain). URL assembly runs when probes run **or** stored URL/version is missing/invalid (discovery-only skips must not skip assembly). **`fetch_cm_api_version_slug.yml`:** `GET /api/version` → **`cm_api_version`** slug (`v58`, `v59`, …). Used by **`assemble_cm_api_url.yml`** and **`wait_for_cm_api.yml`** (re-fetches before each health wait). **`wait_for_cm_api.yml`** then checks `GET {{ cm_api_url }}/cm/version` (same as `25_verify_cm.yml`). **`fetch_cm_autotls_api_state.yml`** → **`cm_tls_mode`**, **`cm_api_https_active`**, **`cm_autotls_api_enabled`**, **`cm_agent_use_tls`**, **`cm_autotls_config_flags_unreported`** (generateCmca + agent truststore when `/cm/config` omits flags), then recalculates **`cm_krb_api_url`** from the live state so later mutations cannot retain a stale HTTP endpoint after Auto-TLS. Its conditional URL-host and display imports are dynamic to avoid repeated skipped task expansion. **27** re-fetches after generateCmca / CM restart before **`print_cm_urls.yml`**.
+**`set_cm_api_url.yml`:** HTTP/HTTPS `/api/version` probes → `cm_protocol`, `cm_api_port`; **`assemble_cm_api_url.yml`** (+ **`resolve_cm_api_url_host.yml`**) → **`cm_api_version`**, **`cm_api_url`** (dynamically includes probe context only when `cm_api_probe_host` is unset, so resolved-context reruns do not expand its skipped task chain). URL assembly runs when probes run **or** stored URL/version is missing/invalid (discovery-only skips must not skip assembly). **`fetch_cm_api_version_slug.yml`:** `GET /api/version` → **`cm_api_version`** slug (`v58`, `v59`, …). Used by **`assemble_cm_api_url.yml`** and **`wait_for_cm_api.yml`** (re-fetches before each health wait). **`wait_for_cm_api.yml`** then checks `GET .../cm/version` using **`cm_api_effective_url`** / **`cm_api_url_delegated`** when REST delegates to cldr-mngr (same chain as **`25_verify_cm.yml`** via **`resolve_cm_api_effective_url.yml`**). **`fetch_cm_autotls_api_state.yml`** → **`cm_tls_mode`**, **`cm_api_https_active`**, **`cm_autotls_api_enabled`**, **`cm_agent_use_tls`**, **`cm_autotls_config_flags_unreported`** (generateCmca + agent truststore when `/cm/config` omits flags), then recalculates **`cm_krb_api_url`** from the live state so later mutations cannot retain a stale HTTP endpoint after Auto-TLS. Its conditional URL-host and display imports are dynamic to avoid repeated skipped task expansion. **27** re-fetches after generateCmca / CM restart before **`print_cm_urls.yml`**.
 
 **`configure_cm_parcel_repo_api.yml`:** uses the prepared mutation-safe URL. If CM nevertheless returns its standard HTTP `303` after Auto-TLS, the helper accepts only a same-manager redirect to the expected HTTPS port and exact `/api/<version>/cm/config` path, adopts that HTTPS base for subsequent shared API facts, and retries the read before any parcel configuration mutation.
 
@@ -177,7 +111,7 @@ must never be overwritten by the public-host fact task.
 
 **CM agent host identity before Auto-TLS:** `configure_cm_agent.yml` pins `reported_hostname` to `cm_agent_reported_hostname` (empty default resolves to `cldr_hostname.cluster_domain`) after requiring `hostname -f` to match and `getent ahostsv4` to succeed. A changed setting creates `cm_agent_reported_hostname_change_marker_path`. Initial Auto-TLS issuance proceeds normally. If CM already reports Auto-TLS enabled, play **27** refuses its normal no-op while any marker exists and requires one intentional run with `cm_autotls_force_run=true`; successful `generateCmca` clears all markers. This avoids relying on CM agent FQDN caching/address-family behavior and avoids silently replacing an existing CMCA.
 
-**`28_setup_cm_cms.yml` / `configure_cm_cms_autotls_trust.yml`:** same **`cm_autotls_setup_intent`** capture before **`set_cm_api_url.yml`**. **`cms_autotls_trust_required`** is true when **`cm_cms_configure_autotls_trust`** and (**`cm_autotls_api_enabled`** from CM config **or** setup intent with agent **`cm-auto-global_truststore.jks`** on the CM host). Manual TLS (`autotls_enabled: false` in inventory) stays skipped when CM reports HTTPS without Auto-TLS and no agent truststore.
+**`28_setup_cm_cms.yml` / `configure_cm_cms_autotls_trust.yml`:** same **`cm_autotls_setup_intent`** capture before **`set_cm_api_url.yml`**. **`cms_autotls_trust_required`** is true when **`cm_cms_configure_autotls_trust`** and (**`cm_autotls_api_enabled`** from CM config **or** setup intent with agent **`cm-auto-global_truststore.jks`** on the CM host). The helper configures the MGMT client truststore and adds JVM-standard `javax.net.ssl.keyStore*` / `trustStore*` options to the Service Monitor `firehose_java_opts`, preserving unrelated Java options. The JVM options are required for mutual-TLS JMX endpoints such as ZooKeeper port 9010; `mgmt_ssl_client_safety_valve` applies only to Reports Manager and must not be used for Service Monitor. Manual TLS (`autotls_enabled: false` in inventory) stays skipped when CM reports HTTPS without Auto-TLS and no agent truststore.
 
 **CM UI:** Cloudera Manager **`frontend_url`** is not set via Caddy. Portal index and Jenkins list **direct** `https://cldr-mngr.<domain>:7183` (or `:7180`). Optional `cm_external_url` in `group_vars` sets `cm_frontend_url_effective` only when you need a custom published URL.
 
@@ -190,7 +124,8 @@ must never be overwritten by the public-host fact task.
 | `cm_frontend_url_effective` | `resolve_caddy_service_public_urls.yml` — optional `cm_external_url` override only |
 | `deployment_portal_public_host` | `resolve_caddy_service_public_urls.yml` — Caddy lab hostname for the deployment index (`portal.<ops-ip-dashed>.<base>`) |
 | `pgadmin_caddy_public_url` | `resolve_caddy_service_public_urls.yml` — preferred browser URL for pgAdmin on Caddy port `deployment_portal_http_port` (default **81**) |
-| `ipa_caddy_public_url`, `ipa_caddy_modern_public_url`, `ipa_caddy_legacy_public_url` | `resolve_caddy_service_public_urls.yml` — FreeIPA Caddy vhost base, modern (`/ipa/modern-ui/`), and legacy (`/ipa/ui`) browser URLs |
+| `deployment_portal_ipa_modern_ui_available`, `deployment_portal_ipa_ui_path` | `build_deployment_portal_facts.yml` — SSH `stat` of `/usr/share/ipa/modern-ui/index.html`; selects modern UI only when installed, otherwise `/ipa/ui/` |
+| `ipa_caddy_public_url`, `ipa_caddy_preferred_public_url`, `ipa_caddy_modern_public_url`, `ipa_caddy_legacy_public_url` | `resolve_caddy_service_public_urls.yml` — FreeIPA Caddy vhost base, installed/preferred UI, optional modern (`/ipa/modern-ui/`), and legacy (`/ipa/ui/`) browser URLs |
 | `deployment_tier_b_url_checks` | `build_deployment_tier_b_url_checks.yml` on **localhost** — Tier B reads via `hostvars['localhost']` in `verify_service_urls_from_controller.yml` |
 | `ecs_control_plane_url_effective` | `resolve_ecs_control_plane_url.yml` — `ecs_control_plane_url` or `https://<ecs_console_host_prefix>.<ecs_app_domain>` (default prefix `console-cdp`; no Caddy) |
 
@@ -211,12 +146,25 @@ See also: `docs/OPERATIONS_GUIDE.md` (URL verification tiers), `docs/REFERENCE.m
 
 ---
 
+## Cluster domain / Ozone hostname (HDDS-16034)
+
+| Fact / var | Set by | Notes |
+|------------|--------|-------|
+| `cluster_domain` | `group_vars/all.yml` | `ipaserver_domain` or `ad_domain` via `identity_provider_effective` |
+| `cluster_domain_skip_ozone_hostname_validation` | `group_vars/all.yml` (default **`false`**) | Brownfield opt-out from `validate_cluster_domain_ozone_hostname.yml` |
+| `_cluster_domain_ozone_validate` | `validate_cluster_domain_ozone_hostname.yml` | Ephemeral `command` result on **localhost** (`run_once`); not consumed downstream |
+
+Import **`validate_cluster_domain_ozone_hostname.yml`** from **`detect_identity_provider.yml`** and playbook **02** before hostnames are applied.
+
+---
+
 ## FreeIPA client enrollment (playbook 16)
 
 | Fact | Set by | Notes |
 |------|--------|-------|
 | `ipa_kerberos_ccache_path` | `group_vars/all.yml` | Ansible **`KRB5CCNAME=FILE:…`** for **`ipa`/`kinit`** in automation — not **`default_ccache_name`** in krb5.conf |
-| `ipa_httpd_disable_browser_krb_negotiate` | `group_vars/all.yml` (default **`true`**) | **`zz-ipa-disable-browser-krb.conf`** on ipaserver (`SetEnv gssapi-no-negotiate`); play **12** + **manage_ipa_httpd_caddy_proxy_on_ipaserver** |
+| `ipa_httpd_disable_browser_krb_negotiate` | `group_vars/all.yml` (default **`true`**) | **`zz-ipa-disable-browser-krb.conf`** uses `SetEnvIf Request_URI "^/ipa(/|$)" gssapi-no-negotiate=1` for password/form browser login without overriding FreeIPA's public UI locations. Caddy preserves upstream authentication headers; backend Kerberos remains enabled. |
+| `ipa_server_packages_state`, `ipa_server_require_modern_ui` | `group_vars/all.yml` (defaults **`latest`**, **`false`**) | Play **12** refreshes package metadata and upgrades configured IPA with `ipa-server-upgrade` when packages change. The portal publishes the explicit Caddy `/ipa/modern-ui/` link; set the strict gate to `true` when the modern application must be enforced during installation. The direct `/ipa/ui/` URL remains documented for legacy-package fallback. |
 | `krb5_comment_default_ccache_on_ipaserver` | `group_vars/all.yml` (default **`false`**) | When **`false`**, **ipaserver** keeps active **`default_ccache_name = KEYRING:persistent:%{uid}`**; clients stay commented |
 | `krb5_libdefaults_default_ccache_commented_line` | `group_vars/all.yml` | Target commented line on **clients** (`ensure_krb5_default_ccache_commented.yml`) |
 | `krb5_cm_managed_krb5_conf` | `group_vars/all.yml` (default **`true`**) | CM **`KRB_MANAGE_KRB5_CONF`** — CM regenerates **`/etc/krb5.conf`** on cluster hosts; set **`false`** to keep host/IPA-managed krb5 |
