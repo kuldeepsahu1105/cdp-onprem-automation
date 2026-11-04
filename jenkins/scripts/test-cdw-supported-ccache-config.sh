@@ -162,6 +162,12 @@ require(
     "persisted DBC config must force-refresh and verify the generated metastore pod",
 )
 require(
+    "failed to acquire lease|already leased by operation" in followup
+    and "Require database catalog FILE cache update" in followup
+    and "ecs_cdw_workload_refresh_retries" in followup,
+    "transient DBC update leases must be retried within the bounded refresh window",
+)
+require(
     followup.index("Persist database catalog FILE credential cache through CDW API")
     < followup.index("\n    - name: Wait for default database catalog\n"),
     "DBC cache must be configured before waiting for Running",

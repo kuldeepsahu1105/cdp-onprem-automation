@@ -476,6 +476,8 @@ assert "item.virtual_warehouses | default([]) | length == 0" in cdw_followup
 assert "ecs_data_service_cdw_reconcile_vw_ccaches.yml" not in cdw_followup
 assert "'describe-dbc-config'" in cdw_followup
 assert "'update-dbc'" in cdw_followup
+assert "failed to acquire lease|already leased by operation" in cdw_followup
+assert "Require database catalog FILE cache update" in cdw_followup
 assert "'start-dbc'" in cdw_followup
 assert "'--force-refresh'" in cdw_followup
 assert "Verify generated metastore FILE credential cache" in cdw_followup
