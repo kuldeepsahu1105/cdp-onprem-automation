@@ -11,7 +11,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 | 1 | VALIDATE | — | (outside Ansible) |
 | 2 | TERRAFORM | — | inventory generation |
 | 3 | PREREQS | `1` / `prereq` | SSH: `00_setup_ssh_preqs` → `01`–`09` (`00` only on PREREQS / `all`; override with `ANSIBLE_RUN_SSH_PREQS`) |
-| 4 | PORTAL | `portal` | `10_setup_deployment_portal`; defers monitoring/exporter work when MONITORING is also selected |
+| 4 | PORTAL | `portal` | `10_setup_deployment_portal`; optional monitoring/exporter work runs only when MONITORING is also selected |
 | 5 | MONITORING | `monitoring` | `32_setup_monitoring_stack`; runs immediately after PORTAL when enabled and includes exporter enrollment plus portal Caddy/index sync |
 | 6 | IDENTITY | `2` / `identity` | `11_identity_setup` (`12` → packages → `13` → `14` DNS records → `19` wildcard → `16` clients; imports `detect_identity.yml` first) |
 | 7 | CM_INSTALL | `3` / `cm` | `20`/`22` → `23`–`24` → `25`–`26` (CM API/UI direct on cldr-mngr `:7180`/`:7183`; no Caddy) |
@@ -26,7 +26,7 @@ Always follow **`pvc_setup.sh`** / **Jenkins** stage order for production runs.
 
 **Full local flow:** `DEPLOY_PHASE=all ./pvc_setup.sh` = phases 1 → portal (`10`) → monitoring (`32`, if enabled) → identity → CM → cm_tls → CDH → ECS.
 
-**Portal refresh:** Bootstrap (`10`) runs only on `DEPLOY_PHASE=portal` (Jenkins **PORTAL**). A deliberate `DEPLOY_PHASE=6` / `portal_refresh` still runs the full `35_refresh_deployment_portal.yml`. Normal base-cluster and ECS completion instead run `35_sync_deployment_portal_access.yml`, which updates only authenticated credential/access files and never invokes Docker Compose, Caddy, pgAdmin, or monitoring. Other non-portal phases use that same lightweight sync only when `DEPLOYMENT_PORTAL_REFRESH=true`.
+**Portal refresh:** Bootstrap (`10`) runs only on `DEPLOY_PHASE=portal` (Jenkins **PORTAL**). A deliberate `DEPLOY_PHASE=6` / `portal_refresh` still runs the full `35_refresh_deployment_portal.yml`. Non-portal phases update portal credentials/routes only when the Jenkins **PORTAL** stage is explicitly selected in the same lifecycle or `DEPLOYMENT_PORTAL_REFRESH=true`; selecting ECS phases alone never invokes portal or monitoring work.
 
 ## Mandatory vs optional phases
 
@@ -57,7 +57,7 @@ Re-running a **mandatory** phase is safe (every numbered playbook is idempotent 
 | `cm_api_context_resolved_this_play` (`common_tasks/resolve_cm_api_probe_context.yml`) | Within one `ansible-playbook` process (persists across plays targeting `localhost`) | Re-running the CM manager reachability + bind-address discovery (`resolve_cm_connect_host.yml` + `select_cm_api_probe_host.yml`) more than once per process |
 | `cm_api_url` / `cm_api_version` / `cm_api_discovery_succeeded` early-exit (`common_tasks/set_cm_api_url.yml`) | Within one `ansible-playbook` process | Re-running the `/api/version` HTTP+HTTPS probe loop when a prior play in the **same process** already resolved it (this is why `pvc_setup.sh` runs `25_verify_cm.yml 26_setup_cm_license.yml` as one `ansible-playbook` call — `26` reuses `25`'s already-resolved `cm_api_url`) |
 | `11_identity_setup.yml` importing `detect_identity.yml` itself | `pvc_setup.sh` no longer also calls `detect_identity.yml` standalone in `run_phase_2` | A guaranteed double run of the identity-provider assert/debug on every identity-phase run |
-| Selected-stage deferral in `pvc_setup.sh` | Jenkins `SELECTED_ANSIBLE_STAGES` or local `DEPLOY_PHASE=all` | PORTAL lays down the shared foundation, then the immediately following MONITORING phase owns monitoring/exporters; standalone PORTAL retains the combined install behavior |
+| Deterministic selected-stage dispatch | Jenkins `SELECTED_ANSIBLE_STAGES` or local `DEPLOY_PHASE=all` | Normalizes aliases/case/whitespace, removes duplicates, and runs each selected stage once in fixed order. MONITORING may add its required PORTAL foundation; ECS/CM/CDH stages never add PORTAL or MONITORING. |
 | EC2 start/stop installer ownership | PORTAL defers play **36** when IDENTITY follows in the same selected pipeline | Running the same package/template install in both PORTAL and IDENTITY |
 
 **Known, intentional process boundaries:** `27_setup_cm_autotls.yml` remains a separate `ansible-playbook` process because it can replace TLS material and restart CM. After that stable boundary, the wrapper runs `28_setup_cm_cms.yml`, `29_setup_cm_ldap.yml`, and `30_setup_cm_krbs.yml` in one process so LDAP and Kerberos reuse the CMS-resolved CM API endpoint instead of repeating discovery. Every numbered playbook remains independently runnable for targeted recovery. Likewise, `validate_ansible_ssh_reachability.yml` deliberately re-probes SSH reachability in `00`, `10`, `32`, and `35` even when their target host groups overlap — it is a cheap fail-fast guard against the exact "SSH timeout" symptom in `docs/OPERATIONS_GUIDE.md`, not a redundant check to remove.

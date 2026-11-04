@@ -188,7 +188,7 @@ Defaults match `.tfvars.yaml` in the repo (refresh Jenkinsfile after updates):
 
 | Parameter | Default |
 |---|---|
-| `PIPELINE_STAGES` | `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION`; with `MONITORING_STACK_ENABLED=true`, MONITORING is inserted immediately after PORTAL |
+| `PIPELINE_STAGES` | `VALIDATE,TERRAFORM,PORTAL,STARTSTOP_AUTOMATION`; optional MONITORING must be selected explicitly |
 | `DEPLOYMENT_PORTAL_ENABLED` | `true` (bootstrap the Caddy portal foundation before the adjacent monitoring stage) |
 | `ECS_DATA_SERVICES_DEPLOY_ENABLED` | `false` (playbook 34 only when checked or an `ECS_DEPLOY_*` box is checked) |
 | Internal validation checks | `TOOLS,AWS_CREDS,TFVARS,ANSIBLE_SYNTAX,INVENTORY` |
@@ -212,6 +212,10 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 
 `VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `MONITORING` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `ECS_INSTALL` → `ECS_POST_INSTALL_TASKS` → `ECS_DATA_SERVICES` → `STARTSTOP_AUTOMATION` → `DESTROY_STACK`
 
+Selection is normalized case-insensitively, trims whitespace, accepts the legacy aliases listed by validation, and removes duplicates before execution. Stages run only when selected, except that `MONITORING` adds its required `PORTAL` foundation. Selecting `PORTAL` alone does not add monitoring, and selecting `ECS_INSTALL,ECS_DATA_SERVICES` runs exactly those two stages once without portal or monitoring.
+
+On Jenkins **Restart from Stage**, the skipped `Resolve Stages` checkpoint is reconstructed from the original build parameters before evaluating Ansible stages. The canonical selection is idempotent, so completed earlier stages remain skipped and the resumed selected stage is not expanded into unrelated portal or monitoring work.
+
 **Copy-paste (matches Jenkinsfile checkbox names):** `VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS` — also at the top of **Build with Parameters** → `PIPELINE_STAGES` description and `PIPELINE_STAGES_REFERENCE` default text. Append `ECS_DATA_SERVICES`, `STARTSTOP_AUTOMATION`, or `DESTROY_STACK` when needed.
 
 | Checkbox | What runs |
@@ -219,7 +223,7 @@ Select one or more stage checkboxes. Fixed run order (each Ansible step is its o
 | `VALIDATE` | `validate-prereqs.sh` — standard tool, AWS, tfvars, Ozone/Netty cluster-domain check for user-set `ipaserver_domain` / `cluster_domain` in tfvars or `ANSIBLE_GROUP_VARS_YAML` (`VALIDATE_CLUSTER_DOMAIN` / `CLUSTER_DOMAIN`), Ansible syntax, and inventory checks (no deploy) |
 | `TERRAFORM` | EC2/VPC/SG/EIP via Terraform; `inventory.ini` + `.pem` key |
 | `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 |
-| `PORTAL` | Bootstrap the shared Caddy/pgAdmin/index foundation (`10`); MONITORING follows immediately when enabled |
+| `PORTAL` | Bootstrap the shared Caddy/pgAdmin/index foundation (`10`); select MONITORING separately when required |
 | `IDENTITY` | Ansible **phase 2** — FreeIPA or AD (`11_identity_setup.yml` → `12_setup_freeipa_server.yml` with DNS preflight + VPC forwarder); refreshes portal index (`35`). **Checkout `EXECUTION_BRANCH=main` at commit `e30c2de` or newer** — older trees used `dns_forwarders: no` → `--no-forwarders` on AWS and skipped dig preflight (IDENTITY failures: `[Errno 2]`, ~10 playbook tasks). |
 | `CM_INSTALL` | Ansible **phase 3** — CM repos, Postgres, CM server + agents, license/trial |
 | `CM_TLS_KRB_LDAP` | Auto-TLS, CMS, LDAP, Kerberos (27→28→29→30); portal refresh. **Checkout `EXECUTION_BRANCH=main` at commit `b03af5a` or newer** — older trees fail in `realign_cm_api_url_after_autotls_restart.yml` with task *CM API — derive API host from existing cm_api_url* (`NoneType` `.group` when `cm_api_url` has no hostname match). |
@@ -323,7 +327,7 @@ Leave blank to use `.tfvars.yaml` / `.tfvars.env`:
 | `CM_REPO_USERNAME` | Optional archive.cloudera.com username (empty = skip; no early validation failure) |
 | `CM_REPO_PASSWORD` | Optional archive.cloudera.com password (empty = skip) |
 | `CM_LICENSE_CONTENT` | Optional multiline Cloudera license file content when no `*license*` file on the agent (empty = trial or agent file) |
-| `MONITORING_STACK_ENABLED` | When checked (default), sets Ansible `monitoring_stack_enabled: true` and automatically inserts playbook **32** immediately after PORTAL. Uncheck to run the portal foundation without monitoring. Overrides `monitoring_stack_enabled` in `ANSIBLE_GROUP_VARS_YAML` if both are set. |
+| `MONITORING_STACK_ENABLED` | When checked (default), permits the explicitly selected MONITORING stage to run playbook **32**. Selecting MONITORING adds its required PORTAL foundation; selecting PORTAL alone does not add monitoring. Overrides `monitoring_stack_enabled` in `ANSIBLE_GROUP_VARS_YAML` if both are set. |
 
 **Deployment portal (playbook 10) and CM verify (25)** use two URL verification tiers (detail: `ansible-playbooks/docs/OPERATIONS_GUIDE.md` § Service URL verification tiers):
 

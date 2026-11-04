@@ -396,9 +396,11 @@
 
     - name: Resolve deployment portal Caddy gate for ECS ingress sync
       ansible.builtin.import_tasks: common_tasks/resolve_deployment_portal_caddy_enabled.yml
+      when: ecs_data_services_sync_portal_routes | default(true) | bool
 
     - name: Refresh optional deployment portal routes for ECS data services
       when:
+        - ecs_data_services_sync_portal_routes | default(true) | bool
         - ecs_caddy_data_service_routes | default([]) | length > 0
         - deployment_portal_caddy_effective | default(false) | bool
       block:
