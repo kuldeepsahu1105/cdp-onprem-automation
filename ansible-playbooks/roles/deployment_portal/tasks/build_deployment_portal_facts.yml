@@ -152,39 +152,12 @@
   delegate_to: "{{ ipaserver_inventory_host }}"
   when: deployment_portal_has_ipa | bool
 
-- name: Probe FreeIPA modern UI application
-  ansible.builtin.uri:
-    url: https://127.0.0.1/ipa/modern-ui/
-    headers:
-      Host: "{{ deployment_portal_ipa_fqdn }}"
-    validate_certs: false
-    return_content: true
-    status_code:
-      - 200
-      - 301
-      - 302
-      - 401
-      - 403
-      - 404
-  register: deployment_portal_ipa_modern_ui_probe
-  changed_when: false
-  failed_when: false
-  connection: ssh
-  delegate_to: "{{ ipaserver_inventory_host }}"
-  when:
-    - deployment_portal_has_ipa | bool
-    - deployment_portal_ipa_modern_ui.stat.exists | default(false) | bool
-    - deployment_portal_ipa_modern_ui.stat.isreg | default(false) | bool
-
 - name: Select installed FreeIPA UI application
   ansible.builtin.set_fact:
     deployment_portal_ipa_modern_ui_available: >-
       {{
         deployment_portal_ipa_modern_ui.stat.exists | default(false) | bool
         and deployment_portal_ipa_modern_ui.stat.isreg | default(false) | bool
-        and deployment_portal_ipa_modern_ui_probe.status | default(0) | int in [200, 301, 302]
-        and 'Unable to verify your Kerberos credentials'
-            not in deployment_portal_ipa_modern_ui_probe.content | default('')
       }}
     deployment_portal_ipa_ui_path: >-
       {{
@@ -192,9 +165,6 @@
         if (
           deployment_portal_ipa_modern_ui.stat.exists | default(false) | bool
           and deployment_portal_ipa_modern_ui.stat.isreg | default(false) | bool
-          and deployment_portal_ipa_modern_ui_probe.status | default(0) | int in [200, 301, 302]
-          and 'Unable to verify your Kerberos credentials'
-              not in deployment_portal_ipa_modern_ui_probe.content | default('')
         )
         else '/ipa/ui/'
       }}
@@ -708,18 +678,6 @@
             )
             else ''
           }}
-        ipa_caddy_preferred_url: >-
-          {{
-            (
-              caddy_vhost_urls_external.ipa.url | default('') | trim | regex_replace('/+$', '')
-              + deployment_portal_ipa_ui_path
-            )
-            if (
-              caddy_vhost_enabled | default(false) | bool
-              and deployment_portal_has_ipa | bool
-            )
-            else ''
-          }}
         ipa_caddy_modern_url: >-
           {{
             (
@@ -747,7 +705,6 @@
         ipa_ui_label: "FreeIPA / IdM"
         ipa_ui_modern_label: "FreeIPA (modern UI)"
         ipa_ui_legacy_label: "FreeIPA (legacy UI)"
-        ipa_modern_ui_available: "{{ deployment_portal_ipa_modern_ui_available | default(false) | bool }}"
       cloudera_manager:
         host_fqdn: "{{ deployment_portal_cm_fqdn }}"
         public_ip: "{{ deployment_portal_cm_public_ip | default('') }}"
