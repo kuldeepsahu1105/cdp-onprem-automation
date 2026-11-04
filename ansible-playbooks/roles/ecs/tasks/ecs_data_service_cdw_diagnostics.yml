@@ -395,6 +395,82 @@
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
 
+- name: Collect pending CDW pod names
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_cdw_kubernetes_namespace }}"
+      - get
+      - pods
+      - --field-selector
+      - status.phase=Pending
+      - --output
+      - "jsonpath={range .items[*]}{.metadata.name}{'\\n'}{end}"
+  register: ecs_cdw_pending_pod_names
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Describe pending CDW pods
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_cdw_kubernetes_namespace }}"
+      - describe
+      - pod
+      - "{{ item }}"
+  loop: "{{ ecs_cdw_pending_pod_names.stdout_lines | default([]) }}"
+  register: ecs_cdw_pending_pod_descriptions
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Collect failed CDW persistent volume claims
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_cdw_kubernetes_namespace }}"
+      - get
+      - persistentvolumeclaims
+      - --output
+      - wide
+  register: ecs_cdw_failed_pvcs
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Collect ECS node scheduling capacity
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - get
+      - nodes
+      - --output
+      - "custom-columns=NAME:.metadata.name,READY:.status.conditions[?(@.type=='Ready')].status,CPU:.status.allocatable.cpu,MEMORY:.status.allocatable.memory,TAINTS:.spec.taints"
+  register: ecs_cdw_node_scheduling_capacity
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
 - name: Collect failed Hue query processor description
   ansible.builtin.command:
     argv:
@@ -485,6 +561,22 @@
           | default('none found', true)
         }}
       - "Pods:\n{{ ecs_cdw_failed_pods.stdout | default(ecs_cdw_failed_pods.stderr, true) }}"
+      - >-
+        Pending pod descriptions:
+        {% for result in ecs_cdw_pending_pod_descriptions.results | default([]) %}
+        ===== {{ result.item }} =====
+        {{ result.stdout | default(result.stderr, true) }}
+        {% else %}
+        no Pending pods were found
+        {% endfor %}
+      - >-
+        Persistent volume claims:
+        {{ ecs_cdw_failed_pvcs.stdout
+           | default(ecs_cdw_failed_pvcs.stderr, true) }}
+      - >-
+        Node scheduling capacity:
+        {{ ecs_cdw_node_scheduling_capacity.stdout
+           | default(ecs_cdw_node_scheduling_capacity.stderr, true) }}
       - >-
         Hue query processor:
         {{ ecs_cdw_hue_query_processor_description.stdout

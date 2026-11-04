@@ -133,7 +133,21 @@
         ecs_cdw_cluster:
           failed: true
           finished: true
-          msg: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_json) }}"
+          msg: >-
+            {{
+              ansible_failed_result.stderr
+              | default(
+                  ansible_failed_result.stdout
+                  | default(
+                      ansible_failed_result.msg
+                      | default(ansible_failed_result | to_json),
+                      true
+                    ),
+                  true
+                )
+            }}
+          rc: "{{ ansible_failed_result.rc | default('unknown') }}"
+          details: "{{ ansible_failed_result }}"
 
     - name: Collect CDW diagnostics after uncaught failure
       ansible.builtin.include_tasks: ecs_data_service_cdw_diagnostics.yml
