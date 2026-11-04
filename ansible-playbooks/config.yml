@@ -32,6 +32,13 @@ ipaserver_domain: cldr.internal.arpa
 ipa_server_install_allow_zone_overlap: false
 # Detect and pin each host's current RHEL minor release before any DNF operation.
 rhel_release_pin: auto                  # auto | major.minor
+# FreeIPA and its explicit server dependencies use repository-latest versions by
+# default. To pin, uncomment both keys and provide exact native package specs:
+# ipa_server_packages_state: present
+# ipa_server_packages_override:
+#   # RHEL example syntax: ipa-server-<exact-version-release>
+#   # Debian example syntax: freeipa-server=<exact-version-release>
+#   - ipa-server-<exact-version-release>
 
 # Active Directory is selected automatically when identity_provider is auto,
 # no FreeIPA host exists, and ad_kdc_host is non-empty.
