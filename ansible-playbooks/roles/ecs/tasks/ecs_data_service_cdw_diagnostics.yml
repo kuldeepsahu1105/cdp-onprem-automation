@@ -395,6 +395,84 @@
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
 
+- name: Collect failed metastore StatefulSet FILE cache
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_cdw_kubernetes_namespace }}"
+      - get
+      - statefulset
+      - metastore
+      - --output
+      - >-
+        jsonpath=KRB5CCNAME={.spec.template.spec.containers[?(@.name=="metastore")].env[?(@.name=="KRB5CCNAME")].value}{' generation='}{.metadata.generation}{' observedGeneration='}{.status.observedGeneration}{'\n'}
+  register: ecs_cdw_failed_metastore_statefulset
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Collect failed metastore pod description
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_cdw_kubernetes_namespace }}"
+      - describe
+      - pod
+      - metastore-0
+  register: ecs_cdw_failed_metastore_description
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Collect failed metastore logs
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_cdw_kubernetes_namespace }}"
+      - logs
+      - metastore-0
+      - --container=metastore
+      - --tail=300
+  register: ecs_cdw_failed_metastore_logs
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: Collect previous failed metastore logs
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_cdw_kubernetes_namespace }}"
+      - logs
+      - metastore-0
+      - --container=metastore
+      - --previous
+      - --tail=300
+  register: ecs_cdw_failed_metastore_previous_logs
+  changed_when: false
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
 - name: Collect pending CDW pod names
   ansible.builtin.command:
     argv:
@@ -561,6 +639,22 @@
           | default('none found', true)
         }}
       - "Pods:\n{{ ecs_cdw_failed_pods.stdout | default(ecs_cdw_failed_pods.stderr, true) }}"
+      - >-
+        Metastore StatefulSet:
+        {{ ecs_cdw_failed_metastore_statefulset.stdout
+           | default(ecs_cdw_failed_metastore_statefulset.stderr, true) }}
+      - >-
+        Metastore pod:
+        {{ ecs_cdw_failed_metastore_description.stdout
+           | default(ecs_cdw_failed_metastore_description.stderr, true) }}
+      - >-
+        Metastore logs:
+        {{ ecs_cdw_failed_metastore_logs.stdout
+           | default(ecs_cdw_failed_metastore_logs.stderr, true) }}
+      - >-
+        Metastore previous logs:
+        {{ ecs_cdw_failed_metastore_previous_logs.stdout
+           | default(ecs_cdw_failed_metastore_previous_logs.stderr, true) }}
       - >-
         Pending pod descriptions:
         {% for result in ecs_cdw_pending_pod_descriptions.results | default([]) %}

@@ -173,7 +173,8 @@ require(
 require(
     "Detect fresh catalog FILE cache bootstrap requirement" in followup
     and "Read initial generated metastore FILE credential cache" in followup
-    and "is search('(?i)^(starting|updating)$')" in followup
+    and "is not search(" in followup
+    and "running|stopped|suspended|deactivated|" in followup
     and "Keep metastore on FILE cache until CDW persists the catalog setting"
     in followup
     and "Persist database catalog FILE credential cache through CDW API" in followup
@@ -181,6 +182,8 @@ require(
     and "pod/metastore-0" in followup
     and "--ignore-not-found=true" in followup
     and "pod_exists=false" in followup
+    and "pod_ready=" in followup
+    and "No KCM server|default ccache.*KCM|KCM server" in followup
     and "config_is_converged" in followup
     and "operation is not allowed in '(starting|stopping|updating)' state"
     in followup,

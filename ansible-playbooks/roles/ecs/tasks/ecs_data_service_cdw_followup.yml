@@ -141,14 +141,17 @@
         ecs_cdw_dbc_starting_ccache_bootstrap_required: >-
           {{
             (
-              ecs_cdw_catalog_initial_status | default('')
-              is search('(?i)^(starting|updating)$')
-            )
-            and (
               ecs_cdw_metastore_krb5ccname_initial.stdout
               | default('')
               | trim
               != ecs_cdw_workload_krb5ccname
+            )
+            and (
+              ecs_cdw_catalog_initial_status | default('')
+              is not search(
+                '(?i)^(running|stopped|suspended|deactivated|'
+                ~ 'failed|error|deleted|deleting)$'
+              )
             )
           }}
       when: ecs_cdw_metastore_krb5ccname_initial is defined
@@ -214,7 +217,42 @@
             --output 'jsonpath={.spec.containers[?(@.name=="metastore")].env[?(@.name=="KRB5CCNAME")].value}'
             2>/dev/null || true
           )"
-          if [[ "${pod_exists}" == true && "${pod_cache}" != "${desired}" ]]; then
+          pod_ready="$(
+            {{ ecs_coredns_kubectl_path | quote }}
+            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
+            --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
+            get pod/metastore-0
+            --output 'jsonpath={.status.containerStatuses[?(@.name=="metastore")].ready}'
+            2>/dev/null || true
+          )"
+          kcm_failure=false
+          if [[ "${pod_exists}" == true ]]; then
+            pod_logs="$(
+              {{ ecs_coredns_kubectl_path | quote }}
+              --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
+              --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
+              logs pod/metastore-0 --container=metastore --tail=100
+              2>&1 || true
+            )"
+            pod_previous_logs="$(
+              {{ ecs_coredns_kubectl_path | quote }}
+              --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
+              --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
+              logs pod/metastore-0 --container=metastore --previous --tail=100
+              2>&1 || true
+            )"
+            if grep -Eqi "No KCM server|default ccache.*KCM|KCM server" \
+              <<<"${pod_logs}"$'\n'"${pod_previous_logs}"; then
+              kcm_failure=true
+            fi
+          fi
+          if [[ "${pod_exists}" == true ]] && {
+            [[ "${pod_cache}" != "${desired}" ]] ||
+            {
+              [[ "${pod_ready}" != true ]] &&
+              [[ "${kcm_failure}" == true ]];
+            }
+          }; then
             {{ ecs_coredns_kubectl_path | quote }}
             --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
             --namespace {{ ecs_cdw_kubernetes_namespace | quote }}

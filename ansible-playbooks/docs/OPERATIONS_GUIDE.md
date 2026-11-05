@@ -310,6 +310,10 @@ pre-create a valid `kubernetes.io/tls` secret or set controller-side
 `*.<ecs_cai_static_subdomain>.<ecs_app_domain>`. Automation rejects missing,
 self-signed/untrusted, expired, wrong-SAN, or mismatched-key material before
 workspace submission and never creates a temporary certificate.
+When preflight adopts an existing active or provisioning workspace, its
+reported endpoint is authoritative and pre-create TLS convergence is skipped.
+Automation does not create validation directories, stage certificates, or
+mutate the workspace TLS secret on that rerun.
 
 ECS install owns authoritative FreeIPA records and CoreDNS reconciliation.
 Playbook 33 and its phased installer perform that reconciliation. Playbook 34
@@ -482,20 +486,25 @@ is controlled by
 `ecs_cdw_workload_file_ccache_reconcile` (default `true`) and is idempotent;
 the CDW control plane persists and renders the setting. The private activation
 API cannot accept Database Catalog service configuration. On a fresh catalog
-observed in `Starting` or `Updating` whose generated pod lacks the setting,
+observed in any nonterminal transitional status whose generated pod lacks the setting,
 automation therefore keeps the FILE cache on the metastore StatefulSet and
 recreates only a generated `metastore-0` that still carries the stale cache.
 While CDW rejects `update-dbc` in a transient lifecycle state, each bounded
 retry rechecks the persisted configuration and restores the generated
-StatefulSet before retrying the supported API update. This prevents the CDW
-operator from reintroducing KCM during the gap between a one-time Kubernetes
-bootstrap and API persistence. Fresh-catalog convergence uses
+StatefulSet before retrying the supported API update. A generated pod whose
+current or previous logs still report KCM is recreated even when its visible
+environment already says FILE, which clears a stale failed pod incarnation.
+This prevents the CDW operator from reintroducing KCM during the gap between a
+one-time Kubernetes bootstrap and API persistence. Fresh-catalog convergence uses
 `ecs_cdw_dbc_wait_retries` and `ecs_cdw_dbc_wait_delay` (defaults: 40
 attempts, 30 seconds); the later workload refresh remains bounded by the
 separate ten-minute refresh window. The `Updating` case covers a persisted
 API setting whose stale pod still blocks completion. Automation then
 force-refreshes through the supported API. It does not modify the PVC,
 database, service, or Kerberos principal.
+If convergence still fails, diagnostics include the metastore StatefulSet
+FILE-cache value and generation, pod description, current and previous
+metastore logs, and namespace events.
 
 When a database catalog fails while `metastore-0` is Pending, the failure
 diagnostics describe every Pending pod and report namespace events, PVC state,

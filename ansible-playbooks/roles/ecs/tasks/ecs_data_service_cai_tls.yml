@@ -1,5 +1,26 @@
 ---
+- name: CAI TLS | Reuse adopted workspace TLS contract
+  ansible.builtin.set_fact:
+    ecs_cai_expected_base_hostname: >-
+      {{ ecs_cai_static_subdomain_effective | lower }}.{{ ecs_app_domain | lower }}
+    ecs_cai_workbench_hostname: >-
+      {{ ecs_cai_static_subdomain_effective | lower }}.{{ ecs_app_domain | lower }}
+    ecs_cai_tls_subdomain_validated: "{{ ecs_cai_static_subdomain_effective }}"
+  when: ecs_cai_existing_workspace | default({}) | length > 0
+
+- name: CAI TLS | Skip pre-create convergence for adopted workspace
+  ansible.builtin.debug:
+    msg: >-
+      CAI TLS: existing workspace {{
+      ecs_cai_existing_workspace.instanceName
+      | default(ecs_cai_workspace_name_effective) }} is authoritative at
+      {{ ecs_cai_existing_workspace.instanceUrl
+      | default('https://' + ecs_cai_expected_base_hostname) }}.
+      Skipping certificate staging and pre-create secret convergence.
+  when: ecs_cai_existing_workspace | default({}) | length > 0
+
 - name: CAI TLS | Converge trusted pre-create certificate
+  when: ecs_cai_existing_workspace | default({}) | length == 0
   block:
     - name: CAI TLS | Run provider-aware TLS convergence
       ansible.builtin.include_tasks: ecs_data_service_cai_tls_converge.yml

@@ -486,6 +486,7 @@ assert "ecs_cdw_catalog_initial_status" in cdw_followup
 assert "stopped|suspended|deactivated" in cdw_followup
 assert "Verify generated metastore FILE credential cache" in cdw_followup
 assert "Verify converged database catalog FILE credential cache configuration" in cdw_followup
+assert "No KCM server|default ccache.*KCM|KCM server" in cdw_followup
 assert "'describe-vw-config'" not in cdw_followup
 assert "'update-vw'" not in cdw_followup
 assert "ecs_cdw_dbc_file_ccache_config | to_json" in cdw_followup
