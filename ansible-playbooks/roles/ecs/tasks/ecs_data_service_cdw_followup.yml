@@ -153,90 +153,121 @@
           }}
       when: ecs_cdw_metastore_krb5ccname_initial is defined
 
-    - name: Bootstrap metastore FILE cache during fresh catalog startup
-      ansible.builtin.command:
-        argv:
-          - "{{ ecs_coredns_kubectl_path }}"
-          - --kubeconfig
-          - "{{ ecs_coredns_kubeconfig_path }}"
-          - --namespace
-          - "{{ ecs_cdw_kubernetes_namespace }}"
-          - set
-          - env
-          - statefulset/metastore
-          - --containers=metastore
-          - "KRB5CCNAME={{ ecs_cdw_workload_krb5ccname }}"
-      register: ecs_cdw_dbc_ccache_bootstrap
-      changed_when: >-
-        'env updated' in (
-          ecs_cdw_dbc_ccache_bootstrap.stdout | default('') | lower
-        )
-      until: ecs_cdw_dbc_ccache_bootstrap.rc | default(1) == 0
-      retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
-      delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
-      become: true
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
-      when: ecs_cdw_dbc_starting_ccache_bootstrap_required | default(false) | bool
+    - name: Keep metastore on FILE cache until CDW persists the catalog setting
+      ansible.builtin.shell: |
+        set -o pipefail
 
-    - name: Recreate failed metastore pod from bootstrapped template
-      ansible.builtin.command:
-        argv:
-          - "{{ ecs_coredns_kubectl_path }}"
-          - --kubeconfig
-          - "{{ ecs_coredns_kubeconfig_path }}"
-          - --namespace
-          - "{{ ecs_cdw_kubernetes_namespace }}"
-          - delete
-          - pod
-          - metastore-0
-          - --wait=false
-          - --ignore-not-found=true
-      changed_when: true
-      become: true
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
-      when: ecs_cdw_dbc_starting_ccache_bootstrap_required | default(false) | bool
+        desired={{ ecs_cdw_workload_krb5ccname | quote }}
+        attempts={{ ecs_cdw_dbc_wait_retries | int }}
+        delay={{ ecs_cdw_dbc_wait_delay | int }}
+        last_update_output=""
 
-    - name: Wait for recreated metastore pod record
-      ansible.builtin.command:
-        argv:
-          - "{{ ecs_coredns_kubectl_path }}"
-          - --kubeconfig
-          - "{{ ecs_coredns_kubeconfig_path }}"
-          - --namespace
-          - "{{ ecs_cdw_kubernetes_namespace }}"
-          - get
-          - pod
-          - metastore-0
-      register: ecs_cdw_dbc_ccache_bootstrap_pod
-      changed_when: false
-      failed_when: false
-      until: ecs_cdw_dbc_ccache_bootstrap_pod.rc | default(1) == 0
-      retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
-      delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
-      become: true
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
-      when: ecs_cdw_dbc_starting_ccache_bootstrap_required | default(false) | bool
+        config_is_converged() {
+          local config_json="$1"
+          CONFIG_JSON="${config_json}" DESIRED="${desired}" python3 -c '
+        import json
+        import os
+        import sys
 
-    - name: Wait for bootstrapped metastore pod readiness
-      ansible.builtin.command:
-        argv:
-          - "{{ ecs_coredns_kubectl_path }}"
-          - --kubeconfig
-          - "{{ ecs_coredns_kubeconfig_path }}"
-          - --namespace
-          - "{{ ecs_cdw_kubernetes_namespace }}"
-          - wait
-          - pod/metastore-0
-          - --for=condition=Ready
-          - >-
-            --timeout={{
-              (ecs_cdw_workload_refresh_retries | int)
-              * (ecs_cdw_workload_refresh_delay | int)
-            }}s
-      changed_when: false
+        payload = json.loads(os.environ["CONFIG_JSON"])
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        blocks = payload.get("config", payload).get("commonConfigs", {}).get("configBlocks", [])
+        current = ""
+        for block in blocks:
+            if block.get("id") == "env":
+                current = block.get("content", {}).get("keyValues", {}).get("KRB5CCNAME", "")
+                break
+        raise SystemExit(0 if current == os.environ["DESIRED"] else 3)
+        '
+        }
+
+        for ((attempt = 1; attempt <= attempts; attempt++)); do
+          template_cache="$(
+            {{ ecs_coredns_kubectl_path | quote }}
+            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
+            --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
+            get statefulset/metastore
+            --output 'jsonpath={.spec.template.spec.containers[?(@.name=="metastore")].env[?(@.name=="KRB5CCNAME")].value}'
+            2>/dev/null || true
+          )"
+          if [[ "${template_cache}" != "${desired}" ]]; then
+            {{ ecs_coredns_kubectl_path | quote }}
+            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
+            --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
+            set env statefulset/metastore --containers=metastore
+            "KRB5CCNAME=${desired}" >/dev/null
+          fi
+
+          pod_exists=false
+          if {{ ecs_coredns_kubectl_path | quote }} \
+            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }} \
+            --namespace {{ ecs_cdw_kubernetes_namespace | quote }} \
+            get pod/metastore-0 >/dev/null 2>&1; then
+            pod_exists=true
+          fi
+          pod_cache="$(
+            {{ ecs_coredns_kubectl_path | quote }}
+            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
+            --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
+            get pod/metastore-0
+            --output 'jsonpath={.spec.containers[?(@.name=="metastore")].env[?(@.name=="KRB5CCNAME")].value}'
+            2>/dev/null || true
+          )"
+          if [[ "${pod_exists}" == true && "${pod_cache}" != "${desired}" ]]; then
+            {{ ecs_coredns_kubectl_path | quote }}
+            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
+            --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
+            delete pod/metastore-0 --wait=false --ignore-not-found=true >/dev/null
+          fi
+
+          set +e
+          current_config="$(
+            {{ ecs_data_services_cdp_cli_prefix | map('quote') | join(' ') }}
+            dw describe-dbc-config
+            --cluster-id {{ ecs_cdw_cluster.cluster.id | quote }}
+            --dbc-id {{ ecs_cdw_catalog_id | quote }}
+            2>/dev/null
+          )"
+          config_rc=$?
+          set -e
+          if [[ ${config_rc} -eq 0 ]] && config_is_converged "${current_config}"; then
+            echo "CDW API already persists ${desired}."
+            exit 0
+          fi
+
+          set +e
+          last_update_output="$(
+            {{ ecs_data_services_cdp_cli_prefix | map('quote') | join(' ') }}
+            dw update-dbc
+            --cluster-id {{ ecs_cdw_cluster.cluster.id | quote }}
+            --dbc-id {{ ecs_cdw_catalog_id | quote }}
+            --config {{ ecs_cdw_dbc_file_ccache_config | to_json | quote }}
+            2>&1
+          )"
+          update_rc=$?
+          set -e
+          if [[ ${update_rc} -eq 0 ]]; then
+            printf '%s\n' "${last_update_output}"
+            exit 0
+          fi
+          if ! grep -Eqi \
+            "failed to acquire lease|already leased by operation|operation is not allowed in '(starting|stopping|updating)' state" \
+            <<<"${last_update_output}"; then
+            printf '%s\n' "${last_update_output}" >&2
+            exit "${update_rc}"
+          fi
+
+          sleep "${delay}"
+        done
+
+        printf '%s\n' "${last_update_output}" >&2
+        exit 1
+      args:
+        executable: /bin/bash
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_dbc_ccache_guarded_update
+      changed_when: ecs_cdw_dbc_ccache_guarded_update.rc | default(1) == 0
       become: true
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
@@ -279,23 +310,56 @@
       when:
         - ecs_cdw_dbc_ccache_check is defined
         - ecs_cdw_dbc_ccache_check.rc | default(0) == 3
+        - not (ecs_cdw_dbc_starting_ccache_bootstrap_required | default(false) | bool)
 
     - name: Require database catalog FILE cache update
       ansible.builtin.assert:
         that:
-          - ecs_cdw_dbc_ccache_update.rc | default(0) == 0
+          - >-
+            (
+              ecs_cdw_dbc_ccache_guarded_update.rc
+              if ecs_cdw_dbc_ccache_guarded_update is defined
+              and not (
+                ecs_cdw_dbc_ccache_guarded_update.skipped
+                | default(false)
+                | bool
+              )
+              else ecs_cdw_dbc_ccache_update.rc | default(0)
+            ) == 0
         fail_msg: >-
           CDW database catalog FILE-cache update failed after waiting for any
           active update lease or transient lifecycle state to clear (rc={{
-            ecs_cdw_dbc_ccache_update.rc | default('unknown')
+            ecs_cdw_dbc_ccache_guarded_update.rc
+            if ecs_cdw_dbc_ccache_guarded_update is defined
+            and not (
+              ecs_cdw_dbc_ccache_guarded_update.skipped | default(false) | bool
+            )
+            else ecs_cdw_dbc_ccache_update.rc | default('unknown')
           }}):
           {{
-            ecs_cdw_dbc_ccache_update.stderr
+            ecs_cdw_dbc_ccache_guarded_update.stderr
+            | default(ecs_cdw_dbc_ccache_guarded_update.stdout, true)
+            if ecs_cdw_dbc_ccache_guarded_update is defined
+            and not (
+              ecs_cdw_dbc_ccache_guarded_update.skipped | default(false) | bool
+            )
+            else ecs_cdw_dbc_ccache_update.stderr
             | default(ecs_cdw_dbc_ccache_update.stdout, true)
           }}
       when:
-        - ecs_cdw_dbc_ccache_update is defined
-        - not (ecs_cdw_dbc_ccache_update.skipped | default(false) | bool)
+        - >-
+          (
+            ecs_cdw_dbc_ccache_guarded_update is defined
+            and not (
+              ecs_cdw_dbc_ccache_guarded_update.skipped | default(false) | bool
+            )
+          )
+          or (
+            ecs_cdw_dbc_ccache_update is defined
+            and not (
+              ecs_cdw_dbc_ccache_update.skipped | default(false) | bool
+            )
+          )
 
     - name: Read generated metastore FILE credential cache
       ansible.builtin.command:
@@ -360,6 +424,12 @@
           (
             ecs_cdw_dbc_ccache_update is defined
             and not (ecs_cdw_dbc_ccache_update.skipped | default(false) | bool)
+          )
+          or (
+            ecs_cdw_dbc_ccache_guarded_update is defined
+            and not (
+              ecs_cdw_dbc_ccache_guarded_update.skipped | default(false) | bool
+            )
           )
           or (
             ecs_cdw_metastore_krb5ccname.stdout | default('') | trim

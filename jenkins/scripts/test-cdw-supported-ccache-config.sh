@@ -130,12 +130,12 @@ require(
     "VW creation must use the shared FILE-cache config exactly once",
 )
 require(
-    followup.count('.get("KRB5CCNAME", "")') == 2,
-    "DBC configuration must be inspected before and after reconciliation",
+    followup.count('.get("KRB5CCNAME", "")') == 3,
+    "DBC configuration must be inspected before, during, and after reconciliation",
 )
 require(
-    followup.count("if isinstance(payload, str):") == 3
-    and followup.count("payload = json.loads(payload)") == 3,
+    followup.count("if isinstance(payload, str):") == 4
+    and followup.count("payload = json.loads(payload)") == 4,
     "JSON parsers must unwrap registered stdout when Ansible preserves it as text",
 )
 require(
@@ -174,21 +174,31 @@ require(
     "Detect fresh catalog FILE cache bootstrap requirement" in followup
     and "Read initial generated metastore FILE credential cache" in followup
     and "is search('(?i)^(starting|updating)$')" in followup
-    and "Bootstrap metastore FILE cache during fresh catalog startup" in followup
-    and "Recreate failed metastore pod from bootstrapped template" in followup
+    and "Keep metastore on FILE cache until CDW persists the catalog setting"
+    in followup
     and "Persist database catalog FILE credential cache through CDW API" in followup
     and "statefulset/metastore" in followup
     and "pod/metastore-0" in followup
     and "--ignore-not-found=true" in followup
+    and "pod_exists=false" in followup
+    and "config_is_converged" in followup
     and "operation is not allowed in '(starting|stopping|updating)' state"
     in followup,
     "fresh catalogs in Starting or Updating with a stale metastore pod must "
-    "bootstrap before persisting the setting through the supported API",
+    "keep the FILE cache applied until the supported API persists it",
 )
 require(
-    followup.index("Bootstrap metastore FILE cache during fresh catalog startup")
+    followup.index(
+        "Keep metastore on FILE cache until CDW persists the catalog setting"
+    )
     < followup.index("Persist database catalog FILE credential cache through CDW API"),
     "fresh catalog metastore bootstrap must precede the first update-dbc attempt",
+)
+require(
+    followup.index("delete pod/metastore-0 --wait=false --ignore-not-found=true")
+    < followup.index("if [[ ${config_rc} -eq 0 ]] && config_is_converged"),
+    "fresh catalog recovery must repair a stale generated pod before accepting "
+    "an already-persisted API setting",
 )
 require(
     "another operation[^\\\\n]*already in progress" in followup

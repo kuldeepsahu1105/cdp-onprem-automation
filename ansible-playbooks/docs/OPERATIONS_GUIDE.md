@@ -483,12 +483,19 @@ is controlled by
 the CDW control plane persists and renders the setting. The private activation
 API cannot accept Database Catalog service configuration. On a fresh catalog
 observed in `Starting` or `Updating` whose generated pod lacks the setting,
-automation therefore immediately sets the FILE cache on the metastore
-StatefulSet and recreates only `metastore-0` instead of waiting for KCM restart
-exhaustion or an `update-dbc` failure. The `Updating` case covers a persisted
-API setting whose stale pod still blocks completion. Automation then persists
-the value when needed and force-refreshes through the supported API. It does
-not modify the PVC, database, service, or Kerberos principal.
+automation therefore keeps the FILE cache on the metastore StatefulSet and
+recreates only a generated `metastore-0` that still carries the stale cache.
+While CDW rejects `update-dbc` in a transient lifecycle state, each bounded
+retry rechecks the persisted configuration and restores the generated
+StatefulSet before retrying the supported API update. This prevents the CDW
+operator from reintroducing KCM during the gap between a one-time Kubernetes
+bootstrap and API persistence. Fresh-catalog convergence uses
+`ecs_cdw_dbc_wait_retries` and `ecs_cdw_dbc_wait_delay` (defaults: 40
+attempts, 30 seconds); the later workload refresh remains bounded by the
+separate ten-minute refresh window. The `Updating` case covers a persisted
+API setting whose stale pod still blocks completion. Automation then
+force-refreshes through the supported API. It does not modify the PVC,
+database, service, or Kerberos principal.
 
 When a database catalog fails while `metastore-0` is Pending, the failure
 diagnostics describe every Pending pod and report namespace events, PVC state,
