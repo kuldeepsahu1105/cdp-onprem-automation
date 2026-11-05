@@ -136,7 +136,10 @@
         ecs_cdw_dbc_ccache_update.rc | default(1) == 0
         or (
           ecs_cdw_dbc_ccache_update.stderr | default('')
-          is not search('(?i)(failed to acquire lease|already leased by operation)')
+          is not search(
+            "(?i)(failed to acquire lease|already leased by operation|"
+            ~ "operation is not allowed in '(starting|stopping|updating)' state)"
+          )
         )
       retries: "{{ ecs_cdw_workload_refresh_retries | int }}"
       delay: "{{ ecs_cdw_workload_refresh_delay | int }}"
@@ -153,7 +156,7 @@
           - ecs_cdw_dbc_ccache_update.rc | default(0) == 0
         fail_msg: >-
           CDW database catalog FILE-cache update failed after waiting for any
-          active update lease to clear (rc={{
+          active update lease or transient lifecycle state to clear (rc={{
             ecs_cdw_dbc_ccache_update.rc | default('unknown')
           }}):
           {{

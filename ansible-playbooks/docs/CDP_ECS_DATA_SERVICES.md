@@ -444,13 +444,15 @@ the generated metastore workload configuration, and healthy reruns are
 no-ops. This prevents `kinit: No KCM server found while getting default
 ccache` without directly mutating a Helm-managed StatefulSet or changing the
 metastore PVC, database, service, or principal.
-If another DWX operation temporarily owns the Database Catalog lease,
+If another DWX operation temporarily owns the Database Catalog lease or the
+catalog is transitioning through `Starting`, `Stopping`, or `Updating`,
 automation retries both the supported configuration update and force-refresh
 start within the same bounded ten-minute refresh window rather than treating
-`already leased by operation` or `another operation ... is already in
-progress` as terminal failures. A catalog intentionally deactivated in the UI
-therefore returns from `Stopped` through the supported start path even when
-its persisted configuration and existing pod template are already converged.
+the transient state, `already leased by operation`, or
+`another operation ... is already in progress` as a terminal failure. A
+catalog intentionally deactivated in the UI therefore returns from `Stopped`
+through the supported start path even when its persisted configuration and
+existing pod template are already converged.
 
 Automation never removes a CDW principal automatically. The DW control-plane
 cluster query can return no records even while the backend still considers the
