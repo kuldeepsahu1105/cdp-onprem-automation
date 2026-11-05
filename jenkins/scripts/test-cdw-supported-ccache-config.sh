@@ -185,8 +185,11 @@ require(
 )
 require(
     "another operation[^\\\\n]*already in progress" in followup
+    and "can't start DB Catalog in status " in followup
+    and "'(starting|stopping|updating)'" in followup
     and "Require database catalog workload refresh" in followup,
-    "transient DBC start leases must be retried before catalog readiness checks",
+    "transient DBC start leases and lifecycle states must be retried before "
+    "catalog readiness checks",
 )
 require(
     "ecs_cdw_catalog_initial_status" in followup
