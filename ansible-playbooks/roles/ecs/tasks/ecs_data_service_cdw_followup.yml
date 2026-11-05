@@ -371,7 +371,9 @@
           ecs_cdw_dbc_ccache_refresh.stderr | default('')
           is not search(
             '(?i)(another operation[^\\n]*already in progress|'
-            ~ 'failed to acquire lease|already leased by operation)'
+            ~ 'failed to acquire lease|already leased by operation|'
+            ~ "can't start DB Catalog in status "
+            ~ "'(starting|stopping|updating)')"
           )
         )
       retries: "{{ ecs_cdw_workload_refresh_retries | int }}"
@@ -402,7 +404,7 @@
           - ecs_cdw_dbc_ccache_refresh.rc | default(0) == 0
         fail_msg: >-
           CDW database catalog force refresh failed after waiting for any
-          active operation lease to clear (rc={{
+          active operation lease or transient lifecycle state to clear (rc={{
             ecs_cdw_dbc_ccache_refresh.rc | default('unknown')
           }}):
           {{

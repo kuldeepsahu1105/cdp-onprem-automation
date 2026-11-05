@@ -457,10 +457,12 @@ catalog is transitioning through `Starting`, `Stopping`, or `Updating`,
 automation retries both the supported configuration update and force-refresh
 start within the same bounded ten-minute refresh window rather than treating
 the transient state, `already leased by operation`, or
-`another operation ... is already in progress` as a terminal failure. A
-catalog intentionally deactivated in the UI therefore returns from `Stopped`
-through the supported start path even when its persisted configuration and
-existing pod template are already converged.
+`another operation ... is already in progress` as a terminal failure.
+`start-dbc --force-refresh` also waits while the immediately preceding
+configuration update still reports the catalog as `Updating`. A catalog
+intentionally deactivated in the UI therefore returns from `Stopped` through
+the supported start path even when its persisted configuration and existing
+pod template are already converged.
 
 Automation never removes a CDW principal automatically. The DW control-plane
 cluster query can return no records even while the backend still considers the
