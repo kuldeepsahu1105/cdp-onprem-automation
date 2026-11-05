@@ -446,13 +446,15 @@ ccache` without changing the metastore PVC, database, service, or principal.
 During a fresh activation, the private `create-private-cluster` API has no
 Database Catalog service-config field. The control plane can therefore create
 the first metastore pod before the separate configuration API accepts updates.
-As soon as a new catalog is observed in `Starting` with the FILE cache absent,
-automation temporarily sets the FILE cache on the metastore StatefulSet and
-recreates only `metastore-0`; it does not wait for the pod to exhaust its KCM
-restarts or for `update-dbc` to fail first. After the pod becomes ready and the
-catalog leaves `Starting`, automation persists the same value through
-`update-dbc`, force-refreshes through the supported API, and verifies the
-generated pod. No other workload, principal, database, or PVC is modified.
+As soon as a new catalog is observed in `Starting` or `Updating` while its
+generated metastore pod lacks the FILE cache, automation temporarily sets the
+FILE cache on the metastore StatefulSet and recreates only `metastore-0`; it
+does not wait for the pod to exhaust its KCM restarts or for `update-dbc` to
+fail first. Including `Updating` recovers the case where the API setting was
+already persisted but the stale pod still blocks the transition. After the pod
+becomes ready, automation persists the value when needed, force-refreshes
+through the supported API, and verifies the generated pod. No other workload,
+principal, database, or PVC is modified.
 If another DWX operation temporarily owns the Database Catalog lease or the
 catalog is transitioning through `Starting`, `Stopping`, or `Updating`,
 automation retries both the supported configuration update and force-refresh
