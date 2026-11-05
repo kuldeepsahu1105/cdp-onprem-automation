@@ -168,6 +168,11 @@ require(
     "transient DBC update leases must be retried within the bounded refresh window",
 )
 require(
+    "another operation[^\\\\n]*already in progress" in followup
+    and "Require database catalog workload refresh" in followup,
+    "transient DBC start leases must be retried before catalog readiness checks",
+)
+require(
     followup.index("Persist database catalog FILE credential cache through CDW API")
     < followup.index("\n    - name: Wait for default database catalog\n"),
     "DBC cache must be configured before waiting for Running",

@@ -193,7 +193,19 @@
           }}
       environment: "{{ ecs_cdp_cli_environment }}"
       register: ecs_cdw_dbc_ccache_refresh
-      changed_when: true
+      changed_when: ecs_cdw_dbc_ccache_refresh.rc | default(1) == 0
+      failed_when: false
+      until: >-
+        ecs_cdw_dbc_ccache_refresh.rc | default(1) == 0
+        or (
+          ecs_cdw_dbc_ccache_refresh.stderr | default('')
+          is not search(
+            '(?i)(another operation[^\\n]*already in progress|'
+            ~ 'failed to acquire lease|already leased by operation)'
+          )
+        )
+      retries: "{{ ecs_cdw_workload_refresh_retries | int }}"
+      delay: "{{ ecs_cdw_workload_refresh_delay | int }}"
       become: false
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
@@ -209,6 +221,23 @@
             ecs_cdw_metastore_krb5ccname.stdout | default('') | trim
             != ecs_cdw_workload_krb5ccname
           )
+
+    - name: Require database catalog workload refresh
+      ansible.builtin.assert:
+        that:
+          - ecs_cdw_dbc_ccache_refresh.rc | default(0) == 0
+        fail_msg: >-
+          CDW database catalog force refresh failed after waiting for any
+          active operation lease to clear (rc={{
+            ecs_cdw_dbc_ccache_refresh.rc | default('unknown')
+          }}):
+          {{
+            ecs_cdw_dbc_ccache_refresh.stderr
+            | default(ecs_cdw_dbc_ccache_refresh.stdout, true)
+          }}
+      when:
+        - ecs_cdw_dbc_ccache_refresh is defined
+        - not (ecs_cdw_dbc_ccache_refresh.skipped | default(false) | bool)
 
     - name: Read converged database catalog service configuration
       ansible.builtin.command:
