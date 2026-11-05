@@ -449,7 +449,8 @@ automation retries both the supported configuration update and force-refresh
 start within the same bounded ten-minute refresh window rather than treating
 `already leased by operation` or `another operation ... is already in
 progress` as terminal failures. A catalog intentionally deactivated in the UI
-therefore returns from `Stopped` through the supported start path.
+therefore returns from `Stopped` through the supported start path even when
+its persisted configuration and existing pod template are already converged.
 
 Automation never removes a CDW principal automatically. The DW control-plane
 cluster query can return no records even while the backend still considers the

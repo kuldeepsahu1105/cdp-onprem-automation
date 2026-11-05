@@ -482,6 +482,8 @@ assert "'start-dbc'" in cdw_followup
 assert "'--force-refresh'" in cdw_followup
 assert "another operation[^\\\\n]*already in progress" in cdw_followup
 assert "Require database catalog workload refresh" in cdw_followup
+assert "ecs_cdw_catalog_initial_status" in cdw_followup
+assert "stopped|suspended|deactivated" in cdw_followup
 assert "Verify generated metastore FILE credential cache" in cdw_followup
 assert "Verify converged database catalog FILE credential cache configuration" in cdw_followup
 assert "'describe-vw-config'" not in cdw_followup
