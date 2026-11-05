@@ -163,9 +163,12 @@ require(
 )
 require(
     "failed to acquire lease|already leased by operation" in followup
+    and "operation is not allowed in '(starting|stopping|updating)' state"
+    in followup
     and "Require database catalog FILE cache update" in followup
     and "ecs_cdw_workload_refresh_retries" in followup,
-    "transient DBC update leases must be retried within the bounded refresh window",
+    "transient DBC update leases and lifecycle states must be retried within "
+    "the bounded refresh window",
 )
 require(
     "another operation[^\\\\n]*already in progress" in followup
