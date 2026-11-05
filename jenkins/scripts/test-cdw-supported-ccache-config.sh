@@ -172,6 +172,8 @@ require(
 )
 require(
     "Detect fresh catalog FILE cache bootstrap requirement" in followup
+    and "Read initial generated metastore FILE credential cache" in followup
+    and "is search('(?i)^(starting|updating)$')" in followup
     and "Bootstrap metastore FILE cache during fresh catalog startup" in followup
     and "Recreate failed metastore pod from bootstrapped template" in followup
     and "Persist database catalog FILE credential cache through CDW API" in followup
@@ -180,8 +182,8 @@ require(
     and "--ignore-not-found=true" in followup
     and "operation is not allowed in '(starting|stopping|updating)' state"
     in followup,
-    "fresh catalogs in Starting must bootstrap the metastore before persisting "
-    "the setting through the supported API",
+    "fresh catalogs in Starting or Updating with a stale metastore pod must "
+    "bootstrap before persisting the setting through the supported API",
 )
 require(
     followup.index("Bootstrap metastore FILE cache during fresh catalog startup")

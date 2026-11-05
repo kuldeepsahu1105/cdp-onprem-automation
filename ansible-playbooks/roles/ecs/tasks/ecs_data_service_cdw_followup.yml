@@ -71,6 +71,30 @@
         - ecs_cdw_catalog_id | default('') | length > 0
         - ecs_cdw_workload_file_ccache_reconcile | default(true) | bool
 
+    - name: Read initial generated metastore FILE credential cache
+      ansible.builtin.command:
+        argv:
+          - "{{ ecs_coredns_kubectl_path }}"
+          - --kubeconfig
+          - "{{ ecs_coredns_kubeconfig_path }}"
+          - --namespace
+          - "{{ ecs_cdw_kubernetes_namespace }}"
+          - get
+          - pod
+          - metastore-0
+          - --output
+          - >-
+            jsonpath={.spec.containers[?(@.name=="metastore")].env[?(@.name=="KRB5CCNAME")].value}
+      register: ecs_cdw_metastore_krb5ccname_initial
+      changed_when: false
+      failed_when: false
+      become: true
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_catalog_id | default('') | length > 0
+        - ecs_cdw_workload_file_ccache_reconcile | default(true) | bool
+
     - name: Check database catalog FILE credential cache configuration
       ansible.builtin.command:
         argv:
@@ -116,13 +140,18 @@
       ansible.builtin.set_fact:
         ecs_cdw_dbc_starting_ccache_bootstrap_required: >-
           {{
-            ecs_cdw_dbc_ccache_check.rc | default(0) == 3
-            and (
+            (
               ecs_cdw_catalog_initial_status | default('')
-              is search('(?i)^starting$')
+              is search('(?i)^(starting|updating)$')
+            )
+            and (
+              ecs_cdw_metastore_krb5ccname_initial.stdout
+              | default('')
+              | trim
+              != ecs_cdw_workload_krb5ccname
             )
           }}
-      when: ecs_cdw_dbc_ccache_check is defined
+      when: ecs_cdw_metastore_krb5ccname_initial is defined
 
     - name: Bootstrap metastore FILE cache during fresh catalog startup
       ansible.builtin.command:
