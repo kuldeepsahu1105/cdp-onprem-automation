@@ -33,6 +33,15 @@
             | list
             | first
           }}
+        ecs_cdw_catalog_initial_status: >-
+          {{
+            ecs_cdw_dbc_info.database_catalogs
+            | default([])
+            | map(attribute='status')
+            | list
+            | first
+            | default('', true)
+          }}
       when: ecs_cdw_dbc_info.database_catalogs | default([]) | length > 0
 
     - name: Read database catalog service configuration
@@ -220,6 +229,10 @@
           or (
             ecs_cdw_metastore_krb5ccname.stdout | default('') | trim
             != ecs_cdw_workload_krb5ccname
+          )
+          or (
+            ecs_cdw_catalog_initial_status | default('')
+            is search('(?i)^(stopped|suspended|deactivated)$')
           )
 
     - name: Require database catalog workload refresh

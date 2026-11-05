@@ -173,6 +173,11 @@ require(
     "transient DBC start leases must be retried before catalog readiness checks",
 )
 require(
+    "ecs_cdw_catalog_initial_status" in followup
+    and "stopped|suspended|deactivated" in followup,
+    "stopped catalogs must be started even when config and pods are already converged",
+)
+require(
     followup.index("Persist database catalog FILE credential cache through CDW API")
     < followup.index("\n    - name: Wait for default database catalog\n"),
     "DBC cache must be configured before waiting for Running",
