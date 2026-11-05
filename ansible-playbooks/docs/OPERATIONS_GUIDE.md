@@ -503,8 +503,11 @@ API setting whose stale pod still blocks completion. A fresh catalog continues
 its natural `Accepted`/`Starting` activation after FILE-cache persistence;
 automation does not call `start-dbc --force-refresh` during that initial
 lifecycle. Force-refresh remains limited to established stale or intentionally
-stopped catalogs. Automation does not modify the PVC, database, service, or
-Kerberos principal.
+stopped catalogs. Because a successful `update-dbc` response can precede
+configuration-read propagation, automation polls `describe-dbc-config` until
+the `env` block exposes the expected FILE cache before enforcing the final
+configuration assertion. Automation does not modify the PVC, database,
+service, or Kerberos principal.
 If convergence still fails, diagnostics include the metastore StatefulSet
 FILE-cache value and generation, pod description, current and previous
 metastore logs, and namespace events.

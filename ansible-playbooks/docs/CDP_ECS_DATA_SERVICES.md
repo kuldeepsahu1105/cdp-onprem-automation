@@ -458,8 +458,11 @@ persisted but the stale pod still blocks the transition.
 After the control plane accepts and persists the value, a fresh catalog
 continues its natural `Accepted`/`Starting` activation without a
 `start-dbc --force-refresh` request. Force-refresh is reserved for established
-stale or intentionally stopped catalogs. Automation verifies the generated
-pod without modifying any other workload, principal, database, or PVC.
+stale or intentionally stopped catalogs. A successful `update-dbc` can become
+visible through `describe-dbc-config` asynchronously, so automation polls
+until the `env/KRB5CCNAME` value is exposed before its final assertion.
+Automation verifies the generated pod without modifying any other workload,
+principal, database, or PVC.
 If another DWX operation temporarily owns the Database Catalog lease or the
 catalog is transitioning through `Starting`, `Stopping`, or `Updating`,
 automation retries both the supported configuration update and force-refresh

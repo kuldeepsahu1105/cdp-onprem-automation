@@ -617,9 +617,23 @@
       environment: "{{ ecs_cdp_cli_environment }}"
       register: ecs_cdw_dbc_config_converged
       changed_when: false
-      until: ecs_cdw_dbc_config_converged.rc == 0
-      retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
-      delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
+      failed_when: false
+      until:
+        - ecs_cdw_dbc_config_converged.rc == 0
+        - >-
+          ecs_cdw_dbc_config_converged.stdout
+          | default('')
+          is search('"id"\s*:\s*"env"')
+        - >-
+          ecs_cdw_dbc_config_converged.stdout
+          | default('')
+          is search(
+            '"KRB5CCNAME"\s*:\s*"'
+            ~ (ecs_cdw_workload_krb5ccname | regex_escape)
+            ~ '"'
+          )
+      retries: "{{ ecs_cdw_workload_refresh_retries | int }}"
+      delay: "{{ ecs_cdw_workload_refresh_delay | int }}"
       become: false
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh

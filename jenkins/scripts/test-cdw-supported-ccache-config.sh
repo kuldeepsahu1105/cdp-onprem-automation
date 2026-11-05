@@ -147,6 +147,16 @@ require(
     "converged DBC config must be verified across the command stdin boundary",
 )
 require(
+    "Read converged database catalog service configuration" in followup
+    and 'is search(\'"id"\\s*:\\s*"env"\')' in followup
+    and '\'"KRB5CCNAME"\\s*:\\s*"\''
+    in followup
+    and "ecs_cdw_workload_krb5ccname | regex_escape" in followup
+    and 'retries: "{{ ecs_cdw_workload_refresh_retries | int }}"' in followup,
+    "converged DBC reads must poll through CDW configuration propagation until "
+    "the env FILE-cache block is visible",
+)
+require(
     "ecs_cdw_catalog_kubernetes_pods.stdout" in followup
     and "| default({})" in followup
     and followup.count("| to_json") >= 8,
