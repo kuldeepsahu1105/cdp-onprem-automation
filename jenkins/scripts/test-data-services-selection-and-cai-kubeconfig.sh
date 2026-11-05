@@ -480,6 +480,8 @@ assert "failed to acquire lease|already leased by operation" in cdw_followup
 assert "Require database catalog FILE cache update" in cdw_followup
 assert "'start-dbc'" in cdw_followup
 assert "'--force-refresh'" in cdw_followup
+assert "another operation[^\\\\n]*already in progress" in cdw_followup
+assert "Require database catalog workload refresh" in cdw_followup
 assert "Verify generated metastore FILE credential cache" in cdw_followup
 assert "Verify converged database catalog FILE credential cache configuration" in cdw_followup
 assert "'describe-vw-config'" not in cdw_followup
