@@ -206,6 +206,21 @@ require(
     "fresh catalog recovery must repair a stale generated pod before accepting "
     "an already-persisted API setting",
 )
+refresh_section = followup.split(
+    "- name: Refresh database catalog workloads after FILE cache reconciliation",
+    1,
+)[1].split("- name: Require database catalog workload refresh", 1)[0]
+require(
+    "ecs_cdw_dbc_ccache_guarded_update" not in refresh_section,
+    "fresh guarded recovery must not force-refresh a catalog in Accepted or "
+    "another natural activation state",
+)
+require(
+    "not (\n              ecs_cdw_dbc_starting_ccache_bootstrap_required"
+    in refresh_section,
+    "a temporarily absent recreated fresh metastore pod must not trigger "
+    "force-refresh",
+)
 require(
     "another operation[^\\\\n]*already in progress" in followup
     and "can't start DB Catalog in status " in followup

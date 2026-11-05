@@ -499,9 +499,12 @@ one-time Kubernetes bootstrap and API persistence. Fresh-catalog convergence use
 `ecs_cdw_dbc_wait_retries` and `ecs_cdw_dbc_wait_delay` (defaults: 40
 attempts, 30 seconds); the later workload refresh remains bounded by the
 separate ten-minute refresh window. The `Updating` case covers a persisted
-API setting whose stale pod still blocks completion. Automation then
-force-refreshes through the supported API. It does not modify the PVC,
-database, service, or Kerberos principal.
+API setting whose stale pod still blocks completion. A fresh catalog continues
+its natural `Accepted`/`Starting` activation after FILE-cache persistence;
+automation does not call `start-dbc --force-refresh` during that initial
+lifecycle. Force-refresh remains limited to established stale or intentionally
+stopped catalogs. Automation does not modify the PVC, database, service, or
+Kerberos principal.
 If convergence still fails, diagnostics include the metastore StatefulSet
 FILE-cache value and generation, pod description, current and previous
 metastore logs, and namespace events.

@@ -569,12 +569,12 @@
             and not (ecs_cdw_dbc_ccache_update.skipped | default(false) | bool)
           )
           or (
-            ecs_cdw_dbc_ccache_guarded_update is defined
-            and not (
-              ecs_cdw_dbc_ccache_guarded_update.skipped | default(false) | bool
+            not (
+              ecs_cdw_dbc_starting_ccache_bootstrap_required
+              | default(false)
+              | bool
             )
-          )
-          or (
+            and
             ecs_cdw_metastore_krb5ccname.stdout | default('') | trim
             != ecs_cdw_workload_krb5ccname
           )
