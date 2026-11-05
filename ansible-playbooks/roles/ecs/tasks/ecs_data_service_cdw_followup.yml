@@ -112,57 +112,17 @@
         - ecs_cdw_dbc_config is defined
         - ecs_cdw_dbc_config.rc | default(1) == 0
 
-    - name: Persist database catalog FILE credential cache through CDW API
-      ansible.builtin.command:
-        argv: >-
-          {{
-            ecs_data_services_cdp_cli_prefix
-            + [
-                'dw',
-                'update-dbc',
-                '--cluster-id',
-                ecs_cdw_cluster.cluster.id,
-                '--dbc-id',
-                ecs_cdw_catalog_id,
-                '--config',
-                ecs_cdw_dbc_file_ccache_config | to_json
-              ]
-          }}
-      environment: "{{ ecs_cdp_cli_environment }}"
-      register: ecs_cdw_dbc_ccache_update_initial
-      changed_when: ecs_cdw_dbc_ccache_update_initial.rc | default(1) == 0
-      failed_when: false
-      until: >-
-        ecs_cdw_dbc_ccache_update_initial.rc | default(1) == 0
-        or (
-          ecs_cdw_dbc_ccache_update_initial.stderr | default('')
-          is not search(
-            "(?i)(failed to acquire lease|already leased by operation|"
-            ~ "operation is not allowed in '(stopping|updating)' state)"
-          )
-        )
-      retries: "{{ ecs_cdw_workload_refresh_retries | int }}"
-      delay: "{{ ecs_cdw_workload_refresh_delay | int }}"
-      become: false
-      delegate_to: "{{ ecs_data_services_delegate_host }}"
-      connection: ssh
-      when:
-        - ecs_cdw_dbc_ccache_check is defined
-        - ecs_cdw_dbc_ccache_check.rc | default(0) == 3
-
-    - name: Detect fresh catalog FILE cache bootstrap deadlock
+    - name: Detect fresh catalog FILE cache bootstrap requirement
       ansible.builtin.set_fact:
         ecs_cdw_dbc_starting_ccache_bootstrap_required: >-
           {{
-            ecs_cdw_dbc_ccache_update_initial.rc | default(0) != 0
+            ecs_cdw_dbc_ccache_check.rc | default(0) == 3
             and (
-              ecs_cdw_dbc_ccache_update_initial.stderr | default('')
-              is search(
-                "(?i)operation is not allowed in 'starting' state"
-              )
+              ecs_cdw_catalog_initial_status | default('')
+              is search('(?i)^starting$')
             )
           }}
-      when: ecs_cdw_dbc_ccache_update_initial is defined
+      when: ecs_cdw_dbc_ccache_check is defined
 
     - name: Bootstrap metastore FILE cache during fresh catalog startup
       ansible.builtin.command:
@@ -253,7 +213,7 @@
       connection: ssh
       when: ecs_cdw_dbc_starting_ccache_bootstrap_required | default(false) | bool
 
-    - name: Persist bootstrapped database catalog FILE credential cache
+    - name: Persist database catalog FILE credential cache through CDW API
       ansible.builtin.command:
         argv: >-
           {{
@@ -270,13 +230,13 @@
               ]
           }}
       environment: "{{ ecs_cdp_cli_environment }}"
-      register: ecs_cdw_dbc_ccache_update_after_bootstrap
-      changed_when: ecs_cdw_dbc_ccache_update_after_bootstrap.rc | default(1) == 0
+      register: ecs_cdw_dbc_ccache_update
+      changed_when: ecs_cdw_dbc_ccache_update.rc | default(1) == 0
       failed_when: false
       until: >-
-        ecs_cdw_dbc_ccache_update_after_bootstrap.rc | default(1) == 0
+        ecs_cdw_dbc_ccache_update.rc | default(1) == 0
         or (
-          ecs_cdw_dbc_ccache_update_after_bootstrap.stderr | default('')
+          ecs_cdw_dbc_ccache_update.stderr | default('')
           is not search(
             "(?i)(failed to acquire lease|already leased by operation|"
             ~ "operation is not allowed in '(starting|stopping|updating)' state)"
@@ -287,26 +247,9 @@
       become: false
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
-      when: ecs_cdw_dbc_starting_ccache_bootstrap_required | default(false) | bool
-
-    - name: Select database catalog FILE cache update result
-      ansible.builtin.set_fact:
-        ecs_cdw_dbc_ccache_update: >-
-          {{
-            ecs_cdw_dbc_ccache_update_after_bootstrap
-            if (
-              ecs_cdw_dbc_ccache_update_after_bootstrap is defined
-              and not (
-                ecs_cdw_dbc_ccache_update_after_bootstrap.skipped
-                | default(false)
-                | bool
-              )
-            )
-            else ecs_cdw_dbc_ccache_update_initial
-          }}
       when:
-        - ecs_cdw_dbc_ccache_update_initial is defined
-        - not (ecs_cdw_dbc_ccache_update_initial.skipped | default(false) | bool)
+        - ecs_cdw_dbc_ccache_check is defined
+        - ecs_cdw_dbc_ccache_check.rc | default(0) == 3
 
     - name: Require database catalog FILE cache update
       ansible.builtin.assert:

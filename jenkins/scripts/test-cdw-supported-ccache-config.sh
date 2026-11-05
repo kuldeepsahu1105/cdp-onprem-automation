@@ -163,7 +163,7 @@ require(
 )
 require(
     "failed to acquire lease|already leased by operation" in followup
-    and "operation is not allowed in '(stopping|updating)' state"
+    and "operation is not allowed in '(starting|stopping|updating)' state"
     in followup
     and "Require database catalog FILE cache update" in followup
     and "ecs_cdw_workload_refresh_retries" in followup,
@@ -171,17 +171,22 @@ require(
     "the bounded refresh window",
 )
 require(
-    "Detect fresh catalog FILE cache bootstrap deadlock" in followup
+    "Detect fresh catalog FILE cache bootstrap requirement" in followup
     and "Bootstrap metastore FILE cache during fresh catalog startup" in followup
     and "Recreate failed metastore pod from bootstrapped template" in followup
-    and "Persist bootstrapped database catalog FILE credential cache" in followup
+    and "Persist database catalog FILE credential cache through CDW API" in followup
     and "statefulset/metastore" in followup
     and "pod/metastore-0" in followup
     and "--ignore-not-found=true" in followup
     and "operation is not allowed in '(starting|stopping|updating)' state"
     in followup,
-    "fresh catalogs stuck Starting must bootstrap the metastore, then persist "
+    "fresh catalogs in Starting must bootstrap the metastore before persisting "
     "the setting through the supported API",
+)
+require(
+    followup.index("Bootstrap metastore FILE cache during fresh catalog startup")
+    < followup.index("Persist database catalog FILE credential cache through CDW API"),
+    "fresh catalog metastore bootstrap must precede the first update-dbc attempt",
 )
 require(
     "another operation[^\\\\n]*already in progress" in followup
