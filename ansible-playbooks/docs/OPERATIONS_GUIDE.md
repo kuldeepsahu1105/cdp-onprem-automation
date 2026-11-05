@@ -480,9 +480,13 @@ verification is bounded by `ecs_cdw_workload_refresh_retries` and
 reconciliation
 is controlled by
 `ecs_cdw_workload_file_ccache_reconcile` (default `true`) and is idempotent;
-the CDW control plane persists and renders the setting. Automation does not
-directly patch or delete the StatefulSet, pod, PVC, database, service, or
-Kerberos principal.
+the CDW control plane persists and renders the setting. A fresh activation can
+deadlock before the configuration API accepts updates: the first metastore pod
+crashes on KCM while the API rejects `update-dbc` in `Starting`. For that exact
+state only, automation temporarily sets the FILE cache on the metastore
+StatefulSet, recreates only `metastore-0`, then persists and force-refreshes
+the setting through the supported API. It does not modify the PVC, database,
+service, or Kerberos principal.
 
 When a database catalog fails while `metastore-0` is Pending, the failure
 diagnostics describe every Pending pod and report namespace events, PVC state,

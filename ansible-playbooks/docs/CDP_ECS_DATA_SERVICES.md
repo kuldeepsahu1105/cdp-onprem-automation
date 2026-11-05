@@ -442,8 +442,16 @@ automation calls supported `dw start-dbc --force-refresh` and verifies the
 recreated pod before continuing. The CDW control plane therefore owns
 the generated metastore workload configuration, and healthy reruns are
 no-ops. This prevents `kinit: No KCM server found while getting default
-ccache` without directly mutating a Helm-managed StatefulSet or changing the
-metastore PVC, database, service, or principal.
+ccache` without changing the metastore PVC, database, service, or principal.
+During a fresh activation, the private control plane can create the first
+metastore pod before the Database Catalog configuration API accepts updates.
+That produces a startup deadlock: the pod crashes on the unavailable KCM
+cache, while `update-dbc` rejects changes in `Starting`. For that exact error
+only, automation temporarily sets the FILE cache on the metastore StatefulSet
+and recreates only `metastore-0`. After the pod becomes ready and the catalog
+leaves `Starting`, automation persists the same value through `update-dbc`,
+force-refreshes through the supported API, and verifies the generated pod.
+No other workload, principal, database, or PVC is modified.
 If another DWX operation temporarily owns the Database Catalog lease or the
 catalog is transitioning through `Starting`, `Stopping`, or `Updating`,
 automation retries both the supported configuration update and force-refresh

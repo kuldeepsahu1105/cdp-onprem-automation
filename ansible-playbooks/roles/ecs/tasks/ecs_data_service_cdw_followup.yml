@@ -129,16 +129,16 @@
               ]
           }}
       environment: "{{ ecs_cdp_cli_environment }}"
-      register: ecs_cdw_dbc_ccache_update
-      changed_when: ecs_cdw_dbc_ccache_update.rc | default(1) == 0
+      register: ecs_cdw_dbc_ccache_update_initial
+      changed_when: ecs_cdw_dbc_ccache_update_initial.rc | default(1) == 0
       failed_when: false
       until: >-
-        ecs_cdw_dbc_ccache_update.rc | default(1) == 0
+        ecs_cdw_dbc_ccache_update_initial.rc | default(1) == 0
         or (
-          ecs_cdw_dbc_ccache_update.stderr | default('')
+          ecs_cdw_dbc_ccache_update_initial.stderr | default('')
           is not search(
             "(?i)(failed to acquire lease|already leased by operation|"
-            ~ "operation is not allowed in '(starting|stopping|updating)' state)"
+            ~ "operation is not allowed in '(stopping|updating)' state)"
           )
         )
       retries: "{{ ecs_cdw_workload_refresh_retries | int }}"
@@ -149,6 +149,164 @@
       when:
         - ecs_cdw_dbc_ccache_check is defined
         - ecs_cdw_dbc_ccache_check.rc | default(0) == 3
+
+    - name: Detect fresh catalog FILE cache bootstrap deadlock
+      ansible.builtin.set_fact:
+        ecs_cdw_dbc_starting_ccache_bootstrap_required: >-
+          {{
+            ecs_cdw_dbc_ccache_update_initial.rc | default(0) != 0
+            and (
+              ecs_cdw_dbc_ccache_update_initial.stderr | default('')
+              is search(
+                "(?i)operation is not allowed in 'starting' state"
+              )
+            )
+          }}
+      when: ecs_cdw_dbc_ccache_update_initial is defined
+
+    - name: Bootstrap metastore FILE cache during fresh catalog startup
+      ansible.builtin.command:
+        argv:
+          - "{{ ecs_coredns_kubectl_path }}"
+          - --kubeconfig
+          - "{{ ecs_coredns_kubeconfig_path }}"
+          - --namespace
+          - "{{ ecs_cdw_kubernetes_namespace }}"
+          - set
+          - env
+          - statefulset/metastore
+          - --containers=metastore
+          - "KRB5CCNAME={{ ecs_cdw_workload_krb5ccname }}"
+      register: ecs_cdw_dbc_ccache_bootstrap
+      changed_when: >-
+        'env updated' in (
+          ecs_cdw_dbc_ccache_bootstrap.stdout | default('') | lower
+        )
+      until: ecs_cdw_dbc_ccache_bootstrap.rc | default(1) == 0
+      retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
+      delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
+      become: true
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when: ecs_cdw_dbc_starting_ccache_bootstrap_required | default(false) | bool
+
+    - name: Recreate failed metastore pod from bootstrapped template
+      ansible.builtin.command:
+        argv:
+          - "{{ ecs_coredns_kubectl_path }}"
+          - --kubeconfig
+          - "{{ ecs_coredns_kubeconfig_path }}"
+          - --namespace
+          - "{{ ecs_cdw_kubernetes_namespace }}"
+          - delete
+          - pod
+          - metastore-0
+          - --wait=false
+          - --ignore-not-found=true
+      changed_when: true
+      become: true
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when: ecs_cdw_dbc_starting_ccache_bootstrap_required | default(false) | bool
+
+    - name: Wait for recreated metastore pod record
+      ansible.builtin.command:
+        argv:
+          - "{{ ecs_coredns_kubectl_path }}"
+          - --kubeconfig
+          - "{{ ecs_coredns_kubeconfig_path }}"
+          - --namespace
+          - "{{ ecs_cdw_kubernetes_namespace }}"
+          - get
+          - pod
+          - metastore-0
+      register: ecs_cdw_dbc_ccache_bootstrap_pod
+      changed_when: false
+      failed_when: false
+      until: ecs_cdw_dbc_ccache_bootstrap_pod.rc | default(1) == 0
+      retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
+      delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
+      become: true
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when: ecs_cdw_dbc_starting_ccache_bootstrap_required | default(false) | bool
+
+    - name: Wait for bootstrapped metastore pod readiness
+      ansible.builtin.command:
+        argv:
+          - "{{ ecs_coredns_kubectl_path }}"
+          - --kubeconfig
+          - "{{ ecs_coredns_kubeconfig_path }}"
+          - --namespace
+          - "{{ ecs_cdw_kubernetes_namespace }}"
+          - wait
+          - pod/metastore-0
+          - --for=condition=Ready
+          - >-
+            --timeout={{
+              (ecs_cdw_workload_refresh_retries | int)
+              * (ecs_cdw_workload_refresh_delay | int)
+            }}s
+      changed_when: false
+      become: true
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when: ecs_cdw_dbc_starting_ccache_bootstrap_required | default(false) | bool
+
+    - name: Persist bootstrapped database catalog FILE credential cache
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_data_services_cdp_cli_prefix
+            + [
+                'dw',
+                'update-dbc',
+                '--cluster-id',
+                ecs_cdw_cluster.cluster.id,
+                '--dbc-id',
+                ecs_cdw_catalog_id,
+                '--config',
+                ecs_cdw_dbc_file_ccache_config | to_json
+              ]
+          }}
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_dbc_ccache_update_after_bootstrap
+      changed_when: ecs_cdw_dbc_ccache_update_after_bootstrap.rc | default(1) == 0
+      failed_when: false
+      until: >-
+        ecs_cdw_dbc_ccache_update_after_bootstrap.rc | default(1) == 0
+        or (
+          ecs_cdw_dbc_ccache_update_after_bootstrap.stderr | default('')
+          is not search(
+            "(?i)(failed to acquire lease|already leased by operation|"
+            ~ "operation is not allowed in '(starting|stopping|updating)' state)"
+          )
+        )
+      retries: "{{ ecs_cdw_workload_refresh_retries | int }}"
+      delay: "{{ ecs_cdw_workload_refresh_delay | int }}"
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when: ecs_cdw_dbc_starting_ccache_bootstrap_required | default(false) | bool
+
+    - name: Select database catalog FILE cache update result
+      ansible.builtin.set_fact:
+        ecs_cdw_dbc_ccache_update: >-
+          {{
+            ecs_cdw_dbc_ccache_update_after_bootstrap
+            if (
+              ecs_cdw_dbc_ccache_update_after_bootstrap is defined
+              and not (
+                ecs_cdw_dbc_ccache_update_after_bootstrap.skipped
+                | default(false)
+                | bool
+              )
+            )
+            else ecs_cdw_dbc_ccache_update_initial
+          }}
+      when:
+        - ecs_cdw_dbc_ccache_update_initial is defined
+        - not (ecs_cdw_dbc_ccache_update_initial.skipped | default(false) | bool)
 
     - name: Require database catalog FILE cache update
       ansible.builtin.assert:
