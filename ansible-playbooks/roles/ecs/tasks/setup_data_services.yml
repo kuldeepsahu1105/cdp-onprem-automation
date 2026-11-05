@@ -229,7 +229,7 @@
     path: "{{ ecs_ds_cdp_profile_dir.path }}"
     state: absent
   changed_when: false
-  become: false
+  become: true
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
   when:

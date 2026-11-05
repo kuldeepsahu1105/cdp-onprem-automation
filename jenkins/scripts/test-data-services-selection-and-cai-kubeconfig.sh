@@ -179,6 +179,13 @@ role_data_services = yaml.safe_load(
         root / "ansible-playbooks/roles/ecs/tasks/setup_data_services.yml"
     ).read_text()
 )
+profile_cleanup = next(
+    task
+    for task in role_data_services
+    if task.get("name") == "Remove temporary Data Services profile from ECS master"
+)
+assert profile_cleanup["become"] is True
+assert profile_cleanup["ansible.builtin.file"]["state"] == "absent"
 portal_gate = next(
     task
     for task in role_data_services

@@ -173,6 +173,9 @@ require(
 require(
     "Detect fresh catalog FILE cache bootstrap requirement" in followup
     and "Read initial generated metastore FILE credential cache" in followup
+    and "Read initial generated metastore readiness" in followup
+    and "Read initial generated metastore logs" in followup
+    and "Read previous generated metastore logs" in followup
     and "is not search(" in followup
     and "running|stopped|suspended|deactivated|" in followup
     and "Keep metastore on FILE cache until CDW persists the catalog setting"
