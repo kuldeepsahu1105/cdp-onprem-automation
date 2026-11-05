@@ -476,7 +476,10 @@ If `warehouse-<environment>/metastore-0` reports
 container inherited a KCM default but has no KCM daemon. Playbook 34 reads the
 Database Catalog configuration with `dw describe-dbc-config` and applies
 `KRB5CCNAME=FILE:/tmp/krb5cc_metastore` through additive
-`dw update-dbc --config` only when missing or different. If the persisted
+`dw update-dbc --config` only when missing or different. CDW stores this
+environment value in
+`applicationConfigs.metastore.configBlocks[id=env]`; automation merges it into
+the live block so existing values such as `SERVICE_OPTS` remain intact. If the persisted
 configuration is correct but the generated metastore pod is stale, automation
 uses `dw start-dbc --force-refresh` and verifies the recreated pod. The
 verification is bounded by `ecs_cdw_workload_refresh_retries` and
@@ -505,7 +508,7 @@ automation does not call `start-dbc --force-refresh` during that initial
 lifecycle. Force-refresh remains limited to established stale or intentionally
 stopped catalogs. Because a successful `update-dbc` response can precede
 configuration-read propagation, automation polls `describe-dbc-config` until
-the `env` block exposes the expected FILE cache before enforcing the final
+the metastore application `env` block exposes the expected FILE cache before enforcing the final
 configuration assertion. Automation does not modify the PVC, database,
 service, or Kerberos principal.
 If convergence still fails, diagnostics include the metastore StatefulSet

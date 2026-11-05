@@ -173,13 +173,18 @@
             import json
             import sys
 
-            desired = sys.argv[1]
+            desired_patch = json.loads(sys.argv[1])
+            desired = (
+                desired_patch["applicationConfigs"]["metastore"]["configBlocks"][0]
+                ["content"]["keyValues"]["KRB5CCNAME"]
+            )
             payload = json.load(sys.stdin)
             if isinstance(payload, str):
                 payload = json.loads(payload)
             config = payload.get("config", payload)
             blocks = (
-                config.get("commonConfigs", {})
+                config.get("applicationConfigs", {})
+                .get("metastore", {})
                 .get("configBlocks", [])
             )
             current = ""
@@ -193,11 +198,55 @@
                     break
             print(current)
             raise SystemExit(0 if current == desired else 3)
-          - "{{ ecs_cdw_workload_krb5ccname }}"
+          - "{{ ecs_cdw_dbc_file_ccache_config | to_json }}"
         stdin: "{{ ecs_cdw_dbc_config.stdout | to_json }}"
       register: ecs_cdw_dbc_ccache_check
       changed_when: false
       failed_when: ecs_cdw_dbc_ccache_check.rc not in [0, 3]
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_dbc_config is defined
+        - ecs_cdw_dbc_config.rc | default(1) == 0
+
+    - name: Merge database catalog FILE cache into live metastore configuration
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import copy
+            import json
+            import sys
+
+            desired_patch = json.loads(sys.argv[1])
+            desired = (
+                desired_patch["applicationConfigs"]["metastore"]["configBlocks"][0]
+                ["content"]["keyValues"]["KRB5CCNAME"]
+            )
+            payload = json.load(sys.stdin)
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            config = copy.deepcopy(payload.get("config", payload))
+            applications = config.setdefault("applicationConfigs", {})
+            metastore = applications.setdefault("metastore", {})
+            blocks = metastore.setdefault("configBlocks", [])
+            env = next(
+                (block for block in blocks if block.get("id") == "env"),
+                None,
+            )
+            if env is None:
+                env = {"id": "env", "content": {"keyValues": {}}}
+                blocks.append(env)
+            content = env.setdefault("content", {})
+            key_values = content.setdefault("keyValues", {})
+            key_values["KRB5CCNAME"] = desired
+            print(json.dumps(config, separators=(",", ":"), sort_keys=True))
+          - "{{ ecs_cdw_dbc_file_ccache_config | to_json }}"
+        stdin: "{{ ecs_cdw_dbc_config.stdout | to_json }}"
+      register: ecs_cdw_dbc_file_ccache_config_effective
+      changed_when: false
       become: false
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
@@ -280,7 +329,12 @@
         payload = json.loads(os.environ["CONFIG_JSON"])
         if isinstance(payload, str):
             payload = json.loads(payload)
-        blocks = payload.get("config", payload).get("commonConfigs", {}).get("configBlocks", [])
+        blocks = (
+            payload.get("config", payload)
+            .get("applicationConfigs", {})
+            .get("metastore", {})
+            .get("configBlocks", [])
+        )
         current = ""
         for block in blocks:
             if block.get("id") == "env":
@@ -385,7 +439,7 @@
             dw update-dbc
             --cluster-id {{ ecs_cdw_cluster.cluster.id | quote }}
             --dbc-id {{ ecs_cdw_catalog_id | quote }}
-            --config {{ ecs_cdw_dbc_file_ccache_config | to_json | quote }}
+            --config {{ ecs_cdw_dbc_file_ccache_config_effective.stdout | quote }}
             2>&1
           )"
           update_rc=$?
@@ -429,7 +483,7 @@
                 '--dbc-id',
                 ecs_cdw_catalog_id,
                 '--config',
-                ecs_cdw_dbc_file_ccache_config | to_json
+                ecs_cdw_dbc_file_ccache_config_effective.stdout
               ]
           }}
       environment: "{{ ecs_cdp_cli_environment }}"
@@ -453,6 +507,8 @@
       when:
         - ecs_cdw_dbc_ccache_check is defined
         - ecs_cdw_dbc_ccache_check.rc | default(0) == 3
+        - ecs_cdw_dbc_file_ccache_config_effective is defined
+        - ecs_cdw_dbc_file_ccache_config_effective.rc | default(1) == 0
         - not (ecs_cdw_dbc_starting_ccache_bootstrap_required | default(false) | bool)
 
     - name: Require database catalog FILE cache update
@@ -656,7 +712,8 @@
                 payload = json.loads(payload)
             config = payload.get("config", payload)
             blocks = (
-                config.get("commonConfigs", {})
+                config.get("applicationConfigs", {})
+                .get("metastore", {})
                 .get("configBlocks", [])
             )
             matches = [

@@ -436,7 +436,10 @@ though the Kubernetes nodes do not run a KCM daemon. After the Database
 Catalog record appears, automation reads its supported CDW service
 configuration with `dw describe-dbc-config`. It calls additive
 `dw update-dbc --config` only when the `env` config block does not already set
-`KRB5CCNAME=FILE:/tmp/krb5cc_metastore`. When the persisted configuration is
+`KRB5CCNAME=FILE:/tmp/krb5cc_metastore`. The supported schema places this block
+under `applicationConfigs.metastore`; automation merges the value into the
+live metastore `env` block and preserves existing keys such as `SERVICE_OPTS`.
+When the persisted configuration is
 already correct but the generated metastore pod still lacks the variable,
 automation calls supported `dw start-dbc --force-refresh` and verifies the
 recreated pod before continuing. The CDW control plane therefore owns
@@ -460,7 +463,7 @@ continues its natural `Accepted`/`Starting` activation without a
 `start-dbc --force-refresh` request. Force-refresh is reserved for established
 stale or intentionally stopped catalogs. A successful `update-dbc` can become
 visible through `describe-dbc-config` asynchronously, so automation polls
-until the `env/KRB5CCNAME` value is exposed before its final assertion.
+until the metastore application `env/KRB5CCNAME` value is exposed before its final assertion.
 Automation verifies the generated pod without modifying any other workload,
 principal, database, or PVC.
 If another DWX operation temporarily owns the Database Catalog lease or the

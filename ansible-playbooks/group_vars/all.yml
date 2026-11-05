@@ -1627,12 +1627,13 @@ ecs_cdw_workload_krb5ccname: "FILE:/tmp/krb5cc_metastore"
 ecs_cdw_workload_refresh_retries: 60
 ecs_cdw_workload_refresh_delay: 10
 ecs_cdw_dbc_file_ccache_config:
-  commonConfigs:
-    configBlocks:
-      - id: env
-        content:
-          keyValues:
-            KRB5CCNAME: "{{ ecs_cdw_workload_krb5ccname }}"
+  applicationConfigs:
+    metastore:
+      configBlocks:
+        - id: env
+          content:
+            keyValues:
+              KRB5CCNAME: "{{ ecs_cdw_workload_krb5ccname }}"
 ecs_cdw_hive_vw_name: hive-vw
 ecs_cdw_impala_vw_name: impala-vw
 ecs_cdw_trino_vw_name: trino-vw

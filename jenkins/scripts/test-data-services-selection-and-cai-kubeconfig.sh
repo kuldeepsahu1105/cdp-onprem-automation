@@ -496,7 +496,8 @@ assert "Verify converged database catalog FILE credential cache configuration" i
 assert "No KCM server|default ccache.*KCM|KCM server" in cdw_followup
 assert "'describe-vw-config'" not in cdw_followup
 assert "'update-vw'" not in cdw_followup
-assert "ecs_cdw_dbc_file_ccache_config | to_json" in cdw_followup
+assert cdw_followup.count("ecs_cdw_dbc_file_ccache_config_effective.stdout") == 2
+assert cdw_followup.count("ecs_cdw_dbc_file_ccache_config | to_json") == 2
 assert cdw_followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 1
 assert cdw_followup.count(".get(\"KRB5CCNAME\", \"\")") == 3
 assert "Read database catalog namespace pods after stale API status" in cdw_followup
@@ -530,12 +531,14 @@ assert group_vars["ecs_cdw_catalog_kubernetes_health_fallback"] is True
 assert group_vars["ecs_cdw_vw_krb5ccname"] == "FILE:/tmp/krb5cc_cdw"
 assert (
     "format"
-    not in group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"][
-        "configBlocks"
-    ][0]
+    not in group_vars["ecs_cdw_dbc_file_ccache_config"]["applicationConfigs"][
+        "metastore"
+    ]["configBlocks"][0]
 )
 assert (
-    group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
+    group_vars["ecs_cdw_dbc_file_ccache_config"]["applicationConfigs"]["metastore"][
+        "configBlocks"
+    ][0]
     ["content"]["keyValues"]["KRB5CCNAME"]
     == "{{ ecs_cdw_workload_krb5ccname }}"
 )

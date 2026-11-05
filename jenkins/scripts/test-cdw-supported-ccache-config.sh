@@ -47,17 +47,19 @@ def walk(items):
 
 representative_config = {
     "config": {
-        "commonConfigs": {
-            "configBlocks": [
-                {
-                    "id": "env",
-                    "content": {
-                        "keyValues": {
-                            "KRB5CCNAME": "FILE:/tmp/krb5cc_metastore"
-                        }
-                    },
-                }
-            ]
+        "applicationConfigs": {
+            "metastore": {
+                "configBlocks": [
+                    {
+                        "id": "env",
+                        "content": {
+                            "keyValues": {
+                                "SERVICE_OPTS": "-javaagent:/opt/jmx.jar"
+                            }
+                        },
+                    }
+                ]
+            }
         }
     }
 }
@@ -87,10 +89,26 @@ parser_tasks = {
     }
 }
 require(len(parser_tasks) == 2, "expected both registered-stdout parser tasks")
+dbc_patch = {
+    "applicationConfigs": {
+        "metastore": {
+            "configBlocks": [
+                {
+                    "id": "env",
+                    "content": {
+                        "keyValues": {
+                            "KRB5CCNAME": "FILE:/tmp/krb5cc_expected"
+                        }
+                    },
+                }
+            ]
+        }
+    }
+}
 for name, argv in parser_tasks.items():
     command = ["python3", "-c", argv[2]]
     if len(argv) > 3:
-        command.append("FILE:/tmp/krb5cc_expected")
+        command.append(json.dumps(dbc_patch))
     malformed = subprocess.run(
         command,
         input="{not-json",
@@ -102,6 +120,29 @@ for name, argv in parser_tasks.items():
         malformed.returncode not in (0, 3),
         f"{name} must fail strictly for malformed JSON input",
     )
+
+merge_task = next(
+    item
+    for item in walk(followup_tasks)
+    if item.get("name")
+    == "Merge database catalog FILE cache into live metastore configuration"
+)
+merged = subprocess.run(
+    ["python3", "-c", merge_task["ansible.builtin.command"]["argv"][2], json.dumps(dbc_patch)],
+    input=json.dumps(representative_config),
+    text=True,
+    capture_output=True,
+    check=True,
+)
+merged_config = json.loads(merged.stdout)
+merged_values = merged_config["applicationConfigs"]["metastore"]["configBlocks"][0][
+    "content"
+]["keyValues"]
+require(
+    merged_values["SERVICE_OPTS"] == "-javaagent:/opt/jmx.jar"
+    and merged_values["KRB5CCNAME"] == "FILE:/tmp/krb5cc_expected",
+    "DBC live-config merge must preserve SERVICE_OPTS while adding KRB5CCNAME",
+)
 
 for command in (
     "'describe-dbc-config'",
@@ -122,8 +163,9 @@ for unsupported_vw_update in (
     )
 
 require(
-    "ecs_cdw_dbc_file_ccache_config | to_json" in followup,
-    "DBC update must use the shared FILE-cache config",
+    followup.count("ecs_cdw_dbc_file_ccache_config_effective.stdout") == 2
+    and followup.count("ecs_cdw_dbc_file_ccache_config | to_json") == 2,
+    "DBC updates must use a live-config merge driven by the shared FILE-cache config",
 )
 require(
     followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 1,
@@ -134,9 +176,16 @@ require(
     "DBC configuration must be inspected before, during, and after reconciliation",
 )
 require(
-    followup.count("if isinstance(payload, str):") == 4
-    and followup.count("payload = json.loads(payload)") == 4,
+    followup.count("if isinstance(payload, str):") == 5
+    and followup.count("payload = json.loads(payload)") == 5,
     "JSON parsers must unwrap registered stdout when Ansible preserves it as text",
+)
+require(
+    "Merge database catalog FILE cache into live metastore configuration" in followup
+    and 'config.setdefault("applicationConfigs", {})' in followup
+    and 'applications.setdefault("metastore", {})' in followup
+    and 'key_values["KRB5CCNAME"] = desired' in followup,
+    "DBC reconciliation must merge KRB5CCNAME into the live metastore application config",
 )
 require(
     'stdin: "{{ ecs_cdw_dbc_config.stdout | to_json }}"' in followup,
@@ -302,13 +351,15 @@ require(
 )
 require(
     "format"
-    not in group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"][
-        "configBlocks"
-    ][0],
+    not in group_vars["ecs_cdw_dbc_file_ccache_config"]["applicationConfigs"][
+        "metastore"
+    ]["configBlocks"][0],
     "DBC payload must match pinned CLI schema (id/content only)",
 )
 require(
-    group_vars["ecs_cdw_dbc_file_ccache_config"]["commonConfigs"]["configBlocks"][0]
+    group_vars["ecs_cdw_dbc_file_ccache_config"]["applicationConfigs"]["metastore"][
+        "configBlocks"
+    ][0]
     ["content"]["keyValues"]["KRB5CCNAME"]
     == "{{ ecs_cdw_workload_krb5ccname }}",
     "DBC config must reference the authoritative variable",
