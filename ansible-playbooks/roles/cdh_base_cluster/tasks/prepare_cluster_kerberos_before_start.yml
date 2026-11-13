@@ -242,32 +242,50 @@
   changed_when: false
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+- name: Summarize incomplete Kerberos configuration before First Run
+  ansible.builtin.set_fact:
+    base_cluster_pre_start_security_failures: >-
+      {%- set failures = [] -%}
+      {%- for result in base_cluster_pre_start_security_config.results -%}
+      {%- set observed = (
+        result.json['items'] | default([])
+        | selectattr('name', 'equalto', result.item.name)
+        | map(attribute='value')
+        | first
+        | default(
+            (
+              result.json['items'] | default([])
+              | selectattr('name', 'equalto', result.item.name)
+              | map(attribute='default')
+              | first
+            ),
+            true
+          )
+        | default('', true)
+        | string
+        | lower
+      ) -%}
+      {%- if observed != result.item.value -%}
+      {%- set _ = failures.append(
+        result.item.service ~ '.' ~ result.item.name
+        ~ '=' ~ (observed | default('missing', true))
+        ~ ' (expected ' ~ result.item.value ~ ')'
+      ) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ failures }}
+
 - name: Require complete Kerberos configuration before First Run
   ansible.builtin.assert:
     that:
-      - >-
-        (
-          item.json['items'] | default([])
-          | selectattr('name', 'equalto', item.item.name)
-          | map(attribute='value')
-          | first
-          | default(
-              (
-                item.json['items'] | default([])
-                | selectattr('name', 'equalto', item.item.name)
-                | map(attribute='default')
-                | first
-              ),
-              true
-            )
-          | default('', true)
-          | string
-          | lower
-        ) == item.item.value
-    fail_msg: >-
-      {{ item.item.service }}.{{ item.item.name }} is not {{ item.item.value }}
-      after Kerberos reconciliation. Refusing CM First Run to prevent a
-      partially secured cluster.
-  loop: "{{ base_cluster_pre_start_security_config.results }}"
-  loop_control:
-    label: "{{ item.item.service }}.{{ item.item.name }}"
+      - base_cluster_pre_start_security_failures | length == 0
+    fail_msg: |-
+      Kerberos configuration is incomplete:
+      {% for failure in base_cluster_pre_start_security_failures[:3] %}
+      - {{ failure }}
+      {% endfor %}
+      {% if base_cluster_pre_start_security_failures | length > 3 %}
+      - ... and {{ base_cluster_pre_start_security_failures | length - 3 }} more
+      {% endif %}
+      CM First Run was not started.
+    quiet: true

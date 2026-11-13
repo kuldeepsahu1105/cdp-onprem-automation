@@ -51,11 +51,17 @@ assert mod.format_skipped_summary(["x"]) == "  skipped: [x]"
 assert mod.format_skipped_summary(["x", "y"]) == "  skipped: 2 hosts — x, y"
 print("OK: format_skipped_summary")
 
-assert mod.format_result_message({"msg": "line one\nline two"}) == "line one line two"
+assert mod.format_result_message({"msg": "line one\nline two"}) == "line one\nline two"
 bounded = mod.format_result_message({"payload": "x" * 500}, max_chars=100)
 assert len(bounded) == 100
 assert bounded.endswith("...")
 assert mod.format_result_message({"msg": {"b": 2, "a": 1}}) == '{"a": 1, "b": 2}'
+line_bounded = mod.format_result_message(
+    {"msg": "\n".join(f"line {index}" for index in range(10))},
+    max_lines=6,
+)
+assert len(line_bounded.splitlines()) == 6
+assert line_bounded.splitlines()[-1] == "... (5 more line(s))"
 print("OK: format_result_message")
 
 import os
@@ -99,7 +105,8 @@ failed = type(
 )()
 cb.v2_runner_on_failed(failed)
 assert lines[0] == ""
-assert lines[1].startswith("  ** FAILED: [worker1] => first line ")
+assert lines[1].startswith("  ** FAILED: [worker1] => first line\n")
+assert len(lines[1].splitlines()) == 2
 assert len(lines[1]) < 1300
 assert lines[1].endswith("...")
 print("OK: bounded failure output")
@@ -117,11 +124,23 @@ ranger_tasks = (
 ecs_install_tasks = (
     root / "ansible-playbooks/roles/ecs/tasks/ecs_install_control_plane.yml"
 ).read_text()
+ipaserver_operator_tasks = (
+    root / "ansible-playbooks/common_tasks/prepare_ipaserver_operator_host.yml"
+).read_text()
+base_kerberos_tasks = (
+    root
+    / "ansible-playbooks/roles/cdh_base_cluster/tasks/prepare_cluster_kerberos_before_start.yml"
+).read_text()
 assert "var: license_upload_response" not in license_tasks
 assert "cluster_parcels_activation_failure_summary" in parcel_tasks
 assert "to_nice_json" not in parcel_tasks
 assert "base_cluster_ranger_stale_roles | to_json" not in ranger_tasks
 assert "default(ecs_control_plane_install)" not in ecs_install_tasks
+assert "_ipaserver_operator_invalid_files" in ipaserver_operator_tasks
+assert 'loop: "{{ _ipaserver_operator_file_stats.results }}"' not in ipaserver_operator_tasks
+assert "base_cluster_pre_start_security_failures" in base_kerberos_tasks
+assert 'loop: "{{ base_cluster_pre_start_security_config.results }}"' not in base_kerberos_tasks
+assert base_kerberos_tasks.count("quiet: true") >= 1
 print("OK: concise phase output contracts")
 PY
 

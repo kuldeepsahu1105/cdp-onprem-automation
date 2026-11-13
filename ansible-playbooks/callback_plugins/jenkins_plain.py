@@ -25,13 +25,29 @@ def _verbose_per_host_output() -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
-def format_result_message(result: dict, max_chars: int | None = None) -> str:
+def format_result_message(
+    result: dict,
+    max_chars: int | None = None,
+    max_lines: int | None = None,
+) -> str:
     raw = result.get("msg", result)
     if isinstance(raw, (dict, list)):
         text = json.dumps(raw, sort_keys=True, default=str)
     else:
         text = str(raw)
-    text = " ".join(text.split())
+    lines = [" ".join(line.split()) for line in text.splitlines() if line.strip()]
+    if not lines:
+        lines = [""]
+    if max_lines is None:
+        try:
+            max_lines = int(os.environ.get("JENKINS_ANSIBLE_FAILURE_MAX_LINES", "6"))
+        except ValueError:
+            max_lines = 6
+    max_lines = max(1, max_lines)
+    if len(lines) > max_lines:
+        omitted = len(lines) - max_lines + 1
+        lines = lines[: max_lines - 1] + [f"... ({omitted} more line(s))"]
+    text = "\n".join(lines)
     if max_chars is None:
         try:
             max_chars = int(os.environ.get("JENKINS_ANSIBLE_FAILURE_MAX_CHARS", "1200"))

@@ -131,18 +131,38 @@
     - /root/ansible.cfg
   register: _ipaserver_operator_file_stats
 
+- name: IPAServer operator — summarize invalid deployment files
+  ansible.builtin.set_fact:
+    _ipaserver_operator_invalid_files: >-
+      {%- set invalid = [] -%}
+      {%- for result in _ipaserver_operator_file_stats.results -%}
+      {%- set expected_mode = '0400' if result.item == '/root/sshkey.pem' else '0600' -%}
+      {%- if (
+        not (result.stat.exists | default(false) | bool)
+        or not (result.stat.isreg | default(false) | bool)
+        or (result.stat.size | default(0) | int) <= 0
+        or result.stat.mode | default('') != expected_mode
+      ) -%}
+      {%- set _ = invalid.append(
+        result.item
+        ~ ' (mode=' ~ (result.stat.mode | default('unknown'))
+        ~ ', expected=' ~ expected_mode ~ ')'
+      ) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ invalid }}
+
 - name: IPAServer operator — require installed deployment files
   ansible.builtin.assert:
     that:
-      - item.stat.exists | default(false) | bool
-      - item.stat.isreg | default(false) | bool
-      - item.stat.size | default(0) | int > 0
-      - item.stat.mode == ('0400' if item.item == '/root/sshkey.pem' else '0600')
-    fail_msg: >-
-      {{ item.item }} is missing, empty, not a regular file, or has mode
-      {{ item.stat.mode | default('unknown') }}; expected
-      {{ '0400' if item.item == '/root/sshkey.pem' else '0600' }}.
-  loop: "{{ _ipaserver_operator_file_stats.results }}"
+      - _ipaserver_operator_invalid_files | length == 0
+    fail_msg: |-
+      Invalid IPAServer operator deployment files:
+      {% for failure in _ipaserver_operator_invalid_files[:3] %}
+      - {{ failure }}
+      {% endfor %}
+      Correct the listed files before continuing.
+    quiet: true
 
 - name: IPAServer operator — find inventory hosts not using their private IP
   ansible.builtin.shell: |
