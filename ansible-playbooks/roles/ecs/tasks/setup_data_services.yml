@@ -167,11 +167,11 @@
           finished: true
           msg: >-
             {{
-              ansible_failed_result.msg
+              ansible_failed_result.stderr
               | default(
-                  ansible_failed_result.stderr
+                  ansible_failed_result.stdout
                   | default(
-                      ansible_failed_result.stdout
+                      ansible_failed_result.msg
                       | default('CDW task failed'),
                       true
                     ),

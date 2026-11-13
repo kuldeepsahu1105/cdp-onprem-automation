@@ -354,18 +354,18 @@
 
         for ((attempt = 1; attempt <= attempts; attempt++)); do
           template_cache="$(
-            {{ ecs_coredns_kubectl_path | quote }}
-            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
-            --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
-            get statefulset/metastore
+            {{ ecs_coredns_kubectl_path | quote }} \
+            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }} \
+            --namespace {{ ecs_cdw_kubernetes_namespace | quote }} \
+            get statefulset/metastore \
             --output 'jsonpath={.spec.template.spec.containers[?(@.name=="metastore")].env[?(@.name=="KRB5CCNAME")].value}'
             2>/dev/null || true
           )"
           if [[ "${template_cache}" != "${desired}" ]]; then
-            {{ ecs_coredns_kubectl_path | quote }}
-            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
-            --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
-            set env statefulset/metastore --containers=metastore
+            {{ ecs_coredns_kubectl_path | quote }} \
+            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }} \
+            --namespace {{ ecs_cdw_kubernetes_namespace | quote }} \
+            set env statefulset/metastore --containers=metastore \
             "KRB5CCNAME=${desired}" >/dev/null
           fi
 
@@ -377,34 +377,34 @@
             pod_exists=true
           fi
           pod_cache="$(
-            {{ ecs_coredns_kubectl_path | quote }}
-            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
-            --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
-            get pod/metastore-0
+            {{ ecs_coredns_kubectl_path | quote }} \
+            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }} \
+            --namespace {{ ecs_cdw_kubernetes_namespace | quote }} \
+            get pod/metastore-0 \
             --output 'jsonpath={.spec.containers[?(@.name=="metastore")].env[?(@.name=="KRB5CCNAME")].value}'
             2>/dev/null || true
           )"
           pod_ready="$(
-            {{ ecs_coredns_kubectl_path | quote }}
-            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
-            --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
-            get pod/metastore-0
+            {{ ecs_coredns_kubectl_path | quote }} \
+            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }} \
+            --namespace {{ ecs_cdw_kubernetes_namespace | quote }} \
+            get pod/metastore-0 \
             --output 'jsonpath={.status.containerStatuses[?(@.name=="metastore")].ready}'
             2>/dev/null || true
           )"
           kcm_failure=false
           if [[ "${pod_exists}" == true ]]; then
             pod_logs="$(
-              {{ ecs_coredns_kubectl_path | quote }}
-              --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
-              --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
+              {{ ecs_coredns_kubectl_path | quote }} \
+              --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }} \
+              --namespace {{ ecs_cdw_kubernetes_namespace | quote }} \
               logs pod/metastore-0 --container=metastore --tail=100
               2>&1 || true
             )"
             pod_previous_logs="$(
-              {{ ecs_coredns_kubectl_path | quote }}
-              --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
-              --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
+              {{ ecs_coredns_kubectl_path | quote }} \
+              --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }} \
+              --namespace {{ ecs_cdw_kubernetes_namespace | quote }} \
               logs pod/metastore-0 --container=metastore --previous --tail=100
               2>&1 || true
             )"
@@ -420,17 +420,17 @@
               [[ "${kcm_failure}" == true ]];
             }
           }; then
-            {{ ecs_coredns_kubectl_path | quote }}
-            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }}
-            --namespace {{ ecs_cdw_kubernetes_namespace | quote }}
+            {{ ecs_coredns_kubectl_path | quote }} \
+            --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }} \
+            --namespace {{ ecs_cdw_kubernetes_namespace | quote }} \
             delete pod/metastore-0 --wait=false --ignore-not-found=true >/dev/null
           fi
 
           set +e
           current_config="$(
-            {{ ecs_data_services_cdp_cli_prefix | map('quote') | join(' ') }}
-            dw describe-dbc-config
-            --cluster-id {{ ecs_cdw_cluster.cluster.id | quote }}
+            {{ ecs_data_services_cdp_cli_prefix | map('quote') | join(' ') }} \
+            dw describe-dbc-config \
+            --cluster-id {{ ecs_cdw_cluster.cluster.id | quote }} \
             --dbc-id {{ ecs_cdw_catalog_id | quote }}
             2>/dev/null
           )"
@@ -449,10 +449,10 @@
 
           set +e
           last_update_output="$(
-            {{ ecs_data_services_cdp_cli_prefix | map('quote') | join(' ') }}
-            dw update-dbc
-            --cluster-id {{ ecs_cdw_cluster.cluster.id | quote }}
-            --dbc-id {{ ecs_cdw_catalog_id | quote }}
+            {{ ecs_data_services_cdp_cli_prefix | map('quote') | join(' ') }} \
+            dw update-dbc \
+            --cluster-id {{ ecs_cdw_cluster.cluster.id | quote }} \
+            --dbc-id {{ ecs_cdw_catalog_id | quote }} \
             --config {{ ecs_cdw_dbc_file_ccache_config_effective.stdout | quote }}
             2>&1
           )"

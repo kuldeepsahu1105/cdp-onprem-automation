@@ -6,6 +6,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 python3 - "$repo_root" <<'PY'
 from pathlib import Path
 import json
+import re
 import subprocess
 import sys
 import yaml
@@ -291,6 +292,16 @@ guarded_section = followup.split(
     "- name: Persist database catalog FILE credential cache through CDW API",
     1,
 )[0]
+require(
+    not re.search(r"\}\}\n\s+--", guarded_section),
+    "guarded recovery commands must use shell continuations before option lines",
+)
+require(
+    "{{ ecs_coredns_kubectl_path | quote }} \\" in guarded_section
+    and "{{ ecs_data_services_cdp_cli_prefix | map('quote') | join(' ') }} \\"
+    in guarded_section,
+    "kubectl and CDP CLI multiline commands must remain single shell commands",
+)
 require(
     'if [[ ${update_rc} -eq 0 ]]; then' in guarded_section
     and 'sleep "${delay}"' in guarded_section
