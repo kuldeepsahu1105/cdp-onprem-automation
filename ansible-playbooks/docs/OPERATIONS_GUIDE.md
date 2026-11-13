@@ -407,6 +407,13 @@ HDFS service must use Kerberos authentication. If this gate fails, rerun
 playbooks 30 and 31; do not generate, retrieve, or rotate a CDW keytab
 manually.
 
+Database Catalog health is determined from the generated Kubernetes workloads,
+not only the CDW API lifecycle status. An API status of `Running` does not
+override a non-Ready container or `CrashLoopBackOff`. After a FILE credential
+cache update, automation force-refreshes the catalog even when its initial API
+status was already `Running`, then requires the metastore configuration and
+pod environment to converge before accepting the catalog.
+
 Give every fresh Base/ECS deployment a unique `ecs_cdp_environment_name`.
 Automation reuses an exact-name environment idempotently but does not adopt a
 sole differently named environment by default. This avoids binding a new Base

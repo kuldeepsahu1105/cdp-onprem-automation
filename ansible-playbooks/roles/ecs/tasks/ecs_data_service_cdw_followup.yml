@@ -633,8 +633,19 @@
         - ecs_cdw_catalog_id | default('') | length > 0
         - ecs_cdw_workload_file_ccache_reconcile | default(true) | bool
         - >-
-          ecs_cdw_catalog_initial_status | default('')
-          is search('(?i)^(stopped|suspended|deactivated)$')
+          (
+            ecs_cdw_dbc_ccache_update is defined
+            and not (
+              ecs_cdw_dbc_ccache_update.skipped
+              | default(false)
+              | bool
+            )
+            and ecs_cdw_dbc_ccache_update.rc | default(1) == 0
+          )
+          or (
+            ecs_cdw_catalog_initial_status | default('')
+            is search('(?i)^(stopped|suspended|deactivated)$')
+          )
 
     - name: Require database catalog workload refresh
       ansible.builtin.assert:
@@ -786,7 +797,7 @@
       delegate_to: "{{ ecs_data_services_delegate_host }}"
       connection: ssh
 
-    - name: Read database catalog namespace pods after stale API status
+    - name: Read database catalog namespace pods for authoritative health
       ansible.builtin.command:
         argv:
           - "{{ ecs_coredns_kubectl_path }}"
@@ -807,9 +818,8 @@
       when:
         - ecs_cdw_catalog_kubernetes_health_fallback | default(true) | bool
         - ecs_cdw_dbc_running.database_catalogs | default([]) | length > 0
-        - ecs_cdw_dbc_running.database_catalogs[0].status | default('') != 'Running'
 
-    - name: Verify database catalog namespace health after stale API status
+    - name: Verify database catalog namespace health
       ansible.builtin.command:
         argv:
           - python3
@@ -848,7 +858,27 @@
                 expected = len(spec.get("containers", []))
                 ready = sum(1 for container in containers if container.get("ready"))
                 if expected == 0 or ready != expected:
-                    unhealthy.append(f"{name}:ready={ready}/{expected}")
+                    details = []
+                    for container in containers:
+                        if container.get("ready"):
+                            continue
+                        container_name = container.get("name", "unknown")
+                        state = container.get("state", {})
+                        waiting = state.get("waiting", {})
+                        terminated = state.get("terminated", {})
+                        reason = (
+                            waiting.get("reason")
+                            or terminated.get("reason")
+                            or "NotReady"
+                        )
+                        details.append(
+                            f"{container_name}={reason}"
+                            f"(restarts={container.get('restartCount', 0)})"
+                        )
+                    unhealthy.append(
+                        f"{name}:ready={ready}/{expected}"
+                        + (f":{','.join(details)}" if details else "")
+                    )
 
             missing = sorted(required_apps - observed_apps)
             summary = {
@@ -884,11 +914,22 @@
         ecs_cdw_catalog_succeeded: >-
           {{
             (
-              ecs_cdw_dbc_running.database_catalogs | default([]) | length > 0
-              and ecs_cdw_dbc_running.database_catalogs[0].status
-              | default('') == 'Running'
+              not (
+                ecs_cdw_catalog_kubernetes_health_fallback
+                | default(true)
+                | bool
+              )
+              and (
+                ecs_cdw_dbc_running.database_catalogs | default([]) | length > 0
+                and ecs_cdw_dbc_running.database_catalogs[0].status
+                | default('') == 'Running'
+              )
             )
             or (
+              ecs_cdw_catalog_kubernetes_health_fallback
+              | default(true)
+              | bool
+              and
               ecs_cdw_catalog_kubernetes_health is defined
               and ecs_cdw_catalog_kubernetes_health.rc | default(3) == 0
             )
@@ -913,8 +954,12 @@
     - name: Report default database catalog failure
       ansible.builtin.debug:
         msg: >-
-          CDW database catalog did not reach Running:
-          {{ ecs_cdw_dbc_running.database_catalogs | default([]) | to_json }}
+          CDW database catalog is not healthy. API={{
+            ecs_cdw_dbc_running.database_catalogs | default([]) | to_json
+          }}; Kubernetes={{
+            ecs_cdw_catalog_kubernetes_health.stdout
+            | default('health check unavailable')
+          }}.
       when: not (ecs_cdw_catalog_succeeded | bool)
 
     - name: Collect CDW Kubernetes diagnostics after catalog failure

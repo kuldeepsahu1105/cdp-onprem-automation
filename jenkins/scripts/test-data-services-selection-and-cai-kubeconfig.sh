@@ -608,14 +608,80 @@ assert cdw_followup.count("ecs_cdw_dbc_file_ccache_config_effective.stdout") == 
 assert cdw_followup.count("ecs_cdw_dbc_file_ccache_config | to_json") == 2
 assert cdw_vw.count("ecs_cdw_vw_file_ccache_config | to_json") == 1
 assert cdw_followup.count(".get(\"KRB5CCNAME\", \"\")") == 3
-assert "Read database catalog namespace pods after stale API status" in cdw_followup
-assert "Verify database catalog namespace health after stale API status" in cdw_followup
+assert "Read database catalog namespace pods for authoritative health" in cdw_followup
+assert "Verify database catalog namespace health" in cdw_followup
 assert 'required_apps = {"metastore", "hue-query-processor"}' in cdw_followup
 assert 'any(owner.get("kind") == "Job" for owner in owners)' in cdw_followup
 assert 'status.get("phase") != "Running"' in cdw_followup
 assert 'ready != expected' in cdw_followup
+assert 'waiting.get("reason")' in cdw_followup
+assert "container.get('restartCount', 0)" in cdw_followup
 assert "ecs_cdw_catalog_kubernetes_health.rc not in [0, 3]" in cdw_followup
 assert "healthy metastore and Hue" in cdw_followup
+assert "ecs_cdw_dbc_ccache_update.rc | default(1) == 0" in cdw_followup
+cdw_followup_tasks = yaml.safe_load(cdw_followup)
+cdw_followup_block = next(
+    task["block"]
+    for task in cdw_followup_tasks
+    if task.get("name") == "CDW | Complete database catalog and Virtual Warehouses"
+)
+cdw_health_task = next(
+    task
+    for task in cdw_followup_block
+    if task.get("name") == "Verify database catalog namespace health"
+)
+cdw_health_script = cdw_health_task["ansible.builtin.command"]["argv"][2]
+crashloop_payload = {
+    "items": [
+        {
+            "metadata": {
+                "name": "metastore-0",
+                "labels": {"app": "metastore"},
+            },
+            "spec": {"containers": [{"name": "metastore"}]},
+            "status": {
+                "phase": "Running",
+                "containerStatuses": [
+                    {
+                        "name": "metastore",
+                        "ready": False,
+                        "restartCount": 12,
+                        "state": {
+                            "waiting": {"reason": "CrashLoopBackOff"},
+                        },
+                    }
+                ],
+            },
+        },
+        {
+            "metadata": {
+                "name": "hue-query-processor-0",
+                "labels": {"app": "hue-query-processor"},
+            },
+            "spec": {"containers": [{"name": "hue-query-processor"}]},
+            "status": {
+                "phase": "Running",
+                "containerStatuses": [
+                    {
+                        "name": "hue-query-processor",
+                        "ready": True,
+                        "restartCount": 0,
+                        "state": {"running": {}},
+                    }
+                ],
+            },
+        },
+    ]
+}
+crashloop_check = subprocess.run(
+    [sys.executable, "-c", cdw_health_script],
+    input=json.dumps(json.dumps(crashloop_payload)),
+    text=True,
+    capture_output=True,
+)
+assert crashloop_check.returncode == 3
+assert "CrashLoopBackOff" in crashloop_check.stdout
+assert "restarts=12" in crashloop_check.stdout
 assert "failed_when: ecs_cdw_dbc_ccache_check.rc not in [0, 3]" in cdw_followup
 assert (
     cdw_followup.index("Persist database catalog FILE credential cache through CDW API")

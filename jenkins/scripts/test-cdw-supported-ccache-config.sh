@@ -91,7 +91,7 @@ parser_tasks = {
     if item.get("name")
     in {
         "Check database catalog FILE credential cache configuration",
-        "Verify database catalog namespace health after stale API status",
+        "Verify database catalog namespace health",
     }
 }
 require(len(parser_tasks) == 2, "expected both registered-stdout parser tasks")
@@ -290,10 +290,10 @@ require(
     "another natural activation state",
 )
 require(
-    "ecs_cdw_dbc_ccache_update" not in refresh_section
-    and "ecs_cdw_metastore_krb5ccname" not in refresh_section,
-    "a successful config update or generated-pod mismatch must not call "
-    "start-dbc for an already Running catalog",
+    "ecs_cdw_dbc_ccache_update" in refresh_section
+    and "ecs_cdw_dbc_ccache_update.rc | default(1) == 0" in refresh_section,
+    "a successful config update for an already Running catalog must force "
+    "a workload refresh before convergence is verified",
 )
 require(
     "another operation[^\\\\n]*already in progress" in followup
