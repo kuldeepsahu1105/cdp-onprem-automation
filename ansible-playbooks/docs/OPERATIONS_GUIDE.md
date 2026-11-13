@@ -393,9 +393,11 @@ Deactivated cluster. Fresh activation uses Low Resource Mode by default
 `ecs_cdw_vw_tshirt_size: xsmall` with the resource template named by
 `ecs_cdw_vw_resource_template_name` (default `Reduced resources`). The
 playbook lists private resource templates, requires a matching entity-specific
-template, and submits both its private `resourceTemplate` name and
-`resourceTemplateId` during `create-vw` for compatibility across private CDW
-backend versions. For Hive,
+template, expands its returned resource allocation map into `create-vw`, and
+also submits the private `resourceTemplate` name and `resourceTemplateId` for
+compatibility across private CDW backend versions. If the backend omits the
+allocation map, automation refuses to create another standard-sized
+warehouse. For Hive,
 the generated query executor must request no more than
 `ecs_cdw_hive_reduced_executor_memory_max_gib` (default 64 GiB); this catches
 silent fallback to the standard approximately 111 GiB executor before the

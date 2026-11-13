@@ -163,6 +163,20 @@
             "type": "string",
             "description": "Private Cloud resource allocation template name.",
         }
+        definitions["CreateVwRequest"]["properties"]["resources"] = {
+            "type": "object",
+            "description": "Expanded Private Cloud resource allocation.",
+            "additionalProperties": {
+                "$ref": "#/definitions/CreateApplicationResources",
+            },
+        }
+        definitions["ResourceTemplateResponse"]["properties"]["resources"] = {
+            "type": "object",
+            "description": "Resource allocation values in this template.",
+            "additionalProperties": {
+                "$ref": "#/definitions/ApplicationResources",
+            },
+        }
         target = home / ".cdp" / "models" / "dw" / "dw.yaml"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(yaml.safe_dump(model, sort_keys=False))
