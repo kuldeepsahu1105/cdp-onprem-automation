@@ -532,9 +532,15 @@ catalog from failing a rerun solely because the control-plane status remained
 stale; it does not create, patch, restart, or delete Kubernetes workloads.
 
 Playbook 34 creates any missing Hive, Impala, and Trino Virtual Warehouses
-after the default database catalog becomes healthy. The defaults use the
-smallest `xsmall` template and `root.<environment>.cdw` resource pool. Existing
-warehouses with the configured names are retained. Override
+after the default database catalog becomes healthy. It converges them
+sequentially in Hive, Impala, then Trino order, waiting for each warehouse to
+become healthy before submitting the next. This avoids the simultaneous
+resource-reservation burst produced by submitting all three together.
+`Running`, `Stopped`, and `Suspended` are accepted as healthy rerun states so
+an autosuspended existing warehouse does not block the next warehouse or CDE.
+The defaults use the smallest `xsmall` template and
+`root.<environment>.cdw` resource pool. Existing warehouses with the
+configured names are retained. Override
 `ecs_cdw_hive_vw_name`, `ecs_cdw_impala_vw_name`, `ecs_cdw_trino_vw_name`,
 `ecs_cdw_vw_tshirt_size`, or `ecs_cdw_vw_resource_pool` only when the target
 CDW deployment uses different established values.

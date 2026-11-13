@@ -16,6 +16,12 @@ followup_path = (
 )
 followup = followup_path.read_text()
 followup_tasks = yaml.safe_load(followup)
+vw_tasks_path = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_virtual_warehouse.yml"
+)
+vw_tasks = vw_tasks_path.read_text()
+vw_task_list = yaml.safe_load(vw_tasks)
 compatibility = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_followup.yml"
 ).read_text()
@@ -156,9 +162,9 @@ for command in (
     "'describe-dbc-config'",
     "'update-dbc'",
     "'start-dbc'",
-    "'create-vw'",
 ):
     require(command in followup, f"missing supported CDW API command {command}")
+require("'create-vw'" in vw_tasks, "missing supported CDW API command 'create-vw'")
 
 for unsupported_vw_update in (
     "'describe-vw-config'",
@@ -176,7 +182,7 @@ require(
     "DBC updates must use a live-config merge driven by the shared FILE-cache config",
 )
 require(
-    followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 1,
+    vw_tasks.count("ecs_cdw_vw_file_ccache_config | to_json") == 1,
     "VW creation must use the shared FILE-cache config exactly once",
 )
 require(
@@ -217,7 +223,7 @@ require(
 require(
     "ecs_cdw_catalog_kubernetes_pods.stdout" in followup
     and "| default({})" in followup
-    and followup.count("| to_json") >= 8,
+    and (followup + vw_tasks).count("| to_json") >= 8,
     "Kubernetes health input must cross the command stdin boundary as JSON",
 )
 require(
@@ -320,14 +326,14 @@ for option in (
     "'--autoscaling'",
     "'--additional-quota'",
 ):
-    require(option in followup, f"missing configurable Impala option {option}")
+    require(option in vw_tasks, f"missing configurable Impala option {option}")
 
 for unsupported_private_option in (
     "'--impala-query-log'",
     "'--no-impala-query-log'",
 ):
     require(
-        unsupported_private_option not in followup,
+        unsupported_private_option not in vw_tasks,
         f"public-only option must not be submitted to private CDP: {unsupported_private_option}",
     )
 
@@ -336,12 +342,30 @@ require(
     "Trino settings must be validated before creation",
 )
 require(
-    "ecs_cdw_trino_autoscaling | to_json" in followup,
+    "ecs_cdw_trino_autoscaling | to_json" in vw_tasks,
     "configured Trino autoscaling must be passed to create-vw",
 )
 require(
-    "ecs_cdw_trino_additional_quota | to_json" in followup,
+    "ecs_cdw_trino_additional_quota | to_json" in vw_tasks,
     "configured Trino additional quota must be passed to create-vw",
+)
+require(
+    "Converge CDW Virtual Warehouses sequentially" in followup
+    and "loop_var: ecs_cdw_vw" in followup,
+    "Virtual Warehouses must be converged one at a time in deterministic order",
+)
+vw_task_names = [task["name"] for task in vw_task_list]
+require(
+    vw_task_names.index("CDW VW | Inspect {{ ecs_cdw_vw.type }} Virtual Warehouse")
+    < vw_task_names.index("CDW VW | Create missing {{ ecs_cdw_vw.type }} Virtual Warehouse")
+    < vw_task_names.index("CDW VW | Wait for {{ ecs_cdw_vw.type }} terminal status")
+    < vw_task_names.index("CDW VW | Require healthy {{ ecs_cdw_vw.type }} Virtual Warehouse"),
+    "each Virtual Warehouse must be inspected, created, and verified before the next",
+)
+require(
+    "running|stopped|suspended|failed|error" in vw_tasks
+    and "running|stopped|suspended" in vw_tasks,
+    "Virtual Warehouse waits must accept healthy autosuspended rerun states",
 )
 
 require(

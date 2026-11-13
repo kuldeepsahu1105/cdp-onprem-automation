@@ -1,0 +1,214 @@
+---
+- name: "CDW VW | Inspect {{ ecs_cdw_vw.type }} Virtual Warehouse"
+  cloudera.cloud.dw_virtual_warehouse_info:
+    cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
+    name: "{{ ecs_cdw_vw.name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_vw_existing
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: "CDW VW | Report {{ ecs_cdw_vw.type }} provisioning action"
+  ansible.builtin.debug:
+    msg: >-
+      CDW Virtual Warehouse: type={{ ecs_cdw_vw.type }};
+      name={{ ecs_cdw_vw.name }};
+      status={{
+        (
+          ecs_cdw_vw_existing.virtual_warehouses
+          | default([])
+          | first
+          | default({})
+        ).status
+        | default('Absent')
+      }};
+      action={{
+        'REUSE'
+        if ecs_cdw_vw_existing.virtual_warehouses | default([]) | length > 0
+        else 'CREATE'
+      }}.
+
+- name: "CDW VW | Create missing {{ ecs_cdw_vw.type }} Virtual Warehouse"
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_data_services_cdp_cli_prefix
+        + [
+            'dw',
+            'create-vw',
+            '--cluster-id',
+            ecs_cdw_cluster.cluster.id,
+            '--dbc-id',
+            ecs_cdw_catalog_id,
+            '--vw-type',
+            ecs_cdw_vw.type,
+            '--name',
+            ecs_cdw_vw.name,
+            '--t-shirt-size',
+            ecs_cdw_vw_tshirt_size,
+            '--resource-pool',
+            ecs_cdw_vw_resource_pool,
+            '--config',
+            ecs_cdw_vw_file_ccache_config | to_json
+          ]
+        + (
+            [
+              '--impala-options',
+              ecs_cdw_impala_options | to_json
+            ]
+            if (
+              ecs_cdw_vw.type == 'impala'
+              and ecs_cdw_impala_options | default({}) | length > 0
+            )
+            else []
+          )
+        + (
+            [
+              '--impala-ha-settings',
+              ecs_cdw_impala_ha_settings | to_json,
+              '--autoscaling',
+              ecs_cdw_impala_autoscaling | to_json
+            ]
+            if ecs_cdw_vw.type == 'impala'
+            else []
+          )
+        + (
+            [
+              '--additional-quota',
+              ecs_cdw_impala_additional_quota | to_json
+            ]
+            if (
+              ecs_cdw_vw.type == 'impala'
+              and (
+                ecs_cdw_impala_additional_quota.cpu | default(0) | float > 0
+                or ecs_cdw_impala_additional_quota.memory | default(0) | int > 0
+              )
+            )
+            else []
+          )
+        + (
+            [
+              '--autoscaling',
+              ecs_cdw_trino_autoscaling | to_json
+            ]
+            if (
+              ecs_cdw_vw.type == 'trino'
+              and ecs_cdw_trino_autoscaling | default({}) | length > 0
+            )
+            else []
+          )
+        + (
+            [
+              '--additional-quota',
+              ecs_cdw_trino_additional_quota | to_json
+            ]
+            if (
+              ecs_cdw_vw.type == 'trino'
+              and (
+                ecs_cdw_trino_additional_quota.cpu | default(0) | float > 0
+                or ecs_cdw_trino_additional_quota.memory | default(0) | int > 0
+              )
+            )
+            else []
+          )
+      }}
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_vw_create_result
+  changed_when: true
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cdw_vw_existing.virtual_warehouses | default([]) | length == 0
+
+- name: "CDW VW | Wait for {{ ecs_cdw_vw.type }} record"
+  cloudera.cloud.dw_virtual_warehouse_info:
+    cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
+    name: "{{ ecs_cdw_vw.name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_vw_record
+  until: ecs_cdw_vw_record.virtual_warehouses | default([]) | length > 0
+  retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
+  delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: "CDW VW | Wait for {{ ecs_cdw_vw.type }} terminal status"
+  cloudera.cloud.dw_virtual_warehouse_info:
+    cluster_id: "{{ ecs_cdw_cluster.cluster.id }}"
+    name: "{{ ecs_cdw_vw.name }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_vw_status
+  until:
+    - ecs_cdw_vw_status.virtual_warehouses | default([]) | length > 0
+    - >-
+      (
+        ecs_cdw_vw_status.virtual_warehouses
+        | first
+        | default({})
+      ).status
+      | default('')
+      is search('(?i)^(running|stopped|suspended|failed|error)$')
+  retries: "{{ ecs_cdw_vw_wait_retries | int }}"
+  delay: "{{ ecs_cdw_vw_wait_delay | int }}"
+  failed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
+- name: "CDW VW | Report {{ ecs_cdw_vw.type }} result"
+  ansible.builtin.debug:
+    msg: >-
+      CDW Virtual Warehouse: type={{ ecs_cdw_vw.type }};
+      name={{ ecs_cdw_vw.name }};
+      status={{
+        (
+          ecs_cdw_vw_status.virtual_warehouses
+          | default([])
+          | first
+          | default({})
+        ).status
+        | default('NotFound')
+      }};
+      result={{
+        'READY'
+        if (
+          ecs_cdw_vw_status.virtual_warehouses
+          | default([])
+          | first
+          | default({})
+        ).status
+        | default('')
+        is search('(?i)^(running|stopped|suspended)$')
+        else 'FAILED'
+      }}.
+
+- name: "CDW VW | Require healthy {{ ecs_cdw_vw.type }} Virtual Warehouse"
+  ansible.builtin.assert:
+    that:
+      - ecs_cdw_vw_status.virtual_warehouses | default([]) | length > 0
+      - >-
+        (
+          ecs_cdw_vw_status.virtual_warehouses
+          | first
+          | default({})
+        ).status
+        | default('')
+        is search('(?i)^(running|stopped|suspended)$')
+    fail_msg: >-
+      CDW Virtual Warehouse failed:
+      type={{ ecs_cdw_vw.type }};
+      name={{ ecs_cdw_vw.name }};
+      status={{
+        (
+          ecs_cdw_vw_status.virtual_warehouses
+          | default([])
+          | first
+          | default({})
+        ).status
+        | default('NotFound')
+      }}.

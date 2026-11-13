@@ -105,6 +105,38 @@
 - name: Optional ECS LDAP provider sync and LDAP admin user
   ansible.builtin.import_tasks: ecs_control_plane_ldap_and_admin.yml
 
+- name: Provision CDE before capacity-intensive CDW warehouses
+  when: "'cde' in (ecs_data_services_install_names | default([]))"
+  block:
+    - name: Prepare CDE rerun
+      ansible.builtin.include_tasks: ecs_data_service_cde_preflight.yml
+
+    - name: Launch CDE
+      ansible.builtin.include_tasks: ecs_data_service_cde_start.yml
+      vars:
+        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+
+    - name: Wait for CDE module job
+      ansible.builtin.include_tasks: ecs_data_service_cde_wait.yml
+      vars:
+        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
+        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
+  rescue:
+    - name: Record uncaught CDE failure
+      ansible.builtin.set_fact:
+        ecs_cde_service_succeeded: false
+        ecs_cde_service:
+          failed: true
+          finished: true
+          msg: >-
+            {{
+              ansible_failed_result.msg
+              | default('CDE task failed')
+              | regex_replace('[\r\n]+', ' ')
+              | truncate(500, true, '...')
+            }}
+
 - name: Provision CDW without blocking subsequent services
   when: "'cdw' in (ecs_data_services_install_names | default([]))"
   block:
@@ -155,38 +187,6 @@
     - name: Collect CDW diagnostics after uncaught failure
       ansible.builtin.include_tasks: ecs_data_service_cdw_diagnostics.yml
       when: not (ecs_cdw_diagnostics_collected | default(false) | bool)
-
-- name: Provision CDE without blocking subsequent services
-  when: "'cde' in (ecs_data_services_install_names | default([]))"
-  block:
-    - name: Prepare CDE rerun
-      ansible.builtin.include_tasks: ecs_data_service_cde_preflight.yml
-
-    - name: Launch CDE
-      ansible.builtin.include_tasks: ecs_data_service_cde_start.yml
-      vars:
-        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
-
-    - name: Wait for CDE module job
-      ansible.builtin.include_tasks: ecs_data_service_cde_wait.yml
-      vars:
-        ansible_python_interpreter: "{{ hostvars['localhost'].ecs_data_services_remote_venv_path }}/bin/python"
-        ansible_async_dir: "{{ hostvars['localhost'].ecs_data_services_remote_async_dir }}"
-  rescue:
-    - name: Record uncaught CDE failure
-      ansible.builtin.set_fact:
-        ecs_cde_service_succeeded: false
-        ecs_cde_service:
-          failed: true
-          finished: true
-          msg: >-
-            {{
-              ansible_failed_result.msg
-              | default('CDE task failed')
-              | regex_replace('[\r\n]+', ' ')
-              | truncate(500, true, '...')
-            }}
 
 - name: Provision CAI without blocking subsequent services
   when: "'cai' in (ecs_data_services_install_names | default([]))"

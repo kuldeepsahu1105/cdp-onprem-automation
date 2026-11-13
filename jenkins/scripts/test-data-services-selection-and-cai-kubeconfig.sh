@@ -84,6 +84,9 @@ assert "Collect pending CDW pod names" not in diagnostics_text
 assert "Describe pending CDW pods" not in diagnostics_text
 assert "Collect ECS node scheduling capacity" not in diagnostics_text
 assert "ansible.builtin.include_tasks: ecs_data_service_cde_preflight.yml" in playbook_text
+assert playbook_text.index("Provision CDE before capacity-intensive CDW warehouses") < (
+    playbook_text.index("Provision CDW without blocking subsequent services")
+)
 assert "ansible.builtin.include_tasks: ecs_data_service_cai_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: ecs_data_service_model_registry.yml" in playbook_text
 assert "ecs_reconcile_coredns.yml" in playbook_text
@@ -525,24 +528,31 @@ cdw_followup = (
     root
     / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_followup.yml"
 ).read_text()
+cdw_vw = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_virtual_warehouse.yml"
+).read_text()
 assert "ecs_cdw_trino_vw_name" in cdw_followup
 assert "type: trino" in cdw_followup
-assert "'create-vw'" in cdw_followup
-assert "'--resource-pool'" in cdw_followup
-assert "ecs_cdw_vw_resource_pool" in cdw_followup
-assert "'--t-shirt-size'" in cdw_followup
-assert "ecs_cdw_vw_tshirt_size" in cdw_followup
-assert "'--impala-options'" in cdw_followup
-assert "'--impala-ha-settings'" in cdw_followup
-assert "'--autoscaling'" in cdw_followup
-assert "'--additional-quota'" in cdw_followup
-assert "'--impala-query-log'" not in cdw_followup
-assert "'--no-impala-query-log'" not in cdw_followup
+assert "'create-vw'" in cdw_vw
+assert "'--resource-pool'" in cdw_vw
+assert "ecs_cdw_vw_resource_pool" in cdw_vw
+assert "'--t-shirt-size'" in cdw_vw
+assert "ecs_cdw_vw_tshirt_size" in cdw_vw
+assert "'--impala-options'" in cdw_vw
+assert "'--impala-ha-settings'" in cdw_vw
+assert "'--autoscaling'" in cdw_vw
+assert "'--additional-quota'" in cdw_vw
+assert "'--impala-query-log'" not in cdw_vw
+assert "'--no-impala-query-log'" not in cdw_vw
 assert "Validate configured Impala Virtual Warehouse settings" in cdw_followup
 assert "Validate configured Trino Virtual Warehouse settings" in cdw_followup
-assert "ecs_cdw_trino_autoscaling | to_json" in cdw_followup
-assert "ecs_cdw_trino_additional_quota | to_json" in cdw_followup
-assert "item.virtual_warehouses | default([]) | length == 0" in cdw_followup
+assert "ecs_cdw_trino_autoscaling | to_json" in cdw_vw
+assert "ecs_cdw_trino_additional_quota | to_json" in cdw_vw
+assert "ecs_cdw_vw_existing.virtual_warehouses | default([]) | length == 0" in cdw_vw
+assert "Converge CDW Virtual Warehouses sequentially" in cdw_followup
+assert "loop_var: ecs_cdw_vw" in cdw_followup
+assert "running|stopped|suspended|failed|error" in cdw_vw
 assert "ecs_data_service_cdw_reconcile_vw_ccaches.yml" not in cdw_followup
 assert "'describe-dbc-config'" in cdw_followup
 assert "'update-dbc'" in cdw_followup
@@ -561,7 +571,7 @@ assert "'describe-vw-config'" not in cdw_followup
 assert "'update-vw'" not in cdw_followup
 assert cdw_followup.count("ecs_cdw_dbc_file_ccache_config_effective.stdout") == 2
 assert cdw_followup.count("ecs_cdw_dbc_file_ccache_config | to_json") == 2
-assert cdw_followup.count("ecs_cdw_vw_file_ccache_config | to_json") == 1
+assert cdw_vw.count("ecs_cdw_vw_file_ccache_config | to_json") == 1
 assert cdw_followup.count(".get(\"KRB5CCNAME\", \"\")") == 3
 assert "Read database catalog namespace pods after stale API status" in cdw_followup
 assert "Verify database catalog namespace health after stale API status" in cdw_followup
@@ -576,7 +586,8 @@ assert (
     cdw_followup.index("Persist database catalog FILE credential cache through CDW API")
     < cdw_followup.index("\n    - name: Wait for default database catalog\n")
 )
-assert "CDW Virtual Warehouses to finish provisioning" in cdw_followup
+assert "Converge CDW Virtual Warehouses sequentially" in cdw_followup
+assert "CDW VW | Wait for {{ ecs_cdw_vw.type }} terminal status" in cdw_vw
 assert group_vars["ecs_cdw_vw_tshirt_size"] == "xsmall"
 assert group_vars["ecs_cdw_vw_resource_pool"] == "root.{{ ecs_cdp_environment_name }}.cdw"
 assert group_vars["ecs_cdw_impala_ha_settings"]["highAvailabilityMode"] == "DISABLED"

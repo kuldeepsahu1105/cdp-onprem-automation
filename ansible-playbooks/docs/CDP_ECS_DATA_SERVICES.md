@@ -58,11 +58,16 @@ with the ECS control plane through the isolated CDP CLI profile.
 CDW, CDE, and CAI use the same `cloudera.cloud` request fields as the supplied
 Cloudera Labs examples, adapted only for collection 3.3 option names. Matching
 the supplied separate Labs playbooks, playbook 34 completes each selected
-service before launching the next one: CDW and its catalog/Virtual Warehouses,
-then CDE, then CAI and its TLS/UI follow-up. CDW and CAI submit with `wait: false`
-and use their structured `dw_cluster_info` and `ml_info` APIs for bounded
-polling. Definitive submission errors fail their service boundary immediately
-with the original module/API message. Only documented ambiguous CDW responses
+service before launching the next one: CDE and its default Virtual Cluster
+first, then CDW and its catalog/Virtual Warehouses, then CAI and its TLS/UI
+follow-up. CDE is intentionally completed before capacity-intensive CDW
+warehouse provisioning so a constrained warehouse cannot prevent the CDE
+service and Virtual Cluster from being created. The services are not launched
+in parallel because they reserve capacity from the same ECS worker pool. CDW
+and CAI submit with `wait: false` and use their structured `dw_cluster_info`
+and `ml_info` APIs for bounded polling. Definitive submission errors fail
+their service boundary immediately with the original module/API message. Only
+documented ambiguous CDW responses
 (`already exists`, `environment is already activated` with an existing cluster
 id, HTTP 504, or timeout) proceed to structured discovery so the control plane
 can prove whether the request landed. This avoids remote
@@ -497,7 +502,11 @@ retains existing Virtual Warehouses and creates only missing `hive-vw`,
 `xsmall` template and the private-cloud CDW resource pool
 `root.<environment>.cdw`. The resource pool is passed explicitly because the
 private-cloud API rejects an inherited parent pool that is not the catalog's
-pool or one of its children. Existing warehouses are never deleted or
+pool or one of its children. Warehouses are converged sequentially in Hive,
+Impala, then Trino order; each must become `Running`, `Stopped`, or `Suspended`
+before the next is submitted. This prevents simultaneous create requests from
+competing for the same initial capacity, while treating an autosuspended
+warehouse as healthy on reruns. Existing warehouses are never deleted or
 recreated by this reconciliation. Impala creation also uses the configurable
 `ecs_cdw_impala_options`, `ecs_cdw_impala_ha_settings`,
 `ecs_cdw_impala_autoscaling`, and `ecs_cdw_impala_additional_quota` values.
