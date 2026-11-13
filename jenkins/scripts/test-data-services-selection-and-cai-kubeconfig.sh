@@ -533,7 +533,10 @@ cdw_vw = (
     / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_virtual_warehouse.yml"
 ).read_text()
 assert "ecs_cdw_trino_vw_name" in cdw_followup
-assert "type: trino" in cdw_followup
+assert "'type': 'trino'" in cdw_followup
+assert group_vars["ecs_cdw_virtual_warehouse_types"] == ["hive"]
+assert "ecs_cdw_virtual_warehouse_types_effective" in cdw_followup
+assert "difference(['hive', 'impala', 'trino'])" in cdw_followup
 assert "'create-vw'" in cdw_vw
 assert "'--resource-pool'" in cdw_vw
 assert "ecs_cdw_vw_resource_pool" in cdw_vw

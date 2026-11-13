@@ -531,11 +531,16 @@ non-Job pod is Running with all containers Ready. This prevents a healthy
 catalog from failing a rerun solely because the control-plane status remained
 stale; it does not create, patch, restart, or delete Kubernetes workloads.
 
-Playbook 34 creates any missing Hive, Impala, and Trino Virtual Warehouses
-after the default database catalog becomes healthy. It converges them
-sequentially in Hive, Impala, then Trino order, waiting for each warehouse to
-become healthy before submitting the next. This avoids the simultaneous
-resource-reservation burst produced by submitting all three together.
+Playbook 34 creates the Virtual Warehouse types selected by
+`ecs_cdw_virtual_warehouse_types` after the default database catalog becomes
+healthy. The default is Hive only so deleting an optional Impala or Trino
+warehouse does not cause automation to recreate it on the next rerun. To add
+them explicitly, set for example
+`ecs_cdw_virtual_warehouse_types: [hive, impala]` or
+`[hive, impala, trino]`. Selected warehouses are converged sequentially in
+Hive, Impala, then Trino order, waiting for each warehouse to become healthy
+before submitting the next. This avoids the simultaneous resource-reservation
+burst produced by submitting all three together.
 `Running`, `Stopped`, and `Suspended` are accepted as healthy rerun states so
 an autosuspended existing warehouse does not block the next warehouse or CDE.
 The defaults use the smallest `xsmall` template and

@@ -1637,6 +1637,10 @@ ecs_cdw_dbc_file_ccache_config:
 ecs_cdw_hive_vw_name: hive-vw
 ecs_cdw_impala_vw_name: impala-vw
 ecs_cdw_trino_vw_name: trino-vw
+# Keep the default deployment within the standard eight-worker lab capacity.
+# Add impala and/or trino explicitly only when the ECS worker pool can host them.
+ecs_cdw_virtual_warehouse_types:
+  - hive
 ecs_cdw_vw_tshirt_size: xsmall
 ecs_cdw_vw_resource_pool: "root.{{ ecs_cdp_environment_name }}.cdw"
 ecs_cdw_impala_options: {}

@@ -497,8 +497,10 @@ version must retain their current principal state for diagnostics and use a
 supported DWX recovery workflow rather than an inferred cleanup.
 
 After the default database catalog reaches `Running`, automation inspects and
-retains existing Virtual Warehouses and creates only missing `hive-vw`,
-`impala-vw`, and `trino-vw` services. All three default to the smallest
+retains existing selected Virtual Warehouses and creates only missing
+services. `ecs_cdw_virtual_warehouse_types` defaults to `[hive]`; Impala and
+Trino are explicit opt-ins so a user-deleted optional warehouse is not
+silently recreated on the next run. Selected warehouses use the smallest
 `xsmall` template and the private-cloud CDW resource pool
 `root.<environment>.cdw`. The resource pool is passed explicitly because the
 private-cloud API rejects an inherited parent pool that is not the catalog's

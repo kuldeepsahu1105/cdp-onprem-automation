@@ -523,6 +523,11 @@
       ansible.builtin.assert:
         that:
           - >-
+            ecs_cdw_virtual_warehouse_types
+            | default(['hive'])
+            | type_debug
+            == 'list'
+          - >-
             (
               ecs_cdw_dbc_ccache_guarded_update.rc
               if ecs_cdw_dbc_ccache_guarded_update is defined
@@ -916,17 +921,57 @@
       ansible.builtin.include_tasks: ecs_data_service_cdw_diagnostics.yml
       when: not (ecs_cdw_catalog_succeeded | bool)
 
-    - name: Define desired smallest CDW Virtual Warehouses
+    - name: Validate selected CDW Virtual Warehouse types
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              ecs_cdw_virtual_warehouse_types
+              | default(['hive'])
+              | map('lower')
+              | list
+              | difference(['hive', 'impala', 'trino'])
+            )
+            | length == 0
+        fail_msg: >-
+          ecs_cdw_virtual_warehouse_types must be a list containing only hive,
+          impala, and/or trino.
+      when: ecs_cdw_catalog_succeeded | bool
+
+    - name: Resolve selected CDW Virtual Warehouse types
+      ansible.builtin.set_fact:
+        ecs_cdw_virtual_warehouse_types_effective: >-
+          {{
+            ecs_cdw_virtual_warehouse_types
+            | default(['hive'])
+            | map('lower')
+            | unique
+            | list
+          }}
+      when: ecs_cdw_catalog_succeeded | bool
+
+    - name: Define selected smallest CDW Virtual Warehouses
       ansible.builtin.set_fact:
         ecs_cdw_hive_vw_name_effective: "{{ ecs_cdw_hive_vw_name }}"
         ecs_cdw_impala_vw_name_effective: "{{ ecs_cdw_impala_vw_name }}"
-        ecs_cdw_desired_virtual_warehouses:
-          - name: "{{ ecs_cdw_hive_vw_name }}"
-            type: hive
-          - name: "{{ ecs_cdw_impala_vw_name }}"
-            type: impala
-          - name: "{{ ecs_cdw_trino_vw_name }}"
-            type: trino
+        ecs_cdw_desired_virtual_warehouses: >-
+          {{
+            (
+              [{'name': ecs_cdw_hive_vw_name, 'type': 'hive'}]
+              if 'hive' in ecs_cdw_virtual_warehouse_types_effective
+              else []
+            )
+            + (
+              [{'name': ecs_cdw_impala_vw_name, 'type': 'impala'}]
+              if 'impala' in ecs_cdw_virtual_warehouse_types_effective
+              else []
+            )
+            + (
+              [{'name': ecs_cdw_trino_vw_name, 'type': 'trino'}]
+              if 'trino' in ecs_cdw_virtual_warehouse_types_effective
+              else []
+            )
+          }}
       when: ecs_cdw_catalog_succeeded | bool
 
     - name: Validate configured Impala Virtual Warehouse settings
@@ -959,7 +1004,9 @@
           mode, positive executor-group bounds and autosuspend timeout,
           nonnegative delays/quotas, and configure only one of spillToS3Uri
           or scratchSpaceLimit.
-      when: ecs_cdw_catalog_succeeded | bool
+      when:
+        - ecs_cdw_catalog_succeeded | bool
+        - "'impala' in ecs_cdw_virtual_warehouse_types_effective"
 
     - name: Validate configured Trino Virtual Warehouse settings
       ansible.builtin.assert:
@@ -979,7 +1026,9 @@
           Invalid Trino Virtual Warehouse configuration. Use positive worker
           bounds with max greater than or equal to min, and nonnegative grace
           periods, scaling delays, and additional quotas.
-      when: ecs_cdw_catalog_succeeded | bool
+      when:
+        - ecs_cdw_catalog_succeeded | bool
+        - "'trino' in ecs_cdw_virtual_warehouse_types_effective"
 
     - name: Converge CDW Virtual Warehouses sequentially
       ansible.builtin.include_tasks: ecs_data_service_cdw_virtual_warehouse.yml
@@ -998,22 +1047,32 @@
         ecs_caddy_data_service_routes: >-
           {{
             (ecs_caddy_data_service_routes | default([]))
-            + [
-              {
-                'id': 'cdw-hive',
-                'external_hostname': 'hue-' + ecs_cdw_hive_vw_name_effective + '.' + ecs_app_domain,
-                'backend_host': ecs_master_fqdn,
-                'backend_port': 443,
-                'backend_scheme': 'https'
-              },
-              {
-                'id': 'cdw-impala',
-                'external_hostname': 'hue-' + ecs_cdw_impala_vw_name_effective + '.' + ecs_app_domain,
-                'backend_host': ecs_master_fqdn,
-                'backend_port': 443,
-                'backend_scheme': 'https'
-              }
-            ]
+            + (
+              [
+                {
+                  'id': 'cdw-hive',
+                  'external_hostname': 'hue-' + ecs_cdw_hive_vw_name_effective + '.' + ecs_app_domain,
+                  'backend_host': ecs_master_fqdn,
+                  'backend_port': 443,
+                  'backend_scheme': 'https'
+                }
+              ]
+              if 'hive' in ecs_cdw_virtual_warehouse_types_effective
+              else []
+            )
+            + (
+              [
+                {
+                  'id': 'cdw-impala',
+                  'external_hostname': 'hue-' + ecs_cdw_impala_vw_name_effective + '.' + ecs_app_domain,
+                  'backend_host': ecs_master_fqdn,
+                  'backend_port': 443,
+                  'backend_scheme': 'https'
+                }
+              ]
+              if 'impala' in ecs_cdw_virtual_warehouse_types_effective
+              else []
+            )
           }}
       when: ecs_cdw_catalog_succeeded | bool
 
@@ -1026,12 +1085,13 @@
                 'cdw': ecs_data_services_catalog.cdw | default({}) | combine(
                   {
                     'url': 'https://hue-' + ecs_cdw_hive_vw_name_effective + '.' + ecs_app_domain,
-                    'hive_virtual_warehouse': ecs_cdw_hive_vw_name_effective,
-                    'impala_virtual_warehouse': ecs_cdw_impala_vw_name_effective
+                    'hive_virtual_warehouse': ecs_cdw_hive_vw_name_effective
                   }
                 )
               },
               recursive=True
             )
           }}
-      when: ecs_cdw_catalog_succeeded | bool
+      when:
+        - ecs_cdw_catalog_succeeded | bool
+        - "'hive' in ecs_cdw_virtual_warehouse_types_effective"

@@ -354,6 +354,13 @@ require(
     and "loop_var: ecs_cdw_vw" in followup,
     "Virtual Warehouses must be converged one at a time in deterministic order",
 )
+require(
+    group_vars["ecs_cdw_virtual_warehouse_types"] == ["hive"]
+    and "ecs_cdw_virtual_warehouse_types_effective" in followup
+    and "| type_debug" in followup
+    and "difference(['hive', 'impala', 'trino'])" in followup,
+    "Hive must be the capacity-safe default and optional warehouse types must be validated",
+)
 vw_task_names = [task["name"] for task in vw_task_list]
 require(
     vw_task_names.index("CDW VW | Inspect {{ ecs_cdw_vw.type }} Virtual Warehouse")
