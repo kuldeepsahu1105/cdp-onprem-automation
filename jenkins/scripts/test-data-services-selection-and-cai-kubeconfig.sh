@@ -79,10 +79,10 @@ assert "One or more selected Data Services failed:" in playbook_text
 assert "- CDW: task=" in playbook_text
 assert "CDW details=" not in playbook_text
 assert "| truncate(500, true, '...')" in playbook_text
-assert "Collect pending CDW pod names" in diagnostics_text
-assert "Describe pending CDW pods" in diagnostics_text
 assert "Collect failed CDW persistent volume claims" in diagnostics_text
-assert "Collect ECS node scheduling capacity" in diagnostics_text
+assert "Collect pending CDW pod names" not in diagnostics_text
+assert "Describe pending CDW pods" not in diagnostics_text
+assert "Collect ECS node scheduling capacity" not in diagnostics_text
 assert "ansible.builtin.include_tasks: ecs_data_service_cde_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: ecs_data_service_cai_preflight.yml" in playbook_text
 assert "ansible.builtin.include_tasks: ecs_data_service_model_registry.yml" in playbook_text
@@ -425,14 +425,29 @@ assert "Likely failing boundary=" in cdw_diagnostics
 assert "DWX-to-CM/KDC account-manager principal creation" in cdw_diagnostics
 assert "~ '|KDC_ERR|PREAUTH|CLIENT_NOT_FOUND|ImportCredentials'" in cdw_diagnostics
 assert "~ '|KDC_ERR|PREAUTH|CLIENT_NOT_FOUND|ImportCredentials|Kerberos'" not in cdw_diagnostics
-assert "| tail -n 1" in cdw_diagnostics
-assert "| cut -c1-300" in cdw_diagnostics
-assert "Workload log excerpt=" in cdw_diagnostics
-assert "Recent events=" in cdw_diagnostics
-assert "Metastore pod:" not in cdw_diagnostics
-assert "Pending pod descriptions:" not in cdw_diagnostics
-assert "Hue query processor:" not in cdw_diagnostics
-assert cdw_diagnostics.count("| truncate(500, true, '...')") >= 3
+assert "Latest relevant Cloudera Manager Kerberos evidence:" in cdw_diagnostics
+assert "CDW result=FAILED; workload snapshot=" in cdw_diagnostics
+assert "Root-cause log evidence: metastore=" in cdw_diagnostics
+assert "--field-selector=type=Warning" in cdw_diagnostics
+assert "WAITING:.status.containerStatuses[*].state.waiting.reason" in cdw_diagnostics
+assert "ready='}{.status.readyReplicas}" in cdw_diagnostics
+assert "custom-columns=NAME:.metadata.name,STATUS:.status.phase" in cdw_diagnostics
+assert "\n      - describe\n" not in cdw_diagnostics
+assert "truncate(" not in cdw_diagnostics
+assert "cut -c" not in cdw_diagnostics
+cdw_diagnostic_tasks = yaml.safe_load(cdw_diagnostics)
+cdw_boundary_report = next(
+    task
+    for task in cdw_diagnostic_tasks
+    if task.get("name") == "CDW diagnostics | Report control-plane and Kerberos boundary"
+)
+cdw_kubernetes_report = next(
+    task
+    for task in cdw_diagnostic_tasks
+    if task.get("name") == "Report failed CDW Kubernetes diagnostics"
+)
+assert len(cdw_boundary_report["ansible.builtin.debug"]["msg"]) == 5
+assert len(cdw_kubernetes_report["ansible.builtin.debug"]["msg"]) == 6
 assert "ecs_cdw_diagnostics_collected: true" in cdw_diagnostics
 assert "state: present" not in cdw_diagnostics
 assert "ipa-getkeytab" not in cdw_diagnostics
