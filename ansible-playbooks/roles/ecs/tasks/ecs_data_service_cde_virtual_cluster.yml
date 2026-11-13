@@ -27,6 +27,16 @@
       {%- endfor -%}
       {{ result }}
 
+- name: CDE VC | Validate API-compatible candidate names
+  ansible.builtin.assert:
+    that:
+      - ecs_cde_vc_candidate_names | length > 0
+      - ecs_cde_vc_candidate_names | reject('equalto', '') | list | length == ecs_cde_vc_candidate_names | length
+      - ecs_cde_vc_candidate_names | map('length') | max <= 30
+    fail_msg: >-
+      CDE Virtual Cluster names must be non-empty and at most 30 characters.
+      Configured candidates={{ ecs_cde_vc_candidate_names }}.
+
 - name: CDE VC | Record authoritative Virtual Cluster inventory
   ansible.builtin.set_fact:
     ecs_cde_vc_inventory: >-

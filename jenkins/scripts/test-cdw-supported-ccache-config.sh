@@ -143,6 +143,14 @@ require(
     and merged_values["KRB5CCNAME"] == "FILE:/tmp/krb5cc_expected",
     "DBC live-config merge must preserve SERVICE_OPTS while adding KRB5CCNAME",
 )
+require(
+    set(merged_config) == {"applicationConfigs"}
+    and set(merged_config["applicationConfigs"]) == {"metastore"}
+    and len(
+        merged_config["applicationConfigs"]["metastore"]["configBlocks"]
+    ) == 1,
+    "DBC update must send only the minimal metastore env patch",
+)
 
 for command in (
     "'describe-dbc-config'",
@@ -182,10 +190,11 @@ require(
 )
 require(
     "Merge database catalog FILE cache into live metastore configuration" in followup
-    and 'config.setdefault("applicationConfigs", {})' in followup
-    and 'applications.setdefault("metastore", {})' in followup
+    and 'config.get("applicationConfigs", {})' in followup
+    and "copy.deepcopy(block)" in followup
+    and '"configBlocks": [env]' in followup
     and 'key_values["KRB5CCNAME"] = desired' in followup,
-    "DBC reconciliation must merge KRB5CCNAME into the live metastore application config",
+    "DBC reconciliation must build a minimal metastore patch from the live env config",
 )
 require(
     'stdin: "{{ ecs_cdw_dbc_config.stdout | to_json }}"' in followup,

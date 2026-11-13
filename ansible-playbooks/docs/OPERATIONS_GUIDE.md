@@ -479,7 +479,9 @@ Database Catalog configuration with `dw describe-dbc-config` and applies
 `dw update-dbc --config` only when missing or different. CDW stores this
 environment value in
 `applicationConfigs.metastore.configBlocks[id=env]`; automation merges it into
-the live block so existing values such as `SERVICE_OPTS` remain intact. If the persisted
+the live block so existing values such as `SERVICE_OPTS` remain intact. The
+supported update sends only that minimal metastore `env` patch; it does not
+echo generated read-only configuration back to CDW. If the persisted
 configuration is correct but the generated metastore pod is stale, automation
 uses `dw start-dbc --force-refresh` and verifies the recreated pod. The
 verification is bounded by `ecs_cdw_workload_refresh_retries` and

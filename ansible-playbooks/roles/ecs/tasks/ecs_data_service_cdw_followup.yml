@@ -228,21 +228,29 @@
             payload = json.load(sys.stdin)
             if isinstance(payload, str):
                 payload = json.loads(payload)
-            config = copy.deepcopy(payload.get("config", payload))
-            applications = config.setdefault("applicationConfigs", {})
-            metastore = applications.setdefault("metastore", {})
-            blocks = metastore.setdefault("configBlocks", [])
+            config = payload.get("config", payload)
+            blocks = (
+                config.get("applicationConfigs", {})
+                .get("metastore", {})
+                .get("configBlocks", [])
+            )
             env = next(
-                (block for block in blocks if block.get("id") == "env"),
+                (copy.deepcopy(block) for block in blocks if block.get("id") == "env"),
                 None,
             )
             if env is None:
                 env = {"id": "env", "content": {"keyValues": {}}}
-                blocks.append(env)
             content = env.setdefault("content", {})
             key_values = content.setdefault("keyValues", {})
             key_values["KRB5CCNAME"] = desired
-            print(json.dumps(config, separators=(",", ":"), sort_keys=True))
+            patch = {
+                "applicationConfigs": {
+                    "metastore": {
+                        "configBlocks": [env],
+                    },
+                },
+            }
+            print(json.dumps(patch, separators=(",", ":"), sort_keys=True))
           - "{{ ecs_cdw_dbc_file_ccache_config | to_json }}"
         stdin: "{{ ecs_cdw_dbc_config.stdout | to_json }}"
       register: ecs_cdw_dbc_file_ccache_config_effective
@@ -728,7 +736,8 @@
                     ) == desired
                 )
             ]
-            print(json.dumps(blocks, sort_keys=True))
+            env_blocks = [block for block in blocks if block.get("id") == "env"]
+            print(json.dumps(env_blocks, sort_keys=True))
             raise SystemExit(0 if len(matches) == 1 else 3)
           - "{{ ecs_cdw_workload_krb5ccname }}"
         stdin: "{{ ecs_cdw_dbc_config_converged.stdout | to_json }}"

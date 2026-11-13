@@ -91,6 +91,9 @@ default leaves capacity for a typical 22-CPU virtual cluster plus another
 virtual cluster requiring the 12-CPU minimum. Override
 `ecs_cde_cpu_requests` when a different fresh-service capacity is required;
 the collection API does not resize an existing private-cloud service quota.
+CDE Virtual Cluster candidate names are deterministically truncated to the
+service API limit of 30 characters before the stable name or numbered fallback
+is submitted.
 Before a rerun, CDE uses the signed `de list-services` summary, which does not
 contact Cloudera Manager, to identify an existing terminal `*Failed` service.
 Automation reports that service and fails only the CDE boundary; it does not
@@ -439,6 +442,9 @@ configuration with `dw describe-dbc-config`. It calls additive
 `KRB5CCNAME=FILE:/tmp/krb5cc_metastore`. The supported schema places this block
 under `applicationConfigs.metastore`; automation merges the value into the
 live metastore `env` block and preserves existing keys such as `SERVICE_OPTS`.
+The update request contains only that metastore `env` block rather than
+re-submitting generated read-only configuration returned by
+`describe-dbc-config`.
 When the persisted configuration is
 already correct but the generated metastore pod still lacks the variable,
 automation calls supported `dw start-dbc --force-refresh` and verifies the

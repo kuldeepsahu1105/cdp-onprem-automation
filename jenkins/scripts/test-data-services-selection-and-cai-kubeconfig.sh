@@ -196,6 +196,11 @@ portal_host = next(
     for task in role_data_services
     if task.get("name") == "Resolve deployment portal target host group"
 )
+portal_facts = next(
+    task
+    for task in role_data_services
+    if task.get("name") == "Build deployment portal facts for ECS ingress sync"
+)
 portal_sync = next(
     task
     for task in role_data_services
@@ -204,6 +209,9 @@ portal_sync = next(
 portal_route_gate = "ecs_data_services_sync_portal_routes | default(true) | bool"
 assert portal_gate["when"] == portal_route_gate
 assert portal_host["when"] == portal_route_gate
+assert portal_route_gate in portal_facts["when"]
+assert "deployment_portal_caddy_effective | default(false) | bool" in portal_facts["when"]
+assert role_data_services.index(portal_facts) < role_data_services.index(portal_sync)
 assert portal_route_gate in portal_sync["when"]
 
 cai_files = list(
@@ -216,6 +224,13 @@ assert "ecs_coredns_kubeconfig_path" in combined
 group_vars = yaml.safe_load(
     (root / "ansible-playbooks/group_vars/all.yml").read_text()
 )
+assert group_vars["ecs_cde_virtual_cluster_name_max_length"] == 30
+cde_vc_text = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cde_virtual_cluster.yml"
+).read_text()
+assert "CDE VC | Validate API-compatible candidate names" in cde_vc_text
+assert "map('length') | max <= 30" in cde_vc_text
 for service in ("HDFS", "HIVE", "ATLAS", "RANGER"):
     assert service in group_vars["base_cluster_data_context_services"]
 assert group_vars["base_cluster_data_context_enabled"] is True
