@@ -51,6 +51,11 @@ assert mod.format_skipped_summary(["x"]) == "  skipped: [x]"
 assert mod.format_skipped_summary(["x", "y"]) == "  skipped: 2 hosts — x, y"
 print("OK: format_skipped_summary")
 
+assert mod.retry_update_attempts(91, 6) == {1, 19, 37, 54, 72, 90}
+assert mod.retry_update_attempts(7, 6) == {1, 2, 3, 4, 5, 6}
+assert mod.retry_update_attempts(91, 1) == {90}
+print("OK: retry_update_attempts")
+
 assert mod.format_result_message({"msg": "line one\nline two"}) == "line one\nline two"
 bounded = mod.format_result_message({"payload": "x" * 500}, max_chars=100)
 assert len(bounded) == 100
@@ -110,6 +115,26 @@ assert len(lines[1].splitlines()) == 2
 assert len(lines[1]) < 1300
 assert lines[1].endswith("...")
 print("OK: bounded failure output")
+
+lines = []
+cb._display = CaptureDisplay()
+task = type("T", (), {"get_name": lambda self: "Wait for CM API command 123"})()
+for attempt in range(1, 91):
+    retry = type(
+        "R",
+        (),
+        {
+            "_host": host,
+            "_task": task,
+            "task_name": "Wait for CM API command 123",
+            "_result": {"attempts": attempt, "retries": 91},
+        },
+    )()
+    cb.v2_runner_retry(retry)
+assert len(lines) == 6
+assert "attempt 1 (90 retries left)" in lines[0]
+assert "attempt 90 (1 retry left)" in lines[-1]
+print("OK: bounded retry output")
 
 license_tasks = (
     root / "ansible-playbooks/roles/cm_install/tasks/configure_cm_license.yml"

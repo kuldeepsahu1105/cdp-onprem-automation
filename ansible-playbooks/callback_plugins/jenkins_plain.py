@@ -25,6 +25,27 @@ def _verbose_per_host_output() -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
+def _retry_max_updates() -> int:
+    try:
+        value = int(os.environ.get("JENKINS_ANSIBLE_RETRY_MAX_UPDATES", "6"))
+    except ValueError:
+        value = 6
+    return max(1, value)
+
+
+def retry_update_attempts(total_attempts: int, max_updates: int = 6) -> set[int]:
+    retry_events = max(0, total_attempts - 1)
+    max_updates = max(1, max_updates)
+    if retry_events <= max_updates:
+        return set(range(1, retry_events + 1))
+    if max_updates == 1:
+        return {retry_events}
+    return {
+        1 + round(index * (retry_events - 1) / (max_updates - 1))
+        for index in range(max_updates)
+    }
+
+
 def format_result_message(
     result: dict,
     max_chars: int | None = None,
@@ -159,6 +180,35 @@ class CallbackModule(CallbackBase):
         msg = format_result_message(result._result)
         self._line("")
         self._line(f"  ** UNREACHABLE: [{host}] => {msg}")
+
+    def v2_runner_retry(self, result, **kwargs) -> None:
+        payload = getattr(result, "_result", None)
+        if payload is None:
+            payload = getattr(result, "result", {})
+        attempts = int(payload.get("attempts", 1))
+        total_attempts = int(payload.get("retries", attempts + 1))
+        if attempts not in retry_update_attempts(total_attempts, _retry_max_updates()):
+            return
+
+        task_name = getattr(result, "task_name", None)
+        task = getattr(result, "_task", None) or getattr(result, "task", None)
+        if not task_name and task is not None:
+            get_name = getattr(task, "get_name", None)
+            task_name = get_name() if callable(get_name) else str(task)
+        task_name = task_name or "task"
+
+        try:
+            host = self.host_label(result)
+        except (AttributeError, TypeError):
+            host_obj = getattr(result, "_host", None) or getattr(result, "host", None)
+            host = host_obj.get_name() if host_obj is not None else "unknown"
+
+        retries_left = max(0, total_attempts - attempts)
+        retry_word = "retry" if retries_left == 1 else "retries"
+        self._line(
+            f"  retry: [{host}] {task_name} — "
+            f"attempt {attempts} ({retries_left} {retry_word} left)"
+        )
 
     def v2_runner_on_skipped(self, result, **kwargs) -> None:
         if not _display_skipped_hosts():

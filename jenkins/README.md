@@ -72,6 +72,7 @@ Stage wrappers (`run-ansible.sh`, `run-terraform.sh`) use `jenkins_log_pipe`, wh
 |---|---|---|
 | `JENKINS_PLAIN_LOG` | `0` | Colored console; artifact logs remain stripped |
 | `JENKINS_ANSIBLE_VERBOSE_OUTPUT` | `0` | Internal plain-callback verbosity setting |
+| `JENKINS_ANSIBLE_RETRY_MAX_UPDATES` | `6` | Maximum progress lines emitted for one Ansible retry loop |
 | `UI_COLOR` / `FORCE_COLOR` | `1` | Wrapper labels (`ui_kv`, banners, `PHASE:` headers) |
 | `ANSIBLE_FORCE_COLOR` / `PY_COLORS` | `1` | Ansible/Pygments ANSI on console |
 | `ANSIBLE_DISPLAY_OK_HOSTS` | `true` | `jenkins_plain` callback: one summarized `ok` line per task; `false` hides ok lines |
