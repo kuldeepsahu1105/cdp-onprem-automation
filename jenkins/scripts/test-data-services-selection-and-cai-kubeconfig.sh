@@ -565,12 +565,12 @@ assert "'--resource-pool'" in cdw_vw
 assert "ecs_cdw_vw_resource_pool" in cdw_vw
 assert "'--t-shirt-size'" in cdw_vw
 assert "ecs_cdw_vw_tshirt_size" in cdw_vw
-assert "'--template'" in cdw_vw
+assert "'--resource-template-id'" in cdw_vw
 assert "ecs_cdw_vw_resource_template_ids[ecs_cdw_vw.type]" in cdw_vw
 assert "'list-resource-templates'" in cdw_followup
 assert "ecs_cdw_vw_resource_template_name" in cdw_followup
 assert "lowResourceMode" in data_services_runtime
-assert '["CreateVwRequest"]["properties"]["template"]' in data_services_runtime
+assert '["CreateVwRequest"]["properties"]["resourceTemplateId"]' in data_services_runtime
 assert "'create-private-cluster'" in cdw_start
 assert "'--low-resource-mode'" in cdw_start
 assert "not (ecs_cdw_low_resource_mode | default(false) | bool)" in cdw_start
@@ -692,6 +692,11 @@ assert "CDW VW | Wait for {{ ecs_cdw_vw.type }} terminal status" in cdw_vw
 assert group_vars["ecs_cdw_vw_tshirt_size"] == "xsmall"
 assert group_vars["ecs_cdw_low_resource_mode"] is True
 assert group_vars["ecs_cdw_vw_resource_template_name"] == "Reduced resources"
+assert group_vars["ecs_cdw_hive_reduced_executor_memory_max_gib"] == 64
+assert "CDW VW | Verify {{ ecs_cdw_vw.type }} reduced-resource memory" in cdw_vw
+assert '"query-executor"' in cdw_vw
+assert "actual_gib <= limit_gib" in cdw_vw
+assert "Delete this creation-time Virtual Warehouse" in cdw_vw
 assert group_vars["ecs_cdw_vw_resource_pool"] == "root.{{ ecs_cdp_environment_name }}.cdw"
 assert group_vars["ecs_cdw_impala_ha_settings"]["highAvailabilityMode"] == "DISABLED"
 assert group_vars["ecs_cdw_impala_ha_settings"]["enableShutdownOfCoordinator"] is False

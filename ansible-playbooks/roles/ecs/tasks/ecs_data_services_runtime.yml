@@ -155,7 +155,7 @@
             "type": "boolean",
             "description": "Enable Private Cloud Data Warehouse Low Resource Mode.",
         }
-        definitions["CreateVwRequest"]["properties"]["template"] = {
+        definitions["CreateVwRequest"]["properties"]["resourceTemplateId"] = {
             "type": "string",
             "description": "Private Cloud resource allocation template identifier.",
         }

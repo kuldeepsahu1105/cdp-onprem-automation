@@ -1646,6 +1646,9 @@ ecs_cdw_virtual_warehouse_types:
   - hive
 ecs_cdw_vw_tshirt_size: xsmall
 ecs_cdw_vw_resource_template_name: "Reduced resources"
+# Low-resource Hive executors are approximately 48 GiB. Fail before the long
+# warehouse wait if CDW silently applies the standard ~111 GiB allocation.
+ecs_cdw_hive_reduced_executor_memory_max_gib: 64
 ecs_cdw_vw_resource_pool: "root.{{ ecs_cdp_environment_name }}.cdw"
 ecs_cdw_impala_options: {}
 # Defaults mirror the private-cloud UI's minimum xsmall Impala settings.

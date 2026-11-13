@@ -55,7 +55,7 @@
           ]
         + (
             [
-              '--template',
+              '--resource-template-id',
               ecs_cdw_vw_resource_template_ids[ecs_cdw_vw.type]
             ]
             if ecs_cdw_vw_resource_template_name | default('') | length > 0
@@ -143,6 +143,114 @@
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
+
+- name: "CDW VW | Read {{ ecs_cdw_vw.type }} reduced-resource pod"
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "compute-{{ ecs_cdw_vw.name }}"
+      - get
+      - pod
+      - query-executor-0-0
+      - --output
+      - json
+  register: ecs_cdw_hive_executor_pod
+  changed_when: false
+  until: ecs_cdw_hive_executor_pod.rc | default(1) == 0
+  retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
+  delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
+  failed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - ecs_cdw_vw.type == 'hive'
+    - ecs_cdw_vw_resource_template_name | default('') | length > 0
+
+- name: "CDW VW | Verify {{ ecs_cdw_vw.type }} reduced-resource memory"
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import re
+        import sys
+
+        payload = json.load(sys.stdin)
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        limit_gib = float(sys.argv[1])
+        containers = payload.get("spec", {}).get("containers", [])
+        executor = next(
+            (item for item in containers if item.get("name") == "query-executor"),
+            {},
+        )
+        quantity = (
+            executor.get("resources", {})
+            .get("requests", {})
+            .get("memory", "")
+        )
+        match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([EPTGMK]i?|)", quantity)
+        if not match:
+            print(json.dumps({"memoryRequest": quantity, "error": "unrecognized"}))
+            raise SystemExit(4)
+        value = float(match.group(1))
+        suffix = match.group(2)
+        decimal = {"": 1, "K": 10**3, "M": 10**6, "G": 10**9,
+                   "T": 10**12, "P": 10**15, "E": 10**18}
+        binary = {"Ki": 2**10, "Mi": 2**20, "Gi": 2**30,
+                  "Ti": 2**40, "Pi": 2**50, "Ei": 2**60}
+        bytes_value = value * (binary.get(suffix) or decimal[suffix])
+        actual_gib = bytes_value / (2**30)
+        print(json.dumps({
+            "memoryRequest": quantity,
+            "memoryGiB": round(actual_gib, 2),
+            "maximumGiB": limit_gib,
+        }, sort_keys=True))
+        raise SystemExit(0 if actual_gib <= limit_gib else 3)
+      - "{{ ecs_cdw_hive_reduced_executor_memory_max_gib }}"
+    stdin: "{{ ecs_cdw_hive_executor_pod.stdout | default('{}') | to_json }}"
+  register: ecs_cdw_hive_executor_resources
+  changed_when: false
+  failed_when: ecs_cdw_hive_executor_resources.rc not in [0, 3, 4]
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - ecs_cdw_vw.type == 'hive'
+    - ecs_cdw_vw_resource_template_name | default('') | length > 0
+    - ecs_cdw_hive_executor_pod.rc | default(1) == 0
+
+- name: "CDW VW | Require {{ ecs_cdw_vw.type }} reduced-resource memory"
+  ansible.builtin.assert:
+    that:
+      - ecs_cdw_hive_executor_resources.rc | default(4) == 0
+    fail_msg: >-
+      Hive {{ ecs_cdw_vw.name }} did not apply the
+      '{{ ecs_cdw_vw_resource_template_name }}' template. Executor resources={{
+        ecs_cdw_hive_executor_resources.stdout | default('unavailable')
+      }}. Delete this creation-time Virtual Warehouse and rerun playbook 34;
+      automation will recreate it with resourceTemplateId.
+  when:
+    - ecs_cdw_vw.type == 'hive'
+    - ecs_cdw_vw_resource_template_name | default('') | length > 0
+    - ecs_cdw_hive_executor_pod.rc | default(1) == 0
+
+- name: "CDW VW | Require {{ ecs_cdw_vw.type }} reduced-resource pod"
+  ansible.builtin.assert:
+    that:
+      - ecs_cdw_hive_executor_pod.rc | default(1) == 0
+    fail_msg: >-
+      Hive query-executor pod was not generated in compute-{{ ecs_cdw_vw.name }},
+      so the '{{ ecs_cdw_vw_resource_template_name }}' template could not be
+      verified.
+  when:
+    - ecs_cdw_vw.type == 'hive'
+    - ecs_cdw_vw_resource_template_name | default('') | length > 0
 
 - name: "CDW VW | Wait for {{ ecs_cdw_vw.type }} terminal status"
   cloudera.cloud.dw_virtual_warehouse_info:
