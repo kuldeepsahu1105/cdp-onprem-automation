@@ -566,11 +566,14 @@ assert "ecs_cdw_vw_resource_pool" in cdw_vw
 assert "'--t-shirt-size'" in cdw_vw
 assert "ecs_cdw_vw_tshirt_size" in cdw_vw
 assert "'--resource-template-id'" in cdw_vw
+assert "'--resource-template'" in cdw_vw
 assert "ecs_cdw_vw_resource_template_ids[ecs_cdw_vw.type]" in cdw_vw
+assert "ecs_cdw_vw_resource_template_name" in cdw_vw
 assert "'list-resource-templates'" in cdw_followup
 assert "ecs_cdw_vw_resource_template_name" in cdw_followup
 assert "lowResourceMode" in data_services_runtime
 assert '["CreateVwRequest"]["properties"]["resourceTemplateId"]' in data_services_runtime
+assert '["CreateVwRequest"]["properties"]["resourceTemplate"]' in data_services_runtime
 assert "'create-private-cluster'" in cdw_start
 assert "'--low-resource-mode'" in cdw_start
 assert "not (ecs_cdw_low_resource_mode | default(false) | bool)" in cdw_start

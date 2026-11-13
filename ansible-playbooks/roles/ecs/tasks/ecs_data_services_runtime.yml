@@ -159,6 +159,10 @@
             "type": "string",
             "description": "Private Cloud resource allocation template identifier.",
         }
+        definitions["CreateVwRequest"]["properties"]["resourceTemplate"] = {
+            "type": "string",
+            "description": "Private Cloud resource allocation template name.",
+        }
         target = home / ".cdp" / "models" / "dw" / "dw.yaml"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(yaml.safe_dump(model, sort_keys=False))

@@ -56,7 +56,9 @@
         + (
             [
               '--resource-template-id',
-              ecs_cdw_vw_resource_template_ids[ecs_cdw_vw.type]
+              ecs_cdw_vw_resource_template_ids[ecs_cdw_vw.type],
+              '--resource-template',
+              ecs_cdw_vw_resource_template_name
             ]
             if ecs_cdw_vw_resource_template_name | default('') | length > 0
             else []
@@ -234,7 +236,8 @@
       '{{ ecs_cdw_vw_resource_template_name }}' template. Executor resources={{
         ecs_cdw_hive_executor_resources.stdout | default('unavailable')
       }}. Delete this creation-time Virtual Warehouse and rerun playbook 34;
-      automation will recreate it with resourceTemplateId.
+      automation will recreate it with both the private resourceTemplate name
+      and resourceTemplateId compatibility fields.
   when:
     - ecs_cdw_vw.type == 'hive'
     - ecs_cdw_vw_resource_template_name | default('') | length > 0
