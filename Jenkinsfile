@@ -1514,17 +1514,17 @@ def sendPipelineEmail(String buildResult) {
       if (rel) {
         attachmentList << rel
       }
-      def caFiles = sh(
-        script: "ls ${env.WORKSPACE}/jenkins/artifacts/*.crt 2>/dev/null || true",
-        returnStdout: true
-      ).trim()
-      if (caFiles) {
-        caFiles.split('\n').each { path ->
-          def rel = path.replace("${env.WORKSPACE}/", '')
-          if (rel) {
-            attachmentList << rel
-          }
-        }
+    }
+  }
+  def caFiles = sh(
+    script: "ls ${env.WORKSPACE}/jenkins/artifacts/*.crt 2>/dev/null || true",
+    returnStdout: true
+  ).trim()
+  if (caFiles) {
+    caFiles.split('\n').each { caPath ->
+      def caRel = caPath.replace("${env.WORKSPACE}/", '')
+      if (caRel) {
+        attachmentList << caRel
       }
     }
   }
