@@ -9,25 +9,16 @@ from pathlib import Path
 import sys
 
 tasks = Path(sys.argv[1]).read_text()
-start = tasks.index(
-    "- name: Determine whether post-start client configuration refresh is required"
-)
+start = tasks.index("- name: Verify Knox CDP proxy descriptors after cluster startup")
 end = tasks.index("- name: Reconcile stale Ranger configuration after startup", start)
-refresh = tasks[start:end]
+post_start = tasks[start:end]
 
-required_gates = (
-    "base_cluster_first_run_required",
-    "base_cluster_existing_restart_required",
-    "base_cluster_required_config_changed",
-    "base_cluster_partial_first_run_recovery_required",
-    "base_cluster_ozone_ordered_recovery_required",
-)
-for gate in required_gates:
-    assert gate in refresh, gate
+assert "deployClientConfigsAndRefresh" not in post_start
+assert "base_cluster_refresh_command" not in tasks
 
-assert "when: base_cluster_post_start_refresh_required | bool" in refresh
-assert "existing_cluster.status == 200" not in refresh
-assert "deployClientConfigsAndRefresh" in refresh
+assert tasks.count("deployClientConfigsAndRefresh") == 2
+assert "base_cluster_autotls_refresh_command" in tasks
+assert "base_cluster_kerberos_refresh_command" in tasks
 
-print("OK: clean base-cluster reruns skip post-start refresh")
+print("OK: generic post-start refresh removed; security refreshes remain")
 PY
