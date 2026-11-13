@@ -262,6 +262,14 @@ assert vc_candidates[0] == "autodepl-ecs-cluster-de-vc"
 assert vc_candidates[1] == "autodepl-ecs-cluster-de-vc-1"
 assert all(len(candidate) <= 30 for candidate in vc_candidates)
 assert all(re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?", candidate) for candidate in vc_candidates)
+short_vc_name = "short-de-vc"
+short_vc_candidates = []
+for attempt in range(1, 3):
+    suffix = "" if attempt == 1 else f"-{attempt - 1}"
+    stem_length = 30 - len(suffix)
+    stem = short_vc_name if len(short_vc_name) <= stem_length else short_vc_name[:stem_length].rstrip("-")
+    short_vc_candidates.append(stem + suffix)
+assert short_vc_candidates == ["short-de-vc", "short-de-vc-1"]
 for service in ("HDFS", "HIVE", "ATLAS", "RANGER"):
     assert service in group_vars["base_cluster_data_context_services"]
 assert group_vars["base_cluster_data_context_enabled"] is True

@@ -96,11 +96,12 @@ default leaves capacity for a typical 22-CPU virtual cluster plus another
 virtual cluster requiring the 12-CPU minimum. Override
 `ecs_cde_cpu_requests` when a different fresh-service capacity is required;
 the collection API does not resize an existing private-cloud service quota.
-CDE Virtual Cluster candidate names are deterministically truncated to the
-service API limit of 30 characters before the stable name or numbered fallback
-is submitted. For the standard `<deployment-prefix>-ecs-cluster-de-vc` shape,
-an overlength name abbreviates the deployment prefix from the right while
-preserving its recognizable beginning and the stable service suffix. For
+CDE Virtual Cluster candidate names are preserved exactly when they fit within
+the service API limit of 30 characters. Trimming is applied only when the stable
+name or a numbered fallback would exceed that limit. For the standard
+`<deployment-prefix>-ecs-cluster-de-vc` shape, an overlength name abbreviates
+the deployment prefix from the right while preserving its recognizable
+beginning and the stable service suffix. For
 example, `autodeploytest-ecs-cluster-de-vc` becomes
 `autodepl-ecs-cluster-de-vc`, not `todeploytest-ecs-cluster-de-vc`.
 Before a rerun, CDE uses the signed `de list-services` summary, which does not
