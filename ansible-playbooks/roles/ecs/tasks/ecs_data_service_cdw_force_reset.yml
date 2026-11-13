@@ -80,6 +80,35 @@
     - ecs_cdw_force_reset_existing.rc == 0
     - not (ecs_cdw_force_reset_eligible | bool)
 
+- name: CDW recovery | Inspect federation connectors before cluster deletion
+  cloudera.cloud.dw_connector_info:
+    cluster_id: "{{ ecs_cdw_force_reset_cluster_id }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_force_reset_connectors
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cdw_force_reset_eligible | bool
+
+- name: CDW recovery | Remove Trino Hive and Iceberg federation connectors
+  cloudera.cloud.dw_connector:
+    cluster_id: "{{ ecs_cdw_force_reset_cluster_id }}"
+    connector_id: "{{ item.id }}"
+    endpoint_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+    state: absent
+  environment: "{{ ecs_cdp_cli_environment }}"
+  loop: "{{ ecs_cdw_force_reset_connectors.connectors | default([]) }}"
+  loop_control:
+    label: "{{ item.name | default(item.id | default('unknown')) }}"
+  when:
+    - ecs_cdw_force_reset_eligible | bool
+    - item.id | default('') | length > 0
+    - item.template | default('') | lower in ['hive', 'iceberg']
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+
 - name: CDW recovery | Force-delete stale activation record
   ansible.builtin.command:
     argv: >-

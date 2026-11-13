@@ -438,7 +438,11 @@ assert "CDW recovery | Skip stale reset request for healthy or progressing clust
 assert "is search('(?i)^(error|failed)$')" in cdw_force_reset
 assert "Clear ecs_cdw_force_reset_cluster_id" in cdw_force_reset
 assert "not (ecs_cdw_force_reset_eligible | bool)" in cdw_force_reset
-assert cdw_force_reset.count("when: ecs_cdw_force_reset_eligible | bool") == 2
+assert "cloudera.cloud.dw_connector_info:" in cdw_force_reset
+assert "CDW recovery | Remove Trino Hive and Iceberg federation connectors" in cdw_force_reset
+assert "cloudera.cloud.dw_connector:" in cdw_force_reset
+assert "item.template | default('') | lower in ['hive', 'iceberg']" in cdw_force_reset
+assert cdw_force_reset.count("when: ecs_cdw_force_reset_eligible | bool") == 3
 assert "Status Code:\\\\s*404.*Error Code:\\\\s*NOT_FOUND" in cdw_force_reset
 assert "until: ecs_cdw_force_reset_describe.rc != 0" in cdw_force_reset
 assert "CDW diagnostics | Describe control-plane environment" in cdw_diagnostics
