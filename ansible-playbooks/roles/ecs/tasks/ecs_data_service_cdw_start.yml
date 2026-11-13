@@ -57,7 +57,78 @@
         )
       )
 
+- name: CDW | Resolve private activation identity
+  ansible.builtin.set_fact:
+    ecs_cdw_environment_crn: >-
+      {{
+        (
+          ecs_cdw_environment_info.environments
+          | first
+        ).crn
+      }}
+    ecs_cdw_dwx_account_id: >-
+      {{
+        (
+          (
+            ecs_cdw_environment_info.environments
+            | first
+          ).crn
+          | split(':')
+        )[4]
+      }}
+  no_log: true
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_low_resource_mode | default(false) | bool
+
+- name: CDW | Require exact activation-compatible private configuration
+  ansible.builtin.assert:
+    that:
+      - ecs_cdw_private_cloud_config.storage_class | default('') | length == 0
+      - >-
+        ecs_cdw_private_cloud_config.custom_kerberos_principal_hostname
+        | default('')
+        | length == 0
+      - ecs_cdw_private_cloud_config.db_client_certificate | default('') | length == 0
+      - ecs_cdw_private_cloud_config.db_client_key | default('') | length == 0
+    fail_msg: >-
+      Exact DWX v2 activation currently supports the captured standard private
+      payload only. Remove custom storage, Kerberos-hostname, and DB-client
+      credential overrides or disable ecs_cdw_dwx_v2_activate.
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_low_resource_mode | default(false) | bool
+    - ecs_cdw_dwx_v2_activate | default(true) | bool
+
 - name: CDW | Start low-resource Data Warehouse cluster provisioning
+  cdw_private_dwx:
+    base_url: "{{ ecs_cdp_console_api_url_effective }}"
+    account_id: "{{ ecs_cdw_dwx_account_id }}"
+    username: "{{ ecs_cdw_dwx_login_username }}"
+    password: "{{ ecs_cdw_dwx_login_password }}"
+    operation: activate_environment
+    environment: "{{ ecs_cdp_environment_name }}"
+    environment_crn: "{{ ecs_cdw_environment_crn }}"
+    validate_certs: "{{ ecs_control_plane_validate_certs | default(false) | bool }}"
+    ca_path: "{{ ecs_control_plane_ca_bundle | default(omit, true) }}"
+    timeout: 60
+    payload:
+      clusterName: "{{ ecs_cdw_cluster_name }}"
+      validationOnly: "{{ ecs_cdw_activation_validation_only | bool }}"
+      customEnvSubdomain: "{{ ecs_cdw_custom_env_subdomain }}"
+      enableLowResourceMode: true
+      envBootstrap: "{{ ecs_cdw_activation_env_bootstrap }}"
+  register: ecs_cdw_cluster_start
+  no_log: true
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_low_resource_mode | default(false) | bool
+    - ecs_cdw_dwx_v2_activate | default(true) | bool
+
+- name: CDW | Start low-resource cluster through signed CLI fallback
   ansible.builtin.command:
     argv: >-
       {{
@@ -66,10 +137,7 @@
             'dw',
             'create-private-cluster',
             '--environment-crn',
-            (
-              ecs_cdw_environment_info.environments
-              | first
-            ).crn,
+            ecs_cdw_environment_crn,
             '--low-resource-mode'
           ]
         + (
@@ -127,6 +195,7 @@
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
     - ecs_cdw_low_resource_mode | default(false) | bool
+    - not (ecs_cdw_dwx_v2_activate | default(true) | bool)
 
 - name: CDW | Start Data Warehouse cluster provisioning
   cloudera.cloud.dw_cluster:

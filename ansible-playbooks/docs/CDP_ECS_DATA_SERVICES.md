@@ -399,8 +399,12 @@ clusters are reported without deletion or recreation. An existing cluster
 whose status is exactly `Deactivated` (case-insensitive) fails preflight before
 FreeIPA principal mutation or submission. The pinned `cloudera.cloud`
 `dw_cluster` module does not reconcile or reactivate that state. Fresh
-activation defaults `ecs_cdw_low_resource_mode: true` and submits the private
-`lowResourceMode` request field through an isolated CDP CLI model overlay.
+activation defaults `ecs_cdw_low_resource_mode: true` and uses the repository
+`cdw_private_dwx` module to reproduce the exact DWX v2 UI request:
+`clusterName`, `validationOnly: false`, an empty custom subdomain,
+`enableLowResourceMode: true`, and an empty proxy bootstrap object. The module
+derives the account from the environment CRN, opens an ephemeral local-console
+session, and does not persist its cookie.
 Existing clusters are reused as-is because Low Resource Mode is a
 creation-time setting; deactivate/delete an old standard-resource cluster
 before rerunning if it must be replaced. Automation does not silently delete,

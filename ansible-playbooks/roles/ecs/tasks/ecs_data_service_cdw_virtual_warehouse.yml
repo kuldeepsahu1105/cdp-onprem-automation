@@ -65,8 +65,8 @@
   ansible.builtin.assert:
     that:
       - ecs_cdw_hive_dwx_account_id | default('') | length > 0
-      - ecs_cdw_hive_dwx_login_username | default('') | length > 0
-      - ecs_cdw_hive_dwx_login_password | default('') | length > 0
+      - ecs_cdw_dwx_login_username | default('') | length > 0
+      - ecs_cdw_dwx_login_password | default('') | length > 0
     fail_msg: >-
       Exact DWX Hive creation requires an environment CRN with an account ID
       and configured console login credentials.
@@ -117,8 +117,8 @@
   cdw_private_dwx:
     base_url: "{{ ecs_cdp_console_api_url_effective }}"
     account_id: "{{ ecs_cdw_hive_dwx_account_id }}"
-    username: "{{ ecs_cdw_hive_dwx_login_username }}"
-    password: "{{ ecs_cdw_hive_dwx_login_password }}"
+    username: "{{ ecs_cdw_dwx_login_username }}"
+    password: "{{ ecs_cdw_dwx_login_password }}"
     operation: create_hive_virtual_warehouse
     environment: "{{ ecs_cdp_environment_name }}"
     validate_certs: "{{ ecs_control_plane_validate_certs | default(false) | bool }}"

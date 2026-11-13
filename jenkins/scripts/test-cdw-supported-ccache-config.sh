@@ -257,6 +257,15 @@ require(
     and "cdw_private_dwx:" in vw_tasks,
     "Hive reduced-resource creation must use the exact DWX v2 UI route",
 )
+require(
+    '"activate_environment"' in dwx_module
+    and "environmentCrn=" in dwx_module
+    and "operation: activate_environment" in (
+        root
+        / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_start.yml"
+    ).read_text(),
+    "Low Resource Mode activation must use the exact DWX v2 route",
+)
 for exact_field in (
     "computeName",
     "warehouseId",
@@ -604,6 +613,11 @@ require(
 require(
     group_vars["ecs_cdw_low_resource_mode"] is True,
     "fresh CDW activation must default to Low Resource Mode",
+)
+require(
+    group_vars["ecs_cdw_dwx_v2_activate"] is True
+    and group_vars["ecs_cdw_activation_env_bootstrap"] == {"proxyInfo": {}},
+    "captured private activation payload changed",
 )
 require(
     group_vars["ecs_cdw_vw_resource_template_name"] == "Reduced resources",

@@ -389,7 +389,11 @@ If CDW preflight finds an existing cluster in the exact case-insensitive
 `Deactivated` state, it stops before submission.
 The pinned `cloudera.cloud` `dw_cluster` module cannot reactivate an existing
 Deactivated cluster. Fresh activation uses Low Resource Mode by default
-(`ecs_cdw_low_resource_mode: true`). Hive, Impala, and Trino creation combines
+(`ecs_cdw_low_resource_mode: true`) through the repository-local
+`cdw_private_dwx` module and the exact DWX v2 UI payload. The module opens an
+ephemeral local-console session and submits `enableLowResourceMode: true`;
+credentials and cookies are never persisted or logged. Hive, Impala, and
+Trino creation combines
 `ecs_cdw_vw_tshirt_size: xsmall` with the resource template named by
 `ecs_cdw_vw_resource_template_name` (default `Reduced resources`). The
 playbook lists private resource templates, requires a matching entity-specific

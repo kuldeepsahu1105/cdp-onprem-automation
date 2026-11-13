@@ -28,11 +28,15 @@ options:
     description: Private DWX operation to perform.
     required: true
     choices:
+      - activate_environment
       - create_hive_virtual_warehouse
     type: str
   environment:
     description: CDP environment name.
     required: true
+    type: str
+  environment_crn:
+    description: Environment CRN required for activation.
     type: str
   payload:
     description: Exact JSON payload for the selected operation.
@@ -54,6 +58,23 @@ author:
 """
 
 EXAMPLES = r"""
+- name: Activate CDW Low Resource Mode
+  cdw_private_dwx:
+    base_url: https://console-cdp.apps.example.internal
+    account_id: account-id
+    username: admin
+    password: "{{ console_password }}"
+    operation: activate_environment
+    environment: env-example
+    environment_crn: crn:altus:environments:us-west-1:account-id:environment:example/id
+    payload:
+      clusterName: example
+      validationOnly: false
+      customEnvSubdomain: ""
+      enableLowResourceMode: true
+      envBootstrap:
+        proxyInfo: {}
+
 - name: Create reduced-resource Hive Virtual Warehouse
   cdw_private_dwx:
     base_url: https://console-cdp.apps.example.internal
@@ -137,20 +158,28 @@ def main():
             "operation": {
                 "type": "str",
                 "required": True,
-                "choices": ["create_hive_virtual_warehouse"],
+                "choices": [
+                    "activate_environment",
+                    "create_hive_virtual_warehouse",
+                ],
             },
             "environment": {"type": "str", "required": True},
+            "environment_crn": {"type": "str", "required": False},
             "payload": {"type": "dict", "required": True},
             "validate_certs": {"type": "bool", "default": True},
             "ca_path": {"type": "path", "required": False},
             "timeout": {"type": "int", "default": 60},
         },
+        required_if=[
+            ("operation", "activate_environment", ["environment_crn"]),
+        ],
         supports_check_mode=True,
     )
 
     base_url = module.params["base_url"].rstrip("/")
     account_id = module.params["account_id"]
     environment = module.params["environment"]
+    operation = module.params["operation"]
     timeout = module.params["timeout"]
     if module.check_mode:
         module.exit_json(changed=True, status=0, response={})
@@ -207,10 +236,16 @@ def main():
             response=parse_json(login_response),
         )
 
-    operation_url = (
-        f"{base_url}/dwx/api/v2/environments/"
-        f"{quote(environment, safe='')}/llaps?start"
-    )
+    if operation == "activate_environment":
+        operation_url = (
+            f"{base_url}/dwx/api/v2/environments?"
+            f"environmentCrn={quote(module.params['environment_crn'], safe='')}"
+        )
+    else:
+        operation_url = (
+            f"{base_url}/dwx/api/v2/environments/"
+            f"{quote(environment, safe='')}/llaps?start"
+        )
     operation_request = Request(
         operation_url,
         data=json.dumps(module.params["payload"], separators=(",", ":")).encode("utf-8"),
