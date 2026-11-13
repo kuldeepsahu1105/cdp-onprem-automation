@@ -72,11 +72,13 @@ for service in ("cdw", "cde", "cai"):
 assert "ansible.builtin.include_tasks: ecs_data_service_cdw_preflight.yml" in playbook_text
 assert "Collect CDW diagnostics after uncaught failure" in playbook_text
 assert "not (ecs_cdw_diagnostics_collected | default(false) | bool)" in playbook_text
-assert "ansible_failed_result.stderr" in playbook_text
+assert "ansible_failed_result.msg" in playbook_text
 assert "ansible_failed_task.name" in playbook_text
 assert "details: \"{{ ansible_failed_result }}\"" in playbook_text
-assert "CDW failed task=" in playbook_text
-assert "CDW details=" in playbook_text
+assert "One or more selected Data Services failed:" in playbook_text
+assert "- CDW: task=" in playbook_text
+assert "CDW details=" not in playbook_text
+assert "| truncate(500, true, '...')" in playbook_text
 assert "Collect pending CDW pod names" in diagnostics_text
 assert "Describe pending CDW pods" in diagnostics_text
 assert "Collect failed CDW persistent volume claims" in diagnostics_text
@@ -231,6 +233,9 @@ cde_vc_text = (
 ).read_text()
 assert "CDE VC | Validate API-compatible candidate names" in cde_vc_text
 assert "map('length') | max <= 30" in cde_vc_text
+assert "CDE VC | Require successful Virtual Cluster creation" in cde_vc_text
+assert "failed_when: false" in cde_vc_text
+assert "reason={{" in cde_vc_text
 for service in ("HDFS", "HIVE", "ATLAS", "RANGER"):
     assert service in group_vars["base_cluster_data_context_services"]
 assert group_vars["base_cluster_data_context_enabled"] is True

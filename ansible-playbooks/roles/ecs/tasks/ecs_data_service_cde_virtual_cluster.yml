@@ -271,9 +271,26 @@
     state: present
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cde_vc_create
+  failed_when: false
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
+  when: not (ecs_cde_virtual_cluster_existing | bool)
+
+- name: CDE VC | Require successful Virtual Cluster creation
+  ansible.builtin.assert:
+    that:
+      - not (ecs_cde_vc_create.failed | default(false) | bool)
+    fail_msg: >-
+      CDE Virtual Cluster creation failed.
+      name={{ ecs_cde_virtual_cluster_name_effective }};
+      service={{ ecs_cde_service_name_effective }};
+      reason={{
+        ecs_cde_vc_create.msg
+        | default('API request failed')
+        | regex_replace('[\r\n]+', ' ')
+        | truncate(500, true, '...')
+      }}.
   when: not (ecs_cde_virtual_cluster_existing | bool)
 
 - name: CDE VC | Wait for effective Virtual Cluster

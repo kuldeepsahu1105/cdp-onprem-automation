@@ -135,16 +135,18 @@
           finished: true
           msg: >-
             {{
-              ansible_failed_result.stderr
+              ansible_failed_result.msg
               | default(
-                  ansible_failed_result.stdout
+                  ansible_failed_result.stderr
                   | default(
-                      ansible_failed_result.msg
-                      | default(ansible_failed_result | to_json),
+                      ansible_failed_result.stdout
+                      | default('CDW task failed'),
                       true
                     ),
                   true
                 )
+              | regex_replace('[\r\n]+', ' ')
+              | truncate(500, true, '...')
             }}
           rc: "{{ ansible_failed_result.rc | default('unknown') }}"
           task: "{{ ansible_failed_task.name | default('unknown') }}"
@@ -178,7 +180,13 @@
         ecs_cde_service:
           failed: true
           finished: true
-          msg: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_json) }}"
+          msg: >-
+            {{
+              ansible_failed_result.msg
+              | default('CDE task failed')
+              | regex_replace('[\r\n]+', ' ')
+              | truncate(500, true, '...')
+            }}
 
 - name: Provision CAI without blocking subsequent services
   when: "'cai' in (ecs_data_services_install_names | default([]))"
@@ -216,7 +224,13 @@
         ecs_cai_workspace:
           failed: true
           finished: true
-          msg: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_json) }}"
+          msg: >-
+            {{
+              ansible_failed_result.msg
+              | default('CAI task failed')
+              | regex_replace('[\r\n]+', ' ')
+              | truncate(500, true, '...')
+            }}
 
 - name: Install Model Registry when selected
   ansible.builtin.include_tasks: ecs_data_service_model_registry.yml
@@ -300,22 +314,9 @@
       - >-
         'model_registry' not in (ecs_data_services_install_names | default([]))
         or (ecs_model_registry_succeeded | default(false) | bool)
-    fail_msg: >-
-      One or more selected Data Services failed after all selected services
-      and successful-service follow-up work were attempted.
-      CDW={{ (ecs_cdw_cluster | default({})).msg
-             | default((ecs_cdw_dbc_info | default({})).database_catalogs
-                       | default(ecs_cdw_cluster | default({}))
-                       | to_json) }};
-      CDW failed task={{ (ecs_cdw_cluster | default({})).task | default('unknown') }};
-      CDW rc={{ (ecs_cdw_cluster | default({})).rc | default('unknown') }};
-      CDW details={{ (ecs_cdw_cluster | default({})).details
-                     | default(ecs_cdw_cluster | default({}))
-                     | to_json }};
-      CDE={{ (ecs_cde_service | default({})).msg | default(ecs_cde_service | default({}) | to_json) }};
-      CAI={{ (ecs_cai_workspace | default({})).msg
-             | default(
-                 'workspace=' + (ecs_cai_workspace | default({}) | to_json)
-                 + ', ui_status=' + (ecs_cai_ui_probe.status | default('unavailable') | string)
-               ) }};
-      Model Registry={{ ecs_model_registry_failure_message | default('not selected') }}.
+    fail_msg: |-
+      One or more selected Data Services failed:
+      - CDW: task={{ (ecs_cdw_cluster | default({})).task | default('unknown') }}; rc={{ (ecs_cdw_cluster | default({})).rc | default('unknown') }}; reason={{ (ecs_cdw_cluster | default({})).msg | default('not selected') }}
+      - CDE: {{ (ecs_cde_service | default({})).msg | default('not selected') }}
+      - CAI: {{ (ecs_cai_workspace | default({})).msg | default('not selected') }}
+      - Model Registry: {{ ecs_model_registry_failure_message | default('not selected') }}
