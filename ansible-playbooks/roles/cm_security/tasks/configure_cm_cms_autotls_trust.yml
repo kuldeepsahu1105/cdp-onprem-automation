@@ -147,12 +147,6 @@
           )
           != (cm_cms_autotls_truststore_path | default('') | trim)
         )
-        or (
-          cms_service_config_get.json['items'] | default([])
-          | selectattr('name', 'equalto', 'ssl_client_truststore_password')
-          | list
-          | length
-        ) == 0
         or (autotls_applied_this_run | default(false) | bool)
         or (cm_cms_update_autotls_truststore_password | default(false) | bool)
       }}
@@ -302,7 +296,10 @@
   ansible.builtin.set_fact:
     cms_servicemonitor_existing_java_opts: >-
       {{
-        cms_servicemonitor_existing_java_opts_item.get('value', '')
+        cms_servicemonitor_existing_java_opts_item.get(
+          'value',
+          cms_servicemonitor_existing_java_opts_item.get('default', '')
+        )
         | default('', true)
         | trim
       }}
