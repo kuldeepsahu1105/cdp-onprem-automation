@@ -230,25 +230,36 @@ group_vars = yaml.safe_load(
     (root / "ansible-playbooks/group_vars/all.yml").read_text()
 )
 assert group_vars["ecs_cde_virtual_cluster_name_max_length"] == 30
+assert group_vars["ecs_cde_virtual_cluster_prefix_max_length"] == 8
 cde_vc_text = (
     root
     / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cde_virtual_cluster.yml"
 ).read_text()
 assert "CDE VC | Validate API-compatible candidate names" in cde_vc_text
 assert "<= ecs_cde_virtual_cluster_name_max_length | int" in cde_vc_text
-assert "base_name[-stem_length:]" in cde_vc_text
-assert "regex_replace('^-+', '')" in cde_vc_text
+assert "deployment_prefix[:prefix_length]" in cde_vc_text
+assert "stable_tail" in cde_vc_text
 assert "start and end with an" in cde_vc_text
 assert "CDE VC | Require successful Virtual Cluster creation" not in cde_vc_text
 assert "failed_when: false" not in cde_vc_text
 configured_vc_name = "autodeploytest-ecs-cluster-de-vc"
+deployment_prefix = "autodeploytest"
+stable_tail = configured_vc_name[len(deployment_prefix) :]
 vc_candidates = []
 for attempt in range(1, group_vars["ecs_cde_virtual_cluster_name_attempts"] + 1):
     suffix = "" if attempt == 1 else f"-{attempt - 1}"
-    stem = configured_vc_name[-(30 - len(suffix)) :].lstrip("-")
+    stem_length = 30 - len(suffix)
+    if len(configured_vc_name) <= stem_length:
+        stem = configured_vc_name
+    else:
+        prefix_length = min(
+            group_vars["ecs_cde_virtual_cluster_prefix_max_length"],
+            stem_length - len(stable_tail),
+        )
+        stem = deployment_prefix[:prefix_length].rstrip("-") + stable_tail
     vc_candidates.append(stem + suffix)
-assert vc_candidates[0] == "todeploytest-ecs-cluster-de-vc"
-assert vc_candidates[1] == "deploytest-ecs-cluster-de-vc-1"
+assert vc_candidates[0] == "autodepl-ecs-cluster-de-vc"
+assert vc_candidates[1] == "autodepl-ecs-cluster-de-vc-1"
 assert all(len(candidate) <= 30 for candidate in vc_candidates)
 assert all(re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?", candidate) for candidate in vc_candidates)
 for service in ("HDFS", "HIVE", "ATLAS", "RANGER"):

@@ -25,11 +25,39 @@
         | regex_replace('^-+', '')
         | regex_replace('-+$', '')
       ) -%}
+      {%- set deployment_prefix = (
+        deployment_name_prefix
+        | default('', true)
+        | regex_replace('[^a-zA-Z0-9-]+', '-')
+        | regex_replace('^-+', '')
+        | regex_replace('-+$', '')
+      ) -%}
+      {%- set stable_tail = (
+        base_name[(deployment_prefix | length):]
+        if (
+          deployment_prefix | length > 0
+          and base_name[:(deployment_prefix | length)] == deployment_prefix
+        )
+        else ''
+      ) -%}
       {%- set result = [] -%}
       {%- for attempt in range(1, (ecs_cde_virtual_cluster_name_attempts | int) + 1) -%}
       {%- set suffix = '' if attempt == 1 else '-' + ((attempt - 1) | string) -%}
       {%- set stem_length = (ecs_cde_virtual_cluster_name_max_length | int) - (suffix | length) -%}
-      {%- set stem = base_name[-stem_length:] | regex_replace('^-+', '') -%}
+      {%- if base_name | length <= stem_length -%}
+      {%- set stem = base_name -%}
+      {%- elif stable_tail | length > 0 and stable_tail | length < stem_length -%}
+      {%- set prefix_length = [
+        ecs_cde_virtual_cluster_prefix_max_length | int,
+        stem_length - (stable_tail | length)
+      ] | min -%}
+      {%- set stem = (
+        deployment_prefix[:prefix_length]
+        | regex_replace('-+$', '')
+      ) + stable_tail -%}
+      {%- else -%}
+      {%- set stem = base_name[:stem_length] | regex_replace('-+$', '') -%}
+      {%- endif -%}
       {%- set _ = result.append(stem + suffix) -%}
       {%- endfor -%}
       {{ result }}

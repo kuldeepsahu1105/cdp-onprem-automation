@@ -98,7 +98,11 @@ virtual cluster requiring the 12-CPU minimum. Override
 the collection API does not resize an existing private-cloud service quota.
 CDE Virtual Cluster candidate names are deterministically truncated to the
 service API limit of 30 characters before the stable name or numbered fallback
-is submitted.
+is submitted. For the standard `<deployment-prefix>-ecs-cluster-de-vc` shape,
+an overlength name abbreviates the deployment prefix from the right while
+preserving its recognizable beginning and the stable service suffix. For
+example, `autodeploytest-ecs-cluster-de-vc` becomes
+`autodepl-ecs-cluster-de-vc`, not `todeploytest-ecs-cluster-de-vc`.
 Before a rerun, CDE uses the signed `de list-services` summary, which does not
 contact Cloudera Manager, to identify an existing terminal `*Failed` service.
 Automation reports that service and fails only the CDE boundary; it does not

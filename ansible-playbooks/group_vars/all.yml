@@ -1738,6 +1738,10 @@ ecs_cde_virtual_cluster_name: "{{ ecs_cde_service_name }}-vc"
 # completed-deletion history or another non-reusable record reserves a name.
 ecs_cde_virtual_cluster_name_attempts: 10
 ecs_cde_virtual_cluster_name_max_length: 30
+# When the full VC name exceeds the API limit, abbreviate the deployment
+# prefix from the right while preserving its recognizable beginning and the
+# stable -ecs-cluster-de-vc suffix.
+ecs_cde_virtual_cluster_prefix_max_length: 8
 # Reruns may replace only the configured VC when it is explicitly terminal-failed.
 # Healthy, transitional, deleting, unknown, or differently named VCs are retained.
 ecs_cde_virtual_cluster_recreate_terminal_failed: true
