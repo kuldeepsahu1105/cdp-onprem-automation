@@ -29,7 +29,7 @@
       {%- for attempt in range(1, (ecs_cde_virtual_cluster_name_attempts | int) + 1) -%}
       {%- set suffix = '' if attempt == 1 else '-' + ((attempt - 1) | string) -%}
       {%- set stem_length = (ecs_cde_virtual_cluster_name_max_length | int) - (suffix | length) -%}
-      {%- set stem = base_name[:stem_length] | regex_replace('-+$', '') -%}
+      {%- set stem = base_name[-stem_length:] | regex_replace('^-+', '') -%}
       {%- set _ = result.append(stem + suffix) -%}
       {%- endfor -%}
       {{ result }}

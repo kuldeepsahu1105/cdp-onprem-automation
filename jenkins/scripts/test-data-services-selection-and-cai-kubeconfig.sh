@@ -233,7 +233,8 @@ cde_vc_text = (
 ).read_text()
 assert "CDE VC | Validate API-compatible candidate names" in cde_vc_text
 assert "<= ecs_cde_virtual_cluster_name_max_length | int" in cde_vc_text
-assert "regex_replace('-+$', '')" in cde_vc_text
+assert "base_name[-stem_length:]" in cde_vc_text
+assert "regex_replace('^-+', '')" in cde_vc_text
 assert "start and end with an" in cde_vc_text
 assert "CDE VC | Require successful Virtual Cluster creation" not in cde_vc_text
 assert "failed_when: false" not in cde_vc_text
@@ -241,9 +242,10 @@ configured_vc_name = "autodeploytest-ecs-cluster-de-vc"
 vc_candidates = []
 for attempt in range(1, group_vars["ecs_cde_virtual_cluster_name_attempts"] + 1):
     suffix = "" if attempt == 1 else f"-{attempt - 1}"
-    stem = configured_vc_name[: 30 - len(suffix)].rstrip("-")
+    stem = configured_vc_name[-(30 - len(suffix)) :].lstrip("-")
     vc_candidates.append(stem + suffix)
-assert vc_candidates[0] == "autodeploytest-ecs-cluster-de"
+assert vc_candidates[0] == "todeploytest-ecs-cluster-de-vc"
+assert vc_candidates[1] == "deploytest-ecs-cluster-de-vc-1"
 assert all(len(candidate) <= 30 for candidate in vc_candidates)
 assert all(re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?", candidate) for candidate in vc_candidates)
 for service in ("HDFS", "HIVE", "ATLAS", "RANGER"):
