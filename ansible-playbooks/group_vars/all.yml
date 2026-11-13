@@ -1646,6 +1646,33 @@ ecs_cdw_virtual_warehouse_types:
   - hive
 ecs_cdw_vw_tshirt_size: xsmall
 ecs_cdw_vw_resource_template_name: "Reduced resources"
+# The signed v1 createVw endpoint accepts resourceTemplate but private CDW
+# ignores it. Hive therefore uses the exact DWX UI v2 creation contract.
+ecs_cdw_hive_dwx_v2_create: true
+ecs_cdw_hive_dwx_login_username: "{{ ipaadmin_principal }}"
+ecs_cdw_hive_dwx_login_password: "{{ common_password | default(ipaadmin_password, true) }}"
+ecs_cdw_hive_enable_sso: true
+ecs_cdw_hive_server_ha_mode: disabled
+ecs_cdw_hive_log_queries: false
+ecs_cdw_hive_ebs_llap_spill_gb: null
+ecs_cdw_hive_additional_quota:
+  cpus: 0
+  memory: 0
+ecs_cdw_hive_autoscaling:
+  minClusters: 1
+  waitTimeSeconds: 60
+  maxQueries: 2
+  maxNodesPerQuery: 4
+  maxClusters: 3
+  nodeCount: 3
+  EBSLLAPCache: false
+  autoScaleType: "Wait Time"
+  autoSuspendTimeoutSeconds: 300
+  disableAutoSuspend: false
+  enableQueryIsolation: false
+ecs_cdw_hive_query_isolation:
+  maxQueries: 0
+  maxNodesPerQuery: 0
 # Low-resource Hive executors are approximately 48 GiB. Fail before the long
 # warehouse wait if CDW silently applies the standard ~111 GiB allocation.
 ecs_cdw_hive_reduced_executor_memory_max_gib: 64

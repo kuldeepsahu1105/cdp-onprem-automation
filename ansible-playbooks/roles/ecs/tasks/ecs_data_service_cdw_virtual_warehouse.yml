@@ -30,6 +30,133 @@
         else 'CREATE'
       }}.
 
+- name: "CDW VW | Resolve exact DWX Hive creation requirement"
+  ansible.builtin.set_fact:
+    ecs_cdw_vw_use_dwx_v2_create: >-
+      {{
+        ecs_cdw_vw.type == 'hive'
+        and ecs_cdw_hive_dwx_v2_create | default(true) | bool
+        and ecs_cdw_vw_resource_template_name | default('') | length > 0
+        and ecs_cdw_vw_existing.virtual_warehouses | default([]) | length == 0
+      }}
+
+- name: "CDW VW | Resolve private account ID for exact Hive creation"
+  ansible.builtin.set_fact:
+    ecs_cdw_hive_dwx_account_id: >-
+      {{
+        (_ecs_cdw_environment_crn | split(':'))[4]
+        if (_ecs_cdw_environment_crn | split(':') | length) > 4
+        else ''
+      }}
+  vars:
+    _ecs_cdw_environment_crn: >-
+      {{
+        (
+          ecs_cdw_environment_info.environments
+          | first
+          | default({})
+        ).crn
+        | default('')
+      }}
+  no_log: true
+  when: ecs_cdw_vw_use_dwx_v2_create | bool
+
+- name: "CDW VW | Require private account identity for exact Hive creation"
+  ansible.builtin.assert:
+    that:
+      - ecs_cdw_hive_dwx_account_id | default('') | length > 0
+      - ecs_cdw_hive_dwx_login_username | default('') | length > 0
+      - ecs_cdw_hive_dwx_login_password | default('') | length > 0
+    fail_msg: >-
+      Exact DWX Hive creation requires an environment CRN with an account ID
+      and configured console login credentials.
+  no_log: true
+  when: ecs_cdw_vw_use_dwx_v2_create | bool
+
+- name: "CDW VW | Read catalog image for exact Hive creation"
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - "{{ ecs_cdw_kubernetes_namespace }}"
+      - get
+      - pod
+      - metastore-0
+      - --output
+      - jsonpath={.spec.containers[?(@.name=="metastore")].image}
+  register: ecs_cdw_hive_catalog_image
+  changed_when: false
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cdw_vw_use_dwx_v2_create | bool
+
+- name: "CDW VW | Resolve Hive image version for exact creation"
+  ansible.builtin.set_fact:
+    ecs_cdw_hive_image_version: >-
+      {{
+        ecs_cdw_hive_catalog_image.stdout
+        | default('')
+        | trim
+        | regex_replace('^.*:', '')
+      }}
+  when: ecs_cdw_vw_use_dwx_v2_create | bool
+
+- name: "CDW VW | Require Hive image version for exact creation"
+  ansible.builtin.assert:
+    that:
+      - ecs_cdw_hive_image_version | default('') | length > 0
+    fail_msg: >-
+      Could not derive the Hive image version from
+      {{ ecs_cdw_kubernetes_namespace }}/metastore-0.
+  when: ecs_cdw_vw_use_dwx_v2_create | bool
+
+- name: "CDW VW | Create Hive through exact DWX v2 request"
+  cdw_private_dwx:
+    base_url: "{{ ecs_cdp_console_api_url_effective }}"
+    account_id: "{{ ecs_cdw_hive_dwx_account_id }}"
+    username: "{{ ecs_cdw_hive_dwx_login_username }}"
+    password: "{{ ecs_cdw_hive_dwx_login_password }}"
+    operation: create_hive_virtual_warehouse
+    environment: "{{ ecs_cdp_environment_name }}"
+    validate_certs: "{{ ecs_control_plane_validate_certs | default(false) | bool }}"
+    ca_path: "{{ ecs_control_plane_ca_bundle | default(omit, true) }}"
+    timeout: 60
+    payload:
+      computeName: "{{ ecs_cdw_vw.name }}"
+      warehouseId: "{{ ecs_cdw_catalog_id }}"
+      tShirtSize: "{{ ecs_cdw_vw_tshirt_size }}"
+      resourceTemplate: "{{ ecs_cdw_vw_resource_template_ids[ecs_cdw_vw.type] }}"
+      resourcePool: "{{ ecs_cdw_vw_resource_pool }}"
+      imageVersion: "{{ ecs_cdw_hive_image_version }}"
+      hueImageVersion: "{{ ecs_cdw_hive_image_version }}"
+      autoScaling: "{{ ecs_cdw_hive_autoscaling }}"
+      queryIsolation: "{{ ecs_cdw_hive_query_isolation }}"
+      enableSSO: "{{ ecs_cdw_hive_enable_sso | bool }}"
+      hiveserverHaMode: "{{ ecs_cdw_hive_server_ha_mode }}"
+      logQueries: "{{ ecs_cdw_hive_log_queries | bool }}"
+      EBSLLAPSpillGB: "{{ ecs_cdw_hive_ebs_llap_spill_gb }}"
+      additionalQuota: "{{ ecs_cdw_hive_additional_quota }}"
+      tags: []
+  register: ecs_cdw_vw_dwx_create_result
+  no_log: true
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cdw_vw_use_dwx_v2_create | bool
+
+- name: "CDW VW | Report accepted exact Hive creation"
+  ansible.builtin.debug:
+    msg: >-
+      Exact DWX Hive creation accepted for {{ ecs_cdw_vw.name }} with
+      tShirtSize={{ ecs_cdw_vw_tshirt_size }},
+      resourceTemplate={{
+        ecs_cdw_vw_resource_template_ids[ecs_cdw_vw.type]
+      }}, and resourcePool={{ ecs_cdw_vw_resource_pool }}.
+  when: ecs_cdw_vw_use_dwx_v2_create | bool
+
 - name: "CDW VW | Create missing {{ ecs_cdw_vw.type }} Virtual Warehouse"
   ansible.builtin.command:
     argv: >-
@@ -128,7 +255,9 @@
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
-  when: ecs_cdw_vw_existing.virtual_warehouses | default([]) | length == 0
+  when:
+    - ecs_cdw_vw_existing.virtual_warehouses | default([]) | length == 0
+    - not (ecs_cdw_vw_use_dwx_v2_create | bool)
 
 - name: "CDW VW | Wait for {{ ecs_cdw_vw.type }} record"
   cloudera.cloud.dw_virtual_warehouse_info:

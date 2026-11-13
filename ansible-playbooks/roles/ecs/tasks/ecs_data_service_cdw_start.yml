@@ -16,7 +16,18 @@
   connection: ssh
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
-    - ecs_cdw_low_resource_mode | default(false) | bool
+    - >-
+      ecs_cdw_low_resource_mode | default(false) | bool
+      or (
+        ecs_cdw_hive_dwx_v2_create | default(false) | bool
+        and ecs_cdw_vw_resource_template_name | default('') | length > 0
+        and 'hive' in (
+          ecs_cdw_virtual_warehouse_types
+          | default(['hive'])
+          | map('lower')
+          | list
+        )
+      )
 
 - name: CDW | Require one environment for private activation
   ansible.builtin.assert:
@@ -29,11 +40,22 @@
           | default({})
         ).crn | default('') | length > 0
     fail_msg: >-
-      Low Resource Mode activation requires exactly one ECS environment named
-      {{ ecs_cdp_environment_name }} with a valid CRN.
+      CDW private activation or exact DWX Hive creation requires exactly one
+      ECS environment named {{ ecs_cdp_environment_name }} with a valid CRN.
   when:
     - "'cdw' in (ecs_data_services_install_names | default([]))"
-    - ecs_cdw_low_resource_mode | default(false) | bool
+    - >-
+      ecs_cdw_low_resource_mode | default(false) | bool
+      or (
+        ecs_cdw_hive_dwx_v2_create | default(false) | bool
+        and ecs_cdw_vw_resource_template_name | default('') | length > 0
+        and 'hive' in (
+          ecs_cdw_virtual_warehouse_types
+          | default(['hive'])
+          | map('lower')
+          | list
+        )
+      )
 
 - name: CDW | Start low-resource Data Warehouse cluster provisioning
   ansible.builtin.command:

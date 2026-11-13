@@ -525,7 +525,14 @@ additional quota. Query logging is left to the private control plane because
 CDP CLI 0.9.164 marks both `--impala-query-log` and `--no-impala-query-log` as
 public-form-factor-only arguments. The CLI also does not expose the UI's named
 resource-template selector on `create-vw`; `ecs_cdw_vw_tshirt_size: xsmall`
-is the supported minimum-size input. Trino creation accepts
+is the supported minimum-size input. For reduced-resource Hive creation,
+automation uses the exact private DWX v2 UI endpoint because signed v1
+`createVw` accepts but does not apply `resourceTemplate`. It opens a
+short-lived local-console session from configured credentials, submits the
+captured UI payload (`xsmall`, `hive-low`, resource pool, image version,
+autoscaling, query isolation, and SSO/HA flags), and protects both login and
+cookie-bearing requests with `no_log`. No browser cookie or session token is
+read from Jenkins, files, or operator input. Trino creation accepts
 `ecs_cdw_trino_autoscaling` and
 `ecs_cdw_trino_additional_quota`. The autoscaling map defaults to empty so CDW
 retains the xsmall UI defaults, including its two initial executors; optional

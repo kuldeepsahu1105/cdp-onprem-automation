@@ -23,6 +23,9 @@ vw_tasks_path = (
 )
 vw_tasks = vw_tasks_path.read_text()
 vw_task_list = yaml.safe_load(vw_tasks)
+dwx_module = (
+    root / "ansible-playbooks/library/cdw_private_dwx.py"
+).read_text()
 compatibility = (
     root / "ansible-playbooks/common_tasks/ecs_data_service_cdw_followup.yml"
 ).read_text()
@@ -247,6 +250,40 @@ for command in (
 ):
     require(command in followup, f"missing supported CDW API command {command}")
 require("'create-vw'" in vw_tasks, "missing supported CDW API command 'create-vw'")
+require(
+    "/dwx/api/v2/environments/" in dwx_module
+    and "/llaps?start" in dwx_module
+    and "/authenticate/callback/local" in dwx_module
+    and "cdw_private_dwx:" in vw_tasks,
+    "Hive reduced-resource creation must use the exact DWX v2 UI route",
+)
+for exact_field in (
+    "computeName",
+    "warehouseId",
+    "tShirtSize",
+    "resourceTemplate",
+    "resourcePool",
+    "imageVersion",
+    "hueImageVersion",
+    "autoScaling",
+    "queryIsolation",
+    "enableSSO",
+    "hiveserverHaMode",
+    "logQueries",
+    "EBSLLAPSpillGB",
+    "additionalQuota",
+):
+    require(
+        exact_field in vw_tasks,
+        f"exact DWX Hive payload is missing {exact_field}",
+    )
+require(
+    "no_log: true" in vw_tasks
+    and '"password": {"type": "str", "required": True, "no_log": True}' in dwx_module
+    and "CookieJar()" in dwx_module
+    and "cdp-pvt-session-token" in dwx_module,
+    "DWX login and cookie-bearing creation must remain secret",
+)
 
 require(
     "'describe-vw-config'" in vw_tasks
@@ -546,6 +583,24 @@ require(
     "VW config must reference the authoritative variable",
 )
 require(group_vars["ecs_cdw_vw_tshirt_size"] == "xsmall", "minimum size changed")
+require(group_vars["ecs_cdw_hive_dwx_v2_create"] is True, "exact Hive creation disabled")
+require(
+    group_vars["ecs_cdw_hive_autoscaling"]
+    == {
+        "minClusters": 1,
+        "waitTimeSeconds": 60,
+        "maxQueries": 2,
+        "maxNodesPerQuery": 4,
+        "maxClusters": 3,
+        "nodeCount": 3,
+        "EBSLLAPCache": False,
+        "autoScaleType": "Wait Time",
+        "autoSuspendTimeoutSeconds": 300,
+        "disableAutoSuspend": False,
+        "enableQueryIsolation": False,
+    },
+    "captured Hive autoscaling payload changed",
+)
 require(
     group_vars["ecs_cdw_low_resource_mode"] is True,
     "fresh CDW activation must default to Low Resource Mode",

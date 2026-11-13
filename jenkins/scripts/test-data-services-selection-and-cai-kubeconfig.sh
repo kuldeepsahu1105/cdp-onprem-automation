@@ -555,6 +555,9 @@ cdw_vw = (
     root
     / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_virtual_warehouse.yml"
 ).read_text()
+cdw_dwx_module = (
+    root / "ansible-playbooks/library/cdw_private_dwx.py"
+).read_text()
 cdw_start = (
     root
     / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_start.yml"
@@ -613,6 +616,12 @@ assert "No KCM server|default ccache.*KCM|KCM server" in cdw_followup
 assert "'describe-vw-config'" in cdw_vw
 assert "'update-vw'" in cdw_vw
 assert "Require Hive pods to use FILE credential cache" in cdw_vw
+assert "/dwx/api/v2/environments/" in cdw_dwx_module
+assert "/llaps?start" in cdw_dwx_module
+assert "/authenticate/callback/local" in cdw_dwx_module
+assert "cdw_private_dwx:" in cdw_vw
+assert "resourceTemplate" in cdw_vw
+assert "cdp-pvt-session-token" in cdw_dwx_module
 assert cdw_followup.count("ecs_cdw_dbc_file_ccache_config_effective.stdout") == 2
 assert cdw_followup.count("ecs_cdw_dbc_file_ccache_config | to_json") == 2
 assert cdw_vw.count("ecs_cdw_vw_file_ccache_config | to_json") == 1
