@@ -229,6 +229,21 @@ assert "ecs_coredns_kubeconfig_path" in combined
 group_vars = yaml.safe_load(
     (root / "ansible-playbooks/group_vars/all.yml").read_text()
 )
+assert (
+    group_vars["krb5_libdefaults_default_ccache_line"]
+    == "default_ccache_name = FILE:/tmp/krb5cc_%{uid}"
+)
+assert (
+    group_vars["krb5_cm_libdefaults_safety_valve"]
+    == "{{ krb5_libdefaults_default_ccache_line }}"
+)
+ccache_policy = (
+    root
+    / "ansible-playbooks/roles/identity/tasks/"
+    "ensure_krb5_default_ccache_commented.yml"
+).read_text()
+assert "replace active default_ccache_name with FILE" in ccache_policy
+assert ccache_policy.count("krb5_libdefaults_default_ccache_line") == 3
 assert group_vars["ecs_cde_virtual_cluster_name_max_length"] == 30
 assert group_vars["ecs_cde_virtual_cluster_prefix_max_length"] == 8
 cde_vc_text = (
