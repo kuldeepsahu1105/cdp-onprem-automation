@@ -41,7 +41,13 @@
   ansible.builtin.debug:
     msg: >-
       Ranger roles require stale configuration reconciliation:
-      {{ base_cluster_ranger_stale_roles | to_json }}.
+      {{
+        base_cluster_ranger_stale_roles
+        | map(attribute='name')
+        | zip(base_cluster_ranger_stale_roles | map(attribute='status'))
+        | map('join', '=')
+        | join(', ')
+      }}.
   when: base_cluster_ranger_stale_roles | length > 0
 
 - name: Ranger stale config | Deploy client configuration

@@ -106,15 +106,11 @@
     (license_upload_response is defined and license_upload_response is changed)
     or (trial_license_response is defined and trial_license_response is changed)
 
-- name: Print response from license upload
-  debug:
-    var: license_upload_response
-    # verbosity: 1
-  when: cm_license_info.status == 404 and license_file_status.stat.exists
-
 - name: Print License Upload Status
   ansible.builtin.debug:
-    msg: "License file uploaded successfully."
+    msg: >-
+      License file uploaded successfully
+      (HTTP {{ license_upload_response.status | default('accepted') }}).
   when: license_upload_response is defined and license_upload_response is changed
 
 - name: Print Trial License Activation Status

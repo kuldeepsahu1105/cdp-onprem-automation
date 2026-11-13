@@ -10,11 +10,30 @@ fail() {
   exit 1
 }
 
-python3 - <<'PY' "$PLUGIN"
+python3 - <<'PY' "$PLUGIN" "$REPO_ROOT"
 import importlib.util
+from pathlib import Path
 import sys
+import types
 
 path = sys.argv[1]
+root = Path(sys.argv[2])
+try:
+    from ansible.plugins.callback import CallbackBase  # noqa: F401
+except ModuleNotFoundError:
+    ansible = types.ModuleType("ansible")
+    plugins = types.ModuleType("ansible.plugins")
+    callback = types.ModuleType("ansible.plugins.callback")
+
+    class CallbackBase:
+        def __init__(self, *args, **kwargs):
+            self._display = None
+
+    callback.CallbackBase = CallbackBase
+    sys.modules["ansible"] = ansible
+    sys.modules["ansible.plugins"] = plugins
+    sys.modules["ansible.plugins.callback"] = callback
+
 spec = importlib.util.spec_from_file_location("jenkins_plain", path)
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
@@ -31,6 +50,13 @@ print("OK: format_ok_summary")
 assert mod.format_skipped_summary(["x"]) == "  skipped: [x]"
 assert mod.format_skipped_summary(["x", "y"]) == "  skipped: 2 hosts — x, y"
 print("OK: format_skipped_summary")
+
+assert mod.format_result_message({"msg": "line one\nline two"}) == "line one line two"
+bounded = mod.format_result_message({"payload": "x" * 500}, max_chars=100)
+assert len(bounded) == 100
+assert bounded.endswith("...")
+assert mod.format_result_message({"msg": {"b": 2, "a": 1}}) == '{"a": 1, "b": 2}'
+print("OK: format_result_message")
 
 import os
 
@@ -63,6 +89,40 @@ cb._display = FakeDisplay()
 cb._line("plain")
 cb._line("")
 print("OK: _line display color")
+
+lines = []
+cb._display = CaptureDisplay()
+failed = type(
+    "R",
+    (),
+    {"_host": host, "_result": {"msg": "first line\n" + ("x" * 2000)}},
+)()
+cb.v2_runner_on_failed(failed)
+assert lines[0] == ""
+assert lines[1].startswith("  ** FAILED: [worker1] => first line ")
+assert len(lines[1]) < 1300
+assert lines[1].endswith("...")
+print("OK: bounded failure output")
+
+license_tasks = (
+    root / "ansible-playbooks/roles/cm_install/tasks/configure_cm_license.yml"
+).read_text()
+parcel_tasks = (
+    root / "ansible-playbooks/common_tasks/activate_cluster_parcels.yml"
+).read_text()
+ranger_tasks = (
+    root
+    / "ansible-playbooks/roles/cdh_base_cluster/tasks/reconcile_ranger_stale_config.yml"
+).read_text()
+ecs_install_tasks = (
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_install_control_plane.yml"
+).read_text()
+assert "var: license_upload_response" not in license_tasks
+assert "cluster_parcels_activation_failure_summary" in parcel_tasks
+assert "to_nice_json" not in parcel_tasks
+assert "base_cluster_ranger_stale_roles | to_json" not in ranger_tasks
+assert "default(ecs_control_plane_install)" not in ecs_install_tasks
+print("OK: concise phase output contracts")
 PY
 
 echo "OK: jenkins_plain callback helpers"

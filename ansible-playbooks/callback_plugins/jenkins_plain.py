@@ -1,6 +1,7 @@
 # Plain stdout for Jenkins console logs (no ANSI). Loaded when jenkins_prepare_log_output sets ANSIBLE_STDOUT_CALLBACK.
 from __future__ import annotations
 
+import json
 import os
 
 from ansible.plugins.callback import CallbackBase
@@ -22,6 +23,24 @@ def _display_skipped_hosts() -> bool:
 def _verbose_per_host_output() -> bool:
     raw = os.environ.get("JENKINS_ANSIBLE_VERBOSE_OUTPUT", "").strip().lower()
     return raw in ("1", "true", "yes", "on")
+
+
+def format_result_message(result: dict, max_chars: int | None = None) -> str:
+    raw = result.get("msg", result)
+    if isinstance(raw, (dict, list)):
+        text = json.dumps(raw, sort_keys=True, default=str)
+    else:
+        text = str(raw)
+    text = " ".join(text.split())
+    if max_chars is None:
+        try:
+            max_chars = int(os.environ.get("JENKINS_ANSIBLE_FAILURE_MAX_CHARS", "1200"))
+        except ValueError:
+            max_chars = 1200
+    max_chars = max(80, max_chars)
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 3] + "..."
 
 
 def format_host_batch_summary(label: str, hosts: list[str], max_show: int = 4) -> str | None:
@@ -114,14 +133,14 @@ class CallbackModule(CallbackBase):
     def v2_runner_on_failed(self, result, **kwargs) -> None:
         self._flush_pending_hosts()
         host = result._host.get_name()
-        msg = result._result.get("msg", result._result)
+        msg = format_result_message(result._result)
         self._line("")
         self._line(f"  ** FAILED: [{host}] => {msg}")
 
     def v2_runner_on_unreachable(self, result, **kwargs) -> None:
         self._flush_pending_hosts()
         host = result._host.get_name()
-        msg = result._result.get("msg", result._result)
+        msg = format_result_message(result._result)
         self._line("")
         self._line(f"  ** UNREACHABLE: [{host}] => {msg}")
 

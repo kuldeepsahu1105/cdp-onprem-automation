@@ -64,6 +64,21 @@
         | from_json
       }}
 
+- name: Summarize cluster parcel activation failures
+  ansible.builtin.set_fact:
+    cluster_parcels_activation_failure_summary: >-
+      {%- set summaries = [] -%}
+      {%- for failure in cluster_parcels_activation_result.failures | default([]) -%}
+      {%- set name = failure.name | default('parcel') -%}
+      {%- set version = failure.parcel_version | default('unknown-version') -%}
+      {%- set error = failure.error | default('activation failed')
+            | regex_replace('[\r\n]+', ' ')
+            | truncate(300, true, '...') -%}
+      {%- set _ = summaries.append(name ~ '@' ~ version ~ ': ' ~ error) -%}
+      {%- endfor -%}
+      {{ summaries }}
+  when: cluster_parcels_activation_result.failures | default([]) | length > 0
+
 - name: Require successful cluster parcel activation
   ansible.builtin.assert:
     that:
@@ -73,7 +88,11 @@
       - cluster_parcels_activation_result.parcels | map(attribute='stage') | reject('equalto', 'ACTIVATED') | list | length == 0
     fail_msg: >-
       Parcel activation failed for cluster {{ cluster_parcel_cluster }}:
-      {{ cluster_parcels_activation_result.failures | default([]) | to_nice_json }}
+      {{
+        cluster_parcels_activation_failure_summary
+        | default(['no detailed failure returned'])
+        | join('; ')
+      }}
 
 - name: Report cluster parcel activation result
   ansible.builtin.debug:

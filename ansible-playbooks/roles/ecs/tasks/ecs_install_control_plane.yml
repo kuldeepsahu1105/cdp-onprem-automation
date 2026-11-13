@@ -155,7 +155,14 @@
 
 - name: Fail when ECS control plane install returned an unexpected error
   ansible.builtin.fail:
-    msg: "{{ ecs_control_plane_install.msg | default(ecs_control_plane_install) }}"
+    msg: >-
+      ECS embedded control-plane installation failed:
+      {{
+        ecs_control_plane_install.msg
+        | default('CM API request failed without a message')
+        | regex_replace('[\r\n]+', ' ')
+        | truncate(500, true, '...')
+      }}
   when:
     - not (ecs_control_plane_existing | bool)
     - ecs_control_plane_install is failed
