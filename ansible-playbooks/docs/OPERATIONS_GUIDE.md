@@ -503,7 +503,11 @@ and FreeIPA `has_keytab: TRUE` verification. It never requests deletion mode
 
 If `warehouse-<environment>/metastore-0` reports
 `kinit: No KCM server found while getting default ccache`, the generated
-container inherited a KCM default but has no KCM daemon. Playbook 34 reads the
+container inherited a KCM default but has no KCM daemon. Identity setup
+disables the RHEL `kcm_default_ccache` drop-in on clients and sets an active
+FILE default in the main configuration. Playbook 33 repeats this policy
+immediately before ECS installation so generated Kerberos ConfigMaps cannot
+contain an active KCM default. Playbook 34 reads the
 Database Catalog configuration with `dw describe-dbc-config` and applies
 `KRB5CCNAME=FILE:/tmp/krb5cc_metastore` through additive
 `dw update-dbc --config` only when missing or different. CDW stores this

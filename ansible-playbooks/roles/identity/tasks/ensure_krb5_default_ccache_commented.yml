@@ -10,6 +10,24 @@
     path: /etc/krb5.conf
   register: krb5_main_conf_stat
 
+- name: Kerberos — stat RHEL KCM default cache drop-in
+  ansible.builtin.stat:
+    path: "{{ krb5_kcm_default_ccache_path }}"
+  register: krb5_kcm_default_ccache_stat
+  when:
+    - inventory_hostname not in groups.get('ipaserver', [])
+      or (krb5_comment_default_ccache_on_ipaserver | default(false) | bool)
+
+- name: Kerberos — disable unavailable KCM default cache
+  ansible.builtin.replace:
+    path: "{{ krb5_kcm_default_ccache_path }}"
+    regexp: '^(\s*)(?!#)default_ccache_name\s*=\s*KCM:\s*$'
+    replace: '\1# default_ccache_name = KCM:'
+    backup: true
+  register: krb5_kcm_default_ccache_disabled
+  when:
+    - krb5_kcm_default_ccache_stat.stat.exists | default(false)
+
 - name: Kerberos — restore KEYRING default_ccache_name on FreeIPA server
   when:
     - krb5_main_conf_stat.stat.exists | default(false)
@@ -105,6 +123,7 @@
             (krb5_default_ccache_replace_active is changed)
             or (krb5_default_ccache_line_added is changed)
             or (krb5_default_ccache_replace_commented is changed)
+            or (krb5_kcm_default_ccache_disabled is changed)
           }}
 
     - name: Kerberos — restart IPA after krb5.conf default_ccache_name change (ipaserver)

@@ -135,6 +135,7 @@ freeipa_ansible_module_kerberos_packages:
 # KEYRING by default.
 krb5_comment_default_ccache_on_ipaserver: false
 krb5_libdefaults_default_ccache_line: "default_ccache_name = FILE:/tmp/krb5cc_%{uid}"
+krb5_kcm_default_ccache_path: /etc/krb5.conf.d/kcm_default_ccache
 ipadm_password: "{{ ipaadmin_password }}"
 # Shared lab password (ECS UMS bootstrap, Kerberos admin, ECS LDAP admin); override in Jenkins ANSIBLE_GROUP_VARS_YAML
 common_password: "{{ ipaadmin_password }}"
