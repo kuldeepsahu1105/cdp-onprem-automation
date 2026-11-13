@@ -262,6 +262,10 @@ require(
     and "pod_ready=" in followup
     and "No KCM server|default ccache.*KCM|KCM server" in followup
     and "config_is_converged" in followup
+    and "CDW API and generated metastore persist ${desired}; pod is Ready."
+    in followup
+    and '[[ "${pod_ready}" == true ]]' in followup
+    and 'metastore template cache=%s pod cache=%s ready=%s' in followup
     and "operation is not allowed in '(starting|stopping|updating)' state"
     in followup,
     "fresh catalogs in Starting or Updating with a stale metastore pod must "
@@ -279,6 +283,21 @@ require(
     < followup.index("if [[ ${config_rc} -eq 0 ]] && config_is_converged"),
     "fresh catalog recovery must repair a stale generated pod before accepting "
     "an already-persisted API setting",
+)
+guarded_section = followup.split(
+    "- name: Keep metastore on FILE cache until CDW persists the catalog setting",
+    1,
+)[1].split(
+    "- name: Persist database catalog FILE credential cache through CDW API",
+    1,
+)[0]
+require(
+    'if [[ ${update_rc} -eq 0 ]]; then' in guarded_section
+    and 'sleep "${delay}"' in guarded_section
+    and 'CDW API and generated metastore persist ${desired}; pod is Ready.'
+    in guarded_section,
+    "fresh catalog recovery must not succeed on update-dbc acceptance before "
+    "the generated metastore pod is Ready",
 )
 refresh_section = followup.split(
     "- name: Refresh database catalog workloads after FILE cache reconciliation",

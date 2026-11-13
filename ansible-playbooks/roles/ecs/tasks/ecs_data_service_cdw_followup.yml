@@ -437,8 +437,14 @@
           config_rc=$?
           set -e
           if [[ ${config_rc} -eq 0 ]] && config_is_converged "${current_config}"; then
-            echo "CDW API already persists ${desired}."
-            exit 0
+            if [[ "${template_cache}" == "${desired}" ]] &&
+              [[ "${pod_cache}" == "${desired}" ]] &&
+              [[ "${pod_ready}" == true ]]; then
+              echo "CDW API and generated metastore persist ${desired}; pod is Ready."
+              exit 0
+            fi
+            sleep "${delay}"
+            continue
           fi
 
           set +e
@@ -454,7 +460,8 @@
           set -e
           if [[ ${update_rc} -eq 0 ]]; then
             printf '%s\n' "${last_update_output}"
-            exit 0
+            sleep "${delay}"
+            continue
           fi
           if ! grep -Eqi \
             "failed to acquire lease|already leased by operation|operation is not allowed in '(starting|stopping|updating)' state" \
@@ -467,6 +474,13 @@
         done
 
         printf '%s\n' "${last_update_output}" >&2
+        printf 'metastore template cache=%s pod cache=%s ready=%s\n' \
+          "${template_cache:-unknown}" "${pod_cache:-unknown}" \
+          "${pod_ready:-unknown}" >&2
+        if [[ "${pod_exists:-false}" == true ]]; then
+          printf '%s\n' "${pod_logs:-}" >&2
+          printf '%s\n' "${pod_previous_logs:-}" >&2
+        fi
         exit 1
       args:
         executable: /bin/bash

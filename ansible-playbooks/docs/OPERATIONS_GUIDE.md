@@ -412,7 +412,11 @@ not only the CDW API lifecycle status. An API status of `Running` does not
 override a non-Ready container or `CrashLoopBackOff`. After a FILE credential
 cache update, automation force-refreshes the catalog even when its initial API
 status was already `Running`, then requires the metastore configuration and
-pod environment to converge before accepting the catalog.
+pod environment to converge before accepting the catalog. During a fresh
+catalog transition, the guarded recovery path does not call `start-dbc`;
+instead it waits until the CDW API persists the FILE cache, the generated
+StatefulSet and pod contain that value, and the metastore container is Ready.
+Successful `update-dbc` submission alone is not treated as convergence.
 
 Give every fresh Base/ECS deployment a unique `ecs_cdp_environment_name`.
 Automation reuses an exact-name environment idempotently but does not adopt a
