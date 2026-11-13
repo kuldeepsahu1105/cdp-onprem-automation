@@ -228,23 +228,37 @@
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
   connection: ssh
 
+- name: ECS remote CLI | Summarize missing post-install command options
+  ansible.builtin.set_fact:
+    ecs_remote_cdp_missing_command_options: >-
+      {%- set failures = [] -%}
+      {%- for result in ecs_remote_cdp_command_help.results | default([]) -%}
+      {%- set missing = (
+        result.item.expected_options
+        | difference(result.stdout | default('') | regex_findall('--[a-z0-9-]+'))
+      ) -%}
+      {%- if missing | length > 0 -%}
+      {%- set _ = failures.append(
+        result.item.service ~ ' ' ~ result.item.operation
+        ~ ': ' ~ (missing | join(', '))
+      ) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ failures }}
+
 - name: ECS remote CLI | Verify post-install command options
   ansible.builtin.assert:
     that:
-      - >-
-        item.item.expected_options
-        | difference(item.stdout | regex_findall('--[a-z0-9-]+'))
-        | length == 0
-    fail_msg: >-
-      CDP CLI {{ item.item.service }} {{ item.item.operation }} is missing required
-      options: {{
-        item.item.expected_options
-        | difference(item.stdout | regex_findall('--[a-z0-9-]+'))
-        | join(', ')
-      }}
-  loop: "{{ ecs_remote_cdp_command_help.results }}"
-  loop_control:
-    label: "{{ item.item.service }} {{ item.item.operation }}"
+      - ecs_remote_cdp_missing_command_options | length == 0
+    fail_msg: |-
+      CDP CLI command contracts are incomplete:
+      {% for failure in ecs_remote_cdp_missing_command_options[:3] %}
+      - {{ failure }}
+      {% endfor %}
+      {% if ecs_remote_cdp_missing_command_options | length > 3 %}
+      - ... and {{ ecs_remote_cdp_missing_command_options | length - 3 }} more
+      {% endif %}
+    quiet: true
 
 - name: ECS remote CLI | Publish invocation and environment
   ansible.builtin.set_fact:

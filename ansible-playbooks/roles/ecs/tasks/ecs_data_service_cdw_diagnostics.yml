@@ -143,10 +143,11 @@
     | grep -Ei -- {{
         (
           ecs_cdw_diagnostic_principal_hostname
-          ~ '|KDC_ERR|PREAUTH|CLIENT_NOT_FOUND|ImportCredentials|Kerberos'
+          ~ '|KDC_ERR|PREAUTH|CLIENT_NOT_FOUND|ImportCredentials'
         ) | quote
       }}
-    | tail -n 200
+    | tail -n 1
+    | cut -c1-300
   args:
     executable: /bin/bash
   register: ecs_cdw_diagnostic_cm_kerberos_log
@@ -265,25 +266,12 @@
         }}, name={{
           ecs_cdw_diagnostic_environment.environmentName
           | default(ecs_cdw_diagnostic_environment.name | default('unknown'))
-        }}, crn={{
-          ecs_cdw_diagnostic_environment.crn | default('unknown')
         }}, status={{
           ecs_cdw_diagnostic_environment.status
           | default(
               ecs_cdw_diagnostic_environment.environmentStatus
               | default('unknown')
             )
-        }}, address={{
-          ecs_cdw_diagnostic_environment.address | default('not returned')
-        }}, clusters={{
-          ecs_cdw_diagnostic_environment.clusterNames
-          | default('not returned')
-        }}, domain={{
-          ecs_cdw_diagnostic_environment.domain | default('not returned')
-        }}, keys={{
-          ecs_cdw_diagnostic_environment.keys() | list
-          if ecs_cdw_diagnostic_environment is defined
-          else []
         }}.
       - >-
         CM kerberosInfo HTTP={{
@@ -293,13 +281,11 @@
         }}, kerberized={{ ecs_cdw_diagnostic_cm_kerberized }},
         realm={{ ecs_cdw_diagnostic_cm_realm | default('unset', true) }},
         kdcHost={{ ecs_cdw_diagnostic_cm_kdc_host | default('unset', true) }};
-        expected realm={{ cluster_realm }}, KDC={{ kdc_host }}.
-      - >-
-        Base cluster {{ cdh_basecluster_name }} HDFS authentication={{
+        HDFS authentication={{
           ecs_cdw_diagnostic_hdfs_authentication
           if ecs_cdw_diagnostic_hdfs_config_succeeded | bool
           else 'unavailable'
-        }}.
+        }}; expected realm={{ cluster_realm }}, KDC={{ kdc_host }}.
       - >-
         FreeIPA admin ticket={{
           'valid'
@@ -627,66 +613,71 @@
 - name: Report failed CDW Kubernetes diagnostics
   ansible.builtin.debug:
     msg:
-      - "Namespace: {{ ecs_cdw_kubernetes_namespace }}"
       - >-
-        Warehouse namespaces:
-        {{
+        Namespace={{ ecs_cdw_kubernetes_namespace }}; matching namespaces={{
+        (
           ecs_cdw_failed_namespaces.stdout_lines
           | default([])
           | select('search', '(?i)(warehouse|dwx|cdw)')
           | list
           | join(', ')
-          | default('none found', true)
+        )
+        | default('none found', true)
         }}
-      - "Pods:\n{{ ecs_cdw_failed_pods.stdout | default(ecs_cdw_failed_pods.stderr, true) }}"
       - >-
-        Metastore StatefulSet:
-        {{ ecs_cdw_failed_metastore_statefulset.stdout
-           | default(ecs_cdw_failed_metastore_statefulset.stderr, true) }}
+        Pods={{
+        (
+          ecs_cdw_failed_pods.stdout_lines
+          | default(
+              [ecs_cdw_failed_pods.stderr | default('unavailable', true)],
+              true
+            )
+          | join(' | ')
+        )
+        | truncate(500, true, '...')
+        }}
       - >-
-        Metastore pod:
-        {{ ecs_cdw_failed_metastore_description.stdout
-           | default(ecs_cdw_failed_metastore_description.stderr, true) }}
+        Metastore StatefulSet={{
+        ecs_cdw_failed_metastore_statefulset.stdout
+        | default(ecs_cdw_failed_metastore_statefulset.stderr, true)
+        | default('unavailable', true)
+        | truncate(300, true, '...')
+        }}
       - >-
-        Metastore logs:
-        {{ ecs_cdw_failed_metastore_logs.stdout
-           | default(ecs_cdw_failed_metastore_logs.stderr, true) }}
+        Workload log excerpt={{
+        (
+          (
+            ecs_cdw_failed_metastore_logs.stdout_lines | default([], true)
+          )
+          + (
+            ecs_cdw_failed_metastore_previous_logs.stdout_lines
+            | default([], true)
+          )
+          + (
+            ecs_cdw_hue_query_processor_logs.stdout_lines
+            | default([], true)
+          )
+          + (
+            ecs_cdw_hue_query_processor_previous_logs.stdout_lines
+            | default([], true)
+          )
+        )[-4:]
+        | join(' | ')
+        | default('none returned', true)
+        | truncate(500, true, '...')
+        }}
       - >-
-        Metastore previous logs:
-        {{ ecs_cdw_failed_metastore_previous_logs.stdout
-           | default(ecs_cdw_failed_metastore_previous_logs.stderr, true) }}
-      - >-
-        Pending pod descriptions:
-        {% for result in ecs_cdw_pending_pod_descriptions.results | default([]) %}
-        ===== {{ result.item }} =====
-        {{ result.stdout | default(result.stderr, true) }}
-        {% else %}
-        no Pending pods were found
-        {% endfor %}
-      - >-
-        Persistent volume claims:
-        {{ ecs_cdw_failed_pvcs.stdout
-           | default(ecs_cdw_failed_pvcs.stderr, true) }}
-      - >-
-        Node scheduling capacity:
-        {{ ecs_cdw_node_scheduling_capacity.stdout
-           | default(ecs_cdw_node_scheduling_capacity.stderr, true) }}
-      - >-
-        Hue query processor:
-        {{ ecs_cdw_hue_query_processor_description.stdout
-           | default(ecs_cdw_hue_query_processor_description.stderr, true) }}
-      - >-
-        Hue query processor logs:
-        {{ ecs_cdw_hue_query_processor_logs.stdout
-           | default(ecs_cdw_hue_query_processor_logs.stderr, true) }}
-      - >-
-        Hue query processor previous logs:
-        {{ ecs_cdw_hue_query_processor_previous_logs.stdout
-           | default(ecs_cdw_hue_query_processor_previous_logs.stderr, true) }}
-      - >-
-        Namespace events:
-        {{ ecs_cdw_failed_events.stdout
-           | default(ecs_cdw_failed_events.stderr, true) }}
+        Recent events={{
+        (
+          ecs_cdw_failed_events.stdout_lines
+          | default(
+              [ecs_cdw_failed_events.stderr | default('unavailable', true)],
+              true
+            )
+        )[-4:]
+        | join(' | ')
+        | truncate(500, true, '...')
+        }}
 
 - name: CDW diagnostics | Record diagnostics completion
   ansible.builtin.set_fact:

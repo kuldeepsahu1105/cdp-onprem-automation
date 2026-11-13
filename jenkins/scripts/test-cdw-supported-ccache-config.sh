@@ -284,10 +284,10 @@ require(
     "another natural activation state",
 )
 require(
-    "not (\n              ecs_cdw_dbc_starting_ccache_bootstrap_required"
-    in refresh_section,
-    "a temporarily absent recreated fresh metastore pod must not trigger "
-    "force-refresh",
+    "ecs_cdw_dbc_ccache_update" not in refresh_section
+    and "ecs_cdw_metastore_krb5ccname" not in refresh_section,
+    "a successful config update or generated-pod mismatch must not call "
+    "start-dbc for an already Running catalog",
 )
 require(
     "another operation[^\\\\n]*already in progress" in followup

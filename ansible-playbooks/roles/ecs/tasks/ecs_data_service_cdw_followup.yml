@@ -628,24 +628,8 @@
         - ecs_cdw_catalog_id | default('') | length > 0
         - ecs_cdw_workload_file_ccache_reconcile | default(true) | bool
         - >-
-          (
-            ecs_cdw_dbc_ccache_update is defined
-            and not (ecs_cdw_dbc_ccache_update.skipped | default(false) | bool)
-          )
-          or (
-            not (
-              ecs_cdw_dbc_starting_ccache_bootstrap_required
-              | default(false)
-              | bool
-            )
-            and
-            ecs_cdw_metastore_krb5ccname.stdout | default('') | trim
-            != ecs_cdw_workload_krb5ccname
-          )
-          or (
-            ecs_cdw_catalog_initial_status | default('')
-            is search('(?i)^(stopped|suspended|deactivated)$')
-          )
+          ecs_cdw_catalog_initial_status | default('')
+          is search('(?i)^(stopped|suspended|deactivated)$')
 
     - name: Require database catalog workload refresh
       ansible.builtin.assert:

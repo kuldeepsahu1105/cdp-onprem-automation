@@ -294,6 +294,12 @@ assert "get-access-key" not in ldap_credential_refresh
 assert "No access key found".lower() in ldap_credential_refresh.lower()
 assert "ecs_provision_iam_machine_access_key.yml" in ldap_credential_refresh
 assert "ecs_control_plane_remote_runtime.yml" in ldap_credential_refresh
+remote_runtime = (
+    root / "ansible-playbooks/roles/ecs/tasks/ecs_control_plane_remote_runtime.yml"
+).read_text()
+assert "ecs_remote_cdp_missing_command_options" in remote_runtime
+assert 'loop: "{{ ecs_remote_cdp_command_help.results }}"' not in remote_runtime
+assert "quiet: true" in remote_runtime
 assert "ecs_validate_or_refresh_api_credentials.yml" in ldap_control
 
 base_cluster_role = (
@@ -417,6 +423,16 @@ assert "\n      - host-show\n" in cdw_diagnostics
 assert "\n      - service-show\n" in cdw_diagnostics
 assert "Likely failing boundary=" in cdw_diagnostics
 assert "DWX-to-CM/KDC account-manager principal creation" in cdw_diagnostics
+assert "~ '|KDC_ERR|PREAUTH|CLIENT_NOT_FOUND|ImportCredentials'" in cdw_diagnostics
+assert "~ '|KDC_ERR|PREAUTH|CLIENT_NOT_FOUND|ImportCredentials|Kerberos'" not in cdw_diagnostics
+assert "| tail -n 1" in cdw_diagnostics
+assert "| cut -c1-300" in cdw_diagnostics
+assert "Workload log excerpt=" in cdw_diagnostics
+assert "Recent events=" in cdw_diagnostics
+assert "Metastore pod:" not in cdw_diagnostics
+assert "Pending pod descriptions:" not in cdw_diagnostics
+assert "Hue query processor:" not in cdw_diagnostics
+assert cdw_diagnostics.count("| truncate(500, true, '...')") >= 3
 assert "ecs_cdw_diagnostics_collected: true" in cdw_diagnostics
 assert "state: present" not in cdw_diagnostics
 assert "ipa-getkeytab" not in cdw_diagnostics
