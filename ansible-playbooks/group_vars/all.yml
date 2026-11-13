@@ -1605,7 +1605,10 @@ ecs_ldap_admin_assign_all_resource_roles_on_env: false
 ecs_ldap_admin_tenant_role_name_regex: '(?i)(poweruser|iamadmin|admin|owner|environment)'
 ecs_ldap_admin_resource_role_name_regex: '(?i)(admin|owner|power|environment|de|dw|ml|data)'
 # CDW
-ecs_cdw_private_cloud_config: {}  # optional storage_class, db_client_certificate paths
+ecs_cdw_private_cloud_config: {}  # optional storage class and DB client TLS contents
+# Private-cloud UI "Low Resource Mode" is creation-time only. It also makes
+# reduced resource templates the expected default for the catalog/warehouses.
+ecs_cdw_low_resource_mode: true
 # FreeIPA owns the synthetic host container. CM generateCredentialsAdhoc
 # creates the missing Hive service principal and its initial key together.
 # Existing keyless Hive service objects are rejected.
@@ -1642,6 +1645,7 @@ ecs_cdw_trino_vw_name: trino-vw
 ecs_cdw_virtual_warehouse_types:
   - hive
 ecs_cdw_vw_tshirt_size: xsmall
+ecs_cdw_vw_resource_template_name: "Reduced resources"
 ecs_cdw_vw_resource_pool: "root.{{ ecs_cdp_environment_name }}.cdw"
 ecs_cdw_impala_options: {}
 # Defaults mirror the private-cloud UI's minimum xsmall Impala settings.

@@ -5,6 +5,107 @@
       (?i)(already exists|environment\s+is\s+already\s+activated|existing\s+clusterid\s*:|gateway time-out|gateway timeout|http error 504|\[504\]|timed out|timeout)
   when: "'cdw' in (ecs_data_services_install_names | default([]))"
 
+- name: CDW | Resolve environment CRN for private activation
+  cloudera.cloud.env_info:
+    name: "{{ ecs_cdp_environment_name }}"
+    verify_tls: "{{ ecs_data_services_verify_tls | default(false) | bool }}"
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_environment_info
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_low_resource_mode | default(false) | bool
+
+- name: CDW | Require one environment for private activation
+  ansible.builtin.assert:
+    that:
+      - ecs_cdw_environment_info.environments | default([]) | length == 1
+      - >-
+        (
+          ecs_cdw_environment_info.environments
+          | first
+          | default({})
+        ).crn | default('') | length > 0
+    fail_msg: >-
+      Low Resource Mode activation requires exactly one ECS environment named
+      {{ ecs_cdp_environment_name }} with a valid CRN.
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_low_resource_mode | default(false) | bool
+
+- name: CDW | Start low-resource Data Warehouse cluster provisioning
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_data_services_cdp_cli_prefix
+        + [
+            'dw',
+            'create-private-cluster',
+            '--environment-crn',
+            (
+              ecs_cdw_environment_info.environments
+              | first
+            ).crn,
+            '--low-resource-mode'
+          ]
+        + (
+            [
+              '--storage-class',
+              ecs_cdw_private_cloud_config.storage_class
+            ]
+            if ecs_cdw_private_cloud_config.storage_class | default('') | length > 0
+            else []
+          )
+        + (
+            [
+              '--custom-kerberos-principal-hostname',
+              ecs_cdw_private_cloud_config.custom_kerberos_principal_hostname
+            ]
+            if (
+              ecs_cdw_private_cloud_config.custom_kerberos_principal_hostname
+              | default('')
+              | length > 0
+            )
+            else []
+          )
+        + (
+            [
+              '--db-client-credentials',
+              {
+                'certificate': ecs_cdw_private_cloud_config.db_client_certificate,
+                'privateKey': ecs_cdw_private_cloud_config.db_client_key
+              }
+              | to_json
+            ]
+            if (
+              ecs_cdw_private_cloud_config.db_client_certificate
+              | default('')
+              | length > 0
+              and ecs_cdw_private_cloud_config.db_client_key
+              | default('')
+              | length > 0
+            )
+            else []
+          )
+      }}
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_cluster_start
+  changed_when: ecs_cdw_cluster_start.rc == 0
+  failed_when:
+    - ecs_cdw_cluster_start.rc != 0
+    - >-
+      ecs_cdw_cluster_start.stderr
+      | default('')
+      is not search(ecs_cdw_cluster_start_ambiguous_error_pattern)
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - ecs_cdw_low_resource_mode | default(false) | bool
+
 - name: CDW | Start Data Warehouse cluster provisioning
   cloudera.cloud.dw_cluster:
     env: "{{ ecs_cdp_environment_name }}"
@@ -23,4 +124,6 @@
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
-  when: "'cdw' in (ecs_data_services_install_names | default([]))"
+  when:
+    - "'cdw' in (ecs_data_services_install_names | default([]))"
+    - not (ecs_cdw_low_resource_mode | default(false) | bool)

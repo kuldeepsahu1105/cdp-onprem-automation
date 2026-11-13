@@ -388,14 +388,18 @@ aggregate failure.
 If CDW preflight finds an existing cluster in the exact case-insensitive
 `Deactivated` state, it stops before submission.
 The pinned `cloudera.cloud` `dw_cluster` module cannot reactivate an existing
-Deactivated cluster. In the observed UI failure, the cluster-specific
-`t-shirt-sizes` endpoint returned HTTP 404 (`404 page not found` /
-`NOT_FOUND_ERROR`), so the UI did not submit the activation POST. Repair and
-use the supported DWX UI/backend activation path, activate the cluster
-manually, then rerun playbook 34. Automation does not attempt activation,
-deletion, recreation, or a control-plane restart. A concurrent transition to
-`Deactivated` terminates structured polling promptly, but only `Running`
-passes the final success assertion.
+Deactivated cluster. Fresh activation uses Low Resource Mode by default
+(`ecs_cdw_low_resource_mode: true`). Hive, Impala, and Trino creation combines
+`ecs_cdw_vw_tshirt_size: xsmall` with the resource template named by
+`ecs_cdw_vw_resource_template_name` (default `Reduced resources`). The
+playbook lists private resource templates, requires a matching entity-specific
+template, and submits its ID during `create-vw`. Existing clusters and
+warehouses are reused as-is because these are creation-time settings; delete
+and recreate standard-resource resources when conversion is required. Before
+CDW deactivation/deletion, remove Hive and Iceberg federation connectors,
+especially after deleting Trino. A concurrent transition to `Deactivated`
+terminates structured polling promptly, but only `Running` passes the final
+success assertion.
 
 CDW preflight also verifies the Base security boundary without mutation:
 CM `kerberosInfo` must be enabled for the configured realm/KDC and the Base

@@ -55,6 +55,14 @@
           ]
         + (
             [
+              '--template',
+              ecs_cdw_vw_resource_template_ids[ecs_cdw_vw.type]
+            ]
+            if ecs_cdw_vw_resource_template_name | default('') | length > 0
+            else []
+          )
+        + (
+            [
               '--impala-options',
               ecs_cdw_impala_options | to_json
             ]

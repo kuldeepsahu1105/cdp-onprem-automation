@@ -397,12 +397,13 @@ instead of calling `createPrivateCluster` again. Terminal `Error` or `Failed`
 clusters are reported without deletion or recreation. An existing cluster
 whose status is exactly `Deactivated` (case-insensitive) fails preflight before
 FreeIPA principal mutation or submission. The pinned `cloudera.cloud`
-`dw_cluster` module does not reconcile or reactivate that state. In the
-observed UI failure, the cluster-specific `t-shirt-sizes` endpoint returned
-HTTP 404 (`404 page not found` / `NOT_FOUND_ERROR`), so the UI did not submit
-the activation POST. Repair and use the supported DWX UI/backend activation
-path, activate the cluster manually, then rerun playbook 34. Automation does
-not attempt activation, deletion, recreation, or a control-plane restart.
+`dw_cluster` module does not reconcile or reactivate that state. Fresh
+activation defaults `ecs_cdw_low_resource_mode: true` and submits the private
+`lowResourceMode` request field through an isolated CDP CLI model overlay.
+Existing clusters are reused as-is because Low Resource Mode is a
+creation-time setting; deactivate/delete an old standard-resource cluster
+before rerunning if it must be replaced. Automation does not silently delete,
+recreate, or restart the control plane.
 `Deactivated` is also a terminal structured polling status, while only
 `Running` is accepted as success. For FreeIPA, the playbook idempotently
 ensures that the required `host/<hostname>` and `hive/<hostname>` principal

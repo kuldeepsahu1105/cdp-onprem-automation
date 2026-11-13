@@ -135,6 +135,43 @@
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
 
+- name: Extend isolated DW CLI model for private low-resource controls
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_data_services_remote_venv_path }}/bin/python"
+      - -c
+      - |
+        import pathlib
+        import sys
+
+        import cdpcli
+        import yaml
+
+        home = pathlib.Path(sys.argv[1])
+        source = pathlib.Path(cdpcli.__file__).parent / "data" / "dw" / "dw.yaml"
+        model = yaml.safe_load(source.read_text())
+        definitions = model["definitions"]
+        definitions["CreatePrivateClusterRequest"]["properties"]["lowResourceMode"] = {
+            "type": "boolean",
+            "description": "Enable Private Cloud Data Warehouse Low Resource Mode.",
+        }
+        definitions["CreateVwRequest"]["properties"]["template"] = {
+            "type": "string",
+            "description": "Private Cloud resource allocation template identifier.",
+        }
+        target = home / ".cdp" / "models" / "dw" / "dw.yaml"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(yaml.safe_dump(model, sort_keys=False))
+      - "{{ ecs_ds_cdp_profile_dir.path }}"
+  changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - >-
+      ecs_cdw_low_resource_mode | default(false) | bool
+      or ecs_cdw_vw_resource_template_name | default('') | length > 0
+
 - name: Publish CDP environment for ECS master tasks
   ansible.builtin.set_fact:
     ecs_cdp_cli_environment:

@@ -950,6 +950,110 @@
           }}
       when: ecs_cdw_catalog_succeeded | bool
 
+    - name: CDW | List private resource templates
+      ansible.builtin.command:
+        argv: >-
+          {{
+            ecs_data_services_cdp_cli_prefix
+            + ['dw', 'list-resource-templates']
+          }}
+      environment: "{{ ecs_cdp_cli_environment }}"
+      register: ecs_cdw_resource_templates_result
+      changed_when: false
+      become: false
+      delegate_to: "{{ ecs_data_services_delegate_host }}"
+      connection: ssh
+      when:
+        - ecs_cdw_catalog_succeeded | bool
+        - ecs_cdw_vw_resource_template_name | default('') | length > 0
+
+    - name: CDW | Record private resource templates
+      ansible.builtin.set_fact:
+        ecs_cdw_resource_templates: >-
+          {{
+            (
+              ecs_cdw_resource_templates_result.stdout
+              | from_json
+            ).templates
+            | default([])
+          }}
+        ecs_cdw_vw_resource_template_matches: {}
+      when:
+        - ecs_cdw_catalog_succeeded | bool
+        - ecs_cdw_vw_resource_template_name | default('') | length > 0
+
+    - name: CDW | Resolve reduced template for each selected warehouse
+      ansible.builtin.set_fact:
+        ecs_cdw_vw_resource_template_matches: >-
+          {{
+            ecs_cdw_vw_resource_template_matches
+            | combine(
+                {
+                  item: (
+                    ecs_cdw_resource_templates
+                    | selectattr(
+                        'entityType',
+                        'search',
+                        '(?i)^' + item + '$'
+                      )
+                    | selectattr(
+                        'name',
+                        'search',
+                        '(?i)^'
+                        + (
+                            ecs_cdw_vw_resource_template_name
+                            | regex_escape
+                          )
+                        + '$'
+                      )
+                    | map(attribute='id')
+                    | list
+                  )
+                }
+              )
+          }}
+      loop: "{{ ecs_cdw_virtual_warehouse_types_effective }}"
+      when:
+        - ecs_cdw_catalog_succeeded | bool
+        - ecs_cdw_vw_resource_template_name | default('') | length > 0
+
+    - name: CDW | Require reduced templates for selected warehouses
+      ansible.builtin.assert:
+        that:
+          - >-
+            ecs_cdw_vw_resource_template_matches[item]
+            | default([])
+            | length == 1
+        fail_msg: >-
+          Expected exactly one CDW resource template named
+          '{{ ecs_cdw_vw_resource_template_name }}' for {{ item }}. Available
+          templates:
+          {{ ecs_cdw_resource_templates | to_json }}.
+      loop: "{{ ecs_cdw_virtual_warehouse_types_effective }}"
+      when:
+        - ecs_cdw_catalog_succeeded | bool
+        - ecs_cdw_vw_resource_template_name | default('') | length > 0
+
+    - name: CDW | Record reduced template IDs for selected warehouses
+      ansible.builtin.set_fact:
+        ecs_cdw_vw_resource_template_ids: >-
+          {{
+            ecs_cdw_vw_resource_template_ids
+            | default({})
+            | combine(
+                {
+                  item: (
+                    ecs_cdw_vw_resource_template_matches[item]
+                    | first
+                  )
+                }
+              )
+          }}
+      loop: "{{ ecs_cdw_virtual_warehouse_types_effective }}"
+      when:
+        - ecs_cdw_catalog_succeeded | bool
+        - ecs_cdw_vw_resource_template_name | default('') | length > 0
+
     - name: Define selected smallest CDW Virtual Warehouses
       ansible.builtin.set_fact:
         ecs_cdw_hive_vw_name_effective: "{{ ecs_cdw_hive_vw_name }}"

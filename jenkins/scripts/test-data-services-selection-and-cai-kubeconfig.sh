@@ -547,6 +547,14 @@ cdw_vw = (
     root
     / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_virtual_warehouse.yml"
 ).read_text()
+cdw_start = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/ecs_data_service_cdw_start.yml"
+).read_text()
+data_services_runtime = (
+    root
+    / "ansible-playbooks/roles/ecs/tasks/ecs_data_services_runtime.yml"
+).read_text()
 assert "ecs_cdw_trino_vw_name" in cdw_followup
 assert "'type': 'trino'" in cdw_followup
 assert group_vars["ecs_cdw_virtual_warehouse_types"] == ["hive"]
@@ -557,6 +565,15 @@ assert "'--resource-pool'" in cdw_vw
 assert "ecs_cdw_vw_resource_pool" in cdw_vw
 assert "'--t-shirt-size'" in cdw_vw
 assert "ecs_cdw_vw_tshirt_size" in cdw_vw
+assert "'--template'" in cdw_vw
+assert "ecs_cdw_vw_resource_template_ids[ecs_cdw_vw.type]" in cdw_vw
+assert "'list-resource-templates'" in cdw_followup
+assert "ecs_cdw_vw_resource_template_name" in cdw_followup
+assert "lowResourceMode" in data_services_runtime
+assert '["CreateVwRequest"]["properties"]["template"]' in data_services_runtime
+assert "'create-private-cluster'" in cdw_start
+assert "'--low-resource-mode'" in cdw_start
+assert "not (ecs_cdw_low_resource_mode | default(false) | bool)" in cdw_start
 assert "'--impala-options'" in cdw_vw
 assert "'--impala-ha-settings'" in cdw_vw
 assert "'--autoscaling'" in cdw_vw
@@ -607,6 +624,8 @@ assert (
 assert "Converge CDW Virtual Warehouses sequentially" in cdw_followup
 assert "CDW VW | Wait for {{ ecs_cdw_vw.type }} terminal status" in cdw_vw
 assert group_vars["ecs_cdw_vw_tshirt_size"] == "xsmall"
+assert group_vars["ecs_cdw_low_resource_mode"] is True
+assert group_vars["ecs_cdw_vw_resource_template_name"] == "Reduced resources"
 assert group_vars["ecs_cdw_vw_resource_pool"] == "root.{{ ecs_cdp_environment_name }}.cdw"
 assert group_vars["ecs_cdw_impala_ha_settings"]["highAvailabilityMode"] == "DISABLED"
 assert group_vars["ecs_cdw_impala_ha_settings"]["enableShutdownOfCoordinator"] is False

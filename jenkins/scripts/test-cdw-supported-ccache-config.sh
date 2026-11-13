@@ -419,6 +419,14 @@ require(
 )
 require(group_vars["ecs_cdw_vw_tshirt_size"] == "xsmall", "minimum size changed")
 require(
+    group_vars["ecs_cdw_low_resource_mode"] is True,
+    "fresh CDW activation must default to Low Resource Mode",
+)
+require(
+    group_vars["ecs_cdw_vw_resource_template_name"] == "Reduced resources",
+    "warehouse resource template default changed",
+)
+require(
     group_vars["ecs_cdw_vw_resource_pool"]
     == "root.{{ ecs_cdp_environment_name }}.cdw",
     "CDW resource pool changed",
