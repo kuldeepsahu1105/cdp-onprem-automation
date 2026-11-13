@@ -19,11 +19,18 @@
 - name: CDE VC | Build bounded deterministic names
   ansible.builtin.set_fact:
     ecs_cde_vc_candidate_names: >-
+      {%- set base_name = (
+        ecs_cde_virtual_cluster_name
+        | regex_replace('[^a-zA-Z0-9-]+', '-')
+        | regex_replace('^-+', '')
+        | regex_replace('-+$', '')
+      ) -%}
       {%- set result = [] -%}
       {%- for attempt in range(1, (ecs_cde_virtual_cluster_name_attempts | int) + 1) -%}
       {%- set suffix = '' if attempt == 1 else '-' + ((attempt - 1) | string) -%}
       {%- set stem_length = (ecs_cde_virtual_cluster_name_max_length | int) - (suffix | length) -%}
-      {%- set _ = result.append(ecs_cde_virtual_cluster_name[:stem_length] + suffix) -%}
+      {%- set stem = base_name[:stem_length] | regex_replace('-+$', '') -%}
+      {%- set _ = result.append(stem + suffix) -%}
       {%- endfor -%}
       {{ result }}
 
@@ -32,9 +39,18 @@
     that:
       - ecs_cde_vc_candidate_names | length > 0
       - ecs_cde_vc_candidate_names | reject('equalto', '') | list | length == ecs_cde_vc_candidate_names | length
-      - ecs_cde_vc_candidate_names | map('length') | max <= 30
+      - >-
+        ecs_cde_vc_candidate_names | map('length') | max
+        <= ecs_cde_virtual_cluster_name_max_length | int
+      - >-
+        ecs_cde_vc_candidate_names
+        | select('match', '^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$')
+        | list
+        | length == ecs_cde_vc_candidate_names | length
     fail_msg: >-
-      CDE Virtual Cluster names must be non-empty and at most 30 characters.
+      CDE Virtual Cluster names must be non-empty, at most 30 characters,
+      contain only letters, numbers, or hyphens, and start and end with an
+      alphanumeric character.
       Configured candidates={{ ecs_cde_vc_candidate_names }}.
 
 - name: CDE VC | Record authoritative Virtual Cluster inventory
@@ -271,26 +287,9 @@
     state: present
   environment: "{{ ecs_cdp_cli_environment }}"
   register: ecs_cde_vc_create
-  failed_when: false
   become: false
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
-  when: not (ecs_cde_virtual_cluster_existing | bool)
-
-- name: CDE VC | Require successful Virtual Cluster creation
-  ansible.builtin.assert:
-    that:
-      - not (ecs_cde_vc_create.failed | default(false) | bool)
-    fail_msg: >-
-      CDE Virtual Cluster creation failed.
-      name={{ ecs_cde_virtual_cluster_name_effective }};
-      service={{ ecs_cde_service_name_effective }};
-      reason={{
-        ecs_cde_vc_create.msg
-        | default('API request failed')
-        | regex_replace('[\r\n]+', ' ')
-        | truncate(500, true, '...')
-      }}.
   when: not (ecs_cde_virtual_cluster_existing | bool)
 
 - name: CDE VC | Wait for effective Virtual Cluster
