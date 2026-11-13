@@ -610,8 +610,9 @@ assert "stopped|suspended|deactivated" in cdw_followup
 assert "Verify generated metastore FILE credential cache" in cdw_followup
 assert "Verify converged database catalog FILE credential cache configuration" in cdw_followup
 assert "No KCM server|default ccache.*KCM|KCM server" in cdw_followup
-assert "'describe-vw-config'" not in cdw_followup
-assert "'update-vw'" not in cdw_followup
+assert "'describe-vw-config'" in cdw_vw
+assert "'update-vw'" in cdw_vw
+assert "Require Hive pods to use FILE credential cache" in cdw_vw
 assert cdw_followup.count("ecs_cdw_dbc_file_ccache_config_effective.stdout") == 2
 assert cdw_followup.count("ecs_cdw_dbc_file_ccache_config | to_json") == 2
 assert cdw_vw.count("ecs_cdw_vw_file_ccache_config | to_json") == 1
@@ -719,6 +720,12 @@ assert group_vars["ecs_cdw_trino_autoscaling"] == {}
 assert group_vars["ecs_cdw_trino_additional_quota"] == {"cpu": 0.0, "memory": 0}
 assert group_vars["ecs_cdw_catalog_kubernetes_health_fallback"] is True
 assert group_vars["ecs_cdw_vw_krb5ccname"] == "FILE:/tmp/krb5cc_cdw"
+assert group_vars["ecs_cdw_vw_file_ccache_applications"]["hive"] == [
+    "hiveserver2",
+    "query-coordinator",
+    "query-executor",
+]
+assert group_vars["ecs_cdw_vw_file_ccache_reconcile_types"] == ["hive", "impala"]
 assert (
     "format"
     not in group_vars["ecs_cdw_dbc_file_ccache_config"]["applicationConfigs"][

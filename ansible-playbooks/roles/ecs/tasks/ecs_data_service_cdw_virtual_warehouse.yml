@@ -144,6 +144,275 @@
   delegate_to: "{{ ecs_data_services_delegate_host }}"
   connection: ssh
 
+- name: "CDW VW | Record {{ ecs_cdw_vw.type }} identifier"
+  ansible.builtin.set_fact:
+    ecs_cdw_vw_id: >-
+      {{
+        (
+          ecs_cdw_vw_record.virtual_warehouses
+          | first
+          | default({})
+        ).id
+        | default('')
+      }}
+
+- name: "CDW VW | Read {{ ecs_cdw_vw.type }} service configuration"
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_data_services_cdp_cli_prefix
+        + [
+            'dw',
+            'describe-vw-config',
+            '--cluster-id',
+            ecs_cdw_cluster.cluster.id,
+            '--vw-id',
+            ecs_cdw_vw_id
+          ]
+      }}
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_vw_config
+  changed_when: false
+  until: ecs_cdw_vw_config.rc | default(1) == 0
+  retries: "{{ ecs_cdw_submission_recovery_retries | int }}"
+  delay: "{{ ecs_cdw_submission_recovery_delay | int }}"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cdw_vw.type in ecs_cdw_vw_file_ccache_reconcile_types
+
+- name: "CDW VW | Merge FILE cache into {{ ecs_cdw_vw.type }} applications"
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import copy
+        import json
+        import sys
+
+        payload = json.load(sys.stdin)
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        config = payload.get("config", payload)
+        desired = sys.argv[1]
+        required_apps = json.loads(sys.argv[2])
+
+        def env_block(application):
+            blocks = application.get("configBlocks", [])
+            env = next(
+                (copy.deepcopy(block) for block in blocks if block.get("id") == "env"),
+                {"id": "env", "content": {"keyValues": {}}},
+            )
+            content = env.setdefault("content", {})
+            key_values = content.setdefault("keyValues", {})
+            key_values["KRB5CCNAME"] = desired
+            return {
+                "id": "env",
+                "content": {
+                    "keyValues": key_values,
+                },
+            }
+
+        common = config.get("commonConfigs", {})
+        patch = {
+            "commonConfigs": {
+                "configBlocks": [env_block(common)],
+            },
+            "applicationConfigs": {},
+        }
+        applications = config.get("applicationConfigs", {})
+        for name in sorted(set(applications) | set(required_apps)):
+            patch["applicationConfigs"][name] = {
+                "configBlocks": [
+                    env_block(applications.get(name, {})),
+                ],
+            }
+        print(json.dumps(patch, separators=(",", ":"), sort_keys=True))
+      - "{{ ecs_cdw_vw_krb5ccname }}"
+      - >-
+        {{
+          ecs_cdw_vw_file_ccache_applications[ecs_cdw_vw.type]
+          | default([])
+          | to_json
+        }}
+    stdin: "{{ ecs_cdw_vw_config.stdout | to_json }}"
+  register: ecs_cdw_vw_file_ccache_config_effective
+  changed_when: false
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cdw_vw.type in ecs_cdw_vw_file_ccache_reconcile_types
+
+- name: "CDW VW | Check {{ ecs_cdw_vw.type }} FILE credential cache"
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        import sys
+
+        payload = json.load(sys.stdin)
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        config = payload.get("config", payload)
+        desired = sys.argv[1]
+        required_apps = json.loads(sys.argv[2])
+
+        def value(application):
+            for block in application.get("configBlocks", []):
+                if block.get("id") == "env":
+                    return (
+                        block.get("content", {})
+                        .get("keyValues", {})
+                        .get("KRB5CCNAME", "")
+                    )
+            return ""
+
+        common_matches = value(config.get("commonConfigs", {})) == desired
+        applications = config.get("applicationConfigs", {})
+        apps_match = all(
+            value(applications.get(name, {})) == desired
+            for name in required_apps
+        )
+        print(json.dumps({
+            "applications": {
+                name: value(applications.get(name, {}))
+                for name in required_apps
+            },
+            "common": value(config.get("commonConfigs", {})),
+        }, sort_keys=True))
+        raise SystemExit(0 if common_matches and apps_match else 3)
+      - "{{ ecs_cdw_vw_krb5ccname }}"
+      - >-
+        {{
+          ecs_cdw_vw_file_ccache_applications[ecs_cdw_vw.type]
+          | default([])
+          | to_json
+        }}
+    stdin: "{{ ecs_cdw_vw_config.stdout | to_json }}"
+  register: ecs_cdw_vw_ccache_check
+  changed_when: false
+  failed_when: ecs_cdw_vw_ccache_check.rc not in [0, 3]
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cdw_vw.type in ecs_cdw_vw_file_ccache_reconcile_types
+
+- name: "CDW VW | Persist {{ ecs_cdw_vw.type }} FILE credential cache"
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_data_services_cdp_cli_prefix
+        + [
+            'dw',
+            'update-vw',
+            '--cluster-id',
+            ecs_cdw_cluster.cluster.id,
+            '--vw-id',
+            ecs_cdw_vw_id,
+            '--config',
+            ecs_cdw_vw_file_ccache_config_effective.stdout
+          ]
+      }}
+  environment: "{{ ecs_cdp_cli_environment }}"
+  register: ecs_cdw_vw_ccache_update
+  changed_when: ecs_cdw_vw_ccache_update.rc | default(1) == 0
+  failed_when: false
+  until: ecs_cdw_vw_ccache_update.rc | default(1) == 0
+  retries: "{{ ecs_cdw_workload_refresh_retries | int }}"
+  delay: "{{ ecs_cdw_workload_refresh_delay | int }}"
+  become: false
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when:
+    - ecs_cdw_vw.type in ecs_cdw_vw_file_ccache_reconcile_types
+    - ecs_cdw_vw_ccache_check.rc | default(3) == 3
+
+- name: "CDW VW | Require {{ ecs_cdw_vw.type }} FILE credential cache update"
+  ansible.builtin.assert:
+    that:
+      - >-
+        ecs_cdw_vw_ccache_check.rc | default(3) == 0
+        or ecs_cdw_vw_ccache_update.rc | default(1) == 0
+    fail_msg: >-
+      CDW did not accept the FILE credential-cache configuration for
+      {{ ecs_cdw_vw.type }} Virtual Warehouse {{ ecs_cdw_vw.name }}.
+      {{ ecs_cdw_vw_ccache_update.stderr
+         | default(ecs_cdw_vw_ccache_update.stdout, true)
+         | default('No API error was returned.', true) }}
+  when: ecs_cdw_vw.type in ecs_cdw_vw_file_ccache_reconcile_types
+
+- name: "CDW VW | Wait for Hive pods to use FILE credential cache"
+  ansible.builtin.shell: |
+    set -o pipefail
+    {{ ecs_coredns_kubectl_path | quote }} \
+      --kubeconfig {{ ecs_coredns_kubeconfig_path | quote }} \
+      --namespace {{ ('compute-' ~ ecs_cdw_vw.name) | quote }} \
+      get pods hiveserver2-0 query-executor-0-0 \
+      --output json |
+      python3 -c '
+    import json
+    import sys
+
+    desired = sys.argv[1]
+    required = {
+        "hiveserver2-0": "hiveserver2",
+        "query-executor-0-0": "query-executor",
+    }
+    payload = json.load(sys.stdin)
+    observed = {}
+    for pod in payload.get("items", []):
+        pod_name = pod.get("metadata", {}).get("name", "")
+        container_name = required.get(pod_name)
+        if not container_name:
+            continue
+        container = next(
+            (
+                item
+                for item in pod.get("spec", {}).get("containers", [])
+                if item.get("name") == container_name
+            ),
+            {},
+        )
+        env = {
+            item.get("name"): item.get("value", "")
+            for item in container.get("env", [])
+        }
+        observed[pod_name] = env.get("KRB5CCNAME", "")
+    print(json.dumps(observed, sort_keys=True))
+    raise SystemExit(
+        0
+        if set(observed) == set(required)
+        and all(value == desired for value in observed.values())
+        else 3
+    )
+    ' {{ ecs_cdw_vw_krb5ccname | quote }}
+  args:
+    executable: /bin/bash
+  register: ecs_cdw_hive_vw_ccache
+  changed_when: false
+  failed_when: false
+  until: ecs_cdw_hive_vw_ccache.rc | default(1) == 0
+  retries: "{{ ecs_cdw_workload_refresh_retries | int }}"
+  delay: "{{ ecs_cdw_workload_refresh_delay | int }}"
+  become: true
+  delegate_to: "{{ ecs_data_services_delegate_host }}"
+  connection: ssh
+  when: ecs_cdw_vw.type == 'hive'
+
+- name: "CDW VW | Require Hive pods to use FILE credential cache"
+  ansible.builtin.assert:
+    that:
+      - ecs_cdw_hive_vw_ccache.rc | default(1) == 0
+    fail_msg: >-
+      Hive Virtual Warehouse {{ ecs_cdw_vw.name }} still uses the unavailable
+      KCM cache after the supported CDW configuration update. Observed={{
+        ecs_cdw_hive_vw_ccache.stdout | default('{}')
+      }}.
+  when: ecs_cdw_vw.type == 'hive'
+
 - name: "CDW VW | Read {{ ecs_cdw_vw.type }} reduced-resource pod"
   ansible.builtin.command:
     argv:

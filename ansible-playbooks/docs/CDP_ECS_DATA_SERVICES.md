@@ -533,15 +533,16 @@ supported keys are `trinoDisableAutoScaling`, `trinoMinWorkerCount`,
 `trinoMaxWorkerCount`, `trinoShutdownGracePeriod`,
 `trinoScaleUpDelaySeconds`, and `trinoScaleDownDelaySeconds`.
 
-Before waiting for the warehouses to become healthy, new warehouses receive
-the common `env` config block during `dw create-vw`. The pinned
-`cloudera.cloud.dw_virtual_warehouse` contract defines common and application
-configurations as creation-only, so existing warehouses are retained without
-attempting the unsupported `dw update-vw --config` path. The creation-time
-configuration applies to generated HiveServer2, Impala, and Trino workloads
-and prevents keytab login from falling back to KCM. Automation does not patch,
-restart, delete, or recreate generated StatefulSets, Deployments, pods, PVCs,
-or warehouses.
+Before waiting for warehouses to become healthy, new warehouses receive the
+common `env` config block during `dw create-vw`. Automation then reads the live
+service configuration and uses the pinned CLI's supported
+`dw update-vw --config` operation to merge
+`KRB5CCNAME=FILE:/tmp/krb5cc_cdw` without dropping existing environment
+values. Hive also receives explicit HiveServer2, query-coordinator, and
+query-executor application blocks because private CDW does not consistently
+propagate the common block into generated Hive pods. Automation verifies the
+HiveServer2 and executor pod environments before waiting for health; it does
+not patch generated Kubernetes controllers directly.
 
 If the database catalog API remains non-`Running` after the bounded wait,
 automation performs one read-only health check of the exact

@@ -159,6 +159,87 @@ require(
     "DBC update must send only the minimal metastore env patch",
 )
 
+vw_merge_task = next(
+    item
+    for item in walk(vw_task_list)
+    if item.get("name")
+    == "CDW VW | Merge FILE cache into {{ ecs_cdw_vw.type }} applications"
+)
+vw_check_task = next(
+    item
+    for item in walk(vw_task_list)
+    if item.get("name")
+    == "CDW VW | Check {{ ecs_cdw_vw.type }} FILE credential cache"
+)
+vw_config = {
+    "config": {
+        "commonConfigs": {"configBlocks": []},
+        "applicationConfigs": {
+            "hiveserver2": {
+                "configBlocks": [
+                    {
+                        "id": "env",
+                        "content": {
+                            "keyValues": {
+                                "SERVICE_OPTS": "-javaagent:/opt/hs2-jmx.jar"
+                            }
+                        },
+                    }
+                ]
+            }
+        },
+    }
+}
+required_hive_apps = ["hiveserver2", "query-coordinator", "query-executor"]
+vw_merged = subprocess.run(
+    [
+        "python3",
+        "-c",
+        vw_merge_task["ansible.builtin.command"]["argv"][2],
+        "FILE:/tmp/krb5cc_cdw",
+        json.dumps(required_hive_apps),
+    ],
+    input=json.dumps(vw_config),
+    text=True,
+    capture_output=True,
+    check=True,
+)
+vw_merged_config = json.loads(vw_merged.stdout)
+require(
+    vw_merged_config["applicationConfigs"]["hiveserver2"]["configBlocks"][0][
+        "content"
+    ]["keyValues"]["SERVICE_OPTS"]
+    == "-javaagent:/opt/hs2-jmx.jar",
+    "VW live-config merge must preserve existing application environment values",
+)
+require(
+    all(
+        vw_merged_config["applicationConfigs"][name]["configBlocks"][0]["content"][
+            "keyValues"
+        ]["KRB5CCNAME"]
+        == "FILE:/tmp/krb5cc_cdw"
+        for name in required_hive_apps
+    ),
+    "VW live-config merge must add FILE cache to every required Hive application",
+)
+vw_check = subprocess.run(
+    [
+        "python3",
+        "-c",
+        vw_check_task["ansible.builtin.command"]["argv"][2],
+        "FILE:/tmp/krb5cc_cdw",
+        json.dumps(required_hive_apps),
+    ],
+    input=json.dumps({"config": vw_merged_config}),
+    text=True,
+    capture_output=True,
+    check=False,
+)
+require(
+    vw_check.returncode == 0,
+    "VW FILE-cache convergence check must accept the merged configuration",
+)
+
 for command in (
     "'describe-dbc-config'",
     "'update-dbc'",
@@ -167,15 +248,17 @@ for command in (
     require(command in followup, f"missing supported CDW API command {command}")
 require("'create-vw'" in vw_tasks, "missing supported CDW API command 'create-vw'")
 
-for unsupported_vw_update in (
-    "'describe-vw-config'",
-    "'update-vw'",
-    "ecs_cdw_vw_ccache_checks",
-):
-    require(
-        unsupported_vw_update not in followup,
-        f"creation-only Virtual Warehouse config must not be reconciled: {unsupported_vw_update}",
-    )
+require(
+    "'describe-vw-config'" in vw_tasks
+    and "'update-vw'" in vw_tasks
+    and "ecs_cdw_vw_file_ccache_config_effective.stdout" in vw_tasks,
+    "Virtual Warehouse FILE-cache configuration must converge through the supported API",
+)
+require(
+    "Check {{ ecs_cdw_vw.type }} FILE credential cache" in vw_tasks
+    and "ecs_cdw_vw_ccache_check.rc | default(3) == 3" in vw_tasks,
+    "Virtual Warehouse FILE-cache updates must be idempotent",
+)
 
 require(
     followup.count("ecs_cdw_dbc_file_ccache_config_effective.stdout") == 2
@@ -185,6 +268,12 @@ require(
 require(
     vw_tasks.count("ecs_cdw_vw_file_ccache_config | to_json") == 1,
     "VW creation must use the shared FILE-cache config exactly once",
+)
+require(
+    "hiveserver2-0 query-executor-0-0" in vw_tasks
+    and "Require Hive pods to use FILE credential cache" in vw_tasks
+    and "KRB5CCNAME" in vw_tasks,
+    "Hive warehouse convergence must verify FILE cache in generated pods",
 )
 require(
     followup.count('.get("KRB5CCNAME", "")') == 3,
@@ -418,6 +507,15 @@ require(
 require(
     group_vars["ecs_cdw_vw_krb5ccname"] == "FILE:/tmp/krb5cc_cdw",
     "VW cache path changed",
+)
+require(
+    group_vars["ecs_cdw_vw_file_ccache_applications"]["hive"]
+    == ["hiveserver2", "query-coordinator", "query-executor"],
+    "Hive FILE-cache application coverage changed",
+)
+require(
+    group_vars["ecs_cdw_vw_file_ccache_reconcile_types"] == ["hive", "impala"],
+    "VW config reconciliation must remain limited to CLI-supported types",
 )
 require(
     "format"

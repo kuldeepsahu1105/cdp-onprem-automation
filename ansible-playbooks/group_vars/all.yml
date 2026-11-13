@@ -1682,6 +1682,18 @@ ecs_cdw_vw_file_ccache_config:
         content:
           keyValues:
             KRB5CCNAME: "{{ ecs_cdw_vw_krb5ccname }}"
+ecs_cdw_vw_file_ccache_reconcile_types:
+  - hive
+  - impala
+# Private CDW does not consistently propagate common env configuration into
+# generated Hive applications. Apply the same setting to the concrete apps.
+ecs_cdw_vw_file_ccache_applications:
+  hive:
+    - hiveserver2
+    - query-coordinator
+    - query-executor
+  impala: []
+  trino: []
 ecs_cdw_dataviz_name: "{{ ecs_cluster_name | regex_replace('[^a-zA-Z0-9]+', '-') | lower }}-viz"
 ecs_cdw_dataviz_name_attempts: 10
 ecs_cdw_dataviz_name_max_length: 40
