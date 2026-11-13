@@ -370,7 +370,15 @@ Success/failure emails (Email Extension plugin) include:
 - **SSH private key** (`*.pem`) attached from `jenkins/artifacts/`
 - **`cm-access.txt`** — CM HTTP/HTTPS URL, admin username/password, SSH example
 - **`access-urls.txt`** — Portal, pgAdmin, Grafana, CM direct vs Caddy lab URLs (also embedded in build summary and email)
+- **`ca-bundles.txt`** — authoritative CA server/path inventory and collection result
+- Public CA certificates when reachable: **`freeipa-ca.crt`** and
+  **`cm-autotls-ca.crt`**, plus combined **`cm-ipa-ca-bundle.pem`**
 - Build summary, inventory, and stage logs
+
+CA private keys are never collected or emailed. The source paths are
+`/etc/ipa/ca.crt` on the FreeIPA server and
+`/var/lib/cloudera-scm-agent/agent-cert/cm-auto-in_cluster_ca_cert.pem` on
+`cldr-mngr`.
 
 `NOTIFICATION_EMAIL` defaults to `ksahu@cloudera.com`. When another authenticated user
 triggers the build and Jenkins provides `BUILD_USER_EMAIL`, that address is appended and

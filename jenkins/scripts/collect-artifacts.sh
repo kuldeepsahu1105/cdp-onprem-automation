@@ -46,6 +46,9 @@ fi
 if [[ -x "$REPO_ROOT/jenkins/scripts/build-access-urls.sh" ]]; then
   bash "$REPO_ROOT/jenkins/scripts/build-access-urls.sh" || log "WARN: access-urls.txt not generated"
 fi
+if [[ -x "$REPO_ROOT/jenkins/scripts/collect-ca-bundles.sh" ]]; then
+  bash "$REPO_ROOT/jenkins/scripts/collect-ca-bundles.sh" || log "WARN: CA bundle report not generated"
+fi
 
 log "Artifacts collected in $OUT_DIR"
 ls -la "$OUT_DIR"

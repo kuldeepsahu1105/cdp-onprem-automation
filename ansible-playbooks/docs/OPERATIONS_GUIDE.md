@@ -1343,6 +1343,25 @@ sudo sed -n '1,220p' /opt/cldr-deployment-portal/Caddyfile
 
 **Caddy FreeIPA vhost:** When `[ipaserver]` is present, the modern UI link is `https://ipa.<ops-ip-dashed>.<base>:9443/ipa/modern-ui/`; the IP slug, DNS suffix, and port come from the normal Caddy URL facts (no AWS region, IP, or domain is hardcoded). Its HTTP `:81` vhost redirects to HTTPS. Caddy uses its persistent internal CA because ports 80/443 are already owned by FreeIPA Apache and 8443-8445 are reserved for Dogtag PKI on the default ops host. Download `/downloads/caddy-root-ca.crt` after portal login and trust it in the operator browser/OS once. Caddy connects over **HTTPS** to the IPA inventory address (`private_ip`, then `ansible_host`) so its container does not need to resolve the IPA DNS zone, while using the IPA FQDN for TLS SNI and **`Host`**. The shared IPA proxy route remains mounted on the direct-IP HTTP listener at `http://<ops-public-or-private-ip>:81/ipa/...` as a fallback. That fallback removes the upstream cookie's `Secure` attribute; the preferred HTTPS vhost retains it. Path matchers set IPA’s required HTTPS `Referer`, disable JSON compression through the proxy, and rewrite upstream redirects/cookie domains. **`GET /ipa/session/login_kerberos` → 401** is expected when **`ipa_httpd_disable_browser_krb_negotiate: true`** — use password login. Optional **`deployment_portal_ipa_httpd_proxy_enabled: true`** adds Apache **`mod_substitute`** on UI paths only (not `/ipa/json`).
 
+**CM and FreeIPA CA locations and email artifacts:** Jenkins
+`collect-ca-bundles.sh` writes `jenkins/artifacts/ca-bundles.txt` and attaches
+the reachable public certificates to the normal build email. The FreeIPA CA is
+authoritative on the `[ipaserver]` host at `/etc/ipa/ca.crt`. The CM Auto-TLS
+CA PEM is available on `cldr-mngr` at
+`/var/lib/cloudera-scm-agent/agent-cert/cm-auto-in_cluster_ca_cert.pem`.
+Jenkins attaches them as `freeipa-ca.crt` and `cm-autotls-ca.crt`, and also
+builds `cm-ipa-ca-bundle.pem` for clients that must trust both PKIs. Manual
+retrieval examples:
+
+```bash
+scp root@<ipaserver>:/etc/ipa/ca.crt freeipa-ca.crt
+scp root@<cldr-mngr>:/var/lib/cloudera-scm-agent/agent-cert/cm-auto-in_cluster_ca_cert.pem cm-autotls-ca.crt
+cat cm-autotls-ca.crt freeipa-ca.crt > cm-ipa-ca-bundle.pem
+```
+
+Only public certificates are attached; CA private keys are never copied or
+emailed.
+
 **IPA Apache behind Caddy (ipaserver, opt-in):** Default **`deployment_portal_ipa_httpd_proxy_enabled: false`** — no ipaserver httpd edits; ops Caddy reverse-proxies HTTPS to the ipaserver inventory address on port 443. Jenkins **PORTAL** and playbook **16** run **`remove_ipa_httpd_caddy_proxy_on_ipaserver.yml`** (absent **`zz-ipa-caddy-proxy.conf`**, revert **`ipa-rewrite`** Caddy markers, **`systemctl reload httpd`** when changed). When the flag is **true**, the same entry points run **`configure_ipa_httpd_behind_caddy.yml`** (`mod_substitute` on UI paths only, **`ipa-rewrite`** patches, **`apachectl configtest`**, httpd reload — not **`ipactl restart`**). Manual check: `apachectl configtest && systemctl reload httpd`.
 
 ### Jenkins **PORTAL** and **IDENTITY** rerun — config and automatic restarts

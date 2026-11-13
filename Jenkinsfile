@@ -1432,6 +1432,9 @@ def archivePipelineArtifacts() {
     'jenkins/artifacts/build-summary.txt',
     'jenkins/artifacts/cm-access.txt',
     'jenkins/artifacts/access-urls.txt',
+    'jenkins/artifacts/ca-bundles.txt',
+    'jenkins/artifacts/*.crt',
+    'jenkins/artifacts/cm-ipa-ca-bundle.pem',
     'jenkins/artifacts/inventory.ini',
     'jenkins/artifacts/terraform-*.log',
     'jenkins/artifacts/ansible-*.log',
@@ -1481,7 +1484,7 @@ def sendPipelineEmail(String buildResult) {
   def phaseInfo = env.ANSIBLE_PHASES ?: 'n/a'
 
   def attachmentList = []
-  ['build-summary.txt', 'cm-access.txt', 'access-urls.txt', "terraform-${env.BUILD_NUMBER}.log", 'inventory.ini', 'error-summary.txt'].each { name ->
+  ['build-summary.txt', 'cm-access.txt', 'access-urls.txt', 'ca-bundles.txt', 'cm-ipa-ca-bundle.pem', "terraform-${env.BUILD_NUMBER}.log", 'inventory.ini', 'error-summary.txt'].each { name ->
     if (fileExists("${env.WORKSPACE}/jenkins/artifacts/${name}")) {
       attachmentList << "jenkins/artifacts/${name}"
     }
@@ -1510,6 +1513,18 @@ def sendPipelineEmail(String buildResult) {
       def rel = path.replace("${env.WORKSPACE}/", '')
       if (rel) {
         attachmentList << rel
+      }
+      def caFiles = sh(
+        script: "ls ${env.WORKSPACE}/jenkins/artifacts/*.crt 2>/dev/null || true",
+        returnStdout: true
+      ).trim()
+      if (caFiles) {
+        caFiles.split('\n').each { path ->
+          def rel = path.replace("${env.WORKSPACE}/", '')
+          if (rel) {
+            attachmentList << rel
+          }
+        }
       }
     }
   }
