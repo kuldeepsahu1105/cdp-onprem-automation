@@ -2606,6 +2606,17 @@
     - base_cluster_knox_gateway_group is defined
     - base_cluster_knox_gateway_group | length > 0
 
+- name: Determine whether post-start client configuration refresh is required
+  ansible.builtin.set_fact:
+    base_cluster_post_start_refresh_required: >-
+      {{
+        base_cluster_first_run_required | default(false) | bool
+        or base_cluster_existing_restart_required | default(false) | bool
+        or base_cluster_required_config_changed | default(false) | bool
+        or base_cluster_partial_first_run_recovery_required | default(false) | bool
+        or base_cluster_ozone_ordered_recovery_required | default(false) | bool
+      }}
+
 - name: Refresh base cluster client and monitoring configuration after startup
   ansible.builtin.uri:
     url: >-
@@ -2619,13 +2630,7 @@
     status_code: [200]
     follow_redirects: none
   register: base_cluster_refresh_command
-  when:
-    - >-
-      base_cluster_create_required | bool
-      or (
-        existing_cluster.status == 200
-        and not (base_cluster_partial_empty | bool)
-      )
+  when: base_cluster_post_start_refresh_required | bool
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
 - name: Wait for base cluster refresh
