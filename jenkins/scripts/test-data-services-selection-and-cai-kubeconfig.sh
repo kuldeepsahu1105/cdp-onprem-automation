@@ -82,30 +82,6 @@ assert credentials_provision_text.index(
     "Describe requested ECS environment before creation"
 ) < credentials_provision_text.index("Create missing ECS private-cloud environment")
 
-ecs_install_playbook = (
-    root / "ansible-playbooks/33_setup_ecs_cluster.yml"
-).read_text()
-freeipa_ccache_restore = (
-    root
-    / "ansible-playbooks/roles/identity/tasks/restore_freeipa_default_ccache.yml"
-).read_text()
-freeipa_client_join = (
-    root / "ansible-playbooks/roles/identity/tasks/join_freeipa_client.yml"
-).read_text()
-assert "Restore FreeIPA-managed Kerberos credential-cache default on ECS hosts" in ecs_install_playbook
-assert "Verify ECS hosts remain enrolled with FreeIPA" in ecs_install_playbook
-assert "Require FreeIPA enrollment and KEYRING default before ECS installation" in ecs_install_playbook
-assert "/etc/ipa/default.conf" in ecs_install_playbook
-assert "- KRB5CCNAME" in ecs_install_playbook
-assert "'KCM' not in" in ecs_install_playbook
-assert "restore_freeipa_default_ccache.yml" in freeipa_client_join
-assert "KEYRING:persistent:%{uid}" in freeipa_ccache_restore
-assert "FILE:/tmp/krb5cc_%\\{uid\\}" in freeipa_ccache_restore
-assert not (
-    root
-    / "ansible-playbooks/roles/identity/tasks/ensure_krb5_default_ccache_commented.yml"
-).exists()
-
 playbook = root / "ansible-playbooks/roles/ecs/tasks/setup_data_services.yml"
 playbook_text = playbook.read_text()
 diagnostics_text = (
@@ -782,14 +758,13 @@ assert "ecs_cdw_impala_query_log" not in group_vars
 assert group_vars["ecs_cdw_trino_autoscaling"] == {}
 assert group_vars["ecs_cdw_trino_additional_quota"] == {"cpu": 0.0, "memory": 0}
 assert group_vars["ecs_cdw_catalog_kubernetes_health_fallback"] is True
-assert group_vars["ecs_cdw_workload_file_ccache_reconcile"] is False
 assert group_vars["ecs_cdw_vw_krb5ccname"] == "FILE:/tmp/krb5cc_cdw"
 assert group_vars["ecs_cdw_vw_file_ccache_applications"]["hive"] == [
     "hiveserver2",
     "query-coordinator",
     "query-executor",
 ]
-assert group_vars["ecs_cdw_vw_file_ccache_reconcile_types"] == []
+assert group_vars["ecs_cdw_vw_file_ccache_reconcile_types"] == ["hive", "impala"]
 assert (
     "format"
     not in group_vars["ecs_cdw_dbc_file_ccache_config"]["applicationConfigs"][

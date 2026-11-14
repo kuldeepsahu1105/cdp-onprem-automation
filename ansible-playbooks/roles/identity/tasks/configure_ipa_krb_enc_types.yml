@@ -4,8 +4,8 @@
 - name: Kerberos — document Ansible FILE ccache in krb5.conf.d on IPA server
   ansible.builtin.import_tasks: ensure_krb5_ansible_ccache_note.yml
 
-- name: Kerberos — preserve FreeIPA-managed credential-cache default on IPA server
-  ansible.builtin.import_tasks: restore_freeipa_default_ccache.yml
+- name: Kerberos — restore KEYRING default_ccache_name on IPA server (clients commented elsewhere)
+  ansible.builtin.import_tasks: ensure_krb5_default_ccache_commented.yml
 
 - name: Kerberos — deploy IPA KDC permitted enctypes snippet
   ansible.builtin.template:

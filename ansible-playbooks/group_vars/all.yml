@@ -129,9 +129,9 @@ freeipa_ansible_module_kerberos_packages:
     - krb5-workstation
   Debian:
     - krb5-user
-# Preserve the FreeIPA-managed system default. Ansible automation uses an
-# explicit FILE cache per task and must not rewrite the host default.
-krb5_freeipa_default_ccache_line: "default_ccache_name = KEYRING:persistent:%{uid}"
+# Clients: comment KEYRING in /etc/krb5.conf (ensure_krb5_default_ccache_commented.yml). ipaserver keeps active KEYRING by default.
+krb5_comment_default_ccache_on_ipaserver: false
+krb5_libdefaults_default_ccache_commented_line: "#default_ccache_name = KEYRING:persistent:%{uid}"
 ipadm_password: "{{ ipaadmin_password }}"
 # Shared lab password (ECS UMS bootstrap, Kerberos admin, ECS LDAP admin); override in Jenkins ANSIBLE_GROUP_VARS_YAML
 common_password: "{{ ipaadmin_password }}"
@@ -1159,7 +1159,7 @@ cloudera_cloud_collection_git_ref: 78e5bbfff1cad88dc9602f8026d65bc7e3c88781
 krb5_cm_managed_krb5_conf: true
 krb5_conf_path: "/etc/krb5.conf"
 # Verbatim [libdefaults] lines CM emits when krb5_cm_managed_krb5_conf is true (API: krb_libdefaults_safety_valve).
-krb5_cm_libdefaults_safety_valve: "{{ krb5_freeipa_default_ccache_line }}"
+krb5_cm_libdefaults_safety_valve: "{{ krb5_libdefaults_default_ccache_commented_line }}"
 # CM redacts the stored safety valve; set true only for intentional repair/rotation.
 cm_krb_update_libdefaults_safety_valve: false
 # Cloudera Manager KRB_ENC_TYPES (short names). AES only — Java 17+ disables RC4.
@@ -1631,9 +1631,7 @@ ecs_cdw_repair_stale_cm_credentials_confirm: ""
 ecs_cdw_submission_recovery_retries: 24
 ecs_cdw_submission_recovery_delay: 5
 ecs_cdw_kubernetes_namespace: "warehouse-{{ ecs_cdp_environment_name }}"
-# Emergency compatibility only. A correctly installed ECS cluster propagates
-# the FreeIPA KEYRING default and does not require per-CDW KRB5CCNAME patches.
-ecs_cdw_workload_file_ccache_reconcile: false
+ecs_cdw_workload_file_ccache_reconcile: true
 ecs_cdw_workload_krb5ccname: "FILE:/tmp/krb5cc_metastore"
 ecs_cdw_workload_refresh_retries: 60
 ecs_cdw_workload_refresh_delay: 10
@@ -1717,7 +1715,9 @@ ecs_cdw_vw_file_ccache_config:
         content:
           keyValues:
             KRB5CCNAME: "{{ ecs_cdw_vw_krb5ccname }}"
-ecs_cdw_vw_file_ccache_reconcile_types: []
+ecs_cdw_vw_file_ccache_reconcile_types:
+  - hive
+  - impala
 # Private CDW does not consistently propagate common env configuration into
 # generated Hive applications. Apply the same setting to the concrete apps.
 ecs_cdw_vw_file_ccache_applications:
