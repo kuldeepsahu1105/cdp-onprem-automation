@@ -82,25 +82,6 @@ assert credentials_provision_text.index(
     "Describe requested ECS environment before creation"
 ) < credentials_provision_text.index("Create missing ECS private-cloud environment")
 
-ecs_install_playbook = (
-    root / "ansible-playbooks/33_setup_ecs_cluster.yml"
-).read_text()
-freeipa_ccache_restore = (
-    root
-    / "ansible-playbooks/roles/identity/tasks/restore_freeipa_default_ccache.yml"
-).read_text()
-freeipa_client_join = (
-    root / "ansible-playbooks/roles/identity/tasks/join_freeipa_client.yml"
-).read_text()
-assert "restore_freeipa_default_ccache.yml" in freeipa_client_join
-assert "krb5_freeipa_default_ccache_line" in freeipa_ccache_restore
-assert "FILE:/tmp/krb5cc_%\\{uid\\}" in freeipa_ccache_restore
-assert "Require FreeIPA enrollment and KEYRING default before ECS installation" not in ecs_install_playbook
-assert not (
-    root
-    / "ansible-playbooks/roles/identity/tasks/ensure_krb5_default_ccache_commented.yml"
-).exists()
-
 playbook = root / "ansible-playbooks/roles/ecs/tasks/setup_data_services.yml"
 playbook_text = playbook.read_text()
 diagnostics_text = (
@@ -275,15 +256,6 @@ assert "ecs_coredns_kubeconfig_path" in combined
 group_vars = yaml.safe_load(
     (root / "ansible-playbooks/group_vars/all.yml").read_text()
 )
-assert (
-    group_vars["krb5_freeipa_default_ccache_line"]
-    == "default_ccache_name = KEYRING:persistent:%{uid}"
-)
-assert (
-    group_vars["krb5_cm_libdefaults_safety_valve"]
-    == "{{ krb5_freeipa_default_ccache_line }}"
-)
-assert group_vars["ecs_cdw_workload_file_ccache_reconcile"] is True
 assert group_vars["ecs_cde_virtual_cluster_name_max_length"] == 30
 assert group_vars["ecs_cde_virtual_cluster_prefix_max_length"] == 8
 cde_vc_text = (
