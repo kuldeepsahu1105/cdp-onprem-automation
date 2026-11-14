@@ -560,8 +560,12 @@ require(
     "Hive FILE-cache application coverage changed",
 )
 require(
-    group_vars["ecs_cdw_vw_file_ccache_reconcile_types"] == ["hive", "impala"],
-    "VW config reconciliation must remain limited to CLI-supported types",
+    group_vars["ecs_cdw_workload_file_ccache_reconcile"] is False,
+    "Database Catalog FILE-cache workaround must be disabled by default",
+)
+require(
+    group_vars["ecs_cdw_vw_file_ccache_reconcile_types"] == [],
+    "Virtual Warehouse FILE-cache workaround must be disabled by default",
 )
 require(
     "format"

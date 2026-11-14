@@ -1,0 +1,46 @@
+---
+# Restore the stock FreeIPA client default after older automation revisions
+# commented KEYRING or replaced it with a fleet-wide FILE cache.
+
+- name: Kerberos | Stat FreeIPA Kerberos configuration
+  ansible.builtin.stat:
+    path: /etc/krb5.conf
+  register: freeipa_krb5_conf_stat
+
+- name: Kerberos | Restore automation-commented FreeIPA KEYRING default
+  ansible.builtin.replace:
+    path: /etc/krb5.conf
+    regexp: '^(\s*)#\s*default_ccache_name\s*=\s*KEYRING:persistent:%\{uid\}\s*$'
+    replace: '\1default_ccache_name = KEYRING:persistent:%{uid}'
+    backup: true
+  register: freeipa_keyring_default_uncommented
+  when: freeipa_krb5_conf_stat.stat.exists | default(false)
+
+- name: Kerberos | Replace legacy automation FILE default with FreeIPA KEYRING
+  ansible.builtin.replace:
+    path: /etc/krb5.conf
+    regexp: '^(\s*)default_ccache_name\s*=\s*FILE:/tmp/krb5cc_%\{uid\}\s*$'
+    replace: '\1default_ccache_name = KEYRING:persistent:%{uid}'
+    backup: true
+  register: freeipa_legacy_file_default_replaced
+  when: freeipa_krb5_conf_stat.stat.exists | default(false)
+
+- name: Kerberos | Record restored FreeIPA credential-cache default
+  ansible.builtin.set_fact:
+    freeipa_default_ccache_restored: >-
+      {{
+        (freeipa_keyring_default_uncommented is changed)
+        or (freeipa_legacy_file_default_replaced is changed)
+      }}
+
+- name: Kerberos | Restart SSSD after restoring client credential-cache default
+  ansible.builtin.import_tasks: restart_sssd_after_krb5_ccache_note.yml
+  when:
+    - freeipa_default_ccache_restored | bool
+    - inventory_hostname not in groups.get('ipaserver', [])
+
+- name: Kerberos | Restart IPA after restoring server credential-cache default
+  ansible.builtin.import_tasks: restart_ipa_after_krb5_conf_change.yml
+  when:
+    - freeipa_default_ccache_restored | bool
+    - inventory_hostname in groups.get('ipaserver', [])

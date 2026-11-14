@@ -73,6 +73,12 @@ Reference: cloudera-labs/openshift (cloudera.exe) Caddy + `cloudera.cluster` pla
 
 ## Ansible pitfalls
 
+- **FreeIPA credential-cache ownership:** every node, including ECS masters and
+  workers, remains enrolled with FreeIPA/KDC. Preserve `ipa-client-install`'s
+  active `KEYRING:persistent:%{uid}` system default; automation commands use
+  explicit `KRB5CCNAME=FILE:...` caches without rewriting the host default.
+  Playbook **33** repairs only legacy automation-owned comments/FILE values and
+  refuses ECS installation when the effective default is KCM.
 - **Never** multiple `set_fact` keys in one task when values reference sibling keys (`_acr_*`, `_portal_*`, etc.) — split tasks or use explicit `hostvars` / `deployment_portal_context`.
 - **`when:` lists** with Jinja `in` on items: use `intersect` filter or quote the full expression — bare YAML breaks parsing.
 - **`detect_ansible_control_reachability`:** probes/`set_fact` for control mode → **`delegate_to: localhost`** (env vars, not remote host). **Tier B** builds `deployment_tier_b_url_checks` on localhost — read via `hostvars['localhost']`; `_tier_b_run_any` is true under Jenkins (`BUILD_NUMBER` / `JENKINS_URL`) when probes exist.

@@ -35,6 +35,76 @@
       ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
       when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
 
+    - name: Restore FreeIPA-managed Kerberos credential-cache default on ECS hosts
+      ansible.builtin.import_role:
+        name: identity
+        tasks_from: restore_freeipa_default_ccache
+      become: true
+      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
+
+    - name: Verify ECS hosts remain enrolled with FreeIPA
+      ansible.builtin.stat:
+        path: /etc/ipa/default.conf
+      register: ecs_freeipa_enrollment
+      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
+
+    - name: Read effective Kerberos credential-cache type on ECS hosts
+      ansible.builtin.command:
+        argv:
+          - env
+          - -u
+          - KRB5CCNAME
+          - klist
+      register: ecs_krb5_default_ccache_probe
+      changed_when: false
+      failed_when: false
+      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
+
+    - name: Require FreeIPA enrollment and KEYRING default before ECS installation
+      ansible.builtin.assert:
+        that:
+          - ecs_freeipa_enrollment.stat.exists | default(false)
+          - >-
+            'KEYRING' in (
+              (
+                ecs_krb5_default_ccache_probe.stdout | default('')
+              ) ~ ' ' ~ (
+                ecs_krb5_default_ccache_probe.stderr | default('')
+              )
+            ) | upper
+          - >-
+            'KCM' not in (
+              (
+                ecs_krb5_default_ccache_probe.stdout | default('')
+              ) ~ ' ' ~ (
+                ecs_krb5_default_ccache_probe.stderr | default('')
+              )
+            ) | upper
+        fail_msg: >-
+          ECS installation requires every ECS host to remain enrolled with
+          FreeIPA and use its KEYRING credential-cache default.
+          /etc/ipa/default.conf exists={{
+          ecs_freeipa_enrollment.stat.exists | default(false) }}; effective
+          klist output was:
+          {{
+            (
+              ecs_krb5_default_ccache_probe.stdout | default('')
+            ) ~ ' ' ~ (
+              ecs_krb5_default_ccache_probe.stderr | default('')
+            )
+            | trim
+          }}.
+          Do not continue while the effective default is KCM because ECS
+          propagates the host Kerberos configuration into service workloads.
+      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
+
+    - name: Report ECS host Kerberos installation readiness
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }} is enrolled with FreeIPA and uses the
+          KEYRING credential-cache default; ECS installation may continue.
+      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
+
 - name: Install ECS (Cloudera Data Services) cluster via Cloudera Manager
   hosts: localhost
   connection: local
