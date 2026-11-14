@@ -403,6 +403,83 @@
   when: existing_ecs_cluster.status == 200
   delegate_to: "{{ cm_cluster_module_delegate_to }}"
 
+- name: Read existing ECS control plane records for reporting
+  ansible.builtin.uri:
+    url: "{{ cm_cluster_module_api_url }}/controlPlanes?view=full"
+    method: GET
+    user: "{{ cm_admin_user }}"
+    password: "{{ cm_admin_pass }}"
+    force_basic_auth: yes
+    validate_certs: no
+    status_code: [200]
+    follow_redirects: none
+  register: existing_ecs_control_planes
+  changed_when: false
+  when: existing_ecs_cluster.status == 200
+  delegate_to: "{{ cm_cluster_module_delegate_to }}"
+
+- name: Select existing ECS control plane records for reporting
+  ansible.builtin.set_fact:
+    existing_ecs_control_plane_matches: >-
+      {{
+        existing_ecs_control_planes.json['items'] | default([])
+        | selectattr('dnsSuffix', 'equalto', ecs_application_domain)
+        | list
+      }}
+  when: existing_ecs_cluster.status == 200
+
+- name: Report existing ECS cluster details
+  ansible.builtin.debug:
+    msg:
+      - "Existing ECS cluster found; installation will adopt it."
+      - >-
+        Name={{ existing_ecs_cluster.json.name | default(ecs_cluster_name) }},
+        displayName={{ existing_ecs_cluster.json.displayName | default('unavailable') }},
+        version={{
+          existing_ecs_cluster.json.fullVersion
+          | default(existing_ecs_cluster.json.version | default('unavailable'))
+        }},
+        status={{ existing_ecs_cluster.json.entityStatus | default('unavailable') }}
+      - >-
+        Services={{
+          existing_ecs_services.json['items'] | default([])
+          | map(attribute='name')
+          | list
+          | join(', ')
+        }},
+        activeCommandIds={{
+          existing_ecs_active_commands.json['items'] | default([])
+          | map(attribute='id')
+          | list
+          | to_json
+        }}
+  when: existing_ecs_cluster.status == 200
+
+- name: Report existing ECS service details
+  ansible.builtin.debug:
+    msg: >-
+      Service={{ item.name | default('unknown') }},
+      state={{ item.serviceState | default('unknown') }},
+      health={{ item.healthSummary | default('unknown') }}
+  loop: "{{ existing_ecs_services.json['items'] | default([]) }}"
+  loop_control:
+    label: "{{ item.name | default('unknown') }}"
+  when: existing_ecs_cluster.status == 200
+
+- name: Report existing ECS control plane details
+  ansible.builtin.debug:
+    msg: >-
+      ControlPlaneId={{ item.id | default('unavailable') }},
+      experienceCluster={{ item.experienceClusterName | default(ecs_cluster_name) }},
+      baseCluster={{ item.datalakeClusterName | default(cdh_basecluster_name) }},
+      dnsSuffix={{ item.dnsSuffix | default('unavailable') }},
+      status={{ item.status | default(item.entityStatus | default('unavailable')) }},
+      repository={{ item.remoteRepoUrl | default('unavailable') }}
+  loop: "{{ existing_ecs_control_plane_matches | default([]) }}"
+  loop_control:
+    label: "{{ item.id | default(item.dnsSuffix | default('control-plane')) }}"
+  when: existing_ecs_cluster.status == 200
+
 - name: Determine whether phased ECS installation is required
   ansible.builtin.set_fact:
     ecs_phased_install_required: >-

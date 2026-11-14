@@ -52,6 +52,30 @@ assert active_read["ansible.builtin.uri"]["url"].endswith(
 )
 assert active_read["delegate_to"] == "{{ cm_cluster_module_delegate_to }}"
 
+control_planes_read = setup_by_name[
+    "Read existing ECS control plane records for reporting"
+]
+assert control_planes_read["ansible.builtin.uri"]["url"].endswith(
+    "/controlPlanes?view=full"
+)
+assert control_planes_read["when"] == "existing_ecs_cluster.status == 200"
+cluster_report = setup_by_name["Report existing ECS cluster details"]
+assert "Existing ECS cluster found; installation will adopt it." in str(
+    cluster_report["ansible.builtin.debug"]["msg"]
+)
+assert "existing_ecs_active_commands.json['items']" in str(
+    cluster_report["ansible.builtin.debug"]["msg"]
+)
+service_report = setup_by_name["Report existing ECS service details"]
+assert service_report["loop"] == (
+    "{{ existing_ecs_services.json['items'] | default([]) }}"
+)
+control_plane_report = setup_by_name[
+    "Report existing ECS control plane details"
+]
+assert "item.dnsSuffix" in control_plane_report["ansible.builtin.debug"]["msg"]
+assert "item.remoteRepoUrl" in control_plane_report["ansible.builtin.debug"]["msg"]
+
 decision = setup_by_name["Determine whether phased ECS installation is required"]
 decision_text = decision["ansible.builtin.set_fact"][
     "ecs_phased_install_required"
