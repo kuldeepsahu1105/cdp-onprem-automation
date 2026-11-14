@@ -275,6 +275,20 @@
         )
       }}
 
+- name: Report matching existing ECS environment
+  ansible.builtin.debug:
+    msg:
+      - "Existing ECS environment found; creation will be skipped."
+      - >-
+        Name={{ ecs_requested_environment_matches[0].environmentName }},
+        CRN={{ ecs_requested_environment_matches[0].crn | default('unavailable') }},
+        status={{ ecs_requested_environment_matches[0].status | default('unavailable') }}
+      - >-
+        Address={{ ecs_requested_environment_matches[0].address | default('unavailable') }},
+        domain={{ ecs_requested_environment_matches[0].domain | default('unavailable') }},
+        clusters={{ ecs_requested_environment_matches[0].clusterNames | default([]) | join(',') }}
+  when: ecs_requested_environment_matches | length > 0
+
 - name: Reject ambiguous ECS environment selection
   ansible.builtin.assert:
     that:

@@ -57,6 +57,11 @@ assert (
 assert "Describe requested ECS environment before creation" in credentials_provision_text
 assert "'describe-environment'" in credentials_provision_text
 assert "ecs_requested_environment_direct" in credentials_provision_text
+assert "Report matching existing ECS environment" in credentials_provision_text
+assert "Existing ECS environment found; creation will be skipped." in credentials_provision_text
+assert "ecs_requested_environment_matches[0].environmentName" in credentials_provision_text
+assert "ecs_requested_environment_matches[0].crn" in credentials_provision_text
+assert "ecs_requested_environment_matches[0].clusterNames" in credentials_provision_text
 assert credentials_provision_text.index(
     "Describe requested ECS environment before creation"
 ) < credentials_provision_text.index("Create missing ECS private-cloud environment")
