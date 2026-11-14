@@ -191,6 +191,42 @@
   changed_when: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
 
+- name: Describe requested ECS environment before creation
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ecs_cdp_cli_prefix
+        + [
+          'environments',
+          'describe-environment',
+          '--environment-name',
+          ecs_cdp_environment_name
+        ]
+      }}
+  environment:
+    CDP_CONFIG_FILE: "{{ ecs_cdp_profile_dir.path }}/config"
+    CDP_SHARED_CREDENTIALS_FILE: "{{ ecs_cdp_profile_dir.path }}/credentials"
+    HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
+  register: ecs_requested_environment_describe
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Parse directly described ECS environment
+  ansible.builtin.set_fact:
+    ecs_requested_environment_direct: >-
+      {{
+        (
+          (ecs_requested_environment_describe.stdout | from_json).environment
+          | default({})
+        )
+        if (
+          ecs_requested_environment_describe.rc | default(1) == 0
+          and ecs_requested_environment_describe.stdout | default('') | length > 0
+        )
+        else {}
+      }}
+
 - name: List existing ECS environments
   ansible.builtin.command:
     argv: "{{ ecs_cdp_cli_prefix + ['environments', 'list-environments'] }}"
@@ -214,9 +250,13 @@
   ansible.builtin.set_fact:
     ecs_requested_environment_matches: >-
       {{
-        ecs_existing_environments
-        | selectattr('environmentName', 'equalto', ecs_cdp_environment_name)
-        | list
+        [ecs_requested_environment_direct]
+        if (ecs_requested_environment_direct | length > 0)
+        else (
+          ecs_existing_environments
+          | selectattr('environmentName', 'equalto', ecs_cdp_environment_name)
+          | list
+        )
       }}
 
 - name: Resolve existing ECS environment name

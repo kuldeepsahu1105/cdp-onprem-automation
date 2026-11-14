@@ -54,6 +54,12 @@ assert (
     "{{ ecs_iam_bootstrap_access_key_id_effective | to_json }}"
     in credentials_provision_text
 )
+assert "Describe requested ECS environment before creation" in credentials_provision_text
+assert "'describe-environment'" in credentials_provision_text
+assert "ecs_requested_environment_direct" in credentials_provision_text
+assert credentials_provision_text.index(
+    "Describe requested ECS environment before creation"
+) < credentials_provision_text.index("Create missing ECS private-cloud environment")
 
 playbook = root / "ansible-playbooks/roles/ecs/tasks/setup_data_services.yml"
 playbook_text = playbook.read_text()
