@@ -269,6 +269,25 @@
         else {}
       }}
 
+- name: Sanitize requested ECS environment lookup error
+  ansible.builtin.set_fact:
+    ecs_requested_environment_describe_error: >-
+      {{
+        (
+          ecs_requested_environment_describe.stderr
+          | default(ecs_requested_environment_describe.stdout, true)
+          | default('No CLI error text returned.', true)
+        )
+        | replace(ecs_iam_bootstrap_access_key_id_effective, '***')
+        | replace(ecs_iam_bootstrap_private_key_effective, '***')
+        | replace(cm_admin_pass, '***')
+        | regex_replace('[\r\n]+', ' ')
+        | trim
+        | truncate(1200, true, '...')
+      }}
+  no_log: true
+  when: ecs_requested_environment_describe.rc | default(1) | int != 0
+
 - name: List existing ECS environments
   ansible.builtin.command:
     argv: "{{ ecs_cdp_cli_prefix + ['environments', 'list-environments'] }}"
@@ -278,15 +297,50 @@
     HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
   register: ecs_existing_environments_command
   changed_when: false
+  failed_when: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Parse existing ECS environment list response
+  ansible.builtin.set_fact:
+    ecs_existing_environments_payload: >-
+      {{
+        ecs_existing_environments_command.stdout | from_json
+        if (
+          ecs_existing_environments_command.rc | default(1) | int == 0
+          and ecs_existing_environments_command.stdout
+            | default('')
+            | trim
+            is match('^[{]')
+        )
+        else {}
+      }}
 
 - name: Parse existing ECS environments
   ansible.builtin.set_fact:
     ecs_existing_environments: >-
       {{
-        (ecs_existing_environments_command.stdout | from_json).environments
+        ecs_existing_environments_payload.environments
         | default([])
       }}
+
+- name: Sanitize ECS environment list error
+  ansible.builtin.set_fact:
+    ecs_existing_environments_error: >-
+      {{
+        (
+          ecs_existing_environments_command.stderr
+          | default(ecs_existing_environments_command.stdout, true)
+          | default('No CLI error text returned.', true)
+        )
+        | replace(ecs_iam_bootstrap_access_key_id_effective, '***')
+        | replace(ecs_iam_bootstrap_private_key_effective, '***')
+        | replace(cm_admin_pass, '***')
+        | regex_replace('[\r\n]+', ' ')
+        | trim
+        | truncate(1200, true, '...')
+      }}
+  no_log: true
+  when: ecs_existing_environments_command.rc | default(1) | int != 0
 
 - name: Select requested ECS environment
   ansible.builtin.set_fact:
@@ -337,13 +391,19 @@
       - "No existing ECS environment matched {{ ecs_cdp_environment_name }}."
       - >-
         describe rc={{ ecs_requested_environment_describe.rc | default('unknown') }},
+        error={{
+          ecs_requested_environment_describe_error
+          | default('none')
+        }},
         response keys={{
           ecs_requested_environment_describe_payload.keys() | list
           if ecs_requested_environment_describe_payload is mapping
           else []
         }}
       - >-
-        list count={{ ecs_existing_environments | length }},
+        list rc={{ ecs_existing_environments_command.rc | default('unknown') }},
+        error={{ ecs_existing_environments_error | default('none') }},
+        count={{ ecs_existing_environments | length }},
         listed names={{
           ecs_existing_environments
           | selectattr('environmentName', 'defined')
@@ -404,13 +464,53 @@
     HOME: "{{ ecs_cdp_user_home.stdout | trim }}"
   register: ecs_create_environment
   no_log: true
+  changed_when: ecs_create_environment.rc | default(1) | int == 0
+  failed_when: false
   when: ecs_cdp_environment_name_effective | length == 0
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+
+- name: Sanitize ECS environment creation error
+  ansible.builtin.set_fact:
+    ecs_create_environment_error: >-
+      {{
+        (
+          ecs_create_environment.stderr
+          | default(ecs_create_environment.stdout, true)
+          | default('No CLI error text returned.', true)
+        )
+        | replace(ecs_iam_bootstrap_access_key_id_effective, '***')
+        | replace(ecs_iam_bootstrap_private_key_effective, '***')
+        | replace(cm_admin_pass, '***')
+        | regex_replace('[\r\n]+', ' ')
+        | trim
+        | truncate(1600, true, '...')
+      }}
+  no_log: true
+  when:
+    - ecs_cdp_environment_name_effective | length == 0
+    - ecs_create_environment.rc | default(1) | int != 0
+
+- name: Fail with sanitized ECS environment creation error
+  ansible.builtin.fail:
+    msg: >-
+      create-private-environment failed for {{ ecs_cdp_environment_name }}
+      (rc={{ ecs_create_environment.rc | default('unknown') }}).
+      CM={{ cm_host_fqdn }}:{{ cm_https_port }},
+      baseCluster={{ cdh_basecluster_name }},
+      domain={{ ecs_app_domain }}.
+      CLI error: {{ ecs_create_environment_error }}.
+      The preceding describe/list diagnostics show whether this is an
+      authentication, endpoint, visibility, or duplicate-environment failure.
+  when:
+    - ecs_cdp_environment_name_effective | length == 0
+    - ecs_create_environment.rc | default(1) | int != 0
 
 - name: Use created ECS environment name
   ansible.builtin.set_fact:
     ecs_cdp_environment_name_effective: "{{ ecs_cdp_environment_name }}"
-  when: ecs_cdp_environment_name_effective | length == 0
+  when:
+    - ecs_cdp_environment_name_effective | length == 0
+    - ecs_create_environment.rc | default(1) | int == 0
 
 - name: Publish effective ECS environment name
   ansible.builtin.set_fact:
