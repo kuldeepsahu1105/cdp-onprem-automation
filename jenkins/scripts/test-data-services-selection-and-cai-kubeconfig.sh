@@ -229,32 +229,6 @@ assert "ecs_coredns_kubeconfig_path" in combined
 group_vars = yaml.safe_load(
     (root / "ansible-playbooks/group_vars/all.yml").read_text()
 )
-assert (
-    group_vars["krb5_libdefaults_default_ccache_line"]
-    == "default_ccache_name = FILE:/tmp/krb5cc_%{uid}"
-)
-assert (
-    group_vars["krb5_cm_libdefaults_safety_valve"]
-    == "{{ krb5_libdefaults_default_ccache_line }}"
-)
-assert (
-    group_vars["krb5_kcm_default_ccache_path"]
-    == "/etc/krb5.conf.d/kcm_default_ccache"
-)
-ccache_policy = (
-    root
-    / "ansible-playbooks/roles/identity/tasks/"
-    "ensure_krb5_default_ccache_commented.yml"
-).read_text()
-assert "replace active default_ccache_name with FILE" in ccache_policy
-assert ccache_policy.count("krb5_libdefaults_default_ccache_line") == 3
-assert "disable unavailable KCM default cache" in ccache_policy
-assert "default_ccache_name\\s*=\\s*KCM:" in ccache_policy
-ecs_cluster_playbook = (
-    root / "ansible-playbooks/33_setup_ecs_cluster.yml"
-).read_text()
-assert "Enforce FILE Kerberos cache policy before ECS installation" in ecs_cluster_playbook
-assert "tasks_from: ensure_krb5_default_ccache_commented" in ecs_cluster_playbook
 assert group_vars["ecs_cde_virtual_cluster_name_max_length"] == 30
 assert group_vars["ecs_cde_virtual_cluster_prefix_max_length"] == 8
 cde_vc_text = (

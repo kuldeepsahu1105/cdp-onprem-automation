@@ -248,8 +248,7 @@ Access at runtime: `{{ os_vars[ansible_os_family].<key> }}` or `{{ os.<key> }}` 
 | `ipa_server_install_allow_zone_overlap` | `false` by default; explicitly pass `--allow-zone-overlap` when intentionally using an IPA DNS zone that already exists in public/upstream DNS |
 | `krb5_enc_types` | Space-separated CM `KRB_ENC_TYPES` (default `aes256-cts aes128-cts`) |
 | `krb5_cm_managed_krb5_conf` | CM `KRB_MANAGE_KRB5_CONF` (default `true`); `false` leaves `/etc/krb5.conf` to IPA/Ansible |
-| `krb5_cm_libdefaults_safety_valve` | CM `KRB_LIBDEFAULTS_SAFETY_VALVE` — sets an active FILE `default_ccache_name` after RHEL KCM includes when CM deploys krb5.conf |
-| `krb5_kcm_default_ccache_path` | RHEL KCM drop-in disabled on clients before ECS installation so it cannot be flattened into workload ConfigMaps |
+| `krb5_cm_libdefaults_safety_valve` | CM `KRB_LIBDEFAULTS_SAFETY_VALVE` — preserves commented KEYRING `default_ccache_name` when CM deploys krb5.conf |
 | `krb5_allow_weak_rc4` | `false` — set `true` only if legacy RC4 clients are required (not recommended; Java 17+ disables RC4) |
 | `krb5_ipa_default_enctypes` / `krb5_ipa_permitted_enctypes` | Long krb5 names for FreeIPA KDC `krb5.conf.d` snippet (`configure_ipa_krb_enc_types.yml`) |
 | `krb5_ticket_lifetime` / `krb5_renew_lifetime` | Client ticket request defaults (24 hours / 7 days) used by long-running roles such as Hue `KT_RENEWER` |
@@ -676,7 +675,7 @@ Install: `ansible-galaxy collection install -r requirements.yml`
 | `common_tasks/detect_ipa_client_install_state.yml` | `default.conf` vs partial client state (`/var/lib/ipa-client/sysrestore` markers and deployment-specific `ca.crt`) before enroll; ordinary package-created `/etc/ipa` files are ignored |
 | `common_tasks/preflight_ipa_client_install.yml` | Optional hostname/DNS/`getent` asserts before `ipa-client-install` when **`ipa_client_preflight_enabled: true`** (default **`false`**) on hosts without `/etc/ipa/default.conf` |
 | `common_tasks/ensure_krb5_ansible_ccache_note.yml` | Comment-only **`/etc/krb5.conf.d/ansible-ccache-note.conf`**; play **12** / **16**; **SSSD restart** on clients when drop-in changes and SSSD is active |
-| `common_tasks/ensure_krb5_default_ccache_commented.yml` | **Clients:** set active FILE **`default_ccache_name`** (`krb5_libdefaults_default_ccache_line`) so ECS-generated ConfigMaps do not select KCM. **ipaserver:** restore active KEYRING unless **`krb5_comment_default_ccache_on_ipaserver: true`**; play **12** / **16** / **`join_freeipa_client`**; **`ipactl`** / **SSSD** restart when krb5.conf changes |
+| `common_tasks/ensure_krb5_default_ccache_commented.yml` | **Clients:** comment KEYRING **`default_ccache_name`** (`krb5_libdefaults_default_ccache_commented_line`). **ipaserver:** restore active KEYRING unless **`krb5_comment_default_ccache_on_ipaserver: true`**; play **12** / **16** / **`join_freeipa_client`**; **`ipactl`** / **SSSD** restart when krb5.conf changes |
 | `common_tasks/restart_sssd_after_krb5_ccache_note.yml` | Helper for krb5.conf.d / main krb5.conf client adjustments |
 | `common_tasks/ensure_ipa_httpd_behind_caddy_before_client.yml` | Playbook **16** localhost play: resolve Caddy gate and **`build_deployment_portal_facts.yml`** before client enroll |
 | `common_tasks/sync_ipa_httpd_caddy_proxy_state_on_ipaserver.yml` | Playbook **16** **`[ipaserver]`** play: load portal facts; **`manage_ipa_httpd_caddy_proxy_on_ipaserver.yml`** (cleanup by default; apply + **`preflight_ipa_json_on_ipaserver.yml`** only when **`deployment_portal_ipa_httpd_proxy_enabled`**) |

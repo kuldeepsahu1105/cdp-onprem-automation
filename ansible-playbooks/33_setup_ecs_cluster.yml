@@ -35,12 +35,6 @@
       ansible.builtin.import_tasks: common_tasks/configure_resolv_conf.yml
       when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
 
-    - name: Enforce FILE Kerberos cache policy before ECS installation
-      ansible.builtin.import_role:
-        name: identity
-        tasks_from: ensure_krb5_default_ccache_commented
-      when: ecs_deploy_enabled | default('auto') | string | lower != 'false'
-
 - name: Install ECS (Cloudera Data Services) cluster via Cloudera Manager
   hosts: localhost
   connection: local
