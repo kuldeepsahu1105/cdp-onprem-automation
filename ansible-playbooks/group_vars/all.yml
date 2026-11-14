@@ -129,9 +129,12 @@ freeipa_ansible_module_kerberos_packages:
     - krb5-workstation
   Debian:
     - krb5-user
-# Clients: comment KEYRING in /etc/krb5.conf (ensure_krb5_default_ccache_commented.yml). ipaserver keeps active KEYRING by default.
-krb5_comment_default_ccache_on_ipaserver: false
+# Match the Cloudera Community Edition Kerberos prerequisites on every enrolled host:
+# keep FreeIPA's main-file KEYRING line commented, remove the RHEL KCM drop-in
+# default, and let SSSD create FILE caches for login sessions.
 krb5_libdefaults_default_ccache_commented_line: "#default_ccache_name = KEYRING:persistent:%{uid}"
+krb5_kcm_default_ccache_path: /etc/krb5.conf.d/kcm_default_ccache
+krb5_sssd_ccname_template: "FILE:/tmp/krb5cc_%U_XXXXXX"
 ipadm_password: "{{ ipaadmin_password }}"
 # Shared lab password (ECS UMS bootstrap, Kerberos admin, ECS LDAP admin); override in Jenkins ANSIBLE_GROUP_VARS_YAML
 common_password: "{{ ipaadmin_password }}"
@@ -1154,7 +1157,8 @@ cloudera_cloud_collection_git_ref: 78e5bbfff1cad88dc9602f8026d65bc7e3c88781
 # CM Administration → Settings: "Manage krb5.conf through Cloudera Manager" (KRB_MANAGE_KRB5_CONF).
 # When true, CM regenerates and deploys krb5.conf on cluster hosts (does not merge IPA/Ansible edits).
 # Preserve fleet ccache policy via KRB_LIBDEFAULTS_SAFETY_VALVE (play 30): same commented KEYRING line as
-# identity playbooks on workers; automation still uses KRB5CCNAME=FILE:… only. Set krb5_cm_managed_krb5_conf:
+# identity playbooks on every enrolled host. Identity also removes the active RHEL KCM drop-in default and
+# configures SSSD FILE caches; automation uses KRB5CCNAME=FILE:… only. Set krb5_cm_managed_krb5_conf:
 # false if hosts must keep a hand-managed /etc/krb5.conf (and krb5.conf.d snippets) without CM overwrite.
 krb5_cm_managed_krb5_conf: true
 krb5_conf_path: "/etc/krb5.conf"

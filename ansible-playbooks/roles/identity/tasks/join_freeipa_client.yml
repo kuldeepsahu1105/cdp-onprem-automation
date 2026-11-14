@@ -100,7 +100,7 @@
 - name: Verify complete FreeIPA client enrollment
   ansible.builtin.import_tasks: verify_freeipa_client_enrollment.yml
 
-- name: Keep KEYRING default_ccache_name commented in krb5.conf after IPA client enroll
+- name: Enforce FILE-cache policy after IPA client enrollment
   ansible.builtin.import_tasks: ensure_krb5_default_ccache_commented.yml
   when: ipa_client_default_conf_now.stat.exists | default(false)
 

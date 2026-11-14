@@ -1,5 +1,5 @@
 ---
-# Enrolled FreeIPA clients — comment-only krb5.conf.d drop-in; restart SSSD when it is already running.
+# Enrolled FreeIPA hosts — restart SSSD after credential-cache policy changes when it is already running.
 
 - name: Kerberos — probe whether SSSD is active before restart
   ansible.builtin.command: systemctl is-active sssd
@@ -7,7 +7,7 @@
   changed_when: false
   failed_when: false
 
-- name: Kerberos — restart SSSD after krb5.conf.d ansible-ccache-note change
+- name: Kerberos — restart SSSD after credential-cache policy change
   ansible.builtin.systemd:
     name: sssd
     state: restarted

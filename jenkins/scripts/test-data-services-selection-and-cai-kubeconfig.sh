@@ -13,6 +13,25 @@ import tempfile
 import yaml
 
 root = Path(sys.argv[1])
+group_vars = yaml.safe_load(
+    (root / "ansible-playbooks/group_vars/all.yml").read_text()
+)
+ccache_policy = (
+    root
+    / "ansible-playbooks/roles/identity/tasks/ensure_krb5_default_ccache_commented.yml"
+).read_text()
+assert "krb5_comment_default_ccache_on_ipaserver" not in group_vars
+assert group_vars["krb5_kcm_default_ccache_path"] == (
+    "/etc/krb5.conf.d/kcm_default_ccache"
+)
+assert group_vars["krb5_sssd_ccname_template"] == "FILE:/tmp/krb5cc_%U_XXXXXX"
+assert "remove KCM default_ccache_name from RHEL drop-in" in ccache_policy
+assert "option: default_ccache_name" in ccache_policy
+assert "state: absent" in ccache_policy
+assert "configure SSSD login sessions to use FILE caches" in ccache_policy
+assert 'section: "domain/{{ ipaserver_domain }}"' in ccache_policy
+assert "value: \"{{ krb5_sssd_ccname_template }}\"" in ccache_policy
+
 credentials_parser = (
     root / "ansible-playbooks/files/parse_ecs_api_credentials_cache.py"
 )
@@ -253,9 +272,7 @@ combined = "\n".join(path.read_text() for path in cai_files)
 assert "ecs_kubeconfig_path" not in combined
 assert "ecs_coredns_kubeconfig_path" in combined
 
-group_vars = yaml.safe_load(
-    (root / "ansible-playbooks/group_vars/all.yml").read_text()
-)
+
 assert group_vars["ecs_cde_virtual_cluster_name_max_length"] == 30
 assert group_vars["ecs_cde_virtual_cluster_prefix_max_length"] == 8
 cde_vc_text = (
