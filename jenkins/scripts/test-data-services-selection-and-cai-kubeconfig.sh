@@ -75,6 +75,8 @@ assert "Sanitize ECS environment creation error" in credentials_provision_text
 assert "Fail with sanitized ECS environment creation error" in credentials_provision_text
 assert "create-private-environment failed for" in credentials_provision_text
 assert "failed_when: false" in credentials_provision_text
+assert "ignore_errors: true" in credentials_provision_text
+assert "default(ecs_create_environment.msg, true)" in credentials_provision_text
 assert "| default(ecs_automation_environment.stdout | from_json, true)" in credentials_provision_text
 assert credentials_provision_text.index(
     "Describe requested ECS environment before creation"

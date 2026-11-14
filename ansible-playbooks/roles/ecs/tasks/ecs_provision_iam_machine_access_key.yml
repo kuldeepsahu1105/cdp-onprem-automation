@@ -466,6 +466,7 @@
   no_log: true
   changed_when: ecs_create_environment.rc | default(1) | int == 0
   failed_when: false
+  ignore_errors: true
   when: ecs_cdp_environment_name_effective | length == 0
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
 
@@ -476,6 +477,7 @@
         (
           ecs_create_environment.stderr
           | default(ecs_create_environment.stdout, true)
+          | default(ecs_create_environment.msg, true)
           | default('No CLI error text returned.', true)
         )
         | replace(ecs_iam_bootstrap_access_key_id_effective, '***')
@@ -488,7 +490,9 @@
   no_log: true
   when:
     - ecs_cdp_environment_name_effective | length == 0
-    - ecs_create_environment.rc | default(1) | int != 0
+    - >-
+      ecs_create_environment.failed | default(false) | bool
+      or ecs_create_environment.rc | default(1) | int != 0
 
 - name: Fail with sanitized ECS environment creation error
   ansible.builtin.fail:
@@ -503,7 +507,9 @@
       authentication, endpoint, visibility, or duplicate-environment failure.
   when:
     - ecs_cdp_environment_name_effective | length == 0
-    - ecs_create_environment.rc | default(1) | int != 0
+    - >-
+      ecs_create_environment.failed | default(false) | bool
+      or ecs_create_environment.rc | default(1) | int != 0
 
 - name: Use created ECS environment name
   ansible.builtin.set_fact:
