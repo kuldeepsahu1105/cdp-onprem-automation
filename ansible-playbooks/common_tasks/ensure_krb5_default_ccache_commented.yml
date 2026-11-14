@@ -1,5 +1,0 @@
----
-- name: Compatibility entry point for identity ensure krb5 default ccache commented
-  ansible.builtin.import_role:
-    name: identity
-    tasks_from: ensure_krb5_default_ccache_commented
