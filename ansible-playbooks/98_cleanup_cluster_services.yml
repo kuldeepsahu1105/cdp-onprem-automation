@@ -536,6 +536,60 @@
         enabled: true
       when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
 
+    - name: Verify ECS runtime services are inactive after cleanup
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - "{{ item }}"
+      loop:
+        - rke2-server
+        - rke2-agent
+        - k3s
+        - k3s-agent
+        - containerd
+        - docker
+      register: cleanup_ecs_runtime_service_checks
+      changed_when: false
+      failed_when: false
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Require ECS runtime services to remain stopped
+      ansible.builtin.assert:
+        that:
+          - item.rc | int != 0
+        fail_msg: >-
+          ECS cleanup left {{ item.item }} active on {{ inventory_hostname }}.
+          Do not rerun First Run until the stale runtime is stopped.
+      loop: "{{ cleanup_ecs_runtime_service_checks.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Read ECS node TCP listeners after cleanup
+      ansible.builtin.command:
+        argv:
+          - ss
+          - -H
+          - -ltnp
+      register: cleanup_ecs_tcp_listeners
+      changed_when: false
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
+    - name: Require ingress host ports to be released after cleanup
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              cleanup_ecs_tcp_listeners.stdout
+              | regex_search('(?m)(^|\\s)[^\\s]*:(80|443)\\s')
+            ) is none
+        fail_msg: >-
+          ECS cleanup left ingress host port 80 or 443 occupied on
+          {{ inventory_hostname }}:
+          {{ cleanup_ecs_tcp_listeners.stdout }}
+      when: hostvars['localhost']['cleanup_cluster_services_apply'] | bool
+
 - name: Report preserved installation assets
   hosts: localhost
   connection: local

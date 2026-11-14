@@ -52,7 +52,7 @@ Options:
   --help, -h       Show this help
 
 Environment:
-  DEPLOY_PHASE     1|2|3|cm_tls|cdh|portal|monitoring|ecs|6|7|8|4|5|all|destroy_stack
+  DEPLOY_PHASE     1|2|3|cm_tls|cdh|portal|monitoring|ecs_cleanup|ecs|6|7|8|4|5|all|destroy_stack
   DESTROY_STACK_CONFIRM   true — required for terraform destroy (DRY_RUN=true = destroy plan only)
   CLEANUP_BEFORE_DESTROY  true — run 99_cleanup.yml (cleanup_e2e) before terraform destroy
   ANSIBLE_RUN_SSH_PREQS   auto|true|false (default auto) — 00_setup_ssh_preqs on phase 1/all only
@@ -574,6 +574,27 @@ run_phase_8() {
   ui_phase_footer "$_phase"
 }
 
+run_phase_ecs_cleanup() {
+  local _phase="ECS cleanup — destructive service rebuild"
+  local execute=true
+  local confirm="DELETE-CLUSTER-SERVICE-DATA"
+  ui_phase_header "$_phase"
+  if is_dry_run; then
+    execute=false
+    confirm=""
+    ui_info "Dry-run selected — previewing ECS cleanup without deleting state."
+  elif [[ "${ECS_CLEANUP_CONFIRM:-}" != "DELETE-ECS-CLUSTER-DATA" ]]; then
+    ui_err "ECS cleanup requires ECS_CLEANUP_CONFIRM=DELETE-ECS-CLUSTER-DATA."
+    return 2
+  fi
+  run_playbook 98_cleanup_cluster_services.yml \
+    -e cleanup_cluster_services_scope_input=ecs \
+    -e "cleanup_cluster_services_execute_input=${execute}" \
+    -e cleanup_cluster_services_remove_service_lib_dirs_input=true \
+    -e "cleanup_cluster_services_confirm_input=${confirm}"
+  ui_phase_footer "$_phase"
+}
+
 run_phase_5() {
   local _phase="5 — ECS cluster install"
   local ecs_extra=()
@@ -605,6 +626,7 @@ case "$DEPLOY_PHASE" in
   cdh|cdh_install|cdh_base|base) run_phase_cdh ;;
   portal|deployment_portal) run_phase_portal ;;
   monitoring|monitor) run_phase_monitoring ;;
+  ecs_cleanup|cleanup_ecs) run_phase_ecs_cleanup ;;
   4|cluster|phase4) run_phase_4 ;;
   5|ecs|phase5) run_phase_5 ;;
   6|portal_refresh|phase6) run_phase_6 ;;
@@ -632,7 +654,7 @@ case "$DEPLOY_PHASE" in
     run_phase_5
     ;;
   *)
-    ui_err "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|cm_tls|cdh|portal|monitoring|ecs|6|7|8|all|destroy_stack or prereq|identity|cm_install|…)"
+    ui_err "Unknown DEPLOY_PHASE=$DEPLOY_PHASE (use 1|2|3|cm_tls|cdh|portal|monitoring|ecs_cleanup|ecs|6|7|8|all|destroy_stack or prereq|identity|cm_install|…)"
     exit 1
     ;;
 esac

@@ -172,7 +172,7 @@ If `PIPELINE_STAGES` is empty (old job config), the pipeline falls back to `VALI
 
 Select one or more stage checkboxes. Fixed run order (each Ansible step is its own Jenkins stage in the UI):
 
-`VALIDATE` → `TERRAFORM` → `PREREQS` → `PORTAL` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL` → `ECS_POST_INSTALL_TASKS` → `ECS_DATA_SERVICES` → `STARTSTOP_AUTOMATION` → `DESTROY_STACK`
+`VALIDATE` → `TERRAFORM` → `ECS_CLEANUP` → `PREREQS` → `PORTAL` → `IDENTITY` → `CM_INSTALL` → `CM_TLS_KRB_LDAP` → `CDH_INSTALL` → `MONITORING` → `ECS_INSTALL` → `ECS_POST_INSTALL_TASKS` → `ECS_DATA_SERVICES` → `STARTSTOP_AUTOMATION` → `DESTROY_STACK`
 
 Selection is normalized case-insensitively, trims whitespace, accepts existing aliases (including `CDH_BASE`), and removes duplicates before execution. Stages never implicitly add `PORTAL` or `MONITORING`: selecting `MONITORING` runs only playbook **32**, so select `PORTAL` too when the Caddy foundation has not already been bootstrapped. Jenkins **Restart from Stage** reconstructs the same canonical selection from the original build parameters.
 
@@ -182,6 +182,7 @@ Selection is normalized case-insensitively, trims whitespace, accepts existing a
 |---|---|
 | `VALIDATE` | `validate-prereqs.sh` — standard tool, AWS, tfvars, Ansible syntax, and inventory checks (no deploy) |
 | `TERRAFORM` | EC2/VPC/SG/EIP via Terraform; `inventory.ini` + `.pem` key |
+| `ECS_CLEANUP` | Destructive ECS-only rebuild using playbook **98**. Requires `ECS_CLEANUP_CONFIRM=DELETE-ECS-CLUSTER-DATA`; preserves IPA, CM, base, PostgreSQL, parcels, and CSDs. |
 | `PREREQS` | Ansible **phase 1** — OS prereqs playbooks 01–09 |
 | `PORTAL` | Bootstrap Caddy/pgAdmin/index (`10`); before CM when `DEPLOYMENT_PORTAL_ENABLED` |
 | `IDENTITY` | Ansible **phase 2** — FreeIPA or AD (`11_identity_setup.yml` → `12_setup_freeipa_server.yml` with DNS preflight + VPC forwarder); refreshes portal index (`35`). **Checkout `EXECUTION_BRANCH=main` at commit `e30c2de` or newer** — older trees used `dns_forwarders: no` → `--no-forwarders` on AWS and skipped dig preflight (IDENTITY failures: `[Errno 2]`, ~10 playbook tasks). |
@@ -231,6 +232,7 @@ Full teardown steps are also in the **`PIPELINE_STAGES_REFERENCE`** text area on
 | Install CDH on an existing secured CM | `VALIDATE,CDH_INSTALL` |
 | Install monitoring on existing CDH | `VALIDATE,PORTAL,MONITORING` |
 | Install ECS on existing CDH | `VALIDATE,ECS_INSTALL,ECS_POST_INSTALL_TASKS` |
+| Rebuild a failed/partial ECS First Run | `VALIDATE,ECS_CLEANUP,IDENTITY,CM_TLS_KRB_LDAP,ECS_INSTALL,ECS_POST_INSTALL_TASKS` plus `ECS_CLEANUP_CONFIRM=DELETE-ECS-CLUSTER-DATA` |
 | Reconcile post-install tasks on existing ECS | `VALIDATE,ECS_POST_INSTALL_TASKS` |
 | Install or update data services on existing ECS | `VALIDATE,ECS_DATA_SERVICES` |
 | Install/update EC2 start/stop helper | `VALIDATE,STARTSTOP_AUTOMATION` |

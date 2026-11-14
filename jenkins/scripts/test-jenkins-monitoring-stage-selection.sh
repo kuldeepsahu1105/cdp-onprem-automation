@@ -71,6 +71,7 @@ assert monitoring_stage.end() < jenkinsfile.index("stage('Ansible 4 — Identity
 pipeline_order = [
     "VALIDATE",
     "TERRAFORM",
+    "ECS_CLEANUP",
     "PREREQS",
     "PORTAL",
     "MONITORING",
@@ -118,6 +119,12 @@ assert effective("ECS_INSTALL,ECS_DATA_SERVICES") == [
     "ECS_INSTALL",
     "ECS_DATA_SERVICES",
 ]
+assert effective("VALIDATE,ECS_CLEANUP,IDENTITY,ECS_INSTALL") == [
+    "VALIDATE",
+    "ECS_CLEANUP",
+    "IDENTITY",
+    "ECS_INSTALL",
+]
 assert effective([" ecs ", "DATA_SERVICES", "ecs-install", "dataservices"]) == [
     "ECS_INSTALL",
     "ECS_DATA_SERVICES",
@@ -129,7 +136,7 @@ assert effective(
     "VALIDATE,TERRAFORM,PREREQS,PORTAL,MONITORING,IDENTITY,CM_INSTALL,"
     "CM_TLS_KRB_LDAP,CDH_INSTALL,ECS_INSTALL,ECS_POST_INSTALL_TASKS,"
     "ECS_DATA_SERVICES,ECS_INSTALL"
-) == pipeline_order[:-2]
+) == [stage for stage in pipeline_order[:-2] if stage != "ECS_CLEANUP"]
 assert effective(effective("ECS_INSTALL,ECS_DATA_SERVICES")) == [
     "ECS_INSTALL",
     "ECS_DATA_SERVICES",
@@ -142,6 +149,7 @@ assert effective(" ECS_INSTALL, ECS_DATA_SERVICES ") == effective(
 
 pvc_setup = (Path(sys.argv[1]).parent / "ansible-playbooks" / "pvc_setup.sh").read_text()
 assert "_portal_actions_selected()" in pvc_setup
+assert "ecs_cleanup|cleanup_ecs) run_phase_ecs_cleanup" in pvc_setup
 monitoring_phase = re.search(
     r"run_phase_monitoring\(\) \{(?P<body>.*?)\n\}",
     pvc_setup,

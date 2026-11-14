@@ -1,0 +1,116 @@
+---
+- name: First Run diagnostics | Read kube-system pods
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - kube-system
+      - get
+      - pods
+      - --output
+      - wide
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  register: ecs_first_run_kube_system_pods
+  changed_when: false
+  failed_when: false
+
+- name: First Run diagnostics | Describe ingress-nginx controller
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - kube-system
+      - describe
+      - daemonset
+      - rke2-ingress-nginx-controller
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  register: ecs_first_run_ingress_daemonset
+  changed_when: false
+  failed_when: false
+
+- name: First Run diagnostics | Read recent kube-system events
+  ansible.builtin.command:
+    argv:
+      - "{{ ecs_coredns_kubectl_path }}"
+      - --kubeconfig
+      - "{{ ecs_coredns_kubeconfig_path }}"
+      - --namespace
+      - kube-system
+      - get
+      - events
+      - --sort-by=.lastTimestamp
+  become: true
+  delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
+  register: ecs_first_run_kube_system_events
+  changed_when: false
+  failed_when: false
+
+- name: First Run diagnostics | Read node TCP listeners
+  ansible.builtin.command:
+    argv:
+      - ss
+      - -H
+      - -ltnp
+  become: true
+  delegate_to: "{{ ecs_first_run_diagnostic_node }}"
+  loop: >-
+    {{
+      groups[ecs_cluster_master_group] | default([])
+      + groups[ecs_cluster_worker_group] | default([])
+    }}
+  loop_control:
+    loop_var: ecs_first_run_diagnostic_node
+    label: "{{ ecs_first_run_diagnostic_node }}"
+  register: ecs_first_run_node_listeners
+  changed_when: false
+  failed_when: false
+
+- name: First Run diagnostics | Read node runtime process state
+  ansible.builtin.command:
+    argv:
+      - ps
+      - -C
+      - rke2
+      - -C
+      - rke2-server
+      - -C
+      - rke2-agent
+      - -C
+      - containerd
+      - -C
+      - containerd-shim
+      - -o
+      - pid,ppid,stat,etimes,comm
+  become: true
+  delegate_to: "{{ ecs_first_run_diagnostic_node }}"
+  loop: >-
+    {{
+      groups[ecs_cluster_master_group] | default([])
+      + groups[ecs_cluster_worker_group] | default([])
+    }}
+  loop_control:
+    loop_var: ecs_first_run_diagnostic_node
+    label: "{{ ecs_first_run_diagnostic_node }}"
+  register: ecs_first_run_node_processes
+  changed_when: false
+  failed_when: false
+
+- name: First Run diagnostics | Print uncensored ingress state
+  ansible.builtin.debug:
+    msg:
+      - "kube-system pods (rc={{ ecs_first_run_kube_system_pods.rc | default('unavailable') }}):"
+      - "{{ ecs_first_run_kube_system_pods | to_nice_json }}"
+      - "ingress-nginx daemonset (rc={{ ecs_first_run_ingress_daemonset.rc | default('unavailable') }}):"
+      - "{{ ecs_first_run_ingress_daemonset | to_nice_json }}"
+      - "recent kube-system events (rc={{ ecs_first_run_kube_system_events.rc | default('unavailable') }}):"
+      - "{{ ecs_first_run_kube_system_events | to_nice_json }}"
+      - "node TCP listeners:"
+      - "{{ ecs_first_run_node_listeners.results | default([]) | to_nice_json }}"
+      - "node RKE2/containerd processes:"
+      - "{{ ecs_first_run_node_processes.results | default([]) | to_nice_json }}"

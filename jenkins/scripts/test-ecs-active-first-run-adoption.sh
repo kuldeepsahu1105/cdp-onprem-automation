@@ -117,6 +117,12 @@ wait = yaml.safe_load(
     (role_tasks / "ecs_wait_control_plane_first_run.yml").read_text()
 )
 wait_by_name = {task.get("name"): task for task in wait}
+submitted_wait = wait_by_name[
+    "Wait for submitted ECS control plane First Run command"
+]
+assert submitted_wait["rescue"][0]["ansible.builtin.import_tasks"] == (
+    "ecs_first_run_failure_diagnostics.yml"
+)
 active_wait = wait_by_name[
     "Wait for active CM commands during adopted ECS First Run"
 ]
@@ -141,6 +147,35 @@ service_wait_index = next(
     == "Wait for adopted ECS First Run services after CoreDNS repair"
 )
 assert active_wait_index < service_wait_index
+
+diagnostics = yaml.safe_load(
+    (role_tasks / "ecs_first_run_failure_diagnostics.yml").read_text()
+)
+diagnostic_names = {task.get("name") for task in diagnostics}
+assert "First Run diagnostics | Describe ingress-nginx controller" in (
+    diagnostic_names
+)
+assert "First Run diagnostics | Read recent kube-system events" in (
+    diagnostic_names
+)
+assert "First Run diagnostics | Read node TCP listeners" in diagnostic_names
+assert "First Run diagnostics | Read node runtime process state" in (
+    diagnostic_names
+)
+
+
+def assert_no_no_log(value):
+    if isinstance(value, dict):
+        assert "no_log" not in value
+        for nested in value.values():
+            assert_no_no_log(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            assert_no_no_log(nested)
+
+
+assert_no_no_log(submitted_wait)
+assert_no_no_log(diagnostics)
 
 wait_compat = (
     root / "ansible-playbooks/common_tasks/ecs_wait_control_plane_first_run.yml"
