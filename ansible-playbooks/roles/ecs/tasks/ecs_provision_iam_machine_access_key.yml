@@ -212,17 +212,59 @@
   failed_when: false
   delegate_to: "{{ groups[ecs_cluster_master_group][0] }}"
 
-- name: Parse directly described ECS environment
+- name: Parse requested ECS environment response
+  ansible.builtin.set_fact:
+    ecs_requested_environment_describe_payload: >-
+      {{
+        ecs_requested_environment_describe.stdout | from_json
+        if (
+          ecs_requested_environment_describe.rc | default(1) | int == 0
+          and ecs_requested_environment_describe.stdout
+            | default('')
+            | trim
+            is match('^[{]')
+        )
+        else {}
+      }}
+
+- name: Select directly described ECS environment response
+  ansible.builtin.set_fact:
+    ecs_requested_environment_candidate: >-
+      {{
+        ecs_requested_environment_describe_payload.environment
+        if (
+          ecs_requested_environment_describe_payload.environment is defined
+          and ecs_requested_environment_describe_payload.environment is mapping
+        )
+        else ecs_requested_environment_describe_payload
+      }}
+
+- name: Normalize directly described ECS environment
   ansible.builtin.set_fact:
     ecs_requested_environment_direct: >-
       {{
-        (
-          (ecs_requested_environment_describe.stdout | from_json).environment
-          | default({})
-        )
+        ecs_requested_environment_candidate
+        | combine({
+          'environmentName':
+            ecs_requested_environment_candidate.environmentName
+            | default(
+                ecs_requested_environment_candidate.name
+                | default(ecs_cdp_environment_name)
+              )
+        })
         if (
-          ecs_requested_environment_describe.rc | default(1) == 0
-          and ecs_requested_environment_describe.stdout | default('') | length > 0
+          ecs_requested_environment_candidate is mapping
+          and (
+            ecs_requested_environment_candidate.environmentName
+              | default('')
+              | length > 0
+            or ecs_requested_environment_candidate.name
+              | default('')
+              | length > 0
+            or ecs_requested_environment_candidate.crn
+              | default('')
+              | length > 0
+          )
         )
         else {}
       }}
@@ -286,8 +328,29 @@
       - >-
         Address={{ ecs_requested_environment_matches[0].address | default('unavailable') }},
         domain={{ ecs_requested_environment_matches[0].domain | default('unavailable') }},
-        clusters={{ ecs_requested_environment_matches[0].clusterNames | default([]) | join(',') }}
+        clusters={{ ecs_requested_environment_matches[0].clusterNames | default([]) | to_json }}
   when: ecs_requested_environment_matches | length > 0
+
+- name: Report ECS environment lookup before creation
+  ansible.builtin.debug:
+    msg:
+      - "No existing ECS environment matched {{ ecs_cdp_environment_name }}."
+      - >-
+        describe rc={{ ecs_requested_environment_describe.rc | default('unknown') }},
+        response keys={{
+          ecs_requested_environment_describe_payload.keys() | list
+          if ecs_requested_environment_describe_payload is mapping
+          else []
+        }}
+      - >-
+        list count={{ ecs_existing_environments | length }},
+        listed names={{
+          ecs_existing_environments
+          | selectattr('environmentName', 'defined')
+          | map(attribute='environmentName')
+          | list
+        }}
+  when: ecs_cdp_environment_name_effective | length == 0
 
 - name: Reject ambiguous ECS environment selection
   ansible.builtin.assert:
@@ -400,7 +463,12 @@
 - name: Resolve ECS environment CRN for automation permissions
   ansible.builtin.set_fact:
     ecs_automation_environment_crn: >-
-      {{ (ecs_automation_environment.stdout | from_json).environment.crn }}
+      {{
+        (
+          (ecs_automation_environment.stdout | from_json).environment
+          | default(ecs_automation_environment.stdout | from_json, true)
+        ).crn
+      }}
 
 - name: List tenant IAM roles for ECS automation user
   ansible.builtin.command:

@@ -56,12 +56,20 @@ assert (
 )
 assert "Describe requested ECS environment before creation" in credentials_provision_text
 assert "'describe-environment'" in credentials_provision_text
+assert "Parse requested ECS environment response" in credentials_provision_text
+assert "Select directly described ECS environment response" in credentials_provision_text
+assert "Normalize directly described ECS environment" in credentials_provision_text
+assert "ecs_requested_environment_describe_payload.environment" in credentials_provision_text
+assert "ecs_requested_environment_candidate.name" in credentials_provision_text
 assert "ecs_requested_environment_direct" in credentials_provision_text
 assert "Report matching existing ECS environment" in credentials_provision_text
 assert "Existing ECS environment found; creation will be skipped." in credentials_provision_text
 assert "ecs_requested_environment_matches[0].environmentName" in credentials_provision_text
 assert "ecs_requested_environment_matches[0].crn" in credentials_provision_text
 assert "ecs_requested_environment_matches[0].clusterNames" in credentials_provision_text
+assert "Report ECS environment lookup before creation" in credentials_provision_text
+assert "response keys=" in credentials_provision_text
+assert "| default(ecs_automation_environment.stdout | from_json, true)" in credentials_provision_text
 assert credentials_provision_text.index(
     "Describe requested ECS environment before creation"
 ) < credentials_provision_text.index("Create missing ECS private-cloud environment")
