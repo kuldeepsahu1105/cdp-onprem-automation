@@ -158,7 +158,7 @@ Terraform generates `inventory.ini` with these groups when you run `clone_and_ru
 
 | Variable | Default | Description |
 |---|---|---|
-| `cdh_version` | `7.3.2.20000` | CDH Runtime parcel version |
+| `cdh_version` | `7.3.3.0` | CDH Runtime parcel version |
 | `cdh_basecluster_name` | `<deployment_name_prefix>-base-cluster` | Cluster name in Cloudera Manager (`base-cluster` when the prefix is empty); default-name reruns safely adopt legacy `CDP-base-cluster` / `CDH-Cluster` registrations by host ownership |
 | `base_cluster_master_group` | `base-masters` | Inventory group for master host |
 | `base_cluster_worker_group` | `base-workers` | Inventory group for worker hosts |
@@ -174,7 +174,7 @@ Spark is bundled in the CDH parcel for `>= 7.3.1` — no separate SPARK3 downloa
 ```bash
 # Override at deploy time (example)
 ansible-playbook -i inventory.ini 31_setup_base_cluster.yml \
-  -e cdh_version=7.3.2.20000 \
+  -e cdh_version=7.3.3.0 \
   -e cdh_parcel_os_suffix=noble
 ```
 
@@ -316,8 +316,8 @@ Configured in `ansible-playbooks/config.yml`:
 
 | Component | Version |
 |---|---|
-| Cloudera Manager | `7.13.2.20000` |
-| CDH (Runtime parcel) | `7.3.2.20000` (`cdh_parcel_os_suffix`: `auto` default) |
+| Cloudera Manager | `7.13.3.0` |
+| CDH (Runtime parcel) | `7.3.3.0` (`cdh_parcel_os_suffix`: `auto` default) |
 | Java | `17` |
 | Python | `3.11` |
 | PostgreSQL | `18` |

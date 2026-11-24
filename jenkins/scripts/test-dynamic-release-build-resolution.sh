@@ -20,8 +20,8 @@ config_path, group_vars_path, mirror_path, base_cluster_path, mirror_facts_path 
     Path, sys.argv[1:]
 )
 expected = {
-    "cm_version": "7.13.2.20000",
-    "cdh_version": "7.3.2.20000",
+    "cm_version": "7.13.3.0",
+    "cdh_version": "7.3.3.0",
     "ecs_pvc_ds_version": "1.5.5-h40000",
 }
 for path in (config_path, group_vars_path):
@@ -42,7 +42,7 @@ packages = [
     "cloudera-manager-server-db-2",
 ]
 listing = "\n".join(
-    f'<a href="{package}-7.13.2.20000-98765432.el9.x86_64.rpm">'
+    f'<a href="{package}-7.13.3.0-98765432.el9.x86_64.rpm">'
     for package in packages
 )
 result = subprocess.run(
@@ -50,7 +50,7 @@ result = subprocess.run(
         sys.executable,
         "-c",
         script,
-        "7.13.2.20000",
+        "7.13.3.0",
         "9",
         "x86_64",
         *packages,
@@ -62,7 +62,7 @@ result = subprocess.run(
 )
 assert result.returncode == 0, result.stderr
 assert json.loads(result.stdout) == [
-    f"{package}-7.13.2.20000-98765432.el9.x86_64.rpm"
+    f"{package}-7.13.3.0-98765432.el9.x86_64.rpm"
     for package in packages
 ]
 

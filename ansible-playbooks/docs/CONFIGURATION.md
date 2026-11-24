@@ -215,8 +215,8 @@ Ansible values. The Ansible deployment banner prints both values when they diffe
 | `python_version` | `"3.11"` | Preferred target Python package version; Ansible still uses each host's configured `ansible_python_interpreter`. |
 | `postgresql_version` | `18` | PostgreSQL server/client target version. |
 | `postgres_jdbc_version` | `"42.7.10"` | JDBC driver downloaded for CM services. |
-| `cm_version` | `"7.13.2.20000"` | Cloudera Manager package/repository version. |
-| `cdh_version` | `"7.3.2.20000"` | Runtime parcel version. |
+| `cm_version` | `"7.13.3.0"` | Cloudera Manager package/repository version. |
+| `cdh_version` | `"7.3.3.0"` | Runtime parcel version. |
 | `cdv_version` | `"8.0.7"` | Data Visualization CSD/parcel release. |
 | `cfm_version` | `"2.1.7.3004"` | Flow Management CSD/parcel release. |
 | `cfm_nifi_app_version` | `"1.28.1"` | NiFi application segment used in CSD filenames. |
